@@ -1,4 +1,4 @@
-// THE MEMBERS' LEADERBOARD (spec Part 3 §15.5; ROADMAP 19a-i). Only a live app member of
+// THE MEMBERS' LEADERBOARD (spec Part 3 §15.5; ROADMAP 19a). Only a live app member of
 // the gym reads it; anybody else gets the same 404 as a gym that does not exist.
 import type { Sql } from "postgres";
 import {
@@ -6,6 +6,7 @@ import {
   leaderboardProfileResponseSchema,
   leaderboardResponseSchema,
   leaderboardVisibilitySchema,
+  type LeaderboardBoard,
   type LeaderboardCircle,
   type LeaderboardCountedResponse,
   type LeaderboardPeriod,
@@ -52,6 +53,7 @@ function weekCircles(mine: readonly string[], gymWeeks: ReadonlySet<string>, wee
 }
 
 interface Built {
+  id: LeaderboardBoard;
   board: Board;
   from: string | null;
   to: string;
@@ -65,12 +67,15 @@ interface At {
   today: string;
 }
 
-async function buildGymDays(deps: LeaderboardDeps, gymId: string, viewerId: string, { at, today }: At, period: LeaderboardPeriod): Promise<Built> {
+type DayBoard = Exclude<LeaderboardBoard, "streak">;
+
+async function buildDays(deps: LeaderboardDeps, id: DayBoard, gymId: string, viewerId: string, { at, today }: At, period: LeaderboardPeriod): Promise<Built> {
   const { from, to } = periodRange(today, period);
   const week = isWeek(period) && from !== null ? weekDays(from) : null;
-  const rows = await repo.gymDaysBoard(deps.sql, { gymId, at, today, from, to, viewerId, withDays: week !== null });
+  const input = { gymId, at, today, from, to, viewerId, withDays: week !== null };
+  const rows = id === "gym_days" ? await repo.gymDaysBoard(deps.sql, input) : await repo.workoutDaysBoard(deps.sql, input);
   const people: BoardPerson[] = rows.map((r) => ({ ...r, circles: week === null ? null : dayCircles(r.days, week) }));
-  return { board: rankBoard(people, viewerId), from, to, circleDays: week, period };
+  return { id, board: rankBoard(people, viewerId), from, to, circleDays: week, period };
 }
 
 async function buildStreak(deps: LeaderboardDeps, gymId: string, viewerId: string, { at, today }: At): Promise<Built> {
@@ -79,7 +84,7 @@ async function buildStreak(deps: LeaderboardDeps, gymId: string, viewerId: strin
   const { rows, gymWeeks } = await repo.streakBoard(deps.sql, { gymId, at, today, sinceWeek, viewerId });
   const active = new Set(gymWeeks);
   const people: BoardPerson[] = rows.map((r) => ({ ...r, circles: weekCircles(r.weeks, active, weeks) }));
-  return { board: rankBoard(people, viewerId), from: null, to: today, circleDays: weeks, period: null };
+  return { id: "streak", board: rankBoard(people, viewerId), from: null, to: today, circleDays: weeks, period: null };
 }
 
 export async function getLeaderboard(
@@ -92,9 +97,11 @@ export async function getLeaderboard(
   const gym = await gymForMember(deps, gymId, viewerId, now);
   const at: At = { at: now.toISOString(), today: gym.today };
   const built =
-    query.board === "streak" ? await buildStreak(deps, gymId, viewerId, at) : await buildGymDays(deps, gymId, viewerId, at, query.period);
-  // A lapsed gym's members see no board; Gym days and Streak only while the gym checks in.
-  const status = !gym.live ? "paused" : !gym.checkingIn ? "no_checkins" : built.board.status;
+    query.board === "streak" ? await buildStreak(deps, gymId, viewerId, at) : await buildDays(deps, query.board, gymId, viewerId, at, query.period);
+  // A lapsed gym's members see no board; Gym days and Streak only while the gym checks
+  // in. Workout days needs no check-in.
+  const needsCheckIn = query.board !== "workout_days";
+  const status = !gym.live ? "paused" : needsCheckIn && !gym.checkingIn ? "no_checkins" : built.board.status;
   const showing = status === "shown";
   // A streak skips the gym's silent weeks, so at a gym that stopped checking in it would
   // never end: there, nobody has one.
@@ -162,11 +169,44 @@ export async function getMyCounted(
       value,
       days: [],
       notCounted: [],
+      workoutDays: [],
+      workoutsNotCounted: [],
       weeks,
     });
   }
 
   const { from, to } = periodRange(gym.today, query.period);
+  if (query.board === "workout_days") {
+    const workouts = await repo.ownWorkouts(deps.sql, { gymId, userId: viewerId, at: now.toISOString(), from, to });
+    const workoutDays: LeaderboardCountedResponse["workoutDays"] = [];
+    const workoutsNotCounted: LeaderboardCountedResponse["workoutsNotCounted"] = [];
+    for (const w of workouts) {
+      const at = w.startedAt.toISOString();
+      if (w.why !== null) {
+        workoutsNotCounted.push({ day: w.day, at, why: w.why, daysLate: w.why === "saved_late" ? w.daysToSave : null });
+        continue;
+      }
+      const countedBy = w.camera && w.byHand ? "both" : w.camera ? "camera" : w.byHand ? "you" : null;
+      const last = workoutDays[workoutDays.length - 1];
+      if (last?.day === w.day) last.workouts.push({ at, countedBy });
+      else workoutDays.push({ day: w.day, workouts: [{ at, countedBy }] });
+    }
+    return leaderboardCountedResponseSchema.parse({
+      gymName: gym.name,
+      timezone: gym.timezone,
+      board: "workout_days",
+      period: query.period,
+      from,
+      to,
+      value: workoutDays.length,
+      days: [],
+      notCounted: [],
+      workoutDays,
+      workoutsNotCounted,
+      weeks: [],
+    });
+  }
+
   const visits = await repo.ownVisits(deps.sql, { gymId, userId: viewerId, today: gym.today, from, to });
   const days: LeaderboardCountedResponse["days"] = [];
   const notCounted: LeaderboardCountedResponse["notCounted"] = [];
@@ -192,6 +232,8 @@ export async function getMyCounted(
     value: days.length,
     days,
     notCounted,
+    workoutDays: [],
+    workoutsNotCounted: [],
     weeks: [],
   });
 }
@@ -208,7 +250,7 @@ export async function getProfile(
 ): Promise<LeaderboardProfileResponse> {
   const now = deps.now();
   const gym = await gymForMember(deps, gymId, viewerId, now);
-  if (!gym.live || !gym.checkingIn) throw notFound();
+  if (!gym.live) throw notFound();
   const at: At = { at: now.toISOString(), today: gym.today };
   const person = await repo.memberFacts(deps.sql, gymId, userId, at.at);
   if (person === null) throw notFound();
@@ -216,19 +258,16 @@ export async function getProfile(
   if (named === null || (userId !== viewerId && hiddenReason({ ...person, value: 1, circles: null }) !== null)) {
     throw notFound();
   }
-  const [days, streak] = await Promise.all([
-    buildGymDays(deps, gymId, userId, at, period),
-    buildStreak(deps, gymId, userId, at),
+  // Gym days and Streak only while the gym checks people in, as on the board itself.
+  const built = await Promise.all([
+    ...(gym.checkingIn ? [buildDays(deps, "gym_days", gymId, userId, at, period)] : []),
+    buildDays(deps, "workout_days", gymId, userId, at, period),
+    ...(gym.checkingIn ? [buildStreak(deps, gymId, userId, at)] : []),
   ]);
   // Only the boards that are showing: a board withheld for too few people gives no number.
-  const boards = [days, streak]
-    .filter((built) => built.board.status === "shown")
-    .map((built) => ({
-      board: built.period === null ? ("streak" as const) : ("gym_days" as const),
-      period: built.period,
-      place: built.board.me.place,
-      value: built.board.me.value,
-    }));
+  const boards = built
+    .filter((b) => b.board.status === "shown")
+    .map((b) => ({ board: b.id, period: b.period, place: b.board.me.place, value: b.board.me.value }));
   if (boards.length === 0) throw notFound();
   return leaderboardProfileResponseSchema.parse({ userId, name: named.name, initials: named.initials, boards });
 }

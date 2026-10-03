@@ -1,11 +1,11 @@
-// The gym's leaderboard (spec Part 3 §15.5; ROADMAP 19a-i). Each board ranks ONE fact the
+// The gym's leaderboard (spec Part 3 §15.5; ROADMAP 19a). Each board ranks ONE fact the
 // desk, staff or the app recorded; equal numbers share a place (1, 2, 2, 4).
 import { z } from "zod";
 
-export const LEADERBOARD_BOARDS = ["gym_days", "streak"] as const;
+export const LEADERBOARD_BOARDS = ["gym_days", "workout_days", "streak"] as const;
 export type LeaderboardBoard = (typeof LEADERBOARD_BOARDS)[number];
 
-/** The day boards' periods, in the gym's time zone. The Streak has none: it ranks now. */
+/** The two day boards' periods, in the gym's time zone. The Streak has none: it ranks now. */
 export const LEADERBOARD_PERIODS = ["this_week", "last_week", "this_month", "last_month", "all_time"] as const;
 export type LeaderboardPeriod = (typeof LEADERBOARD_PERIODS)[number];
 
@@ -15,17 +15,31 @@ export const LEADERBOARD_MIN_PEOPLE = 3;
 export const LEADERBOARD_TOP = 100;
 /** Gym days and Streak show to members only while the gym has checked somebody in this recently. */
 export const LEADERBOARD_CHECKIN_DAYS = 30;
+/** A workout counts when it reached the server within this many days of its start. */
+export const LEADERBOARD_WORKOUT_SAVE_DAYS = 7;
+/** A phone's clock may run this far ahead: a workout saved longer than this before its own
+ *  start never counts. */
+export const LEADERBOARD_WORKOUT_EARLY_MINUTES = 60;
+
+/** Why a workout is not a workout day. saved_early: it reached the server more than an
+ *  hour before its own start, and never counts · future: its start is still ahead ·
+ *  before_joining: it started before the person joined this gym · no_sets: no set with a
+ *  rep or a hold was saved · saved_late: it reached the server more than seven days after
+ *  it started. */
+export const LEADERBOARD_WORKOUT_NOT_COUNTED = ["saved_early", "future", "before_joining", "no_sets", "saved_late"] as const;
+export type LeaderboardWorkoutNotCounted = (typeof LEADERBOARD_WORKOUT_NOT_COUNTED)[number];
 
 /** Why a person is not ranked. Taken out before places are given, so no gap shows them. */
 export const LEADERBOARD_HIDDEN_REASONS = ["staff", "taken_off", "hide_me", "under_18", "no_name"] as const;
 export type LeaderboardHiddenReason = (typeof LEADERBOARD_HIDDEN_REASONS)[number];
 
 /** shown: the rows · too_few: fewer than three people on it · no_checkins: the gym has
- *  checked nobody in for 30 days · paused: the gym's plan has lapsed. */
+ *  checked nobody in for 30 days (Gym days and Streak only) · paused: the gym's plan has
+ *  lapsed. */
 export const LEADERBOARD_STATUSES = ["shown", "too_few", "no_checkins", "paused"] as const;
 export type LeaderboardStatus = (typeof LEADERBOARD_STATUSES)[number];
 
-/** One circle: a day on a week view of Gym days, or a week on the Streak (oldest first,
+/** One circle: a day on a week view of a day board, or a week on the Streak (oldest first,
  *  this week last). `skipped` is a week the gym recorded nobody; `open` is this week before
  *  the person's first gym day in it. */
 export const leaderboardCircleSchema = z.enum(["yes", "no", "skipped", "open"]);
@@ -112,6 +126,16 @@ export const leaderboardVisitSchema = z
   })
   .strict();
 
+/** One counted workout, for the person's own list. */
+export const leaderboardWorkoutSchema = z
+  .object({
+    at: z.string().datetime(),
+    /** Who counted its reps: the camera, the person, or some sets each; null when the
+     *  sets do not say. */
+    countedBy: z.enum(["camera", "you", "both"]).nullable(),
+  })
+  .strict();
+
 export const leaderboardCountedResponseSchema = z
   .object({
     gymName: z.string(),
@@ -126,6 +150,20 @@ export const leaderboardCountedResponseSchema = z
     /** Gym days: a visit in the period that did not count, with why. */
     notCounted: z.array(
       z.object({ day, at: z.string().datetime(), why: z.enum(["own_tap", "app_code"]) }).strict(),
+    ),
+    /** Workout days: each counted day, newest first. */
+    workoutDays: z.array(z.object({ day, workouts: z.array(leaderboardWorkoutSchema).min(1) }).strict()),
+    /** Workout days: a workout in the period that did not count, with why. A `saved_late`
+     *  one reached the server more than `daysLate` whole days after its start. */
+    workoutsNotCounted: z.array(
+      z
+        .object({
+          day,
+          at: z.string().datetime(),
+          why: z.enum(LEADERBOARD_WORKOUT_NOT_COUNTED),
+          daysLate: z.number().int().min(1).nullable(),
+        })
+        .strict(),
     ),
     /** Streak: newest week first, back to the week that broke it. */
     weeks: z.array(

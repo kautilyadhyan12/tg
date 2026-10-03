@@ -2,7 +2,8 @@
 //
 // A seeded random generator (no package) builds a thousand small gyms with ties, hidden
 // people, households on one record, visits from before the app, removed members, rejoins,
-// deleted accounts, staff and silent weeks, in six real time zones. The database's boards
+// deleted accounts, staff and silent weeks, and app workouts of every kind (no set, saved
+// late, dated ahead, from before joining), in six real time zones. The database's boards
 // and a model written here from the spec alone must agree on every place and number, and
 // every person's "what counted" must equal their number.
 import { createHash, randomUUID } from "node:crypto";
@@ -84,7 +85,16 @@ interface MPerson {
   shownAt: boolean;
   /** Memberships, oldest first; the last may be live. */
   memberships: { removed: boolean; entryId: string | null; takenOff: boolean }[];
+  /** When the live membership began. */
+  joinedAt: number;
   staff: boolean;
+}
+interface MWorkout {
+  userId: string;
+  startedAt: number;
+  sets: number;
+  reps: number;
+  savedAt: number;
 }
 interface MRecord {
   id: string;
@@ -106,7 +116,12 @@ interface MGym {
   people: MPerson[];
   records: MRecord[];
   visits: MVisit[];
+  workouts: MWorkout[];
 }
+
+const LONG_AGO = Date.UTC(2025, 0, 20);
+const HOUR_MS = 3_600_000;
+const SAVE_MS = 7 * DAY_MS;
 
 const FIRST = ["Asha", "Ben", "Chen", "Dara", "Eli", "Fatima", "Gita", "Hugo", "Ines", "Jon", "Kiri", "Lena", "Mo", "Nia", "Omar", "Pia"];
 const LAST = ["Rao", "Smith", "Wu", "Okafor", "García", "Nguyễn", "Singh", "Brown", "Kim", "Silva"];
@@ -119,7 +134,7 @@ function makeGym(rand: () => number, today: (zone: string) => string): MGym {
   // Eighteen today (not under 18), and eighteen tomorrow (under 18): the edge itself.
   const eighteenToday = eighteenYearsBefore(todayIs);
   const eighteenTomorrow = dayOf(dayNumber(eighteenToday) + 1);
-  const gym: MGym = { id: randomUUID(), zone, live: rand() < 0.9, ownerId: "", people: [], records: [], visits: [] };
+  const gym: MGym = { id: randomUUID(), zone, live: rand() < 0.9, ownerId: "", people: [], records: [], visits: [], workouts: [] };
   const record = (first: string, last: string, young: boolean): MRecord => {
     const roll = rand();
     const dob = young ? dayOf(t - 365 * 16) : roll < 0.4 ? dayOf(t - 365 * 30) : roll < 0.5 ? eighteenToday : roll < 0.6 ? eighteenTomorrow : null;
@@ -143,6 +158,7 @@ function makeGym(rand: () => number, today: (zone: string) => string): MGym {
       hideMe: rand() < 0.1,
       shownAt: rand() < 0.3,
       memberships: [],
+      joinedAt: LONG_AGO,
       staff: i === 0 || rand() < 0.05,
     };
     let entry: string | null = null;
@@ -182,6 +198,30 @@ function makeGym(rand: () => number, today: (zone: string) => string): MGym {
     }
   }
   return gym;
+}
+
+/** App workouts over the same twenty-two weeks, from a generator of their own so the
+ *  visits above stay as they were. A third of the people joined inside those weeks. */
+function addWorkouts(gym: MGym, rand: () => number, instant: number): void {
+  const span = 154 * DAY_MS;
+  for (const p of gym.people) {
+    if (rand() < 0.3) p.joinedAt = instant - Math.floor(rand() * span);
+    const count = rand() < 0.25 ? 0 : Math.floor(rand() * 40);
+    for (let i = 0; i < count; i++) {
+      const edge = rand();
+      // Mostly anywhere in the weeks, up to three days ahead; sometimes the edges themselves.
+      const startedAt =
+        edge < 0.03 ? p.joinedAt : edge < 0.05 ? instant : edge < 0.07 ? instant + 1000 : instant - span + Math.floor(rand() * (span + 3 * DAY_MS));
+      const save = rand();
+      // Some reach the server before their own start: within the hour a fast clock is
+      // allowed, on its edge, and days before.
+      const savedAfter =
+        save < 0.04 ? -Math.floor(rand() * HOUR_MS) : save < 0.06 ? -HOUR_MS : save < 0.08 ? -HOUR_MS - 1000 : save < 0.12 ? -Math.floor(rand() * 30 * DAY_MS)
+        : save < 0.75 ? Math.floor(rand() * HOUR_MS) : save < 0.85 ? Math.floor(rand() * SAVE_MS) : save < 0.9 ? SAVE_MS : save < 0.95 ? SAVE_MS + 1000 : SAVE_MS + Math.floor(rand() * 5 * DAY_MS);
+      const sets = rand() < 0.1 ? 0 : 1 + Math.floor(rand() * 6);
+      gym.workouts.push({ userId: p.userId, startedAt, sets, reps: sets === 0 || rand() < 0.08 ? 0 : sets * 10, savedAt: startedAt + savedAfter });
+    }
+  }
 }
 
 // ── The model ────────────────────────────────────────────────────────────────
@@ -224,7 +264,8 @@ function modelPeople(gym: MGym, today: string): { live: MPerson[]; owner: (v: MV
   return { live, owner, hidden, name };
 }
 
-function modelBoard(gym: MGym, today: string, viewerId: string, query: LeaderboardQuery) {
+function modelBoard(gym: MGym, instant: Date, viewerId: string, query: LeaderboardQuery) {
+  const today = gymToday(instant, gym.zone);
   const t = dayNumber(today);
   const { live, owner, hidden, name } = modelPeople(gym, today);
   const counted = gym.visits.filter((v) => COUNTED.has(v.method) && v.day <= t);
@@ -247,6 +288,26 @@ function modelBoard(gym: MGym, today: string, viewerId: string, query: Leaderboa
         name: name(p) ?? "",
         value: days.length,
         circles: week ? [0, 1, 2, 3, 4, 5, 6].map((i) => (days.includes(from + i) ? "yes" : "no")) : null,
+        hidden: hidden(p),
+      };
+    });
+  } else if (query.board === "workout_days") {
+    const [from, to] = modelRange(today, query.period);
+    const week = query.period === "this_week" || query.period === "last_week";
+    rows = live.map((p) => {
+      const days = new Set<number>();
+      for (const w of gym.workouts) {
+        if (w.userId !== p.userId || w.sets < 1 || w.reps < 1) continue;
+        if (w.savedAt < w.startedAt - HOUR_MS) continue;
+        if (w.startedAt < p.joinedAt || w.startedAt > instant.getTime() || w.savedAt > w.startedAt + SAVE_MS) continue;
+        const day = dayNumber(gymToday(new Date(w.startedAt), gym.zone));
+        if (day >= from && day <= to) days.add(day);
+      }
+      return {
+        userId: p.userId,
+        name: name(p) ?? "",
+        value: days.size,
+        circles: week ? [0, 1, 2, 3, 4, 5, 6].map((i) => (days.has(from + i) ? "yes" : "no")) : null,
         hidden: hidden(p),
       };
     });
@@ -275,7 +336,9 @@ function modelBoard(gym: MGym, today: string, viewerId: string, query: Leaderboa
   const placed = ranked.map((r) => ({ ...r, place: ranked.filter((x) => x.value > r.value).length + 1 }));
   const checkingIn = counted.some((v) => v.day > t - 30);
   const enough = placed.length >= 3;
-  const status = !gym.live ? "paused" : !checkingIn ? "no_checkins" : enough ? "shown" : "too_few";
+  // Workout days needs no check-in.
+  const quiet = query.board !== "workout_days" && !checkingIn;
+  const status = !gym.live ? "paused" : quiet ? "no_checkins" : enough ? "shown" : "too_few";
   const me = rows.find((r) => r.userId === viewerId);
   // No streak at a gym that has stopped checking in: its silent weeks would never end one.
   const value = query.board === "streak" && !checkingIn ? 0 : (me?.value ?? 0);
@@ -309,6 +372,7 @@ d("the leaderboard agrees with a plain model (real Postgres)", () => {
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${gyms})`;
     await sql`DELETE FROM gyms WHERE slug LIKE 'lb-m-%'`;
     await sql`DELETE FROM user_fitness_profiles WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'lb-m-%@example.com')`;
+    await sql`DELETE FROM workouts WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'lb-m-%@example.com')`;
     await sql`DELETE FROM users WHERE email LIKE 'lb-m-%@example.com'`;
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
@@ -356,7 +420,7 @@ d("the leaderboard agrees with a plain model (real Postgres)", () => {
           user_id: p.userId,
           entry_id: m.entryId,
           hidden_from_boards: m.takenOff,
-          joined_at: new Date(Date.UTC(2025, 0, 1 + i)),
+          joined_at: m.removed ? new Date(Date.UTC(2025, 0, 1 + i)) : new Date(p.joinedAt),
           removed_at: m.removed ? new Date(Date.UTC(2025, 0, 1 + i, 12)) : null,
         })),
       ),
@@ -385,6 +449,19 @@ d("the leaderboard agrees with a plain model (real Postgres)", () => {
       });
     });
     for (let i = 0; i < visits.length; i += 2000) await sql`INSERT INTO gym_attendance ${sql(visits.slice(i, i + 2000))}`;
+    const workouts = gyms.flatMap((g) =>
+      g.workouts.map((w) => ({
+        id: randomUUID(),
+        user_id: w.userId,
+        started_at: new Date(w.startedAt),
+        platform: "web",
+        engine_version: "test",
+        sets_count: w.sets,
+        total_reps: w.reps,
+        created_at: new Date(w.savedAt),
+      })),
+    );
+    for (let i = 0; i < workouts.length; i += 2000) await sql`INSERT INTO workouts ${sql(workouts.slice(i, i + 2000))}`;
   }
 
   beforeAll(async () => {
@@ -413,10 +490,13 @@ d("the leaderboard agrees with a plain model (real Postgres)", () => {
         const instant = new Date(iso);
         const rand = generator(dayNumber(iso.slice(0, 10)));
         const gyms = Array.from({ length: count }, () => makeGym(rand, (zone) => gymToday(instant, zone)));
+        const workoutRand = generator(dayNumber(iso.slice(0, 10)) + 7919);
+        for (const gym of gyms) addWorkouts(gym, workoutRand, instant.getTime());
         await insert(gyms);
         const deps = { sql, now: () => instant };
         const queries: LeaderboardQuery[] = [
           ...LEADERBOARD_PERIODS.map((period) => ({ board: "gym_days" as const, period })),
+          ...LEADERBOARD_PERIODS.map((period) => ({ board: "workout_days" as const, period })),
           { board: "streak", period: "this_week" },
         ];
         let compared = 0;
@@ -430,8 +510,10 @@ d("the leaderboard agrees with a plain model (real Postgres)", () => {
           const viewers = viewer === undefined ? [] : [viewer];
           for (const viewer of viewers) {
             for (const query of queries) {
+              // Workout days on every second gym: the full run shares one database.
+              if (query.board === "workout_days" && gyms.indexOf(gym) % 2 === 1) continue;
               const got = await getLeaderboard(deps, viewer.userId, gym.id, query);
-              const want = modelBoard(gym, today, viewer.userId, query);
+              const want = modelBoard(gym, instant, viewer.userId, query);
               const label = `${gym.id} ${gym.zone} ${query.board} ${query.period} viewer ${viewer.userId}`;
               expect({ label, status: got.status, ranked: got.ranked }).toEqual({ label, status: want.status, ranked: want.ranked });
               expect({ label, rows: got.rows.map((r) => [r.userId, r.name, r.place, r.value, r.circles]) }).toEqual({ label, rows: want.rows });
@@ -439,6 +521,7 @@ d("the leaderboard agrees with a plain model (real Postgres)", () => {
               const counted = await getMyCounted(deps, viewer.userId, gym.id, query);
               expect({ label, counted: counted.value }).toEqual({ label, counted: got.me.value });
               if (query.board === "gym_days") expect(counted.days.length).toBe(counted.value);
+              else if (query.board === "workout_days") expect(counted.workoutDays.length).toBe(counted.value);
               else expect(counted.weeks.filter((w) => w.state === "counted").length).toBe(counted.value);
               compared++;
               if (got.status === "shown") shown++;

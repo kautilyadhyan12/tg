@@ -1,8 +1,9 @@
 // THE LEADERBOARD'S READS (spec Part 3 §15.5). Fresh, never stored: one query a board,
-// worked out from the visits each time it opens.
-import type { Sql, TransactionSql } from "postgres";
-import { LEADERBOARD_CHECKIN_DAYS } from "@app/shared";
+// worked out from the visits and workouts each time it opens.
+import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
+import { LEADERBOARD_CHECKIN_DAYS, type LeaderboardWorkoutNotCounted } from "@app/shared";
 import { countedDays, streaks, visitsWithOwner } from "./visits.js";
+import { countedWorkoutDays, memberWorkouts } from "./workouts.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -116,24 +117,31 @@ export async function memberFacts(sql: SqlOrTx, gymId: string, userId: string, a
   return row === undefined ? null : toFacts(row);
 }
 
-export interface GymDaysRow extends MemberFacts {
+export interface DaysRow extends MemberFacts {
   value: number;
   /** The counted days in the period, oldest first; empty unless asked for. */
   days: string[];
 }
 
-/** Gym days in [from, to] for every live member with at least one, and for the viewer. */
-export async function gymDaysBoard(
-  sql: SqlOrTx,
-  input: { gymId: string; at: string; today: string; from: string | null; to: string; viewerId: string; withDays: boolean },
-): Promise<GymDaysRow[]> {
+export interface DaysBoardInput {
+  gymId: string;
+  at: string;
+  today: string;
+  from: string | null;
+  to: string;
+  viewerId: string;
+  withDays: boolean;
+}
+
+/** A day board: `counted` is (owner_id, day), one row a counted day in the period. Every
+ *  live member with at least one, and the viewer. */
+async function daysBoard(sql: SqlOrTx, counted: PendingQuery<Row[]>, input: DaysBoardInput): Promise<DaysRow[]> {
   // The days themselves only for a week view's circles: all time would carry every day.
   const days = input.withDays ? sql`array_agg(d.day::text ORDER BY d.day)` : sql`NULL::text[]`;
   const rows = await sql<(RawFacts & { value: number; days: string[] | null })[]>`
     WITH per AS (
       SELECT d.owner_id, count(*)::int AS value, ${days} AS days
-      FROM (${countedDays(sql, input.gymId, input.today)}) d
-      WHERE d.day <= ${input.to}::date AND (${input.from}::date IS NULL OR d.day >= ${input.from}::date)
+      FROM (${counted}) d
       GROUP BY d.owner_id
     )
     SELECT mem.*, coalesce(per.value, 0) AS value, per.days
@@ -141,6 +149,19 @@ export async function gymDaysBoard(
     LEFT JOIN per ON per.owner_id = mem.user_id
     WHERE per.value IS NOT NULL OR mem.user_id = ${input.viewerId}`;
   return rows.map((r) => ({ ...toFacts(r), value: r.value, days: r.days ?? [] }));
+}
+
+/** Gym days in [from, to]. */
+export function gymDaysBoard(sql: SqlOrTx, input: DaysBoardInput): Promise<DaysRow[]> {
+  const counted = sql`
+    SELECT c.owner_id, c.day FROM (${countedDays(sql, input.gymId, input.today)}) c
+    WHERE c.day <= ${input.to}::date AND (${input.from}::date IS NULL OR c.day >= ${input.from}::date)`;
+  return daysBoard(sql, counted, input);
+}
+
+/** Workout days in [from, to]. */
+export function workoutDaysBoard(sql: SqlOrTx, input: DaysBoardInput): Promise<DaysRow[]> {
+  return daysBoard(sql, countedWorkoutDays(sql, input), input);
 }
 
 export interface StreakRow extends MemberFacts {
@@ -198,6 +219,48 @@ export async function ownVisits(
       AND (${input.from}::date IS NULL OR v.day >= ${input.from}::date)
     ORDER BY v.day DESC, v.marked_at DESC, v.id`;
   return rows.map((r) => ({ day: r.day, markedAt: r.marked_at, method: r.method, by: r.by, byEmail: r.by_email }));
+}
+
+export interface OwnWorkout {
+  day: string;
+  startedAt: Date;
+  /** Null when it counted. */
+  why: LeaderboardWorkoutNotCounted | null;
+  /** It reached the server more than this many whole days after its start. */
+  daysToSave: number;
+  /** A set the camera counted, and a set the person counted. */
+  camera: boolean;
+  byHand: boolean;
+}
+
+/** The person's own workouts in [from, to], counted or not, newest first. All time at a
+ *  gym begins when the person joined it, so it leaves out the workouts from before. */
+export async function ownWorkouts(
+  sql: SqlOrTx,
+  input: { gymId: string; userId: string; at: string; from: string | null; to: string },
+): Promise<OwnWorkout[]> {
+  const rows = await sql<
+    { day: string; started_at: Date; why: LeaderboardWorkoutNotCounted | null; days_to_save: number; camera: boolean; by_hand: boolean }[]
+  >`
+    SELECT x.day::text AS day, x.started_at, x.why,
+           (ceil(extract(epoch FROM (x.created_at - x.started_at)) / 86400) - 1)::int AS days_to_save,
+           coalesce(s.camera, false) AS camera, coalesce(s.by_hand, false) AS by_hand
+    FROM (${memberWorkouts(sql, input)}) x
+    LEFT JOIN LATERAL (
+      SELECT bool_or(ws.mode = 'engine') AS camera, bool_or(ws.mode = 'log_only') AS by_hand
+      FROM workout_sets ws WHERE ws.workout_id = x.id
+    ) s ON true
+    WHERE x.owner_id = ${input.userId}
+      AND (${input.from}::date IS NOT NULL OR x.why IS DISTINCT FROM 'before_joining')
+    ORDER BY x.started_at DESC, x.id`;
+  return rows.map((r) => ({
+    day: r.day,
+    startedAt: r.started_at,
+    why: r.why,
+    daysToSave: r.days_to_save,
+    camera: r.camera,
+    byHand: r.by_hand,
+  }));
 }
 
 /** The person's gym weeks (Mondays) and gym days in each, and the gym's weeks, newest first. */
