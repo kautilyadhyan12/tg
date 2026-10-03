@@ -206,7 +206,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 19a. **The leaderboard** (re-planned 2026-10-02, RULINGS that day; spec Part 3 §15.5), in four jobs. It takes item 1b's place.
      - 19a-i. [x] **The members' board: Gym days and Streak** — merged 2026-10-03 (PR #160).
      - 19a-ii. [x] **Workout days** — merged 2026-10-03 (PR #163).
-     - 19a-iii. [ ] **The board in the console**: everyone, the hidden greyed; anyone's "what counted"; take someone off the board; which boards members see, and why one is not showing.
+     - 19a-iii. [x] **The board in the console** — merged 2026-10-04 (PR #165).
      - 19a-iv. [ ] **Fixing a visit** (after 16b-ii): staff add a missed visit for an earlier day or remove a wrong one, and who did it shows in "what counted".
    - 19b. [ ] **Updates**: posts with photos or one video, pinned posts, reactions and NO comments, the gym's switch for member posts, and the safety tools — Report, the staff queue, remove, stop a person posting, block, the bad-words hold. Needs R2 (Stage 4 item 4) and Kd's Cloudflare Stream account. **First tests: a reported post gone for everyone in one tap; a blocked person's posts gone for the blocker.**
    - 19c. [ ] **Events**, counted by 17c's Book rule. 19d. [ ] **Challenges** (the document's leagues and tournaments; knock-outs later).
