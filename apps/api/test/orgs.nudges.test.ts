@@ -334,12 +334,13 @@ d("the slipping-away list and the nudge (real Postgres)", () => {
    *  defect written into the ORACLE, where no mutant aimed at the code can
    *  reach it. */
   const visit = async (gymId: string, userId: string, daysAgo: number) => {
+    // A staff check-in: the old "I'm here" tap no longer counts towards a streak (19a-i).
     await sql`
       INSERT INTO gym_attendance
         (gym_id, user_id, marked_by_user_id, day, method, hours_status, slot_key)
       SELECT ${gymId}, ${userId}, ${userId},
              (now() AT TIME ZONE g.timezone)::date - ${daysAgo}::int,
-             'manual', 'hours_unset', 'hours_unset'
+             'staff', 'hours_unset', 'hours_unset'
       FROM gyms g WHERE g.id = ${gymId}`;
   };
 

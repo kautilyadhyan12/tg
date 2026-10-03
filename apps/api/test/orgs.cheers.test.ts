@@ -262,12 +262,13 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
    *  hours the two differ — :26812 §2(a)'s defect written into the ORACLE, where
    *  no mutant aimed at the code can reach it. */
   const visit = async (gymId: string, userId: string, daysAgo: number) => {
+    // A staff check-in: the old "I'm here" tap no longer counts towards a streak (19a-i).
     await sql`
       INSERT INTO gym_attendance
         (gym_id, user_id, marked_by_user_id, day, method, hours_status, slot_key)
       SELECT ${gymId}, ${userId}, ${userId},
              (now() AT TIME ZONE g.timezone)::date - ${daysAgo}::int,
-             'manual', 'hours_unset', 'hours_unset'
+             'staff', 'hours_unset', 'hours_unset'
       FROM gyms g WHERE g.id = ${gymId}`;
   };
 
@@ -430,6 +431,11 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
       // and one scoped to the streak are the same number, and the fixture
       // cannot tell the two apart (:30399 §6's C155 shape).
       for (const daysAgo of [0, 7, 14, 21, 60]) await visit(org.org.id, weekly.userId, daysAgo);
+      // Somebody else came five weeks ago, so that week is the gym's and the weekly member
+      // missed it: a week the gym recorded nobody is skipped, never a break (19a-i).
+      const other = await makeUser("l1-other");
+      await joinAsMember(other.cookies, org, owner.cookies);
+      await visit(org.org.id, other.userId, 35);
 
       // THREE DAYS RUNNING, INSIDE THREE WEEK BUCKETS — 3 and 3.
       const daily = await makeUser("l1-daily");

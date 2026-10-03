@@ -40,6 +40,7 @@ import {
 } from "./schemas.js";
 import { registerClassRoutes } from "./classes/routes.js";
 import { registerLeadRoutes } from "./leads/routes.js";
+import { registerLeaderboardRoutes } from "./leaderboard/routes.js";
 import { registerGymPageRoutes } from "./gymPage/routes.js";
 import type { PhotoStore } from "./gymPage/photoStore.js";
 import type { RobotCheck } from "./gymPage/robotCheck.js";
@@ -80,6 +81,8 @@ export interface OrgRouteOverrides {
   /** Tests inject a deterministic source to drive the slug/code collision
    *  retry; production uses `node:crypto`. */
   randomBytes?: (n: number) => Uint8Array;
+  /** Tests move the leaderboard's clock; production uses the real one. */
+  now?: () => Date;
 }
 
 export function registerOrgRoutes(
@@ -126,6 +129,9 @@ export function registerOrgRoutes(
     photos: deps.photos,
     addressKey: deps.invites?.hmacKey ?? null,
   });
+
+  // The members' leaderboard and Hide me (Part 3 §15.5).
+  registerLeaderboardRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).

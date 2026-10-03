@@ -25,6 +25,8 @@ import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no ne
 import Select from '../components/common/Select';
 import GymMembershipCard from '../components/gym/GymMembershipCard';
 import InvitationsPanel from '../components/gym/InvitationsPanel';
+import HideMeSwitch from '../components/gym/HideMeSwitch';
+import { leaderboardService } from '../api/leaderboardApi';
 
 // `gym` is where v1 §8 puts joining a gym — "member enters code at
 // registration or in Settings" — and it is the MEMBER's side of that
@@ -549,6 +551,32 @@ function HealthCard() {
 // The invitations waiting for this address and the gyms this person is in. The
 // code box is gone: join codes are switched off and an invitation is the only way
 // into a gym (ROADMAP 3c; spec Part 3 §10.6).
+/** Hide me, for every gym's leaderboard (spec Part 3 §15.5). Saved when switched, as the
+ *  board's own switch is. */
+function LeaderboardPrivacyCard() {
+  const [visibility, setVisibility] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    leaderboardService.visibility().then(setVisibility).catch(() => setVisibility(null));
+  }, []);
+  if (visibility === null) return null;
+  const change = async (hidden) => {
+    setBusy(true);
+    try {
+      setVisibility(await leaderboardService.setHidden(hidden));
+    } catch {
+      toast.error("Couldn't change Hide me. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="card-glass">
+      <HideMeSwitch hidden={visibility.hidden} under18={visibility.under18} onChange={change} busy={busy} divided={false} />
+    </div>
+  );
+}
+
 function GymTab() {
   // A Join re-reads the card below, so the two never disagree on screen.
   const [joined, setJoined] = useState(0);
@@ -558,6 +586,7 @@ function GymTab() {
           (Part 3 §10.2). */}
       <InvitationsPanel showEmpty onJoined={() => setJoined((n) => n + 1)} />
       <GymMembershipCard refreshToken={joined} />
+      <LeaderboardPrivacyCard />
     </div>
   );
 }

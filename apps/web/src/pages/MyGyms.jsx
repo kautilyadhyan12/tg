@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ORG_TYPES_PHRASE } from '@app/shared';
 import { Building2, Loader2 } from 'lucide-react';
@@ -5,6 +6,8 @@ import { useMyGyms } from '../hooks/useMyGyms';
 import GymHoursNote from '../components/gym/GymHoursNote';
 import AttendancePanel from '../components/gym/AttendancePanel';
 import { cheerNote, myOrgsWords } from '../components/gym/gymMembershipView';
+import Leaderboard from '../components/gym/Leaderboard';
+import { pickedGym, readPicked, savePicked } from '../components/gym/leaderboardView';
 
 // MY GYMS — Kd's ruling of 2026-09-02, in his words: *"whenever a user joins a
 // gym and gym approves them a new option will appear besides the other option
@@ -57,6 +60,14 @@ export default function MyGyms() {
   // client reads "My studios". Somebody in a gym AND a studio gets the neutral
   // word, because no type's word is true of that list.
   const words = myOrgsWords(gyms);
+  // THE GYM PICKER (RULINGS 2026-09-23 and 2026-10-03): a member of two gyms sees each
+  // gym's page, its board included, by tapping its tab; the last one picked is remembered.
+  const [picked, setPicked] = useState(readPicked);
+  const shownId = pickedGym(gyms, picked);
+  const pick = (id) => {
+    setPicked(id);
+    savePicked(id);
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
@@ -121,7 +132,29 @@ export default function MyGyms() {
           </Link>
         </div>
       ) : (
-        gyms.map((gym) => (
+        <>
+        {gyms.length > 1 && (
+          <div role="tablist" aria-label={`Your ${words.plural}`} className="flex flex-wrap gap-2">
+            {gyms.map((gym) => (
+              <button
+                key={gym.id}
+                type="button"
+                role="tab"
+                aria-selected={gym.id === shownId}
+                onClick={() => pick(gym.id)}
+                className="px-3.5 py-2 rounded-xl text-sm font-semibold"
+                style={
+                  gym.id === shownId
+                    ? { background: 'rgba(255,138,31,0.18)', color: '#FF8A1F' }
+                    : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.55)' }
+                }
+              >
+                {gym.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {gyms.filter((gym) => gym.id === shownId).map((gym) => (
           // KEYED BY THE GYM'S OWN ID, AND THAT IS LOAD-BEARING RATHER THAN
           // ROUTINE (T3 round 2, F4). React throws the card away when the gym
           // changes, so `AttendancePanel` cannot carry ANY state from one gym to
@@ -182,8 +215,10 @@ export default function MyGyms() {
                 <AttendancePanel gym={gym} />
               </div>
             </div>
+            <Leaderboard key={`board-${gym.id}`} gym={gym} />
           </div>
-        ))
+        ))}
+        </>
       )}
     </div>
   );

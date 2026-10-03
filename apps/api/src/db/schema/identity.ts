@@ -25,6 +25,8 @@ export const users = pgTable(
     hashAlgo: text("hash_algo"),
     displayName: text("display_name").notNull(), // leaderboard identity; profanity-filtered at write
     leaderboardOptOut: boolean("leaderboard_opt_out").notNull().default(false), // Part 3 §4.4
+    // When the person chose Show me; an under-18 stays off every board until then (§15.5).
+    leaderboardShownAt: timestamp("leaderboard_shown_at", { withTimezone: true }),
     locale: text("locale").notNull().default("en"),
     units: text("units").notNull().default("metric"),
     timezone: text("timezone"), // recaps only; quotas stay UTC (v1)
