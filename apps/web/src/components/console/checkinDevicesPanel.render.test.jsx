@@ -85,7 +85,8 @@ describe('adding a device', () => {
     expect(await screen.findByText('Open this link on Front desk')).toBeTruthy();
     expect(orgService.addCheckinDevice).toHaveBeenCalledWith(ORG.id, 'Front desk');
     expect(screen.getByLabelText('Link for Front desk').value).toBe(LINK);
-    expect(screen.getByText(/It works once, until 15:00/)).toBeTruthy();
+    // A fixed instant: from the day after, the label carries its date ("2 Oct, 15:00").
+    expect(screen.getByText(/It works once, until (2 Oct, )?15:00/)).toBeTruthy();
     expect(screen.getByText('Waiting')).toBeTruthy();
     expect(name.value).toBe('');
 

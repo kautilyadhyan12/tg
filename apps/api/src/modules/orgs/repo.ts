@@ -15,6 +15,7 @@
 // THIRD writer of these tables is a defect, not a precedent.
 import type { Sql, TransactionSql } from "postgres";
 import { slotKeyFor } from "./attendanceSlot.js";
+import { streaks, visitsWithOwner } from "./leaderboard/visits.js";
 import {
   ATTENDANCE_PAGE_LIMIT,
   ATTENDANCE_SUMMARY_LIMIT,
@@ -26,6 +27,7 @@ import {
   gymHoursModeSchema,
   gymNudgePresetSchema,
   GYM_TRIAL_MEMBERS,
+  LEADERBOARD_CHECKIN_DAYS,
   ON_A_ROLL_LIMIT,
   ON_A_ROLL_MIN_SPAN_DAYS,
   ON_A_ROLL_MIN_WEEKS,
@@ -5130,6 +5132,10 @@ const REGULARS_LOOKBACK_DAYS = 400;
 /** THE MEMBERS WHO KEEP TURNING UP — Kd's ruling of 2026-09-04, *"both weeks and
  *  days run"*, over his own :29961 ruling 4.
  *
+ *  **WEEKS RUNNING IS THE LEADERBOARD'S STREAK** (spec Part 3 §15.5, ROADMAP 19a-i):
+ *  desk scans and staff check-ins only, a visit before the app counted by its record, and
+ *  a week the gym recorded nobody skipped. `leaderboard/visits.ts` holds the one rule.
+ *
  *  **EVERY FIGURE COMES FROM `gym_attendance` AT THIS GYM AND NOWHERE ELSE.**
  *  :26469 §1.3 is his ruling that a gym is never shown what a member did away
  *  from it. **`getStreakDays` in `modules/gamification` is the obvious function
@@ -5156,8 +5162,8 @@ const REGULARS_LOOKBACK_DAYS = 400;
  *  **THE ISLAND ARITHMETIC, because it is the part that looks like magic.** For
  *  each member, `day - row_number()` is CONSTANT across a run of consecutive
  *  days and changes at every gap — so grouping by it gives one row per unbroken
- *  run, and `count(*)` is that run's length. The weekly half is the same trick
- *  with Mondays and a stride of 7. The run that matters is the one ending at
+ *  run, and `count(*)` is that run's length. The weekly half numbers the gym's own
+ *  weeks instead of the calendar's. The run that matters is the one ending at
  *  today or yesterday, and there can be at most ONE of those per member: two
  *  islands ending inside that window would be adjacent and would therefore be
  *  one island.
@@ -5174,11 +5180,23 @@ export async function getGymRegulars(
   // Kd's cap is one per member per GYM-DAY (:35762), so the instant the button
   // reopens is the gym's next midnight — which cannot be derived from `today`
   // alone without knowing the zone that produced it.
-  const gymRows = await sql<{ today: string; timezone: string }[]>`
-    SELECT (now() AT TIME ZONE g.timezone)::date::text AS today, g.timezone
-    FROM gyms g WHERE g.id = ${input.gymId}`;
+  const gymRows = await sql<{ today: string; timezone: string; checking_in: boolean }[]>`
+    WITH g AS (
+      SELECT id, timezone, (now() AT TIME ZONE timezone)::date AS today FROM gyms WHERE id = ${input.gymId}
+    )
+    SELECT g.today::text AS today, g.timezone,
+           EXISTS (
+             SELECT 1 FROM gym_attendance a
+             WHERE a.gym_id = g.id AND a.method IN ('pass','key_tag','staff')
+               AND a.day > g.today - ${LEADERBOARD_CHECKIN_DAYS}::int AND a.day <= g.today
+           ) AS checking_in
+    FROM g`;
   const gym = gymRows[0];
   if (gym === undefined) return null;
+  // A gym that has checked nobody in for 30 days has nobody on a roll: a streak skips the
+  // gym's silent weeks, so without this it would never end at a gym that stopped checking
+  // in. The members' board is withheld by the same test.
+  if (!gym.checking_in) return [];
 
   // FLOORED AND CAPPED AND WHOLE, IN THAT ORDER. `Math.min` alone hands
   // `LIMIT -3` straight to Postgres for a negative argument (T3 round 1);
@@ -5197,9 +5215,7 @@ export async function getGymRegulars(
     {
       user_id: string;
       display_name: string;
-      // int4 (`count(*)::int`) reaches JS as a NUMBER; `count(*)` alone is
-      // int8 and reaches it as a STRING. These three were all declared string,
-      // which `Number()` below made invisible.
+      // int4 (`count(*)::int`) reaches JS as a NUMBER; a bare `count(*)` is int8 and a STRING.
       weeks_running: number;
       days_running: number;
       visits: string;
@@ -5208,109 +5224,74 @@ export async function getGymRegulars(
   >`
     WITH b AS (
       SELECT ${gym.today}::date AS today,
-             date_trunc('week', ${gym.today}::date)::date AS this_week,
              ${gym.today}::date - ${REGULARS_LOOKBACK_DAYS}::int AS floor_day
     ),
-    -- THE POPULATION IS THE ROSTER'S, NOT ATTENDANCE'S. Restricting to live,
-    -- non-complimentary members is what stops this panel naming somebody the
-    -- Members screen does not list — a removed member's visits are still in the
-    -- table and would otherwise keep a ghost on the owner's home screen. The
-    -- same population month.visitors counts, so the two panes agree.
+    -- THE POPULATION IS THE ROSTER'S, NOT ATTENDANCE'S: a removed member's visits are
+    -- still in the table and would otherwise keep a ghost on the owner's home screen.
     mem AS (
       SELECT m.user_id FROM gym_members m
       WHERE m.gym_id = ${input.gymId} AND m.removed_at IS NULL AND m.complimentary = false
     ),
-    d AS (
-      SELECT DISTINCT a.user_id, a.day
-      FROM gym_attendance a JOIN mem ON mem.user_id = a.user_id CROSS JOIN b
-      WHERE a.gym_id = ${input.gymId} AND a.day > b.floor_day AND a.day <= b.today
+    -- THE LEADERBOARD'S STREAK, so this panel and the members' board never disagree
+    -- (spec Part 3 §15.5, leaderboard/visits.ts). Read ONCE and kept: a plain CTE read
+    -- per row re-reads the gym's whole history for every member.
+    st AS MATERIALIZED (
+      SELECT s.owner_id AS user_id, s.weeks AS weeks_running, s.from_week AS streak_from
+      FROM (${streaks(sql, input.gymId, gym.today, gym.today)}) s
+      JOIN mem ON mem.user_id = s.owner_id
+      WHERE s.weeks >= ${ON_A_ROLL_MIN_WEEKS}::int
+    ),
+    -- The counted visits of the people with a streak, and whose they are: ONE rule for
+    -- both screens. Read once.
+    cv AS MATERIALIZED (
+      SELECT v.owner_id AS user_id, v.day
+      FROM (${visitsWithOwner(sql, input.gymId)}) v
+      JOIN st ON st.user_id = v.owner_id
+      WHERE v.method IN ('pass','key_tag','staff') AND v.day <= ${gym.today}::date
+        -- No further back than the longest streak or the day search needs.
+        AND v.day >= least((SELECT min(streak_from) FROM st), (SELECT floor_day FROM b))
+    ),
+    -- Over the streak's own span, so the row's two numbers describe one stretch: the
+    -- first real visit in it, and how many visits.
+    span AS (
+      SELECT st.user_id, min(cv.day) AS first_day, count(*) AS visits
+      FROM st JOIN cv ON cv.user_id = st.user_id AND cv.day >= st.streak_from
+      GROUP BY st.user_id
     ),
     -- DAY ISLANDS. day minus row_number() is constant inside a consecutive run.
     dg AS (
-      SELECT user_id, day,
-             day - (row_number() OVER (PARTITION BY user_id ORDER BY day))::int AS grp
-      FROM d
+      SELECT d.user_id, d.day,
+             d.day - (row_number() OVER (PARTITION BY d.user_id ORDER BY d.day))::int AS grp
+      FROM (SELECT DISTINCT cv.user_id, cv.day FROM cv CROSS JOIN b WHERE cv.day > b.floor_day) d
     ),
     day_streak AS (
       SELECT dg.user_id, count(*)::int AS days_running
       FROM dg
       GROUP BY dg.user_id, dg.grp
       HAVING max(dg.day) >= (SELECT today FROM b) - 1
-    ),
-    -- WEEK ISLANDS, the same trick with a stride of 7 over Mondays.
-    -- date_trunc(week) is Monday in Postgres, which is the calendar the
-    -- 8-week chart above is already bucketed by — a second answer to "which
-    -- Monday" computed in JavaScript is how two panes on one screen disagree.
-    -- first_day IS THE REAL FIRST VISIT IN THE BUCKET, NOT ITS MONDAY, and it
-    -- is the only reason this CTE groups instead of using DISTINCT. The two
-    -- differ by up to six days, and that gap IS the defect the span floor below
-    -- closes: two buckets can be one day apart.
-    w AS (
-      SELECT user_id, date_trunc('week', day)::date AS wk, min(day) AS first_day
-      FROM d GROUP BY user_id, date_trunc('week', day)
-    ),
-    wg AS (
-      SELECT user_id, wk, first_day,
-             wk - ((row_number() OVER (PARTITION BY user_id ORDER BY wk)) * 7)::int AS grp
-      FROM w
-    ),
-    week_streak AS (
-      SELECT wg.user_id, count(*)::int AS weeks_running, min(wg.wk) AS streak_from,
-             min(wg.first_day) AS first_day
-      FROM wg
-      GROUP BY wg.user_id, wg.grp
-      HAVING max(wg.wk) >= (SELECT this_week FROM b) - 7
     )
-    SELECT ws.user_id,
+    SELECT st.user_id,
            u.display_name,
-           ws.weeks_running,
+           st.weeks_running,
            coalesce(ds.days_running, 0) AS days_running,
-           -- COUNTED OVER THE STREAK'S OWN SPAN, so the two numbers on the row
-           -- describe one stretch of time. NOT bounded by the same window d
-           -- is: streak_from is a MONDAY and can sit up to six days before
-           -- floor_day, so this can reach a little further back than the
-           -- island search did. Harmless at a 400-day lookback, and written
-           -- down because the comment here used to claim the opposite.
-           (SELECT count(*) FROM gym_attendance v
-             WHERE v.gym_id = ${input.gymId} AND v.user_id = ws.user_id
-               AND v.day >= ws.streak_from AND v.day <= (SELECT today FROM b)) AS visits,
-           -- WHEN THIS GYM MAY CHEER THEM AGAIN — the server's answer to the
-           -- server's own rule, so two open consoles cannot disagree. NULL means
-           -- the window is open now.
-           --
-           -- **ONE PER MEMBER PER GYM-DAY (Kd, :35762), NOT A ROLLING WINDOW.**
-           -- NO BACKTICKS IN THIS COMMENT: it lives inside a sql template
-           -- literal, where one would END the template (:30094 3b, :31098 --
-           -- walked into a third time writing this very line, and caught by
-           -- tsc rather than by reading).
-           -- The two directions of AT TIME ZONE are BOTH here and they are not
-           -- the same operator: on a timestamptz it reads a wall clock OUT
-           -- (giving the gym's calendar date), on a timestamp it puts one back
-           -- IN (giving the instant of the gym's next midnight). Dropping
-           -- either one leaves a query that still runs and answers in UTC -- a
-           -- gym in Kolkata would reopen its buttons at 05:30 (O281 here, O280
-           -- on the guard; the ids were checked against the file's MAXIMUM and
-           -- not against its last row, which is :30094's recorded trap).
-           --
-           -- **NO ORDER BY ANY MORE, AND THAT IS THE RULE CHANGE VISIBLE IN
-           -- ONE LINE.** Under a rolling window the NEWEST cheer decided the
-           -- answer; under a calendar day every cheer sent today gives the same
-           -- midnight, so "which one" stopped being a question.
+           span.visits,
+           -- WHEN THIS GYM MAY CHEER THEM AGAIN: one per member per GYM-DAY (Kd, :35762),
+           -- so the gym's next midnight; NULL means the window is open now. NO BACKTICKS
+           -- IN THIS QUERY'S COMMENTS: one would end the template literal.
            (SELECT ((${gym.today}::date + 1)::timestamp AT TIME ZONE ${gym.timezone})
               FROM gym_cheers c
-             WHERE c.gym_id = ${input.gymId} AND c.user_id = ws.user_id
+             WHERE c.gym_id = ${input.gymId} AND c.user_id = st.user_id
                AND (c.created_at AT TIME ZONE ${gym.timezone})::date = ${gym.today}::date
              LIMIT 1) AS cheerable_at
-    FROM week_streak ws
-    JOIN users u ON u.id = ws.user_id
-    LEFT JOIN day_streak ds ON ds.user_id = ws.user_id
-    WHERE ws.weeks_running >= ${ON_A_ROLL_MIN_WEEKS}::int
-      -- AND THE STREAK MUST HAVE LASTED, not merely straddled a Monday. Week
-      -- BUCKETS are not weeks: without this, somebody whose whole history is
-      -- yesterday and today reads "2 weeks running" on the owner's home screen.
-      AND (SELECT today FROM b) - ws.first_day >= ${ON_A_ROLL_MIN_SPAN_DAYS}::int
-    ORDER BY ws.weeks_running DESC, coalesce(ds.days_running, 0) DESC,
-             u.display_name ASC, ws.user_id ASC
+    FROM st
+    JOIN span ON span.user_id = st.user_id
+    JOIN users u ON u.id = st.user_id
+    LEFT JOIN day_streak ds ON ds.user_id = st.user_id
+    -- THE STREAK MUST HAVE LASTED, not merely straddled a Monday: somebody whose whole
+    -- history is yesterday and today never reads "2 weeks running".
+    WHERE (SELECT today FROM b) - span.first_day >= ${ON_A_ROLL_MIN_SPAN_DAYS}::int
+    ORDER BY st.weeks_running DESC, coalesce(ds.days_running, 0) DESC,
+             u.display_name ASC, st.user_id ASC
     LIMIT ${limit}`;
 
   return rows.map((r) => ({

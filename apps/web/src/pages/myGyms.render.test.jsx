@@ -27,6 +27,14 @@ vi.mock('../api/orgsApi', () => ({
   // exercised here falls back, so the fallback is what the assertions read.
   errorText: (_err, fallback) => fallback,
 }));
+// The leaderboard under each gym has its own suite (leaderboard.render.test.jsx); here it
+// only has to answer.
+vi.mock('../api/leaderboardApi', () => ({
+  leaderboardService: {
+    board: () => new Promise(() => {}),
+    visibility: () => new Promise(() => {}),
+  },
+}));
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', displayName: 'Kd' }, logout: vi.fn(), loading: false }),
 }));
@@ -473,8 +481,10 @@ describe('the pass', () => {
     const other = { ...GYM, id: 'g2', slug: 'bar-bell', name: 'Bar Bell Club' };
     api.getMine.mockResolvedValue({ data: { orgs: [GYM, other], formerOrgs: [] } });
     drawScreen();
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Show my pass' })).toHaveLength(2));
-    fireEvent.click(screen.getAllByRole('button', { name: 'Show my pass' })[1]);
+    // The gym picker shows one gym's card at a time: its tab, then that card's pass.
+    fireEvent.click(await screen.findByRole('tab', { name: 'Bar Bell Club' }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Show my pass' })).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Show my pass' }));
     await waitFor(() => expect(screen.getAllByRole('img', { name: 'Your check-in pass' })).toHaveLength(1));
     expect(api.getCheckinPass).toHaveBeenCalledTimes(1);
   });
@@ -995,11 +1005,15 @@ describe('the cheer', () => {
 
   /** The card a gym's name sits in — `MyGyms` draws one `rounded-2xl` box per
    *  gym and the name is the first thing in it. */
-  const cardFor = (name) => screen.getByText(name).closest('.rounded-2xl');
+  const cardFor = (name) =>
+    screen.getAllByText(name).map((el) => el.closest('.rounded-2xl')).find((card) => card !== null) ?? null;
+  /** A member of two gyms sees one at a time: the gym picker's tab opens the other. */
+  const openGym = async (name) => fireEvent.click(await screen.findByRole('tab', { name }));
 
   it('draws the line the gym chose, and how long ago', async () => {
     api.getMine.mockResolvedValue(cheered());
     drawScreen();
+    await openGym('Iron House');
     expect(await screen.findByText(/You're on a roll\./)).toBeTruthy();
     // `NOW` is 12:00 and the cheer landed at 10:00 — elapsed, never a calendar
     // word, because `sentAt` is an INSTANT read by a member wherever they are
@@ -1014,9 +1028,12 @@ describe('the cheer', () => {
   it('puts the cheer on the card of the gym that sent it, and on no other', async () => {
     api.getMine.mockResolvedValue(cheered());
     drawScreen();
-    await screen.findByText('Bar Bell Club');
-    expect(cardFor('Iron House').textContent).toMatch(/You're on a roll\./);
+    await openGym('Bar Bell Club');
     expect(cardFor('Bar Bell Club').textContent).not.toMatch(/You're on a roll\./);
+    expect(cardFor('Iron House')).toBeNull();
+    await openGym('Iron House');
+    expect(cardFor('Iron House').textContent).toMatch(/You're on a roll\./);
+    expect(cardFor('Bar Bell Club')).toBeNull();
   });
 
   // **IT NEVER NAMES WHO PRESSED IT** (§2.4 — a plain member is told nothing
@@ -1026,6 +1043,7 @@ describe('the cheer', () => {
   it('says the gym cheered them and never which member of staff', async () => {
     api.getMine.mockResolvedValue(cheered());
     drawScreen();
+    await openGym('Iron House');
     // POSITIVE CONTROL FIRST — :28976's vacuity class. An absence assertion
     // over a card that never rendered passes perfectly.
     expect(await screen.findByText(/You're on a roll\./)).toBeTruthy();
@@ -1047,6 +1065,7 @@ describe('the cheer', () => {
   it('still shows the words when it cannot say when', async () => {
     api.getMine.mockResolvedValue(cheered({ sentAt: 'not-an-instant' }));
     drawScreen();
+    await openGym('Iron House');
     expect(await screen.findByText(/You're on a roll\./)).toBeTruthy();
     expect(screen.queryByText(/ago/)).toBeNull();
   });
@@ -1054,7 +1073,8 @@ describe('the cheer', () => {
   it('draws nothing for a preset it has no words for', async () => {
     api.getMine.mockResolvedValue(cheered({ preset: 'something_new' }));
     drawScreen();
-    expect(await screen.findByText('Iron House')).toBeTruthy();
+    await openGym('Iron House');
+    expect(cardFor('Iron House')).not.toBeNull();
     expect(screen.queryByText(/on a roll/i)).toBeNull();
   });
 });

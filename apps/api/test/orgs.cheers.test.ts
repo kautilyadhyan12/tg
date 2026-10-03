@@ -262,12 +262,13 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
    *  hours the two differ — :26812 §2(a)'s defect written into the ORACLE, where
    *  no mutant aimed at the code can reach it. */
   const visit = async (gymId: string, userId: string, daysAgo: number) => {
+    // A staff check-in: the old "I'm here" tap no longer counts towards a streak (19a-i).
     await sql`
       INSERT INTO gym_attendance
         (gym_id, user_id, marked_by_user_id, day, method, hours_status, slot_key)
       SELECT ${gymId}, ${userId}, ${userId},
              (now() AT TIME ZONE g.timezone)::date - ${daysAgo}::int,
-             'manual', 'hours_unset', 'hours_unset'
+             'staff', 'hours_unset', 'hours_unset'
       FROM gyms g WHERE g.id = ${gymId}`;
   };
 
@@ -430,6 +431,11 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
       // and one scoped to the streak are the same number, and the fixture
       // cannot tell the two apart (:30399 §6's C155 shape).
       for (const daysAgo of [0, 7, 14, 21, 60]) await visit(org.org.id, weekly.userId, daysAgo);
+      // Somebody else came five weeks ago, so that week is the gym's and the weekly member
+      // missed it: a week the gym recorded nobody is skipped, never a break (19a-i).
+      const other = await makeUser("l1-other");
+      await joinAsMember(other.cookies, org, owner.cookies);
+      await visit(org.org.id, other.userId, 35);
 
       // THREE DAYS RUNNING, INSIDE THREE WEEK BUCKETS — 3 and 3.
       const daily = await makeUser("l1-daily");
@@ -572,6 +578,26 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
    *  member BELONGS on the list. Both arms are asserted rather than one being
    *  skipped, so the seventh day is not a hole (:7104's PG1). Six days in seven
    *  this test goes red without the span floor. */
+  it(
+    "nobody is on a roll at a gym that stopped checking people in, however long their streak was",
+    async () => {
+      const owner = await makeUser("l9-owner");
+      const org = await makeOrg(owner.cookies, "Roll Gym Stopped");
+      const member = await makeUser("l9-member");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      // Four weeks in a row, the last 40 days ago, and nobody at the gym since: every
+      // week after is silent, which a streak skips, so only the 30-day rule ends it.
+      for (const daysAgo of [40, 47, 54, 61]) await visit(org.org.id, member.userId, daysAgo);
+      expect((await readOverview(org.org.id, owner.cookies)).onARoll).toEqual([]);
+
+      // THE CONTROL: one visit inside the 30 days and the same four weeks count again,
+      // with the silent weeks between skipped.
+      await visit(org.org.id, member.userId, 29);
+      expect(rollFor(await readOverview(org.org.id, owner.cookies), member.userId)?.weeksRunning).toBe(5);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "a streak that only straddled a Monday is not two weeks running",
     async () => {

@@ -350,6 +350,9 @@ export const gymAttendance = pgTable(
       .on(t.gymId, t.entryId, t.day, t.slotKey)
       .where(sql`${t.entryId} IS NOT NULL`),
     index("gym_attendance_gym_day_idx").on(t.gymId, t.day, t.markedAt),
+    // `gym_attendance_counted_idx` — (gym_id, day) INCLUDE (user_id, entry_id) WHERE method is
+    // a desk scan or a staff check-in — is in `0065_leaderboard_show_me.sql`: the leaderboard
+    // reads from it alone, and Drizzle's builder cannot express INCLUDE.
   ],
 );
 
