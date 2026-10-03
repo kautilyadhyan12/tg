@@ -1,5 +1,5 @@
 // THE MEMBERS' LEADERBOARD — the routes against real Postgres (spec Part 3 §15.5; ROADMAP
-// 19a-i). DATABASE_URL-gated.
+// 19a). DATABASE_URL-gated.
 //
 // The worst thing this job could do to a real person: show somebody who chose Hide me to
 // another member — in a row, a photo, a profile, a count, or a gap in the places. That is
@@ -61,6 +61,7 @@ d("the members' leaderboard (real Postgres)", () => {
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gyms WHERE id IN (${mine})`;
     await sql`DELETE FROM user_fitness_profiles WHERE user_id IN (${myUsers})`;
+    await sql`DELETE FROM workouts WHERE user_id IN (${myUsers})`;
     await sql`DELETE FROM one_time_tokens WHERE user_id IN (${myUsers})`;
     await sql`DELETE FROM refresh_tokens WHERE user_id IN (${myUsers})`;
     await sql`DELETE FROM consent_log WHERE user_id IN (${myUsers})`;
@@ -135,8 +136,18 @@ d("the members' leaderboard (real Postgres)", () => {
     return rows[0]?.id ?? "";
   };
 
+  // Joined on a fixed day, long before any workout below: Workout days reads it.
   const join = async (gymId: string, userId: string, entryId: string | null = null): Promise<void> => {
-    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gymId}, ${userId}, ${entryId})`;
+    await sql`
+      INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at)
+      VALUES (${gymId}, ${userId}, ${entryId}, '2026-01-01T00:00:00Z')`;
+  };
+
+  /** A finished app workout at 07:30 on a day of Kolkata's calendar, saved half an hour later. */
+  const workout = async (userId: string, day: string): Promise<void> => {
+    await sql`
+      INSERT INTO workouts (id, user_id, started_at, platform, engine_version, sets_count, total_reps, created_at)
+      VALUES (gen_random_uuid(), ${userId}, ${`${day}T02:00:00Z`}, 'web', 'test', 1, 10, ${`${day}T02:30:00Z`})`;
   };
 
   /** A visit on a day of the gym's calendar. `who` is an account, or only a record. */
@@ -195,7 +206,7 @@ d("the members' leaderboard (real Postgres)", () => {
       const visible = [await account("Asha Rao"), await account("Bilal Khan"), await account("Chen Wu")];
       for (const p of visible) await join(gym.id, p.userId);
 
-      // Five ways to be hidden, each with MORE gym days than anybody shown.
+      // Five ways to be hidden, each with MORE gym days and workout days than anybody shown.
       const hideMe = await account("Hema Hidden");
       await sql`UPDATE users SET leaderboard_opt_out = true WHERE id = ${hideMe.userId}`;
       const young = await account("Yuvi Young");
@@ -214,14 +225,25 @@ d("the members' leaderboard (real Postgres)", () => {
       const hidden = [hideMe, young, youngByRecord, takenOff, nameless];
 
       const days = ["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28", "2026-10-05", "2026-10-06", "2026-10-07"];
-      for (const h of hidden) for (const day of days) await visit(gym, { userId: h.userId }, day);
+      for (const h of hidden) {
+        for (const day of days) {
+          await visit(gym, { userId: h.userId }, day);
+          await workout(h.userId, day);
+        }
+      }
+      // The shown people's workouts run the other way round from their visits, so a
+      // workout board that read visits would show.
       for (const [i, p] of visible.entries()) {
         for (const day of days.slice(4, 5 + i)) await visit(gym, { userId: p.userId }, day);
+        for (const day of days.slice(4, 7 - i)) await workout(p.userId, day);
       }
       await visit(gym, { userId: viewer.userId }, "2026-10-06");
+      await workout(viewer.userId, "2026-10-06");
 
+      const periods = ["this_week", "last_week", "this_month", "last_month", "all_time"];
       const queries = [
-        ...["this_week", "last_week", "this_month", "last_month", "all_time"].map((p) => `board=gym_days&period=${p}`),
+        ...periods.map((p) => `board=gym_days&period=${p}`),
+        ...periods.map((p) => `board=workout_days&period=${p}`),
         "board=streak",
       ];
       for (const q of queries) {
@@ -246,6 +268,13 @@ d("the members' leaderboard (real Postgres)", () => {
         ["Asha R.", 3, 1],
         ["Vera V.", 3, 1],
       ]);
+      const workouts = await board(gym.id, viewer, "board=workout_days&period=this_week");
+      expect(workouts.rows.map((r) => [r.name, r.place, r.value])).toEqual([
+        ["Asha R.", 1, 3],
+        ["Bilal K.", 2, 2],
+        ["Chen W.", 3, 1],
+        ["Vera V.", 3, 1],
+      ]);
 
       // Their profile is the same 404 as somebody who is not in the gym at all.
       const stranger = await account("Sam Stranger");
@@ -261,8 +290,82 @@ d("the members' leaderboard (real Postgres)", () => {
       expect(chen.statusCode).toBe(200);
       expect((JSON.parse(chen.body) as LeaderboardProfileResponse).boards).toEqual([
         { board: "gym_days", period: "this_week", place: 1, value: 3 },
+        { board: "workout_days", period: "this_week", place: 3, value: 1 },
         { board: "streak", period: null, place: 1, value: 1 },
       ]);
+    },
+    T,
+  );
+
+  it(
+    "a gym that checks nobody in: Workout days still hides the hidden, and a profile there carries Workout days and nothing else",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Home Workout Gym");
+      const viewer = await signedIn("Vera Viewer");
+      const hidden = await signedIn("Hema Hidden");
+      await sql`UPDATE users SET leaderboard_opt_out = true WHERE id = ${hidden.userId}`;
+      const young = await account("Yuvi Young");
+      await sql`INSERT INTO user_fitness_profiles (user_id, age) VALUES (${young.userId}, 16)`;
+      const shown = [await account("Asha Rao"), await account("Bilal Khan")];
+      for (const p of [viewer, hidden, young, ...shown]) {
+        await join(gym.id, p.userId);
+        // Desk visits from nine weeks ago: numbers a profile here must never give.
+        await visit(gym, { userId: p.userId }, "2026-08-03");
+        await visit(gym, { userId: p.userId }, "2026-08-04");
+      }
+      for (const day of ["2026-10-05", "2026-10-06", "2026-10-07"]) {
+        await workout(hidden.userId, day);
+        await workout(young.userId, day);
+      }
+      await workout(shown[0]?.userId ?? "", "2026-10-05");
+      await workout(shown[0]?.userId ?? "", "2026-10-06");
+      await workout(shown[1]?.userId ?? "", "2026-10-05");
+      await workout(viewer.userId, "2026-10-05");
+
+      expect((await board(gym.id, viewer, "board=gym_days&period=all_time")).status).toBe("no_checkins");
+      for (const period of ["this_week", "this_month", "all_time"]) {
+        const res = await get(`/v1/orgs/${gym.id}/leaderboard?board=workout_days&period=${period}`, viewer.cookies);
+        expect(res.body).not.toContain(hidden.userId);
+        expect(res.body).not.toContain(young.userId);
+        expect(res.body).not.toMatch(/Hema|Yuvi/);
+        const b = JSON.parse(res.body) as LeaderboardResponse;
+        expect([period, b.status, b.rows.map((r) => [r.name, r.place, r.value])]).toEqual([
+          period,
+          "shown",
+          [
+            ["Asha R.", 1, 2],
+            ["Bilal K.", 2, 1],
+            ["Vera V.", 2, 1],
+          ],
+        ]);
+      }
+
+      const stranger = await account("Sam Stranger");
+      const nobody = await get(`/v1/orgs/${gym.id}/leaderboard/people/${stranger.userId}`, viewer.cookies);
+      expect(nobody.statusCode).toBe(404);
+      for (const h of [hidden, young]) {
+        const res = await get(`/v1/orgs/${gym.id}/leaderboard/people/${h.userId}`, viewer.cookies);
+        expect(res.statusCode).toBe(404);
+        expect(res.body.replace(/"requestId":"[^"]*"/, "")).toBe(nobody.body.replace(/"requestId":"[^"]*"/, ""));
+      }
+      const asha = await get(`/v1/orgs/${gym.id}/leaderboard/people/${shown[0]?.userId ?? ""}`, viewer.cookies);
+      expect(asha.statusCode).toBe(200);
+      expect((JSON.parse(asha.body) as LeaderboardProfileResponse).boards).toEqual([
+        { board: "workout_days", period: "this_week", place: 1, value: 2 },
+      ]);
+      // All time, where the old desk visits would fill a Gym days board: still Workout days alone.
+      const ashaAll = await get(`/v1/orgs/${gym.id}/leaderboard/people/${shown[0]?.userId ?? ""}?period=all_time`, viewer.cookies);
+      expect((JSON.parse(ashaAll.body) as LeaderboardProfileResponse).boards).toEqual([
+        { board: "workout_days", period: "all_time", place: 1, value: 2 },
+      ]);
+
+      // The hidden person sees their own number, the place they would have, and why.
+      const own = await board(gym.id, hidden, "board=workout_days&period=this_week");
+      expect(own.me).toMatchObject({ value: 3, place: 1, hidden: "hide_me" });
+      expect(own.rows.some((r) => r.userId === hidden.userId)).toBe(false);
+      const mine = await get(`/v1/orgs/${gym.id}/leaderboard/mine?board=workout_days&period=this_week`, hidden.cookies);
+      expect((JSON.parse(mine.body) as LeaderboardCountedResponse).workoutDays.map((x) => x.day)).toEqual(["2026-10-07", "2026-10-06", "2026-10-05"]);
     },
     T,
   );
@@ -700,8 +803,10 @@ d("the members' leaderboard (real Postgres)", () => {
 
       const paths = [
         `/v1/orgs/${gym.id}/leaderboard?board=gym_days`,
+        `/v1/orgs/${gym.id}/leaderboard?board=workout_days`,
         `/v1/orgs/${gym.id}/leaderboard?board=streak`,
         `/v1/orgs/${gym.id}/leaderboard/mine?board=gym_days`,
+        `/v1/orgs/${gym.id}/leaderboard/mine?board=workout_days`,
         `/v1/orgs/${gym.id}/leaderboard/mine?board=streak`,
         `/v1/orgs/${gym.id}/leaderboard/people/${member.userId}`,
       ];

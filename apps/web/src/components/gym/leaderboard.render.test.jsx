@@ -1,4 +1,4 @@
-// THE GYM'S LEADERBOARD, drawn (spec Part 3 §15.5; ROADMAP 19a-i). Only the network is
+// THE GYM'S LEADERBOARD, drawn (spec Part 3 §15.5; ROADMAP 19a). Only the network is
 // mocked: what a member sees is read off the real component.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -110,6 +110,7 @@ describe('the members’ board', () => {
   it('says why there is no board instead of drawing an empty one, and draws no row of your own', async () => {
     svc.board.mockResolvedValue(shown({ status: 'no_checkins', rows: [], ranked: 0 }));
     render(<Leaderboard gym={GYM} />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Gym days' }));
     expect(await screen.findByText(/hasn't checked anyone in at the front desk in the last 30 days/)).toBeTruthy();
     expect(screen.queryByRole('list', { name: /people on the board/ })).toBeNull();
     expect(screen.queryByText(/What counted/)).toBeNull();
@@ -160,6 +161,7 @@ describe('the members’ board', () => {
       initials: 'CW',
       boards: [
         { board: 'gym_days', period: 'this_week', place: 1, value: 3 },
+        { board: 'workout_days', period: 'this_week', place: 3, value: 1 },
         { board: 'streak', period: null, place: 2, value: 4 },
       ],
     });
@@ -168,6 +170,11 @@ describe('the members’ board', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Chen W.' });
     expect(await within(dialog).findByText('1st · 3 gym days')).toBeTruthy();
     expect(within(dialog).getByText('2nd · 4 weeks')).toBeTruthy();
+    expect(within(dialog).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Gym days, this week1st · 3 gym days',
+      'Workout days, this week3rd · 1 workout day',
+      'Streak2nd · 4 weeks',
+    ]);
     expect(svc.profile).toHaveBeenCalledWith('g1', 'u2', 'this_week');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
 
@@ -181,6 +188,8 @@ describe('the members’ board', () => {
       value: 1,
       days: [{ day: '2026-10-06', visits: [{ at: '2026-10-06T08:30:00.000Z', how: 'staff', by: 'Maya Coach' }, { at: '2026-10-06T06:30:00.000Z', how: 'desk', by: 'Front desk' }] }],
       notCounted: [{ day: '2026-10-07', at: '2026-10-07T06:30:00.000Z', why: 'own_tap' }],
+      workoutDays: [],
+      workoutsNotCounted: [],
       weeks: [],
     });
     fireEvent.click(screen.getByText('Vera V.'));
@@ -202,6 +211,68 @@ describe('the members’ board', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText('Chen W.')).toBeNull();
     expect(screen.getByText('Sol S.')).toBeTruthy();
+  });
+
+  it('Workout days keeps the period choice, and what counted lists each workout and each one that did not count', async () => {
+    render(<Leaderboard gym={GYM} />);
+    await screen.findByText('Chen W.');
+    svc.board.mockResolvedValue(shown({ board: 'workout_days', period: 'last_week', from: '2026-09-28', to: '2026-10-04' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Workout days' }));
+    await waitFor(() => expect(svc.board).toHaveBeenLastCalledWith('g1', 'workout_days', 'this_week'));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Period' }), { target: { value: 'last_week' } });
+    await waitFor(() => expect(svc.board).toHaveBeenLastCalledWith('g1', 'workout_days', 'last_week'));
+    expect(await screen.findByText('1 more workout day to reach 2nd')).toBeTruthy();
+
+    svc.mine.mockResolvedValue({
+      gymName: 'Iron House',
+      timezone: 'Asia/Kolkata',
+      board: 'workout_days',
+      period: 'last_week',
+      from: '2026-09-28',
+      to: '2026-10-04',
+      value: 1,
+      days: [],
+      notCounted: [],
+      workoutDays: [
+        {
+          day: '2026-09-30',
+          workouts: [
+            { at: '2026-09-30T12:30:00.000Z', countedBy: 'you' },
+            { at: '2026-09-30T02:00:00.000Z', countedBy: 'camera' },
+          ],
+        },
+      ],
+      workoutsNotCounted: [
+        { day: '2026-09-29', at: '2026-09-29T02:00:00.000Z', why: 'saved_late', daysLate: 9 },
+        { day: '2026-09-29', at: '2026-09-29T02:00:00.000Z', why: 'no_sets', daysLate: null },
+        { day: '2026-09-28', at: '2026-09-28T02:00:00.000Z', why: 'before_joining', daysLate: null },
+      ],
+      weeks: [],
+    });
+    fireEvent.click(screen.getByText('Vera V.'));
+    const counted = await screen.findByRole('dialog', { name: 'What counted' });
+    await waitFor(() => expect(svc.mine).toHaveBeenCalledWith('g1', 'workout_days', 'last_week'));
+    expect(await within(counted).findByText('1 workout day')).toBeTruthy();
+    expect(within(counted).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Wed 30 Sep · 2 workouts, 1 day6:00 pm · counted by you7:30 am · counted by the camera',
+      'Tue 29 Sep · 7:30 am · Saved more than 9 days after the workout — a workout counts when it is saved within 7 days',
+      'Tue 29 Sep · 7:30 am · No reps or holds saved',
+      'Mon 28 Sep · 7:30 am · Before you joined Iron House',
+    ]);
+  });
+
+  it('a gym that checks nobody in opens on Workout days, and Gym days says where the board is', async () => {
+    svc.board.mockImplementation((_gym, board) =>
+      Promise.resolve(board === 'gym_days' ? shown({ status: 'no_checkins', rows: [], ranked: 0 }) : shown({ board: 'workout_days' })),
+    );
+    render(<Leaderboard gym={GYM} />);
+    expect(await screen.findByText('Chen W.')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Workout days' }).getAttribute('aria-selected')).toBe('true');
+    expect(svc.board).toHaveBeenLastCalledWith('g1', 'workout_days', 'this_week');
+    // The member's own tap on Gym days stays there, and says why.
+    fireEvent.click(screen.getByRole('tab', { name: 'Gym days' }));
+    expect(await screen.findByText(/so Gym days and Streak aren't showing\. Workout days doesn't need the front desk — see that tab\./)).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Gym days' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('the Streak has no period and shows weeks', async () => {
