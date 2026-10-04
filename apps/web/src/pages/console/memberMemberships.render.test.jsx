@@ -23,6 +23,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       giveHeldMembership: vi.fn(),
       changeHeldMembership: vi.fn(),
       getMemberListEntry: vi.fn(),
+      getMembershipTypes: vi.fn(),
+      addMemberListEntry: vi.fn(),
     },
   };
 });
@@ -302,6 +304,126 @@ describe('changing a membership', () => {
     await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
     expect(await (await boxSoon()).findByRole('button', { name: 'Show 1 earlier membership' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Freeze' })).toBeNull();
+  });
+});
+
+const WORDS = { people: 'members', person: 'member', peopleCap: 'Members', personCap: 'Member', it: 'gym' };
+const IRON = { name: 'Iron Temple', slug: 'iron-temple', timezone: 'Europe/London' };
+
+describe('Add member gives a membership in the same form', () => {
+  const bea = () =>
+    memberListEntryDetailSchema.parse({
+      entryId: BEA,
+      fullName: 'Bea Hart',
+      email: 'bea@members.example',
+      phone: null,
+      memberNumber: null,
+      status: null,
+      membershipType: null,
+      joinedOn: null,
+      endsOn: null,
+      endsOnKind: null,
+      paymentStatus: null,
+      dateOfBirth: null,
+      formerAt: null,
+      source: 'typed',
+      inApp: false,
+      invitation: null,
+      app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
+      extra: [],
+      handEdited: [],
+      members: [],
+    });
+  const openAdd = () =>
+    render(<MemberListPerson gymId={GYM} gym={IRON} entryId={null} list={{ fields: [] }} words={WORDS} readOnly={false} onClose={() => {}} onChanged={() => {}} />);
+  const typeName = (label, value) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+  beforeEach(() => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: { types: [GOLD, PACK] } });
+    orgService.addMemberListEntry.mockResolvedValue({ data: { outcome: 'added', entry: bea(), version: 4 } });
+    orgService.getHeldMemberships.mockResolvedValue(answer([]));
+  });
+
+  it('offers the price list with "No membership" chosen, and adds nobody a membership unless one is picked', async () => {
+    openAdd();
+    const choice = within(await screen.findByTestId('add-membership'));
+    expect(choice.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'No membership',
+      'Gold Monthly · £49.99 every month',
+      '10 classes · £90.00 · 10 classes, used within 60 days',
+    ]);
+    // Nothing picked: no date, no tick.
+    expect(choice.queryByRole('checkbox')).toBeNull();
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea@members.example');
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
+    await screen.findByRole('status');
+    expect(orgService.giveHeldMembership).not.toHaveBeenCalled();
+  });
+
+  it('gives the membership picked to the person just added, and to nobody else', async () => {
+    orgService.giveHeldMembership.mockResolvedValue(answer([]));
+    openAdd();
+    const choice = within(await screen.findByTestId('add-membership'));
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea@members.example');
+    fireEvent.change(choice.getByRole('combobox'), { target: { value: PACK.id } });
+    expect(choice.getByTestId('held-add-line').textContent).toMatch(/^Start(ed|s) .* · Ends .* · 10 of 10 classes left$/);
+    fireEvent.click(choice.getByRole('checkbox', { name: 'They have paid the £90.00' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+    const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
+    expect([gym, entry]).toEqual([GYM, BEA]);
+    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: PACK.id, startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), paid: true });
+    // The person was added first, without the membership's fields in their own details.
+    expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
+    expect(orgService.addMemberListEntry.mock.invocationCallOrder[0]).toBeLessThan(orgService.giveHeldMembership.mock.invocationCallOrder[0]);
+    // Their page opens, with the Memberships box read for them.
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, BEA));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('says so when the person was added and the membership was not', async () => {
+    orgService.giveHeldMembership.mockRejectedValue(
+      refusal(409, { error: 'membership_type_not_found', message: 'That membership type is no longer on your price list. Pick another.' }),
+    );
+    openAdd();
+    const choice = within(await screen.findByTestId('add-membership'));
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea@members.example');
+    fireEvent.change(choice.getByRole('combobox'), { target: { value: GOLD.id } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Bea Hart was added, but the Gold Monthly membership was not: That membership type is no longer on your price list. Pick another. Add it under Memberships.',
+    );
+    // Their page is open, so it can be added there.
+    expect(screen.getByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
+  });
+
+  it('adds nobody while the membership picked cannot be given', async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: { types: [typeOf(3, { name: 'Day pass', kind: 'pack', termCount: null, termUnit: null, packClasses: 1, packDays: 1, priceMinor: 1500 })] } });
+    openAdd();
+    const choice = within(await screen.findByTestId('add-membership'));
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea@members.example');
+    fireEvent.change(choice.getByRole('combobox'), { target: { value: typeOf(3).id } });
+    // A day pass for a day already gone: pick the day through the calendar's own button.
+    fireEvent.click(choice.getByRole('button', { name: /Start date/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+    fireEvent.click(screen.getAllByRole('button').find((b) => b.textContent === '1'));
+    expect(choice.getByRole('alert').textContent).toBe('With that start date this membership would already be over. Pick a later start date.');
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    expect((await screen.findByTestId('panel-alert')).textContent).toContain('this membership would already be over');
+    expect(orgService.addMemberListEntry).not.toHaveBeenCalled();
+  });
+
+  it('adds the person as before where the gym has no price list', async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: { types: [] } });
+    openAdd();
+    await waitFor(() => expect(orgService.getMembershipTypes).toHaveBeenCalledWith(GYM));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByTestId('add-membership')).toBeNull();
   });
 });
 

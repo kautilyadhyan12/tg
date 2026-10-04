@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Check, Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
-import DatePick from '../../components/console/DatePick';
-import { Tick } from './MemberListUpload';
+import MembershipChoice from './MembershipChoice';
 import { termLine } from './membershipTypesView';
 import {
   askWords,
   classesLine,
   datesLine,
   doneWords,
-  givePreview,
+  giveBody,
   isLive,
+  membershipChoice,
+  newRequestKey,
   paymentLine,
-  startRange,
   statusTag,
 } from './heldMembershipsView';
 
@@ -34,13 +34,6 @@ const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 const DANGER = 'c-btn c-btn-danger';
-
-/** A key the server takes one membership for, however often the request arrives. */
-function newRequestKey() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  const hex = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-  return `${hex(8)}-${hex(4)}-4${hex(3)}-8${hex(3)}-${hex(12)}`;
-}
 
 export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
   /** The answer on screen, and the record it is about: never shown under another. */
@@ -236,10 +229,8 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
   };
 
   const renderAdd = () => {
-    const type = types.find((t) => t.id === form.typeId) ?? null;
-    const preview = givePreview(type, form.startsOn, form.paid, today);
-    const range = startRange(today);
-    const ready = type !== null && preview.problem === null;
+    const choice = membershipChoice(types, form, today);
+    const ready = choice.type !== null && choice.problem === null;
     return (
       <form
         noValidate
@@ -249,62 +240,14 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
         onSubmit={(e) => {
           e.preventDefault();
           if (!ready || busy) return;
-          void run('give', null, () =>
-            orgService.giveHeldMembership(gymId, entryId, {
-              requestKey: form.requestKey,
-              typeId: form.typeId,
-              startsOn: form.startsOn,
-              paid: type.priceMinor === 0 ? false : form.paid,
-            }),
-          );
+          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form)));
         }}
       >
         <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
         {types.length === 0 ? (
           <p className="c-s14 c-t2 m-0">You have no membership types yet. Add them in Settings, under Memberships.</p>
         ) : (
-          <>
-            <label className="c-field">
-              <span className="c-label">Membership type</span>
-              <select className="c-sel" value={form.typeId} onChange={(e) => setForm((f) => ({ ...f, typeId: e.target.value }))}>
-                {types.length > 1 ? <option value="">Choose one</option> : null}
-                {types.map((t) => (
-                  <option key={t.id} value={t.id}>{`${t.name} · ${termLine(t)}`}</option>
-                ))}
-              </select>
-            </label>
-            <div className="c-field">
-              <span className="c-label">Start date</span>
-              <DatePick
-                newLook
-                label="Start date"
-                value={form.startsOn}
-                min={range.min}
-                max={range.max}
-                today={today}
-                yearSelect
-                onChange={(day) => setForm((f) => ({ ...f, startsOn: day }))}
-              />
-              {preview.line !== null ? (
-                <span className="c-hint" data-testid="held-add-line">
-                  {preview.line}
-                </span>
-              ) : null}
-              {preview.problem !== null ? (
-                <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
-                  {preview.problem}
-                </span>
-              ) : null}
-            </div>
-            {preview.paidLabel !== null ? (
-              <div className="flex flex-col">
-                <Tick checked={form.paid} onChange={(paid) => setForm((f) => ({ ...f, paid }))}>
-                  {preview.paidLabel}
-                </Tick>
-                <span className="c-hint">Leave it unticked if they still owe it. You can mark it paid later.</span>
-              </div>
-            ) : null}
-          </>
+          <MembershipChoice types={types} today={today} value={form} onChange={(next) => setForm((f) => ({ ...f, ...next }))} />
         )}
         <div className="flex flex-wrap gap-2">
           {types.length > 0 ? (

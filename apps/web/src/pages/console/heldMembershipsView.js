@@ -178,3 +178,22 @@ export function givePreview(type, startsOn, paid, today) {
       : `They have paid the ${price}`;
   return { line, paidLabel, problem: null };
 }
+
+/** What a choice of membership comes to: the type, the line under the date, the words of
+ *  the paid tick, and why it cannot be given. `value` is { typeId, startsOn, paid }. */
+export function membershipChoice(types, value, today) {
+  const type = types.find((t) => t.id === value.typeId) ?? null;
+  return { type, ...givePreview(type, value.startsOn, value.paid, today) };
+}
+
+/** What the server is sent for a choice. `requestKey` is made once a form. */
+export function giveBody(requestKey, type, value) {
+  return { requestKey, typeId: type.id, startsOn: value.startsOn, paid: type.priceMinor === 0 ? false : value.paid };
+}
+
+/** A key the server takes one membership for, however often the request arrives. */
+export function newRequestKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const hex = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+  return `${hex(8)}-${hex(4)}-4${hex(3)}-8${hex(3)}-${hex(12)}`;
+}

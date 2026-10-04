@@ -2367,6 +2367,10 @@ just show (§11).
 - The person's page shows them in a **Memberships** box, drawn only where the gym has
   types or the person holds one; what the gym's own list says about the person sits
   under **Details**.
+- Add member carries the same choice ("Give a membership": a type, a start date, paid;
+  "No membership" until staff pick one). The person is added first and the membership
+  given next, by the two routes above; where the second fails the person stays added and
+  the page says the membership was not (RULINGS 2026-10-04).
 - Not here: bills and money (18a), a file's word linked to a type (17a-iii), a pack's
   classes used by a booking (17c), who a desk lets in (16d).
 

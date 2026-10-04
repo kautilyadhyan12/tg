@@ -25,6 +25,8 @@ import {
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
 import MemberMemberships from './MemberMemberships';
+import MembershipChoice from './MembershipChoice';
+import { giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
 import {
@@ -426,6 +428,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [maybe, setMaybe] = useState(null);
   /** The details typed for somebody new, kept while staff Open a record the warning named. */
   const [draft, setDraft] = useState(null);
+  /** Add member's membership (17a-ii): the gym's price list once it is read (null where it
+   *  has none or it cannot be read), and the choice, "No membership" until staff pick one. */
+  const [giveTypes, setGiveTypes] = useState(null);
+  const [giving, setGiving] = useState(() => ({ requestKey: newRequestKey(), typeId: '', startsOn: gymToday(gym?.timezone), paid: false }));
   /** Where a refusal or the warning shows: at the top, above a form whose buttons are at its foot. */
   const alertRef = useRef(null);
 
@@ -449,6 +455,24 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [picking, setPicking] = useState(pair?.otherId ?? null);
 
   const ranges = dayRanges();
+
+  // The price list, for somebody being added: nothing is offered until it is read.
+  const adding = id === null;
+  useEffect(() => {
+    if (!adding) return undefined;
+    let live = true;
+    Promise.resolve()
+      .then(() => orgService.getMembershipTypes(gymId))
+      .then((res) => {
+        if (live && res.data.types.length > 0) setGiveTypes(res.data.types);
+      })
+      .catch(() => {
+        // No price list to offer: the person is added without a membership, as before.
+      });
+    return () => {
+      live = false;
+    };
+  }, [gymId, adding]);
 
   useEffect(() => {
     const before = document.body.style.overflow;
@@ -631,8 +655,32 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     setNotice(null);
     setRefusal(null);
     setMaybe(null);
+    // A membership chosen in the form is given once the person is added. If that fails
+    // the person stays added, and the page says the membership was not.
+    const choice = giveTypes === null ? null : membershipChoice(giveTypes, giving, gymToday(gym?.timezone));
+    if (choice !== null && choice.type !== null && choice.problem !== null) {
+      setRefusal({ message: choice.problem, openId: null, ack: null });
+      setBusy(false);
+      return;
+    }
     try {
-      written(null, await orgService.addMemberListEntry(gymId, input));
+      const res = await orgService.addMemberListEntry(gymId, input);
+      let notGiven = null;
+      if (choice !== null && choice.type !== null) {
+        try {
+          await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving));
+        } catch (err) {
+          notGiven = errorText(err, 'Please try again.');
+        }
+      }
+      written(null, res);
+      if (notGiven !== null) {
+        setRefusal({
+          message: `${res.data.entry.fullName || 'This person'} was added, but the ${choice.type.name} membership was not: ${notGiven} Add it under Memberships.`,
+          openId: null,
+          ack: null,
+        });
+      }
     } catch (err) {
       if (wanted.current !== null) return;
       const people = err?.response?.data?.people;
@@ -949,6 +997,21 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           <input type="text" value={form.extra[f.key] ?? ''} onChange={(e) => setExtra(f.key, e.target.value)} className="c-input" />
         </label>
       ))}
+      {id === null && giveTypes !== null ? (
+        <div className="c-card p-3 flex flex-col gap-3" data-testid="add-membership">
+          <span className="c-s15 c-w6 c-t1">Give a membership</span>
+          <MembershipChoice
+            allowNone
+            types={giveTypes}
+            today={gymToday(gym?.timezone)}
+            value={giving}
+            onChange={(next) => {
+              setRefusal(null);
+              setGiving(next);
+            }}
+          />
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={busy || readOnly} className={MAIN}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
