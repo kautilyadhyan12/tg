@@ -1,54 +1,135 @@
-// MEMBERSHIPS FROM YOUR LIST, their words (spec Part 3 §13.2; ROADMAP 17a-iii). Pure, so
-// the tests read every state without a browser. The server decides who gets a
-// membership and works out each date (`linkHeldMembership` in `@app/shared`); this file
-// only puts them into words.
+// MEMBERSHIPS ON THE MEMBER LIST, their words (spec Part 3 §13.2; ROADMAP 17a-iii). Pure,
+// so the tests read every state without a browser.
+//
+// A gym's member list says which membership each person has ("Gold"). Such a name IS a
+// membership, so it is shown in the gym's one list of memberships (Settings →
+// Memberships): as a type's own line where it is that type, and under "not set up yet"
+// where it is no type so far. The server decides who gets a membership and works out
+// each date (`linkHeldMembership` in `@app/shared`); this file only puts them into words.
 import { formatMinor } from '@app/shared';
 import { dayWords } from './memberListView';
 
 const people = (n) => `${n.toLocaleString('en')} ${n === 1 ? 'person' : 'people'}`;
 
-/** A name from the list's Membership column, in quotes so it reads as the list's own. */
+/** A name from the member list, in quotes so it reads as the list's own. */
 export const quoted = (word) => `“${word}”`;
 
-/** "“Gold” · 42 people on your list". */
-export function wordLine(w) {
-  return `${quoted(w.word)} · ${people(w.people)} on your list`;
+const sameText = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The list's names that are no membership type yet, in the list's own order. One whose
+ *  type was archived is among them: it cannot be given until it is set up again. */
+export function notSetUp(words) {
+  return words.filter((w) => (w.link === null ? w.sameName === null : w.link.typeArchived));
 }
 
-/** A name that is already one of the gym's own types, with nobody left to give it to,
- *  is not a question: it is not drawn. */
-export function isSettled(w) {
-  return w.link === null && w.sameName !== null && w.sameName.waiting === 0;
+/** "“Gold” · 6 people". */
+export function nameLine(w) {
+  return `${quoted(w.word)} · ${people(w.people)}`;
 }
 
-/** What a row shows and offers:
- *    choose  the list's name is not yet any type: staff pick one;
- *    same    it is the name of one of the gym's types, and some people do not have it;
- *    set     staff picked its type before. `canGive` where people still do not have it. */
-export function rowWords(w) {
-  if (w.link !== null) {
-    const { typeName, typeArchived, waiting } = w.link;
-    if (typeArchived) {
-      return { kind: 'set', canGive: false, text: `${quoted(w.word)} is ${typeName}, which is archived. Put it back above to give it to more people.` };
+/** Under a not-set-up name whose type was archived: what happened, or null. */
+export function archivedLine(w) {
+  if (w.link === null || !w.link.typeArchived) return null;
+  return `You set this up as ${w.link.typeName}, which is now archived. Put ${w.link.typeName} back, or set ${quoted(w.word)} up again.`;
+}
+
+/** What one live type has to do with the member list, a line each, in plain facts:
+ *    - a name staff said is this type ("On your member list this is “Gold” · 6 people"),
+ *      which can be undone;
+ *    - the list's own use of this type's very name, said only while somebody with it
+ *      has never had the membership.
+ *  `give` is whether anybody with the name has never had the type. `first` is true where
+ *  nobody with it has: the people are offered it outright. Otherwise some were given it
+ *  and some were not, perhaps on purpose, so the row states the numbers and offers a
+ *  look at who can get it, never a prompt to give. */
+export function typeTies(type, words) {
+  const ties = [];
+  const never = (waiting) => `${String(waiting)} of them ${waiting === 1 ? 'has' : 'have'} never had it`;
+  const ownName = (w, waiting) => ({
+    word: w,
+    text:
+      waiting === w.people
+        ? `${people(w.people)} on your member list ${w.people === 1 ? 'has' : 'have'} ${type.name}, but it is not on their ${w.people === 1 ? 'page' : 'pages'} yet.`
+        : `On your member list ${people(w.people)} ${w.people === 1 ? 'has' : 'have'} ${type.name}. ${never(waiting)} here.`,
+    give: true,
+    first: waiting === w.people,
+    undo: false,
+  });
+  for (const w of words) {
+    if (w.link !== null) {
+      if (w.link.typeArchived || w.link.typeId !== type.id) continue;
+      const { waiting } = w.link;
+      if (sameText(w.word, type.name)) {
+        if (waiting > 0) ties.push(ownName(w, waiting));
+        continue;
+      }
+      const is = `On your member list this is ${quoted(w.word)} · ${people(w.people)}.`;
+      ties.push({
+        word: w,
+        text: waiting === 0 ? is : waiting === w.people ? `${is} They have never had it.` : `${is} ${never(waiting)}.`,
+        give: waiting > 0,
+        first: waiting === w.people,
+        undo: true,
+      });
+    } else if (w.sameName !== null && w.sameName.typeId === type.id && w.sameName.waiting > 0) {
+      ties.push(ownName(w, w.sameName.waiting));
     }
-    if (waiting === 0) {
-      return { kind: 'set', canGive: false, text: `${quoted(w.word)} is ${typeName}. Everyone with it on your list has ${typeName}, or had it before.` };
-    }
-    return {
-      kind: 'set',
-      canGive: true,
-      text: `${quoted(w.word)} is ${typeName}. ${people(waiting)} ${waiting === 1 ? "doesn't" : "don't"} have ${typeName} yet.`,
-    };
   }
-  if (w.sameName !== null) {
-    const { typeName, waiting } = w.sameName;
-    return {
-      kind: 'same',
-      canGive: true,
-      text: `This is your membership type ${typeName}. ${people(waiting)} ${waiting === 1 ? "doesn't" : "don't"} have it yet.`,
-    };
-  }
-  return { kind: 'choose', canGive: false, text: null };
+  return ties;
+}
+
+/** The button on a type's row that opens the box for one of the list's names. */
+export function tieButton(type, tie) {
+  const who = sameText(tie.word.word, type.name) ? 'on your member list' : `with ${tie.word.word} on your member list`;
+  return tie.first
+    ? { label: 'Give it to them', aria: `Give ${type.name} to the people ${who}`, main: true }
+    : { label: 'See who can get it', aria: `See who ${who} can get ${type.name}`, main: false };
+}
+
+/** The closed section's line, with how many of the list's names wait to be set up. */
+export function withSetUpCount(summary, words) {
+  if (summary === undefined) return undefined;
+  const n = notSetUp(words).length;
+  return n === 0 ? summary : `${summary} · ${String(n)} on your member list to set up`;
+}
+
+/** "Set up" on a name, where the gym already has types: is it one of them, or new? */
+export function chooserWords(w) {
+  return {
+    question: `What is ${quoted(w.word)} at your gym?`,
+    existing: 'One of the memberships above',
+    pick: 'Choose one',
+    fresh: "A new membership. I'll add its price now.",
+  };
+}
+
+/** The Add form, opened for a name from the list. */
+export function formWordsFor(w) {
+  return {
+    heading: `Add ${quoted(w.word)} as a membership type`,
+    hint: `${people(w.people)} on your member list ${w.people === 1 ? 'has' : 'have'} ${quoted(w.word)}. Add its price and how it is paid. Next you choose who gets it.`,
+  };
+}
+
+/** Undoing "this name is this type". */
+export function undoWords(w) {
+  const typeName = w.link?.typeName ?? '';
+  return {
+    button: `This isn't ${quoted(w.word)}`,
+    question: `Stop counting ${quoted(w.word)} on your member list as ${typeName}? Nobody's membership changes: to take one away, cancel it on that person's page. ${quoted(w.word)} goes back under “not set up yet”.`,
+    confirm: 'Stop counting it',
+    done: `Done. Nobody's membership changed. ${quoted(w.word)} is back under “not set up yet”.`,
+  };
+}
+
+/** "Set up again" on a name whose type was archived: it stops counting as that type. */
+export function againWords(w) {
+  const typeName = w.link?.typeName ?? '';
+  return {
+    question: `Set ${quoted(w.word)} up again? It will no longer count as ${typeName}, which is archived. Nobody's membership changes.`,
+    confirm: 'Set it up again',
+    done: `${quoted(w.word)} no longer counts as ${typeName}. Nobody's membership changed. Set it up below.`,
+  };
 }
 
 /** The date beside one person's name in the box: "renews 14 November 2026". */
@@ -169,16 +250,36 @@ export function packNote(preview) {
     : `Each gets all ${String(n)} classes: your list doesn't say how many they have used.`;
 }
 
-/** The box's heading and its button. */
-export function boxWords(preview, ticks) {
+/** The ticks the box opens with. Where nobody with the name has the type yet, everybody
+ *  who can get it is ticked. Where some already have it, the rest may have been left out
+ *  on purpose: nobody is ticked, and staff tick who they mean. */
+export function startTicks(preview) {
+  const on = preview.counts.has === 0;
+  return { settled: on, due: on, ask: on };
+}
+
+/** The box's heading, its button, and what it says when nobody is ticked. Where the
+ *  list's name is the type's own, it is said once, not twice. With nobody ticked there
+ *  is nothing to give; a name that is not yet counted as this type (`counted` false, and
+ *  not its own name) can still be counted as it, to give later. */
+export function boxWords(preview, ticks, counted = false) {
   const n = givenCount(preview, ticks);
+  const { name } = preview.type;
+  const same = sameText(name, preview.word);
+  const heading = same
+    ? `Give ${name} to the people who have it on your member list?`
+    : `Give ${name} to the people with ${quoted(preview.word)} on your member list?`;
+  if (n > 0) return { heading, button: `Give ${name} to ${people(n)}`, nobody: null };
+  const anyone = preview.counts.settled + preview.counts.due + preview.counts.ask > 0;
+  if (same || counted) {
+    return { heading, button: null, nobody: anyone ? `Tick who should get ${name}.` : `Nobody on your member list can be given ${name} now.` };
+  }
   return {
-    heading: `Give ${preview.type.name} to the people with ${quoted(preview.word)} on your list?`,
-    button: n === 0 ? `Remember that ${quoted(preview.word)} is ${preview.type.name}` : `Give ${preview.type.name} to ${people(n)}`,
-    nobody:
-      n === 0
-        ? `Nobody is given ${preview.type.name} now. It is remembered, so you can give it later.`
-        : null,
+    heading,
+    button: `Count ${quoted(preview.word)} as ${name}`,
+    nobody: anyone
+      ? `Tick who should get ${name}. Or count ${quoted(preview.word)} on your member list as ${name} now, and give it to them later from this page.`
+      : `Nobody on your member list can be given ${name} now. You can still count ${quoted(preview.word)} on your member list as ${name}.`,
   };
 }
 
@@ -200,11 +301,6 @@ export function linkBody(preview, ticks, paid) {
 
 /** What the press did, said back in one line. */
 export function doneWords(given, word, typeName) {
-  if (given === 0) return `${quoted(word)} is now ${typeName}. Nobody was given it.`;
+  if (given === 0) return `${quoted(word)} on your member list now counts as ${typeName}. Nobody was given it.`;
   return `${people(given)} now ${given === 1 ? 'has' : 'have'} ${typeName}. You can see it on each person's page.`;
 }
-
-export const UNLINK_QUESTION = (w) =>
-  `Forget that ${quoted(w.word)} is ${w.link.typeName}? Nobody's membership changes. You can then choose again.`;
-
-export const UNLINK_DONE = (w) => `Done. Nobody's membership changed. You can choose a membership type for ${quoted(w.word)} again.`;

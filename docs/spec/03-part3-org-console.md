@@ -2381,9 +2381,10 @@ just show (§11).
 - Not here: bills and money (18a), a pack's classes used by a booking (17c), who a desk
   lets in (16d).
 
-*(17a-iii's notes, 2026-10-04.)* **A list's membership word linked to a type**:
-`gym_membership_word_links` (one link a word), `linkHeldMembership` in `@app/shared`
-(`heldMemberships.ts`), and Settings → Memberships → "Memberships on your member list".
+*(17a-iii's notes, 2026-10-04, the screen redrawn 2026-10-05.)* **A list's membership
+word linked to a type**: `gym_membership_word_links` (one link a word),
+`linkHeldMembership` in `@app/shared` (`heldMemberships.ts`), and the gym's ONE list of
+memberships, Settings → Memberships.
 - A word is matched WHOLE, its capitals folded by Postgres on both sides (`lower`), as
   the list's own chips fold it: "Gold" is "GOLD" and never "Gold Plus". There is no list
   of words in the code.
@@ -2414,16 +2415,31 @@ just show (§11).
   Renews 14 November 2026", never the worked-back day as the day they started.
 - One link a word. A second type is refused until the link is removed; removing it
   changes nobody. The link is remembered and never acts by itself: people who arrive
-  with the word later are counted ("3 people … don't have it yet") and given it on a
-  press.
-- **A name on the list that is already one of the gym's own types is never asked about**
-  (RULINGS 2026-10-05; Kd's click-through met "Gold Monthly" with a dropdown offering
-  Gold Monthly). The read answers `sameName` for a word with no link whose folded
-  spelling is a live type's name: the screen says "This is your membership type Gold
-  Monthly" and offers the people who do not hold it, with no dropdown, and draws no row
-  at all where everybody holds it. The screen's words are a gym's: the list's name in
-  quotes, "Which membership type should they have?", "See who gets it", "Change" (which
-  forgets the choice and changes nobody); never "link".
+  with the word later are given it on a press.
+- **The screen: one list of memberships, never a second one beside it** (RULINGS
+  2026-10-05). A name on the member list IS a membership, as the file's own
+  membership names are in every product read (§13.8). So Settings → Memberships draws:
+  - under the types, **"On your member list, not set up yet"**: each name that is no
+    type so far, with how many people have it, and **Set up**. With nothing for sale
+    yet, Set up opens the usual Add form with the name filled in; saving it leads
+    straight to the box of who gets it. Where the gym has types it first asks "What is
+    “Gold” at your gym?": *One of the memberships above* (which one) or *A new
+    membership*, nothing chosen. The closed section says how many names wait.
+  - on a type's own row, what it has to do with the list, in plain numbers: "On your
+    member list this is “Gold” · 360 people. 60 of them have never had it." with **See
+    who can get it**, and **This isn't “Gold”**, which undoes the tie and changes
+    nobody. Where nobody with the name has had it, the row offers **Give it to them**.
+  - **a name that is already a type's own name is never asked about** (the read's
+    `sameName`): nothing is drawn where everybody with it has had the type, and its
+    row states the numbers where some have not. Kd's click-through met "Gold Monthly"
+    on the list beside a dropdown offering Gold Monthly.
+  - a name whose type was archived goes back under "not set up yet" with **Set up
+    again**.
+  The box opens with everybody who can get it ticked the first time, and with NOBODY
+  ticked where some already have the type: the rest may have been left out on purpose
+  (lapsed members a gym chose not to bring across), so staff tick who they mean. A name
+  not yet tied to the type can be counted as it with nobody given. One thing is open at
+  a time: a form, the question or the box.
 - All four routes need `members.confirm` (a preview names people and what each owes);
   the box sits in Settings → Memberships, which opens on `memberships.manage`, so in
   practice both. The word travels in the request's body, never its address.
@@ -2559,7 +2575,16 @@ manually claim the spot") and "Cancelling classes, class schedules, and Class Ty
 Mindbody support: "How to manage early cancellations, late cancellations, and no-shows
 for classes" (the business sets the window; a fee or a visit deduction) and its
 scheduling page (session lengths, real-time trainer availability) · Glofox's blog on
-class scheduling (the next person on the waitlist is told by SMS or push). Not opened
+class scheduling (the next person on the waitlist is told by SMS or push). **Read 2026-10-05 for 17a-iii's screen:** TeamUp, "Switching to TeamUp from a
+spreadsheet" ("We need at least memberships set up in order to complete the import";
+"we'll either need memberships to match the names of the memberships in your previous
+system, or we can ask for the matches before completing the import") · PushPress,
+"Migration of your Members/Clients from Another Platform" ("Assign membership plans,
+apply discounts, and set dates. You can do this one-by-one or with bulk assign";
+"Select a cohort and apply in one step"; "Bulk edit plan details and set remaining
+sessions") · Gymdesk, "Data Imports Overview" (its membership import's fields:
+"Member Name · Membership Title · Payment Amount · Recurrence Details · … Start Date ·
+End Date · … Next Payment Date"). Not opened
 that day, and general to every product the chat knows: the week calendar, and a desk
 check-in marking a booking attended — each card checks its own before it builds.
 

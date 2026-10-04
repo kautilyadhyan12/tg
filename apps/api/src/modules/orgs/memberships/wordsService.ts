@@ -133,7 +133,7 @@ export async function linkMembershipWord(
       throw new OrgsError(
         409,
         "membership_word_linked",
-        `This is already set as ${outcome.typeName}. Press Change beside it first.`,
+        `That name on your member list already counts as ${outcome.typeName}.`,
       );
     case "changed":
       throw new OrgsError(
