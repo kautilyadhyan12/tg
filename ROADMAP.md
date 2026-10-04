@@ -212,7 +212,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 19a-iii. [x] **The board in the console** — merged 2026-10-04 (PR #165).
      - 19a-iv. [x] **Fixing a visit** — merged 2026-10-04 (PR #167).
    - 19b. **Updates** (spec Part 3 §15.2, §15.3), split 2026-10-04 in three (posts, photos, the safety tools and video are more than one terminal):
-     - 19b-i. [ ] **The gym posts, members react**: staff write a post with up to 4 photos, pin and remove it on a new console page; members read them under an Updates tab and react; no comments.
+     - 19b-i. [x] **The gym posts, members react** — merged 2026-10-04 (PR #169).
      - 19b-ii. [ ] **Members post, and the safety tools**: the gym's switch for member posts, Report, the staff queue, stop a person posting, block, the bad-words hold; whether a member's photo lives one week (RULINGS 2026-08-25) is asked in its plan. **First tests: a reported post gone for everyone in one tap; a blocked person's posts gone for the blocker.**
      - 19b-iii. [ ] **Video**: one video of up to a minute a post, 20 a gym. Needs Kd's Cloudflare Stream account.
    - 19c. [ ] **Events**, counted by 17c's Book rule. 19d. [ ] **Challenges** (the document's leagues and tournaments; knock-outs later).

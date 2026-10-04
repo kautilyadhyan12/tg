@@ -251,3 +251,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **17a-ii, as it stood when it was built (merged 2026-10-04, PR #168):**
 
 - 17a-ii. [ ] **A person's membership**: given on their page (type and start; the end or renewal worked out), ONE pure status rule with its exhaustive test, "paid" marked by hand until Part 5.
+
+**19b-i, as it stood when it was built (merged 2026-10-04, PR #169):**
+
+- 19b-i. [ ] **The gym posts, members react**: staff write a post with up to 4 photos, pin and remove it on a new console page; members read them under an Updates tab and react; no comments.
