@@ -214,7 +214,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 19b. **Updates** (spec Part 3 §15.2, §15.3), split 2026-10-04 in three (posts, photos, the safety tools and video are more than one terminal):
      - 19b-i. [x] **The gym posts, members react** — merged 2026-10-04 (PR #169).
      - 19b-ii. **Members post, and the safety tools**, split 2026-10-04 in three (too big for one terminal; RULINGS that day):
-       - 19b-ii-a. [ ] **Members post, Report and the staff list**: the gym's switch, a member's own post (10 a day) and removing it, Report, the reported list with Remove and Keep, stop a person posting.
+       - 19b-ii-a. [x] **Members post, Report and the reported list** — merged 2026-10-05 (PR #170).
        - 19b-ii-b. [ ] **Block, the bad-words hold and the support address**: a member never again sees a blocked member's posts or reactions; a post with a bad word is HELD for staff, the word list tested against real wording from outside the code. **First test: a blocked person's posts gone for the blocker.**
        - 19b-ii-c. [ ] **A person's posts on their profile** (RULINGS 2026-10-02, 2026-10-03): a tap on a name on the board or a post shows that person's posts, to members and to staff.
      - 19b-iii. [ ] **Video**: one video of up to a minute a post, 20 a gym. Needs Kd's Cloudflare Stream account.
