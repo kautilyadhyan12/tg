@@ -341,6 +341,8 @@ describe('Add member gives a membership in the same form', () => {
   beforeEach(() => {
     orgService.getMembershipTypes.mockResolvedValue({ data: { types: [GOLD, PACK] } });
     orgService.addMemberListEntry.mockResolvedValue({ data: { outcome: 'added', entry: bea(), version: 4 } });
+    // Once added, the page reads the new person again.
+    orgService.getMemberListEntry.mockResolvedValue({ data: { entry: bea() } });
     orgService.getHeldMemberships.mockResolvedValue(answer([]));
   });
 
