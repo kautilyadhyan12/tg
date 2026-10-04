@@ -7,7 +7,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-const svc = { list: vi.fn(), add: vi.fn(), setPinned: vi.fn(), remove: vi.fn(), reactors: vi.fn() };
+const svc = {
+  list: vi.fn(),
+  add: vi.fn(),
+  setPinned: vi.fn(),
+  remove: vi.fn(),
+  reactors: vi.fn(),
+  reported: vi.fn(),
+  keep: vi.fn(),
+  setMembersCanPost: vi.fn(),
+  stopped: vi.fn(),
+  setStopped: vi.fn(),
+};
 const orgApi = { getMine: vi.fn() };
 const prepare = vi.fn();
 vi.mock('../../api/postsApi', () => ({
@@ -42,9 +53,17 @@ const post = (id, body, over = {}) => ({
   createdAt: '2026-10-07T06:30:00.000Z',
   reactions: { like: 0, love: 0, strong: 0, fire: 0 },
   mine: null,
+  fromMember: false,
+  own: false,
+  wrote: false,
+  reported: false,
+  authorId: null,
+  authorStopped: false,
   ...over,
 });
-const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', pinned: [], posts: [], next: null, ...over });
+const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', membersCanPost: false, reportedCount: 0, pinned: [], posts: [], next: null, ...over });
+const reportedList = (items = []) => ({ gymId: 'g1', gymName: 'Iron House', items, total: items.length });
+const NO_REASONS = { unkind: 0, photo_of_someone: 0, nudity: 0, spam: 0, other: 0 };
 
 const open = (org = ORG) => {
   orgApi.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
@@ -66,6 +85,8 @@ beforeEach(() => {
   resetConsoleOrgs();
   for (const fn of [...Object.values(svc), prepare]) fn.mockReset();
   svc.list.mockResolvedValue(feed());
+  svc.reported.mockResolvedValue(reportedList());
+  svc.stopped.mockResolvedValue({ people: [] });
   let made = 0;
   prepare.mockImplementation((file) => {
     if (file.name.endsWith('.pdf')) return Promise.reject(new Error('unreadable'));
@@ -372,5 +393,204 @@ describe('pinning and removing', () => {
     fireEvent.click(within(cards()[0]).getByRole('button', { name: 'Pin to the top' }));
     expect((await screen.findByRole('alert')).textContent).toBe('You can pin up to 3 posts. Unpin one to pin this.');
     await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('members’ posts', () => {
+  const memberPost = (id, body, over = {}) => post(id, body, { fromMember: true, authorId: 'u-wendy', author: { name: 'Wendy Writer', initials: 'WW' }, ...over });
+  const theSwitch = () => within(screen.getByTestId('members-can-post')).getByRole('switch', { name: 'Members can post' });
+
+  it('the switch is off to start, says what it does, and a press switches it for this gym', async () => {
+    svc.setMembersCanPost.mockResolvedValue({ membersCanPost: true });
+    open();
+    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('false'));
+    expect(screen.getByText('Only your staff can post. Switch this on to let your members post too.')).toBeTruthy();
+    fireEvent.click(theSwitch());
+    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('true'));
+    expect(svc.setMembersCanPost.mock.calls).toEqual([['g1', true]]);
+    expect(screen.getByRole('status').textContent).toBe('Your members can post now.');
+    expect(screen.getByText('Your members can post words and photos here. You can remove any post, and stop a person posting.')).toBeTruthy();
+  });
+
+  it('switching it off says members’ posts stay, and a switch that fails stays where it was', async () => {
+    svc.list.mockResolvedValue(feed({ membersCanPost: true }));
+    svc.setMembersCanPost.mockResolvedValueOnce({ membersCanPost: false }).mockRejectedValueOnce(refusal(409, 'Your plan has ended.'));
+    open();
+    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('true'));
+    fireEvent.click(theSwitch());
+    expect((await screen.findByRole('status')).textContent).toBe('Members can no longer post. The posts they already made stay until you remove them.');
+    fireEvent.click(theSwitch());
+    expect((await screen.findByRole('alert')).textContent).toBe('Your plan has ended.');
+    expect(theSwitch().getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('a gym with no plan cannot move the switch', async () => {
+    svc.list.mockResolvedValue(feed({ membersCanPost: true }));
+    open({ ...ORG, subscription: null, consoleReadOnly: true });
+    await waitFor(() => expect(theSwitch().disabled).toBe(true));
+  });
+
+  it('a member’s post is marked, and only it offers "Stop them posting"', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [memberPost('m', 'From a member'), post('s', 'From the gym')] }));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    expect(within(cards()[0]).getByText('Member')).toBeTruthy();
+    expect(within(cards()[0]).getByRole('button', { name: 'Stop them posting' })).toBeTruthy();
+    expect(within(cards()[1]).queryByText('Member')).toBeNull();
+    expect(within(cards()[1]).queryByRole('button', { name: 'Stop them posting' })).toBeNull();
+  });
+
+  it('stopping a person asks first in a box that names them, stops the writer of the post pressed, and marks their posts', async () => {
+    svc.list.mockResolvedValue(
+      feed({ posts: [memberPost('a', 'Wendy one'), memberPost('b', 'Omar one', { authorId: 'u-omar', author: { name: 'Omar Other', initials: 'OO' } }), memberPost('c', 'Wendy two')] }),
+    );
+    svc.setStopped.mockResolvedValue({ stopped: true });
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop them posting' }));
+    const box = within(within(cards()[2]).getByRole('group', { name: 'Stop Wendy Writer posting?' }));
+    expect(
+      box.getByText(
+        "Wendy Writer won't be able to post on Updates until you let them again. They can still read and react. Their posts stay until you remove them. They aren't emailed, and nobody else changes.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
+    expect(svc.setStopped).not.toHaveBeenCalled();
+
+    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop them posting' }));
+    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Stop Wendy Writer posting' }));
+    await waitFor(() => expect(svc.setStopped.mock.calls).toEqual([['g1', 'u-wendy', true]]));
+    expect((await screen.findByRole('status')).textContent).toBe('Wendy Writer can no longer post.');
+    // Both of Wendy's posts say so and offer the way back; Omar's is untouched.
+    await waitFor(() => expect(within(cards()[0]).getByText('Stopped from posting')).toBeTruthy());
+    expect(within(cards()[2]).getByRole('button', { name: 'Let them post again' })).toBeTruthy();
+    expect(within(cards()[1]).queryByText('Stopped from posting')).toBeNull();
+    expect(within(cards()[1]).getByRole('button', { name: 'Stop them posting' })).toBeTruthy();
+    expect(cards()).toHaveLength(3);
+  });
+
+  it('the people stopped are listed by name, and "Let them post again" lets that one back', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [memberPost('a', 'Wendy one', { authorStopped: true })] }));
+    svc.stopped.mockResolvedValueOnce({
+      people: [
+        { userId: 'u-wendy', name: 'Wendy Writer', initials: 'WW', stoppedAt: '2026-10-07T06:30:00.000Z' },
+        { userId: 'u-nameless', name: null, initials: '', stoppedAt: '2026-10-06T06:30:00.000Z' },
+      ],
+    });
+    svc.setStopped.mockResolvedValue({ stopped: false });
+    open();
+    const list = within(await screen.findByTestId('stopped'));
+    expect(list.getByText('Wendy Writer')).toBeTruthy();
+    expect(list.getByText('No name yet')).toBeTruthy();
+    fireEvent.click(list.getAllByRole('button', { name: 'Let them post again' })[0]);
+    await waitFor(() => expect(svc.setStopped.mock.calls).toEqual([['g1', 'u-wendy', false]]));
+    expect((await screen.findByRole('status')).textContent).toBe('Wendy Writer can post again.');
+    await waitFor(() => expect(screen.queryByTestId('stopped')).toBeNull());
+    expect(within(cards()[0]).queryByText('Stopped from posting')).toBeNull();
+  });
+});
+
+describe('reported posts', () => {
+  const wendy = { fromMember: true, authorId: 'u-wendy', author: { name: 'Wendy Writer', initials: 'WW' } };
+  const item = (id, body, reasons, over = {}) => ({
+    post: post(id, body, { ...wendy, ...over }),
+    reports: Object.values(reasons).reduce((a, b) => a + b, 0),
+    reasons: { ...NO_REASONS, ...reasons },
+    notes: [],
+    firstReportedAt: '2026-10-07T07:00:00.000Z',
+    lastReportedAt: `2026-10-07T08:00:0${id === 'r1' ? 1 : 2}.000Z`,
+  });
+  const reportedCards = () => screen.getAllByTestId('reported-post');
+  const two = () => reportedList([item('r1', 'Look at the state of him', { unkind: 2, photo_of_someone: 1 }), item('r2', 'Shakes for sale', { spam: 1 })]);
+
+  it('nothing is drawn while no post is reported', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [post('a', 'Fine')] }));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    expect(screen.queryByTestId('reported')).toBeNull();
+  });
+
+  it('lists each reported post with how many reported it and why, and never who', async () => {
+    svc.reported.mockResolvedValue(two());
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(2));
+    const section = within(screen.getByTestId('reported'));
+    expect(section.getByRole('heading', { name: '2 reported posts to look at' })).toBeTruthy();
+    expect(within(reportedCards()[0]).getByText("Reported by 3 people: Bullying or unkind (2) · A photo of someone who didn't agree to it (1)")).toBeTruthy();
+    expect(within(reportedCards()[1]).getByText('Reported by 1 person: Spam or selling')).toBeTruthy();
+    expect(within(reportedCards()[0]).getByText('Look at the state of him')).toBeTruthy();
+    // Keep, Remove and Stop; a reported post is not pinned from here.
+    expect(within(reportedCards()[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Keep post', 'Remove post', 'Stop them posting']);
+  });
+
+  it('shows what reporters typed, under the post it was typed about, and nothing where nobody typed', async () => {
+    const list = two();
+    list.items[0].notes = ['He says this to her every week', 'Second line\nof a note'];
+    svc.reported.mockResolvedValue(list);
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(2));
+    const notes = within(within(reportedCards()[0]).getByTestId('report-notes'));
+    expect(notes.getByText('What people who reported it wrote:')).toBeTruthy();
+    expect(notes.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['“He says this to her every week”', '“Second line\nof a note”']);
+    expect(within(reportedCards()[1]).queryByTestId('report-notes')).toBeNull();
+  });
+
+  it('Remove asks first, removes the post it was pressed on in one request, and the list is read again', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [post('r1', 'Look at the state of him', wendy), post('r2', 'Shakes for sale', wendy)] }));
+    svc.reported.mockResolvedValueOnce(two()).mockResolvedValue(reportedList([two().items[1]]));
+    svc.remove.mockResolvedValue({ removed: true });
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(2));
+    fireEvent.click(within(reportedCards()[0]).getByRole('button', { name: 'Remove post' }));
+    const box = within(within(reportedCards()[0]).getByRole('group', { name: 'Remove this post?' }));
+    expect(box.getByText("The post will disappear for every one of your members and for your staff. This can't be undone.")).toBeTruthy();
+    fireEvent.click(box.getByRole('button', { name: 'Remove post' }));
+    await waitFor(() => expect(reportedCards()).toHaveLength(1));
+    expect(svc.remove.mock.calls).toEqual([['g1', 'r1']]);
+    expect(svc.keep).not.toHaveBeenCalled();
+    // Gone from the posts below as well.
+    expect(cards().map((c) => c.textContent.includes('Look at the state of him'))).toEqual([false]);
+    expect(screen.getByRole('status').textContent).toBe('Post removed. Your members no longer see it.');
+  });
+
+  it('Keep keeps the post it was pressed on: it leaves this list and stays among the posts', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [post('r2', 'Shakes for sale', wendy)] }));
+    svc.reported.mockResolvedValueOnce(two()).mockResolvedValue(reportedList([two().items[0]]));
+    svc.keep.mockResolvedValue({ kept: true, waiting: 0 });
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(2));
+    fireEvent.click(within(reportedCards()[1]).getByRole('button', { name: 'Keep post' }));
+    await waitFor(() => expect(reportedCards()).toHaveLength(1));
+    // With the newest report this list showed for THAT post, so no later one is answered.
+    expect(svc.keep.mock.calls).toEqual([['g1', 'r2', '2026-10-07T08:00:02.000Z']]);
+    expect(svc.remove).not.toHaveBeenCalled();
+    expect(cards()).toHaveLength(1);
+    expect(screen.getByRole('status').textContent).toBe('Kept. The post stays on Updates and has left this list.');
+  });
+
+  it('a report that arrived while staff were looking: Keep says so, and the post is still listed with it', async () => {
+    const later = two();
+    later.items[0] = { ...later.items[0], reports: 1, reasons: { ...NO_REASONS, photo_of_someone: 1 }, notes: ['That is my brother in the photo'], lastReportedAt: '2026-10-07T09:00:00.000Z' };
+    svc.reported.mockResolvedValueOnce(two()).mockResolvedValue(later);
+    svc.keep.mockResolvedValue({ kept: true, waiting: 1 });
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(2));
+    fireEvent.click(within(reportedCards()[0]).getByRole('button', { name: 'Keep post' }));
+    expect((await screen.findByRole('status')).textContent).toBe(
+      '1 more person reported this post while you were looking, so it is still on this list. Read what is new, then choose again.',
+    );
+    expect(svc.keep.mock.calls).toEqual([['g1', 'r1', '2026-10-07T08:00:01.000Z']]);
+    // Read again: the new report and its words are on the screen, and Keep now names it.
+    await waitFor(() => expect(within(reportedCards()[0]).getByText('“That is my brother in the photo”')).toBeTruthy());
+    expect(reportedCards()).toHaveLength(2);
+    fireEvent.click(within(reportedCards()[0]).getByRole('button', { name: 'Keep post' }));
+    await waitFor(() => expect(svc.keep).toHaveBeenLastCalledWith('g1', 'r1', '2026-10-07T09:00:00.000Z'));
+  });
+
+  it('a gym with no plan reads the reported posts and can answer none', async () => {
+    svc.reported.mockResolvedValue(two());
+    open({ ...ORG, subscription: null, consoleReadOnly: true });
+    await waitFor(() => expect(reportedCards()).toHaveLength(2));
+    expect(within(reportedCards()[0]).queryAllByRole('button')).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 // WHAT A GYM SELLS (Part 3 §13.1; ROADMAP Stage 2 item 17a-i). Mirrors
 // `0069_membership_types.sql`, `0070_held_memberships.sql` and
-// `0072_membership_word_links.sql` 1:1; the migrations carry the reasoning.
+// `0073_membership_word_links.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   boolean,

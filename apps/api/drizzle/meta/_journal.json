@@ -503,7 +503,14 @@
       "idx": 71,
       "version": "7",
       "when": 1788220800056,
-      "tag": "0072_membership_word_links",
+      "tag": "0072_member_posts",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1788220800057,
+      "tag": "0073_membership_word_links",
       "breakpoints": true
     }
   ]

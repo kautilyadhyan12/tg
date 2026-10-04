@@ -1609,14 +1609,14 @@ d("0001_init on a real database", () => {
       });
   });
 
-  it("0072's word links: one link a word whatever its capitals, only to the gym's own type, and a membership is from the list only when written so", async () => {
+  it("0073's word links: one link a word whatever its capitals, only to the gym's own type, and a membership is from the list only when written so", async () => {
     await sql
       .begin(async (tx) => {
-        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0072-owner') RETURNING id`;
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0073-owner') RETURNING id`;
         if (user === undefined) throw new Error("no user");
         const gymOf = async (slug: string) => {
           const [gym] = await tx<{ id: string }[]>`
-            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0072', 'Europe/London', ${user.id}) RETURNING id`;
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0073', 'Europe/London', ${user.id}) RETURNING id`;
           if (gym === undefined) throw new Error("no gym");
           const [entry] = await tx<{ id: string }[]>`
             INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
@@ -1627,8 +1627,8 @@ d("0001_init on a real database", () => {
           if (entry === undefined || type === undefined) throw new Error("no fixture");
           return { gym: gym.id, entry: entry.id, type: type.id };
         };
-        const a = await gymOf("zz-0072-a");
-        const b = await gymOf("zz-0072-b");
+        const a = await gymOf("zz-0073-a");
+        const b = await gymOf("zz-0073-b");
 
         /** The constraint a link trips, or "ok". Each in its own savepoint. */
         const put = async (over: Record<string, unknown>): Promise<string> => {
@@ -1661,10 +1661,10 @@ d("0001_init on a real database", () => {
           VALUES (${a.gym}, ${a.entry}, ${a.type}, ${randomUUID()}, 'recurring', 4999, 'GBP', 1, 'month', '2026-10-04', true)
           RETURNING from_list`;
         expect(held?.from_list).toBe(false);
-        throw new Error("ROLLBACK-0072-FIXTURE");
+        throw new Error("ROLLBACK-0073-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0072-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0073-FIXTURE") return;
         throw err;
       });
   });

@@ -9,7 +9,7 @@
 import type { Sql } from "postgres";
 import { DPDP_EXPORT_SCHEMA_VERSION, type DpdpExport } from "@app/shared";
 import { EXPORTED_TABLES, type ExportedTable } from "./tables.js";
-import { EXPORT_READERS, selectExportConsents, selectExportUser } from "./exportRepo.js";
+import { EXPORT_READERS, selectExportConsents, selectExportMemberPosts, selectExportUser } from "./exportRepo.js";
 
 /** Columns stripped from EVERY exported row, whatever table it came from.
  *
@@ -130,6 +130,14 @@ export async function buildUserExport(deps: ExportDeps, userId: string): Promise
   const truncated: Record<string, { returned: number; total: number }> = {};
   if (consents.total > consents.rows.length) {
     truncated["consent_log"] = { returned: consents.rows.length, total: consents.total };
+  }
+
+  // The posts the person made as a member of a gym: theirs, though the table also holds
+  // the gym's own posts and so is not on the delete list as a whole (tables.ts).
+  const posts = await selectExportMemberPosts(deps.sql, userId);
+  data["gym_posts"] = posts.rows;
+  if (posts.total > posts.rows.length) {
+    truncated["gym_posts"] = { returned: posts.rows.length, total: posts.total };
   }
 
   return {

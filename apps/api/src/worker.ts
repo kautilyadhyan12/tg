@@ -17,6 +17,8 @@
 // worker monopolises its connection, so sharing one with app commands would
 // stall them. This is an ENTRYPOINT (same tier as index.ts), not a module,
 // so the rule's subject does not cover it.
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import * as Sentry from "@sentry/node";
 import { Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
@@ -40,6 +42,7 @@ import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { ORGS_SWEEP_JOB, runJoinSweep, scheduleJoinSweep } from "./modules/orgs/joinSweepSchedule.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
+import { createDiskPhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { processPaddleEvents, processRazorpayEvents } from "./modules/billing/events.js";
 import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
@@ -626,7 +629,7 @@ const worker = new Worker(
       return;
     }
 
-    const result = await purgeDueUsers({ sql, log });
+    const result = await purgeDueUsers({ sql, log, photos: createDiskPhotoStore(config.PHOTO_DIR ?? join(tmpdir(), "aihg-gym-photos")) });
     log.info(
       { ...result, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
       "job finished",

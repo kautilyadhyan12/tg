@@ -1,5 +1,6 @@
 -- A list's membership word linked to a type (ROADMAP Stage 2 item 17a-iii; spec Part 3 §13.2).
 -- Forward-only. Hand-written, as `0016` onwards are; its journal entry is part of this commit.
+-- Written as `0072`; renumbered when Folder B's `0072_member_posts` merged first, and stamped after it.
 --
 -- gym_membership_word_links  which type a gym linked one of its list's words to.
 

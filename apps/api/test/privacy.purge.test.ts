@@ -16,10 +16,14 @@
 // suites. Harmless there, and irrelevant on prod (which starts EMPTY, and
 // where the worker does this on a schedule anyway) — but a suite that
 // silently destroys data outside its own fixtures must say so out loud.
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
 import {
   purgeDueUsers,
   purgeShortfall,
@@ -63,6 +67,9 @@ function testLogger(): TestLogger {
   };
   return { lines, info: push("info"), warn: push("warn"), error: push("error") };
 }
+
+/** A photo store for the tests that purge nobody with photos: it removes whatever it is asked to. */
+const noPhotos = { remove: (): Promise<boolean> => Promise.resolve(true) };
 
 /** Did a run emit this event anywhere? The warn/error paths are behaviour and
  *  were shipped untested through rounds 1-2, which is how their findings
@@ -152,6 +159,9 @@ d("DPDP Day-14 purge (real Postgres)", () => {
               VALUES (${userId}, 'own', 2100, 150, 200, 70)`;
     // A reaction to a gym's post (19b-i): the person's own tap.
     await sql`INSERT INTO gym_post_reactions (gym_id, post_id, user_id, reaction) VALUES (${postGymId}, ${postId}, ${userId}, 'like')`;
+    // A report of a post and a gym's stop on their posting (19b-ii-a): about the person.
+    await sql`INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason) VALUES (${postGymId}, ${postId}, ${userId}, 'spam')`;
+    await sql`INSERT INTO gym_post_stops (gym_id, user_id) VALUES (${postGymId}, ${userId})`;
     // Kept after the purge, as proof (tables.ts) — asserted to survive below.
     await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
               VALUES (${userId}, 'sign_up', 'v1', 'fixture wording', 'test')`;
@@ -231,12 +241,12 @@ d("DPDP Day-14 purge (real Postgres)", () => {
   }
 
   const run = (opts: { now?: Date; dryRun?: boolean; limit?: number } = {}) =>
-    purgeDueUsers({ sql, log: testLogger() }, opts);
+    purgeDueUsers({ sql, log: testLogger(), photos: noPhotos }, opts);
 
   /** Same run, but the log is inspectable — the warn paths are behaviour. */
   async function runLogged(opts: { limit?: number } = {}) {
     const log = testLogger();
-    const result = await purgeDueUsers({ sql, log }, opts);
+    const result = await purgeDueUsers({ sql, log, photos: noPhotos }, opts);
     return { result, log };
   }
 
@@ -330,7 +340,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       },
     });
 
-    const result = await purgeDueUsers({ sql: failing, log: testLogger() }, {});
+    const result = await purgeDueUsers({ sql: failing, log: testLogger(), photos: noPhotos }, {});
 
     // The message an operator wakes up to is built from these two: before the
     // split, this run read as "1 failed" — a member whose purge never failed.
@@ -656,6 +666,95 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     expect(marks[0]?.n).toBe(0);
   });
 
+  it("deletes the posts a person made as a MEMBER with their photo files, and keeps the gym's own", { timeout: 60_000 }, async () => {
+    // `gym_posts` is not on the delete list as a table: a staff post is the gym's. A
+    // member's own post (0072) is the person's, and goes by a statement of its own.
+    const u = await makeUser(uniqEmail("dpdp-posts"), 20);
+    const bystander = await makeUser(uniqEmail("dpdp-posts-bystander"), 1);
+    const post = async (userId: string, byMember: boolean): Promise<{ id: string; key: string }> => {
+      const rows = await sql<{ id: string }[]>`
+        INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member)
+        VALUES (${postGymId}, ${userId}, gen_random_uuid(), 'a member fixture post', ${byMember}) RETURNING id`;
+      const id = rows[0]?.id ?? "";
+      const key = `gym-post/${postGymId}/${randomUUID()}.jpg`;
+      await sql`
+        INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
+        VALUES (${postGymId}, ${id}, ${key}, 'image/jpeg', 10, 1, 1, 0)`;
+      await sql`INSERT INTO gym_post_reactions (gym_id, post_id, user_id, reaction) VALUES (${postGymId}, ${id}, ${bystander.userId}, 'fire')`;
+      return { id, key };
+    };
+    const mine = await post(u.userId, true);
+    const asStaff = await post(u.userId, false);
+    const theirs = await post(bystander.userId, true);
+    const removed: string[] = [];
+
+    await purgeDueUsers({ sql, log: testLogger(), photos: { remove: (key) => Promise.resolve(removed.push(key) > 0) } }, {});
+
+    const left = await sql<{ id: string }[]>`SELECT id FROM gym_posts WHERE id = ANY(${[mine.id, asStaff.id, theirs.id]}) ORDER BY id`;
+    expect(left.map((r) => r.id)).toEqual([asStaff.id, theirs.id].sort());
+    const photos = await sql<{ post_id: string }[]>`SELECT post_id FROM gym_post_photos WHERE post_id = ANY(${[mine.id, asStaff.id, theirs.id]}) ORDER BY post_id`;
+    expect(photos.map((r) => r.post_id)).toEqual([asStaff.id, theirs.id].sort());
+    const reactions = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_post_reactions WHERE post_id = ${mine.id}`;
+    expect(reactions[0]?.n).toBe(0);
+    // The purged person's own files, and nobody else's.
+    expect(removed).toEqual([mine.key]);
+  });
+
+  it("on the real disk: removes the file from the store the api wrote it to, and says so when its store holds no such file", { timeout: 60_000 }, async () => {
+    // The worker builds a store of its own. One rooted where the api's photos are not
+    // finds nothing to remove; that must read as a file LEFT, never as a clean purge.
+    const apiFolder = await mkdtemp(join(tmpdir(), "aihg-purge-api-"));
+    const otherFolder = await mkdtemp(join(tmpdir(), "aihg-purge-other-"));
+    const apiStore = createDiskPhotoStore(apiFolder);
+    try {
+      const seed = async (label: string): Promise<{ userId: string; key: string }> => {
+        const u = await makeUser(uniqEmail(label), 20);
+        const rows = await sql<{ id: string }[]>`
+          INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member)
+          VALUES (${postGymId}, ${u.userId}, gen_random_uuid(), 'a member fixture post', true) RETURNING id`;
+        const key = `gym-post/${postGymId}/${randomUUID()}.jpg`;
+        await sql`
+          INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
+          VALUES (${postGymId}, ${rows[0]?.id ?? ""}, ${key}, 'image/jpeg', 10, 1, 1, 0)`;
+        await apiStore.put(key, new Uint8Array([1, 2, 3]));
+        return { userId: u.userId, key };
+      };
+
+      const wrong = await seed("dpdp-photo-wrong");
+      const wrongLog = testLogger();
+      await purgeDueUsers({ sql, log: wrongLog, photos: createDiskPhotoStore(otherFolder) }, {});
+      expect(await apiStore.get(wrong.key)).not.toBeNull();
+      expect(wrongLog.lines.filter((l) => l.obj["event"] === "dpdp.purge.photo_files_left").map((l) => [l.level, l.obj["userId"], l.obj["count"]])).toEqual([
+        ["error", wrong.userId, 1],
+      ]);
+
+      const right = await seed("dpdp-photo-right");
+      const rightLog = testLogger();
+      await purgeDueUsers({ sql, log: rightLog, photos: apiStore }, {});
+      expect(await apiStore.get(right.key)).toBeNull();
+      expect(anyEvent(rightLog, "dpdp.purge.photo_files_left")).toBe(false);
+    } finally {
+      await rm(apiFolder, { recursive: true, force: true });
+      await rm(otherFolder, { recursive: true, force: true });
+    }
+  });
+
+  it("says so when a purged person's photo files could not be removed", { timeout: 60_000 }, async () => {
+    const u = await makeUser(uniqEmail("dpdp-posts-left"), 20);
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member)
+      VALUES (${postGymId}, ${u.userId}, gen_random_uuid(), 'a member fixture post', true) RETURNING id`;
+    await sql`
+      INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
+      VALUES (${postGymId}, ${rows[0]?.id ?? ""}, ${`gym-post/${postGymId}/${randomUUID()}.jpg`}, 'image/jpeg', 10, 1, 1, 0)`;
+    const log = testLogger();
+    const result = await purgeDueUsers({ sql, log, photos: { remove: () => Promise.reject(new Error("disk full")) } }, {});
+    // The person is purged all the same: the rows are gone, so nothing can show the file.
+    expect(result.errors).toBe(0);
+    expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_posts WHERE author_user_id = ${u.userId}`)[0]?.n).toBe(0);
+    expect(anyEvent(log, "dpdp.purge.photo_files_left")).toBe(true);
+  });
+
   it("one failing user does not stop the others", { timeout: 60_000 }, async () => {
     const bad = await makeUser(uniqEmail("dpdp-bad"), 20);
     const good = await makeUser(uniqEmail("dpdp-good"), 20);
@@ -663,6 +762,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       {
         sql,
         log: testLogger(),
+        photos: noPhotos,
         // Test-only seam (the buildApp overrides precedent): the loop's error
         // isolation is the behaviour under test, and no FK in the schema can
         // block a delete (verified), so a real failure has to be injected.

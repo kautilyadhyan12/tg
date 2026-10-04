@@ -255,3 +255,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **19b-i, as it stood when it was built (merged 2026-10-04, PR #169):**
 
 - 19b-i. [ ] **The gym posts, members react**: staff write a post with up to 4 photos, pin and remove it on a new console page; members read them under an Updates tab and react; no comments.
+
+**19b-ii-a, as it stood when it was built (merged 2026-10-05, PR #170):**
+
+- 19b-ii-a. [ ] **Members post, Report and the staff list**: the gym's switch, a member's own post (10 a day) and removing it, Report, the reported list with Remove and Keep, stop a person posting. Split from 19b-ii on 2026-10-04; at Kd's click-through a member can also type up to 300 characters beside the reason they pick.

@@ -1,4 +1,4 @@
-// A GYM'S UPDATES: THE ROUTES (spec Part 3 §15.2; ROADMAP 19b-i). Authenticate, Zod-parse,
+// A GYM'S UPDATES: THE ROUTES (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a). Authenticate, Zod-parse,
 // and the service decides who may read or write. Registered from `registerOrgRoutes`.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
@@ -9,9 +9,13 @@ import {
   gymPostParamsSchema,
   gymPostPhotoParamsSchema,
   gymPostReactorsQuerySchema,
+  gymPostSettingsSchema,
+  gymPosterParamsSchema,
   gymPostsQuerySchema,
+  keepGymPostRequestSchema,
   pinGymPostRequestSchema,
   reactToGymPostRequestSchema,
+  reportGymPostRequestSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
@@ -65,6 +69,10 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
   const staffReadLimit = limiter("orgs_posts_staff_read", 1200, 6000);
   const staffPostLimit = limiter("orgs_posts_staff_post", 60, 300);
   const staffWriteLimit = limiter("orgs_posts_staff_write", 300, 1500);
+  // A member's ten posts a day are counted in the database; this only stops a flood of
+  // tries, each of which reads a body of photos.
+  const memberPostLimit = limiter("orgs_posts_member_post", 30, 600);
+  const memberWriteLimit = limiter("orgs_posts_member_write", 60, 3000);
 
   // The staff routes ask the tick first and the limit after it, so a stranger's 404 is
   // never a 429.
@@ -112,6 +120,42 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
       .header("x-content-type-options", "nosniff")
       .header("content-security-policy", "default-src 'none'; sandbox")
       .send(Buffer.from(file.bytes.buffer, file.bytes.byteOffset, file.bytes.byteLength));
+  });
+
+  // A member's own post, where the gym lets its members post. As with staff, who is asking,
+  // the gym's switch, a stop on the person and the limit are settled BEFORE the body is read.
+  const mayPostAsMember = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    await service.requireMemberPoster(postsDeps, requireUserId(req), params.gymId);
+    await memberPostLimit(req, reply);
+  };
+
+  app.post("/v1/orgs/:gymId/posts/mine", { bodyLimit: POST_BODY_LIMIT, onRequest: [app.authenticate, mayPostAsMember] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(addGymPostRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    return reply.status(201).send({ post: await service.addMemberPost(postsDeps, requireUserId(req), params.gymId, body) });
+  });
+
+  // Membership first and the limit after it, as for staff: a stranger's 404 is never a 429.
+  app.delete("/v1/orgs/:gymId/posts/mine/:postId", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const done = await service.removeOwnPost(postsDeps, requireUserId(req), params.gymId, params.postId, gate(memberWriteLimit)(req, reply));
+    if (done === null) return;
+    return reply.status(200).send({ removed: true });
+  });
+
+  app.post("/v1/orgs/:gymId/posts/:postId/report", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(reportGymPostRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await service.report(postsDeps, requireUserId(req), params.gymId, params.postId, body.reason, body.note, gate(memberWriteLimit)(req, reply));
+    if (done === null) return;
+    return reply.status(200).send({ reported: true });
   });
 
   // ── STAFF HOLDING `posts.manage` ──
@@ -172,4 +216,56 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     if (done === null) return;
     return reply.status(200).send({ removed: true });
   });
+
+  // The reported posts nobody has answered. Removing one is the DELETE above.
+  app.get("/v1/orgs/:gymId/posts/reported", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const reported = await service.getReported(postsDeps, requireUserId(req), params.gymId, gate(staffReadLimit)(req, reply));
+    if (reported === null) return;
+    return reply.status(200).send(reported);
+  });
+
+  app.post("/v1/orgs/:gymId/posts/:postId/keep", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(keepGymPostRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await service.keepReported(postsDeps, requireUserId(req), params.gymId, params.postId, body.upTo, gate(staffWriteLimit)(req, reply));
+    if (done === null) return;
+    return reply.status(200).send({ kept: true, waiting: done.waiting });
+  });
+
+  app.put("/v1/orgs/:gymId/posts/settings", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(gymPostSettingsSchema, req.body, req, reply);
+    if (body === null) return;
+    const settings = await service.setMembersCanPost(postsDeps, requireUserId(req), params.gymId, body.membersCanPost, gate(staffWriteLimit)(req, reply));
+    if (settings === null) return;
+    return reply.status(200).send(settings);
+  });
+
+  app.get("/v1/orgs/:gymId/posts/stopped", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const stopped = await service.getStopped(postsDeps, requireUserId(req), params.gymId, gate(staffReadLimit)(req, reply));
+    if (stopped === null) return;
+    return reply.status(200).send(stopped);
+  });
+
+  for (const [method, stopped] of [["PUT", true], ["DELETE", false]] as const) {
+    app.route({
+      method,
+      url: "/v1/orgs/:gymId/posts/stopped/:userId",
+      preHandler: app.authenticate,
+      handler: async (req, reply) => {
+        const params = parseOr400(gymPosterParamsSchema, req.params, req, reply);
+        if (params === null) return;
+        const done = await service.setStopped(postsDeps, requireUserId(req), params.gymId, params.userId, stopped, gate(staffWriteLimit)(req, reply));
+        if (done === null) return;
+        return reply.status(200).send(done);
+      },
+    });
+  }
 }

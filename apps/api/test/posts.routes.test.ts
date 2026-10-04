@@ -202,7 +202,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
     folder = await mkdtemp(join(tmpdir(), "aihg-posts-test-"));
     await sql`
       INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap, trial_days, rank, entitlements, member_entitlements)
-      VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'GBP', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
+      VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
     // The real Redis where there is one (`test:local` and CI's database job set
     // TEST_REDIS_URL), so the limits run as the Lua production runs.
@@ -732,7 +732,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       const seen = await inject("GET", posts(gym.id), viewer.cookies);
       expect(seen.statusCode).toBe(200);
       expect(seen.body).not.toMatch(/Written while/);
-      expect(JSON.parse(seen.body)).toEqual({ gymId: gym.id, gymName: "Lapsed House", status: "paused", pinned: [], posts: [], next: null });
+      expect(JSON.parse(seen.body)).toEqual({ gymId: gym.id, gymName: "Lapsed House", status: "paused", posting: "off", pinned: [], posts: [], next: null });
       const photoPath = `${posts(gym.id)}/${post.id}/photos/${post.photos[0]?.id ?? ""}`;
       expect((await inject("GET", photoPath, viewer.cookies)).statusCode).toBe(404);
       expect((await react(gym, viewer, post.id, "like")).statusCode).toBe(404);

@@ -27,6 +27,11 @@ export type PurgeUserStatus = "purged" | "skipped";
 export interface PurgeDeps {
   sql: Sql;
   log: PurgeLogger;
+  /** Where the api keeps photos: the files of the posts a purged person made as a member
+   *  are removed from it once their rows are gone. Required, so no caller can leave it out;
+   *  `remove` answers false when it found no file, which is counted as a file left (a
+   *  store that is not the api's finds none, and must not pass for a clean purge). */
+  photos: { remove(key: string): Promise<boolean> };
   /** TEST-ONLY seam, mirroring buildApp's overrides parameter. No FK in the
    *  schema can block a delete (all 38 verified), so the loop's per-user
    *  error isolation cannot be exercised without injecting a failure. Return
@@ -87,6 +92,21 @@ export function purgeShortfall(result: PurgeResult): boolean {
 }
 
 const DEFAULT_LIMIT = 500;
+
+/** The photo files of a purged person's own posts. A file that will not go, or that this
+ *  store does not hold, is logged as an error and the run carries on: its row is gone, so
+ *  nothing can show it, but the file itself may still be on the api's disk. */
+async function removePhotoFiles(deps: PurgeDeps, userId: string, keys: readonly string[]): Promise<void> {
+  let left = 0;
+  for (const key of keys) {
+    try {
+      if (!(await deps.photos.remove(key))) left += 1;
+    } catch {
+      left += 1;
+    }
+  }
+  if (left > 0) deps.log.error({ userId, count: left, event: "dpdp.purge.photo_files_left" }, "photo files of a purged person's posts were not removed");
+}
 
 /** One user's cascade, inside the caller's transaction (§5.2 "in one
  *  transaction per user"). Takes the concurrency lock FIRST (returns "skipped"
@@ -190,6 +210,8 @@ export async function purgeDueUsers(
 
   for (const user of due) {
     try {
+      // Read before the rows go: the purge deletes them, and the files are found by them.
+      const photoKeys = await repo.selectMemberPostPhotoKeys(deps.sql, user.id);
       const status = await deps.sql.begin(async (tx) => {
         const s = await runOne(tx, user.id, cutoff);
         // Marker only on a real purge, and only when the run can certify.
@@ -206,6 +228,7 @@ export async function purgeDueUsers(
         result.skipped += 1;
         continue; // F7: do NOT log user_purged for a user nothing happened to
       }
+      await removePhotoFiles(deps, user.id, photoKeys);
       if (certify) {
         result.purged += 1;
         // userId only: by this point there is nothing else about them to log,

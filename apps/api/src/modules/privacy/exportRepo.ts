@@ -125,7 +125,33 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
 
   gym_post_reactions: (sql, u) =>
     sql<Row[]>`SELECT * FROM gym_post_reactions WHERE user_id = ${u} ORDER BY created_at, post_id`,
+
+  gym_post_reports: (sql, u) =>
+    sql<Row[]>`SELECT * FROM gym_post_reports WHERE user_id = ${u} ORDER BY created_at, id`,
+
+  gym_post_stops: (sql, u) =>
+    sql<Row[]>`SELECT * FROM gym_post_stops WHERE user_id = ${u} ORDER BY created_at, gym_id`,
 };
+
+/** The most posts one export carries; `total` says how many there are. */
+export const MEMBER_POSTS_EXPORT_LIMIT = 1000;
+
+/** The posts the person made as a MEMBER of a gym (tables.ts, gym_posts): their own words,
+ *  newest first, with how many photos each carries. A post made as staff is the gym's and
+ *  is not here. Explicit columns: `removed_by_user_id` names somebody else. */
+export async function selectExportMemberPosts(sql: Sql, userId: string): Promise<{ rows: Row[]; total: number }> {
+  const rows = await sql<(Row & { total?: number })[]>`
+    SELECT p.id, p.gym_id, p.body, p.created_at, p.removed_at,
+           (SELECT count(*)::int FROM gym_post_photos ph WHERE ph.post_id = p.id) AS photos,
+           count(*) OVER ()::int AS total
+    FROM gym_posts p
+    WHERE p.author_user_id = ${userId} AND p.by_member
+    ORDER BY p.created_at DESC, p.id DESC
+    LIMIT ${MEMBER_POSTS_EXPORT_LIMIT}`;
+  const total = rows[0]?.total ?? 0;
+  for (const row of rows) delete row["total"];
+  return { rows, total };
+}
 
 /** The most consent rows one export carries. Thirty taps an hour is the route's
  *  ceiling (users/routes.ts), so an honest account never gets near this; it

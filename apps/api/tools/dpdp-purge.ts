@@ -8,9 +8,12 @@
 //
 //   corepack pnpm --filter api exec tsx tools/dpdp-purge.ts             # dry run
 //   corepack pnpm --filter api exec tsx tools/dpdp-purge.ts --apply     # destructive
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import pino from "pino";
 import postgres from "postgres";
 import { z } from "zod";
+import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
 import { purgeDueUsers, purgeShortfall } from "../src/modules/privacy/purge.js";
 import { DPDP_RETENTION_DAYS } from "../src/retention.js";
 
@@ -21,6 +24,9 @@ import { DPDP_RETENTION_DAYS } from "../src/retention.js";
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   LOG_LEVEL: z.string().optional(),
+  // Where the api keeps photos (its own PHOTO_DIR): a purged person's post photos are
+  // removed from it. The api's default when unset.
+  PHOTO_DIR: z.string().trim().min(1).max(500).optional(),
 });
 const env = envSchema.safeParse(process.env);
 if (!env.success) {
@@ -34,7 +40,8 @@ const sql = postgres(env.data.DATABASE_URL, { prepare: false, max: 2 });
 
 const startedAt = Date.now();
 try {
-  const result = await purgeDueUsers({ sql, log }, { dryRun: !apply });
+  const photos = createDiskPhotoStore(env.data.PHOTO_DIR ?? join(tmpdir(), "aihg-gym-photos"));
+  const result = await purgeDueUsers({ sql, log, photos }, { dryRun: !apply });
   log.info(
     { ...result, elapsedMs: Date.now() - startedAt, retentionDays: DPDP_RETENTION_DAYS },
     apply ? "purge applied" : "DRY RUN — nothing was written; re-run with --apply to purge",
