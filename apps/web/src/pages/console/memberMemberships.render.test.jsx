@@ -84,7 +84,7 @@ function held(n, type, startsOn, paid, moves = []) {
 }
 /** What the server answers: the memberships, and the gym's price list beside them. */
 const answer = (memberships, past = false, more = {}) => ({
-  data: heldMembershipsResponseSchema.parse({ today: TODAY, past, memberships, earlierNotShown: 0, types: [GOLD, PACK], ...more }),
+  data: heldMembershipsResponseSchema.parse({ today: TODAY, past, memberships, earlierNotShown: 0, types: [GOLD, PACK], listed: null, ...more }),
 });
 const refusal = (status, data) => Object.assign(new Error('refused'), { response: { status, data } });
 
@@ -158,6 +158,53 @@ describe('what the box draws', () => {
     await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, ADA));
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByTestId('held-memberships')).toBeNull();
+  });
+
+  it("says the membership their list names where they do not hold it here, never 'No membership yet' beside it (Kd's click-through)", async () => {
+    // Leo Grant: "Gold Plus" on the member list, which is none of the gym's types.
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { listed: { word: 'Gold Plus', endsOn: '2026-10-13', endsOnKind: 'renews', type: null, held: false } }));
+    render(draw(ADA, 'Leo Grant'));
+    const b = await boxSoon();
+    const row = within(b.getByTestId('held-listed'));
+    expect(row.getByText('Gold Plus')).toBeTruthy();
+    expect(row.getByText('Not set up')).toBeTruthy();
+    expect(row.getByText('From your member list · Renews 13 October 2026')).toBeTruthy();
+    expect(row.getByText('This membership has no price here yet. Set it up in Settings, under Memberships, and Leo Grant gets it.')).toBeTruthy();
+    expect(b.queryByText('No membership yet.')).toBeNull();
+    // It is not a membership held here: nothing to mark paid, freeze or cancel.
+    expect(row.queryByRole('button')).toBeNull();
+    expect(b.getByRole('button', { name: 'Add membership' })).toBeTruthy();
+  });
+
+  it("a name that is one of the gym's types, never given to this person, is said under the type's own name", async () => {
+    orgService.getHeldMemberships.mockResolvedValue(
+      answer([], false, { listed: { word: 'Gold', endsOn: '2026-09-14', endsOnKind: 'renews', type: { id: GOLD.id, name: GOLD.name }, held: false } }),
+    );
+    render(draw(ADA, 'Zara Ali'));
+    const b = await boxSoon();
+    const row = within(b.getByTestId('held-listed'));
+    expect(row.getByText(GOLD.name)).toBeTruthy();
+    expect(row.getByText('Not added')).toBeTruthy();
+    expect(row.getByText('Your member list says “Gold” · Renews 14 September 2026')).toBeTruthy();
+    expect(row.getByText("Zara Ali doesn't have it here yet. Add it with Add membership, or give it to everyone on your list who is missing it in Settings, under Memberships.")).toBeTruthy();
+    expect(b.queryByText('No membership yet.')).toBeNull();
+  });
+
+  it('adds nothing where they have, or have had, that membership, and says "No membership yet" only where the list names none', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(
+      answer([held(1, GOLD, '2026-10-04', true)], false, { listed: { word: 'Gold', endsOn: '2026-11-04', endsOnKind: 'renews', type: { id: GOLD.id, name: GOLD.name }, held: true } }),
+    );
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    expect(b.getAllByTestId('held-membership')).toHaveLength(1);
+    expect(b.queryByTestId('held-listed')).toBeNull();
+    cleanup();
+
+    orgService.getHeldMemberships.mockResolvedValue(answer([]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const empty = await boxSoon();
+    expect(empty.getByText('No membership yet.')).toBeTruthy();
+    expect(empty.queryByTestId('held-listed')).toBeNull();
   });
 
   it('shows each membership with its dates, keeps the ones that are over folded away, and gives each state its own buttons', async () => {

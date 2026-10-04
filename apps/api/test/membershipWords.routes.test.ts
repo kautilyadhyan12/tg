@@ -576,4 +576,65 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "a person's page is told what their list's membership is and how it stands with the price list, so it never reads 'no membership' beside a list that names one",
+    async () => {
+      const owner = await makeUser("page-owner");
+      const rival = await makeUser("page-rival");
+      const org = await makeOrg(owner.cookies, "Mwl Page Gym");
+      await makeOrg(rival.cookies, "Mwl Page Rival");
+      const gymId = org.org.id;
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const silver = await addType(gymId, owner.cookies, monthly({ name: "Silver" }));
+      const plain = await addPerson(gymId, owner.cookies, "Nadia Plain");
+      const today = list(await get(heldUrl(gymId, plain), owner.cookies)).today;
+      const leo = await addPerson(gymId, owner.cookies, "Leo Grant", { membershipType: "Gold Plus", endsOn: addDays(today, 9), endsOnKind: "renews" });
+      const olivia = await addPerson(gymId, owner.cookies, "Olivia Brown", { membershipType: "Gold", endsOn: addDays(today, 12), endsOnKind: "renews" });
+      const zara = await addPerson(gymId, owner.cookies, "Zara Ali", { membershipType: "GOLD", endsOn: addDays(today, -20), endsOnKind: "renews" });
+      const sam = await addPerson(gymId, owner.cookies, "Sam Carter", { membershipType: "silver" });
+      const gone = await addPerson(gymId, owner.cookies, "Past Member", { membershipType: "Gold" });
+      expect((await del(entryUrl(gymId, gone), owner.cookies)).statusCode).toBe(200);
+      const listedOf = async (entryId: string) => list(await get(heldUrl(gymId, entryId), owner.cookies)).listed;
+
+      // The list says nothing: nothing to say.
+      expect(await listedOf(plain)).toBeNull();
+      // A name that is none of the gym's types: not set up, with the list's own day.
+      expect(await listedOf(leo)).toEqual({ word: "Gold Plus", endsOn: addDays(today, 9), endsOnKind: "renews", type: null, held: false });
+      expect(await listedOf(olivia)).toEqual({ word: "Gold", endsOn: addDays(today, 12), endsOnKind: "renews", type: null, held: false });
+      // A name that is a type's own name, whatever its capitals: that type, not held yet.
+      expect(await listedOf(sam)).toEqual({ word: "silver", endsOn: null, endsOnKind: null, type: { id: silver, name: "Silver" }, held: false });
+      await given(gymId, sam, owner.cookies, { typeId: silver, startsOn: today });
+      expect(await listedOf(sam)).toMatchObject({ type: { id: silver, name: "Silver" }, held: true });
+      // A past member's page says nothing of it.
+      const past = list(await get(heldUrl(gymId, gone), owner.cookies));
+      expect(past.past).toBe(true);
+      expect(past.listed).toBeNull();
+
+      // “Gold” is said to be Gold Monthly, and only the paid-up people are given it.
+      const some = await post(
+        `${wordsUrl(gymId)}/link`,
+        { word: "Gold", typeId: gold, groups: { settled: true, due: false, ask: false }, expected: { settled: 1, due: 1, ask: 0 }, paid: null },
+        owner.cookies,
+      );
+      expect(some.statusCode, some.body).toBe(200);
+      expect(await listedOf(olivia)).toEqual({ word: "Gold", endsOn: addDays(today, 12), endsOnKind: "renews", type: { id: gold, name: "Gold Monthly" }, held: true });
+      // Left out: the page knows the name is Gold Monthly and that she has never had it.
+      expect(await listedOf(zara)).toEqual({ word: "GOLD", endsOn: addDays(today, -20), endsOnKind: "renews", type: { id: gold, name: "Gold Monthly" }, held: false });
+      // A cancelled one has still been had.
+      const [hers] = await pageOf(gymId, olivia, owner.cookies);
+      expect((await post(`${heldUrl(gymId, olivia)}/${hers?.id ?? ""}/cancel`, { when: "today" }, owner.cookies)).statusCode).toBe(200);
+      expect(await listedOf(olivia)).toMatchObject({ type: { id: gold, name: "Gold Monthly" }, held: true });
+
+      // Its type archived: the name is not set up, as Settings says of it.
+      expect((await del(`/v1/orgs/${gymId}/membership-types/${gold}`, owner.cookies)).statusCode).toBe(200);
+      expect(await listedOf(zara)).toEqual({ word: "GOLD", endsOn: addDays(today, -20), endsOnKind: "renews", type: null, held: false });
+
+      // Another gym's owner reads none of it.
+      const outside = await get(heldUrl(gymId, leo), rival.cookies);
+      expect(outside.statusCode).toBe(404);
+      expect(outside.body).not.toContain("Gold");
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

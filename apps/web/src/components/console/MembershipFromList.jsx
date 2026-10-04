@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
+  NAMES_PAGE,
+  NAMES_SHOWN,
   againWords,
   archivedLine,
   asksPaid,
@@ -38,22 +40,53 @@ const mainButton = { background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', colo
 const hintStyle = { color: 'rgba(255,255,255,0.55)' };
 const plainStyle = { color: 'rgba(255,255,255,0.75)' };
 
-/** One group's names: a few, then "and N more" and See all. */
+/** One group's people as a list, a row each with the day they will read: the first few,
+ *  "and N more · See all", then a page at a time. The list sits in a frame of its own;
+ *  opened, a long group scrolls inside it, so the box keeps its buttons in reach. */
 function Names({ preview, group }) {
-  const [all, setAll] = useState(false);
-  const { names, more, unnamed, canSeeAll } = groupNames(preview, group, all);
-  if (names.length === 0) return null;
+  const [shown, setShown] = useState(NAMES_SHOWN);
+  const { rows, more, waiting } = groupNames(preview, group, shown);
+  if (rows.length === 0) return null;
+  const opened = shown > NAMES_SHOWN;
+  const linkStyle = { color: 'rgba(255,255,255,0.85)' };
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-sm" style={hintStyle}>
-        {names.map((n) => n.text).join(', ')}
-        {!all && more > 0 ? `, and ${more.toLocaleString('en')} more` : ''}
-        {all && unnamed > 0 ? `, and ${unnamed.toLocaleString('en')} more. To see everyone, filter Members by this membership.` : ''}
-      </p>
-      {canSeeAll ? (
-        <button type="button" onClick={() => setAll((v) => !v)} className="self-start text-sm underline min-h-11" style={plainStyle}>
-          {all ? 'Show fewer' : 'See all'}
-        </button>
+      <ul
+        data-testid={`give-names-${group}`}
+        className="flex flex-col rounded-lg"
+        style={{ border: '1px solid rgba(255,255,255,0.10)', ...(opened ? { maxHeight: '18rem', overflowY: 'auto' } : {}) }}
+      >
+        {rows.map((row, i) => (
+          <li
+            key={row.id}
+            className="flex flex-wrap items-baseline justify-between gap-x-4 px-3 py-1.5 text-sm"
+            style={i > 0 ? { borderTop: '1px solid rgba(255,255,255,0.06)' } : undefined}
+          >
+            <span style={{ color: '#fff' }}>{row.name}</span>
+            {row.note !== '' ? <span style={hintStyle}>{row.note}</span> : null}
+          </li>
+        ))}
+      </ul>
+      {more > 0 || opened ? (
+        <p className="text-sm flex flex-wrap items-center gap-x-2" style={hintStyle}>
+          {more > 0 ? <span>{`and ${more.toLocaleString('en')} more`}</span> : null}
+          {waiting > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShown((n) => (n <= NAMES_SHOWN ? NAMES_PAGE : n + NAMES_PAGE))}
+              className="underline min-h-11"
+              style={linkStyle}
+            >
+              {opened ? 'Show more' : 'See all'}
+            </button>
+          ) : null}
+          {more > 0 && waiting === 0 ? <span>To see everyone, filter Members by this membership.</span> : null}
+          {opened ? (
+            <button type="button" onClick={() => setShown(NAMES_SHOWN)} className="underline min-h-11" style={linkStyle}>
+              Show fewer
+            </button>
+          ) : null}
+        </p>
       ) : null}
     </div>
   );

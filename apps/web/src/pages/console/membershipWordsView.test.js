@@ -1,6 +1,8 @@
 // The member list's memberships, their words (spec Part 3 §13.2; ROADMAP 17a-iii).
 import { describe, expect, it } from 'vitest';
 import {
+  NAMES_PAGE,
+  NAMES_SHOWN,
   againWords,
   archivedLine,
   asksPaid,
@@ -144,18 +146,33 @@ describe('the box names who gets it and who does not', () => {
     expect(personNote(person(1, 'has'))).toBe('');
   });
 
-  it('a group shows three names, then how many more, then all of them', () => {
+  it('a group is a list of rows, one person each: three at first, then a page at a time', () => {
     const people = [1, 2, 3, 4, 5].map((n) => person(n, 'settled', { renewsOn: '2026-11-14' }));
     const p = preview({ counts: counts({ settled: 300 }), people });
-    const few = groupNames(p, 'settled', false);
-    expect(few.names.map((n) => n.text)).toEqual(['Person 1 (renews 14 November 2026)', 'Person 2 (renews 14 November 2026)', 'Person 3 (renews 14 November 2026)']);
+    const few = groupNames(p, 'settled', NAMES_SHOWN);
+    expect(few.rows).toEqual([
+      { id: people[0].entryId, name: 'Person 1', note: 'Renews 14 November 2026' },
+      { id: people[1].entryId, name: 'Person 2', note: 'Renews 14 November 2026' },
+      { id: people[2].entryId, name: 'Person 3', note: 'Renews 14 November 2026' },
+    ]);
+    // 297 of the group are not on screen, and See all can show two of them: the server named five.
     expect(few.more).toBe(297);
-    expect(few.canSeeAll).toBe(true);
-    const all = groupNames(p, 'settled', true);
-    expect(all.names).toHaveLength(5);
-    // The server named five of three hundred.
-    expect(all.unnamed).toBe(295);
-    expect(groupNames(preview({ counts: counts({ has: 2 }), people: [person(1, 'has'), person(2, 'has')] }), 'has', false)).toMatchObject({ more: 0, canSeeAll: false });
+    expect(few.waiting).toBe(2);
+    const all = groupNames(p, 'settled', NAMES_PAGE);
+    expect(all.rows).toHaveLength(5);
+    expect(all.more).toBe(295);
+    expect(all.waiting).toBe(0);
+    // A short group has nothing more; a person with no name or no day still has a row.
+    const short = preview({ counts: counts({ has: 2 }), people: [person(1, 'has'), person(2, 'has', { fullName: '' })] });
+    expect(groupNames(short, 'has', NAMES_SHOWN)).toEqual({
+      rows: [
+        { id: short.people[0].entryId, name: 'Person 1', note: '' },
+        { id: short.people[1].entryId, name: 'No name', note: '' },
+      ],
+      more: 0,
+      waiting: 0,
+    });
+    expect(NAMES_PAGE).toBe(100);
   });
 
   it('only groups with somebody in them are drawn, each saying what its people will read', () => {

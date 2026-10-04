@@ -100,6 +100,8 @@ async function open(types, words, { readOnly = false, currency = 'GBP' } = {}) {
 }
 
 const block = () => screen.findByRole('region', { name: 'On your member list, not set up yet' });
+/** One group's people in the box, a row each: the name and the day they will read. */
+const rowsOf = (box, group) => within(within(box).getByTestId(`give-names-${group}`)).getAllByRole('listitem').map((li) => [...li.children].map((c) => c.textContent));
 const BOX_GOLD = 'Give Gold Monthly to the people with “Gold” on your member list?';
 
 /** Set up “Gold” as the Gold Monthly above, up to the box. */
@@ -320,12 +322,18 @@ describe('the box of who gets it', () => {
   it('names who gets it and who does not, and gives nobody anything before its button, which waits for the paid answer', async () => {
     await open([GOLD], [name()]);
     const box = await openBox();
+    // Each group is a list, one person a row, with the day they will read.
     expect(within(box).getByText('2 people · paid up')).toBeTruthy();
-    expect(within(box).getByText('Olivia Brown (renews 14 November 2026), Noah Patel (renews 20 October 2026)')).toBeTruthy();
+    expect(rowsOf(box, 'settled')).toEqual([
+      ['Olivia Brown', 'Renews 14 November 2026'],
+      ['Noah Patel', 'Renews 20 October 2026'],
+    ]);
     expect(within(box).getByText('1 person · payment due')).toBeTruthy();
-    expect(within(box).getByText('Lapsed Payer (due since 3 September 2026)')).toBeTruthy();
+    expect(rowsOf(box, 'due')).toEqual([['Lapsed Payer', 'Due since 3 September 2026']]);
     expect(within(box).getByText("1 person · your list doesn't say if they have paid")).toBeTruthy();
-    expect(within(box).getByText('Emma Wilson (starts today)')).toBeTruthy();
+    expect(rowsOf(box, 'ask')).toEqual([['Emma Wilson', 'Starts today']]);
+    // Two names fit: nothing to open.
+    expect(within(box).queryByRole('button', { name: 'See all' })).toBeNull();
     expect(within(box).getByText('2 past members have “Gold” too. They are not on your list now, so they get nothing.')).toBeTruthy();
     // The first time, everybody who can get it is ticked.
     for (const tick of within(box).getAllByRole('checkbox')) expect(tick.checked).toBe(true);
@@ -387,7 +395,7 @@ describe('the box of who gets it', () => {
     const box = await screen.findByRole('group', { name: BOX_GOLD });
     for (const tick of within(box).getAllByRole('checkbox')) expect(tick.checked).toBe(false);
     expect(within(box).getByText('1 person already has Gold Monthly, or had it before.')).toBeTruthy();
-    expect(within(box).getByText('Sam Carter')).toBeTruthy();
+    expect(rowsOf(box, 'has')).toEqual([['Sam Carter']]);
     // Already counted as Gold Monthly: nothing to press until somebody is ticked.
     expect(within(box).getByText('Tick who should get Gold Monthly.')).toBeTruthy();
     expect(within(box).queryByRole('button', { name: /Give Gold Monthly|Count/ })).toBeNull();
@@ -443,14 +451,37 @@ describe('the box of who gets it', () => {
     expect(screen.getByText('3 people · paid up')).toBeTruthy();
   });
 
-  it('a group longer than three names shows three, then all on See all', async () => {
+  it('a longer group lists three people, then "and N more · See all" opens the rest as rows, and Show fewer closes it', async () => {
     await open([GOLD], [name({ people: 6 })]);
     const people = ['Ann', 'Ben', 'Cat', 'Dan', 'Eve'].map((first, i) => person(i + 1, `${first} Smith`, 'settled', { renewsOn: '2026-11-14' }));
     const box = await openBox(previewOf(GOLD, { counts: { settled: 5, due: 0, ask: 0, has: 0, full: 0, ended: 0, day: 0, past: 0 }, people }));
-    expect(within(box).getByText(/Cat Smith \(renews 14 November 2026\), and 2 more$/)).toBeTruthy();
+    const day = 'Renews 14 November 2026';
+    expect(rowsOf(box, 'settled')).toEqual([['Ann Smith', day], ['Ben Smith', day], ['Cat Smith', day]]);
+    expect(within(box).getByText('and 2 more')).toBeTruthy();
     expect(within(box).queryByText(/Eve Smith/)).toBeNull();
+
     fireEvent.click(within(box).getByRole('button', { name: 'See all' }));
-    expect(within(box).getByText(/Eve Smith \(renews 14 November 2026\)$/)).toBeTruthy();
+    // Everybody, still one person a row: never one long line of names.
+    expect(rowsOf(box, 'settled')).toEqual([['Ann Smith', day], ['Ben Smith', day], ['Cat Smith', day], ['Dan Smith', day], ['Eve Smith', day]]);
+    expect(within(box).queryByText(/and \d+ more/)).toBeNull();
+    expect(within(box).queryByRole('button', { name: 'See all' })).toBeNull();
+
+    fireEvent.click(within(box).getByRole('button', { name: 'Show fewer' }));
+    expect(rowsOf(box, 'settled')).toHaveLength(3);
+    expect(within(box).getByRole('button', { name: 'See all' })).toBeTruthy();
+  });
+
+  it('a very long group says how many more there are than it can name, and where to see everyone', async () => {
+    await open([GOLD], [name({ people: 250 })]);
+    const people = ['Ann', 'Ben', 'Cat', 'Dan'].map((first, i) => person(i + 1, `${first} Smith`, 'settled', { renewsOn: '2026-11-14' }));
+    const box = await openBox(previewOf(GOLD, { counts: { settled: 250, due: 0, ask: 0, has: 0, full: 0, ended: 0, day: 0, past: 0 }, people }));
+    expect(within(box).getByText('and 247 more')).toBeTruthy();
+    fireEvent.click(within(box).getByRole('button', { name: 'See all' }));
+    expect(rowsOf(box, 'settled')).toHaveLength(4);
+    expect(within(box).getByText('and 246 more')).toBeTruthy();
+    expect(within(box).getByText('To see everyone, filter Members by this membership.')).toBeTruthy();
+    expect(within(box).queryByRole('button', { name: /See all|Show more/ })).toBeNull();
+    expect(within(box).getByRole('button', { name: 'Give Gold Monthly to 250 people' })).toBeTruthy();
   });
 
   it("a server that cannot say who would get it says so, and nothing is opened or given", async () => {

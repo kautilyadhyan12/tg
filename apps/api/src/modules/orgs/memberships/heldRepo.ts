@@ -28,6 +28,7 @@ import {
   type HeldMembership,
   type HeldMembershipEvent,
   type HeldMembershipTypeChoice,
+  type ListedMembership,
 } from "@app/shared";
 import { insertAudit } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
@@ -161,16 +162,57 @@ export interface HeldList {
   over: HeldRow[];
   overTotal: number;
   types: HeldMembershipTypeChoice[];
+  /** What the member list says their membership is; null where it says nothing, and for
+   *  a past member. */
+  listed: ListedMembership | null;
+}
+
+/** What the list says this record's membership is, and how that name stands with the
+ *  price list: the live type staff said it is (`gym_membership_word_links`), else the
+ *  live type of that very name, matched as the list's chips fold a word (`lower`). A
+ *  name tied to an archived type is not set up, as Settings says of it. */
+async function listedMembership(
+  tx: TransactionSql,
+  gymId: string,
+  entryId: string,
+  entry: { membership_type: string | null; ends_on: string | null; ends_on_kind: string | null },
+): Promise<ListedMembership | null> {
+  const word = entry.membership_type;
+  if (word === null || word === "") return null;
+  const [type] = await tx<{ id: string; name: string; held: boolean }[]>`
+    SELECT t.id, t.name,
+           EXISTS (
+             SELECT 1 FROM gym_held_memberships h
+             WHERE h.gym_id = t.gym_id AND h.entry_id = ${entryId} AND h.membership_type_id = t.id
+           ) AS held
+    FROM gym_membership_types t
+    WHERE t.gym_id = ${gymId} AND t.archived_at IS NULL
+      AND t.id = COALESCE(
+        (SELECT l.membership_type_id FROM gym_membership_word_links l
+         WHERE l.gym_id = ${gymId} AND l.word_key = lower(${word})),
+        (SELECT s.id FROM gym_membership_types s
+         WHERE s.gym_id = ${gymId} AND s.archived_at IS NULL AND lower(s.name) = lower(${word}))
+      )`;
+  return {
+    word,
+    endsOn: entry.ends_on,
+    // Text under a CHECK: a kind this build does not know reads as the list's default, an end day.
+    endsOnKind: entry.ends_on === null || entry.ends_on_kind === null ? null : entry.ends_on_kind === "renews" ? "renews" : "ends",
+    type: type === undefined ? null : { id: type.id, name: type.name },
+    held: type?.held ?? false,
+  };
 }
 
 /** A record's memberships, or null where the record is not this gym's. */
 export async function readHeld(sql: Sql, gymId: string, entryId: string): Promise<HeldList | null> {
   // One connection and one moment: the page of earlier ones and their count agree.
   return await sql.begin("isolation level repeatable read read only", async (tx): Promise<HeldList | null> => {
-    const [entry] = await tx<{ past: boolean }[]>`
-      SELECT former_at IS NOT NULL AS past FROM gym_member_list_entries
+    const [entry] = await tx<{ past: boolean; membership_type: string | null; ends_on: string | null; ends_on_kind: string | null }[]>`
+      SELECT former_at IS NOT NULL AS past, membership_type, ends_on::text AS ends_on, ends_on_kind
+      FROM gym_member_list_entries
       WHERE gym_id = ${gymId} AND id = ${entryId}`;
     if (entry === undefined) return null;
+    const listed = entry.past ? null : await listedMembership(tx, gymId, entryId, entry);
     const inUse = await held(tx, gymId, entryId, IN_USE, IN_USE_READ);
     const over = await held(tx, gymId, entryId, OVER, HELD_EARLIER_PAGE);
     const [total] = await tx<{ n: number }[]>`
@@ -183,6 +225,7 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       over: over.map(shape),
       overTotal: total?.n ?? 0,
       types: types.map(typeChoice),
+      listed,
     };
   });
 }

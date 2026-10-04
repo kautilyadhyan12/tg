@@ -149,23 +149,21 @@ export function personNote(person) {
   }
 }
 
-/** How many names a group shows before "See all". */
+/** How many people a group names before "See all", and how many more each press shows:
+ *  the Remove box's own pattern (`MemberListRemove.jsx`). */
 export const NAMES_SHOWN = 3;
+export const NAMES_PAGE = 100;
 
-/** A group's names: the first few, or all the server sent, and how many are not named. */
-export function groupNames(preview, group, all) {
+/** A group's people as rows, one person each: the first `shown` of those the server
+ *  named. `more` is how many of the group are not on screen; `waiting` is how many of
+ *  those another press can show (the server names the first 200 of a group). */
+export function groupNames(preview, group, shown) {
   const inGroup = preview.people.filter((p) => p.group === group);
-  const named = all ? inGroup : inGroup.slice(0, NAMES_SHOWN);
-  return {
-    names: named.map((p) => {
-      const note = personNote(p);
-      return { id: p.entryId, text: note === '' ? p.fullName : `${p.fullName} (${note})` };
-    }),
-    more: preview.counts[group] - named.length,
-    // Names the server left out of a very long group.
-    unnamed: preview.counts[group] - inGroup.length,
-    canSeeAll: inGroup.length > NAMES_SHOWN,
-  };
+  const rows = inGroup.slice(0, shown).map((p) => {
+    const note = personNote(p);
+    return { id: p.entryId, name: p.fullName === '' ? 'No name' : p.fullName, note: note === '' ? '' : `${note.charAt(0).toUpperCase()}${note.slice(1)}` };
+  });
+  return { rows, more: preview.counts[group] - rows.length, waiting: inGroup.length - rows.length };
 }
 
 const recurring = (preview) => preview.type.kind === 'recurring';

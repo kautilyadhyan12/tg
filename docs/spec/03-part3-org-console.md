@@ -2440,6 +2440,20 @@ memberships, Settings → Memberships.
   (lapsed members a gym chose not to bring across), so staff tick who they mean. A name
   not yet tied to the type can be counted as it with nobody given. One thing is open at
   a time: a form, the question or the box.
+- **The box names people in a list, a row each** (Kd's second click-through,
+  2026-10-05): the name and the day they will read ("Aarav Mehta · Renews 16 October
+  2026"), three of a group, then "and N more · See all" a hundred at a time inside the
+  list's own frame, as the Remove box does (§18.6). Never a line of names.
+- **A person's page says the membership their list names** (the same click-through:
+  Leo Grant's page read "No membership yet" above "Membership: Gold Plus"). The read of
+  a person's memberships answers `listed`: the list's name, its day, the live type that
+  name is (one staff said it is, else a type of that very name; none where it is not set
+  up or its type is archived) and whether this person has, or has had, that type. Where
+  they have not, the Memberships box draws it as a row of its own: "Gold Plus · Not set
+  up · From your member list · Renews 13 October 2026", or, for a name that is a type,
+  "Gold Monthly · Not added · Your member list says “Gold”". It has no buttons: it is
+  not a membership held here. "No membership yet" is said only where the list names
+  none. A past member's page is told nothing of it.
 - All four routes need `members.confirm` (a preview names people and what each owes);
   the box sits in Settings → Memberships, which opens on `memberships.manage`, so in
   practice both. The word travels in the request's body, never its address.

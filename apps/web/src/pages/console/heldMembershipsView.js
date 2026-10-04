@@ -63,6 +63,33 @@ function listDatesLine(m) {
   return m.kind === 'recurring' ? `${from} · Ends ${dayWords(endsOn)}, won't renew` : `${from} · Ends ${dayWords(endsOn)}`;
 }
 
+/** What the member list says this person's membership is, as a row of the Memberships
+ *  box (17a-iii), so the box never reads "No membership yet" beside a list that names one.
+ *  Null where the list says nothing, or the person has, or has had, the type that name
+ *  is: then their own membership's row says it. `name` is the person. */
+export function listedRow(listed, name) {
+  if (listed === null || listed === undefined) return null;
+  if (listed.type !== null && listed.held) return null;
+  const who = `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+  const day = listed.endsOn === null ? null : `${listed.endsOnKind === 'renews' ? 'Renews' : 'Ends'} ${dayWords(listed.endsOn)}`;
+  const withDay = (text) => (day === null ? text : `${text} · ${day}`);
+  if (listed.type === null) {
+    return {
+      title: listed.word,
+      tag: 'Not set up',
+      from: withDay('From your member list'),
+      note: `This membership has no price here yet. Set it up in Settings, under Memberships, and ${name} gets it.`,
+    };
+  }
+  const ownName = listed.word.trim().toLowerCase() === listed.type.name.trim().toLowerCase();
+  return {
+    title: listed.type.name,
+    tag: 'Not added',
+    from: withDay(ownName ? 'From your member list' : `Your member list says “${listed.word}”`),
+    note: `${who} doesn't have it here yet. Add it with Add membership, or give it to everyone on your list who is missing it in Settings, under Memberships.`,
+  };
+}
+
 /** A pack's classes: "7 of 10 classes left"; null for any other kind, for a day pass, and
  *  for a pack that is over. */
 export function classesLine(m) {

@@ -566,10 +566,29 @@ export const heldMembershipTypeChoiceSchema = z
   .strict();
 export type HeldMembershipTypeChoice = z.infer<typeof heldMembershipTypeChoiceSchema>;
 
+/** What the gym's own member list says this person's membership is (17a-iii): the name
+ *  as the list wrote it, its end-or-renewal day, and how that name stands with the price
+ *  list. `type` is the live type the name is (one staff said it is, or a type of that
+ *  very name), null where it is not set up; `held` is whether this person has, or has
+ *  had, that type. A person's page says it in the Memberships box, so the box never
+ *  reads "No membership yet" beside a list that names one. */
+export const listedMembershipSchema = z
+  .object({
+    word: z.string().min(1),
+    endsOn: daySchema.nullable(),
+    endsOnKind: z.enum(["ends", "renews"]).nullable(),
+    type: z.object({ id: z.string().uuid(), name: z.string() }).strict().nullable(),
+    held: z.boolean(),
+  })
+  .strict();
+export type ListedMembership = z.infer<typeof listedMembershipSchema>;
+
 /** A record's memberships. `today` is the gym's own day, the one every date here was
  *  worked out on; `past` is true for a past member, whose memberships are not in use.
  *  `memberships` holds every one in use and the newest of the ones that are over;
- *  `earlierNotShown` counts the older ones left out. `types` are the gym's live types. */
+ *  `earlierNotShown` counts the older ones left out. `types` are the gym's live types.
+ *  `listed` is what the member list says their membership is, null where it says
+ *  nothing or the person is a past member. */
 export const heldMembershipsResponseSchema = z
   .object({
     today: daySchema,
@@ -577,6 +596,7 @@ export const heldMembershipsResponseSchema = z
     memberships: z.array(heldMembershipSchema),
     earlierNotShown: z.number().int().min(0),
     types: z.array(heldMembershipTypeChoiceSchema),
+    listed: listedMembershipSchema.nullable(),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;

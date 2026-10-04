@@ -71,6 +71,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     memberships: [...inUse, ...shown],
     earlierNotShown: over.length - shown.length + stored,
     types: list.types,
+    listed: list.listed,
   });
 }
 

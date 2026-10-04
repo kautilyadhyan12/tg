@@ -10,6 +10,7 @@ import {
   doneWords,
   giveBody,
   isLive,
+  listedRow,
   membershipChoice,
   newRequestKey,
   paymentLine,
@@ -95,6 +96,8 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
   const live = shown.memberships.filter(isLive);
   const over = shown.memberships.filter((m) => !isLive(m));
   const canAct = !readOnly && !shown.past;
+  // What their list says their membership is, where they do not hold it here.
+  const listed = listedRow(shown.listed, name);
 
   /** A write: its answer is kept for the person it was asked about. */
   const run = async (what, m, work) => {
@@ -297,7 +300,17 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
         </p>
       ) : null}
       {open !== null && open.what === 'add' && form !== null ? renderAdd() : null}
-      {live.length === 0 && over.length === 0 && open === null ? <p className="c-s14 c-t3 m-0">No membership yet.</p> : null}
+      {listed !== null ? (
+        <div className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-listed">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="c-s15 c-w6 c-t1 break-words min-w-0">{listed.title}</span>
+            <span className="c-tag c-tag-plain whitespace-nowrap">{listed.tag}</span>
+          </div>
+          <span className="c-s14 c-t2">{listed.from}</span>
+          <span className="c-s14 c-t2">{listed.note}</span>
+        </div>
+      ) : null}
+      {live.length === 0 && over.length === 0 && open === null && listed === null ? <p className="c-s14 c-t3 m-0">No membership yet.</p> : null}
       {live.length > 0 ? <ul className="m-0 p-0 list-none flex flex-col">{live.map(renderOne)}</ul> : null}
       {over.length > 0 ? (
         <div className="flex flex-col">
