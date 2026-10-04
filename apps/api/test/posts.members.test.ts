@@ -411,24 +411,26 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const first = await add(gym, writer, "Post 1");
       for (let i = 2; i < GYM_MEMBER_POSTS_A_DAY; i++) await add(gym, writer, `Post ${String(i)}`);
       // One left, and four sent at the same moment across two servers: one lands.
-      const burst = await Promise.all([0, 1, 2, 3].map((n) => send(gym, writer, `Burst ${String(n)}`, [], randomUUID(), nextIp(), either(n))));
+      const keys = [0, 1, 2, 3].map(() => randomUUID());
+      const burst = await Promise.all([0, 1, 2, 3].map((n) => send(gym, writer, `Burst ${String(n)}`, [], keys[n], nextIp(), either(n))));
       expect(burst.map((r) => r.statusCode).sort()).toEqual([201, 429, 429, 429]);
+      // The day's last post, sent again under its key after a lost reply: the same post
+      // back, not "try again tomorrow".
+      const landed = burst.findIndex((r) => r.statusCode === 201);
+      const again = await send(gym, writer, `Burst ${String(landed)}`, [], keys[landed]);
+      expect(again.statusCode, again.body).toBe(201);
+      expect((JSON.parse(again.body) as { post: GymPost }).post.id).toBe((JSON.parse(burst[landed]?.body ?? "{}") as { post: GymPost }).post.id);
       expect(burst.filter((r) => r.statusCode === 429).map(errorOf)).toEqual(["posts_day_full", "posts_day_full", "posts_day_full"]);
       expect(await count("posts", gym.id)).toBe(GYM_MEMBER_POSTS_A_DAY);
 
       // Removing one gives none back; somebody else is not held up by it.
       expect((await inject("DELETE", `${posts(gym.id)}/mine/${first.id}`, writer.cookies)).statusCode).toBe(200);
       expect((await send(gym, writer, "One more")).statusCode).toBe(429);
-      // Settled before the body is read: one that cannot be read is refused the same way.
-      const broken = await api().inject({
-        method: "POST",
-        url: `${posts(gym.id)}/mine`,
-        remoteAddress: nextIp(),
-        cookies: writer.cookies,
-        headers: { "content-type": "application/json" },
-        payload: '{"postKey":',
-      });
-      expect({ status: broken.statusCode, error: errorOf(broken) }).toEqual({ status: 429, error: "posts_day_full" });
+      // Refused before a photo is cleaned or written: a photo that cannot be read is never
+      // looked at, so the answer is the day's, not the photo's.
+      const unread = await send(gym, writer, "With a photo that is no photo", ["AAAA"]);
+      expect({ status: unread.statusCode, error: errorOf(unread) }).toEqual({ status: 429, error: "posts_day_full" });
+      expect(await filesOf(gym.id)).toEqual([]);
       expect((await send(gym, quiet, "My first")).statusCode).toBe(201);
 
       // 24 hours after the first, it no longer counts.

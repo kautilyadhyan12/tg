@@ -292,14 +292,13 @@ async function refuseFullDay(sql: Sql | TransactionSql, gymId: string, userId: s
   }
 }
 
-/** A member who may post: the gym's switch is on, staff have not stopped them, and the
- *  day's posts are not used up. The route asks it before it reads a post's body, so a
- *  person who may not post costs the server no photos; the count that decides is the one
- *  made again with their membership held, when the post is kept. The gym's name. */
-export async function requireMemberPoster(deps: Pick<PostsDeps, "sql" | "now">, userId: string, gymId: string): Promise<string> {
+/** A member who may post: the gym's switch is on and staff have not stopped them. The
+ *  route asks it before it reads a post's body. The day's ten are not asked here: a post
+ *  sent again under its key must be answered with the post kept, and only the body says
+ *  which post it is. The gym's name. */
+export async function requireMemberPoster(deps: Pick<PostsDeps, "sql">, userId: string, gymId: string): Promise<string> {
   const gymName = await requireMember(deps, gymId, userId);
   refusePosting(await postingOf(deps.sql, gymId, userId), gymName);
-  await refuseFullDay(deps.sql, gymId, userId, deps.now());
   return gymName;
 }
 
@@ -378,11 +377,14 @@ async function ownByKey(deps: Pick<PostsDeps, "sql">, gymId: string, userId: str
 /** A new post by a member, where the gym lets its members post. Ten in any 24 hours,
  *  counted with the person's membership held so two sent at once are counted in turn. */
 export async function addMemberPost(deps: PostsDeps, userId: string, gymId: string, body: AddGymPostRequest): Promise<GymPost> {
-  // A post sent again under its key is answered with the post kept, whatever has changed since.
-  await requireMember(deps, gymId, userId);
+  const gymName = await requireMemberPoster(deps, userId, gymId);
+  // A post sent again under its key (a reply lost on the way back) is answered with the
+  // post kept, the day's last one too.
   const kept = await ownByKey(deps, gymId, userId, body.postKey);
   if (kept !== null) return kept;
-  const gymName = await requireMemberPoster(deps, userId, gymId);
+  // A full day is refused before any photo is cleaned or written; the count that decides
+  // is made again below, with the person's membership held.
+  await refuseFullDay(deps.sql, gymId, userId, deps.now());
   const post = await keepPost(deps, gymId, userId, body, true, async (tx, at) => {
     if (!(await repo.lockMember(tx, gymId, userId, true))) throw notFound();
     refusePosting(await postingOf(tx, gymId, userId), gymName);

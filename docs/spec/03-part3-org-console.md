@@ -2685,8 +2685,9 @@ for them and the safety tools of §15.3 are 19b-ii; video is 19b-iii.
 it is on, a live app member writes a post on their gym's Updates tab: the same words and
 photos as staff (`POST …/posts/mine`, one key a post), **10 in any 24 hours** counted in
 the database with the person's membership held (a removed post gives none back), and who
-may post — the switch, a stop, and the day's ten — is settled before the body is read, as
-for staff. A member's post that staff pinned gives its pin back when its writer leaves. A member's post is marked
+may post — the switch and a stop — is settled before the body is read, as for staff; a
+full day is refused before any photo is cleaned, and a post sent again under its key is
+answered with the post kept, the day's last one too. A member's post that staff pinned gives its pin back when its writer leaves. A member's post is marked
 `by_member`; it is shown under their first name and last initial ("A member" with no
 name), staff posts carry the word "Staff", and the console marks a member's post with the
 gym's word for a member. **A member's post stays until they or staff remove it** (RULINGS
