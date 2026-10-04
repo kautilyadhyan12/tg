@@ -58,6 +58,10 @@ describe('what a membership reads as', () => {
       [held(monthly, '2026-10-04', true, { moves: [[{ type: 'freeze' }, '2026-10-10']] }), 'Frozen', 'Started 4 October 2026 · Frozen since 10 October 2026'],
       [held(monthly, '2026-10-04', true, { moves: [[{ type: 'cancel', when: 'period_end' }, '2026-10-10']] }), 'Active', "Started 4 October 2026 · Ends 3 November 2026, won't renew"],
       [held(monthly, '2026-10-04', true, { moves: [[{ type: 'cancel', when: 'today' }, '2026-10-10']] }), 'Cancelled', 'Started 4 October 2026 · Cancelled 10 October 2026'],
+      // Cancelled before its start day: it never started.
+      [held(monthly, '2026-11-10', true, { givenOn: '2026-10-04', moves: [[{ type: 'cancel', when: 'today' }, '2026-10-04']] }), 'Cancelled', 'Was to start 10 November 2026 · Cancelled 4 October 2026'],
+      // Cancelled on its start day: it had started.
+      [held(monthly, '2026-10-04', true, { moves: [[{ type: 'cancel', when: 'today' }, '2026-10-04']] }), 'Cancelled', 'Started 4 October 2026 · Cancelled 4 October 2026'],
       [held(threeMonths, '2026-07-01', true), 'Ended', '1 July 2026 to 30 September 2026'],
       [held(dayPass, '2026-10-01', true), 'Ended', '1 October 2026'],
     ];
@@ -67,7 +71,11 @@ describe('what a membership reads as', () => {
     }
     expect(statusTag(cases[0][0]).tone).toBe('green');
     expect(statusTag(cases[4][0]).tone).toBe('orange');
-    expect(cases.map(([m]) => isLive(m))).toEqual([true, true, true, true, true, true, false, false, false]);
+    expect(cases.map(([m]) => isLive(m))).toEqual([true, true, true, true, true, true, false, false, false, false, false]);
+    // A past member's are kept and not in use: one that would be running says so, one that is over keeps its word.
+    expect(statusTag(cases[0][0], true)).toEqual({ tag: 'Not in use', tone: 'plain' });
+    expect(statusTag(cases[4][0], true)).toEqual({ tag: 'Not in use', tone: 'plain' });
+    expect(statusTag(cases[6][0], true).tag).toBe('Cancelled');
   });
 
   it('says what is paid and what is owed, and marks only what is owed today', () => {

@@ -126,11 +126,12 @@ export const gymHeldMemberships = pgTable(
     packClasses: integer("pack_classes"),
     packDays: integer("pack_days"),
     startsOn: date("starts_on").notNull(),
-    anchorOn: date("anchor_on").notNull(),
+    frozenDays: integer("frozen_days").notNull().default(0),
     status: text("status").notNull().default("active"),
     frozenOn: date("frozen_on"),
     cancelledOn: date("cancelled_on"),
     paidPeriods: integer("paid_periods").notNull().default(0),
+    paidFloor: integer("paid_floor").notNull().default(0),
     renews: boolean("renews").notNull(),
     classesLeft: integer("classes_left"),
     createdAt: createdAt(),
@@ -156,12 +157,12 @@ export const gymHeldMemberships = pgTable(
         AND ${t.packClasses} IS NULL AND ${t.packDays} IS NULL AND ${t.classesLeft} IS NULL
       END`,
     ),
-    check("gym_held_memberships_anchor_check", sql`${t.anchorOn} >= ${t.startsOn}`),
+    check("gym_held_memberships_frozen_days_check", sql`${t.frozenDays} BETWEEN 0 AND 36500`),
     check("gym_held_memberships_frozen_check", sql`(${t.status} = 'frozen') = (${t.frozenOn} IS NOT NULL)`),
     check("gym_held_memberships_cancelled_check", sql`(${t.status} = 'cancelled') = (${t.cancelledOn} IS NOT NULL)`),
     check(
       "gym_held_memberships_paid_check",
-      sql`${t.paidPeriods} >= 0 AND (${t.kind} = 'recurring' OR ${t.paidPeriods} <= 1) AND (${t.priceMinor} > 0 OR ${t.paidPeriods} = 0)`,
+      sql`${t.paidFloor} >= 0 AND ${t.paidPeriods} >= ${t.paidFloor} AND (${t.kind} = 'recurring' OR (${t.paidPeriods} <= 1 AND ${t.paidFloor} = 0)) AND (${t.priceMinor} > 0 OR ${t.paidPeriods} = 0)`,
     ),
     check("gym_held_memberships_renews_check", sql`${t.kind} = 'recurring' OR NOT ${t.renews}`),
     foreignKey({

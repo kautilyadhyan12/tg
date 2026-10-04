@@ -9,10 +9,14 @@
 // Days are 'YYYY-MM-DD' calendar days with no time and no zone.
 //
 // What is stored, and what is worked out:
-//   `anchorOn`     the day its periods are counted from: the start day, moved later
-//                  by every day it was frozen;
+//   `frozenDays`   how many days it has been frozen, in all. Periods are counted from
+//                  the start day in the type's own unit, and these days are added
+//                  AFTER that, so every later date moves by exactly the days frozen
+//                  (moving the start instead loses days at a month's end);
 //   `paidPeriods`  how many periods are marked paid. A repeating membership is paid
-//                  up to `anchorOn` + that many periods; any other kind has one period;
+//                  up to the start of that period; any other kind has one period;
+//   `paidFloor`    the count it was given with for the periods before it was given:
+//                  a mark is never taken back below it;
 //   `renews`       false once staff cancelled a repeating membership at the end of
 //                  what is paid;
 //   the end day, the renewal day and what is owed are worked out from those.
@@ -128,11 +132,12 @@ export interface HeldMembership {
   /** Nothing to pay: the type's price was 0 when it was given. */
   free: boolean;
   startsOn: string;
-  anchorOn: string;
+  frozenDays: number;
   status: HeldMembershipStatus;
   frozenOn: string | null;
   cancelledOn: string | null;
   paidPeriods: number;
+  paidFloor: number;
   renews: boolean;
   classesLeft: number | null;
 }
@@ -149,20 +154,22 @@ function term(m: HeldMembership): { count: number; unit: MembershipTermUnit } {
 /** The first day of period `index` (0 is the first). */
 function periodStart(m: HeldMembership, index: number): string {
   const t = term(m);
-  return addTerms(m.anchorOn, t.count, t.unit, index);
+  return addDays(addTerms(m.startsOn, t.count, t.unit, index), m.frozenDays);
 }
 
-/** Which period `day` falls in: 0 for the first, and 0 for a day before the anchor. */
+/** Which period `day` falls in: 0 for the first, and 0 for a day before it starts. */
 function periodIndex(m: HeldMembership, day: string): number {
-  if (day <= m.anchorOn) return 0;
+  // The day as it would be had it never been frozen: periods are counted from the start.
+  const at = addDays(day, -m.frozenDays);
+  if (at <= m.startsOn) return 0;
   const t = term(m);
-  const a = parts(m.anchorOn);
-  const d = parts(day);
+  const a = parts(m.startsOn);
+  const d = parts(at);
   if (a === null || d === null) throw new Error("not a day");
   // A first guess that is never too high, then forward to the period holding the day.
   let index: number;
   if (t.unit === "day" || t.unit === "week") {
-    index = Math.floor(daysBetween(m.anchorOn, day) / ((t.unit === "week" ? 7 : 1) * t.count));
+    index = Math.floor(daysBetween(m.startsOn, at) / ((t.unit === "week" ? 7 : 1) * t.count));
   } else {
     const months = (d[0] - a[0]) * 12 + (d[1] - a[1]) - 1;
     index = Math.max(0, Math.floor(months / ((t.unit === "year" ? 12 : 1) * t.count)));
@@ -270,7 +277,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
         if (next <= periodIndex(m, asOf) + 1 + HELD_PAID_AHEAD_MAX) {
           markPaid = { paidPeriods: next, until: frozen ? null : periodStart(m, next) };
         }
-        if (m.paidPeriods > 0) undoPaid = { paidPeriods: m.paidPeriods - 1 };
+        if (m.paidPeriods > m.paidFloor) undoPaid = { paidPeriods: m.paidPeriods - 1 };
       }
     } else if (m.paidPeriods === 0) {
       markPaid = { paidPeriods: 1, until: null };
@@ -330,11 +337,11 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
     case "unfreeze": {
       if (m.status === "active") return same;
       if (m.status !== "frozen" || m.frozenOn === null) return refused;
-      // Every day frozen is given back: the periods are counted from a later day.
+      // Every day frozen is given back: each later date moves by exactly that many days.
       const days = Math.max(0, daysBetween(m.frozenOn, today));
       return {
         ok: true,
-        membership: { ...m, status: "active", frozenOn: null, anchorOn: addDays(m.anchorOn, days) },
+        membership: { ...m, status: "active", frozenOn: null, frozenDays: m.frozenDays + days },
         changed: true,
       };
     }
@@ -387,17 +394,21 @@ export function giveHeldMembership(type: HeldMembershipTerms, startsOn: string, 
     packDays: type.packDays,
     free: type.priceMinor === 0,
     startsOn,
-    anchorOn: startsOn,
+    frozenDays: 0,
     status: "active",
     frozenOn: null,
     cancelledOn: null,
     paidPeriods: 0,
+    paidFloor: 0,
     renews: type.kind === "recurring",
     classesLeft: type.kind === "pack" ? type.packClasses : null,
   };
   const free = base.free;
   const current = type.kind === "recurring" ? periodIndex(base, today) : 0;
-  const membership = { ...base, paidPeriods: free ? 0 : current + (paid ? 1 : 0) };
+  // The periods before it was given are not this app's to ask about: they count as paid,
+  // and no mark is taken back into them.
+  const paidFloor = free ? 0 : current;
+  const membership = { ...base, paidFloor, paidPeriods: free ? 0 : current + (paid ? 1 : 0) };
   if (settle(membership, today).status === "ended") return { ok: false, reason: "already_over" };
   return { ok: true, membership };
 }

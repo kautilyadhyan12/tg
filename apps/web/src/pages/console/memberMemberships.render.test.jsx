@@ -183,11 +183,15 @@ describe('what the box draws', () => {
     const view = render(draw(ADA, 'Ada Lovelace'));
     expect(await (await boxSoon()).findByTestId('held-past-note')).toBeTruthy();
     expect(box().queryAllByRole('button')).toEqual([]);
+    // Not in use, so not "Active".
+    expect(box().getByText('Not in use')).toBeTruthy();
+    expect(box().queryByText('Active')).toBeNull();
 
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)]));
     view.rerender(draw(BEA, 'Bea Hart', { readOnly: true }));
     await waitFor(() => expect(screen.queryByTestId('held-past-note')).toBeNull());
     expect(box().getByText('Gold Monthly')).toBeTruthy();
+    expect(box().getByText('Active')).toBeTruthy();
     expect(box().queryAllByRole('button')).toEqual([]);
   });
 
@@ -389,6 +393,27 @@ describe('Add member gives a membership in the same form', () => {
     // Their page opens, with the Memberships box read for them.
     await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, BEA));
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('gives nobody a membership when nobody new was added: someone already on the list, or a past member put back', async () => {
+    const outcomes = [
+      ['already_on_list', 'Bea Hart was already on your list, so the Gold Monthly membership was not added. Add it under Memberships below.'],
+      ['revived', 'Bea Hart was a past member and is back on your list, so the Gold Monthly membership was not added. Add it under Memberships below.'],
+    ];
+    for (const [outcome, sentence] of outcomes) {
+      orgService.addMemberListEntry.mockResolvedValue({ data: { outcome, entry: bea(), version: 4 } });
+      const view = openAdd();
+      const choice = within(await screen.findByTestId('add-membership'));
+      typeName('Name', 'Bea Hart');
+      typeName('Email', 'bea@members.example');
+      fireEvent.change(choice.getByRole('combobox'), { target: { value: GOLD.id } });
+      fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+      expect((await screen.findByRole('alert')).textContent, outcome).toContain(sentence);
+      // Their page is open, and what they hold is untouched.
+      expect(screen.getByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
+      expect(orgService.giveHeldMembership, outcome).not.toHaveBeenCalled();
+      view.unmount();
+    }
   });
 
   it('says so when the person was added and the membership was not', async () => {

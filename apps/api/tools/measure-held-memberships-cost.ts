@@ -76,9 +76,9 @@ async function seed(): Promise<{ gymId: string; owner: string; typeId: string; t
   await sql`
     INSERT INTO gym_held_memberships
       (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit,
-       starts_on, anchor_on, status, cancelled_on, paid_periods, renews)
+       starts_on, status, cancelled_on, paid_periods, renews)
     SELECT ${gymId}, e.id, ${typeId}, gen_random_uuid(), 'recurring', 4999, 'GBP', 1, 'month',
-           current_date - (n * 200), current_date - (n * 200),
+           current_date - (n * 200),
            CASE WHEN n = 0 THEN 'active' ELSE 'cancelled' END,
            CASE WHEN n = 0 THEN NULL ELSE current_date - (n * 200) + 90 END, 1, true
     FROM gym_member_list_entries e

@@ -9,10 +9,11 @@ ALTER TABLE "gym_membership_types" ADD CONSTRAINT "gym_membership_types_gym_id_u
 
 -- Held by the RECORD (`entry_id`), so a person without the app can hold one. The kind, the
 -- price and the term are the type's as they were when it was given: a later change to the
--- type moves nobody's dates. `anchor_on` is the day its periods are counted from: the start
--- day, moved later by every day it was frozen. `paid_periods` is how many periods staff
--- marked paid; `renews` is false once a repeating membership was cancelled at the end of
--- what is paid. The end day, the renewal day and what is owed are worked out from these by
+-- type moves nobody's dates. `frozen_days` is how many days it has been frozen in all: its
+-- periods are counted from the start day and these days are added after, so every later date
+-- moves by exactly the days frozen. `paid_periods` is how many periods are marked paid, and
+-- `paid_floor` the count it was given with, which a mark is never taken back below; `renews`
+-- is false once a repeating membership was cancelled at the end of what is paid. The end day, the renewal day and what is owed are worked out from these by
 -- `heldMembershipView` in `@app/shared`, never stored.
 -- `status` is the last one written: an `active` row past its last day reads as ended, so
 -- nothing reads `status` without that rule.
@@ -31,11 +32,12 @@ CREATE TABLE "gym_held_memberships" (
 	"pack_classes" integer,
 	"pack_days" integer,
 	"starts_on" date NOT NULL,
-	"anchor_on" date NOT NULL,
+	"frozen_days" integer DEFAULT 0 NOT NULL,
 	"status" text DEFAULT 'active' NOT NULL,
 	"frozen_on" date,
 	"cancelled_on" date,
 	"paid_periods" integer DEFAULT 0 NOT NULL,
+	"paid_floor" integer DEFAULT 0 NOT NULL,
 	"renews" boolean NOT NULL,
 	"classes_left" integer,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -59,10 +61,10 @@ CREATE TABLE "gym_held_memberships" (
 			AND "pack_classes" IS NULL AND "pack_days" IS NULL AND "classes_left" IS NULL
 		END
 	),
-	CONSTRAINT "gym_held_memberships_anchor_check" CHECK ("anchor_on" >= "starts_on"),
+	CONSTRAINT "gym_held_memberships_frozen_days_check" CHECK ("frozen_days" BETWEEN 0 AND 36500),
 	CONSTRAINT "gym_held_memberships_frozen_check" CHECK (("status" = 'frozen') = ("frozen_on" IS NOT NULL)),
 	CONSTRAINT "gym_held_memberships_cancelled_check" CHECK (("status" = 'cancelled') = ("cancelled_on" IS NOT NULL)),
-	CONSTRAINT "gym_held_memberships_paid_check" CHECK ("paid_periods" >= 0 AND ("kind" = 'recurring' OR "paid_periods" <= 1) AND ("price_minor" > 0 OR "paid_periods" = 0)),
+	CONSTRAINT "gym_held_memberships_paid_check" CHECK ("paid_floor" >= 0 AND "paid_periods" >= "paid_floor" AND ("kind" = 'recurring' OR ("paid_periods" <= 1 AND "paid_floor" = 0)) AND ("price_minor" > 0 OR "paid_periods" = 0)),
 	-- Only a repeating membership renews.
 	CONSTRAINT "gym_held_memberships_renews_check" CHECK ("kind" = 'recurring' OR NOT "renews")
 );--> statement-breakpoint

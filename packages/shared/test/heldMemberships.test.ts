@@ -196,6 +196,56 @@ describe("freezing gives back every day frozen", () => {
     expect(heldMembershipView(owing, "2026-12-25").payment).toEqual({ state: "due", since: null });
   });
 
+  it("gives back exactly the days frozen at a month's end, where February is shorter", () => {
+    // [type, starts, frozen on, unfrozen on, the day paid up to (repeating) or the last day (one time), after]
+    const cases: [HeldMembershipTerms, string, string, string, string][] = [
+      [monthly, "2026-01-28", "2026-02-01", "2026-02-04", "2026-03-03"], // 28 Feb + 3
+      [monthly, "2026-01-29", "2026-02-01", "2026-02-03", "2026-03-02"], // 28 Feb + 2
+      [monthly, "2026-01-30", "2026-02-01", "2026-02-02", "2026-03-01"], // 28 Feb + 1
+      [monthly, "2026-01-31", "2026-02-01", "2026-03-04", "2026-03-31"], // 28 Feb + 31
+      [monthly, "2026-02-28", "2026-03-01", "2026-03-02", "2026-03-29"], // 28 Mar + 1
+      [yearly, "2028-02-29", "2028-03-01", "2028-03-06", "2029-03-05"], // 28 Feb 2029 + 5
+      [{ ...threeMonths, termCount: 1 }, "2026-01-29", "2026-02-01", "2026-02-03", "2026-03-01"], // last day 27 Feb + 2
+      [{ ...threeMonths, termCount: 1 }, "2026-01-31", "2026-02-10", "2026-02-13", "2026-03-02"], // last day 27 Feb + 3
+    ];
+    for (const [type, starts, frozenOn, backOn, want] of cases) {
+      const m = given(type, starts, true, starts);
+      const back = moved(moved(m, { type: "freeze" }, frozenOn), { type: "unfreeze" }, backOn);
+      const view = heldMembershipView(back, backOn);
+      const label = `${type.kind} from ${starts}, frozen ${frozenOn} to ${backOn}`;
+      if (type.kind === "recurring") expect(view.payment, label).toEqual({ state: "paid", until: want });
+      else expect(view.endsOn, label).toBe(want);
+      expect(back.startsOn).toBe(starts);
+    }
+  });
+
+  it("moves every date by exactly the days frozen, whatever the start day, the unit and the length of the freeze", () => {
+    const kinds: HeldMembershipTerms[] = [monthly, quarterly, weekly, yearly, threeMonths, { ...threeMonths, termCount: 1, termUnit: "year" }, tenPack, freeWeek];
+    let checked = 0;
+    for (const year of ["2026", "2028"]) {
+      for (let offset = 0; offset < 91; offset++) {
+        const starts = addDays(`${year}-01-01`, offset);
+        for (const type of kinds) {
+          for (const days of [1, 2, 3, 30, 31, 400]) {
+            const m = given(type, starts, true, starts);
+            const before = heldMembershipView(m, starts);
+            const backOn = addDays(starts, days);
+            const back = moved(moved(m, { type: "freeze" }, starts), { type: "unfreeze" }, backOn);
+            const after = heldMembershipView(back, backOn);
+            const label = `${type.kind} ${String(type.termCount)} ${String(type.termUnit)} from ${starts}, frozen ${String(days)} days`;
+            if (before.endsOn !== null) expect(daysBetween(before.endsOn, after.endsOn ?? ""), label).toBe(days);
+            if (before.payment?.state === "paid" && before.payment.until !== null) {
+              expect(after.payment, label).toEqual({ state: "paid", until: addDays(before.payment.until, days) });
+            }
+            if (before.renewsOn !== null) expect(after.renewsOn, label).toBe(addDays(before.renewsOn, days));
+            checked += 1;
+          }
+        }
+      }
+    }
+    expect(checked).toBe(2 * 91 * 8 * 6);
+  });
+
   it("a pack frozen keeps its classes and gets its days back", () => {
     const m = given(tenPack, "2026-10-04", true, "2026-10-04"); // last day 2 Dec
     const back = moved(moved(m, { type: "freeze" }, "2026-11-01"), { type: "unfreeze" }, "2026-11-08");
@@ -280,6 +330,11 @@ describe("the one transition, every status against every event", () => {
         } else if (want === "kept") {
           expect(move.changed).toBe(true);
           expect(after).toBe(before);
+          // The one thing each of these is meant to move, and nothing else.
+          const meant =
+            event.type === "paid" ? { paidPeriods: event.paidPeriods } : event.type === "cancel" ? { renews: false } : null;
+          if (meant === null) throw new Error("no kept pair expects this event");
+          expect(move.membership).toEqual({ ...state, ...meant });
           expect(move.membership).not.toEqual(state);
         } else {
           expect(move.changed).toBe(true);
@@ -333,6 +388,29 @@ describe("the one transition, every status against every event", () => {
   });
 });
 
+describe("taking a payment mark back", () => {
+  it("never goes below what the membership was given with", () => {
+    // Started 4 July, given on 20 October with the paid tick left off: three earlier
+    // periods count as paid, and staff marked none of them.
+    const owing = given(monthly, "2026-07-04", false, "2026-10-20");
+    expect(owing).toMatchObject({ paidPeriods: 3, paidFloor: 3 });
+    expect(heldMembershipView(owing, "2026-10-20").can.undoPaid).toBeNull();
+    expect(moveHeldMembership(owing, { type: "paid", paidPeriods: 2 }, "2026-10-20")).toEqual({ ok: false, reason: "not_allowed" });
+    // Ticked paid by mistake: that one mark can be taken back, and no further.
+    const ticked = given(monthly, "2026-07-04", true, "2026-10-20");
+    expect(ticked).toMatchObject({ paidPeriods: 4, paidFloor: 3 });
+    expect(heldMembershipView(ticked, "2026-10-20").can.undoPaid).toEqual({ paidPeriods: 3 });
+    const back = moved(ticked, { type: "paid", paidPeriods: 3 }, "2026-10-20");
+    expect(heldMembershipView(back, "2026-10-20").can.undoPaid).toBeNull();
+    expect(heldMembershipView(back, "2026-10-20").payment).toEqual({ state: "due", since: "2026-10-04" });
+    // Years back, by the week: nothing to take back, however many periods have gone by.
+    const old = given(weekly, "2000-01-03", false, "2026-10-04");
+    expect(old.paidFloor).toBe(old.paidPeriods);
+    expect(old.paidPeriods).toBeGreaterThan(1000);
+    expect(heldMembershipView(old, "2026-10-04").can.undoPaid).toBeNull();
+  });
+});
+
 describe("giving a membership", () => {
   it("refuses a start day the calendar does not have, one too far off, and one already over", () => {
     const today = "2026-10-04";
@@ -349,7 +427,7 @@ describe("giving a membership", () => {
 
   it("keeps the type's term as it was, a pack's classes, and whether there is anything to pay", () => {
     expect(given(tenPack, "2026-10-04", false, "2026-10-04")).toMatchObject({ classesLeft: 10, packDays: 60, renews: false, free: false, paidPeriods: 0 });
-    expect(given(monthly, "2026-10-04", true, "2026-10-04")).toMatchObject({ classesLeft: null, renews: true, anchorOn: "2026-10-04", paidPeriods: 1 });
+    expect(given(monthly, "2026-10-04", true, "2026-10-04")).toMatchObject({ classesLeft: null, renews: true, frozenDays: 0, paidPeriods: 1, paidFloor: 0 });
     expect(given(freeWeek, "2026-10-04", true, "2026-10-04")).toMatchObject({ free: true, renews: false });
   });
 });

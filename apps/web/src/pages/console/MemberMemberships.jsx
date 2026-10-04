@@ -175,7 +175,7 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
   };
 
   const renderOne = (m) => {
-    const tag = statusTag(m);
+    const tag = statusTag(m, shown.past);
     const pay = paymentLine(m, today);
     const classes = classesLine(m);
     const asking = open !== null && open.id === m.id;

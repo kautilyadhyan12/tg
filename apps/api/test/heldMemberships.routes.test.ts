@@ -196,9 +196,9 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
 
   /** What is in the table, read directly. */
   const rowsOf = (gymId: string) => sql<
-    { id: string; entry_id: string; status: string; paid_periods: number; renews: boolean; anchor_on: string; frozen_on: string | null }[]
+    { id: string; entry_id: string; status: string; paid_periods: number; renews: boolean; frozen_days: number; frozen_on: string | null }[]
   >`
-    SELECT id, entry_id, status, paid_periods, renews, anchor_on::text AS anchor_on, frozen_on::text AS frozen_on
+    SELECT id, entry_id, status, paid_periods, renews, frozen_days, frozen_on::text AS frozen_on
     FROM gym_held_memberships WHERE gym_id = ${gymId} ORDER BY created_at, id`;
   const auditOf = (gymId: string) => sql<{ action: string; actor_user_id: string; target_id: string; meta: Record<string, string> }[]>`
     SELECT action, actor_user_id, target_id, meta FROM audit_log
@@ -529,9 +529,9 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       const [stale] = await sql<{ id: string }[]>`
         INSERT INTO gym_held_memberships
           (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, pack_classes, pack_days,
-           classes_left, starts_on, anchor_on, status, renews)
+           classes_left, starts_on, status, renews)
         VALUES (${gymId}, ${person}, ${gold}, gen_random_uuid(), 'pack', 1500, 'GBP', 1, 1, 1,
-                ${addDays(today, -30)}::date, ${addDays(today, -30)}::date, 'active', false)
+                ${addDays(today, -30)}::date, 'active', false)
         RETURNING id`;
       const read = list(await get(heldUrl(gymId, person), owner.cookies));
       expect(read.memberships.map((m) => m.view.status)).toEqual(["active", "ended"]);
@@ -545,9 +545,9 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       await sql`
         INSERT INTO gym_held_memberships
           (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit,
-           starts_on, anchor_on, status, renews)
+           starts_on, status, renews)
         SELECT ${gymId}, ${person}, ${gold}, gen_random_uuid(), 'recurring', 100, 'GBP', 1, 'month',
-               ${today}::date, ${today}::date, 'active', true
+               ${today}::date, 'active', true
         FROM generate_series(1, ${HELD_LIVE_MAX - 1})`;
       const full = await give(gymId, person, owner.cookies, { typeId: gold, startsOn: today });
       expect(full.statusCode).toBe(409);
@@ -563,9 +563,9 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       await sql`
         INSERT INTO gym_held_memberships
           (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit,
-           starts_on, anchor_on, status, cancelled_on, renews)
+           starts_on, status, cancelled_on, renews)
         SELECT ${gymId}, ${person}, ${gold}, gen_random_uuid(), 'recurring', 100, 'GBP', 1, 'month',
-               '2020-01-01'::date + n, '2020-01-01'::date + n, 'cancelled', '2021-02-01', true
+               '2020-01-01'::date + n, 'cancelled', '2021-02-01', true
         FROM generate_series(1, ${HELD_EARLIER_PAGE + 5}) AS n`;
       const long = list(await get(heldUrl(gymId, person), owner.cookies));
       const over = long.memberships.filter((m) => m.view.status === "ended" || m.view.status === "cancelled");
@@ -592,11 +592,35 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
 
       const frozen = await post(oneUrl(gymId, person, id, "freeze"), {}, owner.cookies);
       expect(list(frozen).memberships[0]).toMatchObject({ frozenOn: today, view: { status: "frozen", endsOn: null, renewsOn: null } });
-      // Frozen ten days ago, as the table has it: unfreezing today gives ten days back.
-      await sql`UPDATE gym_held_memberships SET frozen_on = ${addDays(today, -10)}::date WHERE id = ${id}`;
       const back = await post(oneUrl(gymId, person, id, "unfreeze"), {}, owner.cookies);
       expect(list(back).memberships[0]).toMatchObject({ startsOn: today, frozenOn: null, view: { status: "active" } });
-      expect((await rowsOf(gymId))[0]).toMatchObject({ status: "active", anchor_on: addDays(today, 10), frozen_on: null });
+      expect((await rowsOf(gymId))[0]).toMatchObject({ status: "active", frozen_days: 0, frozen_on: null });
+
+      // On fixed days across a short February, as the member is shown it: a monthly from
+      // 29 January, paid up to 28 February, frozen for 2 days, is paid up to 2 March; a
+      // one-month membership from the same day runs through 1 March, not 27 February.
+      const at = (iso: string) => ({ sql, now: () => new Date(iso) });
+      const month = await addType(gymId, owner.cookies, oneMonth());
+      const winter = await addPerson(gymId, owner.cookies, "Liam Hughes");
+      for (const typeId of [gold, month]) {
+        await heldService.giveHeldMembership(at("2026-01-29T12:00:00Z"), owner.userId, gymId, winter, { requestKey: nextKey(), typeId, startsOn: "2026-01-29", paid: true });
+      }
+      const before = await heldService.getHeldMemberships(at("2026-02-01T12:00:00Z"), owner.userId, gymId, winter);
+      const shown = (answer: HeldMembershipsResponse, name: string) => answer.memberships.find((m) => m.typeName === name);
+      expect(shown(before, "Gold Monthly")?.view.payment).toEqual({ state: "paid", until: "2026-02-28" });
+      expect(shown(before, "One month")?.view.endsOn).toBe("2026-02-27");
+      let after = before;
+      for (const m of before.memberships) {
+        await heldService.moveHeldMembership(at("2026-02-01T12:00:00Z"), owner.userId, gymId, winter, m.id, { type: "freeze" });
+        after = await heldService.moveHeldMembership(at("2026-02-03T12:00:00Z"), owner.userId, gymId, winter, m.id, { type: "unfreeze" });
+      }
+      expect(shown(after, "Gold Monthly")?.view).toMatchObject({ status: "active", renewsOn: "2026-03-02", payment: { state: "paid", until: "2026-03-02" } });
+      expect(shown(after, "One month")?.view).toMatchObject({ status: "active", endsOn: "2026-03-01" });
+      // On 28 February, the day it would have been owing and over without the days back, it is neither.
+      const lastOfFeb = await heldService.getHeldMemberships(at("2026-02-28T12:00:00Z"), owner.userId, gymId, winter);
+      expect(shown(lastOfFeb, "Gold Monthly")?.view.payment).toEqual({ state: "paid", until: "2026-03-02" });
+      expect(shown(lastOfFeb, "One month")?.view.status).toBe("active");
+      expect((await rowsOf(gymId)).filter((r) => r.entry_id === winter).map((r) => r.frozen_days)).toEqual([2, 2]);
 
       // Cancelled: nothing more can be done to it.
       expect((await post(oneUrl(gymId, person, id, "cancel"), { when: "today" }, owner.cookies)).statusCode).toBe(200);

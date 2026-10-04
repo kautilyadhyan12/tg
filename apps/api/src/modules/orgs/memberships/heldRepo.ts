@@ -52,11 +52,12 @@ const rawSchema = z.object({
   pack_classes: z.number().int().nullable(),
   pack_days: z.number().int().nullable(),
   starts_on: z.string(),
-  anchor_on: z.string(),
+  frozen_days: z.number().int(),
   status: heldMembershipStatusSchema,
   frozen_on: z.string().nullable(),
   cancelled_on: z.string().nullable(),
   paid_periods: z.number().int(),
+  paid_floor: z.number().int(),
   renews: z.boolean(),
   classes_left: z.number().int().nullable(),
 });
@@ -77,11 +78,12 @@ function shape(row: unknown): HeldRow {
       packDays: r.pack_days,
       free: r.price_minor === 0,
       startsOn: r.starts_on,
-      anchorOn: r.anchor_on,
+      frozenDays: r.frozen_days,
       status: r.status,
       frozenOn: r.frozen_on,
       cancelledOn: r.cancelled_on,
       paidPeriods: r.paid_periods,
+      paidFloor: r.paid_floor,
       renews: r.renews,
       classesLeft: r.classes_left,
     },
@@ -126,9 +128,9 @@ const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: string | nu
 const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.id, h.membership_type_id, t.name AS type_name, h.kind, h.price_minor, h.currency,
   h.term_count, h.term_unit, h.pack_classes, h.pack_days,
-  h.starts_on::text AS starts_on, h.anchor_on::text AS anchor_on, h.status,
+  h.starts_on::text AS starts_on, h.frozen_days, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
-  h.paid_periods, h.renews, h.classes_left`;
+  h.paid_periods, h.paid_floor, h.renews, h.classes_left`;
 
 /** The record's memberships of the statuses named, newest start first. */
 const held = (sql: Sql | TransactionSql, gymId: string, entryId: string, statuses: readonly string[], limit: number) => sql`
@@ -157,27 +159,27 @@ export interface HeldList {
 }
 
 /** A record's memberships, or null where the record is not this gym's. */
-export async function readHeld(sql: Sql | TransactionSql, gymId: string, entryId: string): Promise<HeldList | null> {
-  const [entries, inUse, over, totals, types] = await Promise.all([
-    sql<{ past: boolean }[]>`
+export async function readHeld(sql: Sql, gymId: string, entryId: string): Promise<HeldList | null> {
+  // One connection and one moment: the page of earlier ones and their count agree.
+  return await sql.begin("isolation level repeatable read read only", async (tx): Promise<HeldList | null> => {
+    const [entry] = await tx<{ past: boolean }[]>`
       SELECT former_at IS NOT NULL AS past FROM gym_member_list_entries
-      WHERE gym_id = ${gymId} AND id = ${entryId}`,
-    held(sql, gymId, entryId, IN_USE, IN_USE_READ),
-    held(sql, gymId, entryId, OVER, HELD_EARLIER_PAGE),
-    sql<{ n: number }[]>`
+      WHERE gym_id = ${gymId} AND id = ${entryId}`;
+    if (entry === undefined) return null;
+    const inUse = await held(tx, gymId, entryId, IN_USE, IN_USE_READ);
+    const over = await held(tx, gymId, entryId, OVER, HELD_EARLIER_PAGE);
+    const [total] = await tx<{ n: number }[]>`
       SELECT count(*)::int AS n FROM gym_held_memberships
-      WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND status = ANY(${[...OVER]}::text[])`,
-    liveTypes(sql, gymId, null),
-  ]);
-  const entry = entries[0];
-  if (entry === undefined) return null;
-  return {
-    past: entry.past,
-    inUse: inUse.map(shape),
-    over: over.map(shape),
-    overTotal: totals[0]?.n ?? 0,
-    types: types.map(typeChoice),
-  };
+      WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND status = ANY(${[...OVER]}::text[])`;
+    const types = await liveTypes(tx, gymId, null);
+    return {
+      past: entry.past,
+      inUse: inUse.map(shape),
+      over: over.map(shape),
+      overTotal: total?.n ?? 0,
+      types: types.map(typeChoice),
+    };
+  });
 }
 
 export type HeldWriteOutcome =
@@ -259,12 +261,12 @@ export async function giveHeld(
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_held_memberships
         (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency,
-         term_count, term_unit, pack_classes, pack_days, starts_on, anchor_on, status,
-         paid_periods, renews, classes_left)
+         term_count, term_unit, pack_classes, pack_days, starts_on, status,
+         paid_periods, paid_floor, renews, classes_left)
       VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
               ${type.priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
-              ${m.packDays}, ${m.startsOn}::date, ${m.anchorOn}::date, ${m.status},
-              ${m.paidPeriods}, ${m.renews}, ${m.classesLeft})
+              ${m.packDays}, ${m.startsOn}::date, ${m.status},
+              ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft})
       RETURNING id`;
     if (created === undefined) throw new Error("held membership insert returned no row");
 
@@ -330,7 +332,7 @@ export async function moveHeld(
 
     await tx`
       UPDATE gym_held_memberships
-      SET status = ${m.status}, anchor_on = ${m.anchorOn}::date, frozen_on = ${m.frozenOn}::date,
+      SET status = ${m.status}, frozen_days = ${m.frozenDays}, frozen_on = ${m.frozenOn}::date,
           cancelled_on = ${m.cancelledOn}::date, paid_periods = ${m.paidPeriods}, renews = ${m.renews},
           updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;

@@ -18,8 +18,10 @@ import { dayWords } from './memberListView';
 const TONES = { upcoming: 'plain', active: 'green', frozen: 'orange', ended: 'plain', cancelled: 'plain' };
 const TAGS = { upcoming: 'Not started', active: 'Active', frozen: 'Frozen', ended: 'Ended', cancelled: 'Cancelled' };
 
-/** The word beside a membership's name. */
-export function statusTag(m) {
+/** The word beside a membership's name. A past member's memberships are kept and not in
+ *  use, so one that would be running says so instead of "Active". */
+export function statusTag(m, past = false) {
+  if (past && isLive(m)) return { tag: 'Not in use', tone: 'plain' };
   return { tag: TAGS[m.view.status] ?? '', tone: TONES[m.view.status] ?? 'plain' };
 }
 
@@ -32,7 +34,11 @@ export function isLive(m) {
 export function datesLine(m) {
   const { status, endsOn, renewsOn } = m.view;
   const start = dayWords(m.startsOn);
-  if (status === 'cancelled') return `Started ${start} · Cancelled ${endsOn === null ? '' : dayWords(endsOn)}`.trim();
+  if (status === 'cancelled') {
+    // Cancelled before its start day: it never started.
+    const first = endsOn !== null && endsOn < m.startsOn ? `Was to start ${start}` : `Started ${start}`;
+    return `${first} · Cancelled ${endsOn === null ? '' : dayWords(endsOn)}`.trim();
+  }
   if (status === 'ended') return endsOn === null || endsOn === m.startsOn ? start : `${start} to ${dayWords(endsOn)}`;
   if (status === 'frozen') return `Started ${start} · Frozen since ${m.frozenOn === null ? '' : dayWords(m.frozenOn)}`.trim();
   const first = status === 'upcoming' ? `Starts ${start}` : `Started ${start}`;

@@ -2350,9 +2350,12 @@ just show (§11).
 - "Paid" is a count of periods marked paid, moved one at a time either way: a
   repeating membership is paid up to its start plus that many periods; any other kind
   has one. Giving one to somebody who started earlier asks whether the period today
-  falls in is paid. A free type has nothing to pay.
-- Freeze starts today, Unfreeze gives every frozen day back (its dates are counted
-  from a later day). Cancel is today, or, for a repeating membership paid ahead, at the
+  falls in is paid. A free type has nothing to pay. The periods before it was given
+  count as paid (`paid_floor`), and a mark is never taken back below that.
+- Freeze starts today, Unfreeze gives every frozen day back: `frozen_days` counts them,
+  and they are added AFTER the month arithmetic from the start day, so every later date
+  moves by exactly the days frozen (moving the start instead lost days at a month's
+  end, 31 Jan being cut to 28 Feb). Cancel is today, or, for a repeating membership paid ahead, at the
   end of what is paid, after which it takes no more payments.
 - A request carries a key made by the screen, and a change names the state it moves
   to, so the same request arriving twice changes things once.
@@ -2369,7 +2372,9 @@ just show (§11).
   under **Details**.
 - Add member carries the same choice ("Give a membership": a type, a start date, paid;
   "No membership" until staff pick one). The person is added first and the membership
-  given next, by the two routes above; where the second fails the person stays added and
+  given next, by the two routes above, and only where the add answered that somebody
+  NEW was added (never for somebody already on the list or a past member put back, whose
+  page says the membership was not added); where the second fails the person stays added and
   the page says the membership was not (RULINGS 2026-10-04). Where the gym has a price
   list the form does not also ask the list's own Membership word (§11): it takes the
   name of the type picked. Edit, and a gym with no price list, keep that box.

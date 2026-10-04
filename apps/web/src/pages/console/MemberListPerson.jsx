@@ -671,22 +671,24 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           ? { ...input, membershipType: choice.type.name }
           : input;
       const res = await orgService.addMemberListEntry(gymId, named);
+      const who = res.data.entry.fullName || 'This person';
       let notGiven = null;
       if (choice !== null && choice.type !== null) {
-        try {
-          await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving));
-        } catch (err) {
-          notGiven = errorText(err, 'Please try again.');
+        if (res.data.outcome !== 'added') {
+          // Nobody new was added: the answer is a record the gym already had, and what
+          // that person holds is not changed from this form.
+          const why = res.data.outcome === 'revived' ? `was a past ${words.person} and is back on your list` : 'was already on your list';
+          notGiven = `${who} ${why}, so the ${choice.type.name} membership was not added. Add it under Memberships below.`;
+        } else {
+          try {
+            await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving));
+          } catch (err) {
+            notGiven = `${who} was added, but the ${choice.type.name} membership was not: ${errorText(err, 'Please try again.')} Add it under Memberships.`;
+          }
         }
       }
       written(null, res);
-      if (notGiven !== null) {
-        setRefusal({
-          message: `${res.data.entry.fullName || 'This person'} was added, but the ${choice.type.name} membership was not: ${notGiven} Add it under Memberships.`,
-          openId: null,
-          ack: null,
-        });
-      }
+      if (notGiven !== null) setRefusal({ message: notGiven, openId: null, ack: null });
     } catch (err) {
       if (wanted.current !== null) return;
       const people = err?.response?.data?.people;
