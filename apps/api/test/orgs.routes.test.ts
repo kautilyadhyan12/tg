@@ -5100,6 +5100,7 @@ d("orgs routes (real Postgres)", () => {
       // timetable to owner and manager only, so a trainer's three ticks are
       // still three. `attendance.mark` (16b-ii, `0064`) and `leaderboard.manage`
       // (19a-iii, `0067`) are owner and manager too.
+      // `memberships.manage` (17a-i, `0069`) is owner and manager too.
       "attendance.mark",
       "attendance.read",
       "codes.invite",
@@ -5108,6 +5109,7 @@ d("orgs routes (real Postgres)", () => {
       "members.confirm",
       "members.read",
       "members.remove",
+      "memberships.manage",
       "schedule.manage",
     ]);
   });

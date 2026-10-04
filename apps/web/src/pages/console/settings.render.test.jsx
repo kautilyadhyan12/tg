@@ -57,6 +57,10 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       updateLeadEmailSettings: vi.fn(),
       /** Settings' check-in devices box (16b-i) reads on mount too: a gym with none. */
       getCheckinDevices: vi.fn(() => Promise.resolve({ data: { devices: [] } })),
+      /** Settings' memberships box (17a-i) reads on mount too: a gym selling nothing yet. */
+      getMembershipTypes: vi.fn(() =>
+        Promise.resolve({ data: { currency: 'USD', types: [], archived: [], archivedTotal: 0, classChoices: [] } }),
+      ),
     },
   };
 });
@@ -132,6 +136,10 @@ const TRAINER = {
   since: '2026-08-21T09:00:00.000Z',
   isYou: false,
 };
+
+/** A manager holding none of the three powers Settings has a section for. A manager's
+ *  usual set has held one of them, `memberships.manage`, since 17a-i. */
+const NO_SETTINGS_POWER = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage');
 
 /** A staff invitation waiting for its answer (4a-i). */
 const INVITE = {
@@ -694,6 +702,7 @@ describe('adding somebody', () => {
       'Run the leaderboard',
       'Keep the member list and invite',
       'Remove members',
+      'Change membership types and prices',
     ]);
     // Join codes are switched off (3c): their two ticks get no box.
     expect(within(screen.getByTestId('invite-ticks')).queryByText(/join code/i)).toBeNull();
@@ -711,7 +720,7 @@ describe('adding somebody', () => {
     const sent = orgService.inviteStaff.mock.calls[0][1];
     expect(sent.role).toBe('manager');
     expect([...sent.privileges].sort()).toEqual(
-      ['attendance.mark', 'attendance.read', 'leaderboard.manage', 'members.confirm', 'members.read', 'schedule.manage'].sort(),
+      ['attendance.mark', 'attendance.read', 'leaderboard.manage', 'members.confirm', 'members.read', 'memberships.manage', 'schedule.manage'].sort(),
     );
   });
 
@@ -986,11 +995,34 @@ describe('taking the keys back from somebody who is not a member', () => {
 
 describe('a manager or trainer at this address', () => {
   it('is told, and the screen asks the server NOTHING about staff', async () => {
-    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: NO_SETTINGS_POWER }] } });
     drawSettings();
     expect(await screen.findByText(/Only the gym's owner can change these settings/i)).toBeTruthy();
     // Not merely tidy: the read is owner-gated too, so asking would 404 and the
     // panel would draw an error card at somebody who did nothing wrong.
+    expect(orgService.getStaff).not.toHaveBeenCalled();
+  });
+
+  /** 17a-i: a manager's usual permissions include the price list, so Settings is theirs
+   *  to open, holding that one box and nothing they cannot use. */
+  it('with the usual permissions sees Memberships and no other section', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
+    drawSettings();
+    expect(await screen.findByRole('button', { name: /^Memberships/ })).toBeTruthy();
+    expect(screen.queryByText(/Only the gym's owner can change these settings/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Gym details/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Staff/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Check-in devices/ })).toBeNull();
+    expect(orgService.getStaff).not.toHaveBeenCalled();
+  });
+
+  /** The tick, not the job title: a trainer the owner gave it to has the box too. */
+  it('a trainer given "Change membership types and prices" sees Memberships', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, staffRole: 'trainer', privileges: [...ROLE_PRIVILEGES.trainer, 'memberships.manage'] }] },
+    });
+    drawSettings();
+    expect(await screen.findByRole('button', { name: /^Memberships/ })).toBeTruthy();
     expect(orgService.getStaff).not.toHaveBeenCalled();
   });
 
@@ -1010,13 +1042,19 @@ describe('the Settings tab', () => {
   });
 
   it('is NOT drawn for a manager — it would open onto a refusal', async () => {
-    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: NO_SETTINGS_POWER }] } });
     drawShell();
     // Members always renders, so waiting on it proves the org resolved before
     // this assertion runs — otherwise "no Settings" would pass on an unfinished
     // read and the test could never fail.
     await waitFor(() => expect(screen.getAllByText('Members').length).toBeGreaterThan(0));
     expect(screen.queryByText('Settings')).toBeNull();
+  });
+
+  it('is drawn for a manager with the usual permissions: Memberships is theirs (17a-i)', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
+    drawShell();
+    await waitFor(() => expect(screen.getAllByText('Settings').length).toBeGreaterThan(0));
   });
 
   it('asks the server nothing when there is no gym in the address', async () => {
@@ -1032,7 +1070,7 @@ describe('the Settings tab', () => {
   // because a fix that simply stopped drawing the tab would pass one of them.
 
   it('appears when the power arrives, on clicking back into the window', async () => {
-    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: NO_SETTINGS_POWER }] } });
     drawShell();
     await waitFor(() => expect(screen.getAllByText('Members').length).toBeGreaterThan(0));
     expect(screen.queryByText('Settings')).toBeNull();
@@ -1057,7 +1095,7 @@ describe('the Settings tab', () => {
     drawShell();
     await waitFor(() => expect(screen.getAllByText('Settings').length).toBeGreaterThan(0));
 
-    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: NO_SETTINGS_POWER }] } });
     fireEvent(window, new Event('focus'));
 
     await waitFor(() => expect(screen.queryByText('Settings')).toBeNull());
@@ -2191,7 +2229,7 @@ describe('who gets the gym-details form', () => {
    *  the missing heading rather than on the missing form, i.e. red for the wrong
    *  reason (:4718 F2). Both are asserted: no heading, and no form behind it. */
   it('is not drawn for a manager who has not been given the power', async () => {
-    orgService.getMine.mockResolvedValue({ data: { orgs: [managerWith(ROLE_PRIVILEGES.manager)] } });
+    orgService.getMine.mockResolvedValue({ data: { orgs: [managerWith(NO_SETTINGS_POWER)] } });
     drawSettings();
     expect(await screen.findByText(/Only the gym's owner can change these settings/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Gym details/ })).toBeNull();
@@ -2224,7 +2262,7 @@ describe('who gets the gym-details form', () => {
   });
 
   it('still keeps the tab from a manager holding neither power', async () => {
-    orgService.getMine.mockResolvedValue({ data: { orgs: [managerWith(ROLE_PRIVILEGES.manager)] } });
+    orgService.getMine.mockResolvedValue({ data: { orgs: [managerWith(NO_SETTINGS_POWER)] } });
     drawShell();
     await waitFor(() => expect(screen.getAllByText('Members').length).toBeGreaterThan(0));
     expect(screen.queryByText('Settings')).toBeNull();

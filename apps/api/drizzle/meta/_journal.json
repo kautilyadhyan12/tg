@@ -477,6 +477,13 @@
       "when": 1788220800052,
       "tag": "0068_fix_a_visit",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1788220800053,
+      "tag": "0069_membership_types",
+      "breakpoints": true
     }
   ]
 }

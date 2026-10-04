@@ -1761,6 +1761,7 @@ export const ORG_PRIVILEGES = [
   "schedule.manage",
   "attendance.mark",
   "leaderboard.manage",
+  "memberships.manage",
 ] as const;
 export const orgPrivilegeSchema = z.enum(ORG_PRIVILEGES);
 export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
@@ -1919,7 +1920,12 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *  `leaderboard.manage` is the console's Leaderboard page (spec Part 3 §15.5, 19a-iii):
  *  everyone's full name and number, what counted for anyone, taking a person off the
  *  board and which boards members see. Owner and manager by default; the owner can give
- *  it to a trainer. A write tick that also gates its read, as `schedule.manage` does. */
+ *  it to a trainer. A write tick that also gates its read, as `schedule.manage` does.
+ *
+ *  `memberships.manage` is "change what the gym sells": its membership types and
+ *  their prices (spec Part 3 §13.1: owner and manager by default; the owner can
+ *  tick it for anyone on staff, Kd 2026-10-04). Reading the price list needs only
+ *  `members.read`. */
 export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
   owner: [
     "members.read",
@@ -1934,6 +1940,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "schedule.manage",
     "attendance.mark",
     "leaderboard.manage",
+    "memberships.manage",
   ],
   manager: [
     "members.read",
@@ -1945,6 +1952,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "schedule.manage",
     "attendance.mark",
     "leaderboard.manage",
+    "memberships.manage",
   ],
   trainer: ["members.read", "codes.invite", "attendance.read"],
 };

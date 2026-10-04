@@ -14,6 +14,7 @@ export * from "./ops.js";
 export * from "./usda.js";
 export * from "./memberList.js";
 export * from "./classes.js";
+export * from "./memberships.js";
 export * from "./invites.js";
 export * from "./billing.js";
 export * from "./leads.js";

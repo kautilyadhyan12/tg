@@ -39,6 +39,7 @@ import {
   updateOrgStaffRequestSchema,
 } from "./schemas.js";
 import { registerClassRoutes } from "./classes/routes.js";
+import { registerMembershipRoutes } from "./memberships/routes.js";
 import { registerLeadRoutes } from "./leads/routes.js";
 import { registerLeaderboardRoutes } from "./leaderboard/routes.js";
 import { registerGymPageRoutes } from "./gymPage/routes.js";
@@ -120,6 +121,9 @@ export function registerOrgRoutes(
   // THE GYM'S TIMETABLE (Part 3 §13.3), registered here for the same reason the
   // member list is: the same console, the same gates, the same deps.
   registerClassRoutes(app, { sql: deps.sql, redis: deps.redis });
+
+  // What the gym sells: its membership types (Part 3 §13.1).
+  registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis });
 
   // A gym's leads (Part 3 §16.3), and its own page whose form makes them (20c-iv-a).
   registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });

@@ -80,6 +80,7 @@ import {
   gymClassesResponseSchema,
   gymClassMutationResponseSchema,
   gymClassWeekResponseSchema,
+  gymMembershipTypesResponseSchema,
   gymAttendanceDayResponseSchema,
   gymAttendanceHistoryResponseSchema,
   gymHoursResponseSchema,
@@ -1388,6 +1389,40 @@ export const orgService = {
       removeOrgStaffResponseSchema,
       'that removal',
       authApi.delete(`/v1/orgs/${gymId}/staff/${userId}`),
+    ),
+
+  /** The gym's membership types (Part 3 §13.1): what it sells and what each costs.
+   *  Reading needs `members.read`; the four changes need `memberships.manage`, and each
+   *  answers with the whole list. Nothing here retries: Save is the retry. */
+  getMembershipTypes: (gymId) =>
+    readThrough(
+      gymMembershipTypesResponseSchema,
+      'your membership types',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/membership-types`),
+    ),
+  createMembershipType: (gymId, body) =>
+    readThrough(
+      gymMembershipTypesResponseSchema,
+      'that membership type',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/membership-types`, body),
+    ),
+  updateMembershipType: (gymId, typeId, body) =>
+    readThrough(
+      gymMembershipTypesResponseSchema,
+      'that membership type',
+      authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/membership-types/${encodeURIComponent(typeId)}`, body),
+    ),
+  archiveMembershipType: (gymId, typeId) =>
+    readThrough(
+      gymMembershipTypesResponseSchema,
+      'that membership type',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/membership-types/${encodeURIComponent(typeId)}`),
+    ),
+  restoreMembershipType: (gymId, typeId) =>
+    readThrough(
+      gymMembershipTypesResponseSchema,
+      'that membership type',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/membership-types/${encodeURIComponent(typeId)}/restore`, {}),
     ),
 
   /** GET /v1/orgs/:gymId/classes — the gym's whole timetable (Part 3 §13.3).
