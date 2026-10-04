@@ -24,6 +24,7 @@ import {
 } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
+import MemberMemberships from './MemberMemberships';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
 import {
@@ -1077,8 +1078,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             <Fact key={k} label={FIELD_LABELS[k]} value={v} edited={edited.has(k)} />
           ))}
         </Section>
+        <MemberMemberships key={p.entryId} gymId={gymId} entryId={p.entryId} name={p.fullName || 'this person'} readOnly={readOnly} />
         {membership.length > 0 ? (
-          <Section title="Membership">
+          // What the gym's own list says about them, in its words; the box above is what
+          // they hold from the price list (17a-ii).
+          <Section title="Details">
             {membership.map(([k, v]) => (
               <Fact key={k} label={FIELD_LABELS[k]} value={v} edited={edited.has(k)} />
             ))}

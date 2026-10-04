@@ -394,6 +394,12 @@ export const membershipTypeParamsSchema = z
   .strict();
 export type MembershipTypeParams = z.infer<typeof membershipTypeParamsSchema>;
 
+/** A gym, one record of its list and one membership that record holds (§13.2). */
+export const heldMembershipParamsSchema = z
+  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), membershipId: z.string().uuid() })
+  .strict();
+export type HeldMembershipParams = z.infer<typeof heldMembershipParamsSchema>;
+
 /** A gym and one of its repeats. See the note above on why it is its own shape. */
 export const classScheduleParamsSchema = z
   .object({ gymId: z.string().uuid(), scheduleId: z.string().uuid() })

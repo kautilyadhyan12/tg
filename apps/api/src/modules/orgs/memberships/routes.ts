@@ -8,13 +8,33 @@
 //   POST   /v1/orgs/:gymId/membership-types/:typeId/restore   put it back
 //
 // Every change answers with the whole price list.
+//
+// A person's memberships (§13.2; 17a-ii), under their record on the gym's list:
+//
+//   GET  /v1/orgs/:gymId/member-list/entries/:entryId/memberships            (`members.confirm`)
+//   POST /v1/orgs/:gymId/member-list/entries/:entryId/memberships            give one
+//   POST …/memberships/:membershipId/freeze | unfreeze | cancel | paid       change one
+//
+// Each answers with the person's memberships.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { saveGymMembershipTypeRequestSchema, updateGymMembershipTypeRequestSchema } from "@app/shared";
+import {
+  cancelHeldMembershipRequestSchema,
+  giveHeldMembershipRequestSchema,
+  paidHeldMembershipRequestSchema,
+  saveGymMembershipTypeRequestSchema,
+  updateGymMembershipTypeRequestSchema,
+} from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { membershipTypeParamsSchema, orgParamsSchema } from "../schemas.js";
+import {
+  heldMembershipParamsSchema,
+  memberListEntryParamsSchema,
+  membershipTypeParamsSchema,
+  orgParamsSchema,
+} from "../schemas.js";
+import * as held from "./heldService.js";
 import * as service from "./service.js";
 
 function parseOr400<S extends z.ZodTypeAny>(
@@ -113,6 +133,99 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       requireUserId(req),
       params.gymId,
       params.typeId,
+    );
+    return reply.status(200).send(list);
+  });
+
+  // ── A person's memberships ──
+
+  const heldDeps: held.HeldDeps = { sql: deps.sql, now: () => new Date() };
+  /** The changes' own allowance, so a busy desk never uses up the price list's: a gym
+   *  moving in gives its 200 members a membership each. The read sits under the app-wide
+   *  limit alone, as the person's page it is drawn on does. */
+  const heldLimit = createDualRateLimit({
+    name: "org_held_memberships",
+    max: 300,
+    ipMax: 900,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const heldGuarded = { preHandler: [app.authenticate, heldLimit] };
+  const heldUrl = "/v1/orgs/:gymId/member-list/entries/:entryId/memberships";
+
+  app.get(heldUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await held.getHeldMemberships(heldDeps, requireUserId(req), params.gymId, params.entryId);
+    return reply.status(200).send(list);
+  });
+
+  app.post(heldUrl, heldGuarded, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(giveHeldMembershipRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await held.giveHeldMembership(heldDeps, requireUserId(req), params.gymId, params.entryId, body);
+    return reply.status(201).send(list);
+  });
+
+  app.post(`${heldUrl}/:membershipId/freeze`, heldGuarded, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await held.moveHeldMembership(
+      heldDeps,
+      requireUserId(req),
+      params.gymId,
+      params.entryId,
+      params.membershipId,
+      { type: "freeze" },
+    );
+    return reply.status(200).send(list);
+  });
+
+  app.post(`${heldUrl}/:membershipId/unfreeze`, heldGuarded, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await held.moveHeldMembership(
+      heldDeps,
+      requireUserId(req),
+      params.gymId,
+      params.entryId,
+      params.membershipId,
+      { type: "unfreeze" },
+    );
+    return reply.status(200).send(list);
+  });
+
+  app.post(`${heldUrl}/:membershipId/cancel`, heldGuarded, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(cancelHeldMembershipRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await held.moveHeldMembership(
+      heldDeps,
+      requireUserId(req),
+      params.gymId,
+      params.entryId,
+      params.membershipId,
+      { type: "cancel", when: body.when },
+    );
+    return reply.status(200).send(list);
+  });
+
+  app.post(`${heldUrl}/:membershipId/paid`, heldGuarded, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(paidHeldMembershipRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await held.moveHeldMembership(
+      heldDeps,
+      requireUserId(req),
+      params.gymId,
+      params.entryId,
+      params.membershipId,
+      { type: "paid", paidPeriods: body.paidPeriods },
     );
     return reply.status(200).send(list);
   });
