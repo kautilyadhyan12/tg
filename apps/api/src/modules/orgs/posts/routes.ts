@@ -12,6 +12,7 @@ import {
   gymPostSettingsSchema,
   gymPosterParamsSchema,
   gymPostsQuerySchema,
+  keepGymPostRequestSchema,
   pinGymPostRequestSchema,
   reactToGymPostRequestSchema,
   reportGymPostRequestSchema,
@@ -138,19 +139,22 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     return reply.status(201).send({ post: await service.addMemberPost(postsDeps, requireUserId(req), params.gymId, body) });
   });
 
-  app.delete("/v1/orgs/:gymId/posts/mine/:postId", { preHandler: [app.authenticate, memberWriteLimit] }, async (req, reply) => {
+  // Membership first and the limit after it, as for staff: a stranger's 404 is never a 429.
+  app.delete("/v1/orgs/:gymId/posts/mine/:postId", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
     if (params === null) return;
-    await service.removeOwnPost(postsDeps, requireUserId(req), params.gymId, params.postId);
+    const done = await service.removeOwnPost(postsDeps, requireUserId(req), params.gymId, params.postId, gate(memberWriteLimit)(req, reply));
+    if (done === null) return;
     return reply.status(200).send({ removed: true });
   });
 
-  app.post("/v1/orgs/:gymId/posts/:postId/report", { preHandler: [app.authenticate, memberWriteLimit] }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/posts/:postId/report", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(reportGymPostRequestSchema, req.body, req, reply);
     if (body === null) return;
-    await service.report(postsDeps, requireUserId(req), params.gymId, params.postId, body.reason, body.note);
+    const done = await service.report(postsDeps, requireUserId(req), params.gymId, params.postId, body.reason, body.note, gate(memberWriteLimit)(req, reply));
+    if (done === null) return;
     return reply.status(200).send({ reported: true });
   });
 
@@ -225,9 +229,11 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
   app.post("/v1/orgs/:gymId/posts/:postId/keep", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const done = await service.keepReported(postsDeps, requireUserId(req), params.gymId, params.postId, gate(staffWriteLimit)(req, reply));
+    const body = parseOr400(keepGymPostRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await service.keepReported(postsDeps, requireUserId(req), params.gymId, params.postId, body.upTo, gate(staffWriteLimit)(req, reply));
     if (done === null) return;
-    return reply.status(200).send({ kept: true });
+    return reply.status(200).send({ kept: true, waiting: done.waiting });
   });
 
   app.put("/v1/orgs/:gymId/posts/settings", { preHandler: app.authenticate }, async (req, reply) => {

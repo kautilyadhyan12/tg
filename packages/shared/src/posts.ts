@@ -96,6 +96,8 @@ export const gymPostSchema = z
     fromMember: z.boolean(),
     /** The reader wrote it as a member, and may remove it. */
     own: z.boolean(),
+    /** The reader wrote it, as a member or as staff: nothing of theirs offers Report. */
+    wrote: z.boolean(),
     /** The reader has reported it. Always false for staff reading the console. */
     reported: z.boolean(),
   })
@@ -257,6 +259,8 @@ export const reportedGymPostsResponseSchema = z
             /** What reporters typed, oldest first; never who typed it. */
             notes: z.array(z.string()).max(GYM_POST_REPORT_NOTES_SHOWN),
             firstReportedAt: z.string().datetime({ offset: true }),
+            /** The newest report counted here: Keep answers the reports up to it and no later one. */
+            lastReportedAt: z.string().datetime({ offset: true }),
           })
           .strict(),
       )
@@ -267,7 +271,16 @@ export const reportedGymPostsResponseSchema = z
   .strict();
 export type ReportedGymPostsResponse = z.infer<typeof reportedGymPostsResponseSchema>;
 
-export const keptGymPostResponseSchema = z.object({ kept: z.literal(true) }).strict();
+/** Keep answers the reports staff were shown: those made up to `upTo`, the list item's
+ *  `lastReportedAt`. One that arrived after it stays open, and the post stays on the list. */
+export const keepGymPostRequestSchema = z.object({ upTo: z.string().datetime({ offset: true }) }).strict();
+export const keptGymPostResponseSchema = z
+  .object({
+    kept: z.literal(true),
+    /** Reports that arrived after the ones staff were shown, still waiting. */
+    waiting: z.number().int().nonnegative(),
+  })
+  .strict();
 
 export const gymPostSettingsSchema = z.object({ membersCanPost: z.boolean() }).strict();
 export type GymPostSettings = z.infer<typeof gymPostSettingsSchema>;
@@ -293,7 +306,7 @@ export const GYM_POST_WORDS = {
   pins_full: `You can pin up to ${String(GYM_POST_MAX_PINNED)} posts. Unpin one to pin this.`,
   photo_not_found: "This photo has been removed.",
   posting_off: "Members can't post here at the moment.",
-  posting_stopped: "The staff have stopped you posting here. Speak to them at the front desk.",
+  posting_stopped: (gymName: string): string => `The staff at ${gymName} have stopped you posting here. Speak to them at the front desk.`,
   day_full: `You can post ${String(GYM_MEMBER_POSTS_A_DAY)} times a day. Try again tomorrow.`,
   own_report: "This is your own post. You can remove it instead.",
   person_not_found: "This person isn't one of your members.",

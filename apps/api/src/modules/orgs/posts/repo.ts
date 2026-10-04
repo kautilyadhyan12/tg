@@ -321,8 +321,8 @@ export async function lockMember(tx: TransactionSql, gymId: string, userId: stri
 
 /** The posts this member has made at this gym since `since`, removed ones too: removing
  *  a post gives no post back. */
-export async function countMemberPostsSince(tx: TransactionSql, gymId: string, userId: string, since: Date): Promise<number> {
-  const rows = await tx<{ n: number }[]>`
+export async function countMemberPostsSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM gym_posts
     WHERE author_user_id = ${userId} AND gym_id = ${gymId} AND by_member AND created_at > ${since}`;
   return rows[0]?.n ?? 0;
@@ -371,37 +371,56 @@ export async function reportedBy(sql: SqlOrTx, gymId: string, postIds: readonly 
   return new Set(rows.map((r) => r.post_id));
 }
 
-/** Closes a post's open reports; how many there were. */
-export async function closeReports(tx: TransactionSql, gymId: string, postId: string, outcome: "removed" | "kept", at: Date): Promise<number> {
+/** Closes a post's open reports; how many it closed. `upTo`: only those made up to that
+ *  instant, the ones staff were shown. */
+export async function closeReports(tx: TransactionSql, gymId: string, postId: string, outcome: "removed" | "kept", at: Date, upTo: string | null = null): Promise<number> {
+  const seen = upTo === null ? tx`` : tx`AND created_at <= ${upTo}::timestamptz`;
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_post_reports SET closed_at = ${at}, outcome = ${outcome}
-    WHERE gym_id = ${gymId} AND post_id = ${postId} AND closed_at IS NULL
+    WHERE gym_id = ${gymId} AND post_id = ${postId} AND closed_at IS NULL ${seen}
     RETURNING id`;
   return rows.length;
+}
+
+/** A post's reports nobody has answered. */
+export async function countOpenReports(tx: TransactionSql, gymId: string, postId: string): Promise<number> {
+  const rows = await tx<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_post_reports WHERE gym_id = ${gymId} AND post_id = ${postId} AND closed_at IS NULL`;
+  return rows[0]?.n ?? 0;
+}
+
+/** Unpins this gym's pinned posts nobody can see (a member's post whose writer has left):
+ *  a hidden post must not hold one of the three pins. */
+export async function unpinHidden(tx: TransactionSql, gymId: string): Promise<void> {
+  await tx`
+    UPDATE gym_posts g SET pinned_at = NULL
+    WHERE g.gym_id = ${gymId} AND g.pinned_at IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM (${posts(tx, gymId)}) p WHERE p.id = g.id AND p.visible)`;
 }
 
 export interface ReportedRow {
   post: PostRow;
   reports: number;
   firstAt: Date;
+  lastAt: Date;
   /** Every reported post waiting, on each row. */
   total: number;
 }
 
 /** The posts with a report nobody has answered, longest waiting first. */
 export async function reportedPosts(sql: SqlOrTx, gymId: string, limit: number): Promise<ReportedRow[]> {
-  const rows = await sql<(RawPost & { reports: number; first_at: Date; total: number })[]>`
-    SELECT p.*, r.reports, r.first_at, count(*) OVER ()::int AS total
+  const rows = await sql<(RawPost & { reports: number; first_at: Date; last_at: Date; total: number })[]>`
+    SELECT p.*, r.reports, r.first_at, r.last_at, count(*) OVER ()::int AS total
     FROM (${posts(sql, gymId)}) p
     JOIN (
-      SELECT post_id, count(*)::int AS reports, min(created_at) AS first_at
+      SELECT post_id, count(*)::int AS reports, min(created_at) AS first_at, max(created_at) AS last_at
       FROM gym_post_reports WHERE gym_id = ${gymId} AND closed_at IS NULL
       GROUP BY post_id
     ) r ON r.post_id = p.id
     WHERE p.visible
     ORDER BY r.first_at, p.id
     LIMIT ${limit}`;
-  return rows.map((r) => ({ post: toPost(r), reports: r.reports, firstAt: r.first_at, total: r.total }));
+  return rows.map((r) => ({ post: toPost(r), reports: r.reports, firstAt: r.first_at, lastAt: r.last_at, total: r.total }));
 }
 
 /** How many posts have a report nobody has answered. */

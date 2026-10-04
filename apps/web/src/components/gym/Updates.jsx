@@ -15,6 +15,7 @@ import {
   charsLine,
   emptyLine,
   memberCanPost,
+  memberPostAction,
   memberPostHint,
   ownRemoveBox,
   photoProblem,
@@ -284,6 +285,7 @@ function Post({ gymId, gymName, post, busy, onReact, onOpen, onRemove, onReport 
   const [error, setError] = useState(null);
   const tag = authorTag(post);
   const box = ownRemoveBox(post, gymName);
+  const action = memberPostAction(post);
 
   const run = async (request) => {
     setWorking(true);
@@ -361,19 +363,19 @@ function Post({ gymId, gymName, post, busy, onReact, onOpen, onRemove, onReport 
             </button>
           );
         })}
-        {post.own ? (
+        {action === 'remove' ? (
           <button type="button" disabled={working} onClick={() => setAsking('remove')} className="min-h-11 px-3 rounded-xl flex items-center gap-1.5 text-sm font-semibold ml-auto" style={QUIET}>
             <Trash2 className="w-4 h-4" aria-hidden="true" /> Remove
           </button>
-        ) : post.reported ? (
+        ) : action === 'reported' ? (
           <span className="flex items-center gap-1.5 text-xs font-semibold ml-auto" style={{ color: MUTED }}>
             <Flag className="w-3.5 h-3.5" aria-hidden="true" /> Reported
           </span>
-        ) : (
+        ) : action === 'report' ? (
           <button type="button" disabled={working} onClick={() => setAsking('report')} className="min-h-11 px-3 rounded-xl flex items-center gap-1.5 text-sm font-semibold ml-auto" style={QUIET}>
             <Flag className="w-4 h-4" aria-hidden="true" /> Report
           </button>
-        )}
+        ) : null}
       </div>
       {asking === 'remove' && (
         <div role="group" aria-label={box.title} className="mt-3 pt-3 flex flex-col gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>

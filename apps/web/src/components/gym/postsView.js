@@ -11,6 +11,7 @@ import {
   GYM_POST_REPORT_NOTE_MAX,
   GYM_POST_REPORT_REASONS,
   GYM_POST_REPORT_REASON_WORDS,
+  GYM_POST_WORDS,
   postLength,
 } from '@app/shared';
 
@@ -110,7 +111,8 @@ export function memberCanPost(feed) {
 /** What a member the staff have stopped reads in place of the box, or null. */
 export function stoppedNote(feed) {
   if (feed.status !== 'shown' || feed.posting !== 'stopped') return null;
-  return `The staff at ${feed.gymName} have stopped you posting here. Speak to them at the front desk.`;
+  // The sentence the server refuses a post with: written once.
+  return GYM_POST_WORDS.posting_stopped(feed.gymName);
 }
 
 /** Under the member's box: who sees a post, and the day's limit. */
@@ -196,8 +198,22 @@ export function reportedMore(reported) {
   return left > 0 ? `Showing the ${reported.items.length.toLocaleString('en')} that have waited longest. ${left.toLocaleString('en')} more will show as you answer these.` : null;
 }
 
-/** What Keep does, said beside the button's press. */
-export const KEEP_NOTE = 'Kept. The post stays on Updates and has left this list.';
+/** What Keep did, from its answer. A report that arrived while staff were looking was not
+ *  answered: the post is still on the list, with that report to read. */
+export function keepNote(answer) {
+  if (answer.waiting === 0) return 'Kept. The post stays on Updates and has left this list.';
+  const more = answer.waiting === 1 ? '1 more person reported this post' : `${answer.waiting.toLocaleString('en')} more people reported this post`;
+  return `${more} while you were looking, so it is still on this list. Read what is new, then choose again.`;
+}
+
+/** What a member may press on a post: Remove on their own member post, Report on a post
+ *  somebody else wrote and they have not reported, "Reported" on one they have. A post
+ *  they wrote for the gym as staff offers none of these here. */
+export function memberPostAction(post) {
+  if (post.own) return 'remove';
+  if (post.wrote) return null;
+  return post.reported ? 'reported' : 'report';
+}
 
 /** The person's name in a sentence, or "this person" with none. */
 function personName(name) {

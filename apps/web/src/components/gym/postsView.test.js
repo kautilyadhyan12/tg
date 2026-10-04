@@ -10,7 +10,9 @@ import {
   canPost,
   charsLine,
   emptyLine,
+  keepNote,
   memberCanPost,
+  memberPostAction,
   memberPostHint,
   memberPostsSwitch,
   ownRemoveBox,
@@ -49,6 +51,7 @@ const post = (over = {}) => ({
   mine: null,
   fromMember: false,
   own: false,
+  wrote: false,
   reported: false,
   ...over,
 });
@@ -368,6 +371,24 @@ describe('reporting a post', () => {
     expect(reportNotesTitle({ notes: [] })).toBeNull();
     expect(reportNotesTitle({ notes: ['x'] })).toBe('What the person who reported it wrote:');
     expect(reportNotesTitle({ notes: ['x', 'y'] })).toBe('What people who reported it wrote:');
+  });
+
+  it.each([
+    [{ own: true, wrote: true }, 'remove'],
+    [{ own: false, wrote: false, reported: false }, 'report'],
+    [{ own: false, wrote: false, reported: true }, 'reported'],
+    // Staff who also train, reading a post they wrote for the gym: neither.
+    [{ own: false, wrote: true }, null],
+  ])('what a member may press on a post: %#', (over, action) => {
+    expect(memberPostAction(post(over))).toBe(action);
+  });
+
+  it('Keep says so when a report arrived while staff were looking', () => {
+    expect(keepNote({ kept: true, waiting: 0 })).toBe('Kept. The post stays on Updates and has left this list.');
+    expect(keepNote({ kept: true, waiting: 1 })).toBe(
+      '1 more person reported this post while you were looking, so it is still on this list. Read what is new, then choose again.',
+    );
+    expect(keepNote({ kept: true, waiting: 3 })).toContain('3 more people reported this post');
   });
 
   it('says how many reported posts are waiting, and when the list holds only the oldest', () => {

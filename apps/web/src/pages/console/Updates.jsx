@@ -6,13 +6,13 @@ import { errorStatus, errorText } from '../../api/orgsApi';
 import PhotoViewer from '../../components/common/PhotoViewer';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import {
-  KEEP_NOTE,
   POST_LIMITS,
   addPostPhotos,
   authorInitials,
   authorName,
   canPost,
   charsLine,
+  keepNote,
   memberPostsSwitch,
   photoProblem,
   pinNote,
@@ -378,7 +378,7 @@ function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, re
               {post.pinned ? 'Unpin' : 'Pin to the top'}
             </button>
           ) : (
-            <button type="button" disabled={busy} onClick={() => onKeep(post)} className="c-btn c-btn-s c-btn-sm">
+            <button type="button" disabled={busy} onClick={() => onKeep(post, report)} className="c-btn c-btn-s c-btn-sm">
               <Check aria-hidden="true" className="w-4 h-4" />
               Keep post
             </button>
@@ -474,7 +474,7 @@ export default function Updates() {
     try {
       const answer = await request();
       setState((s) => (s.feed === null ? s : { ...s, feed: change(s.feed, answer) }));
-      setNotice(done);
+      setNotice(typeof done === 'function' ? done(answer) : done);
       await loadSide();
     } catch (err) {
       setActionError(errorText(err, "We couldn't change that. Please try again."));
@@ -516,7 +516,8 @@ export default function Updates() {
         `Post removed. Your ${words.people} no longer see it.`,
         (shown) => withoutPost(shown, p.id),
       ),
-    onKeep: (p) => act(p, () => staffPostsService.keep(gymId, p.id), KEEP_NOTE, (shown) => shown),
+    // Keep answers the reports this list showed and no later one; the list is read again.
+    onKeep: (p, item) => act(p, () => staffPostsService.keep(gymId, p.id, item.lastReportedAt), keepNote, (shown) => shown),
     onStop: (p, stopped) =>
       act(
         p,

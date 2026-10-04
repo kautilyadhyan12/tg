@@ -55,6 +55,7 @@ const post = (id, body, over = {}) => ({
   mine: null,
   fromMember: false,
   own: false,
+  wrote: false,
   reported: false,
   authorId: null,
   authorStopped: false,
@@ -497,6 +498,7 @@ describe('reported posts', () => {
     reasons: { ...NO_REASONS, ...reasons },
     notes: [],
     firstReportedAt: '2026-10-07T07:00:00.000Z',
+    lastReportedAt: `2026-10-07T08:00:0${id === 'r1' ? 1 : 2}.000Z`,
   });
   const reportedCards = () => screen.getAllByTestId('reported-post');
   const two = () => reportedList([item('r1', 'Look at the state of him', { unkind: 2, photo_of_someone: 1 }), item('r2', 'Shakes for sale', { spam: 1 })]);
@@ -554,15 +556,35 @@ describe('reported posts', () => {
   it('Keep keeps the post it was pressed on: it leaves this list and stays among the posts', async () => {
     svc.list.mockResolvedValue(feed({ posts: [post('r2', 'Shakes for sale', wendy)] }));
     svc.reported.mockResolvedValueOnce(two()).mockResolvedValue(reportedList([two().items[0]]));
-    svc.keep.mockResolvedValue({ kept: true });
+    svc.keep.mockResolvedValue({ kept: true, waiting: 0 });
     open();
     await waitFor(() => expect(reportedCards()).toHaveLength(2));
     fireEvent.click(within(reportedCards()[1]).getByRole('button', { name: 'Keep post' }));
     await waitFor(() => expect(reportedCards()).toHaveLength(1));
-    expect(svc.keep.mock.calls).toEqual([['g1', 'r2']]);
+    // With the newest report this list showed for THAT post, so no later one is answered.
+    expect(svc.keep.mock.calls).toEqual([['g1', 'r2', '2026-10-07T08:00:02.000Z']]);
     expect(svc.remove).not.toHaveBeenCalled();
     expect(cards()).toHaveLength(1);
     expect(screen.getByRole('status').textContent).toBe('Kept. The post stays on Updates and has left this list.');
+  });
+
+  it('a report that arrived while staff were looking: Keep says so, and the post is still listed with it', async () => {
+    const later = two();
+    later.items[0] = { ...later.items[0], reports: 1, reasons: { ...NO_REASONS, photo_of_someone: 1 }, notes: ['That is my brother in the photo'], lastReportedAt: '2026-10-07T09:00:00.000Z' };
+    svc.reported.mockResolvedValueOnce(two()).mockResolvedValue(later);
+    svc.keep.mockResolvedValue({ kept: true, waiting: 1 });
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(2));
+    fireEvent.click(within(reportedCards()[0]).getByRole('button', { name: 'Keep post' }));
+    expect((await screen.findByRole('status')).textContent).toBe(
+      '1 more person reported this post while you were looking, so it is still on this list. Read what is new, then choose again.',
+    );
+    expect(svc.keep.mock.calls).toEqual([['g1', 'r1', '2026-10-07T08:00:01.000Z']]);
+    // Read again: the new report and its words are on the screen, and Keep now names it.
+    await waitFor(() => expect(within(reportedCards()[0]).getByText('“That is my brother in the photo”')).toBeTruthy());
+    expect(reportedCards()).toHaveLength(2);
+    fireEvent.click(within(reportedCards()[0]).getByRole('button', { name: 'Keep post' }));
+    await waitFor(() => expect(svc.keep).toHaveBeenLastCalledWith('g1', 'r1', '2026-10-07T09:00:00.000Z'));
   });
 
   it('a gym with no plan reads the reported posts and can answer none', async () => {

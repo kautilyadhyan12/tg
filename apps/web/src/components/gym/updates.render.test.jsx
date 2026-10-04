@@ -26,6 +26,7 @@ const post = (id, body, over = {}) => ({
   mine: null,
   fromMember: false,
   own: false,
+  wrote: false,
   reported: false,
   ...over,
 });
@@ -200,7 +201,7 @@ describe('a member posts', () => {
   it('the box is there on an empty page, sends the words and photos under one key, and shows the post at the top', async () => {
     svc.list.mockResolvedValue(feed({ posting: 'on' }));
     prepare.mockResolvedValue({ key: 'new-1', uploadKey: 'up-1', base64: 'BASE64', preview: 'blob:one' });
-    svc.add.mockResolvedValue({ post: post('mine', 'First time on the rower', { fromMember: true, own: true, author: { name: 'Ina I.', initials: 'II' } }) });
+    svc.add.mockResolvedValue({ post: post('mine', 'First time on the rower', { fromMember: true, own: true, wrote: true, author: { name: 'Ina I.', initials: 'II' } }) });
     render(<Updates gym={GYM} />);
     await screen.findByText('No posts yet. Write the first one.');
     const send = composer().getByRole('button', { name: 'Post' });
@@ -242,7 +243,7 @@ describe('removing one’s own post, and reporting somebody else’s', () => {
       posting: 'on',
       posts: [
         post('theirs', 'Somebody else wrote this', { fromMember: true }),
-        post('mine', 'I wrote this', { fromMember: true, own: true }),
+        post('mine', 'I wrote this', { fromMember: true, own: true, wrote: true }),
         post('seen', 'Already reported', { fromMember: true, reported: true }),
       ],
     });
@@ -312,6 +313,15 @@ describe('removing one’s own post, and reporting somebody else’s', () => {
     fireEvent.click(box.getByRole('button', { name: 'Send report' }));
     await waitFor(() => expect(within(posts()[0]).getByText('Reported')).toBeTruthy());
     expect(svc.report.mock.calls).toEqual([['g1', 'theirs', 'unkind', 'He says this to her every week']]);
+  });
+
+  it('staff who also train see neither Report nor Remove on a post they wrote for the gym', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [post('gym', 'From the gym, by me', { wrote: true })] }));
+    render(<Updates gym={GYM} />);
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(within(posts()[0]).queryByRole('button', { name: 'Report' })).toBeNull();
+    expect(within(posts()[0]).queryByRole('button', { name: 'Remove' })).toBeNull();
+    expect(within(posts()[0]).getAllByRole('button')).toHaveLength(4);
   });
 
   it('a report that fails says so, keeps the box open, and Cancel sends nothing', async () => {

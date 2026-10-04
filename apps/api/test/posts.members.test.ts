@@ -14,6 +14,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
   GYM_MEMBER_POSTS_A_DAY,
+  GYM_POST_REPORTS_SHOWN,
+  GYM_POST_REPORT_NOTES_SHOWN,
+  GYM_POST_STOPS_SHOWN,
   type GymPost,
   type GymPostsResponse,
   type ReportedGymPostsResponse,
@@ -173,6 +176,9 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
     expect(res.statusCode, res.body).toBe(200);
     return JSON.parse(res.body) as ReportedGymPostsResponse;
   };
+  /** Keep, answering the reports made up to `upTo` (now, unless the test says what staff saw). */
+  const keep = (gym: Gym, who: Person, postId: string, upTo = new Date(clock).toISOString()) =>
+    inject("POST", `${posts(gym.id)}/${postId}/keep`, who.cookies, { upTo });
   const stop = (gym: Gym, who: Person, userId: string, stopped: boolean) => inject(stopped ? "PUT" : "DELETE", `${posts(gym.id)}/stopped/${userId}`, who.cookies);
   const shown = (f: GymPostsResponse | StaffGymPostsResponse): string[] => [...f.pinned, ...f.posts].map((p) => p.body);
   const filesOf = async (gymId: string): Promise<string[]> => {
@@ -202,7 +208,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
     folder = await mkdtemp(join(tmpdir(), "aihg-member-posts-test-"));
     await sql`
       INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap, trial_days, rank, entitlements, member_entitlements)
-      VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'GBP', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
+      VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
     redis = redisUrl === undefined || redisUrl === "" ? createMemoryRedis() : createIoRedis(redisUrl);
     for (let tries = 0; (await redis.incrWithTtl(`postsm-ready:${randomUUID()}`, 30)) === null; tries++) {
@@ -413,6 +419,16 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       // Removing one gives none back; somebody else is not held up by it.
       expect((await inject("DELETE", `${posts(gym.id)}/mine/${first.id}`, writer.cookies)).statusCode).toBe(200);
       expect((await send(gym, writer, "One more")).statusCode).toBe(429);
+      // Settled before the body is read: one that cannot be read is refused the same way.
+      const broken = await api().inject({
+        method: "POST",
+        url: `${posts(gym.id)}/mine`,
+        remoteAddress: nextIp(),
+        cookies: writer.cookies,
+        headers: { "content-type": "application/json" },
+        payload: '{"postKey":',
+      });
+      expect({ status: broken.statusCode, error: errorOf(broken) }).toEqual({ status: 429, error: "posts_day_full" });
       expect((await send(gym, quiet, "My first")).statusCode).toBe(201);
 
       // 24 hours after the first, it no longer counts.
@@ -429,14 +445,14 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const noisy = await member(gym, "Nora Noisy");
       const calm = await member(gym, "Cal Calm");
       const wifi = desk();
+      // Tries that may post, so their body is read, and that keep nothing: thirty an hour.
       const codes: string[] = [];
       for (let i = 0; i < 31; i++) {
-        const res = await send(gym, noisy, `Try ${String(i)}`, [], randomUUID(), wifi);
-        codes.push(res.statusCode === 201 ? "posted" : errorOf(res));
+        const res = await inject("POST", `${posts(gym.id)}/mine`, noisy.cookies, { postKey: randomUUID(), body: "", photos: [] }, wifi);
+        codes.push(errorOf(res));
       }
-      expect(codes.slice(0, GYM_MEMBER_POSTS_A_DAY)).toEqual(Array.from({ length: GYM_MEMBER_POSTS_A_DAY }, () => "posted"));
-      expect(codes[GYM_MEMBER_POSTS_A_DAY]).toBe("posts_day_full");
-      expect(codes[30]).toBe("rate_limited");
+      expect([codes[0], codes[29], codes[30]]).toEqual(["validation_error", "validation_error", "rate_limited"]);
+      expect(await count("posts", gym.id)).toBe(0);
       expect((await send(gym, calm, "Same wi-fi, my own allowance", [], randomUUID(), wifi)).statusCode).toBe(201);
     },
     T,
@@ -551,7 +567,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const longest = "a".repeat(290) + String.fromCodePoint(0x1f4aa).repeat(10);
       expect((await report(gym, full, post.id, "other", api(), longest)).statusCode).toBe(200);
       expect((await reported(gym, gym.owner)).items[0]?.notes).toEqual([longest]);
-      expect((await inject("POST", `${posts(gym.id)}/${post.id}/keep`, gym.owner.cookies)).statusCode).toBe(200);
+      expect((await keep(gym, gym.owner, post.id)).statusCode).toBe(200);
       const own = await report(gym, writer, post.id, "spam");
       expect({ status: own.statusCode, error: errorOf(own) }).toEqual({ status: 400, error: "own_post" });
       expect(await count("reports", gym.id)).toBe(1);
@@ -581,14 +597,13 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       // Longest waiting first.
       expect((await reported(gym, gym.owner)).items.map((i) => i.post.body)).toEqual(["Reported first", "Reported second"]);
 
-      const keep = (who: Person, id: string, where = gym) => inject("POST", `${posts(where.id)}/${id}/keep`, who.cookies);
-      expect((await keep(gym.owner, older.id)).statusCode).toBe(200);
+      expect((await keep(gym, gym.owner, older.id)).statusCode).toBe(200);
       expect((await reported(gym, gym.owner)).items.map((i) => i.post.body)).toEqual(["Reported second"]);
       // Still there for everyone: Keep removes nothing.
       expect(shown(await feed(gym, next))).toEqual(["Reported second", "Reported first"]);
       // The same person again changes nothing; kept twice is kept.
       expect((await report(gym, first, older.id, "spam")).statusCode).toBe(200);
-      expect((await keep(gym.owner, older.id)).statusCode).toBe(200);
+      expect((await keep(gym, gym.owner, older.id)).statusCode).toBe(200);
       expect((await reported(gym, gym.owner)).total).toBe(1);
       const kept = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.post_kept'`;
       expect(kept[0]?.n).toBe(1);
@@ -600,7 +615,197 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
         ["Reported second", 1],
         ["Reported first", 1],
       ]);
-      expect((await keep(gym.owner, randomUUID())).statusCode).toBe(404);
+      expect((await keep(gym, gym.owner, randomUUID())).statusCode).toBe(404);
+      for (const bad of [undefined, {}, { upTo: "yesterday" }, { upTo: new Date(clock).toISOString(), all: true }]) {
+        expect((await inject("POST", `${posts(gym.id)}/${older.id}/keep`, gym.owner.cookies, bad)).statusCode).toBe(400);
+      }
+    },
+    T,
+  );
+
+  it(
+    "Keep answers only the reports staff were shown: one that arrives while they look stays, and so does the post",
+    async () => {
+      const gym = await makeGym("Late House");
+      const writer = await member(gym, "Wendy Writer");
+      const first = await member(gym, "Fay First");
+      const late = await member(gym, "Lars Late");
+      const post = await add(gym, writer, "Look at the state of him");
+      clock += 1000;
+      expect((await report(gym, first, post.id, "spam")).statusCode).toBe(200);
+      // Staff open the page and read the list.
+      const seen = (await reported(gym, gym.owner)).items[0];
+      expect(seen?.reports).toBe(1);
+      // While it is open, somebody else reports the post, with words.
+      clock += 1000;
+      expect((await report(gym, late, post.id, "photo_of_someone", api(), "That is my brother in the photo")).statusCode).toBe(200);
+
+      const res = await keep(gym, gym.owner, post.id, seen?.lastReportedAt);
+      expect({ status: res.statusCode, body: JSON.parse(res.body) as unknown }).toEqual({ status: 200, body: { kept: true, waiting: 1 } });
+      // The report nobody read is still open, and the post is still on the list with it.
+      const after = await reported(gym, gym.owner);
+      expect(after.items.map((i) => ({ id: i.post.id, reports: i.reports, notes: i.notes }))).toEqual([
+        { id: post.id, reports: 1, notes: ["That is my brother in the photo"] },
+      ]);
+      const rows = await sql<{ reason: string; outcome: string | null }[]>`SELECT reason, outcome FROM gym_post_reports WHERE post_id = ${post.id} ORDER BY created_at`;
+      expect(rows.map((r) => [r.reason, r.outcome])).toEqual([
+        ["spam", "kept"],
+        ["photo_of_someone", null],
+      ]);
+      // Read again and kept: nothing is waiting now.
+      const again = await keep(gym, gym.owner, post.id, after.items[0]?.lastReportedAt);
+      expect(JSON.parse(again.body)).toEqual({ kept: true, waiting: 0 });
+      expect((await reported(gym, gym.owner)).items).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    "a pinned member's post whose writer leaves gives its pin back, and three pins stay three when they return",
+    async () => {
+      const gym = await makeGym("Pin House");
+      const leaver = await member(gym, "Lena Leaver");
+      const staffPost = async (body: string): Promise<string> => {
+        clock += 1000;
+        const res = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: randomUUID(), body, photos: [] });
+        expect(res.statusCode).toBe(201);
+        return (JSON.parse(res.body) as { post: { id: string } }).post.id;
+      };
+      const pin = (id: string, pinned = true) => {
+        clock += 1000;
+        return inject("PUT", `${posts(gym.id)}/${id}/pin`, gym.owner.cookies, { pinned });
+      };
+      const theirs = await add(gym, leaver, "Pinned, then I left");
+      const one = await staffPost("Staff pin one");
+      const two = await staffPost("Staff pin two");
+      const three = await staffPost("Staff pin three");
+      for (const id of [theirs.id, one, two]) expect((await pin(id)).statusCode).toBe(200);
+      expect((await pin(three)).statusCode).toBe(409);
+
+      await leave(gym, leaver);
+      expect((await staffFeed(gym, gym.owner)).pinned.map((p) => p.body)).toEqual(["Staff pin two", "Staff pin one"]);
+      // The hidden post no longer holds a pin: a third can be pinned.
+      expect((await pin(three)).statusCode).toBe(200);
+      expect((await staffFeed(gym, gym.owner)).pinned.map((p) => p.body)).toEqual(["Staff pin three", "Staff pin two", "Staff pin one"]);
+
+      // The writer comes back: their post is back among the others, not a fourth pin, and
+      // the page still reads for staff and members.
+      await sql`UPDATE gym_members SET removed_at = NULL WHERE gym_id = ${gym.id} AND user_id = ${leaver.userId}`;
+      const staff = await staffFeed(gym, gym.owner);
+      expect(staff.pinned).toHaveLength(3);
+      expect(staff.posts.map((p) => p.body)).toEqual(["Pinned, then I left"]);
+      expect((await feed(gym, leaver)).pinned).toHaveLength(3);
+      const pins = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_posts WHERE gym_id = ${gym.id} AND pinned_at IS NOT NULL`;
+      expect(pins[0]?.n).toBe(3);
+    },
+    T,
+  );
+
+  it(
+    "a stop, or the switch going off, that lands while a post is on its way refuses that post",
+    async () => {
+      // The post passes the check made before its body is read, then waits for the person's
+      // membership, which this test holds while it makes the change: the check made again
+      // inside that step is what refuses it.
+      for (const change of ["stop", "switch"] as const) {
+        const gym = await makeGym(`Lock House ${change}`);
+        const writer = await member(gym, "Wendy Writer");
+        let sent: ReturnType<typeof send> | undefined;
+        await sql.begin(async (tx) => {
+          await tx`SELECT 1 FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${writer.userId} FOR UPDATE`;
+          sent = send(gym, writer, "Sent at the same moment");
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          if (change === "stop") await tx`INSERT INTO gym_post_stops (gym_id, user_id) VALUES (${gym.id}, ${writer.userId})`;
+          else await tx`UPDATE gyms SET members_can_post = false WHERE id = ${gym.id}`;
+        });
+        const res = await sent;
+        expect({ change, status: res?.statusCode, error: res === undefined ? "" : errorOf(res) }).toEqual({
+          change,
+          status: 403,
+          error: change === "stop" ? "posting_stopped" : "posting_off",
+        });
+        expect(await count("posts", gym.id)).toBe(0);
+      }
+    },
+    T,
+  );
+
+  it(
+    "the staff lists hold at their caps: 50 reported posts, 20 typed notes a post, 200 people stopped",
+    async () => {
+      const gym = await makeGym("Cap House");
+      const crowd = GYM_POST_STOPS_SHOWN + 1;
+      const tag = uniq();
+      await sql`
+        INSERT INTO users (email, display_name)
+        SELECT 'postsm-t-crowd-' || ${tag} || '-' || n || '@example.com', 'Crowd Person' FROM generate_series(1, ${crowd}) n`;
+      const people = sql`SELECT id FROM users WHERE email LIKE ${"postsm-t-crowd-" + tag + "-%"}`;
+      await sql`INSERT INTO gym_members (gym_id, user_id, joined_at) SELECT ${gym.id}, id, now() FROM (${people}) p`;
+      await sql`INSERT INTO gym_post_stops (gym_id, user_id) SELECT ${gym.id}, id FROM (${people}) p`;
+      // One more reported post than the list carries, each by the same member; the oldest
+      // of them reported by one more person with words than a post's notes carry.
+      await sql`
+        INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
+        SELECT ${gym.id}, (SELECT id FROM (${people}) p LIMIT 1), gen_random_uuid(), 'Reported ' || n, true, now() - n * interval '1 minute'
+        FROM generate_series(1, ${GYM_POST_REPORTS_SHOWN + 1}) n`;
+      await sql`
+        INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason, created_at)
+        SELECT gym_id, id, ${gym.owner.userId}, 'spam', created_at + interval '1 second' FROM gym_posts WHERE gym_id = ${gym.id}`;
+      await sql`
+        INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason, note, created_at)
+        SELECT ${gym.id}, (SELECT id FROM gym_posts WHERE gym_id = ${gym.id} ORDER BY created_at LIMIT 1), p.id, 'other', 'A note', now()
+        FROM (${people} LIMIT ${GYM_POST_REPORT_NOTES_SHOWN + 1} OFFSET 1) p`;
+
+      const list = await reported(gym, gym.owner);
+      expect({ items: list.items.length, total: list.total }).toEqual({ items: GYM_POST_REPORTS_SHOWN, total: GYM_POST_REPORTS_SHOWN + 1 });
+      expect({ reports: list.items[0]?.reports, notes: list.items[0]?.notes.length }).toEqual({
+        reports: GYM_POST_REPORT_NOTES_SHOWN + 2,
+        notes: GYM_POST_REPORT_NOTES_SHOWN,
+      });
+      expect((await staffFeed(gym, gym.owner)).reportedCount).toBe(GYM_POST_REPORTS_SHOWN + 1);
+      const stoppedRes = await inject("GET", `${posts(gym.id)}/stopped`, gym.owner.cookies);
+      expect(stoppedRes.statusCode).toBe(200);
+      expect((JSON.parse(stoppedRes.body) as StoppedGymPostersResponse).people).toHaveLength(GYM_POST_STOPS_SHOWN);
+    },
+    T,
+  );
+
+  it(
+    "staff who also train are not offered Report on a post they wrote for the gym",
+    async () => {
+      const gym = await makeGym("Both House");
+      await sql`INSERT INTO gym_members (gym_id, user_id, joined_at) VALUES (${gym.id}, ${gym.owner.userId}, '2026-01-01T00:00:00Z')`;
+      const reader = await member(gym, "Rita Reader");
+      const res = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: randomUUID(), body: "From the gym", photos: [] });
+      expect(res.statusCode).toBe(201);
+      // Theirs, so no Report; a staff post, so no member's Remove either.
+      expect((await feed(gym, gym.owner)).posts[0]).toMatchObject({ wrote: true, own: false, fromMember: false });
+      expect((await feed(gym, reader)).posts[0]).toMatchObject({ wrote: false, own: false });
+      const mine = await add(gym, reader, "From a member");
+      expect(mine).toMatchObject({ wrote: true, own: true });
+    },
+    T,
+  );
+
+  it(
+    "a stranger pressing Report or Remove again and again is told 'not found' every time, never 'slow down'",
+    async () => {
+      const gym = await makeGym("Order House");
+      const writer = await member(gym, "Wendy Writer");
+      const post = await add(gym, writer, "Not yours to touch");
+      const stranger = await signedIn("Sam Stranger");
+      const wifi = desk();
+      const answers = new Set<number>();
+      for (let i = 0; i < 62; i++) {
+        answers.add((await inject("POST", `${posts(gym.id)}/${post.id}/report`, stranger.cookies, { reason: "spam" }, wifi)).statusCode);
+        answers.add((await inject("DELETE", `${posts(gym.id)}/mine/${post.id}`, stranger.cookies, undefined, wifi)).statusCode);
+      }
+      expect([...answers]).toEqual([404]);
+      // A member's own limit is still there: the 61st press in the hour is refused.
+      const presser = await member(gym, "Pat Presser");
+      const codes: number[] = [];
+      for (let i = 0; i < 61; i++) codes.push((await inject("POST", `${posts(gym.id)}/${post.id}/report`, presser.cookies, { reason: "spam" }, wifi)).statusCode);
+      expect([codes[0], codes[59], codes[60]]).toEqual([200, 200, 429]);
     },
     T,
   );
@@ -648,7 +853,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
 
       const calls: [string, "GET" | "POST" | "PUT" | "DELETE", string, unknown][] = [
         ["the reported list", "GET", `${posts(gym.id)}/reported`, undefined],
-        ["Keep", "POST", `${posts(gym.id)}/${post.id}/keep`, undefined],
+        ["Keep", "POST", `${posts(gym.id)}/${post.id}/keep`, { upTo: new Date(clock).toISOString() }],
         ["the switch", "PUT", `${posts(gym.id)}/settings`, { membersCanPost: false }],
         ["the stopped list", "GET", `${posts(gym.id)}/stopped`, undefined],
         ["stop a person", "PUT", `${posts(gym.id)}/stopped/${writer.userId}`, undefined],
@@ -675,7 +880,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       // A trainer the owner ticked can do all of it.
       expect((await reported(gym, ticked)).items).toHaveLength(1);
       expect((await stop(gym, ticked, writer.userId, true)).statusCode).toBe(200);
-      expect((await inject("POST", `${posts(gym.id)}/${post.id}/keep`, ticked.cookies)).statusCode).toBe(200);
+      expect((await keep(gym, ticked, post.id)).statusCode).toBe(200);
 
       // A person who was never this gym's member cannot be stopped here, and the other
       // gym's staff cannot reach this gym's member through their own address.
@@ -692,7 +897,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       expect((await inject("GET", `${posts(gym.id)}/stopped`, gym.owner.cookies)).statusCode).toBe(200);
       expect((await setSwitch(gym, gym.owner, false)).statusCode).toBe(409);
       expect((await stop(gym, gym.owner, writer.userId, false)).statusCode).toBe(409);
-      expect((await inject("POST", `${posts(gym.id)}/${post.id}/keep`, gym.owner.cookies)).statusCode).toBe(409);
+      expect((await keep(gym, gym.owner, post.id)).statusCode).toBe(409);
     },
     T,
   );
@@ -710,6 +915,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       expect(await count("stops", gym.id)).toBe(1);
       const refused = await send(gym, writer, "After the stop");
       expect({ status: refused.statusCode, error: errorOf(refused) }).toEqual({ status: 403, error: "posting_stopped" });
+      expect((JSON.parse(refused.body) as { message: string }).message).toBe("The staff at Stop House have stopped you posting here. Speak to them at the front desk.");
       expect(shown(await feed(gym, writer))).toEqual(["Before the stop"]);
       expect((await staffFeed(gym, gym.owner)).posts[0]).toMatchObject({ id: post.id, authorId: writer.userId, authorStopped: true });
       // They still read, react and report, and remove their own.

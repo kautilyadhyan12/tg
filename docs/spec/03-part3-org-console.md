@@ -2685,7 +2685,8 @@ for them and the safety tools of §15.3 are 19b-ii; video is 19b-iii.
 it is on, a live app member writes a post on their gym's Updates tab: the same words and
 photos as staff (`POST …/posts/mine`, one key a post), **10 in any 24 hours** counted in
 the database with the person's membership held (a removed post gives none back), and who
-may post is settled before the body is read, as for staff. A member's post is marked
+may post — the switch, a stop, and the day's ten — is settled before the body is read, as
+for staff. A member's post that staff pinned gives its pin back when its writer leaves. A member's post is marked
 `by_member`; it is shown under their first name and last initial ("A member" with no
 name), staff posts carry the word "Staff", and the console marks a member's post with the
 gym's word for a member. **A member's post stays until they or staff remove it** (RULINGS
@@ -2718,11 +2719,15 @@ never who, and no audit line names the reporter. Staff holding `posts.manage` (t
 tick, as 19b-i decided) see **reported posts** at the top of the console's Updates page,
 longest waiting first, 50 at most (`GET …/posts/reported`): **Remove post** is the
 removal of §15.2, one request, gone for everyone with its photos, the reports answered
-"removed"; **Keep post** answers them "kept" (`POST …/posts/:postId/keep`), the post
-stays, and only a NEW person's report brings it back. **Stop them posting** on a member's
+"removed"; **Keep post** answers "kept" the reports staff were SHOWN (`POST
+…/posts/:postId/keep` with the list item's `lastReportedAt`): one that arrived while they
+were looking stays open, the post stays on the list, and the page says so and reads the
+list again. A kept post stays, and only a NEW person's report brings it back. **Stop them posting** on a member's
 post (`PUT` · `DELETE …/posts/stopped/:userId`, `gym_post_stops`): that person cannot post
 at this gym until staff let them again, still reads and reacts, their posts stay, and the
 page lists who is stopped. A gym whose plan has lapsed reads the list and answers nothing.
+A member's Remove and Report ask who they are before the rate limit, so a stranger's 404 is
+never a 429; nothing a person wrote, as a member or as staff, offers them Report.
 Block, the bad-words hold and the support address are 19b-ii-b; a person's posts on their
 profile (RULINGS 2026-10-02, 2026-10-03) are 19b-ii-c.
 

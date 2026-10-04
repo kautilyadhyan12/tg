@@ -12,8 +12,9 @@ export interface PhotoStore {
   put(key: string, bytes: Uint8Array): Promise<void>;
   /** The photo's bytes, or null when there is none under the key. */
   get(key: string): Promise<Uint8Array | null>;
-  /** Removes it; a key with nothing under it is not an error. */
-  remove(key: string): Promise<void>;
+  /** Removes it; a key with nothing under it is not an error. False when there was nothing
+   *  to remove, so a caller that must know the file is gone can tell. */
+  remove(key: string): Promise<boolean>;
 }
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -64,7 +65,13 @@ export function createDiskPhotoStore(root: string): PhotoStore {
       }
     },
     async remove(key) {
-      await rm(pathFor(root, key), { force: true });
+      try {
+        await rm(pathFor(root, key));
+        return true;
+      } catch (err) {
+        if (isMissing(err)) return false;
+        throw err;
+      }
     },
   };
 }
