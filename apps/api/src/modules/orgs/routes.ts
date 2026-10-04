@@ -43,6 +43,7 @@ import { registerMembershipRoutes } from "./memberships/routes.js";
 import { registerLeadRoutes } from "./leads/routes.js";
 import { registerLeaderboardRoutes } from "./leaderboard/routes.js";
 import { registerGymPageRoutes } from "./gymPage/routes.js";
+import { registerPostRoutes } from "./posts/routes.js";
 import type { PhotoStore } from "./gymPage/photoStore.js";
 import type { RobotCheck } from "./gymPage/robotCheck.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
@@ -137,6 +138,9 @@ export function registerOrgRoutes(
 
   // The members' leaderboard and Hide me (Part 3 §15.5).
   registerLeaderboardRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+
+  // The gym's Updates: posts by staff, read by its members (Part 3 §15.2).
+  registerPostRoutes(app, { sql: deps.sql, redis: deps.redis, photos: deps.photos, now: overrides.now ?? (() => new Date()) });
 
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).

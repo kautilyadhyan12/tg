@@ -491,6 +491,13 @@
       "when": 1788220800054,
       "tag": "0070_held_memberships",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1788220800055,
+      "tag": "0071_gym_posts",
+      "breakpoints": true
     }
   ]
 }

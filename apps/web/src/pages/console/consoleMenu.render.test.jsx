@@ -5,7 +5,7 @@
 // R1 (ConsoleLayout at fa8e38a): Overview and Members always, Leads with
 // `members.confirm`, Attendance with `attendance.read`, Classes with `schedule.manage`,
 // Settings with `staff.manage` or `org.manage`, and since 17a-i with `memberships.manage`
-// too (its Memberships box). Every mix of those six is drawn, and the computer menu and
+// too (its Memberships box), and Updates with `posts.manage` (19b-i). Every mix of them is drawn, and the computer menu and
 // the phone's tabs plus More must each hold exactly those pages.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, cleanup } from '@testing-library/react';
@@ -27,7 +27,7 @@ const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).d
 const More = (await import('./More')).default;
 const Overview = (await import('./Overview')).default;
 
-const GATES = ['members.confirm', 'attendance.read', 'schedule.manage', 'staff.manage', 'org.manage', 'leaderboard.manage', 'memberships.manage'];
+const GATES = ['members.confirm', 'attendance.read', 'schedule.manage', 'staff.manage', 'org.manage', 'leaderboard.manage', 'memberships.manage', 'posts.manage'];
 const BASE = '/console/iron-house';
 
 /** What the menu offered this person before R1. */
@@ -39,6 +39,7 @@ function openableToday(privileges) {
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
     ...(has('schedule.manage') ? [`${BASE}/classes`] : []),
+    ...(has('posts.manage') ? [`${BASE}/updates`] : []),
     ...(has('leaderboard.manage') ? [`${BASE}/leaderboard`] : []),
     ...(has('staff.manage') || has('org.manage') || has('memberships.manage') ? [`${BASE}/settings`] : []),
   ].sort();
@@ -82,7 +83,7 @@ function menus() {
   return { rail, tabs, more };
 }
 
-/** Every one of the 64 mixes of the six permissions that decide a page. */
+/** Every mix of the permissions that decide a page. */
 const EVERY_MIX = Array.from({ length: 2 ** GATES.length }, (_, bits) =>
   ['members.read', ...GATES.filter((_, i) => bits & (1 << i))],
 );

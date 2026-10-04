@@ -49,6 +49,7 @@ import ConsoleAttendance from './pages/console/Attendance';
 import ConsoleClasses  from './pages/console/Classes';
 import ConsoleLeads    from './pages/console/Leads';
 import ConsoleLeaderboard from './pages/console/Leaderboard';
+import ConsoleUpdates  from './pages/console/Updates';
 import ConsoleSettings from './pages/console/Settings';
 import ConsoleMore     from './pages/console/More';
 
@@ -284,6 +285,13 @@ export default function App() {
             <Route path="/console/:orgSlug/leaderboard" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleLeaderboard /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* THE GYM'S UPDATES FOR STAFF (19b-i). The nav draws it for `posts.manage`;
+                the server is the enforcement. */}
+            <Route path="/console/:orgSlug/updates" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleUpdates /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={

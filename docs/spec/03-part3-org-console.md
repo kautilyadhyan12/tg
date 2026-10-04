@@ -2652,6 +2652,34 @@ minute, 20 a gym (RULINGS 2026-08-24), uploaded straight to Cloudflare Stream by
 one-time upload address the server asks for, played from Stream, deleted there when
 the post goes.
 
+**As built in 19b-i (2026-10-04): the gym's own posts.** Staff holding a new tick,
+`posts.manage` ("Post updates": owner and manager by default, the owner can give it to
+a trainer), write a post on the console's **Updates** page: words, up to 4 photos (the
+gym page's limits: 2 MB each once the browser has shrunk it, cleaned by the same
+`cleanPhoto`), pin (at most 3, newest pin first) and remove. The same tick gates the
+page's reads and is the one the staff queue of §15.3 will read, in place of a second
+`posts.moderate`. Members read them on their gym's page under an **Updates** tab, the
+pinned ones first, 20 a page, with the author's first name and last initial (their name on the gym's list
+when the app's is only their email's first part; the gym's name when they have neither
+or the account is gone). Staff see each post's reactions as members do, a filled icon and a
+number each, and a press on one lists who gave it by whole name, newest first, 100 at
+most (`GET …/posts/:postId/reactions?reaction=`, the tick's alone; members see only the
+counts) (Kd's click-through, RULINGS 2026-10-04). **A post stays until staff remove it** (RULINGS
+2026-10-04; the one-week life of 2026-08-25 is for members' photos, settled in 19b-ii).
+A removed post is gone for everyone at once: its photos' files and its reactions are
+deleted, and its row is kept with who removed it. The reactions are **Like · Love ·
+Strong · Fire**, one a person a post; a tap on one's own takes it off; only the counts
+are shown, never who. A reaction counts, and its giver is
+named, only while they are a live app member of the gym with an active account, so the
+number and the names always agree. A post's 2,000 characters are counted by character
+on the screen and the server alike (an emoji is one). A photo is served by the api itself
+to a live member of that gym or to staff holding the tick, and to nobody else; a browser
+may keep it but asks again each time it shows it, so a removed post's photo is gone at
+its next showing (signed URLs come with R2, Stage 4
+item 4). A gym whose plan has lapsed: its members are sent no posts and no photos, and
+its staff can read but not post, pin or remove. Members' own posts, the gym's switch
+for them and the safety tools of §15.3 are 19b-ii; video is 19b-iii.
+
 ### 15.3 Keeping it safe — what Apple (guideline 1.2) and Google ask of any app where people post
 
 **Report** on every post, with a reason; reports land in a staff queue
@@ -2835,8 +2863,10 @@ shared. Without it the trainer can still write a plan from what the gym may see
 ### 15.8 Cards
 
 **19a** the leaderboard, in four jobs (§15.5; takes item 1b's place) · **19b** Updates,
-reactions and the safety tools (needs R2, Stage 4 item 4, and a Cloudflare Stream
-account — Kd's, $5 a month for each 1,000 minutes kept and $1 for each 1,000 watched)
+reactions and the safety tools, in three jobs since 2026-10-04: **19b-i** the gym's own
+posts with photos, pins and reactions · **19b-ii** members' posts, the gym's switch and
+the safety tools · **19b-iii** video (needs a Cloudflare Stream account — Kd's, $5 a
+month for each 1,000 minutes kept and $1 for each 1,000 watched)
 · **19c** events · **19d** challenges · **19e** a gym's own plan (after Stage 1 items
 6a and 6b). ONE feature for CLAUDE.md §6.
 

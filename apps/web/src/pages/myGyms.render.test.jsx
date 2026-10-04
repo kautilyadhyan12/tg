@@ -29,12 +29,11 @@ vi.mock('../api/orgsApi', () => ({
 }));
 // The leaderboard under each gym has its own suite (leaderboard.render.test.jsx); here it
 // only has to answer.
-vi.mock('../api/leaderboardApi', () => ({
-  leaderboardService: {
-    board: () => new Promise(() => {}),
-    visibility: () => new Promise(() => {}),
-  },
-}));
+const boards = { board: vi.fn(() => new Promise(() => {})), visibility: () => new Promise(() => {}) };
+vi.mock('../api/leaderboardApi', () => ({ leaderboardService: boards }));
+// The gym's Updates have their own suite too (updates.render.test.jsx).
+const posts = { list: vi.fn(() => new Promise(() => {})), react: vi.fn() };
+vi.mock('../api/postsApi', () => ({ postsService: posts, postPhotoUrl: () => '' }));
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', displayName: 'Kd' }, logout: vi.fn(), loading: false }),
 }));
@@ -268,6 +267,24 @@ describe('the screen', () => {
     await waitFor(() => expect(screen.getByText('Iron House')).toBeTruthy());
     expect(passButton()).toBeTruthy();
     expect(screen.getByText('Show your pass at the front desk when you arrive.')).toBeTruthy();
+  });
+
+  // THE GYM'S PAGE (19b-i): Updates first, the Leaderboard one tap away, one read at a time.
+  it('opens on Updates, and the Leaderboard tab shows the board', async () => {
+    boards.board.mockClear();
+    posts.list.mockClear();
+    drawScreen();
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Updates' }).getAttribute('aria-selected')).toBe('true'));
+    expect(screen.getByTestId('updates')).toBeTruthy();
+    expect(posts.list).toHaveBeenCalledTimes(1);
+    expect(posts.list.mock.calls[0][0]).toBe('g1');
+    expect(boards.board).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Leaderboard' }));
+    expect(screen.getByRole('tab', { name: 'Leaderboard' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByTestId('updates')).toBeNull();
+    await waitFor(() => expect(boards.board).toHaveBeenCalled());
+    expect(boards.board.mock.calls[0][0]).toBe('g1');
   });
 
   // THE TAP IS GONE FOR EVERY GYM (ROADMAP 16c), whatever the gym's old switch says.

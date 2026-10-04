@@ -7,6 +7,7 @@ import GymHoursNote from '../components/gym/GymHoursNote';
 import AttendancePanel from '../components/gym/AttendancePanel';
 import { cheerNote, myOrgsWords } from '../components/gym/gymMembershipView';
 import Leaderboard from '../components/gym/Leaderboard';
+import Updates from '../components/gym/Updates';
 import { pickedGym, readPicked, savePicked } from '../components/gym/leaderboardView';
 
 // MY GYMS — Kd's ruling of 2026-09-02, in his words: *"whenever a user joins a
@@ -54,6 +55,11 @@ function CheerNote({ latestCheer }) {
   );
 }
 
+const PAGE_TABS = [
+  { id: 'updates', label: 'Updates' },
+  { id: 'leaderboard', label: 'Leaderboard' },
+];
+
 export default function MyGyms() {
   const { loading, error, gyms, reload } = useMyGyms();
   // THE HEADING FOLLOWS WHAT IS ACTUALLY IN THE LIST (roadmap 2b): a studio's
@@ -68,6 +74,7 @@ export default function MyGyms() {
     setPicked(id);
     savePicked(id);
   };
+  const [tab, setTab] = useState('updates');
 
   return (
     <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
@@ -215,7 +222,28 @@ export default function MyGyms() {
                 <AttendancePanel gym={gym} />
               </div>
             </div>
-            <Leaderboard key={`board-${gym.id}`} gym={gym} />
+            {/* THE GYM'S SHARED PAGE (spec Part 3 §15.1): Updates, then the Leaderboard. One
+                is drawn at a time, so the other asks the server nothing until it is opened. */}
+            <div role="tablist" aria-label={`${gym.name}'s page`} className="flex gap-2 mt-4">
+              {PAGE_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.id}
+                  onClick={() => setTab(t.id)}
+                  className="px-3.5 py-2 rounded-xl text-sm font-semibold min-h-11"
+                  style={
+                    tab === t.id
+                      ? { background: 'rgba(255,138,31,0.18)', color: '#FF8A1F' }
+                      : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.55)' }
+                  }
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {tab === 'updates' ? <Updates key={`updates-${gym.id}`} gym={gym} /> : <Leaderboard key={`board-${gym.id}`} gym={gym} />}
           </div>
         ))}
         </>

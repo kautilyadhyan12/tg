@@ -60,6 +60,9 @@ export const DIRECT_DELETE_TABLES = [
   // person's own eating targets are their own data on `user_fitness_profiles`'
   // footing — deleted at Day 14 and exported.
   "user_nutrition_targets",
+  // A member's reactions to their gym's posts (migration 0071; ROADMAP 19b-i): the
+  // person's own taps, deleted at Day 14 and exported.
+  "gym_post_reactions",
   // §5.2's Day-0 sentence already says "push tokens deleted", so clearing
   // them again at Day 14 is not a widening (R0.2) — it is the same
   // defence-in-depth as workout_sets. T3 F5 probe-confirmed that a row
@@ -380,6 +383,11 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_page_photos.added_by — which member of staff put a photo on the gym's page
   // (`0050`), on gym_leads' footing: the gym's record of its own page; `ON DELETE set null`.
   "gym_page_photos",
+  // gym_posts.author_user_id and removed_by_user_id — which member of staff posted one of
+  // the gym's Updates and who removed it (`0071`), on gym_page_photos' footing: the gym's
+  // own announcement; `ON DELETE set null`, and a post whose author's account is not
+  // active is shown under the gym's name.
+  "gym_posts",
   // gym_staff_invites.invited_by and answered_by — who sent a staff invitation and who
   // accepted, declined or cancelled it (`0059`), on gym_leads' footing: the gym's record;
   // `ON DELETE set null`. Deleted when the gym closes.
