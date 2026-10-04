@@ -241,6 +241,8 @@ describe('the list as it changes', () => {
     ['yesterday', false],
     ['2026-13-45T99:99:99Z_------------------------------------', false],
     ['2026-10-07T::::Z_11111111-1111-4111-8111-111111111111', false],
+    ['0000-01-01T00:00:00Z_11111111-1111-4111-8111-111111111111', false],
+    ['1970-01-01T00:00:00Z_11111111-1111-4111-8111-111111111111', true],
   ])('the place %s is read: %s', (before, read) => {
     expect(gymPostsQuerySchema.safeParse({ before }).success).toBe(read);
   });

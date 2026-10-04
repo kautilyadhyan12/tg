@@ -81,7 +81,8 @@ const postsCursor = z
     const cut = text.lastIndexOf("_");
     const at = z.string().datetime().safeParse(text.slice(0, Math.max(cut, 0)));
     const id = z.string().uuid().safeParse(text.slice(cut + 1));
-    if (cut < 0 || !at.success || !id.success || Number.isNaN(new Date(at.data).getTime())) {
+    // Before 1970 no post exists, and the database cannot read year 0000 at all.
+    if (cut < 0 || !at.success || !id.success || !(new Date(at.data).getTime() >= 0)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "not a place in the list" });
       return z.NEVER;
     }
