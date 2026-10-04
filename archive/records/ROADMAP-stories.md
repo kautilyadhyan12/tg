@@ -259,3 +259,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **19b-ii-a, as it stood when it was built (merged 2026-10-05, PR #170):**
 
 - 19b-ii-a. [ ] **Members post, Report and the staff list**: the gym's switch, a member's own post (10 a day) and removing it, Report, the reported list with Remove and Keep, stop a person posting. Split from 19b-ii on 2026-10-04; at Kd's click-through a member can also type up to 300 characters beside the reason they pick.
+
+**17a-iii, as it stood when it was built (merged 2026-10-05, PR #171):**
+
+- 17a-iii. [ ] **A file's word linked to a type**: "Gold" → Gold Monthly once, for everyone who carries the word, their file's dates kept.
