@@ -150,7 +150,7 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     if (params === null) return;
     const body = parseOr400(reportGymPostRequestSchema, req.body, req, reply);
     if (body === null) return;
-    await service.report(postsDeps, requireUserId(req), params.gymId, params.postId, body.reason);
+    await service.report(postsDeps, requireUserId(req), params.gymId, params.postId, body.reason, body.note);
     return reply.status(200).send({ reported: true });
   });
 

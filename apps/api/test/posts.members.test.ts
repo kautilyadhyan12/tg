@@ -166,8 +166,8 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
     expect(res.statusCode, res.body).toBe(200);
     return JSON.parse(res.body) as StaffGymPostsResponse;
   };
-  const report = (gym: Gym, who: Person, postId: string, reason: string, target = api()) =>
-    inject("POST", `${posts(gym.id)}/${postId}/report`, who.cookies, { reason }, nextIp(), target);
+  const report = (gym: Gym, who: Person, postId: string, reason: string, target = api(), note?: string) =>
+    inject("POST", `${posts(gym.id)}/${postId}/report`, who.cookies, note === undefined ? { reason } : { reason, note }, nextIp(), target);
   const reported = async (gym: Gym, who: Person): Promise<ReportedGymPostsResponse> => {
     const res = await inject("GET", `${posts(gym.id)}/reported`, who.cookies);
     expect(res.statusCode, res.body).toBe(200);
@@ -276,12 +276,22 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const gym = await makeGym("Quiet House");
       const writer = await member(gym, "Wendy Writer");
       const reporter = await member(gym, "Zebedee Quillfeather");
+      const quiet = await member(gym, "Quentin Quietly");
+      const blank = await member(gym, "Bea Blank");
       const post = await add(gym, writer, "Protein shakes for sale, message me");
-      expect((await report(gym, reporter, post.id, "spam")).statusCode).toBe(200);
+      // What a reporter types is kept as typed, less the space around it; nothing typed, or
+      // only spaces, is no note.
+      expect((await report(gym, reporter, post.id, "spam", api(), "  He sells these in the changing room\ntoo  ")).statusCode).toBe(200);
+      clock += 1000;
+      expect((await report(gym, quiet, post.id, "spam")).statusCode).toBe(200);
+      clock += 1000;
+      expect((await report(gym, blank, post.id, "other", api(), "   ")).statusCode).toBe(200);
 
       const res = await inject("GET", `${posts(gym.id)}/reported`, gym.owner.cookies);
       expect(res.statusCode).toBe(200);
-      expect(res.body).not.toMatch(/Zebedee|Quillfeather/);
+      const [item] = (JSON.parse(res.body) as ReportedGymPostsResponse).items;
+      expect({ reports: item?.reports, notes: item?.notes }).toEqual({ reports: 3, notes: ["He sells these in the changing room\ntoo"] });
+      expect(res.body).not.toMatch(/Zebedee|Quillfeather|Quentin|Quietly|Bea Blank/);
       expect(res.body).not.toContain(reporter.userId);
       const staffBody = (await inject("GET", `${posts(gym.id)}/staff`, gym.owner.cookies)).body;
       expect(staffBody).not.toContain(reporter.userId);
@@ -532,15 +542,24 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       for (const reason of ["rude", "", null, 7]) {
         expect((await inject("POST", `${posts(gym.id)}/${post.id}/report`, reporter.cookies, { reason })).statusCode).toBe(400);
       }
-      expect((await inject("POST", `${posts(gym.id)}/${post.id}/report`, reporter.cookies, { reason: "spam", note: "x" })).statusCode).toBe(400);
+      // What is typed beside the reason: 300 characters, an emoji one of them, and no more.
+      const bad = [{ reason: "spam", extra: "x" }, { reason: "spam", note: 7 }, { reason: "spam", note: "a".repeat(301) }, { reason: "spam", note: `a${String.fromCharCode(0)}b` }, { note: "no reason given" }];
+      for (const payload of bad) {
+        expect((await inject("POST", `${posts(gym.id)}/${post.id}/report`, reporter.cookies, payload)).statusCode).toBe(400);
+      }
+      const full = await member(gym, "Flo Full");
+      const longest = "a".repeat(290) + String.fromCodePoint(0x1f4aa).repeat(10);
+      expect((await report(gym, full, post.id, "other", api(), longest)).statusCode).toBe(200);
+      expect((await reported(gym, gym.owner)).items[0]?.notes).toEqual([longest]);
+      expect((await inject("POST", `${posts(gym.id)}/${post.id}/keep`, gym.owner.cookies)).statusCode).toBe(200);
       const own = await report(gym, writer, post.id, "spam");
       expect({ status: own.statusCode, error: errorOf(own) }).toEqual({ status: 400, error: "own_post" });
-      expect(await count("reports", gym.id)).toBe(0);
+      expect(await count("reports", gym.id)).toBe(1);
 
       // Five taps at once, across two servers: one report.
       const taps = await Promise.all([0, 1, 2, 3, 4].map((n) => report(gym, reporter, post.id, n === 0 ? "spam" : "unkind", either(n))));
       expect(taps.map((r) => r.statusCode)).toEqual([200, 200, 200, 200, 200]);
-      expect(await count("reports", gym.id)).toBe(1);
+      expect(await count("reports", gym.id)).toBe(2);
       expect((await reported(gym, gym.owner)).items[0]?.reports).toBe(1);
     },
     T,

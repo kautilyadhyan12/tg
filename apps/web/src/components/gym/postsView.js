@@ -8,6 +8,7 @@ import {
   GYM_POST_MAX_PINNED,
   GYM_POST_REACTIONS,
   GYM_POST_REACTION_WORDS,
+  GYM_POST_REPORT_NOTE_MAX,
   GYM_POST_REPORT_REASONS,
   GYM_POST_REPORT_REASON_WORDS,
   postLength,
@@ -136,11 +137,21 @@ export function ownRemoveBox(post, gymName) {
 /** The reasons a post is reported for, in drawing order. */
 export const REPORT_REASONS = GYM_POST_REPORT_REASONS.map((id) => ({ id, word: GYM_POST_REPORT_REASON_WORDS[id] }));
 
+/** Under the box a member may type more in: how much room is left, or how far over. */
+export function reportNoteLine(note) {
+  const left = GYM_POST_REPORT_NOTE_MAX - postLength(note.trim());
+  const chars = (n) => (n === 1 ? '1 character' : `${n.toLocaleString('en')} characters`);
+  if (left >= 0) return { over: false, text: `${chars(left)} left` };
+  return { over: true, text: `${chars(-left)} too many` };
+}
+
 /** The box a member reports a post in. */
 export function reportBox(gymName) {
   return {
     title: 'Report this post',
     line: `The staff at ${gymName} will look at it. The person who posted isn't told who reported it.`,
+    noteLabel: 'Tell the staff more (you can leave this empty)',
+    notePlaceholder: 'What is wrong with this post?',
     confirm: 'Send report',
     cancel: 'Cancel',
     done: `Reported. The staff at ${gymName} will look at it.`,
@@ -166,6 +177,12 @@ export function reportedLine(item) {
   const who = item.reports === 1 ? '1 person' : `${item.reports.toLocaleString('en')} people`;
   const reasons = REPORT_REASONS.filter((r) => item.reasons[r.id] > 0).map((r) => (item.reports === 1 ? r.word : `${r.word} (${item.reasons[r.id].toLocaleString('en')})`));
   return `Reported by ${who}: ${reasons.join(' · ')}`;
+}
+
+/** Over what reporters typed about a post, or null when nobody typed anything. */
+export function reportNotesTitle(item) {
+  if (item.notes.length === 0) return null;
+  return item.notes.length === 1 ? 'What the person who reported it wrote:' : 'What people who reported it wrote:';
 }
 
 /** The heading over the reported posts, with how many are waiting. */

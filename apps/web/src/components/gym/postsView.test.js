@@ -22,6 +22,8 @@ import {
   reactorsTitle,
   removeBox,
   reportBox,
+  reportNoteLine,
+  reportNotesTitle,
   reportedLine,
   reportedMore,
   reportedTitle,
@@ -350,6 +352,22 @@ describe('reporting a post', () => {
     [{ reports: 1200, reasons: { ...none, nudity: 1200 } }, 'Reported by 1,200 people: Nudity or sexual (1,200)'],
   ])('staff read how many reported a post and why, never who: %#', (item, line) => {
     expect(reportedLine(item)).toBe(line);
+  });
+
+  it.each([
+    ['', { over: false, text: '300 characters left' }],
+    ['  spaces around do not count  ', { over: false, text: '274 characters left' }],
+    ['a'.repeat(299), { over: false, text: '1 character left' }],
+    ['a'.repeat(290) + String.fromCodePoint(0x1f4aa).repeat(10), { over: false, text: '0 characters left' }],
+    ['a'.repeat(301), { over: true, text: '1 character too many' }],
+  ])('what a member types with a report has 300 characters, counted as the server counts: %#', (note, line) => {
+    expect(reportNoteLine(note)).toEqual(line);
+  });
+
+  it('staff read what reporters typed under a heading that fits how many wrote', () => {
+    expect(reportNotesTitle({ notes: [] })).toBeNull();
+    expect(reportNotesTitle({ notes: ['x'] })).toBe('What the person who reported it wrote:');
+    expect(reportNotesTitle({ notes: ['x', 'y'] })).toBe('What people who reported it wrote:');
   });
 
   it('says how many reported posts are waiting, and when the list holds only the oldest', () => {

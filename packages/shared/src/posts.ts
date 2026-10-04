@@ -18,6 +18,10 @@ export const GYM_POSTS_PAGE = 20;
 export const GYM_MEMBER_POSTS_A_DAY = 10;
 /** Reported posts the staff list carries, longest waiting first. */
 export const GYM_POST_REPORTS_SHOWN = 50;
+/** The words a person may type beside their reason for a report, by `postLength`. */
+export const GYM_POST_REPORT_NOTE_MAX = 300;
+/** What people typed that one reported post carries for staff, oldest first. */
+export const GYM_POST_REPORT_NOTES_SHOWN = 20;
 /** People stopped from posting the staff list carries. */
 export const GYM_POST_STOPS_SHOWN = 200;
 
@@ -215,7 +219,15 @@ export const gymPostPhotoParamsSchema = gymPostParamsSchema.extend({ photoId: z.
 
 // ── MEMBERS POST, REPORT, AND THE STAFF LIST (19b-ii-a; spec §15.3) ──
 
-export const reportGymPostRequestSchema = z.object({ reason: gymPostReportReasonSchema }).strict();
+/** What a person typed beside their reason: trimmed, and nothing at all is no note. */
+const reportNote = z
+  .string()
+  .max(GYM_POST_REPORT_NOTE_MAX * 2)
+  .refine((text) => !text.includes(NUL), { message: "a character that cannot be kept" })
+  .transform((text) => text.trim())
+  .refine((text) => postLength(text) <= GYM_POST_REPORT_NOTE_MAX, { message: "too many characters" });
+
+export const reportGymPostRequestSchema = z.object({ reason: gymPostReportReasonSchema, note: reportNote.optional() }).strict();
 export const reportedGymPostResponseSchema = z.object({ reported: z.literal(true) }).strict();
 
 const reasonCountsSchema = z
@@ -242,6 +254,8 @@ export const reportedGymPostsResponseSchema = z
             post: staffGymPostSchema,
             reports: z.number().int().positive(),
             reasons: reasonCountsSchema,
+            /** What reporters typed, oldest first; never who typed it. */
+            notes: z.array(z.string()).max(GYM_POST_REPORT_NOTES_SHOWN),
             firstReportedAt: z.string().datetime({ offset: true }),
           })
           .strict(),

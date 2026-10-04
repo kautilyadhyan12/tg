@@ -94,8 +94,8 @@ async function seed(): Promise<{ gymId: string; owner: string; viewer: string }>
     WHERE g.id = p.id AND p.rn % 2 = 0`;
   // The newest 60 members' posts are each reported by 40 people; 200 people are stopped.
   await sql`
-    INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason)
-    SELECT p.gym_id, p.id, m.user_id, (ARRAY['unkind','photo_of_someone','nudity','spam','other'])[1 + floor(random() * 5)::int]
+    INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason, note)
+    SELECT p.gym_id, p.id, m.user_id, (ARRAY['unkind','photo_of_someone','nudity','spam','other'])[1 + floor(random() * 5)::int], repeat('Words of a note. ', 17)
     FROM (SELECT gym_id, id FROM gym_posts WHERE gym_id = ${gymId} AND by_member ORDER BY created_at DESC LIMIT 60) p
     CROSS JOIN (SELECT user_id FROM gym_members WHERE gym_id = ${gymId} ORDER BY user_id LIMIT 40 OFFSET 10) m`;
   await sql`
@@ -184,7 +184,7 @@ const reads: [string, () => Promise<unknown>][] = [
 ];
 // A post the viewer did not write, to report: the same statement runs each time.
 const others = [...first.pinned, ...first.posts].find((p) => !p.own)?.id ?? "";
-reads.push(["member, a report", () => reportPost(deps, viewer, gymId, others, "spam")]);
+reads.push(["member, a report", () => reportPost(deps, viewer, gymId, others, "spam", "Selling things in every post")]);
 let flip = false;
 reads.push([
   "member, a reaction",

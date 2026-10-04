@@ -495,6 +495,7 @@ describe('reported posts', () => {
     post: post(id, body, { ...wendy, ...over }),
     reports: Object.values(reasons).reduce((a, b) => a + b, 0),
     reasons: { ...NO_REASONS, ...reasons },
+    notes: [],
     firstReportedAt: '2026-10-07T07:00:00.000Z',
   });
   const reportedCards = () => screen.getAllByTestId('reported-post');
@@ -518,6 +519,18 @@ describe('reported posts', () => {
     expect(within(reportedCards()[0]).getByText('Look at the state of him')).toBeTruthy();
     // Keep, Remove and Stop; a reported post is not pinned from here.
     expect(within(reportedCards()[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Keep post', 'Remove post', 'Stop them posting']);
+  });
+
+  it('shows what reporters typed, under the post it was typed about, and nothing where nobody typed', async () => {
+    const list = two();
+    list.items[0].notes = ['He says this to her every week', 'Second line\nof a note'];
+    svc.reported.mockResolvedValue(list);
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(2));
+    const notes = within(within(reportedCards()[0]).getByTestId('report-notes'));
+    expect(notes.getByText('What people who reported it wrote:')).toBeTruthy();
+    expect(notes.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['“He says this to her every week”', '“Second line\nof a note”']);
+    expect(within(reportedCards()[1]).queryByTestId('report-notes')).toBeNull();
   });
 
   it('Remove asks first, removes the post it was pressed on in one request, and the list is read again', async () => {

@@ -21,6 +21,7 @@ import {
   postedText,
   reactionButtons,
   reportBox,
+  reportNoteLine,
   stoppedNote,
   withNewPost,
   withPage,
@@ -224,7 +225,9 @@ function Photos({ gymId, post, onOpen }) {
 /** The box a member reports a post in: one reason, then Send. */
 function ReportBox({ name, gymName, busy, error, onSend, onCancel }) {
   const [reason, setReason] = useState(null);
+  const [note, setNote] = useState('');
   const box = reportBox(gymName);
+  const room = reportNoteLine(note);
   return (
     <div role="group" aria-label={box.title} className="mt-3 pt-3 flex flex-col gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
       <p className="text-sm font-semibold text-white">{box.title}</p>
@@ -239,13 +242,31 @@ function ReportBox({ name, gymName, busy, error, onSend, onCancel }) {
           </label>
         ))}
       </div>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-sm" style={{ color: 'rgba(255,255,255,0.88)' }}>
+          {box.noteLabel}
+        </span>
+        <textarea
+          rows={3}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={box.notePlaceholder}
+          disabled={busy}
+          aria-describedby={`${name}-room`}
+          className="rounded-xl px-3 py-2.5 text-sm text-white w-full"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+        />
+        <span id={`${name}-room`} className="text-xs" style={{ color: room.over ? RED : MUTED }}>
+          {room.text}
+        </span>
+      </label>
       {error !== null && (
         <p className="text-sm" role="alert" style={{ color: RED }}>
           {error}
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={busy || reason === null} onClick={() => onSend(reason)} className="rounded-xl px-3.5 text-sm font-semibold min-h-11 disabled:opacity-40" style={SOFT}>
+        <button type="button" disabled={busy || reason === null || room.over} onClick={() => onSend(reason, note)} className="rounded-xl px-3.5 text-sm font-semibold min-h-11 disabled:opacity-40" style={SOFT}>
           {busy ? 'Sending…' : box.confirm}
         </button>
         <button type="button" disabled={busy} onClick={onCancel} className="rounded-xl px-3.5 text-sm font-semibold min-h-11" style={QUIET}>
@@ -375,7 +396,7 @@ function Post({ gymId, gymName, post, busy, onReact, onOpen, onRemove, onReport 
           </div>
         </div>
       )}
-      {asking === 'report' && <ReportBox name={`report-${post.id}`} gymName={gymName} busy={working} error={error} onSend={(reason) => run(() => onReport(post, reason))} onCancel={close} />}
+      {asking === 'report' && <ReportBox name={`report-${post.id}`} gymName={gymName} busy={working} error={error} onSend={(reason, note) => run(() => onReport(post, reason, note))} onCancel={close} />}
     </li>
   );
 }
@@ -444,8 +465,8 @@ export default function Updates({ gym }) {
     setNotice('Your post has been removed.');
   };
 
-  const onReport = async (post, reason) => {
-    await postsService.report(gymId, post.id, reason);
+  const onReport = async (post, reason, note) => {
+    await postsService.report(gymId, post.id, reason, note);
     change((feed) => withPost(feed, { ...post, reported: true }));
     setNotice(reportBox(state.feed?.gymName ?? gym.name).done);
   };

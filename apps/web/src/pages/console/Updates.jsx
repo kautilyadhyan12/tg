@@ -21,6 +21,7 @@ import {
   reactorsMore,
   reactorsTitle,
   removeBox,
+  reportNotesTitle,
   reportedLine,
   reportedMore,
   reportedTitle,
@@ -289,6 +290,19 @@ function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, re
           <Flag aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <span>{reportedLine(report)}</span>
         </p>
+      ) : null}
+      {report !== null && report.notes.length > 0 ? (
+        <div className="rounded-[14px] p-4 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="report-notes">
+          <p className="c-s13 c-t2">{reportNotesTitle(report)}</p>
+          <ul className="flex flex-col gap-2">
+            {report.notes.map((note, i) => (
+              // Read once and never reordered: its position is its key.
+              <li key={i} className="c-s14 c-t1 whitespace-pre-wrap break-words">
+                {`“${note}”`}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       <div className="flex items-center gap-3">
         <span className="c-avatar" style={{ width: 40, height: 40, fontSize: 14 }} aria-hidden="true">

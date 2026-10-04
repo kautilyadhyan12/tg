@@ -339,15 +339,23 @@ export async function markRemovedOwn(tx: TransactionSql, gymId: string, postId: 
 
 /** The person's one report of this gym's post; false when the post is not there. Reported
  *  again, nothing changes. The post is held while it is written, as a reaction's is. */
-export async function insertReport(sql: SqlOrTx, gymId: string, postId: string, userId: string, reason: GymPostReportReason, at: Date): Promise<boolean> {
+export async function insertReport(
+  sql: SqlOrTx,
+  gymId: string,
+  postId: string,
+  userId: string,
+  reason: GymPostReportReason,
+  note: string | null,
+  at: Date,
+): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     WITH post AS (
       SELECT p.gym_id, p.id FROM gym_posts p
       WHERE p.gym_id = ${gymId} AND p.id = ${postId} AND p.removed_at IS NULL
       FOR SHARE
     ), made AS (
-      INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason, created_at)
-      SELECT post.gym_id, post.id, ${userId}, ${reason}, ${at} FROM post
+      INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason, note, created_at)
+      SELECT post.gym_id, post.id, ${userId}, ${reason}, ${note}, ${at} FROM post
       ON CONFLICT (post_id, user_id) DO NOTHING
     )
     SELECT id FROM post`;
@@ -413,6 +421,21 @@ export async function openReportReasons(sql: SqlOrTx, gymId: string, postIds: re
     WHERE gym_id = ${gymId} AND closed_at IS NULL AND post_id = ANY (${[...postIds]}::uuid[])
     GROUP BY post_id, reason`;
   return rows.map((r) => ({ postId: r.post_id, reason: r.reason, count: r.n }));
+}
+
+/** What the people who reported these posts typed, on reports still open: each post's
+ *  oldest first, `limit` a post. */
+export async function openReportNotes(sql: SqlOrTx, gymId: string, postIds: readonly string[], limit: number): Promise<{ postId: string; note: string }[]> {
+  if (postIds.length === 0) return [];
+  const rows = await sql<{ post_id: string; note: string }[]>`
+    SELECT post_id, note FROM (
+      SELECT post_id, note, created_at, id, row_number() OVER (PARTITION BY post_id ORDER BY created_at, id) AS rn
+      FROM gym_post_reports
+      WHERE gym_id = ${gymId} AND closed_at IS NULL AND note IS NOT NULL AND post_id = ANY (${[...postIds]}::uuid[])
+    ) r
+    WHERE rn <= ${limit}
+    ORDER BY post_id, created_at, id`;
+  return rows.map((r) => ({ postId: r.post_id, note: r.note }));
 }
 
 /** Stops the person posting at this gym; false when they already were. */

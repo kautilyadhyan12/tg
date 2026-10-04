@@ -16,6 +16,7 @@ import {
   GYM_POST_REACTIONS,
   GYM_POST_REACTORS_SHOWN,
   GYM_POST_REPORTS_SHOWN,
+  GYM_POST_REPORT_NOTES_SHOWN,
   GYM_POST_REPORT_REASONS,
   GYM_POST_STOPS_SHOWN,
   GYM_POST_WORDS,
@@ -455,14 +456,22 @@ export async function react(
   return gymPostReactionResponseSchema.parse({ reactions: countsOf(counts, postId), mine: reaction });
 }
 
-/** A member reports a post, once. Nothing is written about who reported except the report
- *  itself, and staff are never sent it. */
-export async function report(deps: Pick<PostsDeps, "sql" | "now">, userId: string, gymId: string, postId: string, reason: GymPostReportReason): Promise<true> {
+/** A member reports a post, once, with a reason and anything they typed beside it. Nothing
+ *  is written about who reported except the report itself, and staff are never sent it. */
+export async function report(
+  deps: Pick<PostsDeps, "sql" | "now">,
+  userId: string,
+  gymId: string,
+  postId: string,
+  reason: GymPostReportReason,
+  note: string | undefined,
+): Promise<true> {
   await requireMember(deps, gymId, userId);
   const post = await repo.postById(deps.sql, gymId, postId);
   if (post === null) throw postNotFound();
   if (post.authorId === userId) throw new OrgsError(400, "own_post", GYM_POST_WORDS.own_report);
-  if (!(await repo.insertReport(deps.sql, gymId, postId, userId, reason, deps.now()))) throw postNotFound();
+  const typed = note === undefined || note === "" ? null : note;
+  if (!(await repo.insertReport(deps.sql, gymId, postId, userId, reason, typed, deps.now()))) throw postNotFound();
   return true;
 }
 
@@ -473,9 +482,11 @@ export async function getReported(deps: Pick<PostsDeps, "sql">, staffId: string,
   const { org } = await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   const rows = await repo.reportedPosts(deps.sql, gymId, GYM_POST_REPORTS_SHOWN);
-  const [posts, reasons] = await Promise.all([
+  const ids = rows.map((r) => r.post.id);
+  const [posts, reasons, notes] = await Promise.all([
     staffShaped(deps, gymId, rows.map((r) => r.post), staffId),
-    repo.openReportReasons(deps.sql, gymId, rows.map((r) => r.post.id)),
+    repo.openReportReasons(deps.sql, gymId, ids),
+    repo.openReportNotes(deps.sql, gymId, ids, GYM_POST_REPORT_NOTES_SHOWN),
   ]);
   return reportedGymPostsResponseSchema.parse({
     gymId,
@@ -489,7 +500,8 @@ export async function getReported(deps: Pick<PostsDeps, "sql">, staffId: string,
         const reason = GYM_POST_REPORT_REASONS.find((known) => known === r.reason);
         if (r.postId === row.post.id && reason !== undefined) counts[reason] = r.count;
       }
-      return [{ post, reports: row.reports, reasons: counts, firstReportedAt: row.firstAt.toISOString() }];
+      const typed = notes.filter((n) => n.postId === row.post.id).map((n) => n.note);
+      return [{ post, reports: row.reports, reasons: counts, notes: typed, firstReportedAt: row.firstAt.toISOString() }];
     }),
   });
 }

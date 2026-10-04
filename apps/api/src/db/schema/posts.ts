@@ -106,6 +106,8 @@ export const gymPostReports = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     reason: text("reason").notNull(),
+    /** What the person typed beside their reason, if anything. */
+    note: text("note"),
     createdAt: createdAt(),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     outcome: text("outcome"),
@@ -114,6 +116,7 @@ export const gymPostReports = pgTable(
     foreignKey({ name: "gym_post_reports_post_fk", columns: [t.gymId, t.postId], foreignColumns: [gymPosts.gymId, gymPosts.id] }).onDelete("cascade"),
     unique("gym_post_reports_one_each_uq").on(t.postId, t.userId),
     check("gym_post_reports_reason_check", sql`${t.reason} IN ('unkind','photo_of_someone','nudity','spam','other')`),
+    check("gym_post_reports_note_check", sql`char_length(${t.note}) BETWEEN 1 AND 300`),
     check("gym_post_reports_outcome_check", sql`${t.outcome} IN ('removed','kept')`),
     check("gym_post_reports_closed_check", sql`(${t.closedAt} IS NULL) = (${t.outcome} IS NULL)`),
     index("gym_post_reports_open_idx").on(t.gymId, t.postId).where(sql`${t.closedAt} IS NULL`),

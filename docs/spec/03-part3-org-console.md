@@ -2710,8 +2710,10 @@ per-address ceiling).
 **As built in 19b-ii-a (2026-10-04): Report, the staff list, stopping a person.** Every
 post a member did not write carries **Report** with one of five reasons (Bullying or
 unkind · A photo of someone who didn't agree to it · Nudity or sexual · Spam or selling ·
-Something else): `POST …/posts/:postId/report`, one a person a post
-(`gym_post_reports`). **Nobody is told who reported**: staff are sent how many and why,
+Something else) and, if the member wants, up to 300 characters typed beside it (Kd's
+click-through, RULINGS 2026-10-05; a reason is still picked): `POST …/posts/:postId/report`,
+one a person a post (`gym_post_reports`). Staff read what was typed under the post it was
+typed about, 20 notes a post at most, never who typed it. **Nobody is told who reported**: staff are sent how many and why,
 never who, and no audit line names the reporter. Staff holding `posts.manage` (the one
 tick, as 19b-i decided) see **reported posts** at the top of the console's Updates page,
 longest waiting first, 50 at most (`GET …/posts/reported`): **Remove post** is the

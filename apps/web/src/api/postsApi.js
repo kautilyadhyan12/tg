@@ -50,8 +50,13 @@ export const postsService = {
   add: (gymId, postKey, body, photos) => readThrough(gymPostResponseSchema, 'your post', authApi.post(`${gymPath(gymId)}/mine`, { postKey, body, photos })),
   /** Removes the member's own post. */
   removeOwn: (gymId, postId) => readThrough(removedGymPostResponseSchema, 'the change', authApi.delete(`${gymPath(gymId)}/mine/${encodeURIComponent(postId)}`)),
-  /** Reports a post to the gym's staff, with why. */
-  report: (gymId, postId, reason) => readThrough(reportedGymPostResponseSchema, 'your report', authApi.post(`${postPath(gymId, postId)}/report`, { reason })),
+  /** Reports a post to the gym's staff, with why and anything the member typed. */
+  report: (gymId, postId, reason, note) =>
+    readThrough(
+      reportedGymPostResponseSchema,
+      'your report',
+      authApi.post(`${postPath(gymId, postId)}/report`, note.trim() === '' ? { reason } : { reason, note: note.trim() }),
+    ),
 };
 
 // THE CONSOLE'S UPDATES PAGE: for staff holding `posts.manage`. The server refuses anyone

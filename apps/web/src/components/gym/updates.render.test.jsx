@@ -288,9 +288,30 @@ describe('removing one’s own post, and reporting somebody else’s', () => {
     fireEvent.click(box.getByRole('radio', { name: "A photo of someone who didn't agree to it" }));
     fireEvent.click(send);
     await waitFor(() => expect(within(posts()[0]).getByText('Reported')).toBeTruthy());
-    expect(svc.report.mock.calls).toEqual([['g1', 'theirs', 'photo_of_someone']]);
+    // Nothing typed: the reason alone.
+    expect(svc.report.mock.calls).toEqual([['g1', 'theirs', 'photo_of_someone', '']]);
     expect(within(posts()[0]).queryByRole('group', { name: 'Report this post' })).toBeNull();
     expect(screen.getByRole('status').textContent).toBe('Reported. The staff at Iron House will look at it.');
+  });
+
+  it('a member can type more beside the reason: it is sent with the report, and too much holds Send', async () => {
+    svc.list.mockResolvedValue(three());
+    svc.report.mockResolvedValue({ reported: true });
+    render(<Updates gym={GYM} />);
+    await waitFor(() => expect(posts()).toHaveLength(3));
+    fireEvent.click(button(posts()[0], 'Report'));
+    const box = within(within(posts()[0]).getByRole('group', { name: 'Report this post' }));
+    const more = box.getByRole('textbox', { name: /Tell the staff more/ });
+    expect(box.getByText('300 characters left')).toBeTruthy();
+    fireEvent.click(box.getByRole('radio', { name: 'Bullying or unkind' }));
+    fireEvent.change(more, { target: { value: 'a'.repeat(301) } });
+    expect(box.getByText('1 character too many')).toBeTruthy();
+    expect(box.getByRole('button', { name: 'Send report' }).disabled).toBe(true);
+    // Typing alone, with no reason picked, never sends: the reason is still asked.
+    fireEvent.change(more, { target: { value: 'He says this to her every week' } });
+    fireEvent.click(box.getByRole('button', { name: 'Send report' }));
+    await waitFor(() => expect(within(posts()[0]).getByText('Reported')).toBeTruthy());
+    expect(svc.report.mock.calls).toEqual([['g1', 'theirs', 'unkind', 'He says this to her every week']]);
   });
 
   it('a report that fails says so, keeps the box open, and Cancel sends nothing', async () => {
