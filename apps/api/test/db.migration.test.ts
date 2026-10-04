@@ -2523,11 +2523,14 @@ d("0001_init on a real database", () => {
         INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
         VALUES (${gymId}, 'First',  ${`m34a-${gymId.slice(0, 8)}@example.com`}, ${"a".repeat(64)}, 'upload'),
                (${gymId}, 'Second', ${`m34b-${gymId.slice(0, 8)}@example.com`}, ${"b".repeat(64)}, 'upload')`;
-      const seqs = await sql<{ full_name: string; listed_seq: string }[]>`
-        SELECT full_name, listed_seq::text FROM gym_member_list_entries
+      // The number is read under a name of its own: an output column called `listed_seq`
+      // would be what ORDER BY sorts, as TEXT, and "10" sorts before "9" (it failed in CI
+      // the day the two rows drew 9 and 10).
+      const seqs = await sql<{ full_name: string; seq: string }[]>`
+        SELECT full_name, listed_seq::text AS seq FROM gym_member_list_entries
         WHERE gym_id = ${gymId} ORDER BY listed_seq`;
       expect(seqs.map((r) => r.full_name)).toEqual(["First", "Second"]);
-      expect(seqs[0]?.listed_seq).not.toBe(seqs[1]?.listed_seq);
+      expect(seqs[0]?.seq).not.toBe(seqs[1]?.seq);
     } finally {
       await sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
       await sql`DELETE FROM gyms WHERE id = ${gymId}`;
