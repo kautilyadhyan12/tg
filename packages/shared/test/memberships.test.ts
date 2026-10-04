@@ -12,6 +12,7 @@ import {
   currencyDecimals,
   formatMinor,
   isDayPass,
+  isVisibleText,
   memberCurrencyForCountry,
   minorToPriceText,
   priceToMinor,
@@ -228,12 +229,11 @@ describe("what a gym may save as a membership type", () => {
       { ...monthly, name: "Gold\nMonthly" },
       // Half an emoji, and the characters that make two names look like one.
       { ...monthly, name: "Gold \ud83d" },
-      { ...monthly, name: "Gold​" },
-      { ...monthly, name: "Go‍ld" },
-      { ...monthly, name: "‮Gold" },
-      { ...monthly, name: "Gold⁦" },
-      { ...monthly, name: "Go﻿ld" },
-      { ...monthly, description: "Open gym​" },
+      { ...monthly, name: "Gold\u200b" },
+      { ...monthly, name: "\u202eGold" },
+      { ...monthly, name: "Gold\u2066" },
+      { ...monthly, name: "Go\ufeffld" },
+      { ...monthly, description: "Open gym\u200b" },
       { ...monthly, description: "Open \ud83d gym" },
       { ...monthly, kind: "day_pass" },
       { ...monthly, termCount: 0 },
@@ -243,6 +243,16 @@ describe("what a gym may save as a membership type", () => {
   });
 
   it("takes a whole emoji and any alphabet in a name", () => {
+    // A joined emoji (woman lifting weights), and Hindi and Persian typed with their joiners.
+    for (const name of [
+      "Strong \ud83c\udfcb\ufe0f\u200d\u2640\ufe0f",
+      "\u0915\u094d\u200d\u0937",
+      "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645",
+    ]) {
+      expect(ok({ ...monthly, name }), name).toBe(true);
+      expect(isVisibleText(name)).toBe(true);
+    }
+    expect(isVisibleText("Gold\u200b")).toBe(false);
     for (const name of ["Gold 💪", "سنوي", "月会費", "Café & Gym – Monthly"]) {
       expect(ok({ ...monthly, name }), name).toBe(true);
     }

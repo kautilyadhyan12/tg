@@ -215,6 +215,17 @@ describe('the form', () => {
       packDays: '1 class used within 1 day is a day pass. Add it as a Day pass, or change a number.',
     });
     expect(draftProblems(named({ choice: 'pack', packClasses: '1', packDays: '2' }), 'USD')).toBeNull();
+    // However the 1 is typed.
+    expect(draftProblems(named({ choice: 'pack', packClasses: '01', packDays: ' 1 ' }), 'USD')?.packDays).toMatch(/is a day pass/);
+    // A hidden character pasted into the name or the description is said here, in plain words,
+    // not left for the server's "invalid_string".
+    const hidden = 'Something hidden was pasted in with this. Delete it and type it again.';
+    expect(draftProblems(named({ name: 'Gold\u200b' }), 'USD')).toEqual({ name: hidden });
+    expect(draftProblems(named({ name: '\u202eGold' }), 'USD')).toEqual({ name: hidden });
+    expect(draftProblems(named({ description: 'Open\ufeff gym' }), 'USD')).toEqual({ description: hidden });
+    // A joined emoji and a Hindi word typed with its joiner are names like any other.
+    expect(draftProblems(named({ name: 'Strong \ud83c\udfcb\ufe0f\u200d\u2640\ufe0f' }), 'USD')).toBeNull();
+    expect(draftProblems(named({ name: '\u0915\u094d\u200d\u0937' }), 'USD')).toBeNull();
     // A box the kind does not use is not checked.
     expect(draftProblems(named({ choice: 'day_pass', termCount: '', packClasses: '', bookingsLimit: '' }), 'USD')).toBeNull();
     expect(draftProblems(named({ choice: 'pack', termCount: '' }), 'USD')).toBeNull();

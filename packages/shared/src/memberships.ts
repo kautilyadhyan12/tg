@@ -106,7 +106,7 @@ export const gymMembershipTypeSchema = z
     updatedAt: z.string().datetime({ offset: true }),
   })
   .strict();
-export type GymMembershipType= z.infer<typeof gymMembershipTypeSchema>;
+export type GymMembershipType = z.infer<typeof gymMembershipTypeSchema>;
 
 /** The whole price list. `currency` is what a NEW type would be priced in, null
  *  where the gym's country has none; `classChoices` are the gym's live classes,
@@ -124,8 +124,14 @@ export type GymMembershipTypesResponse = z.infer<typeof gymMembershipTypesRespon
 
 /** Text a gym types that is printed as a name: no control characters, no half of a
  *  surrogate pair (Postgres refuses one inside JSON), and none of the invisible or
- *  direction-turning characters that make two names look like one. */
-const VISIBLE_TEXT = /^[^\p{Cc}\p{Cs}​-‏‪-‮⁦-⁩﻿]*$/u;
+ *  direction-turning characters that make two names look like one. The two joiners
+ *  (U+200C, U+200D) are let through: Hindi, Persian and joined emoji are typed with them. */
+const VISIBLE_TEXT = /^[^\p{Cc}\p{Cs}\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]*$/u;
+
+/** Whether a name or description holds nothing hidden, as the server will ask. */
+export function isVisibleText(text: string): boolean {
+  return VISIBLE_TEXT.test(text);
+}
 
 const membershipTypeFields = {
   name: z.string().trim().min(1).max(MEMBERSHIP_NAME_MAX).regex(VISIBLE_TEXT),
@@ -196,9 +202,13 @@ let knownCurrencies: ReadonlySet<string> | null = null;
  *  null for a code the platform does not list: the formatter alone would give a
  *  well-formed unknown code 2. */
 export function currencyDecimals(currency: string): number | null {
-  knownCurrencies ??= new Set(Intl.supportedValuesOf("currency"));
-  if (!knownCurrencies.has(currency)) return null;
   try {
+    // A browser too old to list its currencies still formats them: only then is
+    // the formatter's answer taken alone.
+    if (typeof Intl.supportedValuesOf === "function") {
+      knownCurrencies ??= new Set(Intl.supportedValuesOf("currency"));
+      if (!knownCurrencies.has(currency)) return null;
+    }
     return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions()
       .maximumFractionDigits ?? null;
   } catch {

@@ -12,6 +12,7 @@ import {
   currencyDecimals,
   formatMinor,
   isDayPass,
+  isVisibleText,
   minorToPriceText,
   priceToMinor,
 } from '@app/shared';
@@ -217,14 +218,20 @@ export const NOT_SAVED = 'Not saved yet. Fix what is marked in red above.';
  *  gone: the pack form sends the gym to the right choice. */
 export const PACK_IS_DAY_PASS = '1 class used within 1 day is a day pass. Add it as a Day pass, or change a number.';
 
+/** A name or description holding a character nobody can see, usually pasted in. */
+export const HIDDEN_TEXT = 'Something hidden was pasted in with this. Delete it and type it again.';
+
 /** What is wrong with the form, one sentence a field, or null when it can be saved. */
 export function draftProblems(draft, currency) {
   const problems = {};
   const name = draft.name.trim();
   if (name === '') problems.name = 'Give it a name, like Gold Monthly.';
   else if (name.length > MEMBERSHIP_NAME_MAX) problems.name = `Keep the name to ${String(MEMBERSHIP_NAME_MAX)} letters.`;
+  else if (!isVisibleText(name)) problems.name = HIDDEN_TEXT;
   if (draft.description.trim().length > MEMBERSHIP_DESCRIPTION_MAX) {
     problems.description = `Keep the description to ${String(MEMBERSHIP_DESCRIPTION_MAX)} letters.`;
+  } else if (!isVisibleText(draft.description.trim())) {
+    problems.description = HIDDEN_TEXT;
   }
   if (priceToMinor(draft.price, currency) === null) {
     problems.price = `Type the price as a number, like ${priceExample(currency)}. Type 0 for free.`;
@@ -239,7 +246,7 @@ export function draftProblems(draft, currency) {
     if (wholeNumber(draft.packDays, 1, MEMBERSHIP_PACK_DAYS_MAX) === null) {
       problems.packDays = `Type how many days, from 1 to ${String(MEMBERSHIP_PACK_DAYS_MAX)}.`;
     }
-    if (problems.packClasses === undefined && problems.packDays === undefined && draft.packClasses.trim() === '1' && draft.packDays.trim() === '1') {
+    if (problems.packClasses === undefined && problems.packDays === undefined && wholeNumber(draft.packClasses, 1, 1) === 1 && wholeNumber(draft.packDays, 1, 1) === 1) {
       problems.packDays = PACK_IS_DAY_PASS;
     }
   }

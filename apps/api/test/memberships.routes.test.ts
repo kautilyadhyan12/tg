@@ -677,11 +677,10 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
 
       const hidden: [string, string][] = [
         ["half an emoji", "Gold \ud83d"],
-        ["a zero-width space", "Mine​"],
-        ["a zero-width joiner", "Mi‍ne"],
-        ["a right-to-left override", "‮Mine"],
-        ["a directional isolate", "Mine⁦"],
-        ["a byte-order mark", "Mi﻿ne"],
+        ["a zero-width space", "Mine\u200b"],
+        ["a right-to-left override", "\u202eMine"],
+        ["a directional isolate", "Mine\u2066"],
+        ["a byte-order mark", "Mi\ufeffne"],
         ["a NUL", "Mine\u0000"],
       ];
       for (const [what, name] of hidden) {
@@ -689,7 +688,10 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
         expect((await post(typesUrl(gymId), monthly({ name: "Fine", description: name }), owner.cookies)).statusCode, `${what}, in the description`).toBe(400);
         expect((await putType(gymId, id, monthly({ name }), owner.cookies)).statusCode, `${what}, on a change`).toBe(400);
       }
-      // A whole emoji and other alphabets are names like any other.
+      // A whole emoji, a joined one, and other alphabets with their joiners are names like any other.
+      await addType(gymId, owner.cookies, monthly({ name: "Strong \ud83c\udfcb\ufe0f\u200d\u2640\ufe0f" }));
+      await addType(gymId, owner.cookies, monthly({ name: "\u0915\u094d\u200d\u0937" }));
+      await sql`DELETE FROM gym_membership_types WHERE gym_id = ${gymId} AND name NOT IN ('Mine')`;
       await addType(gymId, owner.cookies, monthly({ name: "Gold 💪" }));
       await addType(gymId, owner.cookies, monthly({ name: "سنوي" }));
       expect((await rowsOf(gymId)).map((r) => r.name).sort()).toEqual(["Gold 💪", "Mine", "سنوي"].sort());
