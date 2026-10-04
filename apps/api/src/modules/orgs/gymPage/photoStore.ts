@@ -17,13 +17,20 @@ export interface PhotoStore {
 }
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const KEY = new RegExp(`^gym-page/${UUID}/${UUID}\\.(jpg|png|webp)$`);
+/** `gym-page/…` is a gym page's photo, `gym-post/…` a photo on one of its posts (19b-i). */
+const KEY = new RegExp(`^gym-(page|post)/${UUID}/${UUID}\\.(jpg|png|webp)$`);
 
 const EXTENSION = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as const;
 
 export function photoKey(gymId: string, photoId: string, type: keyof typeof EXTENSION): string {
   // An id may arrive in capitals (a UUID is the same either way); a key is always lower case.
   const key = `gym-page/${gymId.toLowerCase()}/${photoId.toLowerCase()}.${EXTENSION[type]}`;
+  if (!KEY.test(key)) throw new Error("photo key out of shape");
+  return key;
+}
+
+export function postPhotoKey(gymId: string, photoId: string, type: keyof typeof EXTENSION): string {
+  const key = `gym-post/${gymId.toLowerCase()}/${photoId.toLowerCase()}.${EXTENSION[type]}`;
   if (!KEY.test(key)) throw new Error("photo key out of shape");
   return key;
 }

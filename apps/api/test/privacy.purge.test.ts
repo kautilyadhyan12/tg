@@ -74,6 +74,9 @@ d("DPDP Day-14 purge (real Postgres)", () => {
   const sql = postgres(url ?? "", { max: 4 });
   let exerciseId = "";
   let challengeId = "";
+  let postOwnerId = "";
+  let postGymId = "";
+  let postId = "";
   const madeUsers: string[] = [];
   const madeEmails: string[] = [];
 
@@ -89,6 +92,15 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       VALUES ('global', 'dpdp_test_fixture', current_date, current_date + 7)
       RETURNING id`;
     challengeId = ch[0]?.id ?? "";
+    // A gym's post for the fixtures to react to (gym_post_reactions, ROADMAP 19b-i).
+    const postOwner = await sql<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('DPDP post fixture owner') RETURNING id`;
+    postOwnerId = postOwner[0]?.id ?? "";
+    const postGym = await sql<{ id: string }[]>`
+      INSERT INTO gyms (slug, name, owner_user_id) VALUES (${`dpdp-post-${randomUUID()}`}, 'DPDP post fixture', ${postOwnerId}) RETURNING id`;
+    postGymId = postGym[0]?.id ?? "";
+    const post = await sql<{ id: string }[]>`
+      INSERT INTO gym_posts (gym_id, author_user_id, post_key, body) VALUES (${postGymId}, ${postOwnerId}, gen_random_uuid(), 'fixture post') RETURNING id`;
+    postId = post[0]?.id ?? "";
   });
 
   afterAll(async () => {
@@ -104,6 +116,8 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       await sql`DELETE FROM users WHERE id = ANY(${madeUsers})`;
     }
     if (challengeId !== "") await sql`DELETE FROM challenges WHERE id = ${challengeId}`;
+    if (postGymId !== "") await sql`DELETE FROM gyms WHERE id = ${postGymId}`;
+    if (postOwnerId !== "") await sql`DELETE FROM users WHERE id = ${postOwnerId}`;
     await sql.end();
   });
 
@@ -136,6 +150,8 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     // The rings' own numbers (7a-iv-e): deleted at Day 14 like the profile.
     await sql`INSERT INTO user_nutrition_targets (user_id, source, kcal, protein_g, carbs_g, fat_g)
               VALUES (${userId}, 'own', 2100, 150, 200, 70)`;
+    // A reaction to a gym's post (19b-i): the person's own tap.
+    await sql`INSERT INTO gym_post_reactions (gym_id, post_id, user_id, reaction) VALUES (${postGymId}, ${postId}, ${userId}, 'like')`;
     // Kept after the purge, as proof (tables.ts) — asserted to survive below.
     await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
               VALUES (${userId}, 'sign_up', 'v1', 'fixture wording', 'test')`;

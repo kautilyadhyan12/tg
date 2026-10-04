@@ -132,7 +132,7 @@ export async function setGymPage(
 // see them. A photo is cleaned (`photoBytes.ts`) before anything is stored: what is
 // kept is the picture, never where it was taken.
 
-const PHOTO_PROBLEM_STATUS: Record<PhotoProblem, { code: string; message: string }> = {
+export const PHOTO_PROBLEM_STATUS: Record<PhotoProblem, { code: string; message: string }> = {
   too_big: { code: "photo_too_big", message: GYM_PAGE_PHOTO_WORDS.too_big },
   not_a_photo: { code: "photo_not_a_photo", message: GYM_PAGE_PHOTO_WORDS.not_a_photo },
   damaged: { code: "photo_damaged", message: GYM_PAGE_PHOTO_WORDS.damaged },

@@ -122,6 +122,9 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
 
   user_nutrition_targets: (sql, u) =>
     sql<Row[]>`SELECT * FROM user_nutrition_targets WHERE user_id = ${u}`,
+
+  gym_post_reactions: (sql, u) =>
+    sql<Row[]>`SELECT * FROM gym_post_reactions WHERE user_id = ${u} ORDER BY created_at, post_id`,
 };
 
 /** The most consent rows one export carries. Thirty taps an hour is the route's

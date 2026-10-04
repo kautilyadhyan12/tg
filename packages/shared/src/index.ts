@@ -40,3 +40,4 @@ export * from "./robotCheck.js";
 export * from "./staffInvites.js";
 export * from "./checkin.js";
 export * from "./leaderboard.js";
+export * from "./posts.js";
