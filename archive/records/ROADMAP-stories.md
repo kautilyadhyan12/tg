@@ -247,3 +247,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **17a-i, as it stood when it was built (merged 2026-10-04, PR #166):**
 
 - 17a-i. [ ] **The gym's price list**: Settings → Memberships; add, change, archive and put back a type (repeating · one time · pack · day pass · trial), its price in the country's own money, what it includes; the "Change membership types and prices" tick.
+
+**17a-ii, as it stood when it was built (merged 2026-10-04, PR #168):**
+
+- 17a-ii. [ ] **A person's membership**: given on their page (type and start; the end or renewal worked out), ONE pure status rule with its exhaustive test, "paid" marked by hand until Part 5.
