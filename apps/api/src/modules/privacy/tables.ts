@@ -63,6 +63,10 @@ export const DIRECT_DELETE_TABLES = [
   // A member's reactions to their gym's posts (migration 0071; ROADMAP 19b-i): the
   // person's own taps, deleted at Day 14 and exported.
   "gym_post_reactions",
+  // A member's reports of posts, and a gym's stop on their posting (migration 0072;
+  // ROADMAP 19b-ii-a): about the person, deleted at Day 14 and exported.
+  "gym_post_reports",
+  "gym_post_stops",
   // §5.2's Day-0 sentence already says "push tokens deleted", so clearing
   // them again at Day 14 is not a widening (R0.2) — it is the same
   // defence-in-depth as workout_sets. T3 F5 probe-confirmed that a row
@@ -386,7 +390,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_posts.author_user_id and removed_by_user_id — which member of staff posted one of
   // the gym's Updates and who removed it (`0071`), on gym_page_photos' footing: the gym's
   // own announcement; `ON DELETE set null`, and a post whose author's account is not
-  // active is shown under the gym's name.
+  // active is shown under the gym's name. A post the person made as a MEMBER
+  // (`by_member`, `0072`) is theirs, not the gym's: hidden from the day the account is
+  // deleted, deleted at Day 14 with its photos by a statement of its own in `repo.ts`,
+  // and exported (`exportRepo.ts`, `selectExportMemberPosts`).
   "gym_posts",
   // gym_staff_invites.invited_by and answered_by — who sent a staff invitation and who
   // accepted, declined or cancelled it (`0059`), on gym_leads' footing: the gym's record;

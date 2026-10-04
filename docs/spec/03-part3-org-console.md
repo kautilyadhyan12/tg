@@ -2680,6 +2680,22 @@ item 4). A gym whose plan has lapsed: its members are sent no posts and no photo
 its staff can read but not post, pin or remove. Members' own posts, the gym's switch
 for them and the safety tools of §15.3 are 19b-ii; video is 19b-iii.
 
+**As built in 19b-ii-a (2026-10-04): members post.** The Updates page carries a switch,
+**Members can post** (`gyms.members_can_post`, off to start, the tick's to change). While
+it is on, a live app member writes a post on their gym's Updates tab: the same words and
+photos as staff (`POST …/posts/mine`, one key a post), **10 in any 24 hours** counted in
+the database with the person's membership held (a removed post gives none back), and who
+may post is settled before the body is read, as for staff. A member's post is marked
+`by_member`; it is shown under their first name and last initial ("A member" with no
+name), staff posts carry the word "Staff", and the console marks a member's post with the
+gym's word for a member. **A member's post stays until they or staff remove it** (RULINGS
+2026-10-04: the one-week life of 2026-08-25 is replaced); they remove their own
+(`DELETE …/posts/mine/:postId`). **It is the person's, not the gym's:** it and its photos
+are shown only while its writer is a live app member of the gym with an active account
+(leave, be removed or delete the account and they are gone for everyone; rejoin and they
+are back), it is deleted with its photo files at the account's Day 14, and it is in the
+person's export. Switching the switch off leaves the posts already made.
+
 ### 15.3 Keeping it safe — what Apple (guideline 1.2) and Google ask of any app where people post
 
 **Report** on every post, with a reason; reports land in a staff queue
@@ -2690,6 +2706,23 @@ A support address is shown. Kd can remove any post and pause any gym (RULINGS
 2026-08-27). Everyone here is a real, invited member under their own name, which is
 the main protection; rate limits stop a flood (10 posts a day a member, with the usual
 per-address ceiling).
+
+**As built in 19b-ii-a (2026-10-04): Report, the staff list, stopping a person.** Every
+post a member did not write carries **Report** with one of five reasons (Bullying or
+unkind · A photo of someone who didn't agree to it · Nudity or sexual · Spam or selling ·
+Something else): `POST …/posts/:postId/report`, one a person a post
+(`gym_post_reports`). **Nobody is told who reported**: staff are sent how many and why,
+never who, and no audit line names the reporter. Staff holding `posts.manage` (the one
+tick, as 19b-i decided) see **reported posts** at the top of the console's Updates page,
+longest waiting first, 50 at most (`GET …/posts/reported`): **Remove post** is the
+removal of §15.2, one request, gone for everyone with its photos, the reports answered
+"removed"; **Keep post** answers them "kept" (`POST …/posts/:postId/keep`), the post
+stays, and only a NEW person's report brings it back. **Stop them posting** on a member's
+post (`PUT` · `DELETE …/posts/stopped/:userId`, `gym_post_stops`): that person cannot post
+at this gym until staff let them again, still reads and reacts, their posts stay, and the
+page lists who is stopped. A gym whose plan has lapsed reads the list and answers nothing.
+Block, the bad-words hold and the support address are 19b-ii-b; a person's posts on their
+profile (RULINGS 2026-10-02, 2026-10-03) are 19b-ii-c.
 
 ### 15.4 Events
 

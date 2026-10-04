@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { GYM_POST_MAX_CHARS, ROLE_PRIVILEGES, addGymPostRequestSchema, gymPostSchema, gymPostsQuerySchema } from '@app/shared';
 import {
+  REPORT_REASONS,
   addPostPhotos,
   authorInitials,
   authorName,
+  authorTag,
   canManagePosts,
   canPost,
   charsLine,
   emptyLine,
+  memberCanPost,
+  memberPostHint,
+  memberPostsSwitch,
+  ownRemoveBox,
   photoProblem,
   pinNote,
   postedText,
@@ -15,9 +21,17 @@ import {
   reactorsMore,
   reactorsTitle,
   removeBox,
+  reportBox,
+  reportedLine,
+  reportedMore,
+  reportedTitle,
+  stopBox,
+  stoppedNote,
+  withNewPost,
   withPage,
   withPinChange,
   withPost,
+  withStopped,
   withoutPost,
   withReaction,
 } from './postsView';
@@ -31,10 +45,13 @@ const post = (over = {}) => ({
   createdAt: '2026-10-07T06:30:00.000Z',
   reactions: { like: 0, love: 0, strong: 0, fire: 0 },
   mine: null,
+  fromMember: false,
+  own: false,
+  reported: false,
   ...over,
 });
-const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', pinned: [], posts: [], next: null, ...over });
-const WORDS = { people: 'members' };
+const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', posting: 'off', pinned: [], posts: [], next: null, ...over });
+const WORDS = { people: 'members', peopleCap: 'Members' };
 
 describe('who may open the console’s Updates page', () => {
   it.each([
@@ -252,5 +269,130 @@ describe('the list as it changes', () => {
     const next = withPost(given, post({ id: 'pin', mine: 'fire' }));
     expect(next.pinned[0].mine).toBe('fire');
     expect(withPost(given, post({ id: 'b', body: 'changed' })).posts.map((p) => p.body)).toEqual(['New squat racks arrive Monday', 'changed']);
+  });
+});
+
+describe('a member’s own post', () => {
+  it('is never taken for the gym’s word: staff posts are marked, a member’s is not', () => {
+    expect(authorTag(post())).toBe('Staff');
+    expect(authorTag(post({ fromMember: true }))).toBeNull();
+    // A staff post with no name shows the gym's own name, so it needs no mark.
+    expect(authorTag(post({ author: { name: null, initials: '' } }))).toBeNull();
+  });
+
+  it('a member with no name to show is "A member", never the gym', () => {
+    const nameless = post({ fromMember: true, author: { name: null, initials: '' } });
+    expect(authorName(nameless, 'Iron House')).toBe('A member');
+    expect(authorInitials(nameless, 'Iron House')).toBe('M');
+    expect(authorName(post({ author: { name: null, initials: '' } }), 'Iron House')).toBe('Iron House');
+  });
+
+  it.each([
+    ['on', 'shown', true, null],
+    ['off', 'shown', false, null],
+    ['stopped', 'shown', false, 'The staff at Iron House have stopped you posting here. Speak to them at the front desk.'],
+    ['on', 'paused', false, null],
+  ])('posting %s on a page that is %s: the box is %s', (posting, status, box, note) => {
+    const f = feed({ posting, status });
+    expect(memberCanPost(f)).toBe(box);
+    expect(stoppedNote(f)).toBe(note);
+  });
+
+  it('an empty page invites the first post only where a member can write one', () => {
+    expect(emptyLine(feed({ posting: 'on' }))).toBe('No posts yet. Write the first one.');
+    expect(emptyLine(feed({ posting: 'stopped' }))).toBe("Iron House hasn't posted anything yet.");
+    expect(emptyLine(feed({ posting: 'on', posts: [post()] }))).toBeNull();
+  });
+
+  it('says who sees a post and the day’s limit', () => {
+    expect(memberPostHint('Iron House')).toBe(
+      'Everyone at Iron House in the app sees it straight away. You can post 10 times a day. Where a photo was taken is never kept.',
+    );
+  });
+
+  it('a new post goes to the top of the unpinned ones, once', () => {
+    const f = feed({ pinned: [post({ id: 'pin', pinned: true })], posts: [post({ id: 'a' })] });
+    const made = post({ id: 'new' });
+    const once = withNewPost(f, made);
+    expect(once.posts.map((p) => p.id)).toEqual(['new', 'a']);
+    expect(withNewPost(once, made).posts.map((p) => p.id)).toEqual(['new', 'a']);
+    expect(once.pinned.map((p) => p.id)).toEqual(['pin']);
+  });
+
+  it('the box before removing one’s own post says it goes for everyone', () => {
+    expect(ownRemoveBox(post({ photos: [{ id: 'x' }, { id: 'y' }] }), 'Iron House')).toEqual({
+      title: 'Remove your post?',
+      line: "Your post and its 2 photos will disappear for everyone at Iron House. This can't be undone.",
+      confirm: 'Remove post',
+      cancel: 'Keep post',
+    });
+  });
+});
+
+describe('reporting a post', () => {
+  it('offers five reasons in plain words, and says the writer is not told who', () => {
+    expect(REPORT_REASONS.map((r) => r.word)).toEqual([
+      'Bullying or unkind',
+      "A photo of someone who didn't agree to it",
+      'Nudity or sexual',
+      'Spam or selling',
+      'Something else',
+    ]);
+    const box = reportBox('Iron House');
+    expect(box.line).toBe("The staff at Iron House will look at it. The person who posted isn't told who reported it.");
+    expect(box.done).toBe('Reported. The staff at Iron House will look at it.');
+  });
+
+  const none = { unkind: 0, photo_of_someone: 0, nudity: 0, spam: 0, other: 0 };
+  it.each([
+    [{ reports: 1, reasons: { ...none, spam: 1 } }, 'Reported by 1 person: Spam or selling'],
+    [{ reports: 3, reasons: { ...none, unkind: 2, other: 1 } }, 'Reported by 3 people: Bullying or unkind (2) · Something else (1)'],
+    [{ reports: 1200, reasons: { ...none, nudity: 1200 } }, 'Reported by 1,200 people: Nudity or sexual (1,200)'],
+  ])('staff read how many reported a post and why, never who: %#', (item, line) => {
+    expect(reportedLine(item)).toBe(line);
+  });
+
+  it('says how many reported posts are waiting, and when the list holds only the oldest', () => {
+    expect(reportedTitle(1)).toBe('1 reported post to look at');
+    expect(reportedTitle(53)).toBe('53 reported posts to look at');
+    expect(reportedMore({ total: 2, items: [1, 2] })).toBeNull();
+    expect(reportedMore({ total: 53, items: Array.from({ length: 50 }) })).toBe('Showing the 50 that have waited longest. 3 more will show as you answer these.');
+  });
+});
+
+describe('the console’s tools for members’ posts', () => {
+  it('the switch says what it does in each position', () => {
+    expect(memberPostsSwitch(false, WORDS)).toMatchObject({
+      label: 'Members can post',
+      line: 'Only your staff can post. Switch this on to let your members post too.',
+      off: 'Members can no longer post. The posts they already made stay until you remove them.',
+    });
+    expect(memberPostsSwitch(true, WORDS).line).toBe('Your members can post words and photos here. You can remove any post, and stop a person posting.');
+  });
+
+  it('the box before stopping a person names them, what changes, and that nobody else does', () => {
+    expect(stopBox('Wendy Writer')).toEqual({
+      title: 'Stop Wendy Writer posting?',
+      line: "Wendy Writer won't be able to post on Updates until you let them again. They can still read and react. Their posts stay until you remove them. They aren't emailed, and nobody else changes.",
+      confirm: 'Stop Wendy Writer posting',
+      cancel: 'Cancel',
+      done: 'Wendy Writer can no longer post.',
+      undone: 'Wendy Writer can post again.',
+    });
+    expect(stopBox(null)).toMatchObject({ title: 'Stop this person posting?', confirm: 'Stop them posting', done: 'They can no longer post.' });
+  });
+
+  it('stopping a person marks every post of theirs and nobody else’s', () => {
+    const f = feed({
+      pinned: [post({ id: 'pin', authorId: 'u1', authorStopped: false })],
+      posts: [post({ id: 'a', authorId: 'u2', authorStopped: false }), post({ id: 'b', authorId: 'u1', authorStopped: false }), post({ id: 'c', authorId: null, authorStopped: false })],
+    });
+    const after = withStopped(f, 'u1', true);
+    expect([...after.pinned, ...after.posts].map((p) => [p.id, p.authorStopped])).toEqual([
+      ['pin', true],
+      ['a', false],
+      ['b', true],
+      ['c', false],
+    ]);
   });
 });

@@ -1,12 +1,13 @@
-// A GYM'S UPDATES (spec Part 3 §15.2; ROADMAP 19b-i). Mirrors `0071_gym_posts.sql`,
-// which is the record.
+// A GYM'S UPDATES (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a). Mirrors
+// `0071_gym_posts.sql` and `0072_member_posts.sql`, which are the record.
 //
-// A post is the gym's: its author and the member of staff who removed it are the only
-// user links, both `ON DELETE set null`, so `gym_posts` is on
-// `USER_LINKED_NOT_PURGED_TABLES`. A reaction is the person's own and is deleted with
-// their account (`DIRECT_DELETE_TABLES`).
+// A staff post is the gym's: its author and the member of staff who removed it are the
+// only user links, both `ON DELETE set null`, so `gym_posts` is on
+// `USER_LINKED_NOT_PURGED_TABLES`. A member's own post (`by_member`) is the person's and
+// is deleted with their account by a statement of its own (`privacy/repo.ts`), as their
+// reactions, reports and a stop on their posting are (`DIRECT_DELETE_TABLES`).
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, integer, pgTable, primaryKey, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, foreignKey, index, integer, pgTable, primaryKey, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gyms } from "./tenancy.js";
@@ -27,6 +28,8 @@ export const gymPosts = pgTable(
     /** Removed by staff: gone for everyone, its photos and reactions deleted. */
     removedAt: timestamp("removed_at", { withTimezone: true }),
     removedByUserId: uuid("removed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** A member's own post, as against one by the gym's staff. */
+    byMember: boolean("by_member").notNull().default(false),
   },
   (t) => [
     unique("gym_posts_gym_id_uq").on(t.gymId, t.id),
@@ -34,6 +37,7 @@ export const gymPosts = pgTable(
     check("gym_posts_body_len_check", sql`char_length(${t.body}) <= 2000`),
     check("gym_posts_removed_not_pinned_check", sql`${t.removedAt} IS NULL OR ${t.pinnedAt} IS NULL`),
     index("gym_posts_feed_idx").on(t.gymId, t.createdAt.desc(), t.id.desc()).where(sql`${t.removedAt} IS NULL`),
+    index("gym_posts_member_author_idx").on(t.authorUserId, t.gymId, t.createdAt.desc()).where(sql`${t.byMember}`),
   ],
 );
 
@@ -87,4 +91,47 @@ export const gymPostReactions = pgTable(
     check("gym_post_reactions_reaction_check", sql`${t.reaction} IN ('like','love','strong','fire')`),
     index("gym_post_reactions_user_idx").on(t.userId),
   ],
+);
+
+/** One report a person a post: open until staff remove the post or keep it. */
+export const gymPostReports = pgTable(
+  "gym_post_reports",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    postId: uuid("post_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reason: text("reason").notNull(),
+    createdAt: createdAt(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    outcome: text("outcome"),
+  },
+  (t) => [
+    foreignKey({ name: "gym_post_reports_post_fk", columns: [t.gymId, t.postId], foreignColumns: [gymPosts.gymId, gymPosts.id] }).onDelete("cascade"),
+    unique("gym_post_reports_one_each_uq").on(t.postId, t.userId),
+    check("gym_post_reports_reason_check", sql`${t.reason} IN ('unkind','photo_of_someone','nudity','spam','other')`),
+    check("gym_post_reports_outcome_check", sql`${t.outcome} IN ('removed','kept')`),
+    check("gym_post_reports_closed_check", sql`(${t.closedAt} IS NULL) = (${t.outcome} IS NULL)`),
+    index("gym_post_reports_open_idx").on(t.gymId, t.postId).where(sql`${t.closedAt} IS NULL`),
+    index("gym_post_reports_user_idx").on(t.userId),
+  ],
+);
+
+/** A person the gym has stopped posting. */
+export const gymPostStops = pgTable(
+  "gym_post_stops",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ name: "gym_post_stops_pk", columns: [t.gymId, t.userId] }), index("gym_post_stops_user_idx").on(t.userId)],
 );

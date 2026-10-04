@@ -1,8 +1,10 @@
-// A GYM'S UPDATES — spec Part 3 §15.2; ROADMAP 19b-i.
+// A GYM'S UPDATES — spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a.
 //
-// Posts by the gym's staff, with up to four photos, read by its live app members and by
-// staff holding `posts.manage`. One reaction a person a post, and no comments (RULINGS
-// 2026-08-25, kept 2026-09-22). A post stays until staff remove it (RULINGS 2026-10-04).
+// Posts by the gym's staff and, where the gym has switched it on, by its members, with up
+// to four photos, read by its live app members and by staff holding `posts.manage`. One
+// reaction a person a post, and no comments (RULINGS 2026-08-25, kept 2026-09-22). A post
+// stays until it is removed: by staff, or a member's own by the member (RULINGS 2026-10-04).
+// Any member can report a post; staff see the reported ones in a list of their own.
 import { z } from "zod";
 import { GYM_PAGE_PHOTO_MAX_BYTES, gymPagePhotoSchema } from "./gymPage.js";
 
@@ -12,6 +14,25 @@ export const GYM_POST_MAX_PHOTOS = 4;
 export const GYM_POST_MAX_PINNED = 3;
 /** Posts a page of the list carries; the pinned ones ride on the first page beside them. */
 export const GYM_POSTS_PAGE = 20;
+/** Posts one member may make at one gym in any 24 hours. */
+export const GYM_MEMBER_POSTS_A_DAY = 10;
+/** Reported posts the staff list carries, longest waiting first. */
+export const GYM_POST_REPORTS_SHOWN = 50;
+/** People stopped from posting the staff list carries. */
+export const GYM_POST_STOPS_SHOWN = 200;
+
+/** Why a post is reported, in the order the choices are drawn. */
+export const GYM_POST_REPORT_REASONS = ["unkind", "photo_of_someone", "nudity", "spam", "other"] as const;
+export const gymPostReportReasonSchema = z.enum(GYM_POST_REPORT_REASONS);
+export type GymPostReportReason = z.infer<typeof gymPostReportReasonSchema>;
+
+export const GYM_POST_REPORT_REASON_WORDS: Record<GymPostReportReason, string> = {
+  unkind: "Bullying or unkind",
+  photo_of_someone: "A photo of someone who didn't agree to it",
+  nudity: "Nudity or sexual",
+  spam: "Spam or selling",
+  other: "Something else",
+};
 
 /** The reactions, in the order the buttons are drawn. */
 export const GYM_POST_REACTIONS = ["like", "love", "strong", "fire"] as const;
@@ -67,9 +88,26 @@ export const gymPostSchema = z
     reactions: reactionCountsSchema,
     /** The reader's own reaction. */
     mine: gymPostReactionSchema.nullable(),
+    /** A member's own post, as against one by the gym's staff. */
+    fromMember: z.boolean(),
+    /** The reader wrote it as a member, and may remove it. */
+    own: z.boolean(),
+    /** The reader has reported it. Always false for staff reading the console. */
+    reported: z.boolean(),
   })
   .strict();
 export type GymPost = z.infer<typeof gymPostSchema>;
+
+/** A post as staff holding the tick read it: a member's post also says whose it is, so
+ *  that person can be stopped from posting. */
+export const staffGymPostSchema = gymPostSchema
+  .extend({
+    /** The member who wrote it; null for a staff post. */
+    authorId: z.string().uuid().nullable(),
+    authorStopped: z.boolean(),
+  })
+  .strict();
+export type StaffGymPost = z.infer<typeof staffGymPostSchema>;
 
 /** Where the next page starts, as a list's `next` gave it: the last post's instant, "_",
  *  its id. Read into the two, each checked as what it is, so nothing the database cannot
@@ -92,23 +130,38 @@ export const gymPostsQuerySchema = z.object({ before: postsCursor.optional() }).
 export type GymPostsQuery = z.infer<typeof gymPostsQuerySchema>;
 export type GymPostsCursor = NonNullable<GymPostsQuery["before"]>;
 
-const feedShape = {
+const feedShape = <P extends z.ZodTypeAny>(post: P) => ({
   gymId: z.string().uuid(),
   gymName: z.string(),
   /** The pinned posts, newest pin first; on the first page only. */
-  pinned: z.array(gymPostSchema).max(GYM_POST_MAX_PINNED),
+  pinned: z.array(post).max(GYM_POST_MAX_PINNED),
   /** Newest first. */
-  posts: z.array(gymPostSchema).max(GYM_POSTS_PAGE),
+  posts: z.array(post).max(GYM_POSTS_PAGE),
   /** `before` for the next page, or null when this is the last. */
   next: z.string().nullable(),
-};
+});
+
+/** Whether the reader may post as a member: the gym's switch is `off`, or staff have
+ *  `stopped` this person. */
+export const gymMemberPostingSchema = z.enum(["on", "off", "stopped"]);
+export type GymMemberPosting = z.infer<typeof gymMemberPostingSchema>;
 
 /** What a member reads. `paused`: the gym's plan has lapsed, and nothing is sent. */
-export const gymPostsResponseSchema = z.object({ ...feedShape, status: z.enum(["shown", "paused"]) }).strict();
+export const gymPostsResponseSchema = z
+  .object({ ...feedShape(gymPostSchema), status: z.enum(["shown", "paused"]), posting: gymMemberPostingSchema })
+  .strict();
 export type GymPostsResponse = z.infer<typeof gymPostsResponseSchema>;
 
 /** What staff read. */
-export const staffGymPostsResponseSchema = z.object(feedShape).strict();
+export const staffGymPostsResponseSchema = z
+  .object({
+    ...feedShape(staffGymPostSchema),
+    /** The gym's switch: whether its members may post. */
+    membersCanPost: z.boolean(),
+    /** Posts with a report nobody has answered yet. */
+    reportedCount: z.number().int().nonnegative(),
+  })
+  .strict();
 export type StaffGymPostsResponse = z.infer<typeof staffGymPostsResponseSchema>;
 
 const photoBase64 = z
@@ -131,6 +184,7 @@ export type AddGymPostRequest = z.infer<typeof addGymPostRequestSchema>;
 
 export const gymPostResponseSchema = z.object({ post: gymPostSchema }).strict();
 export type GymPostResponse = z.infer<typeof gymPostResponseSchema>;
+export const staffGymPostResponseSchema = z.object({ post: staffGymPostSchema }).strict();
 
 export const pinGymPostRequestSchema = z.object({ pinned: z.boolean() }).strict();
 export const removedGymPostResponseSchema = z.object({ removed: z.literal(true) }).strict();
@@ -156,14 +210,79 @@ export const gymPostReactorsResponseSchema = z
   .strict();
 export type GymPostReactorsResponse = z.infer<typeof gymPostReactorsResponseSchema>;
 
-export const gymPostParamsSchema =z.object({ gymId: z.string().uuid(), postId: z.string().uuid() }).strict();
+export const gymPostParamsSchema = z.object({ gymId: z.string().uuid(), postId: z.string().uuid() }).strict();
 export const gymPostPhotoParamsSchema = gymPostParamsSchema.extend({ photoId: z.string().uuid() }).strict();
+
+// ── MEMBERS POST, REPORT, AND THE STAFF LIST (19b-ii-a; spec §15.3) ──
+
+export const reportGymPostRequestSchema = z.object({ reason: gymPostReportReasonSchema }).strict();
+export const reportedGymPostResponseSchema = z.object({ reported: z.literal(true) }).strict();
+
+const reasonCountsSchema = z
+  .object({
+    unkind: z.number().int().nonnegative(),
+    photo_of_someone: z.number().int().nonnegative(),
+    nudity: z.number().int().nonnegative(),
+    spam: z.number().int().nonnegative(),
+    other: z.number().int().nonnegative(),
+  })
+  .strict();
+export type GymPostReasonCounts = z.infer<typeof reasonCountsSchema>;
+
+/** The reported posts staff have not answered, longest waiting first. Who reported is
+ *  never sent: only how many, and why. */
+export const reportedGymPostsResponseSchema = z
+  .object({
+    gymId: z.string().uuid(),
+    gymName: z.string(),
+    items: z
+      .array(
+        z
+          .object({
+            post: staffGymPostSchema,
+            reports: z.number().int().positive(),
+            reasons: reasonCountsSchema,
+            firstReportedAt: z.string().datetime({ offset: true }),
+          })
+          .strict(),
+      )
+      .max(GYM_POST_REPORTS_SHOWN),
+    /** Every reported post waiting, listed or not. */
+    total: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ReportedGymPostsResponse = z.infer<typeof reportedGymPostsResponseSchema>;
+
+export const keptGymPostResponseSchema = z.object({ kept: z.literal(true) }).strict();
+
+export const gymPostSettingsSchema = z.object({ membersCanPost: z.boolean() }).strict();
+export type GymPostSettings = z.infer<typeof gymPostSettingsSchema>;
+
+export const gymPosterParamsSchema = z.object({ gymId: z.string().uuid(), userId: z.string().uuid() }).strict();
+export const gymPosterStoppedResponseSchema = z.object({ stopped: z.boolean() }).strict();
+export const stoppedGymPostersResponseSchema = z
+  .object({
+    people: z
+      .array(
+        z
+          .object({ userId: z.string().uuid(), name: z.string().nullable(), initials: z.string(), stoppedAt: z.string().datetime({ offset: true }) })
+          .strict(),
+      )
+      .max(GYM_POST_STOPS_SHOWN),
+  })
+  .strict();
+export type StoppedGymPostersResponse = z.infer<typeof stoppedGymPostersResponseSchema>;
 
 /** What a person reads when a post cannot be made, changed or found. */
 export const GYM_POST_WORDS = {
   not_found: "This post has been removed.",
   pins_full: `You can pin up to ${String(GYM_POST_MAX_PINNED)} posts. Unpin one to pin this.`,
   photo_not_found: "This photo has been removed.",
+  posting_off: "Members can't post here at the moment.",
+  posting_stopped: "The staff have stopped you posting here. Speak to them at the front desk.",
+  day_full: `You can post ${String(GYM_MEMBER_POSTS_A_DAY)} times a day. Try again tomorrow.`,
+  own_report: "This is your own post. You can remove it instead.",
+  person_not_found: "This person isn't one of your members.",
   /** Which of a post's photos was refused, counted from 1. */
   photo: (position: number, why: string): string => `Photo ${String(position)}: ${why}`,
 } as const;

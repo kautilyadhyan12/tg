@@ -1,8 +1,10 @@
-// What a gym's Updates cost at full size (ROADMAP 19b-i; CLAUDE.md §4 "Cost at full size").
-// One gym of 2,100 live app members (--members= for another size) with three years of
-// posts, two a day, three pinned; the newest 60 reacted to by four members in ten, the rest
-// by one in twenty. Read as a member and as staff read them, a reaction, and a post of four
-// photos at the biggest size the app takes. Two numbers each, over several runs:
+// What a gym's Updates cost at full size (ROADMAP 19b-i, 19b-ii-a; CLAUDE.md §4 "Cost at
+// full size"). One gym of 2,100 live app members (--members= for another size) with three
+// years of posts, two a day, three pinned, every second one a member's own; the newest 60
+// reacted to by four members in ten, the rest by one in twenty; 60 posts reported by 40
+// people each and 200 people stopped from posting. Read as a member and as staff read them,
+// a reaction, a report, the reported list, and a post of four photos at the biggest size
+// the app takes, by staff and by a member. Two numbers each, over several runs:
 //   - total: how long it takes (a read holds one of the pool's connections meanwhile);
 //   - server thread busy: how long the server's one thread answers nobody.
 //
@@ -18,7 +20,19 @@ import { performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { GYM_PAGE_PHOTO_MAX_BYTES, addGymPostRequestSchema, gymPostsQuerySchema } from "@app/shared";
 import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
-import { addPost, getPhoto, getPosts, getStaffPosts, react, removePost } from "../src/modules/orgs/posts/service.js";
+import {
+  addMemberPost,
+  addPost,
+  getPhoto,
+  getPosts,
+  getReported,
+  getStaffPosts,
+  getStopped,
+  react,
+  removeOwnPost,
+  removePost,
+  report as reportPost,
+} from "../src/modules/orgs/posts/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -38,6 +52,7 @@ async function cleanup(): Promise<void> {
   await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${gyms})`;
   await sql`DELETE FROM audit_log WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_posts WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_post_stops WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_members WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_staff WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
@@ -57,7 +72,7 @@ async function seed(): Promise<{ gymId: string; owner: string; viewer: string }>
   for (let i = 0; i < users.length; i += 1000) await sql`INSERT INTO users ${sql(users.slice(i, i + 1000))}`;
   const owner = users[0]?.id ?? "";
   const gymId = randomUUID();
-  await sql`INSERT INTO gyms (id, slug, name, timezone, owner_user_id) VALUES (${gymId}, ${PREFIX + gymId}, 'Cost Gym', 'Asia/Kolkata', ${owner})`;
+  await sql`INSERT INTO gyms (id, slug, name, timezone, owner_user_id, members_can_post) VALUES (${gymId}, ${PREFIX + gymId}, 'Cost Gym', 'Asia/Kolkata', ${owner}, true)`;
   await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${gymId}, ${owner}, 'owner')`;
   await sql`
     INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
@@ -70,6 +85,23 @@ async function seed(): Promise<{ gymId: string; owner: string; viewer: string }>
     SELECT ${gymId}, ${owner}, gen_random_uuid(), repeat('Words of a post. ', 18),
            now() - n * interval '12 hours', CASE WHEN n <= 3 THEN now() END
     FROM generate_series(1, ${POSTS}) n`;
+  // Every second post that is not pinned is a member's own, the members taking turns.
+  await sql`
+    WITH p AS (SELECT id, row_number() OVER (ORDER BY created_at) AS rn FROM gym_posts WHERE gym_id = ${gymId} AND pinned_at IS NULL),
+         m AS (SELECT user_id, row_number() OVER (ORDER BY user_id) AS rn FROM gym_members WHERE gym_id = ${gymId})
+    UPDATE gym_posts g SET by_member = true, author_user_id = m.user_id
+    FROM p JOIN m ON m.rn = 1 + (p.rn % ${MEMBERS})
+    WHERE g.id = p.id AND p.rn % 2 = 0`;
+  // The newest 60 members' posts are each reported by 40 people; 200 people are stopped.
+  await sql`
+    INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason)
+    SELECT p.gym_id, p.id, m.user_id, (ARRAY['unkind','photo_of_someone','nudity','spam','other'])[1 + floor(random() * 5)::int]
+    FROM (SELECT gym_id, id FROM gym_posts WHERE gym_id = ${gymId} AND by_member ORDER BY created_at DESC LIMIT 60) p
+    CROSS JOIN (SELECT user_id FROM gym_members WHERE gym_id = ${gymId} ORDER BY user_id LIMIT 40 OFFSET 10) m`;
+  await sql`
+    INSERT INTO gym_post_stops (gym_id, user_id)
+    SELECT gym_id, user_id FROM gym_members WHERE gym_id = ${gymId} AND user_id <> ALL (${[owner, users[1]?.id ?? owner]}::uuid[])
+    ORDER BY user_id LIMIT 200`;
   // Four photo rows a post on the newest 60 (the rows a page reads; no files behind them).
   await sql`
     INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
@@ -85,6 +117,8 @@ async function seed(): Promise<{ gymId: string; owner: string; viewer: string }>
   await sql`VACUUM ANALYZE gym_posts`;
   await sql`VACUUM ANALYZE gym_post_photos`;
   await sql`VACUUM ANALYZE gym_post_reactions`;
+  await sql`VACUUM ANALYZE gym_post_reports`;
+  await sql`VACUUM ANALYZE gym_post_stops`;
   return { gymId, owner, viewer: users[1]?.id ?? "" };
 }
 
@@ -118,10 +152,15 @@ function report(name: string, runs: { wall: number; js: number }[]): void {
 await cleanup();
 const { gymId, owner, viewer } = await seed();
 const folder = await mkdtemp(join(tmpdir(), "aihg-posts-cost-"));
-const counts = await sql<{ posts: string; reactions: string }[]>`
+const counts = await sql<{ posts: string; own: string; reactions: string; reports: string; stops: string }[]>`
   SELECT (SELECT count(*) FROM gym_posts WHERE gym_id = ${gymId}) AS posts,
-         (SELECT count(*) FROM gym_post_reactions WHERE gym_id = ${gymId}) AS reactions`;
-console.log(`one gym: ${String(MEMBERS)} members, ${counts[0]?.posts ?? "?"} posts, ${counts[0]?.reactions ?? "?"} reactions; cpu ${String(cpus()[0]?.speed ?? 0)} MHz; ${String(RUNS)} runs each`);
+         (SELECT count(*) FROM gym_posts WHERE gym_id = ${gymId} AND by_member) AS own,
+         (SELECT count(*) FROM gym_post_reactions WHERE gym_id = ${gymId}) AS reactions,
+         (SELECT count(*) FROM gym_post_reports WHERE gym_id = ${gymId}) AS reports,
+         (SELECT count(*) FROM gym_post_stops WHERE gym_id = ${gymId}) AS stops`;
+console.log(
+  `one gym: ${String(MEMBERS)} members, ${counts[0]?.posts ?? "?"} posts (${counts[0]?.own ?? "?"} by members), ${counts[0]?.reactions ?? "?"} reactions, ${counts[0]?.reports ?? "?"} reports, ${counts[0]?.stops ?? "?"} people stopped; cpu ${String(cpus()[0]?.speed ?? 0)} MHz; ${String(RUNS)} runs each`,
+);
 
 const deps = { sql, now: () => new Date(), photos: createDiskPhotoStore(folder), log: { warn: () => undefined } };
 const allowed = (): Promise<boolean> => Promise.resolve(true);
@@ -140,7 +179,12 @@ const reads: [string, () => Promise<unknown>][] = [
   ["member, the first page", () => getPosts(deps, viewer, gymId, undefined)],
   ["member, the oldest page", () => getPosts(deps, viewer, gymId, last)],
   ["staff, the first page", () => getStaffPosts(deps, owner, gymId, undefined, allowed)],
+  ["staff, the reported list", () => getReported(deps, owner, gymId, allowed)],
+  ["staff, who is stopped", () => getStopped(deps, owner, gymId, allowed)],
 ];
+// A post the viewer did not write, to report: the same statement runs each time.
+const others = [...first.pinned, ...first.posts].find((p) => !p.own)?.id ?? "";
+reads.push(["member, a report", () => reportPost(deps, viewer, gymId, others, "spam")]);
 let flip = false;
 reads.push([
   "member, a reaction",
@@ -183,6 +227,18 @@ report("staff post, the request read", parses.slice(1));
 report("staff post, 4 photos kept", adds.slice(1));
 report("member, one photo read", photoReads.slice(1));
 report("staff remove a post", removes.slice(1));
+
+// The same post by a member: the gym's switch, a stop and the day's ten are asked as well.
+const memberAdds: { wall: number; js: number }[] = [];
+const ownRemoves: { wall: number; js: number }[] = [];
+for (let i = 0; i < RUNS + 1; i++) {
+  const body = addGymPostRequestSchema.parse({ postKey: randomUUID(), body: "Four photos at full size", photos: [photo, photo, photo, photo] });
+  const added = await time(() => addMemberPost(deps, viewer, gymId, body));
+  memberAdds.push(added);
+  ownRemoves.push(await time(() => removeOwnPost(deps, viewer, gymId, added.value.id)));
+}
+report("member post, 4 photos kept", memberAdds.slice(1));
+report("member removes their own post", ownRemoves.slice(1));
 
 await cleanup();
 await rm(folder, { recursive: true, force: true });

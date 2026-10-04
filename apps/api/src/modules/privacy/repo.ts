@@ -115,6 +115,23 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   await tx`DELETE FROM user_nutrition_targets WHERE user_id = ${userId}`;
   // The person's reactions to their gym's posts (tables.ts, 0071).
   await tx`DELETE FROM gym_post_reactions WHERE user_id = ${userId}`;
+  // Their reports of posts and a gym's stop on their posting (tables.ts, 0072).
+  await tx`DELETE FROM gym_post_reports WHERE user_id = ${userId}`;
+  await tx`DELETE FROM gym_post_stops WHERE user_id = ${userId}`;
+  // The posts they made as a MEMBER, with their photos' rows, reactions and reports by
+  // cascade. A post made as staff is the gym's and stays (tables.ts, gym_posts). The
+  // photos' files are removed by the caller, `purgeDueUsers`.
+  await tx`DELETE FROM gym_posts WHERE author_user_id = ${userId} AND by_member`;
+}
+
+/** The store keys of the photos on the posts this person made as a member: the files the
+ *  purge removes once their rows are gone. */
+export async function selectMemberPostPhotoKeys(sql: SqlOrTx, userId: string): Promise<string[]> {
+  const rows = await sql<{ storage_key: string }[]>`
+    SELECT ph.storage_key FROM gym_post_photos ph
+    JOIN gym_posts p ON p.gym_id = ph.gym_id AND p.id = ph.post_id
+    WHERE p.author_user_id = ${userId} AND p.by_member`;
+  return rows.map((row) => row.storage_key);
 }
 
 /** Rows keyed on the person's ADDRESS rather than their id — `sign_in_codes`

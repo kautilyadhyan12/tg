@@ -1,20 +1,39 @@
-// A GYM'S UPDATES, IN WORDS (spec Part 3 §15.2; ROADMAP 19b-i). Pure, so every sentence is
-// tested without a browser. Shared by the member's Updates tab and the console's page.
-import { GYM_POST_MAX_CHARS, GYM_POST_MAX_PHOTOS, GYM_POST_MAX_PINNED, GYM_POST_REACTIONS, GYM_POST_REACTION_WORDS, postLength } from '@app/shared';
+// A GYM'S UPDATES, IN WORDS (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a). Pure, so
+// every sentence is tested without a browser. Shared by the member's Updates tab and the
+// console's page.
+import {
+  GYM_MEMBER_POSTS_A_DAY,
+  GYM_POST_MAX_CHARS,
+  GYM_POST_MAX_PHOTOS,
+  GYM_POST_MAX_PINNED,
+  GYM_POST_REACTIONS,
+  GYM_POST_REACTION_WORDS,
+  GYM_POST_REPORT_REASONS,
+  GYM_POST_REPORT_REASON_WORDS,
+  postLength,
+} from '@app/shared';
 
 export function canManagePosts(privileges) {
   return Array.isArray(privileges) && privileges.includes('posts.manage');
 }
 
-/** Who posted: the person's name, or the gym's when their account is gone. */
+/** Who posted: the person's name. With none, a member's post says "A member" and a staff
+ *  post the gym's own name. */
 export function authorName(post, gymName) {
-  return post.author.name ?? gymName;
+  return post.author.name ?? (post.fromMember ? 'A member' : gymName);
 }
 
 /** The letters in the round mark beside the name. */
 export function authorInitials(post, gymName) {
   if (post.author.name !== null && post.author.initials !== '') return post.author.initials;
+  if (post.fromMember) return 'M';
   return Array.from(gymName.trim())[0]?.toUpperCase() ?? '';
+}
+
+/** The small word beside the name on the member's page: staff posts are marked, so a
+ *  member's post is never taken for the gym's word. */
+export function authorTag(post) {
+  return !post.fromMember && post.author.name !== null ? 'Staff' : null;
 }
 
 /** "7 Oct, 12:05 pm", with the year when it is not this one. In the reader's own time zone
@@ -76,8 +95,115 @@ export function withReaction(post, tapped) {
 /** What the member reads where the posts would be, or null when there are posts. */
 export function emptyLine(feed) {
   if (feed.status === 'paused') return `${feed.gymName}'s updates aren't showing at the moment.`;
-  if (feed.pinned.length === 0 && feed.posts.length === 0) return `${feed.gymName} hasn't posted anything yet.`;
-  return null;
+  if (feed.pinned.length > 0 || feed.posts.length > 0) return null;
+  return feed.posting === 'on' ? 'No posts yet. Write the first one.' : `${feed.gymName} hasn't posted anything yet.`;
+}
+
+// ── A MEMBER POSTS, REMOVES THEIR OWN, AND REPORTS (19b-ii-a) ──
+
+/** Whether the member is shown the box to write a post in. */
+export function memberCanPost(feed) {
+  return feed.status === 'shown' && feed.posting === 'on';
+}
+
+/** What a member the staff have stopped reads in place of the box, or null. */
+export function stoppedNote(feed) {
+  if (feed.status !== 'shown' || feed.posting !== 'stopped') return null;
+  return `The staff at ${feed.gymName} have stopped you posting here. Speak to them at the front desk.`;
+}
+
+/** Under the member's box: who sees a post, and the day's limit. */
+export function memberPostHint(gymName) {
+  return `Everyone at ${gymName} in the app sees it straight away. You can post ${GYM_MEMBER_POSTS_A_DAY} times a day. Where a photo was taken is never kept.`;
+}
+
+/** The list with the member's new post at the top of the unpinned ones; never twice. */
+export function withNewPost(feed, post) {
+  return { ...feed, posts: [post, ...feed.posts.filter((p) => p.id !== post.id)] };
+}
+
+/** The box before a member removes their own post. */
+export function ownRemoveBox(post, gymName) {
+  const photos = post.photos.length === 0 ? '' : post.photos.length === 1 ? ' and its photo' : ` and its ${post.photos.length} photos`;
+  return {
+    title: 'Remove your post?',
+    line: `Your post${photos} will disappear for everyone at ${gymName}. This can't be undone.`,
+    confirm: 'Remove post',
+    cancel: 'Keep post',
+  };
+}
+
+/** The reasons a post is reported for, in drawing order. */
+export const REPORT_REASONS = GYM_POST_REPORT_REASONS.map((id) => ({ id, word: GYM_POST_REPORT_REASON_WORDS[id] }));
+
+/** The box a member reports a post in. */
+export function reportBox(gymName) {
+  return {
+    title: 'Report this post',
+    line: `The staff at ${gymName} will look at it. The person who posted isn't told who reported it.`,
+    confirm: 'Send report',
+    cancel: 'Cancel',
+    done: `Reported. The staff at ${gymName} will look at it.`,
+  };
+}
+
+// ── THE CONSOLE: MEMBERS' POSTS, THE REPORTED LIST, STOPPING A PERSON (19b-ii-a) ──
+
+/** The switch that lets members post: its name and the line under it. */
+export function memberPostsSwitch(on, words) {
+  return {
+    label: `${words.peopleCap} can post`,
+    line: on
+      ? `Your ${words.people} can post words and photos here. You can remove any post, and stop a person posting.`
+      : `Only your staff can post. Switch this on to let your ${words.people} post too.`,
+    off: `${words.peopleCap} can no longer post. The posts they already made stay until you remove them.`,
+    on: `Your ${words.people} can post now.`,
+  };
+}
+
+/** "Reported by 2 people: Bullying or unkind (1) · Spam or selling (1)". */
+export function reportedLine(item) {
+  const who = item.reports === 1 ? '1 person' : `${item.reports.toLocaleString('en')} people`;
+  const reasons = REPORT_REASONS.filter((r) => item.reasons[r.id] > 0).map((r) => (item.reports === 1 ? r.word : `${r.word} (${item.reasons[r.id].toLocaleString('en')})`));
+  return `Reported by ${who}: ${reasons.join(' · ')}`;
+}
+
+/** The heading over the reported posts, with how many are waiting. */
+export function reportedTitle(total) {
+  return total === 1 ? '1 reported post to look at' : `${total.toLocaleString('en')} reported posts to look at`;
+}
+
+/** Under the heading when more are waiting than the list carries, or null. */
+export function reportedMore(reported) {
+  const left = reported.total - reported.items.length;
+  return left > 0 ? `Showing the ${reported.items.length.toLocaleString('en')} that have waited longest. ${left.toLocaleString('en')} more will show as you answer these.` : null;
+}
+
+/** What Keep does, said beside the button's press. */
+export const KEEP_NOTE = 'Kept. The post stays on Updates and has left this list.';
+
+/** The person's name in a sentence, or "this person" with none. */
+function personName(name) {
+  return name ?? 'this person';
+}
+
+/** The box before a person is stopped from posting: who changes, who does not, and how. */
+export function stopBox(name) {
+  const who = personName(name);
+  return {
+    title: `Stop ${who} posting?`,
+    line: `${name ?? 'They'} won't be able to post on Updates until you let them again. They can still read and react. Their posts stay until you remove them. They aren't emailed, and nobody else changes.`,
+    confirm: name === null ? 'Stop them posting' : `Stop ${name} posting`,
+    cancel: 'Cancel',
+    done: `${name ?? 'They'} can no longer post.`,
+    undone: `${name ?? 'They'} can post again.`,
+  };
+}
+
+/** The list after a person is stopped or let back: every post of theirs says so. */
+export function withStopped(feed, userId, stopped) {
+  const mark = (p) => (p.authorId === userId ? { ...p, authorStopped: stopped } : p);
+  return { ...feed, pinned: feed.pinned.map(mark), posts: feed.posts.map(mark) };
 }
 
 // ── THE CONSOLE'S FORM ──
