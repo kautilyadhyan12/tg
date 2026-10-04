@@ -849,11 +849,11 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       const members = [await member(gym, "Asha Rao"), await member(gym, "Bilal Khan"), await member(gym, "Chen Wu")];
       const staff = [gym.owner, await signedIn("Maya Manager"), await signedIn("Noor Manager")];
       for (const person of staff.slice(1)) await addStaff(gym.id, person.userId, "manager", null);
-      /** Counts a key up as that many requests would, a few hundred at a time. */
+      /** Sets a counter to where that many requests would have left it, in one write: tens
+       *  of thousands of real ones held the shared Redis and timed other suites out in CI. */
       const fill = async (key: string, n: number) => {
-        for (let done = 0; done < n; done += 500) {
-          await Promise.all(Array.from({ length: Math.min(500, n - done) }, () => limits().incrWithTtl(key, 3600)));
-        }
+        const now = Number((await limits().get(key)) ?? "0");
+        expect(await limits().setex(key, 3600, String(now + n))).toBe(true);
       };
       const rows: { name: string; max: number; ipMax: number; people: Person[]; ok: number; ask: (who: Person, ip: string) => Promise<{ statusCode: number }> }[] = [
         { name: "orgs_posts_read", max: 600, ipMax: 6000, people: members, ok: 200, ask: (who, ip) => inject("GET", posts(gym.id), who.cookies, undefined, ip) },
