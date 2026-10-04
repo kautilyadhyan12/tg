@@ -243,3 +243,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **17a, as it stood before it was split in three (2026-10-04):**
 
 - 17a. [ ] **Membership types, and a person's membership.** The gym's price list (repeating · one time · pack · day pass as a pack of 1 · trial; what each includes), a person's membership on their record with ONE pure status rule and its exhaustive test, "paid" marked by hand until Part 5, a file's word ("Gold") linked to a type once for everyone. Settings → Memberships, and the person's page. Needs 3a-v-b.
+
+**17a-i, as it stood when it was built (merged 2026-10-04, PR #166):**
+
+- 17a-i. [ ] **The gym's price list**: Settings → Memberships; add, change, archive and put back a type (repeating · one time · pack · day pass · trial), its price in the country's own money, what it includes; the "Change membership types and prices" tick.
