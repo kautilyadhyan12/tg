@@ -5,6 +5,7 @@ import { canReadAttendance } from './attendanceView';
 import { canManageSchedule } from './classesView';
 import { canSeeLeaderboard } from './leaderboardStaffView';
 import { canManageMemberships } from './membershipTypesView';
+import { canManagePosts } from '../../components/gym/postsView';
 
 /** Settings holds sections gated on three permissions (Staff: `staff.manage`; the gym's
  *  details: `org.manage`; Memberships: `memberships.manage`), so its page is drawn for
@@ -33,6 +34,7 @@ export function consoleMenu(orgSlug, privileges, orgType) {
       phone: 'tab',
     },
     canManageSchedule(privileges) && { key: 'classes', to: `${base}/classes`, end: false, label: 'Classes', phone: 'tab' },
+    canManagePosts(privileges) && { key: 'updates', to: `${base}/updates`, end: false, label: 'Updates', phone: 'more' },
     canSeeLeaderboard(privileges) && {
       key: 'leaderboard',
       to: `${base}/leaderboard`,

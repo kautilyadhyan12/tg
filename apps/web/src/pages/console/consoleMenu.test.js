@@ -5,30 +5,36 @@ import { consoleLook, consoleMenu, moreIsCurrent } from './consoleMenu';
 const keys = (list) => list.map((p) => p.key);
 
 describe('where each page sits on a phone', () => {
-  it('an owner: four tabs; Leads, Leaderboard and Settings under More', () => {
+  it('an owner: four tabs; Leads, Updates, Leaderboard and Settings under More', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.owner, 'gym');
-    expect(keys(menu.pages)).toEqual(['overview', 'members', 'leads', 'attendance', 'classes', 'leaderboard', 'settings']);
+    expect(keys(menu.pages)).toEqual(['overview', 'members', 'leads', 'attendance', 'classes', 'updates', 'leaderboard', 'settings']);
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
-    expect(keys(menu.more)).toEqual(['leads', 'leaderboard', 'settings']);
+    expect(keys(menu.more)).toEqual(['leads', 'updates', 'leaderboard', 'settings']);
   });
 
   // A manager's usual permissions hold the price list (17a-i), which is a box in Settings.
-  it('a manager: Leads, Leaderboard and Settings under More', () => {
+  it('a manager: Leads, Updates, Leaderboard and Settings under More', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.manager, 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
-    expect(keys(menu.more)).toEqual(['leads', 'leaderboard', 'settings']);
+    expect(keys(menu.more)).toEqual(['leads', 'updates', 'leaderboard', 'settings']);
   });
 
   it('a manager without the price list, staff or the gym details: no Settings', () => {
     const none = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage');
     const menu = consoleMenu('iron-house', none, 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
-    expect(keys(menu.more)).toEqual(['leads', 'leaderboard']);
+    expect(keys(menu.more)).toEqual(['leads', 'updates', 'leaderboard']);
   });
 
   it('a trainer the owner gave the leaderboard: it is under More', () => {
     const menu = consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'leaderboard.manage'], 'gym');
     expect(keys(menu.more)).toEqual(['leaderboard']);
+  });
+
+  it('a trainer the owner gave Updates: it is under More', () => {
+    const menu = consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'posts.manage'], 'gym');
+    expect(keys(menu.more)).toEqual(['updates']);
+    expect(menu.more[0].to).toBe('/console/iron-house/updates');
   });
 
   it('a trainer: three tabs, nothing under More but the way out', () => {
@@ -39,7 +45,7 @@ describe('where each page sits on a phone', () => {
 
   it('Settings for a manager given the gym details only', () => {
     const menu = consoleMenu('iron-house', [...ROLE_PRIVILEGES.manager, 'org.manage'], 'gym');
-    expect(keys(menu.more)).toEqual(['leads', 'leaderboard', 'settings']);
+    expect(keys(menu.more)).toEqual(['leads', 'updates', 'leaderboard', 'settings']);
   });
 
   it('draws only Overview and Members before the permissions arrive', () => {
@@ -66,6 +72,7 @@ describe('the More tab is lit', () => {
     ['/console/iron-house/more', true],
     ['/console/iron-house/leads', true],
     ['/console/iron-house/leaderboard', true],
+    ['/console/iron-house/updates', true],
     ['/console/iron-house/settings', true],
     ['/console/iron-house/settings/staff', true],
     ['/console/iron-house', false],

@@ -206,6 +206,12 @@ function privilegeCopy(orgType) {
       hint: `See everyone on the boards and what counted, take somebody off, and choose which boards ${words.people} see.`,
     },
     {
+      // Spec Part 3 §15.2 (19b-i): owner and manager by default.
+      value: 'posts.manage',
+      label: 'Post updates',
+      hint: `Write posts your ${words.people} read in their app, pin them and remove them.`,
+    },
+    {
       value: 'members.confirm',
       label: `Keep the ${words.person} list and invite`,
       hint: `Import and change the list, send invitations, and see Leads and your ${words.it}'s page.`,
