@@ -25,13 +25,20 @@ import {
   typesSummary,
   withChoice,
 } from '../../pages/console/membershipTypesView';
+import { formWordsFor, notSetUp, typeTies, withSetUpCount } from '../../pages/console/membershipWordsView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
+import { GiveBox, NotSetUp, TypeTies } from './MembershipFromList';
+import { useListMemberships } from './useListMemberships';
 
 // SETTINGS → MEMBERSHIPS (spec Part 3 §13.1; ROADMAP 17a-i), on `memberships.manage` as
 // the server gates the changes. What the gym sells: a name, a kind, a price in the gym's
 // own money, how long it lasts or how many classes it holds, and what it includes.
 // Nothing is deleted: a type is archived and can be put back. The form saves with its
 // own button and nothing in it is saved before that.
+//
+// The memberships a gym's member list names are part of this one list (17a-iii;
+// `MembershipFromList.jsx`): a name that is no type yet is set up here, with this same
+// form, and a type the list's people should hold says so on its own row.
 
 const inputStyle = {
   background: '#0A0908',
@@ -77,8 +84,9 @@ function Part({ title, children }) {
   );
 }
 
-function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused, busy, onSave, onCancel }) {
+function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused, busy, forWord, onSave, onCancel }) {
   const editing = draft.id !== null;
+  const title = editing ? 'Change membership type' : (forWord?.heading ?? 'Add a membership type');
   const id = (name) => `membership-${name}-${gymId}`;
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
   const text = (key) => (event) => set({ [key]: event.target.value });
@@ -111,14 +119,14 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
       }}
       className="rounded-xl p-4 flex flex-col gap-4"
       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
-      aria-label={editing ? 'Change membership type' : 'Add a membership type'}
+      aria-label={title}
     >
       <div>
         <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-          {editing ? 'Change membership type' : 'Add a membership type'}
+          {title}
         </p>
         <p className="text-sm mt-1" style={hintStyle}>
-          Make it your own: give it your name and price, then say how it is paid and what it includes.
+          {forWord?.hint ?? 'Make it your own: give it your name and price, then say how it is paid and what it includes.'}
         </p>
       </div>
 
@@ -335,7 +343,7 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
   );
 }
 
-function TypeRow({ type, readOnly, busy, formOpen, onEdit, onArchive }) {
+function TypeRow({ type, readOnly, busy, formOpen, ties, onEdit, onArchive, onGive, onUndo }) {
   const [asking, setAsking] = useState(false);
   return (
     <li className="py-3 flex flex-col gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
@@ -358,6 +366,7 @@ function TypeRow({ type, readOnly, busy, formOpen, onEdit, onArchive }) {
       <p className="text-sm" style={hintStyle}>
         {includesLine(type)}
       </p>
+      <TypeTies type={type} ties={ties} off={readOnly || busy || formOpen} busy={busy} onGive={onGive} onUndo={onUndo} />
       {asking ? (
         <ConfirmInline
           question={`Archive ${type.name}? It leaves your list of what you sell. Nothing is deleted, and you can put it back.`}
@@ -407,6 +416,10 @@ export default function MembershipTypesPanel({ org, readOnly }) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
+  // The name from the member list the form was opened for, and the name whose
+  // "Set up" question is open.
+  const [draftWord, setDraftWord] = useState(null);
+  const [choosing, setChoosing] = useState(null);
 
   const load = useCallback(
     (isLive = () => true) =>
@@ -437,17 +450,18 @@ export default function MembershipTypesPanel({ org, readOnly }) {
     try {
       const res = await request();
       setList(res.data);
-      return true;
+      return res.data;
     } catch (err) {
       setActionError(errorText(err, fallback));
       if (errorCode(err) === 'membership_type_changed') {
         // The form holds an older version: show the list as it is now, the form closed.
         setDraft(null);
+        setDraftWord(null);
         setShowProblems(false);
         setRefused(0);
         void load();
       }
-      return false;
+      return null;
     } finally {
       setBusy(false);
     }
@@ -460,20 +474,41 @@ export default function MembershipTypesPanel({ org, readOnly }) {
 
   const closeForm = () => {
     setDraft(null);
+    setDraftWord(null);
     setShowProblems(false);
     setRefused(0);
   };
+
+  const fromList = useListMemberships(gymId, list?.types);
+  const anyBusy = busy || fromList.busy;
+  // One thing at a time: a form, a "Set up" question or the box of who gets it.
+  const locked = draft !== null || choosing !== null || fromList.preview !== null;
 
   const save = async () => {
     setShowProblems(true);
     if (draft !== null && problems !== null) setRefused((n) => n + 1);
     if (draft === null || draftCurrency === null || problems !== null || readOnly || busy) return;
     const body = draftBody(draft, draftCurrency);
-    const done =
+    const had = new Set((list?.types ?? []).map((t) => t.id));
+    const forWord = draftWord;
+    const saved =
       draft.id === null
         ? await run(() => orgService.createMembershipType(gymId, body), "We couldn't add that membership type. Please try again.")
         : await run(() => orgService.updateMembershipType(gymId, draft.id, body), "We couldn't save that change. Please try again.");
-    if (done) closeForm();
+    if (saved === null) return;
+    closeForm();
+    // Added for a name from the member list: next, who gets it.
+    const made = forWord === null ? undefined : saved.types.find((t) => !had.has(t.id));
+    if (forWord !== null && made !== undefined) void fromList.open(forWord.word, made.id);
+  };
+
+  /** "Set up" on a name from the member list: the form with its name filled in. */
+  const setUpAsNew = (word) => {
+    setChoosing(null);
+    setActionError(null);
+    setShowProblems(false);
+    setDraftWord(word);
+    setDraft({ ...emptyDraft(), name: word.word });
   };
 
   const startDraft = (next) => {
@@ -483,7 +518,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
   };
 
   return (
-    <ConsoleSection title="Memberships" summary={typesSummary(list)} forceOpen={loadError !== null}>
+    <ConsoleSection title="Memberships" summary={withSetUpCount(typesSummary(list), fromList.words)} forceOpen={loadError !== null}>
       {readOnly ? (
         <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
           {readOnlyNote(org.orgType)}
@@ -512,8 +547,11 @@ export default function MembershipTypesPanel({ org, readOnly }) {
                   key={type.id}
                   type={type}
                   readOnly={readOnly}
-                  busy={busy}
-                  formOpen={draft !== null}
+                  busy={anyBusy}
+                  formOpen={locked}
+                  ties={typeTies(type, fromList.words)}
+                  onGive={(word, t) => void fromList.open(word.word, t.id)}
+                  onUndo={(word) => void fromList.undo(word)}
                   onEdit={(t) => startDraft(draftFromType(t))}
                   onArchive={(t) => {
                     if (draft?.id === t.id) closeForm();
@@ -529,6 +567,35 @@ export default function MembershipTypesPanel({ org, readOnly }) {
             </p>
           )}
 
+          <NotSetUp
+            rows={notSetUp(fromList.words)}
+            types={list.types}
+            canCreate={list.currency !== null && canAddType(list)}
+            off={readOnly || anyBusy || locked}
+            busy={anyBusy}
+            choosing={choosing}
+            // With nothing for sale yet there is nothing to choose between: straight to the form.
+            onChoose={(word) => (word !== null && list.types.length === 0 ? setUpAsNew(word) : setChoosing(word === null ? null : word.word))}
+            onExisting={(word, typeId) => {
+              setChoosing(null);
+              void fromList.open(word.word, typeId);
+            }}
+            onNew={setUpAsNew}
+            onUndo={(word) => void fromList.undo(word)}
+          />
+
+          {fromList.preview !== null ? (
+            <GiveBox
+              key={`${fromList.preview.word}-${fromList.preview.type.id}-${JSON.stringify(fromList.preview.counts)}`}
+              preview={fromList.preview}
+              counted={fromList.words.some((w) => w.word === fromList.preview.word && w.link !== null && w.link.typeId === fromList.preview.type.id)}
+              busy={fromList.busy}
+              error={fromList.error}
+              onGive={(body) => void fromList.give(body)}
+              onCancel={fromList.closeBox}
+            />
+          ) : null}
+
           {draft !== null && draftCurrency !== null ? (
             <TypeForm
               gymId={gymId}
@@ -539,6 +606,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
               problems={showProblems ? problems : null}
               refused={refused}
               busy={busy}
+              forWord={draftWord === null ? null : formWordsFor(draftWord)}
               onSave={() => void save()}
               onCancel={closeForm}
             />
@@ -550,7 +618,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
           ) : canAddType(list) ? (
             <button
               type="button"
-              disabled={readOnly || busy}
+              disabled={readOnly || anyBusy || locked}
               onClick={() => startDraft(emptyDraft())}
               className="self-start rounded-xl px-5 py-3 text-sm font-semibold min-h-11 disabled:opacity-40"
               style={mainButton}
@@ -566,6 +634,16 @@ export default function MembershipTypesPanel({ org, readOnly }) {
           {actionError !== null ? (
             <p className="text-sm" style={{ color: '#ef4444' }} role="alert">
               {actionError}
+            </p>
+          ) : null}
+          {fromList.preview === null && fromList.error !== null ? (
+            <p className="text-sm" style={{ color: '#ef4444' }} role="alert">
+              {fromList.error}
+            </p>
+          ) : null}
+          {fromList.done !== null ? (
+            <p className="text-sm" style={{ color: '#34d399' }} role="status">
+              {fromList.done}
             </p>
           ) : null}
 
@@ -615,6 +693,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
               ) : null}
             </div>
           ) : null}
+
         </div>
       )}
     </ConsoleSection>

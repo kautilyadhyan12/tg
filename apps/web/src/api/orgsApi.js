@@ -82,6 +82,9 @@ import {
   gymClassWeekResponseSchema,
   gymMembershipTypesResponseSchema,
   heldMembershipsResponseSchema,
+  membershipLinkPreviewResponseSchema,
+  membershipLinkResponseSchema,
+  membershipWordsResponseSchema,
   gymAttendanceDayResponseSchema,
   gymAttendanceHistoryResponseSchema,
   gymHoursResponseSchema,
@@ -1450,6 +1453,34 @@ export const orgService = {
         `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/${what}`,
         body,
       ),
+    ),
+
+  /** The membership words on the gym's list, each linked to a type once (Part 3 §13.2;
+   *  17a-iii). All four need `members.confirm`. The word travels in the body. Linking
+   *  answers how many people were given the type, with the words as they are now. */
+  getMembershipWords: (gymId) =>
+    readThrough(
+      membershipWordsResponseSchema,
+      'the memberships on your list',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/membership-words`),
+    ),
+  previewMembershipLink: (gymId, body) =>
+    readThrough(
+      membershipLinkPreviewResponseSchema,
+      'who would get that membership',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/membership-words/preview`, body),
+    ),
+  linkMembershipWord: (gymId, body) =>
+    readThrough(
+      membershipLinkResponseSchema,
+      'that link',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/membership-words/link`, body),
+    ),
+  unlinkMembershipWord: (gymId, body) =>
+    readThrough(
+      membershipWordsResponseSchema,
+      'that link',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/membership-words/unlink`, body),
     ),
 
   /** GET /v1/orgs/:gymId/classes — the gym's whole timetable (Part 3 §13.3).

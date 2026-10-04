@@ -12,7 +12,9 @@
 //   `frozenDays`   how many days it has been frozen, in all. Periods are counted from
 //                  the start day in the type's own unit, and these days are added
 //                  AFTER that, so every later date moves by exactly the days frozen
-//                  (moving the start instead loses days at a month's end);
+//                  (moving the start instead loses days at a month's end). One taken
+//                  from the gym's list (`linkHeldMembership`) also counts here the
+//                  days its list's day sits past the type's own term;
 //   `paidPeriods`  how many periods are marked paid. A repeating membership is paid
 //                  up to the start of that period; any other kind has one period;
 //   `paidFloor`    the count it was given with for the periods before it was given:
@@ -413,6 +415,125 @@ export function giveHeldMembership(type: HeldMembershipTerms, startsOn: string, 
   return { ok: true, membership };
 }
 
+// ── A membership taken from the gym's own list (§13.2; ROADMAP 17a-iii) ─────────
+
+/** What a gym's list says about a person's membership: its end-or-renewal day, and
+ *  which of the two the gym's own heading called it. */
+export interface ListMembershipDates {
+  endsOn: string | null;
+  endsOnKind: "ends" | "renews" | null;
+}
+
+/** A list's day further ahead than this is not taken. */
+export const LINK_DAY_AHEAD_DAYS = 5 * 366;
+/** How many periods back a start is looked for. Weekly, five years ahead, is 261. */
+const LINK_PERIODS_MAX = 600;
+
+/** Whether the list's day settles what is paid: `settled` (paid up, or nothing to
+ *  pay), `due` (its renewal day has passed), or `ask` (the list does not say, so
+ *  staff do). */
+export type LinkGroup = "settled" | "due" | "ask";
+
+export type LinkedHeldMembership =
+  | { ok: true; membership: HeldMembership; group: LinkGroup }
+  | { ok: false; reason: "ended_in_list" | "day_out_of_range" };
+
+/** A membership as it is when a list's word is linked to a type: THE LIST'S DAY IS
+ *  KEPT. "Renews 14 Nov" is the first day not paid for; "Ends 31 Dec" is the last
+ *  day covered, so the first day not covered is the day after.
+ *
+ *  A repeating membership is paid up to that day, and owes from it where it has
+ *  passed. Any other kind runs through that day, and whether it is paid is staff's
+ *  answer (`paid`), as it is where the list has no day at all: such a membership
+ *  starts today. A start day is worked back from the list's day and is never after
+ *  today, so nobody on the list is given a membership that has not started. */
+export function linkHeldMembership(
+  type: HeldMembershipTerms,
+  dates: ListMembershipDates,
+  paid: boolean,
+  today: string,
+): LinkedHeldMembership {
+  const free = type.priceMinor === 0;
+  if (dates.endsOn === null) {
+    const made = giveHeldMembership(type, today, paid, today);
+    if (!made.ok) return { ok: false, reason: "day_out_of_range" };
+    return { ok: true, membership: made.membership, group: free ? "settled" : "ask" };
+  }
+  if (!isCalendarDay(dates.endsOn)) return { ok: false, reason: "day_out_of_range" };
+  // The first day the list does not cover.
+  const edge = dates.endsOnKind === "renews" ? dates.endsOn : addDays(dates.endsOn, 1);
+  if (edge <= HELD_START_MIN || edge > addDays(today, LINK_DAY_AHEAD_DAYS)) return { ok: false, reason: "day_out_of_range" };
+
+  const base: HeldMembership = {
+    kind: type.kind,
+    termCount: type.termCount,
+    termUnit: type.termUnit,
+    packClasses: type.packClasses,
+    packDays: type.packDays,
+    free,
+    startsOn: today,
+    frozenDays: 0,
+    status: "active",
+    frozenOn: null,
+    cancelledOn: null,
+    paidPeriods: 0,
+    paidFloor: 0,
+    renews: type.kind === "recurring",
+    classesLeft: type.kind === "pack" ? type.packClasses : null,
+  };
+  const t = term(base);
+
+  if (type.kind !== "recurring") {
+    if (edge <= today) return { ok: false, reason: "ended_in_list" };
+    // One term back from the list's day, and no later than today. Where the type's
+    // own term does not reach the list's day from there, the days between are added
+    // after it, as frozen days are.
+    const back = addTerms(edge, t.count, t.unit, -1);
+    const startsOn = back > today ? today : back;
+    if (startsOn < HELD_START_MIN) return { ok: false, reason: "day_out_of_range" };
+    const frozenDays = daysBetween(addTerms(startsOn, t.count, t.unit, 1), edge);
+    const membership = { ...base, startsOn, frozenDays, paidPeriods: !free && paid ? 1 : 0 };
+    return { ok: true, membership, group: free ? "settled" : "ask" };
+  }
+
+  // Repeating: a start day so many whole periods before the list's day, so each
+  // renewal after it falls on the list's day of the month (31 Mar, 30 Apr, 31 May).
+  // A month's end can cut the way back short (one month before 31 Mar is 28 Feb, and
+  // one month on from that is 28 Mar), so the first start that comes back to the
+  // list's day exactly is the one taken.
+  let found: { startsOn: string; periods: number; frozenDays: number } | null = null;
+  let nearest: { startsOn: string; periods: number; frozenDays: number } | null = null;
+  for (let periods = 1; periods <= LINK_PERIODS_MAX && found === null; periods += 1) {
+    const startsOn = addTerms(edge, t.count, t.unit, -periods);
+    if (startsOn > today) continue;
+    const short = daysBetween(addTerms(startsOn, t.count, t.unit, periods), edge);
+    if (short === 0) found = { startsOn, periods, frozenDays: 0 };
+    else nearest ??= { startsOn, periods, frozenDays: short };
+  }
+  const at = found ?? nearest;
+  // No start a hand-given membership could not have either.
+  if (at === null || at.startsOn < HELD_START_MIN) return { ok: false, reason: "day_out_of_range" };
+  const membership = {
+    ...base,
+    startsOn: at.startsOn,
+    frozenDays: at.frozenDays,
+    paidPeriods: free ? 0 : at.periods,
+    // Every period up to the list's day is the list's own fact, not a mark staff made:
+    // none of them can be taken back.
+    paidFloor: free ? 0 : at.periods,
+  };
+  return { ok: true, membership, group: free || edge > today ? "settled" : "due" };
+}
+
+/** The renewal day a screen prints for a repeating membership taken from the list: the
+ *  LIST's day. A person paid further ahead than one period (a year paid on a type set up
+ *  as monthly) renews in the rule every period, and owes nothing until the list's day,
+ *  which is the day they are paid up to: that is the day shown while it is the later. */
+export function shownRenewal(view: Pick<HeldMembershipView, "renewsOn" | "payment">): string | null {
+  const until = view.payment !== null && view.payment.state === "paid" ? view.payment.until : null;
+  return until !== null && view.renewsOn !== null && until > view.renewsOn ? until : view.renewsOn;
+}
+
 // ── The wire ────────────────────────────────────────────────────────────────
 
 const daySchema = z.string().regex(DAY);
@@ -434,6 +555,9 @@ export const heldMembershipSchema = z
     startsOn: daySchema,
     frozenOn: daySchema.nullable(),
     classesLeft: z.number().int().min(0).nullable(),
+    /** Taken from the gym's own list (17a-iii): its start day was worked back from the
+     *  list's day, so a screen does not print it as the day the person started. */
+    fromList: z.boolean(),
     view: heldMembershipViewSchema,
   })
   .strict();
@@ -456,10 +580,31 @@ export const heldMembershipTypeChoiceSchema = z
   .strict();
 export type HeldMembershipTypeChoice = z.infer<typeof heldMembershipTypeChoiceSchema>;
 
+/** What the gym's own member list says this person's membership is (17a-iii): the name
+ *  as the list wrote it, its end-or-renewal day, and how that name stands with the price
+ *  list. `type` is the live type the name is (one staff said it is, or a type of that
+ *  very name), null where it is not set up; `held` is whether this person has, or has
+ *  had, that type. A person's page says it in the Memberships box, so the box never
+ *  reads "No membership yet" beside a list that names one. */
+export const listedMembershipSchema = z
+  .object({
+    word: z.string().min(1),
+    endsOn: daySchema.nullable(),
+    endsOnKind: z.enum(["ends", "renews"]).nullable(),
+    type: z.object({ id: z.string().uuid(), name: z.string() }).strict().nullable(),
+    /** The list's name is that type's own name, as the server folds both. */
+    ownName: z.boolean(),
+    held: z.boolean(),
+  })
+  .strict();
+export type ListedMembership = z.infer<typeof listedMembershipSchema>;
+
 /** A record's memberships. `today` is the gym's own day, the one every date here was
  *  worked out on; `past` is true for a past member, whose memberships are not in use.
  *  `memberships` holds every one in use and the newest of the ones that are over;
- *  `earlierNotShown` counts the older ones left out. `types` are the gym's live types. */
+ *  `earlierNotShown` counts the older ones left out. `types` are the gym's live types.
+ *  `listed` is what the member list says their membership is, null where it says
+ *  nothing or the person is a past member. */
 export const heldMembershipsResponseSchema = z
   .object({
     today: daySchema,
@@ -467,6 +612,7 @@ export const heldMembershipsResponseSchema = z
     memberships: z.array(heldMembershipSchema),
     earlierNotShown: z.number().int().min(0),
     types: z.array(heldMembershipTypeChoiceSchema),
+    listed: listedMembershipSchema.nullable(),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;

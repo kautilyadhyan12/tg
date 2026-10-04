@@ -7,6 +7,8 @@
 // (`memberList/byHandService.ts`), so a membership is never written onto a record
 // that is being deleted. What a write may do is decided by the one rule in
 // `@app/shared` (`moveHeldMembership`), on the day the service passes in.
+// The one other writer is `wordsRepo.ts`, which gives a type to everybody who carries
+// one of the list's words, under the same gym lock.
 //
 // `status` holds the last status written, and the clock ends a membership without
 // writing: every write first marks the record's memberships the clock has ended
@@ -26,6 +28,7 @@ import {
   type HeldMembership,
   type HeldMembershipEvent,
   type HeldMembershipTypeChoice,
+  type ListedMembership,
 } from "@app/shared";
 import { insertAudit } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
@@ -36,6 +39,7 @@ export interface HeldRow {
   typeName: string;
   priceMinor: number;
   currency: string;
+  fromList: boolean;
   membership: HeldMembership;
 }
 
@@ -60,6 +64,7 @@ const rawSchema = z.object({
   paid_floor: z.number().int(),
   renews: z.boolean(),
   classes_left: z.number().int().nullable(),
+  from_list: z.boolean(),
 });
 
 function shape(row: unknown): HeldRow {
@@ -70,6 +75,7 @@ function shape(row: unknown): HeldRow {
     typeName: r.type_name,
     priceMinor: r.price_minor,
     currency: r.currency,
+    fromList: r.from_list,
     membership: {
       kind: r.kind,
       termCount: r.term_count,
@@ -102,7 +108,7 @@ const typeSchema = z.object({
   pack_days: z.number().int().nullable(),
 });
 
-function typeChoice(row: unknown): HeldMembershipTypeChoice {
+export function typeChoice(row: unknown): HeldMembershipTypeChoice {
   const t = typeSchema.parse(row);
   return {
     id: t.id,
@@ -118,8 +124,8 @@ function typeChoice(row: unknown): HeldMembershipTypeChoice {
 }
 
 /** A gym's live types, or the one named; a gym has at most 60. */
-const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: string | null) => sql`
-  SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days
+export const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: string | null) => sql`
+  SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at
   FROM gym_membership_types
   WHERE gym_id = ${gymId} AND archived_at IS NULL
     AND (${typeId}::uuid IS NULL OR id = ${typeId}::uuid)
@@ -130,7 +136,7 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.term_count, h.term_unit, h.pack_classes, h.pack_days,
   h.starts_on::text AS starts_on, h.frozen_days, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
-  h.paid_periods, h.paid_floor, h.renews, h.classes_left`;
+  h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list`;
 
 /** The record's memberships of the statuses named, newest start first. */
 const held = (sql: Sql | TransactionSql, gymId: string, entryId: string, statuses: readonly string[], limit: number) => sql`
@@ -156,16 +162,58 @@ export interface HeldList {
   over: HeldRow[];
   overTotal: number;
   types: HeldMembershipTypeChoice[];
+  /** What the member list says their membership is; null where it says nothing, and for
+   *  a past member. */
+  listed: ListedMembership | null;
+}
+
+/** What the list says this record's membership is, and how that name stands with the
+ *  price list: the live type staff said it is (`gym_membership_word_links`), else the
+ *  live type of that very name, matched as the list's chips fold a word (`lower`). A
+ *  name tied to an archived type is not set up, as Settings says of it. */
+async function listedMembership(
+  tx: TransactionSql,
+  gymId: string,
+  entryId: string,
+  entry: { membership_type: string | null; ends_on: string | null; ends_on_kind: string | null },
+): Promise<ListedMembership | null> {
+  const word = entry.membership_type;
+  if (word === null || word === "") return null;
+  const [type] = await tx<{ id: string; name: string; own_name: boolean; held: boolean }[]>`
+    SELECT t.id, t.name, (lower(t.name) = lower(${word})) AS own_name,
+           EXISTS (
+             SELECT 1 FROM gym_held_memberships h
+             WHERE h.gym_id = t.gym_id AND h.entry_id = ${entryId} AND h.membership_type_id = t.id
+           ) AS held
+    FROM gym_membership_types t
+    WHERE t.gym_id = ${gymId} AND t.archived_at IS NULL
+      AND t.id = COALESCE(
+        (SELECT l.membership_type_id FROM gym_membership_word_links l
+         WHERE l.gym_id = ${gymId} AND l.word_key = lower(${word})),
+        (SELECT s.id FROM gym_membership_types s
+         WHERE s.gym_id = ${gymId} AND s.archived_at IS NULL AND lower(s.name) = lower(${word}))
+      )`;
+  return {
+    word,
+    endsOn: entry.ends_on,
+    // Text under a CHECK: a kind this build does not know reads as the list's default, an end day.
+    endsOnKind: entry.ends_on === null || entry.ends_on_kind === null ? null : entry.ends_on_kind === "renews" ? "renews" : "ends",
+    type: type === undefined ? null : { id: type.id, name: type.name },
+    ownName: type?.own_name ?? false,
+    held: type?.held ?? false,
+  };
 }
 
 /** A record's memberships, or null where the record is not this gym's. */
 export async function readHeld(sql: Sql, gymId: string, entryId: string): Promise<HeldList | null> {
   // One connection and one moment: the page of earlier ones and their count agree.
   return await sql.begin("isolation level repeatable read read only", async (tx): Promise<HeldList | null> => {
-    const [entry] = await tx<{ past: boolean }[]>`
-      SELECT former_at IS NOT NULL AS past FROM gym_member_list_entries
+    const [entry] = await tx<{ past: boolean; membership_type: string | null; ends_on: string | null; ends_on_kind: string | null }[]>`
+      SELECT former_at IS NOT NULL AS past, membership_type, ends_on::text AS ends_on, ends_on_kind
+      FROM gym_member_list_entries
       WHERE gym_id = ${gymId} AND id = ${entryId}`;
     if (entry === undefined) return null;
+    const listed = entry.past ? null : await listedMembership(tx, gymId, entryId, entry);
     const inUse = await held(tx, gymId, entryId, IN_USE, IN_USE_READ);
     const over = await held(tx, gymId, entryId, OVER, HELD_EARLIER_PAGE);
     const [total] = await tx<{ n: number }[]>`
@@ -178,6 +226,7 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       over: over.map(shape),
       overTotal: total?.n ?? 0,
       types: types.map(typeChoice),
+      listed,
     };
   });
 }
@@ -210,7 +259,7 @@ async function lockedEntry(tx: TransactionSql, gymId: string, entryId: string): 
 
 /** Mark the record's memberships the clock has ended, and answer how many are still in
  *  use. Under the record's lock. */
-async function settle(tx: TransactionSql, gymId: string, entryId: string, today: string, now: Date): Promise<number> {
+export async function settle(tx: TransactionSql, gymId: string, entryId: string, today: string, now: Date): Promise<number> {
   const rows = (await held(tx, gymId, entryId, IN_USE, IN_USE_READ)).map(shape);
   const ended = rows.filter((row) => heldMembershipView(row.membership, today).status === "ended").map((row) => row.id);
   if (ended.length > 0) {
@@ -356,4 +405,29 @@ export async function moveHeld(
     });
     return { kind: "ok" };
   });
+}
+
+/** How many memberships each of these records has in use on `today`, by the rule: a
+ *  stored `active` row the clock has ended is not counted. Only records with at least
+ *  `atLeast` stored in use are read. */
+export async function inUseByRule(
+  tx: TransactionSql,
+  gymId: string,
+  entryIds: readonly string[],
+  today: string,
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (entryIds.length === 0) return counts;
+  const rows = await tx`
+    SELECT h.entry_id, ${COLUMNS(tx)}
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    WHERE h.gym_id = ${gymId} AND h.entry_id = ANY(${[...entryIds]}::uuid[])
+      AND h.status = ANY(${[...IN_USE]}::text[])`;
+  for (const row of rows) {
+    const entryId = z.object({ entry_id: z.string() }).passthrough().parse(row).entry_id;
+    if (heldMembershipView(shape(row).membership, today).status === "ended") continue;
+    counts.set(entryId, (counts.get(entryId) ?? 0) + 1);
+  }
+  return counts;
 }

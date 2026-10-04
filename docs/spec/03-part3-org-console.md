@@ -2378,8 +2378,101 @@ just show (§11).
   the page says the membership was not (RULINGS 2026-10-04). Where the gym has a price
   list the form does not also ask the list's own Membership word (§11): it takes the
   name of the type once that membership is given, and never otherwise. Edit, and a gym with no price list, keep that box.
-- Not here: bills and money (18a), a file's word linked to a type (17a-iii), a pack's
-  classes used by a booking (17c), who a desk lets in (16d).
+- Not here: bills and money (18a), a pack's classes used by a booking (17c), who a desk
+  lets in (16d).
+
+*(17a-iii's notes, 2026-10-04, the screen redrawn 2026-10-05.)* **A list's membership
+word linked to a type**: `gym_membership_word_links` (one link a word),
+`linkHeldMembership` in `@app/shared` (`heldMemberships.ts`), and the gym's ONE list of
+memberships, Settings → Memberships.
+- A word is matched WHOLE, its capitals folded by Postgres on both sides (`lower`), as
+  the list's own chips fold it: "Gold" is "GOLD" and never "Gold Plus". There is no list
+  of words in the code.
+- **The list's day is kept.** "Renews 14 Nov" is the first day not paid for; "Ends 31 Dec"
+  is the last day covered. A repeating membership is paid up to that day (`settled`), or
+  owes since it where it has passed (`due`) and is never ended for it. Its start is so
+  many whole periods before the list's day and never after today, the first such start
+  that comes back to the list's day exactly (one month before 31 Mar is 28 Feb, which
+  comes back to 28 Mar, so the start is 31 Jan), so later renewals stay on the list's day
+  of the month. Somebody paid further ahead than one period (a year paid on a type
+  set up as monthly) renews in the rule every period and owes nothing until the list's
+  day: every screen prints the list's day (`shownRenewal`), in the box's row and on
+  the person's page. A free repeating one has nothing paid up to that day, so its page
+  reads "From your list" with no renewal day. The periods up to the list's day are the list's own fact, so
+  Undo mark paid never goes below them. Any other kind runs through the list's last day; where the type's own
+  term does not reach it, the days between are counted in `frozen_days`. One whose day
+  has passed is not given (`ended`), nor one whose worked-back start would be before
+  1 January 2000, the first day any membership can start.
+- **What the list does not say, staff do** (RULINGS 2026-10-04): with no day on the list
+  the membership starts the day it is linked, and for these people, and for a membership
+  that ends (its end day says how long, not whether it is paid), the box asks once
+  whether they have paid, with nothing chosen. A free type asks nothing.
+- The box names three groups that get it, each with a tick (paid up · payment due · your
+  list doesn't say), and who does not, each with the reason: holds or has held the type
+  (so a second press gives nobody a second, and a cancelled one is not handed back), has
+  20 running, ended in the list, a day more than five years off, and past members, who
+  are counted and given nothing. Names are the first 200 of a group; the counts are of
+  everybody. A pack is given whole, and the box says the list does not say how many
+  classes are used.
+- The press carries the box's `digest`: the day, the type as it stands (its price, term
+  and when it last changed) and each person who can get it, with their name, group and
+  list day. A list or a type that has moved since is refused (409) and nobody is given
+  anything, however alike the numbers are. The same press arriving again, its people
+  already given, is told it was done (409 `membership_link_done`), never that nobody was
+  given a membership. Everybody is given theirs in one statement under
+  the gym's lock, with one note in `audit_log`. `from_list` marks a membership whose
+  start was worked back from the list's day: a person's page reads "From your list ·
+  Renews 14 November 2026", never the worked-back day as the day they started.
+- **A person on the list twice** has the name on both records, and both are given the
+  type. Joining the two records (§11.6) does not move a from-list membership onto a
+  kept record that has that type IN USE: it goes with its record, and the join's note
+  counts it. Where the kept record's one is over (cancelled, or ended, the clock's
+  endings marked first), the other record's is the person's running membership and
+  moves, as any other membership does.
+- One link a word. A second type is refused until the link is removed; removing it
+  changes nobody. The link is remembered and never acts by itself: people who arrive
+  with the word later are given it on a press.
+- **The screen: one list of memberships, never a second one beside it** (RULINGS
+  2026-10-05). A name on the member list IS a membership, as the file's own
+  membership names are in every product read (§13.8). So Settings → Memberships draws:
+  - under the types, **"On your member list, not set up yet"**: each name that is no
+    type so far, with how many people have it, and **Set up**. With nothing for sale
+    yet, Set up opens the usual Add form with the name filled in; saving it leads
+    straight to the box of who gets it. Where the gym has types it first asks "What is
+    “Gold” at your gym?": *One of the memberships above* (which one) or *A new
+    membership*, nothing chosen. The closed section says how many names wait.
+  - on a type's own row, what it has to do with the list, in plain numbers: "On your
+    member list this is “Gold” · 360 people. 60 of them have never had it." with **See
+    who can get it**, and **This isn't “Gold”**, which undoes the tie and changes
+    nobody. Where nobody with the name has had it, the row offers **Give it to them**.
+  - **a name that is already a type's own name is never asked about** (the read's
+    `sameName`): nothing is drawn where everybody with it has had the type, and its
+    row states the numbers where some have not. Kd's click-through met "Gold Monthly"
+    on the list beside a dropdown offering Gold Monthly.
+  - a name whose type was archived goes back under "not set up yet" with **Set up
+    again**.
+  The box opens with everybody who can get it ticked the first time, and with NOBODY
+  ticked where some already have the type: the rest may have been left out on purpose
+  (lapsed members a gym chose not to bring across), so staff tick who they mean. A name
+  not yet tied to the type can be counted as it with nobody given. One thing is open at
+  a time: a form, the question or the box.
+- **The box names people in a list, a row each** (Kd's second click-through,
+  2026-10-05): the name and the day they will read ("Aarav Mehta · Renews 16 October
+  2026"), three of a group, then "and N more · See all" a hundred at a time inside the
+  list's own frame, as the Remove box does (§18.6). Never a line of names.
+- **A person's page says the membership their list names** (the same click-through:
+  Leo Grant's page read "No membership yet" above "Membership: Gold Plus"). The read of
+  a person's memberships answers `listed`: the list's name, its day, the live type that
+  name is (one staff said it is, else a type of that very name; none where it is not set
+  up or its type is archived) and whether this person has, or has had, that type. Where
+  they have not, the Memberships box draws it as a row of its own: "Gold Plus · Not set
+  up · From your member list · Renews 13 October 2026", or, for a name that is a type,
+  "Gold Monthly · Not added · Your member list says “Gold”". It has no buttons: it is
+  not a membership held here. "No membership yet" is said only where the list names
+  none. A past member's page is told nothing of it.
+- All four routes need `members.confirm` (a preview names people and what each owes);
+  the box sits in Settings → Memberships, which opens on `memberships.manage`, so in
+  practice both. The word travels in the request's body, never its address.
 
 **The membership row carries its record.** Since 2026-09-21 a person joins only by
 accepting an invitation (§10.2), and the invitation knows which record it was for; so
@@ -2512,7 +2605,16 @@ manually claim the spot") and "Cancelling classes, class schedules, and Class Ty
 Mindbody support: "How to manage early cancellations, late cancellations, and no-shows
 for classes" (the business sets the window; a fee or a visit deduction) and its
 scheduling page (session lengths, real-time trainer availability) · Glofox's blog on
-class scheduling (the next person on the waitlist is told by SMS or push). Not opened
+class scheduling (the next person on the waitlist is told by SMS or push). **Read 2026-10-05 for 17a-iii's screen:** TeamUp, "Switching to TeamUp from a
+spreadsheet" ("We need at least memberships set up in order to complete the import";
+"we'll either need memberships to match the names of the memberships in your previous
+system, or we can ask for the matches before completing the import") · PushPress,
+"Migration of your Members/Clients from Another Platform" ("Assign membership plans,
+apply discounts, and set dates. You can do this one-by-one or with bulk assign";
+"Select a cohort and apply in one step"; "Bulk edit plan details and set remaining
+sessions") · Gymdesk, "Data Imports Overview" (its membership import's fields:
+"Member Name · Membership Title · Payment Amount · Recurrence Details · … Start Date ·
+End Date · … Next Payment Date"). Not opened
 that day, and general to every product the chat knows: the week calendar, and a desk
 check-in marking a booking attended — each card checks its own before it builds.
 

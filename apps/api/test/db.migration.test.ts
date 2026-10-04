@@ -1609,6 +1609,66 @@ d("0001_init on a real database", () => {
       });
   });
 
+  it("0073's word links: one link a word whatever its capitals, only to the gym's own type, and a membership is from the list only when written so", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0073-owner') RETURNING id`;
+        if (user === undefined) throw new Error("no user");
+        const gymOf = async (slug: string) => {
+          const [gym] = await tx<{ id: string }[]>`
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0073', 'Europe/London', ${user.id}) RETURNING id`;
+          if (gym === undefined) throw new Error("no gym");
+          const [entry] = await tx<{ id: string }[]>`
+            INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+            VALUES (${gym.id}, 'Zz Person', ${slug + "@example.com"}, ${"0".repeat(63) + slug.slice(-1)}, 'typed') RETURNING id`;
+          const [type] = await tx<{ id: string }[]>`
+            INSERT INTO gym_membership_types (gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
+            VALUES (${gym.id}, 'Gold Monthly', 'recurring', 4999, 'GBP', 1, 'month', 'all_classes') RETURNING id`;
+          if (entry === undefined || type === undefined) throw new Error("no fixture");
+          return { gym: gym.id, entry: entry.id, type: type.id };
+        };
+        const a = await gymOf("zz-0073-a");
+        const b = await gymOf("zz-0073-b");
+
+        /** The constraint a link trips, or "ok". Each in its own savepoint. */
+        const put = async (over: Record<string, unknown>): Promise<string> => {
+          const row = { gym_id: a.gym, word_key: "gold", word: "Gold", membership_type_id: a.type, linked_by: user.id, ...over };
+          try {
+            await tx.savepoint((sp) => sp`INSERT INTO gym_membership_word_links ${sp(row)}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        expect(await put({})).toBe("ok");
+        const refused: [string, Record<string, unknown>, string][] = [
+          ["the same word again", {}, "gym_membership_word_links_pk"],
+          ["the same word in capitals, under the same key", { word: "GOLD" }, "gym_membership_word_links_pk"],
+          ["a key that is not the word folded", { word_key: "GOLD", word: "GOLD" }, "gym_membership_word_links_key_check"],
+          ["a key of another word", { word_key: "silver" }, "gym_membership_word_links_key_check"],
+          ["no word", { word_key: "", word: "" }, "gym_membership_word_links_word_check"],
+          ["a word longer than a list keeps", { word_key: "x".repeat(41), word: "x".repeat(41) }, "gym_membership_word_links_word_check"],
+          ["another gym's type", { word_key: "silver", word: "Silver", membership_type_id: b.type }, "gym_membership_word_links_type_fk"],
+        ];
+        for (const [what, over, constraint] of refused) expect(await put(over), what).toBe(constraint);
+        // The other gym links the same word to its own type.
+        expect(await put({ gym_id: b.gym, membership_type_id: b.type })).toBe("ok");
+
+        // A membership written without the column is one given by hand.
+        const [held] = await tx<{ from_list: boolean }[]>`
+          INSERT INTO gym_held_memberships
+            (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, renews)
+          VALUES (${a.gym}, ${a.entry}, ${a.type}, ${randomUUID()}, 'recurring', 4999, 'GBP', 1, 'month', '2026-10-04', true)
+          RETURNING from_list`;
+        expect(held?.from_list).toBe(false);
+        throw new Error("ROLLBACK-0073-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0073-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
    *  (Low-1) — which is the highest-value item that round found.
    *
@@ -2463,11 +2523,14 @@ d("0001_init on a real database", () => {
         INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
         VALUES (${gymId}, 'First',  ${`m34a-${gymId.slice(0, 8)}@example.com`}, ${"a".repeat(64)}, 'upload'),
                (${gymId}, 'Second', ${`m34b-${gymId.slice(0, 8)}@example.com`}, ${"b".repeat(64)}, 'upload')`;
-      const seqs = await sql<{ full_name: string; listed_seq: string }[]>`
-        SELECT full_name, listed_seq::text FROM gym_member_list_entries
+      // The number is read under a name of its own: an output column called `listed_seq`
+      // would be what ORDER BY sorts, as TEXT, and "10" sorts before "9" (it failed in CI
+      // the day the two rows drew 9 and 10).
+      const seqs = await sql<{ full_name: string; seq: string }[]>`
+        SELECT full_name, listed_seq::text AS seq FROM gym_member_list_entries
         WHERE gym_id = ${gymId} ORDER BY listed_seq`;
       expect(seqs.map((r) => r.full_name)).toEqual(["First", "Second"]);
-      expect(seqs[0]?.listed_seq).not.toBe(seqs[1]?.listed_seq);
+      expect(seqs[0]?.seq).not.toBe(seqs[1]?.seq);
     } finally {
       await sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
       await sql`DELETE FROM gyms WHERE id = ${gymId}`;

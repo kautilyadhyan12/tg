@@ -11,6 +11,7 @@ import {
   paymentLine,
   startRange,
   statusTag,
+  listedRow,
 } from './heldMembershipsView';
 
 const TODAY = '2026-10-20';
@@ -44,6 +45,7 @@ function held(type, startsOn, paid, { givenOn = startsOn, moves = [], today = TO
     startsOn,
     frozenOn: m.frozenOn,
     classesLeft: m.classesLeft,
+    fromList: false,
     view: heldMembershipView(m, today),
   });
 }
@@ -101,6 +103,45 @@ describe('what a membership reads as', () => {
     expect(classesLine(held(dayPass, TODAY, true))).toBeNull();
     expect(classesLine(held(monthly, TODAY, true))).toBeNull();
     expect(classesLine(held(tenPack, TODAY, true, { moves: [[{ type: 'cancel', when: 'today' }, TODAY]] }))).toBeNull();
+  });
+});
+
+describe("what the member list says their membership is, where they do not hold it here", () => {
+  const TYPE = { id: '22222222-2222-4222-8222-000000000009', name: 'Gold Monthly' };
+  const listed = (over = {}) => ({ word: 'Gold Plus', endsOn: '2026-10-13', endsOnKind: 'renews', type: null, ownName: false, held: false, ...over });
+
+  it('a name that is no type yet is a row of its own, not set up, with the day the list gives', () => {
+    expect(listedRow(listed(), 'Leo Grant')).toEqual({
+      title: 'Gold Plus',
+      tag: 'Not set up',
+      from: 'From your member list · Renews 13 October 2026',
+      note: 'This membership has no price here yet. Set it up in Settings, under Memberships, and Leo Grant gets it.',
+    });
+    expect(listedRow(listed({ endsOnKind: 'ends', endsOn: '2026-12-31' }), 'Leo Grant').from).toBe('From your member list · Ends 31 December 2026');
+    expect(listedRow(listed({ endsOnKind: null, endsOn: null }), 'this person')).toMatchObject({
+      from: 'From your member list',
+      note: 'This membership has no price here yet. Set it up in Settings, under Memberships, and this person gets it.',
+    });
+  });
+
+  it("a name that is one of the gym's types, never given to them, is said under the type's name", () => {
+    expect(listedRow(listed({ word: 'Gold', type: TYPE }), 'Zara Ali')).toEqual({
+      title: 'Gold Monthly',
+      tag: 'Not added',
+      from: 'Your member list says “Gold” · Renews 13 October 2026',
+      note: "Zara Ali doesn't have it here yet. Add it with Add membership, or give it to everyone on your list who is missing it in Settings, under Memberships.",
+    });
+    // The type's own name on the list (the server says so) is not quoted back at them.
+    expect(listedRow(listed({ word: 'GOLD MONTHLY', type: TYPE, ownName: true, endsOn: null, endsOnKind: null }), 'this person')).toMatchObject({
+      from: 'From your member list',
+      note: expect.stringMatching(/^This person doesn't have it here yet\./),
+    });
+  });
+
+  it('says nothing where the list says nothing, or they have, or have had, that type', () => {
+    expect(listedRow(null, 'Leo Grant')).toBeNull();
+    expect(listedRow(undefined, 'Leo Grant')).toBeNull();
+    expect(listedRow(listed({ word: 'Gold', type: TYPE, held: true }), 'Leo Grant')).toBeNull();
   });
 });
 

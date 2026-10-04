@@ -184,7 +184,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 17a. **Membership types, and a person's membership** (§13.1–13.2), split 2026-10-04 in three (the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 17a-i. [x] **The gym's price list** — merged 2026-10-04 (PR #166).
      - 17a-ii. [x] **A person's membership** — merged 2026-10-04 (PR #168).
-     - 17a-iii. [ ] **A file's word linked to a type**: "Gold" → Gold Monthly once, for everyone who carries the word, their file's dates kept.
+     - 17a-iii. [x] **A file's word linked to a type** — merged 2026-10-05 (PR #171).
    - 17b. **Classes and the calendar** — split into two 2026-09-22 (the whole line was three tables, the repeat rule, a nightly worker and a calendar screen: more than one terminal and more than a reviewable diff). Needs nothing from the member list, so it is built BESIDE it, in Folder B.
      - 17b-i. [x] **What a gym runs, and when it repeats** — merged 2026-09-22 (PR #91).
      - 17b-ii. **A repeat's own coach and places, the week view, and changing one day.** Split in two 2026-09-22 (three parts in one line: the fields, a week calendar and single-day changes).

@@ -12,6 +12,7 @@ import {
   giveHeldMembership,
   heldMembershipView,
   isDayPass,
+  shownRenewal,
 } from '@app/shared';
 import { dayWords } from './memberListView';
 
@@ -30,9 +31,12 @@ export function isLive(m) {
   return m.view.status === 'active' || m.view.status === 'frozen' || m.view.status === 'upcoming';
 }
 
-/** When it runs: "Started 4 Oct 2026 · Renews 4 Nov 2026". */
+/** When it runs: "Started 4 Oct 2026 · Renews 4 Nov 2026". One taken from the gym's list
+ *  kept the list's renewal or end day, and its start day was worked back from that: it
+ *  is not printed as the day the person started. */
 export function datesLine(m) {
   const { status, endsOn, renewsOn } = m.view;
+  if (m.fromList === true) return listDatesLine(m);
   const start = dayWords(m.startsOn);
   if (status === 'cancelled') {
     // Cancelled before its start day: it never started.
@@ -47,6 +51,47 @@ export function datesLine(m) {
   if (endsOn === m.startsOn) return `For ${start} only`;
   // A repeating membership with an end day was cancelled at the end of what is paid.
   return m.kind === 'recurring' ? `${first} · Ends ${dayWords(endsOn)}, won't renew` : `${first} · Ends ${dayWords(endsOn)}`;
+}
+
+function listDatesLine(m) {
+  const { status, endsOn } = m.view;
+  // The list's own day, also for somebody paid further ahead than one period. A free
+  // repeating one has nothing paid up to that day, so the rule's next renewal is not
+  // the list's day: none is printed.
+  const renewsOn = m.kind === 'recurring' && m.priceMinor === 0 ? null : shownRenewal(m.view);
+  const from = 'From your list';
+  if (status === 'cancelled') return `${from} · Cancelled ${endsOn === null ? '' : dayWords(endsOn)}`.trim();
+  if (status === 'ended') return endsOn === null ? from : `${from} · Ended ${dayWords(endsOn)}`;
+  if (status === 'frozen') return `${from} · Frozen since ${m.frozenOn === null ? '' : dayWords(m.frozenOn)}`.trim();
+  if (renewsOn !== null) return `${from} · Renews ${dayWords(renewsOn)}`;
+  if (endsOn === null) return from;
+  return m.kind === 'recurring' ? `${from} · Ends ${dayWords(endsOn)}, won't renew` : `${from} · Ends ${dayWords(endsOn)}`;
+}
+
+/** What the member list says this person's membership is, as a row of the Memberships
+ *  box (17a-iii), so the box never reads "No membership yet" beside a list that names one.
+ *  Null where the list says nothing, or the person has, or has had, the type that name
+ *  is: then their own membership's row says it. `name` is the person. */
+export function listedRow(listed, name) {
+  if (listed === null || listed === undefined) return null;
+  if (listed.type !== null && listed.held) return null;
+  const who = `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+  const day = listed.endsOn === null ? null : `${listed.endsOnKind === 'renews' ? 'Renews' : 'Ends'} ${dayWords(listed.endsOn)}`;
+  const withDay = (text) => (day === null ? text : `${text} · ${day}`);
+  if (listed.type === null) {
+    return {
+      title: listed.word,
+      tag: 'Not set up',
+      from: withDay('From your member list'),
+      note: `This membership has no price here yet. Set it up in Settings, under Memberships, and ${name} gets it.`,
+    };
+  }
+  return {
+    title: listed.type.name,
+    tag: 'Not added',
+    from: withDay(listed.ownName ? 'From your member list' : `Your member list says “${listed.word}”`),
+    note: `${who} doesn't have it here yet. Add it with Add membership, or give it to everyone on your list who is missing it in Settings, under Memberships.`,
+  };
 }
 
 /** A pack's classes: "7 of 10 classes left"; null for any other kind, for a day pass, and

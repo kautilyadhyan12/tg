@@ -50,6 +50,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       startsOn: row.membership.startsOn,
       frozenOn: row.membership.frozenOn,
       classesLeft: row.membership.classesLeft,
+      fromList: row.fromList,
       view: heldMembershipView(row.membership, today),
     }))
     .sort(
@@ -70,6 +71,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     memberships: [...inUse, ...shown],
     earlierNotShown: over.length - shown.length + stored,
     types: list.types,
+    listed: list.listed,
   });
 }
 

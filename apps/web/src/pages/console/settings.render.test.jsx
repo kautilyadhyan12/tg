@@ -58,6 +58,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       /** Settings' check-in devices box (16b-i) reads on mount too: a gym with none. */
       getCheckinDevices: vi.fn(() => Promise.resolve({ data: { devices: [] } })),
       /** Settings' memberships box (17a-i) reads on mount too: a gym selling nothing yet. */
+      getMembershipWords: vi.fn(() => Promise.resolve({ data: { words: [], types: [] } })),
       getMembershipTypes: vi.fn(() =>
         Promise.resolve({ data: { currency: 'USD', types: [], archived: [], archivedTotal: 0, classChoices: [] } }),
       ),
