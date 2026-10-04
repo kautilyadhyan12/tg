@@ -31,6 +31,7 @@ export * from "./invitations.js";
 export * from "./resendWebhook.js";
 export * from "./classes.js";
 export * from "./memberships.js";
+export * from "./heldMemberships.js";
 export * from "./billing.js";
 export * from "./razorpay.js";
 export * from "./leads.js";

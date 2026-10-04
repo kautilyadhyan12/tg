@@ -6,6 +6,9 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { memberListEntriesPageSchema, memberListViewSchema, memberInvitePreviewSchema } from '@app/shared';
 
+// The person's Memberships box (17a-ii) has its own tests in `memberMemberships.render.test.jsx`.
+vi.mock('./MemberMemberships', () => ({ default: () => null }));
+
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return {

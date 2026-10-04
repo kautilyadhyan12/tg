@@ -9,6 +9,9 @@ import { render, screen, within, cleanup, fireEvent, waitFor } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { memberListDuplicatesPageSchema, memberListEntriesPageSchema, memberListEntryDetailSchema, memberListEntryWrittenSchema, memberListViewSchema } from '@app/shared';
 
+// The person's Memberships box (17a-ii) has its own tests in `memberMemberships.render.test.jsx`.
+vi.mock('./MemberMemberships', () => ({ default: () => null }));
+
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return {

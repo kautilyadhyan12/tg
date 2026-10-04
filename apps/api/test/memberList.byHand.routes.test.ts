@@ -1116,6 +1116,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // driven in `checkin.fixVisit.routes.test.ts`.
       "gym_attendance_removed.entry_id",
       "gym_attendance_removed.gym_id",
+      // A membership the record holds (0070): moved by the join, and gone with a record
+      // deleted for good; driven in `heldMemberships.routes.test.ts`.
+      "gym_held_memberships.entry_id",
+      "gym_held_memberships.gym_id",
       "gym_leads.entry_id",
       "gym_leads.gym_id",
       // A pair staff marked Different people (0056): goes with either record, never moved,

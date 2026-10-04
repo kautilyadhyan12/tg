@@ -1435,6 +1435,101 @@ d("0001_init on a real database", () => {
       });
   });
 
+  it("0070's held memberships: each CHECK bites, a membership names only its own gym's record and type, and goes with its record", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0070-owner') RETURNING id`;
+        if (user === undefined) throw new Error("no user");
+        const gymOf = async (slug: string) => {
+          const [gym] = await tx<{ id: string }[]>`
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0070', 'Europe/London', ${user.id}) RETURNING id`;
+          if (gym === undefined) throw new Error("no gym");
+          const [entry] = await tx<{ id: string }[]>`
+            INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+            VALUES (${gym.id}, 'Zz Person', ${slug + "@example.com"}, ${"0".repeat(63) + slug.slice(-1)}, 'typed') RETURNING id`;
+          const [type] = await tx<{ id: string }[]>`
+            INSERT INTO gym_membership_types (gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
+            VALUES (${gym.id}, 'Gold', 'recurring', 4999, 'GBP', 1, 'month', 'all_classes') RETURNING id`;
+          if (entry === undefined || type === undefined) throw new Error("no fixture");
+          return { gym: gym.id, entry: entry.id, type: type.id };
+        };
+        const a = await gymOf("zz-0070-a");
+        const b = await gymOf("zz-0070-b");
+
+        const row = (over: Record<string, unknown> = {}) => ({
+          gym_id: a.gym,
+          entry_id: a.entry,
+          membership_type_id: a.type,
+          request_key: "00000000-0000-4000-8000-000000000070",
+          kind: "recurring",
+          price_minor: 4999,
+          currency: "GBP",
+          term_count: 1,
+          term_unit: "month",
+          pack_classes: null,
+          pack_days: null,
+          starts_on: "2026-10-04",
+          frozen_days: 0,
+          status: "active",
+          frozen_on: null,
+          cancelled_on: null,
+          paid_periods: 1,
+          paid_floor: 0,
+          renews: true,
+          classes_left: null,
+          ...over,
+        });
+        /** The constraint an insert trips, or "ok". Each in its own savepoint. */
+        const put = async (over: Record<string, unknown>): Promise<string> => {
+          try {
+            await tx.savepoint((sp) => sp`INSERT INTO gym_held_memberships ${sp(row({ request_key: randomUUID(), ...over }))}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        const pack = { kind: "pack", term_count: null, term_unit: null, pack_classes: 10, pack_days: 60, classes_left: 10, renews: false };
+
+        expect(await put({})).toBe("ok");
+        expect(await put(pack)).toBe("ok");
+        const refused: [string, Record<string, unknown>, string][] = [
+          ["a status of its own", { status: "paused" }, "gym_held_memberships_status_check"],
+          ["frozen with no day", { status: "frozen" }, "gym_held_memberships_frozen_check"],
+          ["a frozen day while active", { frozen_on: "2026-10-05" }, "gym_held_memberships_frozen_check"],
+          ["cancelled with no day", { status: "cancelled" }, "gym_held_memberships_cancelled_check"],
+          ["fewer than no days frozen", { frozen_days: -1 }, "gym_held_memberships_frozen_days_check"],
+          ["paid for fewer periods than it was given with", { paid_periods: 2, paid_floor: 3 }, "gym_held_memberships_paid_check"],
+          ["a pack given with earlier periods", { ...pack, paid_periods: 1, paid_floor: 1 }, "gym_held_memberships_paid_check"],
+          ["a pack with a term", { ...pack, term_count: 1, term_unit: "month" }, "gym_held_memberships_shape_check"],
+          ["a pack with more classes left than it holds", { ...pack, classes_left: 11 }, "gym_held_memberships_shape_check"],
+          ["a monthly counted in classes", { classes_left: 3 }, "gym_held_memberships_shape_check"],
+          ["a repeating membership by the day", { term_unit: "day" }, "gym_held_memberships_shape_check"],
+          ["a pack paid twice", { ...pack, paid_periods: 2 }, "gym_held_memberships_paid_check"],
+          ["a free one marked paid", { price_minor: 0 }, "gym_held_memberships_paid_check"],
+          ["a pack that renews", { ...pack, renews: true }, "gym_held_memberships_renews_check"],
+          ["a price in no money", { currency: "gbp" }, "gym_held_memberships_currency_check"],
+          ["the same request twice", { request_key: "00000000-0000-4000-8000-000000000070" }, "gym_held_memberships_request_uq"],
+          ["another gym's record", { entry_id: b.entry }, "gym_held_memberships_entry_fk"],
+          ["another gym's type", { membership_type_id: b.type }, "gym_held_memberships_type_fk"],
+        ];
+        expect(await put({ request_key: "00000000-0000-4000-8000-000000000070" })).toBe("ok");
+        for (const [what, over, constraint] of refused) expect(await put(over), what).toBe(constraint);
+
+        // A type somebody holds cannot be deleted; a record deleted takes its memberships.
+        const deleteType = await tx
+          .savepoint((sp) => sp`DELETE FROM gym_membership_types WHERE id = ${a.type}`)
+          .then(() => "deleted", (err: unknown) => (err instanceof postgres.PostgresError ? (err.constraint_name ?? "") : String(err)));
+        expect(deleteType).toBe("gym_held_memberships_type_fk");
+        await tx`DELETE FROM gym_member_list_entries WHERE id = ${a.entry}`;
+        expect(await tx`SELECT 1 FROM gym_held_memberships WHERE gym_id = ${a.gym}`).toHaveLength(0);
+        throw new Error("ROLLBACK-0070-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0070-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
    *  (Low-1) — which is the highest-value item that round found.
    *

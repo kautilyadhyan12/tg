@@ -2336,6 +2336,51 @@ that came from a file** links each of its membership-type WORDS to a type once (
 kept. **A gym that keeps its other software** makes no types, and its file's words
 just show (§11).
 
+*(17a-ii's notes, 2026-10-04.)* `gym_held_memberships`, and ONE rule in `@app/shared`
+(`heldMemberships.ts`): `heldMembershipView` says what a membership is on a day, and
+`moveHeldMembership` is the transition. Every date is worked out on the gym's own day
+(the server's clock in the gym's time zone). What is stored and what is worked out:
+- The kind, the price and the term are copied from the type when the membership is
+  given, so a later change to the price list moves nobody's dates; the name shown is the
+  type's name now.
+- A repeating membership renews on the same day each period, counted from its start
+  (31 Jan, 28 Feb, 31 Mar), until staff cancel it; it never ends for being unpaid. Any
+  other kind runs through its last day and reads `ended` the day after. `status` holds
+  the last one written, so nothing reads it without the rule.
+- "Paid" is a count of periods marked paid, moved one at a time either way: a
+  repeating membership is paid up to its start plus that many periods; any other kind
+  has one. Giving one to somebody who started earlier asks whether the period today
+  falls in is paid. A free type has nothing to pay. The periods before it was given
+  count as paid (`paid_floor`), and a mark is never taken back below that.
+- Freeze starts today, Unfreeze gives every frozen day back: `frozen_days` counts them,
+  and they are added AFTER the month arithmetic from the start day, so every later date
+  moves by exactly the days frozen (moving the start instead lost days at a month's
+  end, 31 Jan being cut to 28 Feb). Cancel is today, or, for a repeating membership paid ahead, at the
+  end of what is paid, after which it takes no more payments.
+- A request carries a key made by the screen, and a change names the state it moves
+  to, so the same request arriving twice changes things once.
+- A past member's memberships are kept, not in use and not changeable; Put back brings
+  them back as they were. A merge moves them to the kept record; Delete for good takes
+  them. One person can have more than one at a time (a monthly and a pack), at most 20
+  running, frozen or still to start; the ones that are over are read a page of 30,
+  newest first, with a count of the rest. A write marks what the clock has ended.
+- Reading and changing both need `members.confirm`, the tick the person's page needs.
+  Changes are limited to 300 an hour a person (900 an address); the read sits under the
+  app-wide limit, as the person's page does.
+- The person's page shows them in a **Memberships** box, drawn only where the gym has
+  types or the person holds one; what the gym's own list says about the person sits
+  under **Details**.
+- Add member carries the same choice ("Give a membership": a type, a start date, paid;
+  "No membership" until staff pick one). The person is added first and the membership
+  given next, by the two routes above, and only where the add answered that somebody
+  NEW was added (never for somebody already on the list or a past member put back, whose
+  page says the membership was not added); where the second fails the person stays added and
+  the page says the membership was not (RULINGS 2026-10-04). Where the gym has a price
+  list the form does not also ask the list's own Membership word (§11): it takes the
+  name of the type once that membership is given, and never otherwise. Edit, and a gym with no price list, keep that box.
+- Not here: bills and money (18a), a file's word linked to a type (17a-iii), a pack's
+  classes used by a booking (17c), who a desk lets in (16d).
+
 **The membership row carries its record.** Since 2026-09-21 a person joins only by
 accepting an invitation (§10.2), and the invitation knows which record it was for; so
 `gym_members` gains `entry_id`, written at the accept. It replaces 9.2 rule 3's

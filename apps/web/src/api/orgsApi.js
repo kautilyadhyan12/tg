@@ -81,6 +81,7 @@ import {
   gymClassMutationResponseSchema,
   gymClassWeekResponseSchema,
   gymMembershipTypesResponseSchema,
+  heldMembershipsResponseSchema,
   gymAttendanceDayResponseSchema,
   gymAttendanceHistoryResponseSchema,
   gymHoursResponseSchema,
@@ -1423,6 +1424,32 @@ export const orgService = {
       gymMembershipTypesResponseSchema,
       'that membership type',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/membership-types/${encodeURIComponent(typeId)}/restore`, {}),
+    ),
+
+  /** A person's memberships (Part 3 §13.2), under their record on the gym's list. Every
+   *  call answers with all of that person's memberships, each date worked out by the
+   *  server on the gym's own day. `what` is freeze, unfreeze, cancel or paid. Nothing
+   *  here retries: a request that arrives twice changes things once. */
+  getHeldMemberships: (gymId, entryId) =>
+    readThrough(
+      heldMembershipsResponseSchema,
+      "this person's memberships",
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships`),
+    ),
+  giveHeldMembership: (gymId, entryId, body) =>
+    readThrough(
+      heldMembershipsResponseSchema,
+      "this person's memberships",
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships`, body),
+    ),
+  changeHeldMembership: (gymId, entryId, membershipId, what, body = {}) =>
+    readThrough(
+      heldMembershipsResponseSchema,
+      "this person's memberships",
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/${what}`,
+        body,
+      ),
     ),
 
   /** GET /v1/orgs/:gymId/classes — the gym's whole timetable (Part 3 §13.3).
