@@ -9,6 +9,8 @@
 //   POST /v1/checkin/scan                                the device's key, and nothing else
 //   GET  /v1/orgs/:gymId/attendance/people?query=        staff find a person (`attendance.mark`)
 //   POST /v1/orgs/:gymId/attendance/check-in             staff check them in (`attendance.mark`)
+//   POST /v1/orgs/:gymId/attendance/visits               staff add a visit for an earlier day (`attendance.mark`)
+//   DELETE /v1/orgs/:gymId/attendance/visits/:visitId    staff remove a wrong visit (`attendance.mark`)
 //   GET  /v1/orgs/:gymId/attendance/log?since=           the live log (`attendance.read`)
 //
 // The device's key lives in an httpOnly cookie sent only to `/v1/checkin`, and the scan is
@@ -19,6 +21,7 @@ import type { Sql } from "postgres";
 import { z } from "zod";
 import {
   addCheckinDeviceRequestSchema,
+  addVisitRequestSchema,
   CHECKIN_WORDS,
   checkinDeviceIdParamsSchema,
   checkinLogQuerySchema,
@@ -26,6 +29,7 @@ import {
   checkinScanRequestSchema,
   claimCheckinDeviceRequestSchema,
   staffCheckinRequestSchema,
+  visitIdParamsSchema,
 } from "@app/shared";
 import type { AppConfig } from "../../../config.js";
 import type { RedisLike } from "../../../redis.js";
@@ -166,6 +170,15 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
+  /** Adding or removing a visit is rare; a gym's staff share its one address. */
+  const visitFixLimit = createDualRateLimit({
+    name: "checkin_visit_fix",
+    max: 300,
+    ipMax: 1500,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
   const staffCheckinLimit = createDualRateLimit({
     name: "checkin_staff",
     max: 600,
@@ -254,6 +267,26 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     const body = parseOr400(staffCheckinRequestSchema, req.body, req, reply);
     if (body === null) return;
     const answer = await service.staffCheckIn(checkinDeps, requireUserId(req), params.gymId, body, gate(staffCheckinLimit)(req, reply));
+    if (answer === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  // Fixing a visit (19a-iv): the service asks the `attendance.mark` tick first and the
+  // limit after it, as every staff route here does.
+  app.post("/v1/orgs/:gymId/attendance/visits", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(addVisitRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await service.addVisit(checkinDeps, requireUserId(req), params.gymId, body, gate(visitFixLimit)(req, reply));
+    if (answer === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.delete("/v1/orgs/:gymId/attendance/visits/:visitId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(visitIdParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await service.removeVisit(checkinDeps, requireUserId(req), params.gymId, params.visitId, gate(visitFixLimit)(req, reply));
     if (answer === null) return;
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });

@@ -1356,10 +1356,10 @@ d("0001_init on a real database", () => {
       });
   });
 
-  /** `0068`'s backfill: an owner's and a manager's stored ticks gain the price list;
+  /** `0069`'s backfill: an owner's and a manager's stored ticks gain the price list;
    *  a trainer's, and a row reading its role's defaults, are left as they were. */
-  it("0068's backfill gives owners and managers memberships.manage and nobody else", async () => {
-    const migration = await readFile(new URL("../drizzle/0068_membership_types.sql", import.meta.url), "utf8");
+  it("0069's backfill gives owners and managers memberships.manage and nobody else", async () => {
+    const migration = await readFile(new URL("../drizzle/0069_membership_types.sql", import.meta.url), "utf8");
     const matches = migration
       .split("--> statement-breakpoint")
       .map((s) => s.trim())
@@ -1367,7 +1367,7 @@ d("0001_init on a real database", () => {
     const backfill = matches.find((s) => /UPDATE "gym_staff"\s/.test(s));
     const invites = matches.find((s) => s.includes('UPDATE "gym_staff_invites"'));
     if (matches.length !== 2 || backfill === undefined || invites === undefined) {
-      throw new Error(`0068 no longer contains its two backfill UPDATEs (found ${String(matches.length)})`);
+      throw new Error(`0069 no longer contains its two backfill UPDATEs (found ${String(matches.length)})`);
     }
     const before = ["members.read", "attendance.read"];
 
@@ -1376,15 +1376,15 @@ d("0001_init on a real database", () => {
         const ids: Record<string, string> = {};
         for (const name of ["owner", "manager", "trainer", "defaults", "frontdesk"]) {
           const [user] = await tx<{ id: string }[]>`
-            INSERT INTO users (display_name) VALUES (${`zz-0068-${name}`}) RETURNING id`;
-          if (user === undefined) throw new Error("0068 user insert failed");
+            INSERT INTO users (display_name) VALUES (${`zz-0069-${name}`}) RETURNING id`;
+          if (user === undefined) throw new Error("0069 user insert failed");
           ids[name] = user.id;
         }
         const owner = ids.owner ?? "";
         const [gym] = await tx<{ id: string }[]>`
-          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0068', 'zz 0068', ${owner}) RETURNING id`;
+          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0069', 'zz 0069', ${owner}) RETURNING id`;
         const gymId = gym?.id;
-        if (gymId === undefined) throw new Error("0068 gym insert failed");
+        if (gymId === undefined) throw new Error("0069 gym insert failed");
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${owner}, 'owner', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.manager ?? ""}, 'manager', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.trainer ?? ""}, 'trainer', ${before})`;
@@ -1397,10 +1397,10 @@ d("0001_init on a real database", () => {
           INSERT INTO gym_staff_invites (gym_id, email, role, privileges, role_name, created_at, expires_at, state, answered_at)
           VALUES (${gymId}, ${email}, ${role}, ${before}, ${roleName}, now(), now() + interval '7 days', ${state},
                   ${state === "pending" ? null : tx`now()`})`;
-        await invite("zz-0068-a@example.com", "manager", null, "pending");
-        await invite("zz-0068-b@example.com", "trainer", null, "pending");
-        await invite("zz-0068-c@example.com", "manager", "Front desk", "pending");
-        await invite("zz-0068-d@example.com", "manager", null, "cancelled");
+        await invite("zz-0069-a@example.com", "manager", null, "pending");
+        await invite("zz-0069-b@example.com", "trainer", null, "pending");
+        await invite("zz-0069-c@example.com", "manager", "Front desk", "pending");
+        await invite("zz-0069-d@example.com", "manager", null, "cancelled");
 
         await tx.unsafe(backfill);
         await tx.unsafe(backfill);
@@ -1410,27 +1410,27 @@ d("0001_init on a real database", () => {
         const invited = await tx<{ email: string; privileges: string[] }[]>`
           SELECT email::text AS email, privileges FROM gym_staff_invites WHERE gym_id = ${gymId} ORDER BY email`;
         expect(invited).toEqual([
-          { email: "zz-0068-a@example.com", privileges: [...before, "memberships.manage"] },
-          { email: "zz-0068-b@example.com", privileges: before },
-          { email: "zz-0068-c@example.com", privileges: before },
-          { email: "zz-0068-d@example.com", privileges: before },
+          { email: "zz-0069-a@example.com", privileges: [...before, "memberships.manage"] },
+          { email: "zz-0069-b@example.com", privileges: before },
+          { email: "zz-0069-c@example.com", privileges: before },
+          { email: "zz-0069-d@example.com", privileges: before },
         ]);
 
         const rows = await tx<{ display_name: string; privileges: string[] | null }[]>`
           SELECT u.display_name, s.privileges FROM gym_staff s JOIN users u ON u.id = s.user_id
           WHERE s.gym_id = ${gymId} ORDER BY u.display_name`;
         expect(rows).toEqual([
-          { display_name: "zz-0068-defaults", privileges: null },
+          { display_name: "zz-0069-defaults", privileges: null },
           // One of the gym's own roles: the owner chose its ticks.
-          { display_name: "zz-0068-frontdesk", privileges: before },
-          { display_name: "zz-0068-manager", privileges: [...before, "memberships.manage"] },
-          { display_name: "zz-0068-owner", privileges: [...before, "memberships.manage"] },
-          { display_name: "zz-0068-trainer", privileges: before },
+          { display_name: "zz-0069-frontdesk", privileges: before },
+          { display_name: "zz-0069-manager", privileges: [...before, "memberships.manage"] },
+          { display_name: "zz-0069-owner", privileges: [...before, "memberships.manage"] },
+          { display_name: "zz-0069-trainer", privileges: before },
         ]);
-        throw new Error("ROLLBACK-0068-BACKFILL-FIXTURE");
+        throw new Error("ROLLBACK-0069-BACKFILL-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0068-BACKFILL-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0069-BACKFILL-FIXTURE") return;
         throw err;
       });
   });
@@ -1682,6 +1682,8 @@ d("0001_init on a real database", () => {
     const byName = new Map(rows.map((r) => [r.name, r.def.replace(/\s+/g, " ")]));
 
     expect([...byName.keys()].sort()).toEqual([
+      // 0068: only staff make a visit with no hour (one added on a later day).
+      "gym_attendance_added_later_check",
       "gym_attendance_hours_status_check",
       // 0063: a desk's scan names its device; a visit names an account or a record.
       "gym_attendance_how_check",
@@ -1712,6 +1714,17 @@ d("0001_init on a real database", () => {
       expect(byName.get("gym_attendance_method_check")).toContain(`'${method}'`);
     }
     expect(byName.get("gym_attendance_who_check")).toBe("CHECK (((user_id IS NOT NULL) OR (entry_id IS NOT NULL)))");
+    expect(byName.get("gym_attendance_hours_status_check")).toContain("'added_later'");
+
+    // 0068: a removed visit is kept in `gym_attendance_removed`, whose two lists are the
+    // visit table's own. A value added to one and not the other would refuse a removal.
+    const kept = await sql<{ name: string; def: string }[]>`
+      SELECT conname AS name, pg_get_constraintdef(oid) AS def
+      FROM pg_constraint
+      WHERE conrelid = 'gym_attendance_removed'::regclass AND contype = 'c'`;
+    const keptByName = new Map(kept.map((r) => [r.name, r.def.replace(/\s+/g, " ")]));
+    expect(keptByName.get("gym_attendance_removed_method_check")).toBe(byName.get("gym_attendance_method_check"));
+    expect(keptByName.get("gym_attendance_removed_hours_status_check")).toBe(byName.get("gym_attendance_hours_status_check"));
 
     // BOTH ARMS OF THE PAIRING: a window is present exactly when the status is
     // `in_session`. One arm alone admits a row that claims a session and names

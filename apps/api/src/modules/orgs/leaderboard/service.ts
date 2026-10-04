@@ -19,6 +19,7 @@ import {
   type LeaderboardResponse,
   type LeaderboardStatus,
   type LeaderboardVisibility,
+  type LeaderboardVisit,
   type StaffLeaderboardCountedResponse,
   type StaffLeaderboardProfileResponse,
   type StaffLeaderboardQuery,
@@ -175,8 +176,22 @@ export async function getMyCounted(
 ): Promise<LeaderboardCountedResponse> {
   const now = deps.now();
   const gym = await gymForMember(deps, gymId, viewerId, now);
-  return countedFor(deps, gym, gymId, viewerId, query, now);
+  const counted = await countedFor(deps, gym, gymId, viewerId, query, now);
+  // A visit's id is staff's, to remove it by: the person's own list carries none.
+  return leaderboardCountedResponseSchema.parse({
+    ...counted,
+    days: counted.days.map((d) => ({ day: d.day, visits: d.visits.map((v) => ({ at: v.at, how: v.how, by: v.by, addedOn: v.addedOn })) })),
+  });
 }
+
+/** What counted, before it is cut to its reader: each visit with its id. */
+type Counted = Omit<LeaderboardCountedResponse, "days"> & {
+  days: { day: string; visits: (LeaderboardVisit & { id: string })[] }[];
+};
+
+/** A member of staff who never typed a name is "staff", never their address's first part. */
+const staffName = (name: string | null, email: string | null): string | null =>
+  name !== null && isAutomaticName(name, email) ? null : name;
 
 /** What counted for one live member's number on one board: the person's own read, and
  *  staff's of anyone. */
@@ -187,7 +202,7 @@ async function countedFor(
   viewerId: string,
   query: LeaderboardQuery,
   now: Date,
-): Promise<LeaderboardCountedResponse> {
+): Promise<Counted> {
   if (query.board === "streak") {
     // No streak at a gym that has stopped checking in (see getLeaderboard).
     const { mine, gym: gymWeeks } = gym.checkingIn
@@ -202,19 +217,20 @@ async function countedFor(
     // is skipped: it neither counts nor breaks; this week stays open until it ends.
     for (let wk = thisWeek; wk >= oldest; wk = addDays(wk, -7)) {
       const days = mine.get(wk) ?? 0;
-      if (days > 0) {
+      // A week only a visit added later falls in is not the gym's: skipped, as the board does.
+      if (days > 0 && active.has(wk)) {
         weeks.push({ weekStart: wk, state: "counted", gymDays: days });
         value += 1;
       } else if (wk === thisWeek) {
-        weeks.push({ weekStart: wk, state: "open", gymDays: 0 });
+        weeks.push({ weekStart: wk, state: "open", gymDays: days });
       } else if (!active.has(wk)) {
-        weeks.push({ weekStart: wk, state: "skipped", gymDays: 0 });
+        weeks.push({ weekStart: wk, state: "skipped", gymDays: days });
       } else {
         weeks.push({ weekStart: wk, state: "missed", gymDays: 0 });
         break;
       }
     }
-    return leaderboardCountedResponseSchema.parse({
+    return {
       gymName: gym.name,
       timezone: gym.timezone,
       board: "streak",
@@ -227,7 +243,7 @@ async function countedFor(
       workoutDays: [],
       workoutsNotCounted: [],
       weeks,
-    });
+    };
   }
 
   const { from, to } = periodRange(gym.today, query.period);
@@ -246,7 +262,7 @@ async function countedFor(
       if (last?.day === w.day) last.workouts.push({ at, countedBy });
       else workoutDays.push({ day: w.day, workouts: [{ at, countedBy }] });
     }
-    return leaderboardCountedResponseSchema.parse({
+    return {
       gymName: gym.name,
       timezone: gym.timezone,
       board: "workout_days",
@@ -259,25 +275,47 @@ async function countedFor(
       workoutDays,
       workoutsNotCounted,
       weeks: [],
-    });
+    };
   }
 
-  const visits = await repo.ownVisits(deps.sql, { gymId, userId: viewerId, today: gym.today, from, to });
-  const days: LeaderboardCountedResponse["days"] = [];
-  const notCounted: LeaderboardCountedResponse["notCounted"] = [];
+  const range = { gymId, userId: viewerId, today: gym.today, from, to };
+  const [visits, removed] = await Promise.all([repo.ownVisits(deps.sql, range), repo.ownRemovedVisits(deps.sql, range)]);
+  const days: Counted["days"] = [];
+  const notCounted: Counted["notCounted"] = [];
   for (const v of visits) {
     if (v.method === "manual" || v.method === "qr") {
-      notCounted.push({ day: v.day, at: v.markedAt.toISOString(), why: v.method === "manual" ? "own_tap" : "app_code" });
+      notCounted.push({
+        day: v.day,
+        at: v.markedAt.toISOString(),
+        why: v.method === "manual" ? "own_tap" : "app_code",
+        by: null,
+        removedOn: null,
+      });
       continue;
     }
-    // A member of staff who never typed a name is "staff", never their address's first part.
-    const by = v.method === "staff" && v.by !== null && isAutomaticName(v.by, v.byEmail) ? null : v.by;
-    const visit = { at: v.markedAt.toISOString(), how: v.method === "staff" ? "staff" : "desk", by } as const;
+    const visit = {
+      id: v.id,
+      at: v.markedAt.toISOString(),
+      how: v.method === "staff" ? "staff" : "desk",
+      by: v.method === "staff" ? staffName(v.by, v.byEmail) : v.by,
+      addedOn: v.addedOn,
+    } as const;
     const last = days[days.length - 1];
     if (last?.day === v.day) last.visits.push(visit);
     else days.push({ day: v.day, visits: [visit] });
   }
-  return leaderboardCountedResponseSchema.parse({
+  // A visit staff removed counts for nothing and stays on the person's list, with who did it.
+  for (const r of removed) {
+    notCounted.push({
+      day: r.day,
+      at: r.markedAt.toISOString(),
+      why: "removed",
+      by: staffName(r.by, r.byEmail),
+      removedOn: r.removedOn,
+    });
+  }
+  notCounted.sort((a, b) => (a.day === b.day ? b.at.localeCompare(a.at) : b.day.localeCompare(a.day)));
+  return {
     gymName: gym.name,
     timezone: gym.timezone,
     board: "gym_days",
@@ -290,7 +328,7 @@ async function countedFor(
     workoutDays: [],
     workoutsNotCounted: [],
     weeks: [],
-  });
+  };
 }
 
 /** A person's places on the boards the viewer can see. Nothing for anyone hidden or not a

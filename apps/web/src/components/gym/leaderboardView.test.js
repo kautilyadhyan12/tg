@@ -5,6 +5,7 @@ import {
   dayCountText,
   hiddenText,
   nextPlaceText,
+  notCountedText,
   ordinal,
   pickedGym,
   statusText,
@@ -91,6 +92,19 @@ describe('the leaderboard in words', () => {
     expect(visitText({ at: '2026-10-07T06:30:00.000Z', how: 'desk', by: 'Front desk' }, 'Asia/Kolkata')).toBe('12:00 pm · scanned at Front desk');
     expect(dayCountText(1)).toBe('1 visit');
     expect(dayCountText(2)).toBe('2 visits, 1 day');
+  });
+
+  it('a visit staff added later says who added it and when, never a time it did not have', () => {
+    const added = { at: '2026-10-07T08:30:00.000Z', how: 'staff', by: 'Maya Coach', addedOn: '2026-10-07' };
+    expect(visitText(added, 'Asia/Kolkata')).toBe('Added by Maya Coach (staff) on 7 Oct');
+    expect(visitText({ ...added, by: null }, 'Asia/Kolkata')).toBe('Added by staff on 7 Oct');
+    expect(visitText({ ...added, addedOn: null }, 'Asia/Kolkata')).toBe('2:00 pm · checked in by Maya Coach');
+  });
+
+  it('a visit staff removed says who removed it and when', () => {
+    expect(notCountedText({ why: 'removed', by: 'Maya Coach', removedOn: '2026-10-07' })).toBe('Visit removed by Maya Coach (staff) on 7 Oct');
+    expect(notCountedText({ why: 'removed', by: null, removedOn: '2026-10-07' })).toBe('Visit removed by staff on 7 Oct');
+    expect(notCountedText({ why: 'own_tap', by: null, removedOn: null })).toMatch(/^Your own "I'm here" tap/);
   });
 
   it('a workout says when it was and who counted it, and one that did not count says why', () => {

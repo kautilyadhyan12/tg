@@ -15,6 +15,7 @@ import {
   repeatVisitLabel,
   searchCoversEverybody,
 } from './attendanceView';
+import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
 import { canCheckPeopleIn, personKey } from './checkinLogView';
 import { CheckedInToday, CheckSomeoneIn } from './AttendanceCheckIn';
@@ -191,6 +192,8 @@ function PersonHistory({ gymId, person, onClose }) {
     const chips = personTimes({ visits: [visit] }, { timezone: state.timezone, clockFormat: state.clockFormat });
     if (chips.length === 1) row.times.push(chips[0]);
   }
+  // Newest day first: a visit staff added later arrives in the order it was added.
+  days.sort((a, b) => (a.day === b.day ? 0 : a.day < b.day ? 1 : -1));
 
   return (
     <div
@@ -325,6 +328,8 @@ function AttendanceDay({ org }) {
   const [day, setDay] = useState(() => gymToday(timezone));
   const mayCheckIn = canCheckPeopleIn(viewerPrivileges(org));
   const [checkedIn, setCheckedIn] = useState(0);
+  /** Counts visits removed from "Checked in today", so the last check-in's answer is cleared. */
+  const [removed, setRemoved] = useState(0);
   const [search, setSearch] = useState('');
   const [picked, setPicked] = useState(null);
 
@@ -498,15 +503,30 @@ function AttendanceDay({ org }) {
           gymId={gymId}
           words={words}
           keepsList={viewerPrivileges(org).includes('members.confirm')}
+          timezone={timezone}
+          clearSignal={removed}
           onCheckedIn={() => {
             setCheckedIn((n) => n + 1);
             // The day list is read again when it shows today, so the person is in it.
             if (day === gymToday(timezone)) setAttempt((a) => a + 1);
           }}
+          // A visit added for the day on screen shows in its list.
+          onAdded={(added) => {
+            if (day === added) setAttempt((a) => a + 1);
+          }}
         />
       ) : null}
 
-      <CheckedInToday gymId={gymId} words={words} refreshSignal={checkedIn} />
+      <CheckedInToday
+        gymId={gymId}
+        words={words}
+        refreshSignal={checkedIn}
+        canFix={mayCheckIn && !consoleIsReadOnly(org)}
+        onRemoved={() => {
+          setRemoved((n) => n + 1);
+          if (day === gymToday(timezone)) setAttempt((a) => a + 1);
+        }}
+      />
 
       {/* ── THE DAY, AND THE WAY BETWEEN DAYS ─────────────────────────────────
           The same control as "closed on a date" on the hours screen, down to
