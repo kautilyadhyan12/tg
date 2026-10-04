@@ -12,6 +12,7 @@ import {
   giveHeldMembership,
   heldMembershipView,
   isDayPass,
+  shownRenewal,
 } from '@app/shared';
 import { dayWords } from './memberListView';
 
@@ -53,7 +54,9 @@ export function datesLine(m) {
 }
 
 function listDatesLine(m) {
-  const { status, endsOn, renewsOn } = m.view;
+  const { status, endsOn } = m.view;
+  // The list's own day, also for somebody paid further ahead than one period.
+  const renewsOn = shownRenewal(m.view);
   const from = 'From your list';
   if (status === 'cancelled') return `${from} · Cancelled ${endsOn === null ? '' : dayWords(endsOn)}`.trim();
   if (status === 'ended') return endsOn === null ? from : `${from} · Ended ${dayWords(endsOn)}`;
@@ -81,11 +84,10 @@ export function listedRow(listed, name) {
       note: `This membership has no price here yet. Set it up in Settings, under Memberships, and ${name} gets it.`,
     };
   }
-  const ownName = listed.word.trim().toLowerCase() === listed.type.name.trim().toLowerCase();
   return {
     title: listed.type.name,
     tag: 'Not added',
-    from: withDay(ownName ? 'From your member list' : `Your member list says “${listed.word}”`),
+    from: withDay(listed.ownName ? 'From your member list' : `Your member list says “${listed.word}”`),
     note: `${who} doesn't have it here yet. Add it with Add membership, or give it to everyone on your list who is missing it in Settings, under Memberships.`,
   };
 }

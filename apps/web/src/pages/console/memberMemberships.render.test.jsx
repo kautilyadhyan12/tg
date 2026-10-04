@@ -162,7 +162,7 @@ describe('what the box draws', () => {
 
   it("says the membership their list names where they do not hold it here, never 'No membership yet' beside it (Kd's click-through)", async () => {
     // Leo Grant: "Gold Plus" on the member list, which is none of the gym's types.
-    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { listed: { word: 'Gold Plus', endsOn: '2026-10-13', endsOnKind: 'renews', type: null, held: false } }));
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { listed: { word: 'Gold Plus', endsOn: '2026-10-13', endsOnKind: 'renews', type: null, ownName: false, held: false } }));
     render(draw(ADA, 'Leo Grant'));
     const b = await boxSoon();
     const row = within(b.getByTestId('held-listed'));
@@ -178,7 +178,7 @@ describe('what the box draws', () => {
 
   it("a name that is one of the gym's types, never given to this person, is said under the type's own name", async () => {
     orgService.getHeldMemberships.mockResolvedValue(
-      answer([], false, { listed: { word: 'Gold', endsOn: '2026-09-14', endsOnKind: 'renews', type: { id: GOLD.id, name: GOLD.name }, held: false } }),
+      answer([], false, { listed: { word: 'Gold', endsOn: '2026-09-14', endsOnKind: 'renews', type: { id: GOLD.id, name: GOLD.name }, ownName: false, held: false } }),
     );
     render(draw(ADA, 'Zara Ali'));
     const b = await boxSoon();
@@ -192,7 +192,7 @@ describe('what the box draws', () => {
 
   it('adds nothing where they have, or have had, that membership, and says "No membership yet" only where the list names none', async () => {
     orgService.getHeldMemberships.mockResolvedValue(
-      answer([held(1, GOLD, '2026-10-04', true)], false, { listed: { word: 'Gold', endsOn: '2026-11-04', endsOnKind: 'renews', type: { id: GOLD.id, name: GOLD.name }, held: true } }),
+      answer([held(1, GOLD, '2026-10-04', true)], false, { listed: { word: 'Gold', endsOn: '2026-11-04', endsOnKind: 'renews', type: { id: GOLD.id, name: GOLD.name }, ownName: false, held: true } }),
     );
     render(draw(ADA, 'Ada Lovelace'));
     const b = await boxSoon();

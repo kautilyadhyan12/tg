@@ -12,6 +12,7 @@ import {
   membershipLinkPreviewResponseSchema,
   membershipLinkResponseSchema,
   membershipWordsResponseSchema,
+  shownRenewal,
   addDays,
   type MembershipLinkPerson,
   type MembershipLinkPreviewRequest,
@@ -57,7 +58,8 @@ function shown(placed: PlacedPerson, today: string): MembershipLinkPerson {
   const view = heldMembershipView(membership, today);
   return {
     ...base,
-    renewsOn: view.renewsOn,
+    // The list's own day, also for somebody paid further ahead than one period.
+    renewsOn: shownRenewal(view),
     endsOn: view.endsOn,
     since: group === "due" && view.payment?.state === "due" ? view.payment.since : null,
   };
@@ -85,6 +87,8 @@ export async function previewMembershipLink(
     today,
     word: preview.word,
     type: preview.type,
+    ownName: preview.ownName,
+    digest: preview.digest,
     counts: {
       settled: count("settled"),
       due: count("due"),
@@ -117,7 +121,7 @@ export async function linkMembershipWord(
     word: req.word,
     typeId: req.typeId,
     groups: req.groups,
-    expected: req.expected,
+    digest: req.digest,
     paid: req.paid,
     today: dayInTz(deps.now(), org.timezone),
     actorUserId: userId,
@@ -139,7 +143,13 @@ export async function linkMembershipWord(
       throw new OrgsError(
         409,
         "membership_link_changed",
-        "Your list has changed since this was opened. Nobody was given a membership: check the names and try again.",
+        "Your list or this membership type has changed since this was opened. Nobody was given a membership: check the names and try again.",
+      );
+    case "already_done":
+      throw new OrgsError(
+        409,
+        "membership_link_done",
+        "This was already done, and nothing more was given. Check each person's page.",
       );
     case "paid_not_answered":
       throw new OrgsError(400, "paid_not_answered", "Say whether these people have paid.");

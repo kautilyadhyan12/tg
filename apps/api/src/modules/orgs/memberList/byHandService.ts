@@ -802,7 +802,7 @@ export async function mergeEntries(
     // (the reference test lists every table that does).
     await repo.moveMembershipLinks(tx, gymId, goneId, keepId);
     await repo.moveLeadLinks(tx, gymId, goneId, keepId);
-    await repo.moveHeldMemberships(tx, gymId, goneId, keepId);
+    const memberships = await repo.moveHeldMemberships(tx, gymId, goneId, keepId);
     await repo.moveVisitLinks(tx, gymId, goneId, keepId);
     await repo.deleteEntry(tx, gymId, goneId);
     const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
@@ -821,7 +821,13 @@ export async function mergeEntries(
       action: "org.member_list_entries_merged",
       targetType: "member_list_entry",
       targetId: keepId,
-      meta: { mergedEntryId: goneId, filled, ...(lost > 0 ? { leftOffList: String(lost) } : {}) },
+      meta: {
+        mergedEntryId: goneId,
+        filled,
+        ...(lost > 0 ? { leftOffList: String(lost) } : {}),
+        // Memberships from the list the kept record already had: gone with the other record.
+        ...(memberships.left > 0 ? { listMembershipsNotMoved: String(memberships.left) } : {}),
+      },
     });
     return { outcome: "merged", entryId: keepId, version };
   }));

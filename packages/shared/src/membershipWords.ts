@@ -13,6 +13,7 @@ export const MEMBERSHIP_WORD_PEOPLE_SHOWN = 200;
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const wordSchema = z.string().min(1).max(MEMBER_LIST_MAX_STATUS_CHARS);
+const digestSchema = z.string().regex(/^[0-9a-f]{64}$/);
 
 /** One membership word on the gym's list, and the type it is linked to. `waiting` is
  *  how many people with the word have never held that type. */
@@ -26,6 +27,8 @@ export const membershipWordSchema = z
         typeName: z.string(),
         typeArchived: z.boolean(),
         waiting: z.number().int().min(0),
+        /** The word is that type's own name, as the server folds both. */
+        ownName: z.boolean(),
       })
       .strict()
       .nullable(),
@@ -98,6 +101,12 @@ export const membershipLinkPreviewResponseSchema = z
     today: daySchema,
     word: wordSchema,
     type: heldMembershipTypeChoiceSchema,
+    /** The word is the type's own name, as the server folds both. */
+    ownName: z.boolean(),
+    /** What the box showed, in one value: the day, the type as it stands (its price and
+     *  term among it), and each person who can get it with their group and list day.
+     *  The press sends it back, and anything else is refused. */
+    digest: digestSchema,
     counts: countsSchema,
     people: z.array(membershipLinkPersonSchema),
   })
@@ -107,19 +116,15 @@ export type MembershipLinkPreviewResponse = z.infer<typeof membershipLinkPreview
 export const membershipLinkPreviewRequestSchema = z.object({ word: wordSchema, typeId: z.string().uuid() }).strict();
 export type MembershipLinkPreviewRequest = z.infer<typeof membershipLinkPreviewRequestSchema>;
 
-const giveCounts = z
-  .object({ settled: z.number().int().min(0), due: z.number().int().min(0), ask: z.number().int().min(0) })
-  .strict();
-
 /** Link a word to a type and give it. `groups` are the ones staff left ticked;
- *  `expected` is how many people the box showed in each, and a list that has moved
- *  since is refused; `paid` answers for the `ask` group, null where it was not asked. */
+ *  `digest` is the preview's, and a list or a type that has moved since is refused;
+ *  `paid` answers for the `ask` group, null where it was not asked. */
 export const membershipLinkRequestSchema = z
   .object({
     word: wordSchema,
     typeId: z.string().uuid(),
     groups: z.object({ settled: z.boolean(), due: z.boolean(), ask: z.boolean() }).strict(),
-    expected: giveCounts,
+    digest: digestSchema,
     paid: z.boolean().nullable(),
   })
   .strict();

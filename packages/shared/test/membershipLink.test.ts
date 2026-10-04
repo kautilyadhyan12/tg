@@ -10,6 +10,7 @@ import {
   heldMembershipView,
   linkHeldMembership,
   moveHeldMembership,
+  shownRenewal,
   type HeldMembership,
   type HeldMembershipTerms,
   type ListMembershipDates,
@@ -55,9 +56,13 @@ describe("a paid-up member on the list is never shown as owing or ended", () => 
       [yearly, renews("2028-02-29"), "2027-06-01", "2028-02-29", "2028-02-29"],
       [weekly, renews("2026-10-09"), "2026-10-04", "2026-10-09", "2026-10-09"],
       [fortnightly, ends("2026-10-10"), "2026-10-04", "2026-10-11", "2026-10-11"],
-      // Paid three months ahead on a monthly: it renews each month and nothing is owed
-      // until the list's day.
+      // Paid three months ahead on a monthly: the rule renews it each month, nothing is
+      // owed until the list's day, and the list's day is the one a screen prints.
       [monthly, renews("2027-01-14"), "2026-10-20", "2026-11-14", "2027-01-14"],
+      // A year paid on a type set up as monthly (round one, H1).
+      [monthly, renews("2027-04-22"), "2026-10-04", "2026-10-22", "2027-04-22"],
+      // 2 January 2027 is a Saturday: the Saturday after 4 October 2026 is the 10th.
+      [weekly, ends("2027-01-01"), "2026-10-04", "2026-10-10", "2027-01-02"],
     ];
     for (const [type, dates, today, renewal, until] of cases) {
       const label = `${String(type.termCount)} ${String(type.termUnit)}, list ${String(dates.endsOnKind)} ${String(dates.endsOn)}, today ${today}`;
@@ -66,7 +71,11 @@ describe("a paid-up member on the list is never shown as owing or ended", () => 
       expect(made.group, label).toBe("settled");
       expect(view.status, label).toBe("active");
       expect(view.renewsOn, label).toBe(renewal);
+      // What a screen prints as "Renews": the list's own day, never an earlier one.
+      expect(shownRenewal(view), label).toBe(until);
       expect(view.payment, label).toEqual({ state: "paid", until });
+      // The periods up to the list's day are the list's fact: no mark of staff's to take back.
+      expect(view.can.undoPaid, label).toBeNull();
       // The day before the list's day they still owe nothing; on it, the payment is due.
       expect(heldMembershipView(made.membership, addDays(until, -1)).payment, label).toEqual({ state: "paid", until });
       expect(heldMembershipView(made.membership, until).payment, label).toEqual({ state: "due", since: until });
@@ -133,6 +142,8 @@ describe("a paid-up member on the list is never shown as owing or ended", () => 
           expect(made.membership.startsOn <= today, label).toBe(true);
           expect(view.status, label).toBe("active");
           expect(view.payment, label).toEqual({ state: "paid", until: edge });
+          expect(shownRenewal(view), label).toBe(edge);
+          expect(view.can.undoPaid, label).toBeNull();
           expect(view.can.cancelAtPeriodEnd, label).toBe(addDays(edge, -1));
           checked += 1;
         }
@@ -203,6 +214,9 @@ describe("what the list's day does not settle", () => {
       expect(made.membership.paidPeriods).toBe(0);
       expect(heldMembershipView(made.membership, today).payment).toBeNull();
     }
+    // Free and renewing: nothing is paid up to anything, so the day printed is the next renewal.
+    const freeAhead = linked({ ...monthly, priceMinor: 0 }, renews("2027-04-22"), true, today);
+    expect(shownRenewal(heldMembershipView(freeAhead.membership, today))).toBe("2026-10-22");
     const freeMonthly = linked({ ...monthly, priceMinor: 0 }, renews("2026-09-14"), true, today);
     expect(freeMonthly.group).toBe("settled");
     expect(freeMonthly.membership.paidPeriods).toBe(0);
@@ -214,6 +228,14 @@ describe("what the list's day does not settle", () => {
     for (const day of ["2026-02-30", "not a day", "1999-12-31", "2000-01-01", "2040-01-01"]) {
       expect(linkHeldMembership(monthly, renews(day), true, today)).toEqual({ ok: false, reason: "day_out_of_range" });
     }
+    // A day whose worked-back start would be before the first day a membership can start
+    // (a membership given by hand cannot start there either).
+    for (const day of ["2000-01-10", "2000-01-31"]) {
+      expect(linkHeldMembership(monthly, renews(day), true, today)).toEqual({ ok: false, reason: "day_out_of_range" });
+    }
+    const first = linkHeldMembership(monthly, renews("2000-02-01"), true, today);
+    expect(first.ok && first.membership.startsOn).toBe("2000-01-01");
+    expect(linkHeldMembership({ ...monthly, kind: "one_time", termCount: 300, termUnit: "year" }, ends("2027-01-01"), true, today)).toEqual({ ok: false, reason: "day_out_of_range" });
     expect(linkHeldMembership(monthly, renews(addDays(today, 5 * 366)), true, today).ok).toBe(true);
     expect(linkHeldMembership(monthly, renews(addDays(today, 5 * 366 + 1)), true, today).ok).toBe(false);
   });

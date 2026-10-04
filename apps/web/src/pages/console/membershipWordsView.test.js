@@ -41,13 +41,14 @@ const person = (n, group, over = {}) => ({
   ...over,
 });
 const counts = (over = {}) => ({ settled: 0, due: 0, ask: 0, has: 0, full: 0, ended: 0, day: 0, past: 0, ...over });
-const preview = (over = {}) => ({ today: '2026-10-04', word: 'Gold', type: GOLD, counts: counts(), people: [], ...over });
+const DIGEST = 'a'.repeat(64);
+const preview = (over = {}) => ({ today: '2026-10-04', word: 'Gold', type: GOLD, ownName: false, digest: DIGEST, counts: counts(), people: [], ...over });
 const ALL = { settled: true, due: true, ask: true };
 
 describe("the member list's names are part of the gym's one list of memberships", () => {
   const SILVER = { ...GOLD, id: '22222222-2222-4222-8222-000000000002', name: 'Silver Monthly' };
   const name = (over = {}) => ({ word: 'Gold', people: 42, link: null, sameName: null, ...over });
-  const counted = (over = {}) => name({ link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 0, ...over } });
+  const counted = (over = {}) => name({ link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 0, ownName: false, ...over } });
   const own = (waiting) => name({ word: 'Gold Monthly', people: 3, sameName: { typeId: GOLD.id, typeName: 'Gold Monthly', waiting } });
 
   it('a name that is no type yet waits to be set up; one that is a type does not', () => {
@@ -79,18 +80,18 @@ describe("the member list's names are part of the gym's one list of memberships"
     expect(typeTies(GOLD, [name(), name({ word: 'Silver' })])).toEqual([]);
     expect(typeTies(SILVER, [counted({})])).toEqual([]);
     const all = counted({});
-    expect(typeTies(GOLD, [all])).toEqual([{ word: all, text: 'On your member list this is “Gold” · 42 people.', give: false, first: false, undo: true }]);
+    expect(typeTies(GOLD, [all])).toEqual([{ word: all, text: 'On your member list this is “Gold” · 42 people.', give: false, first: false, undo: true, own: false }]);
     // Some were given it and some were not, perhaps on purpose: the numbers, and a look at who can get it.
     const some = counted({ waiting: 3 });
-    expect(typeTies(GOLD, [some])).toEqual([{ word: some, text: 'On your member list this is “Gold” · 42 people. 3 of them have never had it.', give: true, first: false, undo: true }]);
+    expect(typeTies(GOLD, [some])).toEqual([{ word: some, text: 'On your member list this is “Gold” · 42 people. 3 of them have never had it.', give: true, first: false, undo: true, own: false }]);
     expect(tieButton(GOLD, typeTies(GOLD, [some])[0])).toEqual({ label: 'See who can get it', aria: 'See who with Gold on your member list can get Gold Monthly', main: false });
     expect(typeTies(GOLD, [counted({ waiting: 1 })])[0].text).toBe('On your member list this is “Gold” · 42 people. 1 of them has never had it.');
     // Nobody with the name has had it: they are offered it outright.
     const none = counted({ waiting: 42 });
-    expect(typeTies(GOLD, [none])).toEqual([{ word: none, text: 'On your member list this is “Gold” · 42 people. They have never had it.', give: true, first: true, undo: true }]);
+    expect(typeTies(GOLD, [none])).toEqual([{ word: none, text: 'On your member list this is “Gold” · 42 people. They have never had it.', give: true, first: true, undo: true, own: false }]);
     expect(tieButton(GOLD, typeTies(GOLD, [none])[0])).toEqual({ label: 'Give it to them', aria: 'Give Gold Monthly to the people with Gold on your member list', main: true });
     // Two names can be one type.
-    expect(typeTies(GOLD, [all, counted({}), name({ word: 'Gold (old)', link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 0 } })])).toHaveLength(3);
+    expect(typeTies(GOLD, [all, counted({}), name({ word: 'Gold (old)', link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 0, ownName: false } })])).toHaveLength(3);
     // An archived type has no row to say it on.
     expect(typeTies(GOLD, [counted({ typeArchived: true })])).toEqual([]);
     expect(undoWords(all)).toEqual({
@@ -105,18 +106,23 @@ describe("the member list's names are part of the gym's one list of memberships"
     // Kd's click-through: "Gold Monthly" on the list beside a type called Gold Monthly.
     expect(typeTies(GOLD, [own(0)])).toEqual([]);
     const two = own(2);
-    expect(typeTies(GOLD, [two])).toEqual([{ word: two, text: 'On your member list 3 people have Gold Monthly. 2 of them have never had it here.', give: true, first: false, undo: false }]);
+    expect(typeTies(GOLD, [two])).toEqual([{ word: two, text: 'On your member list 3 people have Gold Monthly. 2 of them have never had it here.', give: true, first: false, undo: false, own: true }]);
     expect(tieButton(GOLD, typeTies(GOLD, [two])[0])).toEqual({ label: 'See who can get it', aria: 'See who on your member list can get Gold Monthly', main: false });
     expect(typeTies(GOLD, [own(1)])[0].text).toBe('On your member list 3 people have Gold Monthly. 1 of them has never had it here.');
     // None of them has it: offered outright.
     const three = own(3);
-    expect(typeTies(GOLD, [three])).toEqual([{ word: three, text: '3 people on your member list have Gold Monthly, but it is not on their pages yet.', give: true, first: true, undo: false }]);
+    expect(typeTies(GOLD, [three])).toEqual([{ word: three, text: '3 people on your member list have Gold Monthly, but it is not on their pages yet.', give: true, first: true, undo: false, own: true }]);
     expect(tieButton(GOLD, typeTies(GOLD, [three])[0])).toEqual({ label: 'Give it to them', aria: 'Give Gold Monthly to the people on your member list', main: true });
     const one = name({ word: 'Gold Monthly', people: 1, sameName: { typeId: GOLD.id, typeName: 'Gold Monthly', waiting: 1 } });
     expect(typeTies(GOLD, [one])[0].text).toBe('1 person on your member list has Gold Monthly, but it is not on their page yet.');
     // The same once the server holds it as counted: no "this is “Gold Monthly”", nothing to undo.
-    const held = name({ word: 'GOLD MONTHLY', people: 3, link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 1 } });
-    expect(typeTies(GOLD, [held])).toEqual([{ word: held, text: 'On your member list 3 people have Gold Monthly. 1 of them has never had it here.', give: true, first: false, undo: false }]);
+    // Whether a name is the type's own is the server's answer (`ownName`): the screen never
+    // folds two names itself, so letters the two would fold differently cannot part them.
+    const held = name({ word: 'GOLD MONTHLY', people: 3, link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 1, ownName: true } });
+    expect(typeTies(GOLD, [held])).toEqual([{ word: held, text: 'On your member list 3 people have Gold Monthly. 1 of them has never had it here.', give: true, first: false, undo: false, own: true }]);
+    // The same spelling the server does NOT call the type's own is a name staff tied to it.
+    const tied = { ...held, link: { ...held.link, ownName: false } };
+    expect(typeTies(GOLD, [tied])[0]).toMatchObject({ undo: true, own: false, text: 'On your member list this is “GOLD MONTHLY” · 3 people. 1 of them has never had it.' });
     expect(typeTies(GOLD, [{ ...held, link: { ...held.link, waiting: 0 } }])).toEqual([]);
   });
 
@@ -189,7 +195,9 @@ describe('the box names who gets it and who does not', () => {
     // A type that ends keeps the list's end date, and one that is free has nothing to pay.
     const term = { ...GOLD, name: 'Three months', kind: 'one_time', termCount: 3 };
     expect(giveGroups(preview({ type: term, counts: counts({ ask: 2 }) }))[0].detail).toBe('Where your list has an end date for them they keep it; otherwise it starts today.');
-    expect(giveGroups(preview({ type: { ...term, priceMinor: 0 }, counts: counts({ settled: 2 }) }))[0].title).toBe('2 people · nothing to pay');
+    const freeGroup = giveGroups(preview({ type: { ...term, priceMinor: 0 }, counts: counts({ settled: 2 }) }))[0];
+    expect(freeGroup.title).toBe('2 people · nothing to pay');
+    expect(freeGroup.detail).toBe('Three months is free, so there is nothing to pay.');
   });
 
   it('everybody left out has a reason', () => {
@@ -198,7 +206,7 @@ describe('the box names who gets it and who does not', () => {
       '3 people already have Gold Monthly, or had it before.',
       '1 person: your list says their membership has ended.',
       '1 person already has as many memberships running as one person can.',
-      '2 people: the date in your list is too far away to use. Add their membership on their own page.',
+      "2 people: the date in your list can't be used. Add their membership on their own page.",
       '5 past members have “Gold” too. They are not on your list now, so they get nothing.',
     ]);
     expect(leftOut(preview({ counts: counts({ has: 1, past: 1 }) })).map((l) => l.text)).toEqual([
@@ -241,14 +249,14 @@ describe('the button says how many, and nothing is sent that staff did not tick'
   });
 
   it("where the list's name is the type's own name it is said once, and with nobody ticked there is nothing to press", () => {
-    const own = preview({ word: 'GOLD MONTHLY', counts: counts({ settled: 2, has: 1 }) });
+    const own = preview({ word: 'GOLD MONTHLY', ownName: true, counts: counts({ settled: 2, has: 1 }) });
     expect(boxWords(own, ALL)).toEqual({ heading: 'Give Gold Monthly to the people who have it on your member list?', button: 'Give Gold Monthly to 2 people', nobody: null });
     expect(boxWords(own, { settled: false, due: false, ask: false })).toEqual({
       heading: 'Give Gold Monthly to the people who have it on your member list?',
       button: null,
       nobody: 'Tick who should get Gold Monthly.',
     });
-    expect(boxWords(preview({ word: 'Gold Monthly', counts: counts({ ended: 1 }) }), ALL)).toEqual({
+    expect(boxWords(preview({ word: 'Gold Monthly', ownName: true, counts: counts({ ended: 1 }) }), ALL)).toEqual({
       heading: 'Give Gold Monthly to the people who have it on your member list?',
       button: null,
       nobody: 'Nobody on your member list can be given Gold Monthly now.',
@@ -271,7 +279,8 @@ describe('the button says how many, and nothing is sent that staff did not tick'
       word: 'Gold',
       typeId: GOLD.id,
       groups: { settled: true, due: true, ask: true },
-      expected: { settled: 38, due: 4, ask: 6 },
+      // The box as it was shown goes back with the press.
+      digest: DIGEST,
       paid: true,
     });
     // An answer picked, then the group unticked: it is not sent.
@@ -300,7 +309,7 @@ describe("a membership from the list on a person's page", () => {
     frozenOn: null,
     fromList: true,
     ...over,
-    view: { status: 'active', endsOn: null, renewsOn: '2026-11-14', ...view },
+    view: { status: 'active', endsOn: null, renewsOn: '2026-11-14', payment: null, ...view },
   });
 
   it('never prints the worked-back start day as the day the person started', () => {
@@ -314,6 +323,11 @@ describe("a membership from the list on a person's page", () => {
       expect(line).not.toContain('14 September');
       expect(line).not.toContain('Started');
     }
+    // Paid further ahead than one period (a year paid on a monthly type): the list's day,
+    // which is the day they are paid up to, never the rule's next monthly renewal.
+    expect(datesLine(held({}, { renewsOn: '2026-10-22', payment: { state: 'paid', until: '2027-04-22' } }))).toBe('From your list · Renews 22 April 2027');
+    expect(datesLine(held({}, { renewsOn: '2026-11-14', payment: { state: 'paid', until: '2026-11-14' } }))).toBe('From your list · Renews 14 November 2026');
+    expect(datesLine(held({}, { renewsOn: '2026-11-03', payment: { state: 'due', since: '2026-09-03' } }))).toBe('From your list · Renews 3 November 2026');
     // One given by hand reads as it did.
     expect(datesLine(held({ fromList: false }))).toBe('Started 14 September 2026 · Renews 14 November 2026');
   });

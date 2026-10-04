@@ -8,7 +8,7 @@
 // Every refusal is checked by reading the tables, not the reply.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { addDays } from "@app/shared";
+import { HELD_LIVE_MAX, addDays, shownRenewal } from "@app/shared";
 import type {
   GymMembershipTypesResponse,
   HeldMembershipsResponse,
@@ -217,12 +217,14 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
     return JSON.parse(res.body) as MembershipLinkPreviewResponse;
   };
   const ALL = { settled: true, due: true, ask: true };
+  /** A digest of the right shape that is no box's. */
+  const NO_BOX = "0".repeat(64);
   /** Press Link as the box would: every group ticked, the counts the box showed. */
   const link = async (gymId: string, cookies: Cookies, word: string, typeId: string, over: Record<string, unknown> = {}) => {
-    const { counts } = await previewOf(gymId, cookies, word, typeId);
+    const { digest } = await previewOf(gymId, cookies, word, typeId);
     return post(
       `${wordsUrl(gymId)}/link`,
-      { word, typeId, groups: ALL, expected: { settled: counts.settled, due: counts.due, ask: counts.ask }, paid: true, ...over },
+      { word, typeId, groups: ALL, digest, paid: true, ...over },
       cookies,
     );
   };
@@ -246,6 +248,8 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       const renewing = await addPerson(gymId, owner.cookies, "Olivia Brown", { membershipType: "Gold", endsOn: addDays(today, 20), endsOnKind: "renews" });
       const ending = await addPerson(gymId, owner.cookies, "Noah Patel", { membershipType: "GOLD", endsOn: addDays(today, 10), endsOnKind: "ends" });
       const undated = await addPerson(gymId, owner.cookies, "Emma Wilson", { membershipType: "  gold " });
+      // Paid well past one period: a year ahead on a type set up as monthly.
+      const ahead = await addPerson(gymId, owner.cookies, "Yara Ahead", { membershipType: "Gold", endsOn: addDays(today, 200), endsOnKind: "renews" });
       // Words that hold it and are not it: plan names as gym software writes them, and
       // ones no list of words here has heard of.
       const others = [
@@ -270,18 +274,24 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
 
       const preview = await previewOf(gymId, owner.cookies, "gold", gold);
       expect(preview.word).toBe("Gold");
-      expect(preview.counts).toEqual({ settled: 2, due: 0, ask: 1, has: 0, full: 0, ended: 0, day: 0, past: 0 });
-      expect(preview.people.map((p) => p.fullName).sort()).toEqual(["Emma Wilson", "Noah Patel", "Olivia Brown"]);
+      expect(preview.ownName).toBe(false);
+      expect(preview.counts).toEqual({ settled: 3, due: 0, ask: 1, has: 0, full: 0, ended: 0, day: 0, past: 0 });
+      expect(preview.people.map((p) => p.fullName).sort()).toEqual(["Emma Wilson", "Noah Patel", "Olivia Brown", "Yara Ahead"]);
+      // The day each row prints is the list's own day, however far ahead it is.
+      const rowDay = (id: string) => preview.people.find((p) => p.entryId === id)?.renewsOn;
+      expect(rowDay(renewing)).toBe(addDays(today, 20));
+      expect(rowDay(ending)).toBe(addDays(today, 11));
+      expect(rowDay(ahead)).toBe(addDays(today, 200));
 
       const res = await link(gymId, owner.cookies, "Gold", gold);
       expect(res.statusCode, res.body).toBe(200);
-      expect((JSON.parse(res.body) as MembershipLinkResponse).given).toBe(3);
+      expect((JSON.parse(res.body) as MembershipLinkResponse).given).toBe(4);
 
       const held = await heldOf(gymId);
-      expect(held.map((h) => h.entry_id).sort()).toEqual([renewing, ending, undated].sort());
+      expect(held.map((h) => h.entry_id).sort()).toEqual([renewing, ending, undated, ahead].sort());
       expect(held.every((h) => h.membership_type_id === gold)).toBe(true);
       // With a day on the list the start was worked back from it; with none it starts today.
-      expect(Object.fromEntries(held.map((h) => [h.entry_id, h.from_list]))).toEqual({ [renewing]: true, [ending]: true, [undated]: false });
+      expect(Object.fromEntries(held.map((h) => [h.entry_id, h.from_list]))).toEqual({ [renewing]: true, [ending]: true, [undated]: false, [ahead]: true });
       for (const id of otherIds) expect(await pageOf(gymId, id, owner.cookies)).toEqual([]);
 
       // Each reads the list's own day on their page, paid up to it.
@@ -290,6 +300,14 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       expect(olivia?.view.renewsOn).toBe(addDays(today, 20));
       expect(olivia?.view.payment).toEqual({ state: "paid", until: addDays(today, 20) });
       expect(olivia?.fromList).toBe(true);
+      // Nothing of the list's can be taken back with Undo mark paid.
+      expect(olivia?.view.can.undoPaid).toBeNull();
+      // The one paid a year ahead owes nothing until the list's day, and that is the day printed.
+      const [yara] = await pageOf(gymId, ahead, owner.cookies);
+      expect(yara?.view.status).toBe("active");
+      expect(yara?.view.payment).toEqual({ state: "paid", until: addDays(today, 200) });
+      expect(yara === undefined ? null : shownRenewal(yara.view)).toBe(addDays(today, 200));
+      expect(yara?.view.can.undoPaid).toBeNull();
       const [noah] = await pageOf(gymId, ending, owner.cookies);
       expect(noah?.view.status).toBe("active");
       expect(noah?.view.payment).toEqual({ state: "paid", until: addDays(today, 11) });
@@ -300,7 +318,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       expect(emma?.view.payment?.state).toBe("paid");
 
       const words = wordsOf(await get(wordsUrl(gymId), owner.cookies)).words;
-      expect(words.find((w) => w.word === "Gold")).toEqual({ word: "Gold", people: 3, link: { typeId: gold, typeName: "Gold Monthly", typeArchived: false, waiting: 0 }, sameName: null });
+      expect(words.find((w) => w.word === "Gold")).toEqual({ word: "Gold", people: 4, link: { typeId: gold, typeName: "Gold Monthly", typeArchived: false, waiting: 0, ownName: false }, sameName: null });
       expect(words.find((w) => w.word === "Gold Plus")).toEqual({ word: "Gold Plus", people: 1, link: null, sameName: null });
       // A name on the list that IS one of the gym's types is said to be it, with how many
       // people do not hold it: a screen never asks which type "Gold Monthly" is.
@@ -339,7 +357,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       const before = { held: await heldOf(gymId), links: await linksOf(gymId) };
       expect(before.held).toHaveLength(1);
 
-      const body = { word: "Gold", typeId: gold, groups: ALL, expected: { settled: 0, due: 0, ask: 1 }, paid: true };
+      const body = { word: "Gold", typeId: gold, groups: ALL, digest: (await previewOf(gymId, owner.cookies, "Gold", gold)).digest, paid: true };
       const outsiders: { who: string; cookies: Cookies; code: number }[] = [
         { who: "a stranger", cookies: stranger.cookies, code: 404 },
         { who: "a rival gym's owner", cookies: rival.cookies, code: 404 },
@@ -408,20 +426,69 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       expect(ended.counts).toMatchObject({ settled: 0, due: 0, ask: 3, ended: 1, has: 0 });
       expect(ended.people.find((p) => p.entryId === lapsed)).toMatchObject({ group: "ended", endsOn: addDays(today, -32) });
 
-      const expected = { settled: 1, due: 1, ask: 1 };
       // The people the list does not settle, with nobody saying whether they paid.
-      const unanswered = await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, expected, paid: null }, owner.cookies);
+      const unanswered = await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, digest: preview.digest, paid: null }, owner.cookies);
       expect(unanswered.statusCode).toBe(400);
       expect(errorOf(unanswered)).toBe("paid_not_answered");
-      // A box that showed other numbers than the list holds now.
-      const stale = await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, expected: { ...expected, settled: 2 }, paid: true }, owner.cookies);
+      // A box that is not the one the list would show now.
+      const stale = await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, digest: NO_BOX, paid: true }, owner.cookies);
       expect(stale.statusCode).toBe(409);
       expect(errorOf(stale)).toBe("membership_link_changed");
       expect(await heldOf(gymId)).toHaveLength(1);
       expect(await linksOf(gymId)).toEqual([]);
 
+      // THE SAME NUMBERS, OTHER PEOPLE: the paid-up person loses the word and somebody the
+      // box never named gains it. One paid up before, one paid up now.
+      const stranger = await addPerson(gymId, owner.cookies, "Never Shown", { fullName: "Never Shown" });
+      const patch = (entryId: string, body: Record<string, unknown>) =>
+        api().inject({ method: "PATCH", url: entryUrl(gymId, entryId), remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies: owner.cookies, payload: JSON.stringify(body) });
+      expect((await patch(paidUp, { membershipType: null })).statusCode).toBe(200);
+      expect((await patch(stranger, { membershipType: "Gold", endsOn: addDays(today, 9), endsOnKind: "renews" })).statusCode).toBe(200);
+      expect((await previewOf(gymId, owner.cookies, "Gold", gold)).counts).toMatchObject({ settled: 1, due: 1, ask: 1 });
+      const swapped = await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, digest: preview.digest, paid: true }, owner.cookies);
+      expect(swapped.statusCode).toBe(409);
+      expect(errorOf(swapped)).toBe("membership_link_changed");
+      expect(await pageOf(gymId, stranger, owner.cookies)).toEqual([]);
+      expect(await heldOf(gymId)).toHaveLength(1);
+      // Put back as the box showed them: the same box is good again.
+      expect((await patch(stranger, { membershipType: null, endsOn: null, endsOnKind: null })).statusCode).toBe(200);
+      expect((await patch(paidUp, { membershipType: "Gold" })).statusCode).toBe(200);
+      expect((await previewOf(gymId, owner.cookies, "Gold", gold)).digest).toBe(preview.digest);
+
+      // THE SAME PEOPLE, ANOTHER PRICE: somebody saved the type at another price and term
+      // after the box was opened. The paid answer would be for money nobody was shown.
+      const priceList = JSON.parse((await get(`/v1/orgs/${gymId}/membership-types`, owner.cookies)).body) as GymMembershipTypesResponse;
+      const goldNow = priceList.types.find((t) => t.id === gold);
+      const repriced = await api().inject({
+        method: "PUT",
+        url: `/v1/orgs/${gymId}/membership-types/${gold}`,
+        remoteAddress: nextIp(),
+        headers: { "content-type": "application/json" },
+        cookies: owner.cookies,
+        payload: JSON.stringify(monthly({ priceMinor: 9999, termUnit: "year", updatedAt: goldNow?.updatedAt })),
+      });
+      expect(repriced.statusCode, repriced.body).toBe(200);
+      const repricedPress = await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, digest: preview.digest, paid: true }, owner.cookies);
+      expect(repricedPress.statusCode).toBe(409);
+      expect(errorOf(repricedPress)).toBe("membership_link_changed");
+      expect(await heldOf(gymId)).toHaveLength(1);
+      expect(await linksOf(gymId)).toEqual([]);
+      // Back to a month at 49.99; the box is opened again, as the screen does after a refusal.
+      const again = (JSON.parse((await get(`/v1/orgs/${gymId}/membership-types`, owner.cookies)).body) as GymMembershipTypesResponse).types.find((t) => t.id === gold);
+      const restored = await api().inject({
+        method: "PUT",
+        url: `/v1/orgs/${gymId}/membership-types/${gold}`,
+        remoteAddress: nextIp(),
+        headers: { "content-type": "application/json" },
+        cookies: owner.cookies,
+        payload: JSON.stringify(monthly({ updatedAt: again?.updatedAt })),
+      });
+      expect(restored.statusCode, restored.body).toBe(200);
+      const fresh = await previewOf(gymId, owner.cookies, "Gold", gold);
+      expect(fresh.digest).not.toBe(preview.digest);
+
       // Only the paid-up group left ticked: the other two get nothing, and nobody is asked.
-      const some = await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: { settled: true, due: false, ask: false }, expected, paid: null }, owner.cookies);
+      const some = await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: { settled: true, due: false, ask: false }, digest: fresh.digest, paid: null }, owner.cookies);
       expect(some.statusCode, some.body).toBe(200);
       const answer = JSON.parse(some.body) as MembershipLinkResponse;
       expect(answer.given).toBe(1);
@@ -463,10 +530,18 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       for (const name of ["Ann One", "Ben Two", "Cat Three", "Dan Four"]) {
         people.push(await addPerson(gymId, owner.cookies, name, { membershipType: "Gold" }));
       }
-      const body = { word: "Gold", typeId: gold, groups: ALL, expected: { settled: 0, due: 0, ask: 4 }, paid: true };
+      const body = { word: "Gold", typeId: gold, groups: ALL, digest: (await previewOf(gymId, owner.cookies, "Gold", gold)).digest, paid: true };
       const answers = await Promise.all(Array.from({ length: 6 }, () => post(`${wordsUrl(gymId)}/link`, body, owner.cookies)));
       expect(answers.map((r) => r.statusCode).sort()).toEqual([200, 409, 409, 409, 409, 409]);
-      for (const res of answers.filter((r) => r.statusCode === 409)) expect(errorOf(res)).toBe("membership_link_changed");
+      // A press that arrives after the first went through is told it was done: never
+      // "nobody was given a membership", which a lost reply and a retry would make false.
+      for (const res of answers.filter((r) => r.statusCode === 409)) {
+        expect(errorOf(res)).toBe("membership_link_done");
+        expect((JSON.parse(res.body) as { message: string }).message).toBe("This was already done, and nothing more was given. Check each person's page.");
+      }
+      const notes = () => sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.membership_word_linked'`;
+      expect((await notes())[0]?.n).toBe(1);
       expect((await heldOf(gymId)).map((h) => h.entry_id).sort()).toEqual([...people].sort());
       expect(await linksOf(gymId)).toEqual([{ word: "Gold", membership_type_id: gold }]);
 
@@ -474,6 +549,8 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       const again = await link(gymId, owner.cookies, "Gold", gold);
       expect((JSON.parse(again.body) as MembershipLinkResponse).given).toBe(0);
       expect(await heldOf(gymId)).toHaveLength(4);
+      // It gave nothing and tied nothing new: no second note.
+      expect((await notes())[0]?.n).toBe(1);
 
       // One of them cancelled it: Link does not hand it back.
       const [one] = await pageOf(gymId, people[0] ?? "", owner.cookies);
@@ -524,7 +601,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       for (const bad of [{}, { word: "", typeId: gold }, { word: "x".repeat(41), typeId: gold }, { word: "Gold", typeId: "nope" }, { word: "Gold", typeId: gold, extra: 1 }]) {
         expect((await post(`${wordsUrl(gymId)}/preview`, bad, owner.cookies)).statusCode).toBe(400);
       }
-      expect((await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, expected: { settled: 0, due: 0, ask: -1 }, paid: true }, owner.cookies)).statusCode).toBe(400);
+      expect((await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, digest: "not a digest", paid: true }, owner.cookies)).statusCode).toBe(400);
     },
     TEST_TIMEOUT_MS,
   );
@@ -566,7 +643,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       expect(wordsOf(await get(wordsUrl(gymId), owner.cookies)).words).toHaveLength(2);
       expect((await previewOf(gymId, owner.cookies, "Gold", gold)).counts.ask).toBe(1);
       for (const res of [
-        await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, expected: { settled: 0, due: 0, ask: 1 }, paid: true }, owner.cookies),
+        await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, digest: NO_BOX, paid: true }, owner.cookies),
         await post(`${wordsUrl(gymId)}/unlink`, { word: "Silver" }, owner.cookies),
       ]) {
         expect(res.statusCode).toBe(409);
@@ -600,10 +677,10 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       // The list says nothing: nothing to say.
       expect(await listedOf(plain)).toBeNull();
       // A name that is none of the gym's types: not set up, with the list's own day.
-      expect(await listedOf(leo)).toEqual({ word: "Gold Plus", endsOn: addDays(today, 9), endsOnKind: "renews", type: null, held: false });
-      expect(await listedOf(olivia)).toEqual({ word: "Gold", endsOn: addDays(today, 12), endsOnKind: "renews", type: null, held: false });
+      expect(await listedOf(leo)).toEqual({ word: "Gold Plus", endsOn: addDays(today, 9), endsOnKind: "renews", type: null, ownName: false, held: false });
+      expect(await listedOf(olivia)).toEqual({ word: "Gold", endsOn: addDays(today, 12), endsOnKind: "renews", type: null, ownName: false, held: false });
       // A name that is a type's own name, whatever its capitals: that type, not held yet.
-      expect(await listedOf(sam)).toEqual({ word: "silver", endsOn: null, endsOnKind: null, type: { id: silver, name: "Silver" }, held: false });
+      expect(await listedOf(sam)).toEqual({ word: "silver", endsOn: null, endsOnKind: null, type: { id: silver, name: "Silver" }, ownName: true, held: false });
       await given(gymId, sam, owner.cookies, { typeId: silver, startsOn: today });
       expect(await listedOf(sam)).toMatchObject({ type: { id: silver, name: "Silver" }, held: true });
       // A past member's page says nothing of it.
@@ -614,13 +691,13 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       // “Gold” is said to be Gold Monthly, and only the paid-up people are given it.
       const some = await post(
         `${wordsUrl(gymId)}/link`,
-        { word: "Gold", typeId: gold, groups: { settled: true, due: false, ask: false }, expected: { settled: 1, due: 1, ask: 0 }, paid: null },
+        { word: "Gold", typeId: gold, groups: { settled: true, due: false, ask: false }, digest: (await previewOf(gymId, owner.cookies, "Gold", gold)).digest, paid: null },
         owner.cookies,
       );
       expect(some.statusCode, some.body).toBe(200);
-      expect(await listedOf(olivia)).toEqual({ word: "Gold", endsOn: addDays(today, 12), endsOnKind: "renews", type: { id: gold, name: "Gold Monthly" }, held: true });
+      expect(await listedOf(olivia)).toEqual({ word: "Gold", endsOn: addDays(today, 12), endsOnKind: "renews", type: { id: gold, name: "Gold Monthly" }, ownName: false, held: true });
       // Left out: the page knows the name is Gold Monthly and that she has never had it.
-      expect(await listedOf(zara)).toEqual({ word: "GOLD", endsOn: addDays(today, -20), endsOnKind: "renews", type: { id: gold, name: "Gold Monthly" }, held: false });
+      expect(await listedOf(zara)).toEqual({ word: "GOLD", endsOn: addDays(today, -20), endsOnKind: "renews", type: { id: gold, name: "Gold Monthly" }, ownName: false, held: false });
       // A cancelled one has still been had.
       const [hers] = await pageOf(gymId, olivia, owner.cookies);
       expect((await post(`${heldUrl(gymId, olivia)}/${hers?.id ?? ""}/cancel`, { when: "today" }, owner.cookies)).statusCode).toBe(200);
@@ -628,12 +705,115 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
 
       // Its type archived: the name is not set up, as Settings says of it.
       expect((await del(`/v1/orgs/${gymId}/membership-types/${gold}`, owner.cookies)).statusCode).toBe(200);
-      expect(await listedOf(zara)).toEqual({ word: "GOLD", endsOn: addDays(today, -20), endsOnKind: "renews", type: null, held: false });
+      expect(await listedOf(zara)).toEqual({ word: "GOLD", endsOn: addDays(today, -20), endsOnKind: "renews", type: null, ownName: false, held: false });
 
       // Another gym's owner reads none of it.
       const outside = await get(heldUrl(gymId, leo), rival.cookies);
       expect(outside.statusCode).toBe(404);
       expect(outside.body).not.toContain("Gold");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "one person on the list twice: both records get the type, and joining them leaves the person ONE of it",
+    async () => {
+      const owner = await makeUser("twin-owner");
+      const org = await makeOrg(owner.cookies, "Mwl Twin Gym");
+      const gymId = org.org.id;
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const pack10 = await addType(gymId, owner.cookies, monthly({ name: "10 classes", kind: "pack", termCount: null, termUnit: null, packClasses: 10, packDays: 60 }));
+      const keep = await addPerson(gymId, owner.cookies, "Twin Keep", { membershipType: "Gold" });
+      const today = list(await get(heldUrl(gymId, keep), owner.cookies)).today;
+      const day = { membershipType: "Gold", endsOn: addDays(today, 9), endsOnKind: "renews" };
+      const patched = await api().inject({ method: "PATCH", url: entryUrl(gymId, keep), remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies: owner.cookies, payload: JSON.stringify(day) });
+      expect(patched.statusCode, patched.body).toBe(200);
+      const dup = await addPerson(gymId, owner.cookies, "Twin Dup", day);
+      // The record not kept also holds a pack given by hand: that one is theirs and moves.
+      await given(gymId, dup, owner.cookies, { typeId: pack10, startsOn: today });
+
+      const linkedBoth = await link(gymId, owner.cookies, "Gold", gold);
+      expect((JSON.parse(linkedBoth.body) as MembershipLinkResponse).given).toBe(2);
+      expect(await pageOf(gymId, keep, owner.cookies)).toHaveLength(1);
+      expect(await pageOf(gymId, dup, owner.cookies)).toHaveLength(2);
+
+      // Joined, the way staff do it: from the record not kept.
+      const merged = await post(`${entryUrl(gymId, dup)}/merge`, { keepEntryId: keep, acknowledgeLeavesList: true }, owner.cookies);
+      expect(merged.statusCode, merged.body).toBe(200);
+      const after = await pageOf(gymId, keep, owner.cookies);
+      expect(after.map((m) => m.typeName).sort()).toEqual(["10 classes", "Gold Monthly"]);
+      expect(after.filter((m) => m.typeId === gold)).toHaveLength(1);
+      const rows = await heldOf(gymId);
+      expect(rows).toHaveLength(2);
+      expect(rows.every((r) => r.entry_id === keep)).toBe(true);
+      const [note] = await sql<{ meta: Record<string, string> }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.member_list_entries_merged'`;
+      expect(note?.meta["listMembershipsNotMoved"]).toBe("1");
+
+      // Where the kept record never had the type, the list's membership does move.
+      const lone = await addPerson(gymId, owner.cookies, "Lone Keep");
+      const carrier = await addPerson(gymId, owner.cookies, "Lone Dup", { membershipType: "Gold", endsOn: addDays(today, 5), endsOnKind: "renews" });
+      expect((JSON.parse((await link(gymId, owner.cookies, "Gold", gold)).body) as MembershipLinkResponse).given).toBe(1);
+      expect((await post(`${entryUrl(gymId, carrier)}/merge`, { keepEntryId: lone, acknowledgeLeavesList: true }, owner.cookies)).statusCode).toBe(200);
+      expect((await pageOf(gymId, lone, owner.cookies)).map((m) => [m.typeName, m.fromList])).toEqual([["Gold Monthly", true]]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the press gives nothing to a person the box left out: one with as many running as a person can have, and one whose list day has passed for a type that ends",
+    async () => {
+      const owner = await makeUser("out-owner");
+      const org = await makeOrg(owner.cookies, "Mwl Out Gym");
+      const gymId = org.org.id;
+      const term = await addType(gymId, owner.cookies, oneMonth({ name: "Three months", termCount: 3 }));
+      const filler = await addType(gymId, owner.cookies, oneMonth({ name: "One month" }));
+      const full = await addPerson(gymId, owner.cookies, "Full Up", { membershipType: "Term" });
+      const today = list(await get(heldUrl(gymId, full), owner.cookies)).today;
+      for (let i = 0; i < HELD_LIVE_MAX; i++) await given(gymId, full, owner.cookies, { typeId: filler, startsOn: today });
+      const over = await addPerson(gymId, owner.cookies, "Over Already", { membershipType: "Term", endsOn: addDays(today, -3), endsOnKind: "ends" });
+      const fine = await addPerson(gymId, owner.cookies, "Still Running", { membershipType: "Term", endsOn: addDays(today, 30), endsOnKind: "ends" });
+
+      const preview = await previewOf(gymId, owner.cookies, "Term", term);
+      expect(preview.counts).toMatchObject({ settled: 0, due: 0, ask: 1, full: 1, ended: 1 });
+      const res = await post(`${wordsUrl(gymId)}/link`, { word: "Term", typeId: term, groups: ALL, digest: preview.digest, paid: true }, owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      expect((JSON.parse(res.body) as MembershipLinkResponse).given).toBe(1);
+      const held = (await heldOf(gymId)).filter((h) => h.membership_type_id === term);
+      expect(held.map((h) => h.entry_id)).toEqual([fine]);
+      expect(await pageOf(gymId, over, owner.cookies)).toEqual([]);
+      expect((await pageOf(gymId, full, owner.cookies)).every((m) => m.typeId === filler)).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "several staff at ONE address: each has an allowance of their own, and one using theirs up stops nobody else",
+    async () => {
+      const owner = await makeUser("desk-owner");
+      const manager = await makeUser("desk-manager");
+      const org = await makeOrg(owner.cookies, "Mwl Desk Gym");
+      const gymId = org.org.id;
+      await makeStaff(org, owner, manager, "manager");
+      const gold = await addType(gymId, owner.cookies, monthly());
+      await addPerson(gymId, owner.cookies, "Olivia Brown", { membershipType: "Gold" });
+      const DESK = "10.72.250.7";
+      const look = (cookies: Cookies) => post(`${wordsUrl(gymId)}/preview`, { word: "Gold", typeId: gold }, cookies, DESK);
+      // The manager opens the box until the allowance is spent (300 an hour a person).
+      let refusedAt = 0;
+      for (let i = 1; i <= 301 && refusedAt === 0; i++) {
+        const res = await look(manager.cookies);
+        if (res.statusCode === 429) refusedAt = i;
+        else expect(res.statusCode, `the manager's look ${String(i)}`).toBe(200);
+      }
+      expect(refusedAt).toBe(301);
+      // The owner, at the same address, is not held, and can still give the membership.
+      const mine = await look(owner.cookies);
+      expect(mine.statusCode).toBe(200);
+      const digest = (JSON.parse(mine.body) as MembershipLinkPreviewResponse).digest;
+      const pressed = await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, digest, paid: true }, owner.cookies, DESK);
+      expect(pressed.statusCode, pressed.body).toBe(200);
+      expect((await post(`${wordsUrl(gymId)}/unlink`, { word: "Gold" }, manager.cookies, DESK)).statusCode).toBe(429);
     },
     TEST_TIMEOUT_MS,
   );

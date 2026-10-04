@@ -2394,9 +2394,14 @@ memberships, Settings → Memberships.
   many whole periods before the list's day and never after today, the first such start
   that comes back to the list's day exactly (one month before 31 Mar is 28 Feb, which
   comes back to 28 Mar, so the start is 31 Jan), so later renewals stay on the list's day
-  of the month. Any other kind runs through the list's last day; where the type's own
+  of the month. Somebody paid further ahead than one period (a year paid on a type
+  set up as monthly) renews in the rule every period and owes nothing until the list's
+  day: every screen prints the list's day (`shownRenewal`), in the box's row and on
+  the person's page. The periods up to the list's day are the list's own fact, so
+  Undo mark paid never goes below them. Any other kind runs through the list's last day; where the type's own
   term does not reach it, the days between are counted in `frozen_days`. One whose day
-  has passed is not given (`ended`).
+  has passed is not given (`ended`), nor one whose worked-back start would be before
+  1 January 2000, the first day any membership can start.
 - **What the list does not say, staff do** (RULINGS 2026-10-04): with no day on the list
   the membership starts the day it is linked, and for these people, and for a membership
   that ends (its end day says how long, not whether it is paid), the box asks once
@@ -2408,11 +2413,19 @@ memberships, Settings → Memberships.
   are counted and given nothing. Names are the first 200 of a group; the counts are of
   everybody. A pack is given whole, and the box says the list does not say how many
   classes are used.
-- The press carries the numbers the box showed; a list that has moved since is refused
-  (409) and nobody is given anything. Everybody is given theirs in one statement under
+- The press carries the box's `digest`: the day, the type as it stands (its price, term
+  and when it last changed) and each person who can get it, with their name, group and
+  list day. A list or a type that has moved since is refused (409) and nobody is given
+  anything, however alike the numbers are. The same press arriving again, its people
+  already given, is told it was done (409 `membership_link_done`), never that nobody was
+  given a membership. Everybody is given theirs in one statement under
   the gym's lock, with one note in `audit_log`. `from_list` marks a membership whose
   start was worked back from the list's day: a person's page reads "From your list ·
   Renews 14 November 2026", never the worked-back day as the day they started.
+- **A person on the list twice** has the name on both records, and both are given the
+  type. Joining the two records (§11.6) does not move a from-list membership onto a
+  kept record that holds, or has held, that type: it goes with its record, and the
+  join's note counts it. Any other membership moves as before.
 - One link a word. A second type is refused until the link is removed; removing it
   changes nobody. The link is remembered and never acts by itself: people who arrive
   with the word later are given it on a press.

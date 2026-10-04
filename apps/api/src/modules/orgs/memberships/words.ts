@@ -1,11 +1,13 @@
 // Who gets a type when one of the list's words is linked to it (spec Part 3 §13.2;
 // ROADMAP 17a-iii). Pure: the preview and the link itself both ask this, so the box
 // and the press cannot disagree about one person.
+import { createHash } from "node:crypto";
 import {
   HELD_LIVE_MAX,
   linkHeldMembership,
   type HeldMembership,
   type HeldMembershipTerms,
+  type HeldMembershipTypeChoice,
   type MembershipLinkGroup,
 } from "@app/shared";
 
@@ -44,4 +46,35 @@ export function placePeople(
     if (!made.ok) return { person, group: made.reason === "ended_in_list" ? "ended" : "day", membership: null };
     return { person, group: made.group, membership: made.membership };
   });
+}
+
+/** What a box showed, in one value: the day, the type as it stands, and each person who
+ *  can get it with their name, group and list day. The press sends the preview's back;
+ *  where the press works out another, somebody or something has changed since, however
+ *  alike the numbers are (another person with the word, another price on the type). */
+export function linkDigest(
+  type: HeldMembershipTypeChoice,
+  typeUpdatedAt: Date,
+  placed: readonly PlacedPerson[],
+  today: string,
+): string {
+  const people = placed
+    .filter((p) => p.membership !== null)
+    .map((p) => [p.person.entryId, p.group, p.person.fullName, p.person.endsOn ?? "", p.person.endsOnKind ?? ""])
+    .sort((a, b) => (String(a[0]) < String(b[0]) ? -1 : 1));
+  const facts = [
+    today,
+    type.id,
+    typeUpdatedAt.toISOString(),
+    type.name,
+    type.kind,
+    type.priceMinor,
+    type.currency,
+    type.termCount,
+    type.termUnit,
+    type.packClasses,
+    type.packDays,
+    people,
+  ];
+  return createHash("sha256").update(JSON.stringify(facts)).digest("hex");
 }

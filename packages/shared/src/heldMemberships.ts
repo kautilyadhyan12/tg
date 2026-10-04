@@ -490,6 +490,7 @@ export function linkHeldMembership(
     // after it, as frozen days are.
     const back = addTerms(edge, t.count, t.unit, -1);
     const startsOn = back > today ? today : back;
+    if (startsOn < HELD_START_MIN) return { ok: false, reason: "day_out_of_range" };
     const frozenDays = daysBetween(addTerms(startsOn, t.count, t.unit, 1), edge);
     const membership = { ...base, startsOn, frozenDays, paidPeriods: !free && paid ? 1 : 0 };
     return { ok: true, membership, group: free ? "settled" : "ask" };
@@ -510,14 +511,27 @@ export function linkHeldMembership(
     else nearest ??= { startsOn, periods, frozenDays: short };
   }
   const at = found ?? nearest;
-  if (at === null) return { ok: false, reason: "day_out_of_range" };
-  const placed = { ...base, startsOn: at.startsOn, frozenDays: at.frozenDays };
+  // No start a hand-given membership could not have either.
+  if (at === null || at.startsOn < HELD_START_MIN) return { ok: false, reason: "day_out_of_range" };
   const membership = {
-    ...placed,
+    ...base,
+    startsOn: at.startsOn,
+    frozenDays: at.frozenDays,
     paidPeriods: free ? 0 : at.periods,
-    paidFloor: free ? 0 : Math.min(periodIndex(placed, today), at.periods),
+    // Every period up to the list's day is the list's own fact, not a mark staff made:
+    // none of them can be taken back.
+    paidFloor: free ? 0 : at.periods,
   };
   return { ok: true, membership, group: free || edge > today ? "settled" : "due" };
+}
+
+/** The renewal day a screen prints for a repeating membership taken from the list: the
+ *  LIST's day. A person paid further ahead than one period (a year paid on a type set up
+ *  as monthly) renews in the rule every period, and owes nothing until the list's day,
+ *  which is the day they are paid up to: that is the day shown while it is the later. */
+export function shownRenewal(view: Pick<HeldMembershipView, "renewsOn" | "payment">): string | null {
+  const until = view.payment !== null && view.payment.state === "paid" ? view.payment.until : null;
+  return until !== null && view.renewsOn !== null && until > view.renewsOn ? until : view.renewsOn;
 }
 
 // ── The wire ────────────────────────────────────────────────────────────────
@@ -578,6 +592,8 @@ export const listedMembershipSchema = z
     endsOn: daySchema.nullable(),
     endsOnKind: z.enum(["ends", "renews"]).nullable(),
     type: z.object({ id: z.string().uuid(), name: z.string() }).strict().nullable(),
+    /** The list's name is that type's own name, as the server folds both. */
+    ownName: z.boolean(),
     held: z.boolean(),
   })
   .strict();

@@ -6,6 +6,7 @@
 // then the records', as every other write of a held membership does (`heldRepo.ts`),
 // and gives everybody their membership in one statement or nobody.
 import type { Sql, TransactionSql } from "postgres";
+import { z } from "zod";
 import {
   HELD_LIVE_MAX,
   MEMBER_LIST_STATUS_CHIPS_MAX,
@@ -15,12 +16,12 @@ import {
 import { insertAudit } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
 import { inUseByRule, liveTypes, typeChoice } from "./heldRepo.js";
-import { placePeople, type PlacedPerson, type WordPerson } from "./words.js";
+import { linkDigest, placePeople, type PlacedPerson, type WordPerson } from "./words.js";
 
 export interface WordRow {
   word: string;
   people: number;
-  link: { typeId: string; typeName: string; typeArchived: boolean; waiting: number } | null;
+  link: { typeId: string; typeName: string; typeArchived: boolean; waiting: number; ownName: boolean } | null;
   /** Not linked, and the word is the name of one of the gym's live types. */
   sameName: { typeId: string; typeName: string; waiting: number } | null;
 }
@@ -30,7 +31,7 @@ export interface WordRow {
 export async function readWords(sql: Sql, gymId: string): Promise<{ words: WordRow[]; types: HeldMembershipTypeChoice[] }> {
   return await sql.begin("isolation level repeatable read read only", async (tx) => {
     const rows = await tx<
-      { word: string; people: number; type_id: string | null; linked: boolean | null; type_name: string | null; archived: boolean | null; waiting: number }[]
+      { word: string; people: number; type_id: string | null; linked: boolean | null; type_name: string | null; archived: boolean | null; own_name: boolean | null; waiting: number }[]
     >`
       WITH mine AS MATERIALIZED (
         SELECT membership_type, listed_seq FROM gym_member_list_entries
@@ -68,6 +69,7 @@ export async function readWords(sql: Sql, gymId: string): Promise<{ words: WordR
       )
       SELECT g.word, g.people, p.type_id, p.linked, t.name AS type_name,
              (t.archived_at IS NOT NULL) AS archived,
+             (lower(t.name) = g.key) AS own_name,
              -- The people with the word who have never held that type.
              CASE WHEN p.type_id IS NULL THEN 0
                   ELSE GREATEST(g.people - coalesce(ho.holders, 0), 0) END AS waiting
@@ -85,7 +87,7 @@ export async function readWords(sql: Sql, gymId: string): Promise<{ words: WordR
         link:
           row.type_id === null || row.type_name === null || row.linked !== true
             ? null
-            : { typeId: row.type_id, typeName: row.type_name, typeArchived: row.archived === true, waiting: row.waiting },
+            : { typeId: row.type_id, typeName: row.type_name, typeArchived: row.archived === true, waiting: row.waiting, ownName: row.own_name === true },
         sameName:
           row.type_id === null || row.type_name === null || row.linked !== false
             ? null
@@ -178,8 +180,19 @@ async function placeInTurns(
   return placed;
 }
 
+/** The type as the price list holds it now, with when it last changed. */
+function typeNow(raw: unknown): { type: HeldMembershipTypeChoice; updatedAt: Date } {
+  return { type: typeChoice(raw), updatedAt: z.object({ updated_at: z.date() }).passthrough().parse(raw).updated_at };
+}
+
+/** Whether the word is the type's own name, folded as every match here is. */
+async function isOwnName(tx: TransactionSql, word: string, typeName: string): Promise<boolean> {
+  const [row] = await tx<{ own: boolean }[]>`SELECT (lower(${word}) = lower(${typeName})) AS own`;
+  return row?.own === true;
+}
+
 export type WordPreview =
-  | { kind: "ok"; word: string; past: number; type: HeldMembershipTypeChoice; placed: PlacedPerson[] }
+  | { kind: "ok"; word: string; past: number; type: HeldMembershipTypeChoice; ownName: boolean; digest: string; placed: PlacedPerson[] }
   | { kind: "word_not_found" }
   | { kind: "type_not_found" };
 
@@ -193,9 +206,18 @@ export async function previewLink(
     if (onList.word === null) return { kind: "word_not_found" };
     const [rawType] = await liveTypes(tx, input.gymId, input.typeId);
     if (rawType === undefined) return { kind: "type_not_found" };
-    const type = typeChoice(rawType);
+    const { type, updatedAt } = typeNow(rawType);
     const people = await peopleWithWord(tx, input.gymId, input.word, input.typeId, input.today, null);
-    return { kind: "ok", word: onList.word, past: onList.past, type, placed: await placeInTurns(people, type, false, input.today) };
+    const placed = await placeInTurns(people, type, false, input.today);
+    return {
+      kind: "ok",
+      word: onList.word,
+      past: onList.past,
+      type,
+      ownName: await isOwnName(tx, onList.word, type.name),
+      digest: linkDigest(type, updatedAt, placed, input.today),
+      placed,
+    };
   });
 }
 
@@ -205,8 +227,10 @@ export type LinkOutcome =
   | { kind: "type_not_found" }
   /** The word is linked to another type already. */
   | { kind: "linked_elsewhere"; typeName: string }
-  /** The people the box showed are not the people the list holds now. */
+  /** The people, or the type, are not what the box showed. */
   | { kind: "changed" }
+  /** The same press again: the name counts as this type and nobody ticked is left to give. */
+  | { kind: "already_done" }
   /** People the list does not settle were ticked, and nobody said whether they paid. */
   | { kind: "paid_not_answered" };
 
@@ -221,7 +245,8 @@ export async function linkWord(
     word: string;
     typeId: string;
     groups: Record<GiveGroup, boolean>;
-    expected: Record<GiveGroup, number>;
+    /** The preview's, as the box that was pressed held it. */
+    digest: string;
     paid: boolean | null;
     /** The gym's own day. */
     today: string;
@@ -244,7 +269,7 @@ export async function linkWord(
 
     const [rawType] = await liveTypes(tx, input.gymId, input.typeId);
     if (rawType === undefined) return { kind: "type_not_found" };
-    const type = typeChoice(rawType);
+    const { type, updatedAt } = typeNow(rawType);
 
     // The records are held, then read: a join of two records or a delete waits.
     const ids = await tx<{ id: string }[]>`
@@ -255,7 +280,11 @@ export async function linkWord(
     const placed = await placeInTurns(people, type, input.paid ?? false, input.today);
 
     const count = (group: GiveGroup) => placed.filter((p) => p.group === group).length;
-    if (GIVE_GROUPS.some((group) => count(group) !== input.expected[group])) return { kind: "changed" };
+    if (linkDigest(type, updatedAt, placed, input.today) !== input.digest) {
+      // A press that arrives a second time finds its people given: not a changed list.
+      const left = GIVE_GROUPS.some((group) => input.groups[group] && count(group) > 0);
+      return linked !== undefined && !left ? { kind: "already_done" } : { kind: "changed" };
+    }
     if (input.groups.ask && count("ask") > 0 && input.paid === null) return { kind: "paid_not_answered" };
 
     const rows = placed.flatMap((p) =>
@@ -291,10 +320,13 @@ export async function linkWord(
       if (inserted.length !== rows.length) throw new Error("a linked membership was not written");
     }
 
-    await tx`
+    const tied = await tx<{ word_key: string }[]>`
       INSERT INTO gym_membership_word_links (gym_id, word_key, word, membership_type_id, linked_by)
       VALUES (${input.gymId}, lower(${onList.word}), ${onList.word}, ${input.typeId}, ${input.actorUserId})
-      ON CONFLICT (gym_id, word_key) DO NOTHING`;
+      ON CONFLICT (gym_id, word_key) DO NOTHING
+      RETURNING word_key`;
+    // A press that gave nobody anything and tied nothing new leaves no note.
+    if (rows.length === 0 && tied.length === 0) return { kind: "ok", given: 0 };
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,

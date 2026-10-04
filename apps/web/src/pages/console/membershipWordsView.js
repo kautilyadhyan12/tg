@@ -14,8 +14,6 @@ const people = (n) => `${n.toLocaleString('en')} ${n === 1 ? 'person' : 'people'
 /** A name from the member list, in quotes so it reads as the list's own. */
 export const quoted = (word) => `“${word}”`;
 
-const sameText = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
-
 /** The list's names that are no membership type yet, in the list's own order. One whose
  *  type was archived is among them: it cannot be given until it is set up again. */
 export function notSetUp(words) {
@@ -54,12 +52,14 @@ export function typeTies(type, words) {
     give: true,
     first: waiting === w.people,
     undo: false,
+    own: true,
   });
   for (const w of words) {
     if (w.link !== null) {
       if (w.link.typeArchived || w.link.typeId !== type.id) continue;
       const { waiting } = w.link;
-      if (sameText(w.word, type.name)) {
+      // The server says whether the name is the type's own: it folds both, the screen never does.
+      if (w.link.ownName) {
         if (waiting > 0) ties.push(ownName(w, waiting));
         continue;
       }
@@ -70,6 +70,7 @@ export function typeTies(type, words) {
         give: waiting > 0,
         first: waiting === w.people,
         undo: true,
+        own: false,
       });
     } else if (w.sameName !== null && w.sameName.typeId === type.id && w.sameName.waiting > 0) {
       ties.push(ownName(w, w.sameName.waiting));
@@ -80,7 +81,7 @@ export function typeTies(type, words) {
 
 /** The button on a type's row that opens the box for one of the list's names. */
 export function tieButton(type, tie) {
-  const who = sameText(tie.word.word, type.name) ? 'on your member list' : `with ${tie.word.word} on your member list`;
+  const who = tie.own ? 'on your member list' : `with ${tie.word.word} on your member list`;
   return tie.first
     ? { label: 'Give it to them', aria: `Give ${type.name} to the people ${who}`, main: true }
     : { label: 'See who can get it', aria: `See who ${who} can get ${type.name}`, main: false };
@@ -179,7 +180,7 @@ export function giveGroups(preview) {
       key: 'settled',
       title: free(preview) ? `${people(counts.settled)} · nothing to pay` : `${people(counts.settled)} · paid up`,
       detail: free(preview)
-        ? `${preview.type.name} is free. Where your list has a date for them they keep it; otherwise it starts today.`
+        ? `${preview.type.name} is free, so there is nothing to pay.`
         : 'Their renewal date in your list is still to come. Each keeps that date, and shows as paid until then.',
     });
   }
@@ -209,7 +210,7 @@ export function leftOut(preview) {
   if (counts.has > 0) lines.push({ key: 'has', text: `${people(counts.has)} already ${counts.has === 1 ? 'has' : 'have'} ${type.name}, or had it before.` });
   if (counts.ended > 0) lines.push({ key: 'ended', text: `${people(counts.ended)}: your list says their membership has ended.` });
   if (counts.full > 0) lines.push({ key: 'full', text: `${people(counts.full)} already ${counts.full === 1 ? 'has' : 'have'} as many memberships running as one person can.` });
-  if (counts.day > 0) lines.push({ key: 'day', text: `${people(counts.day)}: the date in your list is too far away to use. Add their membership on their own page.` });
+  if (counts.day > 0) lines.push({ key: 'day', text: `${people(counts.day)}: the date in your list can't be used. Add their membership on their own page.` });
   if (counts.past > 0) {
     lines.push({
       key: 'past',
@@ -263,7 +264,7 @@ export function startTicks(preview) {
 export function boxWords(preview, ticks, counted = false) {
   const n = givenCount(preview, ticks);
   const { name } = preview.type;
-  const same = sameText(name, preview.word);
+  const same = preview.ownName;
   const heading = same
     ? `Give ${name} to the people who have it on your member list?`
     : `Give ${name} to the people with ${quoted(preview.word)} on your member list?`;
@@ -292,7 +293,8 @@ export function linkBody(preview, ticks, paid) {
     word: preview.word,
     typeId: preview.type.id,
     groups: { settled: ticks.settled, due: ticks.due, ask: ticks.ask },
-    expected: { settled: preview.counts.settled, due: preview.counts.due, ask: preview.counts.ask },
+    // The box as it was shown: a list or a type that has moved since is refused.
+    digest: preview.digest,
     paid: asksPaid(preview, ticks) ? paid : null,
   };
 }

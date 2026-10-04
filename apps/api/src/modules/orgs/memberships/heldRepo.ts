@@ -125,7 +125,7 @@ export function typeChoice(row: unknown): HeldMembershipTypeChoice {
 
 /** A gym's live types, or the one named; a gym has at most 60. */
 export const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: string | null) => sql`
-  SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days
+  SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at
   FROM gym_membership_types
   WHERE gym_id = ${gymId} AND archived_at IS NULL
     AND (${typeId}::uuid IS NULL OR id = ${typeId}::uuid)
@@ -179,8 +179,8 @@ async function listedMembership(
 ): Promise<ListedMembership | null> {
   const word = entry.membership_type;
   if (word === null || word === "") return null;
-  const [type] = await tx<{ id: string; name: string; held: boolean }[]>`
-    SELECT t.id, t.name,
+  const [type] = await tx<{ id: string; name: string; own_name: boolean; held: boolean }[]>`
+    SELECT t.id, t.name, (lower(t.name) = lower(${word})) AS own_name,
            EXISTS (
              SELECT 1 FROM gym_held_memberships h
              WHERE h.gym_id = t.gym_id AND h.entry_id = ${entryId} AND h.membership_type_id = t.id
@@ -199,6 +199,7 @@ async function listedMembership(
     // Text under a CHECK: a kind this build does not know reads as the list's default, an end day.
     endsOnKind: entry.ends_on === null || entry.ends_on_kind === null ? null : entry.ends_on_kind === "renews" ? "renews" : "ends",
     type: type === undefined ? null : { id: type.id, name: type.name },
+    ownName: type?.own_name ?? false,
     held: type?.held ?? false,
   };
 }

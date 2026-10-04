@@ -101,7 +101,8 @@ const first = await previewMembershipLink(deps, owner, gymId, { word: "Gold", ty
 console.log(
   `one gym: ${String(PEOPLE)} people, all with the one word; paid up ${String(first.counts.settled)}, due ${String(first.counts.due)}, to ask ${String(first.counts.ask)}; cpu ${String(mhz)} MHz; ${String(RUNS)} runs each`,
 );
-const expected = { settled: first.counts.settled, due: first.counts.due, ask: first.counts.ask };
+// The box as it stands before anybody is given anything: every timed link starts from it.
+const digest = first.digest;
 
 /** Take the link's work back, so each run gives everybody their membership afresh. */
 async function undo(): Promise<void> {
@@ -117,7 +118,7 @@ const calls: [string, () => Promise<unknown>, (() => Promise<void>) | null][] = 
   [
     `link: give it to ${String(PEOPLE)} people`,
     async () => {
-      const done = await linkMembershipWord(deps, owner, gymId, { word: "Gold", typeId, groups: { settled: true, due: true, ask: true }, expected, paid: true });
+      const done = await linkMembershipWord(deps, owner, gymId, { word: "Gold", typeId, groups: { settled: true, due: true, ask: true }, digest, paid: true });
       if (done.given !== PEOPLE) throw new Error(`gave ${String(done.given)} of ${String(PEOPLE)}`);
     },
     undo,
@@ -137,7 +138,7 @@ for (const [name, call, after] of calls) {
   console.log(`${name.padEnd(31)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · server thread busy median ${fmt(median(jss))} (worst ${fmt(Math.max(...jss))})`);
 }
 // The words again as Settings reads them from then on: the word linked, everybody holding it.
-await linkMembershipWord(deps, owner, gymId, { word: "Gold", typeId, groups: { settled: true, due: true, ask: true }, expected, paid: true });
+await linkMembershipWord(deps, owner, gymId, { word: "Gold", typeId, groups: { settled: true, due: true, ask: true }, digest, paid: true });
 await sql`VACUUM ANALYZE gym_held_memberships`;
 {
   const walls: number[] = [];

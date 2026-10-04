@@ -108,7 +108,7 @@ describe('what a membership reads as', () => {
 
 describe("what the member list says their membership is, where they do not hold it here", () => {
   const TYPE = { id: '22222222-2222-4222-8222-000000000009', name: 'Gold Monthly' };
-  const listed = (over = {}) => ({ word: 'Gold Plus', endsOn: '2026-10-13', endsOnKind: 'renews', type: null, held: false, ...over });
+  const listed = (over = {}) => ({ word: 'Gold Plus', endsOn: '2026-10-13', endsOnKind: 'renews', type: null, ownName: false, held: false, ...over });
 
   it('a name that is no type yet is a row of its own, not set up, with the day the list gives', () => {
     expect(listedRow(listed(), 'Leo Grant')).toEqual({
@@ -131,8 +131,8 @@ describe("what the member list says their membership is, where they do not hold 
       from: 'Your member list says “Gold” · Renews 13 October 2026',
       note: "Zara Ali doesn't have it here yet. Add it with Add membership, or give it to everyone on your list who is missing it in Settings, under Memberships.",
     });
-    // The type's own name on the list is not quoted back at them, whatever its capitals.
-    expect(listedRow(listed({ word: 'GOLD MONTHLY', type: TYPE, endsOn: null, endsOnKind: null }), 'this person')).toMatchObject({
+    // The type's own name on the list (the server says so) is not quoted back at them.
+    expect(listedRow(listed({ word: 'GOLD MONTHLY', type: TYPE, ownName: true, endsOn: null, endsOnKind: null }), 'this person')).toMatchObject({
       from: 'From your member list',
       note: expect.stringMatching(/^This person doesn't have it here yet\./),
     });

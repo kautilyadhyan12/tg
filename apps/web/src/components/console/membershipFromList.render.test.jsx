@@ -53,7 +53,7 @@ const DAY = type(2, { name: 'Day Pass', kind: 'pack', termCount: null, termUnit:
 const listOf = (over = {}) => ({ currency: 'GBP', types: [], archived: [], archivedTotal: 0, classChoices: [], ...over });
 
 const name = (over = {}) => ({ word: 'Gold', people: 5, link: null, sameName: null, ...over });
-const counted = (waiting, over = {}) => name({ link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting, ...over } });
+const counted = (waiting, over = {}) => name({ link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting, ownName: false, ...over } });
 const own = (waiting) => name({ word: 'Gold Monthly', people: 3, sameName: { typeId: GOLD.id, typeName: 'Gold Monthly', waiting } });
 const wordsOf = (words) => ({ data: { words, types: [] } });
 
@@ -68,10 +68,13 @@ const person = (n, fullName, group, over = {}) => ({
   ...over,
 });
 const choice = (t) => ({ id: t.id, name: t.name, kind: t.kind, priceMinor: t.priceMinor, currency: t.currency, termCount: t.termCount, termUnit: t.termUnit, packClasses: t.packClasses, packDays: t.packDays });
+const DIGEST = 'a'.repeat(64);
 const previewOf = (t, over = {}) => ({
   today: '2026-10-04',
   word: 'Gold',
   type: choice(t),
+  ownName: false,
+  digest: DIGEST,
   counts: { settled: 2, due: 1, ask: 1, has: 0, full: 0, ended: 0, day: 0, past: 2 },
   people: [
     person(1, 'Olivia Brown', 'settled', { renewsOn: '2026-11-14' }),
@@ -164,7 +167,7 @@ describe("a name that is already one of the gym's own types (Kd's click-through)
     await open([GOLD], [own(2)]);
     expect(await screen.findByText('On your member list 3 people have Gold Monthly. 2 of them have never had it here.')).toBeTruthy();
     expect(screen.queryByText('On your member list, not set up yet')).toBeNull();
-    orgService.previewMembershipLink.mockResolvedValue({ data: topUpOf(GOLD, { word: 'Gold Monthly' }) });
+    orgService.previewMembershipLink.mockResolvedValue({ data: topUpOf(GOLD, { word: 'Gold Monthly', ownName: true }) });
     fireEvent.click(screen.getByRole('button', { name: 'See who on your member list can get Gold Monthly' }));
     await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold Monthly', typeId: GOLD.id }));
     // Its name is said once in the box, not "Gold Monthly … with “Gold Monthly”".
@@ -175,7 +178,7 @@ describe("a name that is already one of the gym's own types (Kd's click-through)
   it('where none of them has it yet, they are offered it outright', async () => {
     await open([GOLD], [own(3)]);
     expect(await screen.findByText('3 people on your member list have Gold Monthly, but it is not on their pages yet.')).toBeTruthy();
-    orgService.previewMembershipLink.mockResolvedValue({ data: previewOf(GOLD, { word: 'Gold Monthly' }) });
+    orgService.previewMembershipLink.mockResolvedValue({ data: previewOf(GOLD, { word: 'Gold Monthly', ownName: true }) });
     fireEvent.click(screen.getByRole('button', { name: 'Give Gold Monthly to the people on your member list' }));
     const box = await screen.findByRole('group', { name: 'Give Gold Monthly to the people who have it on your member list?' });
     expect(within(box).getByRole('button', { name: 'Give Gold Monthly to 4 people' })).toBeTruthy();
@@ -195,7 +198,7 @@ describe('Set up, in a gym that has set no price yet', () => {
 
     const MADE = type(9, { name: 'Gold' });
     orgService.createMembershipType.mockResolvedValue({ data: listOf({ types: [MADE] }) });
-    orgService.previewMembershipLink.mockResolvedValue({ data: previewOf(MADE, { counts: { settled: 2, due: 1, ask: 1, has: 0, full: 0, ended: 0, day: 0, past: 0 }, people: previewOf(MADE).people.slice(0, 4) }) });
+    orgService.previewMembershipLink.mockResolvedValue({ data: previewOf(MADE, { ownName: true, counts: { settled: 2, due: 1, ask: 1, has: 0, full: 0, ended: 0, day: 0, past: 0 }, people: previewOf(MADE).people.slice(0, 4) }) });
     fireEvent.change(within(form).getByLabelText('Price (GBP)'), { target: { value: '49.99' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Add membership type' }));
     await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledWith(GYM, expect.objectContaining({ name: 'Gold', kind: 'recurring', priceMinor: 4999 })));
@@ -205,7 +208,7 @@ describe('Set up, in a gym that has set no price yet', () => {
     expect(orgService.linkMembershipWord).not.toHaveBeenCalled();
 
     orgService.linkMembershipWord.mockResolvedValue({
-      data: { given: 4, list: { words: [name({ people: 4, link: { typeId: MADE.id, typeName: 'Gold', typeArchived: false, waiting: 0 } }), name({ word: 'Silver', people: 2 })], types: [] } },
+      data: { given: 4, list: { words: [name({ people: 4, link: { typeId: MADE.id, typeName: 'Gold', typeArchived: false, waiting: 0, ownName: true } }), name({ word: 'Silver', people: 2 })], types: [] } },
     });
     fireEvent.click(within(box).getByLabelText('Yes, they have paid'));
     fireEvent.click(within(box).getByRole('button', { name: 'Give Gold to 4 people' }));
@@ -357,7 +360,7 @@ describe('the box of who gets it', () => {
         word: 'Gold',
         typeId: GOLD.id,
         groups: { settled: true, due: true, ask: true },
-        expected: { settled: 2, due: 1, ask: 1 },
+        digest: DIGEST,
         paid: false,
       }),
     );
@@ -381,7 +384,7 @@ describe('the box of who gets it', () => {
         word: 'Gold',
         typeId: GOLD.id,
         groups: { settled: true, due: false, ask: false },
-        expected: { settled: 2, due: 1, ask: 1 },
+        digest: DIGEST,
         paid: null,
       }),
     );
@@ -411,7 +414,7 @@ describe('the box of who gets it', () => {
         word: 'Gold',
         typeId: GOLD.id,
         groups: { settled: true, due: false, ask: false },
-        expected: { settled: 2, due: 1, ask: 1 },
+        digest: DIGEST,
         paid: null,
       }),
     );
@@ -449,6 +452,21 @@ describe('the box of who gets it', () => {
     expect(await screen.findByText(/Your list has changed since this was opened/)).toBeTruthy();
     expect(await screen.findByRole('button', { name: 'Give Gold Monthly to 4 people' })).toBeTruthy();
     expect(screen.getByText('3 people · paid up')).toBeTruthy();
+  });
+
+  it('a press that had already gone through is told so, and the list is read again: never "nobody was given a membership"', async () => {
+    await open([GOLD], [name()]);
+    const box = await openBox(previewOf(GOLD, { counts: { settled: 2, due: 0, ask: 0, has: 0, full: 0, ended: 0, day: 0, past: 0 }, people: previewOf(GOLD).people.slice(0, 2) }));
+    orgService.linkMembershipWord.mockRejectedValue({
+      response: { status: 409, data: { error: 'membership_link_done', message: "This was already done, and nothing more was given. Check each person's page." } },
+    });
+    orgService.getMembershipWords.mockResolvedValue(wordsOf([counted(0)]));
+    fireEvent.click(within(box).getByRole('button', { name: 'Give Gold Monthly to 2 people' }));
+    expect(await screen.findByText("This was already done, and nothing more was given. Check each person's page.")).toBeTruthy();
+    expect(screen.queryByRole('group', { name: BOX_GOLD })).toBeNull();
+    expect(screen.queryByText(/Nobody was given/)).toBeNull();
+    // The list as it stands now: the name is tied, on its type's row.
+    expect(await screen.findByText('On your member list this is “Gold” · 5 people.')).toBeTruthy();
   });
 
   it('a longer group lists three people, then "and N more · See all" opens the rest as rows, and Show fewer closes it', async () => {

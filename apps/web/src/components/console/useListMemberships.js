@@ -64,6 +64,13 @@ export function useListMemberships(gymId, types) {
       setDone(doneWords(res.data.given, preview.word, preview.type.name));
       setPreview(null);
     } catch (err) {
+      if (errorCode(err) === 'membership_link_done') {
+        // The same press had already gone through: show the list as it is now.
+        setPreview(null);
+        setDone(errorText(err, "This was already done, and nothing more was given. Check each person's page."));
+        void load();
+        return;
+      }
       setError(errorText(err, "We couldn't do that. Nobody was given a membership. Please try again."));
       if (errorCode(err) === 'membership_link_changed') {
         // The box holds an older list: show the people as they are now.
