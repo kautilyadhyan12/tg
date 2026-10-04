@@ -11,7 +11,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { saveGymMembershipTypeRequestSchema } from "@app/shared";
+import { saveGymMembershipTypeRequestSchema, updateGymMembershipTypeRequestSchema } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { membershipTypeParamsSchema, orgParamsSchema } from "../schemas.js";
@@ -81,7 +81,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
   app.put("/v1/orgs/:gymId/membership-types/:typeId", guarded, async (req, reply) => {
     const params = parseOr400(membershipTypeParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const body = parseOr400(saveGymMembershipTypeRequestSchema, req.body, req, reply);
+    const body = parseOr400(updateGymMembershipTypeRequestSchema, req.body, req, reply);
     if (body === null) return;
     const list = await service.updateMembershipType(
       membershipDeps,

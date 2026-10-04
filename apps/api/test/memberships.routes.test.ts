@@ -171,6 +171,14 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
   const restoreUrl = (gymId: string, typeId: string) => `${typeUrl(gymId, typeId)}/restore`;
   const list = (res: { body: string }) => JSON.parse(res.body) as GymMembershipTypesResponse;
 
+  /** A change as the screen sends it: with the stamp the type carries now. */
+  const putType = async (gymId: string, typeId: string, body: Record<string, unknown>, cookies: Cookies = {}) => {
+    const [row] = await sql<{ at: string }[]>`
+      SELECT to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at
+      FROM gym_membership_types WHERE id = ${typeId.toLowerCase()}`;
+    return put(typeUrl(gymId, typeId), { ...body, updatedAt: row?.at ?? "2026-01-01T00:00:00.000Z" }, cookies);
+  };
+
   const addType = async (gymId: string, cookies: Cookies, body: unknown) => {
     const res = await post(typesUrl(gymId), body, cookies);
     expect(res.statusCode, res.body).toBe(201);
@@ -256,7 +264,7 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
         if (outsider.read !== 200) expect(read.body).not.toContain("Gold Monthly");
         const writes = [
           await post(typesUrl(org.org.id), monthly({ name: "Theirs" }), outsider.cookies),
-          await put(typeUrl(org.org.id, typeId), monthly({ priceMinor: 1 }), outsider.cookies),
+          await putType(org.org.id, typeId, monthly({ priceMinor: 1 }), outsider.cookies),
           await del(typeUrl(org.org.id, typeId), outsider.cookies),
           await post(restoreUrl(org.org.id, archivedId), {}, outsider.cookies),
         ];
@@ -270,13 +278,22 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
 
       // The rival's owner holds the tick on their OWN gym: this gym's type through
       // their gym's address is the id-alone attack.
-      expect((await put(typeUrl(rivalOrg.org.id, typeId), monthly({ priceMinor: 1 }), rival.cookies)).statusCode).toBe(404);
+      expect((await putType(rivalOrg.org.id, typeId, monthly({ priceMinor: 1 }), rival.cookies)).statusCode).toBe(404);
       expect((await del(typeUrl(rivalOrg.org.id, typeId), rival.cookies)).statusCode).toBe(404);
       expect((await post(restoreUrl(rivalOrg.org.id, archivedId), {}, rival.cookies)).statusCode).toBe(404);
       // Nor may their own type cover this gym's class.
       const borrowed = await post(typesUrl(rivalOrg.org.id), monthly({ classTypeIds: [classId] }), rival.cookies);
       expect(borrowed.statusCode).toBe(400);
       expect((JSON.parse(borrowed.body) as { error: string }).error).toBe("class_not_in_gym");
+      // Nor by changing a type of their own to cover it.
+      const theirs = await addType(rivalOrg.org.id, rival.cookies, monthly({ name: "Rival Monthly" }));
+      const theirId = idOf(theirs, "Rival Monthly");
+      const borrowedLater = await putType(rivalOrg.org.id, theirId, monthly({ name: "Rival Monthly", classTypeIds: [classId] }), rival.cookies);
+      expect(borrowedLater.statusCode).toBe(400);
+      expect((JSON.parse(borrowedLater.body) as { error: string }).error).toBe("class_not_in_gym");
+      expect(await coveredOf(theirId)).toEqual([]);
+      expect((await del(typeUrl(rivalOrg.org.id, theirId), rival.cookies)).statusCode).toBe(200);
+      await sql`DELETE FROM gym_membership_types WHERE id = ${theirId}`;
       expect(await rowsOf(org.org.id)).toEqual(before);
       expect(await rowsOf(rivalOrg.org.id)).toEqual([]);
 
@@ -311,7 +328,7 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
         monthly({ name: "Sneaky", priceMinor: 100_000_000 }),
       ]) {
         expect((await post(typesUrl(gymId), bad, owner.cookies)).statusCode, JSON.stringify(bad)).toBe(400);
-        expect((await put(typeUrl(gymId, goldId), bad, owner.cookies)).statusCode, JSON.stringify(bad)).toBe(400);
+        expect((await putType(gymId, goldId, bad, owner.cookies)).statusCode, JSON.stringify(bad)).toBe(400);
       }
       expect(await rowsOf(gymId)).toMatchObject([{ name: "Gold Monthly", price_minor: 4999, currency: "GBP" }]);
 
@@ -324,7 +341,7 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       }
 
       // A type keeps the money it was made in when it is changed later.
-      const changed = await put(typeUrl(gymId, goldId), monthly({ priceMinor: 5500 }), owner.cookies);
+      const changed = await putType(gymId, goldId, monthly({ priceMinor: 5500 }), owner.cookies);
       expect(changed.statusCode).toBe(200);
       expect(list(changed).types.find((t) => t.id === goldId)).toMatchObject({ priceMinor: 5500, currency: "GBP" });
 
@@ -371,7 +388,7 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       expect(ticked.statusCode, ticked.body).toBe(200);
       const made = await addType(gymId, trainer.cookies, monthly({ name: "By the trainer" }));
       const id = idOf(made, "By the trainer");
-      expect((await put(typeUrl(gymId, id), monthly({ name: "By the trainer", priceMinor: 100 }), trainer.cookies)).statusCode).toBe(200);
+      expect((await putType(gymId, id, monthly({ name: "By the trainer", priceMinor: 100 }), trainer.cookies)).statusCode).toBe(200);
       expect((await del(typeUrl(gymId, id), trainer.cookies)).statusCode).toBe(200);
       expect((await post(restoreUrl(gymId, id), {}, trainer.cookies)).statusCode).toBe(200);
 
@@ -424,18 +441,18 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
 
       // A change replaces the classes covered: fewer, then all.
       const monthlyId = idOf(answer, "Monthly");
-      const fewer = await put(typeUrl(gymId, monthlyId), monthly({ name: "Monthly", classTypeIds: [spin] }), owner.cookies);
+      const fewer = await putType(gymId, monthlyId, monthly({ name: "Monthly", classTypeIds: [spin] }), owner.cookies);
       expect(fewer.statusCode).toBe(200);
       expect(await coveredOf(monthlyId)).toEqual([spin]);
       expect(list(fewer).types.find((t) => t.id === monthlyId)).toMatchObject({ access: "all_classes", bookingsLimit: null,
   bookingsPeriod: null, classTypes: [{ id: spin, name: "Spin" }] });
-      const all = await put(typeUrl(gymId, monthlyId), monthly({ name: "Monthly" }), owner.cookies);
+      const all = await putType(gymId, monthlyId, monthly({ name: "Monthly" }), owner.cookies);
       expect(list(all).types.find((t) => t.id === monthlyId)?.classTypes).toBeNull();
       expect(await coveredOf(monthlyId)).toEqual([]);
 
       // A class that does not exist is refused, and writes nothing.
       const ghost = "7d3c1b9e-2f4a-4c6d-8e1f-0a2b3c4d5e6f";
-      const refused = await put(typeUrl(gymId, monthlyId), monthly({ name: "Monthly", classTypeIds: [spin, ghost] }), owner.cookies);
+      const refused = await putType(gymId, monthlyId, monthly({ name: "Monthly", classTypeIds: [spin, ghost] }), owner.cookies);
       expect(refused.statusCode).toBe(400);
       expect(await coveredOf(monthlyId)).toEqual([]);
 
@@ -458,7 +475,7 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       ]) {
         expect((await post(typesUrl(gymId), bad, owner.cookies)).statusCode, JSON.stringify(bad)).toBe(400);
       }
-      const kindChange = await put(typeUrl(gymId, monthlyId), pack({ name: "Monthly" }), owner.cookies);
+      const kindChange = await putType(gymId, monthlyId, pack({ name: "Monthly" }), owner.cookies);
       expect(kindChange.statusCode).toBe(409);
       expect((JSON.parse(kindChange.body) as { error: string }).error).toBe("membership_type_kind_fixed");
       expect((await rowsOf(gymId)).map((r) => `${r.name} ${r.kind}`)).toEqual([
@@ -495,8 +512,8 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       const silverId = (await rowsOf(gymId)).find((r) => r.name === "Silver")?.id ?? "";
 
       // Renaming onto a live name is refused; keeping its own name is not.
-      expect((await put(typeUrl(gymId, silverId), monthly({ name: "GOLD" }), owner.cookies)).statusCode).toBe(409);
-      expect((await put(typeUrl(gymId, silverId), monthly({ name: "silver" }), owner.cookies)).statusCode).toBe(200);
+      expect((await putType(gymId, silverId, monthly({ name: "GOLD" }), owner.cookies)).statusCode).toBe(409);
+      expect((await putType(gymId, silverId, monthly({ name: "silver" }), owner.cookies)).statusCode).toBe(200);
 
       // Archive: off the live list, kept, and its name is free again.
       const archived = await del(typeUrl(gymId, goldId), owner.cookies);
@@ -506,7 +523,7 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       expect(list(archived).archivedTotal).toBe(1);
       expect(list(archived).archived[0]?.archivedAt).not.toBeNull();
       expect((await del(typeUrl(gymId, goldId), owner.cookies)).statusCode).toBe(404);
-      expect((await put(typeUrl(gymId, goldId), monthly({ name: "Gold" }), owner.cookies)).statusCode).toBe(404);
+      expect((await putType(gymId, goldId, monthly({ name: "Gold" }), owner.cookies)).statusCode).toBe(404);
       await addType(gymId, owner.cookies, monthly({ name: "Gold", priceMinor: 6000 }));
 
       // Put back: refused while a live type has its name, done once it has not.
@@ -519,8 +536,19 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       expect(list(restored).archived.map((t) => `${t.name} ${String(t.priceMinor)}`)).toEqual(["Gold 6000"]);
       expect((await post(restoreUrl(gymId, goldId), {}, owner.cookies)).statusCode).toBe(404);
 
-      const audit = await sql<{ action: string }[]>`
-        SELECT action FROM audit_log WHERE gym_id = ${gymId} AND target_type = 'gym_membership_type'`;
+      const audit = await sql<{ action: string; actor_user_id: string; target_id: string; meta: Record<string, string> }[]>`
+        SELECT action, actor_user_id, target_id, meta FROM audit_log
+        WHERE gym_id = ${gymId} AND target_type = 'gym_membership_type'`;
+      for (const row of audit) expect(row.actor_user_id, row.action).toBe(owner.userId);
+      const renamed = audit.find((a) => a.action === "org.membership_type_updated");
+      expect(renamed?.target_id).toBe(silverId);
+      expect(renamed?.meta).toEqual({ before: "Silver", after: "silver", priceBefore: "4999", priceAfter: "4999" });
+      expect(audit.find((a) => a.action === "org.membership_type_created" && a.target_id === goldId)?.meta).toEqual({
+        name: "Gold",
+        kind: "recurring",
+        priceMinor: "4999",
+        currency: "GBP",
+      });
       expect(audit.map((a) => a.action).sort()).toEqual([
         "org.membership_type_archived",
         "org.membership_type_archived",
@@ -553,19 +581,172 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       const gymId = org.org.id;
       const made = await addType(gymId, owner.cookies, monthly());
       const id = idOf(made, "Gold Monthly");
+      const old = await addType(gymId, owner.cookies, monthly({ name: "Old" }));
+      const oldId = idOf(old, "Old");
+      expect((await del(typeUrl(gymId, oldId), owner.cookies)).statusCode).toBe(200);
       await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
 
       expect(list(await get(typesUrl(gymId), owner.cookies)).types.map((t) => t.name)).toEqual(["Gold Monthly"]);
       for (const res of [
         await post(typesUrl(gymId), monthly({ name: "New" }), owner.cookies),
-        await put(typeUrl(gymId, id), monthly({ priceMinor: 1 }), owner.cookies),
+        await putType(gymId, id, monthly({ priceMinor: 1 }), owner.cookies),
         await del(typeUrl(gymId, id), owner.cookies),
+        await post(restoreUrl(gymId, oldId), {}, owner.cookies),
       ]) {
         expect(res.statusCode).toBe(409);
         expect((JSON.parse(res.body) as { error: string }).error).toBe("gym_not_on_plan");
       }
-      expect(await rowsOf(gymId)).toMatchObject([{ name: "Gold Monthly", price_minor: 4999, archived: false }]);
+      expect(await rowsOf(gymId)).toMatchObject([
+        { name: "Gold Monthly", price_minor: 4999, archived: false },
+        { name: "Old", archived: true },
+      ]);
     },
     TEST_TIMEOUT_MS,
   );
+  // ── Round one's findings (reviews/17a-i-2-findings.md) ──────────────────────
+
+  it(
+    "a person given only the price-list tick can open the list and change it",
+    async () => {
+      const owner = await makeUser("h1-owner");
+      const trainer = await makeUser("h1-trainer");
+      const org = await makeOrg(owner.cookies, "Mbt Tick Only Gym");
+      const gymId = org.org.id;
+      await makeStaff(org, owner, trainer, "trainer");
+      await addType(gymId, owner.cookies, monthly());
+      const ticked = await put(
+        `/v1/orgs/${gymId}/staff/${trainer.userId}/privileges`,
+        { privileges: ["memberships.manage"] },
+        owner.cookies,
+      );
+      expect(ticked.statusCode, ticked.body).toBe(200);
+
+      const read = await get(typesUrl(gymId), trainer.cookies);
+      expect(read.statusCode).toBe(200);
+      expect(list(read).types.map((t) => t.name)).toEqual(["Gold Monthly"]);
+      await addType(gymId, trainer.cookies, monthly({ name: "By the trainer" }));
+
+      // Holding neither tick, staff are refused the read.
+      expect((await put(`/v1/orgs/${gymId}/staff/${trainer.userId}/privileges`, { privileges: ["attendance.read"] }, owner.cookies)).statusCode).toBe(200);
+      const refused = await get(typesUrl(gymId), trainer.cookies);
+      expect(refused.statusCode).toBe(403);
+      expect(refused.body).not.toContain("Gold Monthly");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a form opened before somebody else's change is refused, and their price stands",
+    async () => {
+      const owner = await makeUser("stale-owner");
+      const org = await makeOrg(owner.cookies, "Mbt Stale Gym");
+      const gymId = org.org.id;
+      const made = await addType(gymId, owner.cookies, monthly({ priceMinor: 4999 }));
+      const gold = made.types[0];
+      if (gold === undefined) throw new Error("no type");
+      expect(gold.updatedAt).toEqual(expect.any(String));
+
+      // A changes the price; B then saves a form that read the type before A did.
+      const byA = await put(typeUrl(gymId, gold.id), { ...monthly({ priceMinor: 6000 }), updatedAt: gold.updatedAt }, owner.cookies);
+      expect(byA.statusCode, byA.body).toBe(200);
+      const byB = await put(typeUrl(gymId, gold.id), { ...monthly({ name: "Gold Plus" }), updatedAt: gold.updatedAt }, owner.cookies);
+      expect(byB.statusCode).toBe(409);
+      expect((JSON.parse(byB.body) as { error: string }).error).toBe("membership_type_changed");
+      expect(await rowsOf(gymId)).toMatchObject([{ name: "Gold Monthly", price_minor: 6000 }]);
+
+      // With the list as it now is, B's change goes through; a change with no stamp is refused outright.
+      const fresh = list(byA).types[0]?.updatedAt;
+      expect((await put(typeUrl(gymId, gold.id), { ...monthly({ name: "Gold Plus", priceMinor: 6000 }), updatedAt: fresh }, owner.cookies)).statusCode).toBe(200);
+      expect((await put(typeUrl(gymId, gold.id), monthly({ name: "Gold Plus" }), owner.cookies)).statusCode).toBe(400);
+      expect(await rowsOf(gymId)).toMatchObject([{ name: "Gold Plus", price_minor: 6000 }]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "an id in capitals is the same type, and a name with hidden or broken characters is refused",
+    async () => {
+      const owner = await makeUser("odd-owner");
+      const org = await makeOrg(owner.cookies, "Mbt Odd Input Gym");
+      const gymId = org.org.id;
+      const made = await addType(gymId, owner.cookies, monthly({ name: "Mine" }));
+      const id = idOf(made, "Mine");
+
+      // Keeping its own name through an upper-case id is not "name taken".
+      expect((await putType(gymId, id.toUpperCase(), monthly({ name: "Mine", priceMinor: 100 }), owner.cookies)).statusCode).toBe(200);
+
+      const hidden: [string, string][] = [
+        ["half an emoji", "Gold \ud83d"],
+        ["a zero-width space", "Mine​"],
+        ["a zero-width joiner", "Mi‍ne"],
+        ["a right-to-left override", "‮Mine"],
+        ["a directional isolate", "Mine⁦"],
+        ["a byte-order mark", "Mi﻿ne"],
+        ["a NUL", "Mine\u0000"],
+      ];
+      for (const [what, name] of hidden) {
+        expect((await post(typesUrl(gymId), monthly({ name }), owner.cookies)).statusCode, what).toBe(400);
+        expect((await post(typesUrl(gymId), monthly({ name: "Fine", description: name }), owner.cookies)).statusCode, `${what}, in the description`).toBe(400);
+        expect((await putType(gymId, id, monthly({ name }), owner.cookies)).statusCode, `${what}, on a change`).toBe(400);
+      }
+      // A whole emoji and other alphabets are names like any other.
+      await addType(gymId, owner.cookies, monthly({ name: "Gold 💪" }));
+      await addType(gymId, owner.cookies, monthly({ name: "سنوي" }));
+      expect((await rowsOf(gymId)).map((r) => r.name).sort()).toEqual(["Gold 💪", "Mine", "سنوي"].sort());
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the cap holds when adds and a put-back arrive at the same instant",
+    async () => {
+      const owner = await makeUser("race-owner");
+      const org = await makeOrg(owner.cookies, "Mbt Race Gym");
+      const gymId = org.org.id;
+      const made = await addType(gymId, owner.cookies, monthly({ name: "Away" }));
+      const awayId = idOf(made, "Away");
+      expect((await del(typeUrl(gymId, awayId), owner.cookies)).statusCode).toBe(200);
+      await sql`
+        INSERT INTO gym_membership_types (gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
+        SELECT ${gymId}, 'Filler ' || n, 'recurring', 100, 'GBP', 1, 'month', 'all_classes'
+        FROM generate_series(1, ${MEMBERSHIP_TYPES_MAX - 1}) AS n`;
+
+      const answers = await Promise.all([
+        post(restoreUrl(gymId, awayId), {}, owner.cookies),
+        ...["A", "B", "C", "D", "E"].map((n) => post(typesUrl(gymId), monthly({ name: `Racer ${n}` }), owner.cookies)),
+      ]);
+      const won = answers.filter((r) => r.statusCode === 200 || r.statusCode === 201);
+      expect(won).toHaveLength(1);
+      for (const res of answers.filter((r) => !won.includes(r))) {
+        expect((JSON.parse(res.body) as { error: string }).error).toBe("too_many_membership_types");
+      }
+      expect((await rowsOf(gymId)).filter((r) => !r.archived)).toHaveLength(MEMBERSHIP_TYPES_MAX);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "each person has their own allowance at one address: one using theirs up stops nobody else",
+    async () => {
+      const owner = await makeUser("limit-owner");
+      const manager = await makeUser("limit-manager");
+      const org = await makeOrg(owner.cookies, "Mbt Limit Gym");
+      const gymId = org.org.id;
+      await makeStaff(org, owner, manager, "manager");
+      const desk = "203.0.113.67";
+      const from = (cookies: Cookies) => api().inject({ method: "GET", url: typesUrl(gymId), remoteAddress: desk, cookies });
+
+      let first429 = 0;
+      for (let i = 1; i <= 305 && first429 === 0; i++) {
+        const res = await from(owner.cookies);
+        if (res.statusCode === 429) first429 = i;
+        else expect(res.statusCode).toBe(200);
+      }
+      expect(first429).toBe(301);
+      expect((await from(manager.cookies)).statusCode).toBe(200);
+      expect((await from({})).statusCode).toBe(401);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
 });

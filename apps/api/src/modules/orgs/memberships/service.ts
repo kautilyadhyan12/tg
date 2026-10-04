@@ -1,7 +1,8 @@
 // A gym's membership types (spec Part 3 §13.1; ROADMAP 17a-i).
 //
 // Reading the price list needs `members.read`, which every role holds: staff who
-// give a person a membership (17a-ii) must see what there is to give. Changing
+// give a person a membership (17a-ii) must see what there is to give; whoever
+// holds the tick to change it may read it too. Changing
 // it needs `memberships.manage`: owner and manager by default, and anyone on
 // staff the owner ticks it for (Kd, 2026-10-04). Writes go through
 // `requireWritablePrivilege`, so a gym with no live plan reads its list and
@@ -15,8 +16,9 @@ import {
   memberCurrencyForCountry,
   type GymMembershipTypesResponse,
   type SaveGymMembershipTypeRequest,
+  type UpdateGymMembershipTypeRequest,
 } from "@app/shared";
-import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import * as repo from "./repo.js";
 
 export interface MembershipsDeps {
@@ -31,6 +33,7 @@ function toResponse(row: repo.PriceListRow): GymMembershipTypesResponse {
   const shape = (t: repo.MembershipTypeRow) => ({
     ...t,
     archivedAt: t.archivedAt === null ? null : t.archivedAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
   });
   // Parsed, not cast: `kind`, `access` and the units are text columns under a
   // CHECK, and a value the contract does not know must fail here, not on a screen.
@@ -75,6 +78,18 @@ function throwOnFailure(outcome: repo.MembershipWriteOutcome): void {
         "membership_type_kind_fixed",
         "A membership type's kind can't be changed. Archive it and add a new one.",
       );
+    case "changed":
+      throw new OrgsError(
+        409,
+        "membership_type_changed",
+        "Somebody changed this membership type while you had it open. Nothing was saved: check it and try again.",
+      );
+    case "no_currency":
+      throw new OrgsError(
+        409,
+        "no_member_currency",
+        "Set your country in Settings before adding a membership type.",
+      );
     default: {
       const never: never = outcome;
       throw new Error(`unhandled membership write outcome: ${JSON.stringify(never)}`);
@@ -85,7 +100,20 @@ function throwOnFailure(outcome: repo.MembershipWriteOutcome): void {
 /** An empty description box means "none", stored as NULL. */
 function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput {
   const description = req.description ?? "";
-  return { ...req, description: description.length === 0 ? null : description };
+  return {
+    name: req.name,
+    description: description.length === 0 ? null : description,
+    kind: req.kind,
+    priceMinor: req.priceMinor,
+    termCount: req.termCount,
+    termUnit: req.termUnit,
+    packClasses: req.packClasses,
+    packDays: req.packDays,
+    access: req.access,
+    bookingsLimit: req.bookingsLimit,
+    bookingsPeriod: req.bookingsPeriod,
+    classTypeIds: req.classTypeIds,
+  };
 }
 
 export async function getMembershipTypes(
@@ -93,7 +121,11 @@ export async function getMembershipTypes(
   userId: string,
   gymId: string,
 ): Promise<GymMembershipTypesResponse> {
-  await requirePrivilege(deps, gymId, userId, "members.read");
+  // Whoever may change the list may read it, whatever else they hold: the owner can
+  // give the tick alone. A stranger still gets `requirePrivilege`'s 404.
+  if (!(await holdsPrivilege(deps, gymId, userId, "memberships.manage"))) {
+    await requirePrivilege(deps, gymId, userId, "members.read");
+  }
   return await readOr404(deps, gymId);
 }
 
@@ -103,18 +135,8 @@ export async function createMembershipType(
   gymId: string,
   req: SaveGymMembershipTypeRequest,
 ): Promise<GymMembershipTypesResponse> {
-  const { org } = await requireWritablePrivilege(deps, gymId, userId, "memberships.manage");
-  const currency = memberCurrencyForCountry(org.country);
-  if (currency === null) {
-    throw new OrgsError(
-      409,
-      "no_member_currency",
-      "Set your country in Settings before adding a membership type.",
-    );
-  }
-  throwOnFailure(
-    await repo.createMembershipType(deps.sql, { ...typeInput(req), gymId, currency, actorUserId: userId }),
-  );
+  await requireWritablePrivilege(deps, gymId, userId, "memberships.manage");
+  throwOnFailure(await repo.createMembershipType(deps.sql, { ...typeInput(req), gymId, actorUserId: userId }));
   return await readOr404(deps, gymId);
 }
 
@@ -123,7 +145,7 @@ export async function updateMembershipType(
   userId: string,
   gymId: string,
   typeId: string,
-  req: SaveGymMembershipTypeRequest,
+  req: UpdateGymMembershipTypeRequest,
 ): Promise<GymMembershipTypesResponse> {
   await requireWritablePrivilege(deps, gymId, userId, "memberships.manage");
   throwOnFailure(
@@ -131,6 +153,7 @@ export async function updateMembershipType(
       ...typeInput(req),
       gymId,
       typeId,
+      readAt: new Date(req.updatedAt),
       actorUserId: userId,
       now: deps.now(),
     }),

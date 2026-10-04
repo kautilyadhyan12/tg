@@ -16,6 +16,7 @@ import {
   minorToPriceText,
   priceToMinor,
   saveGymMembershipTypeRequestSchema,
+  updateGymMembershipTypeRequestSchema,
 } from "../src/index.js";
 
 describe("a price is never a hundred times off", () => {
@@ -27,6 +28,9 @@ describe("a price is never a hundred times off", () => {
     ];
     for (const [currency, decimals] of iso) expect(currencyDecimals(currency), currency).toBe(decimals);
     expect(currencyDecimals("not a currency")).toBeNull();
+    // A well-formed code no country uses: the formatter alone would answer 2.
+    for (const unknown of ["ABC", "ZZZ", "XXX", "usd", ""]) expect(currencyDecimals(unknown), unknown).toBeNull();
+    expect(priceToMinor("49.99", "ABC")).toBeNull();
   });
 
   it("turns a typed price into minor units with whole-number arithmetic", () => {
@@ -222,11 +226,37 @@ describe("what a gym may save as a membership type", () => {
       { ...monthly, name: "x".repeat(81) },
       { ...monthly, name: "Gold\u0000" },
       { ...monthly, name: "Gold\nMonthly" },
+      // Half an emoji, and the characters that make two names look like one.
+      { ...monthly, name: "Gold \ud83d" },
+      { ...monthly, name: "Gold​" },
+      { ...monthly, name: "Go‍ld" },
+      { ...monthly, name: "‮Gold" },
+      { ...monthly, name: "Gold⁦" },
+      { ...monthly, name: "Go﻿ld" },
+      { ...monthly, description: "Open gym​" },
+      { ...monthly, description: "Open \ud83d gym" },
       { ...monthly, kind: "day_pass" },
       { ...monthly, termCount: 0 },
       { ...monthly, termCount: 366 },
     ];
     for (const value of refused) expect(ok(value), JSON.stringify(value)).toBe(false);
+  });
+
+  it("takes a whole emoji and any alphabet in a name", () => {
+    for (const name of ["Gold 💪", "سنوي", "月会費", "Café & Gym – Monthly"]) {
+      expect(ok({ ...monthly, name }), name).toBe(true);
+    }
+  });
+
+  it("a change carries the stamp the list gave, and is refused without it", () => {
+    const change = (value: unknown) => updateGymMembershipTypeRequestSchema.safeParse(value).success;
+    expect(change({ ...monthly, updatedAt: "2026-10-04T10:00:00.000Z" })).toBe(true);
+    expect(change(monthly)).toBe(false);
+    expect(change({ ...monthly, updatedAt: "yesterday" })).toBe(false);
+    // The rules between the fields hold on a change too.
+    expect(change({ ...monthly, termUnit: "day", updatedAt: "2026-10-04T10:00:00.000Z" })).toBe(false);
+    // And a new type does not take a stamp.
+    expect(ok({ ...monthly, updatedAt: "2026-10-04T10:00:00.000Z" })).toBe(false);
   });
 
   it("calls a pack of 1 class for 1 day a day pass, and nothing else", () => {

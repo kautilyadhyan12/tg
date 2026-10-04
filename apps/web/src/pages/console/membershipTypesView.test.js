@@ -41,6 +41,7 @@ const type = (over = {}) => ({
   bookingsPeriod: null,
   classTypes: null,
   archivedAt: null,
+  updatedAt: '2026-10-04T09:00:00.000Z',
   ...over,
 });
 const packType = (over = {}) => type({ kind: 'pack', termCount: null, termUnit: null, packClasses: 10, packDays: 60, ...over });
@@ -54,7 +55,7 @@ describe('the price a gym typed is the price that is sent and shown', () => {
     ['4.35', 'EUR', 435, '€4.35 every month'],
     ['1500', 'INR', 150000, '₹1,500.00 every month'],
     ['5000', 'JPY', 5000, '¥5,000 every month'],
-    ['0', 'USD', 0, 'Free every month'],
+    ['0', 'USD', 0, 'Free · renews every month'],
   ])('%s in %s is %i minor units, shown as "%s"', (typed, currency, minor, shown) => {
     const draft = { ...emptyDraft(), name: 'Gold', price: typed };
     expect(draftProblems(draft, currency)).toBeNull();
@@ -95,6 +96,7 @@ describe('what each type says on the list', () => {
     expect(termLine(type())).toBe('$49.99 every month');
     expect(termLine(type({ termCount: 3 }))).toBe('$49.99 every 3 months');
     expect(termLine(type({ termUnit: 'year' }))).toBe('$49.99 every year');
+    expect(termLine(type({ priceMinor: 0, termCount: 3 }))).toBe('Free · renews every 3 months');
     expect(termLine(type({ kind: 'one_time', termCount: 90, termUnit: 'day' }))).toBe('$49.99 once · lasts 90 days');
     expect(termLine(type({ kind: 'one_time', termCount: 1, termUnit: 'year' }))).toBe('$49.99 once · lasts 1 year');
     expect(termLine(type({ kind: 'trial', priceMinor: 0, termCount: 7, termUnit: 'day' }))).toBe('Free · lasts 7 days');
@@ -112,6 +114,9 @@ describe('what each type says on the list', () => {
     expect(includesLine(type({ classTypes: [YOGA, SPIN] }))).toBe('Only Yoga, Spin');
     expect(includesLine(type({ access: 'limited', bookingsLimit: 2, bookingsPeriod: 'week', classTypes: [YOGA] }))).toBe('2 classes a week · only Yoga');
     expect(includesLine(packType())).toBe('Any class');
+    // A day pass says what the visit is for, not "Any class" under "1 visit".
+    expect(includesLine(packType({ packClasses: 1, packDays: 1 }))).toBe('The gym or any class');
+    expect(includesLine(packType({ packClasses: 1, packDays: 1, classTypes: [YOGA] }))).toBe('Only Yoga');
     expect(includesLine(packType({ classTypes: [YOGA] }))).toBe('Only Yoga');
     const five = ['A', 'B', 'C', 'D', 'E'].map((name, i) => ({ id: `33333333-3333-4333-8333-00000000001${String(i)}`, name }));
     expect(includesLine(type({ classTypes: five }))).toBe('Only A, B, C and 2 more');
@@ -205,6 +210,11 @@ describe('the form', () => {
     });
     expect(draftProblems(named({ description: 'x'.repeat(301) }), 'USD')).toEqual({ description: 'Keep the description to 300 letters.' });
     expect(draftProblems(named({ classScope: 'some' }), 'USD')).toEqual({ classes: 'Tick at least one class, or choose Every class.' });
+    // A pack of 1 class for 1 day would be saved as a day pass and open as one.
+    expect(draftProblems(named({ choice: 'pack', packClasses: '1', packDays: '1' }), 'USD')).toEqual({
+      packDays: '1 class used within 1 day is a day pass. Add it as a Day pass, or change a number.',
+    });
+    expect(draftProblems(named({ choice: 'pack', packClasses: '1', packDays: '2' }), 'USD')).toBeNull();
     // A box the kind does not use is not checked.
     expect(draftProblems(named({ choice: 'day_pass', termCount: '', packClasses: '', bookingsLimit: '' }), 'USD')).toBeNull();
     expect(draftProblems(named({ choice: 'pack', termCount: '' }), 'USD')).toBeNull();
@@ -232,7 +242,10 @@ describe('the form', () => {
       bookingsLimit: 3,
       bookingsPeriod: 'week',
       classTypeIds: [YOGA.id],
+      // A change carries the stamp the list gave; a new type has none.
+      updatedAt: '2026-10-04T09:00:00.000Z',
     });
+    expect('updatedAt' in draftBody(named(), 'USD')).toBe(false);
     expect(draftFromType(packType({ packClasses: 1, packDays: 1 })).choice).toBe('day_pass');
     expect(draftBody(draftFromType(packType({ packClasses: 5, packDays: 30 })), 'USD')).toMatchObject({ kind: 'pack', packClasses: 5, packDays: 30 });
   });

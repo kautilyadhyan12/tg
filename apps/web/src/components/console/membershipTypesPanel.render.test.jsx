@@ -42,6 +42,7 @@ const type = (over = {}) => ({
   bookingsPeriod: null,
   classTypes: null,
   archivedAt: null,
+  updatedAt: '2026-10-04T09:00:00.000Z',
   ...over,
 });
 const listOf = (over = {}) => ({ currency: 'GBP', types: [], archived: [], archivedTotal: 0, classChoices: [], ...over });
@@ -94,7 +95,7 @@ describe('the list', () => {
         ],
       }),
     );
-    expect(await screen.findByText('Prices are in GBP.', { exact: false })).toBeTruthy();
+    expect(await screen.findByText('New prices are in GBP.', { exact: false })).toBeTruthy();
     const rows = screen.getAllByRole('listitem');
     expect(within(rows[0]).getByText('Day pass', { selector: 'span.font-semibold.text-sm' })).toBeTruthy();
     expect(within(rows[0]).getByText('£15.00 · 1 visit, on the day')).toBeTruthy();
@@ -253,23 +254,58 @@ describe('the gym\x27s own options', () => {
 
 describe('changing, archiving and putting back', () => {
   it('opens a type as it was saved, its kind fixed, and saves in the money it was made in', async () => {
-    const gold = type({ name: 'Gold Monthly', currency: 'USD', priceMinor: 4999, termCount: 3 });
-    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, priceMinor: 5500 }] }) });
+    // Yen in a pound gym: 4999 yen is typed "4999" and 55 yen is 55, where a form that
+    // took the gym's pounds would show 49.99 and send 5500.
+    const gold = type({ name: 'Gold Monthly', currency: 'JPY', priceMinor: 4999, termCount: 3 });
+    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, priceMinor: 55 }] }) });
     open(listOf({ types: [gold] }));
     fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
     expect(screen.getByLabelText('Name').value).toBe('Gold Monthly');
-    expect(screen.getByLabelText('Price (USD)').value).toBe('49.99');
+    expect(screen.getByLabelText('Price (JPY)').value).toBe('4999');
     expect(screen.getByLabelText('Charged every').value).toBe('3');
     for (const radio of screen.getAllByRole('radio')) expect(radio.disabled).toBe(true);
     expect(screen.getByRole('radio', { name: /^Recurring/ }).checked).toBe(true);
     expect(screen.getByText(/How it is paid can't be changed once it is saved/)).toBeTruthy();
 
-    type_('Price (USD)', '55');
+    type_('Price (JPY)', '55');
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
     expect(orgService.updateMembershipType.mock.calls[0][1]).toBe(gold.id);
-    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ kind: 'recurring', priceMinor: 5500, termCount: 3 });
-    expect(await screen.findByText('$55.00 every 3 months')).toBeTruthy();
+    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({
+      kind: 'recurring',
+      priceMinor: 55,
+      termCount: 3,
+      updatedAt: '2026-10-04T09:00:00.000Z',
+    });
+    expect(await screen.findByText('¥55 every 3 months')).toBeTruthy();
+  });
+
+  it('a type somebody else changed meanwhile is not saved over: the list is read again and the reason said', async () => {
+    const gold = type();
+    orgService.updateMembershipType.mockRejectedValue({
+      response: { status: 409, data: { error: 'membership_type_changed', message: 'Somebody changed this membership type while you had it open. Nothing was saved: check it and try again.' } },
+    });
+    open(listOf({ types: [gold] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [{ ...gold, priceMinor: 6000, updatedAt: '2026-10-04T09:30:00.000Z' }] }) });
+    type_('Name', 'Gold Plus');
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Somebody changed this membership type/);
+    expect(await screen.findByText('£60.00 every month')).toBeTruthy();
+    expect(screen.queryByLabelText('Name')).toBeNull();
+  });
+
+  it('while a form is open, the rows cannot be changed or archived, so nothing typed is thrown away', async () => {
+    open(listOf({ types: [type(), type({ name: 'Silver' })] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    type_('Price (GBP)', '60');
+    for (const name of ['Change Silver', 'Archive Silver', 'Change Gold Monthly', 'Archive Gold Monthly']) {
+      expect(screen.getByRole('button', { name }).disabled, name).toBe(true);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Change Silver' }));
+    expect(screen.getByLabelText('Price (GBP)').value).toBe('60');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Change Silver' }).disabled).toBe(false);
   });
 
   it('Cancel changes nothing', async () => {

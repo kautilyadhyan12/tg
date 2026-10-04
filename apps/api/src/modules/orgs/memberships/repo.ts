@@ -6,7 +6,7 @@
 // row lock first, so the cap, the name check and the classes a type covers are
 // decided against a list nobody else is changing.
 import type { Sql, TransactionSql } from "postgres";
-import { MEMBERSHIP_ARCHIVED_PAGE, MEMBERSHIP_TYPES_MAX } from "@app/shared";
+import { MEMBERSHIP_ARCHIVED_PAGE, MEMBERSHIP_TYPES_MAX, memberCurrencyForCountry } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
 
 export interface MembershipTypeRow {
@@ -26,6 +26,7 @@ export interface MembershipTypeRow {
   /** null: every class. */
   classTypes: { id: string; name: string }[] | null;
   archivedAt: Date | null;
+  updatedAt: Date;
 }
 
 export interface PriceListRow {
@@ -52,6 +53,7 @@ interface RawType {
   bookings_period: string | null;
   covers_all_classes: boolean;
   archived_at: Date | null;
+  updated_at: Date;
 }
 
 /** The whole price list, or null where the gym does not exist. The live list is
@@ -61,7 +63,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
   const readTypes = (archived: boolean, limit: number) => sql<RawType[]>`
     SELECT id, name, description, kind, price_minor, currency, term_count, term_unit,
            pack_classes, pack_days, access, bookings_limit, bookings_period,
-           covers_all_classes, archived_at
+           covers_all_classes, archived_at, updated_at
     FROM gym_membership_types
     WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
     ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
@@ -110,6 +112,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     bookingsPeriod: r.bookings_period,
     classTypes: r.covers_all_classes ? null : (coveredByType.get(r.id) ?? []),
     archivedAt: r.archived_at,
+    updatedAt: r.updated_at,
   });
   return {
     country: gym.country,
@@ -144,7 +147,11 @@ export type MembershipWriteOutcome =
   /** A class named in `classTypeIds` is not one of this gym's. */
   | { kind: "class_not_in_gym" }
   /** An update tried to change the type's kind. */
-  | { kind: "kind_fixed" };
+  | { kind: "kind_fixed" }
+  /** The type was changed after the form that sent this update read it. */
+  | { kind: "changed" }
+  /** The gym's country has no money to price in. */
+  | { kind: "no_currency" };
 
 async function liveCount(tx: TransactionSql, gymId: string): Promise<number> {
   const [row] = await tx<{ n: number }[]>`
@@ -162,8 +169,10 @@ async function nameTaken(
 ): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
     SELECT id FROM gym_membership_types
-    WHERE gym_id = ${gymId} AND archived_at IS NULL AND lower(name) = lower(${name})`;
-  return rows.some((r) => r.id !== exceptId);
+    WHERE gym_id = ${gymId} AND archived_at IS NULL AND lower(name) = lower(${name})
+      AND (${exceptId}::uuid IS NULL OR id <> ${exceptId}::uuid)
+    LIMIT 1`;
+  return rows.length > 0;
 }
 
 /** Every class named is this gym's own. Archived classes count: a type may go on
@@ -194,12 +203,16 @@ async function writeCoveredClasses(
 
 export async function createMembershipType(
   sql: Sql,
-  input: MembershipTypeInput & { gymId: string; currency: string; actorUserId: string },
+  input: MembershipTypeInput & { gymId: string; actorUserId: string },
 ): Promise<MembershipWriteOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
-    const [gym] = await tx<{ id: string }[]>`SELECT id FROM gyms WHERE id = ${input.gymId}`;
+    // The country is read under the lock: a type is stamped with the money of the
+    // country the gym is in when the type is made, not a moment before.
+    const [gym] = await tx<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${input.gymId}`;
     if (gym === undefined) return { kind: "not_found" };
+    const currency = memberCurrencyForCountry(gym.country);
+    if (currency === null) return { kind: "no_currency" };
     if ((await liveCount(tx, input.gymId)) >= MEMBERSHIP_TYPES_MAX) {
       return { kind: "too_many", cap: MEMBERSHIP_TYPES_MAX };
     }
@@ -213,7 +226,7 @@ export async function createMembershipType(
         (gym_id, name, description, kind, price_minor, currency, term_count, term_unit,
          pack_classes, pack_days, access, bookings_limit, bookings_period, covers_all_classes)
       VALUES (${input.gymId}, ${input.name}, ${input.description}, ${input.kind}, ${input.priceMinor},
-              ${input.currency}, ${input.termCount}, ${input.termUnit}, ${input.packClasses},
+              ${currency}, ${input.termCount}, ${input.termUnit}, ${input.packClasses},
               ${input.packDays}, ${input.access}, ${input.bookingsLimit}, ${input.bookingsPeriod},
               ${input.classTypeIds === null})
       RETURNING id`;
@@ -230,7 +243,7 @@ export async function createMembershipType(
         name: input.name,
         kind: input.kind,
         priceMinor: String(input.priceMinor),
-        currency: input.currency,
+        currency,
       },
     });
     return { kind: "ok" };
@@ -242,14 +255,23 @@ export async function createMembershipType(
  *  price that changed money, would rewrite what they were sold. */
 export async function updateMembershipType(
   sql: Sql,
-  input: MembershipTypeInput & { gymId: string; typeId: string; actorUserId: string; now: Date },
+  input: MembershipTypeInput & {
+    gymId: string;
+    typeId: string;
+    /** The type's `updatedAt` as the sender's form read it. */
+    readAt: Date;
+    actorUserId: string;
+    now: Date;
+  },
 ): Promise<MembershipWriteOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
-    const [before] = await tx<{ name: string; kind: string; price_minor: number }[]>`
-      SELECT name, kind, price_minor FROM gym_membership_types
+    const [before] = await tx<{ name: string; kind: string; price_minor: number; updated_at: Date }[]>`
+      SELECT name, kind, price_minor, updated_at FROM gym_membership_types
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
     if (before === undefined) return { kind: "not_found" };
+    // To the millisecond, which is what the list sends and a form can send back.
+    if (before.updated_at.getTime() !== input.readAt.getTime()) return { kind: "changed" };
     if (before.kind !== input.kind) return { kind: "kind_fixed" };
     if (await nameTaken(tx, input.gymId, input.name, input.typeId)) return { kind: "name_taken" };
     if (!(await classesAreThisGyms(tx, input.gymId, input.classTypeIds))) {

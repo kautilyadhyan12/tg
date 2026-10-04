@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX } from '@app/shared';
 import { Loader2 } from 'lucide-react';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import {
   ACCESS_CHOICES,
@@ -335,7 +335,7 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
   );
 }
 
-function TypeRow({ type, readOnly, busy, onEdit, onArchive }) {
+function TypeRow({ type, readOnly, busy, formOpen, onEdit, onArchive }) {
   const [asking, setAsking] = useState(false);
   return (
     <li className="py-3 flex flex-col gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
@@ -373,7 +373,7 @@ function TypeRow({ type, readOnly, busy, onEdit, onArchive }) {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={readOnly || busy}
+            disabled={readOnly || busy || formOpen}
             onClick={() => onEdit(type)}
             aria-label={`Change ${type.name}`}
             className="rounded-xl px-4 py-2 text-sm min-h-11 disabled:opacity-40"
@@ -383,7 +383,7 @@ function TypeRow({ type, readOnly, busy, onEdit, onArchive }) {
           </button>
           <button
             type="button"
-            disabled={readOnly || busy}
+            disabled={readOnly || busy || formOpen}
             onClick={() => setAsking(true)}
             aria-label={`Archive ${type.name}`}
             className="rounded-xl px-4 py-2 text-sm min-h-11 disabled:opacity-40"
@@ -440,6 +440,13 @@ export default function MembershipTypesPanel({ org, readOnly }) {
       return true;
     } catch (err) {
       setActionError(errorText(err, fallback));
+      if (errorCode(err) === 'membership_type_changed') {
+        // The form holds an older version: show the list as it is now, the form closed.
+        setDraft(null);
+        setShowProblems(false);
+        setRefused(0);
+        void load();
+      }
       return false;
     } finally {
       setBusy(false);
@@ -485,7 +492,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
       <p className="text-sm" style={hintStyle}>
         Your own list of what you sell. You name each one, set its price, and choose how it is paid and what it
         includes.
-        {list?.currency ? ` Prices are in ${list.currency}.` : ''}
+        {list?.currency ? ` New prices are in ${list.currency}.` : ''}
       </p>
 
       {loadError !== null ? (
@@ -506,6 +513,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
                   type={type}
                   readOnly={readOnly}
                   busy={busy}
+                  formOpen={draft !== null}
                   onEdit={(t) => startDraft(draftFromType(t))}
                   onArchive={(t) => {
                     if (draft?.id === t.id) closeForm();

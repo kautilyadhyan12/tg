@@ -2288,7 +2288,9 @@ by default; the owner can tick it for anyone on staff, RULINGS 2026-10-04).
 `MEMBER_CURRENCY` in `@app/shared`: pounds in the UK, euros in the euro area, Canadian
 dollars in Canada — not `COUNTRY_CURRENCY`, which is what the gym pays US in. The server
 stamps it on a type when it is made and never changes it, nor the type's kind. Reading
-the list needs `members.read`. One live type of a name per gym, whatever its capitals;
+the list needs `members.read`, or the tick itself. A change sends back the type's
+`updatedAt`, and one made from a form older than somebody else's change is refused (409),
+never saved over theirs. One live type of a name per gym, whatever its capitals;
 60 live types. A type has a description (optional), and its class limit is so many a
 WEEK OR A MONTH (`limited`, `bookings_limit`, `bookings_period`), not a week alone
 (RULINGS 2026-10-04: the gym’s own options; PushPress and TeamUp count both). The screen

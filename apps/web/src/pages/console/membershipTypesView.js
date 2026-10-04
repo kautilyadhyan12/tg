@@ -82,7 +82,8 @@ export function termLine(type) {
   }
   const [one, many] = unitWords(type.termUnit);
   if (choice === 'recurring') {
-    return type.termCount === 1 ? `${price} every ${one}` : `${price} every ${String(type.termCount)} ${many}`;
+    const every = type.termCount === 1 ? `every ${one}` : `every ${String(type.termCount)} ${many}`;
+    return type.priceMinor === 0 ? `Free · renews ${every}` : `${price} ${every}`;
   }
   const lasts = `lasts ${plural(type.termCount, one, many)}`;
   return choice === 'one_time' ? `${price} once · ${lasts}` : `${price} · ${lasts}`;
@@ -94,9 +95,11 @@ export function includesLine(type) {
   const limited = type.access === 'limited';
   const amount = limited
     ? `${plural(type.bookingsLimit, 'class', 'classes')} a ${type.bookingsPeriod}`
-    : type.kind === 'pack'
-      ? 'Any class'
-      : 'Unlimited classes';
+    : isDayPass(type)
+      ? 'The gym or any class'
+      : type.kind === 'pack'
+        ? 'Any class'
+        : 'Unlimited classes';
   if (!Array.isArray(type.classTypes)) return amount;
   const names = type.classTypes.map((c) => c.name);
   const shown = names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${String(names.length - 3)} more`;
@@ -128,6 +131,7 @@ export function archivedNote(list) {
 export function emptyDraft() {
   return {
     id: null,
+    updatedAt: null,
     name: '',
     description: '',
     choice: 'recurring',
@@ -151,6 +155,7 @@ export function draftFromType(type) {
   return {
     ...base,
     id: type.id,
+    updatedAt: type.updatedAt,
     name: type.name,
     description: type.description ?? '',
     choice,
@@ -208,6 +213,10 @@ export function firstProblem(problems) {
 /** The line beside the Save button when the form was not saved. */
 export const NOT_SAVED = 'Not saved yet. Fix what is marked in red above.';
 
+/** A pack of 1 class for 1 day IS a day pass (§13.1) and would open as one, its two boxes
+ *  gone: the pack form sends the gym to the right choice. */
+export const PACK_IS_DAY_PASS = '1 class used within 1 day is a day pass. Add it as a Day pass, or change a number.';
+
 /** What is wrong with the form, one sentence a field, or null when it can be saved. */
 export function draftProblems(draft, currency) {
   const problems = {};
@@ -229,6 +238,9 @@ export function draftProblems(draft, currency) {
     }
     if (wholeNumber(draft.packDays, 1, MEMBERSHIP_PACK_DAYS_MAX) === null) {
       problems.packDays = `Type how many days, from 1 to ${String(MEMBERSHIP_PACK_DAYS_MAX)}.`;
+    }
+    if (problems.packClasses === undefined && problems.packDays === undefined && draft.packClasses.trim() === '1' && draft.packDays.trim() === '1') {
+      problems.packDays = PACK_IS_DAY_PASS;
     }
   }
   if (
@@ -268,6 +280,8 @@ export function draftBody(draft, currency) {
     bookingsLimit: access === 'limited' ? wholeNumber(draft.bookingsLimit, 1, MEMBERSHIP_BOOKINGS_LIMIT_MAX) : null,
     bookingsPeriod: access === 'limited' ? draft.bookingsPeriod : null,
     classTypeIds: coversSomeClasses(draft) ? [...draft.classIds] : null,
+    // A change says which version of the type the form read.
+    ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
   };
 }
 

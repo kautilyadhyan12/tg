@@ -101,9 +101,12 @@ export const gymMembershipTypeSchema = z
       .array(z.object({ id: z.string().uuid(), name: z.string().min(1).max(80) }).strict())
       .nullable(),
     archivedAt: z.string().datetime({ offset: true }).nullable(),
+    /** When it was last changed. A change sends it back, so a form opened before
+     *  somebody else's change is refused, never saved over theirs. */
+    updatedAt: z.string().datetime({ offset: true }),
   })
   .strict();
-export type GymMembershipType = z.infer<typeof gymMembershipTypeSchema>;
+export type GymMembershipType= z.infer<typeof gymMembershipTypeSchema>;
 
 /** The whole price list. `currency` is what a NEW type would be priced in, null
  *  where the gym's country has none; `classChoices` are the gym's live classes,
@@ -119,72 +122,82 @@ export const gymMembershipTypesResponseSchema = z
   .strict();
 export type GymMembershipTypesResponse = z.infer<typeof gymMembershipTypesResponseSchema>;
 
+/** Text a gym types that is printed as a name: no control characters, no half of a
+ *  surrogate pair (Postgres refuses one inside JSON), and none of the invisible or
+ *  direction-turning characters that make two names look like one. */
+const VISIBLE_TEXT = /^[^\p{Cc}\p{Cs}​-‏‪-‮⁦-⁩﻿]*$/u;
+
+const membershipTypeFields = {
+  name: z.string().trim().min(1).max(MEMBERSHIP_NAME_MAX).regex(VISIBLE_TEXT),
+  /** One or two lines for staff and, later, members. Empty is "none". */
+  description: z.string().trim().max(MEMBERSHIP_DESCRIPTION_MAX).regex(VISIBLE_TEXT).nullable(),
+  kind: membershipKindSchema,
+  priceMinor: priceMinorSchema,
+  termCount: termCountSchema.nullable(),
+  termUnit: membershipTermUnitSchema.nullable(),
+  packClasses: packClassesSchema.nullable(),
+  packDays: packDaysSchema.nullable(),
+  access: membershipAccessSchema,
+  bookingsLimit: bookingsLimitSchema.nullable(),
+  bookingsPeriod: membershipLimitPeriodSchema.nullable(),
+  classTypeIds: z.array(z.string().uuid()).min(1).max(MEMBERSHIP_CLASS_TYPES_MAX).nullable(),
+};
+const membershipTypeObject = z.object(membershipTypeFields);
+
+/** The rules between the fields: each kind in its own shape. */
+function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: z.RefinementCtx): void {
+  const wrong = (path: string) => {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path] });
+  };
+  if (value.kind === "pack") {
+    if (value.packClasses === null) wrong("packClasses");
+    if (value.packDays === null) wrong("packDays");
+    if (value.termCount !== null) wrong("termCount");
+    if (value.termUnit !== null) wrong("termUnit");
+    // A pack IS its classes: there is no "gym only" or "a week" to it.
+    if (value.access !== "all_classes") wrong("access");
+  } else {
+    if (value.termCount === null) wrong("termCount");
+    if (value.termUnit === null) wrong("termUnit");
+    if (value.packClasses !== null) wrong("packClasses");
+    if (value.packDays !== null) wrong("packDays");
+    if (value.kind === "recurring" && value.termUnit === "day") wrong("termUnit");
+  }
+  if ((value.access === "limited") !== (value.bookingsLimit !== null)) wrong("bookingsLimit");
+  if ((value.access === "limited") !== (value.bookingsPeriod !== null)) wrong("bookingsPeriod");
+  if (value.access === "gym_only" && value.classTypeIds !== null) wrong("classTypeIds");
+  if (value.classTypeIds !== null && new Set(value.classTypeIds).size !== value.classTypeIds.length) {
+    wrong("classTypeIds");
+  }
+}
+
 /** What a gym types. Every field every time: an update replaces, it never merges,
  *  so `classTypeIds: null` means "every class" and never "leave it alone". The
  *  currency is not accepted: the server takes it from the gym's country. */
-export const saveGymMembershipTypeRequestSchema = z
-  .object({
-    name: z
-      .string()
-      .trim()
-      .min(1)
-      .max(MEMBERSHIP_NAME_MAX)
-      .regex(/^\P{Cc}+$/u),
-    /** One or two lines for staff and, later, members. Empty is "none". */
-    description: z
-      .string()
-      .trim()
-      .max(MEMBERSHIP_DESCRIPTION_MAX)
-      .regex(/^\P{Cc}*$/u)
-      .nullable(),
-    kind: membershipKindSchema,
-    priceMinor: priceMinorSchema,
-    termCount: termCountSchema.nullable(),
-    termUnit: membershipTermUnitSchema.nullable(),
-    packClasses: packClassesSchema.nullable(),
-    packDays: packDaysSchema.nullable(),
-    access: membershipAccessSchema,
-    bookingsLimit: bookingsLimitSchema.nullable(),
-    bookingsPeriod: membershipLimitPeriodSchema.nullable(),
-    classTypeIds: z.array(z.string().uuid()).min(1).max(MEMBERSHIP_CLASS_TYPES_MAX).nullable(),
-  })
-  .strict()
-  .superRefine((value, ctx) => {
-    const wrong = (path: string) => {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path] });
-    };
-    if (value.kind === "pack") {
-      if (value.packClasses === null) wrong("packClasses");
-      if (value.packDays === null) wrong("packDays");
-      if (value.termCount !== null) wrong("termCount");
-      if (value.termUnit !== null) wrong("termUnit");
-      // A pack IS its classes: there is no "gym only" or "a week" to it.
-      if (value.access !== "all_classes") wrong("access");
-    } else {
-      if (value.termCount === null) wrong("termCount");
-      if (value.termUnit === null) wrong("termUnit");
-      if (value.packClasses !== null) wrong("packClasses");
-      if (value.packDays !== null) wrong("packDays");
-      if (value.kind === "recurring" && value.termUnit === "day") wrong("termUnit");
-    }
-    if ((value.access === "limited") !== (value.bookingsLimit !== null)) wrong("bookingsLimit");
-    if ((value.access === "limited") !== (value.bookingsPeriod !== null)) wrong("bookingsPeriod");
-    if (value.access === "gym_only" && value.classTypeIds !== null) wrong("classTypeIds");
-    if (value.classTypeIds !== null && new Set(value.classTypeIds).size !== value.classTypeIds.length) {
-      wrong("classTypeIds");
-    }
-  });
+export const saveGymMembershipTypeRequestSchema = membershipTypeObject.strict().superRefine(refineMembershipType);
 export type SaveGymMembershipTypeRequest = z.infer<typeof saveGymMembershipTypeRequestSchema>;
+
+/** A change: the same fields, and the `updatedAt` the list gave for the type. */
+export const updateGymMembershipTypeRequestSchema = membershipTypeObject
+  .extend({ updatedAt: z.string().datetime({ offset: true }) })
+  .strict()
+  .superRefine(refineMembershipType);
+export type UpdateGymMembershipTypeRequest = z.infer<typeof updateGymMembershipTypeRequestSchema>;
 
 /** A day pass is a pack of 1 class that lasts 1 day (§13.1). */
 export function isDayPass(type: Pick<GymMembershipType, "kind" | "packClasses" | "packDays">): boolean {
   return type.kind === "pack" && type.packClasses === 1 && type.packDays === 1;
 }
 
+let knownCurrencies: ReadonlySet<string> | null = null;
+
 /** How many decimal places a currency has (2 for dollars, 0 for yen, 3 for
  *  Kuwaiti dinar), from the platform's own ISO 4217 table and never a list here.
- *  null for a code the platform does not know. */
+ *  null for a code the platform does not list: the formatter alone would give a
+ *  well-formed unknown code 2. */
 export function currencyDecimals(currency: string): number | null {
+  knownCurrencies ??= new Set(Intl.supportedValuesOf("currency"));
+  if (!knownCurrencies.has(currency)) return null;
   try {
     return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions()
       .maximumFractionDigits ?? null;
