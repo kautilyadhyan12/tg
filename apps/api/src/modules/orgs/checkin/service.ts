@@ -748,6 +748,9 @@ export async function removeVisit(
   if (!(await limit())) return null;
   const attempt = () =>
     deps.sql.begin(async (tx) => {
+      // The gym's row first, as a join of two records and a record's delete take it: Remove
+      // waits for either rather than each holding what the other needs.
+      await lockOrgRow(tx, gymId);
       const gone = await repo.removeVisit(tx, gymId, visitId, staffId);
       if (gone === null) {
         const day = await repo.removedVisitDay(tx, gymId, visitId);
