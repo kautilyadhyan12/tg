@@ -1,4 +1,4 @@
-// A GYM'S UPDATES (spec Part 3 §15.2; ROADMAP 19b-i). Mirrors `0070_gym_posts.sql`,
+// A GYM'S UPDATES (spec Part 3 §15.2; ROADMAP 19b-i). Mirrors `0071_gym_posts.sql`,
 // which is the record.
 //
 // A post is the gym's: its author and the member of staff who removed it are the only

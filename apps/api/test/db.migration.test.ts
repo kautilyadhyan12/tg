@@ -1435,10 +1435,10 @@ d("0001_init on a real database", () => {
       });
   });
 
-  /** `0070`'s backfill: an owner's and a manager's stored ticks gain the Updates page;
+  /** `0071`'s backfill: an owner's and a manager's stored ticks gain the Updates page;
    *  a trainer's, and a row reading its role's defaults, are left as they were. */
-  it("0070's backfill gives owners and managers posts.manage and nobody else", async () => {
-    const migration = await readFile(new URL("../drizzle/0070_gym_posts.sql", import.meta.url), "utf8");
+  it("0071's backfill gives owners and managers posts.manage and nobody else", async () => {
+    const migration = await readFile(new URL("../drizzle/0071_gym_posts.sql", import.meta.url), "utf8");
     const matches = migration
       .split("--> statement-breakpoint")
       .map((s) => s.trim())
@@ -1446,7 +1446,7 @@ d("0001_init on a real database", () => {
     const backfill = matches.find((s) => /UPDATE "gym_staff"\s/.test(s));
     const invites = matches.find((s) => s.includes('UPDATE "gym_staff_invites"'));
     if (matches.length !== 2 || backfill === undefined || invites === undefined) {
-      throw new Error(`0070 no longer contains its two backfill UPDATEs (found ${String(matches.length)})`);
+      throw new Error(`0071 no longer contains its two backfill UPDATEs (found ${String(matches.length)})`);
     }
     const before = ["members.read", "attendance.read"];
 
@@ -1455,15 +1455,15 @@ d("0001_init on a real database", () => {
         const ids: Record<string, string> = {};
         for (const name of ["owner", "manager", "trainer", "defaults", "frontdesk"]) {
           const [user] = await tx<{ id: string }[]>`
-            INSERT INTO users (display_name) VALUES (${`zz-0070-${name}`}) RETURNING id`;
-          if (user === undefined) throw new Error("0070 user insert failed");
+            INSERT INTO users (display_name) VALUES (${`zz-0071-${name}`}) RETURNING id`;
+          if (user === undefined) throw new Error("0071 user insert failed");
           ids[name] = user.id;
         }
         const owner = ids.owner ?? "";
         const [gym] = await tx<{ id: string }[]>`
-          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0070', 'zz 0070', ${owner}) RETURNING id`;
+          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0071', 'zz 0071', ${owner}) RETURNING id`;
         const gymId = gym?.id;
-        if (gymId === undefined) throw new Error("0070 gym insert failed");
+        if (gymId === undefined) throw new Error("0071 gym insert failed");
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${owner}, 'owner', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.manager ?? ""}, 'manager', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.trainer ?? ""}, 'trainer', ${before})`;
@@ -1476,10 +1476,10 @@ d("0001_init on a real database", () => {
           INSERT INTO gym_staff_invites (gym_id, email, role, privileges, role_name, created_at, expires_at, state, answered_at)
           VALUES (${gymId}, ${email}, ${role}, ${before}, ${roleName}, now(), now() + interval '7 days', ${state},
                   ${state === "pending" ? null : tx`now()`})`;
-        await invite("zz-0070-a@example.com", "manager", null, "pending");
-        await invite("zz-0070-b@example.com", "trainer", null, "pending");
-        await invite("zz-0070-c@example.com", "manager", "Front desk", "pending");
-        await invite("zz-0070-d@example.com", "manager", null, "cancelled");
+        await invite("zz-0071-a@example.com", "manager", null, "pending");
+        await invite("zz-0071-b@example.com", "trainer", null, "pending");
+        await invite("zz-0071-c@example.com", "manager", "Front desk", "pending");
+        await invite("zz-0071-d@example.com", "manager", null, "cancelled");
 
         await tx.unsafe(backfill);
         await tx.unsafe(backfill);
@@ -1489,27 +1489,122 @@ d("0001_init on a real database", () => {
         const invited = await tx<{ email: string; privileges: string[] }[]>`
           SELECT email::text AS email, privileges FROM gym_staff_invites WHERE gym_id = ${gymId} ORDER BY email`;
         expect(invited).toEqual([
-          { email: "zz-0070-a@example.com", privileges: [...before, "posts.manage"] },
-          { email: "zz-0070-b@example.com", privileges: before },
-          { email: "zz-0070-c@example.com", privileges: before },
-          { email: "zz-0070-d@example.com", privileges: before },
+          { email: "zz-0071-a@example.com", privileges: [...before, "posts.manage"] },
+          { email: "zz-0071-b@example.com", privileges: before },
+          { email: "zz-0071-c@example.com", privileges: before },
+          { email: "zz-0071-d@example.com", privileges: before },
         ]);
 
         const rows = await tx<{ display_name: string; privileges: string[] | null }[]>`
           SELECT u.display_name, s.privileges FROM gym_staff s JOIN users u ON u.id = s.user_id
           WHERE s.gym_id = ${gymId} ORDER BY u.display_name`;
         expect(rows).toEqual([
-          { display_name: "zz-0070-defaults", privileges: null },
+          { display_name: "zz-0071-defaults", privileges: null },
           // One of the gym's own roles: the owner chose its ticks.
-          { display_name: "zz-0070-frontdesk", privileges: before },
-          { display_name: "zz-0070-manager", privileges: [...before, "posts.manage"] },
-          { display_name: "zz-0070-owner", privileges: [...before, "posts.manage"] },
-          { display_name: "zz-0070-trainer", privileges: before },
+          { display_name: "zz-0071-frontdesk", privileges: before },
+          { display_name: "zz-0071-manager", privileges: [...before, "posts.manage"] },
+          { display_name: "zz-0071-owner", privileges: [...before, "posts.manage"] },
+          { display_name: "zz-0071-trainer", privileges: before },
         ]);
-        throw new Error("ROLLBACK-0070-BACKFILL-FIXTURE");
+        throw new Error("ROLLBACK-0071-BACKFILL-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0070-BACKFILL-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0071-BACKFILL-FIXTURE") return;
+        throw err;
+      });
+  });
+
+  it("0070's held memberships: each CHECK bites, a membership names only its own gym's record and type, and goes with its record", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0070-owner') RETURNING id`;
+        if (user === undefined) throw new Error("no user");
+        const gymOf = async (slug: string) => {
+          const [gym] = await tx<{ id: string }[]>`
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0070', 'Europe/London', ${user.id}) RETURNING id`;
+          if (gym === undefined) throw new Error("no gym");
+          const [entry] = await tx<{ id: string }[]>`
+            INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+            VALUES (${gym.id}, 'Zz Person', ${slug + "@example.com"}, ${"0".repeat(63) + slug.slice(-1)}, 'typed') RETURNING id`;
+          const [type] = await tx<{ id: string }[]>`
+            INSERT INTO gym_membership_types (gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
+            VALUES (${gym.id}, 'Gold', 'recurring', 4999, 'GBP', 1, 'month', 'all_classes') RETURNING id`;
+          if (entry === undefined || type === undefined) throw new Error("no fixture");
+          return { gym: gym.id, entry: entry.id, type: type.id };
+        };
+        const a = await gymOf("zz-0070-a");
+        const b = await gymOf("zz-0070-b");
+
+        const row = (over: Record<string, unknown> = {}) => ({
+          gym_id: a.gym,
+          entry_id: a.entry,
+          membership_type_id: a.type,
+          request_key: "00000000-0000-4000-8000-000000000070",
+          kind: "recurring",
+          price_minor: 4999,
+          currency: "GBP",
+          term_count: 1,
+          term_unit: "month",
+          pack_classes: null,
+          pack_days: null,
+          starts_on: "2026-10-04",
+          frozen_days: 0,
+          status: "active",
+          frozen_on: null,
+          cancelled_on: null,
+          paid_periods: 1,
+          paid_floor: 0,
+          renews: true,
+          classes_left: null,
+          ...over,
+        });
+        /** The constraint an insert trips, or "ok". Each in its own savepoint. */
+        const put = async (over: Record<string, unknown>): Promise<string> => {
+          try {
+            await tx.savepoint((sp) => sp`INSERT INTO gym_held_memberships ${sp(row({ request_key: randomUUID(), ...over }))}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        const pack = { kind: "pack", term_count: null, term_unit: null, pack_classes: 10, pack_days: 60, classes_left: 10, renews: false };
+
+        expect(await put({})).toBe("ok");
+        expect(await put(pack)).toBe("ok");
+        const refused: [string, Record<string, unknown>, string][] = [
+          ["a status of its own", { status: "paused" }, "gym_held_memberships_status_check"],
+          ["frozen with no day", { status: "frozen" }, "gym_held_memberships_frozen_check"],
+          ["a frozen day while active", { frozen_on: "2026-10-05" }, "gym_held_memberships_frozen_check"],
+          ["cancelled with no day", { status: "cancelled" }, "gym_held_memberships_cancelled_check"],
+          ["fewer than no days frozen", { frozen_days: -1 }, "gym_held_memberships_frozen_days_check"],
+          ["paid for fewer periods than it was given with", { paid_periods: 2, paid_floor: 3 }, "gym_held_memberships_paid_check"],
+          ["a pack given with earlier periods", { ...pack, paid_periods: 1, paid_floor: 1 }, "gym_held_memberships_paid_check"],
+          ["a pack with a term", { ...pack, term_count: 1, term_unit: "month" }, "gym_held_memberships_shape_check"],
+          ["a pack with more classes left than it holds", { ...pack, classes_left: 11 }, "gym_held_memberships_shape_check"],
+          ["a monthly counted in classes", { classes_left: 3 }, "gym_held_memberships_shape_check"],
+          ["a repeating membership by the day", { term_unit: "day" }, "gym_held_memberships_shape_check"],
+          ["a pack paid twice", { ...pack, paid_periods: 2 }, "gym_held_memberships_paid_check"],
+          ["a free one marked paid", { price_minor: 0 }, "gym_held_memberships_paid_check"],
+          ["a pack that renews", { ...pack, renews: true }, "gym_held_memberships_renews_check"],
+          ["a price in no money", { currency: "gbp" }, "gym_held_memberships_currency_check"],
+          ["the same request twice", { request_key: "00000000-0000-4000-8000-000000000070" }, "gym_held_memberships_request_uq"],
+          ["another gym's record", { entry_id: b.entry }, "gym_held_memberships_entry_fk"],
+          ["another gym's type", { membership_type_id: b.type }, "gym_held_memberships_type_fk"],
+        ];
+        expect(await put({ request_key: "00000000-0000-4000-8000-000000000070" })).toBe("ok");
+        for (const [what, over, constraint] of refused) expect(await put(over), what).toBe(constraint);
+
+        // A type somebody holds cannot be deleted; a record deleted takes its memberships.
+        const deleteType = await tx
+          .savepoint((sp) => sp`DELETE FROM gym_membership_types WHERE id = ${a.type}`)
+          .then(() => "deleted", (err: unknown) => (err instanceof postgres.PostgresError ? (err.constraint_name ?? "") : String(err)));
+        expect(deleteType).toBe("gym_held_memberships_type_fk");
+        await tx`DELETE FROM gym_member_list_entries WHERE id = ${a.entry}`;
+        expect(await tx`SELECT 1 FROM gym_held_memberships WHERE gym_id = ${a.gym}`).toHaveLength(0);
+        throw new Error("ROLLBACK-0070-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0070-FIXTURE") return;
         throw err;
       });
   });

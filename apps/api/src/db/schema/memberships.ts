@@ -1,20 +1,25 @@
 // WHAT A GYM SELLS (Part 3 §13.1; ROADMAP Stage 2 item 17a-i). Mirrors
-// `0069_membership_types.sql` 1:1; the migration carries the reasoning.
+// `0069_membership_types.sql` and `0070_held_memberships.sql` 1:1; the migrations
+// carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
+  foreignKey,
   index,
   integer,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
 import { gymClassTypes } from "./classes.js";
+import { gymMemberListEntries } from "./memberList.js";
 import { gyms } from "./tenancy.js";
 
 /** One line of a gym's price list. `price_minor` is whole minor units of
@@ -70,6 +75,8 @@ export const gymMembershipTypes = pgTable(
         AND ${t.packClasses} IS NULL AND ${t.packDays} IS NULL
       END`,
     ),
+    // What a held membership's type key points at, with its gym (0070).
+    unique("gym_membership_types_gym_id_uq").on(t.gymId, t.id),
     index("gym_membership_types_gym_idx").on(t.gymId, t.archivedAt),
     uniqueIndex("gym_membership_types_live_name_uq")
       .on(t.gymId, sql`lower(${t.name})`)
@@ -95,5 +102,80 @@ export const gymMembershipTypeClasses = pgTable(
     primaryKey({ name: "gym_membership_type_classes_pk", columns: [t.membershipTypeId, t.classTypeId] }),
     index("gym_membership_type_classes_gym_idx").on(t.gymId),
     index("gym_membership_type_classes_class_idx").on(t.classTypeId),
+  ],
+);
+
+/** One membership a gym's record of a person holds (§13.2). The kind, price and term are
+ *  the type's as they were when it was given; what it is on a given day is worked out by
+ *  `heldMembershipView` in `@app/shared`, never read off `status` alone. */
+export const gymHeldMemberships = pgTable(
+  "gym_held_memberships",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    entryId: uuid("entry_id").notNull(),
+    membershipTypeId: uuid("membership_type_id").notNull(),
+    requestKey: uuid("request_key").notNull(),
+    kind: text("kind").notNull(),
+    priceMinor: integer("price_minor").notNull(),
+    currency: text("currency").notNull(),
+    termCount: integer("term_count"),
+    termUnit: text("term_unit"),
+    packClasses: integer("pack_classes"),
+    packDays: integer("pack_days"),
+    startsOn: date("starts_on").notNull(),
+    frozenDays: integer("frozen_days").notNull().default(0),
+    status: text("status").notNull().default("active"),
+    frozenOn: date("frozen_on"),
+    cancelledOn: date("cancelled_on"),
+    paidPeriods: integer("paid_periods").notNull().default(0),
+    paidFloor: integer("paid_floor").notNull().default(0),
+    renews: boolean("renews").notNull(),
+    classesLeft: integer("classes_left"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("gym_held_memberships_request_uq").on(t.gymId, t.requestKey),
+    check("gym_held_memberships_kind_check", sql`${t.kind} IN ('recurring','one_time','pack','trial')`),
+    check("gym_held_memberships_price_check", sql`${t.priceMinor} BETWEEN 0 AND 99999999`),
+    check("gym_held_memberships_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("gym_held_memberships_status_check", sql`${t.status} IN ('active','frozen','ended','cancelled')`),
+    check(
+      "gym_held_memberships_shape_check",
+      sql`CASE WHEN ${t.kind} = 'pack' THEN
+        ${t.packClasses} IS NOT NULL AND ${t.packClasses} BETWEEN 1 AND 500
+        AND ${t.packDays} IS NOT NULL AND ${t.packDays} BETWEEN 1 AND 730
+        AND ${t.termCount} IS NULL AND ${t.termUnit} IS NULL
+        AND ${t.classesLeft} IS NOT NULL AND ${t.classesLeft} BETWEEN 0 AND ${t.packClasses}
+      ELSE
+        ${t.termCount} IS NOT NULL AND ${t.termCount} BETWEEN 1 AND 365
+        AND ${t.termUnit} IS NOT NULL AND ${t.termUnit} IN ('day','week','month','year')
+        AND NOT (${t.kind} = 'recurring' AND ${t.termUnit} = 'day')
+        AND ${t.packClasses} IS NULL AND ${t.packDays} IS NULL AND ${t.classesLeft} IS NULL
+      END`,
+    ),
+    check("gym_held_memberships_frozen_days_check", sql`${t.frozenDays} BETWEEN 0 AND 36500`),
+    check("gym_held_memberships_frozen_check", sql`(${t.status} = 'frozen') = (${t.frozenOn} IS NOT NULL)`),
+    check("gym_held_memberships_cancelled_check", sql`(${t.status} = 'cancelled') = (${t.cancelledOn} IS NOT NULL)`),
+    check(
+      "gym_held_memberships_paid_check",
+      sql`${t.paidFloor} >= 0 AND ${t.paidPeriods} >= ${t.paidFloor} AND (${t.kind} = 'recurring' OR (${t.paidPeriods} <= 1 AND ${t.paidFloor} = 0)) AND (${t.priceMinor} > 0 OR ${t.paidPeriods} = 0)`,
+    ),
+    check("gym_held_memberships_renews_check", sql`${t.kind} = 'recurring' OR NOT ${t.renews}`),
+    foreignKey({
+      name: "gym_held_memberships_entry_fk",
+      columns: [t.gymId, t.entryId],
+      foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "gym_held_memberships_type_fk",
+      columns: [t.gymId, t.membershipTypeId],
+      foreignColumns: [gymMembershipTypes.gymId, gymMembershipTypes.id],
+    }),
+    index("gym_held_memberships_entry_idx").on(t.gymId, t.entryId),
+    index("gym_held_memberships_type_idx").on(t.gymId, t.membershipTypeId),
   ],
 );

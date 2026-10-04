@@ -113,7 +113,7 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   await tx`DELETE FROM user_health_screenings WHERE user_id = ${userId}`;
   // The rings' own numbers — the same footing (tables.ts, 2026-09-17).
   await tx`DELETE FROM user_nutrition_targets WHERE user_id = ${userId}`;
-  // The person's reactions to their gym's posts (tables.ts, 0070).
+  // The person's reactions to their gym's posts (tables.ts, 0071).
   await tx`DELETE FROM gym_post_reactions WHERE user_id = ${userId}`;
 }
 

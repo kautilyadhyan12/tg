@@ -19,11 +19,15 @@ import {
   MEMBER_INVITE_AGAIN_PER_PERSON,
   MEMBER_INVITE_AGAIN_PERSON_DAYS,
   MEMBER_INVITE_WORDS,
+  MEMBER_LIST_MAX_STATUS_CHARS,
   MEMBER_LIST_QUERY_MAX_CHARS,
   memberListReviewWords,
 } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
+import MemberMemberships from './MemberMemberships';
+import MembershipChoice from './MembershipChoice';
+import { giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
 import {
@@ -425,6 +429,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [maybe, setMaybe] = useState(null);
   /** The details typed for somebody new, kept while staff Open a record the warning named. */
   const [draft, setDraft] = useState(null);
+  /** Add member's membership (17a-ii): the gym's price list once it is read (null where it
+   *  has none or it cannot be read), and the choice, "No membership" until staff pick one. */
+  const [giveTypes, setGiveTypes] = useState(null);
+  const [giving, setGiving] = useState(() => ({ requestKey: newRequestKey(), typeId: '', startsOn: gymToday(gym?.timezone), paid: false }));
   /** Where a refusal or the warning shows: at the top, above a form whose buttons are at its foot. */
   const alertRef = useRef(null);
 
@@ -448,6 +456,24 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [picking, setPicking] = useState(pair?.otherId ?? null);
 
   const ranges = dayRanges();
+
+  // The price list, for somebody being added: nothing is offered until it is read.
+  const adding = id === null;
+  useEffect(() => {
+    if (!adding) return undefined;
+    let live = true;
+    Promise.resolve()
+      .then(() => orgService.getMembershipTypes(gymId))
+      .then((res) => {
+        if (live && res.data.types.length > 0) setGiveTypes(res.data.types);
+      })
+      .catch(() => {
+        // No price list to offer: the person is added without a membership, as before.
+      });
+    return () => {
+      live = false;
+    };
+  }, [gymId, adding]);
 
   useEffect(() => {
     const before = document.body.style.overflow;
@@ -630,8 +656,44 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     setNotice(null);
     setRefusal(null);
     setMaybe(null);
+    // A membership chosen in the form is given once the person is added. If that fails
+    // the person stays added, and the page says the membership was not.
+    const choice = giveTypes === null ? null : membershipChoice(giveTypes, giving, gymToday(gym?.timezone));
+    if (choice !== null && choice.type !== null && choice.problem !== null) {
+      setRefusal({ message: choice.problem, openId: null, ack: null });
+      setBusy(false);
+      return;
+    }
     try {
-      written(null, await orgService.addMemberListEntry(gymId, input));
+      let res = await orgService.addMemberListEntry(gymId, input);
+      const who = res.data.entry.fullName || 'This person';
+      let notGiven = null;
+      if (choice !== null && choice.type !== null) {
+        if (res.data.outcome !== 'added') {
+          // Nobody new was added: the answer is a record the gym already had, and what
+          // that person holds is not changed from this form.
+          const why = res.data.outcome === 'revived' ? `was a past ${words.person} and is back on your list` : 'was already on your list';
+          notGiven = `${who} ${why}, so the ${choice.type.name} membership was not added. Add it under Memberships below.`;
+        } else {
+          try {
+            await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving));
+            // Once it is given, and only then, the type's name becomes their Membership word,
+            // so the list's Membership column and filter show it as they show a file's word.
+            if (input.membershipType === undefined && choice.type.name.length <= MEMBER_LIST_MAX_STATUS_CHARS) {
+              try {
+                const named = await orgService.changeMemberListEntry(gymId, res.data.entry.entryId, { membershipType: choice.type.name });
+                res = { ...res, data: { ...res.data, entry: named.data.entry } };
+              } catch {
+                // The membership is given; the list's word stays empty.
+              }
+            }
+          } catch (err) {
+            notGiven = `${who} was added, but the ${choice.type.name} membership was not: ${errorText(err, 'Please try again.')} Add it under Memberships.`;
+          }
+        }
+      }
+      written(null, res);
+      if (notGiven !== null) setRefusal({ message: notGiven, openId: null, ack: null });
     } catch (err) {
       if (wanted.current !== null) return;
       const people = err?.response?.data?.people;
@@ -886,7 +948,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         </label>
       ))}
       <p className="c-hint -mt-2 m-0">An email address or a phone number is needed to tell people apart.</p>
-      {WORD_FIELDS.map((f) => {
+      {/* Adding somebody at a gym with a price list asks about their membership once, in
+          "Give a membership" below (Kd, 2026-10-04): the list's own Membership word is not
+          asked beside it, and takes the name of the type once it is given. */}
+      {WORD_FIELDS.filter((f) => !(id === null && giveTypes !== null && f.key === 'membershipType')).map((f) => {
         const listId = `${titleId}-${f.key}`;
         const known = (list?.[f.from] ?? []).map((w) => w.label).filter((w) => w !== '');
         // The box takes any word; the suggestions are the gym's own, so a word is not
@@ -948,6 +1013,21 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           <input type="text" value={form.extra[f.key] ?? ''} onChange={(e) => setExtra(f.key, e.target.value)} className="c-input" />
         </label>
       ))}
+      {id === null && giveTypes !== null ? (
+        <div className="c-card p-3 flex flex-col gap-3" data-testid="add-membership">
+          <span className="c-s15 c-w6 c-t1">Give a membership</span>
+          <MembershipChoice
+            allowNone
+            types={giveTypes}
+            today={gymToday(gym?.timezone)}
+            value={giving}
+            onChange={(next) => {
+              setRefusal(null);
+              setGiving(next);
+            }}
+          />
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={busy || readOnly} className={MAIN}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
@@ -1077,8 +1157,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             <Fact key={k} label={FIELD_LABELS[k]} value={v} edited={edited.has(k)} />
           ))}
         </Section>
+        <MemberMemberships key={p.entryId} gymId={gymId} entryId={p.entryId} name={p.fullName || 'this person'} readOnly={readOnly} />
         {membership.length > 0 ? (
-          <Section title="Membership">
+          // What the gym's own list says about them, in its words; the box above is what
+          // they hold from the price list (17a-ii).
+          <Section title="Details">
             {membership.map(([k, v]) => (
               <Fact key={k} label={FIELD_LABELS[k]} value={v} edited={edited.has(k)} />
             ))}

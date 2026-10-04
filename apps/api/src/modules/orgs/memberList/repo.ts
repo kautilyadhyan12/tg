@@ -2252,6 +2252,16 @@ export async function moveLeadLinks(tx: TransactionSql, gymId: string, fromEntry
   return rows.length;
 }
 
+/** Two records joined: the memberships the one not kept holds become the kept one's
+ *  (17a-ii), each as it is. */
+export async function moveHeldMemberships(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<number> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_held_memberships SET entry_id = ${toEntryId}
+    WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
+    RETURNING id`;
+  return rows.length;
+}
+
 /** The list moved by hand: its version up by one, and the list created for a gym
  *  whose first change is a typed person. */
 export async function bumpListVersion(tx: TransactionSql, gymId: string): Promise<number> {

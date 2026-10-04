@@ -18,6 +18,9 @@ import {
   memberListViewSchema,
 } from '@app/shared';
 
+// The person's Memberships box (17a-ii) has its own tests in `memberMemberships.render.test.jsx`.
+vi.mock('./MemberMemberships', () => ({ default: () => null }));
+
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return {

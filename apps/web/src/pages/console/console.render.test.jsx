@@ -16,6 +16,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { memberListEntryDetailSchema } from '@app/shared';
 import { WEEK_STARTS, attendanceDay, attendee, overview } from './__fixtures__/overview';
 
+// The person's Memberships box (17a-ii) has its own tests in `memberMemberships.render.test.jsx`.
+vi.mock('./MemberMemberships', () => ({ default: () => null }));
+
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return {

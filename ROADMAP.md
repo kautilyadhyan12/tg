@@ -183,7 +183,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 17. **What a gym sells, and its timetable** (RULINGS 2026-09-21, Part 4 of the re-plan; spec Part 3 §13) — items 8 and 9's prices, planned; "the largest gym item". Every card Opus xhigh; every number a starting value the gym can change; the two extra passes run once over 17a–17f.
    - 17a. **Membership types, and a person's membership** (§13.1–13.2), split 2026-10-04 in three (the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 17a-i. [x] **The gym's price list** — merged 2026-10-04 (PR #166).
-     - 17a-ii. [ ] **A person's membership**: given on their page (type and start; the end or renewal worked out), ONE pure status rule with its exhaustive test, "paid" marked by hand until Part 5.
+     - 17a-ii. [x] **A person's membership** — merged 2026-10-04 (PR #168).
      - 17a-iii. [ ] **A file's word linked to a type**: "Gold" → Gold Monthly once, for everyone who carries the word, their file's dates kept.
    - 17b. **Classes and the calendar** — split into two 2026-09-22 (the whole line was three tables, the repeat rule, a nightly worker and a calendar screen: more than one terminal and more than a reviewable diff). Needs nothing from the member list, so it is built BESIDE it, in Folder B.
      - 17b-i. [x] **What a gym runs, and when it repeats** — merged 2026-09-22 (PR #91).
