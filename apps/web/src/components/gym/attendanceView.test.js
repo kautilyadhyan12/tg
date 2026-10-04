@@ -159,6 +159,20 @@ describe('the days they came', () => {
     expect(days[1].times).toEqual(['01:05']);
   });
 
+  // A visit staff added on a later day carries the moment it was ADDED as its instant.
+  // Printing that as a time would tell the member they came at an hour they did not.
+  it('a visit staff added later says so, never the time it was added', () => {
+    const days = visitDays(
+      [
+        visit({ day: '2026-09-25', markedAt: '2026-10-04T05:54:45.994Z', method: 'staff', hoursStatus: 'added_later' }),
+        visit({ day: '2026-09-25', markedAt: '2026-09-25T07:00:00.000Z' }),
+      ],
+      { timezone: 'UTC', clockFormat: '24h' },
+    );
+    expect(days).toHaveLength(1);
+    expect(days[0].times).toEqual(['Added later by staff', '07:00']);
+  });
+
   // T3 ROUND 1, L-1 — THIS TEST USED TO BE A LIAR AND ITS FIXTURE IS WHY. It
   // fed days OLDEST-first, the reverse of the newest-first order the server
   // actually sends, so an ascending `sort` added to `visitDays` left it GREEN:

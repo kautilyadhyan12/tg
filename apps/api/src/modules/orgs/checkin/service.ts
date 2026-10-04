@@ -746,21 +746,28 @@ export async function removeVisit(
 ): Promise<RemoveVisitResponse | null> {
   await requireWritablePrivilege(deps, gymId, staffId, FIX_TICK);
   if (!(await limit())) return null;
-  const done = await deps.sql.begin(async (tx) => {
-    const gone = await repo.removeVisit(tx, gymId, visitId, staffId);
-    if (gone === null) {
-      const day = await repo.removedVisitDay(tx, gymId, visitId);
-      return day === null ? null : { day, userId: null };
-    }
-    await insertAudit(tx, {
-      actorUserId: staffId,
-      gymId,
-      action: "attendance.visit_removed",
-      targetType: "gym_attendance",
-      targetId: visitId,
-      meta: { day: gone.day, method: gone.method },
+  const attempt = () =>
+    deps.sql.begin(async (tx) => {
+      const gone = await repo.removeVisit(tx, gymId, visitId, staffId);
+      if (gone === null) {
+        const day = await repo.removedVisitDay(tx, gymId, visitId);
+        return day === null ? null : { day, userId: null };
+      }
+      await insertAudit(tx, {
+        actorUserId: staffId,
+        gymId,
+        action: "attendance.visit_removed",
+        targetType: "gym_attendance",
+        targetId: visitId,
+        meta: { day: gone.day, method: gone.method },
+      });
+      return { day: gone.day, userId: gone.userId };
     });
-    return { day: gone.day, userId: gone.userId };
+  // A join of two records, or a record deleted, holds the visit at the same moment: the
+  // second try finds it on the kept record, or gone with the record it hung on.
+  const done = await attempt().catch((err: unknown) => {
+    if (!lostARace(err)) throw err;
+    return attempt();
   });
   if (done === null) throw new OrgsError(404, "visit_not_found", VISIT_FIX_WORDS.visit_not_found);
   if (done.userId !== null) await keepStreak(deps, gymId, done.userId, done.day, true);

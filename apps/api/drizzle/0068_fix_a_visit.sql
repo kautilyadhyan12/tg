@@ -23,6 +23,10 @@ CREATE TABLE "gym_attendance_removed" (
 	"removed_by_user_id" uuid NOT NULL REFERENCES "users"("id"),
 	"removed_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "gym_attendance_removed_who_check" CHECK ("user_id" IS NOT NULL OR "entry_id" IS NOT NULL),
+	-- The same two lists as `gym_attendance`: a value added there is added here in the same
+	-- migration, or a removal of such a visit is refused (`db.migration.test.ts` compares them).
+	CONSTRAINT "gym_attendance_removed_method_check" CHECK ("method" IN ('manual','qr','pass','key_tag','staff')),
+	CONSTRAINT "gym_attendance_removed_hours_status_check" CHECK ("hours_status" IN ('in_session','open_24h','outside_hours','closed_day','hours_unset','added_later')),
 	-- As `gym_attendance_entry_fk`: a record deleted for good takes the rows only it holds.
 	CONSTRAINT "gym_attendance_removed_entry_fk" FOREIGN KEY ("gym_id", "entry_id") REFERENCES "gym_member_list_entries" ("gym_id", "id") ON DELETE CASCADE,
 	CONSTRAINT "gym_attendance_removed_device_fk" FOREIGN KEY ("gym_id", "device_id") REFERENCES "gym_checkin_devices" ("gym_id", "id")

@@ -391,6 +391,12 @@ export const gymAttendanceRemoved = pgTable(
   },
   (t) => [
     check("gym_attendance_removed_who_check", sql`${t.userId} IS NOT NULL OR ${t.entryId} IS NOT NULL`),
+    // The same two lists as `gymAttendance`'s, kept in step by `db.migration.test.ts`.
+    check("gym_attendance_removed_method_check", sql`${t.method} IN ('manual','qr','pass','key_tag','staff')`),
+    check(
+      "gym_attendance_removed_hours_status_check",
+      sql`${t.hoursStatus} IN ('in_session','open_24h','outside_hours','closed_day','hours_unset','added_later')`,
+    ),
     index("gym_attendance_removed_gym_user_idx").on(t.gymId, t.userId, t.day),
     index("gym_attendance_removed_gym_entry_idx")
       .on(t.gymId, t.entryId, t.day)

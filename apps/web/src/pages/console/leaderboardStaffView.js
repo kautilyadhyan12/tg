@@ -232,7 +232,7 @@ export function removeVisitBox(name, visit, day, counted) {
     title: `Remove this visit of ${name}?`,
     button: 'Remove visit',
     changes: [`${name} — ${what} is removed.`, number],
-    keeps: [`In their app, ${name} still sees it under "Didn't count", with your name and today's date.`, KEPT],
+    keeps: [`In their app, ${name} still sees it under "Didn't count", with who removed it and today's date.`, KEPT],
     done: `Visit removed for ${name}.`,
   };
 }
@@ -263,7 +263,7 @@ export function addVisitBox(name, day, counted) {
     button,
     ready: true,
     changes: [`${name} — a visit is added for ${dayLabel(day)}.`, `${number} Their streak is worked out again with that day.`],
-    keeps: [`In their app, ${name} sees it with your name and today's date.`, KEPT],
+    keeps: [`In their app, ${name} sees who added it and today's date.`, KEPT],
     done: `Visit added for ${name} on ${dayLabel(day)}.`,
   };
 }

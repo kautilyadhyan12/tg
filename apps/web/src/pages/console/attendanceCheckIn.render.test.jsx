@@ -249,8 +249,8 @@ describe('fixing a visit on Attendance', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add a visit for Anita Kumar' }));
     const box = screen.getByRole('group', { name: 'Add a visit for Anita Kumar' });
     expect(box.textContent).toContain(`Add a visit for Anita Kumar on ${dayLabel(yesterday)}?`);
-    expect(box.textContent).toContain('It counts as a gym day on the leaderboard and for their streak.');
-    expect(box.textContent).toContain("In their app, they see it with your name and today's date.");
+    expect(box.textContent).toContain('It counts as a gym day on the leaderboard, unless they already have a visit that day.');
+    expect(box.textContent).toContain("In their app, they see who added it and today's date.");
     // Nothing yet, and nobody else can be pressed while the box is open.
     expect(api.addVisit).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Add a visit for Anil Kumar' })).toBeNull();
@@ -345,6 +345,28 @@ describe('fixing a visit on Attendance', () => {
     await screen.findByText('Asha App');
     expect(screen.queryByRole('button', { name: /^Remove / })).toBeNull();
     expect(screen.queryByLabelText('Day they came')).toBeNull();
+  });
+
+  it('a gym with no plan is offered no Remove: the press could only be refused', async () => {
+    api.getCheckinLog.mockResolvedValue(logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App')]));
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, subscription: null, consoleReadOnly: true }], formerOrgs: [] } });
+    drawScreen();
+    await screen.findByText('Asha App');
+    expect(screen.queryByRole('button', { name: /^Remove / })).toBeNull();
+  });
+
+  it('a page left open past the gym’s midnight still checks in for today, never adds for yesterday by itself', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-10-03T20:00:00.000Z') });
+    api.findCheckinPeople.mockResolvedValue({ data: { people: [ANIL] } });
+    drawScreen();
+    const dayBox = await screen.findByLabelText('Day they came');
+    expect(dayBox.value).toBe('2026-10-03');
+    // Four hours on it is 4 October in London, and nobody touched the box.
+    vi.setSystemTime(new Date('2026-10-04T00:30:00.000Z'));
+    await typeSearch('Anil');
+    expect(await screen.findByRole('button', { name: 'Check in Anil Kumar' })).toBeTruthy();
+    expect(screen.getByLabelText('Day they came').value).toBe('2026-10-04');
+    expect(screen.queryByRole('button', { name: 'Add a visit for Anil Kumar' })).toBeNull();
   });
 });
 
@@ -453,5 +475,46 @@ describe('the day list counts somebody without the app', () => {
     const row = await screen.findByText('ravi@example.com');
     fireEvent.click(row.closest('button'));
     await waitFor(() => expect(api.getAttendanceHistory).toHaveBeenCalledWith('g1', { entryId: 'e-ravi' }));
+  });
+
+  it("lists a person's days newest first, wherever a visit added later arrives, and gives it no time", async () => {
+    api.getAttendanceDay.mockResolvedValue({
+      data: {
+        attendance: {
+          ...emptyDay().data.attendance,
+          totals: { visits: 1, people: 1 },
+          people: [
+            {
+              userId: 'u-asha',
+              entryId: null,
+              displayName: 'Asha App',
+              email: 'asha@example.com',
+              visits: [{ day: '2026-10-03', markedAt: '2026-10-03T06:05:00.000Z', method: 'pass', hoursStatus: 'hours_unset', session: null }],
+            },
+          ],
+        },
+      },
+    });
+    // The server sends by the instant: the visit added today for 25 Sep comes first.
+    api.getAttendanceHistory.mockResolvedValue({
+      data: {
+        attendance: {
+          timezone: 'Europe/London',
+          clockFormat: '24h',
+          visits: [
+            { day: '2026-09-25', markedAt: '2026-10-04T05:54:45.994Z', method: 'staff', hoursStatus: 'added_later', session: null },
+            { day: '2026-10-01', markedAt: '2026-10-01T06:05:00.000Z', method: 'pass', hoursStatus: 'hours_unset', session: null },
+          ],
+          nextCursor: null,
+        },
+      },
+    });
+    drawScreen();
+    fireEvent.click((await screen.findByText('asha@example.com')).closest('button'));
+    const added = await screen.findByText('Added later by staff');
+    const text = added.closest('div').parentElement.textContent;
+    expect(text.indexOf('1 Oct')).toBeGreaterThan(-1);
+    expect(text.indexOf('1 Oct')).toBeLessThan(text.indexOf('25 Sep'));
+    expect(text).not.toContain('06:54');
   });
 });

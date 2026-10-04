@@ -15,6 +15,7 @@ import {
   repeatVisitLabel,
   searchCoversEverybody,
 } from './attendanceView';
+import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
 import { canCheckPeopleIn, personKey } from './checkinLogView';
 import { CheckedInToday, CheckSomeoneIn } from './AttendanceCheckIn';
@@ -191,6 +192,8 @@ function PersonHistory({ gymId, person, onClose }) {
     const chips = personTimes({ visits: [visit] }, { timezone: state.timezone, clockFormat: state.clockFormat });
     if (chips.length === 1) row.times.push(chips[0]);
   }
+  // Newest day first: a visit staff added later arrives in the order it was added.
+  days.sort((a, b) => (a.day === b.day ? 0 : a.day < b.day ? 1 : -1));
 
   return (
     <div
@@ -518,7 +521,7 @@ function AttendanceDay({ org }) {
         gymId={gymId}
         words={words}
         refreshSignal={checkedIn}
-        canFix={mayCheckIn}
+        canFix={mayCheckIn && !consoleIsReadOnly(org)}
         onRemoved={() => {
           setRemoved((n) => n + 1);
           if (day === gymToday(timezone)) setAttempt((a) => a + 1);

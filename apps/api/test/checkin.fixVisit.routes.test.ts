@@ -14,7 +14,7 @@ import type {
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { deleteEntry, moveVisitLinks } from "../src/modules/orgs/memberList/repo.js";
+import { deleteEntry, deleteListForGym, moveVisitLinks } from "../src/modules/orgs/memberList/repo.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -290,6 +290,9 @@ d("fixing a visit (real Postgres)", () => {
       expect(await visitsOf(other.id)).toBe(1);
       expect(await removedOf(other.id)).toBe(0);
       expect(await visitsOf(gym.id)).toBe(1);
+      // Once that gym has removed its own visit, this gym still learns nothing of it.
+      expect((await remove(other.id, other.owner.cookies, otherVisit)).statusCode).toBe(200);
+      expect((await remove(gym.id, gym.owner.cookies, otherVisit)).statusCode).toBe(404);
 
       // A gym whose plan has lapsed changes nothing.
       const lapsed = await makeGym("Lapsed House", false);
@@ -548,6 +551,103 @@ d("fixing a visit (real Postgres)", () => {
   );
 
   it(
+    "a trainer the owner gave the tick to adds and removes; it is the tick, not the role",
+    async () => {
+      const { gym, member, visitId } = await gymWithMember("Tick House");
+      const trainer = await signedIn("Tara Trainer");
+      await addStaff(gym.id, trainer.userId, "trainer", ["attendance.read", "attendance.mark"]);
+      const added = await add(gym, trainer.cookies, { userId: member.userId }, ago(1));
+      expect(added.statusCode).toBe(200);
+      expect((JSON.parse(added.body) as AddVisitResponse).result).toBe("added");
+      expect((await remove(gym.id, trainer.cookies, visitId)).statusCode).toBe(200);
+      expect(await audits(gym.id, "attendance.visit_removed")).toEqual([{ actor: trainer.userId, target: visitId }]);
+    },
+    T,
+  );
+
+  it(
+    "one member of staff past 300 fixes an hour is told to wait; a colleague at the same address is not",
+    async () => {
+      const { gym, member } = await gymWithMember("Limit House");
+      const colleague = await signedIn("Cara Colleague");
+      await addStaff(gym.id, colleague.userId, "manager", null);
+      const address = "10.99.0.1";
+      const nobody = "00000000-0000-4000-8000-000000000000";
+      const ask = (cookies: Cookies) => inject("DELETE", `/v1/orgs/${gym.id}/attendance/visits/${nobody}`, cookies, undefined, address);
+      const answers = new Map<number, number>();
+      for (let i = 0; i < 300; i++) {
+        const status = (await ask(gym.owner.cookies)).statusCode;
+        answers.set(status, (answers.get(status) ?? 0) + 1);
+      }
+      expect([...answers]).toEqual([[404, 300]]);
+      expect((await ask(gym.owner.cookies)).statusCode).toBe(429);
+      // Adding is held to the same count.
+      expect((await inject("POST", `/v1/orgs/${gym.id}/attendance/visits`, gym.owner.cookies, { pick: { userId: member.userId }, day: ago(1) }, address)).statusCode).toBe(429);
+      expect(await visitsOf(gym.id)).toBe(1);
+      expect((await ask(colleague.cookies)).statusCode).toBe(404);
+    },
+    120_000,
+  );
+
+  it(
+    "a removed visit that names only a record shows to the one member holding that record, and only in its own period",
+    async () => {
+      const gym = await makeGym("Period House");
+      const member = await signedIn("Rina Record");
+      const entryId = await record(gym.id, "Rina Record");
+      await join(gym.id, member.userId, entryId);
+      // From before the app: the visit names her record and no account. Forty days ago is
+      // in no week or month that holds today or last week.
+      const old = await visit(gym, { entryId }, ago(40));
+      expect((await mine(gym, member)).value).toBe(1);
+      expect((await remove(gym.id, gym.owner.cookies, old)).statusCode).toBe(200);
+
+      const allTime = await mine(gym, member);
+      expect(allTime.value).toBe(0);
+      expect(allTime.notCounted.map((n) => ({ day: n.day, why: n.why }))).toEqual([{ day: ago(40), why: "removed" }]);
+      for (const period of ["this_week", "last_week"]) {
+        expect((await mine(gym, member, period)).notCounted, period).toEqual([]);
+      }
+    },
+    T,
+  );
+
+  it(
+    "Remove pressed at the same moment as a join of the person's two records, or a delete of their record, never answers a server error",
+    async () => {
+      const gym = await makeGym("Same Moment House");
+      for (let round = 0; round < 8; round++) {
+        const from = await record(gym.id, `Ravi Old ${String(round)}`);
+        const to = await record(gym.id, `Ravi Kept ${String(round)}`);
+        const visitId = await visit(gym, { entryId: from }, ago(3));
+        const [removed, merged] = await Promise.all([
+          remove(gym.id, gym.owner.cookies, visitId),
+          inject("POST", `/v1/orgs/${gym.id}/member-list/entries/${from}/merge`, gym.owner.cookies, { keepEntryId: to }),
+        ]);
+        expect(merged.statusCode, `join, round ${String(round)}`).toBe(200);
+        // Whichever went first, the visit is there to remove: on its record, or the kept one.
+        expect(removed.statusCode, `remove beside a join, round ${String(round)}`).toBe(200);
+        const kept = await sql<{ entry_id: string | null }[]>`
+          SELECT entry_id FROM gym_attendance_removed WHERE gym_id = ${gym.id} AND id = ${visitId}`;
+        expect(kept).toEqual([{ entry_id: to }]);
+      }
+      for (let round = 0; round < 8; round++) {
+        const former = await record(gym.id, `Fay Former ${String(round)}`, true);
+        const visitId = await visit(gym, { entryId: former }, ago(3));
+        const [removed, deleted] = await Promise.all([
+          remove(gym.id, gym.owner.cookies, visitId),
+          inject("DELETE", `/v1/orgs/${gym.id}/member-list/former/${former}`, gym.owner.cookies),
+        ]);
+        expect(deleted.statusCode, `delete, round ${String(round)}`).toBe(200);
+        // Removed first, or gone with its record: never a 500.
+        expect([200, 404], `remove beside a delete, round ${String(round)}`).toContain(removed.statusCode);
+      }
+      expect(await visitsOf(gym.id)).toBe(0);
+    },
+    120_000,
+  );
+
+  it(
     "the person's app streak loses a removed day",
     async () => {
       const gym = await makeGym("Streak House");
@@ -588,6 +688,25 @@ d("fixing a visit (real Postgres)", () => {
 
       await sql.begin(async (tx) => {
         await deleteEntry(tx, gym.id, to);
+      });
+      const left = await sql<{ id: string; entry_id: string | null; user_id: string | null }[]>`
+        SELECT id, entry_id, user_id FROM gym_attendance_removed WHERE gym_id = ${gym.id}`;
+      expect(left).toEqual([{ id: b, entry_id: null, user_id: withAccount.userId }]);
+    },
+    T,
+  );
+
+  it(
+    "a gym's whole list deleted keeps the removed visits that name an account, and takes the rest",
+    async () => {
+      const gym = await makeGym("Whole List House");
+      const entryId = await record(gym.id, "Lila Listed");
+      const withAccount = await account("Lila Account");
+      const a = await visit(gym, { entryId }, ago(3));
+      const b = await visit(gym, { entryId, userId: withAccount.userId }, ago(4));
+      for (const id of [a, b]) expect((await remove(gym.id, gym.owner.cookies, id)).statusCode).toBe(200);
+      await sql.begin(async (tx) => {
+        await deleteListForGym(tx, gym.id);
       });
       const left = await sql<{ id: string; entry_id: string | null; user_id: string | null }[]>`
         SELECT id, entry_id, user_id FROM gym_attendance_removed WHERE gym_id = ${gym.id}`;

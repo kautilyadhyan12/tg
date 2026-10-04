@@ -2218,7 +2218,14 @@ The row leaves `gym_attendance`, so no count reads it, and is kept under its own
 writes nothing more. A removed visit follows its record as a visit does (a join moves it,
 a deleted record takes the ones only it named). Both are noted in `audit_log`
 (`attendance.visit_added`, `attendance.visit_removed`) and the person's app streak is
-worked out again.
+worked out again: the streak they hold now. Their longest streak and any badge already
+earned are kept, as everywhere else in the app (a "longest" is never taken back), so a
+visit added by mistake and removed again can leave both. Remove tries once more when it
+meets a join of the person's two records or a delete of their record at the same moment,
+so it answers 200 or "not there any more", never a server error. The kept table's `method`
+and `hours_status` carry the visit table's own two CHECK lists. The member's own calendar
+and the console's lists print "Added later by staff" for such a visit, never a clock time,
+and a person's list of days is drawn newest day first.
 
 ### 12.6 Data
 

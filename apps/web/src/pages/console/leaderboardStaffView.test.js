@@ -260,7 +260,7 @@ describe('fixing a visit: the boxes', () => {
       'Their Gym days, this week, go from 2 to 1. Their streak is worked out again without that day.',
     ]);
     expect(box.keeps).toEqual([
-      'In their app, Chen Wu still sees it under "Didn\'t count", with your name and today\'s date.',
+      'In their app, Chen Wu still sees it under "Didn\'t count", with who removed it and today\'s date.',
       "Nobody else's visits change.",
     ]);
   });
@@ -290,7 +290,7 @@ describe('fixing a visit: the boxes', () => {
       'Chen Wu — a visit is added for Wed 7 Oct.',
       'Their Gym days, this week, go from 2 to 3. Their streak is worked out again with that day.',
     ]);
-    expect(inside.keeps).toEqual(["In their app, Chen Wu sees it with your name and today's date.", "Nobody else's visits change."]);
+    expect(inside.keeps).toEqual(["In their app, Chen Wu sees who added it and today's date.", "Nobody else's visits change."]);
     expect(inside.done).toBe('Visit added for Chen Wu on Wed 7 Oct.');
     const outside = addVisitBox('Chen Wu', '2026-09-30', COUNTED);
     expect(outside.changes[1]).toBe(

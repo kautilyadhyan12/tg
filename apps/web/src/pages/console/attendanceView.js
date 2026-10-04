@@ -40,7 +40,7 @@
 // deliberate and is the direction that already exists (the member's file imports
 // `clockLabel` from here): ONE implementation beats tidy layering, and two
 // spellings of one minute is the defect the card names.
-import { visitTimeLabel } from '../../components/gym/attendanceView';
+import { ADDED_LATER, visitTimeLabel } from '../../components/gym/attendanceView';
 
 /** WHO SEES THE ATTENDANCE SECTION — Kd's ruling 18 (:28107): *"also stafs can
  *  see it too default permission owner can change it"*.
@@ -127,7 +127,7 @@ export function personTimes(person, { timezone, clockFormat } = {}) {
       hoursStatus: visit?.hoursStatus ?? null,
       // A visit staff added on a later day (19a-iv) has no time of its own: `markedAt` is
       // when it was added.
-      time: visit?.hoursStatus === 'added_later' ? 'Added later by staff' : visitTimeLabel(visit?.markedAt, timezone, clockFormat),
+      time: visit?.hoursStatus === 'added_later' ? ADDED_LATER : visitTimeLabel(visit?.markedAt, timezone, clockFormat),
     }))
     .filter((chip) => chip.time !== '');
 }

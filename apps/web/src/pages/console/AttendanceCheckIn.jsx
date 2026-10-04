@@ -67,8 +67,9 @@ const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba
 export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal, onCheckedIn, onAdded }) {
   const today = gymToday(timezone);
   const range = addVisitWindow(today);
-  /** The day the visit is for: the gym's today, or an earlier day. */
-  const [day, setDay] = useState(today);
+  /** An earlier day staff picked; null follows the gym's today, past midnight too. */
+  const [picked, setPicked] = useState(null);
+  const day = picked !== null && picked < today ? picked : today;
   const earlier = day < today;
   /** The person an earlier day's visit is about to be added for. */
   const [adding, setAdding] = useState(null);
@@ -178,7 +179,7 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
           max={today}
           // A date box cleared with Backspace gives '': back to today.
           onChange={(e) => {
-            setDay(e.target.value === '' ? today : e.target.value);
+            setPicked(e.target.value === '' || e.target.value >= today ? null : e.target.value);
             setAdding(null);
             // The last answer was about another day.
             setAnswer(null);
@@ -253,10 +254,10 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
             Add a visit for {adding.name} on {dayLabel(day)}?
           </p>
           <p className="text-sm mt-1" style={muted}>
-            {adding.name} — a visit is added for {dayLabel(day)}. It counts as a gym day on the leaderboard and for their streak.
+            {adding.name} — a visit is added for {dayLabel(day)}. It counts as a gym day on the leaderboard, unless they already have a visit that day.
           </p>
           <p className="text-sm mt-1" style={muted}>
-            In their app, they see it with your name and today&apos;s date. Nobody else&apos;s visits change.
+            In their app, they see who added it and today&apos;s date. Nobody else&apos;s visits change.
           </p>
           <BoxButtons label="Add visit" busy={busy !== null} onPress={addVisit} onCancel={() => setAdding(null)} />
         </div>
@@ -449,8 +450,8 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
                       unless they have another visit today.
                     </p>
                     <p className="text-sm mt-1" style={muted}>
-                      In their app, they still see it under &ldquo;Didn&apos;t count&rdquo;, with your name and today&apos;s date. Nobody
-                      else&apos;s visits change.
+                      In their app, they still see it under &ldquo;Didn&apos;t count&rdquo;, with who removed it and today&apos;s date.
+                      Nobody else&apos;s visits change.
                     </p>
                     {removeError !== null ? (
                       <p className="text-sm mt-2" role="alert" style={{ color: '#f87171' }}>

@@ -1635,6 +1635,17 @@ d("0001_init on a real database", () => {
       expect(byName.get("gym_attendance_method_check")).toContain(`'${method}'`);
     }
     expect(byName.get("gym_attendance_who_check")).toBe("CHECK (((user_id IS NOT NULL) OR (entry_id IS NOT NULL)))");
+    expect(byName.get("gym_attendance_hours_status_check")).toContain("'added_later'");
+
+    // 0068: a removed visit is kept in `gym_attendance_removed`, whose two lists are the
+    // visit table's own. A value added to one and not the other would refuse a removal.
+    const kept = await sql<{ name: string; def: string }[]>`
+      SELECT conname AS name, pg_get_constraintdef(oid) AS def
+      FROM pg_constraint
+      WHERE conrelid = 'gym_attendance_removed'::regclass AND contype = 'c'`;
+    const keptByName = new Map(kept.map((r) => [r.name, r.def.replace(/\s+/g, " ")]));
+    expect(keptByName.get("gym_attendance_removed_method_check")).toBe(byName.get("gym_attendance_method_check"));
+    expect(keptByName.get("gym_attendance_removed_hours_status_check")).toBe(byName.get("gym_attendance_hours_status_check"));
 
     // BOTH ARMS OF THE PAIRING: a window is present exactly when the status is
     // `in_session`. One arm alone admits a row that claims a session and names
