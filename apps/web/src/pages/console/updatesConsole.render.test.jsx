@@ -89,7 +89,13 @@ describe('the page', () => {
     const [pinned, plain] = cards();
     expect(within(pinned).getByText('Maya Okafor')).toBeTruthy();
     expect(within(pinned).getByText('Pinned')).toBeTruthy();
-    expect(within(pinned).getByTestId('reactions').textContent).toBe('Like 3 · Strong 1');
+    // The reactions as members see them: an icon and a number each, and none for a zero.
+    const shown = within(within(pinned).getByTestId('reactions')).getAllByRole('img');
+    expect(shown.map((el) => [el.getAttribute('aria-label'), el.textContent])).toEqual([
+      ['Like, 3 people', '3'],
+      ['Strong, 1 person', '1'],
+    ]);
+    expect(shown.every((el) => el.querySelector('svg') !== null)).toBe(true);
     expect(within(pinned).getByRole('button', { name: 'Unpin' })).toBeTruthy();
     expect(within(plain).getByTestId('reactions').textContent).toBe('No reactions yet');
     expect(within(plain).getByRole('button', { name: 'Pin to the top' })).toBeTruthy();
@@ -129,7 +135,7 @@ describe('the page', () => {
     open({ ...ORG, orgType: 'studio' });
     await screen.findByTestId('composer');
     expect(composer().getByRole('button', { name: 'Post to your clients' })).toBeTruthy();
-    expect(screen.getByText('Every one of your clients in the app sees it straight away, under your name. Nobody is emailed.')).toBeTruthy();
+    expect(screen.getByText('Every one of your clients in the app sees it straight away. Nobody is emailed.')).toBeTruthy();
   });
 });
 

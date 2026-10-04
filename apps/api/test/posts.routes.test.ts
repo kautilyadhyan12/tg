@@ -340,6 +340,19 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       const stored = await sql<{ author_user_id: string }[]>`SELECT author_user_id FROM gym_posts WHERE id = ${first.id}`;
       expect(stored[0]?.author_user_id).toBe(manager.userId);
 
+      // An author whose app name is only their email's first part is never shown by it: the
+      // gym's own name stands in, or their name on the gym's list once they have one.
+      await sql`UPDATE users SET display_name = split_part(email::text, '@', 1) WHERE id = ${manager.userId}`;
+      expect((await feed(gym, viewer)).posts[1]?.author).toEqual({ name: null, initials: "" });
+      expect((await staffFeed(gym, gym.owner)).posts[1]?.author).toEqual({ name: null, initials: "" });
+      const entry = await sql<{ id: string }[]>`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+        VALUES (${gym.id}, 'Maya Okafor-Reid', ${`posts-r-${uniq()}@example.com`}, encode(sha256(${`posts-${uniq()}`}::bytea), 'hex'), 'typed')
+        RETURNING id`;
+      await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym.id}, ${manager.userId}, ${entry[0]?.id ?? ""}, now())`;
+      expect((await feed(gym, viewer)).posts[1]?.author).toEqual({ name: "Maya O.", initials: "MO" });
+      expect((await staffFeed(gym, gym.owner)).posts[1]?.author).toEqual({ name: "Maya Okafor-Reid", initials: "MO" });
+
       // An author whose account is no longer active is not named.
       await sql`UPDATE users SET status = 'deleted' WHERE id = ${trainer.userId}`;
       expect((await feed(gym, viewer)).posts[0]?.author).toEqual({ name: null, initials: "" });

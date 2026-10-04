@@ -12,7 +12,6 @@ import {
   pinNote,
   postedText,
   reactionButtons,
-  reactionSummary,
   removeBox,
   withPage,
   withPost,
@@ -84,11 +83,6 @@ describe('the reactions', () => {
       ['fire', 'Fire', 2, true],
     ]);
     expect(buttons.map((b) => b.label)).toEqual(['Like, 1 person', 'Love, 0 people', 'Strong, 1,200 people', 'Fire, 2 people, including you']);
-  });
-
-  it('are summed up for staff in words', () => {
-    expect(reactionSummary(post())).toBe('No reactions yet');
-    expect(reactionSummary(post({ reactions: { like: 3, love: 0, strong: 1, fire: 0 } }))).toBe('Like 3 · Strong 1');
   });
 
   it.each([

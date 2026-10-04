@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ImagePlus, Pin, PinOff, Trash2, X } from 'lucide-react';
+import { BicepsFlexed, Flame, Heart, ImagePlus, Pin, PinOff, ThumbsUp, Trash2, X } from 'lucide-react';
 import { postPhotoUrl, staffPostsService } from '../../api/postsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import PhotoViewer from '../../components/common/PhotoViewer';
@@ -15,7 +15,7 @@ import {
   photoProblem,
   pinNote,
   postedText,
-  reactionSummary,
+  reactionButtons,
   removeBox,
   withPage,
 } from '../../components/gym/postsView';
@@ -29,6 +29,7 @@ import { consoleIsReadOnly, readOnlyNote } from './billingView';
 // else whatever this screen shows.
 
 const newKey = () => globalThis.crypto.randomUUID();
+const REACTION_ICONS = { like: ThumbsUp, love: Heart, strong: BicepsFlexed, fire: Flame };
 
 function Composer({ gymId, gymName, words, onPosted }) {
   const [body, setBody] = useState('');
@@ -169,7 +170,7 @@ function Composer({ gymId, gymName, words, onPosted }) {
           {sending ? 'Posting…' : `Post to your ${words.people}`}
         </button>
       </div>
-      <p className="c-hint">{`Every one of your ${words.people} in the app sees it straight away, under your name. Nobody is emailed.`}</p>
+      <p className="c-hint">{`Every one of your ${words.people} in the app sees it straight away. Nobody is emailed.`}</p>
     </section>
   );
 }
@@ -178,6 +179,7 @@ function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, on
   const [asking, setAsking] = useState(false);
   const box = removeBox(post, words);
   const full = pinNote(post, pinnedCount);
+  const reactions = reactionButtons(post).filter((r) => r.count > 0);
   return (
     <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid="post">
       <div className="flex items-center gap-3">
@@ -217,9 +219,22 @@ function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, on
           ))}
         </ul>
       ) : null}
-      <p className="c-s13 c-t2" data-testid="reactions">
-        {reactionSummary(post)}
-      </p>
+      {/* The reactions as members see them: each one's icon and how many. Not buttons here. */}
+      <div className="flex flex-wrap items-center gap-2" data-testid="reactions">
+        {reactions.length === 0 ? (
+          <span className="c-s13 c-t2">No reactions yet</span>
+        ) : (
+          reactions.map((r) => {
+            const Icon = REACTION_ICONS[r.id];
+            return (
+              <span key={r.id} role="img" aria-label={r.label} title={r.word} className="c-tag c-tag-plain">
+                <Icon aria-hidden="true" className="w-4 h-4" style={{ color: 'var(--accent)' }} />
+                <span className="c-num c-w6">{r.count.toLocaleString('en')}</span>
+              </span>
+            );
+          })
+        )}
+      </div>
       {readOnly ? null : asking ? (
         <div role="group" aria-label={box.title} className="flex flex-col gap-2 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
           <p className="c-s15 c-w6 c-t1">{box.title}</p>

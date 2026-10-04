@@ -51,14 +51,6 @@ export function reactionButtons(post) {
   });
 }
 
-/** What staff see under a post: every reaction that has one, in words. */
-export function reactionSummary(post) {
-  const said = reactionButtons(post)
-    .filter((r) => r.count > 0)
-    .map((r) => `${r.word} ${r.count.toLocaleString('en')}`);
-  return said.length === 0 ? 'No reactions yet' : said.join(' · ');
-}
-
 /** The post after the reader taps a reaction: tapping their own takes it off. Shown at
  *  once, and put right by the server's answer. */
 export function withReaction(post, tapped) {

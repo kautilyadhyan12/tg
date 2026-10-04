@@ -2614,8 +2614,10 @@ gym page's limits: 2 MB each once the browser has shrunk it, cleaned by the same
 `cleanPhoto`), pin (at most 3, newest pin first) and remove. The same tick gates the
 page's reads and is the one the staff queue of §15.3 will read, in place of a second
 `posts.moderate`. Members read them on their gym's page under an **Updates** tab, the
-pinned ones first, 20 a page, with the author's first name and last initial (the gym's
-name when the author's account is gone). **A post stays until staff remove it** (RULINGS
+pinned ones first, 20 a page, with the author's first name and last initial (their name on the gym's list
+when the app's is only their email's first part; the gym's name when they have neither
+or the account is gone). Staff see each post's reactions as members do, an icon and a
+number each (Kd's click-through, RULINGS 2026-10-04). **A post stays until staff remove it** (RULINGS
 2026-10-04; the one-week life of 2026-08-25 is for members' photos, settled in 19b-ii).
 A removed post is gone for everyone at once: its photos' files and its reactions are
 deleted, and its row is kept with who removed it. The reactions are **Like · Love ·

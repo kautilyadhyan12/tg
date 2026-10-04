@@ -10,6 +10,8 @@ export interface PostRow {
   /** The author's app name and address while their account is active; null otherwise. */
   authorName: string | null;
   authorEmail: string | null;
+  /** Their name on this gym's list, shown when the app's name is an automatic one. */
+  authorRecordName: string | null;
   body: string;
   pinnedAt: Date | null;
   createdAt: Date;
@@ -20,6 +22,7 @@ interface RawPost {
   id: string;
   author_name: string | null;
   author_email: string | null;
+  author_record_name: string | null;
   body: string;
   pinned_at: Date | null;
   created_at: Date;
@@ -30,6 +33,7 @@ const toPost = (r: RawPost): PostRow => ({
   id: r.id,
   authorName: r.author_name,
   authorEmail: r.author_email,
+  authorRecordName: r.author_record_name,
   body: r.body,
   pinnedAt: r.pinned_at,
   createdAt: r.created_at,
@@ -40,9 +44,12 @@ function posts(sql: SqlOrTx, gymId: string) {
   return sql`
     SELECT p.id, p.body, p.pinned_at, p.created_at, p.post_key, p.removed_at IS NOT NULL AS removed,
            CASE WHEN u.status = 'active' THEN u.display_name END AS author_name,
-           CASE WHEN u.status = 'active' THEN u.email::text END AS author_email
+           CASE WHEN u.status = 'active' THEN u.email::text END AS author_email,
+           CASE WHEN u.status = 'active' THEN nullif(btrim(e.full_name), '') END AS author_record_name
     FROM gym_posts p
     LEFT JOIN users u ON u.id = p.author_user_id
+    LEFT JOIN gym_members am ON am.gym_id = p.gym_id AND am.user_id = p.author_user_id AND am.removed_at IS NULL
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = am.gym_id AND e.id = am.entry_id
     WHERE p.gym_id = ${gymId}`;
 }
 

@@ -71,7 +71,9 @@ async function shaped(deps: Pick<PostsDeps, "sql">, gymId: string, rows: readonl
     repo.reactionsOf(deps.sql, gymId, ids, viewerId),
   ]);
   return rows.map((r) => {
-    const who = { displayName: r.authorName ?? "", email: r.authorEmail, recordName: null };
+    // An automatic app name (the email's first part) is never shown: the gym's record of
+    // the person names them, and with neither the screen says the gym's own name.
+    const who = { displayName: r.authorName ?? "", email: r.authorEmail, recordName: r.authorRecordName };
     const named = staff ? fullName(who) : shownName(who);
     return gymPostSchema.parse({
       id: r.id,
