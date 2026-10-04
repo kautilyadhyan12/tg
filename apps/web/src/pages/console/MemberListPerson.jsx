@@ -19,6 +19,7 @@ import {
   MEMBER_INVITE_AGAIN_PER_PERSON,
   MEMBER_INVITE_AGAIN_PERSON_DAYS,
   MEMBER_INVITE_WORDS,
+  MEMBER_LIST_MAX_STATUS_CHARS,
   MEMBER_LIST_QUERY_MAX_CHARS,
   memberListReviewWords,
 } from '@app/shared';
@@ -664,7 +665,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       return;
     }
     try {
-      const res = await orgService.addMemberListEntry(gymId, input);
+      // The list's Membership column and filter show the type picked, as they show a file's word.
+      const named =
+        choice !== null && choice.type !== null && input.membershipType === undefined && choice.type.name.length <= MEMBER_LIST_MAX_STATUS_CHARS
+          ? { ...input, membershipType: choice.type.name }
+          : input;
+      const res = await orgService.addMemberListEntry(gymId, named);
       let notGiven = null;
       if (choice !== null && choice.type !== null) {
         try {
@@ -935,7 +941,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         </label>
       ))}
       <p className="c-hint -mt-2 m-0">An email address or a phone number is needed to tell people apart.</p>
-      {WORD_FIELDS.map((f) => {
+      {/* Adding somebody at a gym with a price list asks about their membership once, in
+          "Give a membership" below (Kd, 2026-10-04): the list's own Membership word is not
+          asked beside it, and takes the name of the type picked. */}
+      {WORD_FIELDS.filter((f) => !(id === null && giveTypes !== null && f.key === 'membershipType')).map((f) => {
         const listId = `${titleId}-${f.key}`;
         const known = (list?.[f.from] ?? []).map((w) => w.label).filter((w) => w !== '');
         // The box takes any word; the suggestions are the gym's own, so a word is not

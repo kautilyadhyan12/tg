@@ -356,12 +356,17 @@ describe('Add member gives a membership in the same form', () => {
     ]);
     // Nothing picked: no date, no tick.
     expect(choice.queryByRole('checkbox')).toBeNull();
+    // One membership question, not two: the list's own Membership word is not asked beside it.
+    expect(screen.queryByLabelText('Membership')).toBeNull();
+    expect(screen.getByLabelText('Status')).toBeTruthy();
+    expect(screen.getByLabelText('Payment status')).toBeTruthy();
     typeName('Name', 'Bea Hart');
     typeName('Email', 'bea@members.example');
     fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
     await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
     await screen.findByRole('status');
     expect(orgService.giveHeldMembership).not.toHaveBeenCalled();
+    expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
   });
 
   it('gives the membership picked to the person just added, and to nobody else', async () => {
@@ -378,8 +383,8 @@ describe('Add member gives a membership in the same form', () => {
     const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
     expect([gym, entry]).toEqual([GYM, BEA]);
     expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: PACK.id, startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), paid: true });
-    // The person was added first, without the membership's fields in their own details.
-    expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
+    // The person was added first, with the type's name as their Membership word on the list.
+    expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example', membershipType: '10 classes' });
     expect(orgService.addMemberListEntry.mock.invocationCallOrder[0]).toBeLessThan(orgService.giveHeldMembership.mock.invocationCallOrder[0]);
     // Their page opens, with the Memberships box read for them.
     await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, BEA));
@@ -426,6 +431,8 @@ describe('Add member gives a membership in the same form', () => {
     await waitFor(() => expect(orgService.getMembershipTypes).toHaveBeenCalledWith(GYM));
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByTestId('add-membership')).toBeNull();
+    // Its own word for a membership is still asked.
+    expect(screen.getByLabelText('Membership')).toBeTruthy();
   });
 });
 

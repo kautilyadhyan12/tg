@@ -2370,7 +2370,9 @@ just show (§11).
 - Add member carries the same choice ("Give a membership": a type, a start date, paid;
   "No membership" until staff pick one). The person is added first and the membership
   given next, by the two routes above; where the second fails the person stays added and
-  the page says the membership was not (RULINGS 2026-10-04).
+  the page says the membership was not (RULINGS 2026-10-04). Where the gym has a price
+  list the form does not also ask the list's own Membership word (§11): it takes the
+  name of the type picked. Edit, and a gym with no price list, keep that box.
 - Not here: bills and money (18a), a file's word linked to a type (17a-iii), a pack's
   classes used by a booking (17c), who a desk lets in (16d).
 
