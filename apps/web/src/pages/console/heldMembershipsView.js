@@ -55,8 +55,10 @@ export function datesLine(m) {
 
 function listDatesLine(m) {
   const { status, endsOn } = m.view;
-  // The list's own day, also for somebody paid further ahead than one period.
-  const renewsOn = shownRenewal(m.view);
+  // The list's own day, also for somebody paid further ahead than one period. A free
+  // repeating one has nothing paid up to that day, so the rule's next renewal is not
+  // the list's day: none is printed.
+  const renewsOn = m.kind === 'recurring' && m.priceMinor === 0 ? null : shownRenewal(m.view);
   const from = 'From your list';
   if (status === 'cancelled') return `${from} · Cancelled ${endsOn === null ? '' : dayWords(endsOn)}`.trim();
   if (status === 'ended') return endsOn === null ? from : `${from} · Ended ${dayWords(endsOn)}`;

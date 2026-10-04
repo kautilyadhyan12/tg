@@ -40,8 +40,10 @@ import {
 import type { TransactionSql } from "postgres";
 import { z } from "zod";
 import { bustEntitlements } from "../../entitlements/service.js";
+import { dayInTz } from "../../gamification/streak.js";
 import { acceptAgainForAccounts, markWrongPersonFor, withdrawForAccounts, withdrawForAddress } from "../invites/join.js";
 import { invitationsOf, inviteEntryInTx, readyToSend } from "../invites/service.js";
+import { settle as settleHeldMemberships } from "../memberships/heldRepo.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit, placesFree } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -776,7 +778,7 @@ export async function mergeEntries(
   acknowledgeLeavesList: boolean,
   limit: () => Promise<boolean>,
 ): Promise<WriteAnswer> {
-  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (goneId === keepId) throw new OrgsError(400, "merge_same", MEMBER_LIST_BY_HAND_WORDS.merge_same);
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
@@ -802,6 +804,9 @@ export async function mergeEntries(
     // (the reference test lists every table that does).
     await repo.moveMembershipLinks(tx, gymId, goneId, keepId);
     await repo.moveLeadLinks(tx, gymId, goneId, keepId);
+    // What the clock has ended on the kept record is marked first: only a membership
+    // still in use there keeps the other record's from-list one from moving.
+    await settleHeldMemberships(tx, gymId, keepId, dayInTz(at, org.timezone), at);
     const memberships = await repo.moveHeldMemberships(tx, gymId, goneId, keepId);
     await repo.moveVisitLinks(tx, gymId, goneId, keepId);
     await repo.deleteEntry(tx, gymId, goneId);

@@ -328,6 +328,9 @@ describe("a membership from the list on a person's page", () => {
     expect(datesLine(held({}, { renewsOn: '2026-10-22', payment: { state: 'paid', until: '2027-04-22' } }))).toBe('From your list · Renews 22 April 2027');
     expect(datesLine(held({}, { renewsOn: '2026-11-14', payment: { state: 'paid', until: '2026-11-14' } }))).toBe('From your list · Renews 14 November 2026');
     expect(datesLine(held({}, { renewsOn: '2026-11-03', payment: { state: 'due', since: '2026-09-03' } }))).toBe('From your list · Renews 3 November 2026');
+    // Free and renewing: nothing is paid up to the list's day, so no day is claimed as the list's.
+    expect(datesLine(held({ priceMinor: 0 }, { renewsOn: '2026-10-22' }))).toBe('From your list');
+    expect(datesLine(held({ priceMinor: 4999 }, { renewsOn: '2026-10-22' }))).toBe('From your list · Renews 22 October 2026');
     // One given by hand reads as it did.
     expect(datesLine(held({ fromList: false }))).toBe('Started 14 September 2026 · Renews 14 November 2026');
   });

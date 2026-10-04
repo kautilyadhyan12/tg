@@ -259,7 +259,7 @@ async function lockedEntry(tx: TransactionSql, gymId: string, entryId: string): 
 
 /** Mark the record's memberships the clock has ended, and answer how many are still in
  *  use. Under the record's lock. */
-async function settle(tx: TransactionSql, gymId: string, entryId: string, today: string, now: Date): Promise<number> {
+export async function settle(tx: TransactionSql, gymId: string, entryId: string, today: string, now: Date): Promise<number> {
   const rows = (await held(tx, gymId, entryId, IN_USE, IN_USE_READ)).map(shape);
   const ended = rows.filter((row) => heldMembershipView(row.membership, today).status === "ended").map((row) => row.id);
   if (ended.length > 0) {

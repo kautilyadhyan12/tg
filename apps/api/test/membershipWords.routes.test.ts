@@ -756,6 +756,33 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       expect((JSON.parse((await link(gymId, owner.cookies, "Gold", gold)).body) as MembershipLinkResponse).given).toBe(1);
       expect((await post(`${entryUrl(gymId, carrier)}/merge`, { keepEntryId: lone, acknowledgeLeavesList: true }, owner.cookies)).statusCode).toBe(200);
       expect((await pageOf(gymId, lone, owner.cookies)).map((m) => [m.typeName, m.fromList])).toEqual([["Gold Monthly", true]]);
+
+      // THE OTHER WAY ROUND: the kept record's one is OVER and the other record's is the
+      // person's running, paid-up membership. It moves; the person is never left ended.
+      const lapsedKeep = await addPerson(gymId, owner.cookies, "Lapsed Keep");
+      const old = await given(gymId, lapsedKeep, owner.cookies, { typeId: gold, startsOn: today });
+      expect((await post(`${heldUrl(gymId, lapsedKeep)}/${old.memberships[0]?.id ?? ""}/cancel`, { when: "today" }, owner.cookies)).statusCode).toBe(200);
+      const lapsedDup = await addPerson(gymId, owner.cookies, "Lapsed Dup", { membershipType: "Gold", endsOn: addDays(today, 60), endsOnKind: "renews" });
+      expect((JSON.parse((await link(gymId, owner.cookies, "Gold", gold)).body) as MembershipLinkResponse).given).toBe(1);
+      expect((await post(`${entryUrl(gymId, lapsedDup)}/merge`, { keepEntryId: lapsedKeep, acknowledgeLeavesList: true }, owner.cookies)).statusCode).toBe(200);
+      const kept = (await pageOf(gymId, lapsedKeep, owner.cookies)).filter((m) => m.typeId === gold);
+      expect(kept.map((m) => m.view.status).sort()).toEqual(["active", "cancelled"]);
+      expect(kept.find((m) => m.view.status === "active")?.view.payment).toEqual({ state: "paid", until: addDays(today, 60) });
+
+      // The same where the kept record's one was ended by the CLOCK and nothing has
+      // written that down yet: stored as running, over in fact.
+      const term = await addType(gymId, owner.cookies, oneMonth({ name: "One month" }));
+      const clockKeep = await addPerson(gymId, owner.cookies, "Clock Keep");
+      await sql`
+        INSERT INTO gym_held_memberships
+          (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews)
+        VALUES (${gymId}, ${clockKeep}, ${term}, gen_random_uuid(), 'one_time', 4999, 'GBP', 1, 'month', ${addDays(today, -40)}::date, 'active', 1, false)`;
+      const clockDup = await addPerson(gymId, owner.cookies, "Clock Dup", { membershipType: "Monthly pass", endsOn: addDays(today, 20), endsOnKind: "ends" });
+      expect((JSON.parse((await link(gymId, owner.cookies, "Monthly pass", term)).body) as MembershipLinkResponse).given).toBe(1);
+      expect((await post(`${entryUrl(gymId, clockDup)}/merge`, { keepEntryId: clockKeep, acknowledgeLeavesList: true }, owner.cookies)).statusCode).toBe(200);
+      const clocked = (await pageOf(gymId, clockKeep, owner.cookies)).filter((m) => m.typeId === term);
+      expect(clocked.map((m) => m.view.status).sort()).toEqual(["active", "ended"]);
+      expect(clocked.find((m) => m.view.status === "active")?.view.endsOn).toBe(addDays(today, 20));
     },
     TEST_TIMEOUT_MS,
   );

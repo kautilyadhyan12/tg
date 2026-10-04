@@ -2397,7 +2397,8 @@ memberships, Settings → Memberships.
   of the month. Somebody paid further ahead than one period (a year paid on a type
   set up as monthly) renews in the rule every period and owes nothing until the list's
   day: every screen prints the list's day (`shownRenewal`), in the box's row and on
-  the person's page. The periods up to the list's day are the list's own fact, so
+  the person's page. A free repeating one has nothing paid up to that day, so its page
+  reads "From your list" with no renewal day. The periods up to the list's day are the list's own fact, so
   Undo mark paid never goes below them. Any other kind runs through the list's last day; where the type's own
   term does not reach it, the days between are counted in `frozen_days`. One whose day
   has passed is not given (`ended`), nor one whose worked-back start would be before
@@ -2424,8 +2425,10 @@ memberships, Settings → Memberships.
   Renews 14 November 2026", never the worked-back day as the day they started.
 - **A person on the list twice** has the name on both records, and both are given the
   type. Joining the two records (§11.6) does not move a from-list membership onto a
-  kept record that holds, or has held, that type: it goes with its record, and the
-  join's note counts it. Any other membership moves as before.
+  kept record that has that type IN USE: it goes with its record, and the join's note
+  counts it. Where the kept record's one is over (cancelled, or ended, the clock's
+  endings marked first), the other record's is the person's running membership and
+  moves, as any other membership does.
 - One link a word. A second type is refused until the link is removed; removing it
   changes nobody. The link is remembered and never acts by itself: people who arrive
   with the word later are given it on a press.

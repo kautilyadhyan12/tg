@@ -2254,9 +2254,12 @@ export async function moveLeadLinks(tx: TransactionSql, gymId: string, fromEntry
 
 /** Two records joined: the memberships the one not kept holds become the kept one's
  *  (17a-ii), each as it is. One taken from the list (17a-iii) is NOT moved where the kept
- *  record holds, or has held, that type: a list with one person on it twice gave both
- *  records the type, and moving it would leave that person two of it, both asking to be
- *  paid. It goes with its record. Answers how many moved and how many were left. */
+ *  record has that type IN USE: a list with one person on it twice gave both records the
+ *  type, and moving it would leave that person two of it running, both asking to be
+ *  paid. It goes with its record. Where the kept record's one is over (cancelled, or
+ *  ended), the other record's is the person's running membership and moves like any
+ *  other. The caller marks what the clock has ended on the kept record first, so
+ *  `status` here is what it is today. Answers how many moved and how many were left. */
 export async function moveHeldMemberships(
   tx: TransactionSql,
   gymId: string,
@@ -2268,7 +2271,8 @@ export async function moveHeldMemberships(
     WHERE h.gym_id = ${gymId} AND h.entry_id = ${fromEntryId}
       AND NOT (h.from_list AND EXISTS (
         SELECT 1 FROM gym_held_memberships k
-        WHERE k.gym_id = h.gym_id AND k.entry_id = ${toEntryId} AND k.membership_type_id = h.membership_type_id))
+        WHERE k.gym_id = h.gym_id AND k.entry_id = ${toEntryId} AND k.membership_type_id = h.membership_type_id
+          AND k.status IN ('active','frozen')))
     RETURNING h.id`;
   const [rest] = await tx<{ n: number }[]>`
     SELECT count(*)::int AS n FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}`;
