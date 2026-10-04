@@ -11,8 +11,11 @@ import {
   GYM_POSTS_PAGE,
   GYM_POST_MAX_PINNED,
   GYM_POST_REACTIONS,
+  GYM_POST_REACTORS_SHOWN,
   GYM_POST_WORDS,
   gymPostReactionResponseSchema,
+  gymPostReactorsResponseSchema,
+  type GymPostReactorsResponse,
   gymPostSchema,
   gymPostsResponseSchema,
   staffGymPostsResponseSchema,
@@ -140,6 +143,33 @@ export async function getStaffPosts(
   if (!(await limit())) return null;
   const live = await gymIsLive(deps.sql, gymId, org.status);
   return staffGymPostsResponseSchema.parse({ gymId, gymName: org.name, live, ...(await page(deps, gymId, staffId, before, true)) });
+}
+
+/** Who gave one reaction to a post, by whole name, for staff holding the tick. Members are
+ *  never sent this: they see the counts only. */
+export async function getReactors(
+  deps: Pick<PostsDeps, "sql">,
+  staffId: string,
+  gymId: string,
+  postId: string,
+  reaction: GymPostReaction,
+  limit: Limit,
+): Promise<GymPostReactorsResponse | null> {
+  await requirePrivilege(deps, gymId, staffId, TICK);
+  if (!(await limit())) return null;
+  if ((await repo.postById(deps.sql, gymId, postId)) === null) throw postNotFound();
+  const [counts, people] = await Promise.all([
+    repo.reactionCounts(deps.sql, gymId, [postId]),
+    repo.reactorsOf(deps.sql, gymId, postId, reaction, GYM_POST_REACTORS_SHOWN),
+  ]);
+  return gymPostReactorsResponseSchema.parse({
+    reaction,
+    total: countsOf(counts, postId)[reaction],
+    people: people.map((p) => {
+      const named = fullName(p);
+      return { name: named.name, initials: named.name === null ? "" : named.initials };
+    }),
+  });
 }
 
 async function removeFiles(deps: Pick<PostsDeps, "photos" | "log">, keys: readonly string[]): Promise<void> {

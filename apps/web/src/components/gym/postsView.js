@@ -51,6 +51,18 @@ export function reactionButtons(post) {
   });
 }
 
+/** The heading over the names staff see for one reaction: "Fire · 2 people". */
+export function reactorsTitle(reaction) {
+  return `${reaction.word} · ${reaction.count === 1 ? '1 person' : `${reaction.count.toLocaleString('en')} people`}`;
+}
+
+/** What follows the names when there are more than the list carries, or people whose
+ *  account is gone: "and 12 more". Null when every one is named. */
+export function reactorsMore(who) {
+  const left = who.total - who.people.length;
+  return left > 0 ? `and ${left.toLocaleString('en')} more` : null;
+}
+
 /** The post after the reader taps a reaction: tapping their own takes it off. Shown at
  *  once, and put right by the server's answer. */
 export function withReaction(post, tapped) {

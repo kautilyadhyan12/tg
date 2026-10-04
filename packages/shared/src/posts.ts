@@ -117,7 +117,22 @@ export const gymPostReactionResponseSchema = z
   .strict();
 export type GymPostReactionResponse = z.infer<typeof gymPostReactionResponseSchema>;
 
-export const gymPostParamsSchema = z.object({ gymId: z.string().uuid(), postId: z.string().uuid() }).strict();
+// ── WHO REACTED, for staff holding `posts.manage` (Kd's click-through of 19b-i) ──
+
+/** The most names one reaction's list carries, newest first; `total` says how many there are. */
+export const GYM_POST_REACTORS_SHOWN = 100;
+export const gymPostReactorsQuerySchema = z.object({ reaction: gymPostReactionSchema }).strict();
+export const gymPostReactorsResponseSchema = z
+  .object({
+    reaction: gymPostReactionSchema,
+    total: z.number().int().nonnegative(),
+    /** Whole names, as on Members; null for a person with no name to show. */
+    people: z.array(z.object({ name: z.string().nullable(), initials: z.string() }).strict()).max(GYM_POST_REACTORS_SHOWN),
+  })
+  .strict();
+export type GymPostReactorsResponse = z.infer<typeof gymPostReactorsResponseSchema>;
+
+export const gymPostParamsSchema =z.object({ gymId: z.string().uuid(), postId: z.string().uuid() }).strict();
 export const gymPostPhotoParamsSchema = gymPostParamsSchema.extend({ photoId: z.string().uuid() }).strict();
 
 /** What a person reads when a post cannot be made, changed or found. */

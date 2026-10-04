@@ -1,5 +1,6 @@
 import {
   gymPostReactionResponseSchema,
+  gymPostReactorsResponseSchema,
   gymPostResponseSchema,
   gymPostsResponseSchema,
   removedGymPostResponseSchema,
@@ -44,6 +45,9 @@ export const postsService = {
 // else whatever a screen shows.
 export const staffPostsService = {
   list: (gymId, before) => readThrough(staffGymPostsResponseSchema, 'the updates', authApi.get(`${gymPath(gymId)}/staff`, from(before))),
+  /** Who gave one reaction to a post, by name. */
+  reactors: (gymId, postId, reaction) =>
+    readThrough(gymPostReactorsResponseSchema, 'who reacted', authApi.get(`${postPath(gymId, postId)}/reactions`, { params: { reaction } })),
   /** A new post: its words and photos (base64, already shrunk), under the key it was
    *  written under, so sending it again after a lost reply makes no second post. */
   add: (gymId, postKey, body, photos) => readThrough(gymPostResponseSchema, 'your post', authApi.post(gymPath(gymId), { postKey, body, photos })),

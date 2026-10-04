@@ -2616,8 +2616,10 @@ page's reads and is the one the staff queue of §15.3 will read, in place of a s
 `posts.moderate`. Members read them on their gym's page under an **Updates** tab, the
 pinned ones first, 20 a page, with the author's first name and last initial (their name on the gym's list
 when the app's is only their email's first part; the gym's name when they have neither
-or the account is gone). Staff see each post's reactions as members do, an icon and a
-number each (Kd's click-through, RULINGS 2026-10-04). **A post stays until staff remove it** (RULINGS
+or the account is gone). Staff see each post's reactions as members do, a filled icon and a
+number each, and a press on one lists who gave it by whole name, newest first, 100 at
+most (`GET …/posts/:postId/reactions?reaction=`, the tick's alone; members see only the
+counts) (Kd's click-through, RULINGS 2026-10-04). **A post stays until staff remove it** (RULINGS
 2026-10-04; the one-week life of 2026-08-25 is for members' photos, settled in 19b-ii).
 A removed post is gone for everyone at once: its photos' files and its reactions are
 deleted, and its row is kept with who removed it. The reactions are **Like · Love ·

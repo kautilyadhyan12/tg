@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-const svc = { list: vi.fn(), add: vi.fn(), setPinned: vi.fn(), remove: vi.fn() };
+const svc = { list: vi.fn(), add: vi.fn(), setPinned: vi.fn(), remove: vi.fn(), reactors: vi.fn() };
 const orgApi = { getMine: vi.fn() };
 const prepare = vi.fn();
 vi.mock('../../api/postsApi', () => ({
@@ -90,12 +90,13 @@ describe('the page', () => {
     expect(within(pinned).getByText('Maya Okafor')).toBeTruthy();
     expect(within(pinned).getByText('Pinned')).toBeTruthy();
     // The reactions as members see them: an icon and a number each, and none for a zero.
-    const shown = within(within(pinned).getByTestId('reactions')).getAllByRole('img');
+    const shown = within(within(pinned).getByTestId('reactions')).getAllByRole('button');
     expect(shown.map((el) => [el.getAttribute('aria-label'), el.textContent])).toEqual([
-      ['Like, 3 people', '3'],
-      ['Strong, 1 person', '1'],
+      ['Like, 3 people. See who', '3'],
+      ['Strong, 1 person. See who', '1'],
     ]);
-    expect(shown.every((el) => el.querySelector('svg') !== null)).toBe(true);
+    // Each icon is filled with the console's accent colour, by name.
+    expect(shown.every((el) => el.querySelector('svg')?.style.fill === 'var(--accent)')).toBe(true);
     expect(within(pinned).getByRole('button', { name: 'Unpin' })).toBeTruthy();
     expect(within(plain).getByTestId('reactions').textContent).toBe('No reactions yet');
     expect(within(plain).getByRole('button', { name: 'Pin to the top' })).toBeTruthy();
@@ -136,6 +137,61 @@ describe('the page', () => {
     await screen.findByTestId('composer');
     expect(composer().getByRole('button', { name: 'Post to your clients' })).toBeTruthy();
     expect(screen.getByText('Every one of your clients in the app sees it straight away. Nobody is emailed.')).toBeTruthy();
+  });
+});
+
+describe('who reacted', () => {
+  const liked = () => feed({ posts: [post('a', 'New racks', { reactions: { like: 3, love: 0, strong: 0, fire: 1 } })] });
+
+  it('a press on a reaction shows who gave it, by name; a second press or Close folds it away', async () => {
+    svc.list.mockResolvedValue(liked());
+    svc.reactors.mockResolvedValue({ reaction: 'like', total: 3, people: [{ name: 'Asha Rao', initials: 'AR' }, { name: null, initials: '' }] });
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    const card = within(cards()[0]);
+    expect(svc.reactors).not.toHaveBeenCalled();
+    fireEvent.click(card.getByRole('button', { name: 'Like, 3 people. See who' }));
+    expect(svc.reactors).toHaveBeenCalledWith('g1', 'a', 'like');
+    const box = within(await card.findByRole('region', { name: 'Who reacted Like' }));
+    expect(box.getByText('Like · 3 people')).toBeTruthy();
+    expect((await box.findAllByRole('listitem')).map((li) => li.textContent)).toEqual(['Asha Rao', 'No name yet']);
+    // One of the three is not in the list (an account that is gone): said, never hidden.
+    expect(box.getByText('and 1 more')).toBeTruthy();
+    expect(card.getByRole('button', { name: 'Like, 3 people. See who' }).getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(box.getByRole('button', { name: 'Close' }));
+    expect(card.queryByRole('region')).toBeNull();
+    fireEvent.click(card.getByRole('button', { name: 'Like, 3 people. See who' }));
+    fireEvent.click(card.getByRole('button', { name: 'Like, 3 people. See who' }));
+    expect(card.queryByRole('region')).toBeNull();
+  });
+
+  it('pressing another reaction shows that one, and a slow answer to the first is never drawn under it', async () => {
+    svc.list.mockResolvedValue(liked());
+    let first;
+    svc.reactors
+      .mockReturnValueOnce(new Promise((resolve) => (first = resolve)))
+      .mockResolvedValueOnce({ reaction: 'fire', total: 1, people: [{ name: 'Chen Wu', initials: 'CW' }] });
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    const card = within(cards()[0]);
+    fireEvent.click(card.getByRole('button', { name: 'Like, 3 people. See who' }));
+    fireEvent.click(card.getByRole('button', { name: 'Fire, 1 person. See who' }));
+    const box = within(await card.findByRole('region', { name: 'Who reacted Fire' }));
+    expect(await box.findByText('Chen Wu')).toBeTruthy();
+    first({ reaction: 'like', total: 3, people: [{ name: 'Asha Rao', initials: 'AR' }] });
+    await Promise.resolve();
+    expect(box.queryByText('Asha Rao')).toBeNull();
+    expect(box.getByText('Fire · 1 person')).toBeTruthy();
+  });
+
+  it('says so when the names cannot be read', async () => {
+    svc.list.mockResolvedValue(liked());
+    svc.reactors.mockRejectedValue(new Error('down'));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(within(cards()[0]).getByRole('button', { name: 'Like, 3 people. See who' }));
+    expect((await within(cards()[0]).findByRole('alert')).textContent).toMatch(/Couldn't reach the server/);
   });
 });
 

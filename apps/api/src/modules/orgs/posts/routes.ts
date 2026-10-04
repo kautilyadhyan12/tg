@@ -8,6 +8,7 @@ import {
   addGymPostRequestSchema,
   gymPostParamsSchema,
   gymPostPhotoParamsSchema,
+  gymPostReactorsQuerySchema,
   gymPostsQuerySchema,
   pinGymPostRequestSchema,
   reactToGymPostRequestSchema,
@@ -118,6 +119,16 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     const posts = await service.getStaffPosts(postsDeps, requireUserId(req), params.gymId, query.before, gate(staffReadLimit)(req, reply));
     if (posts === null) return;
     return reply.status(200).send(posts);
+  });
+
+  app.get("/v1/orgs/:gymId/posts/:postId/reactions", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(gymPostReactorsQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const who = await service.getReactors(postsDeps, requireUserId(req), params.gymId, params.postId, query.reaction, gate(staffReadLimit)(req, reply));
+    if (who === null) return;
+    return reply.status(200).send(who);
   });
 
   // A post's body is up to 11 MB of photos, and reading it holds the server's one thread.

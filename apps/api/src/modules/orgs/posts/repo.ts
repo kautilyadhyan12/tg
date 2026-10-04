@@ -128,6 +128,26 @@ export async function reactionsOf(sql: SqlOrTx, gymId: string, postIds: readonly
   return new Map(rows.map((r) => [r.post_id, r.reaction]));
 }
 
+export interface ReactorRow {
+  displayName: string;
+  email: string | null;
+  recordName: string | null;
+}
+
+/** Who gave this reaction to this gym's post, newest first: people whose account is active. */
+export async function reactorsOf(sql: SqlOrTx, gymId: string, postId: string, reaction: GymPostReaction, limit: number): Promise<ReactorRow[]> {
+  const rows = await sql<{ display_name: string; email: string | null; record_name: string | null }[]>`
+    SELECT u.display_name, u.email::text AS email, nullif(btrim(e.full_name), '') AS record_name
+    FROM gym_post_reactions r
+    JOIN users u ON u.id = r.user_id AND u.status = 'active'
+    LEFT JOIN gym_members m ON m.gym_id = r.gym_id AND m.user_id = r.user_id AND m.removed_at IS NULL
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id
+    WHERE r.gym_id = ${gymId} AND r.post_id = ${postId} AND r.reaction = ${reaction}
+    ORDER BY r.created_at DESC, r.user_id
+    LIMIT ${limit}`;
+  return rows.map((r) => ({ displayName: r.display_name, email: r.email, recordName: r.record_name }));
+}
+
 /** Keeps the post; false when the gym already keeps one under this key. */
 export async function insertPost(
   tx: TransactionSql,

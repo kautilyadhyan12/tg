@@ -12,6 +12,8 @@ import {
   pinNote,
   postedText,
   reactionButtons,
+  reactorsMore,
+  reactorsTitle,
   removeBox,
   withPage,
   withPost,
@@ -83,6 +85,14 @@ describe('the reactions', () => {
       ['fire', 'Fire', 2, true],
     ]);
     expect(buttons.map((b) => b.label)).toEqual(['Like, 1 person', 'Love, 0 people', 'Strong, 1,200 people', 'Fire, 2 people, including you']);
+  });
+
+  it('heads the names staff see, and says how many are not listed', () => {
+    const [like, , strong] = reactionButtons(post({ reactions: { like: 1, love: 0, strong: 1200, fire: 0 } }));
+    expect(reactorsTitle(like)).toBe('Like · 1 person');
+    expect(reactorsTitle(strong)).toBe('Strong · 1,200 people');
+    expect(reactorsMore({ total: 2, people: [{}, {}] })).toBeNull();
+    expect(reactorsMore({ total: 1200, people: Array.from({ length: 100 }, () => ({})) })).toBe('and 1,100 more');
   });
 
   it.each([

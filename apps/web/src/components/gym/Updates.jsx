@@ -93,7 +93,7 @@ function Post({ gymId, gymName, post, busy, onReact, onOpen }) {
                   : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }
               }
             >
-              <Icon className="w-4 h-4" aria-hidden="true" style={r.mine ? { fill: 'rgba(255,138,31,0.25)' } : undefined} />
+              <Icon className="w-4 h-4" aria-hidden="true" style={r.mine ? { fill: ORANGE } : undefined} />
               {r.count > 0 && <span>{r.count.toLocaleString('en')}</span>}
             </button>
           );

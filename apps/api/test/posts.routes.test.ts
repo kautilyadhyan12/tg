@@ -226,7 +226,10 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       const memberFeed = posts(gym.id);
       const staffRead = `${posts(gym.id)}/staff`;
       const photoPath = `${posts(gym.id)}/${post.id}/photos/${photoId}`;
-      const leaks = /Closed on Friday|floor to be laid|Private House Owner|Owner/;
+      // A member's reaction: who gave it is for this gym's staff holding the tick alone.
+      expect((await react(gym, inside, post.id, "fire")).statusCode).toBe(200);
+      const whoReacted = `${posts(gym.id)}/${post.id}/reactions?reaction=fire`;
+      const leaks = /Closed on Friday|floor to be laid|Private House Owner|Owner|Vera|Viewer/;
 
       // who, cookies, then the status of: the member feed, the staff feed, the photo, a
       // staff write, a reaction.
@@ -243,6 +246,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
         const reads: [string, number][] = [
           [memberFeed, feedStatus],
           [staffRead, staffStatus],
+          [whoReacted, staffStatus],
           [photoPath, photoStatus],
         ];
         for (const [path, status] of reads) {
@@ -261,6 +265,13 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       }
       // A member of this gym is not its staff.
       expect((await inject("GET", staffRead, inside.cookies)).statusCode).toBe(404);
+      // Nor is a member told who reacted, their own reaction included.
+      const asMember = await inject("GET", whoReacted, inside.cookies);
+      expect([asMember.statusCode, /Vera/.test(asMember.body)]).toEqual([404, false]);
+      expect((await inject("GET", `${posts(other.id)}/${post.id}/reactions?reaction=fire`, other.owner.cookies)).statusCode).toBe(404);
+      // This gym's owner reads it.
+      const asOwner = await inject("GET", whoReacted, gym.owner.cookies);
+      expect([asOwner.statusCode, JSON.parse(asOwner.body)]).toEqual([200, { reaction: "fire", total: 1, people: [{ name: "Vera Viewer", initials: "VV" }] }]);
       expect((await inject("DELETE", `${posts(gym.id)}/${post.id}`, inside.cookies)).statusCode).toBe(404);
       // This gym's post is not reached through another gym's address, by that gym's own people.
       expect((await inject("GET", `${posts(other.id)}/${post.id}/photos/${photoId}`, outsider.cookies)).statusCode).toBe(404);
@@ -270,7 +281,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
 
       // Nothing was written by any of them.
       expect(await rowsOf("gym_posts", gym.id)).toBe(1);
-      expect(await rowsOf("gym_post_reactions", gym.id)).toBe(0);
+      expect(await rowsOf("gym_post_reactions", gym.id)).toBe(1);
       expect(await rowsOf("gym_posts", other.id)).toBe(0);
       const kept = await sql<{ pinned_at: Date | null; removed_at: Date | null }[]>`SELECT pinned_at, removed_at FROM gym_posts WHERE id = ${post.id}`;
       expect(kept).toEqual([{ pinned_at: null, removed_at: null }]);
@@ -465,6 +476,18 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       expect(await rowsOf("gym_post_reactions", gym.id)).toBe(2);
       expect(await answer(asha, null)).toEqual({ reactions: { like: 0, strong: 0, fire: 0, love: 1 }, mine: null });
       expect(await answer(asha, null)).toEqual({ reactions: { like: 0, strong: 0, fire: 0, love: 1 }, mine: null });
+
+      // Staff see who gave each reaction, by whole name, newest first; members never do.
+      const who = async (reaction: string) => {
+        const res = await inject("GET", `${posts(gym.id)}/${post.id}/reactions?reaction=${reaction}`, gym.owner.cookies);
+        return [res.statusCode, res.statusCode === 200 ? (JSON.parse(res.body) as { total: number; people: { name: string | null }[] }) : null] as const;
+      };
+      expect((await react(gym, asha, post.id, "fire")).statusCode).toBe(200);
+      expect(await who("love")).toEqual([200, { reaction: "love", total: 1, people: [{ name: "Bilal Khan", initials: "BK" }] }]);
+      expect(await who("fire")).toEqual([200, { reaction: "fire", total: 1, people: [{ name: "Asha Rao", initials: "AR" }] }]);
+      expect(await who("like")).toEqual([200, { reaction: "like", total: 0, people: [] }]);
+      expect((await who("angry"))[0]).toBe(400);
+      expect((await inject("GET", `${posts(gym.id)}/${randomUUID()}/reactions?reaction=fire`, gym.owner.cookies)).statusCode).toBe(404);
 
       // Not one of the four, and a post that is not there.
       expect((await react(gym, asha, post.id, "angry")).statusCode).toBe(400);

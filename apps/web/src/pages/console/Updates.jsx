@@ -16,6 +16,8 @@ import {
   pinNote,
   postedText,
   reactionButtons,
+  reactorsMore,
+  reactorsTitle,
   removeBox,
   withPage,
 } from '../../components/gym/postsView';
@@ -175,11 +177,95 @@ function Composer({ gymId, gymName, words, onPosted }) {
   );
 }
 
+/** A post's reactions as members see them, each one's icon and how many. A press on one
+ *  shows staff who gave it; members are never shown that. */
+function Reactions({ gymId, post }) {
+  const reactions = reactionButtons(post).filter((r) => r.count > 0);
+  const [open, setOpen] = useState(null);
+  const [state, setState] = useState({ loading: false, error: null, who: null });
+  const asked = useRef(null);
+
+  const show = (id) => {
+    if (open === id) {
+      setOpen(null);
+      return;
+    }
+    setOpen(id);
+    asked.current = id;
+    setState({ loading: true, error: null, who: null });
+    staffPostsService.reactors(gymId, post.id, id).then(
+      (who) => asked.current === id && setState({ loading: false, error: null, who }),
+      (err) => asked.current === id && setState({ loading: false, error: errorText(err, "We couldn't load who reacted."), who: null }),
+    );
+  };
+
+  if (reactions.length === 0) {
+    return (
+      <p className="c-s13 c-t2" data-testid="reactions">
+        No reactions yet
+      </p>
+    );
+  }
+  const shown = reactions.find((r) => r.id === open) ?? null;
+  const more = state.who === null ? null : reactorsMore(state.who);
+  return (
+    <div className="flex flex-col gap-3" data-testid="reactions">
+      <div className="flex flex-wrap items-center gap-2">
+        {reactions.map((r) => {
+          const Icon = REACTION_ICONS[r.id];
+          return (
+            <button
+              key={r.id}
+              type="button"
+              aria-expanded={open === r.id}
+              aria-label={`${r.label}. See who`}
+              title={`${r.word}: see who`}
+              onClick={() => show(r.id)}
+              className={open === r.id ? 'c-chip c-chip-on' : 'c-chip'}
+            >
+              <Icon aria-hidden="true" className="w-[18px] h-[18px]" style={{ color: 'var(--accent)', fill: 'var(--accent)' }} />
+              <span className="c-num c-w6">{r.count.toLocaleString('en')}</span>
+            </button>
+          );
+        })}
+      </div>
+      {shown !== null ? (
+        <div role="region" aria-label={`Who reacted ${shown.word}`} className="rounded-[14px] p-4 flex flex-col gap-2" style={{ background: 'var(--raise)' }}>
+          <div className="flex items-center gap-3">
+            <p className="c-s14 c-w6 c-t1 flex-grow">{reactorsTitle(shown)}</p>
+            <button type="button" onClick={() => setOpen(null)} className="c-btn c-btn-quiet c-s14">
+              Close
+            </button>
+          </div>
+          {state.loading ? <p className="c-s14 c-t2">Loading…</p> : null}
+          {state.error !== null ? (
+            <p className="c-s14" role="alert" style={{ color: 'var(--bad)' }}>
+              {state.error}
+            </p>
+          ) : null}
+          {state.who !== null ? (
+            <>
+              <ul className="flex flex-col gap-1.5">
+                {state.who.people.map((person, i) => (
+                  // A list that is read once and never reordered: its position is its key.
+                  <li key={i} className={person.name === null ? 'c-s14 c-t2' : 'c-s14 c-t1'}>
+                    {person.name ?? 'No name yet'}
+                  </li>
+                ))}
+              </ul>
+              {more !== null ? <p className="c-s13 c-t2">{more}</p> : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, onPin, onRemove, onOpen }) {
   const [asking, setAsking] = useState(false);
   const box = removeBox(post, words);
   const full = pinNote(post, pinnedCount);
-  const reactions = reactionButtons(post).filter((r) => r.count > 0);
   return (
     <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid="post">
       <div className="flex items-center gap-3">
@@ -219,22 +305,7 @@ function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, on
           ))}
         </ul>
       ) : null}
-      {/* The reactions as members see them: each one's icon and how many. Not buttons here. */}
-      <div className="flex flex-wrap items-center gap-2" data-testid="reactions">
-        {reactions.length === 0 ? (
-          <span className="c-s13 c-t2">No reactions yet</span>
-        ) : (
-          reactions.map((r) => {
-            const Icon = REACTION_ICONS[r.id];
-            return (
-              <span key={r.id} role="img" aria-label={r.label} title={r.word} className="c-tag c-tag-plain">
-                <Icon aria-hidden="true" className="w-4 h-4" style={{ color: 'var(--accent)' }} />
-                <span className="c-num c-w6">{r.count.toLocaleString('en')}</span>
-              </span>
-            );
-          })
-        )}
-      </div>
+      <Reactions key={post.id} gymId={gymId} post={post} />
       {readOnly ? null : asking ? (
         <div role="group" aria-label={box.title} className="flex flex-col gap-2 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
           <p className="c-s15 c-w6 c-t1">{box.title}</p>
