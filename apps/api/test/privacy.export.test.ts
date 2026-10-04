@@ -114,6 +114,12 @@ d("DPDP data export (real Postgres)", () => {
               VALUES (${userId}, 'own', 2100, 150, 200, 70)`;
     // A reaction to a gym's post (19b-i): the person's own tap.
     await sql`INSERT INTO gym_post_reactions (gym_id, post_id, user_id, reaction) VALUES (${postGymId}, ${postId}, ${userId}, 'like')`;
+    // A report of a post and a gym's stop on their posting (19b-ii-a): about the person.
+    await sql`INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason) VALUES (${postGymId}, ${postId}, ${userId}, 'spam')`;
+    await sql`INSERT INTO gym_post_stops (gym_id, user_id) VALUES (${postGymId}, ${userId})`;
+    // A post made as a MEMBER is the person's own and exported; one made as staff is the gym's.
+    await sql`INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member) VALUES (${postGymId}, ${userId}, gen_random_uuid(), ${`member-post-${label}`}, true)`;
+    await sql`INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member) VALUES (${postGymId}, ${userId}, gen_random_uuid(), ${`staff-post-${label}`}, false)`;
     await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
               VALUES (${userId}, 'health_step', 'v1', ${`wording-${label}`}, 'test')`;
     const wId = randomUUID();
@@ -179,6 +185,9 @@ d("DPDP data export (real Postgres)", () => {
     // the person's own record) — present, and carrying the words verbatim.
     expect(out.data["consent_log"]).toHaveLength(1);
     expect(out.data["consent_log"]?.[0]).toMatchObject({ purpose: "health_step", wording: "wording-all" });
+    // Their own posts as a member, and not the gym's post they wrote as staff.
+    expect(out.data["gym_posts"]?.map((row) => [row["body"], row["photos"]])).toEqual([["member-post-all", 0]]);
+    expect(Object.keys(out.data["gym_posts"]?.[0] ?? {}).sort()).toEqual(["body", "created_at", "gym_id", "id", "photos", "removed_at"]);
     // Nothing was cut, and the envelope says so out loud rather than by an
     // absent key (the same reason every table keeps an empty array).
     expect(out.truncated).toEqual({});

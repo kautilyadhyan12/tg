@@ -120,6 +120,8 @@ export const gyms = pgTable(
     /** The leaderboard's boards the gym has switched off for its members (0067; spec
      *  Part 3 §15.5). Empty: members see all three. */
     leaderboardBoardsOff: text("leaderboard_boards_off").array().notNull().default(sql`'{}'::text[]`),
+    /** Whether the gym's members may post on its Updates (0072; spec Part 3 §15.2). */
+    membersCanPost: boolean("members_can_post").notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [

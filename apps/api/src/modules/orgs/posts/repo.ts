@@ -1,12 +1,16 @@
-// A GYM'S UPDATES, in the database (spec Part 3 §15.2; ROADMAP 19b-i). Every read and
-// write names the gym.
+// A GYM'S UPDATES, in the database (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a).
+// Every read and write names the gym.
 import type { Sql, TransactionSql } from "postgres";
-import type { GymPostReaction } from "@app/shared";
+import type { GymPostReaction, GymPostReportReason } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
 
 export interface PostRow {
   id: string;
+  /** Who wrote it, while that account exists. */
+  authorId: string | null;
+  /** A member's own post, as against one by the gym's staff. */
+  byMember: boolean;
   /** The author's app name and address while their account is active; null otherwise. */
   authorName: string | null;
   authorEmail: string | null;
@@ -20,6 +24,8 @@ export interface PostRow {
 
 interface RawPost {
   id: string;
+  author_id: string | null;
+  by_member: boolean;
   author_name: string | null;
   author_email: string | null;
   author_record_name: string | null;
@@ -31,6 +37,8 @@ interface RawPost {
 
 const toPost = (r: RawPost): PostRow => ({
   id: r.id,
+  authorId: r.author_id,
+  byMember: r.by_member,
   authorName: r.author_name,
   authorEmail: r.author_email,
   authorRecordName: r.author_record_name,
@@ -40,9 +48,14 @@ const toPost = (r: RawPost): PostRow => ({
   removed: r.removed,
 });
 
+/** The gym's posts. `visible`: not removed and, for a member's own post, its writer still a
+ *  live app member of the gym with an active account. A member who leaves, is removed or
+ *  deletes their account takes their posts and photos off the page with them. */
 function posts(sql: SqlOrTx, gymId: string) {
   return sql`
     SELECT p.id, p.body, p.pinned_at, p.created_at, p.post_key, p.removed_at IS NOT NULL AS removed,
+           p.author_user_id AS author_id, p.by_member,
+           p.removed_at IS NULL AND (NOT p.by_member OR (u.status = 'active' AND am.user_id IS NOT NULL) IS TRUE) AS visible,
            CASE WHEN u.status = 'active' THEN u.display_name END AS author_name,
            CASE WHEN u.status = 'active' THEN u.email::text END AS author_email,
            CASE WHEN u.status = 'active' THEN nullif(btrim(e.full_name), '') END AS author_record_name
@@ -57,7 +70,7 @@ function posts(sql: SqlOrTx, gymId: string) {
 export async function pinnedPosts(sql: SqlOrTx, gymId: string): Promise<PostRow[]> {
   const rows = await sql<RawPost[]>`
     SELECT * FROM (${posts(sql, gymId)}) p
-    WHERE NOT p.removed AND p.pinned_at IS NOT NULL
+    WHERE p.visible AND p.pinned_at IS NOT NULL
     ORDER BY p.pinned_at DESC, p.id DESC`;
   return rows.map(toPost);
 }
@@ -67,16 +80,16 @@ export async function postsPage(sql: SqlOrTx, gymId: string, before: { at: strin
   const from = before === null ? sql`` : sql`AND (p.created_at, p.id) < (${before.at}::timestamptz, ${before.id}::uuid)`;
   const rows = await sql<RawPost[]>`
     SELECT * FROM (${posts(sql, gymId)}) p
-    WHERE NOT p.removed AND p.pinned_at IS NULL ${from}
+    WHERE p.visible AND p.pinned_at IS NULL ${from}
     ORDER BY p.created_at DESC, p.id DESC
     LIMIT ${limit}`;
   return rows.map(toPost);
 }
 
-/** One of this gym's posts that has not been removed, or null. */
+/** One of this gym's posts that can be seen, or null. */
 export async function postById(sql: SqlOrTx, gymId: string, postId: string): Promise<PostRow | null> {
   const rows = await sql<RawPost[]>`
-    SELECT * FROM (${posts(sql, gymId)}) p WHERE p.id = ${postId} AND NOT p.removed`;
+    SELECT * FROM (${posts(sql, gymId)}) p WHERE p.id = ${postId} AND p.visible`;
   const r = rows[0];
   return r === undefined ? null : toPost(r);
 }
@@ -162,13 +175,13 @@ export async function reactorsOf(sql: SqlOrTx, gymId: string, postId: string, re
 export async function insertPost(
   tx: TransactionSql,
   gymId: string,
-  post: { id: string; postKey: string; body: string },
+  post: { id: string; postKey: string; body: string; byMember: boolean },
   authorId: string,
   at: Date,
 ): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
-    INSERT INTO gym_posts (id, gym_id, author_user_id, post_key, body, created_at)
-    VALUES (${post.id}, ${gymId}, ${authorId}, ${post.postKey}, ${post.body}, ${at})
+    INSERT INTO gym_posts (id, gym_id, author_user_id, post_key, body, by_member, created_at)
+    VALUES (${post.id}, ${gymId}, ${authorId}, ${post.postKey}, ${post.body}, ${post.byMember}, ${at})
     ON CONFLICT (gym_id, post_key) DO NOTHING
     RETURNING id`;
   return rows.length === 1;
@@ -240,7 +253,7 @@ export async function clearReaction(sql: SqlOrTx, gymId: string, postId: string,
   await sql`DELETE FROM gym_post_reactions WHERE gym_id = ${gymId} AND post_id = ${postId} AND user_id = ${userId}`;
 }
 
-/** A photo of this gym's post that has not been removed, or null. */
+/** A photo of this gym's post that can be seen, or null. */
 export async function photoOf(
   sql: SqlOrTx,
   gymId: string,
@@ -250,8 +263,8 @@ export async function photoOf(
   const rows = await sql<{ storage_key: string; content_type: string }[]>`
     SELECT ph.storage_key, ph.content_type
     FROM gym_post_photos ph
-    JOIN gym_posts p ON p.gym_id = ph.gym_id AND p.id = ph.post_id
-    WHERE ph.gym_id = ${gymId} AND ph.post_id = ${postId} AND ph.id = ${photoId} AND p.removed_at IS NULL`;
+    JOIN (${posts(sql, gymId)}) p ON p.id = ph.post_id
+    WHERE ph.gym_id = ${gymId} AND ph.post_id = ${postId} AND ph.id = ${photoId} AND p.visible`;
   const r = rows[0];
   return r === undefined ? null : { storageKey: r.storage_key, contentType: r.content_type };
 }
@@ -265,4 +278,215 @@ export async function isLiveMember(sql: SqlOrTx, gymId: string, userId: string):
       WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL
     ) AS ok`;
   return rows[0]?.ok ?? false;
+}
+
+// ── MEMBERS POST, REPORT, AND THE STAFF LIST (19b-ii-a) ──
+
+/** The gym's switch: whether its members may post. */
+export async function membersCanPost(sql: SqlOrTx, gymId: string): Promise<boolean> {
+  const rows = await sql<{ members_can_post: boolean }[]>`SELECT members_can_post FROM gyms WHERE id = ${gymId}`;
+  return rows[0]?.members_can_post ?? false;
+}
+
+/** Sets the switch; false when it already stood there. */
+export async function setMembersCanPost(tx: TransactionSql, gymId: string, on: boolean): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gyms SET members_can_post = ${on} WHERE id = ${gymId} AND members_can_post <> ${on} RETURNING id`;
+  return rows.length === 1;
+}
+
+export async function isStopped(sql: SqlOrTx, gymId: string, userId: string): Promise<boolean> {
+  const rows = await sql<{ ok: boolean }[]>`
+    SELECT EXISTS (SELECT 1 FROM gym_post_stops WHERE gym_id = ${gymId} AND user_id = ${userId}) AS ok`;
+  return rows[0]?.ok ?? false;
+}
+
+/** Which of these people the gym has stopped posting. */
+export async function stoppedAmong(sql: SqlOrTx, gymId: string, userIds: readonly string[]): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const rows = await sql<{ user_id: string }[]>`
+    SELECT user_id FROM gym_post_stops WHERE gym_id = ${gymId} AND user_id = ANY (${[...userIds]}::uuid[])`;
+  return new Set(rows.map((r) => r.user_id));
+}
+
+/** Holds the person's membership of this gym, so their posts are counted, and a stop on
+ *  them lands, one at a time. `liveOnly`: only while they are a member now. False when
+ *  there is no such membership. */
+export async function lockMember(tx: TransactionSql, gymId: string, userId: string, liveOnly: boolean): Promise<boolean> {
+  const live = liveOnly ? tx`AND removed_at IS NULL` : tx``;
+  const rows = await tx<{ ok: number }[]>`
+    SELECT 1 AS ok FROM gym_members WHERE gym_id = ${gymId} AND user_id = ${userId} ${live} FOR UPDATE`;
+  return rows.length > 0;
+}
+
+/** The posts this member has made at this gym since `since`, removed ones too: removing
+ *  a post gives no post back. */
+export async function countMemberPostsSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_posts
+    WHERE author_user_id = ${userId} AND gym_id = ${gymId} AND by_member AND created_at > ${since}`;
+  return rows[0]?.n ?? 0;
+}
+
+/** Marks a member's own post removed; false when it is not theirs, or was removed already. */
+export async function markRemovedOwn(tx: TransactionSql, gymId: string, postId: string, userId: string, at: Date): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_posts SET removed_at = ${at}, removed_by_user_id = ${userId}, pinned_at = NULL
+    WHERE gym_id = ${gymId} AND id = ${postId} AND author_user_id = ${userId} AND by_member AND removed_at IS NULL
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** The person's one report of this gym's post; false when the post is not there. Reported
+ *  again, nothing changes. The post is held while it is written, as a reaction's is. */
+export async function insertReport(
+  sql: SqlOrTx,
+  gymId: string,
+  postId: string,
+  userId: string,
+  reason: GymPostReportReason,
+  note: string | null,
+  at: Date,
+): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    WITH post AS (
+      SELECT p.gym_id, p.id FROM gym_posts p
+      WHERE p.gym_id = ${gymId} AND p.id = ${postId} AND p.removed_at IS NULL
+      FOR SHARE
+    ), made AS (
+      INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason, note, created_at)
+      SELECT post.gym_id, post.id, ${userId}, ${reason}, ${note}, ${at} FROM post
+      ON CONFLICT (post_id, user_id) DO NOTHING
+    )
+    SELECT id FROM post`;
+  return rows.length === 1;
+}
+
+/** Which of these posts the person has reported, answered or not. */
+export async function reportedBy(sql: SqlOrTx, gymId: string, postIds: readonly string[], userId: string): Promise<Set<string>> {
+  if (postIds.length === 0) return new Set();
+  const rows = await sql<{ post_id: string }[]>`
+    SELECT post_id FROM gym_post_reports
+    WHERE gym_id = ${gymId} AND user_id = ${userId} AND post_id = ANY (${[...postIds]}::uuid[])`;
+  return new Set(rows.map((r) => r.post_id));
+}
+
+/** Closes a post's open reports; how many it closed. `upTo`: only those made up to that
+ *  instant, the ones staff were shown. */
+export async function closeReports(tx: TransactionSql, gymId: string, postId: string, outcome: "removed" | "kept", at: Date, upTo: string | null = null): Promise<number> {
+  const seen = upTo === null ? tx`` : tx`AND created_at <= ${upTo}::timestamptz`;
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_post_reports SET closed_at = ${at}, outcome = ${outcome}
+    WHERE gym_id = ${gymId} AND post_id = ${postId} AND closed_at IS NULL ${seen}
+    RETURNING id`;
+  return rows.length;
+}
+
+/** A post's reports nobody has answered. */
+export async function countOpenReports(tx: TransactionSql, gymId: string, postId: string): Promise<number> {
+  const rows = await tx<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_post_reports WHERE gym_id = ${gymId} AND post_id = ${postId} AND closed_at IS NULL`;
+  return rows[0]?.n ?? 0;
+}
+
+/** Unpins this gym's pinned posts nobody can see (a member's post whose writer has left):
+ *  a hidden post must not hold one of the three pins. */
+export async function unpinHidden(tx: TransactionSql, gymId: string): Promise<void> {
+  await tx`
+    UPDATE gym_posts g SET pinned_at = NULL
+    WHERE g.gym_id = ${gymId} AND g.pinned_at IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM (${posts(tx, gymId)}) p WHERE p.id = g.id AND p.visible)`;
+}
+
+export interface ReportedRow {
+  post: PostRow;
+  reports: number;
+  firstAt: Date;
+  lastAt: Date;
+  /** Every reported post waiting, on each row. */
+  total: number;
+}
+
+/** The posts with a report nobody has answered, longest waiting first. */
+export async function reportedPosts(sql: SqlOrTx, gymId: string, limit: number): Promise<ReportedRow[]> {
+  const rows = await sql<(RawPost & { reports: number; first_at: Date; last_at: Date; total: number })[]>`
+    SELECT p.*, r.reports, r.first_at, r.last_at, count(*) OVER ()::int AS total
+    FROM (${posts(sql, gymId)}) p
+    JOIN (
+      SELECT post_id, count(*)::int AS reports, min(created_at) AS first_at, max(created_at) AS last_at
+      FROM gym_post_reports WHERE gym_id = ${gymId} AND closed_at IS NULL
+      GROUP BY post_id
+    ) r ON r.post_id = p.id
+    WHERE p.visible
+    ORDER BY r.first_at, p.id
+    LIMIT ${limit}`;
+  return rows.map((r) => ({ post: toPost(r), reports: r.reports, firstAt: r.first_at, lastAt: r.last_at, total: r.total }));
+}
+
+/** How many posts have a report nobody has answered. */
+export async function countReported(sql: SqlOrTx, gymId: string): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM (${posts(sql, gymId)}) p
+    WHERE p.visible AND EXISTS (
+      SELECT 1 FROM gym_post_reports r WHERE r.gym_id = ${gymId} AND r.post_id = p.id AND r.closed_at IS NULL)`;
+  return rows[0]?.n ?? 0;
+}
+
+/** Why these posts' open reports were made, by reason. */
+export async function openReportReasons(sql: SqlOrTx, gymId: string, postIds: readonly string[]): Promise<{ postId: string; reason: string; count: number }[]> {
+  if (postIds.length === 0) return [];
+  const rows = await sql<{ post_id: string; reason: string; n: number }[]>`
+    SELECT post_id, reason, count(*)::int AS n FROM gym_post_reports
+    WHERE gym_id = ${gymId} AND closed_at IS NULL AND post_id = ANY (${[...postIds]}::uuid[])
+    GROUP BY post_id, reason`;
+  return rows.map((r) => ({ postId: r.post_id, reason: r.reason, count: r.n }));
+}
+
+/** What the people who reported these posts typed, on reports still open: each post's
+ *  oldest first, `limit` a post. */
+export async function openReportNotes(sql: SqlOrTx, gymId: string, postIds: readonly string[], limit: number): Promise<{ postId: string; note: string }[]> {
+  if (postIds.length === 0) return [];
+  const rows = await sql<{ post_id: string; note: string }[]>`
+    SELECT post_id, note FROM (
+      SELECT post_id, note, created_at, id, row_number() OVER (PARTITION BY post_id ORDER BY created_at, id) AS rn
+      FROM gym_post_reports
+      WHERE gym_id = ${gymId} AND closed_at IS NULL AND note IS NOT NULL AND post_id = ANY (${[...postIds]}::uuid[])
+    ) r
+    WHERE rn <= ${limit}
+    ORDER BY post_id, created_at, id`;
+  return rows.map((r) => ({ postId: r.post_id, note: r.note }));
+}
+
+/** Stops the person posting at this gym; false when they already were. */
+export async function insertStop(tx: TransactionSql, gymId: string, userId: string, at: Date): Promise<boolean> {
+  const rows = await tx<{ user_id: string }[]>`
+    INSERT INTO gym_post_stops (gym_id, user_id, created_at) VALUES (${gymId}, ${userId}, ${at})
+    ON CONFLICT (gym_id, user_id) DO NOTHING RETURNING user_id`;
+  return rows.length === 1;
+}
+
+/** Lets the person post again; false when they were not stopped. */
+export async function deleteStop(tx: TransactionSql, gymId: string, userId: string): Promise<boolean> {
+  const rows = await tx<{ user_id: string }[]>`
+    DELETE FROM gym_post_stops WHERE gym_id = ${gymId} AND user_id = ${userId} RETURNING user_id`;
+  return rows.length === 1;
+}
+
+export interface StoppedRow extends ReactorRow {
+  userId: string;
+  stoppedAt: Date;
+}
+
+/** The people this gym has stopped posting whose account is active, newest first. */
+export async function stoppedPeople(sql: SqlOrTx, gymId: string, limit: number): Promise<StoppedRow[]> {
+  const rows = await sql<{ user_id: string; created_at: Date; display_name: string; email: string | null; record_name: string | null }[]>`
+    SELECT s.user_id, s.created_at, u.display_name, u.email::text AS email, nullif(btrim(e.full_name), '') AS record_name
+    FROM gym_post_stops s
+    JOIN users u ON u.id = s.user_id AND u.status = 'active'
+    LEFT JOIN gym_members m ON m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at IS NULL
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id
+    WHERE s.gym_id = ${gymId}
+    ORDER BY s.created_at DESC, s.user_id
+    LIMIT ${limit}`;
+  return rows.map((r) => ({ userId: r.user_id, stoppedAt: r.created_at, displayName: r.display_name, email: r.email, recordName: r.record_name }));
 }

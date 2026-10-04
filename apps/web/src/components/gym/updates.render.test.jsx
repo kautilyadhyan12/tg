@@ -3,11 +3,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-const svc = { list: vi.fn(), react: vi.fn() };
+const svc = { list: vi.fn(), react: vi.fn(), add: vi.fn(), removeOwn: vi.fn(), report: vi.fn() };
+const prepare = vi.fn();
 vi.mock('../../api/postsApi', () => ({
   postsService: svc,
   postPhotoUrl: ({ gymId, postId, photoId }) => `http://api.test/v1/orgs/${gymId}/posts/${postId}/photos/${photoId}`,
 }));
+vi.mock('../../pages/console/gymPagePhotos', () => ({ preparePagePhoto: prepare }));
 vi.mock('../../api/orgsApi', () => ({ errorText: (_err, fallback) => fallback }));
 
 const Updates = (await import('./Updates')).default;
@@ -22,15 +24,18 @@ const post = (id, body, over = {}) => ({
   createdAt: '2026-10-07T06:30:00.000Z',
   reactions: { like: 0, love: 0, strong: 0, fire: 0 },
   mine: null,
+  fromMember: false,
+  own: false,
+  wrote: false,
+  reported: false,
   ...over,
 });
-const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', pinned: [], posts: [], next: null, ...over });
+const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', posting: 'off', pinned: [], posts: [], next: null, ...over });
 const posts = () => screen.getAllByTestId('post');
 const button = (card, name) => within(card).getByRole('button', { name });
 
 beforeEach(() => {
-  svc.list.mockReset();
-  svc.react.mockReset();
+  for (const fn of [...Object.values(svc), prepare]) fn.mockReset();
 });
 afterEach(() => cleanup());
 
@@ -170,6 +175,168 @@ describe('reacting', () => {
     render(<Updates gym={GYM} />);
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(screen.queryByRole('textbox')).toBeNull();
+    // The four reactions and Report: nothing else to press on somebody's post.
+    expect(within(posts()[0]).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent.trim())).toEqual([
+      'Like, 0 people',
+      'Love, 0 people',
+      'Strong, 0 people',
+      'Fire, 0 people',
+      'Report',
+    ]);
+  });
+});
+
+describe('a member posts', () => {
+  const composer = () => within(screen.getByTestId('composer'));
+
+  it.each(['off', 'stopped'])('there is no box to write in while posting is %s, and a stopped member is told why', async (posting) => {
+    svc.list.mockResolvedValue(feed({ posting, posts: [post('a', 'x')] }));
+    render(<Updates gym={GYM} />);
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(screen.queryByTestId('composer')).toBeNull();
+    const note = screen.queryByText('The staff at Iron House have stopped you posting here. Speak to them at the front desk.');
+    expect(note !== null).toBe(posting === 'stopped');
+  });
+
+  it('the box is there on an empty page, sends the words and photos under one key, and shows the post at the top', async () => {
+    svc.list.mockResolvedValue(feed({ posting: 'on' }));
+    prepare.mockResolvedValue({ key: 'new-1', uploadKey: 'up-1', base64: 'BASE64', preview: 'blob:one' });
+    svc.add.mockResolvedValue({ post: post('mine', 'First time on the rower', { fromMember: true, own: true, wrote: true, author: { name: 'Ina I.', initials: 'II' } }) });
+    render(<Updates gym={GYM} />);
+    await screen.findByText('No posts yet. Write the first one.');
+    const send = composer().getByRole('button', { name: 'Post' });
+    expect(send.disabled).toBe(true);
+    expect(composer().getByText(/You can post 10 times a day/)).toBeTruthy();
+
+    fireEvent.change(composer().getByRole('textbox', { name: /Write a post/ }), { target: { value: 'First time on the rower' } });
+    fireEvent.change(composer().getByLabelText('Choose photos'), { target: { files: [new File(['x'], 'rower.jpg', { type: 'image/jpeg' })] } });
+    await composer().findByAltText('Photo 1 of 1');
+    fireEvent.click(send);
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(svc.add).toHaveBeenCalledTimes(1);
+    const [gymId, key, body, photos] = svc.add.mock.calls[0];
+    expect([gymId, body, photos]).toEqual(['g1', 'First time on the rower', ['BASE64']]);
+    expect(key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(within(posts()[0]).getByText('Ina I.')).toBeTruthy();
+    // Their own post: Remove, and nothing to report.
+    expect(within(posts()[0]).queryByRole('button', { name: 'Report' })).toBeNull();
+    expect(button(posts()[0], 'Remove')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe('Posted. Everyone at Iron House can see it now.');
+    expect(composer().getByRole('textbox', { name: /Write a post/ }).value).toBe('');
+  });
+
+  it('a post the server refuses keeps its words and says why in the server’s words', async () => {
+    svc.list.mockResolvedValue(feed({ posting: 'on' }));
+    svc.add.mockRejectedValue(new Error('refused'));
+    render(<Updates gym={GYM} />);
+    await screen.findByTestId('composer');
+    fireEvent.change(composer().getByRole('textbox', { name: /Write a post/ }), { target: { value: 'Eleventh today' } });
+    fireEvent.click(composer().getByRole('button', { name: 'Post' }));
+    expect((await composer().findByRole('alert')).textContent).toBe("We couldn't post that. Please try again.");
+    expect(composer().getByRole('textbox', { name: /Write a post/ }).value).toBe('Eleventh today');
+  });
+});
+
+describe('removing one’s own post, and reporting somebody else’s', () => {
+  const three = () =>
+    feed({
+      posting: 'on',
+      posts: [
+        post('theirs', 'Somebody else wrote this', { fromMember: true }),
+        post('mine', 'I wrote this', { fromMember: true, own: true, wrote: true }),
+        post('seen', 'Already reported', { fromMember: true, reported: true }),
+      ],
+    });
+
+  it('Remove is on the member’s own post alone, asks first, and removes the post it was pressed on', async () => {
+    svc.list.mockResolvedValue(three());
+    svc.removeOwn.mockResolvedValue({ removed: true });
+    render(<Updates gym={GYM} />);
+    await waitFor(() => expect(posts()).toHaveLength(3));
+    expect(within(posts()[0]).queryByRole('button', { name: 'Remove' })).toBeNull();
+    expect(within(posts()[2]).queryByRole('button', { name: 'Remove' })).toBeNull();
+
+    fireEvent.click(button(posts()[1], 'Remove'));
+    const box = within(within(posts()[1]).getByRole('group', { name: 'Remove your post?' }));
+    expect(box.getByText("Your post will disappear for everyone at Iron House. This can't be undone.")).toBeTruthy();
+    fireEvent.click(box.getByRole('button', { name: 'Keep post' }));
+    expect(svc.removeOwn).not.toHaveBeenCalled();
+    expect(posts()).toHaveLength(3);
+
+    fireEvent.click(button(posts()[1], 'Remove'));
+    fireEvent.click(within(posts()[1]).getByRole('button', { name: 'Remove post' }));
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(svc.removeOwn.mock.calls).toEqual([['g1', 'mine']]);
+    expect(posts().map((p) => p.textContent.includes('I wrote this'))).toEqual([false, false]);
+  });
+
+  it('Report asks why, sends the reason for the post it was pressed on, and then reads Reported', async () => {
+    svc.list.mockResolvedValue(three());
+    svc.report.mockResolvedValue({ reported: true });
+    render(<Updates gym={GYM} />);
+    await waitFor(() => expect(posts()).toHaveLength(3));
+    // One already reported says so and offers no second report; one's own offers none.
+    expect(within(posts()[2]).getByText('Reported')).toBeTruthy();
+    expect(within(posts()[2]).queryByRole('button', { name: 'Report' })).toBeNull();
+    expect(within(posts()[1]).queryByRole('button', { name: 'Report' })).toBeNull();
+
+    fireEvent.click(button(posts()[0], 'Report'));
+    const box = within(within(posts()[0]).getByRole('group', { name: 'Report this post' }));
+    expect(box.getByText("The staff at Iron House will look at it. The person who posted isn't told who reported it.")).toBeTruthy();
+    const send = box.getByRole('button', { name: 'Send report' });
+    expect(send.disabled).toBe(true);
+    expect(box.getAllByRole('radio')).toHaveLength(5);
+    fireEvent.click(box.getByRole('radio', { name: "A photo of someone who didn't agree to it" }));
+    fireEvent.click(send);
+    await waitFor(() => expect(within(posts()[0]).getByText('Reported')).toBeTruthy());
+    // Nothing typed: the reason alone.
+    expect(svc.report.mock.calls).toEqual([['g1', 'theirs', 'photo_of_someone', '']]);
+    expect(within(posts()[0]).queryByRole('group', { name: 'Report this post' })).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('Reported. The staff at Iron House will look at it.');
+  });
+
+  it('a member can type more beside the reason: it is sent with the report, and too much holds Send', async () => {
+    svc.list.mockResolvedValue(three());
+    svc.report.mockResolvedValue({ reported: true });
+    render(<Updates gym={GYM} />);
+    await waitFor(() => expect(posts()).toHaveLength(3));
+    fireEvent.click(button(posts()[0], 'Report'));
+    const box = within(within(posts()[0]).getByRole('group', { name: 'Report this post' }));
+    const more = box.getByRole('textbox', { name: /Tell the staff more/ });
+    expect(box.getByText('300 characters left')).toBeTruthy();
+    fireEvent.click(box.getByRole('radio', { name: 'Bullying or unkind' }));
+    fireEvent.change(more, { target: { value: 'a'.repeat(301) } });
+    expect(box.getByText('1 character too many')).toBeTruthy();
+    expect(box.getByRole('button', { name: 'Send report' }).disabled).toBe(true);
+    // Typing alone, with no reason picked, never sends: the reason is still asked.
+    fireEvent.change(more, { target: { value: 'He says this to her every week' } });
+    fireEvent.click(box.getByRole('button', { name: 'Send report' }));
+    await waitFor(() => expect(within(posts()[0]).getByText('Reported')).toBeTruthy());
+    expect(svc.report.mock.calls).toEqual([['g1', 'theirs', 'unkind', 'He says this to her every week']]);
+  });
+
+  it('staff who also train see neither Report nor Remove on a post they wrote for the gym', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [post('gym', 'From the gym, by me', { wrote: true })] }));
+    render(<Updates gym={GYM} />);
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(within(posts()[0]).queryByRole('button', { name: 'Report' })).toBeNull();
+    expect(within(posts()[0]).queryByRole('button', { name: 'Remove' })).toBeNull();
     expect(within(posts()[0]).getAllByRole('button')).toHaveLength(4);
+  });
+
+  it('a report that fails says so, keeps the box open, and Cancel sends nothing', async () => {
+    svc.list.mockResolvedValue(three());
+    svc.report.mockRejectedValue(new Error('down'));
+    render(<Updates gym={GYM} />);
+    await waitFor(() => expect(posts()).toHaveLength(3));
+    fireEvent.click(button(posts()[0], 'Report'));
+    const box = within(within(posts()[0]).getByRole('group', { name: 'Report this post' }));
+    fireEvent.click(box.getByRole('radio', { name: 'Spam or selling' }));
+    fireEvent.click(box.getByRole('button', { name: 'Send report' }));
+    expect((await box.findByRole('alert')).textContent).toBe("That didn't work. Please try again.");
+    expect(within(posts()[0]).queryByText('Reported')).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
+    expect(within(posts()[0]).queryByRole('group', { name: 'Report this post' })).toBeNull();
+    expect(svc.report).toHaveBeenCalledTimes(1);
   });
 });

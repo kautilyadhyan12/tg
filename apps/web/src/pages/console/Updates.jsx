@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { BicepsFlexed, Flame, Heart, ImagePlus, Pin, PinOff, ThumbsUp, Trash2, X } from 'lucide-react';
+import { BicepsFlexed, Check, Flag, Flame, Heart, ImagePlus, Pin, PinOff, ThumbsUp, Trash2, UserCheck, UserX, X } from 'lucide-react';
 import { postPhotoUrl, staffPostsService } from '../../api/postsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import PhotoViewer from '../../components/common/PhotoViewer';
@@ -12,6 +12,8 @@ import {
   authorName,
   canPost,
   charsLine,
+  keepNote,
+  memberPostsSwitch,
   photoProblem,
   pinNote,
   postedText,
@@ -19,8 +21,14 @@ import {
   reactorsMore,
   reactorsTitle,
   removeBox,
+  reportNotesTitle,
+  reportedLine,
+  reportedMore,
+  reportedTitle,
+  stopBox,
   withPage,
   withPinChange,
+  withStopped,
   withoutPost,
 } from '../../components/gym/postsView';
 import { preparePagePhoto } from './gymPagePhotos';
@@ -28,8 +36,9 @@ import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 
-// The gym's Updates, for staff (ROADMAP 19b-i; spec Part 3 §15.2): write a post with up to
-// four photos, pin it to the top, remove it. `posts.manage`'s; the server refuses anyone
+// The gym's Updates, for staff (ROADMAP 19b-i, 19b-ii-a; spec Part 3 §15.2, §15.3): write a
+// post with up to four photos, pin it to the top, remove it; let members post, answer the
+// posts they report, and stop a person posting. `posts.manage`'s; the server refuses anyone
 // else whatever this screen shows.
 
 const newKey = () => globalThis.crypto.randomUUID();
@@ -265,12 +274,36 @@ function Reactions({ gymId, post }) {
   );
 }
 
-function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, onPin, onRemove, onOpen }) {
-  const [asking, setAsking] = useState(false);
+/** One post. `report`: its entry on the reported list, where it is drawn with why it was
+ *  reported and Keep in place of Pin. */
+function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, report = null, onPin, onRemove, onKeep, onStop, onOpen }) {
+  /** Which box is open: null, 'remove' or 'stop'. */
+  const [asking, setAsking] = useState(null);
   const box = removeBox(post, words);
-  const full = pinNote(post, pinnedCount);
+  const stop = stopBox(post.author.name);
+  const full = report === null ? pinNote(post, pinnedCount) : null;
+  const canStop = post.fromMember && post.authorId !== null;
   return (
-    <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid="post">
+    <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid={report === null ? 'post' : 'reported-post'}>
+      {report !== null ? (
+        <p className="c-s14 c-w6 flex items-start gap-2" style={{ color: 'var(--warn)' }}>
+          <Flag aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>{reportedLine(report)}</span>
+        </p>
+      ) : null}
+      {report !== null && report.notes.length > 0 ? (
+        <div className="rounded-[14px] p-4 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="report-notes">
+          <p className="c-s13 c-t2">{reportNotesTitle(report)}</p>
+          <ul className="flex flex-col gap-2">
+            {report.notes.map((note, i) => (
+              // Read once and never reordered: its position is its key.
+              <li key={i} className="c-s14 c-t1 whitespace-pre-wrap break-words">
+                {`“${note}”`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="flex items-center gap-3">
         <span className="c-avatar" style={{ width: 40, height: 40, fontSize: 14 }} aria-hidden="true">
           {authorInitials(post, gymName)}
@@ -279,6 +312,8 @@ function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, on
           <p className="c-s15 c-w6 c-t1 c-ell">{authorName(post, gymName)}</p>
           <p className="c-s13 c-t2">{postedText(post.createdAt)}</p>
         </div>
+        {post.fromMember ? <span className="c-tag c-tag-plain">{words.personCap}</span> : null}
+        {post.authorStopped ? <span className="c-tag c-tag-warn">Stopped from posting</span> : null}
         {post.pinned ? (
           <span className="c-tag c-tag-soft">
             <Pin aria-hidden="true" className="w-3.5 h-3.5" /> Pinned
@@ -309,7 +344,7 @@ function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, on
         </ul>
       ) : null}
       <Reactions key={post.id} gymId={gymId} post={post} />
-      {readOnly ? null : asking ? (
+      {readOnly ? null : asking === 'remove' ? (
         <div role="group" aria-label={box.title} className="flex flex-col gap-2 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
           <p className="c-s15 c-w6 c-t1">{box.title}</p>
           <ConfirmInline
@@ -319,19 +354,51 @@ function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, on
             cancelLabel={box.cancel}
             busy={busy}
             onConfirm={() => onRemove(post)}
-            onCancel={() => setAsking(false)}
+            onCancel={() => setAsking(null)}
+          />
+        </div>
+      ) : asking === 'stop' ? (
+        <div role="group" aria-label={stop.title} className="flex flex-col gap-2 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
+          <p className="c-s15 c-w6 c-t1">{stop.title}</p>
+          <ConfirmInline
+            newLook
+            question={stop.line}
+            confirmLabel={stop.confirm}
+            cancelLabel={stop.cancel}
+            busy={busy}
+            onConfirm={() => onStop(post, true).then(() => setAsking(null))}
+            onCancel={() => setAsking(null)}
           />
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
-          <button type="button" disabled={busy || full !== null} onClick={() => onPin(post, !post.pinned)} className="c-btn c-btn-s c-btn-sm">
-            {post.pinned ? <PinOff aria-hidden="true" className="w-4 h-4" /> : <Pin aria-hidden="true" className="w-4 h-4" />}
-            {post.pinned ? 'Unpin' : 'Pin to the top'}
-          </button>
-          <button type="button" disabled={busy} onClick={() => setAsking(true)} className="c-btn c-btn-s c-btn-sm">
+          {report === null ? (
+            <button type="button" disabled={busy || full !== null} onClick={() => onPin(post, !post.pinned)} className="c-btn c-btn-s c-btn-sm">
+              {post.pinned ? <PinOff aria-hidden="true" className="w-4 h-4" /> : <Pin aria-hidden="true" className="w-4 h-4" />}
+              {post.pinned ? 'Unpin' : 'Pin to the top'}
+            </button>
+          ) : (
+            <button type="button" disabled={busy} onClick={() => onKeep(post, report)} className="c-btn c-btn-s c-btn-sm">
+              <Check aria-hidden="true" className="w-4 h-4" />
+              Keep post
+            </button>
+          )}
+          <button type="button" disabled={busy} onClick={() => setAsking('remove')} className="c-btn c-btn-s c-btn-sm">
             <Trash2 aria-hidden="true" className="w-4 h-4" />
             Remove post
           </button>
+          {canStop && !post.authorStopped ? (
+            <button type="button" disabled={busy} onClick={() => setAsking('stop')} className="c-btn c-btn-s c-btn-sm">
+              <UserX aria-hidden="true" className="w-4 h-4" />
+              Stop them posting
+            </button>
+          ) : null}
+          {canStop && post.authorStopped ? (
+            <button type="button" disabled={busy} onClick={() => onStop(post, false)} className="c-btn c-btn-s c-btn-sm">
+              <UserCheck aria-hidden="true" className="w-4 h-4" />
+              Let them post again
+            </button>
+          ) : null}
           {full !== null ? <span className="c-s13 c-t2">{full}</span> : null}
         </div>
       )}
@@ -347,6 +414,9 @@ export default function Updates() {
   const readOnly = consoleIsReadOnly(org);
 
   const [state, setState] = useState({ loading: true, error: null, refused: false, feed: null });
+  /** The reported posts and the people stopped from posting; null until read. */
+  const [side, setSide] = useState({ reported: null, stopped: null });
+  const [switching, setSwitching] = useState(false);
   const [more, setMore] = useState({ loading: false, error: null });
   /** The post a pin or a removal is on its way for. */
   const [busy, setBusy] = useState(null);
@@ -354,8 +424,20 @@ export default function Updates() {
   const [actionError, setActionError] = useState(null);
   const [viewing, setViewing] = useState(null);
 
+  const loadSide = useCallback(() => {
+    if (gymId === null) return Promise.resolve();
+    // Read beside the posts: one that fails leaves its part of the page as it was.
+    return Promise.allSettled([staffPostsService.reported(gymId), staffPostsService.stopped(gymId)]).then(([reported, stopped]) =>
+      setSide((was) => ({
+        reported: reported.status === 'fulfilled' ? reported.value : was.reported,
+        stopped: stopped.status === 'fulfilled' ? stopped.value : was.stopped,
+      })),
+    );
+  }, [gymId]);
+
   const load = useCallback(() => {
     if (gymId === null) return Promise.resolve();
+    loadSide();
     return staffPostsService.list(gymId).then(
       (feed) => setState({ loading: false, error: null, refused: false, feed }),
       (err) =>
@@ -366,7 +448,7 @@ export default function Updates() {
           feed: s.feed,
         })),
     );
-  }, [gymId]);
+  }, [gymId, loadSide]);
 
   useEffect(() => {
     load();
@@ -392,7 +474,8 @@ export default function Updates() {
     try {
       const answer = await request();
       setState((s) => (s.feed === null ? s : { ...s, feed: change(s.feed, answer) }));
-      setNotice(done);
+      setNotice(typeof done === 'function' ? done(answer) : done);
+      await loadSide();
     } catch (err) {
       setActionError(errorText(err, "We couldn't change that. Please try again."));
       // Removed or pinned somewhere else in the meantime: show what is true now.
@@ -400,6 +483,49 @@ export default function Updates() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const onSwitch = async (on) => {
+    const lines = memberPostsSwitch(on, words);
+    setSwitching(true);
+    setNotice(null);
+    setActionError(null);
+    try {
+      const saved = await staffPostsService.setMembersCanPost(gymId, on);
+      setState((s) => (s.feed === null ? s : { ...s, feed: { ...s.feed, membersCanPost: saved.membersCanPost } }));
+      setNotice(on ? lines.on : lines.off);
+    } catch (err) {
+      setActionError(errorText(err, "We couldn't change that. Please try again."));
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  const cardActions = {
+    onPin: (p, pinned) =>
+      act(
+        p,
+        () => staffPostsService.setPinned(gymId, p.id, pinned),
+        pinned ? 'Pinned to the top.' : 'Unpinned.',
+        (shown, answer) => withPinChange(shown, answer.post),
+      ),
+    onRemove: (p) =>
+      act(
+        p,
+        () => staffPostsService.remove(gymId, p.id),
+        `Post removed. Your ${words.people} no longer see it.`,
+        (shown) => withoutPost(shown, p.id),
+      ),
+    // Keep answers the reports this list showed and no later one; the list is read again.
+    onKeep: (p, item) => act(p, () => staffPostsService.keep(gymId, p.id, item.lastReportedAt), keepNote, (shown) => shown),
+    onStop: (p, stopped) =>
+      act(
+        p,
+        () => staffPostsService.setStopped(gymId, p.authorId, stopped),
+        stopped ? stopBox(p.author.name).done : stopBox(p.author.name).undone,
+        (shown) => withStopped(shown, p.authorId, stopped),
+      ),
+    onOpen: (p, index) => setViewing({ post: p, index }),
   };
 
   if (orgLoading) {
@@ -431,6 +557,10 @@ export default function Updates() {
 
   const feed = state.feed;
   const all = feed === null ? [] : [...feed.pinned, ...feed.posts];
+  const reported = side.reported;
+  const stoppedPeople = side.stopped?.people ?? [];
+  const switchLines = feed === null ? null : memberPostsSwitch(feed.membersCanPost, words);
+  const waiting = reported === null ? null : reportedMore(reported);
   return (
     <div className="c-page">
       <header className="flex flex-col gap-1.5 min-w-0">
@@ -463,6 +593,26 @@ export default function Updates() {
             />
           ) : null}
 
+          {switchLines !== null ? (
+            <section className="c-card" aria-label={switchLines.label}>
+              <div className="c-row" data-testid="members-can-post">
+                <div className="flex flex-col gap-0.5 min-w-0 flex-grow">
+                  <span className="c-s15 c-w6 c-t1">{switchLines.label}</span>
+                  <span className="c-s13 c-t2">{switchLines.line}</span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={feed.membersCanPost}
+                  aria-label={switchLines.label}
+                  disabled={readOnly || switching}
+                  onClick={() => onSwitch(!feed.membersCanPost)}
+                  className={feed.membersCanPost ? 'c-switch c-switch-on' : 'c-switch'}
+                />
+              </div>
+            </section>
+          ) : null}
+
           {notice !== null ? (
             <p className="c-s14 c-w6" role="status" style={{ color: 'var(--good)' }}>
               {notice}
@@ -472,6 +622,62 @@ export default function Updates() {
             <p className="c-s14" role="alert" style={{ color: 'var(--bad)' }}>
               {actionError}
             </p>
+          ) : null}
+
+          {reported !== null && reported.items.length > 0 ? (
+            <section className="flex flex-col gap-3" aria-label="Reported posts" data-testid="reported">
+              <div className="flex flex-col gap-1">
+                <h2 className="c-s15 c-w6 c-t1">{reportedTitle(reported.total)}</h2>
+                <p className="c-s13 c-t2">{`Remove a post and it's gone for everyone. Keep it and it stays on Updates. Your ${words.people} are never told who reported a post, and neither are you.`}</p>
+                {waiting !== null ? <p className="c-s13 c-t2">{waiting}</p> : null}
+              </div>
+              <ul className="flex flex-col gap-3">
+                {reported.items.map((item) => (
+                  <PostCard
+                    key={item.post.id}
+                    gymId={gymId}
+                    gymName={reported.gymName}
+                    post={item.post}
+                    report={item}
+                    pinnedCount={0}
+                    words={words}
+                    readOnly={readOnly}
+                    busy={busy === item.post.id}
+                    {...cardActions}
+                  />
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {stoppedPeople.length > 0 ? (
+            <section className="c-card" aria-label="Stopped from posting" data-testid="stopped">
+              <div className="px-4 md:px-5 pt-4 flex flex-col gap-1">
+                <h2 className="c-s15 c-w6 c-t1">Stopped from posting</h2>
+                <p className="c-s13 c-t2">They can read and react, but not post, until you let them again.</p>
+              </div>
+              {stoppedPeople.map((person) => (
+                <div key={person.userId} className="c-row">
+                  <span className="c-s15 c-t1 min-w-0 flex-grow c-ell">{person.name ?? 'No name yet'}</span>
+                  <button
+                    type="button"
+                    disabled={readOnly || busy === person.userId}
+                    onClick={() =>
+                      act(
+                        { id: person.userId },
+                        () => staffPostsService.setStopped(gymId, person.userId, false),
+                        stopBox(person.name).undone,
+                        (shown) => withStopped(shown, person.userId, false),
+                      )
+                    }
+                    className="c-btn c-btn-s c-btn-sm"
+                  >
+                    <UserCheck aria-hidden="true" className="w-4 h-4" />
+                    Let them post again
+                  </button>
+                </div>
+              ))}
+            </section>
           ) : null}
 
           {state.loading ? <ConsoleLoading label="Loading your updates…" newLook /> : null}
@@ -495,23 +701,7 @@ export default function Updates() {
                   words={words}
                   readOnly={readOnly}
                   busy={busy === post.id}
-                  onPin={(p, pinned) =>
-                    act(
-                      p,
-                      () => staffPostsService.setPinned(gymId, p.id, pinned),
-                      pinned ? 'Pinned to the top.' : 'Unpinned.',
-                      (shown, answer) => withPinChange(shown, answer.post),
-                    )
-                  }
-                  onRemove={(p) =>
-                    act(
-                      p,
-                      () => staffPostsService.remove(gymId, p.id),
-                      `Post removed. Your ${words.people} no longer see it.`,
-                      (shown) => withoutPost(shown, p.id),
-                    )
-                  }
-                  onOpen={(p, index) => setViewing({ post: p, index })}
+                  {...cardActions}
                 />
               ))}
             </ul>
