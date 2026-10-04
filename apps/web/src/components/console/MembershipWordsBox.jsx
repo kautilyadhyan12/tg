@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import {
@@ -65,9 +65,17 @@ function LinkBox({ preview, busy, error, onGive, onCancel }) {
   const question = paidQuestion(preview);
   const pack = packNote(preview);
   const id = (name) => `membership-link-${name}-${preview.type.id}`;
+  const boxRef = useRef(null);
+
+  // The box opens under the whole list of words: bring it to the person who pressed Link.
+  useEffect(() => {
+    const box = boxRef.current;
+    if (box && typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'nearest' });
+  }, []);
 
   return (
     <div
+      ref={boxRef}
       role="group"
       aria-label={words.heading}
       className="rounded-xl p-4 flex flex-col gap-4"
