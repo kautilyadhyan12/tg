@@ -41,13 +41,26 @@ const reactionCountsSchema = z
   .strict();
 export type GymPostReactionCounts = z.infer<typeof reactionCountsSchema>;
 
+/** How long a post's words are, as the screen and the database count them: by character,
+ *  so an emoji is one, not the two units a JavaScript string holds it in. */
+export function postLength(text: string): number {
+  return Array.from(text).length;
+}
+
+/** A post's words: at most 2,000 characters by `postLength`. The unit cap in front of it
+ *  only stops a huge string being walked. */
+const postWords = z
+  .string()
+  .max(GYM_POST_MAX_CHARS * 2)
+  .refine((text) => postLength(text) <= GYM_POST_MAX_CHARS, { message: "too many characters" });
+
 export const gymPostSchema = z
   .object({
     id: z.string().uuid(),
     /** Who posted: first name and last initial for members, the whole name for staff;
      *  null when the account is gone, and the screen says the gym's name. */
     author: z.object({ name: z.string().nullable(), initials: z.string() }).strict(),
-    body: z.string().max(GYM_POST_MAX_CHARS),
+    body: postWords,
     photos: z.array(gymPostPhotoSchema).max(GYM_POST_MAX_PHOTOS),
     pinned: z.boolean(),
     createdAt: z.string().datetime({ offset: true }),
@@ -58,11 +71,25 @@ export const gymPostSchema = z
   .strict();
 export type GymPost = z.infer<typeof gymPostSchema>;
 
-/** Where the next page starts: the last post's instant and id. */
-export const gymPostsQuerySchema = z
-  .object({ before: z.string().regex(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z_[0-9a-f-]{36}$/).optional() })
-  .strict();
+/** Where the next page starts, as a list's `next` gave it: the last post's instant, "_",
+ *  its id. Read into the two, each checked as what it is, so nothing the database cannot
+ *  read as an instant or an id is ever handed to it. */
+const postsCursor = z
+  .string()
+  .max(80)
+  .transform((text, ctx) => {
+    const cut = text.lastIndexOf("_");
+    const at = z.string().datetime().safeParse(text.slice(0, Math.max(cut, 0)));
+    const id = z.string().uuid().safeParse(text.slice(cut + 1));
+    if (cut < 0 || !at.success || !id.success || Number.isNaN(new Date(at.data).getTime())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "not a place in the list" });
+      return z.NEVER;
+    }
+    return { at: at.data, id: id.data };
+  });
+export const gymPostsQuerySchema = z.object({ before: postsCursor.optional() }).strict();
 export type GymPostsQuery = z.infer<typeof gymPostsQuerySchema>;
+export type GymPostsCursor = NonNullable<GymPostsQuery["before"]>;
 
 const feedShape = {
   gymId: z.string().uuid(),
@@ -79,9 +106,8 @@ const feedShape = {
 export const gymPostsResponseSchema = z.object({ ...feedShape, status: z.enum(["shown", "paused"]) }).strict();
 export type GymPostsResponse = z.infer<typeof gymPostsResponseSchema>;
 
-/** What staff read. `live` false: the gym's plan has lapsed, members see nothing and
- *  nothing can be changed. */
-export const staffGymPostsResponseSchema = z.object({ ...feedShape, live: z.boolean() }).strict();
+/** What staff read. */
+export const staffGymPostsResponseSchema = z.object(feedShape).strict();
 export type StaffGymPostsResponse = z.infer<typeof staffGymPostsResponseSchema>;
 
 const photoBase64 = z
@@ -94,10 +120,7 @@ export const addGymPostRequestSchema = z
   .object({
     /** The browser's key for this one post: the same key again is the same post. */
     postKey: z.string().uuid(),
-    body: z
-      .string()
-      .max(GYM_POST_MAX_CHARS)
-      .refine((text) => !text.includes(NUL), { message: "a character that cannot be kept" }),
+    body: postWords.refine((text) => !text.includes(NUL), { message: "a character that cannot be kept" }),
     /** Each photo as base64, already shrunk by the browser, in the order shown. */
     photos: z.array(photoBase64).max(GYM_POST_MAX_PHOTOS),
   })

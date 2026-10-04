@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GYM_POST_MAX_CHARS, ROLE_PRIVILEGES } from '@app/shared';
+import { GYM_POST_MAX_CHARS, ROLE_PRIVILEGES, addGymPostRequestSchema, gymPostSchema, gymPostsQuerySchema } from '@app/shared';
 import {
   addPostPhotos,
   authorInitials,
@@ -16,7 +16,9 @@ import {
   reactorsTitle,
   removeBox,
   withPage,
+  withPinChange,
   withPost,
+  withoutPost,
   withReaction,
 } from './postsView';
 
@@ -134,6 +136,20 @@ describe('the post form', () => {
     expect(charsLine('a'.repeat(GYM_POST_MAX_CHARS + 12))).toEqual({ over: true, text: '12 characters too many' });
   });
 
+  // An emoji is one character here and on the server, though a string holds it as two units:
+  // the server's own schema is asked the same strings.
+  it.each([
+    [10, { over: false, text: '0 characters left' }, true],
+    [11, { over: true, text: '1 character too many' }, false],
+  ])('1,990 letters and %i emoji', (emoji, line, taken) => {
+    const body = 'a'.repeat(1990) + String.fromCodePoint(0x1f4aa).repeat(emoji);
+    expect(body.length).toBe(1990 + emoji * 2);
+    expect(charsLine(body)).toEqual(line);
+    expect(canPost(body, [])).toBe(taken);
+    expect(addGymPostRequestSchema.safeParse({ postKey: '11111111-1111-4111-8111-111111111111', body, photos: [] }).success).toBe(taken);
+    expect(gymPostSchema.safeParse(post({ id: '11111111-1111-4111-8111-111111111111', body })).success).toBe(taken);
+  });
+
   it.each([
     ['', [], false],
     ['   \n ', [], false],
@@ -190,6 +206,43 @@ describe('the list as it changes', () => {
     expect(next.posts.map((p) => p.id)).toEqual(['a', 'b', 'c']);
     expect(next.pinned.map((p) => p.id)).toEqual(['pin']);
     expect(next.next).toBeNull();
+  });
+
+  it('takes a removed post out, pinned or not', () => {
+    const given = feed({ pinned: [post({ id: 'pin' })], posts: [post({ id: 'a' }), post({ id: 'b' })], next: 'cursor-1' });
+    expect(withoutPost(given, 'a').posts.map((p) => p.id)).toEqual(['b']);
+    expect(withoutPost(given, 'pin').pinned).toEqual([]);
+    expect(withoutPost(given, 'pin').next).toBe('cursor-1');
+  });
+
+  // id, when it was posted
+  const at = (id, hour, over = {}) => post({ id, createdAt: `2026-10-07T${hour}:00:00.000Z`, ...over });
+  it.each([
+    // what the server answered, the pinned ids after, the other ids after
+    ['pinning one puts it first among the pinned', at('b', '08', { pinned: true }), ['b', 'p'], ['a', 'c']],
+    ['unpinning puts it back by when it was posted', at('p', '08', { pinned: false }), [], ['a', 'p', 'b', 'c']],
+    ['unpinning the newest puts it first', at('p', '12', { pinned: false }), [], ['p', 'a', 'b', 'c']],
+    ['unpinning one older than every post loaded, with more to come, leaves it for its own page', at('p', '01', { pinned: false }), [], ['a', 'b', 'c']],
+  ])('%s', (_what, answer, pinned, others) => {
+    const given = feed({ pinned: [at('p', '08', { pinned: true })], posts: [at('a', '09'), at('b', '08'), at('c', '07')], next: 'cursor-1' });
+    const next = withPinChange(given, answer);
+    expect(next.pinned.map((p) => p.id)).toEqual(pinned);
+    expect(next.posts.map((p) => p.id)).toEqual(others);
+  });
+
+  it('unpinning the oldest post of a list that is all loaded puts it last', () => {
+    const given = feed({ pinned: [at('p', '01', { pinned: true })], posts: [at('a', '09')], next: null });
+    expect(withPinChange(given, at('p', '01', { pinned: false })).posts.map((p) => p.id)).toEqual(['a', 'p']);
+  });
+
+  // A place in the list is the last answer's `next`, handed back as it came.
+  it.each([
+    ['2026-10-07T06:30:00.000Z_11111111-1111-4111-8111-111111111111', true],
+    ['yesterday', false],
+    ['2026-13-45T99:99:99Z_------------------------------------', false],
+    ['2026-10-07T::::Z_11111111-1111-4111-8111-111111111111', false],
+  ])('the place %s is read: %s', (before, read) => {
+    expect(gymPostsQuerySchema.safeParse({ before }).success).toBe(read);
   });
 
   it('changes one post in place, pinned or not', () => {

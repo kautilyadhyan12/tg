@@ -20,6 +20,8 @@ import {
   reactorsTitle,
   removeBox,
   withPage,
+  withPinChange,
+  withoutPost,
 } from '../../components/gym/postsView';
 import { preparePagePhoto } from './gymPagePhotos';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -232,7 +234,8 @@ function Reactions({ gymId, post }) {
       {shown !== null ? (
         <div role="region" aria-label={`Who reacted ${shown.word}`} className="rounded-[14px] p-4 flex flex-col gap-2" style={{ background: 'var(--raise)' }}>
           <div className="flex items-center gap-3">
-            <p className="c-s14 c-w6 c-t1 flex-grow">{reactorsTitle(shown)}</p>
+            {/* Once the names have arrived the number is theirs, so the two always agree. */}
+            <p className="c-s14 c-w6 c-t1 flex-grow">{reactorsTitle({ word: shown.word, count: state.who?.total ?? shown.count })}</p>
             <button type="button" onClick={() => setOpen(null)} className="c-btn c-btn-quiet c-s14">
               Close
             </button>
@@ -381,13 +384,14 @@ export default function Updates() {
   };
 
   /** A pin or a removal, then the list as the server now has it. */
-  const act = async (post, request, done) => {
+  // The list is changed in place, so older posts already loaded stay where staff were.
+  const act = async (post, request, done, change) => {
     setBusy(post.id);
     setNotice(null);
     setActionError(null);
     try {
-      await request();
-      await load();
+      const answer = await request();
+      setState((s) => (s.feed === null ? s : { ...s, feed: change(s.feed, answer) }));
       setNotice(done);
     } catch (err) {
       setActionError(errorText(err, "We couldn't change that. Please try again."));
@@ -491,8 +495,22 @@ export default function Updates() {
                   words={words}
                   readOnly={readOnly}
                   busy={busy === post.id}
-                  onPin={(p, pinned) => act(p, () => staffPostsService.setPinned(gymId, p.id, pinned), pinned ? 'Pinned to the top.' : 'Unpinned.')}
-                  onRemove={(p) => act(p, () => staffPostsService.remove(gymId, p.id), `Post removed. Your ${words.people} no longer see it.`)}
+                  onPin={(p, pinned) =>
+                    act(
+                      p,
+                      () => staffPostsService.setPinned(gymId, p.id, pinned),
+                      pinned ? 'Pinned to the top.' : 'Unpinned.',
+                      (shown, answer) => withPinChange(shown, answer.post),
+                    )
+                  }
+                  onRemove={(p) =>
+                    act(
+                      p,
+                      () => staffPostsService.remove(gymId, p.id),
+                      `Post removed. Your ${words.people} no longer see it.`,
+                      (shown) => withoutPost(shown, p.id),
+                    )
+                  }
                   onOpen={(p, index) => setViewing({ post: p, index })}
                 />
               ))}

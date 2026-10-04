@@ -106,6 +106,15 @@ export async function photosOf(sql: SqlOrTx, gymId: string, postIds: readonly st
   return rows.map((r) => ({ postId: r.post_id, id: r.id, width: r.width, height: r.height }));
 }
 
+/** A reaction counts, and its giver is named, only while they are a live app member of the
+ *  gym with an active account: the number and the names staff see always agree. Joins `m`
+ *  (the membership) and `u` (the account) to the reaction `r`. */
+function liveReactor(sql: SqlOrTx) {
+  return sql`
+    JOIN gym_members m ON m.gym_id = r.gym_id AND m.user_id = r.user_id AND m.removed_at IS NULL
+    JOIN users u ON u.id = r.user_id AND u.status = 'active'`;
+}
+
 export async function reactionCounts(
   sql: SqlOrTx,
   gymId: string,
@@ -113,9 +122,11 @@ export async function reactionCounts(
 ): Promise<{ postId: string; reaction: string; count: number }[]> {
   if (postIds.length === 0) return [];
   const rows = await sql<{ post_id: string; reaction: string; n: number }[]>`
-    SELECT post_id, reaction, count(*)::int AS n FROM gym_post_reactions
-    WHERE gym_id = ${gymId} AND post_id = ANY (${[...postIds]}::uuid[])
-    GROUP BY post_id, reaction`;
+    SELECT r.post_id, r.reaction, count(*)::int AS n
+    FROM gym_post_reactions r
+    ${liveReactor(sql)}
+    WHERE r.gym_id = ${gymId} AND r.post_id = ANY (${[...postIds]}::uuid[])
+    GROUP BY r.post_id, r.reaction`;
   return rows.map((r) => ({ postId: r.post_id, reaction: r.reaction, count: r.n }));
 }
 
@@ -134,13 +145,12 @@ export interface ReactorRow {
   recordName: string | null;
 }
 
-/** Who gave this reaction to this gym's post, newest first: people whose account is active. */
+/** Who gave this reaction to this gym's post, newest first. */
 export async function reactorsOf(sql: SqlOrTx, gymId: string, postId: string, reaction: GymPostReaction, limit: number): Promise<ReactorRow[]> {
   const rows = await sql<{ display_name: string; email: string | null; record_name: string | null }[]>`
     SELECT u.display_name, u.email::text AS email, nullif(btrim(e.full_name), '') AS record_name
     FROM gym_post_reactions r
-    JOIN users u ON u.id = r.user_id AND u.status = 'active'
-    LEFT JOIN gym_members m ON m.gym_id = r.gym_id AND m.user_id = r.user_id AND m.removed_at IS NULL
+    ${liveReactor(sql)}
     LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id
     WHERE r.gym_id = ${gymId} AND r.post_id = ${postId} AND r.reaction = ${reaction}
     ORDER BY r.created_at DESC, r.user_id

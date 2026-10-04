@@ -44,7 +44,7 @@ const post = (id, body, over = {}) => ({
   mine: null,
   ...over,
 });
-const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', live: true, pinned: [], posts: [], next: null, ...over });
+const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', pinned: [], posts: [], next: null, ...over });
 
 const open = (org = ORG) => {
   orgApi.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
@@ -124,7 +124,7 @@ describe('the page', () => {
   });
 
   it('a gym with no plan: the posts are shown, nothing can be posted, pinned or removed, and the page says why', async () => {
-    svc.list.mockResolvedValue(feed({ live: false, posts: [post('a', 'Written while we were open')] }));
+    svc.list.mockResolvedValue(feed({ posts: [post('a', 'Written while we were open')] }));
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     await waitFor(() => expect(cards()).toHaveLength(1));
     expect(screen.getByText("This gym needs a plan before anything here can be changed. Your members can't see these posts until then.")).toBeTruthy();
@@ -145,7 +145,8 @@ describe('who reacted', () => {
 
   it('a press on a reaction shows who gave it, by name; a second press or Close folds it away', async () => {
     svc.list.mockResolvedValue(liked());
-    svc.reactors.mockResolvedValue({ reaction: 'like', total: 3, people: [{ name: 'Asha Rao', initials: 'AR' }, { name: null, initials: '' }] });
+    // One more person reacted after the page was read: the answer says 4.
+    svc.reactors.mockResolvedValue({ reaction: 'like', total: 4, people: [{ name: 'Asha Rao', initials: 'AR' }, { name: null, initials: '' }] });
     open();
     await waitFor(() => expect(cards()).toHaveLength(1));
     const card = within(cards()[0]);
@@ -153,10 +154,12 @@ describe('who reacted', () => {
     fireEvent.click(card.getByRole('button', { name: 'Like, 3 people. See who' }));
     expect(svc.reactors).toHaveBeenCalledWith('g1', 'a', 'like');
     const box = within(await card.findByRole('region', { name: 'Who reacted Like' }));
-    expect(box.getByText('Like · 3 people')).toBeTruthy();
     expect((await box.findAllByRole('listitem')).map((li) => li.textContent)).toEqual(['Asha Rao', 'No name yet']);
-    // One of the three is not in the list (an account that is gone): said, never hidden.
-    expect(box.getByText('and 1 more')).toBeTruthy();
+    // The heading takes the answer's own number, so it and the names always agree; the
+    // people the list does not carry are said, never hidden.
+    expect(box.getByText('Like · 4 people')).toBeTruthy();
+    expect(box.queryByText('Like · 3 people')).toBeNull();
+    expect(box.getByText('and 2 more')).toBeTruthy();
     expect(card.getByRole('button', { name: 'Like, 3 people. See who' }).getAttribute('aria-expanded')).toBe('true');
 
     fireEvent.click(box.getByRole('button', { name: 'Close' }));
@@ -296,6 +299,32 @@ describe('pinning and removing', () => {
     expect((await screen.findByRole('status')).textContent).toBe('Post removed. Your members no longer see it.');
     expect(cards()).toHaveLength(1);
     expect(cards()[0].textContent).toContain('Stay');
+  });
+
+  it('removing or pinning after "Show older posts" keeps the older posts where they were, and asks for no new list', async () => {
+    svc.list
+      .mockResolvedValueOnce(feed({ posts: [post('a', 'Newest', { createdAt: '2026-10-07T09:00:00.000Z' }), post('b', 'Middle', { createdAt: '2026-10-07T08:00:00.000Z' })], next: 'cursor-1' }))
+      .mockResolvedValueOnce(feed({ posts: [post('c', 'Older', { createdAt: '2026-10-07T07:00:00.000Z' }), post('d', 'Oldest', { createdAt: '2026-10-07T06:00:00.000Z' })] }));
+    svc.remove.mockResolvedValue({ removed: true });
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Show older posts' }));
+    await waitFor(() => expect(cards()).toHaveLength(4));
+    const words = () => cards().map((card) => ['Newest', 'Middle', 'Older', 'Oldest'].find((w) => card.textContent.includes(w)));
+
+    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Remove post' }));
+    fireEvent.click(within(cards()[2]).getByRole('group').querySelector('.c-btn-danger'));
+    await waitFor(() => expect(cards()).toHaveLength(3));
+    expect(svc.remove).toHaveBeenCalledWith('g1', 'c');
+    expect(words()).toEqual(['Newest', 'Middle', 'Oldest']);
+
+    svc.setPinned.mockResolvedValueOnce({ post: post('d', 'Oldest', { pinned: true, createdAt: '2026-10-07T06:00:00.000Z' }) });
+    fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Pin to the top' }));
+    await waitFor(() => expect(words()).toEqual(['Oldest', 'Newest', 'Middle']));
+    svc.setPinned.mockResolvedValueOnce({ post: post('d', 'Oldest', { pinned: false, createdAt: '2026-10-07T06:00:00.000Z' }) });
+    fireEvent.click(within(cards()[0]).getByRole('button', { name: 'Unpin' }));
+    await waitFor(() => expect(words()).toEqual(['Newest', 'Middle', 'Oldest']));
+    expect(svc.list).toHaveBeenCalledTimes(2);
   });
 
   it('a removal that fails says so and keeps the post', async () => {

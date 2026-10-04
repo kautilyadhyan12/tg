@@ -15,7 +15,7 @@ import { GYM_POSTS_PAGE, type GymPost, type GymPostReactionResponse, type GymPos
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
-import { createMemoryRedis } from "../src/redis.js";
+import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
 const url = process.env["DATABASE_URL"];
@@ -40,6 +40,8 @@ const NOON = new Date("2026-10-07T06:30:00Z");
 const photo = (name: string): string => readFileSync(new URL(`./fixtures/photos/${name}`, import.meta.url)).toString("base64");
 const IPHONE = photo("iphone16.jpg");
 const PNG = photo("iphone16-exif.png");
+/** One emoji: one character on the screen, two units in a JavaScript string. */
+const FLEX = String.fromCodePoint(0x1f4aa);
 
 /** The GPS block's tag, either byte order, anywhere before the picture starts. */
 const hasGps = (bytes: Uint8Array): boolean => {
@@ -53,8 +55,15 @@ let ipCounter = 0;
 const nextIp = () => `10.71.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
 const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies =>
   Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
+/** An address of this run's own for a limit test: a real Redis keeps its counters for the
+ *  hour, across runs. */
+const desk = (): string => {
+  const hex = randomUUID().replaceAll("-", "");
+  return `10.${String(100 + (parseInt(hex.slice(0, 2), 16) % 100))}.${String(parseInt(hex.slice(2, 4), 16))}.${String((parseInt(hex.slice(4, 6), 16) % 254) + 1)}`;
+};
+const redisUrl = process.env["TEST_REDIS_URL"];
 let seq = 0;
-const uniq = (): string => `${String(Date.now())}${String(seq++)}`;
+const uniq =(): string => `${String(Date.now())}${String(seq++)}`;
 
 d("a gym's Updates (real Postgres, real disk)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
@@ -64,6 +73,11 @@ d("a gym's Updates (real Postgres, real disk)", () => {
   /** A second api on the same database, folder and Redis: one api holds one connection, so
    *  two requests race only across two of them. */
   let second: App | undefined;
+  let redis: RedisLike | undefined;
+  const limits = (): RedisLike => {
+    if (redis === undefined) throw new Error("beforeAll did not make the Redis");
+    return redis;
+  };
   const either = (n: number): App => (n % 2 === 0 ? api() : (second ?? api()));
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -159,6 +173,9 @@ d("a gym's Updates (real Postgres, real disk)", () => {
   };
   const react = (gym: Gym, who: Person, postId: string, reaction: string | null, target = api()) =>
     inject("PUT", `${posts(gym.id)}/${postId}/reaction`, who.cookies, { reaction }, nextIp(), target);
+  /** A photo asked for again by a browser that already holds it. */
+  const again = (path: string, photoId: string, cookies: Cookies) =>
+    api().inject({ method: "GET", url: path, remoteAddress: nextIp(), cookies, headers: { "if-none-match": `"${photoId}"` } });
   const rowsOf = async (table: "gym_posts" | "gym_post_photos" | "gym_post_reactions", gymId: string): Promise<number> => {
     const rows =
       table === "gym_posts"
@@ -187,7 +204,14 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap, trial_days, rank, entitlements, member_entitlements)
       VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'GBP', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
-    const overrides = { redis: createMemoryRedis(), photoStore: createDiskPhotoStore(folder), orgs: { now: () => new Date(clock) } };
+    // The real Redis where there is one (`test:local` and CI's database job set
+    // TEST_REDIS_URL), so the limits run as the Lua production runs.
+    redis = redisUrl === undefined || redisUrl === "" ? createMemoryRedis() : createIoRedis(redisUrl);
+    for (let tries = 0; (await redis.incrWithTtl(`posts-ready:${randomUUID()}`, 30)) === null; tries++) {
+      if (tries === 100) throw new Error("the Redis at TEST_REDIS_URL never connected");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const overrides = { redis, photoStore: createDiskPhotoStore(folder), orgs: { now: () => new Date(clock) } };
     app = await buildApp(loadConfig(baseEnv), overrides);
     await api().ready();
     second = await buildApp(loadConfig(baseEnv), overrides);
@@ -198,6 +222,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
     await cleanup();
     await app?.close();
     await second?.close();
+    await redis?.close();
     await sql.end({ timeout: 5 });
     await rm(folder, { recursive: true, force: true });
   }, T);
@@ -263,6 +288,11 @@ d("a gym's Updates (real Postgres, real disk)", () => {
         for (const res of writes) expect(res.statusCode, `${who} staff write`).toBe(writeStatus);
         expect((await react(gym, { userId: "", cookies }, post.id, "like")).statusCode, `${who} reaction`).toBe(reactStatus);
       }
+      // A browser that says it already holds the photo is asked the same question: nobody
+      // outside is told "the one you have".
+      for (const [who, cookies, , , photoStatus] of refused) {
+        expect((await again(photoPath, photoId, cookies)).statusCode, `${who} asking again`).toBe(photoStatus);
+      }
       // A member of this gym is not its staff.
       expect((await inject("GET", staffRead, inside.cookies)).statusCode).toBe(404);
       // Nor is a member told who reacted, their own reaction included.
@@ -308,7 +338,8 @@ d("a gym's Updates (real Postgres, real disk)", () => {
           const res = await inject("GET", `${posts(gym.id)}/${post.id}/photos/${p.id}`, who.cookies);
           expect(res.statusCode).toBe(200);
           expect(res.headers["x-content-type-options"]).toBe("nosniff");
-          expect(res.headers["cache-control"]).toBe("private, max-age=300");
+          expect(res.headers["cache-control"]).toBe("private, no-cache");
+          expect(res.headers["etag"]).toBe(`"${p.id}"`);
           expect(hasGps(res.rawPayload)).toBe(false);
           expect(res.rawPayload.toString("latin1")).not.toMatch(/eXIf|iPhone/);
         }
@@ -345,7 +376,6 @@ d("a gym's Updates (real Postgres, real disk)", () => {
         [first.id, "Maya O.", false, null],
       ]);
       const forStaff = await staffFeed(gym, gym.owner);
-      expect(forStaff.live).toBe(true);
       expect(forStaff.posts.map((p) => p.author.name)).toEqual(["Tom Reed", "Maya Okafor"]);
       expect(await audits(gym.id, "org.post_added")).toBe(2);
       const stored = await sql<{ author_user_id: string }[]>`SELECT author_user_id FROM gym_posts WHERE id = ${first.id}`;
@@ -380,6 +410,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       const refused: [string, unknown, number][] = [
         ["no words and no photo", { postKey: randomUUID(), body: "   ", photos: [] }, 400],
         ["2,001 characters", { postKey: randomUUID(), body: "a".repeat(2001), photos: [] }, 400],
+        ["2,001 characters, eleven of them emoji", { postKey: randomUUID(), body: "a".repeat(1990) + FLEX.repeat(11), photos: [] }, 400],
         ["five photos", { postKey: randomUUID(), body: "x", photos: [PNG, PNG, PNG, PNG, PNG] }, 400],
         ["a key that is no key", { postKey: "nope", body: "x", photos: [] }, 400],
         ["a field nobody asked for", { postKey: randomUUID(), body: "x", photos: [], pinned: true }, 400],
@@ -398,6 +429,15 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       const full = await add(gym, gym.owner, "a".repeat(2000), [PNG, PNG, PNG, PNG]);
       expect(full.photos).toHaveLength(4);
       expect(await filesOf(gym.id)).toHaveLength(4);
+      // A character is one however a string holds it: 1,990 letters and ten emoji are the
+      // 2,000 the screen counts, taken and sent back whole to staff and to a member.
+      const emoji = "a".repeat(1990) + FLEX.repeat(10);
+      expect(emoji.length).toBe(2010);
+      const kept = await add(gym, gym.owner, emoji);
+      expect(kept.body).toBe(emoji);
+      const viewer = await member(gym, "Vera Viewer");
+      expect((await feed(gym, viewer)).posts[0]?.body).toBe(emoji);
+      expect((await staffFeed(gym, gym.owner)).posts[0]?.body).toBe(emoji);
     },
     T,
   );
@@ -418,6 +458,13 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       expect((await broken(inside.cookies)).statusCode).toBe(404);
       expect((await broken(trainer.cookies)).statusCode).toBe(403);
       expect((await broken(gym.owner.cookies)).statusCode).toBe(400);
+      // An address that names no gym: answered for the address, its body never read (a
+      // server that read it would say the JSON is broken).
+      for (const cookies of [stranger.cookies, gym.owner.cookies]) {
+        const res = await api().inject({ method: "POST", url: "/v1/orgs/not-a-gym/posts", remoteAddress: nextIp(), cookies, headers: { "content-type": "application/json" }, payload: '{"postKey": ' });
+        expect([res.statusCode, (JSON.parse(res.body) as { error: string }).error]).toEqual([400, "validation_error"]);
+      }
+      expect((await api().inject({ method: "POST", url: "/v1/orgs/not-a-gym/posts", remoteAddress: nextIp(), headers: { "content-type": "application/json" }, payload: '{"postKey": ' })).statusCode).toBe(401);
       await lapse(gym.id);
       expect((await broken(gym.owner.cookies)).statusCode).toBe(409);
     },
@@ -497,6 +544,73 @@ d("a gym's Updates (real Postgres, real disk)", () => {
     T,
   );
 
+  it(
+    "a reaction counts, and its giver is named, only while they are a live member with an active account; the names stop at 100",
+    async () => {
+      const gym = await makeGym("Counted House");
+      const post = await add(gym, gym.owner, "Who is still here");
+      const asha = await member(gym, "Asha Rao");
+      const bilal = await member(gym, "Bilal Khan");
+      const chen = await member(gym, "Chen Wu");
+      for (const who of [asha, bilal, chen]) expect((await react(gym, who, post.id, "fire")).statusCode).toBe(200);
+      const fire = async () => {
+        const res = await inject("GET", `${posts(gym.id)}/${post.id}/reactions?reaction=fire`, gym.owner.cookies);
+        expect(res.statusCode).toBe(200);
+        const body = JSON.parse(res.body) as { total: number; people: { name: string | null }[] };
+        return { total: body.total, names: body.people.map((p) => p.name).sort() };
+      };
+      expect(await fire()).toEqual({ total: 3, names: ["Asha Rao", "Bilal Khan", "Chen Wu"] });
+
+      // The gym removes Bilal, and Chen's account is deleted: neither is counted or named,
+      // for staff or for members, and the number always matches the names.
+      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${bilal.userId}`;
+      await sql`UPDATE users SET status = 'deleted' WHERE id = ${chen.userId}`;
+      expect(await fire()).toEqual({ total: 1, names: ["Asha Rao"] });
+      expect((await feed(gym, asha)).posts[0]?.reactions).toEqual({ like: 0, love: 0, strong: 0, fire: 1 });
+      expect((await staffFeed(gym, gym.owner)).posts[0]?.reactions).toEqual({ like: 0, love: 0, strong: 0, fire: 1 });
+      // Back in the gym, Bilal's reaction is his again.
+      await sql`UPDATE gym_members SET removed_at = NULL WHERE gym_id = ${gym.id} AND user_id = ${bilal.userId}`;
+      expect(await fire()).toEqual({ total: 2, names: ["Asha Rao", "Bilal Khan"] });
+
+      // 105 more people: every one is counted, and the newest hundred are named.
+      await sql`
+        WITH made AS (
+          INSERT INTO users (email, display_name)
+          SELECT 'posts-t-many-' || n || '-' || ${uniq()} || '@example.com', 'Member ' || n FROM generate_series(1, 105) n
+          RETURNING id
+        ), joined AS (
+          INSERT INTO gym_members (gym_id, user_id, joined_at) SELECT ${gym.id}, id, now() FROM made RETURNING user_id
+        )
+        INSERT INTO gym_post_reactions (gym_id, post_id, user_id, reaction, created_at)
+        SELECT ${gym.id}, ${post.id}, user_id, 'fire', ${new Date(clock + 3_600_000)} FROM joined`;
+      const many = await inject("GET", `${posts(gym.id)}/${post.id}/reactions?reaction=fire`, gym.owner.cookies);
+      const body = JSON.parse(many.body) as { total: number; people: { name: string | null }[] };
+      expect([body.total, body.people.length]).toEqual([107, 100]);
+      expect(body.people.every((p) => p.name?.startsWith("Member ") === true)).toBe(true);
+      expect((await feed(gym, asha)).posts[0]?.reactions.fire).toBe(107);
+    },
+    T,
+  );
+
+  it(
+    "a reaction given at the moment its post is removed leaves nothing behind (two api instances, 25 rounds)",
+    async () => {
+      const gym = await makeGym("Moment House");
+      const viewer = await member(gym, "Vera Viewer");
+      for (let round = 0; round < 25; round++) {
+        const post = await add(gym, gym.owner, `Round ${String(round)}`);
+        const [reacted, removed] = await Promise.all([
+          react(gym, viewer, post.id, "fire", either(round)),
+          inject("DELETE", `${posts(gym.id)}/${post.id}`, gym.owner.cookies, undefined, nextIp(), either(round + 1)),
+        ]);
+        expect(removed.statusCode, `round ${String(round)}`).toBe(200);
+        expect([200, 404], `round ${String(round)}`).toContain(reacted.statusCode);
+      }
+      expect(await rowsOf("gym_post_reactions", gym.id)).toBe(0);
+    },
+    T,
+  );
+
   // ===========================================================================
   // PINNING AND REMOVING
   // ===========================================================================
@@ -554,6 +668,9 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       expect((await react(gym, viewer, keep.id, "like")).statusCode).toBe(200);
       const photoPath = `${posts(gym.id)}/${post.id}/photos/${post.photos[0]?.id ?? ""}`;
       expect((await inject("GET", photoPath, viewer.cookies)).statusCode).toBe(200);
+      // A browser holding the photo is told to use it, with nothing sent again.
+      const held = await again(photoPath, post.photos[0]?.id ?? "", viewer.cookies);
+      expect([held.statusCode, held.rawPayload.length, held.headers["cache-control"]]).toEqual([304, 0, "private, no-cache"]);
       expect(await filesOf(gym.id)).toHaveLength(3);
 
       const removed = await inject("DELETE", `${posts(gym.id)}/${post.id}`, gym.owner.cookies);
@@ -564,7 +681,11 @@ d("a gym's Updates (real Postgres, real disk)", () => {
         expect(list.pinned).toEqual([]);
         expect(list.posts.map((p) => p.body)).toEqual(["This one stays"]);
       }
-      for (const who of [viewer, gym.owner]) expect((await inject("GET", photoPath, who.cookies)).statusCode).toBe(404);
+      for (const who of [viewer, gym.owner]) {
+        expect((await inject("GET", photoPath, who.cookies)).statusCode).toBe(404);
+        // …and the browser that still holds it is told it is gone, not to go on showing it.
+        expect((await again(photoPath, post.photos[0]?.id ?? "", who.cookies)).statusCode).toBe(404);
+      }
       expect(await filesOf(gym.id)).toHaveLength(1);
       expect(await rowsOf("gym_post_photos", gym.id)).toBe(1);
       expect(await rowsOf("gym_post_reactions", gym.id)).toBe(1);
@@ -617,7 +738,6 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       expect((await react(gym, viewer, post.id, "like")).statusCode).toBe(404);
 
       const forStaff = await staffFeed(gym, gym.owner);
-      expect(forStaff.live).toBe(false);
       expect(forStaff.posts.map((p) => p.body)).toEqual(["Written while we were open"]);
       expect((await inject("GET", photoPath, gym.owner.cookies)).statusCode).toBe(200);
       const writes = [
@@ -671,7 +791,29 @@ d("a gym's Updates (real Postgres, real disk)", () => {
         SELECT body FROM gym_posts WHERE gym_id = ${gym.id} AND pinned_at IS NULL ORDER BY created_at DESC, id DESC`;
       expect(seen).toEqual(order.map((r) => r.body));
       // A `before` that is not one is refused, never read as "the first page".
-      expect((await inject("GET", `${posts(gym.id)}?before=yesterday`, viewer.cookies)).statusCode).toBe(400);
+      const real = `2026-10-07T06:30:00.000Z_${pinnedId}`;
+      expect((await inject("GET", `${posts(gym.id)}?before=${encodeURIComponent(real)}`, viewer.cookies)).statusCode).toBe(200);
+      const notPlaces = [
+        "yesterday",
+        "2026-13-45T99:99:99Z_------------------------------------",
+        "2026-10-07T06:30:00Z_------------------------------------",
+        `2026-10-07T::::Z_${pinnedId}`,
+        `2026-10-07T06:30:00.000Z${pinnedId}`,
+        `_${pinnedId}`,
+        "2026-10-07T06:30:00.000Z_",
+        `2026-10-07 06:30:00_${pinnedId}`,
+        `2026-10-07T06:30:00.000Z_${pinnedId}'; DROP TABLE gym_posts; --`,
+        "x".repeat(81),
+      ];
+      for (const before of notPlaces) {
+        for (const [who, path] of [
+          [viewer, posts(gym.id)],
+          [gym.owner, `${posts(gym.id)}/staff`],
+        ] as const) {
+          const res = await inject("GET", `${path}?before=${encodeURIComponent(before)}`, who.cookies);
+          expect(res.statusCode, `${path} before=${before}`).toBe(400);
+        }
+      }
     },
     T,
   );
@@ -686,7 +828,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       const gym = await makeGym("Busy House");
       const colleague = await signedIn("Cara Colleague");
       await addStaff(gym.id, colleague.userId, "manager", null);
-      const ip = "10.72.0.9";
+      const ip = desk();
       const send = (who: Person) => inject("POST", posts(gym.id), who.cookies, { postKey: randomUUID(), body: "Again", photos: [] }, ip);
       for (let n = 1; n <= 60; n++) expect((await send(gym.owner)).statusCode, `post ${String(n)}`).toBe(201);
       expect((await send(gym.owner)).statusCode).toBe(429);
@@ -694,6 +836,52 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       expect((await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: "nope" }, ip)).statusCode).toBe(429);
       expect((await send(colleague)).statusCode).toBe(201);
       expect(await rowsOf("gym_posts", gym.id)).toBe(61);
+    },
+    T,
+  );
+
+  it(
+    "every limit: past a person's allowance they are refused and somebody else at the same address is not; the address has a ceiling of its own",
+    async () => {
+      const gym = await makeGym("Limits House");
+      const post = await add(gym, gym.owner, "Limits", [PNG]);
+      const photoPath = `${posts(gym.id)}/${post.id}/photos/${post.photos[0]?.id ?? ""}`;
+      const members = [await member(gym, "Asha Rao"), await member(gym, "Bilal Khan"), await member(gym, "Chen Wu")];
+      const staff = [gym.owner, await signedIn("Maya Manager"), await signedIn("Noor Manager")];
+      for (const person of staff.slice(1)) await addStaff(gym.id, person.userId, "manager", null);
+      /** Counts a key up as that many requests would, a few hundred at a time. */
+      const fill = async (key: string, n: number) => {
+        for (let done = 0; done < n; done += 500) {
+          await Promise.all(Array.from({ length: Math.min(500, n - done) }, () => limits().incrWithTtl(key, 3600)));
+        }
+      };
+      const rows: { name: string; max: number; ipMax: number; people: Person[]; ok: number; ask: (who: Person, ip: string) => Promise<{ statusCode: number }> }[] = [
+        { name: "orgs_posts_read", max: 600, ipMax: 6000, people: members, ok: 200, ask: (who, ip) => inject("GET", posts(gym.id), who.cookies, undefined, ip) },
+        { name: "orgs_posts_photo", max: 6000, ipMax: 60_000, people: members, ok: 200, ask: (who, ip) => inject("GET", photoPath, who.cookies, undefined, ip) },
+        { name: "orgs_posts_react", max: 300, ipMax: 6000, people: members, ok: 200, ask: (who, ip) => inject("PUT", `${posts(gym.id)}/${post.id}/reaction`, who.cookies, { reaction: "like" }, ip) },
+        { name: "orgs_posts_staff_read", max: 1200, ipMax: 6000, people: staff, ok: 200, ask: (who, ip) => inject("GET", `${posts(gym.id)}/staff`, who.cookies, undefined, ip) },
+        { name: "orgs_posts_staff_write", max: 300, ipMax: 1500, people: staff, ok: 200, ask: (who, ip) => inject("PUT", `${posts(gym.id)}/${post.id}/pin`, who.cookies, { pinned: false }, ip) },
+        { name: "orgs_posts_staff_post", max: 60, ipMax: 300, people: staff, ok: 201, ask: (who, ip) => inject("POST", posts(gym.id), who.cookies, { postKey: randomUUID(), body: "x", photos: [] }, ip) },
+      ];
+      for (const row of rows) {
+        const [first, second, third] = row.people;
+        if (first === undefined || second === undefined || third === undefined) throw new Error("three people a row");
+        // One person at the allowance: refused, and the person beside them is not.
+        const shared = desk();
+        expect((await row.ask(first, shared)).statusCode, `${row.name}: before the allowance is used`).toBe(row.ok);
+        await fill(`rl:${row.name}:id:${first.userId}`, row.max - 1);
+        expect((await row.ask(first, shared)).statusCode, `${row.name}: the person's ${String(row.max + 1)}th`).toBe(429);
+        expect((await row.ask(second, shared)).statusCode, `${row.name}: somebody else at the same address`).toBe(row.ok);
+        // An address at its ceiling: refused there, whoever asks, and not anywhere else.
+        const full = desk();
+        await fill(`rl:${row.name}:ip:${full}`, row.ipMax);
+        expect((await row.ask(third, full)).statusCode, `${row.name}: an address past ${String(row.ipMax)}`).toBe(429);
+        expect((await row.ask(third, desk())).statusCode, `${row.name}: the same person elsewhere`).toBe(row.ok);
+      }
+      // The staff feed's other reader, who reacted: under its own limit.
+      const who = `${posts(gym.id)}/${post.id}/reactions?reaction=like`;
+      expect((await inject("GET", who, gym.owner.cookies, undefined, desk())).statusCode).toBe(429);
+      expect((await inject("GET", who, staff[1]?.cookies ?? {}, undefined, desk())).statusCode).toBe(200);
     },
     T,
   );

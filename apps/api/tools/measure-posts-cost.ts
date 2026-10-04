@@ -16,7 +16,7 @@ import { cpus, tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import postgres from "postgres";
-import { GYM_PAGE_PHOTO_MAX_BYTES, addGymPostRequestSchema } from "@app/shared";
+import { GYM_PAGE_PHOTO_MAX_BYTES, addGymPostRequestSchema, gymPostsQuerySchema } from "@app/shared";
 import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
 import { addPost, getPhoto, getPosts, getStaffPosts, react, removePost } from "../src/modules/orgs/posts/service.js";
 
@@ -129,11 +129,12 @@ const allowed = (): Promise<boolean> => Promise.resolve(true);
 const first = await getPosts(deps, viewer, gymId, undefined);
 const newest = first.posts[0]?.id ?? "";
 // The last page: reached by walking every page before it.
+const place = (next: string) => gymPostsQuerySchema.parse({ before: next }).before;
 let cursor = first.next;
-let last: string | undefined;
+let last: ReturnType<typeof place>;
 while (cursor !== null) {
-  last = cursor;
-  cursor = (await getPosts(deps, viewer, gymId, cursor)).next;
+  last = place(cursor);
+  cursor = (await getPosts(deps, viewer, gymId, last)).next;
 }
 const reads: [string, () => Promise<unknown>][] = [
   ["member, the first page", () => getPosts(deps, viewer, gymId, undefined)],
@@ -174,7 +175,7 @@ for (let i = 0; i < RUNS + 1; i++) {
     const kept = await sql<{ bytes: number }[]>`SELECT byte_size AS bytes FROM gym_post_photos WHERE post_id = ${post.id} ORDER BY position`;
     console.log(`each photo sent: ${String(Buffer.from(photo, "base64").length)} bytes; kept: ${kept.map((k) => String(k.bytes)).join(", ")} bytes`);
   }
-  photoReads.push(await time(() => getPhoto(deps, viewer, gymId, post.id, post.photos[0]?.id ?? "")));
+  photoReads.push(await time(() => getPhoto(deps, viewer, gymId, post.id, post.photos[0]?.id ?? "", true)));
   removes.push(await time(() => removePost(deps, owner, gymId, post.id, allowed)));
 }
 // The first of each is the warm-up, as for the reads.

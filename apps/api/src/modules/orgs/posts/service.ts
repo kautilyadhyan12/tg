@@ -16,6 +16,7 @@ import {
   gymPostReactionResponseSchema,
   gymPostReactorsResponseSchema,
   type GymPostReactorsResponse,
+  type GymPostsCursor,
   gymPostSchema,
   gymPostsResponseSchema,
   staffGymPostsResponseSchema,
@@ -93,15 +94,9 @@ async function shaped(deps: Pick<PostsDeps, "sql">, gymId: string, rows: readonl
 
 const cursorOf = (row: repo.PostRow): string => `${row.createdAt.toISOString()}_${row.id}`;
 
-function readCursor(before: string | undefined): { at: string; id: string } | null {
-  if (before === undefined) return null;
-  const cut = before.lastIndexOf("_");
-  return { at: before.slice(0, cut), id: before.slice(cut + 1) };
-}
-
 /** One page: the pinned posts on the first, then the rest newest first. */
-async function page(deps: Pick<PostsDeps, "sql">, gymId: string, viewerId: string, before: string | undefined, staff: boolean) {
-  const from = readCursor(before);
+async function page(deps: Pick<PostsDeps, "sql">, gymId: string, viewerId: string, before: GymPostsCursor | undefined, staff: boolean) {
+  const from = before ?? null;
   const [pinned, rows] = await Promise.all([
     from === null ? repo.pinnedPosts(deps.sql, gymId) : Promise.resolve([]),
     repo.postsPage(deps.sql, gymId, from, GYM_POSTS_PAGE + 1),
@@ -122,7 +117,7 @@ async function gymIsLive(sql: Sql, gymId: string, status: string): Promise<boole
 }
 
 /** The gym's posts for a live app member of it; 404 for everybody else. */
-export async function getPosts(deps: Pick<PostsDeps, "sql">, userId: string, gymId: string, before: string | undefined): Promise<GymPostsResponse> {
+export async function getPosts(deps: Pick<PostsDeps, "sql">, userId: string, gymId: string, before: GymPostsCursor | undefined): Promise<GymPostsResponse> {
   const org = await getOrgById(deps.sql, gymId);
   if (org === null || !(await repo.isLiveMember(deps.sql, gymId, userId))) throw notFound();
   if (!(await gymIsLive(deps.sql, gymId, org.status))) {
@@ -136,13 +131,12 @@ export async function getStaffPosts(
   deps: Pick<PostsDeps, "sql">,
   staffId: string,
   gymId: string,
-  before: string | undefined,
+  before: GymPostsCursor | undefined,
   limit: Limit,
 ): Promise<StaffGymPostsResponse | null> {
   const { org } = await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
-  const live = await gymIsLive(deps.sql, gymId, org.status);
-  return staffGymPostsResponseSchema.parse({ gymId, gymName: org.name, live, ...(await page(deps, gymId, staffId, before, true)) });
+  return staffGymPostsResponseSchema.parse({ gymId, gymName: org.name, ...(await page(deps, gymId, staffId, before, true)) });
 }
 
 /** Who gave one reaction to a post, by whole name, for staff holding the tick. Members are
@@ -297,14 +291,25 @@ export async function react(
   return gymPostReactionResponseSchema.parse({ reactions: countsOf(counts, postId), mine: reaction });
 }
 
-/** A post's photo, for a member who may read the post or staff holding the tick. */
-export async function getPhoto(deps: Pick<PostsDeps, "sql" | "photos">, userId: string, gymId: string, postId: string, photoId: string): Promise<PhotoFile> {
+/** A post's photo, for a member who may read the post or staff holding the tick. With
+ *  `wantBytes` false (the reader's browser already holds it) the same checks run and null
+ *  is the answer: it is still theirs to show. */
+export async function getPhoto(
+  deps: Pick<PostsDeps, "sql" | "photos">,
+  userId: string,
+  gymId: string,
+  postId: string,
+  photoId: string,
+  wantBytes: boolean,
+): Promise<PhotoFile | null> {
   const org = await getOrgById(deps.sql, gymId);
   if (org === null) throw notFound();
   const member = (await repo.isLiveMember(deps.sql, gymId, userId)) && (await gymIsLive(deps.sql, gymId, org.status));
   if (!member && !(await holdsPrivilege(deps, gymId, userId, TICK))) throw notFound();
   const photo = await repo.photoOf(deps.sql, gymId, postId, photoId);
-  const bytes = photo === null ? null : await deps.photos.get(photo.storageKey);
-  if (photo === null || bytes === null) throw new OrgsError(404, "photo_not_found", GYM_POST_WORDS.photo_not_found);
+  if (photo === null) throw new OrgsError(404, "photo_not_found", GYM_POST_WORDS.photo_not_found);
+  if (!wantBytes) return null;
+  const bytes = await deps.photos.get(photo.storageKey);
+  if (bytes === null) throw new OrgsError(404, "photo_not_found", GYM_POST_WORDS.photo_not_found);
   return { contentType: photo.contentType, bytes };
 }

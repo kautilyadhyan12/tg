@@ -2624,8 +2624,13 @@ counts) (Kd's click-through, RULINGS 2026-10-04). **A post stays until staff rem
 A removed post is gone for everyone at once: its photos' files and its reactions are
 deleted, and its row is kept with who removed it. The reactions are **Like · Love ·
 Strong · Fire**, one a person a post; a tap on one's own takes it off; only the counts
-are shown, never who. A photo is served by the api itself to a live member of that gym
-or to staff holding the tick, and to nobody else (signed URLs come with R2, Stage 4
+are shown, never who. A reaction counts, and its giver is
+named, only while they are a live app member of the gym with an active account, so the
+number and the names always agree. A post's 2,000 characters are counted by character
+on the screen and the server alike (an emoji is one). A photo is served by the api itself
+to a live member of that gym or to staff holding the tick, and to nobody else; a browser
+may keep it but asks again each time it shows it, so a removed post's photo is gone at
+its next showing (signed URLs come with R2, Stage 4
 item 4). A gym whose plan has lapsed: its members are sent no posts and no photos, and
 its staff can read but not post, pin or remove. Members' own posts, the gym's switch
 for them and the safety tools of §15.3 are 19b-ii; video is 19b-iii.

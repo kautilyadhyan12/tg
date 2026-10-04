@@ -94,18 +94,23 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     return reply.status(200).send(await service.react(postsDeps, requireUserId(req), params.gymId, params.postId, body.reaction));
   });
 
-  // For a member, or staff holding the tick. Served as a picture and nothing else; kept
-  // by the reader's own browser for a few minutes, so a removed post's photo goes soon.
+  // For a member, or staff holding the tick. Served as a picture and nothing else. A
+  // browser may keep it but asks again every time it shows it (`no-cache`): a photo never
+  // changes, so the answer is "the one you have" (304) while the reader may still see it,
+  // and the usual 404 the moment the post is removed or they may not.
   app.get("/v1/orgs/:gymId/posts/:postId/photos/:photoId", { preHandler: [app.authenticate, photoLimit] }, async (req, reply) => {
     const params = parseOr400(gymPostPhotoParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const file = await service.getPhoto(postsDeps, requireUserId(req), params.gymId, params.postId, params.photoId);
+    const etag = `"${params.photoId}"`;
+    const has = req.headers["if-none-match"] === etag;
+    const file = await service.getPhoto(postsDeps, requireUserId(req), params.gymId, params.postId, params.photoId, !has);
+    void reply.header("cache-control", "private, no-cache").header("etag", etag);
+    if (file === null) return reply.status(304).send();
     return reply
       .status(200)
       .header("content-type", file.contentType)
       .header("x-content-type-options", "nosniff")
       .header("content-security-policy", "default-src 'none'; sandbox")
-      .header("cache-control", "private, max-age=300")
       .send(Buffer.from(file.bytes.buffer, file.bytes.byteOffset, file.bytes.byteLength));
   });
 
@@ -135,9 +140,10 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
   // So who is asking, the tick and the limit are settled BEFORE the body is read: anybody
   // who may not post is answered without it.
   const mayPost = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const params = orgParamsSchema.safeParse(req.params);
-    if (!params.success) return;
-    await service.requirePoster(postsDeps, requireUserId(req), params.data.gymId);
+    // An address that names no gym is answered here too, or its body would be read.
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    await service.requirePoster(postsDeps, requireUserId(req), params.gymId);
     await staffPostLimit(req, reply);
   };
 

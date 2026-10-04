@@ -1,6 +1,6 @@
 // A GYM'S UPDATES, IN WORDS (spec Part 3 §15.2; ROADMAP 19b-i). Pure, so every sentence is
 // tested without a browser. Shared by the member's Updates tab and the console's page.
-import { GYM_POST_MAX_CHARS, GYM_POST_MAX_PHOTOS, GYM_POST_MAX_PINNED, GYM_POST_REACTIONS, GYM_POST_REACTION_WORDS } from '@app/shared';
+import { GYM_POST_MAX_CHARS, GYM_POST_MAX_PHOTOS, GYM_POST_MAX_PINNED, GYM_POST_REACTIONS, GYM_POST_REACTION_WORDS, postLength } from '@app/shared';
 
 export function canManagePosts(privileges) {
   return Array.isArray(privileges) && privileges.includes('posts.manage');
@@ -86,9 +86,11 @@ export const POST_LIMITS = { chars: GYM_POST_MAX_CHARS, photos: GYM_POST_MAX_PHO
 
 /** "1,988 characters left", or how far over. */
 export function charsLine(body) {
-  const left = GYM_POST_MAX_CHARS - Array.from(body).length;
-  if (left >= 0) return { over: false, text: `${left.toLocaleString('en')} characters left` };
-  return { over: true, text: `${(-left).toLocaleString('en')} characters too many` };
+  // Counted as the server counts it (`postLength`): an emoji is one character.
+  const left = GYM_POST_MAX_CHARS - postLength(body);
+  const chars = (n) => (n === 1 ? '1 character' : `${n.toLocaleString('en')} characters`);
+  if (left >= 0) return { over: false, text: `${chars(left)} left` };
+  return { over: true, text: `${chars(-left)} too many` };
 }
 
 /** Whether Post can be pressed: something to post, and not too long. */
@@ -140,6 +142,22 @@ export function pinNote(post, pinnedCount) {
 export function withPage(feed, page) {
   const seen = new Set([...feed.pinned, ...feed.posts].map((p) => p.id));
   return { ...feed, posts: [...feed.posts, ...page.posts.filter((p) => !seen.has(p.id))], next: page.next };
+}
+
+/** The list with one post taken out: it was removed. */
+export function withoutPost(feed, id) {
+  return { ...feed, pinned: feed.pinned.filter((p) => p.id !== id), posts: feed.posts.filter((p) => p.id !== id) };
+}
+
+/** The list after a post is pinned or unpinned, as the server's answer has it. Pinned, it
+ *  goes to the top. Unpinned, it goes back among the others by when it was posted; one
+ *  older than every post loaded so far, with more still to come, arrives with its own page. */
+export function withPinChange(feed, post) {
+  const rest = withoutPost(feed, post.id);
+  if (post.pinned) return { ...rest, pinned: [post, ...rest.pinned] };
+  const at = rest.posts.findIndex((p) => p.createdAt < post.createdAt || (p.createdAt === post.createdAt && p.id < post.id));
+  if (at === -1) return rest.next === null ? { ...rest, posts: [...rest.posts, post] } : rest;
+  return { ...rest, posts: [...rest.posts.slice(0, at), post, ...rest.posts.slice(at)] };
 }
 
 /** The list with one post changed in place (a reaction, a pin's own answer). */
