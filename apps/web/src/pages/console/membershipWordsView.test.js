@@ -1,6 +1,7 @@
 // Memberships from your list, their words (spec Part 3 §13.2; ROADMAP 17a-iii).
 import { describe, expect, it } from 'vitest';
 import {
+  UNLINK_DONE,
   UNLINK_QUESTION,
   asksPaid,
   boxProblem,
@@ -9,12 +10,13 @@ import {
   giveGroups,
   givenCount,
   groupNames,
+  isSettled,
   leftOut,
   linkBody,
-  linkedLine,
   packNote,
   paidQuestion,
   personNote,
+  rowWords,
   wordLine,
 } from './membershipWordsView';
 import { datesLine } from './heldMembershipsView';
@@ -34,18 +36,35 @@ const counts = (over = {}) => ({ settled: 0, due: 0, ask: 0, has: 0, full: 0, en
 const preview = (over = {}) => ({ today: '2026-10-04', word: 'Gold', type: GOLD, counts: counts(), people: [], ...over });
 const ALL = { settled: true, due: true, ask: true };
 
-describe('a word on the list', () => {
-  it('says how many people have it, and what a link has done', () => {
-    expect(wordLine({ word: 'Gold', people: 42 })).toBe('Gold · 42 people');
-    expect(wordLine({ word: 'Day guest', people: 1 })).toBe('Day guest · 1 person');
-    expect(wordLine({ word: 'Gold', people: 2100 })).toBe('Gold · 2,100 people');
-    const link = (over) => ({ word: 'Gold', people: 42, link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 0, ...over } });
-    expect(linkedLine({ word: 'Gold', people: 42, link: null })).toBeNull();
-    expect(linkedLine(link({}))).toEqual({ text: 'Linked to Gold Monthly. Everyone with Gold on your list has it, or has had it.', canGive: false });
-    expect(linkedLine(link({ waiting: 3 }))).toEqual({ text: "Linked to Gold Monthly. 3 people with Gold on your list don't have it yet.", canGive: true });
-    expect(linkedLine(link({ waiting: 1 })).text).toBe("Linked to Gold Monthly. 1 person with Gold on your list doesn't have it yet.");
-    expect(linkedLine(link({ waiting: 3, typeArchived: true })).canGive).toBe(false);
-    expect(UNLINK_QUESTION(link({}))).toBe("Remove the link between Gold and Gold Monthly? Nobody's membership changes. You can link it again.");
+describe('a name from the list', () => {
+  const name = (over = {}) => ({ word: 'Gold', people: 42, link: null, sameName: null, ...over });
+  const set = (over) => name({ link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 0, ...over } });
+  const same = (waiting) => name({ word: 'Gold Monthly', people: 3, sameName: { typeId: GOLD.id, typeName: 'Gold Monthly', waiting } });
+
+  it('says how many people on the list have it', () => {
+    expect(wordLine(name())).toBe('“Gold” · 42 people on your list');
+    expect(wordLine(name({ word: 'Day guest', people: 1 }))).toBe('“Day guest” · 1 person on your list');
+    expect(wordLine(name({ people: 2100 }))).toBe('“Gold” · 2,100 people on your list');
+  });
+
+  it('a name that is no type yet asks which type; one staff set before says so and offers the people without it', () => {
+    expect(rowWords(name())).toEqual({ kind: 'choose', canGive: false, text: null });
+    expect(rowWords(set({}))).toEqual({ kind: 'set', canGive: false, text: '“Gold” is Gold Monthly. Everyone with it on your list has Gold Monthly, or had it before.' });
+    expect(rowWords(set({ waiting: 3 }))).toEqual({ kind: 'set', canGive: true, text: "“Gold” is Gold Monthly. 3 people don't have Gold Monthly yet." });
+    expect(rowWords(set({ waiting: 1 })).text).toBe("“Gold” is Gold Monthly. 1 person doesn't have Gold Monthly yet.");
+    expect(rowWords(set({ waiting: 3, typeArchived: true }))).toMatchObject({ kind: 'set', canGive: false });
+    expect(UNLINK_QUESTION(set({}))).toBe("Forget that “Gold” is Gold Monthly? Nobody's membership changes. You can then choose again.");
+    expect(UNLINK_DONE(set({}))).toBe("Done. Nobody's membership changed. You can choose a membership type for “Gold” again.");
+  });
+
+  it("a name that is already one of the gym's own types is never asked about: it is offered, or not drawn at all", () => {
+    // Kd's click-through: "Gold Monthly" on the list beside a type called Gold Monthly.
+    expect(rowWords(same(2))).toEqual({ kind: 'same', canGive: true, text: "This is your membership type Gold Monthly. 2 people don't have it yet." });
+    expect(isSettled(same(2))).toBe(false);
+    expect(isSettled(same(0))).toBe(true);
+    // A name staff set, or one that is no type, is always drawn.
+    expect(isSettled(set({}))).toBe(false);
+    expect(isSettled(name())).toBe(false);
   });
 });
 
@@ -98,11 +117,11 @@ describe('the box names who gets it and who does not', () => {
       '1 person: your list says their membership has ended.',
       '1 person already has as many memberships running as one person can.',
       '2 people: the date in your list is too far away to use. Add their membership on their own page.',
-      '5 past members have Gold too. They are not on your list now, so they get nothing.',
+      '5 past members have “Gold” too. They are not on your list now, so they get nothing.',
     ]);
     expect(leftOut(preview({ counts: counts({ has: 1, past: 1 }) })).map((l) => l.text)).toEqual([
       '1 person already has Gold Monthly, or had it before.',
-      '1 past member has Gold too. They are not on your list now, so they get nothing.',
+      '1 past member has “Gold” too. They are not on your list now, so they get nothing.',
     ]);
   });
 });
@@ -113,11 +132,11 @@ describe('the button says how many, and nothing is sent that staff did not tick'
   it('counts only the ticked groups', () => {
     expect(givenCount(p, ALL)).toBe(48);
     expect(givenCount(p, { ...ALL, due: false })).toBe(44);
-    expect(boxWords(p, ALL)).toEqual({ heading: 'Give Gold Monthly to people with Gold on your list?', button: 'Give Gold Monthly to 48 people', nobody: null });
+    expect(boxWords(p, ALL)).toEqual({ heading: 'Give Gold Monthly to the people with “Gold” on your list?', button: 'Give Gold Monthly to 48 people', nobody: null });
     expect(boxWords(p, { settled: false, due: false, ask: false })).toEqual({
-      heading: 'Give Gold Monthly to people with Gold on your list?',
-      button: 'Link Gold to Gold Monthly',
-      nobody: 'Nobody is given Gold Monthly now. The link is kept, so you can give it later.',
+      heading: 'Give Gold Monthly to the people with “Gold” on your list?',
+      button: 'Remember that “Gold” is Gold Monthly',
+      nobody: 'Nobody is given Gold Monthly now. It is remembered, so you can give it later.',
     });
     expect(boxWords(preview({ counts: counts({ settled: 1 }) }), ALL).button).toBe('Give Gold Monthly to 1 person');
   });
@@ -156,7 +175,7 @@ describe('the button says how many, and nothing is sent that staff did not tick'
   it('says back what the press did', () => {
     expect(doneWords(48, 'Gold', 'Gold Monthly')).toBe("48 people now have Gold Monthly. You can see it on each person's page.");
     expect(doneWords(1, 'Gold', 'Gold Monthly')).toBe("1 person now has Gold Monthly. You can see it on each person's page.");
-    expect(doneWords(0, 'Gold', 'Gold Monthly')).toBe('Gold is linked to Gold Monthly. Nobody was given it.');
+    expect(doneWords(0, 'Gold', 'Gold Monthly')).toBe('“Gold” is now Gold Monthly. Nobody was given it.');
   });
 });
 

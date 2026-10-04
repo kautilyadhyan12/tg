@@ -29,6 +29,14 @@ export const membershipWordSchema = z
       })
       .strict()
       .nullable(),
+    /** For a word with no link that is the name of one of the gym's live types ("Gold
+     *  Monthly", written by Add member): that type, and how many people with the word
+     *  have never held it. A screen offers it without asking which type the word is, and
+     *  shows nothing where everybody has it. */
+    sameName: z
+      .object({ typeId: z.string().uuid(), typeName: z.string(), waiting: z.number().int().min(0) })
+      .strict()
+      .nullable(),
   })
   .strict();
 export type MembershipWord = z.infer<typeof membershipWordSchema>;

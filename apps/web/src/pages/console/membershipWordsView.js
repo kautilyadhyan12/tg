@@ -7,26 +7,48 @@ import { dayWords } from './memberListView';
 
 const people = (n) => `${n.toLocaleString('en')} ${n === 1 ? 'person' : 'people'}`;
 
-/** "Gold · 42 people". */
+/** A name from the list's Membership column, in quotes so it reads as the list's own. */
+export const quoted = (word) => `“${word}”`;
+
+/** "“Gold” · 42 people on your list". */
 export function wordLine(w) {
-  return `${w.word} · ${people(w.people)}`;
+  return `${quoted(w.word)} · ${people(w.people)} on your list`;
 }
 
-/** What a linked word says under its name, and whether more people can be given it. */
-export function linkedLine(w) {
-  if (w.link === null) return null;
-  const { typeName, typeArchived, waiting } = w.link;
-  if (typeArchived) {
+/** A name that is already one of the gym's own types, with nobody left to give it to,
+ *  is not a question: it is not drawn. */
+export function isSettled(w) {
+  return w.link === null && w.sameName !== null && w.sameName.waiting === 0;
+}
+
+/** What a row shows and offers:
+ *    choose  the list's name is not yet any type: staff pick one;
+ *    same    it is the name of one of the gym's types, and some people do not have it;
+ *    set     staff picked its type before. `canGive` where people still do not have it. */
+export function rowWords(w) {
+  if (w.link !== null) {
+    const { typeName, typeArchived, waiting } = w.link;
+    if (typeArchived) {
+      return { kind: 'set', canGive: false, text: `${quoted(w.word)} is ${typeName}, which is archived. Put it back above to give it to more people.` };
+    }
+    if (waiting === 0) {
+      return { kind: 'set', canGive: false, text: `${quoted(w.word)} is ${typeName}. Everyone with it on your list has ${typeName}, or had it before.` };
+    }
     return {
-      text: `Linked to ${typeName}, which is archived. Put it back on your list of what you sell to give it to more people.`,
-      canGive: false,
+      kind: 'set',
+      canGive: true,
+      text: `${quoted(w.word)} is ${typeName}. ${people(waiting)} ${waiting === 1 ? "doesn't" : "don't"} have ${typeName} yet.`,
     };
   }
-  if (waiting === 0) return { text: `Linked to ${typeName}. Everyone with ${w.word} on your list has it, or has had it.`, canGive: false };
-  return {
-    text: `Linked to ${typeName}. ${people(waiting)} with ${w.word} on your list ${waiting === 1 ? "doesn't" : "don't"} have it yet.`,
-    canGive: true,
-  };
+  if (w.sameName !== null) {
+    const { typeName, waiting } = w.sameName;
+    return {
+      kind: 'same',
+      canGive: true,
+      text: `This is your membership type ${typeName}. ${people(waiting)} ${waiting === 1 ? "doesn't" : "don't"} have it yet.`,
+    };
+  }
+  return { kind: 'choose', canGive: false, text: null };
 }
 
 /** The date beside one person's name in the box: "renews 14 November 2026". */
@@ -112,7 +134,7 @@ export function leftOut(preview) {
   if (counts.past > 0) {
     lines.push({
       key: 'past',
-      text: `${counts.past === 1 ? '1 past member has' : `${counts.past.toLocaleString('en')} past members have`} ${preview.word} too. They are not on your list now, so they get nothing.`,
+      text: `${counts.past === 1 ? '1 past member has' : `${counts.past.toLocaleString('en')} past members have`} ${quoted(preview.word)} too. They are not on your list now, so they get nothing.`,
     });
   }
   return lines;
@@ -151,11 +173,11 @@ export function packNote(preview) {
 export function boxWords(preview, ticks) {
   const n = givenCount(preview, ticks);
   return {
-    heading: `Give ${preview.type.name} to people with ${preview.word} on your list?`,
-    button: n === 0 ? `Link ${preview.word} to ${preview.type.name}` : `Give ${preview.type.name} to ${people(n)}`,
+    heading: `Give ${preview.type.name} to the people with ${quoted(preview.word)} on your list?`,
+    button: n === 0 ? `Remember that ${quoted(preview.word)} is ${preview.type.name}` : `Give ${preview.type.name} to ${people(n)}`,
     nobody:
       n === 0
-        ? `Nobody is given ${preview.type.name} now. The link is kept, so you can give it later.`
+        ? `Nobody is given ${preview.type.name} now. It is remembered, so you can give it later.`
         : null,
   };
 }
@@ -178,9 +200,11 @@ export function linkBody(preview, ticks, paid) {
 
 /** What the press did, said back in one line. */
 export function doneWords(given, word, typeName) {
-  if (given === 0) return `${word} is linked to ${typeName}. Nobody was given it.`;
+  if (given === 0) return `${quoted(word)} is now ${typeName}. Nobody was given it.`;
   return `${people(given)} now ${given === 1 ? 'has' : 'have'} ${typeName}. You can see it on each person's page.`;
 }
 
 export const UNLINK_QUESTION = (w) =>
-  `Remove the link between ${w.word} and ${w.link.typeName}? Nobody's membership changes. You can link it again.`;
+  `Forget that ${quoted(w.word)} is ${w.link.typeName}? Nobody's membership changes. You can then choose again.`;
+
+export const UNLINK_DONE = (w) => `Done. Nobody's membership changed. You can choose a membership type for ${quoted(w.word)} again.`;

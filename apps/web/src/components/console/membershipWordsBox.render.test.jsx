@@ -24,7 +24,7 @@ const GOLD = { id: '22222222-2222-4222-8222-000000000001', name: 'Gold Monthly',
 const SILVER = { ...GOLD, id: '22222222-2222-4222-8222-000000000002', name: 'Silver Monthly' };
 const TYPES = [GOLD, SILVER];
 
-const word = (over = {}) => ({ word: 'Gold', people: 5, link: null, ...over });
+const word = (over = {}) => ({ word: 'Gold', people: 5, link: null, sameName: null, ...over });
 const linked = (over = {}) => word({ link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 0, ...over } });
 const silver = (waiting) => word({ word: 'Silver', link: { typeId: SILVER.id, typeName: 'Silver Monthly', typeArchived: false, waiting } });
 const person = (n, name, group, over = {}) => ({
@@ -60,9 +60,9 @@ async function open(words, { readOnly = false, types = TYPES } = {}) {
 /** Pick a type for Gold and press Link, with the preview the server answers. */
 async function pressLink(preview = PREVIEW) {
   orgService.previewMembershipLink.mockResolvedValue({ data: preview });
-  fireEvent.change(await screen.findByLabelText('Which of your membership types is Gold?'), { target: { value: GOLD.id } });
-  fireEvent.click(screen.getByRole('button', { name: 'Link Gold' }));
-  return await screen.findByRole('group', { name: 'Give Gold Monthly to people with Gold on your list?' });
+  fireEvent.change(await screen.findByLabelText('Membership type for Gold'), { target: { value: GOLD.id } });
+  fireEvent.click(screen.getByRole('button', { name: 'See who gets a membership for Gold' }));
+  return await screen.findByRole('group', { name: 'Give Gold Monthly to the people with “Gold” on your list?' });
 }
 
 afterEach(() => {
@@ -73,27 +73,27 @@ afterEach(() => {
 describe('the box is there only where there is something to link', () => {
   it('draws nothing for a list with no membership words, and nothing for somebody the server refuses', async () => {
     await open([]);
-    expect(screen.queryByText('Memberships from your list')).toBeNull();
+    expect(screen.queryByText('Memberships on your member list')).toBeNull();
     cleanup();
     orgService.getMembershipWords.mockRejectedValue({ response: { status: 403, data: { error: 'forbidden' } } });
     render(<MembershipWordsBox gymId={GYM} readOnly={false} types={TYPES} />);
     await waitFor(() => expect(orgService.getMembershipWords).toHaveBeenCalledTimes(2));
-    expect(screen.queryByText('Memberships from your list')).toBeNull();
+    expect(screen.queryByText('Memberships on your member list')).toBeNull();
   });
 
   it('lists each word with how many people have it, and a gym with nothing for sale is told to add a type first', async () => {
     await open([word(), word({ word: 'Day guest', people: 1 })], { types: [] });
-    expect(await screen.findByText('Gold · 5 people')).toBeTruthy();
-    expect(screen.getByText('Day guest · 1 person')).toBeTruthy();
-    expect(screen.getByText('Add a membership type above first, then link Gold to it.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Link Gold' })).toBeNull();
+    expect(await screen.findByText('“Gold” · 5 people on your list')).toBeTruthy();
+    expect(screen.getByText('“Day guest” · 1 person on your list')).toBeTruthy();
+    expect(screen.getByText('Add a membership type above first. Then choose it here for “Gold”.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'See who gets a membership for Gold' })).toBeNull();
   });
 });
 
 describe('linking a word', () => {
   it('nothing is asked of the server before a type is picked, and nothing is given before the box is answered', async () => {
     await open([word()]);
-    const button = await screen.findByRole('button', { name: 'Link Gold' });
+    const button = await screen.findByRole('button', { name: 'See who gets a membership for Gold' });
     expect(button.disabled).toBe(true);
     const box = await pressLink();
     expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold', typeId: GOLD.id });
@@ -108,7 +108,7 @@ describe('linking a word', () => {
     expect(within(box).getByText('Emma Wilson (starts today)')).toBeTruthy();
     expect(within(box).getByText('1 person already has Gold Monthly, or had it before.')).toBeTruthy();
     expect(within(box).getByText('Sam Carter')).toBeTruthy();
-    expect(within(box).getByText('2 past members have Gold too. They are not on your list now, so they get nothing.')).toBeTruthy();
+    expect(within(box).getByText('2 past members have “Gold” too. They are not on your list now, so they get nothing.')).toBeTruthy();
     expect(within(box).getByText(/No money is taken and nobody is emailed/)).toBeTruthy();
 
     // The paid question has no answer chosen, and the press waits for one.
@@ -132,7 +132,7 @@ describe('linking a word', () => {
       }),
     );
     expect(await screen.findByText("4 people now have Gold Monthly. You can see it on each person's page.")).toBeTruthy();
-    expect(screen.getByText('Linked to Gold Monthly. Everyone with Gold on your list has it, or has had it.')).toBeTruthy();
+    expect(screen.getByText('“Gold” is Gold Monthly. Everyone with it on your list has Gold Monthly, or had it before.')).toBeTruthy();
     expect(screen.queryByRole('group', { name: /Give Gold Monthly/ })).toBeNull();
   });
 
@@ -153,7 +153,7 @@ describe('linking a word', () => {
         paid: null,
       }),
     );
-    expect(await screen.findByText("Linked to Gold Monthly. 2 people with Gold on your list don't have it yet.")).toBeTruthy();
+    expect(await screen.findByText("“Gold” is Gold Monthly. 2 people don't have Gold Monthly yet.")).toBeTruthy();
   });
 
   it('Cancel gives nobody anything', async () => {
@@ -188,37 +188,61 @@ describe('linking a word', () => {
   });
 });
 
+describe("a name on the list that is already one of the gym's own types", () => {
+  const sameName = (waiting) => word({ word: 'Gold Monthly', people: 3, sameName: { typeId: GOLD.id, typeName: 'Gold Monthly', waiting } });
+
+  it('is never asked "which type is it": with everybody holding it the row is not drawn, and alone it draws no box', async () => {
+    await open([sameName(0)]);
+    await waitFor(() => expect(orgService.getMembershipWords).toHaveBeenCalled());
+    expect(screen.queryByText('Memberships on your member list')).toBeNull();
+    cleanup();
+    await open([word(), sameName(0)]);
+    expect(await screen.findByText('“Gold” · 5 people on your list')).toBeTruthy();
+    expect(screen.queryByText(/“Gold Monthly”/)).toBeNull();
+    expect(screen.queryByLabelText('Membership type for Gold Monthly')).toBeNull();
+  });
+
+  it('with people who do not have it yet, it offers them that type and no dropdown', async () => {
+    await open([sameName(2)]);
+    expect(await screen.findByText("This is your membership type Gold Monthly. 2 people don't have it yet.")).toBeTruthy();
+    expect(screen.queryByLabelText('Membership type for Gold Monthly')).toBeNull();
+    orgService.previewMembershipLink.mockResolvedValue({ data: { ...PREVIEW, word: 'Gold Monthly' } });
+    fireEvent.click(screen.getByRole('button', { name: 'See who gets a membership for Gold Monthly' }));
+    await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold Monthly', typeId: GOLD.id }));
+  });
+});
+
 describe('a word already linked', () => {
   it('offers the people who came later, and nothing where everybody has it', async () => {
     await open([linked({ waiting: 3 }), silver(0)]);
-    expect(await screen.findByText("Linked to Gold Monthly. 3 people with Gold on your list don't have it yet.")).toBeTruthy();
-    expect(screen.queryByLabelText('Which of your membership types is Gold?')).toBeNull();
-    expect(screen.queryByRole('button', { name: /Give Silver Monthly/ })).toBeNull();
+    expect(await screen.findByText("“Gold” is Gold Monthly. 3 people don't have Gold Monthly yet.")).toBeTruthy();
+    expect(screen.queryByLabelText('Membership type for Gold')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'See who gets a membership for Silver' })).toBeNull();
     orgService.previewMembershipLink.mockResolvedValue({ data: PREVIEW });
-    fireEvent.click(screen.getByRole('button', { name: "Give Gold Monthly to the people with Gold who don't have it" }));
+    fireEvent.click(screen.getByRole('button', { name: 'See who gets a membership for Gold' }));
     await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold', typeId: GOLD.id }));
   });
 
-  it('Remove link asks first, says nobody changes, and removes only on its own button', async () => {
+  it('Change asks first, says nobody changes, and forgets only on its own button', async () => {
     await open([linked()]);
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove the link for Gold' }));
-    expect(screen.getByText("Remove the link between Gold and Gold Monthly? Nobody's membership changes. You can link it again.")).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Change the membership type for Gold' }));
+    expect(screen.getByText("Forget that “Gold” is Gold Monthly? Nobody's membership changes. You can then choose again.")).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
     expect(orgService.unlinkMembershipWord).not.toHaveBeenCalled();
 
     orgService.unlinkMembershipWord.mockResolvedValue({ data: { words: [word()], types: TYPES } });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove the link for Gold' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove link' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Change the membership type for Gold' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forget it' }));
     await waitFor(() => expect(orgService.unlinkMembershipWord).toHaveBeenCalledWith(GYM, { word: 'Gold' }));
-    expect(await screen.findByText("The link for Gold was removed. Nobody's membership changed.")).toBeTruthy();
-    expect(screen.getByLabelText('Which of your membership types is Gold?')).toBeTruthy();
+    expect(await screen.findByText("Done. Nobody's membership changed. You can choose a membership type for “Gold” again.")).toBeTruthy();
+    expect(screen.getByLabelText('Membership type for Gold')).toBeTruthy();
   });
 
   it('a gym with no live plan sees its words and can press nothing', async () => {
     await open([word(), silver(2)], { readOnly: true });
-    expect((await screen.findByLabelText('Which of your membership types is Gold?')).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: 'Link Gold' }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: 'Remove the link for Silver' }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: /Give Silver Monthly/ }).disabled).toBe(true);
+    expect((await screen.findByLabelText('Membership type for Gold')).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'See who gets a membership for Gold' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Change the membership type for Silver' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'See who gets a membership for Silver' }).disabled).toBe(true);
   });
 });

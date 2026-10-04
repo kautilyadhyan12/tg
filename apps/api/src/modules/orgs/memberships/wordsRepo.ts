@@ -21,6 +21,8 @@ export interface WordRow {
   word: string;
   people: number;
   link: { typeId: string; typeName: string; typeArchived: boolean; waiting: number } | null;
+  /** Not linked, and the word is the name of one of the gym's live types. */
+  sameName: { typeId: string; typeName: string; waiting: number } | null;
 }
 
 /** The list's membership words in the list's own order, each with its link, and the
@@ -28,7 +30,7 @@ export interface WordRow {
 export async function readWords(sql: Sql, gymId: string): Promise<{ words: WordRow[]; types: HeldMembershipTypeChoice[] }> {
   return await sql.begin("isolation level repeatable read read only", async (tx) => {
     const rows = await tx<
-      { word: string; people: number; type_id: string | null; type_name: string | null; archived: boolean | null; waiting: number }[]
+      { word: string; people: number; type_id: string | null; linked: boolean | null; type_name: string | null; archived: boolean | null; waiting: number }[]
     >`
       WITH mine AS MATERIALIZED (
         SELECT membership_type, listed_seq FROM gym_member_list_entries
@@ -41,26 +43,38 @@ export async function readWords(sql: Sql, gymId: string): Promise<{ words: WordR
                min(listed_seq) AS first_seq
         FROM mine GROUP BY lower(membership_type)
       ),
-      -- How many people with each linked word have ever held its type. From the link to
+      -- The type each word goes with: the one it is linked to, or, for a word with no
+      -- link, the live type of the very same name (one a gym, whatever its capitals).
+      pairs AS MATERIALIZED (
+        SELECT l.word_key AS key, l.membership_type_id AS type_id, true AS linked
+        FROM gym_membership_word_links l WHERE l.gym_id = ${gymId}
+        UNION ALL
+        SELECT lower(t.name), t.id, false
+        FROM gym_membership_types t
+        WHERE t.gym_id = ${gymId} AND t.archived_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM gym_membership_word_links l WHERE l.gym_id = ${gymId} AND l.word_key = lower(t.name))
+      ),
+      -- How many people with each such word have ever held its type. From the type to
       -- its memberships to their records, each step by an index: a join of the whole list
       -- against the gym's memberships took a second straight after 2,100 were given.
       holding AS MATERIALIZED (
-        SELECT l.word_key AS key, count(DISTINCT h.entry_id)::int AS holders
-        FROM gym_membership_word_links l
-        JOIN gym_held_memberships h ON h.gym_id = l.gym_id AND h.membership_type_id = l.membership_type_id
+        SELECT p.key, count(DISTINCT h.entry_id)::int AS holders
+        FROM pairs p
+        JOIN gym_held_memberships h ON h.gym_id = ${gymId} AND h.membership_type_id = p.type_id
         JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
-        WHERE l.gym_id = ${gymId} AND e.former_at IS NULL AND lower(e.membership_type) = l.word_key
-        GROUP BY l.word_key
+        WHERE e.former_at IS NULL AND lower(e.membership_type) = p.key
+        GROUP BY p.key
       )
-      SELECT g.word, g.people, l.membership_type_id AS type_id, t.name AS type_name,
+      SELECT g.word, g.people, p.type_id, p.linked, t.name AS type_name,
              (t.archived_at IS NOT NULL) AS archived,
-             -- The people with the word who have never held the type it is linked to.
-             CASE WHEN l.membership_type_id IS NULL THEN 0
+             -- The people with the word who have never held that type.
+             CASE WHEN p.type_id IS NULL THEN 0
                   ELSE GREATEST(g.people - coalesce(ho.holders, 0), 0) END AS waiting
       FROM grouped g
-      LEFT JOIN gym_membership_word_links l ON l.gym_id = ${gymId} AND l.word_key = g.key
+      LEFT JOIN pairs p ON p.key = g.key
       LEFT JOIN holding ho ON ho.key = g.key
-      LEFT JOIN gym_membership_types t ON t.gym_id = ${gymId} AND t.id = l.membership_type_id
+      LEFT JOIN gym_membership_types t ON t.gym_id = ${gymId} AND t.id = p.type_id
       ORDER BY g.first_seq
       LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}`;
     const types = await liveTypes(tx, gymId, null);
@@ -69,9 +83,13 @@ export async function readWords(sql: Sql, gymId: string): Promise<{ words: WordR
         word: row.word,
         people: row.people,
         link:
-          row.type_id === null || row.type_name === null
+          row.type_id === null || row.type_name === null || row.linked !== true
             ? null
             : { typeId: row.type_id, typeName: row.type_name, typeArchived: row.archived === true, waiting: row.waiting },
+        sameName:
+          row.type_id === null || row.type_name === null || row.linked !== false
+            ? null
+            : { typeId: row.type_id, typeName: row.type_name, waiting: row.waiting },
       })),
       types: types.map(typeChoice),
     };

@@ -300,8 +300,19 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       expect(emma?.view.payment?.state).toBe("paid");
 
       const words = wordsOf(await get(wordsUrl(gymId), owner.cookies)).words;
-      expect(words.find((w) => w.word === "Gold")).toEqual({ word: "Gold", people: 3, link: { typeId: gold, typeName: "Gold Monthly", typeArchived: false, waiting: 0 } });
-      expect(words.find((w) => w.word === "Gold Plus")).toEqual({ word: "Gold Plus", people: 1, link: null });
+      expect(words.find((w) => w.word === "Gold")).toEqual({ word: "Gold", people: 3, link: { typeId: gold, typeName: "Gold Monthly", typeArchived: false, waiting: 0 }, sameName: null });
+      expect(words.find((w) => w.word === "Gold Plus")).toEqual({ word: "Gold Plus", people: 1, link: null, sameName: null });
+      // A name on the list that IS one of the gym's types is said to be it, with how many
+      // people do not hold it: a screen never asks which type "Gold Monthly" is.
+      expect(words.find((w) => w.word === "Gold Monthly")).toEqual({
+        word: "Gold Monthly",
+        people: 1,
+        link: null,
+        sameName: { typeId: gold, typeName: "Gold Monthly", waiting: 1 },
+      });
+      const sameId = otherIds[others.indexOf("Gold Monthly")] ?? "";
+      expect((await given(gymId, sameId, owner.cookies, { typeId: gold, startsOn: today })).memberships).toHaveLength(1);
+      expect(wordsOf(await get(wordsUrl(gymId), owner.cookies)).words.find((w) => w.word === "Gold Monthly")?.sameName).toEqual({ typeId: gold, typeName: "Gold Monthly", waiting: 0 });
     },
     TEST_TIMEOUT_MS,
   );

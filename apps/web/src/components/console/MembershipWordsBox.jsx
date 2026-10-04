@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import {
+  UNLINK_DONE,
   UNLINK_QUESTION,
   asksPaid,
   boxProblem,
@@ -10,15 +11,17 @@ import {
   giveGroups,
   groupNames,
   leftOut,
+  isSettled,
   linkBody,
-  linkedLine,
   packNote,
   paidQuestion,
+  quoted,
+  rowWords,
   wordLine,
 } from '../../pages/console/membershipWordsView';
 import { ConfirmInline } from './ConsoleStates';
 
-// MEMBERSHIPS FROM YOUR LIST (spec Part 3 §13.2; ROADMAP 17a-iii), inside Settings →
+// MEMBERSHIPS ON YOUR MEMBER LIST (spec Part 3 §13.2; ROADMAP 17a-iii), inside Settings →
 // Memberships. A gym that came from a file has a word beside each person ("Gold").
 // Staff link the word to one of their own types once; a box then names who gets the
 // membership and who does not, and nothing is given before its button is pressed.
@@ -201,73 +204,78 @@ function LinkBox({ preview, busy, error, onGive, onCancel }) {
 function WordRow({ gymId, word, types, readOnly, busy, open, onOpen, onUnlink }) {
   const [typeId, setTypeId] = useState('');
   const [asking, setAsking] = useState(false);
-  const linked = linkedLine(word);
+  const row = rowWords(word);
   const selectId = `membership-word-${gymId}-${word.word}`;
+  const off = readOnly || busy || open;
+  const seeButton = (pickedTypeId, disabled) => (
+    <button
+      type="button"
+      disabled={off || disabled}
+      onClick={() => onOpen(word, pickedTypeId)}
+      aria-label={`See who gets a membership for ${word.word}`}
+      className="rounded-xl px-5 py-3 text-sm font-semibold min-h-11 disabled:opacity-40"
+      style={mainButton}
+    >
+      See who gets it
+    </button>
+  );
 
   return (
     <li className="py-3 flex flex-col gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
       <span className="text-sm font-semibold" style={{ color: '#fff' }}>
         {wordLine(word)}
       </span>
-      {linked !== null ? (
-        <>
-          <p className="text-sm" style={plainStyle}>
-            {linked.text}
-          </p>
-          {asking ? (
-            <ConfirmInline
-              question={UNLINK_QUESTION(word)}
-              confirmLabel="Remove link"
-              cancelLabel="Keep it"
-              busy={busy}
-              onConfirm={() => {
-                setAsking(false);
-                onUnlink(word);
-              }}
-              onCancel={() => setAsking(false)}
-            />
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {linked.canGive ? (
-                <button
-                  type="button"
-                  disabled={readOnly || busy || open}
-                  onClick={() => onOpen(word, word.link.typeId)}
-                  aria-label={`Give ${word.link.typeName} to the people with ${word.word} who don't have it`}
-                  className="rounded-xl px-4 py-2 text-sm font-semibold min-h-11 disabled:opacity-40"
-                  style={mainButton}
-                >
-                  Give it to them
-                </button>
-              ) : null}
-              <button
-                type="button"
-                disabled={readOnly || busy || open}
-                onClick={() => setAsking(true)}
-                aria-label={`Remove the link for ${word.word}`}
-                className="rounded-xl px-4 py-2 text-sm min-h-11 disabled:opacity-40"
-                style={quietButton}
-              >
-                Remove link
-              </button>
-            </div>
-          )}
-        </>
+      {row.text !== null ? (
+        <p className="text-sm" style={plainStyle}>
+          {row.text}
+        </p>
+      ) : null}
+      {row.kind === 'set' ? (
+        asking ? (
+          <ConfirmInline
+            question={UNLINK_QUESTION(word)}
+            confirmLabel="Forget it"
+            cancelLabel="Keep it"
+            busy={busy}
+            onConfirm={() => {
+              setAsking(false);
+              onUnlink(word);
+            }}
+            onCancel={() => setAsking(false)}
+          />
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {row.canGive ? seeButton(word.link.typeId, false) : null}
+            <button
+              type="button"
+              disabled={off}
+              onClick={() => setAsking(true)}
+              aria-label={`Change the membership type for ${word.word}`}
+              className="rounded-xl px-4 py-2 text-sm min-h-11 disabled:opacity-40"
+              style={quietButton}
+            >
+              Change
+            </button>
+          </div>
+        )
+      ) : row.kind === 'same' ? (
+        <div className="flex flex-wrap gap-2">{seeButton(word.sameName.typeId, false)}</div>
       ) : types.length === 0 ? (
         <p className="text-sm" style={hintStyle}>
-          Add a membership type above first, then link {word.word} to it.
+          Add a membership type above first. Then choose it here for {quoted(word.word)}.
         </p>
       ) : (
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1 flex-grow min-w-0" style={{ maxWidth: '22rem' }}>
             <label htmlFor={selectId} className="text-sm" style={plainStyle}>
-              Which of your membership types is {word.word}?
+              Which membership type should they have?
             </label>
             <select
               id={selectId}
               value={typeId}
               onChange={(event) => setTypeId(event.target.value)}
-              disabled={readOnly || busy || open}
+              disabled={off}
+              aria-label={`Membership type for ${word.word}`}
               className="w-full rounded-xl px-4 py-3 text-base sm:text-sm"
               style={inputStyle}
             >
@@ -279,16 +287,7 @@ function WordRow({ gymId, word, types, readOnly, busy, open, onOpen, onUnlink })
               ))}
             </select>
           </div>
-          <button
-            type="button"
-            disabled={readOnly || busy || open || typeId === ''}
-            onClick={() => onOpen(word, typeId)}
-            aria-label={`Link ${word.word}`}
-            className="rounded-xl px-5 py-3 text-sm font-semibold min-h-11 disabled:opacity-40"
-            style={mainButton}
-          >
-            Link
-          </button>
+          {seeButton(typeId, typeId === '')}
         </div>
       )}
     </li>
@@ -349,7 +348,7 @@ export default function MembershipWordsBox({ gymId, readOnly, types }) {
       setDone(doneWords(res.data.given, preview.word, preview.type.name));
       setPreview(null);
     } catch (err) {
-      setError(errorText(err, "We couldn't link that. Nobody was given a membership. Please try again."));
+      setError(errorText(err, "We couldn't do that. Nobody was given a membership. Please try again."));
       if (errorCode(err) === 'membership_link_changed') {
         // The box holds an older list: show the people as they are now.
         try {
@@ -371,31 +370,33 @@ export default function MembershipWordsBox({ gymId, readOnly, types }) {
     try {
       const res = await orgService.unlinkMembershipWord(gymId, { word: word.word });
       setList(res.data);
-      setDone(`The link for ${word.word} was removed. Nobody's membership changed.`);
+      setDone(UNLINK_DONE(word));
     } catch (err) {
-      setError(errorText(err, "We couldn't remove that link. Please try again."));
+      setError(errorText(err, "We couldn't change that. Please try again."));
     } finally {
       setBusy(false);
     }
   };
 
-  if (list === null || list.words.length === 0) return null;
+  // A name that is already one of the gym's types, with nobody left to give it to, asks nothing.
+  const words = list === null ? [] : list.words.filter((w) => !isSettled(w));
+  if (words.length === 0) return null;
 
   return (
     <section
-      aria-label="Memberships from your list"
+      aria-label="Memberships on your member list"
       className="flex flex-col gap-2 pt-4"
       style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
     >
       <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-        Memberships from your list
+        Memberships on your member list
       </p>
       <p className="text-sm" style={hintStyle}>
-        Your member list says which membership each person has. Link each one to a membership type above, once, and
-        the people who have it get that membership, with the renewal or end date from your list.
+        Your member list has a Membership column. These are the names in it. For each name, choose which of your
+        membership types above those people should have. They keep the renewal or end date from your list.
       </p>
       <ul className="flex flex-col">
-        {list.words.map((word) => (
+        {words.map((word) => (
           <WordRow
             key={word.word}
             gymId={gymId}

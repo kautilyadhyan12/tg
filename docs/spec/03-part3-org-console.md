@@ -2383,7 +2383,7 @@ just show (§11).
 
 *(17a-iii's notes, 2026-10-04.)* **A list's membership word linked to a type**:
 `gym_membership_word_links` (one link a word), `linkHeldMembership` in `@app/shared`
-(`heldMemberships.ts`), and Settings → Memberships → "Memberships from your list".
+(`heldMemberships.ts`), and Settings → Memberships → "Memberships on your member list".
 - A word is matched WHOLE, its capitals folded by Postgres on both sides (`lower`), as
   the list's own chips fold it: "Gold" is "GOLD" and never "Gold Plus". There is no list
   of words in the code.
@@ -2416,6 +2416,14 @@ just show (§11).
   changes nobody. The link is remembered and never acts by itself: people who arrive
   with the word later are counted ("3 people … don't have it yet") and given it on a
   press.
+- **A name on the list that is already one of the gym's own types is never asked about**
+  (RULINGS 2026-10-05; Kd's click-through met "Gold Monthly" with a dropdown offering
+  Gold Monthly). The read answers `sameName` for a word with no link whose folded
+  spelling is a live type's name: the screen says "This is your membership type Gold
+  Monthly" and offers the people who do not hold it, with no dropdown, and draws no row
+  at all where everybody holds it. The screen's words are a gym's: the list's name in
+  quotes, "Which membership type should they have?", "See who gets it", "Change" (which
+  forgets the choice and changes nobody); never "link".
 - All four routes need `members.confirm` (a preview names people and what each owes);
   the box sits in Settings → Memberships, which opens on `memberships.manage`, so in
   practice both. The word travels in the request's body, never its address.
