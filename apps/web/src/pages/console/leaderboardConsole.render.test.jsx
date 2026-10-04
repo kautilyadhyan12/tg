@@ -501,6 +501,11 @@ describe('fixing a visit from a person’s panel', () => {
     const asked = await box.findByTestId('visit-box');
     expect(asked.textContent).toContain('Pick the day they came.');
     expect(box.getByTestId('visit-press').disabled).toBe(true);
+    // A press on the box opens the calendar: the day is picked, not typed.
+    const dayBox = box.getByTestId('add-visit-day');
+    dayBox.showPicker = vi.fn();
+    fireEvent.click(dayBox);
+    expect(dayBox.showPicker).toHaveBeenCalledTimes(1);
 
     // A day that already counts cannot be pressed either.
     fireEvent.change(box.getByTestId('add-visit-day'), { target: { value: '2026-10-06' } });

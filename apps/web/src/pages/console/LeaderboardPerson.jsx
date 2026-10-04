@@ -34,6 +34,15 @@ import {
 // bottom on a phone, as Members' boxes. Staff who check people in also fix a visit here
 // (19a-iv): Remove beside each visit and Add a visit under Gym days, each behind its own box.
 
+// A click anywhere on the box opens the calendar, not only its small icon.
+const openCalendar = (e) => {
+  try {
+    e.currentTarget.showPicker();
+  } catch {
+    // An older browser: the box is still typed into.
+  }
+};
+
 function Counted({ gymId, userId, boardId, period, canFix, onRemove, onAdd }) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
   useEffect(() => {
@@ -265,9 +274,10 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
               min={addWindow.min}
               max={addWindow.max}
               onChange={(e) => setFixDay(e.target.value)}
+              onClick={openCalendar}
               data-testid="add-visit-day"
             />
-            <span className="c-s13 c-t2">An earlier day, up to 62 days back. For today, use Check in on Attendance.</span>
+            <span className="c-s13 c-t2">Press the box to pick from a calendar: an earlier day, up to 62 days back. For today, use Check in on Attendance.</span>
           </label>
         ) : null}
         <section className="flex flex-col gap-1.5">

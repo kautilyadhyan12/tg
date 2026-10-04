@@ -26,6 +26,15 @@ const SEARCH_WAIT_MS = 250;
 const muted = { color: 'rgba(255,255,255,0.55)' };
 const ORANGE = '#FFB347';
 
+// A click anywhere on the box opens the calendar, not only its small icon.
+const openCalendar = (e) => {
+  try {
+    e.currentTarget.showPicker();
+  } catch {
+    // An older browser: the box is still typed into.
+  }
+};
+
 /** The two buttons under a box that asks before it changes a visit. */
 function BoxButtons({ label, busy, danger, onPress, onCancel }) {
   return (
@@ -174,8 +183,9 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
             // The last answer was about another day.
             setAnswer(null);
           }}
+          onClick={openCalendar}
           aria-label="Day they came"
-          className="rounded-lg px-2 py-1 text-sm"
+          className="rounded-lg px-2 py-1 text-sm cursor-pointer"
           style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)', color: '#fff', colorScheme: 'dark' }}
         />
         <span className="text-xs" style={muted}>

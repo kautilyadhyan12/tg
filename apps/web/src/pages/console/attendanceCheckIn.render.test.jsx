@@ -237,6 +237,10 @@ describe('fixing a visit on Attendance', () => {
     expect(dayBox.value).toBe(today);
     expect(dayBox.max).toBe(today);
     expect(dayBox.min).toBe(addDays(today, -62));
+    // A press on the box opens the calendar.
+    dayBox.showPicker = vi.fn();
+    fireEvent.click(dayBox);
+    expect(dayBox.showPicker).toHaveBeenCalledTimes(1);
     fireEvent.change(dayBox, { target: { value: yesterday } });
     await typeSearch('Kumar');
     await screen.findByText('Anita Kumar');
