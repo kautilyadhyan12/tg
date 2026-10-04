@@ -16,12 +16,24 @@
 //   POST …/memberships/:membershipId/freeze | unfreeze | cancel | paid       change one
 //
 // Each answers with the person's memberships.
+//
+// A list's membership word linked to a type (§13.2; 17a-iii), all on `members.confirm`:
+//
+//   GET  /v1/orgs/:gymId/membership-words            the list's words and their links
+//   POST /v1/orgs/:gymId/membership-words/preview    who a link would give the type to
+//   POST /v1/orgs/:gymId/membership-words/link       link it, and give it to them
+//   POST /v1/orgs/:gymId/membership-words/unlink     forget the link; nobody changes
+//
+// The word travels in the body, never the address: it is a cell of the gym's file.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import {
   cancelHeldMembershipRequestSchema,
   giveHeldMembershipRequestSchema,
+  membershipLinkPreviewRequestSchema,
+  membershipLinkRequestSchema,
+  membershipUnlinkRequestSchema,
   paidHeldMembershipRequestSchema,
   saveGymMembershipTypeRequestSchema,
   updateGymMembershipTypeRequestSchema,
@@ -36,6 +48,7 @@ import {
 } from "../schemas.js";
 import * as held from "./heldService.js";
 import * as service from "./service.js";
+import * as words from "./wordsService.js";
 
 function parseOr400<S extends z.ZodTypeAny>(
   schema: S,
@@ -228,5 +241,39 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       { type: "paid", paidPeriods: body.paidPeriods },
     );
     return reply.status(200).send(list);
+  });
+
+  // ── A list's word linked to a type ──
+
+  const wordsUrl = "/v1/orgs/:gymId/membership-words";
+
+  app.get(wordsUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await words.getMembershipWords(heldDeps, requireUserId(req), params.gymId));
+  });
+
+  app.post(`${wordsUrl}/preview`, heldGuarded, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(membershipLinkPreviewRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    return reply.status(200).send(await words.previewMembershipLink(heldDeps, requireUserId(req), params.gymId, body));
+  });
+
+  app.post(`${wordsUrl}/link`, heldGuarded, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(membershipLinkRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    return reply.status(200).send(await words.linkMembershipWord(heldDeps, requireUserId(req), params.gymId, body));
+  });
+
+  app.post(`${wordsUrl}/unlink`, heldGuarded, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(membershipUnlinkRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    return reply.status(200).send(await words.unlinkMembershipWord(heldDeps, requireUserId(req), params.gymId, body));
   });
 }

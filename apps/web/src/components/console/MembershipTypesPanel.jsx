@@ -26,6 +26,7 @@ import {
   withChoice,
 } from '../../pages/console/membershipTypesView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
+import MembershipWordsBox from './MembershipWordsBox';
 
 // SETTINGS → MEMBERSHIPS (spec Part 3 §13.1; ROADMAP 17a-i), on `memberships.manage` as
 // the server gates the changes. What the gym sells: a name, a kind, a price in the gym's
@@ -615,6 +616,8 @@ export default function MembershipTypesPanel({ org, readOnly }) {
               ) : null}
             </div>
           ) : null}
+
+          <MembershipWordsBox gymId={gymId} readOnly={readOnly} types={list.types} />
         </div>
       )}
     </ConsoleSection>

@@ -30,9 +30,12 @@ export function isLive(m) {
   return m.view.status === 'active' || m.view.status === 'frozen' || m.view.status === 'upcoming';
 }
 
-/** When it runs: "Started 4 Oct 2026 · Renews 4 Nov 2026". */
+/** When it runs: "Started 4 Oct 2026 · Renews 4 Nov 2026". One taken from the gym's list
+ *  kept the list's renewal or end day, and its start day was worked back from that: it
+ *  is not printed as the day the person started. */
 export function datesLine(m) {
   const { status, endsOn, renewsOn } = m.view;
+  if (m.fromList === true) return listDatesLine(m);
   const start = dayWords(m.startsOn);
   if (status === 'cancelled') {
     // Cancelled before its start day: it never started.
@@ -47,6 +50,17 @@ export function datesLine(m) {
   if (endsOn === m.startsOn) return `For ${start} only`;
   // A repeating membership with an end day was cancelled at the end of what is paid.
   return m.kind === 'recurring' ? `${first} · Ends ${dayWords(endsOn)}, won't renew` : `${first} · Ends ${dayWords(endsOn)}`;
+}
+
+function listDatesLine(m) {
+  const { status, endsOn, renewsOn } = m.view;
+  const from = 'From your list';
+  if (status === 'cancelled') return `${from} · Cancelled ${endsOn === null ? '' : dayWords(endsOn)}`.trim();
+  if (status === 'ended') return endsOn === null ? from : `${from} · Ended ${dayWords(endsOn)}`;
+  if (status === 'frozen') return `${from} · Frozen since ${m.frozenOn === null ? '' : dayWords(m.frozenOn)}`.trim();
+  if (renewsOn !== null) return `${from} · Renews ${dayWords(renewsOn)}`;
+  if (endsOn === null) return from;
+  return m.kind === 'recurring' ? `${from} · Ends ${dayWords(endsOn)}, won't renew` : `${from} · Ends ${dayWords(endsOn)}`;
 }
 
 /** A pack's classes: "7 of 10 classes left"; null for any other kind, for a day pass, and

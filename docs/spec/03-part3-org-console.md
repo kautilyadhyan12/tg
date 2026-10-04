@@ -2378,8 +2378,47 @@ just show (§11).
   the page says the membership was not (RULINGS 2026-10-04). Where the gym has a price
   list the form does not also ask the list's own Membership word (§11): it takes the
   name of the type once that membership is given, and never otherwise. Edit, and a gym with no price list, keep that box.
-- Not here: bills and money (18a), a file's word linked to a type (17a-iii), a pack's
-  classes used by a booking (17c), who a desk lets in (16d).
+- Not here: bills and money (18a), a pack's classes used by a booking (17c), who a desk
+  lets in (16d).
+
+*(17a-iii's notes, 2026-10-04.)* **A list's membership word linked to a type**:
+`gym_membership_word_links` (one link a word), `linkHeldMembership` in `@app/shared`
+(`heldMemberships.ts`), and Settings → Memberships → "Memberships from your list".
+- A word is matched WHOLE, its capitals folded by Postgres on both sides (`lower`), as
+  the list's own chips fold it: "Gold" is "GOLD" and never "Gold Plus". There is no list
+  of words in the code.
+- **The list's day is kept.** "Renews 14 Nov" is the first day not paid for; "Ends 31 Dec"
+  is the last day covered. A repeating membership is paid up to that day (`settled`), or
+  owes since it where it has passed (`due`) and is never ended for it. Its start is so
+  many whole periods before the list's day and never after today, the first such start
+  that comes back to the list's day exactly (one month before 31 Mar is 28 Feb, which
+  comes back to 28 Mar, so the start is 31 Jan), so later renewals stay on the list's day
+  of the month. Any other kind runs through the list's last day; where the type's own
+  term does not reach it, the days between are counted in `frozen_days`. One whose day
+  has passed is not given (`ended`).
+- **What the list does not say, staff do** (RULINGS 2026-10-04): with no day on the list
+  the membership starts the day it is linked, and for these people, and for a membership
+  that ends (its end day says how long, not whether it is paid), the box asks once
+  whether they have paid, with nothing chosen. A free type asks nothing.
+- The box names three groups that get it, each with a tick (paid up · payment due · your
+  list doesn't say), and who does not, each with the reason: holds or has held the type
+  (so a second press gives nobody a second, and a cancelled one is not handed back), has
+  20 running, ended in the list, a day more than five years off, and past members, who
+  are counted and given nothing. Names are the first 200 of a group; the counts are of
+  everybody. A pack is given whole, and the box says the list does not say how many
+  classes are used.
+- The press carries the numbers the box showed; a list that has moved since is refused
+  (409) and nobody is given anything. Everybody is given theirs in one statement under
+  the gym's lock, with one note in `audit_log`. `from_list` marks a membership whose
+  start was worked back from the list's day: a person's page reads "From your list ·
+  Renews 14 November 2026", never the worked-back day as the day they started.
+- One link a word. A second type is refused until the link is removed; removing it
+  changes nobody. The link is remembered and never acts by itself: people who arrive
+  with the word later are counted ("3 people … don't have it yet") and given it on a
+  press.
+- All four routes need `members.confirm` (a preview names people and what each owes);
+  the box sits in Settings → Memberships, which opens on `memberships.manage`, so in
+  practice both. The word travels in the request's body, never its address.
 
 **The membership row carries its record.** Since 2026-09-21 a person joins only by
 accepting an invitation (§10.2), and the invitation knows which record it was for; so

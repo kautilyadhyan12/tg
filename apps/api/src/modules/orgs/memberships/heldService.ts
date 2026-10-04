@@ -50,6 +50,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       startsOn: row.membership.startsOn,
       frozenOn: row.membership.frozenOn,
       classesLeft: row.membership.classesLeft,
+      fromList: row.fromList,
       view: heldMembershipView(row.membership, today),
     }))
     .sort(

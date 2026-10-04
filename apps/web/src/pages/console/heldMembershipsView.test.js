@@ -44,6 +44,7 @@ function held(type, startsOn, paid, { givenOn = startsOn, moves = [], today = TO
     startsOn,
     frozenOn: m.frozenOn,
     classesLeft: m.classesLeft,
+    fromList: false,
     view: heldMembershipView(m, today),
   });
 }

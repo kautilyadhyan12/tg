@@ -78,6 +78,7 @@ function held(n, type, startsOn, paid, moves = []) {
     startsOn,
     frozenOn: m.frozenOn,
     classesLeft: m.classesLeft,
+    fromList: false,
     view: heldMembershipView(m, TODAY),
   };
 }

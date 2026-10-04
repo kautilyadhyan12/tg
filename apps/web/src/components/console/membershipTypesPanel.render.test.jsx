@@ -13,6 +13,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       updateMembershipType: vi.fn(),
       archiveMembershipType: vi.fn(),
       restoreMembershipType: vi.fn(),
+      // The list's own words (17a-iii) have their own test: none here.
+      getMembershipWords: vi.fn(() => Promise.resolve({ data: { words: [], types: [] } })),
     },
   };
 });

@@ -1,6 +1,6 @@
 // WHAT A GYM SELLS (Part 3 §13.1; ROADMAP Stage 2 item 17a-i). Mirrors
-// `0069_membership_types.sql` and `0070_held_memberships.sql` 1:1; the migrations
-// carry the reasoning.
+// `0069_membership_types.sql`, `0070_held_memberships.sql` and
+// `0072_membership_word_links.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -21,6 +21,7 @@ import { createdAt } from "./common.js";
 import { gymClassTypes } from "./classes.js";
 import { gymMemberListEntries } from "./memberList.js";
 import { gyms } from "./tenancy.js";
+import { users } from "./identity.js";
 
 /** One line of a gym's price list. `price_minor` is whole minor units of
  *  `currency`, stamped by the server from the gym's country. */
@@ -134,6 +135,7 @@ export const gymHeldMemberships = pgTable(
     paidFloor: integer("paid_floor").notNull().default(0),
     renews: boolean("renews").notNull(),
     classesLeft: integer("classes_left"),
+    fromList: boolean("from_list").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -177,5 +179,32 @@ export const gymHeldMemberships = pgTable(
     }),
     index("gym_held_memberships_entry_idx").on(t.gymId, t.entryId),
     index("gym_held_memberships_type_idx").on(t.gymId, t.membershipTypeId),
+  ],
+);
+
+/** Which type a gym linked one of its list's membership words to (§13.2; 17a-iii). */
+export const gymMembershipWordLinks = pgTable(
+  "gym_membership_word_links",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    wordKey: text("word_key").notNull(),
+    word: text("word").notNull(),
+    membershipTypeId: uuid("membership_type_id").notNull(),
+    linkedBy: uuid("linked_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_membership_word_links_pk", columns: [t.gymId, t.wordKey] }),
+    check("gym_membership_word_links_word_check", sql`char_length(${t.word}) BETWEEN 1 AND 40`),
+    check("gym_membership_word_links_key_check", sql`${t.wordKey} = lower(${t.word})`),
+    foreignKey({
+      name: "gym_membership_word_links_type_fk",
+      columns: [t.gymId, t.membershipTypeId],
+      foreignColumns: [gymMembershipTypes.gymId, gymMembershipTypes.id],
+    }).onDelete("cascade"),
+    index("gym_membership_word_links_type_idx").on(t.gymId, t.membershipTypeId),
+    index("gym_membership_word_links_linked_by_idx").on(t.linkedBy),
   ],
 );
