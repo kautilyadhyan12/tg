@@ -665,12 +665,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       return;
     }
     try {
-      // The list's Membership column and filter show the type picked, as they show a file's word.
-      const named =
-        choice !== null && choice.type !== null && input.membershipType === undefined && choice.type.name.length <= MEMBER_LIST_MAX_STATUS_CHARS
-          ? { ...input, membershipType: choice.type.name }
-          : input;
-      const res = await orgService.addMemberListEntry(gymId, named);
+      let res = await orgService.addMemberListEntry(gymId, input);
       const who = res.data.entry.fullName || 'This person';
       let notGiven = null;
       if (choice !== null && choice.type !== null) {
@@ -682,6 +677,16 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         } else {
           try {
             await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving));
+            // Once it is given, and only then, the type's name becomes their Membership word,
+            // so the list's Membership column and filter show it as they show a file's word.
+            if (input.membershipType === undefined && choice.type.name.length <= MEMBER_LIST_MAX_STATUS_CHARS) {
+              try {
+                const named = await orgService.changeMemberListEntry(gymId, res.data.entry.entryId, { membershipType: choice.type.name });
+                res = { ...res, data: { ...res.data, entry: named.data.entry } };
+              } catch {
+                // The membership is given; the list's word stays empty.
+              }
+            }
           } catch (err) {
             notGiven = `${who} was added, but the ${choice.type.name} membership was not: ${errorText(err, 'Please try again.')} Add it under Memberships.`;
           }
@@ -945,7 +950,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       <p className="c-hint -mt-2 m-0">An email address or a phone number is needed to tell people apart.</p>
       {/* Adding somebody at a gym with a price list asks about their membership once, in
           "Give a membership" below (Kd, 2026-10-04): the list's own Membership word is not
-          asked beside it, and takes the name of the type picked. */}
+          asked beside it, and takes the name of the type once it is given. */}
       {WORD_FIELDS.filter((f) => !(id === null && giveTypes !== null && f.key === 'membershipType')).map((f) => {
         const listId = `${titleId}-${f.key}`;
         const known = (list?.[f.from] ?? []).map((w) => w.label).filter((w) => w !== '');

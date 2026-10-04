@@ -25,6 +25,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMemberListEntry: vi.fn(),
       getMembershipTypes: vi.fn(),
       addMemberListEntry: vi.fn(),
+      changeMemberListEntry: vi.fn(),
     },
   };
 });
@@ -345,6 +346,7 @@ describe('Add member gives a membership in the same form', () => {
   beforeEach(() => {
     orgService.getMembershipTypes.mockResolvedValue({ data: { types: [GOLD, PACK] } });
     orgService.addMemberListEntry.mockResolvedValue({ data: { outcome: 'added', entry: bea(), version: 4 } });
+    orgService.changeMemberListEntry.mockResolvedValue({ data: { outcome: 'changed', entry: { ...bea(), membershipType: '10 classes' }, version: 5 } });
     // Once added, the page reads the new person again.
     orgService.getMemberListEntry.mockResolvedValue({ data: { entry: bea() } });
     orgService.getHeldMemberships.mockResolvedValue(answer([]));
@@ -387,9 +389,14 @@ describe('Add member gives a membership in the same form', () => {
     const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
     expect([gym, entry]).toEqual([GYM, BEA]);
     expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: PACK.id, startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), paid: true });
-    // The person was added first, with the type's name as their Membership word on the list.
-    expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example', membershipType: '10 classes' });
+    // The person was added first, as typed; the type's name became their Membership word
+    // on the list only after the membership was given.
+    expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
     expect(orgService.addMemberListEntry.mock.invocationCallOrder[0]).toBeLessThan(orgService.giveHeldMembership.mock.invocationCallOrder[0]);
+    expect(orgService.changeMemberListEntry).toHaveBeenCalledTimes(1);
+    expect(orgService.changeMemberListEntry).toHaveBeenCalledWith(GYM, BEA, { membershipType: '10 classes' });
+    expect(orgService.giveHeldMembership.mock.invocationCallOrder[0]).toBeLessThan(orgService.changeMemberListEntry.mock.invocationCallOrder[0]);
+    expect(await screen.findByText('Member added.')).toBeTruthy();
     // Their page opens, with the Memberships box read for them.
     await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, BEA));
     expect(screen.queryByRole('alert')).toBeNull();
@@ -412,6 +419,9 @@ describe('Add member gives a membership in the same form', () => {
       // Their page is open, and what they hold is untouched.
       expect(screen.getByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
       expect(orgService.giveHeldMembership, outcome).not.toHaveBeenCalled();
+      // Nor is a type they do not hold written as their Membership word.
+      expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
+      expect(orgService.changeMemberListEntry, outcome).not.toHaveBeenCalled();
       view.unmount();
     }
   });
@@ -429,8 +439,9 @@ describe('Add member gives a membership in the same form', () => {
     expect((await screen.findByRole('alert')).textContent).toContain(
       'Bea Hart was added, but the Gold Monthly membership was not: That membership type is no longer on your price list. Pick another. Add it under Memberships.',
     );
-    // Their page is open, so it can be added there.
+    // Their page is open, so it can be added there; no type's name was written for them.
     expect(screen.getByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
+    expect(orgService.changeMemberListEntry).not.toHaveBeenCalled();
   });
 
   it('adds nobody while the membership picked cannot be given', async () => {
