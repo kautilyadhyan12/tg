@@ -1,6 +1,7 @@
 // THE CONSOLE LEADERBOARD'S WORDS (spec Part 3 §15.5; ROADMAP 19a-iii). Pure, so every
 // sentence is tested without a browser. Written for someone who opened a gym last week.
-import { BOARD_TABS } from '../../components/gym/leaderboardView';
+import { VISIT_ADD_DAYS_BACK } from '@app/shared';
+import { BOARD_TABS, PERIODS, dayLabel, removedText, timeText } from '../../components/gym/leaderboardView';
 
 export function canSeeLeaderboard(privileges) {
   return Array.isArray(privileges) && privileges.includes('leaderboard.manage');
@@ -187,7 +188,82 @@ export function staffWorkoutNotCountedText(item, gymName) {
 }
 
 export function staffVisitNotCountedText(item) {
+  if (item.why === 'removed') return removedText(item);
   return item.why === 'own_tap'
     ? 'Their own "I\'m here" tap — only front-desk and staff check-ins count'
     : "Checked in with the app's code — only front-desk and staff check-ins count";
+}
+
+// FIXING A VISIT (ROADMAP 19a-iv): staff holding "Check people in" add a visit somebody
+// made on an earlier day, or remove a wrong one. Each box names the person, the day and
+// what happens to their number before anything changes.
+
+export function canFixVisits(privileges) {
+  return Array.isArray(privileges) && privileges.includes('attendance.mark');
+}
+
+const moveDay = (day, count) => {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + count);
+  return d.toISOString().slice(0, 10);
+};
+
+/** The days a visit can be added for, given the gym's own today: yesterday back to the limit. */
+export function addVisitWindow(today) {
+  return { min: moveDay(today, -VISIT_ADD_DAYS_BACK), max: moveDay(today, -1) };
+}
+
+const periodWords = (period) => (PERIODS.find((p) => p.id === period)?.label ?? '').toLowerCase();
+const KEPT = "Nobody else's visits change.";
+
+/** The box before a visit is removed. `day` is the counted day it is on and `counted` the
+ *  person's Gym days for the period on screen. */
+export function removeVisitBox(name, visit, day, counted) {
+  const what =
+    typeof visit.addedOn === 'string'
+      ? `the visit added for ${dayLabel(day.day)}`
+      : `the ${timeText(visit.at, counted.timezone)} visit on ${dayLabel(day.day)}`;
+  const period = periodWords(counted.period);
+  const number =
+    day.visits.length === 1
+      ? `Their Gym days, ${period}, go from ${counted.value} to ${counted.value - 1}. Their streak is worked out again without that day.`
+      : `They have another visit that day, so their Gym days, ${period}, stay at ${counted.value}.`;
+  return {
+    title: `Remove this visit of ${name}?`,
+    button: 'Remove visit',
+    changes: [`${name} — ${what} is removed.`, number],
+    keeps: [`In their app, ${name} still sees it under "Didn't count", with who removed it and today's date.`, KEPT],
+    done: `Visit removed for ${name}.`,
+  };
+}
+
+/** The box before a visit is added for `day` ('' until one is picked). `ready` is false
+ *  while there is nothing to add. */
+export function addVisitBox(name, day, counted) {
+  const title = `Add a visit for ${name}`;
+  const button = 'Add visit';
+  if (day === '') return { title, button, ready: false, changes: ['Pick the day they came.'], keeps: [], done: '' };
+  if (counted.days.some((d) => d.day === day)) {
+    return {
+      title,
+      button,
+      ready: false,
+      changes: [`${name} already has a visit that counts on ${dayLabel(day)}. Nothing will be added.`],
+      keeps: [],
+      done: '',
+    };
+  }
+  const period = periodWords(counted.period);
+  const inPeriod = (counted.from === null || day >= counted.from) && day <= counted.to;
+  const number = inPeriod
+    ? `Their Gym days, ${period}, go from ${counted.value} to ${counted.value + 1}.`
+    : `${dayLabel(day)} is outside ${period}, so the number here stays at ${counted.value}. It counts wherever that day does.`;
+  return {
+    title,
+    button,
+    ready: true,
+    changes: [`${name} — a visit is added for ${dayLabel(day)}.`, `${number} Their streak is worked out again with that day.`],
+    keeps: [`In their app, ${name} sees who added it and today's date.`, KEPT],
+    done: `Visit added for ${name} on ${dayLabel(day)}.`,
+  };
 }

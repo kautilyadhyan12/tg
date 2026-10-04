@@ -331,6 +331,8 @@ export const gymAttendance = pgTable(
   },
   (t) => [
     check("gym_attendance_method_check", sql`${t.method} IN ('manual','qr','pass','key_tag','staff')`),
+    // A visit staff add on a later day (19a-iv): no hour is known, and only staff make one.
+    check("gym_attendance_added_later_check", sql`${t.hoursStatus} <> 'added_later' OR ${t.method} = 'staff'`),
     check("gym_attendance_who_check", sql`${t.userId} IS NOT NULL OR ${t.entryId} IS NOT NULL`),
     check(
       "gym_attendance_how_check",
@@ -338,7 +340,7 @@ export const gymAttendance = pgTable(
     ),
     check(
       "gym_attendance_hours_status_check",
-      sql`${t.hoursStatus} IN ('in_session','open_24h','outside_hours','closed_day','hours_unset')`,
+      sql`${t.hoursStatus} IN ('in_session','open_24h','outside_hours','closed_day','hours_unset','added_later')`,
     ),
     check(
       "gym_attendance_session_pairing_check",
@@ -360,6 +362,45 @@ export const gymAttendance = pgTable(
     // `gym_attendance_counted_idx` — (gym_id, day) INCLUDE (user_id, entry_id) WHERE method is
     // a desk scan or a staff check-in — is in `0065_leaderboard_show_me.sql`: the leaderboard
     // reads from it alone, and Drizzle's builder cannot express INCLUDE.
+  ],
+);
+
+/** A visit staff removed (19a-iv; `0068_fix_a_visit.sql`): out of `gym_attendance`, so
+ *  nothing counts it, and kept here under its own id with who removed it and when. The
+ *  foreign keys `(gym_id, entry_id)` → the record, ON DELETE CASCADE, and
+ *  `(gym_id, device_id)` → the desk are in the migration, as `gym_attendance`'s are. */
+export const gymAttendanceRemoved = pgTable(
+  "gym_attendance_removed",
+  {
+    id: uuid("id").primaryKey(),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id),
+    entryId: uuid("entry_id"),
+    deviceId: uuid("device_id"),
+    markedByUserId: uuid("marked_by_user_id").references(() => users.id),
+    day: date("day").notNull(),
+    markedAt: timestamp("marked_at", { withTimezone: true }).notNull(),
+    method: text("method").notNull(),
+    hoursStatus: text("hours_status").notNull(),
+    removedByUserId: uuid("removed_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    removedAt: timestamp("removed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("gym_attendance_removed_who_check", sql`${t.userId} IS NOT NULL OR ${t.entryId} IS NOT NULL`),
+    // The same two lists as `gymAttendance`'s, kept in step by `db.migration.test.ts`.
+    check("gym_attendance_removed_method_check", sql`${t.method} IN ('manual','qr','pass','key_tag','staff')`),
+    check(
+      "gym_attendance_removed_hours_status_check",
+      sql`${t.hoursStatus} IN ('in_session','open_24h','outside_hours','closed_day','hours_unset','added_later')`,
+    ),
+    index("gym_attendance_removed_gym_user_idx").on(t.gymId, t.userId, t.day),
+    index("gym_attendance_removed_gym_entry_idx")
+      .on(t.gymId, t.entryId, t.day)
+      .where(sql`${t.entryId} IS NOT NULL`),
   ],
 );
 

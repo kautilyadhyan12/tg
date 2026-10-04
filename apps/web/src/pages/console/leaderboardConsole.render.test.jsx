@@ -14,7 +14,7 @@ const svc = {
   setTakenOff: vi.fn(),
   setBoardOff: vi.fn(),
 };
-const orgApi = { getMine: vi.fn() };
+const orgApi = { getMine: vi.fn(), addVisit: vi.fn(), removeVisit: vi.fn() };
 vi.mock('../../api/leaderboardApi', () => ({ staffLeaderboardService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -412,5 +412,121 @@ describe('a board members do not see', () => {
     expect((await box.findByTestId('person-gym_days')).textContent).toContain("No place — members don't see this board now · 3 gym days");
     expect(box.getByTestId('person-workout_days').textContent).toContain('No place · 0 workout days');
     expect(box.queryByText('On the board')).toBeNull();
+  });
+});
+
+// The worst thing the screen could do here: remove a visit staff did not pick, or do it
+// without the box that names the person and the visit.
+describe('fixing a visit from a person’s panel', () => {
+  const FIXER = { ...ORG, privileges: ['members.read', 'leaderboard.manage', 'attendance.mark'] };
+  const gymDays = () => ({
+    userId: 'u-chen',
+    gymName: 'Iron House',
+    timezone: 'Asia/Kolkata',
+    board: 'gym_days',
+    period: 'this_week',
+    from: '2026-10-05',
+    to: '2026-10-11',
+    value: 2,
+    days: [
+      { day: '2026-10-06', visits: [{ id: 'v-tue', at: '2026-10-06T06:30:00.000Z', how: 'desk', by: 'Front desk', addedOn: null }] },
+      { day: '2026-10-05', visits: [{ id: 'v-mon', at: '2026-10-05T06:30:00.000Z', how: 'staff', by: 'Sam Desk', addedOn: '2026-10-06' }] },
+    ],
+    notCounted: [{ day: '2026-10-07', at: '2026-10-07T06:30:00.000Z', why: 'removed', by: 'Sam Desk', removedOn: '2026-10-07' }],
+    workoutDays: [],
+    workoutsNotCounted: [],
+    weeks: [],
+  });
+  const openCounted = async (org) => {
+    svc.counted.mockResolvedValue(gymDays());
+    open(org);
+    fireEvent.click((await screen.findAllByTestId('board-row'))[0]);
+    const box = within(await screen.findByTestId('person-box'));
+    fireEvent.click(within(await box.findByTestId('person-gym_days')).getByRole('button', { name: 'What counted' }));
+    await box.findByTestId('counted-gym_days');
+    return box;
+  };
+
+  it('says who added a visit and who removed one, and offers nothing to staff without the tick', async () => {
+    const box = await openCounted(ORG);
+    const counted = box.getByTestId('counted-gym_days');
+    expect(counted.textContent).toContain('Added by Sam Desk (staff) on 6 Oct');
+    expect(counted.textContent).toContain('Wed 7 Oct · Visit removed by Sam Desk (staff) on 7 Oct');
+    expect(box.queryByRole('button', { name: /^Remove the visit/ })).toBeNull();
+    expect(box.queryByTestId('add-visit-open')).toBeNull();
+  });
+
+  it('nor at a gym with no plan', async () => {
+    const box = await openCounted({ ...FIXER, subscription: null, consoleReadOnly: true });
+    expect(box.queryByRole('button', { name: /^Remove the visit/ })).toBeNull();
+    expect(box.queryByTestId('add-visit-open')).toBeNull();
+  });
+
+  it('Remove: a box names the person, the visit and the new number; the press is for THAT visit; what counted is read again', async () => {
+    orgApi.removeVisit.mockResolvedValue({ data: { removed: true, day: '2026-10-06' } });
+    const box = await openCounted(FIXER);
+    fireEvent.click(box.getByRole('button', { name: 'Remove the visit on Tue 6 Oct: 12:00 pm · scanned at Front desk' }));
+    const asked = await box.findByTestId('visit-box');
+    expect(screen.getByRole('dialog', { name: 'Remove this visit of Chen Wu?' })).toBeTruthy();
+    expect(asked.textContent).toContain('Chen Wu — the 12:00 pm visit on Tue 6 Oct is removed.');
+    expect(asked.textContent).toContain('Their Gym days, this week, go from 2 to 1.');
+    expect(orgApi.removeVisit).not.toHaveBeenCalled();
+
+    const before = svc.counted.mock.calls.length;
+    fireEvent.click(box.getByTestId('visit-press'));
+    await waitFor(() => expect(orgApi.removeVisit).toHaveBeenCalledTimes(1));
+    expect(orgApi.removeVisit).toHaveBeenCalledWith('g1', 'v-tue');
+    await waitFor(() => expect(svc.counted.mock.calls.length).toBeGreaterThan(before));
+    expect(await screen.findByText('Visit removed for Chen Wu.')).toBeTruthy();
+  });
+
+  it('Cancel removes nothing; a failed press says so and keeps the box', async () => {
+    orgApi.removeVisit.mockRejectedValue({ response: { status: 404, data: { message: "That visit isn't there any more." } } });
+    const box = await openCounted(FIXER);
+    fireEvent.click(box.getByRole('button', { name: /^Remove the visit on Tue 6 Oct/ }));
+    fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
+    expect(orgApi.removeVisit).not.toHaveBeenCalled();
+    await box.findByTestId('counted-gym_days');
+
+    fireEvent.click(box.getByRole('button', { name: /^Remove the visit on Tue 6 Oct/ }));
+    fireEvent.click(box.getByTestId('visit-press'));
+    expect((await box.findByRole('alert')).textContent).toBe("That visit isn't there any more.");
+    expect(box.getByTestId('visit-box')).toBeTruthy();
+  });
+
+  it('Add a visit: nothing is sent until a day is picked; the press sends that person and that day', async () => {
+    orgApi.addVisit.mockResolvedValue({ data: { result: 'added', person: { name: 'Chen Wu' }, day: '2026-10-07' } });
+    const box = await openCounted(FIXER);
+    fireEvent.click(box.getByTestId('add-visit-open'));
+    const asked = await box.findByTestId('visit-box');
+    expect(asked.textContent).toContain('Pick the day they came.');
+    expect(box.getByTestId('visit-press').disabled).toBe(true);
+    // A press on the box opens the calendar: the day is picked, not typed.
+    const dayBox = box.getByTestId('add-visit-day');
+    dayBox.showPicker = vi.fn();
+    fireEvent.click(dayBox);
+    expect(dayBox.showPicker).toHaveBeenCalledTimes(1);
+
+    // A day that already counts cannot be pressed either.
+    fireEvent.change(box.getByTestId('add-visit-day'), { target: { value: '2026-10-06' } });
+    expect(asked.textContent).toContain('Chen Wu already has a visit that counts on Tue 6 Oct. Nothing will be added.');
+    expect(box.getByTestId('visit-press').disabled).toBe(true);
+
+    fireEvent.change(box.getByTestId('add-visit-day'), { target: { value: '2026-10-07' } });
+    expect(asked.textContent).toContain('Chen Wu — a visit is added for Wed 7 Oct.');
+    expect(asked.textContent).toContain('Their Gym days, this week, go from 2 to 3.');
+    fireEvent.click(box.getByTestId('visit-press'));
+    await waitFor(() => expect(orgApi.addVisit).toHaveBeenCalledTimes(1));
+    expect(orgApi.addVisit).toHaveBeenCalledWith('g1', { userId: 'u-chen' }, '2026-10-07');
+    expect(await screen.findByText('Visit added for Chen Wu on Wed 7 Oct.')).toBeTruthy();
+  });
+
+  it('says so when the server found a visit already there', async () => {
+    orgApi.addVisit.mockResolvedValue({ data: { result: 'already', person: { name: 'Chen Wu' }, day: '2026-09-30' } });
+    const box = await openCounted(FIXER);
+    fireEvent.click(box.getByTestId('add-visit-open'));
+    fireEvent.change(await box.findByTestId('add-visit-day'), { target: { value: '2026-09-30' } });
+    fireEvent.click(box.getByTestId('visit-press'));
+    expect(await screen.findByText('Chen Wu already had a visit that counts on that day. Nothing was added.')).toBeTruthy();
   });
 });

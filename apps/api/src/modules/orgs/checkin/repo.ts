@@ -418,6 +418,83 @@ export async function insertVisit(
   });
 }
 
+// ── FIXING A VISIT (19a-iv) ──
+
+/** The gym's own today, and the earliest day a visit can still be added for. */
+export async function addWindow(sql: SqlOrTx, gymId: string, daysBack: number): Promise<{ today: string; earliest: string } | null> {
+  const rows = await sql<{ today: string; earliest: string }[]>`
+    SELECT d.today::text AS today, (d.today - ${daysBack}::int)::text AS earliest
+    FROM (SELECT (now() AT TIME ZONE timezone)::date AS today FROM gyms WHERE id = ${gymId}) d`;
+  return rows[0] ?? null;
+}
+
+/** A visit staff add for an earlier day: no hour is known (`added_later`, its slot too),
+ *  so a person has at most one a day and the unique keys decide when two staff add it
+ *  together. `already` when the person has a visit that counts on that day. Null when the
+ *  record it names is no longer on the list (held to the commit, as `insertVisit` does). */
+export async function insertAddedVisit(
+  tx: TransactionSql,
+  input: { gymId: string; who: Who; markedBy: string; day: string },
+): Promise<{ id: string } | "already" | null> {
+  if (input.who.entryId !== null) {
+    const held = await tx`
+      SELECT 1 FROM gym_member_list_entries
+      WHERE gym_id = ${input.gymId} AND id = ${input.who.entryId} AND former_at IS NULL
+      FOR KEY SHARE`;
+    if (held.length === 0) return null;
+  }
+  const counted = await tx`
+    SELECT 1 FROM gym_attendance
+    WHERE gym_id = ${input.gymId} AND day = ${input.day}::date AND method IN ('pass','key_tag','staff')
+      AND (user_id = ${input.who.userId}::uuid OR entry_id = ${input.who.entryId}::uuid)
+    LIMIT 1`;
+  const inserted =
+    counted.length > 0
+      ? []
+      : await tx<{ id: string }[]>`
+          INSERT INTO gym_attendance
+            (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key)
+          VALUES (${input.gymId}, ${input.who.userId}, ${input.who.entryId}, ${input.markedBy},
+                  ${input.day}::date, 'staff', 'added_later', 'added_later')
+          ON CONFLICT DO NOTHING
+          RETURNING id`;
+  await joinVisits(tx, input.gymId, input.day, input.who);
+  const row = inserted[0];
+  return row === undefined ? "already" : { id: row.id };
+}
+
+export interface RemovedVisit {
+  day: string;
+  /** The app account the visit named, whose streak counted it. */
+  userId: string | null;
+  method: string;
+}
+
+/** One of THIS gym's visits removed: out of `gym_attendance` and into
+ *  `gym_attendance_removed` in one statement, with who removed it. Null when the gym has
+ *  no such visit. */
+export async function removeVisit(tx: TransactionSql, gymId: string, visitId: string, removedBy: string): Promise<RemovedVisit | null> {
+  const rows = await tx<{ day: string; user_id: string | null; method: string }[]>`
+    WITH gone AS (
+      DELETE FROM gym_attendance WHERE gym_id = ${gymId} AND id = ${visitId}
+      RETURNING id, gym_id, user_id, entry_id, device_id, marked_by_user_id, day, marked_at, method, hours_status
+    )
+    INSERT INTO gym_attendance_removed
+      (id, gym_id, user_id, entry_id, device_id, marked_by_user_id, day, marked_at, method, hours_status, removed_by_user_id)
+    SELECT id, gym_id, user_id, entry_id, device_id, marked_by_user_id, day, marked_at, method, hours_status, ${removedBy}::uuid
+    FROM gone
+    RETURNING day::text AS day, user_id, method`;
+  const row = rows[0];
+  return row === undefined ? null : { day: row.day, userId: row.user_id, method: row.method };
+}
+
+/** The day of a visit this gym's staff already removed, or null. */
+export async function removedVisitDay(sql: SqlOrTx, gymId: string, visitId: string): Promise<string | null> {
+  const rows = await sql<{ day: string }[]>`
+    SELECT day::text AS day FROM gym_attendance_removed WHERE gym_id = ${gymId} AND id = ${visitId}`;
+  return rows[0]?.day ?? null;
+}
+
 // ── THE LIVE LOG (16b-ii) ──
 
 export interface LogVisit {

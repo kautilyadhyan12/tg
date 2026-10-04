@@ -1140,6 +1140,9 @@ export async function deleteListForGym(tx: TransactionSql, gymId: string): Promi
   await tx`
     UPDATE gym_attendance SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id IS NOT NULL AND user_id IS NOT NULL`;
+  await tx`
+    UPDATE gym_attendance_removed SET entry_id = NULL
+    WHERE gym_id = ${gymId} AND entry_id IS NOT NULL AND user_id IS NOT NULL`;
   await tx`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
   // The gym's own column headings (3a-v-b). Nothing points at them once the entries
   // are gone, and a catalogue outliving the gym it belongs to would be the one row of
@@ -2180,6 +2183,10 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
   await tx`
     UPDATE gym_attendance SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND user_id IS NOT NULL`;
+  // The same for a visit staff removed (19a-iv): the person's own list keeps it.
+  await tx`
+    UPDATE gym_attendance_removed SET entry_id = NULL
+    WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND user_id IS NOT NULL`;
   const rows = await tx<{ id: string }[]>`
     DELETE FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ${entryId}
@@ -2228,6 +2235,10 @@ export async function moveVisitLinks(tx: TransactionSql, gymId: string, fromEntr
     UPDATE gym_attendance SET entry_id = ${toEntryId}
     WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
     RETURNING id`;
+  // The visits staff removed (19a-iv) follow the person too.
+  await tx`
+    UPDATE gym_attendance_removed SET entry_id = ${toEntryId}
+    WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}`;
   return rows.length;
 }
 

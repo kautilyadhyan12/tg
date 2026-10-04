@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, X } from 'lucide-react';
 import { staffLeaderboardService } from '../../api/leaderboardApi';
-import { errorText } from '../../api/orgsApi';
+import { errorText, orgService } from '../../api/orgsApi';
 import {
   BOARD_TABS,
   PERIODS,
@@ -14,14 +14,36 @@ import {
   weekText,
   workoutCountText,
 } from '../../components/gym/leaderboardView';
-import { HIDDEN_TAG, hiddenLine, nameOf, panelPlace, staffVisitNotCountedText, staffWorkoutNotCountedText, takeOffBox } from './leaderboardStaffView';
+import { gymToday } from './hoursView';
+import {
+  HIDDEN_TAG,
+  addVisitBox,
+  addVisitWindow,
+  hiddenLine,
+  nameOf,
+  panelPlace,
+  removeVisitBox,
+  staffVisitNotCountedText,
+  staffWorkoutNotCountedText,
+  takeOffBox,
+} from './leaderboardStaffView';
 
 // One person on the console's leaderboard (ROADMAP 19a-iii): their place and number on all
 // three boards, what counted for each, and Take off the board / Put back. Before either
 // happens a box names who changes and what is kept. In the middle on a computer, from the
-// bottom on a phone, as Members' boxes.
+// bottom on a phone, as Members' boxes. Staff who check people in also fix a visit here
+// (19a-iv): Remove beside each visit and Add a visit under Gym days, each behind its own box.
 
-function Counted({ gymId, userId, boardId, period }) {
+// A click anywhere on the box opens the calendar, not only its small icon.
+const openCalendar = (e) => {
+  try {
+    e.currentTarget.showPicker();
+  } catch {
+    // An older browser: the box is still typed into.
+  }
+};
+
+function Counted({ gymId, userId, boardId, period, canFix, onRemove, onAdd }) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
   useEffect(() => {
     let live = true;
@@ -63,14 +85,29 @@ function Counted({ gymId, userId, boardId, period }) {
                   {dayLabel(day.day)} <span className="c-t2">· {dayCountText(day.visits.length)}</span>
                 </span>
                 {day.visits.map((v) => (
-                  <span key={v.at + v.how} className="c-s13 c-t2">
-                    {visitText(v, d.timezone)}
+                  <span key={v.id} className="c-s13 c-t2 flex items-center justify-between gap-3">
+                    <span>{visitText(v, d.timezone)}</span>
+                    {canFix ? (
+                      <button
+                        type="button"
+                        onClick={() => onRemove(v, day, d)}
+                        aria-label={`Remove the visit on ${dayLabel(day.day)}: ${visitText(v, d.timezone)}`}
+                        className="c-btn c-btn-link c-btn-sm flex-shrink-0"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
                   </span>
                 ))}
               </li>
             ))}
           </ul>
         )
+      ) : null}
+      {boardId === 'gym_days' && canFix ? (
+        <button type="button" onClick={() => onAdd(d)} data-testid="add-visit-open" className="c-btn c-btn-s c-btn-sm self-start">
+          Add a visit
+        </button>
       ) : null}
       {boardId === 'workout_days' ? (
         d.workoutDays.length === 0 ? (
@@ -118,7 +155,7 @@ function Counted({ gymId, userId, boardId, period }) {
   );
 }
 
-export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, words, readOnly, onClose, onChanged }) {
+export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, words, readOnly, canFix, onClose, onChanged }) {
   const [state, setState] = useState({ loading: true, error: null, profile: null });
   /** The board whose "what counted" is open. */
   const [counted, setCounted] = useState(null);
@@ -126,6 +163,11 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
   const [asking, setAsking] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  /** The visit box: `{ kind: 'remove', visit, day, counted }` or `{ kind: 'add', counted }`. */
+  const [fix, setFix] = useState(null);
+  const [fixDay, setFixDay] = useState('');
+  /** Read "what counted" again after a visit changed. */
+  const [countedRead, setCountedRead] = useState(0);
 
   // The page behind holds still while the box is open.
   useEffect(() => {
@@ -152,7 +194,44 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
   const person = profile ?? row;
   const periodLabel = PERIODS.find((p) => p.id === period)?.label.toLowerCase() ?? '';
   // The box is built from the server's answer for the person, never from the row alone.
-  const box = asking === null || profile === null ? null : takeOffBox(profile, asking, gym.name, words);
+  const fixBox =
+    fix === null
+      ? null
+      : fix.kind === 'remove'
+        ? { ...removeVisitBox(nameOf(person), fix.visit, fix.day, fix.counted), ready: true }
+        : addVisitBox(nameOf(person), fixDay, fix.counted);
+  const box = fixBox ?? (asking === null || profile === null ? null : takeOffBox(profile, asking, gym.name, words));
+  const addWindow = addVisitWindow(gymToday(gym.timezone));
+
+  const closeBox = () => {
+    setAsking(null);
+    setFix(null);
+    setFixDay('');
+    setSaveError(null);
+  };
+
+  const pressFix = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      if (fix.kind === 'remove') {
+        await orgService.removeVisit(gymId, fix.visit.id);
+        onChanged(fixBox.done);
+      } else {
+        const res = await orgService.addVisit(gymId, { userId: row.userId }, fixDay);
+        onChanged(
+          res.data.result === 'added' ? fixBox.done : `${nameOf(person)} already had a visit that counts on that day. Nothing was added.`,
+        );
+      }
+      closeBox();
+      setCountedRead((n) => n + 1);
+      await load();
+    } catch (err) {
+      setSaveError(errorText(err, "We couldn't change that. Please try again."));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const press = async () => {
     setSaving(true);
@@ -184,7 +263,23 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
     );
   } else if (box !== null) {
     body = (
-      <div className="flex flex-col gap-5" data-testid="take-off-box">
+      <div className="flex flex-col gap-5" data-testid={fix !== null ? 'visit-box' : 'take-off-box'}>
+        {fix?.kind === 'add' ? (
+          <label className="c-field">
+            <span className="c-label">Day they came</span>
+            <input
+              type="date"
+              className="c-input"
+              value={fixDay}
+              min={addWindow.min}
+              max={addWindow.max}
+              onChange={(e) => setFixDay(e.target.value)}
+              onClick={openCalendar}
+              data-testid="add-visit-day"
+            />
+            <span className="c-s13 c-t2">Press the box to pick from a calendar: an earlier day, up to 62 days back. For today, use Check in on Attendance.</span>
+          </label>
+        ) : null}
         <section className="flex flex-col gap-1.5">
           <h3 className="c-s16 c-w6 c-t1">What changes</h3>
           {box.changes.map((line) => (
@@ -193,14 +288,16 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
             </p>
           ))}
         </section>
-        <section className="flex flex-col gap-1.5">
-          <h3 className="c-s16 c-w6 c-t1">What stays the same</h3>
-          {box.keeps.map((line) => (
-            <p key={line} className="c-s15 c-t2">
-              {line}
-            </p>
-          ))}
-        </section>
+        {box.keeps.length > 0 ? (
+          <section className="flex flex-col gap-1.5">
+            <h3 className="c-s16 c-w6 c-t1">What stays the same</h3>
+            {box.keeps.map((line) => (
+              <p key={line} className="c-s15 c-t2">
+                {line}
+              </p>
+            ))}
+          </section>
+        ) : null}
       </div>
     );
   } else {
@@ -240,7 +337,16 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
                 </div>
                 {isOpen ? (
                   <div className="pt-3">
-                    <Counted gymId={gymId} userId={row.userId} boardId={b.board} period={period} />
+                    <Counted
+                      key={countedRead}
+                      gymId={gymId}
+                      userId={row.userId}
+                      boardId={b.board}
+                      period={period}
+                      canFix={canFix === true && !readOnly}
+                      onRemove={(visit, day, data) => setFix({ kind: 'remove', visit, day, counted: data })}
+                      onAdd={(data) => setFix({ kind: 'add', counted: data })}
+                    />
                   </div>
                 ) : null}
               </div>
@@ -269,15 +375,15 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
         <div className="grid grid-cols-[1fr_auto] md:flex md:justify-end gap-2 md:gap-3">
           <button
             type="button"
-            onClick={() => void press()}
-            disabled={saving}
-            data-testid="take-off-press"
-            className={`c-btn c-btn-lg md:order-2 ${asking ? 'c-btn-danger' : 'c-btn-p'}`}
+            onClick={() => void (fix !== null ? pressFix() : press())}
+            disabled={saving || (fix !== null && !fixBox.ready)}
+            data-testid={fix !== null ? 'visit-press' : 'take-off-press'}
+            className={`c-btn c-btn-lg md:order-2 ${asking || fix?.kind === 'remove' ? 'c-btn-danger' : 'c-btn-p'}`}
           >
             {saving ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
             {box.button}
           </button>
-          <button type="button" onClick={() => setAsking(null)} disabled={saving} className="c-btn c-btn-s c-btn-lg md:order-1">
+          <button type="button" onClick={closeBox} disabled={saving} className="c-btn c-btn-s c-btn-lg md:order-1">
             Cancel
           </button>
         </div>

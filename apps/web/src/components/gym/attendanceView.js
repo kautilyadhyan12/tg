@@ -279,6 +279,8 @@ export function mergeVisits(readVisits, markedVisits) {
  *
  *  A time that cannot be read contributes no chip and never removes the day: the
  *  day is a fact off the wire, the chip is a rendering of it. */
+export const ADDED_LATER = 'Added later by staff';
+
 export function visitDays(visits, { timezone, clockFormat } = {}) {
   const days = [];
   const byDay = new Map();
@@ -291,7 +293,9 @@ export function visitDays(visits, { timezone, clockFormat } = {}) {
       byDay.set(day, row);
       days.push(row);
     }
-    const time = visitTimeLabel(visit?.markedAt, timezone, clockFormat);
+    // A visit staff added on a later day (19a-iv) has no time of its own: `markedAt` is
+    // when it was added, never when the person came.
+    const time = visit?.hoursStatus === 'added_later' ? ADDED_LATER : visitTimeLabel(visit?.markedAt, timezone, clockFormat);
     if (time !== '') row.times.push(time);
   }
   return days;
