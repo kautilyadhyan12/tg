@@ -716,7 +716,7 @@ export default function Classes() {
         </div>
       ) : null}
 
-      {weekShown ? <ClassWeek gymId={gymId} staff={staff} locked={locked} /> : null}
+      {weekShown ? <ClassWeek gymId={gymId} org={org} readOnly={readOnly} staff={staff} locked={locked} /> : null}
 
       {!weekShown && actionError !== null ? <ConsoleFailed message={actionError} newLook /> : null}
 

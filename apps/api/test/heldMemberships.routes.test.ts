@@ -51,6 +51,12 @@ let keyCounter = 0;
 /** A fresh request key, as the screen makes one a form. */
 const nextKey = () => `00000000-0000-4000-8000-${String(++keyCounter).padStart(12, "0")}`;
 
+/** A change that ended nobody's bookings: the person's memberships after it. */
+const moved = (answer: Awaited<ReturnType<typeof heldService.moveHeldMembership>>): HeldMembershipsResponse => {
+  if (answer.kind !== "ok") throw new Error("the change asked about bookings");
+  return answer.body;
+};
+
 const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
   Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
 
@@ -269,7 +275,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
           .giveHeldMembership(at(late), owner.userId, gymId, visitor, { requestKey: nextKey(), typeId: pass, startsOn: "2026-11-03", paid: true })
           .then(() => "given", (err: unknown) => (err instanceof OrgsError ? err.code : "threw"));
         const goldId = results[city].late.memberships.find((m) => m.typeName === "Gold Monthly")?.id ?? "";
-        const frozen = await heldService.moveHeldMembership(at(late), owner.userId, gymId, person, goldId, { type: "freeze" });
+        const frozen = moved(await heldService.moveHeldMembership(at(late), owner.userId, gymId, person, goldId, { type: "freeze" }));
         pressed[city] = { dayPass, frozenOn: frozen.memberships.find((m) => m.id === goldId)?.frozenOn };
       }
       expect(pressed).toEqual({
@@ -612,7 +618,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       let after = before;
       for (const m of before.memberships) {
         await heldService.moveHeldMembership(at("2026-02-01T12:00:00Z"), owner.userId, gymId, winter, m.id, { type: "freeze" });
-        after = await heldService.moveHeldMembership(at("2026-02-03T12:00:00Z"), owner.userId, gymId, winter, m.id, { type: "unfreeze" });
+        after = moved(await heldService.moveHeldMembership(at("2026-02-03T12:00:00Z"), owner.userId, gymId, winter, m.id, { type: "unfreeze" }));
       }
       expect(shown(after, "Gold Monthly")?.view).toMatchObject({ status: "active", renewsOn: "2026-03-02", payment: { state: "paid", until: "2026-03-02" } });
       expect(shown(after, "One month")?.view).toMatchObject({ status: "active", endsOn: "2026-03-01" });

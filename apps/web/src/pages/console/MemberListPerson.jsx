@@ -1157,7 +1157,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             <Fact key={k} label={FIELD_LABELS[k]} value={v} edited={edited.has(k)} />
           ))}
         </Section>
-        <MemberMemberships key={p.entryId} gymId={gymId} entryId={p.entryId} name={p.fullName || 'this person'} readOnly={readOnly} />
+        <MemberMemberships
+          key={p.entryId}
+          gymId={gymId}
+          entryId={p.entryId}
+          name={p.fullName || 'this person'}
+          readOnly={readOnly}
+          clockFormat={gym?.clockFormat}
+        />
         {membership.length > 0 ? (
           // What the gym's own list says about them, in its words; the box above is what
           // they hold from the price list (17a-ii).

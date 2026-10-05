@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
+import { orgWords } from '@app/shared';
 import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import BookingsEndBox from '../../components/console/BookingsEndBox';
+import ClassBookingsList from '../../components/console/ClassBookingsList';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { bookingsAsked, endingTotal } from './bookingsEndView';
 import { RunFields, StartTimePick } from './ClassFields';
+import MemberListPerson from './MemberListPerson';
+import { canRemoveMembers, viewerPrivileges } from './consoleView';
 import { addDays } from './hoursView';
 import {
   canGoForward,
@@ -28,8 +32,9 @@ import {
 
 // THE CALENDAR TAB (Part 3 §13.3, §13.6). Monday to Sunday in the gym's own
 // calendar: seven columns on a wide screen, a list by day on a phone. Tapping a
-// class opens it: Edit (this class only, or this and future classes of its time
-// slot) or Cancel class for that date, Un-cancel for a cancelled one. Drawn from
+// class opens it: who is booked on it (17c-iii), and Edit (this class only, or this
+// and future classes of its time slot) or Cancel class for that date, Un-cancel for
+// a cancelled one. Drawn from
 // `console.css` (spec Part 3 §17; ROADMAP R2).
 
 const EMPTY_FILTER = { classTypeId: '', className: '', coach: '', coachLabel: '' };
@@ -117,7 +122,7 @@ function DayForm({
 /** One date, opened. Its actions follow what the server says it is: a started
  *  class has none, a cancelled one can be un-cancelled, any other can be edited
  *  or cancelled. */
-function DayPanel({ gymId, session, clockFormat, staff, locked, busy, onClose, onChange, onCancel, onRestore }) {
+function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVersion, onOpenPerson, onClose, onChange, onCancel, onRestore }) {
   const [mode, setMode] = useState(null);
   const [draft, setDraft] = useState(() => dayDraft(session));
   const [scope, setScope] = useState('this');
@@ -125,9 +130,12 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, onClose, o
   const [asked, setAsked] = useState(null);
   // Who is booked on the classes a cancel or a move would end, when the server asked.
   const [ending, setEnding] = useState(null);
+  // Saves so far: a save can move people in from the waitlist, so the list is read again.
+  const [saves, setSaves] = useState(0);
   // What a save answered: done, a move to ask about, or people to ask about.
   const settle = (done) => {
     if (done === true) {
+      setSaves((n) => n + 1);
       setEnding(null);
       setMode(null);
       return;
@@ -161,6 +169,11 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, onClose, o
           <X aria-hidden="true" className="w-[18px] h-[18px]" />
         </button>
       </div>
+
+      {/* A cancelled class holds nobody: its bookings ended with it. */}
+      {cancelled ? null : (
+        <ClassBookingsList gymId={gymId} sessionId={session.id} version={`${String(saves)}-${String(peopleVersion)}`} onOpen={onOpenPerson} />
+      )}
 
       {session.started ? (
         <p className="c-s14 c-t3">This class has started, so it can&apos;t be changed.</p>
@@ -281,7 +294,7 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, onClose, o
   );
 }
 
-export default function ClassWeek({ gymId, staff, locked }) {
+export default function ClassWeek({ gymId, org, readOnly, staff, locked }) {
   const [wanted, setWanted] = useState(null);
   const [week, setWeek] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -291,6 +304,21 @@ export default function ClassWeek({ gymId, staff, locked }) {
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
+  // A person opened from a class's list: their page, over the Calendar.
+  const [person, setPerson] = useState(null);
+  // The gym's own columns, for that page; read when the first person is opened.
+  const [memberList, setMemberList] = useState(null);
+  // Closing that page reads the class's list again: a membership may have been cancelled.
+  const [peopleVersion, setPeopleVersion] = useState(0);
+
+  const openPerson = (entryId) => {
+    setPerson(entryId);
+    if (memberList !== null) return;
+    orgService.getMemberList(gymId).then(
+      (res) => setMemberList(res.data.list),
+      () => undefined,
+    );
+  };
 
   // The loading flag is set by the click, never inside the effect.
   const goTo = useCallback((day) => {
@@ -522,6 +550,8 @@ export default function ClassWeek({ gymId, staff, locked }) {
                   staff={staff}
                   locked={locked}
                   busy={busy}
+                  peopleVersion={peopleVersion}
+                  onOpenPerson={openPerson}
                   onClose={() => setSelected(null)}
                   onChange={(body) => act(() => orgService.changeClassDay(gymId, open.id, body))}
                   onCancel={(confirmBookings) =>
@@ -538,6 +568,24 @@ export default function ClassWeek({ gymId, staff, locked }) {
           </div>
         </>
       ) : null}
+
+      {person === null ? null : (
+        <MemberListPerson
+          key={person}
+          gymId={gymId}
+          gym={org}
+          entryId={person}
+          list={memberList}
+          words={orgWords(org?.orgType)}
+          readOnly={readOnly}
+          canRemove={canRemoveMembers(viewerPrivileges(org))}
+          onClose={() => {
+            setPerson(null);
+            setPeopleVersion((n) => n + 1);
+          }}
+          onChanged={() => setPeopleVersion((n) => n + 1)}
+        />
+      )}
     </div>
   );
 }

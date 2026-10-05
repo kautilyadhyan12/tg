@@ -283,3 +283,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 17c-ii-a. [ ] **Bookings when things change, and the settings**: staff cancel, move, shrink or remove a class that has bookings; a member removed or an account deleted loses their coming bookings; Settings → Class bookings.
 
 - 17d, as first written: **The member's side**: the list by day with Book · Cancel · Join waitlist · Claim, on the member web until the phone app shows it.
+
+- 17c-iii, as first written: **Who is booked, on the Calendar** (RULINGS 2026-10-05; spec §13.6; after 17d): a class on the Calendar opens its list of people booked and waiting, for `schedule.manage` and the class's own coach (the server's read exists since 17c-i); a membership staff cancel on a person's page ends the bookings made on it.
