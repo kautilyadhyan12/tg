@@ -100,6 +100,25 @@ export async function postsPage(sql: SqlOrTx, gymId: string, reader: Reader, bef
   return rows.map(toPost);
 }
 
+/** The posts one person made as a member that this reader is sent, newest first, a pinned
+ *  one in its own place, from `before` on. */
+export async function memberPostsPage(
+  sql: SqlOrTx,
+  gymId: string,
+  reader: Reader,
+  authorId: string,
+  before: { at: string; id: string } | null,
+  limit: number,
+): Promise<PostRow[]> {
+  const from = before === null ? sql`` : sql`AND (p.created_at, p.id) < (${before.at}::timestamptz, ${before.id}::uuid)`;
+  const rows = await sql<RawPost[]>`
+    SELECT * FROM (${posts(sql, gymId)}) p
+    WHERE ${seenBy(sql, gymId, reader)} AND p.by_member AND p.author_id = ${authorId} ${from}
+    ORDER BY p.created_at DESC, p.id DESC
+    LIMIT ${limit}`;
+  return rows.map(toPost);
+}
+
 /** One of this gym's posts this reader is sent, or null. */
 export async function postById(sql: SqlOrTx, gymId: string, postId: string, reader: Reader): Promise<PostRow | null> {
   const rows = await sql<RawPost[]>`
@@ -351,6 +370,16 @@ export async function countMemberPostsSince(sql: SqlOrTx, gymId: string, userId:
   return rows[0]?.n ?? 0;
 }
 
+/** Of those, the posts that carry photos now. A removed post's photos are deleted with it,
+ *  so it is not counted here: the day's ten above are what stop post-and-remove. */
+export async function countMemberPhotoPostsSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_posts p
+    WHERE p.author_user_id = ${userId} AND p.gym_id = ${gymId} AND p.by_member AND p.created_at > ${since}
+      AND EXISTS (SELECT 1 FROM gym_post_photos ph WHERE ph.gym_id = p.gym_id AND ph.post_id = p.id)`;
+  return rows[0]?.n ?? 0;
+}
+
 /** Marks a member's own post removed; false when it is not theirs, or was removed already. */
 export async function markRemovedOwn(tx: TransactionSql, gymId: string, postId: string, userId: string, at: Date): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
@@ -521,6 +550,14 @@ export async function insertBlock(sql: SqlOrTx, gymId: string, userId: string, b
   await sql`
     INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id, created_at) VALUES (${gymId}, ${userId}, ${blockedId}, ${at})
     ON CONFLICT (gym_id, user_id, blocked_user_id) DO NOTHING`;
+}
+
+export async function hasBlocked(sql: SqlOrTx, gymId: string, userId: string, blockedId: string): Promise<boolean> {
+  const rows = await sql<{ ok: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM gym_post_blocks WHERE gym_id = ${gymId} AND user_id = ${userId} AND blocked_user_id = ${blockedId}
+    ) AS ok`;
+  return rows[0]?.ok ?? false;
 }
 
 /** Whether this post is one the person is not sent only because they blocked its writer. */
