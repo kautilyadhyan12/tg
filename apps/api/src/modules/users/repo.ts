@@ -637,8 +637,23 @@ export async function softDeleteUser(
   /** The HMAC the account's address is invited under, or null while invitations are
    *  switched off. */
   inviteHmac: string | null = null,
+  /** What else ends at a gym the person has just left: their coming class bookings
+   *  (17c-ii-a). Called once a gym, inside this transaction, with that gym's row held. */
+  leftGym?: (tx: TransactionSql, gymId: string) => Promise<void>,
 ): Promise<DeletedUserRow | null> {
   return await sql.begin(async (tx) => {
+    // The person's gyms, each gym's row held before anything else and in one order:
+    // every write on a gym's members and bookings holds that row first, so a booking
+    // being made at this instant lands before this or waits for it.
+    const held = new Set<string>();
+    if (leftGym !== undefined) {
+      const gyms = await tx<{ id: string }[]>`
+        SELECT g.id FROM gyms g
+        WHERE g.id IN (SELECT gym_id FROM gym_members WHERE user_id = ${userId} AND removed_at IS NULL)
+        ORDER BY g.id
+        FOR UPDATE OF g`;
+      for (const gym of gyms) held.add(gym.id);
+    }
     const rows = await tx<{ email: string | null; display_name: string }[]>`
       UPDATE users SET status = 'deleted', deleted_at = now()
       WHERE id = ${userId} AND status = 'active'
@@ -679,6 +694,10 @@ export async function softDeleteUser(
       UPDATE gym_members SET removed_at = now()
       WHERE user_id = ${userId} AND removed_at IS NULL
       RETURNING gym_id`;
+    // A gym joined in the instant after the rows above were held has no booking yet.
+    for (const { gym_id } of closed) {
+      if (held.has(gym_id)) await leftGym?.(tx, gym_id);
+    }
     // RULINGS 2026-09-23, gap B: the invitations this account used to join the gyms it
     // has just left wait again, so the account restored, or a new one proved at the same
     // address, can tap Join. Only those gyms: an invitation staff withdrew stays

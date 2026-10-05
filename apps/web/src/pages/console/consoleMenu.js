@@ -7,11 +7,13 @@ import { canSeeLeaderboard } from './leaderboardStaffView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManagePosts } from '../../components/gym/postsView';
 
-/** Settings holds sections gated on three permissions (Staff: `staff.manage`; the gym's
- *  details: `org.manage`; Memberships: `memberships.manage`), so its page is drawn for
- *  whoever holds any of them. */
+/** Settings holds sections gated on four permissions (Staff: `staff.manage`; the gym's
+ *  details: `org.manage`; Memberships: `memberships.manage`; Class bookings:
+ *  `schedule.manage`), so its page is drawn for whoever holds any of them. */
 function settingsIsReachable(privileges) {
-  return canManageStaff(privileges) || canManageOrg(privileges) || canManageMemberships(privileges);
+  return (
+    canManageStaff(privileges) || canManageOrg(privileges) || canManageMemberships(privileges) || canManageSchedule(privileges)
+  );
 }
 
 /** THE CONSOLE'S PAGES THIS PERSON MAY OPEN, in the menu's order (spec Part 3 §17.5).

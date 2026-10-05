@@ -405,7 +405,7 @@ export function repeatEditProblem(draft, bounds) {
 
 /** The body, or null when the form is not ready. `confirmReplace` is the count
  *  the server asked about, sent back only after the gym said Move anyway. */
-export function repeatEditRequest(draft, bounds, confirmReplace = null) {
+export function repeatEditRequest(draft, bounds, confirmReplace = null, confirmBookings = null) {
   if (repeatEditProblem(draft, bounds) !== null) return null;
   return {
     updateFrom: draft.updateFrom,
@@ -413,6 +413,7 @@ export function repeatEditRequest(draft, bounds, confirmReplace = null) {
     startMinute: clockToMinutes(draft.time),
     ...runFieldsRequest(draft),
     ...(Number.isInteger(confirmReplace) && confirmReplace > 0 ? { confirmReplace } : {}),
+    ...(Number.isInteger(confirmBookings) && confirmBookings > 0 ? { confirmBookings } : {}),
   };
 }
 
@@ -769,7 +770,7 @@ export function dayProblem(draft) {
 
 /** `scope` is "this" (this class only) or "future" (this and future classes,
  *  which is its time slot's change from this date). */
-export function dayRequest(draft, scope = 'this', confirmReplace = null) {
+export function dayRequest(draft, scope = 'this', confirmReplace = null, confirmBookings = null) {
   if (dayProblem(draft) !== null) return null;
   return {
     scope: scope === 'future' ? 'future' : 'this',
@@ -777,6 +778,9 @@ export function dayRequest(draft, scope = 'this', confirmReplace = null) {
     ...runFieldsRequest(draft),
     ...(scope === 'future' && Number.isInteger(confirmReplace) && confirmReplace > 0
       ? { confirmReplace }
+      : {}),
+    ...(scope === 'future' && Number.isInteger(confirmBookings) && confirmBookings > 0
+      ? { confirmBookings }
       : {}),
   };
 }

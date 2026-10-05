@@ -3,10 +3,16 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { CLASS_LATE_CANCEL_ERROR, bookClassRequestSchema, cancelClassBookingRequestSchema } from "@app/shared";
+import {
+  CLASS_LATE_CANCEL_ERROR,
+  bookClassRequestSchema,
+  cancelClassBookingRequestSchema,
+  classBookingSettingsSchema,
+  classBookingsEndingQuerySchema,
+} from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { classSessionParamsSchema } from "../schemas.js";
+import { classSessionParamsSchema, orgParamsSchema } from "../schemas.js";
 import * as service from "./bookingsService.js";
 
 function parseOr400<S extends z.ZodTypeAny>(
@@ -107,5 +113,42 @@ export function registerClassBookingRoutes(app: FastifyInstance, deps: { sql: Sq
     const list = await service.getSessionBookings(bookingDeps, requireUserId(req), params.gymId, params.sessionId, gate(staffReadLimit)(req, reply));
     if (list === null) return;
     return reply.status(200).send(list);
+  });
+
+  // ── STAFF HOLDING `schedule.manage` ──
+
+  // Staff set a timetable and its settings now and then; three at one front desk share
+  // an address. The service asks who they are first, as for members above.
+  const staffLimit = limiter("orgs_bookings_staff", 300, 900);
+  const staff = { preHandler: app.authenticate };
+
+  // Whose bookings a change to the timetable would end: the whole list, a page at a time.
+  app.get("/v1/orgs/:gymId/class-bookings/ending", staff, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(classBookingsEndingQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const list = await service.getEndingBookings(bookingDeps, requireUserId(req), params.gymId, query, gate(staffLimit)(req, reply));
+    if (list === null) return;
+    return reply.status(200).send(list);
+  });
+
+  app.get("/v1/orgs/:gymId/booking-settings", staff, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const settings = await service.getBookingSettings(bookingDeps, requireUserId(req), params.gymId, gate(staffLimit)(req, reply));
+    if (settings === null) return;
+    return reply.status(200).send(settings);
+  });
+
+  // PUT: all four every time.
+  app.put("/v1/orgs/:gymId/booking-settings", staff, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(classBookingSettingsSchema, req.body, req, reply);
+    if (body === null) return;
+    const saved = await service.setBookingSettings(bookingDeps, requireUserId(req), params.gymId, body, gate(staffLimit)(req, reply));
+    if (saved === null) return;
+    return reply.status(200).send(saved);
   });
 }

@@ -8,6 +8,7 @@ import {
   ConsoleLoading,
   ConsoleSection,
 } from '../../components/console/ConsoleStates';
+import BookingsEndBox from '../../components/console/BookingsEndBox';
 import {
   CoachField,
   DateField,
@@ -58,6 +59,7 @@ import {
   updateFromBounds,
   weekdayLine,
 } from './classesView';
+import { bookingsAsked, endingTotal } from './bookingsEndView';
 
 // CLASSES — the gym's timetable (Part 3 §13.3). Its words are gym software's
 // (Kd, RULINGS 2026-09-23): a class, its time slots, Cancel, Archive, Restore;
@@ -236,6 +238,7 @@ function RepeatEditForm({
   disabled,
   saving,
   question,
+  endBox,
   onSave,
   onClose,
   onMove,
@@ -268,7 +271,9 @@ function RepeatEditForm({
       />
       <p className="c-hint">{repeatEditNote(repeatEditMoves(schedule, draft))}</p>
       <Problem text={problem} />
-      {question === null ? (
+      {endBox !== null ? (
+        endBox
+      ) : question === null ? (
         <FormButtons
           saveLabel="Save"
           onSave={onSave}
@@ -418,6 +423,9 @@ export default function Classes() {
   // A move the server asked about: how many classes it would replace, from
   // which date. Any change to the form puts Save back.
   const [replaceAsk, setReplaceAsk] = useState(null);
+  // People booked on the classes a change would end, when the server asked: which
+  // row asked (`archive:<id>`, `stop:<id>` or `move:<id>`) and who they are.
+  const [endAsk, setEndAsk] = useState(null);
   // Which class is open for a bulk edit, and its form.
   const [bulkFor, setBulkFor] = useState(null);
   const [bulkState, setBulkState] = useState(() => bulkEditDraft([], ''));
@@ -528,6 +536,28 @@ export default function Classes() {
     }
   };
 
+  // Archive a class or cancel a time slot. People booked on what would go are a
+  // question, shown in the row's own box, and `confirmBookings` is its answer.
+  const endOrAsk = async (key, call) => {
+    setBusy(key);
+    setActionError(null);
+    try {
+      const res = await call();
+      setTimetable(res.data);
+      setEndAsk(null);
+    } catch (err) {
+      const ending = bookingsAsked(err);
+      if (ending !== null) {
+        setEndAsk({ key, ending });
+      } else {
+        setEndAsk(null);
+        setActionError(errorText(err, "We couldn't save that."));
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const saveNew = async () => {
     const body = classRequest(addDraft);
     if (body === null) return;
@@ -556,8 +586,8 @@ export default function Classes() {
   const editBounds = (schedule) => updateFromBounds(schedule, today, lists.horizonDays);
 
   // Not `run`: a move the server asks about is a question, not a failure.
-  const saveRepeatEdit = async (schedule, confirmReplace = null) => {
-    const body = repeatEditRequest(repeatEditState, editBounds(schedule), confirmReplace);
+  const saveRepeatEdit = async (schedule, confirmReplace = null, confirmBookings = null) => {
+    const body = repeatEditRequest(repeatEditState, editBounds(schedule), confirmReplace, confirmBookings);
     if (body === null) return;
     setBusy(`repeatEdit:${schedule.id}`);
     setActionError(null);
@@ -565,10 +595,16 @@ export default function Classes() {
       const res = await orgService.updateClassRepeat(gymId, schedule.id, body);
       setTimetable(res.data);
       setReplaceAsk(null);
+      setEndAsk(null);
       setEditingRepeat(null);
     } catch (err) {
       const count = replacesAsked(err);
-      if (count === null) {
+      const ending = bookingsAsked(err);
+      if (ending !== null) {
+        // The move was agreed to (or needed no asking); the people are asked about next.
+        setEndAsk({ key: `move:${schedule.id}`, ending, from: body.updateFrom, confirmReplace });
+      } else if (count === null) {
+        setEndAsk(null);
         setReplaceAsk(null);
         setActionError(errorText(err, "We couldn't save that."));
         // A refusal can mean the list on screen is out of date — the same Save
@@ -722,7 +758,9 @@ export default function Classes() {
                 const type = entry.type;
                 const swatch = classSwatch(type.colour);
                 const isEditing = editing === type.id;
-                const asking = confirming === `archive:${type.id}`;
+                const archiveKey = `archive:${type.id}`;
+                const archiveEnds = endAsk?.key === archiveKey ? endAsk.ending : null;
+                const asking = confirming === archiveKey || archiveEnds !== null;
                 const bulkSlots = bulkEditSlots(entry.schedules, today, lists.horizonDays);
                 const isBulk = bulkFor === type.id;
                 return (
@@ -794,7 +832,20 @@ export default function Classes() {
                       )}
                     </div>
 
-                    {asking ? (
+                    {archiveEnds !== null ? (
+                      <BookingsEndBox
+                        gymId={gymId}
+                        ending={archiveEnds}
+                        scope={{ by: 'class', id: type.id }}
+                        kind="class"
+                        clockFormat={lists.clockFormat}
+                        busy={busy !== null}
+                        onCancel={() => setEndAsk(null)}
+                        onConfirm={() =>
+                          void endOrAsk(archiveKey, () => orgService.archiveClass(gymId, type.id, endingTotal(archiveEnds)))
+                        }
+                      />
+                    ) : asking ? (
                       <ConfirmInline
                         question={`Archive ${type.name}? Its time slots are cancelled and its upcoming classes come off the calendar. You can restore the class later and add its time slots again.`}
                         confirmLabel="Archive"
@@ -804,7 +855,7 @@ export default function Classes() {
                         onCancel={() => setConfirming(null)}
                         onConfirm={() => {
                           setConfirming(null);
-                          void run(`archive:${type.id}`, () => orgService.archiveClass(gymId, type.id));
+                          void endOrAsk(archiveKey, () => orgService.archiveClass(gymId, type.id));
                         }}
                       />
                     ) : null}
@@ -848,7 +899,10 @@ export default function Classes() {
                         const days = weekdayLine(schedule.weekdays);
                         const startsAt = clockLabel(schedule.startMinute, lists.clockFormat);
                         const editingThis = editingRepeat === schedule.id;
-                        const askingThis = confirming === `stop:${schedule.id}`;
+                        const stopKey = `stop:${schedule.id}`;
+                        const stopEnds = endAsk?.key === stopKey ? endAsk.ending : null;
+                        const askingThis = confirming === stopKey || stopEnds !== null;
+                        const moveEnds = endAsk?.key === `move:${schedule.id}` ? endAsk : null;
                         return (
                           <div
                             key={schedule.id}
@@ -913,8 +967,26 @@ export default function Classes() {
                                 draft={repeatEditState}
                                 setDraft={(next) => {
                                   setReplaceAsk(null);
+                                  setEndAsk(null);
                                   setRepeatEditState(next);
                                 }}
+                                endBox={
+                                  moveEnds === null ? null : (
+                                    <BookingsEndBox
+                                      gymId={gymId}
+                                      ending={moveEnds.ending}
+                                      scope={{ by: 'slot', id: schedule.id, from: moveEnds.from }}
+                                      kind="move"
+                                      clockFormat={lists.clockFormat}
+                                      busy={busy !== null}
+                                      cancelLabel="Go back"
+                                      onCancel={() => setEndAsk(null)}
+                                      onConfirm={() =>
+                                        void saveRepeatEdit(schedule, moveEnds.confirmReplace, endingTotal(moveEnds.ending))
+                                      }
+                                    />
+                                  )
+                                }
                                 bounds={editBounds(schedule)}
                                 today={today}
                                 staff={staff}
@@ -927,6 +999,7 @@ export default function Classes() {
                                 onSave={() => void saveRepeatEdit(schedule)}
                                 onClose={() => {
                                   setReplaceAsk(null);
+                                  setEndAsk(null);
                                   setEditingRepeat(null);
                                 }}
                                 onMove={() => {
@@ -935,7 +1008,20 @@ export default function Classes() {
                                 onBack={() => setReplaceAsk(null)}
                               />
                             ) : null}
-                            {askingThis ? (
+                            {stopEnds !== null ? (
+                              <BookingsEndBox
+                                gymId={gymId}
+                                ending={stopEnds}
+                                scope={{ by: 'slot', id: schedule.id }}
+                                kind="slot"
+                                clockFormat={lists.clockFormat}
+                                busy={busy !== null}
+                                onCancel={() => setEndAsk(null)}
+                                onConfirm={() =>
+                                  void endOrAsk(stopKey, () => orgService.stopClassRepeat(gymId, schedule.id, endingTotal(stopEnds)))
+                                }
+                              />
+                            ) : askingThis ? (
                               <ConfirmInline
                                 question={`Cancel the ${days} ${startsAt} time slot? Its upcoming classes come off the calendar.`}
                                 confirmLabel="Cancel time slot"
@@ -945,7 +1031,7 @@ export default function Classes() {
                                 onCancel={() => setConfirming(null)}
                                 onConfirm={() => {
                                   setConfirming(null);
-                                  void run(`stop:${schedule.id}`, () => orgService.stopClassRepeat(gymId, schedule.id));
+                                  void endOrAsk(stopKey, () => orgService.stopClassRepeat(gymId, schedule.id));
                                 }}
                               />
                             ) : null}

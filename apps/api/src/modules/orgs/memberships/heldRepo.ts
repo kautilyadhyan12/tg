@@ -474,6 +474,19 @@ export async function givePackClassBack(tx: TransactionSql, gymId: string, membe
     WHERE gym_id = ${gymId} AND id = ${membershipId} AND kind = 'pack' AND classes_left < pack_classes`;
 }
 
+/** Several packs given their classes back in one statement (`n` each), for bookings ended
+ *  with a class or with a person's membership. Never past what the pack was sold with. */
+export async function givePackClassesBack(tx: TransactionSql, gymId: string, back: ReadonlyMap<string, number>, now: Date): Promise<void> {
+  if (back.size === 0) return;
+  const payload = [...back].map(([id, n]) => ({ id, n }));
+  await tx`
+    UPDATE gym_held_memberships h
+    SET status = CASE WHEN h.status = 'ended' AND h.classes_left = 0 THEN 'active' ELSE h.status END,
+        classes_left = LEAST(h.pack_classes, h.classes_left + r.n), updated_at = ${now}
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(id uuid, n int)
+    WHERE h.gym_id = ${gymId} AND h.id = r.id AND h.kind = 'pack'`;
+}
+
 /** How many memberships each of these records has in use on `today`, by the rule: a
  *  stored `active` row the clock has ended is not counted. Only records with at least
  *  `atLeast` stored in use are read. */

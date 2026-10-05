@@ -405,3 +405,241 @@ export async function countStatus(sql: SqlOrTx, gymId: string, sessionId: string
     WHERE gym_id = ${gymId} AND session_id = ${sessionId} AND status = ${status}`;
   return rows[0]?.n ?? 0;
 }
+
+// ── WHEN A CLASS OR A PERSON GOES (17c-ii-a) ──
+
+/** One class as a hand-over reads it: no one person in it. */
+export type ClassContext = Pick<BookingContext, "session" | "settings" | "counts" | "gymHasTypes">;
+
+const rawClassContext = rawContext.omit({ member: true, entry_id: true, mine_id: true });
+
+/** One class of this gym with its counts, its row held until the transaction ends; null
+ *  where the gym has no such class. For a write under the gym's lock. */
+export async function classContext(tx: TransactionSql, gymId: string, sessionId: string): Promise<ClassContext | null> {
+  const rows = await tx`
+    SELECT s.id, s.class_type_id, t.name, t.open_gym, s.local_date::text AS local_date, s.local_start_minute,
+           s.starts_at, s.minutes, s.places, s.status AS session_status, s.coach_user_id,
+           g.booking_opens_days AS opens, g.booking_free_cancel_minutes AS free,
+           g.waitlist_handover_minutes AS handover, g.waitlist_max AS waitlist, g.timezone,
+           (SELECT count(*)::int FROM gym_class_bookings b
+            WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = ANY(${[...CLASS_BOOKING_HOLDS_PLACE]}::text[])) AS booked,
+           (SELECT count(*)::int FROM gym_class_bookings b
+            WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = 'waitlisted') AS waitlisted,
+           EXISTS (SELECT 1 FROM gym_membership_types mt WHERE mt.gym_id = s.gym_id AND mt.archived_at IS NULL) AS has_types
+    FROM gym_class_sessions s
+    JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
+    JOIN gyms g ON g.id = s.gym_id
+    WHERE s.gym_id = ${gymId} AND s.id = ${sessionId}
+    FOR UPDATE OF s`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  const r = rawClassContext.parse(row);
+  return {
+    session: {
+      id: r.id,
+      classTypeId: r.class_type_id,
+      className: r.name,
+      openGym: r.open_gym,
+      localDate: r.local_date,
+      localStartMinute: r.local_start_minute,
+      startsAt: r.starts_at,
+      minutes: r.minutes,
+      places: r.places,
+      cancelled: r.session_status === "cancelled",
+      coachUserId: r.coach_user_id,
+    },
+    settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist, timezone: r.timezone },
+    counts: { booked: r.booked, waitlisted: r.waitlisted },
+    gymHasTypes: r.has_types,
+  };
+}
+
+/** Which of these classes have somebody waiting, the soonest first. */
+export async function classesWithWaitlist(tx: TransactionSql, gymId: string, sessionIds: readonly string[]): Promise<string[]> {
+  if (sessionIds.length === 0) return [];
+  const rows = await tx<{ id: string }[]>`
+    SELECT s.id FROM gym_class_sessions s
+    WHERE s.gym_id = ${gymId} AND s.id = ANY(${[...sessionIds]}::uuid[])
+      AND EXISTS (SELECT 1 FROM gym_class_bookings b WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = 'waitlisted')
+    ORDER BY s.starts_at, s.id`;
+  return rows.map((r) => r.id);
+}
+
+/** This gym's coming classes that somebody is waiting for, the soonest first. */
+export async function comingClassesWithWaitlist(tx: TransactionSql, gymId: string, now: Date): Promise<string[]> {
+  const rows = await tx<{ id: string }[]>`
+    SELECT s.id FROM gym_class_sessions s
+    WHERE s.gym_id = ${gymId} AND s.starts_at > ${now} AND s.status = 'scheduled'
+      AND EXISTS (SELECT 1 FROM gym_class_bookings b WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = 'waitlisted')
+    ORDER BY s.starts_at, s.id`;
+  return rows.map((r) => r.id);
+}
+
+export interface EndedBooking {
+  userId: string;
+  sessionId: string;
+  /** What it was: `booked` or `waitlisted`, and for a class that will not run also
+   *  `attended`, `no_show` and a `late_cancelled` whose pack had kept the charge. */
+  was: ClassBookingStatus;
+  /** The pack this booking's class goes back to; null where none was charged. */
+  packMembershipId: string | null;
+}
+
+/** BOOKINGS ENDED BY SOMETHING OTHER THAN THE PERSON'S OWN CANCEL. Each becomes
+ *  `cancelled` and stops being charged to its pack; the caller gives the classes back
+ *  (`packMembershipId`) in the same transaction, under the gym's lock. Run again it finds
+ *  nothing left to end.
+ *
+ *  `classes`: these classes will not run (staff cancelled or removed them), so everything
+ *  on them ends, and a late cancel whose pack kept the charge loses the charge too.
+ *  `people`: these people have left the gym, so their bookings of classes that have not
+ *  started end; a class already started is history and stays. */
+export async function endBookings(
+  tx: TransactionSql,
+  gymId: string,
+  which: { classes: readonly string[] } | { people: readonly string[]; now: Date },
+  at: Date,
+): Promise<EndedBooking[]> {
+  const ids = "classes" in which ? which.classes : which.people;
+  if (ids.length === 0) return [];
+  const chosen =
+    "classes" in which
+      ? tx`b.session_id = ANY(${[...ids]}::uuid[])
+           AND (b.status IN ('booked','waitlisted','attended','no_show') OR (b.status = 'late_cancelled' AND b.pack_charged))`
+      : tx`b.user_id = ANY(${[...ids]}::uuid[]) AND b.status IN ('booked','waitlisted')
+           AND EXISTS (SELECT 1 FROM gym_class_sessions s
+                       WHERE s.gym_id = b.gym_id AND s.id = b.session_id AND s.starts_at > ${which.now})`;
+  const rows = await tx<{ user_id: string; session_id: string; was: string; charged: boolean; held_membership_id: string | null }[]>`
+    WITH old AS (
+      SELECT b.id, b.status, b.pack_charged, b.held_membership_id
+      FROM gym_class_bookings b
+      WHERE b.gym_id = ${gymId} AND ${chosen}
+      FOR UPDATE
+    )
+    UPDATE gym_class_bookings b
+    SET status = CASE WHEN old.status = 'late_cancelled' THEN 'late_cancelled' ELSE 'cancelled' END,
+        cancelled_at = COALESCE(b.cancelled_at, ${at}), pack_charged = false
+    FROM old
+    WHERE b.id = old.id
+    RETURNING b.user_id, b.session_id, old.status AS was, old.pack_charged AS charged, old.held_membership_id`;
+  return rows.map((r) => ({
+    userId: r.user_id,
+    sessionId: r.session_id,
+    was: classBookingStatusSchema.parse(r.was),
+    packMembershipId: r.charged ? r.held_membership_id : null,
+  }));
+}
+
+/** The bookings of classes that are being removed go with them. Only after `endBookings`
+ *  has ended them and their packs have their classes back. */
+export async function deleteBookingsOf(tx: TransactionSql, gymId: string, sessionIds: readonly string[]): Promise<void> {
+  if (sessionIds.length === 0) return;
+  await tx`DELETE FROM gym_class_bookings WHERE gym_id = ${gymId} AND session_id = ANY(${[...sessionIds]}::uuid[])`;
+}
+
+/** Which classes a change would end the bookings of: one class, a time slot's coming
+ *  classes (from a date, when the change has one), or every coming class of one kind. */
+export type EndingScope = { by: "session"; id: string } | { by: "slot"; id: string; from: string | null } | { by: "class"; id: string };
+
+export type EndingWhere = { sessionIds: readonly string[] } | { scope: EndingScope; now: Date };
+
+const endingWhere = (sql: SqlOrTx, where: EndingWhere) => {
+  if ("sessionIds" in where) return sql`s.id = ANY(${[...where.sessionIds]}::uuid[])`;
+  const { scope, now } = where;
+  if (scope.by === "session") return sql`s.id = ${scope.id}`;
+  if (scope.by === "class") return sql`s.class_type_id = ${scope.id} AND s.starts_at > ${now}`;
+  return sql`s.schedule_id = ${scope.id} AND s.starts_at > ${now} AND s.local_date >= COALESCE(${scope.from}::date, s.local_date)`;
+};
+
+/** BOOKINGS, not people: somebody booked on three of the classes is three. */
+export interface EndingCounts {
+  /** Classes with at least one booking that holds a place or waits. */
+  classes: number;
+  booked: number;
+  waiting: number;
+}
+
+/** How many bookings hold a place or wait in those classes. */
+export async function endingCounts(sql: SqlOrTx, gymId: string, where: EndingWhere): Promise<EndingCounts> {
+  if ("sessionIds" in where && where.sessionIds.length === 0) return { classes: 0, booked: 0, waiting: 0 };
+  const rows = await sql<EndingCounts[]>`
+    SELECT count(DISTINCT b.session_id)::int AS classes,
+           count(*) FILTER (WHERE b.status <> 'waitlisted')::int AS booked,
+           count(*) FILTER (WHERE b.status = 'waitlisted')::int AS waiting
+    FROM gym_class_bookings b
+    JOIN gym_class_sessions s ON s.gym_id = b.gym_id AND s.id = b.session_id
+    WHERE b.gym_id = ${gymId} AND b.status IN ('booked','waitlisted','attended','no_show') AND ${endingWhere(sql, where)}`;
+  return rows[0] ?? { classes: 0, booked: 0, waiting: 0 };
+}
+
+export interface EndingPersonRow {
+  bookingId: string;
+  waiting: boolean;
+  displayName: string;
+  email: string | null;
+  recordName: string | null;
+  className: string;
+  localDate: string;
+  localStartMinute: number;
+}
+
+/** The bookings those counts are of, in the order they were made, a page at a time
+ *  (`after`: the id of the last booking already shown; one this gym does not have
+ *  answers nothing). `seq` is one counter for every gym and is never sent out. */
+export async function endingPeople(sql: SqlOrTx, gymId: string, where: EndingWhere, after: string | null, limit: number): Promise<EndingPersonRow[]> {
+  if ("sessionIds" in where && where.sessionIds.length === 0) return [];
+  const rows = await sql<
+    {
+      id: string;
+      status: string;
+      display_name: string | null;
+      email: string | null;
+      record_name: string | null;
+      name: string;
+      local_date: string;
+      local_start_minute: number;
+    }[]
+  >`
+    SELECT b.id, b.status,
+           CASE WHEN u.status = 'active' THEN u.display_name END AS display_name,
+           CASE WHEN u.status = 'active' THEN u.email::text END AS email,
+           nullif(btrim(e.full_name), '') AS record_name,
+           t.name, s.local_date::text AS local_date, s.local_start_minute
+    FROM gym_class_bookings b
+    JOIN gym_class_sessions s ON s.gym_id = b.gym_id AND s.id = b.session_id
+    JOIN gym_class_types t ON t.gym_id = s.gym_id AND t.id = s.class_type_id
+    JOIN users u ON u.id = b.user_id
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = b.gym_id AND e.id = b.entry_id
+    WHERE b.gym_id = ${gymId} AND b.status IN ('booked','waitlisted','attended','no_show') AND ${endingWhere(sql, where)}
+      ${after === null ? sql`` : sql`AND b.seq > (SELECT c.seq FROM gym_class_bookings c WHERE c.gym_id = ${gymId} AND c.id = ${after})`}
+    ORDER BY b.seq
+    LIMIT ${limit}`;
+  return rows.map((r) => ({
+    bookingId: r.id,
+    waiting: r.status === "waitlisted",
+    displayName: r.display_name ?? "",
+    email: r.email,
+    recordName: r.record_name,
+    className: r.name,
+    localDate: r.local_date,
+    localStartMinute: r.local_start_minute,
+  }));
+}
+
+/** The gym's four booking settings; null where there is no such gym. */
+export async function readSettings(sql: SqlOrTx, gymId: string): Promise<ClassBookingSettings | null> {
+  const rows = await sql<{ opens: number; free: number; handover: number; waitlist: number }[]>`
+    SELECT booking_opens_days AS opens, booking_free_cancel_minutes AS free,
+           waitlist_handover_minutes AS handover, waitlist_max AS waitlist
+    FROM gyms WHERE id = ${gymId}`;
+  const r = rows[0];
+  return r === undefined ? null : { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist };
+}
+
+export async function writeSettings(tx: TransactionSql, gymId: string, s: ClassBookingSettings): Promise<void> {
+  await tx`
+    UPDATE gyms
+    SET booking_opens_days = ${s.opensDays}, booking_free_cancel_minutes = ${s.freeCancelMinutes},
+        waitlist_handover_minutes = ${s.handoverMinutes}, waitlist_max = ${s.waitlistMax}
+    WHERE id = ${gymId}`;
+}

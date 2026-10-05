@@ -55,6 +55,11 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
         }),
       ),
       updateLeadEmailSettings: vi.fn(),
+      /** Settings' class bookings box (17c-ii-a) reads on mount too: the starting values. */
+      getBookingSettings: vi.fn(() =>
+        Promise.resolve({ data: { settings: { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 } } }),
+      ),
+      updateBookingSettings: vi.fn(),
       /** Settings' check-in devices box (16b-i) reads on mount too: a gym with none. */
       getCheckinDevices: vi.fn(() => Promise.resolve({ data: { devices: [] } })),
       /** Settings' memberships box (17a-i) reads on mount too: a gym selling nothing yet. */
@@ -138,9 +143,10 @@ const TRAINER = {
   isYou: false,
 };
 
-/** A manager holding none of the three powers Settings has a section for. A manager's
- *  usual set has held one of them, `memberships.manage`, since 17a-i. */
-const NO_SETTINGS_POWER = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage');
+/** A manager holding none of the four powers Settings has a section for. A manager's
+ *  usual set has held `memberships.manage` since 17a-i, and `schedule.manage` opens
+ *  Class bookings since 17c-ii-a. */
+const NO_SETTINGS_POWER = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage' && p !== 'schedule.manage');
 
 /** A staff invitation waiting for its answer (4a-i). */
 const INVITE = {

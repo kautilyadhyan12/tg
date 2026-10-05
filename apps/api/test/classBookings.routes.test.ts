@@ -846,9 +846,9 @@ d("booking a class, and its waitlist (real Postgres, two api instances)", () => 
   );
 
   it(
-    "a class somebody has booked is not deleted from under them: staff are told why, in words",
+    "a class somebody has booked is not deleted from under them: staff are asked first, and nothing is done until they answer",
     async () => {
-      // The timetable's routes read the real clock, so this class is three days from today.
+      // The time slot starts on the database's own today, so this class is three days from today.
       const kept = clock;
       clock = Date.now();
       try {
@@ -863,7 +863,9 @@ d("booking a class, and its waitlist (real Postgres, two api instances)", () => 
         expect(view(await book(open, who, booked.id)).mine?.status).toBe("booked");
 
         const stop = await inject("DELETE", `/v1/orgs/${open.id}/class-repeats/${slot.id}`, open.owner.cookies);
-        expect([stop.statusCode, JSON.parse(stop.body)]).toEqual([409, expect.objectContaining({ error: "class_has_bookings", message: "People have booked some of these classes, so this can't be done yet." })]);
+        const asked = JSON.parse(stop.body) as { error: string; message: string; ending: { classes: number; booked: number; waiting: number } };
+        expect([stop.statusCode, asked.error, asked.message]).toEqual([409, "class_has_bookings", "People have booked these classes. Their bookings will end if you go ahead."]);
+        expect([asked.ending.classes, asked.ending.booked, asked.ending.waiting]).toEqual([1, 1, 0]);
         const archive = await inject("DELETE", `/v1/orgs/${open.id}/classes/${booked.typeId}`, open.owner.cookies);
         expect([archive.statusCode, errorOf(archive)]).toEqual([409, "class_has_bookings"]);
         // Nothing was half done: the class, its time slot and the booking stand.

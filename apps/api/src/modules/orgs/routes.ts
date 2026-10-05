@@ -124,7 +124,7 @@ export function registerOrgRoutes(
 
   // THE GYM'S TIMETABLE (Part 3 §13.3), registered here for the same reason the
   // member list is: the same console, the same gates, the same deps.
-  registerClassRoutes(app, { sql: deps.sql, redis: deps.redis });
+  registerClassRoutes(app, { sql: deps.sql, redis: deps.redis, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
 
   // Booking a class, and its waitlist (Part 3 §13.4).
   registerClassBookingRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });

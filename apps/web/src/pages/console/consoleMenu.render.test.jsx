@@ -30,7 +30,7 @@ const Overview = (await import('./Overview')).default;
 const GATES = ['members.confirm', 'attendance.read', 'schedule.manage', 'staff.manage', 'org.manage', 'leaderboard.manage', 'memberships.manage', 'posts.manage'];
 const BASE = '/console/iron-house';
 
-/** What the menu offered this person before R1. */
+/** What the menu offered this person before R1, and Settings for whoever sets the timetable. */
 function openableToday(privileges) {
   const has = (p) => privileges.includes(p);
   return [
@@ -41,7 +41,8 @@ function openableToday(privileges) {
     ...(has('schedule.manage') ? [`${BASE}/classes`] : []),
     ...(has('posts.manage') ? [`${BASE}/updates`] : []),
     ...(has('leaderboard.manage') ? [`${BASE}/leaderboard`] : []),
-    ...(has('staff.manage') || has('org.manage') || has('memberships.manage') ? [`${BASE}/settings`] : []),
+    // Settings also holds Class bookings since 17c-ii-a, on `schedule.manage`.
+    ...(has('staff.manage') || has('org.manage') || has('memberships.manage') || has('schedule.manage') ? [`${BASE}/settings`] : []),
   ].sort();
 }
 

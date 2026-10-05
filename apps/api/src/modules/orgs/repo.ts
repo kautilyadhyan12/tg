@@ -15,6 +15,7 @@
 // THIRD writer of these tables is a defect, not a precedent.
 import type { Sql, TransactionSql } from "postgres";
 import { slotKeyFor } from "./attendanceSlot.js";
+import { endLeaversBookings } from "./classes/bookingChanges.js";
 import { streaks, visitsWithOwner } from "./leaderboard/visits.js";
 import {
   ATTENDANCE_PAGE_LIMIT,
@@ -2696,6 +2697,8 @@ export async function removeMember(
       return { kind: "already_removed" };
     }
 
+    // Their coming class bookings end with their membership (17c-ii-a).
+    await endLeaversBookings(tx, input.gymId, [input.userId], null);
     await input.afterClose?.(tx);
     await endStaff();
     await insertAudit(tx, {

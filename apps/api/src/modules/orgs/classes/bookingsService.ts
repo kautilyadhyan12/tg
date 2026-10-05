@@ -12,30 +12,36 @@
 // be the class's own coach.
 import type { Sql, TransactionSql } from "postgres";
 import {
+  CLASS_BOOKINGS_ENDING_PAGE,
   CLASS_BOOKINGS_LATE_SHOWN,
   CLASS_BOOKING_HOLDS_PLACE,
   CLASS_BOOKING_WORDS,
   CLASS_LATE_CANCEL_ERROR,
   bookingTime,
+  classBookingSettingsResponseSchema,
   classBookingViewSchema,
+  classBookingsEndingResponseSchema,
   classSessionBookingsResponseSchema,
   decideBook,
   decideCancel,
-  handsOverNow,
-  pickCover,
   type BookClassRequest,
   type ClassBookRefusal,
+  type ClassBookingSettings,
+  type ClassBookingSettingsResponse,
   type ClassBookingView,
+  type ClassBookingsEndingQuery,
+  type ClassBookingsEndingResponse,
   type ClassSessionBookingsResponse,
   type Cover,
-  type HeldCover,
   type StaffClassBooking,
 } from "@app/shared";
-import { getOrgById, getStaffAuthority, gymHasLivePlan, isLiveMember, lockOrgRow } from "../repo.js";
-import { OrgsError, holdsPrivilege } from "../service.js";
+import { getOrgById, getStaffAuthority, gymHasLivePlan, insertAudit, isLiveMember, lockOrgRow } from "../repo.js";
+import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { fullName } from "../leaderboard/rank.js";
 import { chargePack, givePackClassBack } from "../memberships/heldRepo.js";
+import { handOver, handOverComing, handOverPlan, pick } from "./bookingChanges.js";
 import * as repo from "./bookingsRepo.js";
+import { endingPerson } from "./service.js";
 
 export interface BookingsDeps {
   sql: Sql;
@@ -95,9 +101,6 @@ export function createLine(): Line {
   };
 }
 
-const pick = (ctx: Pick<repo.BookingContext, "session" | "gymHasTypes">, held: readonly HeldCover[]): Cover =>
-  pickCover({ gymHasTypes: ctx.gymHasTypes, openGym: ctx.session.openGym, classDay: ctx.session.localDate, held });
-
 /** Which membership covers a person for a class, by the rule. */
 async function coverFor(
   sql: Sql | TransactionSql,
@@ -111,77 +114,6 @@ async function coverFor(
 
 const mineOf = (ctx: repo.BookingContext): "booked" | "waitlisted" | null =>
   ctx.latest?.status === "booked" || ctx.latest?.status === "waitlisted" ? ctx.latest.status : null;
-
-interface Move {
-  waiter: repo.Waiter;
-  entryId: string | null;
-  cover: Extract<Cover, { ok: true }>;
-}
-
-/** Who the class's free places go to at this moment: while the rule says a free place
- *  goes to the waitlist by itself, the first in line who may book, and so on down the
- *  line. Somebody who may not is passed over and keeps their place. It reads and changes
- *  nothing, in three statements whatever the waitlist's length. */
-async function handOverPlan(
-  sql: Sql | TransactionSql,
-  gymId: string,
-  ctx: repo.BookingContext,
-  now: Date,
-): Promise<{ moves: Move[]; /** The waiters' memberships by record, as they stand once the moves are made. */ covers: Map<string, HeldCover[]> }> {
-  const time = bookingTime(now.getTime(), ctx.session.startsAt.getTime(), ctx.settings);
-  let booked = ctx.counts.booked;
-  const free = () => handsOverNow({ time, cancelled: ctx.session.cancelled, places: ctx.session.places, booked });
-  if (ctx.counts.waitlisted === 0 || !free()) return { moves: [], covers: new Map() };
-  const waiters = await repo.waitlistOf(sql, gymId, ctx.session.id);
-  const entryIds = ctx.gymHasTypes ? waiters.flatMap((w) => w.booker?.entryId ?? []) : [];
-  const covers = await repo.coversOf(sql, gymId, entryIds, ctx.session);
-  const moves: Move[] = [];
-  for (const waiter of waiters) {
-    if (!free()) break;
-    if (waiter.booker === null) continue;
-    const { entryId } = waiter.booker;
-    const cover = pick(ctx, entryId === null ? [] : (covers.get(entryId) ?? []));
-    if (!cover.ok) continue;
-    moves.push({ waiter, entryId, cover });
-    booked += 1;
-    // One reading serves the whole line, so what this person takes is taken off it: two
-    // accounts on one record do not both use its last booking of the week, or its last class.
-    if (entryId !== null && cover.membershipId !== null) {
-      const { membershipId, chargePack: pack } = cover;
-      covers.set(
-        entryId,
-        (covers.get(entryId) ?? []).map((h) => {
-          if (h.id !== membershipId) return h;
-          if (!pack) return { ...h, used: h.used + 1 };
-          return { ...h, membership: { ...h.membership, classesLeft: (h.membership.classesLeft ?? 1) - 1 } };
-        }),
-      );
-    }
-  }
-  return { moves, covers };
-}
-
-/** The plan carried out, under the gym's lock and the class's. Answers how many were
- *  moved in. */
-async function handOver(tx: TransactionSql, gymId: string, ctx: repo.BookingContext, now: Date): Promise<number> {
-  let moved = 0;
-  for (const { waiter, entryId, cover } of (await handOverPlan(tx, gymId, ctx, now)).moves) {
-    if (cover.chargePack && cover.membershipId !== null && !(await chargePack(tx, gymId, cover.membershipId, now))) {
-      throw new Error("a pack the plan chose had no class left");
-    }
-    await repo.moveIn(tx, {
-      gymId,
-      bookingId: waiter.bookingId,
-      entryId,
-      heldMembershipId: cover.membershipId,
-      packCharged: cover.chargePack,
-      claimKey: null,
-      now,
-    });
-    moved += 1;
-  }
-  return moved;
-}
 
 /** One class as this person sees it now. Somebody who stopped being a member in the
  *  instant after their booking was made is still answered, with nothing they can do. */
@@ -487,4 +419,82 @@ export async function getSessionBookings(
     lateCancelled: shown(late),
     lateCancelledTotal: lateTotal,
   });
+}
+
+/** Everybody whose booking a change to the timetable would end, a page at a time, for
+ *  staff holding `schedule.manage`: the list behind the box's "See all". */
+export async function getEndingBookings(
+  deps: Pick<BookingsDeps, "sql" | "now">,
+  staffId: string,
+  gymId: string,
+  query: ClassBookingsEndingQuery,
+  limit: Limit,
+): Promise<ClassBookingsEndingResponse | null> {
+  await requirePrivilege(deps, gymId, staffId, "schedule.manage");
+  if (!(await limit())) return null;
+  const scope: repo.EndingScope =
+    query.by === "slot" ? { by: "slot", id: query.id, from: query.from ?? null } : { by: query.by, id: query.id };
+  const where = { scope, now: deps.now() };
+  const [counts, rows] = await Promise.all([
+    repo.endingCounts(deps.sql, gymId, where),
+    repo.endingPeople(deps.sql, gymId, where, query.after ?? null, CLASS_BOOKINGS_ENDING_PAGE + 1),
+  ]);
+  const page = rows.slice(0, CLASS_BOOKINGS_ENDING_PAGE);
+  const last = page[page.length - 1];
+  return classBookingsEndingResponseSchema.parse({
+    ...counts,
+    people: page.map(endingPerson),
+    next: rows.length > CLASS_BOOKINGS_ENDING_PAGE && last !== undefined ? last.bookingId : null,
+  });
+}
+
+/** The gym's four booking settings, for staff holding `schedule.manage`. */
+export async function getBookingSettings(
+  deps: Pick<BookingsDeps, "sql">,
+  staffId: string,
+  gymId: string,
+  limit: Limit,
+): Promise<ClassBookingSettingsResponse | null> {
+  await requirePrivilege(deps, gymId, staffId, "schedule.manage");
+  if (!(await limit())) return null;
+  const settings = await repo.readSettings(deps.sql, gymId);
+  if (settings === null) throw notFound();
+  return classBookingSettingsResponseSchema.parse({ settings });
+}
+
+/** The settings changed. They are read at each booking, so they hold for every class
+ *  from now; no booking already made is touched, and a waitlist longer than a new, lower
+ *  limit keeps everybody on it. A hand-over time made shorter can make free places the
+ *  waitlist's at once, so those are handed over here. */
+export async function setBookingSettings(
+  deps: Pick<BookingsDeps, "sql" | "now">,
+  staffId: string,
+  gymId: string,
+  settings: ClassBookingSettings,
+  limit: Limit,
+): Promise<(ClassBookingSettingsResponse & { movedIn: number }) | null> {
+  await requireWritablePrivilege(deps, gymId, staffId, "schedule.manage");
+  if (!(await limit())) return null;
+  let movedIn = 0;
+  const saved = await deps.sql.begin(async (tx) => {
+    await lockOrgRow(tx, gymId);
+    const before = await repo.readSettings(tx, gymId);
+    if (before === null) return null;
+    const keys = ["opensDays", "freeCancelMinutes", "handoverMinutes", "waitlistMax"] as const;
+    const changed = keys.filter((k) => before[k] !== settings[k]);
+    if (changed.length === 0) return before;
+    await repo.writeSettings(tx, gymId, settings);
+    await insertAudit(tx, {
+      actorUserId: staffId,
+      gymId,
+      action: "org.booking_settings_changed",
+      targetType: "gym",
+      targetId: gymId,
+      meta: Object.fromEntries(changed.map((k) => [k, `${String(before[k])} -> ${String(settings[k])}`])),
+    });
+    if (settings.handoverMinutes < before.handoverMinutes) movedIn = await handOverComing(tx, gymId, deps.now());
+    return settings;
+  });
+  if (saved === null) throw notFound();
+  return { ...classBookingSettingsResponseSchema.parse({ settings: saved }), movedIn };
 }

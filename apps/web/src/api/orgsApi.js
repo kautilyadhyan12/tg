@@ -77,6 +77,8 @@ import {
   memberListRowsResponseSchema,
   myInvitationsResponseSchema,
   notMeInvitationResponseSchema,
+  classBookingSettingsResponseSchema,
+  classBookingsEndingResponseSchema,
   gymClassesResponseSchema,
   gymClassMutationResponseSchema,
   gymClassWeekResponseSchema,
@@ -161,6 +163,10 @@ export function gymPhotoUrl({ gymId = null, slug = null, photoId }) {
     ? `${base}/v1/public/gyms/${encodeURIComponent(slug)}/photos/${id}`
     : `${base}/v1/orgs/${encodeURIComponent(gymId)}/page/photos/${id}`;
 }
+
+/** How many people's bookings the gym agreed to end, sent back after the server asked
+ *  (409 `class_has_bookings`); nothing until then. */
+const confirmBookingsOf = (n) => (Number.isInteger(n) && n > 0 ? { confirmBookings: n } : {});
 
 export const orgService = {
   /** POST /v1/orgs — Part 3 §4.0 steps 1/4/6 in one transaction server-side.
@@ -1535,11 +1541,11 @@ export const orgService = {
    *  **What it performs is an ARCHIVE, not a delete**: the class keeps its name
    *  in the archived list, its repeats stop, its FUTURE dates go and the days it
    *  already ran stay as the gym's history. */
-  archiveClass: (gymId, classTypeId) =>
+  archiveClass: (gymId, classTypeId, confirmBookings = null) =>
     readThrough(
       gymClassMutationResponseSchema,
       'that class',
-      authApi.delete(`/v1/orgs/${gymId}/classes/${classTypeId}`),
+      authApi.delete(`/v1/orgs/${gymId}/classes/${classTypeId}`, { params: confirmBookingsOf(confirmBookings) }),
     ),
 
   /** POST /v1/orgs/:gymId/classes/:classTypeId/restore — bring it back.
@@ -1598,11 +1604,11 @@ export const orgService = {
    *
    *  It takes the repeat's FUTURE dates with it and leaves the class itself
    *  standing: "stop this repeat" is not "delete this class". */
-  stopClassRepeat: (gymId, scheduleId) =>
+  stopClassRepeat: (gymId, scheduleId, confirmBookings = null) =>
     readThrough(
       gymClassMutationResponseSchema,
       'that repeat',
-      authApi.delete(`/v1/orgs/${gymId}/class-repeats/${scheduleId}`),
+      authApi.delete(`/v1/orgs/${gymId}/class-repeats/${scheduleId}`, { params: confirmBookingsOf(confirmBookings) }),
     ),
 
   /** GET /v1/orgs/:gymId/class-sessions?week=YYYY-MM-DD — one week of the
@@ -1624,12 +1630,31 @@ export const orgService = {
       authApi.put(`/v1/orgs/${gymId}/class-sessions/${sessionId}`, body),
     ),
 
-  cancelClassDay: (gymId, sessionId) =>
+  cancelClassDay: (gymId, sessionId, confirmBookings = null) =>
     readThrough(
       gymClassWeekResponseSchema,
       'that day',
-      authApi.post(`/v1/orgs/${gymId}/class-sessions/${sessionId}/cancel`, {}),
+      authApi.post(`/v1/orgs/${gymId}/class-sessions/${sessionId}/cancel`, confirmBookingsOf(confirmBookings)),
     ),
+
+  /** GET …/class-bookings/ending — everybody whose booking a change to the timetable
+   *  would end, a hundred at a time: `{ by: 'session' | 'slot' | 'class', id, from?, after? }`.
+   *  The box that asks shows the first few from the 409 itself; this is its "See all". */
+  getEndingBookings: (gymId, { by, id, from, after }) =>
+    readThrough(
+      classBookingsEndingResponseSchema,
+      'those bookings',
+      authApi.get(`/v1/orgs/${gymId}/class-bookings/ending`, {
+        params: { by, id, ...(typeof from === 'string' && from !== '' ? { from } : {}), ...(typeof after === 'string' && after !== '' ? { after } : {}) },
+      }),
+    ),
+
+  /** GET and PUT …/booking-settings — the gym's four booking settings (`schedule.manage`),
+   *  all four every time. */
+  getBookingSettings: (gymId) =>
+    readThrough(classBookingSettingsResponseSchema, 'your booking settings', authApi.get(`/v1/orgs/${gymId}/booking-settings`)),
+  updateBookingSettings: (gymId, body) =>
+    readThrough(classBookingSettingsResponseSchema, 'your booking settings', authApi.put(`/v1/orgs/${gymId}/booking-settings`, body)),
 
   restoreClassDay: (gymId, sessionId) =>
     readThrough(
