@@ -19,11 +19,18 @@ describe('where each page sits on a phone', () => {
     expect(keys(menu.more)).toEqual(['leads', 'updates', 'leaderboard', 'settings']);
   });
 
-  it('a manager without the price list, staff or the gym details: no Settings', () => {
-    const none = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage');
+  it('a manager without the price list, the timetable, staff or the gym details: no Settings', () => {
+    const none = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage' && p !== 'schedule.manage');
     const menu = consoleMenu('iron-house', none, 'gym');
-    expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
+    expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance']);
     expect(keys(menu.more)).toEqual(['leads', 'updates', 'leaderboard']);
+  });
+
+  it('a manager who sets the timetable and nothing else in Settings still has it, for Class bookings', () => {
+    const timetable = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage');
+    const menu = consoleMenu('iron-house', timetable, 'gym');
+    expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
+    expect(keys(menu.more)).toEqual(['leads', 'updates', 'leaderboard', 'settings']);
   });
 
   it('a trainer the owner gave the leaderboard: it is under More', () => {
