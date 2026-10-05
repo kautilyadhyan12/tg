@@ -6,10 +6,14 @@
 // stays until it is removed: by staff, or a member's own by the member (RULINGS 2026-10-04).
 // Any member can report a post; staff see the reported ones in a list of their own.
 import { z } from "zod";
-import { GYM_PAGE_PHOTO_MAX_BYTES, gymPagePhotoSchema } from "./gymPage.js";
+import { gymPagePhotoSchema } from "./gymPage.js";
 
 export const GYM_POST_MAX_CHARS = 2000;
 export const GYM_POST_MAX_PHOTOS = 4;
+/** Longest side the browser shrinks a post's photo to before it is sent (ROADMAP 19b-iv). */
+export const GYM_POST_PHOTO_SEND_SIDE = 1600;
+/** The most one photo of a post may weigh, as sent. */
+export const GYM_POST_PHOTO_MAX_BYTES = 1024 * 1024;
 /** Posts kept at the top of the page at once. */
 export const GYM_POST_MAX_PINNED = 3;
 /** Posts a page of the list carries; the pinned ones ride on the first page beside them. */
@@ -179,7 +183,7 @@ export type StaffGymPostsResponse = z.infer<typeof staffGymPostsResponseSchema>;
 const photoBase64 = z
   .string()
   .min(4)
-  .max(Math.ceil(GYM_PAGE_PHOTO_MAX_BYTES / 3) * 4)
+  .max(Math.ceil(GYM_POST_PHOTO_MAX_BYTES / 3) * 4)
   .regex(/^[A-Za-z0-9+/]+={0,2}$/);
 
 export const addGymPostRequestSchema = z
@@ -383,4 +387,5 @@ export const GYM_POST_WORDS = {
       : `Your post wasn't posted because it has words that aren't allowed here: ${words.join(", ")}. Take them out and post again.`,
   /** Which of a post's photos was refused, counted from 1. */
   photo: (position: number, why: string): string => `Photo ${String(position)}: ${why}`,
+  photo_too_big: "This photo is bigger than 1 MB. Choose a smaller one.",
 } as const;

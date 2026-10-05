@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { postPhotoUrl, postsService } from '../../api/postsApi';
 import { errorText } from '../../api/orgsApi';
-import { preparePagePhoto } from '../../pages/console/gymPagePhotos';
+import { preparePostPhoto } from '../../pages/console/gymPagePhotos';
 import PhotoViewer from '../common/PhotoViewer';
 import PersonProfile from './PersonProfile';
 import PostCard from './PostCard';
@@ -62,7 +62,7 @@ function Composer({ gymId, gymName, onPosted }) {
     const tooBig = [];
     for (const file of files) {
       try {
-        prepared.push(await preparePagePhoto(file));
+        prepared.push(await preparePostPhoto(file));
       } catch (err) {
         (err.message === 'too_big' ? tooBig : unreadable).push(file.name);
       }
