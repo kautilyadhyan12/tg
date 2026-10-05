@@ -272,9 +272,35 @@ d("a member's list of classes (real Postgres)", () => {
       await sql`INSERT INTO gym_membership_type_classes (gym_id, membership_type_id, class_type_id) VALUES (${gym.id}, ${onlyType}, ${unlimited.typeId})`;
       const ona = await listed(gym, "Ona Only");
       await hold(gym, ona.entryId, onlyType);
-      const sessions = [free, second, mine, claim, promised, off, unlimited, sameWeek, monday].map((c) => c.id);
+      // Two memberships with a limit on one record: one's bookings never count against the other.
+      const twoAWeek = await typeOf(gym, { access: "limited", limit: 2, period: "week" });
+      const duo = await listed(gym, "Duo Two");
+      await hold(gym, duo.entryId, limitedType);
+      await hold(gym, duo.entryId, twoAWeek);
+      await ok(book(gym, duo, limits.id));
+      await ok(book(gym, duo, sameWeek.id));
+      // The week's one booking was on a class staff then cancelled: it is not counted.
+      const cal = await listed(gym, "Cal Cancelled");
+      await hold(gym, cal.entryId, limitedType);
+      const calOff = await classAt(gym, 36, 5);
+      await ok(book(gym, cal, calOff.id));
+      await sql`UPDATE gym_class_sessions SET status = 'cancelled' WHERE id = ${calOff.id}`;
+      // The week's one booking was cancelled late: it is counted.
+      const lat = await listed(gym, "Lat Late");
+      await hold(gym, lat.entryId, limitedType);
+      await ok(book(gym, lat, unlimited.id));
+      await sql`UPDATE gym_class_bookings SET status = 'late_cancelled', cancelled_at = now() WHERE gym_id = ${gym.id} AND user_id = ${lat.userId}`;
+      // A frozen membership, one that starts on Saturday 10 October, and one for the gym only.
+      const fro = await listed(gym, "Fro Frozen");
+      await hold(gym, fro.entryId, all, { frozen: true });
+      const sta = await listed(gym, "Sta Starts");
+      await hold(gym, sta.entryId, all, { startsOn: "2026-10-10" });
+      const gil = await listed(gym, "Gil Gym");
+      await hold(gym, gil.entryId, await typeOf(gym, { access: "gym_only" }));
+      const openSlot = await classAt(gym, 34, 5, { openGym: true });
+      const sessions = [free, second, mine, claim, promised, off, unlimited, sameWeek, monday, calOff, openSlot].map((c) => c.id);
 
-      for (const who of [pat, lim, nom, unlisted, ona, f1, f2, f3]) {
+      for (const who of [pat, lim, nom, unlisted, ona, duo, cal, lat, fro, sta, gil, f1, f2, f3]) {
         const list = await listOf(gym, who);
         expect(list).toMatchObject({ week: 0, from: "2026-10-07", to: "2026-10-13", timezone: "Europe/London" });
         expect(list.classes.map((c) => c.sessionId)).toEqual(expect.arrayContaining(sessions));
@@ -320,6 +346,16 @@ d("a member's list of classes (real Postgres)", () => {
       expect(rowOf(onas, unlimited.id).can).toMatchObject({ book: true, why: null });
       expect(rowOf(onas, free.id).can).toMatchObject({ book: false, why: "not_covered" });
       expect(rowOf(onas, monday.id).can).toMatchObject({ book: false, why: "not_covered" });
+      expect(rowOf(await listOf(gym, duo), free.id).can).toMatchObject({ book: true, why: null });
+      expect(rowOf(await listOf(gym, cal), free.id).can).toMatchObject({ book: true, why: null });
+      expect(rowOf(await listOf(gym, lat), free.id).can).toMatchObject({ book: false, why: "limit_week" });
+      expect(rowOf(await listOf(gym, fro), free.id).can).toMatchObject({ book: false, why: "no_membership" });
+      const stas = await listOf(gym, sta);
+      expect(rowOf(stas, free.id).can).toMatchObject({ book: false, why: "no_membership" });
+      expect(rowOf(stas, monday.id).can).toMatchObject({ book: true, why: null });
+      const gils = await listOf(gym, gil);
+      expect(rowOf(gils, openSlot.id).can).toMatchObject({ book: true, why: null });
+      expect(rowOf(gils, free.id).can).toMatchObject({ book: false, why: "not_covered" });
       expect(rowOf(await listOf(gym, nom), free.id).can).toMatchObject({ book: false, why: "no_membership" });
       expect(rowOf(await listOf(gym, unlisted), free.id).can).toMatchObject({ book: false, why: "no_membership" });
     },
@@ -420,12 +456,59 @@ d("a member's list of classes (real Postgres)", () => {
   );
 
   it(
+    "a week of more classes than a page holds says so, and holds the soonest",
+    async () => {
+      const gym = await makeGym("Packed");
+      const who = await member(gym, "Max Many");
+      const [type] = await sql<{ id: string }[]>`
+        INSERT INTO gym_class_types (gym_id, name, minutes, places, colour) VALUES (${gym.id}, 'Every ten minutes', 5, 5, 'blue') RETURNING id`;
+      // 501 classes ten minutes apart from an hour ahead: three and a half days.
+      await sql`
+        INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places)
+        SELECT ${gym.id}, ${type?.id ?? ""}, l::date, (EXTRACT(HOUR FROM l) * 60 + EXTRACT(MINUTE FROM l))::int, at, 5, 5
+        FROM (SELECT ${new Date(clock + HOUR)}::timestamptz + n * interval '10 minutes' AS at FROM generate_series(0, 500) AS n) a,
+             LATERAL (SELECT a.at AT TIME ZONE 'Europe/London' AS l) x`;
+      const list = await listOf(gym, who);
+      expect(list.more).toBe(true);
+      expect(list.classes).toHaveLength(500);
+      expect(list.classes[0]?.startsAt).toBe(new Date(clock + HOUR).toISOString());
+      expect(list.classes[499]?.startsAt).toBe(new Date(clock + HOUR + 499 * 10 * 60_000).toISOString());
+      expect((await listOf(gym, who, 1)).more).toBe(false);
+      await sql`DELETE FROM gym_class_sessions WHERE gym_id = ${gym.id} AND starts_at > ${new Date(clock + HOUR + 400 * 10 * 60_000)}`;
+      expect(await listOf(gym, who)).toMatchObject({ more: false, classes: { length: 401 } });
+    },
+    T,
+  );
+
+  it(
+    "one person's reads are limited, and a stranger at the same address is still told nothing",
+    async () => {
+      const gym = await makeGym("Quiet");
+      const who = await member(gym, "Rae Reader");
+      const other = await member(gym, "Ola Other");
+      const address = "10.75.250.7";
+      const path = `/v1/orgs/${gym.id}/member-classes`;
+      // The hour's 1,200 reads, all but five already counted (the app's own floor of 600 a
+      // minute a person would answer first if they were all made here).
+      for (let n = 0; n < 1195; n++) await redis?.incrWithTtl(`rl:orgs_bookings_read:id:${who.userId}`, 3600);
+      const codes: number[] = [];
+      for (let n = 0; n < 8; n++) codes.push((await inject("GET", path, who.cookies, undefined, address)).statusCode);
+      expect(codes).toEqual([200, 200, 200, 200, 200, 429, 429, 429]);
+      // Another member at that address reads; a stranger gets the 404, never the limit's answer.
+      expect((await inject("GET", path, other.cookies, undefined, address)).statusCode).toBe(200);
+      const stranger = await signedIn("Sol Stranger");
+      expect((await inject("GET", path, stranger.cookies, undefined, address)).statusCode).toBe(404);
+    },
+    T,
+  );
+
+  it(
     "a week that is not one of the eight, or anything else in the address, is refused",
     async () => {
       const gym = await makeGym("Strict");
       const who = await member(gym, "Val Valid");
       const path = `/v1/orgs/${gym.id}/member-classes`;
-      for (const query of ["?week=8", "?week=-1", "?week=one", "?week=1.5", "?week=0&gymId=x"]) {
+      for (const query of ["?week=8", "?week=-1", "?week=one", "?week=1.5", "?week=0&gymId=x", "?week=", "?week=%20", "?week=0x7", "?week=07", "?week=1e0", "?week=%2B3", "?week=1&week=2"]) {
         const res = await inject("GET", `${path}${query}`, who.cookies);
         expect(res.statusCode, query).toBe(400);
         expect(errorOf(res)).toBe("validation_error");

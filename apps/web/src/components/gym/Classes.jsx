@@ -4,7 +4,7 @@ import { CLASS_LATE_CANCEL_ERROR, MEMBER_CLASSES_WEEKS } from '@app/shared';
 import { classesService } from '../../api/classesApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
-import { actionsOf, byDay, cancelAsk, cancelledText, dayHeading, mineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
+import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, mineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
 
 // A GYM'S CLASSES FOR ITS MEMBER (spec Part 3 §13.6; ROADMAP 17d): the coming classes by
 // day, with Book, Join waitlist, Claim place and Cancel. The server decides every one; a
@@ -98,7 +98,12 @@ export default function Classes({ gym }) {
     const mine = ++asked.current;
     classesService
       .list(gym.id, week)
-      .then((list) => mine === asked.current && setState({ loading: false, error: null, list }))
+      .then((list) => {
+        if (mine !== asked.current) return;
+        // A class they hold needs no kept key: the tap it was for has plainly been answered.
+        for (const c of list.classes) if (c.mine?.status === 'booked' || c.mine?.status === 'waitlisted') keys.current.delete(c.sessionId);
+        setState({ loading: false, error: null, list });
+      })
       .catch((err) => {
         if (mine !== asked.current) return;
         // The server's 404 is for anybody who is not a member of a gym on a live plan.
@@ -136,6 +141,8 @@ export default function Classes({ gym }) {
       const now = await classesService.book(gym.id, c.sessionId, key, action.joinWaitlist);
       keys.current.delete(c.sessionId);
       put(now);
+      // One booking changes what the others say (a week's bookings, a pack's last class).
+      load();
     } catch (err) {
       // An answer from the server ends this tap; no answer keeps its key for the retry.
       if (err?.response !== undefined) keys.current.delete(c.sessionId);
@@ -156,6 +163,7 @@ export default function Classes({ gym }) {
       put(now);
       say(c.sessionId, cancelledText(now), false);
       setAsking(null);
+      load();
     } catch (err) {
       if (errorCode(err) === CLASS_LATE_CANCEL_ERROR && !lateOk) {
         // The free time ran out while the box was open: ask again, as a late cancel.
@@ -237,6 +245,7 @@ export default function Classes({ gym }) {
               </ul>
             </div>
           ))}
+          {list.more && <p className="text-xs" style={{ color: ORANGE }}>{MORE_CLASSES}</p>}
         </>
       )}
 

@@ -5,6 +5,8 @@
 // waiting on every other one. The reader is booked on 5 and waiting on 5.
 // Measured: one member's week, the same member's later week, and THE BURST: 200 members
 // opening the list at the same instant through ten database connections, as the api has.
+// Then the same again with one place freed on every class, so every other class has a
+// free place and 20 people waiting whom the list must plan for (--no-freed leaves it out).
 // The numbers that matter are how long the server's one thread answers nobody, and how
 // long another gym's request waits for a connection while it runs.
 //
@@ -143,7 +145,11 @@ console.log(`one gym: ${String(PEOPLE)} members, each with a pack and a 3-a-week
 const deps = { sql, now: () => new Date() };
 const reader = s.people[0] ?? "";
 const delay = monitorEventLoopDelay({ resolution: 1 });
-for (const week of [0, 1, 7]) {
+const shapes = process.argv.includes("--no-freed") ? ["every class full"] : ["every class full", "one place freed on every class"];
+for (const shape of shapes) {
+if (shape !== "every class full") await sql`UPDATE gym_class_sessions SET places = 31 WHERE gym_id = ${s.gymId}`;
+console.log(`── ${shape} ──`);
+for (const week of shape === "every class full" ? [0, 1, 7] : [0]) {
   const first = await getMemberClasses(deps, reader, s.gymId, { week }, yes);
   const walls: number[] = [];
   const jss: number[] = [];
@@ -173,6 +179,7 @@ const burstJs: number[] = [];
 const waits: number[] = [];
 const stalls: number[] = [];
 const crowd = s.people.slice(1, 1 + BURST);
+await new Promise((resolve) => setTimeout(resolve, 200));
 for (let run = 0; run < RUNS; run++) {
   const state = { probing: true };
   let worstWait = 0;
@@ -203,6 +210,7 @@ console.log(`  until the last person is answered: median ${fmt(median(burstWalls
 console.log(`  server thread busy in all: median ${fmt(median(burstJs))} (worst ${fmt(Math.max(...burstJs))})`);
 console.log(`  longest single stall of the thread: median ${fmt(median(stalls))} (worst ${fmt(Math.max(...stalls))})`);
 console.log(`  longest another request waited for a database connection: median ${fmt(median(waits))} (worst ${fmt(Math.max(...waits))})`);
+}
 
 if (process.argv.includes("--keep")) console.log(`kept: gym ${s.gymId}, the reader ${reader}`);
 else await cleanup();

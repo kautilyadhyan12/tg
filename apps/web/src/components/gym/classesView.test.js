@@ -67,6 +67,17 @@ describe('what a class says', () => {
     expect(placesText(klass({ booked: 4 }))).toBe('1 place left');
     expect(placesText(klass({ booked: 5 }))).toBe('Full');
     expect(placesText(klass({ booked: 5, waitlisted: 3 }))).toBe('Full · 3 on the waitlist');
+    expect(placesText(klass({ booked: 5, waitlisted: 1 }))).toBe('Full · 1 on the waitlist');
+    // A free place that is the first in line's: nobody else is told a place is left.
+    const promised = { places: 2, booked: 1, waitlisted: 2 };
+    expect(placesText(klass({ ...promised, can: can({ joinWaitlist: true }) }))).toBe('Full · 2 on the waitlist · a free place is going to the first in line');
+    expect(placesText(klass({ ...promised, mine: mine('waitlisted', { waitlistPlace: 2 }), can: can({ cancel: 'free' }) }))).toBe(
+      'Full · 2 on the waitlist · a free place is going to the first in line',
+    );
+    // The first in line, somebody booked, and somebody told why they cannot book read the place as it is.
+    expect(placesText(klass({ ...promised, mine: mine('waitlisted', { waitlistPlace: 1 }), can: can({ claim: true, cancel: 'free' }) }))).toBe('1 place left');
+    expect(placesText(klass({ ...promised, mine: mine('booked'), can: can({ cancel: 'free' }) }))).toBe('1 place left');
+    expect(placesText(klass({ ...promised, can: can({ why: 'not_covered' }) }))).toBe('1 place left');
     expect(placesText(klass({ places: null, booked: 40 }))).toBeNull();
     expect(placesText(klass({ cancelled: true }))).toBeNull();
   });

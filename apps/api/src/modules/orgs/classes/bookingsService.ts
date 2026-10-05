@@ -17,6 +17,7 @@ import {
   CLASS_BOOKING_HOLDS_PLACE,
   CLASS_BOOKING_WORDS,
   CLASS_LATE_CANCEL_ERROR,
+  MEMBER_CLASSES_MAX,
   addDays,
   bookingTime,
   classBookingSettingsResponseSchema,
@@ -45,7 +46,7 @@ import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege }
 import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { chargePack, givePackClassBack } from "../memberships/heldRepo.js";
-import { handOver, handOverComing, handOverPlan, pick } from "./bookingChanges.js";
+import { handOver, handOverComing, handOverPlan, handsOverTo, pick, planHandOver, type HandOverPlan } from "./bookingChanges.js";
 import * as repo from "./bookingsRepo.js";
 import { endingPerson } from "./service.js";
 
@@ -127,31 +128,38 @@ const mineOf = (ctx: repo.BookingContext): "booked" | "waitlisted" | null =>
 async function viewOf(deps: Pick<BookingsDeps, "sql" | "now">, gymId: string, sessionId: string, userId: string): Promise<ClassBookingView> {
   const ctx = await repo.contextOf(deps.sql, gymId, sessionId, userId, false);
   if (ctx === null) throw classNotFound();
-  return classBookingViewSchema.parse(await viewFrom(deps.sql, gymId, ctx, userId, deps.now(), (entryId) => coverFor(deps.sql, gymId, ctx, entryId)));
+  const now = deps.now();
+  return classBookingViewSchema.parse(
+    await viewFrom(deps.sql, gymId, ctx, userId, now, {
+      cover: (entryId) => coverFor(deps.sql, gymId, ctx, entryId),
+      plan: () => handOverPlan(deps.sql, gymId, ctx, now),
+    }),
+  );
 }
 
-/** The view of one class from what was read about it, for the caller to parse. `coverOf`:
- *  which membership covers this person for it, read now. */
+/** The view of one class from what was read about it, for the caller to parse. `read`:
+ *  which membership covers this person for it, and who its free places are about to be
+ *  handed to, each read now or already. */
 async function viewFrom(
   sql: Sql,
   gymId: string,
   ctx: repo.BookingContext,
   userId: string,
   now: Date,
-  coverOf: (entryId: string | null) => Promise<Cover>,
+  read: { cover: (entryId: string | null) => Promise<Cover>; plan: () => Promise<HandOverPlan> },
 ): Promise<ClassBookingView> {
   const { session, settings, counts, latest, booker } = ctx;
   const time = bookingTime(now.getTime(), session.startsAt.getTime(), settings);
   const mine = mineOf(ctx);
   // A free place the waitlist is about to be handed is taken, for everybody but the
   // person it is going to: anybody's Book would hand it over first.
-  const plan = mine !== "booked" && booker !== null ? await handOverPlan(sql, gymId, ctx, now) : null;
+  const plan = mine !== "booked" && booker !== null ? await read.plan() : null;
   const promised = plan === null ? 0 : plan.moves.filter((move) => move.waiter.userId !== userId).length;
   // Somebody waiting who is not handed a place is covered by what their record has left
   // once the people ahead have theirs.
   const left = mine === "waitlisted" && promised === plan?.moves.length && booker?.entryId != null ? plan.covers.get(booker.entryId) : undefined;
   const cover: Cover =
-    booker === null ? { ok: false, reason: "no_membership" } : left !== undefined ? pick(ctx, left) : await coverOf(booker.entryId);
+    booker === null ? { ok: false, reason: "no_membership" } : left !== undefined ? pick(ctx, left) : await read.cover(booker.entryId);
   const ask = (joinWaitlist: boolean) =>
     decideBook({
       time,
@@ -207,7 +215,8 @@ export async function getBooking(deps: Pick<BookingsDeps, "sql" | "now">, userId
 }
 
 /** A week of the gym's coming classes, each as one class's own read answers it. The
- *  person's memberships are read once for the whole page, not once a class. */
+ *  person's memberships are read once for the whole page, not once a class, and so are the
+ *  waitlists of the classes with a free place to hand over, with their people's. */
 export async function getMemberClasses(
   deps: Pick<BookingsDeps, "sql" | "now">,
   userId: string,
@@ -220,19 +229,32 @@ export async function getMemberClasses(
   const now = deps.now();
   const from = addDays(dayInTz(now, timezone), query.week * 7);
   const to = addDays(from, 6);
-  const contexts = await repo.comingContexts(deps.sql, gymId, userId, { now, from, to });
+  const read = await repo.comingContexts(deps.sql, gymId, userId, { now, from, to, limit: MEMBER_CLASSES_MAX + 1 });
+  const contexts = read.slice(0, MEMBER_CLASSES_MAX);
   // Every class answers the same person, so the same record.
   const record = contexts.find((ctx) => ctx.gymHasTypes)?.booker?.entryId ?? null;
-  const covers = record === null ? new Map<string, HeldCover[]>() : await repo.coversOfClasses(deps.sql, gymId, record, contexts.map((ctx) => ctx.session));
+  const reader = record === null ? [] : [record];
+  const own = await repo.coversOfClasses(deps.sql, gymId, contexts.map((ctx) => ctx.session), () => reader);
+  // The classes whose free place the waitlist is about to be handed, as one class's read
+  // asks it (`viewFrom`): their lines, and the memberships of the people on them.
+  const handing = contexts.filter((ctx) => mineOf(ctx) !== "booked" && ctx.booker !== null && handsOverTo(ctx, now));
+  const lines = await repo.waitlistsOf(deps.sql, gymId, handing.map((ctx) => ctx.session.id));
+  const typed = contexts.some((ctx) => ctx.gymHasTypes);
+  const theirs = await repo.coversOfClasses(deps.sql, gymId, handing.map((ctx) => ctx.session), (sessionId) =>
+    typed ? (lines.get(sessionId) ?? []).flatMap((w) => w.booker?.entryId ?? []) : [],
+  );
   const classes: ClassBookingView[] = [];
   for (const ctx of contexts) {
+    const { id } = ctx.session;
     classes.push(
-      await viewFrom(deps.sql, gymId, ctx, userId, now, (entryId) =>
-        Promise.resolve(pick(ctx, !ctx.gymHasTypes || entryId === null ? [] : (covers.get(ctx.session.id) ?? []))),
-      ),
+      await viewFrom(deps.sql, gymId, ctx, userId, now, {
+        cover: (entryId) => Promise.resolve(pick(ctx, !ctx.gymHasTypes || entryId === null ? [] : (own.get(id)?.get(entryId) ?? []))),
+        plan: () =>
+          Promise.resolve(handing.includes(ctx) ? planHandOver(ctx, now, lines.get(id) ?? [], new Map(theirs.get(id))) : { moves: [], covers: new Map<string, HeldCover[]>() }),
+      }),
     );
   }
-  return memberClassesResponseSchema.parse({ week: query.week, from, to, timezone, classes });
+  return memberClassesResponseSchema.parse({ week: query.week, from, to, timezone, classes, more: read.length > MEMBER_CLASSES_MAX });
 }
 
 /** Book, Join waitlist and Claim. */

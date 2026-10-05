@@ -15,6 +15,7 @@ const Classes = (await import('./Classes')).default;
 
 const GYM = { id: 'g1', name: 'Iron House' };
 const can = (over = {}) => ({ book: false, joinWaitlist: false, claim: false, cancel: null, why: null, ...over });
+const mine = (status, over = {}) => ({ status, waitlistPlace: null, packCharged: false, ...over });
 const klass = (sessionId, className, over = {}) => ({
   sessionId,
   className,
@@ -33,9 +34,23 @@ const klass = (sessionId, className, over = {}) => ({
   can: can({ book: true }),
   ...over,
 });
-const week = (classes, over = {}) => ({ week: 0, from: '2026-10-07', to: '2026-10-13', timezone: 'Europe/London', classes, ...over });
+const week = (classes, over = {}) => ({ week: 0, from: '2026-10-07', to: '2026-10-13', timezone: 'Europe/London', classes, more: false, ...over });
 const refused = (status, error, message, extra = {}) => Object.assign(new Error(error), { response: { status, data: { error, message, ...extra } } });
 const rowOf = (name) => screen.getByText(name).closest('li');
+
+// THE SERVER, as far as this screen can tell: the week it would answer now. A Book or a
+// Cancel answers one class and may change what the week says about the others.
+let server = [];
+const serve = (classes) => {
+  server = classes;
+  svc.list.mockImplementation(() => Promise.resolve(week(server)));
+};
+/** The next call answers `answer`, and from then on the week reads `after` (the answer alone by default). */
+const answers = (fn, answer, after) =>
+  fn.mockImplementationOnce(() => {
+    server = after ?? server.map((c) => (c.sessionId === answer.sessionId ? answer : c));
+    return Promise.resolve(answer);
+  });
 
 beforeEach(() => {
   let n = 0;
@@ -43,20 +58,18 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('a member’s classes', () => {
   it('lists the coming classes by day, on the gym’s clock, each saying what the member has', async () => {
-    svc.list.mockResolvedValue(
-      week([
-        klass('s1', 'Spin'),
-        klass('s2', 'Yoga', { booked: 10, waitlisted: 3, mine: { status: 'waitlisted', waitlistPlace: 2, packCharged: false }, can: can({ cancel: 'free' }) }),
-        klass('s3', 'Boxing', { localDate: '2026-10-08', mine: { status: 'booked', waitlistPlace: null, packCharged: true }, can: can({ cancel: 'free' }) }),
-        klass('s4', 'Pilates', { localDate: '2026-10-08', can: can({ why: 'not_covered' }) }),
-      ]),
-    );
+    serve([
+      klass('s1', 'Spin'),
+      klass('s2', 'Yoga', { booked: 10, waitlisted: 3, mine: mine('waitlisted', { waitlistPlace: 2 }), can: can({ cancel: 'free' }) }),
+      klass('s3', 'Boxing', { localDate: '2026-10-08', mine: mine('booked', { packCharged: true }), can: can({ cancel: 'free' }) }),
+      klass('s4', 'Pilates', { localDate: '2026-10-08', can: can({ why: 'not_covered' }) }),
+    ]);
     render(<Classes gym={GYM} />);
     expect(await screen.findByText('Spin')).toBeTruthy();
     expect(svc.list).toHaveBeenCalledWith('g1', 0);
@@ -76,11 +89,14 @@ describe('a member’s classes', () => {
     const pilates = rowOf('Pilates');
     expect(pilates.textContent).toContain("Your membership doesn't include this class. Ask at the front desk.");
     expect(within(pilates).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByText(/more classes than this page shows/)).toBeNull();
   });
 
-  it('Book sends one keyed request and the row becomes what the server answered', async () => {
-    svc.list.mockResolvedValue(week([klass('s1', 'Spin'), klass('s2', 'Yoga')]));
-    svc.book.mockResolvedValue(klass('s1', 'Spin', { booked: 5, mine: { status: 'booked', waitlistPlace: null, packCharged: false }, can: can({ cancel: 'free' }) }));
+  it('Book sends one keyed request, the row becomes what the server answered, and the week is read again', async () => {
+    const booked = klass('s1', 'Spin', { booked: 5, mine: mine('booked'), can: can({ cancel: 'free' }) });
+    serve([klass('s1', 'Spin'), klass('s2', 'Yoga')]);
+    // On one booking a week, the booking takes Book off the other class.
+    answers(svc.book, booked, [booked, klass('s2', 'Yoga', { can: can({ why: 'limit_week' }) })]);
     render(<Classes gym={GYM} />);
     fireEvent.click(await screen.findByRole('button', { name: /^Book: Spin/ }));
     await waitFor(() => expect(rowOf('Spin').textContent).toContain("You're booked"));
@@ -88,15 +104,30 @@ describe('a member’s classes', () => {
     expect(svc.book).toHaveBeenCalledWith('g1', 's1', 'key-1', false);
     expect(rowOf('Spin').textContent).toContain('5 of 10 places left');
     expect(within(rowOf('Spin')).getByRole('button', { name: /^Cancel booking/ })).toBeTruthy();
-    // Nobody else's row moved.
-    expect(within(rowOf('Yoga')).getByRole('button', { name: /^Book: Yoga/ })).toBeTruthy();
+    await waitFor(() => expect(rowOf('Yoga').textContent).toContain("You've used all the bookings your membership includes for that week."));
+    expect(within(rowOf('Yoga')).queryByRole('button', { name: /^Book/ })).toBeNull();
+    expect(svc.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('a cancel gives the week’s booking back to the other classes, without leaving the tab', async () => {
+    const monday = klass('s1', 'Spin', { mine: mine('booked'), can: can({ cancel: 'free' }) });
+    serve([monday, klass('s2', 'Yoga', { can: can({ why: 'limit_week' }) })]);
+    render(<Classes gym={GYM} />);
+    expect((await screen.findByText('Yoga')).closest('li').textContent).toContain("You've used all the bookings");
+    const cancelled = klass('s1', 'Spin', { booked: 3, mine: mine('cancelled') });
+    answers(svc.cancel, cancelled, [cancelled, klass('s2', 'Yoga')]);
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel booking: Spin/ }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel booking' }));
+    expect(await screen.findByText('Cancelled.')).toBeTruthy();
+    await waitFor(() => expect(within(rowOf('Yoga')).getByRole('button', { name: /^Book: Yoga/ })).toBeTruthy());
+    expect(rowOf('Yoga').textContent).not.toContain("You've used all the bookings");
+    // What the tap did is still said after the week was read again.
+    expect(screen.getByText('Cancelled.')).toBeTruthy();
   });
 
   it('a Book that found the class full and waited says waitlist, not booked', async () => {
-    svc.list.mockResolvedValue(week([klass('s1', 'Spin', { booked: 10, can: can({ joinWaitlist: true }) })]));
-    svc.book.mockResolvedValue(
-      klass('s1', 'Spin', { booked: 10, waitlisted: 1, mine: { status: 'waitlisted', waitlistPlace: 1, packCharged: false }, can: can({ cancel: 'free' }) }),
-    );
+    serve([klass('s1', 'Spin', { booked: 10, can: can({ joinWaitlist: true }) })]);
+    answers(svc.book, klass('s1', 'Spin', { booked: 10, waitlisted: 1, mine: mine('waitlisted', { waitlistPlace: 1 }), can: can({ cancel: 'free' }) }));
     render(<Classes gym={GYM} />);
     fireEvent.click(await screen.findByRole('button', { name: /^Join waitlist: Spin/ }));
     // A Book that waited is not a booking, and the row never says it is.
@@ -106,7 +137,7 @@ describe('a member’s classes', () => {
   });
 
   it('a tap that got no answer is sent again under the same key; an answered one gets a new key', async () => {
-    svc.list.mockResolvedValue(week([klass('s1', 'Spin')]));
+    serve([klass('s1', 'Spin')]);
     svc.book.mockRejectedValueOnce(new Error('Network Error'));
     render(<Classes gym={GYM} />);
     fireEvent.click(await screen.findByRole('button', { name: /^Book: Spin/ }));
@@ -120,16 +151,40 @@ describe('a member’s classes', () => {
     // The server said no: its words are shown and the week is read again.
     expect(await screen.findByText('This class is full.')).toBeTruthy();
     await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
-    svc.book.mockResolvedValue(klass('s1', 'Spin', { mine: { status: 'booked', waitlistPlace: null, packCharged: false }, can: can({ cancel: 'free' }) }));
+    answers(svc.book, klass('s1', 'Spin', { mine: mine('booked'), can: can({ cancel: 'free' }) }));
     fireEvent.click(screen.getByRole('button', { name: /^Book: Spin/ }));
     await waitFor(() => expect(svc.book).toHaveBeenCalledTimes(3));
     expect(svc.book.mock.calls[2][2]).toBe('key-2');
   });
 
+  it('a Book that reached the server with its answer lost leaves no key behind for a later Book', async () => {
+    const booked = klass('s1', 'Spin', { mine: mine('booked'), can: can({ cancel: 'free' }) });
+    serve([klass('s1', 'Spin')]);
+    // The booking is made; the answer never arrives.
+    svc.book.mockImplementationOnce(() => {
+      server = [booked];
+      return Promise.reject(new Error('Network Error'));
+    });
+    render(<Classes gym={GYM} />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Book: Spin/ }));
+    expect(await screen.findByText("That didn't go through. Try again.")).toBeTruthy();
+    // They look again (Later, then Earlier) and see it booked; then cancel it.
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+    await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Cancel booking: Spin/ }));
+    answers(svc.cancel, klass('s1', 'Spin', { mine: mine('cancelled') }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel booking' }));
+    expect(await screen.findByText('Cancelled.')).toBeTruthy();
+    // Book again: a new request, not the old key the server already holds a cancelled booking under.
+    answers(svc.book, booked);
+    fireEvent.click(await screen.findByRole('button', { name: /^Book: Spin/ }));
+    await waitFor(() => expect(svc.book).toHaveBeenCalledTimes(2));
+    expect(svc.book.mock.calls.map((c) => c[2])).toEqual(['key-1', 'key-2']);
+  });
+
   it('Cancel asks first, and Keep it changes nothing', async () => {
-    const booked = klass('s1', 'Spin', { mine: { status: 'booked', waitlistPlace: null, packCharged: true }, can: can({ cancel: 'free' }) });
-    svc.list.mockResolvedValue(week([booked]));
-    svc.cancel.mockResolvedValue(klass('s1', 'Spin', { booked: 3, mine: { status: 'cancelled', waitlistPlace: null, packCharged: false } }));
+    serve([klass('s1', 'Spin', { mine: mine('booked', { packCharged: true }), can: can({ cancel: 'free' }) })]);
     render(<Classes gym={GYM} />);
     fireEvent.click(await screen.findByRole('button', { name: /^Cancel booking: Spin/ }));
     const box = screen.getByRole('dialog', { name: 'Cancel your booking?' });
@@ -138,25 +193,27 @@ describe('a member’s classes', () => {
     fireEvent.click(within(box).getByRole('button', { name: 'Keep it' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(svc.cancel).not.toHaveBeenCalled();
+    expect(svc.list).toHaveBeenCalledTimes(1);
 
+    answers(svc.cancel, klass('s1', 'Spin', { booked: 3, mine: mine('cancelled') }));
     fireEvent.click(screen.getByRole('button', { name: /^Cancel booking: Spin/ }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel booking' }));
     expect(await screen.findByText('Cancelled.')).toBeTruthy();
     expect(svc.cancel).toHaveBeenCalledWith('g1', 's1', false);
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByRole('button', { name: /^Book: Spin/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /^Book: Spin/ })).toBeTruthy();
   });
 
   it('a late cancel says the pack keeps the class before it is sent, and one that turned late asks again', async () => {
-    const late = klass('s1', 'Spin', { mine: { status: 'booked', waitlistPlace: null, packCharged: true }, can: can({ cancel: 'late' }) });
-    const free = klass('s2', 'Yoga', { mine: { status: 'booked', waitlistPlace: null, packCharged: false }, can: can({ cancel: 'free' }) });
-    svc.list.mockResolvedValue(week([late, free]));
+    const late = klass('s1', 'Spin', { mine: mine('booked', { packCharged: true }), can: can({ cancel: 'late' }) });
+    const free = klass('s2', 'Yoga', { mine: mine('booked'), can: can({ cancel: 'free' }) });
+    serve([late, free]);
     render(<Classes gym={GYM} />);
     fireEvent.click(await screen.findByRole('button', { name: /^Cancel booking: Spin/ }));
     const box = screen.getByRole('dialog', { name: 'Cancel late?' });
     expect(box.textContent).toContain('the class stays used on your pack');
     expect(svc.cancel).not.toHaveBeenCalled();
-    svc.cancel.mockResolvedValueOnce({ ...late, mine: { status: 'late_cancelled', waitlistPlace: null, packCharged: true }, can: can({ book: true }) });
+    answers(svc.cancel, { ...late, mine: mine('late_cancelled', { packCharged: true }), can: can({ book: true }) });
     fireEvent.click(within(box).getByRole('button', { name: 'Cancel booking' }));
     expect(await screen.findByText('Cancelled late.')).toBeTruthy();
     expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's1', true);
@@ -168,21 +225,27 @@ describe('a member’s classes', () => {
     const again = await screen.findByRole('dialog', { name: 'Cancel late?' });
     expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's2', false);
     expect(rowOf('Yoga').textContent).toContain("You're booked");
-    svc.cancel.mockResolvedValueOnce({ ...free, mine: { status: 'late_cancelled', waitlistPlace: null, packCharged: false }, can: can({ book: true }) });
+    answers(svc.cancel, { ...free, mine: mine('late_cancelled'), can: can({ book: true }) });
     fireEvent.click(within(again).getByRole('button', { name: 'Cancel booking' }));
     await waitFor(() => expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's2', true));
   });
 
   it('Claim place is offered to somebody waiting when a place is free', async () => {
-    svc.list.mockResolvedValue(
-      week([klass('s1', 'Spin', { booked: 9, waitlisted: 2, mine: { status: 'waitlisted', waitlistPlace: 1, packCharged: false }, can: can({ claim: true, cancel: 'free' }) })]),
-    );
-    svc.book.mockResolvedValue(klass('s1', 'Spin', { booked: 10, waitlisted: 1, mine: { status: 'booked', waitlistPlace: null, packCharged: false }, can: can({ cancel: 'free' }) }));
+    serve([klass('s1', 'Spin', { booked: 9, waitlisted: 2, mine: mine('waitlisted', { waitlistPlace: 1 }), can: can({ claim: true, cancel: 'free' }) })]);
+    answers(svc.book, klass('s1', 'Spin', { booked: 10, waitlisted: 1, mine: mine('booked'), can: can({ cancel: 'free' }) }));
     render(<Classes gym={GYM} />);
     expect(await screen.findByText('A place is free. The first person on the waitlist to claim it has it.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /^Claim place: Spin/ }));
     expect(await screen.findByText("You're booked")).toBeTruthy();
     expect(svc.book).toHaveBeenCalledWith('g1', 's1', 'key-1', false);
+  });
+
+  it('a free place that is the first in line’s is not shown as a place left to anybody else', async () => {
+    serve([klass('s1', 'Spin', { places: 2, booked: 1, waitlisted: 2, can: can({ joinWaitlist: true }) })]);
+    render(<Classes gym={GYM} />);
+    expect((await screen.findByText('Spin')).closest('li').textContent).toContain('Full · 2 on the waitlist · a free place is going to the first in line');
+    expect(rowOf('Spin').textContent).not.toContain('place left');
+    expect(within(rowOf('Spin')).getByRole('button', { name: /^Join waitlist/ })).toBeTruthy();
   });
 
   it('Later and Earlier read another week; a week with no classes says so', async () => {
@@ -200,8 +263,14 @@ describe('a member’s classes', () => {
     expect(await screen.findByText('Spin')).toBeTruthy();
   });
 
+  it('a week the server cut short says the later classes are not listed', async () => {
+    svc.list.mockResolvedValue(week([klass('s1', 'Spin')], { more: true }));
+    render(<Classes gym={GYM} />);
+    expect(await screen.findByText('These 7 days have more classes than this page shows. The later ones are not listed.')).toBeTruthy();
+  });
+
   it('says whose clock the times are on when this device is in another zone', async () => {
-    svc.list.mockResolvedValue(week([klass('s1', 'Spin', { timezone: 'Pacific/Kiritimati' })]));
+    serve([klass('s1', 'Spin', { timezone: 'Pacific/Kiritimati' })]);
     render(<Classes gym={GYM} />);
     expect(await screen.findByText("Times are Iron House time (Pacific/Kiritimati), not this device's.")).toBeTruthy();
     // The row still prints the gym's clock.

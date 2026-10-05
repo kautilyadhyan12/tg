@@ -423,25 +423,26 @@ const forBookingSchema = z.object({
 
 const forClassesSchema = forBookingSchema.omit({ covers_class: true }).extend({ covers_all: z.boolean(), class_type_ids: z.array(z.string()) });
 
-/** One record's memberships in use, each with the kinds of class its type names (17d):
+/** These records' memberships in use, each with the kinds of class its type names (17d):
  *  what `heldForBooking` answers for one class, for every class at once. A plain read. */
 export async function heldForClasses(
   sql: Sql | TransactionSql,
   gymId: string,
-  entryId: string,
-): Promise<(Omit<HeldCover, "used" | "coversClass"> & { coversAll: boolean; classTypeIds: string[] })[]> {
+  entryIds: readonly string[],
+): Promise<(Omit<HeldCover, "used" | "coversClass"> & { entryId: string; coversAll: boolean; classTypeIds: string[] })[]> {
   const rows = await sql`
     SELECT ${COLUMNS(sql)}, h.entry_id, t.access, t.bookings_limit, t.bookings_period, t.covers_all_classes AS covers_all,
            ARRAY(SELECT c.class_type_id::text FROM gym_membership_type_classes c
                  WHERE c.gym_id = t.gym_id AND c.membership_type_id = t.id) AS class_type_ids
     FROM gym_held_memberships h
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-    WHERE h.gym_id = ${gymId} AND h.entry_id = ${entryId} AND h.status = ANY(${[...IN_USE]}::text[])
+    WHERE h.gym_id = ${gymId} AND h.entry_id = ANY(${[...entryIds]}::uuid[]) AND h.status = ANY(${[...IN_USE]}::text[])
     ORDER BY h.id`;
   return rows.map((row) => {
     const extra = forClassesSchema.parse(row);
     const h = shape(row);
     return {
+      entryId: extra.entry_id,
       id: h.id,
       membership: h.membership,
       access: extra.access,

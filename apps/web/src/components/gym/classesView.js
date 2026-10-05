@@ -61,14 +61,21 @@ export function zoneNote(classes, gymName, deviceZone) {
   return `Times are ${gymName} time (${zone.replaceAll('_', ' ')}), not this device's.`;
 }
 
-/** How full the class is. */
+/** How full the class is. A free place that is the first in line's is not left for
+ *  anybody else, so the class reads full to them. */
 export function placesText(c) {
   if (c.cancelled) return null;
   if (c.places === null) return null;
   const left = c.places - c.booked;
-  if (left <= 0) return c.waitlisted > 0 ? `Full · ${c.waitlisted} on the waitlist` : 'Full';
+  const waiting = c.waitlisted === 1 ? '1 on the waitlist' : `${c.waitlisted} on the waitlist`;
+  if (left <= 0) return c.waitlisted > 0 ? `Full · ${waiting}` : 'Full';
+  const promised = c.waitlisted > 0 && !c.can.book && !c.can.claim && c.can.why === null && c.mine?.status !== 'booked';
+  if (promised) return `Full · ${waiting} · a free place is going to the first in line`;
   return left === 1 ? '1 place left' : `${left} of ${c.places} places left`;
 }
+
+/** The line under a list the server cut short. */
+export const MORE_CLASSES = 'These 7 days have more classes than this page shows. The later ones are not listed.';
 
 /** What the person has in the class, or null. Waiting never reads as booked. */
 export function mineText(c) {
