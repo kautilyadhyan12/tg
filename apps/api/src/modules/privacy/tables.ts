@@ -67,6 +67,10 @@ export const DIRECT_DELETE_TABLES = [
   // ROADMAP 19b-ii-a): about the person, deleted at Day 14 and exported.
   "gym_post_reports",
   "gym_post_stops",
+  // Who a member has blocked on a gym's Updates (migration 0074; ROADMAP 19b-ii-b): the
+  // person's own choice, deleted at Day 14 and exported without the other person's id.
+  // A block OF the person by somebody else names them too, and is deleted with it.
+  "gym_post_blocks",
   // §5.2's Day-0 sentence already says "push tokens deleted", so clearing
   // them again at Day 14 is not a widening (R0.2) — it is the same
   // defence-in-depth as workout_sets. T3 F5 probe-confirmed that a row
@@ -374,7 +378,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gym_class_schedules",
   "gym_class_sessions",
   // gym_class_bookings.user_id — which classes a member booked, waited for, cancelled or
-  // came to (Part 3 §13.4, migration `0074`). On gym_attendance's footing: the same dated
+  // came to (Part 3 §13.4, migration `0075`). On gym_attendance's footing: the same dated
   // record of a person at a gym, kept as the gym's count of its classes and of a pack's
   // charges, and ruled with it.
   "gym_class_bookings",

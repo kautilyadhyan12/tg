@@ -475,6 +475,7 @@ describe("invitation settings", () => {
     TURNSTILE_SITE_KEY: "site",
     TURNSTILE_SECRET_KEY: "secret",
     PHOTO_DIR: "/srv/aihg/photos",
+    SUPPORT_EMAIL: "help@example.com",
   };
 
   it("production: the key alone keeps invitations readable; sending needs the sender and the api's address too", () => {

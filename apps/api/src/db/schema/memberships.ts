@@ -1,6 +1,6 @@
 // WHAT A GYM SELLS (Part 3 §13.1; ROADMAP Stage 2 item 17a-i). Mirrors
 // `0069_membership_types.sql`, `0070_held_memberships.sql` and
-// `0073_membership_word_links.sql` 1:1, and `0074_class_bookings.sql`'s bookings; the
+// `0073_membership_word_links.sql` 1:1, and `0075_class_bookings.sql`'s bookings; the
 // migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
@@ -184,7 +184,7 @@ export const gymHeldMemberships = pgTable(
   ],
 );
 
-/** One person's booking of one class (§13.4; 17c-i). Mirrors `0074_class_bookings.sql`,
+/** One person's booking of one class (§13.4; 17c-i). Mirrors `0075_class_bookings.sql`,
  *  which holds the two foreign keys Drizzle's builder cannot express: `(gym_id,
  *  session_id)` → the class, and `(gym_id, entry_id)` → the record, ON DELETE SET NULL
  *  (entry_id). `seq` is the waitlist's order. */

@@ -154,7 +154,15 @@ export type GymMemberPosting = z.infer<typeof gymMemberPostingSchema>;
 
 /** What a member reads. `paused`: the gym's plan has lapsed, and nothing is sent. */
 export const gymPostsResponseSchema = z
-  .object({ ...feedShape(gymPostSchema), status: z.enum(["shown", "paused"]), posting: gymMemberPostingSchema })
+  .object({
+    ...feedShape(gymPostSchema),
+    status: z.enum(["shown", "paused"]),
+    posting: gymMemberPostingSchema,
+    /** People the reader has blocked at this gym. */
+    blockedCount: z.number().int().nonnegative(),
+    /** Where to write for help with the app; null until one is set. */
+    supportEmail: z.string().email().nullable(),
+  })
   .strict();
 export type GymPostsResponse = z.infer<typeof gymPostsResponseSchema>;
 
@@ -300,6 +308,28 @@ export const stoppedGymPostersResponseSchema = z
   .strict();
 export type StoppedGymPostersResponse = z.infer<typeof stoppedGymPostersResponseSchema>;
 
+// ── BLOCK, AND THE BAD-WORDS CHECK (19b-ii-b; spec §15.3) ──
+
+/** People one member's blocked list carries, newest first. */
+export const GYM_POST_BLOCKS_SHOWN = 200;
+
+export const blockedGymPosterResponseSchema = z.object({ blocked: z.boolean() }).strict();
+export const gymPostBlockParamsSchema = z.object({ gymId: z.string().uuid(), blockId: z.string().uuid() }).strict();
+
+/** The people the reader has blocked at this gym, named as members see each other. */
+export const blockedGymPostersResponseSchema = z
+  .object({
+    people: z
+      .array(
+        z
+          .object({ id: z.string().uuid(), name: z.string().nullable(), initials: z.string(), blockedAt: z.string().datetime({ offset: true }) })
+          .strict(),
+      )
+      .max(GYM_POST_BLOCKS_SHOWN),
+  })
+  .strict();
+export type BlockedGymPostersResponse = z.infer<typeof blockedGymPostersResponseSchema>;
+
 /** What a person reads when a post cannot be made, changed or found. */
 export const GYM_POST_WORDS = {
   not_found: "This post has been removed.",
@@ -310,6 +340,14 @@ export const GYM_POST_WORDS = {
   day_full: `You can post ${String(GYM_MEMBER_POSTS_A_DAY)} times a day. Try again tomorrow.`,
   own_report: "This is your own post. You can remove it instead.",
   person_not_found: "This person isn't one of your members.",
+  own_block: "This is your own post.",
+  gym_block: "This post is from the gym's staff, so it can't be blocked. You can report it instead.",
+  block_not_found: "This person isn't blocked any more.",
+  /** A member's post the app will not take, naming each word it found. */
+  bad_words: (words: readonly string[]): string =>
+    words.length === 1
+      ? `Your post wasn't posted because it has a word that isn't allowed here: ${words[0] ?? ""}. Take it out and post again.`
+      : `Your post wasn't posted because it has words that aren't allowed here: ${words.join(", ")}. Take them out and post again.`,
   /** Which of a post's photos was refused, counted from 1. */
   photo: (position: number, why: string): string => `Photo ${String(position)}: ${why}`,
 } as const;

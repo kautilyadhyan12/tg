@@ -1116,7 +1116,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // driven in `checkin.fixVisit.routes.test.ts`.
       "gym_attendance_removed.entry_id",
       "gym_attendance_removed.gym_id",
-      // A class booking (0074): it is the app account's, so the join moves it to the kept
+      // A class booking (0075): it is the app account's, so the join moves it to the kept
       // record (driven in `classBookings.routes.test.ts`) and a deleted record lets it go
       // (`db.migration.test.ts`).
       "gym_class_bookings.entry_id",

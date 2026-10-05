@@ -66,30 +66,44 @@ function posts(sql: SqlOrTx, gymId: string) {
     WHERE p.gym_id = ${gymId}`;
 }
 
+/** Who is reading. A member is sent what everyone sees, less the member posts of anybody
+ *  they have blocked. `staff` is sent what everyone sees. */
+export type Reader = { member: string } | "staff";
+
+/** The posts of `p` (a row of `posts`) this reader is sent. */
+function seenBy(sql: SqlOrTx, gymId: string, reader: Reader) {
+  if (reader === "staff") return sql`p.visible`;
+  return sql`
+    p.visible
+    AND NOT (p.by_member AND EXISTS (
+      SELECT 1 FROM gym_post_blocks b
+      WHERE b.gym_id = ${gymId} AND b.user_id = ${reader.member} AND b.blocked_user_id = p.author_id))`;
+}
+
 /** The gym's pinned posts, newest pin first. */
-export async function pinnedPosts(sql: SqlOrTx, gymId: string): Promise<PostRow[]> {
+export async function pinnedPosts(sql: SqlOrTx, gymId: string, reader: Reader): Promise<PostRow[]> {
   const rows = await sql<RawPost[]>`
     SELECT * FROM (${posts(sql, gymId)}) p
-    WHERE p.visible AND p.pinned_at IS NOT NULL
+    WHERE ${seenBy(sql, gymId, reader)} AND p.pinned_at IS NOT NULL
     ORDER BY p.pinned_at DESC, p.id DESC`;
   return rows.map(toPost);
 }
 
 /** The posts that are not pinned, newest first, from `before` (a post's instant and id) on. */
-export async function postsPage(sql: SqlOrTx, gymId: string, before: { at: string; id: string } | null, limit: number): Promise<PostRow[]> {
+export async function postsPage(sql: SqlOrTx, gymId: string, reader: Reader, before: { at: string; id: string } | null, limit: number): Promise<PostRow[]> {
   const from = before === null ? sql`` : sql`AND (p.created_at, p.id) < (${before.at}::timestamptz, ${before.id}::uuid)`;
   const rows = await sql<RawPost[]>`
     SELECT * FROM (${posts(sql, gymId)}) p
-    WHERE p.visible AND p.pinned_at IS NULL ${from}
+    WHERE ${seenBy(sql, gymId, reader)} AND p.pinned_at IS NULL ${from}
     ORDER BY p.created_at DESC, p.id DESC
     LIMIT ${limit}`;
   return rows.map(toPost);
 }
 
-/** One of this gym's posts that can be seen, or null. */
-export async function postById(sql: SqlOrTx, gymId: string, postId: string): Promise<PostRow | null> {
+/** One of this gym's posts this reader is sent, or null. */
+export async function postById(sql: SqlOrTx, gymId: string, postId: string, reader: Reader): Promise<PostRow | null> {
   const rows = await sql<RawPost[]>`
-    SELECT * FROM (${posts(sql, gymId)}) p WHERE p.id = ${postId} AND p.visible`;
+    SELECT * FROM (${posts(sql, gymId)}) p WHERE p.id = ${postId} AND ${seenBy(sql, gymId, reader)}`;
   const r = rows[0];
   return r === undefined ? null : toPost(r);
 }
@@ -128,17 +142,25 @@ function liveReactor(sql: SqlOrTx) {
     JOIN users u ON u.id = r.user_id AND u.status = 'active'`;
 }
 
+/** `viewerId`: a member reading, who is not sent the reactions of anybody they have blocked. */
 export async function reactionCounts(
   sql: SqlOrTx,
   gymId: string,
   postIds: readonly string[],
+  viewerId: string | null,
 ): Promise<{ postId: string; reaction: string; count: number }[]> {
   if (postIds.length === 0) return [];
+  const unblocked =
+    viewerId === null
+      ? sql``
+      : sql`AND NOT EXISTS (
+          SELECT 1 FROM gym_post_blocks b
+          WHERE b.gym_id = r.gym_id AND b.user_id = ${viewerId} AND b.blocked_user_id = r.user_id)`;
   const rows = await sql<{ post_id: string; reaction: string; n: number }[]>`
     SELECT r.post_id, r.reaction, count(*)::int AS n
     FROM gym_post_reactions r
     ${liveReactor(sql)}
-    WHERE r.gym_id = ${gymId} AND r.post_id = ANY (${[...postIds]}::uuid[])
+    WHERE r.gym_id = ${gymId} AND r.post_id = ANY (${[...postIds]}::uuid[]) ${unblocked}
     GROUP BY r.post_id, r.reaction`;
   return rows.map((r) => ({ postId: r.post_id, reaction: r.reaction, count: r.n }));
 }
@@ -253,18 +275,19 @@ export async function clearReaction(sql: SqlOrTx, gymId: string, postId: string,
   await sql`DELETE FROM gym_post_reactions WHERE gym_id = ${gymId} AND post_id = ${postId} AND user_id = ${userId}`;
 }
 
-/** A photo of this gym's post that can be seen, or null. */
+/** A photo of a post of this gym that this reader is sent, or null. */
 export async function photoOf(
   sql: SqlOrTx,
   gymId: string,
   postId: string,
   photoId: string,
+  reader: Reader,
 ): Promise<{ storageKey: string; contentType: string } | null> {
   const rows = await sql<{ storage_key: string; content_type: string }[]>`
     SELECT ph.storage_key, ph.content_type
     FROM gym_post_photos ph
     JOIN (${posts(sql, gymId)}) p ON p.id = ph.post_id
-    WHERE ph.gym_id = ${gymId} AND ph.post_id = ${postId} AND ph.id = ${photoId} AND p.visible`;
+    WHERE ph.gym_id = ${gymId} AND ph.post_id = ${postId} AND ph.id = ${photoId} AND ${seenBy(sql, gymId, reader)}`;
   const r = rows[0];
   return r === undefined ? null : { storageKey: r.storage_key, contentType: r.content_type };
 }
@@ -489,4 +512,65 @@ export async function stoppedPeople(sql: SqlOrTx, gymId: string, limit: number):
     ORDER BY s.created_at DESC, s.user_id
     LIMIT ${limit}`;
   return rows.map((r) => ({ userId: r.user_id, stoppedAt: r.created_at, displayName: r.display_name, email: r.email, recordName: r.record_name }));
+}
+
+// ── BLOCK (19b-ii-b) ──
+
+/** `userId` blocks `blockedId` at this gym. Blocked again, nothing changes. */
+export async function insertBlock(sql: SqlOrTx, gymId: string, userId: string, blockedId: string, at: Date): Promise<void> {
+  await sql`
+    INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id, created_at) VALUES (${gymId}, ${userId}, ${blockedId}, ${at})
+    ON CONFLICT (gym_id, user_id, blocked_user_id) DO NOTHING`;
+}
+
+/** Whether this post is one the person is not sent only because they blocked its writer. */
+export async function hiddenByOwnBlock(sql: SqlOrTx, gymId: string, postId: string, userId: string): Promise<boolean> {
+  const rows = await sql<{ ok: number }[]>`
+    SELECT 1 AS ok FROM (${posts(sql, gymId)}) p
+    JOIN gym_post_blocks b ON b.gym_id = ${gymId} AND b.user_id = ${userId} AND b.blocked_user_id = p.author_id
+    WHERE p.id = ${postId} AND p.visible AND p.by_member`;
+  return rows.length > 0;
+}
+
+/** Deletes the reactions one person gave another's member posts at this gym. */
+export async function deleteReactionsToMember(tx: TransactionSql, gymId: string, userId: string, authorId: string): Promise<void> {
+  await tx`
+    DELETE FROM gym_post_reactions r USING gym_posts p
+    WHERE r.gym_id = ${gymId} AND r.user_id = ${userId}
+      AND p.gym_id = r.gym_id AND p.id = r.post_id AND p.by_member AND p.author_user_id = ${authorId}`;
+}
+
+/** Takes one of the person's own blocks at this gym off; false when it is not theirs or is gone. */
+export async function deleteBlock(sql: SqlOrTx, gymId: string, userId: string, blockId: string): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM gym_post_blocks WHERE gym_id = ${gymId} AND user_id = ${userId} AND id = ${blockId} RETURNING id`;
+  return rows.length === 1;
+}
+
+/** How many people with an active account this person has blocked at this gym. */
+export async function countBlocked(sql: SqlOrTx, gymId: string, userId: string): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_post_blocks b
+    JOIN users u ON u.id = b.blocked_user_id AND u.status = 'active'
+    WHERE b.gym_id = ${gymId} AND b.user_id = ${userId}`;
+  return rows[0]?.n ?? 0;
+}
+
+export interface BlockedRow extends ReactorRow {
+  id: string;
+  blockedAt: Date;
+}
+
+/** The people this person has blocked at this gym whose account is active, newest first. */
+export async function blockedPeople(sql: SqlOrTx, gymId: string, userId: string, limit: number): Promise<BlockedRow[]> {
+  const rows = await sql<{ id: string; created_at: Date; display_name: string; email: string | null; record_name: string | null }[]>`
+    SELECT b.id, b.created_at, u.display_name, u.email::text AS email, nullif(btrim(e.full_name), '') AS record_name
+    FROM gym_post_blocks b
+    JOIN users u ON u.id = b.blocked_user_id AND u.status = 'active'
+    LEFT JOIN gym_members m ON m.gym_id = b.gym_id AND m.user_id = b.blocked_user_id AND m.removed_at IS NULL
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id
+    WHERE b.gym_id = ${gymId} AND b.user_id = ${userId}
+    ORDER BY b.created_at DESC, b.id
+    LIMIT ${limit}`;
+  return rows.map((r) => ({ id: r.id, blockedAt: r.created_at, displayName: r.display_name, email: r.email, recordName: r.record_name }));
 }

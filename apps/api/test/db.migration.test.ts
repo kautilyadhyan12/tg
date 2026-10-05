@@ -1669,14 +1669,14 @@ d("0001_init on a real database", () => {
       });
   });
 
-  it("0074's bookings: one booking a person a class at a time, only this gym's class and record, and a class with a booking cannot be deleted", async () => {
+  it("0075's bookings: one booking a person a class at a time, only this gym's class and record, and a class with a booking cannot be deleted", async () => {
     await sql
       .begin(async (tx) => {
-        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0074-owner') RETURNING id`;
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0075-owner') RETURNING id`;
         if (user === undefined) throw new Error("no user");
         const gymOf = async (slug: string) => {
           const [gym] = await tx<{ id: string; opens: number; free: number; handover: number; waitlist: number }[]>`
-            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0074', 'Europe/London', ${user.id})
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0075', 'Europe/London', ${user.id})
             RETURNING id, booking_opens_days AS opens, booking_free_cancel_minutes AS free, waitlist_handover_minutes AS handover, waitlist_max AS waitlist`;
           if (gym === undefined) throw new Error("no gym");
           // The starting values Kd agreed (RULINGS 2026-09-21): 7 days, 2 hours, 1 day, 20.
@@ -1693,8 +1693,8 @@ d("0001_init on a real database", () => {
           if (session === undefined) throw new Error("no class");
           return { gym: gym.id, entry: entry.id, session: session.id };
         };
-        const a = await gymOf("zz-0074-a");
-        const b = await gymOf("zz-0074-b");
+        const a = await gymOf("zz-0075-a");
+        const b = await gymOf("zz-0075-b");
 
         const at = "2026-10-07T09:00:00Z";
         const row = (over: Record<string, unknown> = {}) => ({
@@ -1761,10 +1761,10 @@ d("0001_init on a real database", () => {
         const left = await tx<{ entry_id: string | null; gym_id: string }[]>`SELECT entry_id, gym_id FROM gym_class_bookings WHERE gym_id = ${a.gym}`;
         expect(left).toHaveLength(3);
         expect(left.every((r) => r.entry_id === null && r.gym_id === a.gym)).toBe(true);
-        throw new Error("ROLLBACK-0074-FIXTURE");
+        throw new Error("ROLLBACK-0075-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0074-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0075-FIXTURE") return;
         throw err;
       });
   });

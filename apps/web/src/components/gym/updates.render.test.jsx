@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-const svc = { list: vi.fn(), react: vi.fn(), add: vi.fn(), removeOwn: vi.fn(), report: vi.fn() };
+const svc = { list: vi.fn(), react: vi.fn(), add: vi.fn(), removeOwn: vi.fn(), report: vi.fn(), block: vi.fn(), blocked: vi.fn(), unblock: vi.fn() };
 const prepare = vi.fn();
 vi.mock('../../api/postsApi', () => ({
   postsService: svc,
@@ -30,7 +30,7 @@ const post = (id, body, over = {}) => ({
   reported: false,
   ...over,
 });
-const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', posting: 'off', pinned: [], posts: [], next: null, ...over });
+const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', posting: 'off', blockedCount: 0, supportEmail: null, pinned: [], posts: [], next: null, ...over });
 const posts = () => screen.getAllByTestId('post');
 const button = (card, name) => within(card).getByRole('button', { name });
 

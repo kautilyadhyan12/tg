@@ -2855,8 +2855,39 @@ at this gym until staff let them again, still reads and reacts, their posts stay
 page lists who is stopped. A gym whose plan has lapsed reads the list and answers nothing.
 A member's Remove and Report ask who they are before the rate limit, so a stranger's 404 is
 never a 429; nothing a person wrote, as a member or as staff, offers them Report.
-Block, the bad-words hold and the support address are 19b-ii-b; a person's posts on their
-profile (RULINGS 2026-10-02, 2026-10-03) are 19b-ii-c.
+A person's posts on their profile (RULINGS 2026-10-02, 2026-10-03) are 19b-ii-c.
+
+**As built in 19b-ii-b (2026-10-05): Block, the bad-words check, the support address.**
+**Block** is on every post another MEMBER wrote (`PUT …/posts/:postId/block`,
+`gym_post_blocks`): from then on the blocker is sent none of that person's posts or
+photos at that gym, a pinned one included, and that person's reactions are left out of
+the counts the blocker reads. It is one way and per gym; the blocked person is never
+told, staff are never told, and no audit line is written. A post the gym's staff wrote
+cannot be blocked (it is the gym's word; Report answers it), so a blocked person who is
+also staff is still read where they post for the gym, and the Block box says so. A
+reaction the blocker had given that person's posts is deleted with the block; the same
+block sent twice answers as the first did. The blocker reads their
+list at the bottom of Updates (`GET …/posts/blocked`, 200 at most, first name and last
+initial) and takes a block off (`DELETE …/posts/blocked/:blockId`), which brings
+everything back. A block is the person's own data: deleted at the account's Day 14, with
+anybody's block OF them, and in their export without the other person's id.
+**The bad-words check (Kd, RULINGS 2026-10-05: the app checks, staff are sent nothing;
+it replaces the hold above):** a member's post is checked before anything is kept
+(`posts/badWords.ts`: the `obscenity` package's English list, plus slurs and explicit
+words it lacks; English only). One that has a listed word is refused (400
+`post_bad_words`) with a sentence naming each word found, five at most; the member's
+words stay in the box to change, nothing is stored, no photo is read, and it uses none
+of the day's ten. Staff's own posts are not checked. A word is refused for what it IS,
+never for what it has inside it ("cucumber", "mishit" and "rapeseed" pass; "bullshit" and
+"dickheads" do not), and the sentence names the whole word as typed. Characters nobody
+sees are taken out first, a mark or digit after a word does not hide it ("tosser!"), and
+letters typed one at a time are read joined. The list catches the words it
+knows: an unkind post in ordinary words goes through, and Report is what answers it;
+the outside list it is tested against, and what is let through on purpose, are in
+`apps/api/test/fixtures/bad-words`.
+**The support address** is one for the whole app, `SUPPORT_EMAIL` on the server,
+required in production; members read "Need help with the app? Email …" under a gym's
+Updates once it is set. Kd has not chosen it yet (RULINGS 2026-10-05).
 
 ### 15.4 Events
 
