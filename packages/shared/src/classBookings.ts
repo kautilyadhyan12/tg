@@ -408,3 +408,39 @@ export const classBookingSettingsResponseSchema = z
   .object({ settings: classBookingSettingsSchema, movedIn: z.number().int().optional() })
   .strict();
 export type ClassBookingSettingsResponse = z.infer<typeof classBookingSettingsResponseSchema>;
+
+// ── A MEMBER'S LIST OF CLASSES (17d) ──
+
+/** How many weeks ahead a member's list goes: the calendar's 8. */
+export const MEMBER_CLASSES_WEEKS = 8;
+
+/** `week`: 0 for the gym's next seven days from today, 1 for the seven after, and so on. */
+export const memberClassesQuerySchema = z
+  .object({
+    week: z
+      .string()
+      .regex(new RegExp(`^[0-${String(MEMBER_CLASSES_WEEKS - 1)}]$`))
+      .default("0")
+      .transform(Number),
+  })
+  .strict();
+export type MemberClassesQuery = z.infer<typeof memberClassesQuerySchema>;
+
+/** How many classes one page of a member's list holds at most. */
+export const MEMBER_CLASSES_MAX = 500;
+
+/** The gym's classes in that week that have not started, the soonest first, each as the
+ *  person reading meets it: what one class's own read answers. `from` and `to` are the
+ *  week's first and last day, the gym's own. `more`: the week holds more classes than
+ *  the page does, and the later ones are not on it. */
+export const memberClassesResponseSchema = z
+  .object({
+    week: z.number().int(),
+    from: classDaySchema,
+    to: classDaySchema,
+    timezone: z.string(),
+    classes: z.array(classBookingViewSchema).max(MEMBER_CLASSES_MAX),
+    more: z.boolean(),
+  })
+  .strict();
+export type MemberClassesResponse = z.infer<typeof memberClassesResponseSchema>;

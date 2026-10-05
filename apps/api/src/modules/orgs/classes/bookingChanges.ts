@@ -20,23 +20,26 @@ export interface Move {
   cover: Extract<Cover, { ok: true }>;
 }
 
-/** Who the class's free places go to at this moment: while the rule says a free place
- *  goes to the waitlist by itself, the first in line who may book, and so on down the
- *  line. Somebody who may not is passed over and keeps their place. It reads and changes
- *  nothing, in three statements whatever the waitlist's length. */
-export async function handOverPlan(
-  sql: Sql | TransactionSql,
-  gymId: string,
-  ctx: repo.ClassContext,
-  now: Date,
-): Promise<{ moves: Move[]; /** The waiters' memberships by record, as they stand once the moves are made. */ covers: Map<string, HeldCover[]> }> {
+export interface HandOverPlan {
+  moves: Move[];
+  /** The waiters' memberships by record, as they stand once the moves are made. */
+  covers: Map<string, HeldCover[]>;
+}
+
+/** Whether the class has a free place that goes to its waitlist by itself at this moment. */
+export function handsOverTo(ctx: repo.ClassContext, now: Date): boolean {
+  const time = bookingTime(now.getTime(), ctx.session.startsAt.getTime(), ctx.settings);
+  return ctx.counts.waitlisted > 0 && handsOverNow({ time, cancelled: ctx.session.cancelled, places: ctx.session.places, booked: ctx.counts.booked });
+}
+
+/** Who the class's free places go to, from its waitlist and the memberships of the
+ *  people on it, both read already: the first in line who may book, and so on down the
+ *  line. Somebody who may not is passed over and keeps their place. `covers` is changed as
+ *  places are given. */
+export function planHandOver(ctx: repo.ClassContext, now: Date, waiters: readonly repo.Waiter[], covers: Map<string, HeldCover[]>): HandOverPlan {
   const time = bookingTime(now.getTime(), ctx.session.startsAt.getTime(), ctx.settings);
   let booked = ctx.counts.booked;
   const free = () => handsOverNow({ time, cancelled: ctx.session.cancelled, places: ctx.session.places, booked });
-  if (ctx.counts.waitlisted === 0 || !free()) return { moves: [], covers: new Map() };
-  const waiters = await repo.waitlistOf(sql, gymId, ctx.session.id);
-  const entryIds = ctx.gymHasTypes ? waiters.flatMap((w) => w.booker?.entryId ?? []) : [];
-  const covers = await repo.coversOf(sql, gymId, entryIds, ctx.session);
   const moves: Move[] = [];
   for (const waiter of waiters) {
     if (!free()) break;
@@ -61,6 +64,16 @@ export async function handOverPlan(
     }
   }
   return { moves, covers };
+}
+
+/** Who the class's free places go to at this moment, while the rule says a free place
+ *  goes to the waitlist by itself. It reads and changes nothing, in three statements
+ *  whatever the waitlist's length. */
+export async function handOverPlan(sql: Sql | TransactionSql, gymId: string, ctx: repo.ClassContext, now: Date): Promise<HandOverPlan> {
+  if (!handsOverTo(ctx, now)) return { moves: [], covers: new Map() };
+  const waiters = await repo.waitlistOf(sql, gymId, ctx.session.id);
+  const entryIds = ctx.gymHasTypes ? waiters.flatMap((w) => w.booker?.entryId ?? []) : [];
+  return planHandOver(ctx, now, waiters, await repo.coversOf(sql, gymId, entryIds, ctx.session));
 }
 
 /** The plan carried out, under the gym's lock and the class's. Answers how many were
