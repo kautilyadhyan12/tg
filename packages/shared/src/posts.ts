@@ -400,7 +400,7 @@ export const GYM_POST_WORDS = {
   block_not_found: "This person isn't blocked any more.",
   reports_changed: "The reports on this post have changed. Read them again, then choose.",
   /** On a hidden post, for the member who wrote it. */
-  hidden_own: (gymName: string): string => `Hidden from other members while the staff at ${gymName} check it. Only you can see it.`,
+  hidden_own: (gymName: string): string => `Hidden from other members while the staff at ${gymName} check it.`,
   /** A member's post the app will not take, naming each word it found. */
   bad_words: (words: readonly string[]): string =>
     words.length === 1

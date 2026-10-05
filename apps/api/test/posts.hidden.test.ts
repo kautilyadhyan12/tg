@@ -15,6 +15,7 @@ import type { GymPost, GymPostsResponse, PersonGymPostsResponse, ReportedGymPost
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
+import { deleteUserOwnedRows } from "../src/modules/privacy/repo.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -245,7 +246,12 @@ d("a post five people have reported is hidden until staff decide (real Postgres,
       expect(page.posts.map((p) => p.body)).toEqual(["First 5k done"]);
       expect(page.total).toBe(1);
       expect((await reactTo(gym, reader, bad.id)).statusCode).toBe(404);
+      expect((await inject("PUT", `${posts(gym.id)}/${bad.id}/reaction`, reader.cookies, { reaction: null })).statusCode).toBe(404);
       expect((await report(gym, reader, bad.id)).statusCode).toBe(404);
+      // One of the five whose reply was lost sends the report again: answered as the first was.
+      const again = await report(gym, reporters[4] ?? reader, bad.id);
+      expect(again.statusCode, again.body).toBe(200);
+      expect(JSON.parse(again.body)).toEqual({ reported: true });
       expect((await inject("PUT", `${posts(gym.id)}/${bad.id}/block`, reader.cookies)).statusCode).toBe(404);
 
       // The writer still reads it, marked, and nothing else of theirs is.
@@ -339,6 +345,74 @@ d("a post five people have reported is hidden until staff decide (real Postgres,
     T,
   );
 
+  it(
+    "a reporter whose account is purged does not bring the post back: it stays hidden until staff decide",
+    async () => {
+      const gym = await makeGym("Purge House");
+      const writer = await member(gym, "Wes Writer");
+      const reader = await member(gym, "Rita Reader");
+      const five = await members(gym, ["A One", "B Two", "C Three", "D Four", "E Five"]);
+      const post = await add(gym, writer, "Changing room again", [IPHONE]);
+      await reportAll(gym, five, post.id);
+      // The purge's own statements for one person, as the nightly run makes them.
+      const purge = (who: Person) => sql.begin((tx) => deleteUserOwnedRows(tx, who.userId));
+
+      await purge(five[0] ?? reader);
+      expect(shown(await feed(gym, reader))).toEqual([]);
+      expect((await inject("GET", photoPath(gym, post), reader.cookies)).statusCode).toBe(404);
+      expect((await reported(gym)).items.map((i) => ({ reports: i.reports, hidden: i.post.hidden }))).toEqual([{ reports: 4, hidden: true }]);
+      // Staff decide: Keep answers the four that are left, and the post is shown again.
+      expect(JSON.parse((await keep(gym, post.id)).body)).toEqual({ kept: true, waiting: 0 });
+      expect(shown(await feed(gym, reader))).toEqual(["Changing room again"]);
+
+      // Every reporter purged: nothing is left on the staff's list to answer, so the post is
+      // shown, and one later report does not hide it again.
+      const second = await add(gym, writer, "Second post");
+      const more = await members(gym, ["F Six", "G Seven", "H Eight", "I Nine", "J Ten"]);
+      await reportAll(gym, more, second.id);
+      expect(shown(await feed(gym, reader))).toEqual(["Changing room again"]);
+      for (const who of more.slice(0, 4)) await purge(who);
+      expect(shown(await feed(gym, reader))).toEqual(["Changing room again"]);
+      await purge(more[4] ?? reader);
+      expect(shown(await feed(gym, reader))).toEqual(["Second post", "Changing room again"]);
+      expect((await reported(gym)).items).toEqual([]);
+      await reportAll(gym, [reader], second.id);
+      expect(find(await feed(gym, writer), second.id)).toMatchObject({ hidden: false });
+    },
+    T,
+  );
+
+  it(
+    "a report from somebody who has since left still counts, and a hidden post is hidden on a later page too",
+    async () => {
+      const gym = await makeGym("Later House");
+      const writer = await member(gym, "Wes Writer");
+      const reader = await member(gym, "Rita Reader");
+      const five = await members(gym, ["A One", "B Two", "C Three", "D Four", "E Five"]);
+      await add(gym, writer, "The oldest post");
+      const bad = await add(gym, writer, "An old post to hide");
+      for (let n = 1; n <= 21; n++) await staffAdd(gym, `Newer ${String(n)}`);
+      const first = await feed(gym, reader);
+      expect(first.posts).toHaveLength(20);
+      const later = async (who: Person): Promise<string[]> => {
+        const res = await inject("GET", `${posts(gym.id)}?before=${encodeURIComponent(first.next ?? "")}`, who.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return (JSON.parse(res.body) as GymPostsResponse).posts.map((p) => p.body);
+      };
+      expect(await later(reader)).toEqual(["Newer 1", "An old post to hide", "The oldest post"]);
+
+      await reportAll(gym, five.slice(0, 4), bad.id);
+      // One of the four leaves the gym; their report is still waiting for staff.
+      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${five[0]?.userId ?? ""}`;
+      expect(await later(reader)).toContain("An old post to hide");
+      await reportAll(gym, five.slice(4), bad.id);
+      expect(await later(reader)).toEqual(["Newer 1", "The oldest post"]);
+      expect(await later(writer)).toEqual(["Newer 1", "An old post to hide", "The oldest post"]);
+      expect((await reported(gym)).items[0]).toMatchObject({ reports: 5 });
+    },
+    T,
+  );
+
   // ===========================================================================
   // THE GYM'S OWN POST, REMOVE, AND TWO AT ONCE
   // ===========================================================================
@@ -349,10 +423,14 @@ d("a post five people have reported is hidden until staff decide (real Postgres,
       const gym = await makeGym("Staff House");
       const reader = await member(gym, "Rita Reader");
       const five = await members(gym, ["A One", "B Two", "C Three", "D Four", "E Five"]);
+      // The owner also trains here, and so reads the members' Updates too.
+      await sql`INSERT INTO gym_members (gym_id, user_id, joined_at) VALUES (${gym.id}, ${gym.owner.userId}, '2026-01-01T00:00:00Z')`;
       const post = await staffAdd(gym, "Closed on Monday");
       await reportAll(gym, five, post.id);
       expect(shown(await feed(gym, reader))).toEqual([]);
       expect(find(await staffFeed(gym), post.id)).toMatchObject({ hidden: true });
+      // Whoever wrote a hidden post still reads it, marked: a staff post too.
+      expect(find(await feed(gym, gym.owner), post.id)).toMatchObject({ hidden: true, wrote: true, own: false });
 
       expect((await inject("DELETE", `${posts(gym.id)}/${post.id}`, gym.owner.cookies)).statusCode).toBe(200);
       expect(shown(await feed(gym, reader))).toEqual([]);
@@ -380,9 +458,19 @@ d("a post five people have reported is hidden until staff decide (real Postgres,
       const waiting = (await reported(gym)).items[0]?.reports ?? 0;
       expect(waiting).toBeGreaterThanOrEqual(5);
 
+      // The fourth and fifth at the same instant: neither sees the other's, and the post is
+      // hidden all the same. Several posts, so that some pair truly overlaps.
+      for (let n = 0; n < 6; n++) {
+        const next = await add(gym, writer, `Racing post ${String(n)}`);
+        await reportAll(gym, six.slice(0, 3), next.id);
+        const both = await Promise.all([report(gym, six[3] ?? reader, next.id, 0, api()), report(gym, six[4] ?? reader, next.id, 1, other())]);
+        expect(both.map((r) => r.statusCode)).toEqual([200, 200]);
+        expect(find(await feed(gym, reader), next.id), `racing post ${String(n)}`).toBeUndefined();
+      }
+
       expect((await inject("DELETE", `${posts(gym.id)}/mine/${post.id}`, writer.cookies)).statusCode).toBe(200);
-      expect(shown(await feed(gym, writer))).toEqual([]);
-      expect((await reported(gym)).items).toEqual([]);
+      expect(shown(await feed(gym, writer))).not.toContain("You all look ridiculous");
+      expect((await reported(gym)).items.map((i) => i.post.id)).not.toContain(post.id);
     },
     T,
   );

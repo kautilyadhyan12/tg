@@ -301,7 +301,7 @@ export default function Updates() {
         p,
         () => staffPostsService.keep(gymId, p.id, item),
         (answer) => keepNote(answer, p, words),
-        (shown, answer) => (answer.kept && answer.waiting === 0 ? withKept(shown, p.id) : shown),
+        (shown, answer) => (answer.kept ? withKept(shown, p.id) : shown),
       ),
     onStop: (p, stopped) =>
       act(
@@ -485,6 +485,7 @@ export default function Updates() {
                   gymName={feed.gymName}
                   post={post}
                   pinnedCount={feed.pinned.length}
+                  reportedRead={reported !== null}
                   words={words}
                   readOnly={readOnly}
                   busy={busy === post.id}

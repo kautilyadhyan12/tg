@@ -114,3 +114,5 @@ archive/records/t3/*.diff
 # folder, never committed. Folder B is a git worktree of this repository.
 FOLDER.md
 reviews/
+# A terminal's own logs, screenshots and one-off scripts.
+.cost/

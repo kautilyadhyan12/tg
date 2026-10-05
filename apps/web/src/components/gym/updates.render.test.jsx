@@ -260,7 +260,7 @@ describe('removing one’s own post, and reporting somebody else’s', () => {
     svc.list.mockResolvedValue(list);
     render(<Updates gym={GYM} />);
     await waitFor(() => expect(posts()).toHaveLength(3));
-    expect(within(posts()[1]).getByTestId('hidden-note').textContent).toBe('Hidden from other members while the staff at Iron House check it. Only you can see it.');
+    expect(within(posts()[1]).getByTestId('hidden-note').textContent).toBe('Hidden from other members while the staff at Iron House check it.');
     expect(within(posts()[0]).queryByTestId('hidden-note')).toBeNull();
     expect(within(posts()[2]).queryByTestId('hidden-note')).toBeNull();
     expect(button(posts()[1], 'Remove')).toBeTruthy();

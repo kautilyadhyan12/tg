@@ -114,13 +114,13 @@ function Reactions({ gymId, post }) {
 /** One post. `report`: its entry on the reported list, where it is drawn with why it was
  *  reported and Keep in place of Pin. With `onPin` null (a person's own list) there is no
  *  Pin; with `onPerson` a member's name opens that person's posts. */
-export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words, readOnly, busy, report = null, onPin = null, onRemove, onKeep, onStop, onOpen, onPerson = null }) {
+export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words, readOnly, busy, report = null, reportedRead = false, onPin = null, onRemove, onKeep, onStop, onOpen, onPerson = null }) {
   /** Which box is open: null, 'remove' or 'stop'. */
   const [asking, setAsking] = useState(null);
   const box = removeBox(post, words);
   const stop = stopBox(post.author.name);
   const full = report === null && onPin !== null ? pinNote(post, pinnedCount) : null;
-  const hidden = hiddenStaffNote(post, words, report !== null);
+  const hidden = hiddenStaffNote(post, words, report !== null ? 'list' : reportedRead ? 'later' : null);
   const canStop = post.fromMember && post.authorId !== null;
   const opens = onPerson !== null && canOpenPerson(post);
   const Who = opens ? 'button' : 'div';

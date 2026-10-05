@@ -600,14 +600,46 @@ describe('reported posts', () => {
     expect(within(cards()[0]).queryByTestId('hidden-note')).toBeNull();
   });
 
-  it('a hidden post the reported list does not carry is still drawn among the posts, saying where it is', async () => {
+  it('a hidden post the reported list has not reached is drawn among the posts, and says it will show above', async () => {
     svc.list.mockResolvedValue(feed({ posts: [post('h1', 'Hidden and far down the list', { ...wendy, hidden: true })] }));
     svc.reported.mockResolvedValue(two());
     open();
     await waitFor(() => expect(reportedCards()).toHaveLength(2));
     expect(within(cards()[0]).getByTestId('hidden-note').textContent).toBe(
-      'Hidden from your members: 5 or more people reported it. It is in the reported posts at the top of Updates, where you can keep or remove it.',
+      'Hidden from your members: 5 or more people reported it. It will show in the reported posts above once you have answered the ones before it.',
     );
+  });
+
+  it('when the reported list cannot be read, a hidden post says only that it is hidden', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [post('h1', 'Hidden', { ...wendy, hidden: true })] }));
+    svc.reported.mockRejectedValue(new Error('down'));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    await waitFor(() => expect(within(cards()[0]).getByTestId('hidden-note').textContent).toBe('Hidden from your members: 5 or more people reported it.'));
+  });
+
+  it('a post hidden since the page was read is drawn once, on the reported list', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [post('r1', 'Look at the state of him', wendy), post('r2', 'Shakes for sale', wendy)] }));
+    svc.reported.mockResolvedValue(reportedList([item('r1', 'Look at the state of him', { unkind: 5 }, { hidden: true })]));
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(1));
+    await waitFor(() => expect(cards().map((c) => c.textContent.includes('Shakes for sale'))).toEqual([true]));
+  });
+
+  it('Keep with a new report waiting: the five are answered, so the post is drawn among the posts again', async () => {
+    const hiddenPost = { hidden: true };
+    svc.list.mockResolvedValue(feed({ posts: [post('r1', 'Changing room, this morning', { ...wendy, ...hiddenPost })] }));
+    svc.reported
+      .mockResolvedValueOnce(reportedList([item('r1', 'Changing room, this morning', { nudity: 5 }, hiddenPost)]))
+      .mockResolvedValue(reportedList([item('r1', 'Changing room, this morning', { spam: 1 })]));
+    svc.keep.mockResolvedValue({ kept: true, waiting: 1 });
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(1));
+    expect(screen.queryAllByTestId('post')).toHaveLength(0);
+    fireEvent.click(within(reportedCards()[0]).getByRole('button', { name: 'Keep post' }));
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    expect(within(cards()[0]).queryByTestId('hidden-note')).toBeNull();
+    expect(within(reportedCards()[0]).queryByTestId('hidden-note')).toBeNull();
   });
 
   it('a report that arrived while staff were looking: Keep says so, and the post is still listed with it', async () => {

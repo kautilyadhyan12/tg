@@ -221,19 +221,22 @@ export function hiddenOwnNote(post, gymName) {
   return post.hidden ? GYM_POST_WORDS.hidden_own(gymName) : null;
 }
 
-/** What staff read on a hidden post, or null. `onList`: on the reported list, where Keep
- *  and Remove are; elsewhere it says where they are. */
-export function hiddenStaffNote(post, words, onList) {
+/** What staff read on a hidden post, or null. `where`: "list" on the reported list, where
+ *  Keep is; "later" among the posts when that list has not reached it yet (it carries the
+ *  ones that have waited longest); anything else when the list could not be read. */
+export function hiddenStaffNote(post, words, where) {
   if (!post.hidden) return null;
   const why = `Hidden from your ${words.people}: ${GYM_POST_REPORTS_TO_HIDE} or more people reported it.`;
-  return onList ? `${why} Keep post shows it to them again.` : `${why} It is in the reported posts at the top of Updates, where you can keep or remove it.`;
+  if (where === 'list') return `${why} Keep post shows it to them again.`;
+  return where === 'later' ? `${why} It will show in the reported posts above once you have answered the ones before it.` : why;
 }
 
 /** The posts drawn under the reported list in the console: what members read. A hidden
- *  post is drawn once, on the reported list; one that list does not carry stays here. */
+ *  post is drawn once, on the reported list; one that list does not carry stays here. The
+ *  reported list is read again after every change and says which are hidden. */
 export function postsBelow(feed, reported) {
-  const listed = new Set((reported?.items ?? []).map((item) => item.post.id));
-  return [...feed.pinned, ...feed.posts].filter((p) => !(p.hidden && listed.has(p.id)));
+  const listed = new Set((reported?.items ?? []).filter((item) => item.post.hidden).map((item) => item.post.id));
+  return [...feed.pinned, ...feed.posts].filter((p) => !listed.has(p.id));
 }
 
 /** The list after staff keep a post: it is no longer hidden. */

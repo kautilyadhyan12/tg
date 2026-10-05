@@ -522,7 +522,7 @@ export async function setPinned(deps: Pick<PostsDeps, "sql" | "now">, staffId: s
   await deps.sql.begin(async (tx) => {
     await lockGym(tx, gymId);
     // A pinned member's post whose writer has left is seen by nobody: its pin is given back.
-    await repo.unpinHidden(tx, gymId);
+    await repo.unpinUnseen(tx, gymId);
     const post = await repo.postById(tx, gymId, postId, "staff");
     if (post === null) throw postNotFound();
     if (pinned === (post.pinnedAt !== null)) return;
@@ -612,10 +612,20 @@ export async function report(
   await requireMember(deps, gymId, userId);
   if (!(await limit())) return null;
   const post = await repo.postById(deps.sql, gymId, postId, { member: userId });
-  if (post === null) throw postNotFound();
+  if (post === null) {
+    // Sent again after a lost reply: their own report helped hide the post from them.
+    if (await repo.reportedHidden(deps.sql, gymId, postId, userId)) return true;
+    throw postNotFound();
+  }
   if (post.authorId === userId) throw new OrgsError(400, "own_post", GYM_POST_WORDS.own_report);
   const typed = note === undefined || note === "" ? null : note;
-  if (!(await repo.insertReport(deps.sql, gymId, postId, userId, reason, typed, deps.now()))) throw postNotFound();
+  const made = await deps.sql.begin(async (tx) => {
+    const at = deps.now();
+    if (!(await repo.insertReport(tx, gymId, postId, userId, reason, typed, at))) return false;
+    await repo.hideIfReported(tx, gymId, postId, at);
+    return true;
+  });
+  if (!made) throw postNotFound();
   return true;
 }
 
@@ -670,6 +680,7 @@ export async function keepReported(
     const closed = await repo.closeReports(tx, gymId, postId, "kept", deps.now(), shown.reportsMark);
     const now = await repo.countReports(tx, gymId, postId);
     if (closed > 0) {
+      await repo.showAgain(tx, gymId, postId);
       await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.post_kept", targetType: "post", targetId: postId, meta: { reports: String(closed) } });
       // One that landed after the reports were answered.
       return { kept: true, waiting: now.open };
