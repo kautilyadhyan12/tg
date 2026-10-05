@@ -287,12 +287,12 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
 }
 
 /** One booked session, with its Cancel and the box that asks first. */
-function SessionRow({ appointment, clockFormat, freeCancelMinutes, locked, asking, busy, error, onAsk, onKeep, onCancel }) {
+function SessionRow({ appointment, first, clockFormat, freeCancelMinutes, locked, asking, busy, error, onAsk, onKeep, onCancel }) {
   const row = sessionRow(appointment, clockFormat);
   const box = asking ? cancelBox(appointment, { freeCancelMinutes, clockFormat }) : null;
   return (
-    <li className="c-row flex flex-col gap-3" data-testid="pt-session">
-      <div className="flex items-start justify-between gap-3 min-w-0">
+    <li className="flex flex-col gap-3 py-3 min-w-0" style={first ? undefined : { borderTop: '1px solid var(--line)' }} data-testid="pt-session">
+      <div className="flex items-center justify-between gap-3 min-w-0 min-h-11">
         <div className="flex flex-col min-w-0">
           <span className="c-s15 c-w6 c-t1 c-ell">
             <span className="c-num">{row.time}</span> · {row.name}
@@ -588,16 +588,26 @@ export default function PersonalTraining() {
                 <div className="grid gap-4 xl:grid-cols-2 items-start">
                   {shownWeek.data.days.map((day) => {
                     const openSlot = booking !== null && booking.localDate === day.localDate ? booking : null;
+                    // A day with nothing on it and nothing to book is one line, so a week reads at a glance.
+                    if (day.appointments.length === 0 && day.free.length === 0) {
+                      return (
+                        <section key={day.localDate} className="c-card px-5 py-3 flex items-center justify-between gap-3 min-w-0" data-testid="pt-day">
+                          <h3 className="c-s15 c-w6 c-t2 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
+                          <span className="c-s13 c-t3">No free times</span>
+                        </section>
+                      );
+                    }
                     return (
                       <section key={day.localDate} className="c-card p-5 flex flex-col gap-4 min-w-0" data-testid="pt-day">
                         <h3 className="c-h3 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
 
                         {day.appointments.length > 0 ? (
                           <ul className="m-0 p-0 list-none flex flex-col">
-                            {day.appointments.map((appointment) => (
+                            {day.appointments.map((appointment, index) => (
                               <SessionRow
                                 key={appointment.id}
                                 appointment={appointment}
+                                first={index === 0}
                                 clockFormat={clockFormat}
                                 freeCancelMinutes={list.freeCancelMinutes}
                                 locked={readOnly}
