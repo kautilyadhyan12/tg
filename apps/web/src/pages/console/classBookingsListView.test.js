@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { bookedHeading, bookingRow, lateHeading, listRefusal, waitlistHeading } from './classBookingsListView';
 
+// (Which names open a person's page is the screen's test: classWeek.render.test.jsx.)
 const people = (n) => Array.from({ length: n }, (_, i) => ({ bookingId: String(i) }));
 
 describe('the headings count what is under them', () => {

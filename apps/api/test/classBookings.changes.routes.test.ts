@@ -773,6 +773,25 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       const zoeGold = await holdMonthly(sells, zoe.entryId, gold);
       expect(await booked(sells, zoe, later.id)).toBe("booked");
 
+      // The class's list for staff: the owner's carries each person's record on the list,
+      // the way to their page; the class's own coach, who may not open that page, gets none.
+      const coach = await member(sells, "Cleo Coach");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${sells.id}, ${coach.userId}, 'trainer', NULL)`;
+      await sql`UPDATE gym_class_sessions SET coach_user_id = ${coach.userId} WHERE id = ${later.id}`;
+      const listOf = async (who: Person) => {
+        const res = await inject("GET", `/v1/orgs/${sells.id}/class-sessions/${later.id}/bookings`, who.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return (JSON.parse(res.body) as { booked: { name: string; entryId: string | null; membership: string | null }[] }).booked;
+      };
+      expect((await listOf(sells.owner)).map((b) => [b.name, b.entryId, b.membership !== null])).toEqual([
+        ["Maya Pack", maya.entryId, true],
+        ["Zoe Gold", zoe.entryId, true],
+      ]);
+      expect((await listOf(coach)).map((b) => [b.name, b.entryId, b.membership])).toEqual([
+        ["Maya Pack", null, null],
+        ["Zoe Gold", null, null],
+      ]);
+
       // Without the number it only asks, naming the classes, and changes nothing.
       const ask = askedHeld(await cancelHeld(sells, maya.entryId, mayaGold, { when: "today" }));
       expect({ classes: ask.classes, booked: ask.booked, waiting: ask.waiting }).toEqual({ classes: 2, booked: 2, waiting: 0 });

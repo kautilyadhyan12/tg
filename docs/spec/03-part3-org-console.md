@@ -2654,7 +2654,10 @@ the Calendar draws its list under its name: Booked ("3 of 12 places"), the Waitl
 its order, and Cancelled late, from `GET …/class-sessions/:sessionId/bookings` (17c-i):
 staff with `schedule.manage` read what each person booked with, the class's own coach
 the names alone, any other staff are told who can see it; a cancelled class asks for no
-list, and a save reads it again. **A membership staff cancel on a person's page ends the
+list, and a save reads it again. A name opens that person's page over the Calendar
+(Kd's click-through): the list carries each person's record on the gym's list
+(`entryId`) for staff who hold `members.confirm`, and for nobody else; closing the page
+reads the class's list again. **A membership staff cancel on a person's page ends the
 places booked on it** in classes that have not started: cancelled today, all of them;
 cancelled on its last paid day, those on a day after it. A pack has those classes back
 and each place goes to the class's waitlist by the usual rule, in the cancel's own

@@ -13,6 +13,9 @@ const api = {
   getStaff: vi.fn(),
   getClassWeek: vi.fn(),
   getClassBookings: vi.fn(),
+  getMemberList: vi.fn(),
+  getMemberListEntry: vi.fn(),
+  getHeldMemberships: vi.fn(),
   changeClassDay: vi.fn(),
   cancelClassDay: vi.fn(),
   restoreClassDay: vi.fn(),
@@ -104,6 +107,7 @@ const person = (n, name, over = {}) => ({
   status: 'booked',
   membership: null,
   packCharged: null,
+  entryId: null,
   at: '2026-09-20T09:00:00.000Z',
   ...over,
 });
@@ -297,6 +301,34 @@ describe('a class on the Calendar opens who is booked on it', () => {
     await screen.findByRole('button', { name: 'Un-cancel' });
     expect(api.getClassBookings).not.toHaveBeenCalled();
     expect(screen.queryByTestId('class-bookings')).toBeNull();
+  });
+
+  it("a name opens that person's page over the Calendar, only where the server sent their record, and closing it reads the list again", async () => {
+    const MAYA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    api.getClassBookings.mockResolvedValue(bookings({ booked: [person(1, 'Maya Shah', { entryId: MAYA }), person(2, 'Leo Grant')] }));
+    // The page's own reads are left pending: this test is about which person is asked for.
+    const never = new Promise(() => {});
+    api.getMemberList.mockReset().mockReturnValue(never);
+    api.getMemberListEntry.mockReset().mockReturnValue(never);
+    api.getHeldMemberships.mockReset().mockReturnValue(never);
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    const list = within(await screen.findByTestId('class-bookings'));
+    // Leo is not on the gym's list: his name is words, not a button.
+    expect(list.queryByRole('button', { name: 'Open Leo Grant' })).toBeNull();
+    expect(list.getByText('Leo Grant')).toBeTruthy();
+    expect(api.getMemberListEntry).not.toHaveBeenCalled();
+    fireEvent.click(list.getByRole('button', { name: 'Open Maya Shah' }));
+    await waitFor(() => expect(api.getMemberListEntry).toHaveBeenCalledWith('g1', MAYA));
+    expect(api.getMemberList).toHaveBeenCalledWith('g1');
+    const page = await screen.findByRole('dialog');
+    // The class stays open under the page.
+    expect(screen.getByTestId('class-bookings')).toBeTruthy();
+    const before = api.getClassBookings.mock.calls.length;
+    fireEvent.click(within(page).getAllByRole('button', { name: /close/i })[0]);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(api.getClassBookings.mock.calls.length).toBeGreaterThan(before));
+    expect(api.getClassBookings).toHaveBeenLastCalledWith('g1', 'x1');
   });
 
   it('reads the list again after a save, since a bigger class takes people in from the waitlist', async () => {

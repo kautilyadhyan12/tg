@@ -477,6 +477,7 @@ export async function getSessionBookings(
   }
   if (!(await limit())) return null;
   if (session === null) throw classNotFound();
+  const opens = await holdsPrivilege(deps, gymId, staffId, "members.confirm");
   const [booked, waitlisted, late, lateTotal] = await Promise.all([
     repo.staffList(deps.sql, gymId, sessionId, CLASS_BOOKING_HOLDS_PLACE, 1000),
     repo.staffList(deps.sql, gymId, sessionId, ["waitlisted"], 1000),
@@ -494,6 +495,8 @@ export async function getSessionBookings(
         // What a person pays with is for staff who run the timetable, not for a coach's list.
         membership: manages ? r.membership : null,
         packCharged: manages ? r.packCharged : null,
+        // The way to a person's page, for staff who may open it.
+        entryId: opens ? r.entryId : null,
         at: r.at.toISOString(),
       };
     });

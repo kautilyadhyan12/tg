@@ -3,6 +3,7 @@ import { errorStatus, errorText } from '../../api/orgsApi';
 // WHO IS BOOKED ON A CLASS (spec Part 3 §13.6; ROADMAP 17c-iii): the words of the list a
 // class on the Calendar opens. Staff who manage classes read it with what each person
 // booked with; the class's own coach reads the names alone (the server sends no more).
+// A name opens the person's page for staff the server sent their record to.
 
 const count = (n) => (Number.isInteger(n) ? n.toLocaleString('en') : '0');
 

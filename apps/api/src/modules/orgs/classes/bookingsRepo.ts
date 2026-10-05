@@ -439,6 +439,8 @@ export interface StaffBookingRow {
   displayName: string;
   email: string | null;
   recordName: string | null;
+  /** Their record on the gym's list as it is now; null where it has gone. */
+  entryId: string | null;
   membership: string | null;
   packCharged: boolean;
   at: Date;
@@ -460,12 +462,13 @@ export async function staffList(
       display_name: string | null;
       email: string | null;
       record_name: string | null;
+      entry_id: string | null;
       membership: string | null;
       pack_charged: boolean;
       at: Date;
     }[]
   >`
-    SELECT b.id, b.status, b.pack_charged, COALESCE(b.cancelled_at, b.booked_at, b.created_at) AS at,
+    SELECT b.id, b.status, b.pack_charged, COALESCE(b.cancelled_at, b.booked_at, b.created_at) AS at, e.id AS entry_id,
            CASE WHEN u.status = 'active' THEN u.display_name END AS display_name,
            CASE WHEN u.status = 'active' THEN u.email::text END AS email,
            nullif(btrim(e.full_name), '') AS record_name,
@@ -484,6 +487,7 @@ export async function staffList(
     displayName: r.display_name ?? "",
     email: r.email,
     recordName: r.record_name,
+    entryId: r.entry_id,
     membership: r.membership,
     packCharged: r.pack_charged,
     at: r.at,

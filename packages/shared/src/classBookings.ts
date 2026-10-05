@@ -302,6 +302,9 @@ const staffBookingSchema = z
      *  It and `packCharged` are null for a coach reading their own class's list. */
     membership: z.string().nullable(),
     packCharged: z.boolean().nullable(),
+    /** Their record on the gym's list, for staff who may open a person's page
+     *  (`members.confirm`); null for anybody else, and where they are not on the list. */
+    entryId: z.string().uuid().nullable(),
     at: z.string().datetime(),
   })
   .strict();
