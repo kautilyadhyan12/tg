@@ -108,6 +108,14 @@ describe("the bad-words check", () => {
       "rag head",
       "f u c k",
       "f.u.c.k",
+      // The re-check: a look-alike letter, an accent, and "@" after the word.
+      "tоsser",
+      "tösser",
+      "pаki",
+      "tosser@",
+      "tosser$",
+      "tosssssssssser",
+      "ⓕⓤⓒⓚ",
     ];
     expect(refused.filter((text) => !hasBadWords(text))).toEqual([]);
   });
@@ -204,6 +212,23 @@ describe("the bad-words check", () => {
     expect(names.filter((name) => hasBadWords(`Did 3 sets of ${name} today`))).toEqual([]);
   });
 
+  it("reads the longest post a member can send, in its worst shapes, without holding the server", () => {
+    const shapes = ["ki" + "l".repeat(1998), "fuck".repeat(500), "ⓕⓤⓒⓚ".repeat(500), "to" + "s".repeat(1998), "a b ".repeat(500), "Words of a post. ".repeat(118).slice(0, 2000)];
+    for (const shape of shapes) {
+      // The quickest of five, so a pause in the test runner is not read as the check's cost.
+      // Measured at 0.4 to 3 ms; a pattern that reads a run twice took 19 to 58 ms.
+      let quickest = Infinity;
+      for (let run = 0; run < 5; run++) {
+        const started = performance.now();
+        badWordsIn(shape);
+        quickest = Math.min(quickest, performance.now() - started);
+      }
+      expect({ shape: shape.slice(0, 12), quick: quickest < 15 }).toEqual({ shape: shape.slice(0, 12), quick: true });
+    }
+    expect(hasBadWords("fuck".repeat(500))).toBe(true);
+    expect(hasBadWords("ki" + "l".repeat(1998))).toBe(false);
+  });
+
   it("names the word as its writer typed it, whole, each once and no more than five", () => {
     expect(badWordsIn("what a tosser, a real TOSSER")).toEqual(["tosser"]);
     expect(badWordsIn("Great class tonight")).toEqual([]);
@@ -218,6 +243,10 @@ describe("the bad-words check", () => {
     expect(badWordsIn("stop bullshitting")).toEqual(["bullshitting"]);
     expect(badWordsIn("you dickheads")).toEqual(["dickheads"]);
     expect(badWordsIn("Cucumber, cumin and a shitty attitude")).toEqual(["shitty"]);
+    // A capital that lower-cases to two characters before the word does not move its name.
+    expect(badWordsIn("İstanbul trip, what a tosser")).toEqual(["tosser"]);
+    expect(badWordsIn("tosser$ and tosser@")).toEqual(["tosser"]);
+    expect(badWordsIn("what a tossssssser")).toEqual(["tossssssser"]);
     const many = badWordsIn("tosser paki wetback raghead poofter coon spic");
     expect(many).toHaveLength(BAD_WORDS_SHOWN);
     expect(many.slice(0, 2)).toEqual(["tosser", "paki"]);

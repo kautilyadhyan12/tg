@@ -58,12 +58,13 @@ const ALLOWED = [
 
 const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** A listed phrase as a pattern: each letter once or more ("tossser"), and between its
- *  words a space, a line break, a hyphen, or nothing. */
+/** A listed phrase as a pattern: each letter up to three times ("tossser"; a longer run is
+ *  cut to three before it is read), and between its words a space, a line break, a hyphen,
+ *  or nothing. */
 const phrasePattern = (phrase: string): string =>
   phrase
     .split(" ")
-    .map((word) => Array.from(word, (letter) => `${escaped(letter)}+`).join(""))
+    .map((word) => Array.from(word, (letter) => `${escaped(letter)}{1,3}`).join(""))
     .join("[\\s\\-_.]*");
 
 /** Whole words only: a letter on either side is another word. A digit or a mark is not. */
@@ -89,23 +90,55 @@ const LETTER = /\p{L}/u;
 /** Marks that end a sentence or close a bracket, not part of a word as typed. */
 const TRAILING = /[!?.,;:)\]"']+$/;
 
-/** The text the checks read: characters nobody sees (a zero-width space, a soft hyphen, a
- *  combining stroke) taken out, so a word drawn as a listed word is read as one. */
+/** Cyrillic and Greek letters drawn like Latin ones, each to the letter it is read as. */
+const LOOK_ALIKE: Record<string, string> = {
+  "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "і": "i", "у": "y", "к": "k",
+  "м": "m", "т": "t", "н": "h", "в": "b", "ѕ": "s", "ј": "j",
+  "α": "a", "ο": "o", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ρ": "p", "τ": "t", "υ": "u", "χ": "x",
+};
+
+/** The text the checks read, in lower case: accents and characters nobody sees (a
+ *  zero-width space, a soft hyphen, a combining stroke) taken out and look-alike letters
+ *  turned to the ones they are read as, so a word drawn as a listed word is read as one.
+ *  Lower-cased here, before the marks go: a capital can become a letter and a mark. */
 function cleaned(text: string): string {
-  return text.normalize("NFKC").replace(/[\p{Cf}\p{M}]/gu, "");
-}
-
-const LETTER_FOR: Record<string, string> = { "0": "o", "3": "e", "4": "a", "5": "s", "@": "a", $: "s", "7": "t" };
-
-/** Lower case, with the digits and marks people write letters with turned back into them.
- *  Every swap keeps the length, so a place in this text is the same place in the cleaned one.
- *  "1" and "!" are an "i" only between letters: at a word's end they are a digit and a mark. */
-function plain(text: string): string {
   return text
+    .normalize("NFKD")
     .toLowerCase()
-    .replace(/[0345@$7]/g, (c) => LETTER_FOR[c] ?? c)
-    .replace(/(?<=[a-z])[1!](?=[a-z])/g, "i");
+    .replace(/[\p{Cf}\p{M}]/gu, "")
+    .replace(/[а-џα-ω]/g, (c) => LOOK_ALIKE[c] ?? c);
 }
+
+const LETTER_FOR: Record<string, string> = { "0": "o", "3": "e", "4": "a", "5": "s", "@": "a", $: "s", "7": "t", "1": "i", "!": "i" };
+
+/** The digits and marks people write letters with, turned back into them. Only between
+ *  letters ("p4ki", "a$$hole", "b!tch"): at a word's start or end they are a digit or a mark
+ *  ("tosser!", "tosser@", "tosser1"). Every swap keeps the length, so a place in this text
+ *  is the same place in the cleaned one. */
+function plain(text: string): string {
+  return text.replace(/(?<=[a-z])[0345@$71!]+(?=[a-z])/g, (run) => Array.from(run, (c) => LETTER_FOR[c] ?? c).join(""));
+}
+
+/** The text with a run of one character cut to three, and where each character left came
+ *  from: a pattern then never reads a long run twice. `at[i]` is the place of character `i`,
+ *  and `at[text.length]` the end. */
+function runsCut(text: string): { text: string; at: number[] } {
+  const kept: string[] = [];
+  const at: number[] = [];
+  let run = 0;
+  for (let i = 0; i < text.length; i++) {
+    run = i > 0 && text[i] === text[i - 1] ? run + 1 : 1;
+    if (run > 3) continue;
+    kept.push(text[i] ?? "");
+    at.push(i);
+  }
+  at.push(text.length);
+  return { text: kept.join(""), at };
+}
+
+/** No ordinary word is this long: a longer run of letters with a listed word in it is refused
+ *  for that word, and is not walked letter by letter. */
+const LONGEST_WORD = 40;
 
 interface Span {
   start: number;
@@ -114,42 +147,48 @@ interface Span {
   word: string;
 }
 
-/** The package's words in this text, each kept only where the typed word IS that word. */
 /** A run of one letter read as one, as the package reads it: "fuuuck" is "fuck". */
 const squeezed = (word: string): string => word.replace(/(.)\1+/g, "$1");
 
 /** The package reads "!" and "1" as an "i" and "(" as a "c" wherever they stand, so "cock!"
  *  is "cocki" to it and "(anal)" is "canal". Here they are a letter only between letters
  *  ("b!tch", "sh1t"); anywhere else they are blanked, which keeps every place. */
-const forPackage = (text: string): string => text.replace(/(?<!\p{L})[!(1|]|[!(1|](?!\p{L})/gu, " ");
+const forPackage = (text: string): string => text.replace(/(?<!\p{L})[!(1|]|[!(1|@](?!\p{L})/gu, " ");
 
+/** The package's words in this text, each kept only where the typed word IS that word. */
 function packageSpans(typedText: string): Span[] {
   const spans: Span[] = [];
   const text = forPackage(typedText);
   for (const match of PACKAGE.getAllMatches(text)) {
+    const matched = text.slice(match.startIndex, match.endIndex + 1);
     let start = match.startIndex;
     let end = match.endIndex + 1;
-    while (start > 0 && LETTER.test(text[start - 1] ?? "")) start--;
-    while (end < text.length && LETTER.test(text[end] ?? "")) end++;
-    if (!BEFORE.has(text.slice(start, match.startIndex).toLowerCase())) continue;
+    while (start > 0 && match.startIndex - start <= LONGEST_WORD && LETTER.test(text[start - 1] ?? "")) start--;
+    while (end < text.length && end - match.endIndex <= LONGEST_WORD && LETTER.test(text[end] ?? "")) end++;
+    if (end - start > LONGEST_WORD) {
+      spans.push({ start: match.startIndex, end: match.endIndex + 1, word: matched });
+      continue;
+    }
+    if (!BEFORE.has(text.slice(start, match.startIndex))) continue;
     // From where the listed word starts to the end of the typed word: the listed word (the
     // package matches some by their first letters only: "fellat", "bestial") and an ending.
     const typed = squeezed(plain(text.slice(match.startIndex, end)));
-    const listed = [englishDataset.getPayloadWithPhraseMetadata(match).phraseMetadata?.originalWord ?? "", text.slice(match.startIndex, match.endIndex + 1)]
+    const listed = [englishDataset.getPayloadWithPhraseMetadata(match).phraseMetadata?.originalWord ?? "", matched]
       .filter((word) => word !== "")
       .map((word) => squeezed(plain(word)));
     if (!listed.some((word) => typed.startsWith(word) && AFTER.has(typed.slice(word.length)))) continue;
-    spans.push({ start, end, word: text.slice(start, end).replace(TRAILING, "").toLowerCase() });
+    spans.push({ start, end, word: text.slice(start, end).replace(TRAILING, "") });
   }
   return spans;
 }
 
 /** This job's own words in this text. */
 function extraSpans(text: string): Span[] {
-  return Array.from(plain(text).matchAll(EXTRA), (match) => {
-    const start = match.index;
-    const end = start + match[0].length;
-    return { start, end, word: text.slice(start, end).replace(/\s+/g, " ").toLowerCase() };
+  const read = runsCut(plain(text));
+  return Array.from(read.text.matchAll(EXTRA), (match) => {
+    const start = read.at[match.index] ?? 0;
+    const end = read.at[match.index + match[0].length] ?? text.length;
+    return { start, end, word: text.slice(start, end).replace(/\s+/g, " ") };
   });
 }
 

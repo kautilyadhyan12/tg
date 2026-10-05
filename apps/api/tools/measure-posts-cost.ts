@@ -194,6 +194,9 @@ const reads: [string, () => Promise<unknown>][] = [
   ["member, who they blocked", () => getBlocked(deps, viewer, gymId)],
   // The word check on the longest post a member can write, clean, so every word is read.
   ["the word check, 2,000 characters", () => Promise.resolve(badWordsIn("Words of a post. ".repeat(118).slice(0, 2000)))],
+  // Its worst shapes at the same length: one letter run on, and a listed word with no spaces.
+  ["the word check, one letter x 1,998", () => Promise.resolve(badWordsIn("ki" + "l".repeat(1998)))],
+  ["the word check, a word x 500", () => Promise.resolve(badWordsIn("fuck".repeat(500)))],
 ];
 // A post the viewer did not write, to report: the same statement runs each time.
 const others = [...first.pinned, ...first.posts].find((p) => !p.own)?.id ?? "";
