@@ -1,13 +1,13 @@
 // WHAT HAPPENS TO BOOKINGS WHEN SOMETHING ELSE CHANGES (spec Part 3 §13.4; ROADMAP
 // 17c-ii-a): a freed place handed to the waitlist, a class staff cancelled or removed, a
-// class made bigger, a member who left.
+// class made bigger, a member who left, a membership staff cancelled (17c-iii).
 //
 // Every function here runs inside the caller's transaction, under the gym's row lock,
 // which the caller has taken. A pack's class is given back in the same transaction as the
 // booking that stops being charged for it, and a booking already ended is not found again,
 // so each class comes back once however often a change arrives.
 import type { Sql, TransactionSql } from "postgres";
-import { bookingTime, handsOverNow, pickCover, type Cover, type HeldCover } from "@app/shared";
+import { MEMBERSHIP_BOOKINGS_ENDING_SHOWN, bookingTime, handsOverNow, pickCover, type Cover, type HeldCover } from "@app/shared";
 import { chargePack, givePackClassesBack } from "../memberships/heldRepo.js";
 import * as repo from "./bookingsRepo.js";
 
@@ -175,4 +175,37 @@ export async function endLeaversBookings(tx: TransactionSql, gymId: string, user
   await handOverClasses(tx, gymId, freed, at);
   const waiting = ended.filter((b) => b.was === "waitlisted").length;
   return { booked: ended.length - waiting, waiting, packClasses };
+}
+
+/** The bookings a change would end, as the 409 that asks first carries them. */
+export interface HasBookings {
+  kind: "has_bookings";
+  ending: repo.EndingCounts & { people: repo.EndingPersonRow[] };
+}
+
+/** The question a membership's cancel must have answered first: null when no place is
+ *  booked on it, or when `confirmed` is their number as counted here, under the gym's
+ *  lock. Asked before the cancel's first write. */
+export async function membershipBookingsAsk(
+  tx: TransactionSql,
+  gymId: string,
+  scope: repo.MembershipScope,
+  confirmed: number | null,
+): Promise<HasBookings | null> {
+  const counts = await repo.endingCounts(tx, gymId, scope);
+  if (counts.booked === 0 || counts.booked === confirmed) return null;
+  return {
+    kind: "has_bookings",
+    ending: { ...counts, people: await repo.endingPeople(tx, gymId, scope, null, MEMBERSHIP_BOOKINGS_ENDING_SHOWN) },
+  };
+}
+
+/** STAFF CANCELLED THIS MEMBERSHIP: the places booked on it end, a pack has those classes
+ *  back, and each place goes to the class's waitlist by the usual rule. A place the person
+ *  booked on another membership is not on this one and stays. */
+export async function endMembershipBookings(tx: TransactionSql, gymId: string, scope: repo.MembershipScope, now: Date): Promise<BookingsEnded> {
+  const ended = await repo.endBookings(tx, gymId, scope, now);
+  const packClasses = await giveBack(tx, gymId, ended, now);
+  await handOverClasses(tx, gymId, [...new Set(ended.map((b) => b.sessionId))], now);
+  return { booked: ended.length, waiting: 0, packClasses };
 }

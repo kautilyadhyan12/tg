@@ -13,6 +13,7 @@ import {
   MEMBER_LIST_BY_HAND_WORDS,
   heldMembershipView,
   heldMembershipsResponseSchema,
+  type ClassBookingsEnding,
   type GiveHeldMembershipRequest,
   type HeldMembershipEvent,
   type HeldMembershipShown,
@@ -20,6 +21,7 @@ import {
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import * as repo from "./heldRepo.js";
 
 export interface HeldDeps {
@@ -163,12 +165,16 @@ export async function moveHeldMembership(
   entryId: string,
   membershipId: string,
   event: HeldMembershipEvent,
-): Promise<HeldMembershipsResponse> {
+  confirmBookings: number | null = null,
+): Promise<BookingsAnswer<HeldMembershipsResponse>> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
-  throwOnFailure(
-    await repo.moveHeld(deps.sql, { gymId, entryId, membershipId, event, today, actorUserId: userId, now }),
-  );
-  return await readOr404(deps, gymId, entryId, today);
+  const outcome = await repo.moveHeld(deps.sql, { gymId, entryId, membershipId, event, today, confirmBookings, actorUserId: userId, now });
+  if (outcome.kind === "has_bookings") {
+    const ending: ClassBookingsEnding = { ...outcome.ending, people: outcome.ending.people.map(endingPerson) };
+    return { kind: "bookings", ending };
+  }
+  throwOnFailure(outcome);
+  return { kind: "ok", body: await readOr404(deps, gymId, entryId, today) };
 }

@@ -2,15 +2,19 @@ import { useEffect, useState } from 'react';
 import { Check, Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import MembershipChoice from './MembershipChoice';
+import { ENDING_NOT_TOLD } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
 import {
+  ENDING_CLASSES_SHOWN,
   askWords,
   classesLine,
   datesLine,
   doneWords,
+  endingWords,
   giveBody,
   isLive,
   listedRow,
+  membershipBookingsAsked,
   membershipChoice,
   newRequestKey,
   paymentLine,
@@ -21,6 +25,8 @@ import {
 // hold from the gym's price list, each with the one or two buttons its state calls for,
 // and Add membership. Every date and every "can" is the server's, worked out on the gym's
 // own day; a press asks first, in a box under the membership it is about, naming the person.
+// A cancel that would end classes booked with the membership asks once more, naming them
+// (ROADMAP 17c-iii).
 //
 // Drawn only where there is something to show: a gym with no membership types, and a
 // person who holds none, see no box at all (a gym that keeps its other software uses
@@ -36,7 +42,7 @@ const PLAIN = 'c-btn c-btn-s';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 const DANGER = 'c-btn c-btn-danger';
 
-export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
+export default function MemberMemberships({ gymId, entryId, name, readOnly, clockFormat }) {
   /** The answer on screen, and the record it is about: never shown under another. */
   const [held, setHeld] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -48,6 +54,8 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
   const [notice, setNotice] = useState(null);
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
+  /** The classes a cancel would end, when the server asked: { id, later, ending, all }. */
+  const [ending, setEnding] = useState(null);
 
   useEffect(() => {
     let live = true;
@@ -110,8 +118,16 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
       setHeld({ entryId: asked, ...res.data });
       setOpen(null);
       setForm(null);
+      setEnding(null);
       setNotice(doneWords(what, m));
     } catch (err) {
+      // Classes are booked with it: the box names them and waits for its own button.
+      const booked = m === null ? null : membershipBookingsAsked(err);
+      if (booked !== null) {
+        setEnding({ id: m.id, later: what === 'cancelLater', ending: booked, all: false });
+        return;
+      }
+      setEnding(null);
       setRefusal(errorText(err, "We couldn't save that. Please try again."));
       // Somebody else changed it first: show it as it is now.
       if (errorCode(err) === 'held_membership_changed' || errorCode(err) === 'membership_type_not_found') {
@@ -128,6 +144,7 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
   const ask = (what, m) => {
     setNotice(null);
     setRefusal(null);
+    setEnding(null);
     setOpen({ what, id: m.id });
   };
 
@@ -142,9 +159,61 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly }) {
     setRefusal(null);
     setOpen(null);
     setForm(null);
+    setEnding(null);
+  };
+
+  /** The second question of a cancel: the classes booked with the membership. */
+  const renderEnding = (m) => {
+    const words = endingWords(ending.ending, m, name, ending.later, clockFormat);
+    const rows = ending.all ? words.rows : words.rows.slice(0, ENDING_CLASSES_SHOWN);
+    const hidden = words.rows.length - rows.length;
+    const body = { when: ending.later ? 'period_end' : 'today', confirmBookings: ending.ending.booked };
+    return (
+      <div
+        role="group"
+        aria-label="Bookings that will end"
+        className="rounded-[14px] p-3 flex flex-col gap-2"
+        style={{ background: 'var(--raise)' }}
+        data-testid="held-ending"
+      >
+        <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+        <p className="c-s14 c-t2 m-0">{words.change}</p>
+        <ul className="m-0 p-0 list-none flex flex-col gap-1" style={ending.all ? { maxHeight: 220, overflowY: 'auto' } : undefined}>
+          {rows.map((row) => (
+            <li key={row.id} className="c-s15 c-t1 c-ell">
+              {row.line}
+            </li>
+          ))}
+        </ul>
+        {hidden > 0 ? (
+          <p className="c-s14 c-t2 m-0">
+            {`and ${(hidden + words.unlisted).toLocaleString('en')} more · `}
+            <button type="button" className="c-btn-link c-w6" onClick={() => setEnding({ ...ending, all: true })}>
+              See all
+            </button>
+          </p>
+        ) : words.unlisted > 0 ? (
+          <p className="c-s14 c-t2 m-0">{`and ${words.unlisted.toLocaleString('en')} more`}</p>
+        ) : null}
+        <p className="c-s14 c-t2 m-0">{words.kept}</p>
+        <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
+          {ENDING_NOT_TOLD}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={DANGER} disabled={busy} onClick={() => void change(ending.later ? 'cancelLater' : 'cancel', m, 'cancel', body)}>
+            {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            {words.button}
+          </button>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+            Keep it
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const renderAsk = (m) => {
+    if (ending !== null && ending.id === m.id) return renderEnding(m);
     const words = askWords(open.what, m, name, today);
     if (words === null) return null;
     const act = {

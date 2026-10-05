@@ -2649,6 +2649,22 @@ changes what the others say; a free place that is the first in line's reads "Ful
 anybody else; waiting reads "On the waitlist, not booked", never as a booking. It is a
 plain screen, the member web's until the phone app has its own. Not on it yet: the
 class's coach.)*
+*(17c-iii, 2026-10-05: **who is booked, and a cancelled membership.** A class opened on
+the Calendar draws its list under its name: Booked ("3 of 12 places"), the Waitlist in
+its order, and Cancelled late, from `GET …/class-sessions/:sessionId/bookings` (17c-i):
+staff with `schedule.manage` read what each person booked with, the class's own coach
+the names alone, any other staff are told who can see it; a cancelled class asks for no
+list, and a save reads it again. **A membership staff cancel on a person's page ends the
+places booked on it** in classes that have not started: cancelled today, all of them;
+cancelled on its last paid day, those on a day after it. A pack has those classes back
+and each place goes to the class's waitlist by the usual rule, in the cancel's own
+transaction under the gym's lock. A place booked on the person's other membership or
+pack is not on this one and stays, as does a class that has started; somebody waiting
+has no membership on their row, so no waitlist place ends. The cancel first answers 409
+`membership_has_bookings` with `ending` (the classes, a hundred at most) and does nothing
+until the request sends `confirmBookings` equal to their number, counted again under the
+lock; the box names the classes, says what stays, and has its own button. Not done: a
+membership frozen, or one whose last payment mark is taken back, keeps its bookings.)*
 
 ### 13.7 Cost at full size, cards, the two extra passes
 

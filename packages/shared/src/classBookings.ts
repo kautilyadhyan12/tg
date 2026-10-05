@@ -367,6 +367,12 @@ export const classBookingsEndingSchema = z
   .strict();
 export type ClassBookingsEnding = z.infer<typeof classBookingsEndingSchema>;
 
+/** A membership staff cancel ends the bookings made on it (17c-iii): the 409 that asks
+ *  first carries `ending` as above, its `people` one row a class of that one person, as
+ *  many as this at most. */
+export const MEMBERSHIP_HAS_BOOKINGS_ERROR = "membership_has_bookings";
+export const MEMBERSHIP_BOOKINGS_ENDING_SHOWN = 100;
+
 export const CLASS_BOOKINGS_ENDING_SCOPES = ["session", "slot", "class"] as const;
 
 /** The whole list behind a box's "See all": one class (`session`), a time slot's coming

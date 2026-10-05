@@ -12,6 +12,7 @@ const api = {
   getClasses: vi.fn(),
   getStaff: vi.fn(),
   getClassWeek: vi.fn(),
+  getClassBookings: vi.fn(),
   changeClassDay: vi.fn(),
   cancelClassDay: vi.fn(),
   restoreClassDay: vi.fn(),
@@ -96,6 +97,31 @@ const YOGA_WED = day({
 const SPIN_FRI = day({ id: 'x3', localDate: '2026-09-25', startMinute: 1170, minutes: 90, places: 8, changedAlone: true });
 const SPIN_MON = day({ id: 'x0', localDate: '2026-09-21', started: true });
 
+const person = (n, name, over = {}) => ({
+  bookingId: `00000000-0000-4000-8000-0000000001${String(n).padStart(2, '0')}`,
+  name,
+  initials: '',
+  status: 'booked',
+  membership: null,
+  packCharged: null,
+  at: '2026-09-20T09:00:00.000Z',
+  ...over,
+});
+const bookings = (over = {}) => ({
+  data: {
+    sessionId: '00000000-0000-4000-8000-0000000000aa',
+    className: 'Spin',
+    startsAt: '2026-09-22T17:00:00.000Z',
+    cancelled: false,
+    places: 12,
+    booked: [],
+    waitlisted: [],
+    lateCancelled: [],
+    lateCancelledTotal: 0,
+    ...over,
+  },
+});
+
 const week = (over = {}) => ({
   data: {
     timezone: 'Europe/London',
@@ -127,6 +153,7 @@ beforeEach(() => {
     data: { staff: [{ userId: 'u8', displayName: 'Dana Okafor', email: 'd@example.com', role: 'trainer' }] },
   });
   api.getClassWeek.mockReset().mockResolvedValue(week());
+  api.getClassBookings.mockReset().mockResolvedValue(bookings());
   api.changeClassDay.mockReset().mockResolvedValue(week());
   api.cancelClassDay.mockReset().mockResolvedValue(week());
   api.restoreClassDay.mockReset().mockResolvedValue(week());
@@ -194,6 +221,95 @@ describe('closing and backing out never change a class', () => {
     expect(api.cancelClassDay).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
     await waitFor(() => expect(api.cancelClassDay).toHaveBeenCalledWith('g1', 'x1'));
+  });
+});
+
+// WHO IS BOOKED (17c-iii). The worst this list could do: draw one class's people under
+// another class, or word somebody waiting as booked.
+describe('a class on the Calendar opens who is booked on it', () => {
+  it('lists who is booked, the waitlist in its order and the late cancels, each under its own heading', async () => {
+    api.getClassBookings.mockResolvedValue(
+      bookings({
+        booked: [
+          person(1, 'Maya Shah', { membership: 'Gold Monthly', packCharged: false }),
+          person(2, 'Leo Grant', { membership: '10 classes', packCharged: true }),
+          person(3, null),
+        ],
+        waitlisted: [person(4, 'Tom Reed', { status: 'waitlisted' }), person(5, 'Sara Cole', { status: 'waitlisted' })],
+        lateCancelled: [person(6, 'Ana Diaz', { status: 'late_cancelled' })],
+        lateCancelledTotal: 1,
+      }),
+    );
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    const list = within(await screen.findByTestId('class-bookings'));
+    expect(api.getClassBookings).toHaveBeenCalledWith('g1', 'x1');
+    const groups = list.getAllByRole('list').map((ol) => within(ol).getAllByRole('listitem').map((li) => li.textContent));
+    expect(list.getByText('Booked · 3 of 12 places')).toBeTruthy();
+    expect(list.getByText('Waitlist · 2')).toBeTruthy();
+    expect(list.getByText('Cancelled late · 1')).toBeTruthy();
+    expect(groups).toEqual([
+      ['Maya ShahGold Monthly', 'Leo Grant10 classes · 1 class used from this pack', 'No name'],
+      ['1.Tom Reed', '2.Sara Cole'],
+      ['Ana Diaz'],
+    ]);
+  });
+
+  it("another class opened while the first one's list is still on its way never shows the first one's people", async () => {
+    let answerSpin;
+    api.getClassBookings.mockImplementation((_gym, id) =>
+      id === 'x1'
+        ? new Promise((resolve) => {
+            answerSpin = resolve;
+          })
+        : Promise.resolve(bookings({ booked: [person(7, 'Friday Person')], places: 8 })),
+    );
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    await waitFor(() => expect(answerSpin).toBeTypeOf('function'));
+    await openDay('Spin on Fri 25 Sep 2026 at 19:30, changed');
+    expect(await screen.findByText('Friday Person')).toBeTruthy();
+    answerSpin(bookings({ booked: [person(1, 'Tuesday Person')] }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText('Tuesday Person')).toBeNull();
+    expect(screen.getByText('Booked · 1 of 8 places')).toBeTruthy();
+  });
+
+  it('says so when nobody has booked, and a class with no limit counts people without "places"', async () => {
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    expect(await screen.findByText('Nobody has booked this class yet.')).toBeTruthy();
+    cleanup();
+    resetConsoleOrgs();
+    api.getClassBookings.mockResolvedValue(bookings({ places: null, booked: [person(1, 'Maya Shah')] }));
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    expect(await screen.findByText('Booked · 1')).toBeTruthy();
+  });
+
+  it('staff the server refuses are told who can see the list, and a cancelled class asks for none', async () => {
+    api.getClassBookings.mockRejectedValue({ response: { status: 403, data: { error: 'forbidden', message: "Your role doesn't allow that." } } });
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    expect((await screen.findByTestId('class-bookings-refused')).textContent).toBe('Only this class’s coach and staff who can change classes see who is booked.');
+    api.getClassBookings.mockClear();
+    await openDay('Yoga on Wed 23 Sep 2026 at 07:00, cancelled');
+    await screen.findByRole('button', { name: 'Un-cancel' });
+    expect(api.getClassBookings).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('class-bookings')).toBeNull();
+  });
+
+  it('reads the list again after a save, since a bigger class takes people in from the waitlist', async () => {
+    api.getClassBookings.mockResolvedValueOnce(bookings({ booked: [person(1, 'Maya Shah')], waitlisted: [person(4, 'Tom Reed', { status: 'waitlisted' })], places: 1 }));
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    expect(await screen.findByText('Waitlist · 1')).toBeTruthy();
+    api.getClassBookings.mockResolvedValueOnce(bookings({ booked: [person(1, 'Maya Shah'), person(4, 'Tom Reed')], places: 12 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Booked · 2 of 12 places')).toBeTruthy();
+    expect(screen.queryByText('Waitlist · 1')).toBeNull();
+    expect(api.getClassBookings).toHaveBeenCalledTimes(2);
   });
 });
 

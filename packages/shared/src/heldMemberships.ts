@@ -629,7 +629,11 @@ export const giveHeldMembershipRequestSchema = z
   .strict();
 export type GiveHeldMembershipRequest = z.infer<typeof giveHeldMembershipRequestSchema>;
 
-export const cancelHeldMembershipRequestSchema = z.object({ when: z.enum(["today", "period_end"]) }).strict();
+/** `confirmBookings`: the number of bookings the screen was told the cancel would end
+ *  (409 `membership_has_bookings`), counted again under the gym's lock. */
+export const cancelHeldMembershipRequestSchema = z
+  .object({ when: z.enum(["today", "period_end"]), confirmBookings: z.number().int().min(1).max(1_000_000).optional() })
+  .strict();
 export type CancelHeldMembershipRequest = z.infer<typeof cancelHeldMembershipRequestSchema>;
 
 export const paidHeldMembershipRequestSchema = z

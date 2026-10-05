@@ -697,4 +697,181 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
     },
     T,
   );
+
+  // ── A MEMBERSHIP STAFF CANCEL (ROADMAP 17c-iii) ──
+  //
+  // The worst thing this job could do to a real person: staff cancel somebody's monthly
+  // membership and the class they booked with the pack they paid for goes with it.
+
+  /** A monthly membership type that includes every class without counting. */
+  const monthlyTypeOf = async (gym: Gym): Promise<string> => {
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO gym_membership_types
+        (gym_id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, access, bookings_limit, bookings_period, covers_all_classes)
+      VALUES (${gym.id}, ${`Gold ${uniq()}`}, 'recurring', 4999, 'GBP', 1, 'month', NULL, NULL, 'all_classes', NULL, NULL, true)
+      RETURNING id`;
+    if (row === undefined) throw new Error("no type");
+    return row.id;
+  };
+  /** That membership held from `daysAgo`, its first month paid. */
+  const holdMonthly = async (gym: Gym, entryId: string, typeId: string, daysAgo = 5): Promise<string> => {
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO gym_held_memberships
+        (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews)
+      VALUES (${gym.id}, ${entryId}, ${typeId}, gen_random_uuid(), 'recurring', 4999, 'GBP', 1, 'month',
+              ((now() AT TIME ZONE 'Europe/London')::date - ${daysAgo}::int), 'active', 1, true)
+      RETURNING id`;
+    if (row === undefined) throw new Error("no membership");
+    return row.id;
+  };
+  const cancelHeld = (gym: Gym, entryId: string, heldId: string, body: Record<string, unknown>, who: Person = gym.owner, target = api()) =>
+    inject("POST", `/v1/orgs/${gym.id}/member-list/entries/${entryId}/memberships/${heldId}/cancel`, who.cookies, body, target);
+  const askedHeld = (res: { statusCode: number; body: string }): ClassBookingsEnding => {
+    expect([res.statusCode, errorOf(res)], res.body).toEqual([409, "membership_has_bookings"]);
+    return (JSON.parse(res.body) as { ending: ClassBookingsEnding }).ending;
+  };
+  /** One person's booking of one class, as the table has it. */
+  const bookingOf = async (who: Person, sessionId: string) => {
+    const rows = await sql<{ status: string; held: string | null; charged: boolean }[]>`
+      SELECT status, held_membership_id AS held, pack_charged AS charged FROM gym_class_bookings
+      WHERE session_id = ${sessionId} AND user_id = ${who.userId} ORDER BY seq`;
+    return rows.map((r) => ({ status: r.status, held: r.held, charged: r.charged }));
+  };
+  const heldStatus = async (heldId: string) => {
+    const [row] = await sql<{ status: string; renews: boolean }[]>`SELECT status, renews FROM gym_held_memberships WHERE id = ${heldId}`;
+    return row;
+  };
+
+  it(
+    "staff cancel a monthly membership: it asks first, then only the classes booked on IT end, each once, and a class booked on the person's pack stays",
+    async () => {
+      const gold = await monthlyTypeOf(sells);
+      const maya = await packed(sells, packType, "Maya Pack", 5);
+      const onPack = await classAt(sells, 3 * DAY, 10);
+      const full = await classAt(sells, 4 * DAY, 1);
+      const later = await classAt(sells, 5 * DAY, 10);
+      const begun = await classAt(sells, -1, 10);
+
+      // Booked while the pack is all she holds: this class is the pack's.
+      expect(await booked(sells, maya, onPack.id)).toBe("booked");
+      expect(await left(maya.pack)).toBe(4);
+      // Then a monthly membership, which pays for a class before a pack does.
+      const mayaGold = await holdMonthly(sells, maya.entryId, gold);
+      expect(await booked(sells, maya, full.id)).toBe("booked");
+      expect(await booked(sells, maya, later.id)).toBe("booked");
+      expect(await left(maya.pack)).toBe(4);
+      expect((await bookingOf(maya, onPack.id))[0]).toEqual({ status: "booked", held: maya.pack, charged: true });
+      expect((await bookingOf(maya, full.id))[0]).toEqual({ status: "booked", held: mayaGold, charged: false });
+      // A class that has started, booked on the same membership: history.
+      await sql`
+        INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, request_key, status, held_membership_id, pack_charged, created_at, booked_at)
+        VALUES (${sells.id}, ${begun.id}, ${maya.userId}, ${maya.entryId}, gen_random_uuid(), 'booked', ${mayaGold}, false, now(), now())`;
+      // Tom waits for the full class; Zoe holds the same kind of membership and a place.
+      const tom = await packed(sells, packType, "Tom Waiting", 5);
+      expect(await booked(sells, tom, full.id, true)).toBe("waitlisted");
+      const zoe = await listed(sells, "Zoe Gold");
+      const zoeGold = await holdMonthly(sells, zoe.entryId, gold);
+      expect(await booked(sells, zoe, later.id)).toBe("booked");
+
+      // Without the number it only asks, naming the classes, and changes nothing.
+      const ask = askedHeld(await cancelHeld(sells, maya.entryId, mayaGold, { when: "today" }));
+      expect({ classes: ask.classes, booked: ask.booked, waiting: ask.waiting }).toEqual({ classes: 2, booked: 2, waiting: 0 });
+      expect(ask.people.map((p) => [p.name, p.waiting, p.localStartMinute])).toEqual([
+        ["Maya Pack", false, full.minute],
+        ["Maya Pack", false, later.minute],
+      ]);
+      // A number that is not theirs is asked again.
+      expect(askedHeld(await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: 3 })).booked).toBe(2);
+      expect((await heldStatus(mayaGold))?.status).toBe("active");
+      expect(await tally(full.id)).toEqual({ booked: 1, waitlisted: 1 });
+
+      // Nobody outside the gym's staff cancels it, with the right number or without.
+      const stranger = await signedIn("Stranger");
+      for (const who of [stranger, open.owner, zoe]) {
+        const res = await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: 2 }, who);
+        expect([403, 404], who.name).toContain(res.statusCode);
+      }
+      expect((await inject("POST", `/v1/orgs/${sells.id}/member-list/entries/${maya.entryId}/memberships/${mayaGold}/cancel`, {}, { when: "today" })).statusCode).toBe(401);
+      // Another gym's owner, through their own gym's address, finds no such membership.
+      expect((await inject("POST", `/v1/orgs/${open.id}/member-list/entries/${maya.entryId}/memberships/${mayaGold}/cancel`, open.owner.cookies, { when: "today", confirmBookings: 2 })).statusCode).toBe(404);
+      expect((await heldStatus(mayaGold))?.status).toBe("active");
+      expect(await tally(later.id)).toEqual({ booked: 2 });
+
+      // Two staff cancels on two servers, at the instant Maya cancels one class herself. A
+      // cancel that lost the race is told the new number and sends it.
+      const staffCancel = async (n: number): Promise<void> => {
+        let confirm = 2;
+        for (let tries = 0; tries < 20; tries++) {
+          const res = await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: confirm }, sells.owner, either(n));
+          if (res.statusCode === 200) return;
+          confirm = askedHeld(res).booked;
+        }
+        throw new Error("the membership was never cancelled");
+      };
+      await Promise.all([staffCancel(0), staffCancel(1), cancel(sells, maya, later.id, either(1))]);
+
+      expect(await heldStatus(mayaGold)).toEqual({ status: "cancelled", renews: true });
+      // The pack's class is hers still, and the pack was neither charged again nor given a class.
+      expect(await bookingOf(maya, onPack.id)).toEqual([{ status: "booked", held: maya.pack, charged: true }]);
+      expect(await left(maya.pack)).toBe(4);
+      // The two on the membership ended, and the full class's place went to Tom, charged once.
+      expect((await bookingOf(maya, full.id)).map((b) => b.status)).toEqual(["cancelled"]);
+      expect((await bookingOf(maya, later.id)).map((b) => b.status)).toEqual(["cancelled"]);
+      expect(await bookingOf(tom, full.id)).toEqual([{ status: "booked", held: tom.pack, charged: true }]);
+      expect(await left(tom.pack)).toBe(4);
+      // The class that had started keeps its row, and Zoe's membership and place are hers.
+      expect((await bookingOf(maya, begun.id)).map((b) => b.status)).toEqual(["booked"]);
+      expect(await bookingOf(zoe, later.id)).toEqual([{ status: "booked", held: zoeGold, charged: false }]);
+      expect((await heldStatus(zoeGold))?.status).toBe("active");
+
+      // The cancel arriving again changes nothing.
+      expect((await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: 2 })).statusCode).toBe(200);
+      expect(await left(tom.pack)).toBe(4);
+      expect(await left(maya.pack)).toBe(4);
+      expect(await tally(full.id)).toEqual({ booked: 1, cancelled: 1 });
+    },
+    T,
+  );
+
+  it(
+    "a membership cancelled on its last paid day keeps the classes up to that day and ends the ones after it; a cancelled pack ends its classes and nobody is asked where nothing is booked",
+    async () => {
+      const gold = await monthlyTypeOf(sells);
+      const ana = await listed(sells, "Ana Monthly");
+      // Twenty days into a paid month: its last day is some ten days on.
+      const anaGold = await holdMonthly(sells, ana.entryId, gold, 20);
+      const soon = await classAt(sells, 3 * DAY, 10);
+      const after = await classAt(sells, 15 * DAY, 10);
+      expect(await booked(sells, ana, soon.id)).toBe("booked");
+      // Booked when the membership still renewed (booking opens seven days ahead, so by hand).
+      await sql`
+        INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, request_key, status, held_membership_id, pack_charged, created_at, booked_at)
+        VALUES (${sells.id}, ${after.id}, ${ana.userId}, ${ana.entryId}, gen_random_uuid(), 'booked', ${anaGold}, false, now(), now())`;
+
+      const ask = askedHeld(await cancelHeld(sells, ana.entryId, anaGold, { when: "period_end" }));
+      expect({ classes: ask.classes, booked: ask.booked }).toEqual({ classes: 1, booked: 1 });
+      expect(ask.people.map((p) => p.localStartMinute)).toEqual([after.minute]);
+      expect(await heldStatus(anaGold)).toEqual({ status: "active", renews: true });
+      expect((await cancelHeld(sells, ana.entryId, anaGold, { when: "period_end", confirmBookings: 1 })).statusCode).toBe(200);
+      expect(await heldStatus(anaGold)).toEqual({ status: "active", renews: false });
+      expect((await bookingOf(ana, soon.id)).map((b) => b.status)).toEqual(["booked"]);
+      expect((await bookingOf(ana, after.id)).map((b) => b.status)).toEqual(["cancelled"]);
+
+      // A pack cancelled: its class ends, is no longer charged, and is back on the pack's count.
+      const pat = await packed(sells, packType, "Pat Pack", 5);
+      expect(await booked(sells, pat, soon.id)).toBe("booked");
+      expect(await left(pat.pack)).toBe(4);
+      expect(askedHeld(await cancelHeld(sells, pat.entryId, pat.pack, { when: "today" })).booked).toBe(1);
+      expect((await cancelHeld(sells, pat.entryId, pat.pack, { when: "today", confirmBookings: 1 })).statusCode).toBe(200);
+      expect(await bookingOf(pat, soon.id)).toEqual([{ status: "cancelled", held: pat.pack, charged: false }]);
+      expect([(await heldStatus(pat.pack))?.status, await left(pat.pack)]).toEqual(["cancelled", 5]);
+
+      // Nothing booked on it: cancelled at once, and a number sent anyway does not stop it.
+      const sam = await listed(sells, "Sam Monthly");
+      const samGold = await holdMonthly(sells, sam.entryId, gold);
+      expect((await cancelHeld(sells, sam.entryId, samGold, { when: "today", confirmBookings: 4 })).statusCode).toBe(200);
+      expect((await heldStatus(samGold))?.status).toBe("cancelled");
+    },
+    T,
+  );
 });

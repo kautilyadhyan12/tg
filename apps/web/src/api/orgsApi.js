@@ -79,6 +79,7 @@ import {
   notMeInvitationResponseSchema,
   classBookingSettingsResponseSchema,
   classBookingsEndingResponseSchema,
+  classSessionBookingsResponseSchema,
   gymClassesResponseSchema,
   gymClassMutationResponseSchema,
   gymClassWeekResponseSchema,
@@ -1635,6 +1636,16 @@ export const orgService = {
       gymClassWeekResponseSchema,
       'that day',
       authApi.post(`/v1/orgs/${gymId}/class-sessions/${sessionId}/cancel`, confirmBookingsOf(confirmBookings)),
+    ),
+
+  /** GET …/class-sessions/:sessionId/bookings — who is booked on one class, who is
+   *  waiting and who cancelled late: for `schedule.manage`, and for the class's own coach
+   *  (403 for other staff). */
+  getClassBookings: (gymId, sessionId) =>
+    readThrough(
+      classSessionBookingsResponseSchema,
+      'who is booked',
+      authApi.get(`/v1/orgs/${gymId}/class-sessions/${sessionId}/bookings`),
     ),
 
   /** GET …/class-bookings/ending — everybody whose booking a change to the timetable

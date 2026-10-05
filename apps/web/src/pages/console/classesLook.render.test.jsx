@@ -13,6 +13,7 @@ const api = {
   getClasses: vi.fn(),
   getStaff: vi.fn(),
   getClassWeek: vi.fn(),
+  getClassBookings: vi.fn(),
 };
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -129,6 +130,9 @@ beforeEach(() => {
   api.getClasses.mockReset().mockResolvedValue(timetable);
   api.getStaff.mockReset().mockResolvedValue({ data: { staff: [] } });
   api.getClassWeek.mockReset().mockResolvedValue(week);
+  api.getClassBookings.mockReset().mockResolvedValue({
+  data: { sessionId: '00000000-0000-4000-8000-0000000000aa', className: 'Spin', startsAt: '2026-09-22T17:00:00.000Z', cancelled: false, places: 12, booked: [], waitlisted: [], lateCancelled: [], lateCancelledTotal: 0 },
+});
 });
 afterEach(() => {
   cleanup();

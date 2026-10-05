@@ -29,6 +29,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import {
+  MEMBERSHIP_HAS_BOOKINGS_ERROR,
   cancelHeldMembershipRequestSchema,
   giveHeldMembershipRequestSchema,
   membershipLinkPreviewRequestSchema,
@@ -73,6 +74,18 @@ function requireUserId(req: FastifyRequest): string {
   const userId = req.authUser?.id;
   if (userId === undefined) throw new Error("authenticate preHandler did not run");
   return userId;
+}
+
+/** A change to one membership answered: the person's memberships, or the 409 a cancel
+ *  answers while it would end bookings nobody has confirmed. */
+function sendHeld(reply: FastifyReply, req: FastifyRequest, answer: Awaited<ReturnType<typeof held.moveHeldMembership>>) {
+  if (answer.kind === "ok") return reply.status(200).send(answer.body);
+  return reply.status(409).send({
+    error: MEMBERSHIP_HAS_BOOKINGS_ERROR,
+    message: "They have classes booked on this membership. Those bookings will end if you go ahead.",
+    ending: answer.ending,
+    requestId: req.id,
+  });
 }
 
 export interface MembershipRouteDeps {
@@ -186,7 +199,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
   app.post(`${heldUrl}/:membershipId/freeze`, heldGuarded, async (req, reply) => {
     const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const list = await held.moveHeldMembership(
+    const answer = await held.moveHeldMembership(
       heldDeps,
       requireUserId(req),
       params.gymId,
@@ -194,13 +207,13 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       params.membershipId,
       { type: "freeze" },
     );
-    return reply.status(200).send(list);
+    return sendHeld(reply, req, answer);
   });
 
   app.post(`${heldUrl}/:membershipId/unfreeze`, heldGuarded, async (req, reply) => {
     const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const list = await held.moveHeldMembership(
+    const answer = await held.moveHeldMembership(
       heldDeps,
       requireUserId(req),
       params.gymId,
@@ -208,7 +221,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       params.membershipId,
       { type: "unfreeze" },
     );
-    return reply.status(200).send(list);
+    return sendHeld(reply, req, answer);
   });
 
   app.post(`${heldUrl}/:membershipId/cancel`, heldGuarded, async (req, reply) => {
@@ -216,15 +229,16 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     if (params === null) return;
     const body = parseOr400(cancelHeldMembershipRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const list = await held.moveHeldMembership(
+    const answer = await held.moveHeldMembership(
       heldDeps,
       requireUserId(req),
       params.gymId,
       params.entryId,
       params.membershipId,
       { type: "cancel", when: body.when },
+      body.confirmBookings ?? null,
     );
-    return reply.status(200).send(list);
+    return sendHeld(reply, req, answer);
   });
 
   app.post(`${heldUrl}/:membershipId/paid`, heldGuarded, async (req, reply) => {
@@ -232,7 +246,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     if (params === null) return;
     const body = parseOr400(paidHeldMembershipRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const list = await held.moveHeldMembership(
+    const answer = await held.moveHeldMembership(
       heldDeps,
       requireUserId(req),
       params.gymId,
@@ -240,7 +254,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       params.membershipId,
       { type: "paid", paidPeriods: body.paidPeriods },
     );
-    return reply.status(200).send(list);
+    return sendHeld(reply, req, answer);
   });
 
   // ── A list's word linked to a type ──

@@ -584,22 +584,25 @@ export interface EndedBooking {
  *  `classes`: these classes will not run (staff cancelled or removed them), so everything
  *  on them ends, and a late cancel whose pack kept the charge loses the charge too.
  *  `people`: these people have left the gym, so their bookings of classes that have not
- *  started end; a class already started is history and stays. */
+ *  started end; a class already started is history and stays.
+ *  `membership`: staff cancelled this membership, so the places booked on it end. */
 export async function endBookings(
   tx: TransactionSql,
   gymId: string,
-  which: { classes: readonly string[] } | { people: readonly string[]; now: Date },
+  which: { classes: readonly string[] } | { people: readonly string[]; now: Date } | MembershipScope,
   at: Date,
 ): Promise<EndedBooking[]> {
-  const ids = "classes" in which ? which.classes : which.people;
-  if (ids.length === 0) return [];
+  if ("classes" in which ? which.classes.length === 0 : "people" in which && which.people.length === 0) return [];
   const chosen =
     "classes" in which
-      ? tx`b.session_id = ANY(${[...ids]}::uuid[])
+      ? tx`b.session_id = ANY(${[...which.classes]}::uuid[])
            AND (b.status IN ('booked','waitlisted','attended','no_show') OR (b.status = 'late_cancelled' AND b.pack_charged))`
-      : tx`b.user_id = ANY(${[...ids]}::uuid[]) AND b.status IN ('booked','waitlisted')
-           AND EXISTS (SELECT 1 FROM gym_class_sessions s
-                       WHERE s.gym_id = b.gym_id AND s.id = b.session_id AND s.starts_at > ${which.now})`;
+      : "people" in which
+        ? tx`b.user_id = ANY(${[...which.people]}::uuid[]) AND b.status IN ('booked','waitlisted')
+             AND EXISTS (SELECT 1 FROM gym_class_sessions s
+                         WHERE s.gym_id = b.gym_id AND s.id = b.session_id AND s.starts_at > ${which.now})`
+        : tx`EXISTS (SELECT 1 FROM gym_class_sessions s
+                     WHERE s.gym_id = b.gym_id AND s.id = b.session_id AND ${onMembership(tx, which)})`;
   const rows = await tx<{ user_id: string; session_id: string; was: string; charged: boolean; held_membership_id: string | null }[]>`
     WITH old AS (
       SELECT b.id, b.status, b.pack_charged, b.held_membership_id
@@ -632,9 +635,23 @@ export async function deleteBookingsOf(tx: TransactionSql, gymId: string, sessio
  *  classes (from a date, when the change has one), or every coming class of one kind. */
 export type EndingScope = { by: "session"; id: string } | { by: "slot"; id: string; from: string | null } | { by: "class"; id: string };
 
-export type EndingWhere = { sessionIds: readonly string[] } | { scope: EndingScope; now: Date };
+/** The places booked on one held membership, in classes that have not started: all of
+ *  them, or those on a day after `afterDay` (the membership's last day). Somebody
+ *  waiting has no membership on their row yet, so no waitlist place is among them. */
+export interface MembershipScope {
+  membership: string;
+  now: Date;
+  afterDay: string | null;
+}
+
+const onMembership = (sql: SqlOrTx, m: MembershipScope) => sql`
+  b.held_membership_id = ${m.membership} AND b.status = 'booked' AND s.starts_at > ${m.now}
+  AND (${m.afterDay}::date IS NULL OR s.local_date > ${m.afterDay}::date)`;
+
+export type EndingWhere = { sessionIds: readonly string[] } | { scope: EndingScope; now: Date } | MembershipScope;
 
 const endingWhere = (sql: SqlOrTx, where: EndingWhere) => {
+  if ("membership" in where) return onMembership(sql, where);
   if ("sessionIds" in where) return sql`s.id = ANY(${[...where.sessionIds]}::uuid[])`;
   const { scope, now } = where;
   if (scope.by === "session") return sql`s.id = ${scope.id}`;
