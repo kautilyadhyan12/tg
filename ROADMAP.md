@@ -198,7 +198,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 17c. **Booking and the waitlist, on the server** (§13.4), split 2026-10-05 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 17c-i. [x] **Book, Cancel, the waitlist and Claim** — merged 2026-10-05 (PR #173).
      - 17c-ii. **Bookings when things change, the settings and the emails**, split 2026-10-05 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
-       - 17c-ii-a. [ ] **Bookings when things change, and the settings**: staff cancel, move, shrink or remove a class that has bookings; a member removed or an account deleted loses their coming bookings; Settings → Class bookings.
+       - 17c-ii-a. [x] **Bookings when things change, and the settings** — merged 2026-10-05 (PR #175).
        - 17c-ii-b. [ ] **The emails**: booked · moved in · a place is free · class cancelled or moved, to the people 17c-ii-a's changes touch; the box that asks then says "they are emailed" in place of "the app doesn't tell them yet".
    - 17d. [ ] **The member's side**: the list by day with Book · Cancel · Join waitlist · Claim, on the member web until the phone app shows it.
    - 17e. [ ] **Personal training**: a trainer's hours and session length, free times worked out, an appointment the DATABASE refuses to overlap, booked at once, PT packs.

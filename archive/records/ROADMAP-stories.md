@@ -277,3 +277,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **17c-ii, as first written (split 2026-10-05 into 17c-ii-a and 17c-ii-b):**
 
 - 17c-ii. [ ] **Bookings when things change, the settings and the emails**: staff cancel, move, shrink or delete a class that has bookings (bookings ended, packs given back, the waitlist handed a bigger class's places; today a class with a booking cannot be deleted and answers 409 `class_has_bookings`); a member removed or an account deleted loses their coming bookings; Settings → the four booking numbers; the emails (booked · moved in · a place is free · class cancelled).
+
+**17c-ii-a, as it stood when it was built (merged 2026-10-05, PR #175):**
+
+- 17c-ii-a. [ ] **Bookings when things change, and the settings**: staff cancel, move, shrink or remove a class that has bookings; a member removed or an account deleted loses their coming bookings; Settings → Class bookings.
