@@ -263,3 +263,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 **17a-iii, as it stood when it was built (merged 2026-10-05, PR #171):**
 
 - 17a-iii. [ ] **A file's word linked to a type**: "Gold" → Gold Monthly once, for everyone who carries the word, their file's dates kept.
+
+- 19b-ii-b (as the line stood before it was built, 2026-10-04): **Block, the bad-words hold and the support address**: a member never again sees a blocked member's posts or reactions; a post with a bad word is HELD for staff, the word list tested against real wording from outside the code. **First test: a blocked person's posts gone for the blocker.** Built with the hold replaced by a refusal that names the word (RULINGS 2026-10-05).

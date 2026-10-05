@@ -162,6 +162,9 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     // A report of a post and a gym's stop on their posting (19b-ii-a): about the person.
     await sql`INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason) VALUES (${postGymId}, ${postId}, ${userId}, 'spam')`;
     await sql`INSERT INTO gym_post_stops (gym_id, user_id) VALUES (${postGymId}, ${userId})`;
+    // Who they blocked on a gym's Updates (19b-ii-b), and somebody's block of them.
+    await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, ${userId}, owner_user_id FROM gyms WHERE id = ${postGymId}`;
+    await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, owner_user_id, ${userId} FROM gyms WHERE id = ${postGymId}`;
     // Kept after the purge, as proof (tables.ts) — asserted to survive below.
     await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
               VALUES (${userId}, 'sign_up', 'v1', 'fixture wording', 'test')`;
@@ -366,6 +369,9 @@ d("DPDP Day-14 purge (real Postgres)", () => {
 
     const after = await directCounts(u.userId);
     for (const t of USER_ID_TABLES) expect({ t, n: after[t] }).toEqual({ t, n: 0 });
+    // Somebody else's block of them names them too, in a column of its own.
+    const blockedBy = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_post_blocks WHERE blocked_user_id = ${u.userId}`;
+    expect(blockedBy[0]?.n).toBe(0);
 
     // The two cascade-collected tables carry no user_id, so they are checked
     // by the exact row id seeded for this user.

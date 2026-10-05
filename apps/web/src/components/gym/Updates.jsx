@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BicepsFlexed, Flag, Flame, Heart, ImagePlus, Loader2, Pin, ThumbsUp, Trash2, X } from 'lucide-react';
+import { Ban, BicepsFlexed, Flag, Flame, Heart, ImagePlus, Loader2, Pin, ThumbsUp, Trash2, X } from 'lucide-react';
 import { postPhotoUrl, postsService } from '../../api/postsApi';
 import { errorText } from '../../api/orgsApi';
 import { preparePagePhoto } from '../../pages/console/gymPagePhotos';
@@ -11,9 +11,14 @@ import {
   authorInitials,
   authorName,
   authorTag,
+  blockBox,
+  blockedButton,
+  blockedMore,
+  canBlock,
   canPost,
   charsLine,
   emptyLine,
+  helpLine,
   memberCanPost,
   memberPostAction,
   memberPostHint,
@@ -24,6 +29,7 @@ import {
   reportBox,
   reportNoteLine,
   stoppedNote,
+  unblockedNote,
   withNewPost,
   withPage,
   withPost,
@@ -278,14 +284,15 @@ function ReportBox({ name, gymName, busy, error, onSend, onCancel }) {
   );
 }
 
-function Post({ gymId, gymName, post, busy, onReact, onOpen, onRemove, onReport }) {
-  /** Which box is open under the post: null, 'remove' or 'report'. */
+function Post({ gymId, gymName, post, busy, onReact, onOpen, onRemove, onReport, onBlock }) {
+  /** Which box is open under the post: null, 'remove', 'report' or 'block'. */
   const [asking, setAsking] = useState(null);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState(null);
   const tag = authorTag(post);
   const box = ownRemoveBox(post, gymName);
   const action = memberPostAction(post);
+  const blocking = blockBox(post, gymName);
 
   const run = async (request) => {
     setWorking(true);
@@ -376,6 +383,11 @@ function Post({ gymId, gymName, post, busy, onReact, onOpen, onRemove, onReport 
             <Flag className="w-4 h-4" aria-hidden="true" /> Report
           </button>
         ) : null}
+        {canBlock(post) && (
+          <button type="button" disabled={working} onClick={() => setAsking('block')} className={`min-h-11 px-3 rounded-xl flex items-center gap-1.5 text-sm font-semibold ${action === null ? 'ml-auto' : ''}`} style={QUIET}>
+            <Ban className="w-4 h-4" aria-hidden="true" /> Block
+          </button>
+        )}
       </div>
       {asking === 'remove' && (
         <div role="group" aria-label={box.title} className="mt-3 pt-3 flex flex-col gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
@@ -398,6 +410,27 @@ function Post({ gymId, gymName, post, busy, onReact, onOpen, onRemove, onReport 
           </div>
         </div>
       )}
+      {asking === 'block' && (
+        <div role="group" aria-label={blocking.title} className="mt-3 pt-3 flex flex-col gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <p className="text-sm font-semibold text-white">{blocking.title}</p>
+          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+            {blocking.line}
+          </p>
+          {error !== null && (
+            <p className="text-sm" role="alert" style={{ color: RED }}>
+              {error}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={working} onClick={() => run(() => onBlock(post))} className="rounded-xl px-3.5 text-sm font-semibold min-h-11" style={SOFT}>
+              {working ? 'Blocking…' : blocking.confirm}
+            </button>
+            <button type="button" disabled={working} onClick={close} className="rounded-xl px-3.5 text-sm font-semibold min-h-11" style={QUIET}>
+              {blocking.cancel}
+            </button>
+          </div>
+        </div>
+      )}
       {asking === 'report' && <ReportBox name={`report-${post.id}`} gymName={gymName} busy={working} error={error} onSend={(reason, note) => run(() => onReport(post, reason, note))} onCancel={close} />}
     </li>
   );
@@ -412,6 +445,9 @@ export default function Updates({ gym }) {
   const [reactError, setReactError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [viewing, setViewing] = useState(null);
+  /** The member's blocked list once opened: null while closed. */
+  const [blocked, setBlocked] = useState(null);
+  const [unblocking, setUnblocking] = useState(null);
 
   const load = useCallback(
     () =>
@@ -467,6 +503,38 @@ export default function Updates({ gym }) {
     setNotice('Your post has been removed.');
   };
 
+  // Their other posts go too, and the counts change, so the page is read again.
+  const onBlock = async (post) => {
+    await postsService.block(gymId, post.id);
+    setBlocked(null);
+    await load();
+    setNotice(blockBox(post, state.feed?.gymName ?? gym.name).done);
+  };
+
+  const showBlocked = async () => {
+    setBlocked({ loading: true, error: null, people: [] });
+    try {
+      const list = await postsService.blocked(gymId);
+      setBlocked({ loading: false, error: null, people: list.people });
+    } catch (err) {
+      setBlocked({ loading: false, error: errorText(err, "Couldn't load who you've blocked."), people: [] });
+    }
+  };
+
+  const onUnblock = async (person) => {
+    setUnblocking(person.id);
+    try {
+      await postsService.unblock(gymId, person.id);
+      setBlocked((b) => (b === null ? b : { ...b, error: null, people: b.people.filter((p) => p.id !== person.id) }));
+      await load();
+      setNotice(unblockedNote(person.name));
+    } catch (err) {
+      setBlocked((b) => (b === null ? b : { ...b, error: errorText(err, "That didn't work. Please try again.") }));
+    } finally {
+      setUnblocking(null);
+    }
+  };
+
   const onReport = async (post, reason, note) => {
     await postsService.report(gymId, post.id, reason, note);
     change((feed) => withPost(feed, { ...post, reported: true }));
@@ -476,6 +544,8 @@ export default function Updates({ gym }) {
   const feed = state.feed;
   const empty = feed === null ? null : emptyLine(feed);
   const stopped = feed === null ? null : stoppedNote(feed);
+  const blockedLabel = feed === null ? null : blockedButton(feed);
+  const help = feed === null ? null : helpLine(feed);
   return (
     <div className="mt-4" data-testid="updates">
       {state.loading ? (
@@ -535,6 +605,7 @@ export default function Updates({ gym }) {
                   onOpen={(p, index) => setViewing({ post: p, index })}
                   onRemove={onRemove}
                   onReport={onReport}
+                  onBlock={onBlock}
                 />
               ))}
             </ul>
@@ -550,6 +621,62 @@ export default function Updates({ gym }) {
                 </p>
               )}
             </div>
+          )}
+          {blockedLabel !== null && blocked === null && (
+            <button type="button" onClick={showBlocked} className="mt-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold min-h-11" style={QUIET}>
+              {blockedLabel}
+            </button>
+          )}
+          {blocked !== null && (
+            <section className="rounded-xl p-3.5 mt-3 flex flex-col gap-2" style={{ background: 'rgba(255,255,255,0.03)' }} aria-label="People you've blocked" data-testid="blocked">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-white flex-1">People you&apos;ve blocked</p>
+                <button type="button" onClick={() => setBlocked(null)} className="rounded-xl px-3 text-sm font-semibold min-h-11" style={QUIET}>
+                  Close
+                </button>
+              </div>
+              <p className="text-xs" style={{ color: MUTED }}>
+                You don&apos;t see their posts or reactions here. They aren&apos;t told.
+              </p>
+              {blocked.loading && (
+                <p className="text-sm" style={{ color: MUTED }}>
+                  Loading…
+                </p>
+              )}
+              {blocked.error !== null && (
+                <p className="text-sm" role="alert" style={{ color: RED }}>
+                  {blocked.error}
+                </p>
+              )}
+              {!blocked.loading && blocked.error === null && blocked.people.length === 0 && (
+                <p className="text-sm" style={{ color: MUTED }}>
+                  You haven&apos;t blocked anyone here.
+                </p>
+              )}
+              {blockedMore(feed, blocked.people.length) !== null && (
+                <p className="text-xs" style={{ color: MUTED }}>
+                  {blockedMore(feed, blocked.people.length)}
+                </p>
+              )}
+              <ul className="flex flex-col gap-1">
+                {blocked.people.map((person) => (
+                  <li key={person.id} className="flex items-center gap-2 min-h-11">
+                    <span className="text-sm text-white flex-1 truncate">{person.name ?? 'A member'}</span>
+                    <button type="button" disabled={unblocking !== null} onClick={() => onUnblock(person)} className="rounded-xl px-3.5 text-sm font-semibold min-h-11" style={SOFT}>
+                      {unblocking === person.id ? 'Unblocking…' : 'Unblock'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {help !== null && (
+            <p className="text-xs mt-4" style={{ color: MUTED }} data-testid="help-line">
+              {help.text}{' '}
+              <a href={`mailto:${help.email}`} style={{ color: ORANGE }}>
+                {help.email}
+              </a>
+            </p>
           )}
         </>
       )}

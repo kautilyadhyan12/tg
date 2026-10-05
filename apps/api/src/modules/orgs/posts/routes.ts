@@ -6,6 +6,7 @@ import {
   GYM_PAGE_PHOTO_MAX_BYTES,
   GYM_POST_MAX_PHOTOS,
   addGymPostRequestSchema,
+  gymPostBlockParamsSchema,
   gymPostParamsSchema,
   gymPostPhotoParamsSchema,
   gymPostReactorsQuerySchema,
@@ -51,7 +52,7 @@ function requireUserId(req: FastifyRequest): string {
 const POST_BODY_LIMIT = GYM_POST_MAX_PHOTOS * (Math.ceil(GYM_PAGE_PHOTO_MAX_BYTES / 3) * 4 + 8) + 16 * 1024;
 
 export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.PostsDeps, "log"> & { redis: RedisLike }): void {
-  const postsDeps: service.PostsDeps = { sql: deps.sql, now: deps.now, photos: deps.photos, log: app.log };
+  const postsDeps: service.PostsDeps = { sql: deps.sql, now: deps.now, photos: deps.photos, supportEmail: deps.supportEmail, log: app.log };
   const limiter = (name: string, max: number, ipMax: number) =>
     createDualRateLimit({
       name,
@@ -156,6 +157,29 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     const done = await service.report(postsDeps, requireUserId(req), params.gymId, params.postId, body.reason, body.note, gate(memberWriteLimit)(req, reply));
     if (done === null) return;
     return reply.status(200).send({ reported: true });
+  });
+
+  // Block whoever wrote this post. Membership first and the limit after it, as above.
+  app.put("/v1/orgs/:gymId/posts/:postId/block", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const done = await service.block(postsDeps, requireUserId(req), params.gymId, params.postId, gate(memberWriteLimit)(req, reply));
+    if (done === null) return;
+    return reply.status(200).send({ blocked: true });
+  });
+
+  app.get("/v1/orgs/:gymId/posts/blocked", { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.getBlocked(postsDeps, requireUserId(req), params.gymId));
+  });
+
+  app.delete("/v1/orgs/:gymId/posts/blocked/:blockId", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPostBlockParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const done = await service.unblock(postsDeps, requireUserId(req), params.gymId, params.blockId, gate(memberWriteLimit)(req, reply));
+    if (done === null) return;
+    return reply.status(200).send({ blocked: false });
   });
 
   // ── STAFF HOLDING `posts.manage` ──

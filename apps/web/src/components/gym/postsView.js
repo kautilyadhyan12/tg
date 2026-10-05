@@ -239,6 +239,50 @@ export function withStopped(feed, userId, stopped) {
   return { ...feed, pinned: feed.pinned.map(mark), posts: feed.posts.map(mark) };
 }
 
+// ── BLOCK AND THE HELP LINE (19b-ii-b) ──
+
+/** Whether a member is offered Block on a post: another member's post. One the gym's
+ *  staff wrote cannot be blocked, and nobody blocks themselves. */
+export function canBlock(post) {
+  return post.fromMember && !post.wrote;
+}
+
+/** The box before a member blocks whoever wrote a post: who changes, and who does not. */
+export function blockBox(post, gymName) {
+  const name = post.author.name;
+  const who = name ?? 'this member';
+  return {
+    title: `Block ${who}?`,
+    // Posts the same person writes for the gym as staff are the gym's and still show: said here.
+    line: `You won't see the posts ${who} writes as a member, or their reactions, at ${gymName} any more. Any reaction you gave those posts is taken off. Posts they write for ${gymName} as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.`,
+    confirm: `Block ${who}`,
+    cancel: 'Cancel',
+    done: `Blocked. You won't see the posts ${who} writes as a member, or their reactions, any more.`,
+  };
+}
+
+/** The button at the bottom of Updates that opens the member's blocked list, or null with nobody blocked. */
+export function blockedButton(feed) {
+  if (feed.blockedCount === 0) return null;
+  return feed.blockedCount === 1 ? "People you've blocked (1)" : `People you've blocked (${feed.blockedCount.toLocaleString('en')})`;
+}
+
+/** Under the blocked list when the member has blocked more people than it carries, or null. */
+export function blockedMore(feed, shown) {
+  if (shown === 0 || feed.blockedCount <= shown) return null;
+  return `Showing the ${shown.toLocaleString('en')} you blocked most recently. ${(feed.blockedCount - shown).toLocaleString('en')} more will show as you unblock these.`;
+}
+
+/** What a member reads after Unblock. */
+export function unblockedNote(name) {
+  return name === null ? "Unblocked. You'll see their posts and reactions again." : `Unblocked. You'll see ${name}'s posts and reactions again.`;
+}
+
+/** The help line under a member's Updates: null until an address is set. */
+export function helpLine(feed) {
+  return feed.supportEmail === null ? null : { text: 'Need help with the app? Email', email: feed.supportEmail };
+}
+
 // ── THE CONSOLE'S FORM ──
 
 export const POST_LIMITS = { chars: GYM_POST_MAX_CHARS, photos: GYM_POST_MAX_PHOTOS, pinned: GYM_POST_MAX_PINNED };

@@ -138,3 +138,28 @@ export const gymPostStops = pgTable(
   },
   (t) => [primaryKey({ name: "gym_post_stops_pk", columns: [t.gymId, t.userId] }), index("gym_post_stops_user_idx").on(t.userId)],
 );
+
+/** One member has blocked another at this gym: `userId` no longer sees `blockedUserId`'s
+ *  posts or reactions there. */
+export const gymPostBlocks = pgTable(
+  "gym_post_blocks",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    blockedUserId: uuid("blocked_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("gym_post_blocks_one_each_uq").on(t.gymId, t.userId, t.blockedUserId),
+    check("gym_post_blocks_not_self_check", sql`${t.userId} <> ${t.blockedUserId}`),
+    index("gym_post_blocks_user_idx").on(t.userId),
+    index("gym_post_blocks_blocked_idx").on(t.blockedUserId),
+  ],
+);

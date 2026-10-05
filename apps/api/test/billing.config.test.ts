@@ -42,6 +42,7 @@ describe("Paddle's settings", () => {
       TURNSTILE_SITE_KEY: "site",
       TURNSTILE_SECRET_KEY: "secret",
       PHOTO_DIR: "/srv/aihg/photos",
+      SUPPORT_EMAIL: "help@example.com",
       PADDLE_API_KEY: SANDBOX_KEY,
       PADDLE_CLIENT_TOKEN: TOKEN,
     };

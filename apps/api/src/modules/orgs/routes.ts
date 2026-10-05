@@ -96,6 +96,8 @@ export function registerOrgRoutes(
     onlinePayments: OnlinePayments;
     robotCheck: RobotCheck;
     photos: PhotoStore;
+    /** Where members are told to write for help; null until one is set. */
+    supportEmail: string | null;
     joinCodes: boolean;
     memberTap: boolean;
   },
@@ -140,7 +142,7 @@ export function registerOrgRoutes(
   registerLeaderboardRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // The gym's Updates: posts by staff, read by its members (Part 3 §15.2).
-  registerPostRoutes(app, { sql: deps.sql, redis: deps.redis, photos: deps.photos, now: overrides.now ?? (() => new Date()) });
+  registerPostRoutes(app, { sql: deps.sql, redis: deps.redis, photos: deps.photos, supportEmail: deps.supportEmail, now: overrides.now ?? (() => new Date()) });
 
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).

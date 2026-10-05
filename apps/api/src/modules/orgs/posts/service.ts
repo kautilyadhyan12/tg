@@ -12,6 +12,7 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   GYM_MEMBER_POSTS_A_DAY,
   GYM_POSTS_PAGE,
+  GYM_POST_BLOCKS_SHOWN,
   GYM_POST_MAX_PINNED,
   GYM_POST_REACTIONS,
   GYM_POST_REACTORS_SHOWN,
@@ -20,6 +21,7 @@ import {
   GYM_POST_REPORT_REASONS,
   GYM_POST_STOPS_SHOWN,
   GYM_POST_WORDS,
+  blockedGymPostersResponseSchema,
   gymPostReactionResponseSchema,
   gymPostReactorsResponseSchema,
   gymPostSchema,
@@ -29,6 +31,7 @@ import {
   staffGymPostsResponseSchema,
   stoppedGymPostersResponseSchema,
   type AddGymPostRequest,
+  type BlockedGymPostersResponse,
   type GymMemberPosting,
   type GymPost,
   type GymPostReaction,
@@ -51,12 +54,15 @@ import { postPhotoKey, type PhotoStore } from "../gymPage/photoStore.js";
 import { PHOTO_PROBLEM_STATUS, type PhotoFile } from "../gymPage/service.js";
 import { fullName, shownName } from "../leaderboard/rank.js";
 import { lockGym } from "../memberList/repo.js";
+import { badWordsIn } from "./badWords.js";
 import * as repo from "./repo.js";
 
 export interface PostsDeps {
   sql: Sql;
   now: () => Date;
   photos: PhotoStore;
+  /** Where members are told to write for help; null until Kd has set one (`SUPPORT_EMAIL`). */
+  supportEmail: string | null;
   /** A file left behind after its row went is said here, never thrown at the person. */
   log: { warn: (obj: object, msg: string) => void };
 }
@@ -88,7 +94,7 @@ async function shaped(deps: Pick<PostsDeps, "sql">, gymId: string, rows: readonl
   const ids = rows.map((r) => r.id);
   const [photos, counts, mine, reported] = await Promise.all([
     repo.photosOf(deps.sql, gymId, ids),
-    repo.reactionCounts(deps.sql, gymId, ids),
+    repo.reactionCounts(deps.sql, gymId, ids, viewerId),
     repo.reactionsOf(deps.sql, gymId, ids, viewerId),
     repo.reportedBy(deps.sql, gymId, ids, viewerId),
   ]);
@@ -120,7 +126,7 @@ async function staffShaped(deps: Pick<PostsDeps, "sql">, gymId: string, rows: re
   const members = rows.flatMap((r) => (r.byMember && r.authorId !== null ? [r.authorId] : []));
   const [photos, counts, mine, stopped] = await Promise.all([
     repo.photosOf(deps.sql, gymId, ids),
-    repo.reactionCounts(deps.sql, gymId, ids),
+    repo.reactionCounts(deps.sql, gymId, ids, null),
     repo.reactionsOf(deps.sql, gymId, ids, staffId),
     repo.stoppedAmong(deps.sql, gymId, members),
   ]);
@@ -153,12 +159,13 @@ async function page<P>(
   deps: Pick<PostsDeps, "sql">,
   gymId: string,
   before: GymPostsCursor | undefined,
+  reader: repo.Reader,
   shape: (rows: readonly repo.PostRow[]) => Promise<P[]>,
 ): Promise<{ pinned: P[]; posts: P[]; next: string | null }> {
   const from = before ?? null;
   const [pinned, rows] = await Promise.all([
-    from === null ? repo.pinnedPosts(deps.sql, gymId) : Promise.resolve([]),
-    repo.postsPage(deps.sql, gymId, from, GYM_POSTS_PAGE + 1),
+    from === null ? repo.pinnedPosts(deps.sql, gymId, reader) : Promise.resolve([]),
+    repo.postsPage(deps.sql, gymId, reader, from, GYM_POSTS_PAGE + 1),
   ]);
   const shown = rows.slice(0, GYM_POSTS_PAGE);
   const last = shown[shown.length - 1];
@@ -182,17 +189,19 @@ async function postingOf(sql: Sql | TransactionSql, gymId: string, userId: strin
 }
 
 /** The gym's posts for a live app member of it; 404 for everybody else. */
-export async function getPosts(deps: Pick<PostsDeps, "sql">, userId: string, gymId: string, before: GymPostsCursor | undefined): Promise<GymPostsResponse> {
+export async function getPosts(deps: Pick<PostsDeps, "sql" | "supportEmail">, userId: string, gymId: string, before: GymPostsCursor | undefined): Promise<GymPostsResponse> {
   const org = await getOrgById(deps.sql, gymId);
   if (org === null || !(await repo.isLiveMember(deps.sql, gymId, userId))) throw notFound();
+  const supportEmail = deps.supportEmail;
   if (!(await gymIsLive(deps.sql, gymId, org.status))) {
-    return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "paused", posting: "off", pinned: [], posts: [], next: null });
+    return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "paused", posting: "off", blockedCount: await repo.countBlocked(deps.sql, gymId, userId), supportEmail, pinned: [], posts: [], next: null });
   }
-  const [feed, posting] = await Promise.all([
-    page(deps, gymId, before, (rows) => shaped(deps, gymId, rows, userId)),
+  const [feed, posting, blockedCount] = await Promise.all([
+    page(deps, gymId, before, { member: userId }, (rows) => shaped(deps, gymId, rows, userId)),
     postingOf(deps.sql, gymId, userId),
+    repo.countBlocked(deps.sql, gymId, userId),
   ]);
-  return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "shown", posting, ...feed });
+  return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "shown", posting, blockedCount, supportEmail, ...feed });
 }
 
 /** The gym's posts for its staff holding the tick. */
@@ -206,7 +215,7 @@ export async function getStaffPosts(
   const { org } = await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   const [feed, membersCanPost, reportedCount] = await Promise.all([
-    page(deps, gymId, before, (rows) => staffShaped(deps, gymId, rows, staffId)),
+    page(deps, gymId, before, "staff", (rows) => staffShaped(deps, gymId, rows, staffId)),
     repo.membersCanPost(deps.sql, gymId),
     repo.countReported(deps.sql, gymId),
   ]);
@@ -225,9 +234,9 @@ export async function getReactors(
 ): Promise<GymPostReactorsResponse | null> {
   await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
-  if ((await repo.postById(deps.sql, gymId, postId)) === null) throw postNotFound();
+  if ((await repo.postById(deps.sql, gymId, postId, "staff")) === null) throw postNotFound();
   const [counts, people] = await Promise.all([
-    repo.reactionCounts(deps.sql, gymId, [postId]),
+    repo.reactionCounts(deps.sql, gymId, [postId], null),
     repo.reactorsOf(deps.sql, gymId, postId, reaction, GYM_POST_REACTORS_SHOWN),
   ]);
   return gymPostReactorsResponseSchema.parse({
@@ -251,7 +260,7 @@ async function removeFiles(deps: Pick<PostsDeps, "photos" | "log">, keys: readon
 }
 
 async function staffPost(deps: Pick<PostsDeps, "sql">, gymId: string, postId: string, staffId: string): Promise<StaffGymPost> {
-  const row = await repo.postById(deps.sql, gymId, postId);
+  const row = await repo.postById(deps.sql, gymId, postId, "staff");
   if (row === null) throw postNotFound();
   const [post] = await staffShaped(deps, gymId, [row], staffId);
   if (post === undefined) throw postNotFound();
@@ -259,7 +268,7 @@ async function staffPost(deps: Pick<PostsDeps, "sql">, gymId: string, postId: st
 }
 
 async function memberPost(deps: Pick<PostsDeps, "sql">, gymId: string, postId: string, userId: string): Promise<GymPost> {
-  const row = await repo.postById(deps.sql, gymId, postId);
+  const row = await repo.postById(deps.sql, gymId, postId, { member: userId });
   if (row === null) throw postNotFound();
   const [post] = await shaped(deps, gymId, [row], userId);
   if (post === undefined) throw postNotFound();
@@ -382,6 +391,10 @@ export async function addMemberPost(deps: PostsDeps, userId: string, gymId: stri
   // post kept, the day's last one too.
   const kept = await ownByKey(deps, gymId, userId, body.postKey);
   if (kept !== null) return kept;
+  // The app checks a member's words itself and says which it will not take: nothing is
+  // kept, no photo is cleaned, and the day's ten are not touched. Staff's posts are not checked.
+  const words = badWordsIn(body.body);
+  if (words.length > 0) throw new OrgsError(400, "post_bad_words", GYM_POST_WORDS.bad_words(words));
   // A full day is refused before any photo is cleaned or written; the count that decides
   // is made again below, with the person's membership held.
   await refuseFullDay(deps.sql, gymId, userId, deps.now());
@@ -404,7 +417,7 @@ export async function setPinned(deps: Pick<PostsDeps, "sql" | "now">, staffId: s
     await lockGym(tx, gymId);
     // A pinned member's post whose writer has left is seen by nobody: its pin is given back.
     await repo.unpinHidden(tx, gymId);
-    const post = await repo.postById(tx, gymId, postId);
+    const post = await repo.postById(tx, gymId, postId, "staff");
     if (post === null) throw postNotFound();
     if (pinned === (post.pinnedAt !== null)) return;
     if (pinned && (await repo.countPinned(tx, gymId)) >= GYM_POST_MAX_PINNED) {
@@ -465,13 +478,13 @@ export async function react(
   reaction: GymPostReaction | null,
 ): Promise<GymPostReactionResponse> {
   await requireMember(deps, gymId, userId);
-  if ((await repo.postById(deps.sql, gymId, postId)) === null) throw postNotFound();
+  if ((await repo.postById(deps.sql, gymId, postId, { member: userId })) === null) throw postNotFound();
   if (reaction === null) {
     await repo.clearReaction(deps.sql, gymId, postId, userId);
   } else if (!(await repo.setReaction(deps.sql, gymId, postId, userId, reaction, deps.now()))) {
     throw postNotFound();
   }
-  const counts = await repo.reactionCounts(deps.sql, gymId, [postId]);
+  const counts = await repo.reactionCounts(deps.sql, gymId, [postId], userId);
   return gymPostReactionResponseSchema.parse({ reactions: countsOf(counts, postId), mine: reaction });
 }
 
@@ -488,7 +501,7 @@ export async function report(
 ): Promise<true | null> {
   await requireMember(deps, gymId, userId);
   if (!(await limit())) return null;
-  const post = await repo.postById(deps.sql, gymId, postId);
+  const post = await repo.postById(deps.sql, gymId, postId, { member: userId });
   if (post === null) throw postNotFound();
   if (post.authorId === userId) throw new OrgsError(400, "own_post", GYM_POST_WORDS.own_report);
   const typed = note === undefined || note === "" ? null : note;
@@ -541,7 +554,7 @@ export async function keepReported(
   await requireWritablePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   return await deps.sql.begin(async (tx) => {
-    if ((await repo.postById(tx, gymId, postId)) === null) throw postNotFound();
+    if ((await repo.postById(tx, gymId, postId, "staff")) === null) throw postNotFound();
     const closed = await repo.closeReports(tx, gymId, postId, "kept", deps.now(), upTo);
     if (closed > 0) {
       await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.post_kept", targetType: "post", targetId: postId, meta: { reports: String(closed) } });
@@ -590,6 +603,57 @@ export async function getStopped(deps: Pick<PostsDeps, "sql">, staffId: string, 
   });
 }
 
+/** A live app member of the gym, whatever its plan; 404 for everybody else. */
+async function requireOwnMembership(deps: Pick<PostsDeps, "sql">, gymId: string, userId: string): Promise<void> {
+  const org = await getOrgById(deps.sql, gymId);
+  if (org === null || !(await repo.isLiveMember(deps.sql, gymId, userId))) throw notFound();
+}
+
+/** A member blocks whoever wrote this post: from now on they are sent none of that
+ *  person's posts, photos or reactions at this gym. Nobody is told, and nothing is written
+ *  about it but the block itself. A post by the gym's staff cannot be blocked. */
+export async function block(deps: Pick<PostsDeps, "sql" | "now">, userId: string, gymId: string, postId: string, limit: Limit): Promise<true | null> {
+  await requireMember(deps, gymId, userId);
+  if (!(await limit())) return null;
+  const post = await repo.postById(deps.sql, gymId, postId, { member: userId });
+  if (post === null) {
+    // Sent again after a lost reply: the post is hidden only by this person's own block of
+    // its writer, and the answer is the first one's.
+    if (await repo.hiddenByOwnBlock(deps.sql, gymId, postId, userId)) return true;
+    throw postNotFound();
+  }
+  if (post.authorId === userId) throw new OrgsError(400, "own_post", GYM_POST_WORDS.own_block);
+  const blockedId = post.authorId;
+  if (!post.byMember || blockedId === null) throw new OrgsError(400, "gym_post", GYM_POST_WORDS.gym_block);
+  await deps.sql.begin(async (tx) => {
+    await repo.insertBlock(tx, gymId, userId, blockedId, deps.now());
+    // A reaction the blocker gave that person's posts could never be taken off again, and
+    // would go on being counted and named for staff: it goes with the block.
+    await repo.deleteReactionsToMember(tx, gymId, userId, blockedId);
+  });
+  return true;
+}
+
+/** The people a member has blocked at this gym, named as members see each other. */
+export async function getBlocked(deps: Pick<PostsDeps, "sql">, userId: string, gymId: string): Promise<BlockedGymPostersResponse> {
+  await requireOwnMembership(deps, gymId, userId);
+  const people = await repo.blockedPeople(deps.sql, gymId, userId, GYM_POST_BLOCKS_SHOWN);
+  return blockedGymPostersResponseSchema.parse({
+    people: people.map((p) => {
+      const named = shownName(p);
+      return { id: p.id, name: named?.name ?? null, initials: named?.name == null ? "" : named.initials, blockedAt: p.blockedAt.toISOString() };
+    }),
+  });
+}
+
+/** A member takes one of their own blocks off. Somebody else's is "not found" to them. */
+export async function unblock(deps: Pick<PostsDeps, "sql">, userId: string, gymId: string, blockId: string, limit: Limit): Promise<true | null> {
+  await requireOwnMembership(deps, gymId, userId);
+  if (!(await limit())) return null;
+  if (!(await repo.deleteBlock(deps.sql, gymId, userId, blockId))) throw new OrgsError(404, "block_not_found", GYM_POST_WORDS.block_not_found);
+  return true;
+}
+
 /** A post's photo, for a member who may read the post or staff holding the tick. With
  *  `wantBytes` false (the reader's browser already holds it) the same checks run and null
  *  is the answer: it is still theirs to show. */
@@ -604,8 +668,14 @@ export async function getPhoto(
   const org = await getOrgById(deps.sql, gymId);
   if (org === null) throw notFound();
   const member = (await repo.isLiveMember(deps.sql, gymId, userId)) && (await gymIsLive(deps.sql, gymId, org.status));
-  if (!member && !(await holdsPrivilege(deps, gymId, userId, TICK))) throw notFound();
-  const photo = await repo.photoOf(deps.sql, gymId, postId, photoId);
+  // A member is sent what a member sees: nothing of anybody they blocked. Staff holding
+  // the tick are asked second.
+  let photo = member ? await repo.photoOf(deps.sql, gymId, postId, photoId, { member: userId }) : null;
+  if (photo === null) {
+    const staff = await holdsPrivilege(deps, gymId, userId, TICK);
+    if (!member && !staff) throw notFound();
+    if (staff) photo = await repo.photoOf(deps.sql, gymId, postId, photoId, "staff");
+  }
   if (photo === null) throw new OrgsError(404, "photo_not_found", GYM_POST_WORDS.photo_not_found);
   if (!wantBytes) return null;
   const bytes = await deps.photos.get(photo.storageKey);
