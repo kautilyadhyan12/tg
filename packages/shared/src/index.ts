@@ -33,6 +33,7 @@ export * from "./classes.js";
 export * from "./memberships.js";
 export * from "./heldMemberships.js";
 export * from "./classBookings.js";
+export * from "./personalTraining.js";
 export * from "./membershipWords.js";
 export * from "./billing.js";
 export * from "./razorpay.js";

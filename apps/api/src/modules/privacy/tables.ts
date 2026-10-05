@@ -408,6 +408,14 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // membership words to a type (`0073`), on gym_leads' footing: the gym's record;
   // `ON DELETE set null`. Deleted when the gym closes.
   "gym_membership_word_links",
+  // gym_trainers.user_id — a member of staff's personal-training hours (`0077`), on
+  // gym_class_types' footing: a worker's rota, the gym's record; `ON DELETE cascade`.
+  "gym_trainers",
+  // gym_pt_appointments.trainer_user_id and booked_by — which member of staff takes a
+  // personal-training session and who booked it (`0077`), on the same footing;
+  // `ON DELETE set null`, the session kept since a pack may have been charged for it. The
+  // person booked is a record on the gym's list, not an account.
+  "gym_pt_appointments",
   // gym_staff_invites.invited_by and answered_by — who sent a staff invitation and who
   // accepted, declined or cancelled it (`0059`), on gym_leads' footing: the gym's record;
   // `ON DELETE set null`. Deleted when the gym closes.

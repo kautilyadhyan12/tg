@@ -41,6 +41,7 @@ import {
 import { registerClassRoutes } from "./classes/routes.js";
 import { registerClassBookingRoutes } from "./classes/bookingsRoutes.js";
 import { registerMembershipRoutes } from "./memberships/routes.js";
+import { registerPtRoutes } from "./pt/routes.js";
 import { registerLeadRoutes } from "./leads/routes.js";
 import { registerLeaderboardRoutes } from "./leaderboard/routes.js";
 import { registerGymPageRoutes } from "./gymPage/routes.js";
@@ -128,6 +129,9 @@ export function registerOrgRoutes(
 
   // Booking a class, and its waitlist (Part 3 §13.4).
   registerClassBookingRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+
+  // Personal training: trainers' hours and the sessions booked with them (Part 3 §13.5).
+  registerPtRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // What the gym sells: its membership types (Part 3 §13.1).
   registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis });

@@ -533,6 +533,13 @@
       "when": 1788220800060,
       "tag": "0076_photo_files_to_remove",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1788220800061,
+      "tag": "0077_personal_training",
+      "breakpoints": true
     }
   ]
 }
