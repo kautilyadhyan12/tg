@@ -118,7 +118,7 @@ export function stoppedNote(feed) {
 
 /** Under the member's box: who sees a post, and the day's limit. */
 export function memberPostHint(gymName) {
-  return `Everyone at ${gymName} in the app sees it straight away. You can post ${GYM_MEMBER_POSTS_A_DAY} times a day, ${GYM_MEMBER_PHOTO_POSTS_A_DAY} of them with photos. Where a photo was taken is never kept.`;
+  return `Everyone at ${gymName} in the app sees it straight away. You can post ${GYM_MEMBER_POSTS_A_DAY} times in any 24 hours, ${GYM_MEMBER_PHOTO_POSTS_A_DAY} of them with photos. Where a photo was taken is never kept.`;
 }
 
 /** The list with the member's new post at the top of the unpinned ones; never twice. */

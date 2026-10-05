@@ -366,8 +366,11 @@ export const GYM_POST_WORDS = {
   /** `hours`: whole hours until the oldest of the counted posts is 24 hours old. */
   day_full: (hours: number): string =>
     `You've posted ${String(GYM_MEMBER_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. You can post again ${againIn(hours)}.`,
-  photo_day_full: (hours: number): string =>
-    `You've posted photos ${String(GYM_MEMBER_PHOTO_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again ${againIn(hours)}.`,
+  /** `hasWords`: the post has words that could go without its photos. */
+  photo_day_full: (hours: number, hasWords: boolean): string =>
+    hasWords
+      ? `You've posted photos ${String(GYM_MEMBER_PHOTO_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again ${againIn(hours)}.`
+      : `You've posted photos ${String(GYM_MEMBER_PHOTO_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. You can post photos again ${againIn(hours)}.`,
   own_report: "This is your own post. You can remove it instead.",
   person_not_found: "This person isn't one of your members.",
   own_block: "This is your own post.",

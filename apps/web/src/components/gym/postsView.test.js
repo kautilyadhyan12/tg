@@ -318,7 +318,7 @@ describe('a member’s own post', () => {
 
   it('says who sees a post and the day’s limit', () => {
     expect(memberPostHint('Iron House')).toBe(
-      'Everyone at Iron House in the app sees it straight away. You can post 10 times a day, 3 of them with photos. Where a photo was taken is never kept.',
+      'Everyone at Iron House in the app sees it straight away. You can post 10 times in any 24 hours, 3 of them with photos. Where a photo was taken is never kept.',
     );
   });
 

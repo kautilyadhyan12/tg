@@ -23,6 +23,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
+import { getPersonPosts } from "../src/modules/orgs/posts/service.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -376,6 +377,64 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
   // ===========================================================================
 
   it(
+    "the day's ten say when the next post may be made, and a photo post that waits on both limits is told the later hour",
+    async () => {
+      const gym = await makeGym("Hours House");
+      const writer = await member(gym, "Wendy Writer");
+      const at = (hoursAgo: number) => new Date(clock - hoursAgo * HOUR);
+      // Ten posts: the oldest, words alone, 20 hours old; the three with photos 10 hours old.
+      await sql`
+        INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
+        SELECT ${gym.id}, ${writer.userId}, gen_random_uuid(), 'Words ' || n, true, ${at(20)}::timestamptz + n * interval '1 second'
+        FROM generate_series(0, 6) n`;
+      await sql`
+        WITH p AS (
+          INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
+          SELECT ${gym.id}, ${writer.userId}, gen_random_uuid(), 'Photo ' || n, true, ${at(10)}::timestamptz + n * interval '1 second'
+          FROM generate_series(0, 2) n
+          RETURNING gym_id, id)
+        INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
+        SELECT gym_id, id, 'gym-post/' || gym_id || '/' || gen_random_uuid() || '.jpg', 'image/jpeg', 1000, 100, 100, 0 FROM p`;
+      const message = (res: { body: string }): string => (JSON.parse(res.body) as { message: string }).message;
+
+      const words = await send(gym, writer, "An eleventh");
+      expect({ status: words.statusCode, error: errorOf(words) }).toEqual({ status: 429, error: "posts_day_full" });
+      expect(message(words)).toBe("You've posted 10 times in the last 24 hours, which is the most allowed. You can post again in about 4 hours.");
+      // With photos it waits for the oldest photo post too, 14 hours off: told that, not 4.
+      const photo = await send(gym, writer, "An eleventh, with a photo", [IPHONE]);
+      expect({ status: photo.statusCode, error: errorOf(photo) }).toEqual({ status: 429, error: "posts_day_full" });
+      expect(message(photo)).toBe("You've posted 10 times in the last 24 hours, which is the most allowed. You can post again in about 14 hours.");
+      // Four hours on the oldest words post has gone: words post, photos still wait ten hours.
+      clock += 4 * HOUR + 60 * 1000;
+      expect((await send(gym, writer, "Now there is room")).statusCode).toBe(201);
+    },
+    T,
+  );
+
+  it(
+    "who is reading is asked before the limit: a stranger is 404 and the limit is never asked; a member's read asks it once",
+    async () => {
+      const gym = await makeGym("Limit House");
+      const writer = await member(gym, "Wendy Writer");
+      const stranger = await signedIn("Sid Stranger");
+      // The route's limit is the last argument (the whole api's own ceiling of requests
+      // sits in front of every route, so the order cannot be seen by counting replies).
+      let asked = 0;
+      const limit = (): Promise<boolean> => {
+        asked += 1;
+        return Promise.resolve(true);
+      };
+      await expect(getPersonPosts({ sql }, stranger.userId, gym.id, writer.userId, undefined, limit)).rejects.toMatchObject({ statusCode: 404 });
+      expect(asked).toBe(0);
+      expect(await getPersonPosts({ sql }, writer.userId, gym.id, writer.userId, undefined, limit)).toEqual(NOBODY);
+      expect(asked).toBe(1);
+      // A limit that has already answered leaves the read undone.
+      expect(await getPersonPosts({ sql }, writer.userId, gym.id, writer.userId, undefined, () => Promise.resolve(false))).toBeNull();
+    },
+    T,
+  );
+
+  it(
     `a member posts photos ${String(GYM_MEMBER_PHOTO_POSTS_A_DAY)} times in 24 hours and goes on posting words, however the posts arrive`,
     async () => {
       const gym = await makeGym("Photo House");
@@ -396,6 +455,11 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       expect((JSON.parse(again.body) as { post: GymPost }).post.id).toBe((JSON.parse(burst[landed]?.body ?? "{}") as { post: GymPost }).post.id);
 
       // Refused before a photo is cleaned or written, and in words that say what to do.
+      // A post of photos alone is not told to take them off: nothing would be left to post.
+      const bare = await send(gym, writer, "", ["AAAA"]);
+      expect((JSON.parse(bare.body) as { message: string }).message).toBe(
+        "You've posted photos 3 times in the last 24 hours, which is the most allowed. You can post photos again in about 24 hours.",
+      );
       const unread = await send(gym, writer, "With a photo that is no photo", ["AAAA"]);
       expect({ status: unread.statusCode, error: errorOf(unread) }).toEqual({ status: 429, error: "posts_photo_day_full" });
       // It says when: the first photo post of the three is a few seconds old.
@@ -414,6 +478,13 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
         expect(res.statusCode, res.body).toBe(201);
       }
 
+      // A photo post staff remove gives its place back as well: its photos are gone either way.
+      const taken = await send(gym, quiet, "Second", [IPHONE]);
+      await send(gym, quiet, "Third", [IPHONE]);
+      expect((await send(gym, quiet, "Fourth", [IPHONE])).statusCode).toBe(429);
+      expect((await inject("DELETE", `${posts(gym.id)}/${(JSON.parse(taken.body) as { post: GymPost }).post.id}`, gym.owner.cookies)).statusCode).toBe(200);
+      expect((await send(gym, quiet, "After staff took one down", [IPHONE])).statusCode).toBe(201);
+
       // A photo post the member removes, its files gone, gives its place back.
       expect((await inject("DELETE", `${posts(gym.id)}/mine/${firstPhoto.id}`, writer.cookies)).statusCode).toBe(200);
       expect((await send(gym, writer, "In its place", [IPHONE])).statusCode).toBe(201);
@@ -422,6 +493,10 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       // A photo post from yesterday evening still counts this morning, and the sentence says
       // how long is left (Kd's click-through: two photo posts today, the third refused).
       clock += 19 * HOUR;
+      // A words-only post older than every photo post: the hours are the photo posts' own.
+      await sql`
+        INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
+        VALUES (${gym.id}, ${writer.userId}, gen_random_uuid(), 'Words from last night', true, ${new Date(clock - 23 * HOUR)})`;
       const morning = await send(gym, writer, "Next morning", [IPHONE]);
       expect(morning.statusCode).toBe(429);
       expect((JSON.parse(morning.body) as { message: string }).message).toMatch(/post photos again in about 5 hours\.$/);

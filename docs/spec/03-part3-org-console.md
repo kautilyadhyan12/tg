@@ -2814,7 +2814,9 @@ with photos** (Kd, RULINGS 2026-10-05; 429 `posts_photo_day_full`, "take the pho
 post the words now"; both refusals say the 24 hours and in about how many hours the next
 may be made, since a post from yesterday evening still counts this morning) counted in the database with the person's membership held (a removed
 post gives none of the ten back; a removed photo post, its files deleted, gives its photo
-place back, and the ten bound that), and who
+place back whoever removed it, the member or staff, and the ten bound that; a photo post
+that waits on both limits is told the later of the two hours; "take the photos off" is
+said only to a post that has words), and who
 may post — the switch and a stop — is settled before the body is read, as for staff; a
 full day is refused before any photo is cleaned, and a post sent again under its key is
 answered with the post kept, the day's last one too. A member's post that staff pinned gives its pin back when its writer leaves. A member's post is marked
@@ -2879,7 +2881,9 @@ a former member and a lapsed gym's member get the usual 404. Each post carries
 Staff holding `posts.manage` read the same list (`GET …/posts/staff/people/:userId`)
 with Remove post and Stop them posting: in a box opened from a member's name on the
 console's Updates page (the reported list too), and under the boards on a person's panel
-on the Leaderboard page for staff who hold both ticks.
+on the Leaderboard page for staff who hold both ticks. The member's read asks who is
+reading before its rate limit. A photo opened anywhere is drawn on the page's body
+(`PhotoViewer`), so it fills the window from inside a box too.
 
 **Video (Kd, RULINGS 2026-10-05, for 19b-iii):** only the gym's staff post video, at most
 20 a month a gym, one minute each, played on a tap and never by itself; members post words

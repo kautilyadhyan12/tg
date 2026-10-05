@@ -182,13 +182,16 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     return reply.status(200).send({ blocked: false });
   });
 
-  // One person's posts, on their profile.
-  app.get("/v1/orgs/:gymId/posts/people/:userId", { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
+  // One person's posts, on their profile. Who is reading is asked before the limit, so a
+  // stranger's 404 is never a 429.
+  app.get("/v1/orgs/:gymId/posts/people/:userId", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(gymPosterParamsSchema, req.params, req, reply);
     if (params === null) return;
     const query = parseOr400(gymPostsQuerySchema, req.query, req, reply);
     if (query === null) return;
-    return reply.status(200).send(await service.getPersonPosts(postsDeps, requireUserId(req), params.gymId, params.userId, query.before));
+    const posts = await service.getPersonPosts(postsDeps, requireUserId(req), params.gymId, params.userId, query.before, gate(readLimit)(req, reply));
+    if (posts === null) return;
+    return reply.status(200).send(posts);
   });
 
   // ── STAFF HOLDING `posts.manage` ──

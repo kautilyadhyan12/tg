@@ -207,9 +207,9 @@ const single = await sql<{ id: string }[]>`
     AND author_user_id NOT IN (SELECT blocked_user_id FROM gym_post_blocks WHERE gym_id = ${gymId}) LIMIT 1`;
 const others1 = single[0]?.id ?? "";
 const reads: [string, () => Promise<unknown>][] = [
-  ["member, one person's posts", () => getPersonPosts(deps, viewer, gymId, owner, undefined)],
-  ["member, that person's oldest page", () => getPersonPosts(deps, viewer, gymId, owner, personLast)],
-  ["member, a person with one post", () => getPersonPosts(deps, viewer, gymId, others1, undefined)],
+  ["member, one person's posts", () => getPersonPosts(deps, viewer, gymId, owner, undefined, allowed)],
+  ["member, that person's oldest page", () => getPersonPosts(deps, viewer, gymId, owner, personLast, allowed)],
+  ["member, a person with one post", () => getPersonPosts(deps, viewer, gymId, others1, undefined, allowed)],
   ["staff, one person's posts", () => getStaffPersonPosts(deps, owner, gymId, owner, undefined, allowed)],
   ["member, the first page", () => getPosts(deps, viewer, gymId, undefined)],
   ["member, the oldest page", () => getPosts(deps, viewer, gymId, last)],

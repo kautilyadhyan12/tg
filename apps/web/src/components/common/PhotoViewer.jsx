@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 // One photo at full size over the page, the whole picture and never cropped, with
@@ -22,7 +23,8 @@ export default function PhotoViewer({ photos, index, onIndex, onClose }) {
 
   if (photo === undefined) return null;
   const arrow = { background: 'rgba(0,0,0,0.45)' };
-  return (
+  // Drawn on the page's body: a box that is moved into place would otherwise hold it inside itself.
+  return createPortal(
     <div role="dialog" aria-modal="true" aria-label={photo.alt} className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'rgba(12, 11, 10, 0.94)' }}>
       <div className="flex items-center justify-between px-4 py-3 text-white">
         <span className="text-sm">
@@ -45,6 +47,7 @@ export default function PhotoViewer({ photos, index, onIndex, onClose }) {
           </>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -1,4 +1,4 @@
-// A GYM'S UPDATES, in the database (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a).
+// A GYM'S UPDATES, in the database (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a, 19b-ii-c).
 // Every read and write names the gym.
 import type { Sql, TransactionSql } from "postgres";
 import type { GymPostReaction, GymPostReportReason } from "@app/shared";
@@ -385,7 +385,8 @@ export async function countMemberPostsSince(sql: SqlOrTx, gymId: string, userId:
 }
 
 /** Of those, the posts that carry photos now. A removed post's photos are deleted with it,
- *  so it is not counted here: the day's ten above are what stop post-and-remove. */
+ *  whoever removed it, so it is not counted here: the day's ten above are what stop
+ *  post-and-remove, and staff stop a person whose photos they keep taking down. */
 export async function countMemberPhotoPostsSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<Counted> {
   const rows = await sql<Counted[]>`
     SELECT count(*)::int AS n, min(p.created_at) AS oldest FROM gym_posts p

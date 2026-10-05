@@ -257,8 +257,10 @@ export async function getPersonPosts(
   gymId: string,
   userId: string,
   before: GymPostsCursor | undefined,
-): Promise<PersonGymPostsResponse> {
+  limit: Limit,
+): Promise<PersonGymPostsResponse | null> {
   await requireMember(deps, gymId, viewerId);
+  if (!(await limit())) return null;
   const [feed, blocked] = await Promise.all([
     personPage(deps, gymId, { member: viewerId }, userId, before, (rows) => shaped(deps, gymId, rows, viewerId)),
     repo.hasBlocked(deps.sql, gymId, viewerId, userId),
@@ -354,16 +356,20 @@ function refusePosting(posting: GymMemberPosting, gymName: string): void {
 
 /** Refuses a member who has made the day's posts already, or, for a post with photos, the
  *  day's posts with photos. */
-async function refuseFullDay(sql: Sql | TransactionSql, gymId: string, userId: string, at: Date, withPhotos: boolean): Promise<void> {
+async function refuseFullDay(sql: Sql | TransactionSql, gymId: string, userId: string, at: Date, post: { photos: boolean; words: boolean }): Promise<void> {
   const since = new Date(at.getTime() - DAY_MS);
   // Whole hours until the oldest counted post is a day old and one more may be made.
   const hoursLeft = (counted: repo.Counted): number =>
     counted.oldest === null ? 0 : Math.max(0, Math.round((counted.oldest.getTime() + DAY_MS - at.getTime()) / (60 * 60 * 1000)));
   const all = await repo.countMemberPostsSince(sql, gymId, userId, since);
-  if (all.n >= GYM_MEMBER_POSTS_A_DAY) throw new OrgsError(429, "posts_day_full", GYM_POST_WORDS.day_full(hoursLeft(all)));
-  if (!withPhotos) return;
+  const full = all.n >= GYM_MEMBER_POSTS_A_DAY;
+  if (full && !post.photos) throw new OrgsError(429, "posts_day_full", GYM_POST_WORDS.day_full(hoursLeft(all)));
+  if (!post.photos) return;
   const photos = await repo.countMemberPhotoPostsSince(sql, gymId, userId, since);
-  if (photos.n >= GYM_MEMBER_PHOTO_POSTS_A_DAY) throw new OrgsError(429, "posts_photo_day_full", GYM_POST_WORDS.photo_day_full(hoursLeft(photos)));
+  const photosFull = photos.n >= GYM_MEMBER_PHOTO_POSTS_A_DAY;
+  // Both full: this post waits for the later of the two, so that is the hour it is told.
+  if (full) throw new OrgsError(429, "posts_day_full", GYM_POST_WORDS.day_full(Math.max(hoursLeft(all), photosFull ? hoursLeft(photos) : 0)));
+  if (photosFull) throw new OrgsError(429, "posts_photo_day_full", GYM_POST_WORDS.photo_day_full(hoursLeft(photos), post.words));
 }
 
 /** A member who may post: the gym's switch is on and staff have not stopped them. The
@@ -463,12 +469,12 @@ export async function addMemberPost(deps: PostsDeps, userId: string, gymId: stri
   if (words.length > 0) throw new OrgsError(400, "post_bad_words", GYM_POST_WORDS.bad_words(words));
   // A full day is refused before any photo is cleaned or written; the count that decides
   // is made again below, with the person's membership held.
-  const withPhotos = body.photos.length > 0;
-  await refuseFullDay(deps.sql, gymId, userId, deps.now(), withPhotos);
+  const shape = { photos: body.photos.length > 0, words: body.body.trim() !== "" };
+  await refuseFullDay(deps.sql, gymId, userId, deps.now(), shape);
   const post = await keepPost(deps, gymId, userId, body, true, async (tx, at) => {
     if (!(await repo.lockMember(tx, gymId, userId, true))) throw notFound();
     refusePosting(await postingOf(tx, gymId, userId), gymName);
-    await refuseFullDay(tx, gymId, userId, at, withPhotos);
+    await refuseFullDay(tx, gymId, userId, at, shape);
   });
   if (post.made) return await memberPost(deps, gymId, post.id, userId);
   const first = await ownByKey(deps, gymId, userId, body.postKey);

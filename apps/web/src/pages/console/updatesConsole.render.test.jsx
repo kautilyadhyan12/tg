@@ -640,6 +640,21 @@ describe('a person’s posts, opened from a name', () => {
     await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
   });
 
+  it('Stop them posting in the box asks first, stops THAT person, and every post of theirs says so', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
+    svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done'), theirs('c', 'Leg day')], next: null, total: 2 });
+    svc.setStopped.mockResolvedValue({ stopped: true });
+    open();
+    const box = await openWendy();
+    await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(2));
+    fireEvent.click(within(box.getAllByTestId('post')[1]).getByRole('button', { name: 'Stop them posting' }));
+    expect(svc.setStopped).not.toHaveBeenCalled();
+    fireEvent.click(within(box.getAllByTestId('post')[1]).getByRole('button', { name: 'Stop Wendy Writer posting' }));
+    await waitFor(() => expect(svc.setStopped).toHaveBeenCalledWith('g1', 'u-wendy', true));
+    await waitFor(() => expect(box.getAllByText('Stopped from posting')).toHaveLength(2));
+    expect(box.getByText('Wendy Writer can no longer post.')).toBeTruthy();
+  });
+
   it('says so when they have posted nothing, and when the posts cannot be read', async () => {
     svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
     svc.person.mockResolvedValueOnce({ posts: [], next: null, total: 0 });

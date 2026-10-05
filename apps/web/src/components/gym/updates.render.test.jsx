@@ -88,6 +88,8 @@ describe('the gym’s updates', () => {
     ]);
     fireEvent.click(button(posts()[0], 'Open photo 2 of 2'));
     const viewer = screen.getByRole('dialog', { name: 'Photo 2 of 2' });
+    // Drawn on the page's body, so no box it was opened from can hold it inside itself.
+    expect(viewer.parentElement).toBe(document.body);
     expect(within(viewer).getByRole('img').getAttribute('src')).toBe('http://api.test/v1/orgs/g1/posts/a/photos/ph2');
     fireEvent.click(within(viewer).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -209,7 +211,7 @@ describe('a member posts', () => {
     await screen.findByText('No posts yet. Write the first one.');
     const send = composer().getByRole('button', { name: 'Post' });
     expect(send.disabled).toBe(true);
-    expect(composer().getByText(/You can post 10 times a day/)).toBeTruthy();
+    expect(composer().getByText(/You can post 10 times in any 24 hours, 3 of them with photos/)).toBeTruthy();
 
     fireEvent.change(composer().getByRole('textbox', { name: /Write a post/ }), { target: { value: 'First time on the rower' } });
     fireEvent.change(composer().getByLabelText('Choose photos'), { target: { files: [new File(['x'], 'rower.jpg', { type: 'image/jpeg' })] } });
@@ -432,9 +434,26 @@ describe('a person’s profile, opened from their picture or name', () => {
     await waitFor(() => expect(screen.queryAllByTestId('post')).toEqual([]));
   });
 
+  it('removing one’s own post on one’s own profile takes it off and off the number', async () => {
+    const mine = theirs('a', 'My first', { own: true, wrote: true });
+    svc.list.mockResolvedValue(feed({ posts: [mine] }));
+    svc.person.mockResolvedValue(page({ posts: [mine, theirs('c', 'My second', { own: true, wrote: true })] }));
+    svc.removeOwn.mockResolvedValue({ removed: true });
+    boards.profile.mockRejectedValue(notFound());
+    render(<Updates gym={GYM} />);
+    const sheet = await openChen();
+    await waitFor(() => expect(stats(sheet)).toEqual(['2Posts']));
+    const card = sheet.getAllByTestId('post')[1];
+    fireEvent.click(button(card, 'Remove'));
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove post' }));
+    await waitFor(() => expect(sheet.getAllByTestId('post')).toHaveLength(1));
+    expect(svc.removeOwn).toHaveBeenCalledWith('g1', 'c');
+    expect(stats(sheet)).toEqual(['1Post']);
+  });
+
   it('a reaction on a profile is sent for that post, and older posts load on a tap', async () => {
     svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
-    svc.person.mockResolvedValueOnce(page({ posts: [theirs('a', 'First 5k done')], next: 'cursor-1' })).mockResolvedValue(page({ posts: [theirs('c', 'Leg day')] }));
+    svc.person.mockResolvedValueOnce(page({ posts: [theirs('a', 'First 5k done')], next: 'cursor-1', total: 2 })).mockResolvedValue(page({ posts: [theirs('c', 'Leg day')], total: 3 }));
     svc.react.mockResolvedValue({ reactions: { like: 0, love: 0, strong: 0, fire: 1 }, mine: 'fire' });
     boards.profile.mockRejectedValue(notFound());
     render(<Updates gym={GYM} />);
@@ -445,6 +464,8 @@ describe('a person’s profile, opened from their picture or name', () => {
     fireEvent.click(sheet.getByRole('button', { name: 'Show older posts' }));
     await waitFor(() => expect(sheet.getAllByTestId('post')).toHaveLength(2));
     expect(svc.person).toHaveBeenLastCalledWith('g1', 'u2', 'cursor-1');
+    // The number over "Posts" is the newest answer's: somebody posted while the page was open.
+    expect(stats(sheet)).toEqual(['3Posts']);
     expect(sheet.queryByRole('button', { name: 'Show older posts' })).toBeNull();
   });
 });
