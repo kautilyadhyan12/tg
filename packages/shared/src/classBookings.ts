@@ -302,6 +302,9 @@ const staffBookingSchema = z
      *  It and `packCharged` are null for a coach reading their own class's list. */
     membership: z.string().nullable(),
     packCharged: z.boolean().nullable(),
+    /** Their record on the gym's list, for staff who may open a person's page
+     *  (`members.confirm`); null for anybody else, and where they are not on the list. */
+    entryId: z.string().uuid().nullable(),
     at: z.string().datetime(),
   })
   .strict();
@@ -366,6 +369,12 @@ export const classBookingsEndingSchema = z
   })
   .strict();
 export type ClassBookingsEnding = z.infer<typeof classBookingsEndingSchema>;
+
+/** A membership staff cancel ends the bookings made on it (17c-iii): the 409 that asks
+ *  first carries `ending` as above, its `people` one row a class of that one person, as
+ *  many as this at most. */
+export const MEMBERSHIP_HAS_BOOKINGS_ERROR = "membership_has_bookings";
+export const MEMBERSHIP_BOOKINGS_ENDING_SHOWN = 100;
 
 export const CLASS_BOOKINGS_ENDING_SCOPES = ["session", "slot", "class"] as const;
 

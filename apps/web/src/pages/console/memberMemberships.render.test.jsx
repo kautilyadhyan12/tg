@@ -151,6 +151,117 @@ describe('whose membership is on screen', () => {
   });
 });
 
+// A CANCEL THAT WOULD END CLASSES (17c-iii). The worst this box could do: end bookings on
+// one press with nobody told which, or send a number the server never gave.
+describe('cancelling a membership that classes are booked with', () => {
+  const row = (n, className, localDate, localStartMinute) => ({
+    id: `55555555-5555-4555-8555-00000000000${String(n)}`,
+    name: 'Ada Lovelace',
+    initials: 'AL',
+    waiting: false,
+    className,
+    localDate,
+    localStartMinute,
+  });
+  const FOUR = [row(1, 'Yoga', '2026-10-21', 420), row(2, 'Spin', '2026-10-22', 1080), row(3, 'Yoga', '2026-10-23', 420), row(4, 'Boxing', '2026-10-24', 600)];
+  const asks = (people, booked = people.length) =>
+    refusal(409, { error: 'membership_has_bookings', message: 'They have classes booked.', ending: { classes: booked, booked, waiting: 0, people } });
+
+  it('names the classes first, ends nothing until its own button, and sends back the number the server gave', async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    const cancelled = held(1, GOLD, '2026-10-04', true, [[{ type: 'cancel', when: 'today' }, TODAY]]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockRejectedValueOnce(asks(FOUR));
+    render(draw(ADA, 'Ada Lovelace', { clockFormat: '12h' }));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    const ending = within(await b.findByTestId('held-ending'));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today' });
+    expect(ending.getByText('Ada Lovelace has 4 classes booked with Gold Monthly')).toBeTruthy();
+    // It never says somebody waiting HAS the place: close to a class nobody is moved in.
+    expect(ending.getByText("Those bookings end and Ada Lovelace's place in each class is free again. Where people are waiting, it goes to the next person on the waitlist; close to a class's start, to the first of them to claim it.")).toBeTruthy();
+    expect(ending.queryByText('The classes changed while this was open. Check them and press again.')).toBeNull();
+    expect(ending.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Yoga · Wed 21 Oct · 7:00 AM', 'Spin · Thu 22 Oct · 6:00 PM', 'Yoga · Fri 23 Oct · 7:00 AM']);
+    expect(ending.getByText(/and 1 more/)).toBeTruthy();
+    expect(ending.getByText('Classes booked with another membership or a pack stay booked. So does a class that has already started.')).toBeTruthy();
+    expect(ending.getByText("The app doesn't tell them yet. Let them know yourself.")).toBeTruthy();
+    // No error sentence: it is a question, not a failure.
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(ending.getByRole('button', { name: 'See all' }));
+    expect(ending.getAllByRole('listitem')).toHaveLength(4);
+    expect(ending.getByText('Boxing · Sat 24 Oct · 10:00 AM')).toBeTruthy();
+    expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1);
+
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([cancelled]));
+    fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 4 bookings' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', confirmBookings: 4 });
+    expect(await b.findByText('Gold Monthly is cancelled.')).toBeTruthy();
+    expect(screen.queryByTestId('held-ending')).toBeNull();
+  });
+
+  it('Keep it sends nothing more, and a number that moved is asked again with the new one', async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockRejectedValueOnce(asks(FOUR.slice(0, 2)));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    let ending = within(await b.findByTestId('held-ending'));
+    // She cancelled one herself in the meantime: the server asks again with one.
+    orgService.changeHeldMembership.mockRejectedValueOnce(asks(FOUR.slice(0, 1)));
+    fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 2 bookings' }));
+    expect(await b.findByText('Ada Lovelace has 1 class booked with Gold Monthly')).toBeTruthy();
+    ending = within(b.getByTestId('held-ending'));
+    expect(ending.getByText("That booking ends and Ada Lovelace's place is free again. If people are waiting, it goes to the next person on the waitlist; close to the class's start, to the first of them to claim it.")).toBeTruthy();
+    // The press ended nothing, and the box says why.
+    expect(ending.getByRole('status').textContent).toBe('The classes changed while this was open. Check them and press again.');
+    expect(ending.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Yoga · Wed 21 Oct · 07:00']);
+    fireEvent.click(ending.getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByTestId('held-ending')).toBeNull();
+    expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2);
+    expect(b.getByRole('button', { name: 'Cancel membership' })).toBeTruthy();
+  });
+
+  it('cancelled on the last paid day: the box says only the classes after that day end, and confirms that same choice', async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockRejectedValueOnce(asks([row(1, 'Yoga', '2026-11-05', 420)]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel on 3 November 2026' }));
+    const ending = within(await b.findByTestId('held-ending'));
+    expect(ending.getByText('Ada Lovelace has 1 class booked with Gold Monthly after 3 November 2026')).toBeTruthy();
+    expect(ending.getByText('Classes up to 3 November 2026 stay booked. So do classes booked with another membership or a pack.')).toBeTruthy();
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([gold]));
+    fireEvent.click(ending.getByRole('button', { name: 'Cancel on 3 November 2026 and end 1 booking' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'period_end', confirmBookings: 1 }));
+  });
+});
+
+describe('cancelling a pack that classes are booked with', () => {
+  it("says another pack's classes stay, never that this pack's do", async () => {
+    const pack = held(2, PACK, '2026-10-10', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([pack]));
+    orgService.changeHeldMembership.mockRejectedValueOnce(
+      refusal(409, {
+        error: 'membership_has_bookings',
+        message: 'They have classes booked.',
+        ending: { classes: 1, booked: 1, waiting: 0, people: [{ id: '55555555-5555-4555-8555-000000000009', name: 'Ada Lovelace', initials: 'AL', waiting: false, className: 'Yoga', localDate: '2026-10-21', localStartMinute: 420 }] },
+      }),
+    );
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    const ending = within(await b.findByTestId('held-ending'));
+    expect(ending.getByText('Classes booked with another pack or a membership stay booked. So does a class that has already started.')).toBeTruthy();
+  });
+});
+
 describe('what the box draws', () => {
   it('draws nothing for a gym with no membership types and a person holding none', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { types: [] }));

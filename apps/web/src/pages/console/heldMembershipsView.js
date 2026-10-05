@@ -6,7 +6,9 @@
 import {
   HELD_START_AHEAD_DAYS,
   HELD_START_MIN,
+  MEMBERSHIP_HAS_BOOKINGS_ERROR,
   addDays,
+  classBookingsEndingSchema,
   daysBetween,
   formatMinor,
   giveHeldMembership,
@@ -14,6 +16,8 @@ import {
   isDayPass,
   shownRenewal,
 } from '@app/shared';
+import { dayHeading } from './classesView';
+import { clockLabel } from './hoursView';
 import { dayWords } from './memberListView';
 
 const TONES = { upcoming: 'plain', active: 'green', frozen: 'orange', ended: 'plain', cancelled: 'plain' };
@@ -171,6 +175,53 @@ export function askWords(what, m, name, today) {
     default:
       return null;
   }
+}
+
+/** The classes the server says a cancel would end the bookings of (409
+ *  `membership_has_bookings`); null for any other answer. */
+export function membershipBookingsAsked(err) {
+  const data = err?.response?.data;
+  if (data?.error !== MEMBERSHIP_HAS_BOOKINGS_ERROR) return null;
+  const parsed = classBookingsEndingSchema.safeParse(data?.ending);
+  return parsed.success && parsed.data.booked > 0 ? parsed.data : null;
+}
+
+/** Said in the box when the classes are not the ones it listed a moment ago: the person
+ *  booked or cancelled one between the box and its button, and the press ended nothing. */
+export const ENDING_MOVED = 'The classes changed while this was open. Check them and press again.';
+
+/** How many of the classes the box lists before "See all". */
+export const ENDING_CLASSES_SHOWN = 3;
+
+/** The box that asks before a cancel ends the classes booked on the membership: who
+ *  changes, what happens, and what does not change. `later`: it is cancelled on its
+ *  last paid day (`m.view.can.cancelAtPeriodEnd`), so only classes after that day end. */
+export function endingWords(ending, m, name, later, clockFormat) {
+  const n = ending?.booked ?? 0;
+  const classes = n === 1 ? '1 class' : `${n.toLocaleString('en')} classes`;
+  const bookings = n === 1 ? '1 booking' : `${n.toLocaleString('en')} bookings`;
+  const last = later ? (m.view.can.cancelAtPeriodEnd ?? null) : null;
+  const rows = (Array.isArray(ending?.people) ? ending.people : []).map((row) => ({
+    id: row.id,
+    line: [row.className, dayHeading(row.localDate), clockLabel(row.localStartMinute, clockFormat)].filter((part) => part !== '').join(' · '),
+  }));
+  return {
+    title: last === null ? `${name} has ${classes} booked with ${m.typeName}` : `${name} has ${classes} booked with ${m.typeName} after ${dayWords(last)}`,
+    // What the server does with a freed place (spec §13.4): handed to the next in line, or
+    // inside the gym's waitlist time left for the first of them to claim. Never "X gets it".
+    change:
+      n === 1
+        ? `That booking ends and ${name}'s place is free again. If people are waiting, it goes to the next person on the waitlist; close to the class's start, to the first of them to claim it.`
+        : `Those bookings end and ${name}'s place in each class is free again. Where people are waiting, it goes to the next person on the waitlist; close to a class's start, to the first of them to claim it.`,
+    rows,
+    // The server lists a hundred at most; the count is whole.
+    unlisted: Math.max(0, n - rows.length),
+    kept:
+      last === null
+        ? `Classes booked with ${m.kind === 'pack' ? 'another pack or a membership' : 'another membership or a pack'} stay booked. So does a class that has already started.`
+        : `Classes up to ${dayWords(last)} stay booked. So do classes booked with another membership or a pack.`,
+    button: `${last === null ? 'Cancel today' : `Cancel on ${dayWords(last)}`} and end ${bookings}`,
+  };
 }
 
 /** What each press did, said back in one line. */

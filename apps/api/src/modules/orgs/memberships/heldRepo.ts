@@ -38,6 +38,8 @@ import {
 } from "@app/shared";
 import { insertAudit } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
+import type { HasBookings } from "../classes/bookingChanges.js";
+import type { MembershipScope } from "../classes/bookingsRepo.js";
 
 export interface HeldRow {
   id: string;
@@ -351,10 +353,21 @@ const AUDIT_ACTION: Record<HeldMembershipEvent["type"], string> = {
   paid: "org.held_membership_paid",
 };
 
+/** What a cancel does about the places booked on the membership, handed in by the service
+ *  so this file runs none of the booking code (which imports this one; its types alone
+ *  are read here): `ask` answers the question to put first, or null to go ahead; `end`
+ *  ends them. Both run in the cancel's transaction, under the gym's lock. */
+export interface CancelBookings {
+  ask: (tx: TransactionSql, gymId: string, scope: MembershipScope, confirmed: number | null) => Promise<HasBookings | null>;
+  end: (tx: TransactionSql, gymId: string, scope: MembershipScope, now: Date) => Promise<{ booked: number; packClasses: number }>;
+}
+
 /** One change to a held membership, decided by the rule on the row as it is under its
- *  lock. A change that is already so writes nothing and answers ok. */
+ *  lock. A change that is already so writes nothing and answers ok. A cancel that would
+ *  end bookings answers who they are until the request sends their number back. */
 export async function moveHeld(
   sql: Sql,
+  bookings: CancelBookings,
   input: {
     gymId: string;
     entryId: string;
@@ -362,11 +375,13 @@ export async function moveHeld(
     event: HeldMembershipEvent;
     /** The gym's own day. */
     today: string;
+    /** A cancel: the number of bookings the screen was told it would end. */
+    confirmBookings: number | null;
     actorUserId: string;
     now: Date;
   },
-): Promise<HeldWriteOutcome> {
-  return await sql.begin(async (tx): Promise<HeldWriteOutcome> => {
+): Promise<HeldWriteOutcome | HasBookings> {
+  return await sql.begin(async (tx): Promise<HeldWriteOutcome | HasBookings> => {
     const entry = await lockedEntry(tx, input.gymId, input.entryId);
     if (entry === null) return { kind: "entry_not_found" };
     const [raw] = await tx`
@@ -385,12 +400,25 @@ export async function moveHeld(
     if (!move.changed) return { kind: "ok" };
     const m = move.membership;
 
+    // A cancel ends the places booked on it (17c-iii): every class not yet started, or,
+    // where it runs on to the end of what is paid, the classes after its last day.
+    let ends: MembershipScope | null = null;
+    if (input.event.type === "cancel") {
+      const last = m.status === "cancelled" ? null : heldMembershipView(m, input.today).endsOn;
+      if (m.status === "cancelled" || last !== null) ends = { membership: before.id, now: input.now, afterDay: last };
+    }
+    if (ends !== null) {
+      const ask = await bookings.ask(tx, input.gymId, ends, input.confirmBookings);
+      if (ask !== null) return ask;
+    }
+
     await tx`
       UPDATE gym_held_memberships
       SET status = ${m.status}, frozen_days = ${m.frozenDays}, frozen_on = ${m.frozenOn}::date,
           cancelled_on = ${m.cancelledOn}::date, paid_periods = ${m.paidPeriods}, renews = ${m.renews},
           updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
+    const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -407,6 +435,7 @@ export async function moveHeld(
         paidBefore: String(before.membership.paidPeriods),
         paidAfter: String(m.paidPeriods),
         renews: String(m.renews),
+        ...(ended === null ? {} : { bookingsEnded: String(ended.booked), packClassesBack: String(ended.packClasses) }),
       },
     });
     return { kind: "ok" };
