@@ -2653,9 +2653,9 @@ lock; an open-gym slot takes nobody's time. The week answers each day's `classes
 the page lists them as not free; a session that a class was put over afterwards says it
 runs into it (the class side asking first is 17e-iii). The calendar is written 56 days
 ahead and sessions are booked 55, so the classes of every bookable day are there once the
-nightly fill has run. Nobody is told yet (the inbox, 20a). Not done, and
-17e-ii and 17e-iii: the member's own booking; sessions ended when a person leaves, a
-membership is cancelled or a trainer leaves the staff; came and no-show.)*
+nightly fill has run. Nobody is told yet (the inbox, 20a). Not done: the class side asking first and a trainer's time off (17e-iii, built next);
+the member's own booking (17e-ii); sessions ended when a person leaves, a membership is
+cancelled or a trainer leaves the staff, came and no-show (17e-iv).)*
 
 ### 13.6 The calendar, the desk and the messages
 
