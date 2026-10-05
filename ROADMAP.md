@@ -224,7 +224,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 19b-ii-c. [x] **A person's posts on their profile** — merged 2026-10-05 (PR #174).
      - 19b-iii. [ ] **Video**: only the gym's staff post it, one video of up to a minute a post, 20 a month a gym, played on a tap (RULINGS 2026-10-05). Needs Kd's Cloudflare Stream account.
      - 19b-iv. [x] **Smaller photos before upload** — merged 2026-10-05 (PR #176).
-     - 19b-v. [ ] **The feature's two extra passes, fixed** (security and data integrity, over #169–#176): 4 High and 7 Low. Video (19b-iii) gets its own check when it is built.
+     - 19b-v. [x] **The feature's two extra passes, fixed** — merged 2026-10-05 (PR #178).
      - 19b-vi. [ ] **A post five people have reported is hidden until staff decide** (RULINGS 2026-10-05): five different members, any reason; members stop seeing it at once, staff Keep it (shown again) or Remove it. Risky (other people's posts). Before anybody uses Updates.
    - 19c. [ ] **Events**, counted by 17c's Book rule. 19d. [ ] **Challenges** (the document's leagues and tournaments; knock-outs later).
    - 19e. [ ] **A gym's own plan for a member**, after Stage 1 items 6a and 6b. **Its plan first settles §15.7's open question with Kd: whether a trainer sees a member's food, weight and plan only after the member's own tap.**
