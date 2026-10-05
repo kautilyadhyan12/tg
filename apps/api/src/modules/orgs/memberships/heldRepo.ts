@@ -354,9 +354,9 @@ const AUDIT_ACTION: Record<HeldMembershipEvent["type"], string> = {
 };
 
 /** What a cancel does about the places booked on the membership, handed in by the service
- *  so this file runs none of the booking code (which imports this one; its types alone are read here): `ask` answers
- *  the question to put first, or null to go ahead; `end` ends them. Both run in the
- *  cancel's transaction, under the gym's lock. */
+ *  so this file runs none of the booking code (which imports this one; its types alone
+ *  are read here): `ask` answers the question to put first, or null to go ahead; `end`
+ *  ends them. Both run in the cancel's transaction, under the gym's lock. */
 export interface CancelBookings {
   ask: (tx: TransactionSql, gymId: string, scope: MembershipScope, confirmed: number | null) => Promise<HasBookings | null>;
   end: (tx: TransactionSql, gymId: string, scope: MembershipScope, now: Date) => Promise<{ booked: number; packClasses: number }>;
