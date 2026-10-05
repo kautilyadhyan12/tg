@@ -1,37 +1,42 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Loader2, Plus, Search, X } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import TimePick from '../../components/console/TimePick';
-import { Field, Tick } from './ClassFields';
+import { Tick } from './ClassFields';
 import { useConsoleOrg } from './useConsoleOrg';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
-import { WEEKDAYS, addDays, clockLabel } from './hoursView';
+import { WEEKDAYS, addDays } from './hoursView';
 import {
   NOT_TOLD,
+  PT_INTRO_MANAGER,
+  PT_INTRO_OWN,
   PT_TITLE,
-  SESSION_LENGTH_CHOICES,
+  SESSION_LENGTH_HINT,
+  SESSION_LENGTH_USUAL,
   addRange,
+  bookCost,
   bookSentence,
   canAddRange,
   canGoEarlier,
   canGoLater,
   cancelBox,
   dayHeading,
+  freeTimeLabel,
   hoursDraft,
   hoursFormProblem,
   hoursLines,
   hoursRequest,
   noTimesNote,
-  personQuery,
+  peopleHeading,
   personRow,
   pickTrainer,
   removeRange,
   sessionRow,
   sessionsAWeek,
   setRange,
-  timeRange,
+  trainerGroups,
   trainerName,
   trainerSummary,
   weekTitle,
@@ -49,25 +54,41 @@ function HoursForm({ trainer, clockFormat, saving, error, onSave, onClose }) {
   const problem = hoursFormProblem(draft);
   return (
     <div className="flex flex-col gap-5" data-testid="pt-hours-form">
+      <h3 className="c-h3 m-0">Hours for {trainerName(trainer)}</h3>
       <Tick checked={draft.offers} onChange={(on) => setDraft({ ...draft, offers: on })} disabled={saving}>
         Takes personal training sessions
       </Tick>
 
-      <div className="c-narrow">
-        <Field label="Session length">
-          <select
+      <div className="c-field">
+        <label className="c-label" htmlFor="pt-session-length">
+          How long is one session? (minutes)
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            id="pt-session-length"
             value={draft.sessionMinutes}
             onChange={(e) => setDraft({ ...draft, sessionMinutes: e.target.value })}
             disabled={saving}
+            inputMode="numeric"
+            maxLength={3}
             className="c-input"
-          >
-            {SESSION_LENGTH_CHOICES.map((choice) => (
-              <option key={choice.value} value={choice.value}>
-                {choice.label}
-              </option>
-            ))}
-          </select>
-        </Field>
+            style={{ width: 104 }}
+          />
+          {SESSION_LENGTH_USUAL.map((minutes) => (
+            <button
+              key={minutes}
+              type="button"
+              onClick={() => setDraft({ ...draft, sessionMinutes: minutes })}
+              disabled={saving}
+              aria-pressed={draft.sessionMinutes.trim() === minutes}
+              aria-label={`${minutes} minutes`}
+              className={draft.sessionMinutes.trim() === minutes ? 'c-chip c-chip-on c-num' : 'c-chip c-num'}
+            >
+              {minutes}
+            </button>
+          ))}
+        </div>
+        <span className="c-s13 c-t3">{SESSION_LENGTH_HINT}</span>
       </div>
 
       <div className="flex flex-col gap-4">
@@ -79,12 +100,18 @@ function HoursForm({ trainer, clockFormat, saving, error, onSave, onClose }) {
               <div className="flex items-center justify-between gap-3">
                 <span className="c-s15 c-w6 c-t1">{day.label}</span>
                 {canAddRange(draft, day.iso) ? (
-                  <button type="button" onClick={() => setDraft(addRange(draft, day.iso))} disabled={saving} className="c-btn-link c-s14 c-w6">
-                    <Plus aria-hidden="true" className="w-4 h-4 inline" /> Add hours
+                  <button
+                    type="button"
+                    onClick={() => setDraft(addRange(draft, day.iso))}
+                    disabled={saving}
+                    aria-label={`Add hours on ${day.label}`}
+                    className="c-btn c-btn-sm c-btn-s"
+                  >
+                    <Plus aria-hidden="true" className="w-4 h-4" /> Add hours
                   </button>
                 ) : null}
               </div>
-              {ranges.length === 0 ? <span className="c-s14 c-t3">No sessions</span> : null}
+              {ranges.length === 0 ? <span className="c-s14 c-t3">Not training this day</span> : null}
               {ranges.map((range, index) => (
                 <div key={`${String(day.iso)}-${String(index)}`} className="flex flex-wrap items-end gap-3">
                   <div className="c-field">
@@ -127,12 +154,15 @@ function HoursForm({ trainer, clockFormat, saving, error, onSave, onClose }) {
         })}
       </div>
 
-      {problem === null ? <p className="c-s14 c-t2 m-0">{draft.offers ? `These hours make ${sessionsAWeek(draft)}.` : 'No new sessions can be booked.'} Sessions already booked stay as they are.</p> : null}
-      {problem !== null ? (
+      {problem === null ? (
+        <p className="c-s14 c-t2 m-0">
+          {draft.offers ? `These hours make ${sessionsAWeek(draft)}.` : 'No new sessions can be booked.'} Sessions already booked stay as they are.
+        </p>
+      ) : (
         <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
           {problem}
         </p>
-      ) : null}
+      )}
       {error !== null ? (
         <p className="c-s14 c-w5 m-0" role="alert" style={{ color: 'var(--bad)' }}>
           {error}
@@ -151,7 +181,8 @@ function HoursForm({ trainer, clockFormat, saving, error, onSave, onClose }) {
   );
 }
 
-/** The box that books one free time: find the person, see who and when, press Book. */
+/** The box that books one free time: pick the person from the list, see who and when,
+ *  press Book. The list is there without typing; typing narrows it. */
 function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose }) {
   const [typed, setTyped] = useState('');
   const [found, setFound] = useState(null);
@@ -161,20 +192,23 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
   // One key a box: pressing Book twice, or again after a lost answer, books once.
   const requestKey = useRef(crypto.randomUUID());
 
-  const query = personQuery(typed);
+  const query = typed.trim();
   useEffect(() => {
-    if (query === null) return undefined;
     let live = true;
-    const timer = setTimeout(() => {
-      orgService.getMemberListEntries(gymId, query).then(
-        (res) => {
-          if (live) setFound({ query, entries: res.data.page.entries, total: res.data.page.total, failed: null });
-        },
-        (err) => {
-          if (live) setFound({ query, entries: [], total: 0, failed: errorText(err, "We couldn't search your member list.") });
-        },
-      );
-    }, 250);
+    // The list as the box opens; a typed search waits a moment for the next letter.
+    const timer = setTimeout(
+      () => {
+        orgService.getPtPeople(gymId, query).then(
+          (res) => {
+            if (live) setFound({ query, data: res.data, failed: null });
+          },
+          (err) => {
+            if (live) setFound({ query, data: null, failed: errorText(err, "We couldn't read your member list.") });
+          },
+        );
+      },
+      query === '' ? 0 : 250,
+    );
     return () => {
       live = false;
       clearTimeout(timer);
@@ -205,7 +239,7 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
     <div className="c-card p-5 flex flex-col gap-4" role="group" aria-label="Book a session" data-testid="pt-book-box" style={{ background: 'var(--raise)' }}>
       <div className="flex items-start justify-between gap-3">
         <h3 className="c-h3 m-0">
-          Book {trainerName(trainer)} · {dayHeading(slot.localDate, null)} · {timeRange(slot.startMinute, slot.startMinute + minutes, clockFormat)}
+          Book {trainerName(trainer)} · {dayHeading(slot.localDate, null)} · {freeTimeLabel(slot.startMinute, minutes, clockFormat)}
         </h3>
         <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="c-btn c-btn-sm c-btn-ghost">
           <X aria-hidden="true" className="w-4 h-4" />
@@ -215,40 +249,59 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
       {person === null ? (
         <>
           <label className="c-field">
-            <span className="c-label">Who is it for? Search your member list</span>
+            <span className="c-label">Who is it for?</span>
             <span className="relative block">
               <Search aria-hidden="true" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 c-t3" />
               <input
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
-                placeholder="Name, email or phone"
+                placeholder="Search by name or email"
+                maxLength={100}
                 className="c-input"
                 style={{ paddingLeft: 36 }}
-                autoFocus
               />
             </span>
           </label>
-          {query !== null && results === null ? <p className="c-s14 c-t3 m-0">Searching…</p> : null}
+          {results === null ? <p className="c-s14 c-t3 m-0">Loading your members…</p> : null}
           {results !== null && results.failed !== null ? <p className="c-s14 c-t2 m-0">{results.failed}</p> : null}
-          {results !== null && results.failed === null && results.entries.length === 0 ? (
-            <p className="c-s14 c-t2 m-0">Nobody on your member list matches. Add them on Members first.</p>
+          {results !== null && results.data !== null ? (
+            <>
+              <span className="c-s13 c-w6 c-t3">{peopleHeading(results.data, typed)}</span>
+              {results.data.people.length > 0 ? (
+                <ul className="m-0 p-0 list-none flex flex-col" style={{ maxHeight: 300, overflowY: 'auto' }}>
+                  {results.data.people.map((entry, index) => {
+                    const row = personRow(entry, results.data.gymHasTypes);
+                    const words = (
+                      <>
+                        <span className={`c-s15 c-w6 c-ell ${row.pickable ? 'c-t1' : 'c-t3'}`}>{row.name}</span>
+                        {row.detail === '' ? null : <span className="c-s13 c-t3 c-ell">{row.detail}</span>}
+                      </>
+                    );
+                    return (
+                      <li key={entry.entryId} className="min-w-0" style={index === 0 ? undefined : { borderTop: '1px solid var(--line)' }}>
+                        {row.pickable ? (
+                          <button
+                            type="button"
+                            onClick={() => setPerson(entry)}
+                            aria-label={`Pick ${row.name}`}
+                            className="w-full text-left min-h-11 py-2 flex items-center justify-between gap-3 min-w-0"
+                          >
+                            <span className="flex flex-col min-w-0">{words}</span>
+                            <span className="c-btn c-btn-sm c-btn-s flex-shrink-0" aria-hidden="true">
+                              Pick
+                            </span>
+                          </button>
+                        ) : (
+                          <div className="min-h-11 py-2 flex flex-col justify-center min-w-0">{words}</div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+              {results.data.more ? <p className="c-s13 c-t3 m-0">Showing the first {results.data.people.length}. Type a name to find anybody else.</p> : null}
+            </>
           ) : null}
-          {results !== null && results.entries.length > 0 ? (
-            <ul className="m-0 p-0 list-none flex flex-col" style={{ maxHeight: 280, overflowY: 'auto' }}>
-              {results.entries.slice(0, 20).map((entry) => {
-                const row = personRow(entry);
-                return (
-                  <li key={entry.entryId} className="c-row">
-                    <button type="button" onClick={() => setPerson(entry)} className="w-full text-left min-h-11 flex flex-col justify-center min-w-0">
-                      <span className="c-s15 c-w6 c-t1 c-ell">{row.name}</span>
-                      {row.detail === '' ? null : <span className="c-s13 c-t3 c-ell">{row.detail}</span>}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-          {results !== null && results.total > 20 ? <p className="c-s13 c-t3 m-0">Showing the first 20 of {results.total}. Type more to narrow it down.</p> : null}
         </>
       ) : (
         <>
@@ -256,7 +309,7 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
             {bookSentence({ person, trainer, localDate: slot.localDate, startMinute: slot.startMinute, minutes, clockFormat })}
           </p>
           <p className="c-s14 c-t2 m-0">
-            If they have a pack that includes personal training, one session is used. {NOT_TOLD}
+            {bookCost(person)} {NOT_TOLD}
           </p>
           {error !== null ? (
             <p className="c-s14 c-w5 m-0" role="alert" style={{ color: 'var(--bad)' }}>
@@ -300,7 +353,7 @@ function SessionRow({ appointment, first, clockFormat, freeCancelMinutes, locked
           {row.detail === '' ? null : <span className="c-s13 c-t3 c-ell">{row.detail}</span>}
         </div>
         {!locked && appointment.cancel !== null && !asking ? (
-          <button type="button" onClick={onAsk} className="c-btn-link c-s14 c-w6 flex-shrink-0">
+          <button type="button" onClick={onAsk} aria-label={`Cancel ${row.name}'s session`} className="c-btn c-btn-sm c-btn-s flex-shrink-0">
             Cancel
           </button>
         ) : null}
@@ -340,7 +393,9 @@ export default function PersonalTraining() {
   const [list, setList] = useState(null);
   const [listFailed, setListFailed] = useState(null);
   const [listKey, setListKey] = useState(0);
-  const [editing, setEditing] = useState(false);
+  // Whose hours form is open: a member of staff's id, one at a time.
+  const [editing, setEditing] = useState(null);
+  const [adding, setAdding] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
@@ -372,7 +427,7 @@ export default function PersonalTraining() {
     };
   }, [gymId, listKey]);
 
-  const trainer = list === null ? null : pickTrainer(list.trainers, wantedTrainer);
+  const trainer = list === null ? null : pickTrainer(list.trainers, wantedTrainer, list.canManage);
   const trainerId = trainer?.userId ?? null;
   const weekOf = `${String(trainerId)}:${String(from)}`;
 
@@ -392,12 +447,12 @@ export default function PersonalTraining() {
     };
   }, [gymId, trainerId, from, weekOf, weekKey]);
 
-  const readWeekAgain = useCallback(() => {
+  const readWeekAgain = () => {
     setBooking(null);
     setCancelling(null);
     setCancelError(null);
     setWeekKey((n) => n + 1);
-  }, []);
+  };
 
   if (orgLoading) {
     return (
@@ -429,23 +484,30 @@ export default function PersonalTraining() {
   const readOnly = consoleIsReadOnly(org);
   const clockFormat = org.clockFormat;
   const shownWeek = week !== null && week.key === weekOf ? week : null;
+  const groups = trainerGroups(list?.trainers);
+  const editingTrainer = list?.trainers.find((t) => t.userId === editing) ?? null;
 
-  const pick = (userId) => {
-    setEditing(false);
-    setSaveError(null);
+  const show = (userId) => {
     setFrom(null);
     setBooking(null);
     setCancelling(null);
     setSearchParams({ trainer: userId });
+  };
+  const openHours = (userId) => {
+    setSaveError(null);
+    setEditing(userId);
   };
 
   const saveHours = async (body) => {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await orgService.savePtTrainer(gymId, trainer.userId, body);
+      const res = await orgService.savePtTrainer(gymId, editing, body);
       setList(res.data);
-      setEditing(false);
+      // Whoever was just set up is the one whose week is shown.
+      if (list.canManage) show(editing);
+      setEditing(null);
+      setAdding('');
       readWeekAgain();
     } catch (err) {
       setSaveError(errorText(err, "We couldn't save those hours."));
@@ -474,6 +536,22 @@ export default function PersonalTraining() {
     }
   };
 
+  const hoursForm =
+    editingTrainer === null ? null : (
+      <HoursForm
+        key={editingTrainer.userId}
+        trainer={editingTrainer}
+        clockFormat={clockFormat}
+        saving={saving}
+        error={saveError}
+        onSave={(body) => void saveHours(body)}
+        onClose={() => {
+          setEditing(null);
+          setSaveError(null);
+        }}
+      />
+    );
+
   return (
     <div className="c-page">
       <header className="flex flex-col gap-1.5 min-w-0">
@@ -482,6 +560,7 @@ export default function PersonalTraining() {
           {org.name}
           {list?.timezone ? ` · ${list.timezone} time` : ''}
         </p>
+        {list !== null ? <p className="c-s15 c-t2 m-0">{list.canManage ? PT_INTRO_MANAGER : PT_INTRO_OWN}</p> : null}
       </header>
 
       {readOnly ? (
@@ -493,115 +572,172 @@ export default function PersonalTraining() {
       {list === null && listFailed === null ? <ConsoleLoading label="Loading your trainers…" newLook /> : null}
       {listFailed !== null ? <ConsoleFailed message={listFailed} onRetry={() => setListKey((n) => n + 1)} newLook /> : null}
 
-      {list !== null && trainer !== null ? (
-        <>
-          {list.canManage && list.trainers.length > 1 ? (
-            <div className="c-narrow">
-              <Field label="Trainer">
-                <select value={trainer.userId} onChange={(e) => pick(e.target.value)} className="c-input">
-                  {list.trainers.map((t) => (
+      {list !== null && list.canManage ? (
+        <section className="c-card p-5 md:p-6 flex flex-col gap-4" aria-label="Trainers">
+          <h2 className="c-h2">Trainers</h2>
+          {groups.setUp.length === 0 ? (
+            <p className="c-s15 c-t2 m-0">No trainers yet. Choose who takes personal training sessions, then set their hours.</p>
+          ) : (
+            <ul className="m-0 p-0 list-none flex flex-col">
+              {groups.setUp.map((t, index) => {
+                const shown = trainer !== null && t.userId === trainer.userId;
+                return (
+                  <li
+                    key={t.userId}
+                    className="py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between min-w-0"
+                    style={index === 0 ? undefined : { borderTop: '1px solid var(--line)' }}
+                    data-testid="pt-trainer"
+                  >
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="c-s15 c-w6 c-t1 c-ell">
+                        {trainerName(t)} · <span className="c-t2 c-w5">{trainerSummary(t)}</span>
+                      </span>
+                      {hoursLines(t, clockFormat).map((line) => (
+                        <span key={line} className="c-s13 c-t3">
+                          {line}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                      {shown ? (
+                        <span className="c-tag c-tag-soft">Week shown below</span>
+                      ) : (
+                        <button type="button" onClick={() => show(t.userId)} aria-label={`See ${trainerName(t)}'s week`} className="c-btn c-btn-sm c-btn-s">
+                          See week
+                        </button>
+                      )}
+                      {!readOnly ? (
+                        <button type="button" onClick={() => openHours(t.userId)} aria-label={`Edit hours for ${trainerName(t)}`} className="c-btn c-btn-sm c-btn-s">
+                          Edit hours
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {!readOnly && groups.others.length > 0 && editingTrainer === null ? (
+            <div className="flex flex-col gap-2 pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+              <label className="c-label" htmlFor="pt-add-trainer">
+                Add a trainer
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <select id="pt-add-trainer" value={adding} onChange={(e) => setAdding(e.target.value)} className="c-input" style={{ maxWidth: 320 }}>
+                  <option value="">Choose a member of staff</option>
+                  {groups.others.map((t) => (
                     <option key={t.userId} value={t.userId}>
-                      {trainerName(t)} · {trainerSummary(t)}
+                      {trainerName(t)}
                     </option>
                   ))}
                 </select>
-              </Field>
+                <button type="button" onClick={() => openHours(adding)} disabled={adding === ''} className="c-btn c-btn-p">
+                  Set their hours
+                </button>
+              </div>
+              <span className="c-s13 c-t3">Only people on your staff are listed. Invite somebody new in Settings, under Staff.</span>
             </div>
           ) : null}
 
-          <section className="c-card p-5 md:p-6 flex flex-col gap-4" aria-label="Hours">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div className="flex flex-col gap-1 min-w-0">
-                <h2 className="c-h2">{trainerName(trainer)}</h2>
-                <p className="c-s14 c-t2 m-0">{trainerSummary(trainer)}</p>
-              </div>
-              {!readOnly && !editing ? (
-                <button type="button" onClick={() => setEditing(true)} className="c-btn c-btn-s w-full md:w-auto">
-                  {trainer.sessionMinutes === null ? 'Set hours' : 'Edit hours'}
-                </button>
-              ) : null}
+          {hoursForm !== null ? (
+            <div className="pt-4" style={{ borderTop: '1px solid var(--line)' }}>
+              {hoursForm}
             </div>
-            {editing ? (
-              <HoursForm
-                key={trainer.userId}
-                trainer={trainer}
-                clockFormat={clockFormat}
-                saving={saving}
-                error={saveError}
-                onSave={(body) => void saveHours(body)}
-                onClose={() => {
-                  setEditing(false);
-                  setSaveError(null);
-                }}
-              />
-            ) : (
-              <ul className="m-0 p-0 list-none flex flex-col gap-1">
-                {hoursLines(trainer, clockFormat).map((line) => (
-                  <li key={line} className="c-s15 c-t1">
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          ) : null}
+        </section>
+      ) : null}
 
-          <section className="flex flex-col gap-4" aria-label="Sessions">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <h2 className="c-h2">{shownWeek?.data ? weekTitle(shownWeek.data) : 'Sessions'}</h2>
-              {shownWeek?.data ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFrom(addDays(shownWeek.data.from, -7))}
-                    disabled={!canGoEarlier(shownWeek.data)}
-                    className="c-btn c-btn-sm c-btn-s"
-                  >
-                    <ChevronLeft aria-hidden="true" className="w-4 h-4" /> Earlier
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFrom(addDays(shownWeek.data.from, 7))}
-                    disabled={!canGoLater(shownWeek.data)}
-                    className="c-btn c-btn-sm c-btn-s"
-                  >
-                    Later <ChevronRight aria-hidden="true" className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : null}
+      {list !== null && !list.canManage && trainer !== null ? (
+        <section className="c-card p-5 md:p-6 flex flex-col gap-4" aria-label="Your hours">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex flex-col gap-1 min-w-0">
+              <h2 className="c-h2">Your hours</h2>
+              <p className="c-s14 c-t2 m-0">{trainerSummary(trainer)}</p>
             </div>
+            {!readOnly && editingTrainer === null ? (
+              <button type="button" onClick={() => openHours(trainer.userId)} className="c-btn c-btn-s w-full md:w-auto">
+                {trainer.sessionMinutes === null ? 'Set my hours' : 'Edit my hours'}
+              </button>
+            ) : null}
+          </div>
+          {hoursForm ?? (
+            <ul className="m-0 p-0 list-none flex flex-col gap-1">
+              {hoursLines(trainer, clockFormat).map((line) => (
+                <li key={line} className="c-s15 c-t1">
+                  {line}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
-            {shownWeek === null ? <ConsoleLoading label="Loading that week…" newLook /> : null}
-            {shownWeek !== null && shownWeek.failed !== null ? <ConsoleFailed message={shownWeek.failed} onRetry={() => setWeekKey((n) => n + 1)} newLook /> : null}
-
+      {list !== null && trainer !== null ? (
+        <section className="flex flex-col gap-4" aria-label="Sessions">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <h2 className="c-h2">
+              {list.canManage ? `${trainerName(trainer)} · ` : ''}
+              {shownWeek?.data ? weekTitle(shownWeek.data) : 'Sessions'}
+            </h2>
             {shownWeek?.data ? (
-              <>
-                {noTimesNote(shownWeek.data, trainer) !== null ? (
-                  <section className="c-card p-5">
-                    <p className="c-s15 c-t2 m-0">{noTimesNote(shownWeek.data, trainer)}</p>
-                  </section>
-                ) : null}
-                {!list.canBook && !readOnly ? (
-                  <p className="c-s14 c-t2 m-0">
-                    You can see and cancel these sessions. To book one, ask a manager: booking picks a person from the member list.
-                  </p>
-                ) : null}
-                <div className="grid gap-4 xl:grid-cols-2 items-start">
-                  {shownWeek.data.days.map((day) => {
-                    const openSlot = booking !== null && booking.localDate === day.localDate ? booking : null;
-                    // A day with nothing on it and nothing to book is one line, so a week reads at a glance.
-                    if (day.appointments.length === 0 && day.free.length === 0) {
-                      return (
-                        <section key={day.localDate} className="c-card px-5 py-3 flex items-center justify-between gap-3 min-w-0" data-testid="pt-day">
-                          <h3 className="c-s15 c-w6 c-t2 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
-                          <span className="c-s13 c-t3">No free times</span>
-                        </section>
-                      );
-                    }
-                    return (
-                      <section key={day.localDate} className="c-card p-5 flex flex-col gap-4 min-w-0" data-testid="pt-day">
-                        <h3 className="c-h3 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFrom(addDays(shownWeek.data.from, -7))}
+                  disabled={!canGoEarlier(shownWeek.data)}
+                  className="c-btn c-btn-sm c-btn-s"
+                >
+                  <ChevronLeft aria-hidden="true" className="w-4 h-4" /> Earlier
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFrom(addDays(shownWeek.data.from, 7))}
+                  disabled={!canGoLater(shownWeek.data)}
+                  className="c-btn c-btn-sm c-btn-s"
+                >
+                  Later <ChevronRight aria-hidden="true" className="w-4 h-4" />
+                </button>
+              </div>
+            ) : null}
+          </div>
 
-                        {day.appointments.length > 0 ? (
+          {shownWeek === null ? <ConsoleLoading label="Loading that week…" newLook /> : null}
+          {shownWeek !== null && shownWeek.failed !== null ? <ConsoleFailed message={shownWeek.failed} onRetry={() => setWeekKey((n) => n + 1)} newLook /> : null}
+
+          {shownWeek?.data ? (
+            <>
+              {noTimesNote(shownWeek.data, trainer) !== null ? (
+                <section className="c-card p-5">
+                  <p className="c-s15 c-t2 m-0">{noTimesNote(shownWeek.data, trainer)}</p>
+                </section>
+              ) : null}
+              {!list.canBook && !readOnly ? (
+                <p className="c-s14 c-t2 m-0">
+                  You can see and cancel these sessions. To book one, ask a manager: booking picks a person from the member list.
+                </p>
+              ) : null}
+              <div className="grid gap-4 xl:grid-cols-2 items-start">
+                {shownWeek.data.days.map((day) => {
+                  const openSlot = booking !== null && booking.localDate === day.localDate ? booking : null;
+                  const minutes = shownWeek.data.sessionMinutes;
+                  const canBook = list.canBook && !readOnly && minutes !== null;
+                  // A day with nothing on it and nothing to book is one line, so a week reads at a glance.
+                  if (day.appointments.length === 0 && day.free.length === 0) {
+                    return (
+                      <section key={day.localDate} className="c-card px-5 py-3 flex items-center justify-between gap-3 min-w-0" data-testid="pt-day">
+                        <h3 className="c-s15 c-w6 c-t2 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
+                        <span className="c-s13 c-t3">No free times</span>
+                      </section>
+                    );
+                  }
+                  return (
+                    <section key={day.localDate} className="c-card p-5 flex flex-col gap-4 min-w-0" data-testid="pt-day">
+                      <h3 className="c-h3 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
+
+                      {day.appointments.length > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="c-s13 c-w6 c-t3">Booked</span>
                           <ul className="m-0 p-0 list-none flex flex-col">
                             {day.appointments.map((appointment, index) => (
                               <SessionRow
@@ -627,61 +763,60 @@ export default function PersonalTraining() {
                               />
                             ))}
                           </ul>
-                        ) : null}
-
-                        <div className="flex flex-col gap-2">
-                          <span className="c-s13 c-w6 c-t3">
-                            {day.free.length === 0 ? 'No free times' : day.free.length === 1 ? '1 free time' : `${String(day.free.length)} free times`}
-                          </span>
-                          {day.free.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {day.free.map((minute) => {
-                                const picked = openSlot !== null && openSlot.startMinute === minute;
-                                const label = clockLabel(minute, clockFormat);
-                                return list.canBook && !readOnly ? (
-                                  <button
-                                    key={minute}
-                                    type="button"
-                                    aria-pressed={picked}
-                                    aria-label={`Book ${label}`}
-                                    onClick={() => {
-                                      setCancelling(null);
-                                      setBooking(picked ? null : { localDate: day.localDate, startMinute: minute });
-                                    }}
-                                    className={picked ? 'c-chip c-chip-on c-num' : 'c-chip c-num'}
-                                  >
-                                    {label}
-                                  </button>
-                                ) : (
-                                  <span key={minute} className="c-tag c-tag-plain c-num">
-                                    {label}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          ) : null}
                         </div>
+                      ) : null}
 
-                        {openSlot !== null && shownWeek.data.sessionMinutes !== null ? (
-                          <BookBox
-                            key={`${openSlot.localDate}:${String(openSlot.startMinute)}`}
-                            gymId={gymId}
-                            trainer={trainer}
-                            slot={openSlot}
-                            minutes={shownWeek.data.sessionMinutes}
-                            clockFormat={clockFormat}
-                            onBooked={readWeekAgain}
-                            onClose={() => setBooking(null)}
-                          />
-                        ) : null}
-                      </section>
-                    );
-                  })}
-                </div>
-              </>
-            ) : null}
-          </section>
-        </>
+                      {day.free.length > 0 && minutes !== null ? (
+                        <div className="flex flex-col gap-2">
+                          <span className="c-s13 c-w6 c-t3">{canBook ? 'Free times. Press one to book it.' : 'Free times'}</span>
+                          <div className="flex flex-wrap gap-2">
+                            {day.free.map((minute) => {
+                              const picked = openSlot !== null && openSlot.startMinute === minute;
+                              const label = freeTimeLabel(minute, minutes, clockFormat);
+                              return canBook ? (
+                                <button
+                                  key={minute}
+                                  type="button"
+                                  aria-pressed={picked}
+                                  aria-label={`Book ${label}`}
+                                  onClick={() => {
+                                    setCancelling(null);
+                                    setBooking(picked ? null : { localDate: day.localDate, startMinute: minute });
+                                  }}
+                                  className={picked ? 'c-btn c-btn-sm c-btn-p c-num' : 'c-btn c-btn-sm c-btn-s c-num'}
+                                >
+                                  <Plus aria-hidden="true" className="w-4 h-4" />
+                                  {label}
+                                </button>
+                              ) : (
+                                <span key={minute} className="c-tag c-tag-plain c-num">
+                                  {label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {openSlot !== null && minutes !== null ? (
+                        <BookBox
+                          key={`${openSlot.localDate}:${String(openSlot.startMinute)}`}
+                          gymId={gymId}
+                          trainer={trainer}
+                          slot={openSlot}
+                          minutes={minutes}
+                          clockFormat={clockFormat}
+                          onBooked={readWeekAgain}
+                          onClose={() => setBooking(null)}
+                        />
+                      ) : null}
+                    </section>
+                  );
+                })}
+              </div>
+            </>
+          ) : null}
+        </section>
       ) : null}
     </div>
   );

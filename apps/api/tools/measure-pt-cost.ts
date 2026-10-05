@@ -16,7 +16,7 @@ import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
 import { addDays } from "@app/shared";
-import { book, cancel, getTrainers, getWeek, saveTrainer } from "../src/modules/orgs/pt/service.js";
+import { book, cancel, getPeople, getTrainers, getWeek, saveTrainer } from "../src/modules/orgs/pt/service.js";
 import { dayInTz } from "../src/modules/gamification/streak.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -170,6 +170,14 @@ await measure("a trainer's week, all 224 times booked", fillWeek, async () => {
 await measure(`the staff list: ${String(STAFF)} staff with their hours`, () => Promise.resolve(), async () => {
   const list = await getTrainers(deps, owner, gymId, yes);
   if (list?.trainers.length !== STAFF) throw new Error("not the whole staff");
+});
+await measure(`the picker: the first 30 of ${String(PEOPLE)} people, those with a pack first`, () => Promise.resolve(), async () => {
+  const list = await getPeople(deps, owner, gymId, {}, yes);
+  if (list?.people.length !== Math.min(30, PEOPLE) || !list.more) throw new Error("not a full page");
+});
+await measure("the picker: a typed part of a name", () => Promise.resolve(), async () => {
+  const list = await getPeople(deps, owner, gymId, { query: "son1999 co" }, yes);
+  if (list?.people.length !== 1) throw new Error("not the one person");
 });
 const request = (n: number, minute: number, trainerId = trainer) => ({ requestKey: randomUUID(), trainerId, entryId: entryAt(n), localDate: WEEK_FROM, startMinute: minute });
 await measure("one booking, the pack charged", () => Promise.resolve(), async () => {

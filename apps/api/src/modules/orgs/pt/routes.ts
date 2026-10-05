@@ -4,7 +4,14 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import { PT_LATE_CANCEL_ERROR, bookPtRequestSchema, cancelPtRequestSchema, ptWeekQuerySchema, savePtTrainerRequestSchema } from "@app/shared";
+import {
+  PT_LATE_CANCEL_ERROR,
+  bookPtRequestSchema,
+  cancelPtRequestSchema,
+  ptPeopleQuerySchema,
+  ptWeekQuerySchema,
+  savePtTrainerRequestSchema,
+} from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
@@ -88,6 +95,17 @@ export function registerPtRoutes(app: FastifyInstance, deps: { sql: Sql; redis: 
     const week = await service.getWeek(ptDeps, requireUserId(req), params.gymId, query, gate(readLimit)(req, reply));
     if (week === null) return;
     return reply.status(200).send(week);
+  });
+
+  // Who a session can be booked for: the member list, people with personal training first.
+  app.get("/v1/orgs/:gymId/pt/people", staff, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(ptPeopleQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const people = await service.getPeople(ptDeps, requireUserId(req), params.gymId, query, gate(readLimit)(req, reply));
+    if (people === null) return;
+    return reply.status(200).send(people);
   });
 
   // The same `requestKey` again answers the session it made and changes nothing.

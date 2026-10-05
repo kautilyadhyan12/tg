@@ -25,7 +25,7 @@ export const gymTrainers = pgTable(
   },
   (t) => [
     primaryKey({ name: "gym_trainers_pk", columns: [t.gymId, t.userId] }),
-    check("gym_trainers_minutes_check", sql`${t.sessionMinutes} IN (30, 45, 60, 90)`),
+    check("gym_trainers_minutes_check", sql`${t.sessionMinutes} BETWEEN 10 AND 240 AND ${t.sessionMinutes} % 5 = 0`),
   ],
 );
 
@@ -78,7 +78,7 @@ export const gymPtAppointments = pgTable(
     check("gym_pt_appointments_cancelled_check", sql`(${t.status} IN ('cancelled','late_cancelled')) = (${t.cancelledAt} IS NOT NULL)`),
     check(
       "gym_pt_appointments_time_check",
-      sql`${t.minutes} IN (30, 45, 60, 90) AND ${t.endsAt} > ${t.startsAt} AND ${t.localStartMinute} BETWEEN 0 AND 1439`,
+      sql`${t.minutes} BETWEEN 10 AND 240 AND ${t.minutes} % 5 = 0 AND ${t.endsAt} > ${t.startsAt} AND ${t.localStartMinute} BETWEEN 0 AND 1439`,
     ),
     index("gym_pt_appointments_trainer_idx").on(t.gymId, t.trainerUserId, t.startsAt),
     index("gym_pt_appointments_entry_idx").on(t.gymId, t.entryId, t.startsAt).where(sql`${t.entryId} IS NOT NULL`),

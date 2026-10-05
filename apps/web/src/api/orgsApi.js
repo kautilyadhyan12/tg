@@ -118,6 +118,7 @@ import {
   removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
   ptAppointmentResponseSchema,
+  ptPeopleResponseSchema,
   ptTrainersResponseSchema,
   ptWeekResponseSchema,
   sendGymCheerResponseSchema,
@@ -1699,6 +1700,17 @@ export const orgService = {
       'that week',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/pt/week`, {
         params: { trainer: trainerId, ...(typeof from === 'string' && from !== '' ? { from } : {}) },
+      }),
+    ),
+
+  /** GET …/pt/people — who a session can be booked for: the member list, people with
+   *  personal training first; `query` is part of a name or an email. */
+  getPtPeople: (gymId, query) =>
+    readThrough(
+      ptPeopleResponseSchema,
+      'your members',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/pt/people`, {
+        params: typeof query === 'string' && query.trim() !== '' ? { query: query.trim() } : {},
       }),
     ),
 

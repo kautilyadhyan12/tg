@@ -7,7 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import type { PtAppointment, PtTrainersResponse, PtWeekResponse } from "@app/shared";
+import type { PtAppointment, PtPeopleResponse, PtTrainersResponse, PtWeekResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -655,12 +655,80 @@ d("personal training (real Postgres, two api instances)", () => {
       [{ weekday: 1, fromMinute: 601, toMinute: 660 }],
     ];
     for (const hours of bad) expect((await setHours(open, open.owner, sam, { hours })).statusCode).toBe(400);
-    expect((await setHours(open, open.owner, sam, { sessionMinutes: 50 })).statusCode).toBe(400);
+    for (const minutes of [5, 52, 245]) expect((await setHours(open, open.owner, sam, { sessionMinutes: minutes })).statusCode).toBe(400);
     const kept = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_trainer_hours WHERE gym_id = ${open.id} AND user_id = ${sam.userId}`;
     expect(kept[0]?.n).toBe(7);
     const notStaff = await signedIn("Hours Stranger");
     const res = await setHours(open, open.owner, notStaff);
     expect([res.statusCode, errorOf(res)]).toEqual([404, "trainer_not_found"]);
+  });
+
+  it("a session is as long as the gym says: 20 minutes and 75 minutes make their own times and are booked at that length", async () => {
+    const sam = await staff(open, "Length Trainer");
+    const tom = await listed(open, "Tom Length");
+    const hours = [{ weekday: 5, fromMinute: 540, toMinute: 660 }];
+    expect((await setHours(open, open.owner, sam, { sessionMinutes: 20, hours })).statusCode).toBe(200);
+    expect(dayOf(await week(open, open.owner, sam), FRIDAY).free).toEqual([540, 560, 580, 600, 620, 640]);
+    const short = made(await book(open, sam, tom, { minute: 560 }));
+    expect([short.minutes, short.startsAt]).toEqual([20, "2026-10-09T08:20:00.000Z"]);
+    // 75 minutes from now on: one fits in the two hours, and the 20 minutes booked blocks it.
+    expect((await setHours(open, open.owner, sam, { sessionMinutes: 75, hours })).statusCode).toBe(200);
+    expect(dayOf(await week(open, open.owner, sam), FRIDAY).free).toEqual([]);
+    expect(made(await cancel(open, short.id)).status).toBe("cancelled");
+    expect(dayOf(await week(open, open.owner, sam), FRIDAY).free).toEqual([540]);
+    expect(made(await book(open, sam, tom, { minute: 540 })).minutes).toBe(75);
+  });
+
+  it("the people to pick from: those with personal training first, found by part of a name, and only for staff who may read the list", async () => {
+    const gym = await makeGym("Picker PT");
+    const sam = await trainerWith(gym, "Picker Trainer");
+    const pack = await typeOf(gym, { kind: "pack", includesPt: true });
+    const unlimited = await typeOf(gym, { includesPt: true });
+    const classes = await typeOf(gym);
+    const zara = await listed(gym, "Zara Pack");
+    const yan = await listed(gym, "Yan Unlimited");
+    const abe = await listed(gym, "Abe Classes");
+    await listed(gym, "Bea Nothing");
+    const used = await listed(gym, "Cal Used_Up");
+    const gone = await listed(gym, "Dee Former");
+    await hold(gym, zara, pack, { pack: 7 });
+    await hold(gym, yan, unlimited);
+    await hold(gym, abe, classes);
+    await hold(gym, used, pack, { pack: 0 });
+    await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE id = ${gone}`;
+    const people = async (by: Person, query?: string): Promise<PtPeopleResponse> => {
+      const res = await inject("GET", `/v1/orgs/${gym.id}/pt/people${query === undefined ? "" : `?query=${encodeURIComponent(query)}`}`, by.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      return JSON.parse(res.body) as PtPeopleResponse;
+    };
+    const all = await people(gym.owner);
+    expect(all.gymHasTypes).toBe(true);
+    expect(all.people.map((p) => [p.name, p.pt])).toEqual([
+      ["Yan Unlimited", { membership: expect.stringMatching(/^Type /) as string, sessionsLeft: null }],
+      ["Zara Pack", { membership: expect.stringMatching(/^Type /) as string, sessionsLeft: 7 }],
+      ["Abe Classes", null],
+      ["Bea Nothing", null],
+      ["Cal Used_Up", null],
+    ]);
+    expect(all.more).toBe(false);
+    // Part of a name, whatever its capitals; a typed `_` or `%` is a letter, not "anything".
+    expect((await people(gym.owner, "zAR")).people.map((p) => p.entryId)).toEqual([zara]);
+    expect((await people(gym.owner, "used_")).people.map((p) => p.entryId)).toEqual([used]);
+    expect((await people(gym.owner, "a_e")).people).toEqual([]);
+    expect((await people(gym.owner, "%")).people).toEqual([]);
+    expect((await people(gym.owner, "Former")).people).toEqual([]);
+    // What the list says is what the booking then does.
+    expect(made(await book(gym, sam, zara)).packCharged).toBe(true);
+    expect((await people(gym.owner, "Zara")).people[0]?.pt?.sessionsLeft).toBe(6);
+
+    // A trainer on the usual ticks cannot read the member list here either; nor anybody outside the gym.
+    expect((await inject("GET", `/v1/orgs/${gym.id}/pt/people`, sam.cookies)).statusCode).toBe(403);
+    expect((await inject("GET", `/v1/orgs/${gym.id}/pt/people`, open.owner.cookies)).statusCode).toBe(404);
+    expect((await inject("GET", `/v1/orgs/${gym.id}/pt/people`, {})).statusCode).toBe(401);
+    expect((await inject("GET", `/v1/orgs/${gym.id}/pt/people?query=${"x".repeat(101)}`, gym.owner.cookies)).statusCode).toBe(400);
+    // A gym that sells no memberships says so, and nobody has anything to show.
+    const none = JSON.parse((await inject("GET", `/v1/orgs/${open.id}/pt/people?query=Tom%20Length`, open.owner.cookies)).body) as PtPeopleResponse;
+    expect([none.gymHasTypes, none.people.map((p) => p.pt)]).toEqual([false, [null]]);
   });
 
   it("a stranger, another gym's owner and somebody signed out get nothing, and a member of the gym is not staff", async () => {

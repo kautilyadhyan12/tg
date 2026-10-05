@@ -1,15 +1,28 @@
 // PERSONAL TRAINING, its words and its form's rules (spec Part 3 §13.5; ROADMAP 17e-i).
 // Pure, so the tests read every state without a browser. Every time is the gym's own clock.
-import { PT_RANGES_PER_DAY, PT_SESSION_MINUTES, ptHoursProblem } from '@app/shared';
+import { PT_RANGES_PER_DAY, PT_SESSION_MINUTES_MAX, PT_SESSION_MINUTES_MIN, PT_SESSION_MINUTES_USUAL, ptHoursProblem } from '@app/shared';
 import { WEEKDAYS, clockLabel, clockToMinutes, minutesToClock } from './hoursView';
 import { dayLabel } from '../../components/gym/leaderboardView';
 
 export const PT_TITLE = 'Personal training';
 
+/** What the page is for, in one line under its name. */
+export const PT_INTRO_MANAGER = 'Set the hours each trainer is free. Their free times appear below: press one to book a member.';
+export const PT_INTRO_OWN = 'Set the hours you are free for sessions. Your booked sessions appear below.';
+
 /** Until the inbox exists nobody is told by the app (RULINGS 2026-10-05). */
 export const NOT_TOLD = "The app doesn't tell them yet. Let them know yourself.";
 
-export const SESSION_LENGTH_CHOICES = PT_SESSION_MINUTES.map((minutes) => ({ value: String(minutes), label: `${String(minutes)} minutes` }));
+/** The lengths offered in one press; any other length is typed. */
+export const SESSION_LENGTH_USUAL = PT_SESSION_MINUTES_USUAL.map((minutes) => String(minutes));
+export const SESSION_LENGTH_HINT = `Any length from ${String(PT_SESSION_MINUTES_MIN)} to ${String(PT_SESSION_MINUTES_MAX)} minutes, in steps of 5.`;
+
+/** The typed session length as a number the server takes, or null. */
+export function sessionLength(text) {
+  if (typeof text !== 'string' || !/^\d{1,3}$/.test(text.trim())) return null;
+  const n = Number(text.trim());
+  return n >= PT_SESSION_MINUTES_MIN && n <= PT_SESSION_MINUTES_MAX && n % 5 === 0 ? n : null;
+}
 
 /** A member of staff's name on this page; the reader's own row says so. */
 export function trainerName(trainer) {
@@ -17,9 +30,10 @@ export function trainerName(trainer) {
   return trainer?.mine === true ? `${name} (you)` : name;
 }
 
-/** Whether somebody has hours that make sessions. */
-export function takesSessions(trainer) {
-  return trainer?.offers === true && trainer.sessionMinutes !== null && trainer.hours.length > 0;
+/** The staff who are set up to take sessions, and the rest, who can be. */
+export function trainerGroups(trainers) {
+  const list = Array.isArray(trainers) ? trainers : [];
+  return { setUp: list.filter((t) => t.sessionMinutes !== null), others: list.filter((t) => t.sessionMinutes === null) };
 }
 
 /** The one line under a trainer's name. */
@@ -44,17 +58,15 @@ export function hoursLines(trainer, clockFormat) {
   });
 }
 
-/** Who the page opens on: the trainer named in the address, else the reader's own row
- *  when they take sessions, else the first person who does, else the first row. */
-export function pickTrainer(trainers, wantedId) {
+/** Whose week the page shows: the trainer named in the address, else the reader when they
+ *  are set up, else the first person who is. Nobody where nobody is set up: staff who run
+ *  the timetable are shown how to add a trainer, never themselves as one. Somebody who
+ *  sees only their own row always gets it. */
+export function pickTrainer(trainers, wantedId, canManage) {
   if (!Array.isArray(trainers) || trainers.length === 0) return null;
-  return (
-    trainers.find((t) => t.userId === wantedId) ??
-    trainers.find((t) => t.mine && takesSessions(t)) ??
-    trainers.find((t) => takesSessions(t)) ??
-    trainers.find((t) => t.mine) ??
-    trainers[0]
-  );
+  if (!canManage) return trainers.find((t) => t.mine) ?? trainers[0];
+  const { setUp } = trainerGroups(trainers);
+  return setUp.find((t) => t.userId === wantedId) ?? setUp.find((t) => t.mine) ?? setUp[0] ?? null;
 }
 
 // ── THE HOURS FORM ──
@@ -70,7 +82,7 @@ export function hoursDraft(trainer) {
       .map((h) => ({ from: minutesToClock(h.fromMinute), to: minutesToClock(h.toMinute) }));
   }
   return {
-    // Somebody opening the form for the first time is setting themselves up to take sessions.
+    // Somebody opening the form for the first time is being set up to take sessions.
     offers: trainer?.sessionMinutes === null ? true : trainer?.offers === true,
     sessionMinutes: String(trainer?.sessionMinutes ?? 60),
     days,
@@ -104,9 +116,10 @@ function draftRanges(draft) {
 
 /** What is wrong with the form in one sentence, or null when it can be saved. */
 export function hoursFormProblem(draft) {
+  const length = sessionLength(draft.sessionMinutes);
+  if (length === null) return `Type how long a session is, in minutes. ${SESSION_LENGTH_HINT}`;
   const ranges = draftRanges(draft);
   if (ranges.some((r) => r.fromMinute === null || r.toMinute === null)) return 'Pick a start and an end time for each set of hours, or remove it.';
-  const length = Number(draft.sessionMinutes);
   switch (ptHoursProblem(ranges)) {
     case 'range':
       return 'Each set of hours must end after it starts.';
@@ -128,12 +141,13 @@ export function hoursFormProblem(draft) {
 
 /** The request the form sends. Call only when `hoursFormProblem` is null. */
 export function hoursRequest(draft) {
-  return { offers: draft.offers, sessionMinutes: Number(draft.sessionMinutes), hours: draftRanges(draft) };
+  return { offers: draft.offers, sessionMinutes: sessionLength(draft.sessionMinutes), hours: draftRanges(draft) };
 }
 
 /** How many sessions a week the form's hours make: "12 sessions a week". */
 export function sessionsAWeek(draft) {
-  const length = Number(draft.sessionMinutes);
+  const length = sessionLength(draft.sessionMinutes);
+  if (length === null) return '0 sessions a week';
   const ranges = draftRanges(draft).filter((r) => r.fromMinute !== null && r.toMinute !== null && r.toMinute > r.fromMinute);
   const n = ranges.reduce((sum, r) => sum + Math.floor((r.toMinute - r.fromMinute) / length), 0);
   return n === 1 ? '1 session a week' : `${String(n)} sessions a week`;
@@ -166,6 +180,11 @@ export function noTimesNote(week, trainer) {
   return null;
 }
 
+/** A free time as its button reads: "09:00 – 10:00". */
+export function freeTimeLabel(startMinute, minutes, clockFormat) {
+  return timeRange(startMinute, startMinute + minutes, clockFormat);
+}
+
 /** A session's own line: its time, who it is with, and what it was booked on. */
 export function sessionRow(appointment, clockFormat) {
   const time = timeRange(appointment.localStartMinute, appointment.localStartMinute + appointment.minutes, clockFormat);
@@ -184,9 +203,14 @@ export function durationWords(minutes) {
 
 /** The box before a booking: who, with whom, when. */
 export function bookSentence({ person, trainer, localDate, startMinute, minutes, clockFormat }) {
-  const who = person === null ? 'Pick who the session is for.' : `${person.fullName} will be booked`;
-  if (person === null) return who;
-  return `${who} with ${trainerName(trainer)} on ${dayLabel(localDate)}, ${timeRange(startMinute, startMinute + minutes, clockFormat)}.`;
+  if (person === null) return 'Pick who the session is for.';
+  return `${person.name} will be booked with ${trainerName(trainer)} on ${dayLabel(localDate)}, ${timeRange(startMinute, startMinute + minutes, clockFormat)}.`;
+}
+
+/** What booking this person costs them, said before the button. */
+export function bookCost(person) {
+  if (person?.pt === null || person?.pt === undefined) return '';
+  return person.pt.sessionsLeft === null ? `It is booked on ${person.pt.membership}.` : `One session is used from ${person.pt.membership}.`;
 }
 
 /** The box before a cancel: what it costs the person, and the buttons that say so. */
@@ -217,14 +241,23 @@ export function cancelBox(appointment, { freeCancelMinutes, clockFormat }) {
   };
 }
 
-/** The member list's search, as its query string; null for nothing typed. */
-export function personQuery(text) {
-  const typed = typeof text === 'string' ? text.trim() : '';
-  return typed === '' ? null : `query=${encodeURIComponent(typed)}`;
+/** One person in the picker: their name, what they hold that pays for a session, and
+ *  whether they can be picked. Where the gym sells memberships, somebody holding nothing
+ *  that includes personal training cannot be booked, and the row says so. */
+export function personRow(person, gymHasTypes) {
+  if (person.pt === null) {
+    return gymHasTypes
+      ? { name: person.name, detail: 'No membership that includes personal training', pickable: false }
+      : { name: person.name, detail: '', pickable: true };
+  }
+  const left = person.pt.sessionsLeft;
+  const sessions = left === null ? '' : left === 1 ? ' · 1 session left' : ` · ${String(left)} sessions left`;
+  return { name: person.name, detail: `${person.pt.membership}${sessions}`, pickable: true };
 }
 
-/** One person found, as the picker lists them: the name and what the list says of them. */
-export function personRow(entry) {
-  const detail = [entry.membershipType, entry.email].filter((v) => typeof v === 'string' && v.trim() !== '').join(' · ');
-  return { name: entry.fullName, detail };
+/** What the picker says above its list. */
+export function peopleHeading(people, typed) {
+  if (typed.trim() !== '') return people.people.length === 0 ? 'Nobody on your member list matches.' : 'Matching people';
+  if (people.people.length === 0) return 'Your member list is empty. Add people on Members first.';
+  return people.gymHasTypes ? 'Your members, people with personal training first' : 'Your members';
 }

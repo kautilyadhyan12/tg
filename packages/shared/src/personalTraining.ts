@@ -9,9 +9,13 @@ import { z } from "zod";
 import { CLASS_FILL_HORIZON_DAYS, classDaySchema } from "./classes.js";
 import { heldMembershipView, type HeldMembership } from "./heldMemberships.js";
 
-/** The session lengths a trainer can offer (Mindbody's). */
-export const PT_SESSION_MINUTES = [30, 45, 60, 90] as const;
-export const ptSessionMinutesSchema = z.union([z.literal(30), z.literal(45), z.literal(60), z.literal(90)]);
+/** A session is as long as the gym says (RULINGS 2026-10-06; PushPress and TeamUp take any
+ *  length): from 10 minutes to 4 hours, on a five-minute mark. */
+export const PT_SESSION_MINUTES_MIN = 10;
+export const PT_SESSION_MINUTES_MAX = 240;
+/** The lengths the form offers to pick in one press. */
+export const PT_SESSION_MINUTES_USUAL = [30, 45, 60, 90] as const;
+export const ptSessionMinutesSchema = z.number().int().min(PT_SESSION_MINUTES_MIN).max(PT_SESSION_MINUTES_MAX).multipleOf(5);
 export type PtSessionMinutes = z.infer<typeof ptSessionMinutesSchema>;
 
 /** How many separate ranges of hours one weekday holds (a morning, an afternoon, an evening). */
@@ -351,6 +355,38 @@ export const bookPtRequestSchema = z
   })
   .strict();
 export type BookPtRequest = z.infer<typeof bookPtRequestSchema>;
+
+/** How many people one read of the picker answers. */
+export const PT_PEOPLE_SHOWN = 30;
+
+/** `query`: part of a name or an email; left out, the start of the list. */
+export const ptPeopleQuerySchema = z.object({ query: z.string().trim().max(100).optional() }).strict();
+export type PtPeopleQuery = z.infer<typeof ptPeopleQuerySchema>;
+
+/** The people on the member list a session can be booked for, those who hold something
+ *  that includes personal training first, then by name. `pt` is what they hold: the
+ *  membership's name and, for a pack, the sessions left; null where they hold nothing
+ *  that includes it. It is what the list says now: the booking itself decides. */
+export const ptPeopleResponseSchema = z
+  .object({
+    /** The gym sells memberships: somebody with `pt` null cannot be booked. */
+    gymHasTypes: z.boolean(),
+    people: z
+      .array(
+        z
+          .object({
+            entryId: z.string().uuid(),
+            name: z.string(),
+            pt: z.object({ membership: z.string(), sessionsLeft: z.number().int().nullable() }).strict().nullable(),
+          })
+          .strict(),
+      )
+      .max(PT_PEOPLE_SHOWN),
+    /** More people match than are shown. */
+    more: z.boolean(),
+  })
+  .strict();
+export type PtPeopleResponse = z.infer<typeof ptPeopleResponseSchema>;
 
 export const cancelPtRequestSchema = z.object({ lateOk: z.boolean(), giveBack: z.boolean() }).strict();
 export type CancelPtRequest = z.infer<typeof cancelPtRequestSchema>;

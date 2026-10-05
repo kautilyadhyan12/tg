@@ -2638,7 +2638,14 @@ request says which: a late cancel that keeps the session used, or `giveBack`. **
 `schedule.manage` sees and changes every trainer; anybody else on staff has their own
 hours and sessions; booking also needs `members.confirm`, since it picks a person from
 the member list. The console's Personal training page (`/console/:slug/personal-training`)
-is in every member of staff's menu. Nobody is told yet (the inbox, 20a). Not done, and
+is in every member of staff's menu. **From Kd's click-through (RULINGS 2026-10-06):** a
+session is any length from 10 to 240 minutes on a five-minute mark; whoever runs the
+timetable sees a Trainers list and Add a trainer, never themselves as a trainer they are
+not; a free time is a button reading its whole session; the booking box lists the member
+list at once (`GET …/pt/people`, `members.confirm`: people holding something that
+includes personal training first, with a pack's sessions left; `query` narrows it by
+part of a name or an email), and where the gym sells memberships somebody holding
+nothing that pays is named and cannot be picked. Nobody is told yet (the inbox, 20a). Not done, and
 17e-ii and 17e-iii: the member's own booking; sessions ended when a person leaves, a
 membership is cancelled or a trainer leaves the staff; came and no-show.)*
 

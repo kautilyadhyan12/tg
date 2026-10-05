@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { savePtTrainerRequestSchema } from '@app/shared';
 import {
   addRange,
+  bookCost,
   bookSentence,
   canAddRange,
   canGoEarlier,
@@ -12,18 +13,21 @@ import {
   cancelBox,
   dayHeading,
   durationWords,
+  freeTimeLabel,
   hoursDraft,
   hoursFormProblem,
   hoursLines,
   hoursRequest,
   noTimesNote,
-  personQuery,
+  peopleHeading,
   personRow,
   pickTrainer,
   removeRange,
+  sessionLength,
   sessionRow,
   sessionsAWeek,
   setRange,
+  trainerGroups,
   trainerName,
   trainerSummary,
   weekTitle,
@@ -43,6 +47,7 @@ const trainer = (over = {}) => ({
   mine: false,
   ...over,
 });
+const notSetUp = (over = {}) => trainer({ sessionMinutes: null, offers: false, hours: [], ...over });
 const session = (over = {}) => ({
   id: 'a1',
   trainerId: 'u-sam',
@@ -63,9 +68,10 @@ const session = (over = {}) => ({
 describe('a trainer on the page', () => {
   it('reads in plain words whether they take sessions', () => {
     expect(trainerSummary(trainer())).toBe('60-minute sessions');
+    expect(trainerSummary(trainer({ sessionMinutes: 20 }))).toBe('20-minute sessions');
     expect(trainerSummary(trainer({ offers: false }))).toBe('Not taking sessions');
     expect(trainerSummary(trainer({ hours: [] }))).toBe('Taking sessions, but no hours set');
-    expect(trainerSummary(trainer({ sessionMinutes: null, offers: false, hours: [] }))).toBe('No hours set yet');
+    expect(trainerSummary(notSetUp())).toBe('No hours set yet');
     expect(trainerName(trainer({ mine: true }))).toBe('Sam Reed (you)');
     expect(trainerName(trainer({ name: null }))).toBe('A member of staff');
   });
@@ -76,16 +82,30 @@ describe('a trainer on the page', () => {
     expect(hoursLines(trainer({ hours: [] }), '24h')).toEqual([]);
   });
 
-  it('opens on the trainer in the address, else the reader if they take sessions, else the first who does', () => {
-    const ana = trainer({ userId: 'u-ana', name: 'Ana', sessionMinutes: null, offers: false, hours: [] });
-    const me = trainer({ userId: 'u-me', mine: true, sessionMinutes: null, offers: false, hours: [] });
+  it('the staff are those set up to take sessions, and the rest who can be added', () => {
+    const ana = notSetUp({ userId: 'u-ana', name: 'Ana' });
+    const groups = trainerGroups([ana, trainer(), trainer({ userId: 'u-off', offers: false })]);
+    expect(groups.setUp.map((t) => t.userId)).toEqual(['u-sam', 'u-off']);
+    expect(groups.others.map((t) => t.userId)).toEqual(['u-ana']);
+    expect(trainerGroups(undefined)).toEqual({ setUp: [], others: [] });
+  });
+
+  it('whoever runs the timetable is never shown as a trainer they are not: the week is of somebody set up, or of nobody', () => {
+    const ana = notSetUp({ userId: 'u-ana', name: 'Ana' });
+    const me = notSetUp({ userId: 'u-me', mine: true });
     const sam = trainer();
-    expect(pickTrainer([ana, me, sam], 'u-ana').userId).toBe('u-ana');
-    expect(pickTrainer([ana, me, sam], 'nobody').userId).toBe('u-sam');
-    expect(pickTrainer([ana, { ...me, ...trainer({ userId: 'u-me', mine: true }) }, sam], null).userId).toBe('u-me');
-    expect(pickTrainer([ana, me], null).userId).toBe('u-me');
-    expect(pickTrainer([ana], null).userId).toBe('u-ana');
-    expect(pickTrainer([], null)).toBeNull();
+    const meSetUp = trainer({ userId: 'u-me', mine: true });
+    expect(pickTrainer([ana, me, sam], null, true).userId).toBe('u-sam');
+    expect(pickTrainer([ana, me, sam], 'u-sam', true).userId).toBe('u-sam');
+    // Somebody not set up cannot be the week shown, even when the address names them.
+    expect(pickTrainer([ana, me, sam], 'u-ana', true).userId).toBe('u-sam');
+    expect(pickTrainer([ana, me], null, true)).toBeNull();
+    // An owner who does train sees their own week first.
+    expect(pickTrainer([sam, meSetUp], null, true).userId).toBe('u-me');
+    expect(pickTrainer([], null, true)).toBeNull();
+    // Somebody who sees only their own row always gets it.
+    expect(pickTrainer([me], null, false).userId).toBe('u-me');
+    expect(pickTrainer([me], 'u-sam', false).userId).toBe('u-me');
   });
 });
 
@@ -112,8 +132,24 @@ describe('the hours form', () => {
     expect(sessionsAWeek(draft)).toBe('9 sessions a week');
   });
 
+  it('a session is as long as the gym types: any length on a five-minute mark from 10 minutes to 4 hours', () => {
+    expect(['10', '20', ' 45 ', '75', '240'].map(sessionLength)).toEqual([10, 20, 45, 75, 240]);
+    expect(['', '5', '52', '245', '60.5', 'sixty', '-30', '1e2'].map(sessionLength)).toEqual([null, null, null, null, null, null, null, null]);
+    const draft = hoursDraft(trainer());
+    const typed = { ...draft, sessionMinutes: '20' };
+    expect(hoursFormProblem(typed)).toBeNull();
+    expect(hoursRequest(typed).sessionMinutes).toBe(20);
+    expect(savePtTrainerRequestSchema.safeParse(hoursRequest(typed)).success).toBe(true);
+    // 2 + 4 + 3 hours in pieces of 20 minutes.
+    expect(sessionsAWeek(typed)).toBe('27 sessions a week');
+    expect(hoursFormProblem({ ...draft, sessionMinutes: '52' })).toBe(
+      'Type how long a session is, in minutes. Any length from 10 to 240 minutes, in steps of 5.',
+    );
+    expect(hoursFormProblem({ ...draft, sessionMinutes: '' })).toContain('Type how long a session is');
+  });
+
   it('somebody with nothing set starts ticked to take sessions, at 60 minutes, with no hours', () => {
-    const draft = hoursDraft(trainer({ sessionMinutes: null, offers: false, hours: [] }));
+    const draft = hoursDraft(notSetUp());
     expect([draft.offers, draft.sessionMinutes]).toEqual([true, '60']);
     expect(hoursFormProblem(draft)).toBe('Add the hours they train, or untick "Takes personal training sessions".');
     // Unticked, no hours is fine: they take none.
@@ -169,6 +205,11 @@ describe('the week', () => {
     expect(noTimesNote({ ...week, offers: false }, trainer())).toBe("Sam Reed isn't taking sessions. Their booked sessions are still shown.");
   });
 
+  it('a free time reads as the whole session, start to end', () => {
+    expect(freeTimeLabel(540, 60, '24h')).toBe('09:00 – 10:00');
+    expect(freeTimeLabel(540, 20, '12h')).toBe('9:00 AM – 9:20 AM');
+  });
+
   it('a session reads its time, its person and what it was booked on', () => {
     expect(sessionRow(session(), '24h')).toEqual({ time: '10:00 – 11:00', name: 'Maya Lopez', detail: 'PT 10 · 1 session used' });
     expect(sessionRow(session({ packCharged: false, membership: 'PT Unlimited' }), '24h').detail).toBe('PT Unlimited');
@@ -177,13 +218,40 @@ describe('the week', () => {
   });
 });
 
-describe('the box before a booking and before a cancel', () => {
-  it('names who is booked, with whom and when', () => {
-    const at = { trainer: trainer(), localDate: '2026-10-09', startMinute: 600, minutes: 60, clockFormat: '24h' };
-    expect(bookSentence({ ...at, person: { fullName: 'Maya Lopez' } })).toBe('Maya Lopez will be booked with Sam Reed on Fri 9 Oct, 10:00 – 11:00.');
-    expect(bookSentence({ ...at, person: null })).toBe('Pick who the session is for.');
+describe('picking the person', () => {
+  const maya = { entryId: 'e1', name: 'Maya Lopez', pt: { membership: 'PT 10', sessionsLeft: 9 } };
+  it('somebody with a pack reads how many sessions are left; a membership without a count reads its name', () => {
+    expect(personRow(maya, true)).toEqual({ name: 'Maya Lopez', detail: 'PT 10 · 9 sessions left', pickable: true });
+    expect(personRow({ ...maya, pt: { membership: 'PT 10', sessionsLeft: 1 } }, true).detail).toBe('PT 10 · 1 session left');
+    expect(personRow({ ...maya, pt: { membership: 'PT Unlimited', sessionsLeft: null } }, true).detail).toBe('PT Unlimited');
   });
+  it('where the gym sells memberships, somebody with nothing that includes it cannot be picked, and the row says why', () => {
+    expect(personRow({ entryId: 'e2', name: 'Leo Grant', pt: null }, true)).toEqual({
+      name: 'Leo Grant',
+      detail: 'No membership that includes personal training',
+      pickable: false,
+    });
+    // A gym with no memberships books anybody on its list.
+    expect(personRow({ entryId: 'e2', name: 'Leo Grant', pt: null }, false)).toEqual({ name: 'Leo Grant', detail: '', pickable: true });
+  });
+  it('the list says what it is showing', () => {
+    expect(peopleHeading({ gymHasTypes: true, people: [maya] }, '')).toBe('Your members, people with personal training first');
+    expect(peopleHeading({ gymHasTypes: false, people: [maya] }, '  ')).toBe('Your members');
+    expect(peopleHeading({ gymHasTypes: true, people: [] }, '')).toBe('Your member list is empty. Add people on Members first.');
+    expect(peopleHeading({ gymHasTypes: true, people: [maya] }, 'may')).toBe('Matching people');
+    expect(peopleHeading({ gymHasTypes: true, people: [] }, 'zzz')).toBe('Nobody on your member list matches.');
+  });
+  it('the box before a booking names who is booked, with whom and when, and what it uses', () => {
+    const at = { trainer: trainer(), localDate: '2026-10-09', startMinute: 600, minutes: 60, clockFormat: '24h' };
+    expect(bookSentence({ ...at, person: maya })).toBe('Maya Lopez will be booked with Sam Reed on Fri 9 Oct, 10:00 – 11:00.');
+    expect(bookSentence({ ...at, person: null })).toBe('Pick who the session is for.');
+    expect(bookCost(maya)).toBe('One session is used from PT 10.');
+    expect(bookCost({ ...maya, pt: { membership: 'PT Unlimited', sessionsLeft: null } })).toBe('It is booked on PT Unlimited.');
+    expect(bookCost({ ...maya, pt: null })).toBe('');
+  });
+});
 
+describe('the box before a cancel', () => {
   const view = { freeCancelMinutes: 120, clockFormat: '24h' };
   it('a free cancel says the pack gets its session back, only where a pack was charged', () => {
     expect(cancelBox(session(), view)).toEqual({
@@ -214,16 +282,5 @@ describe('the box before a booking and before a cancel', () => {
 
   it('a length of time in words', () => {
     expect([30, 60, 90, 120, 1440, 2880].map(durationWords)).toEqual(['30 minutes', '1 hour', '90 minutes', '2 hours', '1 day', '2 days']);
-  });
-});
-
-describe('finding the person', () => {
-  it('asks the member list only once something is typed, and escapes what is typed', () => {
-    expect(personQuery('   ')).toBeNull();
-    expect(personQuery(' maya & co ')).toBe('query=maya%20%26%20co');
-  });
-  it("a person reads their name and what the list says of them", () => {
-    expect(personRow({ fullName: 'Maya Lopez', membershipType: 'PT 10', email: 'maya@example.com' })).toEqual({ name: 'Maya Lopez', detail: 'PT 10 · maya@example.com' });
-    expect(personRow({ fullName: 'Leo', membershipType: null, email: null })).toEqual({ name: 'Leo', detail: '' });
   });
 });

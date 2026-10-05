@@ -19,7 +19,7 @@ CREATE TABLE "gym_trainers" (
 	"session_minutes" integer NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "gym_trainers_pk" PRIMARY KEY ("gym_id", "user_id"),
-	CONSTRAINT "gym_trainers_minutes_check" CHECK ("session_minutes" IN (30, 45, 60, 90))
+	CONSTRAINT "gym_trainers_minutes_check" CHECK ("session_minutes" BETWEEN 10 AND 240 AND "session_minutes" % 5 = 0)
 );--> statement-breakpoint
 
 -- ISO weekday, Monday 1 to Sunday 7, as `gym_class_schedules` counts them. Minutes are
@@ -69,7 +69,7 @@ CREATE TABLE "gym_pt_appointments" (
 	CONSTRAINT "gym_pt_appointments_request_uq" UNIQUE ("gym_id", "request_key"),
 	CONSTRAINT "gym_pt_appointments_status_check" CHECK ("status" IN ('booked','cancelled','late_cancelled','attended','no_show')),
 	CONSTRAINT "gym_pt_appointments_cancelled_check" CHECK (("status" IN ('cancelled','late_cancelled')) = ("cancelled_at" IS NOT NULL)),
-	CONSTRAINT "gym_pt_appointments_time_check" CHECK ("minutes" IN (30, 45, 60, 90) AND "ends_at" > "starts_at" AND "local_start_minute" BETWEEN 0 AND 1439),
+	CONSTRAINT "gym_pt_appointments_time_check" CHECK ("minutes" BETWEEN 10 AND 240 AND "minutes" % 5 = 0 AND "ends_at" > "starts_at" AND "local_start_minute" BETWEEN 0 AND 1439),
 	CONSTRAINT "gym_pt_appointments_trainer_no_overlap" EXCLUDE USING gist (
 		"gym_id" WITH =, "trainer_user_id" WITH =, tstzrange("starts_at", "ends_at") WITH &&
 	) WHERE ("status" IN ('booked','attended','no_show'))

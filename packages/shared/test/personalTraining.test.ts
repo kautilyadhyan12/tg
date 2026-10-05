@@ -245,10 +245,11 @@ describe("a trainer's hours and the times they make", () => {
     expect(savePtTrainerRequestSchema.safeParse({ offers: true, sessionMinutes: 60, hours }).success).toBe(problem === null);
   });
 
-  it("the save refuses a length nobody offers, a minute off the five-minute marks and a weekday that is not one", () => {
+  it("the save takes any length on a five-minute mark from 10 minutes to 4 hours, and refuses a minute off the marks and a weekday that is not one", () => {
     const save = (over: object) => savePtTrainerRequestSchema.safeParse({ offers: true, sessionMinutes: 60, hours: [range(1, 600, 660)], ...over }).success;
     expect(save({})).toBe(true);
-    expect(save({ sessionMinutes: 50 })).toBe(false);
+    for (const minutes of [10, 20, 50, 75, 240]) expect(save({ sessionMinutes: minutes })).toBe(true);
+    for (const minutes of [5, 52, 245, 60.5, 0, -30]) expect(save({ sessionMinutes: minutes })).toBe(false);
     expect(save({ hours: [range(1, 601, 660)] })).toBe(false);
     expect(save({ hours: [range(0, 600, 660)] })).toBe(false);
     expect(save({ hours: [range(8, 600, 660)] })).toBe(false);

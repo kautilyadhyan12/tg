@@ -15,6 +15,7 @@
 import type { Sql } from "postgres";
 import {
   PT_HORIZON_DAYS,
+  PT_PEOPLE_SHOWN,
   PT_WEEK_DAYS,
   PT_WORDS,
   addDays,
@@ -25,6 +26,7 @@ import {
   ptBusy,
   ptFreeTimes,
   ptOfferedTimes,
+  ptPeopleResponseSchema,
   ptTime,
   ptTrainersResponseSchema,
   ptWeekResponseSchema,
@@ -32,6 +34,8 @@ import {
   type CancelPtRequest,
   type PtAppointment,
   type PtBookRefusal,
+  type PtPeopleQuery,
+  type PtPeopleResponse,
   type PtTrainersResponse,
   type PtWeekQuery,
   type PtWeekResponse,
@@ -216,6 +220,24 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
       free: free.filter((t) => t.localDate === localDate).map((t) => t.startMinute),
       appointments: appointments.filter((a) => a.localDate === localDate).map((a) => shown(a, view)),
     })),
+  });
+}
+
+/** The people a session can be booked for, for staff who may read the member list. */
+export async function getPeople(deps: PtDeps, staffId: string, gymId: string, query: PtPeopleQuery, limit: Limit): Promise<PtPeopleResponse | null> {
+  const standing = await standingOf(deps, gymId, staffId);
+  if (!standing.confirms) throw forbidden();
+  if (!(await limit())) return null;
+  const [clock, rows] = await Promise.all([repo.gymClock(deps.sql, gymId), repo.peopleFor(deps.sql, gymId, query.query ?? "", PT_PEOPLE_SHOWN + 1)]);
+  if (clock === null) throw notFound();
+  return ptPeopleResponseSchema.parse({
+    gymHasTypes: clock.hasTypes,
+    people: rows.slice(0, PT_PEOPLE_SHOWN).map((r) => ({
+      entryId: r.entryId,
+      name: r.fullName,
+      pt: r.ptMembership === null ? null : { membership: r.ptMembership, sessionsLeft: r.ptSessionsLeft },
+    })),
+    more: rows.length > PT_PEOPLE_SHOWN,
   });
 }
 
