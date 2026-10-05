@@ -9,7 +9,7 @@ list is tested against words it was not built from.
 by hand on 2026-10-05:
 
 - words a gym uses every day (snatch, butt, hardcore, domination, humping, suck);
-- words that are also ordinary English (escort, nude, sexual, nipple, grope, topless);
+- words that are also ordinary English (escort, nude, sexual, nipple, grope, rectum);
 - names of websites, films and acts no post would hold by accident.
 
 A post of that kind is answered by Report, not by the check. The test fails when an entry

@@ -44,6 +44,14 @@ describe("the bad-words check", () => {
       "Great session.\nShame the coach is a towelhead",
       "titties out",
       "jizzz",
+      // Kd's click-through, 2026-10-05: sexual words that got through.
+      "gooning all night",
+      "creampie",
+      "creampied her",
+      "cum inside me",
+      "send nudes",
+      "deepthroating",
+      "FAPPING",
     ];
     expect(held.filter((text) => !hasBadWords(text))).toEqual([]);
   });
@@ -83,6 +91,15 @@ describe("the bad-words check", () => {
       "Pedometer says 12,000 steps",
       "Jack offered to spot me",
       "Kill your selfish reps and help rack the weights",
+      // Ordinary gym talk beside the sexual words the list has.
+      "The coach will push you hard",
+      "Go hard or go home",
+      "Gooners in tonight",
+      "Strap on your belt for deadlifts",
+      "Cream pie for dessert, back on it Monday",
+      "Spread your legs wider in the sumo squat",
+      "Nipple chafing on the long run",
+      "Sextet of kettlebells arrived",
       // Places with the "Scunthorpe problem".
       "Scunthorpe open this weekend",
       "Essex half marathon results",
@@ -105,6 +122,9 @@ describe("the bad-words check", () => {
 
   it("names the words it found, each once and no more than five", () => {
     expect(badWordsIn("what a tosser, a real TOSSER")).toEqual(["tosser"]);
+    // As the writer typed it, and a word inside a longer listed word is said once.
+    expect(badWordsIn("FAPPING and cumming")).toEqual(["fapping", "cumming"]);
+    expect(badWordsIn("sh1t post")).toEqual(["sh1t"]);
     expect(badWordsIn("Great class tonight")).toEqual([]);
     const many = badWordsIn("tosser paki wetback raghead poof coon spic");
     expect(many).toHaveLength(BAD_WORDS_SHOWN);
