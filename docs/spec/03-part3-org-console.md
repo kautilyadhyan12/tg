@@ -2619,6 +2619,28 @@ one trainer (an exclusion constraint on the range) — the structural rule, befo
 check in code. A member picks a free time, is booked at once, and the trainer is told;
 the same free-cancel time applies; PT packs are a pack type that covers personal
 training. A trainer keeps their own hours.
+*(17e-i, 2026-10-06: **the staff side.** `gym_trainers` (offers, session length),
+`gym_trainer_hours` (ISO weekday, minutes from midnight on the gym's clock, three ranges a
+day at most, none overlapping) and `gym_pt_appointments`, whose EXCLUDE constraint on
+`(gym_id, trainer_user_id, tstzrange(starts_at, ends_at))` over the statuses that hold
+time is the structural rule (`btree_gist`, migration `0077`). The rule in words is
+`decidePtBook`, `decidePtCancel` and `pickPtCover` in `packages/shared/src/personalTraining.ts`,
+decided under the gym's lock. A session is held by the person's RECORD, so somebody
+without the app can be booked; it keeps its request's key, so the same request again
+changes nothing. Free times are each range of hours cut into sessions from its start,
+less what is booked and what has started; a time the gym's clock skips is never offered.
+**What pays:** a membership type has `includes_pt`; "every class" does not include it. A
+membership that includes it pays first and is not charged; else a pack, the one ending
+soonest, is charged one; a class limit a week or a month does not count sessions; a gym
+with no membership types books anybody on its list. **Cancel** is free until the gym's
+free-cancel time (the one classes use) and gives a pack its session back; after it the
+request says which: a late cancel that keeps the session used, or `giveBack`. **Who:**
+`schedule.manage` sees and changes every trainer; anybody else on staff has their own
+hours and sessions; booking also needs `members.confirm`, since it picks a person from
+the member list. The console's Personal training page (`/console/:slug/personal-training`)
+is in every member of staff's menu. Nobody is told yet (the inbox, 20a). Not done, and
+17e-ii and 17e-iii: the member's own booking; sessions ended when a person leaves, a
+membership is cancelled or a trainer leaves the staff; came and no-show.)*
 
 ### 13.6 The calendar, the desk and the messages
 
