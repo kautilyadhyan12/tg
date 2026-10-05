@@ -17,16 +17,18 @@ const SWEEP_LIMIT = 1000;
  *  file has gone; how many stay. `missingIsGone`: a key with no file under it counts as
  *  gone. Only the api, whose store the files are in, may say so. */
 export async function removeListed(deps: PhotoFilesDeps, keys: readonly string[], missingIsGone: boolean): Promise<number> {
-  let left = 0;
-  for (const key of await repo.queuedAmong(deps.sql, keys)) {
+  const listed = await repo.queuedAmong(deps.sql, keys);
+  const gone: string[] = [];
+  for (const key of listed) {
     try {
-      if ((await deps.photos.remove(key)) || missingIsGone) await repo.unqueueFiles(deps.sql, [key]);
-      else left += 1;
+      if ((await deps.photos.remove(key)) || missingIsGone) gone.push(key);
     } catch {
-      left += 1;
+      // Stays listed.
     }
   }
-  return left;
+  // One write for them all: each write waits for the disk.
+  await repo.unqueueFiles(deps.sql, gone);
+  return listed.length - gone.length;
 }
 
 /** Tries again the files an earlier try left; how many stay. */
