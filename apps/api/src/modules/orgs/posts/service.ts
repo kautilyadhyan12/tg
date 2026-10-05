@@ -123,6 +123,7 @@ async function shaped(deps: Pick<PostsDeps, "sql">, gymId: string, rows: readonl
       own: r.byMember && r.authorId === viewerId,
       wrote: r.authorId === viewerId,
       reported: reported.has(r.id),
+      hidden: r.hidden,
     });
   });
 }
@@ -154,6 +155,7 @@ async function staffShaped(deps: Pick<PostsDeps, "sql">, gymId: string, rows: re
       own: false,
       wrote: false,
       reported: false,
+      hidden: r.hidden,
       authorId,
       authorStopped: authorId !== null && stopped.has(authorId),
     });

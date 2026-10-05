@@ -58,6 +58,7 @@ const post = (id, body, over = {}) => ({
   own: false,
   wrote: false,
   reported: false,
+  hidden: false,
   authorId: null,
   authorStopped: false,
   ...over,
@@ -573,6 +574,29 @@ describe('reported posts', () => {
     expect(svc.remove).not.toHaveBeenCalled();
     expect(cards()).toHaveLength(1);
     expect(screen.getByRole('status').textContent).toBe('Kept. The post stays on Updates and has left this list.');
+  });
+
+  it('a post five people reported says it is hidden from members, on the list and among the posts, and Keep shows it again', async () => {
+    const hiddenPost = { hidden: true };
+    const list = () => reportedList([item('r1', 'Changing room, this morning', { nudity: 5 }, hiddenPost), item('r2', 'Shakes for sale', { spam: 1 })]);
+    svc.list.mockResolvedValue(feed({ posts: [post('r1', 'Changing room, this morning', { ...wendy, ...hiddenPost }), post('r2', 'Shakes for sale', wendy)] }));
+    svc.reported.mockResolvedValueOnce(list()).mockResolvedValue(reportedList([list().items[1]]));
+    svc.keep.mockResolvedValue({ kept: true, waiting: 0 });
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(2));
+    expect(within(screen.getByTestId('reported')).getByText(/A post 5 people have reported is hidden from your members until you choose\./)).toBeTruthy();
+    expect(within(reportedCards()[0]).getByTestId('hidden-note').textContent).toBe('Hidden from your members: 5 or more people reported it. Keep post shows it to them again.');
+    expect(within(reportedCards()[1]).queryByTestId('hidden-note')).toBeNull();
+    expect(within(cards()[0]).getByTestId('hidden-note').textContent).toBe(
+      'Hidden from your members: 5 or more people reported it. It is in the reported posts at the top of Updates, where you can keep or remove it.',
+    );
+    expect(within(cards()[1]).queryByTestId('hidden-note')).toBeNull();
+
+    fireEvent.click(within(reportedCards()[0]).getByRole('button', { name: 'Keep post' }));
+    await waitFor(() => expect(reportedCards()).toHaveLength(1));
+    expect(screen.getByRole('status').textContent).toBe('Kept. Your members can see the post again, and it has left this list.');
+    expect(cards()).toHaveLength(2);
+    expect(within(cards()[0]).queryByTestId('hidden-note')).toBeNull();
   });
 
   it('a report that arrived while staff were looking: Keep says so, and the post is still listed with it', async () => {

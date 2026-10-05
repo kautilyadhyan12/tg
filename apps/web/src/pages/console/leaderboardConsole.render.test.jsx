@@ -547,6 +547,7 @@ describe('a person’s posts on their panel', () => {
     own: false,
     wrote: false,
     reported: false,
+    hidden: false,
     authorId: 'u-chen',
     authorStopped: false,
   };

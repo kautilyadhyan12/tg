@@ -11,6 +11,8 @@ import {
   canPost,
   charsLine,
   emptyLine,
+  hiddenOwnNote,
+  hiddenStaffNote,
   keepNote,
   memberCanPost,
   memberPostAction,
@@ -31,12 +33,14 @@ import {
   reportBox,
   reportNoteLine,
   reportNotesTitle,
+  reportedHelp,
   reportedLine,
   reportedMore,
   reportedTitle,
   staffPersonPosts,
   stopBox,
   stoppedNote,
+  withKept,
   withNewPost,
   withPage,
   withPinChange,
@@ -60,6 +64,7 @@ const post = (over = {}) => ({
   own: false,
   wrote: false,
   reported: false,
+  hidden: false,
   ...over,
 });
 const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', posting: 'off', blockedCount: 0, supportEmail: null, pinned: [], posts: [], next: null, ...over });
@@ -396,6 +401,34 @@ describe('reporting a post', () => {
       '1 more person reported this post while you were looking, so it is still on this list. Read what is new, then choose again.',
     );
     expect(keepNote({ kept: false, waiting: 3 })).toContain('3 more people reported this post');
+  });
+
+  it('a hidden post says so to its writer and to staff, and to nobody about a post that is not', () => {
+    expect(hiddenOwnNote(post({ hidden: true }), 'Iron House')).toBe('Hidden from other members while the staff at Iron House check it. Only you can see it.');
+    expect(hiddenOwnNote(post(), 'Iron House')).toBeNull();
+    expect(hiddenStaffNote(post({ hidden: true }), WORDS, true)).toBe('Hidden from your members: 5 or more people reported it. Keep post shows it to them again.');
+    expect(hiddenStaffNote(post({ hidden: true }), { people: 'clients' }, false)).toBe(
+      'Hidden from your clients: 5 or more people reported it. It is in the reported posts at the top of Updates, where you can keep or remove it.',
+    );
+    expect(hiddenStaffNote(post(), WORDS, true)).toBeNull();
+    expect(reportedHelp(WORDS)).toContain('A post 5 people have reported is hidden from your members until you choose.');
+    expect(keepNote({ kept: true, waiting: 0 }, post({ hidden: true }), WORDS)).toBe('Kept. Your members can see the post again, and it has left this list.');
+    expect(keepNote({ kept: true, waiting: 0 }, post(), WORDS)).toBe('Kept. The post stays on Updates and has left this list.');
+    expect(keepNote({ kept: false, waiting: 1 }, post({ hidden: true }), WORDS)).toContain('1 more person reported this post');
+  });
+
+  it('Keep takes the hidden mark off that post alone', () => {
+    const list = feed({ pinned: [post({ id: 'a', hidden: true })], posts: [post({ id: 'b', hidden: true })] });
+    const kept = withKept(list, 'a');
+    expect(kept.pinned[0].hidden).toBe(false);
+    expect(kept.posts[0].hidden).toBe(true);
+  });
+
+  it('a post without the hidden mark is not a post the screens accept', () => {
+    const old = post({ id: '7f0c6f0e-5a0b-4a52-9f0e-3d1f6f0c2a11' });
+    delete old.hidden;
+    expect(gymPostSchema.safeParse(old).success).toBe(false);
+    expect(gymPostSchema.safeParse({ ...old, hidden: true }).success).toBe(true);
   });
 
   it('says how many reported posts are waiting, and when the list holds only the oldest', () => {

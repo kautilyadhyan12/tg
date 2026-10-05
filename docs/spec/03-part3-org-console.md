@@ -2913,6 +2913,19 @@ Every Updates route asks who is reading or writing before the rate limit, so a s
 404 is never a 429 and never counts against the address a gym's members share; nothing a
 person wrote, as a member or as staff, offers them Report.
 
+**As built in 19b-vi (2026-10-05): a post five people have reported is hidden until staff
+decide** (RULINGS 2026-10-05). A post with five reports nobody has answered
+(`GYM_POST_REPORTS_TO_HIDE`; one report a person a post, so five people, whatever reason
+each picked) is sent to no member but the one who wrote it: not on Updates, not pinned, not
+on the writer's profile, not its photo by its own address, and a reaction, a report or a
+block of it answers 404. It is worked out from the waiting reports each time a member
+reads (`posts()`'s `hidden` in `posts/repo.ts`, once a read and not once a post), so
+nothing is stored that could go stale. The gym's own staff posts follow the same rule. The
+writer still reads it, marked `hidden` ("Hidden from other members while the staff at
+{gym} check it. Only you can see it."), and can remove it. Staff read it marked on Updates
+and on the reported list: **Keep post** answers the reports, so every member reads it
+again and it takes five NEW people to hide it again; **Remove post** is the removal above.
+
 **A photo's file is never lost track of** (the feature's passes, 2026-10-05). A photo's
 row goes in the database's own step and its file after it, so the file's key is written
 to `photo_files_to_remove` in that same step (a removal, a purged account) and taken off

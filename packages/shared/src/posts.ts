@@ -28,6 +28,9 @@ export const GYM_POST_REPORTS_SHOWN = 50;
 export const GYM_POST_REPORT_NOTE_MAX = 300;
 /** What people typed that one reported post carries for staff, oldest first. */
 export const GYM_POST_REPORT_NOTES_SHOWN = 20;
+/** A post this many people have reported, with none of those reports answered, is hidden
+ *  from members until staff keep or remove it (RULINGS 2026-10-05). */
+export const GYM_POST_REPORTS_TO_HIDE = 5;
 /** People stopped from posting the staff list carries. */
 export const GYM_POST_STOPS_SHOWN = 200;
 
@@ -108,6 +111,9 @@ export const gymPostSchema = z
     wrote: z.boolean(),
     /** The reader has reported it. Always false for staff reading the console. */
     reported: z.boolean(),
+    /** Hidden from members while staff decide (`GYM_POST_REPORTS_TO_HIDE`). A member is
+     *  sent such a post only when they wrote it. */
+    hidden: z.boolean(),
   })
   .strict();
 export type GymPost = z.infer<typeof gymPostSchema>;
@@ -393,6 +399,8 @@ export const GYM_POST_WORDS = {
   gym_block: "This post is from the gym's staff, so it can't be blocked. You can report it instead.",
   block_not_found: "This person isn't blocked any more.",
   reports_changed: "The reports on this post have changed. Read them again, then choose.",
+  /** On a hidden post, for the member who wrote it. */
+  hidden_own: (gymName: string): string => `Hidden from other members while the staff at ${gymName} check it. Only you can see it.`,
   /** A member's post the app will not take, naming each word it found. */
   bad_words: (words: readonly string[]): string =>
     words.length === 1

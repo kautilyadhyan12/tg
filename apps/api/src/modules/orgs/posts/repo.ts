@@ -1,7 +1,7 @@
 // A GYM'S UPDATES, in the database (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a, 19b-ii-c).
 // Every read and write names the gym.
 import type { Sql, TransactionSql } from "postgres";
-import type { GymPostReaction, GymPostReportReason } from "@app/shared";
+import { GYM_POST_REPORTS_TO_HIDE, type GymPostReaction, type GymPostReportReason } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -20,6 +20,8 @@ export interface PostRow {
   pinnedAt: Date | null;
   createdAt: Date;
   removed: boolean;
+  /** Reported by enough people to be hidden from members until staff decide. */
+  hidden: boolean;
 }
 
 interface RawPost {
@@ -33,6 +35,7 @@ interface RawPost {
   pinned_at: Date | null;
   created_at: Date;
   removed: boolean;
+  hidden: boolean;
 }
 
 const toPost = (r: RawPost): PostRow => ({
@@ -46,16 +49,20 @@ const toPost = (r: RawPost): PostRow => ({
   pinnedAt: r.pinned_at,
   createdAt: r.created_at,
   removed: r.removed,
+  hidden: r.hidden,
 });
 
 /** The gym's posts. `visible`: not removed and, for a member's own post, its writer still a
  *  live app member of the gym with an active account. A member who leaves, is removed or
- *  deletes their account takes their posts and photos off the page with them. */
+ *  deletes their account takes their posts and photos off the page with them. `hidden`:
+ *  five people's reports of it are waiting for staff. One report a person a post, so that
+ *  is five people; Keep and Remove answer them, so a kept post is shown again. */
 function posts(sql: SqlOrTx, gymId: string) {
   return sql`
     SELECT p.id, p.body, p.pinned_at, p.created_at, p.post_key, p.removed_at IS NOT NULL AS removed,
            p.author_user_id AS author_id, p.by_member,
            p.removed_at IS NULL AND (NOT p.by_member OR (u.status = 'active' AND am.user_id IS NOT NULL) IS TRUE) AS visible,
+           h.post_id IS NOT NULL AS hidden,
            CASE WHEN u.status = 'active' THEN u.display_name END AS author_name,
            CASE WHEN u.status = 'active' THEN u.email::text END AS author_email,
            CASE WHEN u.status = 'active' THEN nullif(btrim(e.full_name), '') END AS author_record_name
@@ -63,11 +70,17 @@ function posts(sql: SqlOrTx, gymId: string) {
     LEFT JOIN users u ON u.id = p.author_user_id
     LEFT JOIN gym_members am ON am.gym_id = p.gym_id AND am.user_id = p.author_user_id AND am.removed_at IS NULL
     LEFT JOIN gym_member_list_entries e ON e.gym_id = am.gym_id AND e.id = am.entry_id
+    LEFT JOIN (
+      SELECT hr.post_id FROM gym_post_reports hr
+      WHERE hr.gym_id = ${gymId} AND hr.closed_at IS NULL
+      GROUP BY hr.post_id HAVING count(*) >= ${GYM_POST_REPORTS_TO_HIDE}
+    ) h ON h.post_id = p.id
     WHERE p.gym_id = ${gymId}`;
 }
 
 /** Who is reading. A member is sent what everyone sees, less the member posts of anybody
- *  they have blocked. `staff` is sent what everyone sees. */
+ *  they have blocked and less a hidden post they did not write. `staff` is sent what
+ *  everyone sees, hidden posts too. */
 export type Reader = { member: string } | "staff";
 
 /** The posts of `p` (a row of `posts`) this reader is sent. */
@@ -75,6 +88,7 @@ function seenBy(sql: SqlOrTx, gymId: string, reader: Reader) {
   if (reader === "staff") return sql`p.visible`;
   return sql`
     p.visible
+    AND (NOT p.hidden OR p.author_id = ${reader.member})
     AND NOT (p.by_member AND EXISTS (
       SELECT 1 FROM gym_post_blocks b
       WHERE b.gym_id = ${gymId} AND b.user_id = ${reader.member} AND b.blocked_user_id = p.author_id))`;

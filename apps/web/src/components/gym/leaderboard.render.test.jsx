@@ -186,6 +186,7 @@ describe('the members’ board', () => {
           own: false,
           wrote: false,
           reported: false,
+          hidden: false,
         },
       ],
       next: null,

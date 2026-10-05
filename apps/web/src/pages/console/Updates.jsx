@@ -14,9 +14,11 @@ import {
   memberPostsSwitch,
   personOf,
   photoProblem,
+  reportedHelp,
   reportedMore,
   reportedTitle,
   stopBox,
+  withKept,
   withPage,
   withPinChange,
   withStopped,
@@ -293,7 +295,13 @@ export default function Updates() {
         (shown) => withoutPost(shown, p.id),
       ),
     // Keep answers the reports this list showed, and none when another has arrived; the list is read again.
-    onKeep: (p, item) => act(p, () => staffPostsService.keep(gymId, p.id, item), keepNote, (shown) => shown),
+    onKeep: (p, item) =>
+      act(
+        p,
+        () => staffPostsService.keep(gymId, p.id, item),
+        (answer) => keepNote(answer, p, words),
+        (shown, answer) => (answer.kept && answer.waiting === 0 ? withKept(shown, p.id) : shown),
+      ),
     onStop: (p, stopped) =>
       act(
         p,
@@ -405,7 +413,7 @@ export default function Updates() {
             <section className="flex flex-col gap-3" aria-label="Reported posts" data-testid="reported">
               <div className="flex flex-col gap-1">
                 <h2 className="c-s15 c-w6 c-t1">{reportedTitle(reported.total)}</h2>
-                <p className="c-s13 c-t2">{`Remove a post and it's gone for everyone. Keep it and it stays on Updates. Your ${words.people} are never told who reported a post, and neither are you.`}</p>
+                <p className="c-s13 c-t2">{reportedHelp(words)}</p>
                 {waiting !== null ? <p className="c-s13 c-t2">{waiting}</p> : null}
               </div>
               <ul className="flex flex-col gap-3">
