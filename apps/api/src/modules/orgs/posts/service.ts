@@ -1,4 +1,4 @@
-// A GYM'S UPDATES (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a).
+// A GYM'S UPDATES (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a, 19b-ii-c).
 //
 // The worst thing this could do to a real person: show a gym's post or photo to somebody
 // outside that gym, keep a photo with the place it was taken inside it, or leave a cruel
@@ -10,6 +10,7 @@
 import { randomUUID } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
 import {
+  GYM_MEMBER_PHOTO_POSTS_A_DAY,
   GYM_MEMBER_POSTS_A_DAY,
   GYM_POSTS_PAGE,
   GYM_POST_BLOCKS_SHOWN,
@@ -26,9 +27,11 @@ import {
   gymPostReactorsResponseSchema,
   gymPostSchema,
   gymPostsResponseSchema,
+  personGymPostsResponseSchema,
   reportedGymPostsResponseSchema,
   staffGymPostSchema,
   staffGymPostsResponseSchema,
+  staffPersonGymPostsResponseSchema,
   stoppedGymPostersResponseSchema,
   type AddGymPostRequest,
   type BlockedGymPostersResponse,
@@ -42,9 +45,11 @@ import {
   type GymPostReportReason,
   type GymPostsCursor,
   type GymPostsResponse,
+  type PersonGymPostsResponse,
   type ReportedGymPostsResponse,
   type StaffGymPost,
   type StaffGymPostsResponse,
+  type StaffPersonGymPostsResponse,
   type StoppedGymPostersResponse,
 } from "@app/shared";
 import { getOrgById, gymHasLivePlan, insertAudit } from "../repo.js";
@@ -112,6 +117,7 @@ async function shaped(deps: Pick<PostsDeps, "sql">, gymId: string, rows: readonl
       reactions: countsOf(counts, r.id),
       mine: GYM_POST_REACTIONS.find((reaction) => reaction === mine.get(r.id)) ?? null,
       fromMember: r.byMember,
+      authorId: r.byMember ? r.authorId : null,
       own: r.byMember && r.authorId === viewerId,
       wrote: r.authorId === viewerId,
       reported: reported.has(r.id),
@@ -222,6 +228,60 @@ export async function getStaffPosts(
   return staffGymPostsResponseSchema.parse({ gymId, gymName: org.name, membersCanPost, reportedCount, ...feed });
 }
 
+// ── ONE PERSON'S POSTS, ON THEIR PROFILE (19b-ii-c) ──
+// The worst thing it could do: send a reader what Updates would not, the posts of somebody
+// they blocked or of somebody who has left. Both reads go through the feed's own `seenBy`.
+
+async function personPage<P>(
+  deps: Pick<PostsDeps, "sql">,
+  gymId: string,
+  reader: repo.Reader,
+  userId: string,
+  before: GymPostsCursor | undefined,
+  shape: (rows: readonly repo.PostRow[]) => Promise<P[]>,
+): Promise<{ posts: P[]; next: string | null; total: number }> {
+  const [rows, total] = await Promise.all([
+    repo.memberPostsPage(deps.sql, gymId, reader, userId, before ?? null, GYM_POSTS_PAGE + 1),
+    repo.countMemberPosts(deps.sql, gymId, reader, userId),
+  ]);
+  const shown = rows.slice(0, GYM_POSTS_PAGE);
+  const last = shown[shown.length - 1];
+  return { posts: await shape(shown), next: rows.length > GYM_POSTS_PAGE && last !== undefined ? cursorOf(last) : null, total };
+}
+
+/** The posts one person made as a member, for a live app member of a gym on a live plan;
+ *  404 for everybody else. An id that is nobody's here reads as a member with no posts. */
+export async function getPersonPosts(
+  deps: Pick<PostsDeps, "sql">,
+  viewerId: string,
+  gymId: string,
+  userId: string,
+  before: GymPostsCursor | undefined,
+  limit: Limit,
+): Promise<PersonGymPostsResponse | null> {
+  await requireMember(deps, gymId, viewerId);
+  if (!(await limit())) return null;
+  const [feed, blocked] = await Promise.all([
+    personPage(deps, gymId, { member: viewerId }, userId, before, (rows) => shaped(deps, gymId, rows, viewerId)),
+    repo.hasBlocked(deps.sql, gymId, viewerId, userId),
+  ]);
+  return personGymPostsResponseSchema.parse({ ...feed, blocked });
+}
+
+/** The same for staff holding the tick, each post as the console's Updates page has it. */
+export async function getStaffPersonPosts(
+  deps: Pick<PostsDeps, "sql">,
+  staffId: string,
+  gymId: string,
+  userId: string,
+  before: GymPostsCursor | undefined,
+  limit: Limit,
+): Promise<StaffPersonGymPostsResponse | null> {
+  await requirePrivilege(deps, gymId, staffId, TICK);
+  if (!(await limit())) return null;
+  return staffPersonGymPostsResponseSchema.parse(await personPage(deps, gymId, "staff", userId, before, (rows) => staffShaped(deps, gymId, rows, staffId)));
+}
+
 /** Who gave one reaction to a post, by whole name, for staff holding the tick. Members are
  *  never sent this: they see the counts only. */
 export async function getReactors(
@@ -294,11 +354,22 @@ function refusePosting(posting: GymMemberPosting, gymName: string): void {
   if (posting === "stopped") throw new OrgsError(403, "posting_stopped", GYM_POST_WORDS.posting_stopped(gymName));
 }
 
-/** Refuses a member who has made the day's posts already. */
-async function refuseFullDay(sql: Sql | TransactionSql, gymId: string, userId: string, at: Date): Promise<void> {
-  if ((await repo.countMemberPostsSince(sql, gymId, userId, new Date(at.getTime() - DAY_MS))) >= GYM_MEMBER_POSTS_A_DAY) {
-    throw new OrgsError(429, "posts_day_full", GYM_POST_WORDS.day_full);
-  }
+/** Refuses a member who has made the day's posts already, or, for a post with photos, the
+ *  day's posts with photos. */
+async function refuseFullDay(sql: Sql | TransactionSql, gymId: string, userId: string, at: Date, post: { photos: boolean; words: boolean }): Promise<void> {
+  const since = new Date(at.getTime() - DAY_MS);
+  // Whole hours until the oldest counted post is a day old and one more may be made.
+  const hoursLeft = (counted: repo.Counted): number =>
+    counted.oldest === null ? 0 : Math.max(0, Math.round((counted.oldest.getTime() + DAY_MS - at.getTime()) / (60 * 60 * 1000)));
+  const all = await repo.countMemberPostsSince(sql, gymId, userId, since);
+  const full = all.n >= GYM_MEMBER_POSTS_A_DAY;
+  if (full && !post.photos) throw new OrgsError(429, "posts_day_full", GYM_POST_WORDS.day_full(hoursLeft(all)));
+  if (!post.photos) return;
+  const photos = await repo.countMemberPhotoPostsSince(sql, gymId, userId, since);
+  const photosFull = photos.n >= GYM_MEMBER_PHOTO_POSTS_A_DAY;
+  // Both full: this post waits for the later of the two, so that is the hour it is told.
+  if (full) throw new OrgsError(429, "posts_day_full", GYM_POST_WORDS.day_full(Math.max(hoursLeft(all), photosFull ? hoursLeft(photos) : 0)));
+  if (photosFull) throw new OrgsError(429, "posts_photo_day_full", GYM_POST_WORDS.photo_day_full(hoursLeft(photos), post.words));
 }
 
 /** A member who may post: the gym's switch is on and staff have not stopped them. The
@@ -383,8 +454,9 @@ async function ownByKey(deps: Pick<PostsDeps, "sql">, gymId: string, userId: str
   return await memberPost(deps, gymId, kept.id, userId);
 }
 
-/** A new post by a member, where the gym lets its members post. Ten in any 24 hours,
- *  counted with the person's membership held so two sent at once are counted in turn. */
+/** A new post by a member, where the gym lets its members post. Ten in any 24 hours, three
+ *  of them with photos, counted with the person's membership held so two sent at once are
+ *  counted in turn. */
 export async function addMemberPost(deps: PostsDeps, userId: string, gymId: string, body: AddGymPostRequest): Promise<GymPost> {
   const gymName = await requireMemberPoster(deps, userId, gymId);
   // A post sent again under its key (a reply lost on the way back) is answered with the
@@ -397,11 +469,12 @@ export async function addMemberPost(deps: PostsDeps, userId: string, gymId: stri
   if (words.length > 0) throw new OrgsError(400, "post_bad_words", GYM_POST_WORDS.bad_words(words));
   // A full day is refused before any photo is cleaned or written; the count that decides
   // is made again below, with the person's membership held.
-  await refuseFullDay(deps.sql, gymId, userId, deps.now());
+  const shape = { photos: body.photos.length > 0, words: body.body.trim() !== "" };
+  await refuseFullDay(deps.sql, gymId, userId, deps.now(), shape);
   const post = await keepPost(deps, gymId, userId, body, true, async (tx, at) => {
     if (!(await repo.lockMember(tx, gymId, userId, true))) throw notFound();
     refusePosting(await postingOf(tx, gymId, userId), gymName);
-    await refuseFullDay(tx, gymId, userId, at);
+    await refuseFullDay(tx, gymId, userId, at, shape);
   });
   if (post.made) return await memberPost(deps, gymId, post.id, userId);
   const first = await ownByKey(deps, gymId, userId, body.postKey);

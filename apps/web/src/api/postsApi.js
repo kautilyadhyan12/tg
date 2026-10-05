@@ -8,11 +8,13 @@ import {
   gymPosterStoppedResponseSchema,
   gymPostsResponseSchema,
   keptGymPostResponseSchema,
+  personGymPostsResponseSchema,
   removedGymPostResponseSchema,
   reportedGymPostResponseSchema,
   reportedGymPostsResponseSchema,
   staffGymPostResponseSchema,
   staffGymPostsResponseSchema,
+  staffPersonGymPostsResponseSchema,
   stoppedGymPostersResponseSchema,
 } from '@app/shared';
 import authApi from './authApi';
@@ -45,6 +47,9 @@ export function postPhotoUrl({ gymId, postId, photoId }) {
 export const postsService = {
   /** A page of the gym's posts, for a member; `before` is the last answer's `next`. */
   list: (gymId, before) => readThrough(gymPostsResponseSchema, 'the updates', authApi.get(gymPath(gymId), from(before))),
+  /** A page of the posts one person made as a member, for their profile. */
+  person: (gymId, userId, before) =>
+    readThrough(personGymPostsResponseSchema, 'their posts', authApi.get(`${gymPath(gymId)}/people/${encodeURIComponent(userId)}`, from(before))),
   /** The member's one reaction to a post, or null to take it off. */
   react: (gymId, postId, reaction) =>
     readThrough(gymPostReactionResponseSchema, 'your reaction', authApi.put(`${postPath(gymId, postId)}/reaction`, { reaction })),
@@ -70,6 +75,9 @@ export const postsService = {
 // else whatever a screen shows.
 export const staffPostsService = {
   list: (gymId, before) => readThrough(staffGymPostsResponseSchema, 'the updates', authApi.get(`${gymPath(gymId)}/staff`, from(before))),
+  /** A page of the posts one of the gym's people made as a member. */
+  person: (gymId, userId, before) =>
+    readThrough(staffPersonGymPostsResponseSchema, 'their posts', authApi.get(`${gymPath(gymId)}/staff/people/${encodeURIComponent(userId)}`, from(before))),
   /** Who gave one reaction to a post, by name. */
   reactors: (gymId, postId, reaction) =>
     readThrough(gymPostReactorsResponseSchema, 'who reacted', authApi.get(`${postPath(gymId, postId)}/reactions`, { params: { reaction } })),

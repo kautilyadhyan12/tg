@@ -1,4 +1,4 @@
-// A GYM'S UPDATES — spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a.
+// A GYM'S UPDATES — spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a, 19b-ii-c.
 //
 // Posts by the gym's staff and, where the gym has switched it on, by its members, with up
 // to four photos, read by its live app members and by staff holding `posts.manage`. One
@@ -16,6 +16,8 @@ export const GYM_POST_MAX_PINNED = 3;
 export const GYM_POSTS_PAGE = 20;
 /** Posts one member may make at one gym in any 24 hours. */
 export const GYM_MEMBER_POSTS_A_DAY = 10;
+/** Of those, the posts that may carry photos (RULINGS 2026-10-05). */
+export const GYM_MEMBER_PHOTO_POSTS_A_DAY = 3;
 /** Reported posts the staff list carries, longest waiting first. */
 export const GYM_POST_REPORTS_SHOWN = 50;
 /** The words a person may type beside their reason for a report, by `postLength`. */
@@ -94,6 +96,8 @@ export const gymPostSchema = z
     mine: gymPostReactionSchema.nullable(),
     /** A member's own post, as against one by the gym's staff. */
     fromMember: z.boolean(),
+    /** The member who wrote it, whose posts a tap on the name opens; null for a staff post. */
+    authorId: z.string().uuid().nullable(),
     /** The reader wrote it as a member, and may remove it. */
     own: z.boolean(),
     /** The reader wrote it, as a member or as staff: nothing of theirs offers Report. */
@@ -104,15 +108,9 @@ export const gymPostSchema = z
   .strict();
 export type GymPost = z.infer<typeof gymPostSchema>;
 
-/** A post as staff holding the tick read it: a member's post also says whose it is, so
- *  that person can be stopped from posting. */
-export const staffGymPostSchema = gymPostSchema
-  .extend({
-    /** The member who wrote it; null for a staff post. */
-    authorId: z.string().uuid().nullable(),
-    authorStopped: z.boolean(),
-  })
-  .strict();
+/** A post as staff holding the tick read it: a member's post also says whether that
+ *  person has been stopped from posting. */
+export const staffGymPostSchema = gymPostSchema.extend({ authorStopped: z.boolean() }).strict();
 export type StaffGymPost = z.infer<typeof staffGymPostSchema>;
 
 /** Where the next page starts, as a list's `next` gave it: the last post's instant, "_",
@@ -330,6 +328,34 @@ export const blockedGymPostersResponseSchema = z
   .strict();
 export type BlockedGymPostersResponse = z.infer<typeof blockedGymPostersResponseSchema>;
 
+// ── ONE PERSON'S POSTS, ON THEIR PROFILE (19b-ii-c; RULINGS 2026-10-02, 2026-10-03) ──
+
+/** The posts one person made as a member, newest first, as the reader is sent them on
+ *  Updates: none from somebody the reader blocked, none from somebody who has left. An id
+ *  that is nobody's reads the same as a member who has not posted. */
+export const personGymPostsResponseSchema = z
+  .object({
+    posts: z.array(gymPostSchema).max(GYM_POSTS_PAGE),
+    next: z.string().nullable(),
+    /** Every post of theirs the reader is sent, on this page or a later one. */
+    total: z.number().int().nonnegative(),
+    /** The reader has blocked this person here, which is why no post of theirs is sent. */
+    blocked: z.boolean(),
+  })
+  .strict();
+export type PersonGymPostsResponse = z.infer<typeof personGymPostsResponseSchema>;
+
+export const staffPersonGymPostsResponseSchema = z
+  .object({ posts: z.array(staffGymPostSchema).max(GYM_POSTS_PAGE), next: z.string().nullable(), total: z.number().int().nonnegative() })
+  .strict();
+export type StaffPersonGymPostsResponse = z.infer<typeof staffPersonGymPostsResponseSchema>;
+
+/** "in about 5 hours", for a limit counted over any 24 hours: when its oldest post leaves the count. */
+function againIn(hours: number): string {
+  if (hours <= 0) return "in under an hour";
+  return hours === 1 ? "in about 1 hour" : `in about ${String(hours)} hours`;
+}
+
 /** What a person reads when a post cannot be made, changed or found. */
 export const GYM_POST_WORDS = {
   not_found: "This post has been removed.",
@@ -337,7 +363,14 @@ export const GYM_POST_WORDS = {
   photo_not_found: "This photo has been removed.",
   posting_off: "Members can't post here at the moment.",
   posting_stopped: (gymName: string): string => `The staff at ${gymName} have stopped you posting here. Speak to them at the front desk.`,
-  day_full: `You can post ${String(GYM_MEMBER_POSTS_A_DAY)} times a day. Try again tomorrow.`,
+  /** `hours`: whole hours until the oldest of the counted posts is 24 hours old. */
+  day_full: (hours: number): string =>
+    `You've posted ${String(GYM_MEMBER_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. You can post again ${againIn(hours)}.`,
+  /** `hasWords`: the post has words that could go without its photos. */
+  photo_day_full: (hours: number, hasWords: boolean): string =>
+    hasWords
+      ? `You've posted photos ${String(GYM_MEMBER_PHOTO_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again ${againIn(hours)}.`
+      : `You've posted photos ${String(GYM_MEMBER_PHOTO_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. You can post photos again ${againIn(hours)}.`,
   own_report: "This is your own post. You can remove it instead.",
   person_not_found: "This person isn't one of your members.",
   own_block: "This is your own post.",

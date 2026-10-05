@@ -10,8 +10,10 @@ const svc = {
   visibility: vi.fn(),
   setHidden: vi.fn(),
 };
+const postsSvc = { person: vi.fn() };
 vi.mock('../../api/leaderboardApi', () => ({ leaderboardService: svc }));
-vi.mock('../../api/orgsApi', () => ({ errorText: (_err, fallback) => fallback }));
+vi.mock('../../api/postsApi', () => ({ postsService: postsSvc, postPhotoUrl: () => 'http://api.test/photo' }));
+vi.mock('../../api/orgsApi', () => ({ errorText: (_err, fallback) => fallback, errorStatus: (err) => err?.response?.status ?? null }));
 
 const Leaderboard = (await import('./Leaderboard')).default;
 
@@ -43,6 +45,8 @@ const shown = (over = {}) => ({
 });
 
 beforeEach(() => {
+  postsSvc.person.mockReset();
+  postsSvc.person.mockResolvedValue({ posts: [], next: null, total: 0, blocked: false });
   svc.board.mockResolvedValue(shown());
   svc.visibility.mockResolvedValue({ hidden: false, hideMe: false, under18: false });
 });
@@ -116,14 +120,15 @@ describe('the members’ board', () => {
     expect(screen.queryByText(/What counted/)).toBeNull();
   });
 
-  it('a sheet closes by its X, never by a click outside it', async () => {
+  it('a profile is a page of its own, and Back closes it', async () => {
     svc.profile.mockResolvedValue({ userId: 'u2', name: 'Chen W.', initials: 'CW', boards: [{ board: 'gym_days', period: 'this_week', place: 1, value: 3 }] });
     render(<Leaderboard gym={GYM} />);
     fireEvent.click(await screen.findByText('Chen W.'));
     const dialog = await screen.findByRole('dialog', { name: 'Chen W.' });
-    fireEvent.click(dialog.parentElement);
-    expect(screen.getByRole('dialog', { name: 'Chen W.' })).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(dialog.className).toContain('inset-0');
+    expect(within(dialog).getByRole('heading', { name: 'Chen W.' })).toBeTruthy();
+    expect(within(dialog).getByText('Member at Iron House')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back' }));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
@@ -165,18 +170,44 @@ describe('the members’ board', () => {
         { board: 'streak', period: null, place: 2, value: 4 },
       ],
     });
+    postsSvc.person.mockResolvedValue({
+      posts: [
+        {
+          id: 'p1',
+          author: { name: 'Chen W.', initials: 'CW' },
+          body: 'First 5k done',
+          photos: [],
+          pinned: false,
+          createdAt: '2026-10-07T06:30:00.000Z',
+          reactions: { like: 0, love: 0, strong: 0, fire: 0 },
+          mine: null,
+          fromMember: true,
+          authorId: 'u2',
+          own: false,
+          wrote: false,
+          reported: false,
+        },
+      ],
+      next: null,
+      total: 1,
+      blocked: false,
+    });
     render(<Leaderboard gym={GYM} />);
     fireEvent.click(await screen.findByText('Chen W.'));
     const dialog = await screen.findByRole('dialog', { name: 'Chen W.' });
-    expect(await within(dialog).findByText('1st · 3 gym days')).toBeTruthy();
-    expect(within(dialog).getByText('2nd · 4 weeks')).toBeTruthy();
-    expect(within(dialog).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'Gym days, this week1st · 3 gym days',
-      'Workout days, this week3rd · 1 workout day',
-      'Streak2nd · 4 weeks',
-    ]);
+    // Their posts are under their numbers.
+    expect(await within(dialog).findByText('First 5k done')).toBeTruthy();
+    expect(postsSvc.person).toHaveBeenCalledWith('g1', 'u2');
+    await waitFor(() =>
+      expect(within(within(dialog).getByTestId('person-stats')).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+        '1Post',
+        '1stGym days3 gym days this week',
+        '3rdWorkout days1 workout day this week',
+        '2ndStreak4 weeks',
+      ]),
+    );
     expect(svc.profile).toHaveBeenCalledWith('g1', 'u2', 'this_week');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back' }));
 
     svc.mine.mockResolvedValue({
       gymName: 'Iron House',

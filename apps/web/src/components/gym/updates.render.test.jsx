@@ -3,14 +3,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-const svc = { list: vi.fn(), react: vi.fn(), add: vi.fn(), removeOwn: vi.fn(), report: vi.fn(), block: vi.fn(), blocked: vi.fn(), unblock: vi.fn() };
+const svc = { list: vi.fn(), react: vi.fn(), add: vi.fn(), removeOwn: vi.fn(), report: vi.fn(), block: vi.fn(), blocked: vi.fn(), unblock: vi.fn(), person: vi.fn() };
+const boards = { profile: vi.fn() };
 const prepare = vi.fn();
 vi.mock('../../api/postsApi', () => ({
   postsService: svc,
   postPhotoUrl: ({ gymId, postId, photoId }) => `http://api.test/v1/orgs/${gymId}/posts/${postId}/photos/${photoId}`,
 }));
 vi.mock('../../pages/console/gymPagePhotos', () => ({ preparePagePhoto: prepare }));
-vi.mock('../../api/orgsApi', () => ({ errorText: (_err, fallback) => fallback }));
+vi.mock('../../api/leaderboardApi', () => ({ leaderboardService: boards }));
+vi.mock('../../api/orgsApi', () => ({ errorText: (_err, fallback) => fallback, errorStatus: (err) => err?.response?.status ?? null }));
 
 const Updates = (await import('./Updates')).default;
 
@@ -25,6 +27,7 @@ const post = (id, body, over = {}) => ({
   reactions: { like: 0, love: 0, strong: 0, fire: 0 },
   mine: null,
   fromMember: false,
+  authorId: null,
   own: false,
   wrote: false,
   reported: false,
@@ -35,7 +38,7 @@ const posts = () => screen.getAllByTestId('post');
 const button = (card, name) => within(card).getByRole('button', { name });
 
 beforeEach(() => {
-  for (const fn of [...Object.values(svc), prepare]) fn.mockReset();
+  for (const fn of [...Object.values(svc), prepare, boards.profile]) fn.mockReset();
 });
 afterEach(() => cleanup());
 
@@ -85,6 +88,8 @@ describe('the gym’s updates', () => {
     ]);
     fireEvent.click(button(posts()[0], 'Open photo 2 of 2'));
     const viewer = screen.getByRole('dialog', { name: 'Photo 2 of 2' });
+    // Drawn on the page's body, so no box it was opened from can hold it inside itself.
+    expect(viewer.parentElement).toBe(document.body);
     expect(within(viewer).getByRole('img').getAttribute('src')).toBe('http://api.test/v1/orgs/g1/posts/a/photos/ph2');
     fireEvent.click(within(viewer).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -206,7 +211,7 @@ describe('a member posts', () => {
     await screen.findByText('No posts yet. Write the first one.');
     const send = composer().getByRole('button', { name: 'Post' });
     expect(send.disabled).toBe(true);
-    expect(composer().getByText(/You can post 10 times a day/)).toBeTruthy();
+    expect(composer().getByText(/You can post 10 times in any 24 hours, 3 of them with photos/)).toBeTruthy();
 
     fireEvent.change(composer().getByRole('textbox', { name: /Write a post/ }), { target: { value: 'First time on the rower' } });
     fireEvent.change(composer().getByLabelText('Choose photos'), { target: { files: [new File(['x'], 'rower.jpg', { type: 'image/jpeg' })] } });
@@ -338,5 +343,129 @@ describe('removing one’s own post, and reporting somebody else’s', () => {
     fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
     expect(within(posts()[0]).queryByRole('group', { name: 'Report this post' })).toBeNull();
     expect(svc.report).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a person’s profile, opened from their picture or name', () => {
+  const notFound = () => Object.assign(new Error('not found'), { response: { status: 404 } });
+  const theirs = (id, body, over = {}) => post(id, body, { fromMember: true, authorId: 'u2', author: { name: 'Chen W.', initials: 'CW' }, ...over });
+  const page = (over = {}) => ({ posts: [], next: null, blocked: false, total: (over.posts ?? []).length, ...over });
+  const stats = (sheet) => within(sheet.getByTestId('person-stats')).getAllByRole('listitem').map((li) => li.textContent);
+  const places = { userId: 'u2', name: 'Chen W.', initials: 'CW', boards: [{ board: 'gym_days', period: 'this_week', place: 1, value: 3 }] };
+  const openChen = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'See what Chen W. has posted' }));
+    return within(await screen.findByRole('dialog', { name: 'Chen W.' }));
+  };
+
+  it('a member’s name opens their places and their posts; a post the gym’s staff wrote has no name to press', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done'), post('b', 'Closed on Monday')] }));
+    svc.person.mockResolvedValue(page({ posts: [theirs('a', 'First 5k done'), theirs('c', 'Leg day')] }));
+    boards.profile.mockResolvedValue(places);
+    render(<Updates gym={GYM} />);
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(within(posts()[1]).queryByRole('button', { name: /has posted/ })).toBeNull();
+
+    const sheet = await openChen();
+    await waitFor(() => expect(sheet.getAllByTestId('post')).toHaveLength(2));
+    expect(svc.person).toHaveBeenCalledWith('g1', 'u2');
+    expect(boards.profile).toHaveBeenCalledWith('g1', 'u2', 'this_week');
+    // The numbers in a row, as a profile has them: how many posts, then each board.
+    expect(stats(sheet)).toEqual(['2Posts', '1stGym days3 gym days this week']);
+    // The picture and the name are one thing to press.
+    expect(screen.getByRole('button', { name: 'See what Chen W. has posted' }).textContent).toContain('CW');
+    expect(sheet.getAllByTestId('post').map((p) => within(p).getByText(/First 5k done|Leg day/).textContent)).toEqual(['First 5k done', 'Leg day']);
+    // Inside the profile a name opens nothing further.
+    expect(sheet.queryByRole('button', { name: /has posted/ })).toBeNull();
+    // Nothing changed, so closing reads nothing again.
+    fireEvent.click(sheet.getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(svc.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('a person who is on no board, hidden or not, shows their posts and no place at all', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
+    svc.person.mockResolvedValue(page({ posts: [theirs('a', 'First 5k done')] }));
+    boards.profile.mockRejectedValue(notFound());
+    render(<Updates gym={GYM} />);
+    const sheet = await openChen();
+    await waitFor(() => expect(sheet.getAllByTestId('post')).toHaveLength(1));
+    expect(stats(sheet)).toEqual(['1Post']);
+    expect(sheet.queryByText(/leaderboard/i)).toBeNull();
+    expect(sheet.queryByText(/gym days|weeks|workout/i)).toBeNull();
+  });
+
+  it('places that could not be read are said, and never drawn as none', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
+    svc.person.mockResolvedValue(page());
+    boards.profile.mockRejectedValue(Object.assign(new Error('down'), { response: { status: 500 } }));
+    render(<Updates gym={GYM} />);
+    const sheet = await openChen();
+    expect(await sheet.findByText("Couldn't load their places on the leaderboard.")).toBeTruthy();
+    expect(await sheet.findByText("Chen W. hasn't posted anything.")).toBeTruthy();
+  });
+
+  it('posts that could not be read are said, with Try again', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
+    svc.person.mockRejectedValueOnce(new Error('down')).mockResolvedValue(page({ posts: [theirs('a', 'First 5k done')] }));
+    boards.profile.mockRejectedValue(notFound());
+    render(<Updates gym={GYM} />);
+    const sheet = await openChen();
+    expect(await sheet.findByText("Couldn't load their posts.")).toBeTruthy();
+    fireEvent.click(sheet.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(sheet.getAllByTestId('post')).toHaveLength(1));
+  });
+
+  it('Block on a profile reads it again, says why it is empty, and the page behind is read again on closing', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
+    svc.person.mockResolvedValueOnce(page({ posts: [theirs('a', 'First 5k done')] })).mockResolvedValue(page({ blocked: true }));
+    svc.block.mockResolvedValue({ blocked: true });
+    boards.profile.mockRejectedValue(notFound());
+    render(<Updates gym={GYM} />);
+    const sheet = await openChen();
+    const card = (await sheet.findAllByTestId('post'))[0];
+    fireEvent.click(button(card, 'Block'));
+    fireEvent.click(within(card).getByRole('button', { name: 'Block Chen W.' }));
+    expect(await sheet.findByText("You've blocked Chen W., so their posts aren't shown. You can unblock them at the bottom of Updates.")).toBeTruthy();
+    expect(svc.block).toHaveBeenCalledWith('g1', 'a');
+    expect(sheet.queryAllByTestId('post')).toEqual([]);
+    svc.list.mockResolvedValue(feed({ blockedCount: 1 }));
+    fireEvent.click(sheet.getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryAllByTestId('post')).toEqual([]));
+  });
+
+  it('removing one’s own post on one’s own profile takes it off and off the number', async () => {
+    const mine = theirs('a', 'My first', { own: true, wrote: true });
+    svc.list.mockResolvedValue(feed({ posts: [mine] }));
+    svc.person.mockResolvedValue(page({ posts: [mine, theirs('c', 'My second', { own: true, wrote: true })] }));
+    svc.removeOwn.mockResolvedValue({ removed: true });
+    boards.profile.mockRejectedValue(notFound());
+    render(<Updates gym={GYM} />);
+    const sheet = await openChen();
+    await waitFor(() => expect(stats(sheet)).toEqual(['2Posts']));
+    const card = sheet.getAllByTestId('post')[1];
+    fireEvent.click(button(card, 'Remove'));
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove post' }));
+    await waitFor(() => expect(sheet.getAllByTestId('post')).toHaveLength(1));
+    expect(svc.removeOwn).toHaveBeenCalledWith('g1', 'c');
+    expect(stats(sheet)).toEqual(['1Post']);
+  });
+
+  it('a reaction on a profile is sent for that post, and older posts load on a tap', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
+    svc.person.mockResolvedValueOnce(page({ posts: [theirs('a', 'First 5k done')], next: 'cursor-1', total: 2 })).mockResolvedValue(page({ posts: [theirs('c', 'Leg day')], total: 3 }));
+    svc.react.mockResolvedValue({ reactions: { like: 0, love: 0, strong: 0, fire: 1 }, mine: 'fire' });
+    boards.profile.mockRejectedValue(notFound());
+    render(<Updates gym={GYM} />);
+    const sheet = await openChen();
+    const card = (await sheet.findAllByTestId('post'))[0];
+    fireEvent.click(within(card).getByRole('button', { name: /^Fire/ }));
+    await waitFor(() => expect(svc.react).toHaveBeenCalledWith('g1', 'a', 'fire'));
+    fireEvent.click(sheet.getByRole('button', { name: 'Show older posts' }));
+    await waitFor(() => expect(sheet.getAllByTestId('post')).toHaveLength(2));
+    expect(svc.person).toHaveBeenLastCalledWith('g1', 'u2', 'cursor-1');
+    // The number over "Posts" is the newest answer's: somebody posted while the page was open.
+    expect(stats(sheet)).toEqual(['3Posts']);
+    expect(sheet.queryByRole('button', { name: 'Show older posts' })).toBeNull();
   });
 });
