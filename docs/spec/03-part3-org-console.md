@@ -2581,6 +2581,28 @@ changes them, the emails, and what happens to bookings when staff cancel, move o
 delete a class, when a member is removed or an account deleted, are 17c-ii: until then
 a class with a booking cannot be deleted (no cascade; staff are answered 409
 `class_has_bookings`), so a pack's charge is never lost with it.)*
+*(17c-ii-a, 2026-10-05: **bookings when things change.** A class that will not run takes
+its bookings with it, and nobody pays for it: every booking on it ends, every pack
+charged for one has its class back (a late cancel's too), the waitlist is cleared. Staff
+**cancel one class**: the bookings stay as `cancelled`, and putting the class back does
+not bring them back. Staff **cancel a time slot, archive a class, or move a time slot to
+another day or time from a date**: the coming classes that go are deleted and their
+bookings with them; bookings of classes before the date, and of a class that has
+started, stay. Each of the four first answers 409 `class_has_bookings` with `ending`
+(classes, booked, waiting, the first three people) and does nothing until the request
+sends `confirmBookings` equal to booked plus waiting, counted again under the gym's
+lock; `GET …/class-bookings/ending` is the whole list, 100 at a time. **One class moved
+to another time on its day keeps its bookings. A class made smaller takes nobody out; a
+class made bigger hands its free places to the waitlist by the usual rule.** **A member
+who leaves** (removed by staff, taken off the list, or their account deleted) loses
+their bookings of classes that have not started, their pack has those classes back, and
+each place goes to the waitlist; a class that has started keeps its row. One function
+for every way of leaving (`endLeaversBookings`, called where the membership is closed).
+**The four settings** are read and changed at `…/booking-settings` on
+`schedule.manage` (Settings → Class bookings); they hold from the next booking on and
+change none already made; a shorter hand-over time hands over at once the free places
+it makes the waitlist's. Nobody is emailed yet: the box that asks says so until
+17c-ii-b.)*
 
 ### 13.5 Personal training
 

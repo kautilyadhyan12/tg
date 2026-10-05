@@ -41,7 +41,8 @@ function NumberBox({ id, value, onChange, disabled, label }) {
   );
 }
 
-function UnitPick({ value, onChange, disabled, label }) {
+/** `one`: the number beside it is 1, so the units read "minute", "hour", "day". */
+function UnitPick({ value, onChange, disabled, label, one }) {
   return (
     <select
       aria-label={label}
@@ -53,7 +54,7 @@ function UnitPick({ value, onChange, disabled, label }) {
     >
       {BOOKING_TIME_UNITS.map((unit) => (
         <option key={unit} value={unit}>
-          {unit}
+          {one ? unit.slice(0, -1) : unit}
         </option>
       ))}
     </select>
@@ -163,7 +164,7 @@ export default function BookingSettingsPanel({ org, readOnly }) {
 
           <Row title="When booking opens" hint="Members can book from then until the class starts.">
             <NumberBox label="Days before a class that booking opens" value={draft.opensDays} onChange={(opensDays) => edit({ opensDays })} disabled={off} />
-            <span>days before the class</span>
+            <span>{draft.opensDays === '1' ? 'day' : 'days'} before the class</span>
           </Row>
 
           <Row
@@ -172,7 +173,7 @@ export default function BookingSettingsPanel({ org, readOnly }) {
           >
             <span>Until</span>
             <NumberBox label="How long before a class cancelling is free" value={draft.freeAmount} onChange={(freeAmount) => edit({ freeAmount })} disabled={off} />
-            <UnitPick label="Free cancelling, in" value={draft.freeUnit} onChange={(freeUnit) => edit({ freeUnit })} disabled={off} />
+            <UnitPick label="Free cancelling, in" value={draft.freeUnit} one={draft.freeAmount === '1'} onChange={(freeUnit) => edit({ freeUnit })} disabled={off} />
             <span>before the class</span>
           </Row>
 
@@ -182,7 +183,7 @@ export default function BookingSettingsPanel({ org, readOnly }) {
           >
             <span>The first person on the waitlist gets it automatically until</span>
             <NumberBox label="How long before a class a free place goes to the waitlist automatically" value={draft.handoverAmount} onChange={(handoverAmount) => edit({ handoverAmount })} disabled={off} />
-            <UnitPick label="The waitlist time, in" value={draft.handoverUnit} onChange={(handoverUnit) => edit({ handoverUnit })} disabled={off} />
+            <UnitPick label="The waitlist time, in" value={draft.handoverUnit} one={draft.handoverAmount === '1'} onChange={(handoverUnit) => edit({ handoverUnit })} disabled={off} />
             <span>before the class</span>
           </Row>
 

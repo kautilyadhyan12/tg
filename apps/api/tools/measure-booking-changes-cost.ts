@@ -96,13 +96,16 @@ await sql`
   SELECT ${gymId}, e.id, ${packType}, gen_random_uuid(), 'pack', 9000, 'GBP', 500, 365, 300, current_date - 10, 'active', false
   FROM gym_member_list_entries e WHERE e.gym_id = ${gymId}`;
 
-/** A class type with `count` coming classes of `places`, the first of them `hours` away. */
-async function classType(count: number, places: number, hours = 72): Promise<{ typeId: string; sessions: string[] }> {
+/** A class type with `count` coming classes of `places`, the first of them 72 hours away
+ *  and each `stepMinutes` after the one before (all inside the week booking is open for
+ *  when the step is small). */
+async function classType(count: number, places: number, stepMinutes = 60): Promise<{ typeId: string; sessions: string[] }> {
   const typeId = randomUUID();
   await sql`INSERT INTO gym_class_types (id, gym_id, name, minutes, places, colour) VALUES (${typeId}, ${gymId}, ${`Spin ${typeId.slice(0, 8)}`}, 45, ${places}, 'blue')`;
   const rows = await sql<{ id: string }[]>`
     INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places)
-    SELECT ${gymId}, ${typeId}, (now() + ((${hours}::int + n) || ' hours')::interval)::date, 600 + (n % 24), now() + ((${hours}::int + n) || ' hours')::interval, 45, ${places}
+    SELECT ${gymId}, ${typeId}, (now() + ((4320 + n * ${stepMinutes}::int) || ' minutes')::interval)::date, n % 1440,
+           now() + ((4320 + n * ${stepMinutes}::int) || ' minutes')::interval, 45, ${places}
     FROM generate_series(0, ${count - 1}) AS n
     RETURNING id`;
   return { typeId, sessions: rows.map((r) => r.id) };
@@ -228,7 +231,7 @@ const LEAVERS = Math.min(200, Math.floor(PEOPLE / 10));
 await measure(
   `${String(LEAVERS)} members removed at once, each holding the one place of a class with 1 waiting`,
   async () => {
-    const { sessions } = await classType(LEAVERS, 1);
+    const { sessions } = await classType(LEAVERS, 1, 10);
     for (const [i, id] of sessions.entries()) await fill(id, i, 1, 0);
     // One person waits for each of those classes: the next person along.
     await sql`
