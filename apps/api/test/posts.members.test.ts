@@ -185,11 +185,19 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
     expect(res.statusCode, res.body).toBe(200);
     return JSON.parse(res.body) as ReportedGymPostsResponse;
   };
-  /** Keep, saying how many reports staff were shown (every one the post has had, unless
-   *  the test says what they saw). */
-  const keep = async (gym: Gym, who: Person, postId: string, allReports?: number) => {
-    const had = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_post_reports WHERE post_id = ${postId}`;
-    return await inject("POST", `${posts(gym.id)}/${postId}/keep`, who.cookies, { allReports: allReports ?? Math.max(1, had[0]?.n ?? 0) });
+  /** Which reports staff were shown: how many, and the one value for exactly those. */
+  interface Shown {
+    allReports: number;
+    reportsMark: string;
+  }
+  /** Keep, saying which reports staff were shown (every one the post has now, unless the
+   *  test says what they saw). */
+  const keep = async (gym: Gym, who: Person, postId: string, shown?: Shown) => {
+    const had = await sql<{ n: number; mark: string }[]>`
+      SELECT count(*)::int AS n, md5(coalesce(string_agg(id::text, ',' ORDER BY id), '')) AS mark FROM gym_post_reports WHERE post_id = ${postId}`;
+    const now = { allReports: Math.max(1, had[0]?.n ?? 0), reportsMark: had[0]?.mark ?? "" };
+    const sent = shown ?? now;
+    return await inject("POST", `${posts(gym.id)}/${postId}/keep`, who.cookies, { allReports: sent.allReports, reportsMark: sent.reportsMark });
   };
   /** The photo files of this gym still written down to remove. */
   const listedOf = async (gymId: string): Promise<string[]> =>
@@ -686,7 +694,8 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
         ["Reported first", 1],
       ]);
       expect((await keep(gym, gym.owner, randomUUID())).statusCode).toBe(404);
-      for (const bad of [undefined, {}, { allReports: 0 }, { allReports: "1" }, { allReports: 1.5 }, { allReports: 1, all: true }, { upTo: new Date(clock).toISOString() }]) {
+      const mark = "a".repeat(32);
+      for (const bad of [undefined, {}, { allReports: 1 }, { reportsMark: mark }, { allReports: 0, reportsMark: mark }, { allReports: "1", reportsMark: mark }, { allReports: 1.5, reportsMark: mark }, { allReports: 1, reportsMark: "A".repeat(32) }, { allReports: 1, reportsMark: mark, all: true }, { upTo: new Date(clock).toISOString() }]) {
         expect((await inject("POST", `${posts(gym.id)}/${older.id}/keep`, gym.owner.cookies, bad)).statusCode).toBe(400);
       }
     },
@@ -710,7 +719,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       clock += 1000;
       expect((await report(gym, late, post.id, "photo_of_someone", api(), "That is my brother in the photo")).statusCode).toBe(200);
 
-      const res = await keep(gym, gym.owner, post.id, seen?.allReports);
+      const res = await keep(gym, gym.owner, post.id, seen);
       expect({ status: res.statusCode, body: JSON.parse(res.body) as unknown }).toEqual({ status: 200, body: { kept: false, waiting: 1 } });
       // Nothing was answered: the post is still on the list, with the report nobody read.
       const after = await reported(gym, gym.owner);
@@ -725,7 +734,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       ]);
       expect(await audits(gym.id, "org.post_kept")).toBe(0);
       // Read again and kept: nothing is waiting now.
-      const again = await keep(gym, gym.owner, post.id, after.items[0]?.allReports);
+      const again = await keep(gym, gym.owner, post.id, after.items[0]);
       expect(JSON.parse(again.body)).toEqual({ kept: true, waiting: 0 });
       expect((await reported(gym, gym.owner)).items).toEqual([]);
       expect(await open()).toEqual([
@@ -756,7 +765,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
         INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason, note, created_at)
         VALUES (${gym.id}, ${post.id}, ${unread.userId}, 'photo_of_someone', 'That is me in the photo and I did not agree to it', ${new Date(clock - 2000)})`;
 
-      const res = await keep(gym, gym.owner, post.id, seen?.allReports);
+      const res = await keep(gym, gym.owner, post.id, seen);
       expect({ status: res.statusCode, body: JSON.parse(res.body) as unknown }).toEqual({ status: 200, body: { kept: false, waiting: 1 } });
       const rows = await sql<{ reason: string; outcome: string | null }[]>`SELECT reason, outcome FROM gym_post_reports WHERE post_id = ${post.id} ORDER BY reason`;
       expect(rows.map((r) => [r.reason, r.outcome])).toEqual([
@@ -773,20 +782,31 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       // the first reader's Keep, still saying two, answers nothing of the third's.
       const manager = await signedIn("Maya Manager");
       await addStaff(gym.id, manager.userId, "manager", null);
-      expect(JSON.parse((await keep(gym, manager, post.id, 2)).body)).toEqual({ kept: true, waiting: 0 });
+      const two = after.items[0];
+      expect(JSON.parse((await keep(gym, manager, post.id, two)).body)).toEqual({ kept: true, waiting: 0 });
       const third = await member(gym, "Theo Third");
       clock += 1000;
       expect((await report(gym, third, post.id, "unkind")).statusCode).toBe(200);
-      expect(JSON.parse((await keep(gym, gym.owner, post.id, 2)).body)).toEqual({ kept: false, waiting: 1 });
+      expect(JSON.parse((await keep(gym, gym.owner, post.id, two)).body)).toEqual({ kept: false, waiting: 1 });
       expect(await count("open_reports", gym.id)).toBe(1);
+      const three = (await reported(gym, gym.owner)).items[0];
+      expect(three?.allReports).toBe(3);
       // A reporter's account has gone since the list was read: fewer reports than staff were
       // shown, so the list is read again and nothing is answered.
       await sql`DELETE FROM gym_post_reports WHERE post_id = ${post.id} AND user_id = ${shownOne.userId}`;
-      const fewer = await keep(gym, gym.owner, post.id, 3);
+      const fewer = await keep(gym, gym.owner, post.id, three);
       expect({ status: fewer.statusCode, error: errorOf(fewer) }).toEqual({ status: 409, error: "reports_changed" });
       expect(await count("open_reports", gym.id)).toBe(1);
-      // Told the number that is true now, Keep answers it.
-      expect(JSON.parse((await keep(gym, gym.owner, post.id, 2)).body)).toEqual({ kept: true, waiting: 0 });
+      // …and a new report arrives in the same look: the post has three again, the number
+      // staff were shown, and they are not the same three. Nothing is answered.
+      const fourth = await member(gym, "Fern Fourth");
+      clock += 1000;
+      expect((await report(gym, fourth, post.id, "nudity")).statusCode).toBe(200);
+      const same = await keep(gym, gym.owner, post.id, three);
+      expect({ status: same.statusCode, error: errorOf(same) }).toEqual({ status: 409, error: "reports_changed" });
+      expect(await count("open_reports", gym.id)).toBe(2);
+      // Told what is true now, Keep answers them.
+      expect(JSON.parse((await keep(gym, gym.owner, post.id)).body)).toEqual({ kept: true, waiting: 0 });
       expect(await count("open_reports", gym.id)).toBe(0);
     },
     T,
@@ -824,10 +844,10 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
 
       // The nightly run leaves alone what was listed within the hour: a post being made
       // lists its files before it writes them.
-      await removeLeftovers({ sql, photos: store() }, false);
+      await removeLeftovers({ sql, photos: store() });
       expect(await filesOf(gym.id)).toHaveLength(3);
       await sql`UPDATE photo_files_to_remove SET created_at = now() - interval '2 hours' WHERE storage_key = ANY(${left})`;
-      await removeLeftovers({ sql, photos: store() }, false);
+      await removeLeftovers({ sql, photos: store() });
       expect(await listedOf(gym.id)).toEqual([]);
       // The kept post's file is the one left, and it is still served.
       expect(await filesOf(gym.id)).toHaveLength(1);
@@ -838,6 +858,22 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
       const keys = (await sql<{ storage_key: string }[]>`SELECT storage_key FROM gym_post_photos WHERE gym_id = ${gym.id}`).map((r) => r.storage_key);
       expect(keys).toHaveLength(1);
       expect(await removeListed({ sql, photos: store() }, keys, true)).toBe(0);
+      expect(await filesOf(gym.id)).toHaveLength(1);
+
+      // A listed key whose file has already gone (the file went and the list could not be
+      // written at that instant). A store rooted somewhere else finds no file either, and
+      // must not clear it; the store that holds this gym's kept photo may.
+      const stuck = `gym-post/${gym.id}/${randomUUID()}.jpg`;
+      await sql`INSERT INTO photo_files_to_remove (storage_key, created_at) VALUES (${stuck}, now() - interval '2 hours')`;
+      const elsewhere = await mkdtemp(join(tmpdir(), "aihg-member-posts-elsewhere-"));
+      try {
+        await removeLeftovers({ sql, photos: createDiskPhotoStore(elsewhere) });
+        expect(await listedOf(gym.id)).toEqual([stuck]);
+      } finally {
+        await rm(elsewhere, { recursive: true, force: true });
+      }
+      await removeLeftovers({ sql, photos: store() });
+      expect(await listedOf(gym.id)).toEqual([]);
       expect(await filesOf(gym.id)).toHaveLength(1);
     },
     T,
@@ -1125,7 +1161,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
 
       const calls: [string, "GET" | "POST" | "PUT" | "DELETE", string, unknown][] = [
         ["the reported list", "GET", `${posts(gym.id)}/reported`, undefined],
-        ["Keep", "POST", `${posts(gym.id)}/${post.id}/keep`, { allReports: 1 }],
+        ["Keep", "POST", `${posts(gym.id)}/${post.id}/keep`, { allReports: 1, reportsMark: "a".repeat(32) }],
         ["the switch", "PUT", `${posts(gym.id)}/settings`, { membersCanPost: false }],
         ["the stopped list", "GET", `${posts(gym.id)}/stopped`, undefined],
         ["stop a person", "PUT", `${posts(gym.id)}/stopped/${writer.userId}`, undefined],

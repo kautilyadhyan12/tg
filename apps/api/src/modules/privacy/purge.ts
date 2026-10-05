@@ -32,8 +32,9 @@ export interface PurgeDeps {
    *  are removed from it once their rows are gone, and so is any file an earlier removal
    *  left. Required, so no caller can leave it out; `remove` answers false when it found
    *  no file, which is counted as a file left (a store that is not the api's finds none,
-   *  and must not pass for a clean purge). */
-  photos: { remove(key: string): Promise<boolean> };
+   *  and must not pass for a clean purge). `get` is how a leftover with no file is told
+   *  from a store that is not the api's: this one holds a photo that gym still has. */
+  photos: { remove(key: string): Promise<boolean>; get(key: string): Promise<Uint8Array | null> };
   /** TEST-ONLY seam, mirroring buildApp's overrides parameter. No FK in the
    *  schema can block a delete (all 38 verified), so the loop's per-user
    *  error isolation cannot be exercised without injecting a failure. Return
@@ -292,7 +293,7 @@ export async function purgeDueUsers(
 
   // The files an earlier removal left, by a member, by staff or by a run before this one.
   try {
-    const left = await removeLeftovers(deps, false);
+    const left = await removeLeftovers(deps);
     result.photoFilesLeft += left;
     if (left > 0) deps.log.error({ count: left, event: "dpdp.purge.photo_leftovers_left" }, "photo files listed to remove are still in the store; the next run tries again");
   } catch (err) {

@@ -293,7 +293,7 @@ export default function Updates() {
         (shown) => withoutPost(shown, p.id),
       ),
     // Keep answers the reports this list showed, and none when another has arrived; the list is read again.
-    onKeep: (p, item) => act(p, () => staffPostsService.keep(gymId, p.id, item.allReports), keepNote, (shown) => shown),
+    onKeep: (p, item) => act(p, () => staffPostsService.keep(gymId, p.id, item), keepNote, (shown) => shown),
     onStop: (p, stopped) =>
       act(
         p,

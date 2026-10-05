@@ -447,15 +447,18 @@ export async function reportedBy(sql: SqlOrTx, gymId: string, postIds: readonly 
   return new Set(rows.map((r) => r.post_id));
 }
 
-/** Closes a post's open reports; how many it closed. `allReports`: only while the post has
- *  had exactly that many, the number staff were shown, and none otherwise. One statement,
- *  so a report that lands while it runs is neither counted nor closed. A report's own
- *  time cannot say whether staff saw it: it is read before the report is stored. */
-export async function closeReports(tx: TransactionSql, gymId: string, postId: string, outcome: "removed" | "kept", at: Date, allReports: number | null = null): Promise<number> {
+/** One value for exactly these reports of a post: another report, or one fewer, changes it. */
+const reportsMark = (sql: SqlOrTx) => sql`md5(coalesce(string_agg(a.id::text, ',' ORDER BY a.id), ''))`;
+
+/** Closes a post's open reports; how many it closed. `shown`: only while the post's
+ *  reports, answered or not, are exactly the ones staff were shown, and none otherwise.
+ *  One statement, so a report that lands while it runs is neither compared nor closed. A
+ *  report's own time cannot say whether staff saw it: it is read before the report is stored. */
+export async function closeReports(tx: TransactionSql, gymId: string, postId: string, outcome: "removed" | "kept", at: Date, shown: string | null = null): Promise<number> {
   const seen =
-    allReports === null
+    shown === null
       ? tx``
-      : tx`AND (SELECT count(*) FROM gym_post_reports a WHERE a.gym_id = ${gymId} AND a.post_id = ${postId}) = ${allReports}`;
+      : tx`AND (SELECT ${reportsMark(tx)} FROM gym_post_reports a WHERE a.gym_id = ${gymId} AND a.post_id = ${postId}) = ${shown}`;
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_post_reports SET closed_at = ${at}, outcome = ${outcome}
     WHERE gym_id = ${gymId} AND post_id = ${postId} AND closed_at IS NULL ${seen}
@@ -483,8 +486,9 @@ export async function unpinHidden(tx: TransactionSql, gymId: string): Promise<vo
 export interface ReportedRow {
   post: PostRow;
   reports: number;
-  /** Every report the post has had, answered or not. */
+  /** Every report the post has had, answered or not, and one value for exactly those. */
   allReports: number;
+  reportsMark: string;
   firstAt: Date;
   lastAt: Date;
   /** Every reported post waiting, on each row. */
@@ -493,9 +497,10 @@ export interface ReportedRow {
 
 /** The posts with a report nobody has answered, longest waiting first. */
 export async function reportedPosts(sql: SqlOrTx, gymId: string, limit: number): Promise<ReportedRow[]> {
-  const rows = await sql<(RawPost & { reports: number; all_reports: number; first_at: Date; last_at: Date; total: number })[]>`
+  const rows = await sql<(RawPost & { reports: number; all_reports: number; reports_mark: string; first_at: Date; last_at: Date; total: number })[]>`
     SELECT p.*, r.reports, r.first_at, r.last_at, count(*) OVER ()::int AS total,
-           (SELECT count(*)::int FROM gym_post_reports a WHERE a.gym_id = ${gymId} AND a.post_id = p.id) AS all_reports
+           (SELECT count(*)::int FROM gym_post_reports a WHERE a.gym_id = ${gymId} AND a.post_id = p.id) AS all_reports,
+           (SELECT ${reportsMark(sql)} FROM gym_post_reports a WHERE a.gym_id = ${gymId} AND a.post_id = p.id) AS reports_mark
     FROM (${posts(sql, gymId)}) p
     JOIN (
       SELECT post_id, count(*)::int AS reports, min(created_at) AS first_at, max(created_at) AS last_at
@@ -505,7 +510,7 @@ export async function reportedPosts(sql: SqlOrTx, gymId: string, limit: number):
     WHERE p.visible
     ORDER BY r.first_at, p.id
     LIMIT ${limit}`;
-  return rows.map((r) => ({ post: toPost(r), reports: r.reports, allReports: r.all_reports, firstAt: r.first_at, lastAt: r.last_at, total: r.total }));
+  return rows.map((r) => ({ post: toPost(r), reports: r.reports, allReports: r.all_reports, reportsMark: r.reports_mark, firstAt: r.first_at, lastAt: r.last_at, total: r.total }));
 }
 
 /** How many posts have a report nobody has answered. */
@@ -666,6 +671,15 @@ export async function queuedAmong(sql: SqlOrTx, keys: readonly string[]): Promis
   if (keys.length === 0) return [];
   const rows = await sql<{ storage_key: string }[]>`
     SELECT storage_key FROM photo_files_to_remove WHERE storage_key = ANY (${[...keys]}::text[])`;
+  return rows.map((r) => r.storage_key);
+}
+
+/** The store keys of this gym's newest post photos. */
+export async function newestPhotoKeys(sql: SqlOrTx, gymId: string, limit: number): Promise<string[]> {
+  // A listed key's gym is read out of the key: one that is no id names no gym.
+  if (!/^[0-9a-f-]{36}$/.test(gymId)) return [];
+  const rows = await sql<{ storage_key: string }[]>`
+    SELECT storage_key FROM gym_post_photos WHERE gym_id = ${gymId} ORDER BY created_at DESC, id LIMIT ${limit}`;
   return rows.map((r) => r.storage_key);
 }
 

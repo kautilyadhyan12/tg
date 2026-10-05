@@ -31,7 +31,38 @@ export async function removeListed(deps: PhotoFilesDeps, keys: readonly string[]
   return listed.length - gone.length;
 }
 
-/** Tries again the files an earlier try left; how many stay. */
-export async function removeLeftovers(deps: PhotoFilesDeps, missingIsGone: boolean): Promise<number> {
-  return await removeListed(deps, await repo.queuedFor(deps.sql, SETTLED_MINUTES, SWEEP_LIMIT), missingIsGone);
+export interface LeftoverDeps {
+  sql: Sql;
+  photos: { remove(key: string): Promise<boolean>; get(key: string): Promise<Uint8Array | null> };
+}
+
+/** The gym a key's photo belongs to: `gym-post/{gymId}/{photoId}.jpg`. */
+const gymOf = (key: string): string => key.split("/")[1] ?? "";
+
+/** Whether this store is the one the api writes to, as far as this gym shows: it holds a
+ *  photo the database says the gym has. A worker rooted at another folder holds none. */
+async function holdsThisGymsPhotos(deps: LeftoverDeps, gymId: string): Promise<boolean> {
+  for (const key of await repo.newestPhotoKeys(deps.sql, gymId, 3)) {
+    try {
+      if ((await deps.photos.get(key)) !== null) return true;
+    } catch {
+      // Not proof either way.
+    }
+  }
+  return false;
+}
+
+/** Tries again the files an earlier try left; how many stay. A listed key with no file
+ *  under it (the file went and the list could not be written at that instant) counts as
+ *  gone only where the store is shown to be the api's; otherwise it stays, and is counted. */
+export async function removeLeftovers(deps: LeftoverDeps): Promise<number> {
+  const byGym = new Map<string, string[]>();
+  for (const key of await repo.queuedFor(deps.sql, SETTLED_MINUTES, SWEEP_LIMIT)) {
+    byGym.set(gymOf(key), [...(byGym.get(gymOf(key)) ?? []), key]);
+  }
+  let left = 0;
+  for (const [gymId, keys] of byGym) {
+    left += await removeListed(deps, keys, await holdsThisGymsPhotos(deps, gymId));
+  }
+  return left;
 }

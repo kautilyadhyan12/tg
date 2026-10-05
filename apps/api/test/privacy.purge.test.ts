@@ -69,7 +69,7 @@ function testLogger(): TestLogger {
 }
 
 /** A photo store for the tests that purge nobody with photos: it removes whatever it is asked to. */
-const noPhotos = { remove: (): Promise<boolean> => Promise.resolve(true) };
+const noPhotos = { remove: (): Promise<boolean> => Promise.resolve(true), get: (): Promise<Uint8Array | null> => Promise.resolve(null) };
 
 /** Did a run emit this event anywhere? The warn/error paths are behaviour and
  *  were shipped untested through rounds 1-2, which is how their findings
@@ -694,7 +694,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     const theirs = await post(bystander.userId, true);
     const removed: string[] = [];
 
-    await purgeDueUsers({ sql, log: testLogger(), photos: { remove: (key) => Promise.resolve(removed.push(key) > 0) } }, {});
+    await purgeDueUsers({ sql, log: testLogger(), photos: { ...noPhotos, remove: (key) => Promise.resolve(removed.push(key) > 0) } }, {});
 
     const left = await sql<{ id: string }[]>`SELECT id FROM gym_posts WHERE id = ANY(${[mine.id, asStaff.id, theirs.id]}) ORDER BY id`;
     expect(left.map((r) => r.id)).toEqual([asStaff.id, theirs.id].sort());
@@ -725,7 +725,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       {
         sql,
         log: testLogger(),
-        photos: { remove: (k) => Promise.resolve(removed.push(k) > 0) },
+        photos: { ...noPhotos, remove: (k) => Promise.resolve(removed.push(k) > 0) },
         // Restored between the scan and their turn.
         purgeOne: async (tx, userId, cutoff) => {
           if (userId === u.userId) await tx`UPDATE users SET status = 'active', deleted_at = NULL WHERE id = ${userId}`;
@@ -801,7 +801,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
       VALUES (${postGymId}, ${rows[0]?.id ?? ""}, ${key}, 'image/jpeg', 10, 1, 1, 0)`;
     const log = testLogger();
-    const result = await purgeDueUsers({ sql, log, photos: { remove: () => Promise.reject(new Error("disk full")) } }, {});
+    const result = await purgeDueUsers({ sql, log, photos: { ...noPhotos, remove: () => Promise.reject(new Error("disk full")) } }, {});
     // The person is purged all the same: the rows are gone, so nothing can show the file.
     expect(result.errors).toBe(0);
     expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_posts WHERE author_user_id = ${u.userId}`)[0]?.n).toBe(0);

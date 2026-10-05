@@ -88,9 +88,11 @@ export const staffPostsService = {
   remove: (gymId, postId) => readThrough(removedGymPostResponseSchema, 'the change', authApi.delete(postPath(gymId, postId))),
   /** The reported posts nobody has answered yet, longest waiting first. */
   reported: (gymId) => readThrough(reportedGymPostsResponseSchema, 'the reported posts', authApi.get(`${gymPath(gymId)}/reported`)),
-  /** Keeps a reported post, while it has had exactly `allReports` (the list item's
-   *  number): when another has arrived since, none is answered and `waiting` says how many. */
-  keep: (gymId, postId, allReports) => readThrough(keptGymPostResponseSchema, 'the change', authApi.post(`${postPath(gymId, postId)}/keep`, { allReports })),
+  /** Keeps a reported post, while its reports are exactly the ones the list item counted
+   *  (its `allReports` and `reportsMark`): when another has arrived since, none is
+   *  answered and `waiting` says how many. */
+  keep: (gymId, postId, { allReports, reportsMark }) =>
+    readThrough(keptGymPostResponseSchema, 'the change', authApi.post(`${postPath(gymId, postId)}/keep`, { allReports, reportsMark })),
   /** The gym's switch: whether its members may post. */
   setMembersCanPost: (gymId, membersCanPost) => readThrough(gymPostSettingsSchema, 'the change', authApi.put(`${gymPath(gymId)}/settings`, { membersCanPost })),
   /** The people this gym has stopped posting. */

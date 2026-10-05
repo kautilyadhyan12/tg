@@ -643,27 +643,29 @@ export async function getReported(deps: Pick<PostsDeps, "sql">, staffId: string,
         if (r.postId === row.post.id && reason !== undefined) counts[reason] = r.count;
       }
       const typed = notes.filter((n) => n.postId === row.post.id).map((n) => n.note);
-      return [{ post, reports: row.reports, allReports: row.allReports, reasons: counts, notes: typed, firstReportedAt: row.firstAt.toISOString(), lastReportedAt: row.lastAt.toISOString() }];
+      return [{ post, reports: row.reports, allReports: row.allReports, reportsMark: row.reportsMark, reasons: counts, notes: typed, firstReportedAt: row.firstAt.toISOString(), lastReportedAt: row.lastAt.toISOString() }];
     }),
   });
 }
 
-/** Staff keep a reported post: its reports are answered, but only while the post has had
- *  exactly the `allReports` staff were shown. One that arrived since was never read, so
- *  none is answered and the post stays on the list; how many such are waiting. */
+/** Staff keep a reported post: its reports are answered, but only while they are exactly
+ *  the ones staff were shown (`reportsMark`; `allReports` is how many those were). One
+ *  that arrived since was never read, so none is answered and the post stays on the list;
+ *  how many such are waiting. */
 export async function keepReported(
   deps: Pick<PostsDeps, "sql" | "now">,
   staffId: string,
   gymId: string,
   postId: string,
-  allReports: number,
+  shown: { allReports: number; reportsMark: string },
   limit: Limit,
 ): Promise<{ kept: boolean; waiting: number } | null> {
+  const { allReports } = shown;
   await requireWritablePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   return await deps.sql.begin(async (tx) => {
     if ((await repo.postById(tx, gymId, postId, "staff")) === null) throw postNotFound();
-    const closed = await repo.closeReports(tx, gymId, postId, "kept", deps.now(), allReports);
+    const closed = await repo.closeReports(tx, gymId, postId, "kept", deps.now(), shown.reportsMark);
     const now = await repo.countReports(tx, gymId, postId);
     if (closed > 0) {
       await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.post_kept", targetType: "post", targetId: postId, meta: { reports: String(closed) } });
@@ -672,7 +674,8 @@ export async function keepReported(
     }
     // Answered by somebody else already.
     if (now.open === 0) return { kept: true, waiting: 0 };
-    // Fewer than staff were shown (a reporter's account has gone): the list is read again.
+    // No more than staff were shown, and not the same ones (a reporter's account has
+    // gone, with or without a new report): the list is read again.
     if (now.all <= allReports) throw new OrgsError(409, "reports_changed", GYM_POST_WORDS.reports_changed);
     return { kept: false, waiting: Math.min(now.open, now.all - allReports) };
   });

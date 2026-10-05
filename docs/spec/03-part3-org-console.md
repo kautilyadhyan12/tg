@@ -2880,9 +2880,12 @@ tick, as 19b-i decided) see **reported posts** at the top of the console's Updat
 longest waiting first, 50 at most (`GET …/posts/reported`): **Remove post** is the
 removal of §15.2, one request, gone for everyone with its photos, the reports answered
 "removed"; **Keep post** answers "kept" the reports staff were SHOWN (`POST
-…/posts/:postId/keep` with the list item's `allReports`, every report the post has had):
+…/posts/:postId/keep` with the list item's `allReports` and `reportsMark`: how many reports
+the post has had, and one value for exactly those):
 when another has arrived while they were looking NONE is answered, the post stays on the
-list, and the page says so and reads the list again. It is a count and not a time (the
+list, and the page says so and reads the list again; when the post has no more reports than
+staff saw but not the same ones (a reporter's account purged), the answer is 409
+`reports_changed` and the list is read again. It is the reports themselves and not a time (the
 feature's passes, 2026-10-05): a report's time is read before the report is stored, so one
 can land after staff read the list carrying an earlier time than the newest they saw. A kept post stays, and only a NEW person's report brings it back. **Stop them posting** on a member's
 post (`PUT` · `DELETE …/posts/stopped/:userId`, `gym_post_stops`): that person cannot post
@@ -2898,9 +2901,10 @@ to `photo_files_to_remove` in that same step (a removal, a purged account) and t
 once the file has gone; a new post lists its files before it writes them and takes them
 off in the step that keeps the post. A file that will not go stays listed: the nightly
 purge run tries again whatever has been listed for over an hour, counts what is still
-there (`photoFilesLeft`) and fails the run while any is. Only the api counts a missing
-file as gone; the worker does not, so a worker pointed at the wrong folder cannot clear
-the list.
+there (`photoFilesLeft`) and fails the run while any is. A listed key with no file under
+it counts as gone for the api, whose store it is. The nightly run counts it as gone only
+when its own store holds a photo that gym still has, which shows the store is the api's;
+a worker pointed at the wrong folder holds none, so it cannot clear the list.
 
 **As built in 19b-ii-c (2026-10-05): a person's posts on their profile** (RULINGS
 2026-10-02, 2026-10-03). A member's picture or name on a post, and a row of the

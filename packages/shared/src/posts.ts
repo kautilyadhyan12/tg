@@ -246,6 +246,8 @@ const reportNote = z
 export const reportGymPostRequestSchema = z.object({ reason: gymPostReportReasonSchema, note: reportNote.optional() }).strict();
 export const reportedGymPostResponseSchema = z.object({ reported: z.literal(true) }).strict();
 
+const reportsMark = z.string().regex(/^[0-9a-f]{32}$/);
+
 const reasonCountsSchema = z
   .object({
     unkind: z.number().int().nonnegative(),
@@ -272,9 +274,11 @@ export const reportedGymPostsResponseSchema = z
             reasons: reasonCountsSchema,
             /** What reporters typed, oldest first; never who typed it. */
             notes: z.array(z.string()).max(GYM_POST_REPORT_NOTES_SHOWN),
-            /** Every report this post has had, answered or not. Keep sends it back, and
-             *  answers nothing when another has arrived since. */
+            /** Every report this post has had, answered or not, and one value for exactly
+             *  those reports. Keep sends both back, and answers nothing when the post's
+             *  reports are no longer the ones counted here. */
             allReports: z.number().int().positive(),
+            reportsMark: reportsMark,
             firstReportedAt: z.string().datetime({ offset: true }),
             lastReportedAt: z.string().datetime({ offset: true }),
           })
@@ -287,10 +291,10 @@ export const reportedGymPostsResponseSchema = z
   .strict();
 export type ReportedGymPostsResponse = z.infer<typeof reportedGymPostsResponseSchema>;
 
-/** Keep answers a post's reports only while it has had exactly `allReports`, the list
- *  item's number. When another has arrived since, none is answered and the post stays on
- *  the list. */
-export const keepGymPostRequestSchema = z.object({ allReports: z.number().int().positive() }).strict();
+/** Keep answers a post's reports only while they are exactly the ones the list item
+ *  counted (`reportsMark`, with how many they were). When another has arrived since, none
+ *  is answered and the post stays on the list. */
+export const keepGymPostRequestSchema = z.object({ allReports: z.number().int().positive(), reportsMark }).strict();
 export const keptGymPostResponseSchema = z
   .object({
     /** False when a report arrived that staff were not shown: nothing was answered. */
