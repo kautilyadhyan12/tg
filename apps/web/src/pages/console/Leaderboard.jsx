@@ -6,6 +6,7 @@ import { errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { BOARD_TABS, PERIODS, circleLabel, datesLine, ordinal, updatedText, weekLabel, weekdayInitial } from '../../components/gym/leaderboardView';
 import LeaderboardPerson from './LeaderboardPerson';
+import { canManagePosts } from '../../components/gym/postsView';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
@@ -361,6 +362,7 @@ export default function Leaderboard() {
           words={words}
           readOnly={readOnly}
           canFix={canFixVisits(viewerPrivileges(org))}
+          canSeePosts={canManagePosts(viewerPrivileges(org))}
           onClose={() => setOpen(null)}
           onChanged={(line) => {
             setNotice(line);

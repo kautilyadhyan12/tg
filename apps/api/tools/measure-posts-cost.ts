@@ -2,7 +2,9 @@
 // full size"). One gym of 2,100 live app members (--members= for another size) with three
 // years of posts, two a day, three pinned, every second one a member's own; the newest 60
 // reacted to by four members in ten, the rest by one in twenty; 60 posts reported by 40
-// people each and 200 people stopped from posting. Read as a member and as staff read them,
+// people each and 200 people stopped from posting; and one person who has posted ten times
+// a day for all three years, whose profile is the longest there can be (19b-ii-c). Read as a
+// member and as staff read them,
 // a reaction, a report, the reported list, and a post of four photos at the biggest size
 // the app takes, by staff and by a member. Two numbers each, over several runs:
 //   - total: how long it takes (a read holds one of the pool's connections meanwhile);
@@ -28,6 +30,8 @@ import {
   getReported,
   getStaffPosts,
   getBlocked,
+  getPersonPosts,
+  getStaffPersonPosts,
   getStopped,
   react,
   removeOwnPost,
@@ -45,6 +49,8 @@ const sql = postgres(url, { prepare: false, max: 4 });
 const membersArg = process.argv.find((a) => a.startsWith("--members="));
 const MEMBERS = membersArg === undefined ? 2100 : Number(membersArg.slice("--members=".length));
 const POSTS = 3 * 365 * 2;
+/** One person's posts at the day's limit of ten, every day for three years. */
+const PROLIFIC = 3 * 365 * 10;
 const RUNS = 5;
 const PLAN = "zz_posts_cost";
 const PREFIX = "posts-cost-";
@@ -94,6 +100,11 @@ async function seed(): Promise<{ gymId: string; owner: string; viewer: string }>
     UPDATE gym_posts g SET by_member = true, author_user_id = m.user_id
     FROM p JOIN m ON m.rn = 1 + (p.rn % ${MEMBERS})
     WHERE g.id = p.id AND p.rn % 2 = 0`;
+  // One person at the day's limit for three years. They are neither blocked nor stopped below.
+  await sql`
+    INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
+    SELECT ${gymId}, ${owner}, gen_random_uuid(), repeat('Words of a post. ', 18), true, now() - n * interval '144 minutes'
+    FROM generate_series(1, ${PROLIFIC}) n`;
   // The newest 60 members' posts are each reported by 40 people; 200 people are stopped.
   await sql`
     INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason, note)
@@ -169,7 +180,7 @@ const counts = await sql<{ posts: string; own: string; reactions: string; report
          (SELECT count(*) FROM gym_post_stops WHERE gym_id = ${gymId}) AS stops,
          (SELECT count(*) FROM gym_post_blocks WHERE gym_id = ${gymId}) AS blocks`;
 console.log(
-  `one gym: ${String(MEMBERS)} members, ${counts[0]?.posts ?? "?"} posts (${counts[0]?.own ?? "?"} by members), ${counts[0]?.reactions ?? "?"} reactions, ${counts[0]?.reports ?? "?"} reports, ${counts[0]?.stops ?? "?"} people stopped, ${counts[0]?.blocks ?? "?"} blocked by the reader; cpu ${String(cpus()[0]?.speed ?? 0)} MHz; ${String(RUNS)} runs each`,
+  `one gym: ${String(MEMBERS)} members, ${counts[0]?.posts ?? "?"} posts (${counts[0]?.own ?? "?"} by members, ${String(PROLIFIC)} of them one person's), ${counts[0]?.reactions ?? "?"} reactions, ${counts[0]?.reports ?? "?"} reports, ${counts[0]?.stops ?? "?"} people stopped, ${counts[0]?.blocks ?? "?"} blocked by the reader; cpu ${String(cpus()[0]?.speed ?? 0)} MHz; ${String(RUNS)} runs each`,
 );
 
 const deps = { sql, now: () => new Date(), photos: createDiskPhotoStore(folder), supportEmail: null, log: { warn: () => undefined } };
@@ -185,7 +196,21 @@ while (cursor !== null) {
   last = place(cursor);
   cursor = (await getPosts(deps, viewer, gymId, last)).next;
 }
+// The oldest page of the one person's posts: from their 21st-oldest post on.
+const edge = await sql<{ at: Date; id: string }[]>`
+  SELECT created_at AS at, id FROM gym_posts WHERE gym_id = ${gymId} AND author_user_id = ${owner} AND by_member
+  ORDER BY created_at, id OFFSET 20 LIMIT 1`;
+const personLast = place(`${edge[0]?.at.toISOString() ?? ""}_${edge[0]?.id ?? ""}`);
+// Somebody with a single post, as most people's profile is.
+const single = await sql<{ id: string }[]>`
+  SELECT author_user_id AS id FROM gym_posts WHERE gym_id = ${gymId} AND by_member AND author_user_id <> ${owner}
+    AND author_user_id NOT IN (SELECT blocked_user_id FROM gym_post_blocks WHERE gym_id = ${gymId}) LIMIT 1`;
+const others1 = single[0]?.id ?? "";
 const reads: [string, () => Promise<unknown>][] = [
+  ["member, one person's posts", () => getPersonPosts(deps, viewer, gymId, owner, undefined, allowed)],
+  ["member, that person's oldest page", () => getPersonPosts(deps, viewer, gymId, owner, personLast, allowed)],
+  ["member, a person with one post", () => getPersonPosts(deps, viewer, gymId, others1, undefined, allowed)],
+  ["staff, one person's posts", () => getStaffPersonPosts(deps, owner, gymId, owner, undefined, allowed)],
   ["member, the first page", () => getPosts(deps, viewer, gymId, undefined)],
   ["member, the oldest page", () => getPosts(deps, viewer, gymId, last)],
   ["staff, the first page", () => getStaffPosts(deps, owner, gymId, undefined, allowed)],

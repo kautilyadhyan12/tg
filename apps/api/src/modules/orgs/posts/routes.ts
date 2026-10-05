@@ -1,4 +1,4 @@
-// A GYM'S UPDATES: THE ROUTES (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a). Authenticate, Zod-parse,
+// A GYM'S UPDATES: THE ROUTES (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a, 19b-ii-c). Authenticate, Zod-parse,
 // and the service decides who may read or write. Registered from `registerOrgRoutes`.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
@@ -182,7 +182,29 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     return reply.status(200).send({ blocked: false });
   });
 
+  // One person's posts, on their profile. Who is reading is asked before the limit, so a
+  // stranger's 404 is never a 429.
+  app.get("/v1/orgs/:gymId/posts/people/:userId", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPosterParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(gymPostsQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const posts = await service.getPersonPosts(postsDeps, requireUserId(req), params.gymId, params.userId, query.before, gate(readLimit)(req, reply));
+    if (posts === null) return;
+    return reply.status(200).send(posts);
+  });
+
   // ── STAFF HOLDING `posts.manage` ──
+
+  app.get("/v1/orgs/:gymId/posts/staff/people/:userId", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymPosterParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(gymPostsQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const posts = await service.getStaffPersonPosts(postsDeps, requireUserId(req), params.gymId, params.userId, query.before, gate(staffReadLimit)(req, reply));
+    if (posts === null) return;
+    return reply.status(200).send(posts);
+  });
 
   app.get("/v1/orgs/:gymId/posts/staff", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
