@@ -29,6 +29,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -220,6 +221,8 @@ export const gymClassSessions = pgTable(
       sql`${t.places} IS NULL OR ${t.places} BETWEEN 1 AND 500`,
     ),
     check("gym_class_sessions_status_check", sql`${t.status} IN ('scheduled','cancelled')`),
+    // What a booking's class key points at, with its gym (0075).
+    unique("gym_class_sessions_gym_id_uq").on(t.gymId, t.id),
     uniqueIndex("gym_class_sessions_schedule_date_uq").on(t.scheduleId, t.localDate),
     index("gym_class_sessions_gym_starts_idx").on(t.gymId, t.startsAt),
     index("gym_class_sessions_type_starts_idx").on(t.classTypeId, t.startsAt),

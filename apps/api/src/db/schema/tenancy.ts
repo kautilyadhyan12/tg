@@ -122,6 +122,12 @@ export const gyms = pgTable(
     leaderboardBoardsOff: text("leaderboard_boards_off").array().notNull().default(sql`'{}'::text[]`),
     /** Whether the gym's members may post on its Updates (0072; spec Part 3 §15.2). */
     membersCanPost: boolean("members_can_post").notNull().default(false),
+    /** The gym's booking settings (0075; spec Part 3 §13.4), under
+     *  `gyms_booking_settings_check`; `CLASS_BOOKING_DEFAULTS` in `@app/shared`. */
+    bookingOpensDays: integer("booking_opens_days").notNull().default(7),
+    bookingFreeCancelMinutes: integer("booking_free_cancel_minutes").notNull().default(120),
+    waitlistHandoverMinutes: integer("waitlist_handover_minutes").notNull().default(1440),
+    waitlistMax: integer("waitlist_max").notNull().default(20),
     createdAt: createdAt(),
   },
   (t) => [

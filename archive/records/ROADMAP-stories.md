@@ -264,4 +264,12 @@ stage. History, never a rule: RULINGS wins where they differ.
 
 - 17a-iii. [ ] **A file's word linked to a type**: "Gold" → Gold Monthly once, for everyone who carries the word, their file's dates kept.
 
+**17c, as first written (split 2026-10-05 into 17c-i and 17c-ii):**
+
+- 17c. [ ] **Booking and the waitlist, on the server.** Book · cancel · hand-over · claim as ONE rule under the session's lock, with its table test and its races RUN across two app instances; who may book; packs charged once and given back on a free cancel; the gym's settings with their starting values; the emails. **First tests: fifty people and one place; a pack charged once however often the request arrives.** Needs 17a, 17b-i, 3b-ii.
+
 - 19b-ii-b (as the line stood before it was built, 2026-10-04): **Block, the bad-words hold and the support address**: a member never again sees a blocked member's posts or reactions; a post with a bad word is HELD for staff, the word list tested against real wording from outside the code. **First test: a blocked person's posts gone for the blocker.** Built with the hold replaced by a refusal that names the word (RULINGS 2026-10-05).
+
+**17c-i, as it stood when it was built (merged 2026-10-05, PR #173):**
+
+- 17c-i. [ ] **Book, Cancel, the waitlist and Claim.**

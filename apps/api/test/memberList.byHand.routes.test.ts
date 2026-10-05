@@ -1097,9 +1097,9 @@ d("member list: keeping it by hand (real Postgres)", () => {
   // (20c-i), driven in `leads.routes.test.ts`. The join moves both onto the kept record
   // and deleting clears both. A visit (16a) is moved by the join too, and deleting keeps
   // only an app member's visits; both driven in `checkin.routes.test.ts`. The day another
-  // table points at a record (bookings), this fails: that job must make the join move its
-  // rows too, decide what deleting does to them, and drive both.
-  it("the tables that point at a list record are the membership, the joined lead, a visit and a Different people pair, each with its gym", async () => {
+  // table points at a record, this fails: that job must make the join move its rows too,
+  // decide what deleting does to them, and drive both.
+  it("the tables that point at a list record are the membership, the joined lead, a visit, a class booking and a Different people pair, each with its gym", async () => {
     const refs = await sql<{ ref: string }[]>`
       SELECT DISTINCT tc.table_name || '.' || kcu.column_name AS ref
       FROM information_schema.table_constraints tc
@@ -1116,6 +1116,11 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // driven in `checkin.fixVisit.routes.test.ts`.
       "gym_attendance_removed.entry_id",
       "gym_attendance_removed.gym_id",
+      // A class booking (0075): it is the app account's, so the join moves it to the kept
+      // record (driven in `classBookings.routes.test.ts`) and a deleted record lets it go
+      // (`db.migration.test.ts`).
+      "gym_class_bookings.entry_id",
+      "gym_class_bookings.gym_id",
       // A membership the record holds (0070): moved by the join, and gone with a record
       // deleted for good; driven in `heldMemberships.routes.test.ts`.
       "gym_held_memberships.entry_id",

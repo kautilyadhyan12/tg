@@ -8,7 +8,10 @@
 // that is being deleted. What a write may do is decided by the one rule in
 // `@app/shared` (`moveHeldMembership`), on the day the service passes in.
 // The one other writer is `wordsRepo.ts`, which gives a type to everybody who carries
-// one of the list's words, under the same gym lock.
+// one of the list's words, under the same gym lock. A class booking (17c-i,
+// `classes/bookingsRepo.ts`) reads a record's memberships and takes a class off a pack or
+// gives it back through `heldForBooking`, `chargePack` and `givePackClassBack` below,
+// under that lock too.
 //
 // `status` holds the last status written, and the clock ends a membership without
 // writing: every write first marks the record's memberships the clock has ended
@@ -22,9 +25,12 @@ import {
   giveHeldMembership,
   heldMembershipStatusSchema,
   heldMembershipView,
+  membershipAccessSchema,
   membershipKindSchema,
+  membershipLimitPeriodSchema,
   membershipTermUnitSchema,
   moveHeldMembership,
+  type HeldCover,
   type HeldMembership,
   type HeldMembershipEvent,
   type HeldMembershipTypeChoice,
@@ -405,6 +411,67 @@ export async function moveHeld(
     });
     return { kind: "ok" };
   });
+}
+
+const forBookingSchema = z.object({
+  entry_id: z.string(),
+  access: membershipAccessSchema,
+  bookings_limit: z.number().int().nullable(),
+  bookings_period: membershipLimitPeriodSchema.nullable(),
+  covers_class: z.boolean(),
+});
+
+/** These records' memberships in use, each with what its type includes for one class
+ *  (17c-i). `used` is the booking repo's to count. For a booking, under the gym's lock. */
+export async function heldForBooking(
+  tx: Sql | TransactionSql,
+  gymId: string,
+  entryIds: readonly string[],
+  classTypeId: string,
+): Promise<(Omit<HeldCover, "used"> & { entryId: string })[]> {
+  const rows = await tx`
+    SELECT ${COLUMNS(tx)}, h.entry_id, t.access, t.bookings_limit, t.bookings_period,
+           (t.covers_all_classes OR EXISTS (
+             SELECT 1 FROM gym_membership_type_classes c
+             WHERE c.gym_id = t.gym_id AND c.membership_type_id = t.id AND c.class_type_id = ${classTypeId}
+           )) AS covers_class
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    WHERE h.gym_id = ${gymId} AND h.entry_id = ANY(${[...entryIds]}::uuid[]) AND h.status = ANY(${[...IN_USE]}::text[])
+    ORDER BY h.id`;
+  return rows.map((row) => {
+    const extra = forBookingSchema.parse(row);
+    const h = shape(row);
+    return {
+      entryId: extra.entry_id,
+      id: h.id,
+      membership: h.membership,
+      access: extra.access,
+      coversClass: extra.covers_class,
+      bookingsLimit: extra.bookings_limit,
+      bookingsPeriod: extra.bookings_period,
+    };
+  });
+}
+
+/** One class off a pack, for a booking. False where the pack has none left: the caller
+ *  holds the gym's lock and has just read one, so that is a fault and it throws. */
+export async function chargePack(tx: TransactionSql, gymId: string, membershipId: string, now: Date): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_held_memberships SET classes_left = classes_left - 1, updated_at = ${now}
+    WHERE gym_id = ${gymId} AND id = ${membershipId} AND kind = 'pack' AND classes_left > 0
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** A pack's class given back by a free cancel. A pack marked ended because its last class
+ *  was used runs again; one over by its days stays over by the rule's own reading. */
+export async function givePackClassBack(tx: TransactionSql, gymId: string, membershipId: string, now: Date): Promise<void> {
+  await tx`
+    UPDATE gym_held_memberships
+    SET status = CASE WHEN status = 'ended' AND classes_left = 0 THEN 'active' ELSE status END,
+        classes_left = classes_left + 1, updated_at = ${now}
+    WHERE gym_id = ${gymId} AND id = ${membershipId} AND kind = 'pack' AND classes_left < pack_classes`;
 }
 
 /** How many memberships each of these records has in use on `today`, by the rule: a

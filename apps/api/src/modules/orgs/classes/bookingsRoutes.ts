@@ -1,0 +1,111 @@
+// CLASS BOOKINGS: THE ROUTES (spec Part 3 §13.4; ROADMAP 17c-i). Authenticate, Zod-parse,
+// and the service decides who may read or write. Registered from `registerOrgRoutes`.
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { Sql } from "postgres";
+import type { z } from "zod";
+import { CLASS_LATE_CANCEL_ERROR, bookClassRequestSchema, cancelClassBookingRequestSchema } from "@app/shared";
+import type { RedisLike } from "../../../redis.js";
+import { createDualRateLimit } from "../../auth/rateLimit.js";
+import { classSessionParamsSchema } from "../schemas.js";
+import * as service from "./bookingsService.js";
+
+function parseOr400<S extends z.ZodTypeAny>(
+  schema: S,
+  value: unknown,
+  req: FastifyRequest,
+  reply: FastifyReply,
+): z.output<S> | null {
+  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+  if (!parsed.success) {
+    // Issue paths and codes only, never the offending value.
+    void reply.status(400).send({
+      error: "validation_error",
+      message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.code}`).join("; "),
+      requestId: req.id,
+    });
+    return null;
+  }
+  return parsed.data;
+}
+
+function requireUserId(req: FastifyRequest): string {
+  const userId = req.authUser?.id;
+  if (userId === undefined) throw new Error("authenticate preHandler did not run");
+  return userId;
+}
+
+export function registerClassBookingRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date }): void {
+  const bookingDeps: service.BookingsDeps = { sql: deps.sql, now: deps.now, inLine: service.createLine() };
+  const limiter = (name: string, max: number, ipMax: number) =>
+    createDualRateLimit({
+      name,
+      max,
+      ipMax,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    });
+  // A whole gym books from one address on its wi-fi when a popular class opens (§13.7:
+  // two hundred people inside a minute), hence each explicit `ipMax`.
+  const readLimit = limiter("orgs_bookings_read", 1200, 60_000);
+  const writeLimit = limiter("orgs_bookings_write", 120, 12_000);
+  const staffReadLimit = limiter("orgs_bookings_staff_read", 1200, 6000);
+
+  // Membership first and the limit after it: a stranger's 404 is never a 429.
+  const gate =
+    (limit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>) =>
+    (req: FastifyRequest, reply: FastifyReply) =>
+    async (): Promise<boolean> => {
+      await limit(req, reply);
+      return !reply.sent;
+    };
+
+  // ── MEMBERS ──
+
+  app.get("/v1/orgs/:gymId/class-sessions/:sessionId/booking", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const booking = await service.getBooking(bookingDeps, requireUserId(req), params.gymId, params.sessionId, gate(readLimit)(req, reply));
+    if (booking === null) return;
+    return reply.status(200).send({ booking });
+  });
+
+  // Book, Join waitlist (`joinWaitlist`) and Claim. The same `requestKey` again answers
+  // the booking it made and changes nothing.
+  app.post("/v1/orgs/:gymId/class-sessions/:sessionId/booking", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(bookClassRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const booking = await service.book(bookingDeps, requireUserId(req), params.gymId, params.sessionId, body, gate(writeLimit)(req, reply));
+    if (booking === null) return;
+    return reply.status(200).send({ booking });
+  });
+
+  // Cancel a booking or leave the waitlist. Past the free time it answers 409
+  // `late_cancel` until the request says `lateOk`.
+  app.post("/v1/orgs/:gymId/class-sessions/:sessionId/booking/cancel", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(cancelClassBookingRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const booking = await service.cancel(bookingDeps, requireUserId(req), params.gymId, params.sessionId, body.lateOk, gate(writeLimit)(req, reply));
+      if (booking === null) return;
+      return await reply.status(200).send({ booking });
+    } catch (err) {
+      if (!(err instanceof service.LateCancel)) throw err;
+      return reply.status(409).send({ error: CLASS_LATE_CANCEL_ERROR, message: err.message, packCharged: err.packCharged, requestId: req.id });
+    }
+  });
+
+  // ── STAFF HOLDING `schedule.manage`, AND THE CLASS'S OWN COACH ──
+
+  app.get("/v1/orgs/:gymId/class-sessions/:sessionId/bookings", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await service.getSessionBookings(bookingDeps, requireUserId(req), params.gymId, params.sessionId, gate(staffReadLimit)(req, reply));
+    if (list === null) return;
+    return reply.status(200).send(list);
+  });
+}

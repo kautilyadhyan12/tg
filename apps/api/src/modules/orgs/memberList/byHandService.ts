@@ -809,6 +809,7 @@ export async function mergeEntries(
     await settleHeldMemberships(tx, gymId, keepId, dayInTz(at, org.timezone), at);
     const memberships = await repo.moveHeldMemberships(tx, gymId, goneId, keepId);
     await repo.moveVisitLinks(tx, gymId, goneId, keepId);
+    await repo.moveBookingLinks(tx, gymId, goneId, keepId);
     await repo.deleteEntry(tx, gymId, goneId);
     const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");

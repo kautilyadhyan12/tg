@@ -2557,6 +2557,30 @@ membership × places (free · last · full) × time (before opening · open · i
 free-cancel time · inside the hand-over time · after the start) × the request arriving
 twice. The races are RUN, across two app instances (3a-iii-b's lesson: one app has one
 database connection and cannot race itself).
+*(17c-i, 2026-10-05: built as `decideBook`, `decideCancel` and `pickCover` in
+`packages/shared/src/classBookings.ts`. The lock is the GYM's row and then the class's:
+every timetable and membership write takes the gym's row first, so a booking takes it
+too. A "no" is answered from a plain read and takes no lock. A booking is the app
+account's, with its record on the list; a new row each time a person books again, the
+cancelled ones kept. Outside the hand-over time a free place is the first in line's
+before anybody else's: Book hands it over before it decides. Somebody waiting whose
+membership no longer covers the class is passed over and keeps their place in line. The
+pack is charged when the place is theirs, never for waiting. Which membership pays: one
+that includes the class without counting, then one with bookings left in the class's
+own week (Monday to Sunday) or month, then a pack, the one ending soonest first. A
+membership counts if it runs on the CLASS's day; a late cancel and a no-show count
+toward a week's bookings, a free cancel does not. "Gym only" includes an open-gym slot
+and no class. A late cancel answers 409 `late_cancel` until the request says `lateOk`.
+A booking keeps the key of the request that made it and of the Claim that took its
+place from the waitlist; either arriving again changes nothing. A place the waitlist is
+about to be handed reads as taken for anybody not waiting. A class staff cancelled does
+not count toward a week's bookings. A class's coach reads who is coming and waiting,
+not what they pay with.
+The four settings are columns on `gyms` with the starting values; the screen that
+changes them, the emails, and what happens to bookings when staff cancel, move or
+delete a class, when a member is removed or an account deleted, are 17c-ii: until then
+a class with a booking cannot be deleted (no cascade; staff are answered 409
+`class_has_bookings`), so a pack's charge is never lost with it.)*
 
 ### 13.5 Personal training
 

@@ -519,6 +519,13 @@
       "when": 1788220800058,
       "tag": "0074_post_blocks",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1788220800059,
+      "tag": "0075_class_bookings",
+      "breakpoints": true
     }
   ]
 }

@@ -377,6 +377,11 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gym_class_types",
   "gym_class_schedules",
   "gym_class_sessions",
+  // gym_class_bookings.user_id — which classes a member booked, waited for, cancelled or
+  // came to (Part 3 §13.4, migration `0075`). On gym_attendance's footing: the same dated
+  // record of a person at a gym, kept as the gym's count of its classes and of a pack's
+  // charges, and ruled with it.
+  "gym_class_bookings",
   // billing_checkouts.created_by — which member of staff pressed Subscribe for a gym
   // (migration `0041`). Kept on audit_log's footing: it is the gym's record of a
   // payment it made, not the person's own data; `ON DELETE set null` if the row goes.

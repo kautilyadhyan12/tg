@@ -1,8 +1,10 @@
 // WHAT A GYM SELLS (Part 3 §13.1; ROADMAP Stage 2 item 17a-i). Mirrors
 // `0069_membership_types.sql`, `0070_held_memberships.sql` and
-// `0073_membership_word_links.sql` 1:1; the migrations carry the reasoning.
+// `0073_membership_word_links.sql` 1:1, and `0075_class_bookings.sql`'s bookings; the
+// migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -179,6 +181,59 @@ export const gymHeldMemberships = pgTable(
     }),
     index("gym_held_memberships_entry_idx").on(t.gymId, t.entryId),
     index("gym_held_memberships_type_idx").on(t.gymId, t.membershipTypeId),
+  ],
+);
+
+/** One person's booking of one class (§13.4; 17c-i). Mirrors `0075_class_bookings.sql`,
+ *  which holds the two foreign keys Drizzle's builder cannot express: `(gym_id,
+ *  session_id)` → the class, and `(gym_id, entry_id)` → the record, ON DELETE SET NULL
+ *  (entry_id). `seq` is the waitlist's order. */
+export const gymClassBookings = pgTable(
+  "gym_class_bookings",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    entryId: uuid("entry_id"),
+    heldMembershipId: uuid("held_membership_id").references(() => gymHeldMemberships.id, { onDelete: "set null" }),
+    status: text("status").notNull(),
+    packCharged: boolean("pack_charged").notNull().default(false),
+    requestKey: uuid("request_key").notNull(),
+    /** The request that claimed the place from the waitlist, where a person did. */
+    claimKey: uuid("claim_key"),
+    createdAt: createdAt(),
+    bookedAt: timestamp("booked_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("gym_class_bookings_request_uq").on(t.gymId, t.requestKey),
+    unique("gym_class_bookings_claim_uq").on(t.gymId, t.claimKey),
+    check(
+      "gym_class_bookings_status_check",
+      sql`${t.status} IN ('booked','waitlisted','cancelled','late_cancelled','attended','no_show')`,
+    ),
+    check(
+      "gym_class_bookings_booked_check",
+      sql`${t.status} NOT IN ('booked','attended','no_show','late_cancelled') OR ${t.bookedAt} IS NOT NULL`,
+    ),
+    check(
+      "gym_class_bookings_cancelled_check",
+      sql`(${t.status} IN ('cancelled','late_cancelled')) = (${t.cancelledAt} IS NOT NULL)`,
+    ),
+    check("gym_class_bookings_pack_check", sql`NOT ${t.packCharged} OR ${t.bookedAt} IS NOT NULL`),
+    uniqueIndex("gym_class_bookings_live_uq")
+      .on(t.sessionId, t.userId)
+      .where(sql`${t.status} IN ('booked','waitlisted','attended','no_show')`),
+    index("gym_class_bookings_session_idx").on(t.gymId, t.sessionId, t.status, t.seq),
+    index("gym_class_bookings_user_idx").on(t.userId, t.gymId),
+    index("gym_class_bookings_entry_idx").on(t.gymId, t.entryId).where(sql`${t.entryId} IS NOT NULL`),
+    index("gym_class_bookings_held_idx").on(t.heldMembershipId).where(sql`${t.heldMembershipId} IS NOT NULL`),
   ],
 );
 
