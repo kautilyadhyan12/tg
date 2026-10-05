@@ -28,7 +28,7 @@ const SESSION = '33333333-3333-4333-8333-000000000001';
 const sam = { userId: SAM, name: 'Sam Reed', initials: 'SR', offers: true, sessionMinutes: 60, hours: [{ weekday: 5, fromMinute: 540, toMinute: 720 }], mine: false };
 const owner = { userId: OWNER, name: 'Harbour Owner', initials: 'HO', offers: false, sessionMinutes: null, hours: [], mine: true };
 const ana = { userId: ANA, name: 'Ana Diaz', initials: 'AD', offers: false, sessionMinutes: null, hours: [], mine: false };
-const trainers = (over = {}) => ({ timezone: 'Europe/London', canManage: true, canBook: true, freeCancelMinutes: 120, trainers: [ana, owner, sam], ...over });
+const trainers = (over = {}) => ({ timezone: 'Europe/London', canManage: true, canBook: true, freeCancelMinutes: 120, gymHasTypes: true, trainers: [ana, owner, sam], ...over });
 const mayaSession = (over = {}) => ({
   id: SESSION, trainerId: SAM, localDate: '2026-10-09', localStartMinute: 600, minutes: 60, startsAt: '2026-10-09T09:00:00.000Z', status: 'booked',
   name: 'Maya Lopez', initials: 'ML', entryId: MAYA, membership: 'PT 10', packCharged: true, cancel: 'free', ...over,
@@ -39,6 +39,7 @@ const week = (appointments = [mayaSession()], over = {}) => ({
     localDate,
     free: localDate === '2026-10-09' ? [540, 660] : [],
     appointments: localDate === '2026-10-09' ? appointments : [],
+    classes: [],
   })),
   ...over,
 });
@@ -76,7 +77,8 @@ afterEach(cleanup);
 describe('the page for whoever runs the timetable', () => {
   it('lists the trainers who are set up, says what the page is for, and shows the first one’s week: never the reader as a trainer', async () => {
     open();
-    expect(await screen.findByText('Set the hours each trainer is free. Their free times appear below: press one to book a member.')).toBeTruthy();
+    expect(await screen.findByText('One-to-one sessions with a trainer. Set when each trainer is free, then book members into their free times.')).toBeTruthy();
+    expect(screen.getByText('These hours repeat every week. A class a trainer coaches is taken off their free times by itself.')).toBeTruthy();
     const rows = screen.getAllByTestId('pt-trainer');
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain('Sam Reed · 60-minute sessions');
@@ -93,19 +95,55 @@ describe('the page for whoever runs the timetable', () => {
     expect(day.getByRole('button', { name: 'Book 09:00 – 10:00' })).toBeTruthy();
     expect(day.getByTestId('pt-session').textContent).toContain('10:00 – 11:00 · Maya Lopez');
     expect(day.getByTestId('pt-session').textContent).toContain('PT 10 · 1 session used');
-    // Earlier than today is not offered.
-    expect(screen.getByRole('button', { name: /Earlier/ }).disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: /Later/ }));
+    // The week before today is not offered; the next one is one press away, and the page says how far it goes.
+    expect(screen.getByText('Sessions can be booked up to Tue 1 Dec.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Previous week/ }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /Next week/ }));
     await waitFor(() => expect(api.getPtWeek).toHaveBeenLastCalledWith('g1', SAM, '2026-10-14'));
   });
 
   it('with nobody set up it says so and how to start, and asks for no week', async () => {
     api.getPtTrainers.mockResolvedValue({ data: trainers({ trainers: [ana, owner] }) });
     open();
-    expect(await screen.findByText('No trainers yet. Choose who takes personal training sessions, then set their hours.')).toBeTruthy();
+    expect(await screen.findByText('No trainers yet. This is how it works:')).toBeTruthy();
+    expect([...screen.getByTestId('pt-how').querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      'Add a trainer and set the hours they are free.',
+      'Tick "Includes personal training" on a membership or pack (Settings, then Memberships) and give it to the member on their page.',
+      "Press one of the trainer's free times and pick the member.",
+    ]);
     expect(screen.getByRole('button', { name: 'Set their hours' }).disabled).toBe(true);
     expect(screen.queryByTestId('pt-day')).toBeNull();
     expect(api.getPtWeek).not.toHaveBeenCalled();
+  });
+
+  it('a gym that sells no memberships is not told to tick one', async () => {
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ gymHasTypes: false, trainers: [ana, owner] }) });
+    open();
+    await screen.findByText('No trainers yet. This is how it works:');
+    expect([...screen.getByTestId('pt-how').querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      'Add a trainer and set the hours they are free.',
+      "Press one of the trainer's free times and pick the member.",
+    ]);
+  });
+
+  it('a class the trainer coaches is listed on its day as time that is not free, on the clock the gym reads', async () => {
+    ORG = { ...ORG, clockFormat: '12h' };
+    const data = week();
+    data.days[2].classes = [{ name: 'Spin', localStartMinute: 615, minutes: 45 }];
+    data.days[2].free = [660];
+    // A class and nothing else on a day still shows the day whole.
+    data.days[3].classes = [{ name: 'Yoga', localStartMinute: 1080, minutes: 60 }];
+    api.getPtWeek.mockResolvedValue({ data });
+    open();
+    const day = await friday();
+    expect(within(day.getByTestId('pt-coaching')).getByText('10:15 AM – 11:00 AM · Spin')).toBeTruthy();
+    expect(day.getByText('Coaching a class, so not free')).toBeTruthy();
+    expect(day.getByRole('button', { name: 'Book 11:00 AM – 12:00 PM' })).toBeTruthy();
+    // The session booked from 10:00 runs into the class given to the trainer afterwards, and says so.
+    expect(day.getByText('This runs into Spin, a class they coach at the same time. Move one of them.')).toBeTruthy();
+    const saturday = within(screen.getAllByTestId('pt-day')[3]);
+    expect(saturday.getByText('6:00 PM – 7:00 PM · Yoga')).toBeTruthy();
+    expect(saturday.getByText('No free times')).toBeTruthy();
   });
 
   it('Add a trainer: pick a member of staff, set their hours, and their week is the one shown', async () => {
@@ -229,7 +267,8 @@ describe('a trainer on the usual permissions', () => {
   it('sees their own hours and week, the free times as plain times with why, and no Book; their own session can be cancelled', async () => {
     open();
     expect(await screen.findByRole('heading', { name: 'Your hours' })).toBeTruthy();
-    expect(screen.getByText('Set the hours you are free for sessions. Your booked sessions appear below.')).toBeTruthy();
+    expect(screen.getByText('One-to-one sessions. Set when you are free; the sessions booked with you appear below.')).toBeTruthy();
+    expect(screen.getByText('These hours repeat every week. A class you coach is taken off your free times by itself.')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Trainers' })).toBeNull();
     expect(screen.queryByLabelText('Add a trainer')).toBeNull();
     const day = await friday();

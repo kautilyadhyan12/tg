@@ -7,8 +7,28 @@ import { dayLabel } from '../../components/gym/leaderboardView';
 export const PT_TITLE = 'Personal training';
 
 /** What the page is for, in one line under its name. */
-export const PT_INTRO_MANAGER = 'Set the hours each trainer is free. Their free times appear below: press one to book a member.';
-export const PT_INTRO_OWN = 'Set the hours you are free for sessions. Your booked sessions appear below.';
+export const PT_INTRO_MANAGER = 'One-to-one sessions with a trainer. Set when each trainer is free, then book members into their free times.';
+export const PT_INTRO_OWN = 'One-to-one sessions. Set when you are free; the sessions booked with you appear below.';
+
+/** Said once beside the hours: they are set once, and the timetable is already counted. */
+export const HOURS_REPEAT = 'These hours repeat every week. A class a trainer coaches is taken off their free times by itself.';
+export const HOURS_REPEAT_OWN = 'These hours repeat every week. A class you coach is taken off your free times by itself.';
+
+/** The steps a gym that has never used the page reads, in order. The middle one is only
+ *  for a gym that sells memberships in the app: with none, anybody on its list is booked. */
+export function howItWorks(gymHasTypes) {
+  return [
+    'Add a trainer and set the hours they are free.',
+    ...(gymHasTypes
+      ? ['Tick "Includes personal training" on a membership or pack (Settings, then Memberships) and give it to the member on their page.']
+      : []),
+    "Press one of the trainer's free times and pick the member.",
+  ];
+}
+
+/** The two ways along the weeks. */
+export const PREVIOUS_WEEK = 'Previous week';
+export const NEXT_WEEK = 'Next week';
 
 /** Until the inbox exists nobody is told by the app (RULINGS 2026-10-05). */
 export const NOT_TOLD = "The app doesn't tell them yet. Let them know yourself.";
@@ -166,6 +186,25 @@ export function canGoEarlier(week) {
 
 export function canGoLater(week) {
   return week.to < week.lastDay;
+}
+
+/** How far ahead the page goes, said under the week: "Sessions can be booked up to Tue 1 Dec." */
+export function bookableUntil(week) {
+  return `Sessions can be booked up to ${dayLabel(week.lastDay)}.`;
+}
+
+/** A class the trainer coaches, as their day lists it: "10:15 – 11:00 · Spin". */
+export function coachedClassRow(coached, clockFormat) {
+  return `${timeRange(coached.localStartMinute, coached.localStartMinute + coached.minutes, clockFormat)} · ${coached.name}`;
+}
+
+/** The class a booked session runs into, if the trainer was given one over it afterwards;
+ *  null where there is none. */
+export function sessionClash(appointment, classes) {
+  const from = appointment.localStartMinute;
+  const to = from + appointment.minutes;
+  const hit = (Array.isArray(classes) ? classes : []).find((c) => c.localStartMinute < to && from < c.localStartMinute + c.minutes);
+  return hit === undefined ? null : `This runs into ${hit.name}, a class they coach at the same time. Move one of them.`;
 }
 
 /** "Today · Wed 7 Oct", or the day alone. */

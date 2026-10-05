@@ -61,6 +61,8 @@ d("personal training (real Postgres, two api instances)", () => {
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_pt_appointments WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_trainers WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
@@ -124,6 +126,26 @@ d("personal training (real Postgres, two api instances)", () => {
     const res = await inject("POST", `/v1/orgs/${gym.id}/member-list/entries`, gym.owner.cookies, { fullName: name, email: `ptr-l-${uniq()}@example.com` });
     expect(res.statusCode, res.body).toBe(201);
     return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
+  };
+
+  /** One class on the gym's calendar, coached by `coach`, at a clock time on a day of the gym's. */
+  const coaches = async (
+    gym: Gym,
+    coach: Person,
+    day: string,
+    startMinute: number,
+    minutes: number,
+    over: { name?: string; openGym?: boolean; cancelled?: boolean } = {},
+  ): Promise<void> => {
+    const [type] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym)
+      VALUES (${gym.id}, ${over.name ?? `Class ${uniq()}`}, ${minutes}, 10, 'blue', ${over.openGym ?? false})
+      RETURNING id`;
+    if (type === undefined) throw new Error("no class type");
+    await sql`
+      INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, coach_user_id, status)
+      VALUES (${gym.id}, ${type.id}, ${day}::date, ${startMinute}, (${day}::date + make_interval(mins => ${startMinute})) AT TIME ZONE 'Europe/London',
+              ${minutes}, 10, ${coach.userId}, ${over.cancelled === true ? "cancelled" : "scheduled"})`;
   };
 
   const typeOf = async (gym: Gym, over: { kind?: "recurring" | "pack"; includesPt?: boolean } = {}): Promise<string> => {
@@ -606,7 +628,7 @@ d("personal training (real Postgres, two api instances)", () => {
     const mine = await setHours(open, sam, sam, { sessionMinutes: 45, hours: [{ weekday: 5, fromMinute: 960, toMinute: 1200 }] });
     expect(mine.statusCode, mine.body).toBe(200);
     const list = JSON.parse(mine.body) as PtTrainersResponse;
-    expect([list.canManage, list.canBook, list.freeCancelMinutes]).toEqual([false, true, 120]);
+    expect([list.canManage, list.canBook, list.freeCancelMinutes, list.gymHasTypes]).toEqual([false, true, 120, false]);
     expect(list.trainers.map((t) => [t.name, t.mine, t.offers, t.sessionMinutes, t.hours])).toEqual([
       ["Own Sam", true, true, 45, [{ weekday: 5, fromMinute: 960, toMinute: 1200 }]],
     ]);
@@ -677,6 +699,58 @@ d("personal training (real Postgres, two api instances)", () => {
     expect(made(await cancel(open, short.id)).status).toBe("cancelled");
     expect(dayOf(await week(open, open.owner, sam), FRIDAY).free).toEqual([540]);
     expect(made(await book(open, sam, tom, { minute: 540 })).minutes).toBe(75);
+  });
+
+  it("a class the trainer coaches takes its time off their free times, and a session cannot be booked over it", async () => {
+    const gym = await makeGym("Coach PT");
+    const sam = await trainerWith(gym, "Coach Sam");
+    const ana = await trainerWith(gym, "Coach Ana");
+    const tom = await listed(gym, "Tom Coach");
+    // Sam is free 09:00 to 13:00 in sessions of an hour. On Friday he coaches Spin from 10:15 to 11:00.
+    await coaches(gym, sam, FRIDAY, 615, 45, { name: "Spin" });
+    // None of these takes his time: a class staff cancelled, an open-gym slot he is named on,
+    // and a class somebody else coaches.
+    await coaches(gym, sam, FRIDAY, 720, 60, { cancelled: true });
+    await coaches(gym, sam, FRIDAY, 540, 240, { openGym: true });
+    await coaches(gym, ana, FRIDAY, 660, 60, { name: "Yoga" });
+
+    const friday = dayOf(await week(gym, gym.owner, sam), FRIDAY);
+    expect(friday.free).toEqual([540, 660, 720]);
+    expect(friday.classes).toEqual([{ name: "Spin", localStartMinute: 615, minutes: 45 }]);
+    const anas = dayOf(await week(gym, gym.owner, ana), FRIDAY);
+    expect([anas.free, anas.classes.map((c) => c.name)]).toEqual([[540, 600, 720], ["Yoga"]]);
+    // Sam's own week says the same to Sam.
+    const own = dayOf(await week(gym, sam, sam), FRIDAY);
+    expect([own.free, own.classes.map((c) => c.name)]).toEqual([[540, 660, 720], ["Spin"]]);
+
+    const over = await book(gym, sam, tom, { minute: 600 });
+    expect([over.statusCode, errorOf(over)]).toEqual([409, "trainer_in_class"]);
+    expect(await sessions(gym, sam)).toHaveLength(0);
+    // Up to the class and straight after it are his to give.
+    expect(made(await book(gym, sam, tom, { minute: 540 })).status).toBe("booked");
+    expect(made(await book(gym, sam, tom, { minute: 660 })).status).toBe("booked");
+
+    // The class cancelled gives its time back.
+    await sql`UPDATE gym_class_sessions SET status = 'cancelled' WHERE gym_id = ${gym.id} AND coach_user_id = ${sam.userId} AND local_start_minute = 615`;
+    const after = dayOf(await week(gym, gym.owner, sam), FRIDAY);
+    expect([after.free, after.classes]).toEqual([[600, 720], []]);
+    expect(made(await book(gym, sam, tom, { minute: 600 })).status).toBe("booked");
+  });
+
+  it("a class that runs past midnight takes the first of the next day's times, and is listed on its own day", async () => {
+    const gym = await makeGym("Late PT");
+    const sam = await staff(gym, "Late Sam");
+    // Free on Fridays from midnight to 02:00; on Thursday he coaches from 23:30 to 01:00.
+    expect((await setHours(gym, gym.owner, sam, { hours: [{ weekday: 5, fromMinute: 0, toMinute: 120 }] })).statusCode).toBe(200);
+    await coaches(gym, sam, "2026-10-08", 1410, 90, { name: "Late Lift" });
+    const w = await week(gym, gym.owner, sam);
+    expect(dayOf(w, FRIDAY).free).toEqual([60]);
+    expect(dayOf(w, FRIDAY).classes).toEqual([]);
+    expect(dayOf(w, "2026-10-08").classes).toEqual([{ name: "Late Lift", localStartMinute: 1410, minutes: 90 }]);
+    const tom = await listed(gym, "Tom Late");
+    const over = await book(gym, sam, tom, { minute: 0 });
+    expect([over.statusCode, errorOf(over)]).toEqual([409, "trainer_in_class"]);
+    expect(made(await book(gym, sam, tom, { minute: 60 })).startsAt).toBe("2026-10-09T00:00:00.000Z");
   });
 
   it("the people to pick from: those with personal training first, found by part of a name, and only for staff who may read the list", async () => {

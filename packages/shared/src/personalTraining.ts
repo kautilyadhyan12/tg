@@ -4,7 +4,8 @@
 // rule for booking and cancelling a session. Pure: the instant, what is already booked and
 // the person's memberships are passed in, and the server reads them under the gym's lock.
 // The database refuses two overlapping sessions of one trainer by itself (`0077`); this
-// rule is what answers in words before it has to.
+// rule is what answers in words before it has to. A class the trainer coaches takes their
+// time too: it comes off their free times, and a session cannot be booked over it.
 import { z } from "zod";
 import { CLASS_FILL_HORIZON_DAYS, classDaySchema } from "./classes.js";
 import { heldMembershipView, type HeldMembership } from "./heldMemberships.js";
@@ -95,7 +96,8 @@ export function ptBusy(startsAtMs: number, minutes: number, taken: readonly PtSp
   return taken.some((t) => overlaps(span, t));
 }
 
-/** The offered times still free: not started, and not running into a session already booked. */
+/** The offered times still free: not started, and not running into anything in `taken`
+ *  (a session already booked, or a class the trainer coaches). */
 export function ptFreeTimes<T extends { startsAtMs: number }>(
   offered: readonly T[],
   input: { minutes: number; taken: readonly PtSpan[]; nowMs: number },
@@ -148,6 +150,7 @@ export const PT_BOOK_REFUSALS = [
   "time_passed",
   "too_far",
   "time_taken",
+  "trainer_in_class",
   "person_busy",
   "no_membership",
   "not_covered",
@@ -167,6 +170,8 @@ export interface PtBookInput {
   tooFar: boolean;
   /** The trainer has a session that runs into it. */
   trainerBusy: boolean;
+  /** The trainer coaches a class that runs into it. */
+  trainerInClass: boolean;
   /** The person has a session that runs into it. */
   personBusy: boolean;
   cover: PtCover;
@@ -181,6 +186,7 @@ export function decidePtBook(i: PtBookInput): PtBookDecision {
   if (i.started) return { kind: "refuse", reason: "time_passed" };
   if (i.tooFar) return { kind: "refuse", reason: "too_far" };
   if (i.trainerBusy) return { kind: "refuse", reason: "time_taken" };
+  if (i.trainerInClass) return { kind: "refuse", reason: "trainer_in_class" };
   if (i.personBusy) return { kind: "refuse", reason: "person_busy" };
   if (!i.cover.ok) return { kind: "refuse", reason: i.cover.reason };
   return { kind: "book", membershipId: i.cover.membershipId, chargePack: i.cover.chargePack };
@@ -224,6 +230,7 @@ export const PT_WORDS = {
   time_passed: "That time has already passed.",
   too_far: "Sessions can be booked up to 8 weeks ahead.",
   time_taken: "This trainer already has a session at that time.",
+  trainer_in_class: "This trainer is coaching a class at that time.",
   person_busy: "This person already has a personal training session at that time.",
   no_membership: "This person has no membership in use on that day.",
   not_covered: "None of this person's memberships includes personal training.",
@@ -271,6 +278,8 @@ export const ptTrainersResponseSchema = z
     canBook: z.boolean(),
     /** The gym's own free-cancel time, the one classes use. */
     freeCancelMinutes: z.number().int(),
+    /** The gym sells memberships, so a session needs one that includes personal training. */
+    gymHasTypes: z.boolean(),
     trainers: z.array(ptTrainerSchema),
   })
   .strict();
@@ -318,8 +327,15 @@ export type PtAppointment = z.infer<typeof ptAppointmentSchema>;
 export const ptWeekQuerySchema = z.object({ trainer: z.string().uuid(), from: classDaySchema.optional() }).strict();
 export type PtWeekQuery = z.infer<typeof ptWeekQuerySchema>;
 
+/** A taught class the trainer coaches, as their week shows it: it takes that time off
+ *  their free times. */
+export const ptCoachedClassSchema = z
+  .object({ name: z.string(), localStartMinute: z.number().int(), minutes: z.number().int() })
+  .strict();
+export type PtCoachedClass = z.infer<typeof ptCoachedClassSchema>;
+
 /** Seven days of one trainer: each day's free times (minutes from midnight on the gym's
- *  clock) and the sessions booked on it, the earliest first. */
+ *  clock), the sessions booked on it and the classes they coach on it, the earliest first. */
 export const ptWeekResponseSchema = z
   .object({
     trainerId: z.string().uuid(),
@@ -337,6 +353,7 @@ export const ptWeekResponseSchema = z
           localDate: classDaySchema,
           free: z.array(z.number().int()),
           appointments: z.array(ptAppointmentSchema),
+          classes: z.array(ptCoachedClassSchema),
         })
         .strict(),
     ),

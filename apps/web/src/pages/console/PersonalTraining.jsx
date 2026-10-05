@@ -9,7 +9,11 @@ import { useConsoleOrg } from './useConsoleOrg';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import { WEEKDAYS, addDays } from './hoursView';
 import {
+  HOURS_REPEAT,
+  HOURS_REPEAT_OWN,
+  NEXT_WEEK,
   NOT_TOLD,
+  PREVIOUS_WEEK,
   PT_INTRO_MANAGER,
   PT_INTRO_OWN,
   PT_TITLE,
@@ -18,21 +22,25 @@ import {
   addRange,
   bookCost,
   bookSentence,
+  bookableUntil,
   canAddRange,
   canGoEarlier,
   canGoLater,
   cancelBox,
+  coachedClassRow,
   dayHeading,
   freeTimeLabel,
   hoursDraft,
   hoursFormProblem,
   hoursLines,
   hoursRequest,
+  howItWorks,
   noTimesNote,
   peopleHeading,
   personRow,
   pickTrainer,
   removeRange,
+  sessionClash,
   sessionRow,
   sessionsAWeek,
   setRange,
@@ -92,7 +100,10 @@ function HoursForm({ trainer, clockFormat, saving, error, onSave, onClose }) {
       </div>
 
       <div className="flex flex-col gap-4">
-        <span className="c-label">Hours they train, on {`the gym's`} clock</span>
+        <div className="flex flex-col gap-1">
+          <span className="c-label">Hours they are free each week, on {`the gym's`} clock</span>
+          <span className="c-s13 c-t3">A split day? Add a second set of hours, for example a morning and an evening.</span>
+        </div>
         {WEEKDAYS.map((day) => {
           const ranges = draft.days[day.iso] ?? [];
           return (
@@ -107,7 +118,7 @@ function HoursForm({ trainer, clockFormat, saving, error, onSave, onClose }) {
                     aria-label={`Add hours on ${day.label}`}
                     className="c-btn c-btn-sm c-btn-s"
                   >
-                    <Plus aria-hidden="true" className="w-4 h-4" /> Add hours
+                    <Plus aria-hidden="true" className="w-4 h-4" /> {ranges.length === 0 ? 'Add hours' : 'Add more hours'}
                   </button>
                 ) : null}
               </div>
@@ -340,8 +351,9 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
 }
 
 /** One booked session, with its Cancel and the box that asks first. */
-function SessionRow({ appointment, first, clockFormat, freeCancelMinutes, locked, asking, busy, error, onAsk, onKeep, onCancel }) {
+function SessionRow({ appointment, classes, first, clockFormat, freeCancelMinutes, locked, asking, busy, error, onAsk, onKeep, onCancel }) {
   const row = sessionRow(appointment, clockFormat);
+  const clash = sessionClash(appointment, classes);
   const box = asking ? cancelBox(appointment, { freeCancelMinutes, clockFormat }) : null;
   return (
     <li className="flex flex-col gap-3 py-3 min-w-0" style={first ? undefined : { borderTop: '1px solid var(--line)' }} data-testid="pt-session">
@@ -351,6 +363,11 @@ function SessionRow({ appointment, first, clockFormat, freeCancelMinutes, locked
             <span className="c-num">{row.time}</span> · {row.name}
           </span>
           {row.detail === '' ? null : <span className="c-s13 c-t3 c-ell">{row.detail}</span>}
+          {clash === null ? null : (
+            <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+              {clash}
+            </span>
+          )}
         </div>
         {!locked && appointment.cancel !== null && !asking ? (
           <button type="button" onClick={onAsk} aria-label={`Cancel ${row.name}'s session`} className="c-btn c-btn-sm c-btn-s flex-shrink-0">
@@ -581,9 +598,19 @@ export default function PersonalTraining() {
 
       {list !== null && list.canManage ? (
         <section className="c-card p-5 md:p-6 flex flex-col gap-4" aria-label="Trainers">
-          <h2 className="c-h2">Trainers</h2>
+          <div className="flex flex-col gap-1">
+            <h2 className="c-h2">Trainers</h2>
+            {groups.setUp.length > 0 ? <p className="c-s14 c-t2 m-0">{HOURS_REPEAT}</p> : null}
+          </div>
           {groups.setUp.length === 0 ? (
-            <p className="c-s15 c-t2 m-0">No trainers yet. Choose who takes personal training sessions, then set their hours.</p>
+            <div className="flex flex-col gap-2" data-testid="pt-how">
+              <p className="c-s15 c-t1 c-w6 m-0">No trainers yet. This is how it works:</p>
+              <ol className="m-0 pl-5 flex flex-col gap-1 c-s15 c-t2" style={{ listStyle: 'decimal' }}>
+                {howItWorks(list.gymHasTypes).map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </div>
           ) : (
             <ul className="m-0 p-0 list-none flex flex-col">
               {groups.setUp.map((t, index) => {
@@ -661,6 +688,7 @@ export default function PersonalTraining() {
             <div className="flex flex-col gap-1 min-w-0">
               <h2 className="c-h2">Your hours</h2>
               <p className="c-s14 c-t2 m-0">{trainerSummary(trainer)}</p>
+              {trainer.sessionMinutes === null ? null : <p className="c-s13 c-t3 m-0">{HOURS_REPEAT_OWN}</p>}
             </div>
             {!readOnly && editingTrainer === null ? (
               <button type="button" onClick={() => openHours(trainer.userId)} className="c-btn c-btn-s w-full md:w-auto">
@@ -695,7 +723,7 @@ export default function PersonalTraining() {
                   disabled={!canGoEarlier(shownWeek.data)}
                   className="c-btn c-btn-sm c-btn-s"
                 >
-                  <ChevronLeft aria-hidden="true" className="w-4 h-4" /> Earlier
+                  <ChevronLeft aria-hidden="true" className="w-4 h-4" /> {PREVIOUS_WEEK}
                 </button>
                 <button
                   type="button"
@@ -703,7 +731,7 @@ export default function PersonalTraining() {
                   disabled={!canGoLater(shownWeek.data)}
                   className="c-btn c-btn-sm c-btn-s"
                 >
-                  Later <ChevronRight aria-hidden="true" className="w-4 h-4" />
+                  {NEXT_WEEK} <ChevronRight aria-hidden="true" className="w-4 h-4" />
                 </button>
               </div>
             ) : null}
@@ -714,6 +742,7 @@ export default function PersonalTraining() {
 
           {shownWeek?.data ? (
             <>
+              <p className="c-s13 c-t3 m-0">{bookableUntil(shownWeek.data)}</p>
               {noTimesNote(shownWeek.data, trainer) !== null ? (
                 <section className="c-card p-5">
                   <p className="c-s15 c-t2 m-0">{noTimesNote(shownWeek.data, trainer)}</p>
@@ -730,7 +759,7 @@ export default function PersonalTraining() {
                   const minutes = shownWeek.data.sessionMinutes;
                   const canBook = list.canBook && !readOnly && minutes !== null;
                   // A day with nothing on it and nothing to book is one line, so a week reads at a glance.
-                  if (day.appointments.length === 0 && day.free.length === 0) {
+                  if (day.appointments.length === 0 && day.free.length === 0 && day.classes.length === 0) {
                     return (
                       <section key={day.localDate} className="c-card px-5 py-3 flex items-center justify-between gap-3 min-w-0" data-testid="pt-day">
                         <h3 className="c-s15 c-w6 c-t2 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
@@ -750,6 +779,7 @@ export default function PersonalTraining() {
                               <SessionRow
                                 key={appointment.id}
                                 appointment={appointment}
+                                classes={day.classes}
                                 first={index === 0}
                                 clockFormat={clockFormat}
                                 freeCancelMinutes={list.freeCancelMinutes}
@@ -773,6 +803,20 @@ export default function PersonalTraining() {
                         </div>
                       ) : null}
 
+                      {day.classes.length > 0 ? (
+                        <div className="flex flex-col gap-1" data-testid="pt-coaching">
+                          <span className="c-s13 c-w6 c-t3">Coaching a class, so not free</span>
+                          <ul className="m-0 p-0 list-none flex flex-col gap-0.5">
+                            {day.classes.map((coached) => (
+                              <li key={`${String(coached.localStartMinute)}:${coached.name}`} className="c-s15 c-t2 c-num">
+                                {coachedClassRow(coached, clockFormat)}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      {day.free.length === 0 && minutes !== null ? <span className="c-s13 c-t3">No free times</span> : null}
                       {day.free.length > 0 && minutes !== null ? (
                         <div className="flex flex-col gap-2">
                           <span className="c-s13 c-w6 c-t3">{canBook ? 'Free times. Press one to book it.' : 'Free times'}</span>

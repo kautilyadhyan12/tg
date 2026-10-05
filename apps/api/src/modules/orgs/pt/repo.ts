@@ -322,3 +322,41 @@ export async function peopleFor(sql: SqlOrTx, gymId: string, query: string, limi
     LIMIT ${limit}`;
   return rows.map((r) => ({ entryId: r.id, fullName: r.full_name, ptMembership: r.pt_membership, ptSessionsLeft: r.pt_left }));
 }
+
+export interface CoachedClass {
+  name: string;
+  localDate: string;
+  localStartMinute: number;
+  minutes: number;
+  fromMs: number;
+  toMs: number;
+}
+
+/** The taught classes a member of staff coaches on these days of the gym's (and the day
+ *  before, for one that runs past midnight): not cancelled, and not an open-gym slot,
+ *  during which a trainer gives sessions like anybody else. The earliest first. */
+export async function classesCoached(
+  sql: SqlOrTx,
+  gymId: string,
+  trainerId: string,
+  timezone: string,
+  fromDay: string,
+  toDay: string,
+): Promise<CoachedClass[]> {
+  const rows = await sql<{ name: string; local_date: string; local_start_minute: number; minutes: number; starts_at: Date }[]>`
+    SELECT t.name, s.local_date::text AS local_date, s.local_start_minute, s.minutes, s.starts_at
+    FROM gym_class_sessions s
+    JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
+    WHERE s.gym_id = ${gymId} AND s.coach_user_id = ${trainerId} AND s.status = 'scheduled' AND NOT t.open_gym
+      AND s.starts_at >= ((${fromDay}::date - 1)::timestamp AT TIME ZONE ${timezone})
+      AND s.starts_at < ((${toDay}::date + 1)::timestamp AT TIME ZONE ${timezone})
+    ORDER BY s.starts_at, s.id`;
+  return rows.map((r) => ({
+    name: r.name,
+    localDate: r.local_date,
+    localStartMinute: r.local_start_minute,
+    minutes: r.minutes,
+    fromMs: r.starts_at.getTime(),
+    toMs: r.starts_at.getTime() + r.minutes * 60_000,
+  }));
+}

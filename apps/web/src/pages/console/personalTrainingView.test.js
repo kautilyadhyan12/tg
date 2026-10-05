@@ -7,10 +7,12 @@ import {
   addRange,
   bookCost,
   bookSentence,
+  bookableUntil,
   canAddRange,
   canGoEarlier,
   canGoLater,
   cancelBox,
+  coachedClassRow,
   dayHeading,
   durationWords,
   freeTimeLabel,
@@ -18,11 +20,13 @@ import {
   hoursFormProblem,
   hoursLines,
   hoursRequest,
+  howItWorks,
   noTimesNote,
   peopleHeading,
   personRow,
   pickTrainer,
   removeRange,
+  sessionClash,
   sessionLength,
   sessionRow,
   sessionsAWeek,
@@ -203,6 +207,28 @@ describe('the week', () => {
     expect(noTimesNote(week, trainer())).toBeNull();
     expect(noTimesNote({ ...week, sessionMinutes: null, offers: false }, trainer())).toBe('Sam Reed has no hours yet. Set their hours to book sessions.');
     expect(noTimesNote({ ...week, offers: false }, trainer())).toBe("Sam Reed isn't taking sessions. Their booked sessions are still shown.");
+  });
+
+  it('says how far ahead it goes, by the day', () => {
+    expect(bookableUntil(week)).toBe('Sessions can be booked up to Tue 1 Dec.');
+  });
+
+  it('a class the trainer coaches reads its time and its name, and a session booked into it says so', () => {
+    const spin = { name: 'Spin', localStartMinute: 615, minutes: 45 };
+    expect(coachedClassRow(spin, '24h')).toBe('10:15 – 11:00 · Spin');
+    expect(coachedClassRow(spin, '12h')).toBe('10:15 AM – 11:00 AM · Spin');
+    // A session from 10:00 to 11:00 runs into it; one that ends at 10:15, or starts at 11:00, does not.
+    expect(sessionClash(session(), [spin])).toBe('This runs into Spin, a class they coach at the same time. Move one of them.');
+    expect(sessionClash(session({ localStartMinute: 555 }), [spin])).toBeNull();
+    expect(sessionClash(session({ localStartMinute: 660 }), [spin])).toBeNull();
+    expect(sessionClash(session(), [])).toBeNull();
+    expect(sessionClash(session(), undefined)).toBeNull();
+  });
+
+  it('the steps a new gym reads leave out the membership one where the gym sells none', () => {
+    expect(howItWorks(true)).toHaveLength(3);
+    expect(howItWorks(true)[1]).toContain('Includes personal training');
+    expect(howItWorks(false)).toEqual(['Add a trainer and set the hours they are free.', "Press one of the trainer's free times and pick the member."]);
   });
 
   it('a free time reads as the whole session, start to end', () => {

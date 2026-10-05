@@ -6,7 +6,8 @@
 // is decided by the one rule in `@app/shared` (`decidePtBook`, `decidePtCancel`) on what
 // is read inside it; the table itself refuses a second session of that trainer that
 // overlaps; and a request's key is kept on its session, so the same request again changes
-// nothing.
+// nothing. A class the trainer coaches takes their time as a session does: it is read from
+// the timetable, so nobody has to carve it out of the trainer's hours by hand.
 //
 // Who may do what: staff holding `schedule.manage` see and change every trainer; anybody
 // else on staff has their own hours and their own sessions. Booking also needs
@@ -85,6 +86,7 @@ const STATUS: Record<PtBookRefusal, number> = {
   time_passed: 409,
   too_far: 409,
   time_taken: 409,
+  trainer_in_class: 409,
   person_busy: 409,
   no_membership: 409,
   not_covered: 409,
@@ -129,6 +131,7 @@ export async function getTrainers(deps: PtDeps, staffId: string, gymId: string, 
     canManage: standing.manages,
     canBook: standing.confirms,
     freeCancelMinutes: clock.freeCancelMinutes,
+    gymHasTypes: clock.hasTypes,
     trainers: rows.map((r) => ({
       userId: r.userId,
       ...staffName(r),
@@ -178,7 +181,7 @@ export async function saveTrainer(
   return await getTrainers(deps, staffId, gymId, () => Promise.resolve(true));
 }
 
-/** Seven days of one trainer: the free times and the sessions booked. */
+/** Seven days of one trainer: the free times, the sessions booked and the classes they coach. */
 export async function getWeek(deps: PtDeps, staffId: string, gymId: string, query: PtWeekQuery, limit: Limit): Promise<PtWeekResponse | null> {
   const standing = await standingOf(deps, gymId, staffId);
   if (!standing.manages && query.trainer !== staffId) throw forbidden();
@@ -199,11 +202,13 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
     trainer.offers && trainer.sessionMinutes !== null
       ? ptOfferedTimes(trainer.hours, trainer.sessionMinutes, days.filter((day) => day <= lastDay))
       : [];
-  const [slots, appointments] = await Promise.all([
+  const [slots, appointments, coached] = await Promise.all([
     repo.instantsOf(deps.sql, clock.timezone, offered),
     repo.appointmentsOf(deps.sql, gymId, trainer.userId, from, to),
+    repo.classesCoached(deps.sql, gymId, trainer.userId, clock.timezone, from, to),
   ]);
-  const taken = appointments.map((a) => ({ fromMs: a.startsAt.getTime(), toMs: a.startsAt.getTime() + a.minutes * 60_000 }));
+  // What takes the trainer's time: the sessions booked with them, and the classes they coach.
+  const taken = [...appointments.map((a) => ({ fromMs: a.startsAt.getTime(), toMs: a.startsAt.getTime() + a.minutes * 60_000 })), ...coached];
   const free = ptFreeTimes(slots, { minutes: trainer.sessionMinutes ?? 0, taken, nowMs: now.getTime() });
   const view = { now, freeCancelMinutes: clock.freeCancelMinutes, opens: standing.confirms };
   return ptWeekResponseSchema.parse({
@@ -219,6 +224,9 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
       localDate,
       free: free.filter((t) => t.localDate === localDate).map((t) => t.startMinute),
       appointments: appointments.filter((a) => a.localDate === localDate).map((a) => shown(a, view)),
+      classes: coached
+        .filter((c) => c.localDate === localDate)
+        .map((c) => ({ name: c.name, localStartMinute: c.localStartMinute, minutes: c.minutes })),
     })),
   });
 }
@@ -277,9 +285,11 @@ export async function book(deps: PtDeps, staffId: string, gymId: string, req: Bo
     const [slot] = isOffered ? await repo.instantsOf(tx, clock.timezone, [{ localDate: req.localDate, startMinute: req.startMinute }]) : [];
     const startsAt = slot === undefined ? null : new Date(slot.startsAtMs);
     const span = startsAt === null || minutes === null ? null : { from: startsAt, to: new Date(startsAt.getTime() + minutes * 60_000) };
-    const [trainerTaken, personTaken, held] = await Promise.all([
+    const [trainerTaken, personTaken, coached, held] = await Promise.all([
       span === null ? [] : repo.takenBy(tx, gymId, { trainerId: trainer.userId }, span.from, span.to),
       span === null ? [] : repo.takenBy(tx, gymId, { entryId: req.entryId }, span.from, span.to),
+      // The timetable is written under this same lock, so the classes read here stand.
+      span === null ? [] : repo.classesCoached(tx, gymId, trainer.userId, clock.timezone, req.localDate, req.localDate),
       clock.hasTypes ? heldForPt(tx, gymId, req.entryId) : [],
     ]);
     const busy = (taken: Awaited<ReturnType<typeof repo.takenBy>>) => startsAt !== null && minutes !== null && ptBusy(startsAt.getTime(), minutes, taken);
@@ -289,6 +299,7 @@ export async function book(deps: PtDeps, staffId: string, gymId: string, req: Bo
       started: startsAt !== null && ptTime(now.getTime(), startsAt.getTime(), clock.freeCancelMinutes).started,
       tooFar: req.localDate > addDays(today, PT_HORIZON_DAYS - 1),
       trainerBusy: busy(trainerTaken),
+      trainerInClass: busy(coached),
       personBusy: busy(personTaken),
       cover: pickPtCover({ gymHasTypes: clock.hasTypes, day: req.localDate, held }),
     });

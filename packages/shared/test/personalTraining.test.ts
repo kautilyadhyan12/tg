@@ -44,7 +44,7 @@ const held = (id: string, membership: HeldMembership, includesPt: boolean): PtHe
 const cover = (list: PtHeld[], gymHasTypes = true): PtCover => pickPtCover({ gymHasTypes, day: DAY, held: list });
 
 const covered: PtCover = { ok: true, membershipId: "m", chargePack: true };
-const fine: PtBookInput = { offers: true, offered: true, started: false, tooFar: false, trainerBusy: false, personBusy: false, cover: covered };
+const fine: PtBookInput = { offers: true, offered: true, started: false, tooFar: false, trainerBusy: false, trainerInClass: false, personBusy: false, cover: covered };
 
 describe("the worst thing: two people with one trainer at one time, or a pack charged for nothing", () => {
   it("a time the trainer already has a session in is refused, whoever asks and whatever they hold", () => {
@@ -53,6 +53,16 @@ describe("the worst thing: two people with one trainer at one time, or a pack ch
       kind: "refuse",
       reason: "time_taken",
     });
+  });
+
+  it("a time the trainer coaches a class in is refused the same way, and says it is a class", () => {
+    expect(decidePtBook({ ...fine, trainerInClass: true })).toEqual({ kind: "refuse", reason: "trainer_in_class" });
+    expect(decidePtBook({ ...fine, trainerInClass: true, cover: { ok: true, membershipId: null, chargePack: false } }).kind).toBe("refuse");
+    // A class is one more thing that takes the trainer's time: a 45-minute class from 10:15
+    // leaves 09:00 and 11:00 free, and takes 10:00.
+    const at = (minute: number) => ({ startMinute: minute, startsAtMs: minute * MIN });
+    const coaching = [{ fromMs: 615 * MIN, toMs: 660 * MIN }];
+    expect(ptFreeTimes([at(540), at(600), at(660), at(720)], { minutes: 60, taken: coaching, nowMs: 0 }).map((t) => t.startMinute)).toEqual([540, 660, 720]);
   });
 
   it("a session that only touches another's end, or its start, is not the same time", () => {
@@ -73,6 +83,7 @@ describe("the worst thing: two people with one trainer at one time, or a pack ch
       { started: true },
       { tooFar: true },
       { trainerBusy: true },
+      { trainerInClass: true },
       { personBusy: true },
       { cover: { ok: false, reason: "pack_used" } },
     ];
@@ -94,7 +105,8 @@ describe("decidePtBook: the first thing wrong is the one said", () => {
     ["not one of their times", { offered: false, started: true, tooFar: true }, "not_a_time"],
     ["a time that has passed", { started: true, trainerBusy: true }, "time_passed"],
     ["more than eight weeks ahead", { tooFar: true, trainerBusy: true }, "too_far"],
-    ["the trainer is busy", { trainerBusy: true, personBusy: true }, "time_taken"],
+    ["the trainer is busy", { trainerBusy: true, trainerInClass: true, personBusy: true }, "time_taken"],
+    ["the trainer is coaching a class", { trainerInClass: true, personBusy: true }, "trainer_in_class"],
     ["the person is busy", { personBusy: true, cover: { ok: false, reason: "not_covered" } }, "person_busy"],
     ["no membership in use", { cover: { ok: false, reason: "no_membership" } }, "no_membership"],
     ["a membership without personal training", { cover: { ok: false, reason: "not_covered" } }, "not_covered"],

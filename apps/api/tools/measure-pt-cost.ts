@@ -1,7 +1,8 @@
 // What personal training costs at full size (ROADMAP 17e-i; CLAUDE.md §4 "Cost at full
 // size"). One gym of 2,100 people on its list (--people= for another size), each with a
 // pack that includes personal training, and 30 staff. One trainer works 06:00 to 22:00
-// every day in half-hour sessions: 32 a day, 224 a week, the most a week can hold.
+// every day in half-hour sessions: 32 a day, 224 a week, the most a week can hold. The gym
+// also runs 20 classes a day that week, coached in turn by its staff, after those hours.
 // Measured: that trainer's week with every time free and with every time booked, one
 // booking, one cancel, the staff list, and 20 staff booking at the same instant.
 // The numbers that matter are how long the server's one thread answers nobody, and how
@@ -39,6 +40,8 @@ async function cleanup(): Promise<void> {
   await sql`DELETE FROM audit_log WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_pt_appointments WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_trainers WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_class_types WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${gyms})`;
@@ -48,7 +51,7 @@ async function cleanup(): Promise<void> {
   await sql`DELETE FROM plans WHERE code = ${PLAN}`;
 }
 
-const TABLES = ["users", "gym_staff", "gym_member_list_entries", "gym_held_memberships", "gym_trainers", "gym_trainer_hours", "gym_pt_appointments"];
+const TABLES = ["users", "gym_staff", "gym_member_list_entries", "gym_held_memberships", "gym_trainers", "gym_trainer_hours", "gym_pt_appointments", "gym_class_sessions"];
 /** A table filled seconds ago has no statistics, and a plan made without them is not the
  *  one a gym meets (`measure-bookings-cost.ts`). */
 async function analyse(): Promise<void> {
@@ -95,6 +98,15 @@ for (const id of staff.slice(1)) await saveTrainer(deps, owner, gymId, id, { off
 const today = dayInTz(new Date(), "Europe/London");
 /** A week that starts a week from now: every one of its 224 times is still to come. */
 const WEEK_FROM = addDays(today, 7);
+// 140 classes in that week, 20 a day at 22:30, each coached by one of the staff in turn:
+// the week's read looks through them for the trainer's own.
+const classType = randomUUID();
+await sql`INSERT INTO gym_class_types (id, gym_id, name, minutes, places, colour) VALUES (${classType}, ${gymId}, 'Late Spin', 45, 20, 'blue')`;
+await sql`
+  INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, coach_user_id)
+  SELECT ${gymId}, ${classType}, d::date, 1350, (d::date + make_interval(mins => 1350)) AT TIME ZONE 'Europe/London', 45, 20,
+         (${staff}::uuid[])[1 + (n % ${STAFF})]
+  FROM generate_series(${WEEK_FROM}::date, ${addDays(WEEK_FROM, 6)}::date, interval '1 day') AS d, generate_series(1, 20) AS n`;
 const entryAt = (n: number): string => {
   const e = entries[n % entries.length];
   if (e === undefined) throw new Error("no person");

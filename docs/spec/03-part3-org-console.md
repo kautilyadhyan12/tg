@@ -2645,7 +2645,15 @@ not; a free time is a button reading its whole session; the booking box lists th
 list at once (`GET …/pt/people`, `members.confirm`: people holding something that
 includes personal training first, with a pack's sessions left; `query` narrows it by
 part of a name or an email), and where the gym sells memberships somebody holding
-nothing that pays is named and cannot be picked. Nobody is told yet (the inbox, 20a). Not done, and
+nothing that pays is named and cannot be picked. **A class the trainer coaches takes
+their time too** (RULINGS 2026-10-06; TeamUp blocks it the same way): a taught class on the
+calendar with them as its coach, not cancelled, comes off their free times and refuses a
+booking over it (409 `trainer_in_class`), read from `gym_class_sessions` under the gym's
+lock; an open-gym slot takes nobody's time. The week answers each day's `classes` and
+the page lists them as not free; a session that a class was put over afterwards says it
+runs into it (the class side asking first is 17e-iii). The calendar is written 56 days
+ahead and sessions are booked 55, so the classes of every bookable day are there once the
+nightly fill has run. Nobody is told yet (the inbox, 20a). Not done, and
 17e-ii and 17e-iii: the member's own booking; sessions ended when a person leaves, a
 membership is cancelled or a trainer leaves the staff; came and no-show.)*
 
