@@ -292,8 +292,8 @@ export default function Updates() {
         `Post removed. Your ${words.people} no longer see it.`,
         (shown) => withoutPost(shown, p.id),
       ),
-    // Keep answers the reports this list showed and no later one; the list is read again.
-    onKeep: (p, item) => act(p, () => staffPostsService.keep(gymId, p.id, item.lastReportedAt), keepNote, (shown) => shown),
+    // Keep answers the reports this list showed, and none when another has arrived; the list is read again.
+    onKeep: (p, item) => act(p, () => staffPostsService.keep(gymId, p.id, item.allReports), keepNote, (shown) => shown),
     onStop: (p, stopped) =>
       act(
         p,

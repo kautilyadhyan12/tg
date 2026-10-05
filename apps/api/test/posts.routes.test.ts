@@ -460,6 +460,22 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       }
       const bad = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: randomUUID(), body: "x", photos: [PNG, notAPhoto] });
       expect((JSON.parse(bad.body) as { message: string }).message).toBe("Photo 2: Choose a photo saved as JPEG, PNG or WebP.");
+      // A list of a hundred thousand things where four photos go: refused for its length,
+      // in one line, and no item of it is looked at (each would be a line of the reply).
+      const viewer0 = await member(gym, "Mel Member");
+      expect((await inject("PUT", `${posts(gym.id)}/settings`, gym.owner.cookies, { membersCanPost: true })).statusCode).toBe(200);
+      for (const [path, cookies] of [[posts(gym.id), gym.owner.cookies], [`${posts(gym.id)}/mine`, viewer0.cookies]] as const) {
+        const flood = await inject("POST", path, cookies, { postKey: randomUUID(), body: "x", photos: Array.from({ length: 100_000 }, () => 7) });
+        expect({ path, status: flood.statusCode, body: JSON.parse(flood.body) as unknown }).toEqual({
+          path,
+          status: 400,
+          body: { error: "validation_error", message: "photos: custom", requestId: expect.any(String) as unknown },
+        });
+      }
+      // Everything wrong at once is still a short answer: the first ten faults, no more.
+      const everything = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: "nope", body: 7, photos: ["", "!", "", "!"], pinned: true });
+      expect(everything.statusCode).toBe(400);
+      expect((JSON.parse(everything.body) as { message: string }).message.split("; ").length).toBeLessThanOrEqual(10);
       expect(await rowsOf("gym_posts", gym.id)).toBe(0);
       expect(await filesOf(gym.id)).toEqual([]);
       // Exactly 2,000 characters and four photos are taken.
@@ -916,6 +932,25 @@ d("a gym's Updates (real Postgres, real disk)", () => {
         await fill(`rl:${row.name}:ip:${full}`, row.ipMax);
         expect((await row.ask(third, full)).statusCode, `${row.name}: an address past ${String(row.ipMax)}`).toBe(429);
         expect((await row.ask(third, desk())).statusCode, `${row.name}: the same person elsewhere`).toBe(row.ok);
+      }
+      // Somebody who is not this gym's member is answered 404 and is never counted against
+      // the address its members share: with the address one short of its ceiling, a
+      // stranger asks three times and a member is still answered.
+      const stranger = await signedIn("Sam Stranger");
+      const fresh = await member(gym, "Dee Fresh");
+      const doors: { name: string; ipMax: number; ask: (who: Person, ip: string) => Promise<{ statusCode: number }> }[] = [
+        { name: "orgs_posts_read", ipMax: 6000, ask: (who, ip) => inject("GET", posts(gym.id), who.cookies, undefined, ip) },
+        { name: "orgs_posts_read", ipMax: 6000, ask: (who, ip) => inject("GET", `${posts(gym.id)}/blocked`, who.cookies, undefined, ip) },
+        { name: "orgs_posts_photo", ipMax: 60_000, ask: (who, ip) => inject("GET", photoPath, who.cookies, undefined, ip) },
+        { name: "orgs_posts_react", ipMax: 6000, ask: (who, ip) => inject("PUT", `${posts(gym.id)}/${post.id}/reaction`, who.cookies, { reaction: "like" }, ip) },
+      ];
+      for (const [n, door] of doors.entries()) {
+        const wifi = desk();
+        await fill(`rl:${door.name}:ip:${wifi}`, door.ipMax - 1);
+        for (let i = 0; i < 3; i++) expect((await door.ask(stranger, wifi)).statusCode, `door ${String(n)}: a stranger`).toBe(404);
+        expect((await door.ask(fresh, wifi)).statusCode, `door ${String(n)}: a member after the strangers`).toBe(200);
+        // And the address does have its ceiling: the member's next one is over it.
+        expect((await door.ask(fresh, wifi)).statusCode, `door ${String(n)}: the address past its ceiling`).toBe(429);
       }
       // The staff feed's other reader, who reacted: under its own limit.
       const who = `${posts(gym.id)}/${post.id}/reactions?reaction=like`;

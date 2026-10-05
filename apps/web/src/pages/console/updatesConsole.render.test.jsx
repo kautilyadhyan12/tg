@@ -493,9 +493,11 @@ describe('members’ posts', () => {
 
 describe('reported posts', () => {
   const wendy = { fromMember: true, authorId: 'u-wendy', author: { name: 'Wendy Writer', initials: 'WW' } };
+  // Four reports of each post were answered before: `allReports` is never `reports` here.
   const item = (id, body, reasons, over = {}) => ({
     post: post(id, body, { ...wendy, ...over }),
     reports: Object.values(reasons).reduce((a, b) => a + b, 0),
+    allReports: Object.values(reasons).reduce((a, b) => a + b, 0) + 4,
     reasons: { ...NO_REASONS, ...reasons },
     notes: [],
     firstReportedAt: '2026-10-07T07:00:00.000Z',
@@ -562,8 +564,9 @@ describe('reported posts', () => {
     await waitFor(() => expect(reportedCards()).toHaveLength(2));
     fireEvent.click(within(reportedCards()[1]).getByRole('button', { name: 'Keep post' }));
     await waitFor(() => expect(reportedCards()).toHaveLength(1));
-    // With the newest report this list showed for THAT post, so no later one is answered.
-    expect(svc.keep.mock.calls).toEqual([['g1', 'r2', '2026-10-07T08:00:02.000Z']]);
+    // With how many reports THAT post had had when this list was read, so one that
+    // arrives later is not answered.
+    expect(svc.keep.mock.calls).toEqual([['g1', 'r2', 5]]);
     expect(svc.remove).not.toHaveBeenCalled();
     expect(cards()).toHaveLength(1);
     expect(screen.getByRole('status').textContent).toBe('Kept. The post stays on Updates and has left this list.');
@@ -571,21 +574,21 @@ describe('reported posts', () => {
 
   it('a report that arrived while staff were looking: Keep says so, and the post is still listed with it', async () => {
     const later = two();
-    later.items[0] = { ...later.items[0], reports: 1, reasons: { ...NO_REASONS, photo_of_someone: 1 }, notes: ['That is my brother in the photo'], lastReportedAt: '2026-10-07T09:00:00.000Z' };
+    later.items[0] = { ...later.items[0], reports: 4, allReports: 8, reasons: { ...NO_REASONS, unkind: 2, photo_of_someone: 2 }, notes: ['That is my brother in the photo'], lastReportedAt: '2026-10-07T09:00:00.000Z' };
     svc.reported.mockResolvedValueOnce(two()).mockResolvedValue(later);
-    svc.keep.mockResolvedValue({ kept: true, waiting: 1 });
+    svc.keep.mockResolvedValue({ kept: false, waiting: 1 });
     open();
     await waitFor(() => expect(reportedCards()).toHaveLength(2));
     fireEvent.click(within(reportedCards()[0]).getByRole('button', { name: 'Keep post' }));
     expect((await screen.findByRole('status')).textContent).toBe(
       '1 more person reported this post while you were looking, so it is still on this list. Read what is new, then choose again.',
     );
-    expect(svc.keep.mock.calls).toEqual([['g1', 'r1', '2026-10-07T08:00:01.000Z']]);
+    expect(svc.keep.mock.calls).toEqual([['g1', 'r1', 7]]);
     // Read again: the new report and its words are on the screen, and Keep now names it.
     await waitFor(() => expect(within(reportedCards()[0]).getByText('“That is my brother in the photo”')).toBeTruthy());
     expect(reportedCards()).toHaveLength(2);
     fireEvent.click(within(reportedCards()[0]).getByRole('button', { name: 'Keep post' }));
-    await waitFor(() => expect(svc.keep).toHaveBeenLastCalledWith('g1', 'r1', '2026-10-07T09:00:00.000Z'));
+    await waitFor(() => expect(svc.keep).toHaveBeenLastCalledWith('g1', 'r1', 8));
   });
 
   it('a gym with no plan reads the reported posts and can answer none', async () => {

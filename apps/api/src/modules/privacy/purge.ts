@@ -10,6 +10,7 @@
 // do not wait 14 days.
 import type { Sql, TransactionSql } from "postgres";
 import { CONSENT_PROOF_RETENTION_DAYS, DPDP_RETENTION_DAYS } from "../../retention.js";
+import { removeLeftovers, removeListed } from "../orgs/posts/photoFiles.js";
 import * as repo from "./repo.js";
 
 /** Structurally satisfied by FastifyBaseLogger — the worker passes pino, the
@@ -28,9 +29,10 @@ export interface PurgeDeps {
   sql: Sql;
   log: PurgeLogger;
   /** Where the api keeps photos: the files of the posts a purged person made as a member
-   *  are removed from it once their rows are gone. Required, so no caller can leave it out;
-   *  `remove` answers false when it found no file, which is counted as a file left (a
-   *  store that is not the api's finds none, and must not pass for a clean purge). */
+   *  are removed from it once their rows are gone, and so is any file an earlier removal
+   *  left. Required, so no caller can leave it out; `remove` answers false when it found
+   *  no file, which is counted as a file left (a store that is not the api's finds none,
+   *  and must not pass for a clean purge). */
   photos: { remove(key: string): Promise<boolean> };
   /** TEST-ONLY seam, mirroring buildApp's overrides parameter. No FK in the
    *  schema can block a delete (all 38 verified), so the loop's per-user
@@ -73,6 +75,10 @@ export interface PurgeResult {
    *  not a user's transaction) and still a shortfall — both entrypoints fail
    *  the run on it, and the next run retries: the delete is idempotent. */
   consentProofExpiryFailed: boolean;
+  /** Run-level: photo files this run was to remove and could not, a purged person's or
+   *  one a removed post left. Each is still listed (`photo_files_to_remove`) and the next
+   *  run tries it again. A list that could not be read counts as one. */
+  photoFilesLeft: number;
   dryRun: boolean;
 }
 
@@ -82,30 +88,31 @@ export interface PurgeResult {
  *  Both used to spell the condition out for themselves, and neither is imported
  *  by any test, so a term dropped from one of the copies was invisible.
  *
- *  Three ways, each a different job for whoever reads the log: a user's
+ *  Four ways, each a different job for whoever reads the log: a user's
  *  transaction threw (retried next run), a leaderboard snapshot the scrub
- *  cannot certify so this run withheld every marker (needs a code fix), or the
- *  run-level consent-log expiry threw (retried next run). A run that fell short
+ *  cannot certify so this run withheld every marker (needs a code fix), the
+ *  run-level consent-log expiry threw (retried next run), or a photo file that
+ *  was to be removed is still in the store (retried next run; if it is every
+ *  file, the worker's `PHOTO_DIR` is not the api's). A run that fell short
  *  must NEVER be acked COMPLETED — R8.3. */
 export function purgeShortfall(result: PurgeResult): boolean {
-  return result.errors > 0 || result.schemaDriftSnapshots > 0 || result.consentProofExpiryFailed;
+  return result.errors > 0 || result.schemaDriftSnapshots > 0 || result.consentProofExpiryFailed || result.photoFilesLeft > 0;
 }
 
 const DEFAULT_LIMIT = 500;
 
-/** The photo files of a purged person's own posts. A file that will not go, or that this
- *  store does not hold, is logged as an error and the run carries on: its row is gone, so
- *  nothing can show it, but the file itself may still be on the api's disk. */
-async function removePhotoFiles(deps: PurgeDeps, userId: string, keys: readonly string[]): Promise<void> {
-  let left = 0;
-  for (const key of keys) {
-    try {
-      if (!(await deps.photos.remove(key))) left += 1;
-    } catch {
-      left += 1;
-    }
+/** The photo files of a purged person's own posts, listed to remove in the purge's own
+ *  step. A file that will not go, or that this store does not hold, stays listed, is
+ *  logged as an error and counted; the run carries on. How many stay. */
+async function removePhotoFiles(deps: PurgeDeps, userId: string, keys: readonly string[]): Promise<number> {
+  let left: number;
+  try {
+    left = await removeListed(deps, keys, false);
+  } catch {
+    left = keys.length;
   }
-  if (left > 0) deps.log.error({ userId, count: left, event: "dpdp.purge.photo_files_left" }, "photo files of a purged person's posts were not removed");
+  if (left > 0) deps.log.error({ userId, count: left, event: "dpdp.purge.photo_files_left" }, "photo files of a purged person's posts were not removed; the next run tries again");
+  return left;
 }
 
 /** One user's cascade, inside the caller's transaction (§5.2 "in one
@@ -122,6 +129,8 @@ export async function purgeUser(
 ): Promise<PurgeUserStatus> {
   const proceed = await repo.lockDueUserForPurge(tx, userId, cutoff);
   if (!proceed) return "skipped";
+  // Before the rows go: the files are found by them.
+  await repo.queueMemberPostPhotoFiles(tx, userId);
   await repo.deleteUserOwnedRows(tx, userId);
   // Address-keyed rows go BEFORE the tombstone nulls the address they are
   // found by (tables.ts, ADDRESS_KEYED_PURGE_TABLES).
@@ -180,6 +189,7 @@ export async function purgeDueUsers(
     schemaDriftSnapshots: schemaDrift,
     consentProofExpired: 0,
     consentProofExpiryFailed: false,
+    photoFilesLeft: 0,
     dryRun,
   };
 
@@ -210,7 +220,7 @@ export async function purgeDueUsers(
 
   for (const user of due) {
     try {
-      // Read before the rows go: the purge deletes them, and the files are found by them.
+      // Read before the rows go; the purge lists the same keys to remove in its own step.
       const photoKeys = await repo.selectMemberPostPhotoKeys(deps.sql, user.id);
       const status = await deps.sql.begin(async (tx) => {
         const s = await runOne(tx, user.id, cutoff);
@@ -228,7 +238,7 @@ export async function purgeDueUsers(
         result.skipped += 1;
         continue; // F7: do NOT log user_purged for a user nothing happened to
       }
-      await removePhotoFiles(deps, user.id, photoKeys);
+      result.photoFilesLeft += await removePhotoFiles(deps, user.id, photoKeys);
       if (certify) {
         result.purged += 1;
         // userId only: by this point there is nothing else about them to log,
@@ -277,6 +287,19 @@ export async function purgeDueUsers(
         event: "dpdp.purge.consent_expiry_failed",
       },
       "consent-log expiry failed; will retry next run",
+    );
+  }
+
+  // The files an earlier removal left, by a member, by staff or by a run before this one.
+  try {
+    const left = await removeLeftovers(deps, false);
+    result.photoFilesLeft += left;
+    if (left > 0) deps.log.error({ count: left, event: "dpdp.purge.photo_leftovers_left" }, "photo files listed to remove are still in the store; the next run tries again");
+  } catch (err) {
+    result.photoFilesLeft += 1;
+    deps.log.error(
+      { errName: err instanceof Error ? err.name : typeof err, errMessage: err instanceof Error ? err.message : undefined, event: "dpdp.purge.photo_leftovers_failed" },
+      "the list of photo files to remove could not be read; will retry next run",
     );
   }
 
