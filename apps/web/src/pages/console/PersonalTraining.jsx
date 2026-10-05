@@ -486,8 +486,14 @@ export default function PersonalTraining() {
   const shownWeek = week !== null && week.key === weekOf ? week : null;
   const groups = trainerGroups(list?.trainers);
   const editingTrainer = list?.trainers.find((t) => t.userId === editing) ?? null;
+  // While somebody else is being picked or set up, the page is about them: the week of
+  // the trainer shown before is put away, so nothing of theirs reads as the new person's.
+  const settingUpOther = editingTrainer !== null ? editingTrainer.userId !== trainerId : adding !== '';
 
   const show = (userId) => {
+    setEditing(null);
+    setAdding('');
+    setSaveError(null);
     setFrom(null);
     setBooking(null);
     setCancelling(null);
@@ -502,10 +508,11 @@ export default function PersonalTraining() {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await orgService.savePtTrainer(gymId, editing, body);
+      const saved = editing;
+      const res = await orgService.savePtTrainer(gymId, saved, body);
       setList(res.data);
       // Whoever was just set up is the one whose week is shown.
-      if (list.canManage) show(editing);
+      if (list.canManage) show(saved);
       setEditing(null);
       setAdding('');
       readWeekAgain();
@@ -580,7 +587,7 @@ export default function PersonalTraining() {
           ) : (
             <ul className="m-0 p-0 list-none flex flex-col">
               {groups.setUp.map((t, index) => {
-                const shown = trainer !== null && t.userId === trainer.userId;
+                const shown = !settingUpOther && trainer !== null && t.userId === trainer.userId;
                 return (
                   <li
                     key={t.userId}
@@ -673,7 +680,7 @@ export default function PersonalTraining() {
         </section>
       ) : null}
 
-      {list !== null && trainer !== null ? (
+      {list !== null && trainer !== null && !settingUpOther ? (
         <section className="flex flex-col gap-4" aria-label="Sessions">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h2 className="c-h2">

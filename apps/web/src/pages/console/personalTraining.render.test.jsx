@@ -129,6 +129,30 @@ describe('the page for whoever runs the timetable', () => {
     expect(screen.getAllByTestId('pt-trainer')).toHaveLength(2);
   });
 
+  it("while another member of staff is picked or being set up, the first trainer's week is put away; See week brings it back", async () => {
+    open();
+    await friday();
+    expect(screen.getByRole('heading', { name: /^Sam Reed · / })).toBeTruthy();
+    // Picked in the list, before any button.
+    fireEvent.change(screen.getByLabelText('Add a trainer'), { target: { value: OWNER } });
+    expect(screen.queryByRole('heading', { name: /^Sam Reed · / })).toBeNull();
+    expect(screen.queryByTestId('pt-day')).toBeNull();
+    expect(screen.queryByText('Week shown below')).toBeNull();
+    // And while their hours form is open.
+    fireEvent.click(screen.getByRole('button', { name: 'Set their hours' }));
+    expect(screen.getByRole('heading', { name: 'Hours for Harbour Owner (you)' })).toBeTruthy();
+    expect(screen.queryByTestId('pt-day')).toBeNull();
+    // Closing the form without saving, the list still names the person picked, so the week stays away.
+    fireEvent.click(within(screen.getByTestId('pt-hours-form')).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByTestId('pt-day')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: "See Sam Reed's week" }));
+    expect((await screen.findAllByTestId('pt-day')).length).toBe(7);
+    expect(screen.getByLabelText('Add a trainer').value).toBe('');
+    // Editing Sam's own hours keeps Sam's week on screen.
+    fireEvent.click(screen.getByRole('button', { name: 'Edit hours for Sam Reed' }));
+    expect(screen.getAllByTestId('pt-day')).toHaveLength(7);
+  });
+
   it('See week on another trainer reads theirs', async () => {
     const anaSet = { ...ana, offers: true, sessionMinutes: 30, hours: [{ weekday: 1, fromMinute: 600, toMinute: 660 }] };
     api.getPtTrainers.mockResolvedValue({ data: trainers({ trainers: [anaSet, owner, sam] }) });
