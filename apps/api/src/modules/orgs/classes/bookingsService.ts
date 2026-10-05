@@ -428,8 +428,10 @@ export async function getEndingBookings(
   staffId: string,
   gymId: string,
   query: ClassBookingsEndingQuery,
-): Promise<ClassBookingsEndingResponse> {
+  limit: Limit,
+): Promise<ClassBookingsEndingResponse | null> {
   await requirePrivilege(deps, gymId, staffId, "schedule.manage");
+  if (!(await limit())) return null;
   const scope: repo.EndingScope =
     query.by === "slot" ? { by: "slot", id: query.id, from: query.from ?? null } : { by: query.by, id: query.id };
   const where = { scope, now: deps.now() };
@@ -442,13 +444,19 @@ export async function getEndingBookings(
   return classBookingsEndingResponseSchema.parse({
     ...counts,
     people: page.map(endingPerson),
-    next: rows.length > CLASS_BOOKINGS_ENDING_PAGE && last !== undefined ? last.seq : null,
+    next: rows.length > CLASS_BOOKINGS_ENDING_PAGE && last !== undefined ? last.bookingId : null,
   });
 }
 
 /** The gym's four booking settings, for staff holding `schedule.manage`. */
-export async function getBookingSettings(deps: Pick<BookingsDeps, "sql">, staffId: string, gymId: string): Promise<ClassBookingSettingsResponse> {
+export async function getBookingSettings(
+  deps: Pick<BookingsDeps, "sql">,
+  staffId: string,
+  gymId: string,
+  limit: Limit,
+): Promise<ClassBookingSettingsResponse | null> {
   await requirePrivilege(deps, gymId, staffId, "schedule.manage");
+  if (!(await limit())) return null;
   const settings = await repo.readSettings(deps.sql, gymId);
   if (settings === null) throw notFound();
   return classBookingSettingsResponseSchema.parse({ settings });
@@ -463,8 +471,11 @@ export async function setBookingSettings(
   staffId: string,
   gymId: string,
   settings: ClassBookingSettings,
-): Promise<ClassBookingSettingsResponse> {
+  limit: Limit,
+): Promise<(ClassBookingSettingsResponse & { movedIn: number }) | null> {
   await requireWritablePrivilege(deps, gymId, staffId, "schedule.manage");
+  if (!(await limit())) return null;
+  let movedIn = 0;
   const saved = await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
     const before = await repo.readSettings(tx, gymId);
@@ -481,9 +492,9 @@ export async function setBookingSettings(
       targetId: gymId,
       meta: Object.fromEntries(changed.map((k) => [k, `${String(before[k])} -> ${String(settings[k])}`])),
     });
-    if (settings.handoverMinutes < before.handoverMinutes) await handOverComing(tx, gymId, deps.now());
+    if (settings.handoverMinutes < before.handoverMinutes) movedIn = await handOverComing(tx, gymId, deps.now());
     return settings;
   });
   if (saved === null) throw notFound();
-  return classBookingSettingsResponseSchema.parse({ settings: saved });
+  return { ...classBookingSettingsResponseSchema.parse({ settings: saved }), movedIn };
 }

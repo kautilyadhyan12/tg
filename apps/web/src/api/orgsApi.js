@@ -1645,7 +1645,7 @@ export const orgService = {
       classBookingsEndingResponseSchema,
       'those bookings',
       authApi.get(`/v1/orgs/${gymId}/class-bookings/ending`, {
-        params: { by, id, ...(typeof from === 'string' && from !== '' ? { from } : {}), ...(Number.isInteger(after) ? { after } : {}) },
+        params: { by, id, ...(typeof from === 'string' && from !== '' ? { from } : {}), ...(typeof after === 'string' && after !== '' ? { after } : {}) },
       }),
     ),
 

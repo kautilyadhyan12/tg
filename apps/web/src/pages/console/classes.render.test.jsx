@@ -125,9 +125,9 @@ const BOOKED = {
         booked: 2,
         waiting: 1,
         people: [
-          { seq: 1, name: 'Asha Rao', initials: 'AR', waiting: false, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
-          { seq: 2, name: 'Ben Okoro', initials: 'BO', waiting: false, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
-          { seq: 3, name: 'Cy Diaz', initials: 'CD', waiting: true, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
+          { id: '00000000-0000-4000-8000-000000000001', name: 'Asha Rao', initials: 'AR', waiting: false, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
+          { id: '00000000-0000-4000-8000-000000000002', name: 'Ben Okoro', initials: 'BO', waiting: false, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
+          { id: '00000000-0000-4000-8000-000000000003', name: 'Cy Diaz', initials: 'CD', waiting: true, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
         ],
       },
     },

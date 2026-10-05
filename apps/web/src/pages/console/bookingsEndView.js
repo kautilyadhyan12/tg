@@ -27,23 +27,36 @@ export function endingTotal(ending) {
   return (ending?.booked ?? 0) + (ending?.waiting ?? 0);
 }
 
-/** "12 people are booked and 3 are waiting, across 4 classes". */
+const count = (n, one, many) => (n === 1 ? `1 ${one}` : `${n.toLocaleString('en')} ${many}`);
+
+/** One class: "6 people are booked and 2 are on the waitlist", since each person has one
+ *  booking in it. Several classes: the server counts BOOKINGS, and somebody booked on
+ *  three of them is three, so the box says bookings: "12 bookings will end, 2 of them
+ *  waitlist places, across 3 classes". */
 export function endingTitle(ending) {
   const booked = ending?.booked ?? 0;
   const waiting = ending?.waiting ?? 0;
+  const classes = ending?.classes ?? 0;
+  if (classes > 1) {
+    const across = `across ${classes.toLocaleString('en')} classes`;
+    if (booked === 0) return `${count(waiting, 'waitlist place', 'waitlist places')} will end, ${across}`;
+    const all = `${count(booked + waiting, 'booking', 'bookings')} will end`;
+    return waiting === 0 ? `${all}, ${across}` : `${all}, ${waiting.toLocaleString('en')} of them waitlist places, ${across}`;
+  }
   const parts = [];
   if (booked > 0) parts.push(`${people(booked)} ${booked === 1 ? 'is' : 'are'} booked`);
   if (waiting > 0) {
     parts.push(booked > 0 ? `${waiting.toLocaleString('en')} ${waiting === 1 ? 'is' : 'are'} on the waitlist` : `${people(waiting)} ${waiting === 1 ? 'is' : 'are'} on the waitlist`);
   }
-  const classes = ending?.classes ?? 0;
-  return `${parts.join(' and ')}${classes > 1 ? `, across ${classes.toLocaleString('en')} classes` : ''}`;
+  return parts.join(' and ');
 }
 
 /** What happens to them, in one line. */
 export function endingChangeLine(ending) {
-  const one = endingTotal(ending) === 1;
-  return one
+  if ((ending?.classes ?? 0) > 1) {
+    return 'Each is listed below; somebody booked on several of these classes is there once for each. A booking that used a class from a pack puts the class back on the pack.';
+  }
+  return endingTotal(ending) === 1
     ? 'Their booking ends. If it used a class from a pack, the class goes back on the pack.'
     : 'Their bookings end. A booking that used a class from a pack puts the class back on the pack.';
 }
@@ -82,7 +95,7 @@ export function endingPersonLine(person, clockFormat) {
   };
 }
 
-/** "and 12 more", for the people the box has not listed yet. */
+/** "and 12 more", for the bookings the box has not listed yet. */
 export function endingMore(ending, shown) {
   return Math.max(0, endingTotal(ending) - shown);
 }
@@ -181,4 +194,10 @@ export function bookingSettingsSummary(settings) {
   const free = settings.freeCancelMinutes === 0 ? 'free to cancel until the start' : `free to cancel until ${span(settings.freeCancelMinutes)} before`;
   const waitlist = settings.waitlistMax === 0 ? 'no waitlist' : `waitlist of ${settings.waitlistMax}`;
   return `${opens} · ${free} · ${waitlist}`;
+}
+
+/** What a save says once it is done: a shorter waitlist time can book waiting people. */
+export function bookingSettingsSavedLine(movedIn) {
+  if (!Number.isInteger(movedIn) || movedIn <= 0) return 'Saved.';
+  return movedIn === 1 ? 'Saved. 1 person moved in from a waitlist.' : `Saved. ${movedIn.toLocaleString('en')} people moved in from waitlists.`;
 }

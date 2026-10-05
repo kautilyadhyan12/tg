@@ -9,6 +9,7 @@ import {
   endingMore,
   endingPersonLine,
   endingTitle,
+  endingTotal,
 } from '../../pages/console/bookingsEndView';
 
 // WHO IS BOOKED, BEFORE A CLASS GOES (ROADMAP 17c-ii-a; CLAUDE.md §4's screen rule): the
@@ -26,17 +27,20 @@ export default function BookingsEndBox({ gymId, ending, scope, kind, clockFormat
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(null);
 
-  const list = all === null ? ending.people : all.people;
+  // A list read for an earlier answer is not this one's: the server asked again.
+  const total = endingTotal(ending);
+  const whole = all !== null && all.total === total ? all : null;
+  const list = whole === null ? ending.people : whole.people;
   const more = endingMore(ending, list.length);
-  const canLoad = all === null ? more > 0 : all.next !== null;
+  const canLoad = whole === null ? more > 0 : whole.next !== null;
 
   const loadMore = async () => {
     setLoading(true);
     setFailed(null);
     try {
-      const res = await orgService.getEndingBookings(gymId, { ...scope, after: all === null ? undefined : all.next });
+      const res = await orgService.getEndingBookings(gymId, { ...scope, after: whole === null ? undefined : whole.next });
       const page = Array.isArray(res.data?.people) ? res.data.people : [];
-      setAll({ people: all === null ? page : [...all.people, ...page], next: res.data?.next ?? null });
+      setAll({ total, people: whole === null ? page : [...whole.people, ...page], next: res.data?.next ?? null });
     } catch (err) {
       setFailed(errorText(err, "We couldn't load the list."));
     } finally {
@@ -47,7 +51,7 @@ export default function BookingsEndBox({ gymId, ending, scope, kind, clockFormat
   return (
     <div
       role="group"
-      aria-label="People booked on these classes"
+      aria-label="Bookings that will end"
       className="rounded-xl p-4 flex flex-col gap-3"
       style={{ background: 'var(--raise)', border: '1px solid var(--card-line)' }}
     >
@@ -56,12 +60,12 @@ export default function BookingsEndBox({ gymId, ending, scope, kind, clockFormat
       <ul
         data-testid="ending-people"
         className="flex flex-col gap-2"
-        style={all === null ? undefined : { maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}
+        style={whole === null ? undefined : { maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}
       >
         {list.map((person) => {
           const line = endingPersonLine(person, clockFormat);
           return (
-            <li key={person.seq} className="min-w-0">
+            <li key={person.id} className="min-w-0">
               <div className="c-s15 c-t1 c-ell">{line.name}</div>
               <div className="c-s13 c-t3 c-ell">{line.detail}</div>
             </li>
@@ -72,7 +76,7 @@ export default function BookingsEndBox({ gymId, ending, scope, kind, clockFormat
         <p className="c-s14 c-t2">
           {more > 0 ? `and ${more.toLocaleString('en')} more · ` : null}
           <button type="button" onClick={() => void loadMore()} disabled={loading} className="c-btn-link c-w6">
-            {loading ? 'Loading…' : all === null ? 'See all' : 'Show more'}
+            {loading ? 'Loading…' : whole === null ? 'See all' : 'Show more'}
           </button>
         </p>
       ) : null}

@@ -551,14 +551,15 @@ const endingWhere = (sql: SqlOrTx, where: EndingWhere) => {
   return sql`s.schedule_id = ${scope.id} AND s.starts_at > ${now} AND s.local_date >= COALESCE(${scope.from}::date, s.local_date)`;
 };
 
+/** BOOKINGS, not people: somebody booked on three of the classes is three. */
 export interface EndingCounts {
-  /** Classes with at least one person booked or waiting. */
+  /** Classes with at least one booking that holds a place or waits. */
   classes: number;
   booked: number;
   waiting: number;
 }
 
-/** How many people hold a place or wait in those classes. */
+/** How many bookings hold a place or wait in those classes. */
 export async function endingCounts(sql: SqlOrTx, gymId: string, where: EndingWhere): Promise<EndingCounts> {
   if ("sessionIds" in where && where.sessionIds.length === 0) return { classes: 0, booked: 0, waiting: 0 };
   const rows = await sql<EndingCounts[]>`
@@ -572,7 +573,7 @@ export async function endingCounts(sql: SqlOrTx, gymId: string, where: EndingWhe
 }
 
 export interface EndingPersonRow {
-  seq: number;
+  bookingId: string;
   waiting: boolean;
   displayName: string;
   email: string | null;
@@ -582,13 +583,14 @@ export interface EndingPersonRow {
   localStartMinute: number;
 }
 
-/** The people those counts are of, in the order they booked, a page at a time (`after`:
- *  the last `seq` already shown). */
-export async function endingPeople(sql: SqlOrTx, gymId: string, where: EndingWhere, after: number | null, limit: number): Promise<EndingPersonRow[]> {
+/** The bookings those counts are of, in the order they were made, a page at a time
+ *  (`after`: the id of the last booking already shown; one this gym does not have
+ *  answers nothing). `seq` is one counter for every gym and is never sent out. */
+export async function endingPeople(sql: SqlOrTx, gymId: string, where: EndingWhere, after: string | null, limit: number): Promise<EndingPersonRow[]> {
   if ("sessionIds" in where && where.sessionIds.length === 0) return [];
   const rows = await sql<
     {
-      seq: string;
+      id: string;
       status: string;
       display_name: string | null;
       email: string | null;
@@ -598,7 +600,7 @@ export async function endingPeople(sql: SqlOrTx, gymId: string, where: EndingWhe
       local_start_minute: number;
     }[]
   >`
-    SELECT b.seq, b.status,
+    SELECT b.id, b.status,
            CASE WHEN u.status = 'active' THEN u.display_name END AS display_name,
            CASE WHEN u.status = 'active' THEN u.email::text END AS email,
            nullif(btrim(e.full_name), '') AS record_name,
@@ -609,11 +611,11 @@ export async function endingPeople(sql: SqlOrTx, gymId: string, where: EndingWhe
     JOIN users u ON u.id = b.user_id
     LEFT JOIN gym_member_list_entries e ON e.gym_id = b.gym_id AND e.id = b.entry_id
     WHERE b.gym_id = ${gymId} AND b.status IN ('booked','waitlisted','attended','no_show') AND ${endingWhere(sql, where)}
-      AND b.seq > ${after ?? 0}
+      ${after === null ? sql`` : sql`AND b.seq > (SELECT c.seq FROM gym_class_bookings c WHERE c.gym_id = ${gymId} AND c.id = ${after})`}
     ORDER BY b.seq
     LIMIT ${limit}`;
   return rows.map((r) => ({
-    seq: Number(r.seq),
+    bookingId: r.id,
     waiting: r.status === "waitlisted",
     displayName: r.display_name ?? "",
     email: r.email,

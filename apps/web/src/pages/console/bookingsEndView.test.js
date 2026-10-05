@@ -6,6 +6,7 @@ import {
   bookingSettingsChanged,
   bookingSettingsDraft,
   bookingSettingsProblem,
+  bookingSettingsSavedLine,
   bookingSettingsSummary,
   bookingsAsked,
   endingChangeLine,
@@ -19,7 +20,7 @@ import {
 } from './bookingsEndView';
 
 const person = (over = {}) => ({
-  seq: 1,
+  id: '00000000-0000-4000-8000-000000000001',
   name: 'Asha Rao',
   initials: 'AR',
   waiting: false,
@@ -53,9 +54,12 @@ describe('the box’s words', () => {
     [{ booked: 12, waiting: 3, classes: 1 }, '12 people are booked and 3 are on the waitlist'],
     [{ booked: 1, waiting: 0, classes: 1 }, '1 person is booked'],
     [{ booked: 0, waiting: 1, classes: 1 }, '1 person is on the waitlist'],
-    [{ booked: 0, waiting: 4, classes: 2 }, '4 people are on the waitlist, across 2 classes'],
-    [{ booked: 2, waiting: 1, classes: 3 }, '2 people are booked and 1 is on the waitlist, across 3 classes'],
-    [{ booked: 1200, waiting: 0, classes: 40 }, '1,200 people are booked, across 40 classes'],
+    // Several classes: the numbers are bookings, and one person on three of them is three.
+    [{ booked: 0, waiting: 4, classes: 2 }, '4 waitlist places will end, across 2 classes'],
+    [{ booked: 0, waiting: 1, classes: 2 }, '1 waitlist place will end, across 2 classes'],
+    [{ booked: 2, waiting: 1, classes: 3 }, '3 bookings will end, 1 of them waitlist places, across 3 classes'],
+    [{ booked: 3, waiting: 0, classes: 2 }, '3 bookings will end, across 2 classes'],
+    [{ booked: 1200, waiting: 0, classes: 40 }, '1,200 bookings will end, across 40 classes'],
   ])('%j reads "%s"', (counts, words) => {
     expect(endingTitle(ending(counts))).toBe(words);
   });
@@ -63,6 +67,10 @@ describe('the box’s words', () => {
   it('says what happens to them, for one booking and for several', () => {
     expect(endingChangeLine(ending({ booked: 1, waiting: 0 }))).toBe('Their booking ends. If it used a class from a pack, the class goes back on the pack.');
     expect(endingChangeLine(ending())).toBe('Their bookings end. A booking that used a class from a pack puts the class back on the pack.');
+    // Several classes: the list is of bookings, and the box says so.
+    expect(endingChangeLine(ending({ classes: 3 }))).toBe(
+      'Each is listed below; somebody booked on several of these classes is there once for each. A booking that used a class from a pack puts the class back on the pack.',
+    );
   });
 
   it('says who does not change, for each kind of change', () => {
@@ -131,6 +139,13 @@ describe('the four booking settings', () => {
   it('allows each end of each range', () => {
     expect(bookingSettingsProblem({ opensDays: '1', freeAmount: '0', freeUnit: 'minutes', handoverAmount: '0', handoverUnit: 'days', waitlistMax: '0' })).toBeNull();
     expect(bookingSettingsProblem({ opensDays: '56', freeAmount: '7', freeUnit: 'days', handoverAmount: '168', handoverUnit: 'hours', waitlistMax: '100' })).toBeNull();
+  });
+
+  it('says what a save did: a shorter waitlist time can book people who were waiting', () => {
+    expect(bookingSettingsSavedLine(undefined)).toBe('Saved.');
+    expect(bookingSettingsSavedLine(0)).toBe('Saved.');
+    expect(bookingSettingsSavedLine(1)).toBe('Saved. 1 person moved in from a waitlist.');
+    expect(bookingSettingsSavedLine(4)).toBe('Saved. 4 people moved in from waitlists.');
   });
 
   it('sums the settings up in the closed section', () => {

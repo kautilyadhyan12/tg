@@ -2601,8 +2601,13 @@ for every way of leaving (`endLeaversBookings`, called where the membership is c
 **The four settings** are read and changed at `…/booking-settings` on
 `schedule.manage` (Settings → Class bookings); they hold from the next booking on and
 change none already made; a shorter hand-over time hands over at once the free places
-it makes the waitlist's. Nobody is emailed yet: the box that asks says so until
-17c-ii-b.)*
+it makes the waitlist's, and the save answers how many (`movedIn`). Nobody is emailed
+yet: the box that asks says so until 17c-ii-b. `booked` and `waiting` count BOOKINGS:
+in one class they are people, across several the box says "bookings" (one person on
+three classes is three). `confirmBookings` is that count and not the list, so a booking
+made and another cancelled between the box and its button leave it equal: the change
+then ends a booking the box did not name, by at most what moved in that moment. The
+list pages by a booking's id; its `seq`, one counter for every gym, is never sent.)*
 
 ### 13.5 Personal training
 

@@ -60,7 +60,7 @@ import * as repo from "./repo.js";
 export function endingPerson(r: EndingPersonRow): ClassBookingsEnding["people"][number] {
   const named = fullName(r);
   return {
-    seq: r.seq,
+    id: r.bookingId,
     name: named.name,
     initials: named.name === null ? "" : named.initials,
     waiting: r.waiting,

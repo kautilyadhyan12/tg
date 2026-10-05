@@ -8,6 +8,7 @@ import {
   bookingSettingsChanged,
   bookingSettingsDraft,
   bookingSettingsProblem,
+  bookingSettingsSavedLine,
   bookingSettingsSummary,
 } from '../../pages/console/bookingsEndView';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
@@ -84,7 +85,8 @@ export default function BookingSettingsPanel({ org, readOnly }) {
   const [loadError, setLoadError] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  // What the last save said, until something is typed again; null before one.
+  const [saved, setSaved] = useState(null);
 
   const fetchSettings = useCallback(
     (isLive = () => true) =>
@@ -122,7 +124,7 @@ export default function BookingSettingsPanel({ org, readOnly }) {
 
   const edit = (patch) => {
     setDraft({ ...draft, ...patch });
-    setSaved(false);
+    setSaved(null);
     setSaveError(null);
   };
 
@@ -137,7 +139,7 @@ export default function BookingSettingsPanel({ org, readOnly }) {
       const res = await orgService.updateBookingSettings(gymId, body);
       setSettings(res.data.settings);
       setDraft(bookingSettingsDraft(res.data.settings));
-      setSaved(true);
+      setSaved(bookingSettingsSavedLine(res.data.movedIn));
     } catch (err) {
       setSaveError(errorText(err, "We couldn't save your booking settings."));
     } finally {
@@ -159,7 +161,7 @@ export default function BookingSettingsPanel({ org, readOnly }) {
       ) : (
         <form onSubmit={save} className="flex flex-col gap-5">
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            These apply to every class from now on. Bookings already made don&apos;t change.
+            These apply to every class from now on. Nobody who is booked loses their place.
           </p>
 
           <Row title="When booking opens" hint="Members can book from then until the class starts.">
@@ -179,7 +181,7 @@ export default function BookingSettingsPanel({ org, readOnly }) {
 
           <Row
             title="When a place comes free"
-            hint="Closer to the class than that, everyone on the waitlist can take it and the first to tap Claim gets it."
+            hint="Closer to the class than that, everyone on the waitlist can take it and the first to tap Claim gets it. Saving a shorter time gives places that are free now to people already on a waitlist, straight away."
           >
             <span>The first person on the waitlist gets it automatically until</span>
             <NumberBox label="How long before a class a free place goes to the waitlist automatically" value={draft.handoverAmount} onChange={(handoverAmount) => edit({ handoverAmount })} disabled={off} />
@@ -212,9 +214,9 @@ export default function BookingSettingsPanel({ org, readOnly }) {
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {saving ? 'Saving…' : 'Save changes'}
             </button>
-            {saved ? (
+            {saved !== null ? (
               <span className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                Saved.
+                {saved}
               </span>
             ) : null}
           </div>
