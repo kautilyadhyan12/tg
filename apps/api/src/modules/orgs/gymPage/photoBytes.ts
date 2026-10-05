@@ -44,6 +44,10 @@ const ascii = (b: Uint8Array, i: number, n: number): string => {
   if (i + n > b.length) throw new Damaged();
   return String.fromCharCode(...b.subarray(i, i + n));
 };
+/** Where a JPEG colour-profile block's profile starts: after its marker, length, name,
+ *  part number and part count. */
+const ICC_AT = 18;
+
 const startsWith = (b: Uint8Array, i: number, text: string): boolean =>
   i + text.length <= b.length && ascii(b, i, text.length) === text;
 
@@ -108,6 +112,8 @@ function cleanJpeg(b: Uint8Array): { width: number; height: number; bytes: Uint8
   let at = 2;
   let size: { width: number; height: number } | null = null;
   let orientationDone = false;
+  /** Whether the colour profile's first part was one. */
+  let profile = false;
   let rotated = false;
   let scans = 0;
   let blocks = 0;
@@ -200,13 +206,19 @@ function cleanJpeg(b: Uint8Array): { width: number; height: number; bytes: Uint8
     }
     if (marker === 0xe2) {
       // The colour profile keeps colours true; a multi-picture index (MPF) points at the
-      // pictures after the end, which are not copied.
-      if (startsWith(segment, 4, "ICC_PROFILE\0")) out.push(segment);
+      // pictures after the end, which are not copied. A block that only carries the
+      // profile's name is not one: its first part has the profile's own mark, and a later
+      // part is kept only after such a first.
+      if (startsWith(segment, 4, "ICC_PROFILE\0")) {
+        if (byteAt(segment, 16) === 1) profile = segment.length >= ICC_AT + 40 && startsWith(segment, ICC_AT + 36, "acsp");
+        if (profile) out.push(segment);
+      }
       continue;
     }
     if (marker === 0xee) {
-      // Adobe's colour transform: without it some JPEGs draw in the wrong colours.
-      if (startsWith(segment, 4, "Adobe")) out.push(segment);
+      // Adobe's colour transform: without it some JPEGs draw in the wrong colours. It is
+      // twelve bytes and no more.
+      if (startsWith(segment, 4, "Adobe") && segment.length === 4 + 12) out.push(segment);
       continue;
     }
     if ((marker >= 0xe3 && marker <= 0xef) || marker === 0xfe) {
@@ -309,6 +321,8 @@ function cleanWebp(b: Uint8Array): { width: number; height: number; bytes: Uint8
       size = webpSize(type, chunk.subarray(8));
     }
     if (!WEBP_KEPT.has(type)) continue;
+    // A colour profile has the profile's own mark; a block that only has its name goes.
+    if (type === "ICCP" && !(length >= 40 && startsWith(chunk, 8 + 36, "acsp"))) continue;
     if (type === "VP8 " || type === "VP8L" || type === "ANMF") hasPicture = true;
     if (type === "VP8X") {
       const fixed = Uint8Array.from(chunk);

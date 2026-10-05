@@ -108,6 +108,11 @@ describe("the bad-words check", () => {
       "rag head",
       "f u c k",
       "f.u.c.k",
+      // The security pass: the spaced word typed twice.
+      "f.u.c.k f.u.c.k",
+      "f u c k f u c k",
+      "f-u-c-k f-u-c-k f-u-c-k",
+      "s.h.i.t t.o.s.s.e.r",
       // The re-check: a look-alike letter, an accent, and "@" after the word.
       "tоsser",
       "tösser",
@@ -126,6 +131,13 @@ describe("the bad-words check", () => {
       "New PB on the snatch today, 60 kg",
       "Hit a 100 kg clean and jerk",
       "Jerk technique session Saturday",
+      // Spelt out letter by letter, as a banner is: each holds a listed word and is not one.
+      "C L A S S  C A N C E L L E D",
+      "c.l.a.s.s p.a.s.s",
+      "a s s u m e",
+      "c o c k t a i l",
+      "g r a s s g r a s s",
+      "h a h a h a",
       "Kicked my butt today",
       "Hump day workout done",
       "Hardcore abs at 6",
@@ -239,6 +251,8 @@ describe("the bad-words check", () => {
     expect(badWordsIn("(tosser)")).toEqual(["tosser"]);
     expect(badWordsIn("kill\nyourself")).toEqual(["kill yourself"]);
     expect(badWordsIn("f u c k you")).toEqual(["fuck"]);
+    expect(badWordsIn("f.u.c.k f.u.c.k")).toEqual(["fuck"]);
+    expect(badWordsIn("f u c k f u c k")).toEqual(["fuck"]);
     // The whole typed word, never a piece of it.
     expect(badWordsIn("stop bullshitting")).toEqual(["bullshitting"]);
     expect(badWordsIn("you dickheads")).toEqual(["dickheads"]);

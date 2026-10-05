@@ -526,6 +526,13 @@
       "when": 1788220800059,
       "tag": "0075_class_bookings",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1788220800060,
+      "tag": "0076_photo_files_to_remove",
+      "breakpoints": true
     }
   ]
 }

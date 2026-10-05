@@ -31,16 +31,19 @@ function parseOr400<S extends z.ZodTypeAny>(
 ): z.output<S> | null {
   const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
-    // Issue paths and codes only, never the offending value.
+    // Issue paths and codes only, never the offending value, and the first few: a body
+    // may be megabytes, and a reply must not be.
     void reply.status(400).send({
       error: "validation_error",
-      message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.code}`).join("; "),
+      message: parsed.error.issues.slice(0, ISSUES_SAID).map((i) => `${i.path.join(".")}: ${i.code}`).join("; "),
       requestId: req.id,
     });
     return null;
   }
   return parsed.data;
 }
+
+const ISSUES_SAID = 10;
 
 function requireUserId(req: FastifyRequest): string {
   const userId = req.authUser?.id;
@@ -75,8 +78,8 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
   const memberPostLimit = limiter("orgs_posts_member_post", 30, 600);
   const memberWriteLimit = limiter("orgs_posts_member_write", 60, 3000);
 
-  // The staff routes ask the tick first and the limit after it, so a stranger's 404 is
-  // never a 429.
+  // Every route asks who is reading or writing first and the limit after it, so a
+  // stranger's 404 is never a 429 and never counts against the gym's shared address.
   const gate =
     (limit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>) =>
     (req: FastifyRequest, reply: FastifyReply) =>
@@ -87,34 +90,39 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
 
   // ── MEMBERS ──
 
-  app.get("/v1/orgs/:gymId/posts", { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
+  app.get("/v1/orgs/:gymId/posts", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const query = parseOr400(gymPostsQuerySchema, req.query, req, reply);
     if (query === null) return;
-    return reply.status(200).send(await service.getPosts(postsDeps, requireUserId(req), params.gymId, query.before));
+    const feed = await service.getPosts(postsDeps, requireUserId(req), params.gymId, query.before, gate(readLimit)(req, reply));
+    if (feed === null) return;
+    return reply.status(200).send(feed);
   });
 
-  app.put("/v1/orgs/:gymId/posts/:postId/reaction", { preHandler: [app.authenticate, reactLimit] }, async (req, reply) => {
+  app.put("/v1/orgs/:gymId/posts/:postId/reaction", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(reactToGymPostRequestSchema, req.body, req, reply);
     if (body === null) return;
-    return reply.status(200).send(await service.react(postsDeps, requireUserId(req), params.gymId, params.postId, body.reaction));
+    const done = await service.react(postsDeps, requireUserId(req), params.gymId, params.postId, body.reaction, gate(reactLimit)(req, reply));
+    if (done === null) return;
+    return reply.status(200).send(done);
   });
 
   // For a member, or staff holding the tick. Served as a picture and nothing else. A
   // browser may keep it but asks again every time it shows it (`no-cache`): a photo never
   // changes, so the answer is "the one you have" (304) while the reader may still see it,
   // and the usual 404 the moment the post is removed or they may not.
-  app.get("/v1/orgs/:gymId/posts/:postId/photos/:photoId", { preHandler: [app.authenticate, photoLimit] }, async (req, reply) => {
+  app.get("/v1/orgs/:gymId/posts/:postId/photos/:photoId", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(gymPostPhotoParamsSchema, req.params, req, reply);
     if (params === null) return;
     const etag = `"${params.photoId}"`;
     const has = req.headers["if-none-match"] === etag;
-    const file = await service.getPhoto(postsDeps, requireUserId(req), params.gymId, params.postId, params.photoId, !has);
+    const file = await service.getPhoto(postsDeps, requireUserId(req), params.gymId, params.postId, params.photoId, !has, gate(photoLimit)(req, reply));
+    if (file === null) return;
     void reply.header("cache-control", "private, no-cache").header("etag", etag);
-    if (file === null) return reply.status(304).send();
+    if (file === "same") return reply.status(304).send();
     return reply
       .status(200)
       .header("content-type", file.contentType)
@@ -140,7 +148,6 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     return reply.status(201).send({ post: await service.addMemberPost(postsDeps, requireUserId(req), params.gymId, body) });
   });
 
-  // Membership first and the limit after it, as for staff: a stranger's 404 is never a 429.
   app.delete("/v1/orgs/:gymId/posts/mine/:postId", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
     if (params === null) return;
@@ -159,7 +166,7 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     return reply.status(200).send({ reported: true });
   });
 
-  // Block whoever wrote this post. Membership first and the limit after it, as above.
+  // Block whoever wrote this post.
   app.put("/v1/orgs/:gymId/posts/:postId/block", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
     if (params === null) return;
@@ -168,10 +175,12 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     return reply.status(200).send({ blocked: true });
   });
 
-  app.get("/v1/orgs/:gymId/posts/blocked", { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
+  app.get("/v1/orgs/:gymId/posts/blocked", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
-    return reply.status(200).send(await service.getBlocked(postsDeps, requireUserId(req), params.gymId));
+    const blocked = await service.getBlocked(postsDeps, requireUserId(req), params.gymId, gate(readLimit)(req, reply));
+    if (blocked === null) return;
+    return reply.status(200).send(blocked);
   });
 
   app.delete("/v1/orgs/:gymId/posts/blocked/:blockId", { preHandler: app.authenticate }, async (req, reply) => {
@@ -182,8 +191,7 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     return reply.status(200).send({ blocked: false });
   });
 
-  // One person's posts, on their profile. Who is reading is asked before the limit, so a
-  // stranger's 404 is never a 429.
+  // One person's posts, on their profile.
   app.get("/v1/orgs/:gymId/posts/people/:userId", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(gymPosterParamsSchema, req.params, req, reply);
     if (params === null) return;
@@ -277,9 +285,9 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     if (params === null) return;
     const body = parseOr400(keepGymPostRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const done = await service.keepReported(postsDeps, requireUserId(req), params.gymId, params.postId, body.upTo, gate(staffWriteLimit)(req, reply));
+    const done = await service.keepReported(postsDeps, requireUserId(req), params.gymId, params.postId, body, gate(staffWriteLimit)(req, reply));
     if (done === null) return;
-    return reply.status(200).send({ kept: true, waiting: done.waiting });
+    return reply.status(200).send(done);
   });
 
   app.put("/v1/orgs/:gymId/posts/settings", { preHandler: app.authenticate }, async (req, reply) => {

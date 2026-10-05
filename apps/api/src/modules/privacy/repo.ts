@@ -122,7 +122,8 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   await tx`DELETE FROM gym_post_blocks WHERE user_id = ${userId} OR blocked_user_id = ${userId}`;
   // The posts they made as a MEMBER, with their photos' rows, reactions and reports by
   // cascade. A post made as staff is the gym's and stays (tables.ts, gym_posts). The
-  // photos' files are removed by the caller, `purgeDueUsers`.
+  // photos' files are listed to remove before this (`queueMemberPostPhotoFiles`) and
+  // removed by the caller, `purgeDueUsers`.
   await tx`DELETE FROM gym_posts WHERE author_user_id = ${userId} AND by_member`;
 }
 
@@ -134,6 +135,17 @@ export async function selectMemberPostPhotoKeys(sql: SqlOrTx, userId: string): P
     JOIN gym_posts p ON p.gym_id = ph.gym_id AND p.id = ph.post_id
     WHERE p.author_user_id = ${userId} AND p.by_member`;
   return rows.map((row) => row.storage_key);
+}
+
+/** Lists those files to remove (`photo_files_to_remove`), in the purge's own step: a file
+ *  that will not go is still known once its row has. */
+export async function queueMemberPostPhotoFiles(tx: TransactionSql, userId: string): Promise<void> {
+  await tx`
+    INSERT INTO photo_files_to_remove (storage_key)
+    SELECT ph.storage_key FROM gym_post_photos ph
+    JOIN gym_posts p ON p.gym_id = ph.gym_id AND p.id = ph.post_id
+    WHERE p.author_user_id = ${userId} AND p.by_member
+    ON CONFLICT (storage_key) DO NOTHING`;
 }
 
 /** Rows keyed on the person's ADDRESS rather than their id — `sign_in_codes`

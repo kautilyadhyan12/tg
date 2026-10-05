@@ -639,17 +639,19 @@ const worker = new Worker(
     // Sentry. WHAT COUNTS AS FALLING SHORT IS `purgeShortfall`, not a copy of
     // the condition spelled out here: tools/dpdp-purge.ts exits non-zero on the
     // same call, so the two entrypoints cannot drift apart, and the shared
-    // function is unit-tested (privacy.purge.test.ts, ungated) over all three
+    // function is unit-tested (privacy.purge.test.ts, ungated) over all four
     // flags — nothing tested either copy while they were inline.
     //
-    // The three are still named separately IN THE MESSAGE because they are
+    // The four are still named separately IN THE MESSAGE because they are
     // different jobs for whoever reads it: a failed user retries next run,
-    // drift needs a code fix, a failed consent-log expiry retries next run.
+    // drift needs a code fix, a failed consent-log expiry retries next run, a
+    // photo file still in the store retries next run.
     if (purgeShortfall(result)) {
       throw new Error(
         `purge not fully certified: ${String(result.errors)} user(s) failed, ` +
           `${String(result.schemaDriftSnapshots)} uncertifiable snapshot(s), ` +
-          `consent-log expiry ${result.consentProofExpiryFailed ? "FAILED" : "ok"}`,
+          `consent-log expiry ${result.consentProofExpiryFailed ? "FAILED" : "ok"}, ` +
+          `${String(result.photoFilesLeft)} photo file(s) not removed`,
       );
     }
   },

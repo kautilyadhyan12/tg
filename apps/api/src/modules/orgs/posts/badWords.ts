@@ -193,15 +193,34 @@ function extraSpans(text: string): Span[] {
 }
 
 /** Letters typed one at a time ("f u c k", "f.u.c.k"): refused where, joined, they are a
- *  listed word and nothing else. */
+ *  listed word and nothing else. Typed more than once, it is the same word: where the
+ *  letters are joined by a mark a space parts two words ("f.u.c.k f.u.c.k"), and a run that
+ *  is one stretch over and over is read as that stretch ("f u c k f u c k"). */
 const SPACED = /(?<![a-z])(?:[a-z][ .*_-]){2,}[a-z](?![a-z])/g;
+const SHORTEST_LISTED = 3;
+
+const isListed = (letters: string): boolean =>
+  [...packageSpans(letters), ...extraSpans(letters)].some((span) => span.start === 0 && span.end === letters.length);
+
+/** The stretch these letters repeat from end to end, or the letters themselves. */
+function repeated(letters: string): string {
+  for (let size = SHORTEST_LISTED; size * 2 <= letters.length; size++) {
+    if (letters.length % size === 0 && letters === letters.slice(0, size).repeat(letters.length / size)) return letters.slice(0, size);
+  }
+  return letters;
+}
 
 function spacedSpans(text: string): Span[] {
   const spans: Span[] = [];
   for (const match of plain(text).matchAll(SPACED)) {
-    const joined = match[0].replace(/[^a-z]/g, "");
-    const whole = [...packageSpans(joined), ...extraSpans(joined)].some((span) => span.start === 0 && span.end === joined.length);
-    if (whole) spans.push({ start: match.index, end: match.index + match[0].length, word: joined });
+    const parts = /[.*_-]/.test(match[0]) ? match[0].split(" ") : [match[0]];
+    let start = match.index;
+    for (const part of parts) {
+      const joined = part.replace(/[^a-z]/g, "");
+      const word = [...new Set([joined, repeated(joined)])].find((letters) => letters.length >= SHORTEST_LISTED && isListed(letters));
+      if (word !== undefined) spans.push({ start, end: start + part.length, word });
+      start += part.length + 1;
+    }
   }
   return spans;
 }
