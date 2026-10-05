@@ -245,7 +245,7 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body)).toMatchObject({ error: "photo_too_big", message: "Photo 1: This photo is bigger than 1 MB. Choose a smaller one." });
     expect(await filesOf(gym.id)).toEqual([]);
-  });
+  }, T);
 
   it(
     "a reported post staff remove in one tap is gone for everyone, its photo with it",

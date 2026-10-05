@@ -437,7 +437,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
     const full = await add(gym, gym.owner, "Four at the limit", [b64, b64, b64, b64]);
     expect(full.photos).toHaveLength(4);
     expect(await filesOf(gym.id)).toHaveLength(4);
-  });
+  }, T);
 
   it(
     "a post with nothing in it, too many words, too many photos or a file that is no photo is refused and nothing is kept",
