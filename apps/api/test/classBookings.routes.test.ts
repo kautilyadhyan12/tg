@@ -77,7 +77,7 @@ d("booking a class, and its waitlist (real Postgres, two api instances)", () => 
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const inject = (method: "GET" | "POST", path: string, cookies: Cookies, payload?: unknown, ip = nextIp(), target = api()) =>
+  const inject = (method: "GET" | "POST" | "DELETE", path: string, cookies: Cookies, payload?: unknown, ip = nextIp(), target = api()) =>
     target.inject({
       method,
       url: path,
@@ -518,8 +518,26 @@ d("booking a class, and its waitlist (real Postgres, two api instances)", () => 
       }
 
       // The staff list names the membership each booking is on.
+      const [yogaOnlyType] = await sql<{ name: string }[]>`SELECT name FROM gym_membership_types WHERE id = ${yogaOnly}`;
       const list = await staffList(sells, sells.owner, yoga.id);
-      expect(list.booked.map((b) => [b.name, b.packCharged, typeof b.membership])).toEqual([["Yara Yogi", false, "string"]]);
+      expect(list.booked.map((b) => [b.name, b.packCharged, b.membership])).toEqual([["Yara Yogi", false, yogaOnlyType?.name]]);
+
+      // Two bookings a MONTH: Thursday 8 and Tuesday 13 October use them, in two different
+      // weeks; Saturday 10 October is refused for the month.
+      const monthly = await listed(sells, "Mona Monthly");
+      await hold(sells, monthly.entryId, await typeOf(sells, { access: "limited", limit: 2, period: "month" }));
+      expect(view(await book(sells, monthly, thu.id)).mine?.status).toBe("booked");
+      expect(view(await book(sells, monthly, tue.id)).mine?.status).toBe("booked");
+      expect(no(await book(sells, monthly, sat.id))).toBe("409 limit_month");
+
+      // A class staff cancelled does not use up the week.
+      const once = await listed(sells, "Olive Once");
+      await hold(sells, once.entryId, await typeOf(sells, { access: "limited", limit: 1, period: "week" }));
+      const called = await classAt(sells, 1 * DAY, 12);
+      expect(view(await book(sells, once, called.id)).mine?.status).toBe("booked");
+      expect(no(await book(sells, once, sat.id))).toBe("409 limit_week");
+      await sql`UPDATE gym_class_sessions SET status = 'cancelled' WHERE id = ${called.id}`;
+      expect(view(await book(sells, once, sat.id)).mine?.status).toBe("booked");
     },
     T,
   );
@@ -536,7 +554,9 @@ d("booking a class, and its waitlist (real Postgres, two api instances)", () => 
       const emptied = await hold(sells, first.entryId, packType, { pack: 1 });
       const pack = await hold(sells, secondInLine.entryId, packType, { pack: 10 });
       await hold(sells, third.entryId, unlimited);
-      const spin = await classAt(sells, 3 * DAY, 1);
+      const coach = await signedIn("Cleo Coach");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${sells.id}, ${coach.userId}, 'trainer', NULL)`;
+      const spin = await classAt(sells, 3 * DAY, 1, { coach: coach.userId });
 
       expect(view(await book(sells, holder, spin.id)).mine?.status).toBe("booked");
       for (const who of [first, secondInLine, third]) {
@@ -557,6 +577,11 @@ d("booking a class, and its waitlist (real Postgres, two api instances)", () => 
       const list = await staffList(sells, sells.owner, spin.id);
       expect(list.booked.map((b) => [b.name, b.packCharged])).toEqual([["Sid Second", true]]);
       expect(list.waitlisted.map((b) => b.name)).toEqual(["Fay First", "Thea Third"]);
+      expect(typeof list.booked[0]?.membership).toBe("string");
+      // The class's coach reads who is coming, and not what they pay with.
+      const coachList = await staffList(sells, coach, spin.id);
+      expect(coachList.booked.map((b) => [b.name, b.membership, b.packCharged])).toEqual([["Sid Second", null, null]]);
+      expect(coachList.waitlisted.map((b) => [b.name, b.membership, b.packCharged])).toEqual([["Fay First", null, null], ["Thea Third", null, null]]);
 
       // Leaving the waitlist frees no place and moves nobody.
       expect(view(await cancel(sells, third, spin.id)).mine?.status).toBe("cancelled");
@@ -698,6 +723,137 @@ d("booking a class, and its waitlist (real Postgres, two api instances)", () => 
       // A stranger at that address gets the 404, not the limit's answer.
       const stranger = await signedIn("Sol Stranger");
       for (let n = 0; n < 3; n++) expect((await book(open, stranger, spin.id, { ip: address })).statusCode).toBe(404);
+    },
+    T,
+  );
+  it(
+    "a Claim sent again after its booking was cancelled books nothing and charges nothing",
+    async () => {
+      const packType = await typeOf(sells, { kind: "pack" });
+      const [holder, waiter] = await Promise.all([listed(sells, "Hana Holder"), listed(sells, "Wes Waiter")]);
+      await hold(sells, holder.entryId, await typeOf(sells));
+      const pack = await hold(sells, waiter.entryId, packType, { pack: 10 });
+      const spin = await classAt(sells, 5, 1);
+      expect(view(await book(sells, holder, spin.id)).mine?.status).toBe("booked");
+      const joined = randomUUID();
+      expect(view(await book(sells, waiter, spin.id, { joinWaitlist: true, key: joined })).mine?.status).toBe("waitlisted");
+      expect(view(await cancel(sells, holder, spin.id)).mine?.status).toBe("cancelled");
+
+      const claim = randomUUID();
+      expect(view(await book(sells, waiter, spin.id, { key: claim })).mine).toEqual({ status: "booked", waitlistPlace: null, packCharged: true });
+      expect((await classesLeft(pack)).left).toBe(9);
+      // The Claim again while it stands: the same booking.
+      expect(view(await book(sells, waiter, spin.id, { key: claim, target: second ?? api() })).mine?.status).toBe("booked");
+      expect((await classesLeft(pack)).left).toBe(9);
+
+      expect(view(await cancel(sells, waiter, spin.id)).mine?.status).toBe("cancelled");
+      expect((await classesLeft(pack)).left).toBe(10);
+      // The Claim arriving again, and the Join waitlist request that made the row: neither books.
+      for (const key of [claim, joined, claim]) {
+        expect(view(await book(sells, waiter, spin.id, { key, joinWaitlist: key === joined })).mine?.status).toBe("cancelled");
+      }
+      expect(await tally(spin.id)).toEqual({ cancelled: 2 });
+      expect((await classesLeft(pack)).left).toBe(10);
+      // Somebody else cannot use the Claim's key either.
+      const stolen = await book(sells, holder, spin.id, { key: claim });
+      expect([stolen.statusCode, errorOf(stolen)]).toEqual([409, "request_reused"]);
+      // A new tap books again, once.
+      expect(view(await book(sells, waiter, spin.id)).mine?.status).toBe("booked");
+      expect((await classesLeft(pack)).left).toBe(9);
+    },
+    T,
+  );
+
+  it(
+    "outside the last day a place that comes free without a cancel is the first in line's: Book hands it over before it decides, and the screen says so",
+    async () => {
+      const [holder, waiter, walkUp] = [person(11), person(12), person(13)];
+      const spin = await classAt(open, 3 * DAY, 1);
+      expect(view(await book(open, holder, spin.id)).mine?.status).toBe("booked");
+      expect(view(await book(open, waiter, spin.id, { joinWaitlist: true })).mine?.status).toBe("waitlisted");
+      // Staff make the class bigger.
+      await sql`UPDATE gym_class_sessions SET places = 2 WHERE id = ${spin.id}`;
+
+      // Somebody not waiting sees a class they cannot book, though one place reads free.
+      const before = await seen(open, walkUp, spin.id);
+      expect([before.booked, before.places, before.waitlisted]).toEqual([1, 2, 1]);
+      expect(before.can).toEqual({ book: false, joinWaitlist: true, claim: false, cancel: null, why: null });
+      const refused = await book(open, walkUp, spin.id);
+      expect([refused.statusCode, errorOf(refused)]).toEqual([409, "class_full"]);
+      // Their tap gave the place to the one who was waiting.
+      expect((await seen(open, waiter, spin.id)).mine).toEqual({ status: "booked", waitlistPlace: null, packCharged: false });
+      expect(await tally(spin.id)).toEqual({ booked: 2 });
+
+      // Where the one waiting may not book, the place is anybody's: the screen says Book, and Book gives it.
+      const unlimited = await typeOf(sells);
+      const [has, stuck, free] = await Promise.all([listed(sells, "Hugo Has"), listed(sells, "Stu Stuck"), listed(sells, "Fran Free")]);
+      await hold(sells, has.entryId, unlimited);
+      const emptied = await hold(sells, stuck.entryId, await typeOf(sells, { kind: "pack" }), { pack: 1 });
+      await hold(sells, free.entryId, unlimited);
+      const yoga = await classAt(sells, 3 * DAY, 1);
+      expect(view(await book(sells, has, yoga.id)).mine?.status).toBe("booked");
+      expect(view(await book(sells, stuck, yoga.id, { joinWaitlist: true })).mine?.status).toBe("waitlisted");
+      await sql`UPDATE gym_held_memberships SET classes_left = 0 WHERE id = ${emptied}`;
+      await sql`UPDATE gym_class_sessions SET places = 2 WHERE id = ${yoga.id}`;
+      expect((await seen(sells, free, yoga.id)).can).toEqual({ book: true, joinWaitlist: false, claim: false, cancel: null, why: null });
+      expect(view(await book(sells, free, yoga.id)).mine?.status).toBe("booked");
+      expect((await seen(sells, stuck, yoga.id)).mine).toEqual({ status: "waitlisted", waitlistPlace: 1, packCharged: false });
+    },
+    T,
+  );
+
+  it(
+    "a request's key is the gym's own, and a deleted account's name is not on the staff list",
+    async () => {
+      const other = await makeGym("Second Gym");
+      const both = await member(open, "Bella Both");
+      await sql`INSERT INTO gym_members (gym_id, user_id, joined_at) VALUES (${other.id}, ${both.userId}, '2026-01-01T00:00:00Z')`;
+      const here = await classAt(open, 3 * DAY, 5);
+      const there = await classAt(other, 3 * DAY, 5);
+      const key = randomUUID();
+      expect(view(await book(open, both, here.id, { key })).mine?.status).toBe("booked");
+      expect(view(await book(other, both, there.id, { key })).mine?.status).toBe("booked");
+      expect([await tally(here.id), await tally(there.id)]).toEqual([{ booked: 1 }, { booked: 1 }]);
+
+      expect((await staffList(open, open.owner, here.id)).booked.map((b) => b.name)).toEqual(["Bella Both"]);
+      await sql`UPDATE users SET status = 'deleted' WHERE id = ${both.userId}`;
+      expect((await staffList(open, open.owner, here.id)).booked.map((b) => [b.name, b.initials, b.status])).toEqual([[null, "", "booked"]]);
+    },
+    T,
+  );
+
+  it(
+    "a class somebody has booked is not deleted from under them: staff are told why, in words",
+    async () => {
+      // The timetable's routes read the real clock, so this class is three days from today.
+      const kept = clock;
+      clock = Date.now();
+      try {
+        const who = person(14);
+        const booked = await classAt(open, 3 * DAY, 5);
+        const empty = await classAt(open, 3 * DAY, 5);
+        const [slot] = await sql<{ id: string }[]>`
+          INSERT INTO gym_class_schedules (gym_id, class_type_id, weekdays, local_start_minute, starts_on, minutes, places)
+          VALUES (${open.id}, ${booked.typeId}, ARRAY[1,2,3,4,5,6,7], 600, current_date, 45, 5) RETURNING id`;
+        if (slot === undefined) throw new Error("no time slot");
+        await sql`UPDATE gym_class_sessions SET schedule_id = ${slot.id} WHERE id = ${booked.id}`;
+        expect(view(await book(open, who, booked.id)).mine?.status).toBe("booked");
+
+        const stop = await inject("DELETE", `/v1/orgs/${open.id}/class-repeats/${slot.id}`, open.owner.cookies);
+        expect([stop.statusCode, JSON.parse(stop.body)]).toEqual([409, expect.objectContaining({ error: "class_has_bookings", message: "People have booked some of these classes, so this can't be done yet." })]);
+        const archive = await inject("DELETE", `/v1/orgs/${open.id}/classes/${booked.typeId}`, open.owner.cookies);
+        expect([archive.statusCode, errorOf(archive)]).toEqual([409, "class_has_bookings"]);
+        // Nothing was half done: the class, its time slot and the booking stand.
+        expect(await tally(booked.id)).toEqual({ booked: 1 });
+        const [still] = await sql<{ archived: boolean; ended: boolean }[]>`
+          SELECT t.archived_at IS NOT NULL AS archived, s.ended_at IS NOT NULL AS ended
+          FROM gym_class_types t JOIN gym_class_schedules s ON s.class_type_id = t.id WHERE t.id = ${booked.typeId}`;
+        expect(still).toEqual({ archived: false, ended: false });
+        // A class nobody has booked is archived as before.
+        expect((await inject("DELETE", `/v1/orgs/${open.id}/classes/${empty.typeId}`, open.owner.cookies)).statusCode).toBe(200);
+      } finally {
+        clock = kept;
+      }
     },
     T,
   );

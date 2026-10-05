@@ -8,7 +8,7 @@
 // nobody, and how long another gym's request waits for a connection while it runs.
 //
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg'
-//   corepack pnpm --filter api exec tsx tools/measure-bookings-cost.ts [--people=200] [--no-flush]
+//   corepack pnpm --filter api exec tsx tools/measure-bookings-cost.ts [--people=200] [--no-flush] [--keep]
 //
 // LOCAL DATABASES ONLY: it writes a gym, its people and their bookings, and removes them.
 import { createHash, randomUUID } from "node:crypto";
@@ -109,8 +109,12 @@ async function seed(): Promise<Seeded> {
     JOIN (SELECT user_id, entry_id, row_number() OVER (ORDER BY user_id) AS r FROM gym_members WHERE gym_id = ${gymId}) m
       ON (m.r + s.k) % ${Math.max(1, Math.floor(PEOPLE / 20))} = 0
     JOIN gym_held_memberships h ON h.gym_id = ${gymId} AND h.entry_id = m.entry_id`;
-  await sql`VACUUM ANALYZE gym_class_bookings`;
-  await sql`VACUUM ANALYZE gym_held_memberships`;
+  // Every table filled above: a table filled seconds ago has no statistics until the
+  // database's own analyse reaches it, and a plan made without them is not the one a gym
+  // meets (seen here: the waitlist's read at 2 ms with them and up to 362 ms without).
+  for (const table of ["users", "gym_members", "gym_member_list_entries", "gym_class_sessions", "gym_class_bookings", "gym_held_memberships"]) {
+    await sql`VACUUM ANALYZE ${sql(table)}`;
+  }
   return { gymId, owner, people, typeId };
 }
 
@@ -156,9 +160,21 @@ const who = (n: number): string => s.people[s.people.length - 1 - n] ?? "";
 
 const roomy = await classOf(s, 72, 500, 0, 0);
 const big = await classOf(s, 72, 500, 500, 100);
+// A class with places free and 100 people waiting whom nobody can move in (their packs
+// are used up): every Book on it reads them all first, under the gym's lock.
+const stuckPeople = s.people.slice(1500, 1600);
+const stuck = await classOf(s, 72, 500, 0, 0);
+if (stuckPeople.length > 0) {
+  await sql`
+    UPDATE gym_held_memberships h SET classes_left = 0
+    FROM gym_members m
+    WHERE m.gym_id = ${s.gymId} AND m.user_id = ANY(${stuckPeople}::uuid[]) AND h.gym_id = m.gym_id AND h.entry_id = m.entry_id`;
+  await sql`INSERT INTO gym_class_bookings ${sql(stuckPeople.map((userId) => ({ gym_id: s.gymId, session_id: stuck, user_id: userId, status: "waitlisted", request_key: randomUUID() })))}`;
+}
 let n = 0;
 const single: [string, () => Promise<unknown>][] = [
   ["book a place (a pack charged)", () => book(deps, who(n++), s.gymId, roomy, { requestKey: randomUUID(), joinWaitlist: false }, yes)],
+  [`book past ${String(stuckPeople.length)} waiting nobody can move in`, () => book(deps, who(n++), s.gymId, stuck, { requestKey: randomUUID(), joinWaitlist: false }, yes)],
   ["read one class as a member", () => getBooking(deps, who(0), s.gymId, roomy, yes)],
   [
     "cancel, the place handed to a waitlist of 20",
@@ -230,5 +246,6 @@ console.log(`  server thread busy in all: median ${fmt(median(burstJs))} (worst 
 console.log(`  longest single stall of the thread: median ${fmt(median(stalls))} (worst ${fmt(Math.max(...stalls))})`);
 console.log(`  longest another request waited for a database connection: median ${fmt(median(waits))} (worst ${fmt(Math.max(...waits))})`);
 
-await cleanup();
+if (process.argv.includes("--keep")) console.log(`kept: gym ${s.gymId}, the class with the stuck waitlist ${stuck}`);
+else await cleanup();
 await sql.end({ timeout: 5 });

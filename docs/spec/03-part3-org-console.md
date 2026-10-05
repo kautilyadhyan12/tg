@@ -2571,11 +2571,16 @@ own week (Monday to Sunday) or month, then a pack, the one ending soonest first.
 membership counts if it runs on the CLASS's day; a late cancel and a no-show count
 toward a week's bookings, a free cancel does not. "Gym only" includes an open-gym slot
 and no class. A late cancel answers 409 `late_cancel` until the request says `lateOk`.
+A booking keeps the key of the request that made it and of the Claim that took its
+place from the waitlist; either arriving again changes nothing. A place the waitlist is
+about to be handed reads as taken for anybody not waiting. A class staff cancelled does
+not count toward a week's bookings. A class's coach reads who is coming and waiting,
+not what they pay with.
 The four settings are columns on `gyms` with the starting values; the screen that
 changes them, the emails, and what happens to bookings when staff cancel, move or
 delete a class, when a member is removed or an account deleted, are 17c-ii: until then
-a class with a booking cannot be deleted (no cascade), so a pack's charge is never
-lost with it.)*
+a class with a booking cannot be deleted (no cascade; staff are answered 409
+`class_has_bookings`), so a pack's charge is never lost with it.)*
 
 ### 13.5 Personal training
 

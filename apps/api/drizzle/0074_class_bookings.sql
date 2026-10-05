@@ -23,7 +23,9 @@ ALTER TABLE "gym_class_sessions" ADD CONSTRAINT "gym_class_sessions_gym_id_uq" U
 -- the class): a pack's charge would go with it.
 -- `entry_id`: the person's record on the gym's list when they booked; it lets go when the
 -- record is deleted. `held_membership_id`: the membership the booking is on, the one a
--- pack's class is given back to.
+-- pack's class is given back to. `request_key` is the request that made the row and
+-- `claim_key` the request that claimed its place from the waitlist: either one arriving
+-- again finds the booking and changes nothing.
 CREATE TABLE "gym_class_bookings" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"seq" bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -35,12 +37,14 @@ CREATE TABLE "gym_class_bookings" (
 	"status" text NOT NULL,
 	"pack_charged" boolean DEFAULT false NOT NULL,
 	"request_key" uuid NOT NULL,
+	"claim_key" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"booked_at" timestamp with time zone,
 	"cancelled_at" timestamp with time zone,
 	CONSTRAINT "gym_class_bookings_session_fk" FOREIGN KEY ("gym_id", "session_id") REFERENCES "gym_class_sessions" ("gym_id", "id"),
 	CONSTRAINT "gym_class_bookings_entry_fk" FOREIGN KEY ("gym_id", "entry_id") REFERENCES "gym_member_list_entries" ("gym_id", "id") ON DELETE SET NULL ("entry_id"),
 	CONSTRAINT "gym_class_bookings_request_uq" UNIQUE ("gym_id", "request_key"),
+	CONSTRAINT "gym_class_bookings_claim_uq" UNIQUE ("gym_id", "claim_key"),
 	CONSTRAINT "gym_class_bookings_status_check" CHECK ("status" IN ('booked','waitlisted','cancelled','late_cancelled','attended','no_show')),
 	CONSTRAINT "gym_class_bookings_booked_check" CHECK ("status" NOT IN ('booked','attended','no_show','late_cancelled') OR "booked_at" IS NOT NULL),
 	CONSTRAINT "gym_class_bookings_cancelled_check" CHECK (("status" IN ('cancelled','late_cancelled')) = ("cancelled_at" IS NOT NULL)),

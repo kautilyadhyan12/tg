@@ -207,10 +207,13 @@ export async function contextOf(sql: SqlOrTx, gymId: string, sessionId: string, 
   };
 }
 
-/** The booking this gym keeps under a request's key, whoever made it. */
+/** The booking this gym keeps under a request's key, whoever made it: the request that
+ *  made it, or the one that claimed its place from the waitlist. */
 export async function byKey(sql: SqlOrTx, gymId: string, requestKey: string): Promise<BookingRow | null> {
   const rows = await sql`
-    SELECT ${BOOKING(sql)} FROM gym_class_bookings WHERE gym_id = ${gymId} AND request_key = ${requestKey}`;
+    SELECT ${BOOKING(sql)} FROM gym_class_bookings
+    WHERE gym_id = ${gymId} AND (request_key = ${requestKey} OR claim_key = ${requestKey})
+    ORDER BY seq LIMIT 1`;
   return rows[0] === undefined ? null : toBooking(rows[0]);
 }
 
@@ -222,34 +225,38 @@ export async function waitlistPlace(sql: SqlOrTx, gymId: string, sessionId: stri
   return rows[0]?.n ?? 0;
 }
 
-/** The class's waitlist, first in line first. */
-export async function waitlistOf(tx: TransactionSql, gymId: string, sessionId: string): Promise<BookingRow[]> {
-  const rows = await tx`
-    SELECT ${BOOKING(tx)} FROM gym_class_bookings
-    WHERE gym_id = ${gymId} AND session_id = ${sessionId} AND status = 'waitlisted'
-    ORDER BY seq`;
-  return rows.map(toBooking);
+export interface Waiter {
+  bookingId: string;
+  userId: string;
+  /** As `BookingContext.booker`: null where they are not a member now. */
+  booker: { entryId: string | null } | null;
 }
 
-/** The person as a booker: a live app member of the gym with an active account, and their
- *  record on its list where the list says which is theirs and it is not a past member's.
- *  Null: not a member now. */
-export async function bookerOf(sql: SqlOrTx, gymId: string, userId: string): Promise<{ entryId: string | null } | null> {
-  const rows = await sql<{ entry_id: string | null }[]>`
-    SELECT e.id AS entry_id
-    FROM gym_members m
-    JOIN users u ON u.id = m.user_id AND u.status = 'active'
+/** The class's waitlist, first in line first, each person as a booker, in one statement. */
+export async function waitlistOf(sql: SqlOrTx, gymId: string, sessionId: string): Promise<Waiter[]> {
+  const rows = await sql<{ id: string; user_id: string; member: boolean; entry_id: string | null }[]>`
+    SELECT b.id, b.user_id, (m.user_id IS NOT NULL AND u.id IS NOT NULL) AS member, e.id AS entry_id
+    FROM gym_class_bookings b
+    LEFT JOIN gym_members m ON m.gym_id = b.gym_id AND m.user_id = b.user_id AND m.removed_at IS NULL
+    LEFT JOIN users u ON u.id = m.user_id AND u.status = 'active'
     LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
-    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL
-    LIMIT 1`;
-  const r = rows[0];
-  return r === undefined ? null : { entryId: r.entry_id };
+    WHERE b.gym_id = ${gymId} AND b.session_id = ${sessionId} AND b.status = 'waitlisted'
+    ORDER BY b.seq`;
+  return rows.map((r) => ({ bookingId: r.id, userId: r.user_id, booker: r.member ? { entryId: r.entry_id } : null }));
 }
 
-/** The record's memberships in use, each with its bookings already counted in the week
- *  and the month the class is in (the gym's own days). */
-export async function coversOf(sql: SqlOrTx, gymId: string, entryId: string, session: BookingSession): Promise<HeldCover[]> {
-  const held = await heldForBooking(sql, gymId, entryId, session.classTypeId);
+/** These records' memberships in use, by record, each with its bookings already counted in
+ *  the week and the month the class is in (the gym's own days). A class staff cancelled
+ *  is not counted. Two statements, however many records. */
+export async function coversOf(
+  sql: SqlOrTx,
+  gymId: string,
+  entryIds: readonly string[],
+  session: BookingSession,
+): Promise<Map<string, HeldCover[]>> {
+  const covers = new Map<string, HeldCover[]>();
+  if (entryIds.length === 0) return covers;
+  const held = await heldForBooking(sql, gymId, entryIds, session.classTypeId);
   const limited = held.filter((h) => h.bookingsPeriod !== null).map((h) => h.id);
   const used = new Map<string, { week: number; month: number }>();
   if (limited.length > 0) {
@@ -263,13 +270,18 @@ export async function coversOf(sql: SqlOrTx, gymId: string, entryId: string, ses
       JOIN gym_class_sessions s ON s.gym_id = b.gym_id AND s.id = b.session_id
       WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${limited}::uuid[])
         AND b.status = ANY(${[...CLASS_BOOKING_COUNTED]}::text[])
+        AND s.status <> 'cancelled'
         AND s.local_date BETWEEN LEAST(${week.from}::date, ${month.from}::date) AND GREATEST(${week.to}::date, ${month.to}::date)
       GROUP BY b.held_membership_id`;
     for (const r of rows) used.set(r.id, { week: r.week, month: r.month });
   }
-  return held.map((h) => ({ ...h, used: h.bookingsPeriod === null ? 0 : (used.get(h.id)?.[h.bookingsPeriod] ?? 0) }));
+  for (const { entryId, ...h } of held) {
+    const list = covers.get(entryId) ?? [];
+    list.push({ ...h, used: h.bookingsPeriod === null ? 0 : (used.get(h.id)?.[h.bookingsPeriod] ?? 0) });
+    covers.set(entryId, list);
+  }
+  return covers;
 }
-
 /** A new booking, holding a place or waiting. */
 export async function insertBooking(
   tx: TransactionSql,
@@ -296,12 +308,22 @@ export async function insertBooking(
 /** Somebody waiting is given the place. */
 export async function moveIn(
   tx: TransactionSql,
-  input: { gymId: string; bookingId: string; entryId: string | null; heldMembershipId: string | null; packCharged: boolean; now: Date },
+  input: {
+    gymId: string;
+    bookingId: string;
+    entryId: string | null;
+    heldMembershipId: string | null;
+    packCharged: boolean;
+    /** The person's own Claim request; null where the place was handed to them. */
+    claimKey: string | null;
+    now: Date;
+  },
 ): Promise<void> {
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_class_bookings
     SET status = 'booked', booked_at = ${input.now}, entry_id = ${input.entryId},
-        held_membership_id = ${input.heldMembershipId}, pack_charged = ${input.packCharged}
+        held_membership_id = ${input.heldMembershipId}, pack_charged = ${input.packCharged},
+        claim_key = ${input.claimKey}
     WHERE gym_id = ${input.gymId} AND id = ${input.bookingId} AND status = 'waitlisted'
     RETURNING id`;
   if (rows.length !== 1) throw new Error("a waitlisted booking was not there to move in");

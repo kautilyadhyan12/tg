@@ -31,9 +31,11 @@
 // `requirePrivilege`** — §4.2's read-only console, unchanged: a gym with no live
 // plan keeps reading its own timetable and cannot change it, exactly like its
 // roster and its opening hours. No new refusal vocabulary is invented here.
-import type { Sql } from "postgres";
+import postgres, { type Sql } from "postgres";
 import {
+  CLASS_BOOKING_WORDS,
   CLASS_FILL_HORIZON_DAYS,
+  CLASS_HAS_BOOKINGS_ERROR,
   classColourSchema,
   classSessionStatusSchema,
   gymClassesResponseSchema,
@@ -51,6 +53,29 @@ import {
 } from "@app/shared";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import * as repo from "./repo.js";
+
+/** A change that would remove a class somebody has booked is refused by the database
+ *  (`gym_class_bookings_session_fk`: a pack's charge would go with the class), and
+ *  answered here in plain words. ROADMAP 17c-ii ends the bookings itself instead. */
+const keepingBookings =
+  <A extends unknown[], R>(write: (...args: A) => Promise<R>) =>
+  async (...args: A): Promise<R> => {
+    try {
+      return await write(...args);
+    } catch (err) {
+      if (err instanceof postgres.PostgresError && err.constraint_name === "gym_class_bookings_session_fk") {
+        throw new OrgsError(409, CLASS_HAS_BOOKINGS_ERROR, CLASS_BOOKING_WORDS.class_has_bookings);
+      }
+      throw err;
+    }
+  };
+/** The writes that delete coming classes. */
+const kept = {
+  archiveClassType: keepingBookings(repo.archiveClassType),
+  changeSlotFrom: keepingBookings(repo.changeSlotFrom),
+  bulkChangeSlots: keepingBookings(repo.bulkChangeSlots),
+  endSchedule: keepingBookings(repo.endSchedule),
+};
 
 export interface ClassesDeps {
   sql: Sql;
@@ -312,7 +337,7 @@ export async function archiveClassType(
 ): Promise<GymClassesResponse> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   throwOnFailure(
-    await repo.archiveClassType(deps.sql, {
+    await kept.archiveClassType(deps.sql, {
       gymId,
       classTypeId,
       actorUserId: userId,
@@ -465,7 +490,7 @@ export async function updateSchedule(
 ): Promise<SlotChangeAnswer<GymClassesResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const done = slotOutcome(
-    await repo.changeSlotFrom(deps.sql, {
+    await kept.changeSlotFrom(deps.sql, {
       gymId,
       target: {
         by: "slot",
@@ -497,7 +522,7 @@ export async function bulkEditSchedules(
   req: BulkEditGymClassSchedulesRequest,
 ): Promise<GymClassesResponse> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
-  const outcome = await repo.bulkChangeSlots(deps.sql, {
+  const outcome = await kept.bulkChangeSlots(deps.sql, {
     gymId,
     classTypeId,
     scheduleIds: req.scheduleIds,
@@ -657,7 +682,7 @@ export async function changeClassSession(
   }
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const done = slotOutcome(
-    await repo.changeSlotFrom(deps.sql, {
+    await kept.changeSlotFrom(deps.sql, {
       gymId,
       target: { by: "session", sessionId },
       startMinute: req.startMinute,
@@ -700,7 +725,7 @@ export async function endSchedule(
 ): Promise<GymClassesResponse> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   throwOnFailure(
-    await repo.endSchedule(deps.sql, {
+    await kept.endSchedule(deps.sql, {
       gymId,
       scheduleId,
       actorUserId: userId,

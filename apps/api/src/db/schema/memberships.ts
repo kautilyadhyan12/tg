@@ -205,12 +205,15 @@ export const gymClassBookings = pgTable(
     status: text("status").notNull(),
     packCharged: boolean("pack_charged").notNull().default(false),
     requestKey: uuid("request_key").notNull(),
+    /** The request that claimed the place from the waitlist, where a person did. */
+    claimKey: uuid("claim_key"),
     createdAt: createdAt(),
     bookedAt: timestamp("booked_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   },
   (t) => [
     unique("gym_class_bookings_request_uq").on(t.gymId, t.requestKey),
+    unique("gym_class_bookings_claim_uq").on(t.gymId, t.claimKey),
     check(
       "gym_class_bookings_status_check",
       sql`${t.status} IN ('booked','waitlisted','cancelled','late_cancelled','attended','no_show')`,

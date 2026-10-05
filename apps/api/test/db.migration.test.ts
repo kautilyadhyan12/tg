@@ -1722,7 +1722,7 @@ d("0001_init on a real database", () => {
         // Any number of cancelled ones, and one in use.
         expect(await put({})).toBe("ok");
         expect(await put({})).toBe("ok");
-        expect(await put({ ...booked, request_key: "00000000-0000-4000-8000-000000000074" })).toBe("ok");
+        expect(await put({ ...booked, request_key: "00000000-0000-4000-8000-000000000074", claim_key: "00000000-0000-4000-8000-000000000075" })).toBe("ok");
         const refused: [string, Record<string, unknown>, string][] = [
           ["a second booking of the class in use", booked, "gym_class_bookings_live_uq"],
           ["waiting while booked", { status: "waitlisted", booked_at: null, cancelled_at: null }, "gym_class_bookings_live_uq"],
@@ -1732,6 +1732,7 @@ d("0001_init on a real database", () => {
           ["a late cancel of nothing booked", { status: "late_cancelled", booked_at: null }, "gym_class_bookings_booked_check"],
           ["a pack charged for waiting", { pack_charged: true, booked_at: null }, "gym_class_bookings_pack_check"],
           ["the same request twice", { request_key: "00000000-0000-4000-8000-000000000074" }, "gym_class_bookings_request_uq"],
+          ["a Claim's request twice", { claim_key: "00000000-0000-4000-8000-000000000075" }, "gym_class_bookings_claim_uq"],
           ["another gym's class", { session_id: b.session }, "gym_class_bookings_session_fk"],
           ["another gym's record", { entry_id: b.entry }, "gym_class_bookings_entry_fk"],
         ];

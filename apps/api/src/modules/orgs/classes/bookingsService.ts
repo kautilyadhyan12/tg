@@ -28,6 +28,7 @@ import {
   type ClassBookingView,
   type ClassSessionBookingsResponse,
   type Cover,
+  type HeldCover,
   type StaffClassBooking,
 } from "@app/shared";
 import { getOrgById, getStaffAuthority, gymHasLivePlan, isLiveMember, lockOrgRow } from "../repo.js";
@@ -94,6 +95,9 @@ export function createLine(): Line {
   };
 }
 
+const pick = (ctx: Pick<repo.BookingContext, "session" | "gymHasTypes">, held: readonly HeldCover[]): Cover =>
+  pickCover({ gymHasTypes: ctx.gymHasTypes, openGym: ctx.session.openGym, classDay: ctx.session.localDate, held });
+
 /** Which membership covers a person for a class, by the rule. */
 async function coverFor(
   sql: Sql | TransactionSql,
@@ -101,60 +105,95 @@ async function coverFor(
   ctx: Pick<repo.BookingContext, "session" | "gymHasTypes">,
   entryId: string | null,
 ): Promise<Cover> {
-  const held = ctx.gymHasTypes && entryId !== null ? await repo.coversOf(sql, gymId, entryId, ctx.session) : [];
-  return pickCover({ gymHasTypes: ctx.gymHasTypes, openGym: ctx.session.openGym, classDay: ctx.session.localDate, held });
+  if (!ctx.gymHasTypes || entryId === null) return pick(ctx, []);
+  return pick(ctx, (await repo.coversOf(sql, gymId, [entryId], ctx.session)).get(entryId) ?? []);
 }
 
 const mineOf = (ctx: repo.BookingContext): "booked" | "waitlisted" | null =>
   ctx.latest?.status === "booked" || ctx.latest?.status === "waitlisted" ? ctx.latest.status : null;
 
-/** While the rule says a free place goes to the waitlist by itself, the first in line who
- *  may book is given it, and so on down the line. Under the gym's lock and the class's.
- *  Answers how many were moved in. */
-async function handOver(tx: TransactionSql, gymId: string, ctx: repo.BookingContext, now: Date): Promise<number> {
+interface Move {
+  waiter: repo.Waiter;
+  entryId: string | null;
+  cover: Extract<Cover, { ok: true }>;
+}
+
+/** Who the class's free places go to at this moment: while the rule says a free place
+ *  goes to the waitlist by itself, the first in line who may book, and so on down the
+ *  line. Somebody who may not is passed over and keeps their place. It reads and changes
+ *  nothing, in three statements whatever the waitlist's length. */
+async function handOverPlan(sql: Sql | TransactionSql, gymId: string, ctx: repo.BookingContext, now: Date): Promise<Move[]> {
   const time = bookingTime(now.getTime(), ctx.session.startsAt.getTime(), ctx.settings);
   let booked = ctx.counts.booked;
   const free = () => handsOverNow({ time, cancelled: ctx.session.cancelled, places: ctx.session.places, booked });
-  if (ctx.counts.waitlisted === 0 || !free()) return 0;
-  let moved = 0;
-  for (const waiting of await repo.waitlistOf(tx, gymId, ctx.session.id)) {
+  if (ctx.counts.waitlisted === 0 || !free()) return [];
+  const waiters = await repo.waitlistOf(sql, gymId, ctx.session.id);
+  const entryIds = ctx.gymHasTypes ? waiters.flatMap((w) => w.booker?.entryId ?? []) : [];
+  const covers = await repo.coversOf(sql, gymId, entryIds, ctx.session);
+  const moves: Move[] = [];
+  for (const waiter of waiters) {
     if (!free()) break;
-    const booker = await repo.bookerOf(tx, gymId, waiting.userId);
-    if (booker === null) continue;
-    const cover = await coverFor(tx, gymId, ctx, booker.entryId);
+    if (waiter.booker === null) continue;
+    const { entryId } = waiter.booker;
+    const cover = pick(ctx, entryId === null ? [] : (covers.get(entryId) ?? []));
     if (!cover.ok) continue;
-    if (cover.chargePack && cover.membershipId !== null && !(await chargePack(tx, gymId, cover.membershipId, now))) {
-      throw new Error("a pack the rule chose had no class left");
-    }
+    moves.push({ waiter, entryId, cover });
+    booked += 1;
+  }
+  return moves;
+}
+
+/** The plan carried out, under the gym's lock and the class's. Answers how many were
+ *  moved in. A pack with no class left when its turn comes (two people on one record)
+ *  moves nobody. */
+async function handOver(tx: TransactionSql, gymId: string, ctx: repo.BookingContext, now: Date): Promise<number> {
+  let moved = 0;
+  for (const { waiter, entryId, cover } of await handOverPlan(tx, gymId, ctx, now)) {
+    if (cover.chargePack && cover.membershipId !== null && !(await chargePack(tx, gymId, cover.membershipId, now))) continue;
     await repo.moveIn(tx, {
       gymId,
-      bookingId: waiting.id,
-      entryId: booker.entryId,
+      bookingId: waiter.bookingId,
+      entryId,
       heldMembershipId: cover.membershipId,
       packCharged: cover.chargePack,
+      claimKey: null,
       now,
     });
-    booked += 1;
     moved += 1;
   }
   return moved;
 }
 
-/** One class as this person sees it now. */
+/** One class as this person sees it now. Somebody who stopped being a member in the
+ *  instant after their booking was made is still answered, with nothing they can do. */
 async function viewOf(deps: Pick<BookingsDeps, "sql" | "now">, gymId: string, sessionId: string, userId: string): Promise<ClassBookingView> {
   const ctx = await repo.contextOf(deps.sql, gymId, sessionId, userId, false);
   if (ctx === null) throw classNotFound();
-  if (ctx.booker === null) throw notFound();
-  const { session, settings, counts, latest } = ctx;
-  const time = bookingTime(deps.now().getTime(), session.startsAt.getTime(), settings);
+  const { session, settings, counts, latest, booker } = ctx;
+  const now = deps.now();
+  const time = bookingTime(now.getTime(), session.startsAt.getTime(), settings);
   const mine = mineOf(ctx);
-  const cover = await coverFor(deps.sql, gymId, ctx, ctx.booker.entryId);
+  const cover: Cover = booker === null ? { ok: false, reason: "no_membership" } : await coverFor(deps.sql, gymId, ctx, booker.entryId);
+  // A free place the waitlist is about to be handed is taken, for anybody not waiting:
+  // their Book would hand it over first.
+  const promised = mine === null && booker !== null ? (await handOverPlan(deps.sql, gymId, ctx, now)).length : 0;
   const ask = (joinWaitlist: boolean) =>
-    decideBook({ time, cancelled: session.cancelled, places: session.places, ...counts, waitlistMax: settings.waitlistMax, mine, joinWaitlist, cover });
+    decideBook({
+      time,
+      cancelled: session.cancelled,
+      places: session.places,
+      booked: counts.booked + promised,
+      waitlisted: counts.waitlisted - promised,
+      waitlistMax: settings.waitlistMax,
+      mine,
+      joinWaitlist,
+      cover,
+    });
   const book = ask(false);
   const wait = ask(true);
   const cancel = decideCancel({ time, cancelled: session.cancelled, mine, packCharged: latest?.packCharged ?? false, lateOk: true });
   const startsAt = session.startsAt.getTime();
+  const member = booker !== null;
   return classBookingViewSchema.parse({
     sessionId: session.id,
     className: session.className,
@@ -178,15 +217,14 @@ async function viewOf(deps: Pick<BookingsDeps, "sql" | "now">, gymId: string, se
             packCharged: latest.packCharged,
           },
     can: {
-      book: book.kind === "book" && !book.fromWaitlist,
-      joinWaitlist: wait.kind === "waitlist",
-      claim: book.kind === "book" && book.fromWaitlist,
-      cancel: cancel.kind === "cancel" ? (cancel.status === "cancelled" ? "free" : "late") : null,
-      why: wait.kind === "refuse" ? wait.reason : null,
+      book: member && book.kind === "book" && !book.fromWaitlist,
+      joinWaitlist: member && wait.kind === "waitlist",
+      claim: member && book.kind === "book" && book.fromWaitlist,
+      cancel: member && cancel.kind === "cancel" ? (cancel.status === "cancelled" ? "free" : "late") : null,
+      why: member && wait.kind === "refuse" ? wait.reason : null,
     },
   });
 }
-
 export async function getBooking(deps: Pick<BookingsDeps, "sql" | "now">, userId: string, gymId: string, sessionId: string, limit: Limit): Promise<ClassBookingView | null> {
   await requireMember(deps, gymId, userId);
   if (!(await limit())) return null;
@@ -288,6 +326,7 @@ export async function book(
               entryId: booker.entryId,
               heldMembershipId: decision.membershipId,
               packCharged: decision.chargePack,
+              claimKey: req.requestKey,
               now,
             });
           } else {
@@ -407,8 +446,9 @@ export async function getSessionBookings(
         name: named.name,
         initials: named.name === null ? "" : named.initials,
         status: r.status,
-        membership: r.membership,
-        packCharged: r.packCharged,
+        // What a person pays with is for staff who run the timetable, not for a coach's list.
+        membership: manages ? r.membership : null,
+        packCharged: manages ? r.packCharged : null,
         at: r.at.toISOString(),
       };
     });

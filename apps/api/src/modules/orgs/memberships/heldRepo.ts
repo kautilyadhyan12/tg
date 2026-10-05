@@ -414,35 +414,36 @@ export async function moveHeld(
 }
 
 const forBookingSchema = z.object({
+  entry_id: z.string(),
   access: membershipAccessSchema,
   bookings_limit: z.number().int().nullable(),
   bookings_period: membershipLimitPeriodSchema.nullable(),
   covers_class: z.boolean(),
 });
 
-/** A record's memberships in use, each with what its type includes for one class (17c-i).
- *  `used` is the booking repo's to count. For a booking, under the gym's lock. */
+/** These records' memberships in use, each with what its type includes for one class
+ *  (17c-i). `used` is the booking repo's to count. For a booking, under the gym's lock. */
 export async function heldForBooking(
   tx: Sql | TransactionSql,
   gymId: string,
-  entryId: string,
+  entryIds: readonly string[],
   classTypeId: string,
-): Promise<Omit<HeldCover, "used">[]> {
+): Promise<(Omit<HeldCover, "used"> & { entryId: string })[]> {
   const rows = await tx`
-    SELECT ${COLUMNS(tx)}, t.access, t.bookings_limit, t.bookings_period,
+    SELECT ${COLUMNS(tx)}, h.entry_id, t.access, t.bookings_limit, t.bookings_period,
            (t.covers_all_classes OR EXISTS (
              SELECT 1 FROM gym_membership_type_classes c
              WHERE c.gym_id = t.gym_id AND c.membership_type_id = t.id AND c.class_type_id = ${classTypeId}
            )) AS covers_class
     FROM gym_held_memberships h
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-    WHERE h.gym_id = ${gymId} AND h.entry_id = ${entryId} AND h.status = ANY(${[...IN_USE]}::text[])
-    ORDER BY h.id
-    LIMIT ${IN_USE_READ}`;
+    WHERE h.gym_id = ${gymId} AND h.entry_id = ANY(${[...entryIds]}::uuid[]) AND h.status = ANY(${[...IN_USE]}::text[])
+    ORDER BY h.id`;
   return rows.map((row) => {
     const extra = forBookingSchema.parse(row);
     const h = shape(row);
     return {
+      entryId: extra.entry_id,
       id: h.id,
       membership: h.membership,
       access: extra.access,

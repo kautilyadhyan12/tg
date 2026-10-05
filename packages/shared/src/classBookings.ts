@@ -228,7 +228,11 @@ export const CLASS_BOOKING_WORDS = {
   late_cancel_pack: "It's too late to cancel for free. Cancelling now counts as a late cancel, and the class stays used on your pack.",
   request_reused: "That didn't go through. Try again.",
   class_not_found: "That class was not found.",
+  /** Staff, on a change that would remove a class somebody has booked. */
+  class_has_bookings: "People have booked some of these classes, so this can't be done yet.",
 } as const;
+
+export const CLASS_HAS_BOOKINGS_ERROR = "class_has_bookings";
 
 export const CLASS_LATE_CANCEL_ERROR = "late_cancel";
 
@@ -293,9 +297,10 @@ const staffBookingSchema = z
     name: z.string().nullable(),
     initials: z.string(),
     status: classBookingStatusSchema,
-    /** The membership it was booked on; null where the gym has no membership types. */
+    /** The membership it was booked on; null where the gym has no membership types.
+     *  It and `packCharged` are null for a coach reading their own class's list. */
     membership: z.string().nullable(),
-    packCharged: z.boolean(),
+    packCharged: z.boolean().nullable(),
     at: z.string().datetime(),
   })
   .strict();
