@@ -4,7 +4,7 @@ import { CLASS_LATE_CANCEL_ERROR, MEMBER_CLASSES_WEEKS } from '@app/shared';
 import { classesService } from '../../api/classesApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
-import { actionsOf, byDay, cancelAsk, dayHeading, doneText, mineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
+import { actionsOf, byDay, cancelAsk, cancelledText, dayHeading, mineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
 
 // A GYM'S CLASSES FOR ITS MEMBER (spec Part 3 §13.6; ROADMAP 17d): the coming classes by
 // day, with Book, Join waitlist, Claim place and Cancel. The server decides every one; a
@@ -136,7 +136,6 @@ export default function Classes({ gym }) {
       const now = await classesService.book(gym.id, c.sessionId, key, action.joinWaitlist);
       keys.current.delete(c.sessionId);
       put(now);
-      say(c.sessionId, doneText(action.kind, now), false);
     } catch (err) {
       // An answer from the server ends this tap; no answer keeps its key for the retry.
       if (err?.response !== undefined) keys.current.delete(c.sessionId);
@@ -155,7 +154,7 @@ export default function Classes({ gym }) {
     try {
       const now = await classesService.cancel(gym.id, c.sessionId, lateOk);
       put(now);
-      say(c.sessionId, doneText('cancel', now), false);
+      say(c.sessionId, cancelledText(now), false);
       setAsking(null);
     } catch (err) {
       if (errorCode(err) === CLASS_LATE_CANCEL_ERROR && !lateOk) {

@@ -17,7 +17,7 @@ import {
   type ClassBookingStatus,
   type HeldCover,
 } from "@app/shared";
-import { heldForBooking } from "../memberships/heldRepo.js";
+import { heldForBooking, heldForClasses } from "../memberships/heldRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -307,6 +307,51 @@ export async function coversOf(
   }
   return covers;
 }
+
+/** `coversOf` for one record and many classes at once, by class: the record's memberships
+ *  in use as each class meets them. Two statements, however many classes. A plain read. */
+export async function coversOfClasses(
+  sql: SqlOrTx,
+  gymId: string,
+  entryId: string,
+  sessions: readonly BookingSession[],
+): Promise<Map<string, HeldCover[]>> {
+  const covers = new Map<string, HeldCover[]>();
+  if (sessions.length === 0) return covers;
+  const held = await heldForClasses(sql, gymId, entryId);
+  const limited = held.filter((h) => h.bookingsPeriod !== null).map((h) => h.id);
+  const periods = new Map(sessions.map((s) => [s.id, { week: bookingPeriod(s.localDate, "week"), month: bookingPeriod(s.localDate, "month") }]));
+  // Its counted bookings by membership and day, over every week and month the classes are in.
+  let counted: { id: string; day: string; n: number }[] = [];
+  if (limited.length > 0) {
+    const ends = [...periods.values()].flatMap((p) => [p.week.from, p.week.to, p.month.from, p.month.to]).sort();
+    counted = await sql<{ id: string; day: string; n: number }[]>`
+      SELECT b.held_membership_id AS id, s.local_date::text AS day, count(*)::int AS n
+      FROM gym_class_bookings b
+      JOIN gym_class_sessions s ON s.gym_id = b.gym_id AND s.id = b.session_id
+      WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${limited}::uuid[])
+        AND b.status = ANY(${[...CLASS_BOOKING_COUNTED]}::text[])
+        AND s.status <> 'cancelled'
+        AND s.local_date BETWEEN ${ends[0] ?? ""}::date AND ${ends[ends.length - 1] ?? ""}::date
+      GROUP BY b.held_membership_id, s.local_date`;
+  }
+  for (const session of sessions) {
+    const period = periods.get(session.id);
+    covers.set(
+      session.id,
+      held.map(({ coversAll, classTypeIds, ...h }) => {
+        const within = h.bookingsPeriod === null || period === undefined ? null : period[h.bookingsPeriod];
+        return {
+          ...h,
+          coversClass: coversAll || classTypeIds.includes(session.classTypeId),
+          used: within === null ? 0 : counted.reduce((sum, c) => (c.id === h.id && c.day >= within.from && c.day <= within.to ? sum + c.n : sum), 0),
+        };
+      }),
+    );
+  }
+  return covers;
+}
+
 /** A new booking, holding a place or waiting. */
 export async function insertBooking(
   tx: TransactionSql,

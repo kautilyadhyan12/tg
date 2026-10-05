@@ -246,7 +246,8 @@ d("a member's list of classes (real Postgres)", () => {
       await ok(book(gym, pat, second.id, { joinWaitlist: true }));
       const mine = await classAt(gym, 31, 1);
       await ok(book(gym, pat, mine.id));
-      await ok(book(gym, lim, (await classAt(gym, 32, 3)).id));
+      const limits = await classAt(gym, 32, 3);
+      await ok(book(gym, lim, limits.id));
       // Inside the last day: a cancel frees the place and hands it to nobody.
       const claim = await classAt(gym, 5, 1);
       await ok(book(gym, f1, claim.id));
@@ -262,14 +263,16 @@ d("a member's list of classes (real Postgres)", () => {
       await ok(book(gym, pat, off.id));
       await sql`UPDATE gym_class_sessions SET status = 'cancelled' WHERE id = ${off.id}`;
       const unlimited = await classAt(gym, 50, null);
-      // Monday 12 October: the next of the gym's weeks, inside the same seven days.
-      const monday = await classAt(gym, 5 * DAY, 5);
+      // The same kind of class again this week, and on Monday 12 October: the next of the
+      // gym's weeks, inside the same seven days.
+      const sameWeek = await classAt(gym, 33, 5, { typeId: limits.typeId });
+      const monday = await classAt(gym, 5 * DAY, 5, { typeId: limits.typeId });
       // A membership that includes one kind of class and no other.
       const onlyType = await typeOf(gym, { coversAll: false });
       await sql`INSERT INTO gym_membership_type_classes (gym_id, membership_type_id, class_type_id) VALUES (${gym.id}, ${onlyType}, ${unlimited.typeId})`;
       const ona = await listed(gym, "Ona Only");
       await hold(gym, ona.entryId, onlyType);
-      const sessions = [free, second, mine, claim, promised, off, unlimited, monday].map((c) => c.id);
+      const sessions = [free, second, mine, claim, promised, off, unlimited, sameWeek, monday].map((c) => c.id);
 
       for (const who of [pat, lim, nom, unlisted, ona, f1, f2, f3]) {
         const list = await listOf(gym, who);
@@ -311,6 +314,7 @@ d("a member's list of classes (real Postgres)", () => {
       expect(rowOf(await listOf(gym, lim), free.id).can).toEqual({ book: false, joinWaitlist: false, claim: false, cancel: null, why: "limit_week" });
       // The week's one booking is counted in the class's own week, and a membership covers
       // the kind of class it names: neither is read once and used for every class.
+      expect(rowOf(await listOf(gym, lim), sameWeek.id).can).toMatchObject({ book: false, why: "limit_week" });
       expect(rowOf(await listOf(gym, lim), monday.id).can).toMatchObject({ book: true, why: null });
       const onas = await listOf(gym, ona);
       expect(rowOf(onas, unlimited.id).can).toMatchObject({ book: true, why: null });
@@ -318,6 +322,32 @@ d("a member's list of classes (real Postgres)", () => {
       expect(rowOf(onas, monday.id).can).toMatchObject({ book: false, why: "not_covered" });
       expect(rowOf(await listOf(gym, nom), free.id).can).toMatchObject({ book: false, why: "no_membership" });
       expect(rowOf(await listOf(gym, unlisted), free.id).can).toMatchObject({ book: false, why: "no_membership" });
+    },
+    T,
+  );
+
+  it(
+    "a membership's bookings a month are counted in each class's own month, on one page",
+    async () => {
+      const gym = await makeGym("Month End");
+      // Booking opens eight weeks ahead here, so a class weeks away is decided by the membership.
+      await sql`UPDATE gyms SET booking_opens_days = 56 WHERE id = ${gym.id}`;
+      const monthly = await typeOf(gym, { access: "limited", limit: 1, period: "month" });
+      const mo = await listed(gym, "Mo Monthly");
+      await hold(gym, mo.entryId, monthly);
+      // Week 3 is Wednesday 28 October to Tuesday 3 November.
+      const october = await classAt(gym, 21 * DAY + 3, 5);
+      const alsoOctober = await classAt(gym, 23 * DAY, 5, { typeId: october.typeId });
+      const november = await classAt(gym, 26 * DAY, 5, { typeId: october.typeId });
+      view(await book(gym, mo, october.id));
+
+      const list = await listOf(gym, mo, 3);
+      expect(list).toMatchObject({ from: "2026-10-28", to: "2026-11-03" });
+      expect(list.classes.map((c) => c.localDate)).toEqual(["2026-10-28", "2026-10-30", "2026-11-02"]);
+      for (const row of list.classes) expect(row, row.localDate).toEqual(await seen(gym, mo, row.sessionId));
+      expect(rowOf(list, october.id)).toMatchObject({ mine: { status: "booked" } });
+      expect(rowOf(list, alsoOctober.id).can).toMatchObject({ book: false, why: "limit_month" });
+      expect(rowOf(list, november.id).can).toMatchObject({ book: true, why: null });
     },
     T,
   );

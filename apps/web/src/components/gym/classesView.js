@@ -58,7 +58,7 @@ export function zoneNote(classes, gymName, deviceZone) {
   });
   if (!differs) return null;
   const zone = classes[0]?.timezone ?? '';
-  return `Times are ${gymName}'s own (${zone.replaceAll('_', ' ')}), not this device's.`;
+  return `Times are ${gymName} time (${zone.replaceAll('_', ' ')}), not this device's.`;
 }
 
 /** How full the class is. */
@@ -148,10 +148,8 @@ export function cancelAsk(c) {
   };
 }
 
-/** What is said once a tap has gone through, from the class as the server now has it. */
-export function doneText(kind, c) {
-  if (kind === 'cancel') return c.mine?.status === 'late_cancelled' ? 'Cancelled late.' : 'Cancelled.';
-  if (c.mine?.status === 'booked') return "You're booked.";
-  if (c.mine?.status === 'waitlisted') return "You're on the waitlist, not booked.";
-  return null;
+/** What is said once a cancel has gone through, from the class as the server now has it.
+ *  A booking needs no line of its own: the row says "You're booked", or that they wait. */
+export function cancelledText(c) {
+  return c.mine?.status === 'late_cancelled' ? 'Cancelled late.' : 'Cancelled.';
 }

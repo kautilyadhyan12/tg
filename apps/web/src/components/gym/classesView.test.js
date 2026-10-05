@@ -1,6 +1,6 @@
 // A MEMBER'S CLASSES, IN WORDS (ROADMAP 17d).
 import { describe, expect, it } from 'vitest';
-import { actionsOf, byDay, cancelAsk, clockText, dayHeading, doneText, instantText, mineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
+import { actionsOf, byDay, cancelAsk, cancelledText, clockText, dayHeading, instantText, mineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
 
 const can = (over = {}) => ({ book: false, joinWaitlist: false, claim: false, cancel: null, why: null, ...over });
 const klass = (over = {}) => ({
@@ -34,8 +34,8 @@ describe('the time is the gym’s own', () => {
     expect(zoneNote(list, 'Iron House', 'Europe/London')).toBeNull();
     // Dublin keeps London's clock.
     expect(zoneNote(list, 'Iron House', 'Europe/Dublin')).toBeNull();
-    expect(zoneNote(list, 'Iron House', 'Asia/Kolkata')).toBe("Times are Iron House's own (Europe/London), not this device's.");
-    expect(zoneNote([klass({ timezone: 'America/New_York' })], 'Iron House', 'Europe/London')).toBe("Times are Iron House's own (America/New York), not this device's.");
+    expect(zoneNote(list, 'Iron House', 'Asia/Kolkata')).toBe("Times are Iron House time (Europe/London), not this device's.");
+    expect(zoneNote([klass({ timezone: 'America/New_York' })], 'Iron House', 'Europe/London')).toBe("Times are Iron House time (America/New York), not this device's.");
     expect(zoneNote(list, 'Iron House', 'Not/AZone')).not.toBeNull();
     expect(zoneNote([], 'Iron House', 'Asia/Kolkata')).toBeNull();
   });
@@ -129,12 +129,8 @@ describe('what a class says', () => {
     });
   });
 
-  it('says what a tap did from what the server now has', () => {
-    expect(doneText('book', klass({ mine: mine('booked') }))).toBe("You're booked.");
-    // A Book that found the class full and waited is not a booking.
-    expect(doneText('book', klass({ mine: mine('waitlisted', { waitlistPlace: 1 }) }))).toBe("You're on the waitlist, not booked.");
-    expect(doneText('waitlist', klass({ mine: mine('booked') }))).toBe("You're booked.");
-    expect(doneText('cancel', klass({ mine: mine('cancelled') }))).toBe('Cancelled.');
-    expect(doneText('cancel', klass({ mine: mine('late_cancelled') }))).toBe('Cancelled late.');
+  it('says which kind of cancel went through', () => {
+    expect(cancelledText(klass({ mine: mine('cancelled') }))).toBe('Cancelled.');
+    expect(cancelledText(klass({ mine: mine('late_cancelled') }))).toBe('Cancelled late.');
   });
 });

@@ -2631,6 +2631,20 @@ scan (§12) from 30 minutes before a booked class until it ends marks the bookin
 twice. Booked · on the waitlist · moved in · a place is free · class changed or
 cancelled · PT booked or cancelled: fixed-word emails now, phone notifications with the
 phone app (Part 7 of the re-plan).
+*(2026-10-05, RULINGS that day: the booking emails are not built. A member is told in the
+app, by the inbox and the phone's notification; until then staff tell them.)*
+*(17d, 2026-10-05: **the member's side.** `GET …/member-classes?week=0..7` answers the
+gym's classes that have not started on seven of its own days (week 0 starts today), the
+soonest first, each exactly as that class's own read answers it, with the week's first
+and last day and the gym's time zone; for a live app member of a gym on a live plan, 404
+for anybody else. The person's memberships are read once for the page (two statements),
+not once a class. The member web's Classes tab on My Gyms, beside Updates and
+Leaderboard, lists them by day on the gym's clock and names the gym's zone when the
+device's differs; one button to take a place (Book · Join waitlist · Claim place) and one
+to give it up (Cancel booking · Leave waitlist), a box before every cancel that says
+what it costs; waiting reads "On the waitlist, not booked", never as a booking. It is a
+plain screen, the member web's until the phone app has its own. Not on it yet: the
+class's coach.)*
 
 ### 13.7 Cost at full size, cards, the two extra passes
 

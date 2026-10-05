@@ -99,9 +99,10 @@ describe('a member’s classes', () => {
     );
     render(<Classes gym={GYM} />);
     fireEvent.click(await screen.findByRole('button', { name: /^Join waitlist: Spin/ }));
-    expect(await screen.findByText("You're on the waitlist, not booked.")).toBeTruthy();
+    // A Book that waited is not a booking, and the row never says it is.
+    expect(await screen.findByText('On the waitlist, not booked · 1st in line')).toBeTruthy();
     expect(svc.book).toHaveBeenCalledWith('g1', 's1', 'key-1', true);
-    expect(rowOf('Spin').textContent).toContain('On the waitlist, not booked · 1st in line');
+    expect(rowOf('Spin').textContent).not.toContain("You're booked");
   });
 
   it('a tap that got no answer is sent again under the same key; an answered one gets a new key', async () => {
@@ -180,7 +181,7 @@ describe('a member’s classes', () => {
     render(<Classes gym={GYM} />);
     expect(await screen.findByText('A place is free. The first person on the waitlist to claim it has it.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /^Claim place: Spin/ }));
-    expect(await screen.findByText("You're booked.")).toBeTruthy();
+    expect(await screen.findByText("You're booked")).toBeTruthy();
     expect(svc.book).toHaveBeenCalledWith('g1', 's1', 'key-1', false);
   });
 
@@ -202,7 +203,7 @@ describe('a member’s classes', () => {
   it('says whose clock the times are on when this device is in another zone', async () => {
     svc.list.mockResolvedValue(week([klass('s1', 'Spin', { timezone: 'Pacific/Kiritimati' })]));
     render(<Classes gym={GYM} />);
-    expect(await screen.findByText("Times are Iron House's own (Pacific/Kiritimati), not this device's.")).toBeTruthy();
+    expect(await screen.findByText("Times are Iron House time (Pacific/Kiritimati), not this device's.")).toBeTruthy();
     // The row still prints the gym's clock.
     expect(rowOf('Spin').textContent).toContain('6:00 pm');
   });

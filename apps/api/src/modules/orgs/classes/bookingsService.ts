@@ -18,7 +18,6 @@ import {
   CLASS_BOOKING_WORDS,
   CLASS_LATE_CANCEL_ERROR,
   addDays,
-  bookingPeriod,
   bookingTime,
   classBookingSettingsResponseSchema,
   classBookingViewSchema,
@@ -128,11 +127,11 @@ const mineOf = (ctx: repo.BookingContext): "booked" | "waitlisted" | null =>
 async function viewOf(deps: Pick<BookingsDeps, "sql" | "now">, gymId: string, sessionId: string, userId: string): Promise<ClassBookingView> {
   const ctx = await repo.contextOf(deps.sql, gymId, sessionId, userId, false);
   if (ctx === null) throw classNotFound();
-  return await viewFrom(deps.sql, gymId, ctx, userId, deps.now(), (entryId) => coverFor(deps.sql, gymId, ctx, entryId));
+  return classBookingViewSchema.parse(await viewFrom(deps.sql, gymId, ctx, userId, deps.now(), (entryId) => coverFor(deps.sql, gymId, ctx, entryId)));
 }
 
-/** The view of one class from what was read about it. `coverOf`: which membership covers
- *  this person for it, read now. */
+/** The view of one class from what was read about it, for the caller to parse. `coverOf`:
+ *  which membership covers this person for it, read now. */
 async function viewFrom(
   sql: Sql,
   gymId: string,
@@ -170,7 +169,7 @@ async function viewFrom(
   const cancel = decideCancel({ time, cancelled: session.cancelled, mine, packCharged: latest?.packCharged ?? false, lateOk: true });
   const startsAt = session.startsAt.getTime();
   const member = booker !== null;
-  return classBookingViewSchema.parse({
+  return {
     sessionId: session.id,
     className: session.className,
     localDate: session.localDate,
@@ -199,7 +198,7 @@ async function viewFrom(
       cancel: member && cancel.kind === "cancel" ? (cancel.status === "cancelled" ? "free" : "late") : null,
       why: member && wait.kind === "refuse" ? wait.reason : null,
     },
-  });
+  };
 }
 export async function getBooking(deps: Pick<BookingsDeps, "sql" | "now">, userId: string, gymId: string, sessionId: string, limit: Limit): Promise<ClassBookingView | null> {
   await requireMember(deps, gymId, userId);
@@ -207,9 +206,8 @@ export async function getBooking(deps: Pick<BookingsDeps, "sql" | "now">, userId
   return await viewOf(deps, gymId, sessionId, userId);
 }
 
-/** A week of the gym's coming classes, each as one class's own read answers it. A
- *  person's memberships are read once for each kind of class and each week and month the
- *  page touches, not once a class. */
+/** A week of the gym's coming classes, each as one class's own read answers it. The
+ *  person's memberships are read once for the whole page, not once a class. */
 export async function getMemberClasses(
   deps: Pick<BookingsDeps, "sql" | "now">,
   userId: string,
@@ -222,18 +220,16 @@ export async function getMemberClasses(
   const now = deps.now();
   const from = addDays(dayInTz(now, timezone), query.week * 7);
   const to = addDays(from, 6);
-  const read = new Map<string, Promise<Map<string, HeldCover[]>>>();
+  const contexts = await repo.comingContexts(deps.sql, gymId, userId, { now, from, to });
+  // Every class answers the same person, so the same record.
+  const record = contexts.find((ctx) => ctx.gymHasTypes)?.booker?.entryId ?? null;
+  const covers = record === null ? new Map<string, HeldCover[]>() : await repo.coversOfClasses(deps.sql, gymId, record, contexts.map((ctx) => ctx.session));
   const classes: ClassBookingView[] = [];
-  for (const ctx of await repo.comingContexts(deps.sql, gymId, userId, { now, from, to })) {
+  for (const ctx of contexts) {
     classes.push(
-      await viewFrom(deps.sql, gymId, ctx, userId, now, async (entryId) => {
-        if (!ctx.gymHasTypes || entryId === null) return pick(ctx, []);
-        const { session } = ctx;
-        const key = `${session.classTypeId} ${bookingPeriod(session.localDate, "week").from} ${bookingPeriod(session.localDate, "month").from}`;
-        const held = read.get(key) ?? repo.coversOf(deps.sql, gymId, [entryId], session);
-        read.set(key, held);
-        return pick(ctx, (await held).get(entryId) ?? []);
-      }),
+      await viewFrom(deps.sql, gymId, ctx, userId, now, (entryId) =>
+        Promise.resolve(pick(ctx, !ctx.gymHasTypes || entryId === null ? [] : (covers.get(ctx.session.id) ?? []))),
+      ),
     );
   }
   return memberClassesResponseSchema.parse({ week: query.week, from, to, timezone, classes });
