@@ -14,6 +14,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Real run on :3000/:5173 in headless Edge** (Harbour Gym Classes, owner; 1280 and 390 wide): the list on a full class (Maya booked, Asha first on the waitlist); Maya's page, Cancel membership, Cancel today, the box with three classes and "and 1 more", See all, its button. In the database after: her pack's class still booked, the four on Gold cancelled, Asha booked and her pack charged. No browser errors, no sideways scroll. It found "1 of 1 places", fixed.
 - **Open:** a frozen membership, and one whose last payment mark is taken back, keep their bookings; the list shows no "came" or "no-show" yet (17f); nobody is told (the inbox, 20a). The four changed pictures under `apps/web/public/images/dashboard` were in the folder before this job and are not in its commits. This folder's local api was restarted on this branch (it was running older code).
 - **Next in Folder A:** 17e (personal training).
+
 ## 2026-10-05 · 19b-v (Folder B): the two extra passes over Updates, fixed (branch `updates-extra-passes`)
 
 - **Why this job:** CLAUDE.md §6's two extra passes over the whole feature (#169–#176), due before anybody uses Updates. Two fresh terminals: security found 2 High and 4 Low, data integrity 2 High and 3 Low; nobody outside a gym could read or change its posts. Kd asked *"can you see?"*; the fixing was started on that, not on the words "Fix the findings". Migration 0076, no new package, no cost.
