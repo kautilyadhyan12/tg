@@ -36,6 +36,9 @@ export function consoleMenu(orgSlug, privileges, orgType) {
       phone: 'tab',
     },
     canManageSchedule(privileges) && { key: 'classes', to: `${base}/classes`, end: false, label: 'Classes', phone: 'tab' },
+    // Every member of staff: their own hours and sessions, or everybody's for whoever
+    // runs the timetable.
+    Array.isArray(privileges) && { key: 'training', to: `${base}/personal-training`, end: false, label: 'Personal training', phone: 'more' },
     canManagePosts(privileges) && { key: 'updates', to: `${base}/updates`, end: false, label: 'Updates', phone: 'more' },
     canSeeLeaderboard(privileges) && {
       key: 'leaderboard',

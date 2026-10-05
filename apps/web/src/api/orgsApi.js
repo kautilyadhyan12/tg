@@ -117,6 +117,9 @@ import {
   removeMemberResponseSchema,
   removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
+  ptAppointmentResponseSchema,
+  ptTrainersResponseSchema,
+  ptWeekResponseSchema,
   sendGymCheerResponseSchema,
   startOrgTrialResponseSchema,
   updateOrgResponseSchema,
@@ -1672,6 +1675,45 @@ export const orgService = {
       gymClassWeekResponseSchema,
       'that day',
       authApi.post(`/v1/orgs/${gymId}/class-sessions/${sessionId}/restore`, {}),
+    ),
+
+  // PERSONAL TRAINING (spec Part 3 §13.5; ROADMAP 17e-i). Staff who run the timetable see
+  // every trainer; anybody else on staff has their own hours and sessions.
+
+  /** GET …/pt/trainers — the gym's staff and their personal-training hours. */
+  getPtTrainers: (gymId) =>
+    readThrough(ptTrainersResponseSchema, 'your trainers', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/pt/trainers`)),
+
+  /** PUT …/pt/trainers/:userId — one trainer's hours, all of them every time. */
+  savePtTrainer: (gymId, userId, body) =>
+    readThrough(
+      ptTrainersResponseSchema,
+      'those hours',
+      authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/pt/trainers/${encodeURIComponent(userId)}`, body),
+    ),
+
+  /** GET …/pt/week — seven days of one trainer from `from`: free times and sessions. */
+  getPtWeek: (gymId, trainerId, from) =>
+    readThrough(
+      ptWeekResponseSchema,
+      'that week',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/pt/week`, {
+        params: { trainer: trainerId, ...(typeof from === 'string' && from !== '' ? { from } : {}) },
+      }),
+    ),
+
+  /** POST …/pt/appointments — book a person on the member list with a trainer. The same
+   *  `requestKey` again changes nothing. */
+  bookPt: (gymId, body) =>
+    readThrough(ptAppointmentResponseSchema, 'that session', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/pt/appointments`, body)),
+
+  /** POST …/pt/appointments/:id/cancel — past the free time the server answers 409
+   *  `late_cancel` until `lateOk`; `giveBack` then gives a pack its session back. */
+  cancelPt: (gymId, appointmentId, { lateOk = false, giveBack = false } = {}) =>
+    readThrough(
+      ptAppointmentResponseSchema,
+      'that session',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/pt/appointments/${encodeURIComponent(appointmentId)}/cancel`, { lateOk, giveBack }),
     ),
 };
 
