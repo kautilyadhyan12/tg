@@ -219,7 +219,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 19b-ii-a. [x] **Members post, Report and the reported list** — merged 2026-10-05 (PR #170).
        - 19b-ii-b. [x] **Block, the bad-words check and the support address** — merged 2026-10-05 (PR #172).
        - 19b-ii-c. [ ] **A person's posts on their profile** (RULINGS 2026-10-02, 2026-10-03): a tap on a name on the board or a post shows that person's posts, to members and to staff.
-     - 19b-iii. [ ] **Video**: one video of up to a minute a post, 20 a gym. Needs Kd's Cloudflare Stream account.
+     - 19b-iii. [ ] **Video**: only the gym's staff post it, one video of up to a minute a post, 20 a month a gym, played on a tap (RULINGS 2026-10-05). Needs Kd's Cloudflare Stream account.
+     - 19b-iv. [ ] **Smaller photos before upload** (RULINGS 2026-10-05): a post's photo is resized to a phone screen's size before it is sent (today up to 2 MB each), measured before and after; it cuts what photo storage costs.
    - 19c. [ ] **Events**, counted by 17c's Book rule. 19d. [ ] **Challenges** (the document's leagues and tournaments; knock-outs later).
    - 19e. [ ] **A gym's own plan for a member**, after Stage 1 items 6a and 6b. **Its plan first settles §15.7's open question with Kd: whether a trainer sees a member's food, weight and plan only after the member's own tap.**
 20. **Messages, in the app** (RULINGS 2026-09-22, Part 7 of the re-plan; spec Part 3 §16.1–16.4) — it takes in item 2. Every card Opus xhigh (it sends data out to real people).
