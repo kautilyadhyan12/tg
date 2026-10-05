@@ -196,7 +196,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
            - 17b-ii-b-ii-a. [x] **Change a time slot from a date** — merged 2026-09-23 (PR #97).
            - 17b-ii-b-ii-b. [x] **Edit all time slots of a class at once** — merged 2026-09-23 (PR #99).
    - 17c. **Booking and the waitlist, on the server** (§13.4), split 2026-10-05 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
-     - 17c-i. [ ] **Book, Cancel, the waitlist and Claim.**
+     - 17c-i. [x] **Book, Cancel, the waitlist and Claim** — merged 2026-10-05 (PR #173).
      - 17c-ii. [ ] **Bookings when things change, the settings and the emails**: staff cancel, move, shrink or delete a class that has bookings (bookings ended, packs given back, the waitlist handed a bigger class's places; today a class with a booking cannot be deleted and answers 409 `class_has_bookings`); a member removed or an account deleted loses their coming bookings; Settings → the four booking numbers; the emails (booked · moved in · a place is free · class cancelled).
    - 17d. [ ] **The member's side**: the list by day with Book · Cancel · Join waitlist · Claim, on the member web until the phone app shows it.
    - 17e. [ ] **Personal training**: a trainer's hours and session length, free times worked out, an appointment the DATABASE refuses to overlap, booked at once, PT packs.
