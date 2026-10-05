@@ -200,7 +200,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 17c-ii. **Bookings when things change, the settings and the emails**, split 2026-10-05 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
        - 17c-ii-a. [x] **Bookings when things change, and the settings** — merged 2026-10-05 (PR #175).
        - 17c-ii-b. ~~**The emails**: booked · moved in · a place is free · class cancelled or moved.~~ **Not built (Kd, RULINGS 2026-10-05)**: members are told in the app, with the inbox (20a) and the phone app's notifications; the box keeps "the app doesn't tell them yet" until then.
-     - 17c-iii. [ ] **Who is booked, on the Calendar** (RULINGS 2026-10-05; spec §13.6; after 17d): a class on the Calendar opens its list of people booked and waiting, for `schedule.manage` and the class's own coach (the server's read exists since 17c-i); a membership staff cancel on a person's page ends the bookings made on it.
+     - 17c-iii. [x] **Who is booked, on the Calendar** — merged 2026-10-06 (PR #179).
    - 17d. [x] **The member's side** — merged 2026-10-05 (PR #177).
    - 17e. [ ] **Personal training**: a trainer's hours and session length, free times worked out, an appointment the DATABASE refuses to overlap, booked at once, PT packs.
    - 17f. [ ] **Check-in meets bookings**: a desk scan near a booked class marks it "came"; a worker marks the rest no-shows at the end, safe to run twice. Needs 16a.
