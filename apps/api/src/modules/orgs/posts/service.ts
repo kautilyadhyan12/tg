@@ -61,6 +61,7 @@ import { PHOTO_PROBLEM_STATUS, type PhotoFile } from "../gymPage/service.js";
 import { fullName, shownName } from "../leaderboard/rank.js";
 import { lockGym } from "../memberList/repo.js";
 import { badWordsIn } from "./badWords.js";
+import { removeListed } from "./photoFiles.js";
 import * as repo from "./repo.js";
 
 export interface PostsDeps {
@@ -196,9 +197,16 @@ async function postingOf(sql: Sql | TransactionSql, gymId: string, userId: strin
 }
 
 /** The gym's posts for a live app member of it; 404 for everybody else. */
-export async function getPosts(deps: Pick<PostsDeps, "sql" | "supportEmail">, userId: string, gymId: string, before: GymPostsCursor | undefined): Promise<GymPostsResponse> {
+export async function getPosts(
+  deps: Pick<PostsDeps, "sql" | "supportEmail">,
+  userId: string,
+  gymId: string,
+  before: GymPostsCursor | undefined,
+  limit: Limit,
+): Promise<GymPostsResponse | null> {
   const org = await getOrgById(deps.sql, gymId);
   if (org === null || !(await repo.isLiveMember(deps.sql, gymId, userId))) throw notFound();
+  if (!(await limit())) return null;
   const supportEmail = deps.supportEmail;
   if (!(await gymIsLive(deps.sql, gymId, org.status))) {
     return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "paused", posting: "off", blockedCount: await repo.countBlocked(deps.sql, gymId, userId), supportEmail, pinned: [], posts: [], next: null });
@@ -310,13 +318,15 @@ export async function getReactors(
   });
 }
 
-async function removeFiles(deps: Pick<PostsDeps, "photos" | "log">, keys: readonly string[]): Promise<void> {
-  for (const key of keys) {
-    try {
-      await deps.photos.remove(key);
-    } catch (err) {
-      deps.log.warn({ event: "gym_post.photo_left_behind", err }, "a removed photo's file could not be deleted");
-    }
+/** Removes the files of those of `keys` still listed to remove. One that will not go stays
+ *  listed and is tried again by the nightly run; it is said here, never thrown at the person. */
+async function removeFiles(deps: Pick<PostsDeps, "sql" | "photos" | "log">, keys: readonly string[]): Promise<void> {
+  if (keys.length === 0) return;
+  try {
+    const left = await removeListed(deps, keys, true);
+    if (left > 0) deps.log.warn({ event: "gym_post.photo_left_behind", count: left }, "a removed photo's file could not be deleted; it will be tried again");
+  } catch (err) {
+    deps.log.warn({ event: "gym_post.photo_left_behind", err }, "a removed photo's file could not be deleted; it will be tried again");
   }
 }
 
@@ -410,6 +420,10 @@ async function keepPost(
   const id = randomUUID();
   const at = deps.now();
   let made: boolean;
+  // Listed to remove before a file is written, and taken off the list in the step that
+  // keeps the post: whatever stops in between, a file with no post is found and removed,
+  // and a kept post's file never is.
+  await repo.queueFiles(deps.sql, keys);
   try {
     for (const photo of photos) await deps.photos.put(photo.storageKey, photo.bytes);
     made = await deps.sql.begin(async (tx) => {
@@ -417,6 +431,7 @@ async function keepPost(
       // The same key sent twice at once: the second finds the first's row and keeps nothing.
       if (!(await repo.insertPost(tx, gymId, { id, postKey: body.postKey, body: body.body.trim(), byMember }, authorId, at))) return false;
       await repo.insertPhotos(tx, gymId, id, photos, at);
+      await repo.unqueueFiles(tx, keys);
       await insertAudit(tx, {
         actorUserId: authorId,
         gymId,
@@ -438,13 +453,24 @@ async function keepPost(
 /** A new post by staff. Sent twice under one key (a reply lost on the way back), it is one post. */
 export async function addPost(deps: PostsDeps, staffId: string, gymId: string, body: AddGymPostRequest): Promise<StaffGymPost> {
   await requirePoster(deps, staffId, gymId);
-  const kept = await repo.postByKey(deps.sql, gymId, body.postKey);
-  if (kept !== null) return await staffPost(deps, gymId, kept.id, staffId);
+  const kept = await gymsByKey(deps, gymId, body.postKey);
+  if (kept !== null) return await staffPost(deps, gymId, kept, staffId);
   const post = await keepPost(deps, gymId, staffId, body, false, () => Promise.resolve());
   if (post.made) return await staffPost(deps, gymId, post.id, staffId);
-  const first = await repo.postByKey(deps.sql, gymId, body.postKey);
+  const first = await gymsByKey(deps, gymId, body.postKey);
   if (first === null) throw postNotFound();
-  return await staffPost(deps, gymId, first.id, staffId);
+  return await staffPost(deps, gymId, first, staffId);
+}
+
+const keyTaken = (): OrgsError => new OrgsError(409, "post_key_taken", "Please try posting again.");
+
+/** The post staff already made for the gym under this key, or null. A key a member used
+ *  for a post of their own is not answered with that post. */
+async function gymsByKey(deps: Pick<PostsDeps, "sql">, gymId: string, postKey: string): Promise<string | null> {
+  const kept = await repo.postByKey(deps.sql, gymId, postKey);
+  if (kept === null) return null;
+  if (kept.byMember) throw keyTaken();
+  return kept.id;
 }
 
 /** The post a member already made under this key, or null. A key somebody else used is
@@ -452,7 +478,7 @@ export async function addPost(deps: PostsDeps, staffId: string, gymId: string, b
 async function ownByKey(deps: Pick<PostsDeps, "sql">, gymId: string, userId: string, postKey: string): Promise<GymPost | null> {
   const kept = await repo.postByKey(deps.sql, gymId, postKey);
   if (kept === null) return null;
-  if (!kept.byMember || kept.authorId !== userId) throw new OrgsError(409, "post_key_taken", "Please try posting again.");
+  if (!kept.byMember || kept.authorId !== userId) throw keyTaken();
   return await memberPost(deps, gymId, kept.id, userId);
 }
 
@@ -476,6 +502,9 @@ export async function addMemberPost(deps: PostsDeps, userId: string, gymId: stri
   const post = await keepPost(deps, gymId, userId, body, true, async (tx, at) => {
     if (!(await repo.lockMember(tx, gymId, userId, true))) throw notFound();
     refusePosting(await postingOf(tx, gymId, userId), gymName);
+    // The same key sent twice at once, the first kept while this one waited for the
+    // membership: it is answered below with that post, not counted against the day.
+    if ((await repo.postByKey(tx, gymId, body.postKey)) !== null) return;
     await refuseFullDay(tx, gymId, userId, at, shape);
   });
   if (post.made) return await memberPost(deps, gymId, post.id, userId);
@@ -498,16 +527,18 @@ export async function setPinned(deps: Pick<PostsDeps, "sql" | "now">, staffId: s
     if (pinned && (await repo.countPinned(tx, gymId)) >= GYM_POST_MAX_PINNED) {
       throw new OrgsError(409, "pins_full", GYM_POST_WORDS.pins_full);
     }
-    await repo.setPinned(tx, gymId, postId, pinned ? deps.now() : null);
+    // A removal does not wait for the gym's lock: a post removed since it was read is not pinned.
+    if (!(await repo.setPinned(tx, gymId, postId, pinned ? deps.now() : null))) throw postNotFound();
     await insertAudit(tx, { actorUserId: staffId, gymId, action: pinned ? "org.post_pinned" : "org.post_unpinned", targetType: "post", targetId: postId, meta: {} });
   });
   return await staffPost(deps, gymId, postId, staffId);
 }
 
-/** What goes with a removed post, in the removal's own step: its photos' rows, its
- *  reactions, and its open reports, answered. The photos' store keys. */
+/** What goes with a removed post, in the removal's own step: its photos' rows, their files
+ *  listed to remove, its reactions, and its open reports, answered. The photos' store keys. */
 async function removeRest(tx: TransactionSql, gymId: string, postId: string, at: Date): Promise<string[]> {
   const files = await repo.deletePhotos(tx, gymId, postId);
+  await repo.queueFiles(tx, files);
   await repo.deleteReactions(tx, gymId, postId);
   await repo.closeReports(tx, gymId, postId, "removed", at);
   return files;
@@ -551,8 +582,10 @@ export async function react(
   gymId: string,
   postId: string,
   reaction: GymPostReaction | null,
-): Promise<GymPostReactionResponse> {
+  limit: Limit,
+): Promise<GymPostReactionResponse | null> {
   await requireMember(deps, gymId, userId);
+  if (!(await limit())) return null;
   if ((await repo.postById(deps.sql, gymId, postId, { member: userId })) === null) throw postNotFound();
   if (reaction === null) {
     await repo.clearReaction(deps.sql, gymId, postId, userId);
@@ -610,31 +643,41 @@ export async function getReported(deps: Pick<PostsDeps, "sql">, staffId: string,
         if (r.postId === row.post.id && reason !== undefined) counts[reason] = r.count;
       }
       const typed = notes.filter((n) => n.postId === row.post.id).map((n) => n.note);
-      return [{ post, reports: row.reports, reasons: counts, notes: typed, firstReportedAt: row.firstAt.toISOString(), lastReportedAt: row.lastAt.toISOString() }];
+      return [{ post, reports: row.reports, allReports: row.allReports, reportsMark: row.reportsMark, reasons: counts, notes: typed, firstReportedAt: row.firstAt.toISOString(), lastReportedAt: row.lastAt.toISOString() }];
     }),
   });
 }
 
-/** Staff keep a reported post: the reports they were shown (those made up to `upTo`) are
- *  answered. A report that arrived after it was never read, so it stays open and the post
- *  stays on the list; how many such are waiting. */
+/** Staff keep a reported post: its reports are answered, but only while they are exactly
+ *  the ones staff were shown (`reportsMark`; `allReports` is how many those were). One
+ *  that arrived since was never read, so none is answered and the post stays on the list;
+ *  how many such are waiting. */
 export async function keepReported(
   deps: Pick<PostsDeps, "sql" | "now">,
   staffId: string,
   gymId: string,
   postId: string,
-  upTo: string,
+  shown: { allReports: number; reportsMark: string },
   limit: Limit,
-): Promise<{ waiting: number } | null> {
+): Promise<{ kept: boolean; waiting: number } | null> {
+  const { allReports } = shown;
   await requireWritablePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   return await deps.sql.begin(async (tx) => {
     if ((await repo.postById(tx, gymId, postId, "staff")) === null) throw postNotFound();
-    const closed = await repo.closeReports(tx, gymId, postId, "kept", deps.now(), upTo);
+    const closed = await repo.closeReports(tx, gymId, postId, "kept", deps.now(), shown.reportsMark);
+    const now = await repo.countReports(tx, gymId, postId);
     if (closed > 0) {
       await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.post_kept", targetType: "post", targetId: postId, meta: { reports: String(closed) } });
+      // One that landed after the reports were answered.
+      return { kept: true, waiting: now.open };
     }
-    return { waiting: await repo.countOpenReports(tx, gymId, postId) };
+    // Answered by somebody else already.
+    if (now.open === 0) return { kept: true, waiting: 0 };
+    // No more than staff were shown, and not the same ones (a reporter's account has
+    // gone, with or without a new report): the list is read again.
+    if (now.all <= allReports) throw new OrgsError(409, "reports_changed", GYM_POST_WORDS.reports_changed);
+    return { kept: false, waiting: Math.min(now.open, now.all - allReports) };
   });
 }
 
@@ -710,8 +753,9 @@ export async function block(deps: Pick<PostsDeps, "sql" | "now">, userId: string
 }
 
 /** The people a member has blocked at this gym, named as members see each other. */
-export async function getBlocked(deps: Pick<PostsDeps, "sql">, userId: string, gymId: string): Promise<BlockedGymPostersResponse> {
+export async function getBlocked(deps: Pick<PostsDeps, "sql">, userId: string, gymId: string, limit: Limit): Promise<BlockedGymPostersResponse | null> {
   await requireOwnMembership(deps, gymId, userId);
+  if (!(await limit())) return null;
   const people = await repo.blockedPeople(deps.sql, gymId, userId, GYM_POST_BLOCKS_SHOWN);
   return blockedGymPostersResponseSchema.parse({
     people: people.map((p) => {
@@ -730,8 +774,8 @@ export async function unblock(deps: Pick<PostsDeps, "sql">, userId: string, gymI
 }
 
 /** A post's photo, for a member who may read the post or staff holding the tick. With
- *  `wantBytes` false (the reader's browser already holds it) the same checks run and null
- *  is the answer: it is still theirs to show. */
+ *  `wantBytes` false (the reader's browser already holds it) the same checks run and
+ *  "same" is the answer: it is still theirs to show. Null when the limit has answered. */
 export async function getPhoto(
   deps: Pick<PostsDeps, "sql" | "photos">,
   userId: string,
@@ -739,20 +783,23 @@ export async function getPhoto(
   postId: string,
   photoId: string,
   wantBytes: boolean,
-): Promise<PhotoFile | null> {
+  limit: Limit,
+): Promise<PhotoFile | "same" | null> {
   const org = await getOrgById(deps.sql, gymId);
   if (org === null) throw notFound();
   const member = (await repo.isLiveMember(deps.sql, gymId, userId)) && (await gymIsLive(deps.sql, gymId, org.status));
+  let staff = member ? null : await holdsPrivilege(deps, gymId, userId, TICK);
+  if (!member && staff !== true) throw notFound();
+  if (!(await limit())) return null;
   // A member is sent what a member sees: nothing of anybody they blocked. Staff holding
   // the tick are asked second.
   let photo = member ? await repo.photoOf(deps.sql, gymId, postId, photoId, { member: userId }) : null;
   if (photo === null) {
-    const staff = await holdsPrivilege(deps, gymId, userId, TICK);
-    if (!member && !staff) throw notFound();
+    staff ??= await holdsPrivilege(deps, gymId, userId, TICK);
     if (staff) photo = await repo.photoOf(deps.sql, gymId, postId, photoId, "staff");
   }
   if (photo === null) throw new OrgsError(404, "photo_not_found", GYM_POST_WORDS.photo_not_found);
-  if (!wantBytes) return null;
+  if (!wantBytes) return "same";
   const bytes = await deps.photos.get(photo.storageKey);
   if (bytes === null) throw new OrgsError(404, "photo_not_found", GYM_POST_WORDS.photo_not_found);
   return { contentType: photo.contentType, bytes };

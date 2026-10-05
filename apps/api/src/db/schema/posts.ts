@@ -163,3 +163,14 @@ export const gymPostBlocks = pgTable(
     index("gym_post_blocks_blocked_idx").on(t.blockedUserId),
   ],
 );
+
+/** Photo files still to be removed from the store (`0076_photo_files_to_remove.sql`): a
+ *  key is here from the step that deletes its row until its file has gone. */
+export const photoFilesToRemove = pgTable(
+  "photo_files_to_remove",
+  {
+    storageKey: text("storage_key").primaryKey(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("photo_files_to_remove_created_idx").on(t.createdAt)],
+);

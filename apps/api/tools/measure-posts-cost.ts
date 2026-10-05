@@ -186,7 +186,12 @@ console.log(
 const deps = { sql, now: () => new Date(), photos: createDiskPhotoStore(folder), supportEmail: null, log: { warn: () => undefined } };
 const allowed = (): Promise<boolean> => Promise.resolve(true);
 
-const first = await getPosts(deps, viewer, gymId, undefined);
+const feed = async (before?: ReturnType<typeof place>) => {
+  const page = await getPosts(deps, viewer, gymId, before, allowed);
+  if (page === null) throw new Error("the limit answered");
+  return page;
+};
+const first = await feed();
 const newest = first.posts[0]?.id ?? "";
 // The last page: reached by walking every page before it.
 const place = (next: string) => gymPostsQuerySchema.parse({ before: next }).before;
@@ -194,7 +199,7 @@ let cursor = first.next;
 let last: ReturnType<typeof place>;
 while (cursor !== null) {
   last = place(cursor);
-  cursor = (await getPosts(deps, viewer, gymId, last)).next;
+  cursor = (await feed(last)).next;
 }
 // The oldest page of the one person's posts: from their 21st-oldest post on.
 const edge = await sql<{ at: Date; id: string }[]>`
@@ -211,12 +216,12 @@ const reads: [string, () => Promise<unknown>][] = [
   ["member, that person's oldest page", () => getPersonPosts(deps, viewer, gymId, owner, personLast, allowed)],
   ["member, a person with one post", () => getPersonPosts(deps, viewer, gymId, others1, undefined, allowed)],
   ["staff, one person's posts", () => getStaffPersonPosts(deps, owner, gymId, owner, undefined, allowed)],
-  ["member, the first page", () => getPosts(deps, viewer, gymId, undefined)],
-  ["member, the oldest page", () => getPosts(deps, viewer, gymId, last)],
+  ["member, the first page", () => feed()],
+  ["member, the oldest page", () => feed(last)],
   ["staff, the first page", () => getStaffPosts(deps, owner, gymId, undefined, allowed)],
   ["staff, the reported list", () => getReported(deps, owner, gymId, allowed)],
   ["staff, who is stopped", () => getStopped(deps, owner, gymId, allowed)],
-  ["member, who they blocked", () => getBlocked(deps, viewer, gymId)],
+  ["member, who they blocked", () => getBlocked(deps, viewer, gymId, allowed)],
   // The word check on the longest post a member can write, clean, so every word is read.
   ["the word check, 2,000 characters", () => Promise.resolve(badWordsIn("Words of a post. ".repeat(118).slice(0, 2000)))],
   // Its worst shapes at the same length: one letter run on, and a listed word with no spaces.
@@ -231,7 +236,7 @@ reads.push([
   "member, a reaction",
   () => {
     flip = !flip;
-    return react(deps, viewer, gymId, newest, flip ? "fire" : "like");
+    return react(deps, viewer, gymId, newest, flip ? "fire" : "like", allowed);
   },
 ]);
 for (const [name, fn] of reads) {
@@ -260,7 +265,7 @@ for (let i = 0; i < RUNS + 1; i++) {
     const kept = await sql<{ bytes: number }[]>`SELECT byte_size AS bytes FROM gym_post_photos WHERE post_id = ${post.id} ORDER BY position`;
     console.log(`each photo sent: ${String(Buffer.from(photo, "base64").length)} bytes; kept: ${kept.map((k) => String(k.bytes)).join(", ")} bytes`);
   }
-  photoReads.push(await time(() => getPhoto(deps, viewer, gymId, post.id, post.photos[0]?.id ?? "", true)));
+  photoReads.push(await time(() => getPhoto(deps, viewer, gymId, post.id, post.photos[0]?.id ?? "", true, allowed)));
   removes.push(await time(() => removePost(deps, owner, gymId, post.id, allowed)));
 }
 // The first of each is the warm-up, as for the reads.

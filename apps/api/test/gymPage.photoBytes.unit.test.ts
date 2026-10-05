@@ -132,6 +132,29 @@ describe("THE WORST THING: a photo on a public page with the place it was taken 
     if (hasIcc) expect(jpegBlocks(original).header).toContain("ICC_PROFILE\0");
   });
 
+  it("a block that only carries a colour block's name is not kept: words hidden under it are gone, and the phone's real profile stays", () => {
+    const hidden = "meet me behind the gym at nine";
+    const block = (marker: number, body: string): Uint8Array => {
+      const bytes = Buffer.from(body, "latin1");
+      return Uint8Array.from([0xff, marker, (bytes.length + 2) >> 8, (bytes.length + 2) & 0xff, ...bytes]);
+    };
+    const original = fixture("pixel7-meta.jpg");
+    expect(jpegBlocks(original).header).toContain("ICC_PROFILE\0");
+    // Straight after the start of the file: a "profile" and an "Adobe" block that are neither.
+    const stuffed = Uint8Array.from([
+      ...original.subarray(0, 2),
+      ...block(0xe2, `ICC_PROFILE\0\x01\x01${hidden.repeat(4)}`),
+      ...block(0xee, `Adobe${hidden}`),
+      ...original.subarray(2),
+    ]);
+    expect(text(stuffed)).toContain(hidden);
+    const read = clean(stuffed);
+    expect(text(read.bytes)).not.toContain(hidden);
+    // The same picture as the untouched file gives, its true profile with it.
+    expect(Buffer.from(read.bytes).equals(Buffer.from(clean(original).bytes))).toBe(true);
+    expect(jpegBlocks(read.bytes).blocks.some((b) => b.marker === 0xe2 && text(b.body.subarray(0, 12)) === "ICC_PROFILE\0")).toBe(true);
+  });
+
   it("a progressive photo with the phone's EXIF after its first pass: every block of the file is checked, not only those before the picture", () => {
     const original = fixture("progressive-exif-between-scans.jpg");
     const before = everyJpegBlock(original);

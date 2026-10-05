@@ -69,7 +69,7 @@ function testLogger(): TestLogger {
 }
 
 /** A photo store for the tests that purge nobody with photos: it removes whatever it is asked to. */
-const noPhotos = { remove: (): Promise<boolean> => Promise.resolve(true) };
+const noPhotos = { remove: (): Promise<boolean> => Promise.resolve(true), get: (): Promise<Uint8Array | null> => Promise.resolve(null) };
 
 /** Did a run emit this event anywhere? The warn/error paths are behaviour and
  *  were shipped untested through rounds 1-2, which is how their findings
@@ -694,7 +694,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     const theirs = await post(bystander.userId, true);
     const removed: string[] = [];
 
-    await purgeDueUsers({ sql, log: testLogger(), photos: { remove: (key) => Promise.resolve(removed.push(key) > 0) } }, {});
+    await purgeDueUsers({ sql, log: testLogger(), photos: { ...noPhotos, remove: (key) => Promise.resolve(removed.push(key) > 0) } }, {});
 
     const left = await sql<{ id: string }[]>`SELECT id FROM gym_posts WHERE id = ANY(${[mine.id, asStaff.id, theirs.id]}) ORDER BY id`;
     expect(left.map((r) => r.id)).toEqual([asStaff.id, theirs.id].sort());
@@ -704,6 +704,40 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     expect(reactions[0]?.n).toBe(0);
     // The purged person's own files, and nobody else's.
     expect(removed).toEqual([mine.key]);
+  });
+
+  /** Which of these keys are still written down as files to remove. */
+  const listed = async (keys: string[]): Promise<string[]> =>
+    (await sql<{ storage_key: string }[]>`SELECT storage_key FROM photo_files_to_remove WHERE storage_key = ANY(${keys}) ORDER BY storage_key`).map((r) => r.storage_key);
+
+  it("a restored person's photo files are never listed to remove", { timeout: 60_000 }, async () => {
+    // Deleted fifteen days ago and restored since: the purge skips them, and their photos stay.
+    const u = await makeUser(uniqEmail("dpdp-posts-restored"), 20);
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member)
+      VALUES (${postGymId}, ${u.userId}, gen_random_uuid(), 'a member fixture post', true) RETURNING id`;
+    const key = `gym-post/${postGymId}/${randomUUID()}.jpg`;
+    await sql`
+      INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
+      VALUES (${postGymId}, ${rows[0]?.id ?? ""}, ${key}, 'image/jpeg', 10, 1, 1, 0)`;
+    const removed: string[] = [];
+    await purgeDueUsers(
+      {
+        sql,
+        log: testLogger(),
+        photos: { ...noPhotos, remove: (k) => Promise.resolve(removed.push(k) > 0) },
+        // Restored between the scan and their turn.
+        purgeOne: async (tx, userId, cutoff) => {
+          if (userId === u.userId) await tx`UPDATE users SET status = 'active', deleted_at = NULL WHERE id = ${userId}`;
+          return await purgeUser(tx, userId, cutoff);
+        },
+      },
+      {},
+    );
+    expect(removed).not.toContain(key);
+    expect(await listed([key])).toEqual([]);
+    expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_post_photos WHERE storage_key = ${key}`)[0]?.n).toBe(1);
+    await sql`DELETE FROM gym_posts WHERE id = ${rows[0]?.id ?? ""}`;
   });
 
   it("on the real disk: removes the file from the store the api wrote it to, and says so when its store holds no such file", { timeout: 60_000 }, async () => {
@@ -733,11 +767,23 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       expect(wrongLog.lines.filter((l) => l.obj["event"] === "dpdp.purge.photo_files_left").map((l) => [l.level, l.obj["userId"], l.obj["count"]])).toEqual([
         ["error", wrong.userId, 1],
       ]);
+      // The person's rows are gone and the file is not: its key is still written down, the
+      // run says it fell short, and a later run with the api's own store removes the file.
+      expect(await listed([wrong.key])).toEqual([wrong.key]);
+      await sql`UPDATE photo_files_to_remove SET created_at = now() - interval '2 hours' WHERE storage_key = ${wrong.key}`;
+      const again = await purgeDueUsers({ sql, log: testLogger(), photos: createDiskPhotoStore(otherFolder) }, {});
+      expect(again.photoFilesLeft).toBeGreaterThanOrEqual(1);
+      expect(purgeShortfall(again)).toBe(true);
+      expect(await listed([wrong.key])).toEqual([wrong.key]);
+      await purgeDueUsers({ sql, log: testLogger(), photos: apiStore }, {});
+      expect(await apiStore.get(wrong.key)).toBeNull();
+      expect(await listed([wrong.key])).toEqual([]);
 
       const right = await seed("dpdp-photo-right");
       const rightLog = testLogger();
       await purgeDueUsers({ sql, log: rightLog, photos: apiStore }, {});
       expect(await apiStore.get(right.key)).toBeNull();
+      expect(await listed([right.key])).toEqual([]);
       expect(anyEvent(rightLog, "dpdp.purge.photo_files_left")).toBe(false);
     } finally {
       await rm(apiFolder, { recursive: true, force: true });
@@ -750,15 +796,21 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     const rows = await sql<{ id: string }[]>`
       INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member)
       VALUES (${postGymId}, ${u.userId}, gen_random_uuid(), 'a member fixture post', true) RETURNING id`;
+    const key = `gym-post/${postGymId}/${randomUUID()}.jpg`;
     await sql`
       INSERT INTO gym_post_photos (gym_id, post_id, storage_key, content_type, byte_size, width, height, position)
-      VALUES (${postGymId}, ${rows[0]?.id ?? ""}, ${`gym-post/${postGymId}/${randomUUID()}.jpg`}, 'image/jpeg', 10, 1, 1, 0)`;
+      VALUES (${postGymId}, ${rows[0]?.id ?? ""}, ${key}, 'image/jpeg', 10, 1, 1, 0)`;
     const log = testLogger();
-    const result = await purgeDueUsers({ sql, log, photos: { remove: () => Promise.reject(new Error("disk full")) } }, {});
+    const result = await purgeDueUsers({ sql, log, photos: { ...noPhotos, remove: () => Promise.reject(new Error("disk full")) } }, {});
     // The person is purged all the same: the rows are gone, so nothing can show the file.
     expect(result.errors).toBe(0);
     expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_posts WHERE author_user_id = ${u.userId}`)[0]?.n).toBe(0);
     expect(anyEvent(log, "dpdp.purge.photo_files_left")).toBe(true);
+    // The file's key is kept for the next run, and this run is not a clean one.
+    expect(await listed([key])).toEqual([key]);
+    expect(result.photoFilesLeft).toBeGreaterThanOrEqual(1);
+    expect(purgeShortfall(result)).toBe(true);
+    await sql`DELETE FROM photo_files_to_remove WHERE storage_key = ${key}`;
   });
 
   it("one failing user does not stop the others", { timeout: 60_000 }, async () => {
@@ -858,6 +910,7 @@ describe("purge shortfall (no database)", () => {
     schemaDriftSnapshots: 0,
     consentProofExpired: 2,
     consentProofExpiryFailed: false,
+    photoFilesLeft: 0,
     dryRun: false,
   };
 
@@ -877,6 +930,7 @@ describe("purge shortfall (no database)", () => {
     expect(purgeShortfall({ ...certified, errors: 1 })).toBe(true);
     expect(purgeShortfall({ ...certified, schemaDriftSnapshots: 1 })).toBe(true);
     expect(purgeShortfall({ ...certified, consentProofExpiryFailed: true })).toBe(true);
+    expect(purgeShortfall({ ...certified, photoFilesLeft: 1 })).toBe(true);
   });
 
   // The other half: the function can be right and still not be CALLED. Both

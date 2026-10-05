@@ -392,10 +392,10 @@ describe('reporting a post', () => {
 
   it('Keep says so when a report arrived while staff were looking', () => {
     expect(keepNote({ kept: true, waiting: 0 })).toBe('Kept. The post stays on Updates and has left this list.');
-    expect(keepNote({ kept: true, waiting: 1 })).toBe(
+    expect(keepNote({ kept: false, waiting: 1 })).toBe(
       '1 more person reported this post while you were looking, so it is still on this list. Read what is new, then choose again.',
     );
-    expect(keepNote({ kept: true, waiting: 3 })).toContain('3 more people reported this post');
+    expect(keepNote({ kept: false, waiting: 3 })).toContain('3 more people reported this post');
   });
 
   it('says how many reported posts are waiting, and when the list holds only the oldest', () => {

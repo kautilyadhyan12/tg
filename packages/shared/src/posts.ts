@@ -191,8 +191,12 @@ export const addGymPostRequestSchema = z
     /** The browser's key for this one post: the same key again is the same post. */
     postKey: z.string().uuid(),
     body: postWords.refine((text) => !text.includes(NUL), { message: "a character that cannot be kept" }),
-    /** Each photo as base64, already shrunk by the browser, in the order shown. */
-    photos: z.array(photoBase64).max(GYM_POST_MAX_PHOTOS),
+    /** Each photo as base64, already shrunk by the browser, in the order shown. A list
+     *  that is too long is refused before one item of it is looked at: the body may hold
+     *  millions. */
+    photos: z
+      .custom<unknown[]>((value) => Array.isArray(value) && value.length <= GYM_POST_MAX_PHOTOS, { message: "too many photos" })
+      .pipe(z.array(photoBase64)),
   })
   .strict()
   .refine((post) => post.body.trim() !== "" || post.photos.length > 0, { message: "nothing to post", path: ["body"] });
@@ -242,6 +246,8 @@ const reportNote = z
 export const reportGymPostRequestSchema = z.object({ reason: gymPostReportReasonSchema, note: reportNote.optional() }).strict();
 export const reportedGymPostResponseSchema = z.object({ reported: z.literal(true) }).strict();
 
+const reportsMark = z.string().regex(/^[0-9a-f]{32}$/);
+
 const reasonCountsSchema = z
   .object({
     unkind: z.number().int().nonnegative(),
@@ -268,8 +274,12 @@ export const reportedGymPostsResponseSchema = z
             reasons: reasonCountsSchema,
             /** What reporters typed, oldest first; never who typed it. */
             notes: z.array(z.string()).max(GYM_POST_REPORT_NOTES_SHOWN),
+            /** Every report this post has had, answered or not, and one value for exactly
+             *  those reports. Keep sends both back, and answers nothing when the post's
+             *  reports are no longer the ones counted here. */
+            allReports: z.number().int().positive(),
+            reportsMark: reportsMark,
             firstReportedAt: z.string().datetime({ offset: true }),
-            /** The newest report counted here: Keep answers the reports up to it and no later one. */
             lastReportedAt: z.string().datetime({ offset: true }),
           })
           .strict(),
@@ -281,13 +291,15 @@ export const reportedGymPostsResponseSchema = z
   .strict();
 export type ReportedGymPostsResponse = z.infer<typeof reportedGymPostsResponseSchema>;
 
-/** Keep answers the reports staff were shown: those made up to `upTo`, the list item's
- *  `lastReportedAt`. One that arrived after it stays open, and the post stays on the list. */
-export const keepGymPostRequestSchema = z.object({ upTo: z.string().datetime({ offset: true }) }).strict();
+/** Keep answers a post's reports only while they are exactly the ones the list item
+ *  counted (`reportsMark`, with how many they were). When another has arrived since, none
+ *  is answered and the post stays on the list. */
+export const keepGymPostRequestSchema = z.object({ allReports: z.number().int().positive(), reportsMark }).strict();
 export const keptGymPostResponseSchema = z
   .object({
-    kept: z.literal(true),
-    /** Reports that arrived after the ones staff were shown, still waiting. */
+    /** False when a report arrived that staff were not shown: nothing was answered. */
+    kept: z.boolean(),
+    /** Reports staff were not shown, still waiting. */
     waiting: z.number().int().nonnegative(),
   })
   .strict();
@@ -380,6 +392,7 @@ export const GYM_POST_WORDS = {
   own_block: "This is your own post.",
   gym_block: "This post is from the gym's staff, so it can't be blocked. You can report it instead.",
   block_not_found: "This person isn't blocked any more.",
+  reports_changed: "The reports on this post have changed. Read them again, then choose.",
   /** A member's post the app will not take, naming each word it found. */
   bad_words: (words: readonly string[]): string =>
     words.length === 1

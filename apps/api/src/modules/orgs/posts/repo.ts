@@ -164,9 +164,15 @@ export async function photosOf(sql: SqlOrTx, gymId: string, postIds: readonly st
  *  gym with an active account: the number and the names staff see always agree. Joins `m`
  *  (the membership) and `u` (the account) to the reaction `r`. */
 function liveReactor(sql: SqlOrTx) {
+  // Nor does a reaction to the post of somebody its giver has blocked: a block deletes
+  // those, and one sent at the same moment can land after the delete.
   return sql`
     JOIN gym_members m ON m.gym_id = r.gym_id AND m.user_id = r.user_id AND m.removed_at IS NULL
-    JOIN users u ON u.id = r.user_id AND u.status = 'active'`;
+    JOIN users u ON u.id = r.user_id AND u.status = 'active'
+    JOIN gym_posts rp ON rp.gym_id = r.gym_id AND rp.id = r.post_id
+      AND NOT (rp.by_member AND EXISTS (
+        SELECT 1 FROM gym_post_blocks rb
+        WHERE rb.gym_id = r.gym_id AND rb.user_id = r.user_id AND rb.blocked_user_id = rp.author_user_id))`;
 }
 
 /** `viewerId`: a member reading, who is not sent the reactions of anybody they have blocked. */
@@ -260,8 +266,11 @@ export async function countPinned(tx: TransactionSql, gymId: string): Promise<nu
   return rows[0]?.n ?? 0;
 }
 
-export async function setPinned(tx: TransactionSql, gymId: string, postId: string, pinnedAt: Date | null): Promise<void> {
-  await tx`UPDATE gym_posts SET pinned_at = ${pinnedAt} WHERE gym_id = ${gymId} AND id = ${postId} AND removed_at IS NULL`;
+/** False when the post is not there to pin: removed at this moment. */
+export async function setPinned(tx: TransactionSql, gymId: string, postId: string, pinnedAt: Date | null): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_posts SET pinned_at = ${pinnedAt} WHERE gym_id = ${gymId} AND id = ${postId} AND removed_at IS NULL RETURNING id`;
+  return rows.length === 1;
 }
 
 /** Marks this gym's post removed; false when it has none, or it was removed already. */
@@ -438,10 +447,18 @@ export async function reportedBy(sql: SqlOrTx, gymId: string, postIds: readonly 
   return new Set(rows.map((r) => r.post_id));
 }
 
-/** Closes a post's open reports; how many it closed. `upTo`: only those made up to that
- *  instant, the ones staff were shown. */
-export async function closeReports(tx: TransactionSql, gymId: string, postId: string, outcome: "removed" | "kept", at: Date, upTo: string | null = null): Promise<number> {
-  const seen = upTo === null ? tx`` : tx`AND created_at <= ${upTo}::timestamptz`;
+/** One value for exactly these reports of a post: another report, or one fewer, changes it. */
+const reportsMark = (sql: SqlOrTx) => sql`md5(coalesce(string_agg(a.id::text, ',' ORDER BY a.id), ''))`;
+
+/** Closes a post's open reports; how many it closed. `shown`: only while the post's
+ *  reports, answered or not, are exactly the ones staff were shown, and none otherwise.
+ *  One statement, so a report that lands while it runs is neither compared nor closed. A
+ *  report's own time cannot say whether staff saw it: it is read before the report is stored. */
+export async function closeReports(tx: TransactionSql, gymId: string, postId: string, outcome: "removed" | "kept", at: Date, shown: string | null = null): Promise<number> {
+  const seen =
+    shown === null
+      ? tx``
+      : tx`AND (SELECT ${reportsMark(tx)} FROM gym_post_reports a WHERE a.gym_id = ${gymId} AND a.post_id = ${postId}) = ${shown}`;
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_post_reports SET closed_at = ${at}, outcome = ${outcome}
     WHERE gym_id = ${gymId} AND post_id = ${postId} AND closed_at IS NULL ${seen}
@@ -449,11 +466,12 @@ export async function closeReports(tx: TransactionSql, gymId: string, postId: st
   return rows.length;
 }
 
-/** A post's reports nobody has answered. */
-export async function countOpenReports(tx: TransactionSql, gymId: string, postId: string): Promise<number> {
-  const rows = await tx<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM gym_post_reports WHERE gym_id = ${gymId} AND post_id = ${postId} AND closed_at IS NULL`;
-  return rows[0]?.n ?? 0;
+/** A post's reports: every one it has had, and those nobody has answered. */
+export async function countReports(tx: TransactionSql, gymId: string, postId: string): Promise<{ all: number; open: number }> {
+  const rows = await tx<{ all: number; open: number }[]>`
+    SELECT count(*)::int AS all, (count(*) FILTER (WHERE closed_at IS NULL))::int AS open
+    FROM gym_post_reports WHERE gym_id = ${gymId} AND post_id = ${postId}`;
+  return rows[0] ?? { all: 0, open: 0 };
 }
 
 /** Unpins this gym's pinned posts nobody can see (a member's post whose writer has left):
@@ -468,6 +486,9 @@ export async function unpinHidden(tx: TransactionSql, gymId: string): Promise<vo
 export interface ReportedRow {
   post: PostRow;
   reports: number;
+  /** Every report the post has had, answered or not, and one value for exactly those. */
+  allReports: number;
+  reportsMark: string;
   firstAt: Date;
   lastAt: Date;
   /** Every reported post waiting, on each row. */
@@ -476,8 +497,10 @@ export interface ReportedRow {
 
 /** The posts with a report nobody has answered, longest waiting first. */
 export async function reportedPosts(sql: SqlOrTx, gymId: string, limit: number): Promise<ReportedRow[]> {
-  const rows = await sql<(RawPost & { reports: number; first_at: Date; last_at: Date; total: number })[]>`
-    SELECT p.*, r.reports, r.first_at, r.last_at, count(*) OVER ()::int AS total
+  const rows = await sql<(RawPost & { reports: number; all_reports: number; reports_mark: string; first_at: Date; last_at: Date; total: number })[]>`
+    SELECT p.*, r.reports, r.first_at, r.last_at, count(*) OVER ()::int AS total,
+           (SELECT count(*)::int FROM gym_post_reports a WHERE a.gym_id = ${gymId} AND a.post_id = p.id) AS all_reports,
+           (SELECT ${reportsMark(sql)} FROM gym_post_reports a WHERE a.gym_id = ${gymId} AND a.post_id = p.id) AS reports_mark
     FROM (${posts(sql, gymId)}) p
     JOIN (
       SELECT post_id, count(*)::int AS reports, min(created_at) AS first_at, max(created_at) AS last_at
@@ -487,7 +510,7 @@ export async function reportedPosts(sql: SqlOrTx, gymId: string, limit: number):
     WHERE p.visible
     ORDER BY r.first_at, p.id
     LIMIT ${limit}`;
-  return rows.map((r) => ({ post: toPost(r), reports: r.reports, firstAt: r.first_at, lastAt: r.last_at, total: r.total }));
+  return rows.map((r) => ({ post: toPost(r), reports: r.reports, allReports: r.all_reports, reportsMark: r.reports_mark, firstAt: r.first_at, lastAt: r.last_at, total: r.total }));
 }
 
 /** How many posts have a report nobody has answered. */
@@ -625,4 +648,47 @@ export async function blockedPeople(sql: SqlOrTx, gymId: string, userId: string,
     ORDER BY b.created_at DESC, b.id
     LIMIT ${limit}`;
   return rows.map((r) => ({ id: r.id, blockedAt: r.created_at, displayName: r.display_name, email: r.email, recordName: r.record_name }));
+}
+
+// ── PHOTO FILES STILL TO REMOVE (`photo_files_to_remove`) ──
+
+/** Notes these store keys as files to remove. */
+export async function queueFiles(sql: SqlOrTx, keys: readonly string[]): Promise<void> {
+  if (keys.length === 0) return;
+  await sql`
+    INSERT INTO photo_files_to_remove (storage_key) SELECT unnest(${[...keys]}::text[])
+    ON CONFLICT (storage_key) DO NOTHING`;
+}
+
+/** Takes these keys off the list: their files are gone, or are a kept post's. */
+export async function unqueueFiles(sql: SqlOrTx, keys: readonly string[]): Promise<void> {
+  if (keys.length === 0) return;
+  await sql`DELETE FROM photo_files_to_remove WHERE storage_key = ANY (${[...keys]}::text[])`;
+}
+
+/** Which of these keys are on the list. */
+export async function queuedAmong(sql: SqlOrTx, keys: readonly string[]): Promise<string[]> {
+  if (keys.length === 0) return [];
+  const rows = await sql<{ storage_key: string }[]>`
+    SELECT storage_key FROM photo_files_to_remove WHERE storage_key = ANY (${[...keys]}::text[])`;
+  return rows.map((r) => r.storage_key);
+}
+
+/** The store keys of this gym's newest post photos. */
+export async function newestPhotoKeys(sql: SqlOrTx, gymId: string, limit: number): Promise<string[]> {
+  // A listed key's gym is read out of the key: one that is no id names no gym.
+  if (!/^[0-9a-f-]{36}$/.test(gymId)) return [];
+  const rows = await sql<{ storage_key: string }[]>`
+    SELECT storage_key FROM gym_post_photos WHERE gym_id = ${gymId} ORDER BY created_at DESC, id LIMIT ${limit}`;
+  return rows.map((r) => r.storage_key);
+}
+
+/** Keys that have been on the list for longer than `minutes`, oldest first. */
+export async function queuedFor(sql: SqlOrTx, minutes: number, limit: number): Promise<string[]> {
+  const rows = await sql<{ storage_key: string }[]>`
+    SELECT storage_key FROM photo_files_to_remove
+    WHERE created_at < now() - make_interval(mins => ${minutes})
+    ORDER BY created_at, storage_key
+    LIMIT ${limit}`;
+  return rows.map((r) => r.storage_key);
 }
