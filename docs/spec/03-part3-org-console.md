@@ -2631,6 +2631,24 @@ scan (§12) from 30 minutes before a booked class until it ends marks the bookin
 twice. Booked · on the waitlist · moved in · a place is free · class changed or
 cancelled · PT booked or cancelled: fixed-word emails now, phone notifications with the
 phone app (Part 7 of the re-plan).
+*(2026-10-05, RULINGS that day: the booking emails are not built. A member is told in the
+app, by the inbox and the phone's notification; until then staff tell them.)*
+*(17d, 2026-10-05: **the member's side.** `GET …/member-classes?week=0..7` answers the
+gym's classes that have not started on seven of its own days (week 0 starts today), the
+soonest first, each exactly as that class's own read answers it, with the week's first
+and last day and the gym's time zone; for a live app member of a gym on a live plan, 404
+for anybody else. `week` is one digit and nothing else. A page holds 500 classes at
+most and answers `more` when the week has more, which the screen says. The person's
+memberships are read once for the page (two statements), not once a class, and so are the
+waitlists, and their people's memberships, of the classes with a free place to hand over. The member web's Classes tab on My Gyms, beside Updates and
+Leaderboard, lists them by day on the gym's clock and names the gym's zone when the
+device's differs; one button to take a place (Book · Join waitlist · Claim place) and one
+to give it up (Cancel booking · Leave waitlist), a box before every cancel that says
+what it costs; the week is read again after every Book and Cancel, since one booking
+changes what the others say; a free place that is the first in line's reads "Full" to
+anybody else; waiting reads "On the waitlist, not booked", never as a booking. It is a
+plain screen, the member web's until the phone app has its own. Not on it yet: the
+class's coach.)*
 
 ### 13.7 Cost at full size, cards, the two extra passes
 

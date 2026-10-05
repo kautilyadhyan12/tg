@@ -34,6 +34,9 @@ vi.mock('../api/leaderboardApi', () => ({ leaderboardService: boards }));
 // The gym's Updates have their own suite too (updates.render.test.jsx).
 const posts = { list: vi.fn(() => new Promise(() => {})), react: vi.fn() };
 vi.mock('../api/postsApi', () => ({ postsService: posts, postPhotoUrl: () => '' }));
+// And its classes (classes.render.test.jsx).
+const classes = { list: vi.fn(() => new Promise(() => {})) };
+vi.mock('../api/classesApi', () => ({ classesService: classes }));
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', displayName: 'Kd' }, logout: vi.fn(), loading: false }),
 }));
@@ -285,6 +288,13 @@ describe('the screen', () => {
     expect(screen.queryByTestId('updates')).toBeNull();
     await waitFor(() => expect(boards.board).toHaveBeenCalled());
     expect(boards.board.mock.calls[0][0]).toBe('g1');
+    expect(classes.list).not.toHaveBeenCalled();
+
+    // The gym's classes (17d): the third tab, read only when it is opened.
+    fireEvent.click(screen.getByRole('tab', { name: 'Classes' }));
+    expect(screen.getByRole('tab', { name: 'Classes' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('region', { name: `${GYM.name}'s classes` })).toBeTruthy();
+    await waitFor(() => expect(classes.list).toHaveBeenCalledWith('g1', 0));
   });
 
   // THE TAP IS GONE FOR EVERY GYM (ROADMAP 16c), whatever the gym's old switch says.

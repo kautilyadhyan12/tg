@@ -17,7 +17,7 @@ import {
   type ClassBookingStatus,
   type HeldCover,
 } from "@app/shared";
-import { heldForBooking } from "../memberships/heldRepo.js";
+import { heldForBooking, heldForClasses } from "../memberships/heldRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -153,10 +153,8 @@ const rawContext = z.object({
   mine_id: z.string().nullable(),
 });
 
-/** One class of this gym as one person meets it, or null where the gym has no such class.
- *  `lock`: the class's row is held until the transaction ends. The counts are right for
- *  a write only under the gym's lock, taken in a statement before this one. */
-export async function contextOf(sql: SqlOrTx, gymId: string, sessionId: string, userId: string, lock: boolean): Promise<BookingContext | null> {
+/** The classes of this gym that `which` chooses, each as one person meets it. */
+async function contexts(sql: SqlOrTx, gymId: string, userId: string, which: ReturnType<SqlOrTx>, tail: ReturnType<SqlOrTx>): Promise<BookingContext[]> {
   const rows = await sql`
     SELECT s.id, s.class_type_id, t.name, t.open_gym, s.local_date::text AS local_date, s.local_start_minute,
            s.starts_at, s.minutes, s.places, s.status AS session_status, s.coach_user_id,
@@ -180,31 +178,55 @@ export async function contextOf(sql: SqlOrTx, gymId: string, sessionId: string, 
       WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.user_id = ${userId}
       ORDER BY b.seq DESC LIMIT 1
     ) mine ON true
-    WHERE s.gym_id = ${gymId} AND s.id = ${sessionId}
-    ${lock ? sql`FOR UPDATE OF s` : sql``}`;
-  const row = rows[0];
-  if (row === undefined) return null;
-  const r = rawContext.parse(row);
-  return {
-    session: {
-      id: r.id,
-      classTypeId: r.class_type_id,
-      className: r.name,
-      openGym: r.open_gym,
-      localDate: r.local_date,
-      localStartMinute: r.local_start_minute,
-      startsAt: r.starts_at,
-      minutes: r.minutes,
-      places: r.places,
-      cancelled: r.session_status === "cancelled",
-      coachUserId: r.coach_user_id,
-    },
-    settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist, timezone: r.timezone },
-    counts: { booked: r.booked, waitlisted: r.waitlisted },
-    gymHasTypes: r.has_types,
-    booker: r.member ? { entryId: r.entry_id } : null,
-    latest: r.mine_id === null ? null : toBooking({ ...row, id: r.mine_id }),
-  };
+    WHERE s.gym_id = ${gymId} AND ${which}
+    ${tail}`;
+  return rows.map((row) => {
+    const r = rawContext.parse(row);
+    return {
+      session: {
+        id: r.id,
+        classTypeId: r.class_type_id,
+        className: r.name,
+        openGym: r.open_gym,
+        localDate: r.local_date,
+        localStartMinute: r.local_start_minute,
+        startsAt: r.starts_at,
+        minutes: r.minutes,
+        places: r.places,
+        cancelled: r.session_status === "cancelled",
+        coachUserId: r.coach_user_id,
+      },
+      settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist, timezone: r.timezone },
+      counts: { booked: r.booked, waitlisted: r.waitlisted },
+      gymHasTypes: r.has_types,
+      booker: r.member ? { entryId: r.entry_id } : null,
+      latest: r.mine_id === null ? null : toBooking({ ...row, id: r.mine_id }),
+    };
+  });
+}
+
+/** One class of this gym as one person meets it, or null where the gym has no such class.
+ *  `lock`: the class's row is held until the transaction ends. The counts are right for
+ *  a write only under the gym's lock, taken in a statement before this one. */
+export async function contextOf(sql: SqlOrTx, gymId: string, sessionId: string, userId: string, lock: boolean): Promise<BookingContext | null> {
+  return (await contexts(sql, gymId, userId, sql`s.id = ${sessionId}`, lock ? sql`FOR UPDATE OF s` : sql``))[0] ?? null;
+}
+
+/** The gym's classes that have not started, on its own days `from` to `to`, the soonest
+ *  first, each as this person meets it: at most `limit`. A plain read. */
+export async function comingContexts(
+  sql: SqlOrTx,
+  gymId: string,
+  userId: string,
+  when: { now: Date; from: string; to: string; limit: number },
+): Promise<BookingContext[]> {
+  return await contexts(
+    sql,
+    gymId,
+    userId,
+    sql`s.starts_at > ${when.now} AND s.local_date BETWEEN ${when.from}::date AND ${when.to}::date`,
+    sql`ORDER BY s.starts_at, s.id LIMIT ${when.limit}`,
+  );
 }
 
 /** The booking this gym keeps under a request's key, whoever made it: the request that
@@ -245,6 +267,24 @@ export async function waitlistOf(sql: SqlOrTx, gymId: string, sessionId: string)
   return rows.map((r) => ({ bookingId: r.id, userId: r.user_id, booker: r.member ? { entryId: r.entry_id } : null }));
 }
 
+/** `waitlistOf` for many classes at once, by class. One statement. */
+export async function waitlistsOf(sql: SqlOrTx, gymId: string, sessionIds: readonly string[]): Promise<Map<string, Waiter[]>> {
+  const lines = new Map<string, Waiter[]>();
+  if (sessionIds.length === 0) return lines;
+  const rows = await sql<{ id: string; session_id: string; user_id: string; member: boolean; entry_id: string | null }[]>`
+    SELECT b.id, b.session_id, b.user_id, (m.user_id IS NOT NULL AND u.id IS NOT NULL) AS member, e.id AS entry_id
+    FROM gym_class_bookings b
+    LEFT JOIN gym_members m ON m.gym_id = b.gym_id AND m.user_id = b.user_id AND m.removed_at IS NULL
+    LEFT JOIN users u ON u.id = m.user_id AND u.status = 'active'
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
+    WHERE b.gym_id = ${gymId} AND b.session_id = ANY(${[...sessionIds]}::uuid[]) AND b.status = 'waitlisted'
+    ORDER BY b.seq`;
+  for (const r of rows) {
+    lines.set(r.session_id, [...(lines.get(r.session_id) ?? []), { bookingId: r.id, userId: r.user_id, booker: r.member ? { entryId: r.entry_id } : null }]);
+  }
+  return lines;
+}
+
 /** These records' memberships in use, by record, each with its bookings already counted in
  *  the week and the month the class is in (the gym's own days). A class staff cancelled
  *  is not counted. Two statements, however many records. */
@@ -282,6 +322,57 @@ export async function coversOf(
   }
   return covers;
 }
+
+/** `coversOf` for many classes at once: by class, then by record, the memberships in use
+ *  of the records `recordsOf` names for that class, as the class meets them. Two
+ *  statements, however many classes and records. A plain read. */
+export async function coversOfClasses(
+  sql: SqlOrTx,
+  gymId: string,
+  sessions: readonly BookingSession[],
+  recordsOf: (sessionId: string) => readonly string[],
+): Promise<Map<string, Map<string, HeldCover[]>>> {
+  const covers = new Map<string, Map<string, HeldCover[]>>();
+  const entryIds = [...new Set(sessions.flatMap((s) => recordsOf(s.id)))];
+  if (entryIds.length === 0) return covers;
+  const rows = await heldForClasses(sql, gymId, entryIds);
+  const heldBy = new Map<string, Omit<(typeof rows)[number], "entryId">[]>();
+  for (const { entryId, ...h } of rows) heldBy.set(entryId, [...(heldBy.get(entryId) ?? []), h]);
+  const limited = rows.filter((h) => h.bookingsPeriod !== null).map((h) => h.id);
+  const periods = new Map(sessions.map((s) => [s.id, { week: bookingPeriod(s.localDate, "week"), month: bookingPeriod(s.localDate, "month") }]));
+  // Their counted bookings by membership and day, over every week and month the classes are in.
+  const counted = new Map<string, { day: string; n: number }[]>();
+  if (limited.length > 0) {
+    const ends = [...periods.values()].flatMap((p) => [p.week.from, p.week.to, p.month.from, p.month.to]).sort();
+    const rows = await sql<{ id: string; day: string; n: number }[]>`
+      SELECT b.held_membership_id AS id, s.local_date::text AS day, count(*)::int AS n
+      FROM gym_class_bookings b
+      JOIN gym_class_sessions s ON s.gym_id = b.gym_id AND s.id = b.session_id
+      WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${limited}::uuid[])
+        AND b.status = ANY(${[...CLASS_BOOKING_COUNTED]}::text[])
+        AND s.status <> 'cancelled'
+        AND s.local_date BETWEEN ${ends[0] ?? ""}::date AND ${ends[ends.length - 1] ?? ""}::date
+      GROUP BY b.held_membership_id, s.local_date`;
+    for (const r of rows) counted.set(r.id, [...(counted.get(r.id) ?? []), { day: r.day, n: r.n }]);
+  }
+  for (const session of sessions) {
+    const period = periods.get(session.id);
+    const byRecord = new Map<string, HeldCover[]>();
+    for (const record of recordsOf(session.id)) {
+      byRecord.set(
+        record,
+        (heldBy.get(record) ?? []).map(({ coversAll, classTypeIds, ...h }) => {
+          const within = h.bookingsPeriod === null || period === undefined ? null : period[h.bookingsPeriod];
+          const used = within === null ? 0 : (counted.get(h.id) ?? []).reduce((sum, c) => (c.day >= within.from && c.day <= within.to ? sum + c.n : sum), 0);
+          return { ...h, coversClass: coversAll || classTypeIds.includes(session.classTypeId), used };
+        }),
+      );
+    }
+    covers.set(session.id, byRecord);
+  }
+  return covers;
+}
+
 /** A new booking, holding a place or waiting. */
 export async function insertBooking(
   tx: TransactionSql,
