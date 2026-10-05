@@ -455,6 +455,42 @@ d("personal training (real Postgres, two api instances)", () => {
     expect((await sessions(sells, sam)).map((r) => r.pack_charged)).toEqual([false, true]);
   });
 
+  it("the price list's tick is what makes a membership pay: saved through the route, read back, and changed", async () => {
+    const gym = await makeGym("Tick PT");
+    const sam = await trainerWith(gym, "Tick Trainer");
+    const maya = await listed(gym, "Maya Tick");
+    const types = `/v1/orgs/${gym.id}/membership-types`;
+    const pack = {
+      name: "PT 10", description: null, kind: "pack", priceMinor: 30000, termCount: null, termUnit: null, packClasses: 10, packDays: 90,
+      access: "all_classes", bookingsLimit: null, bookingsPeriod: null,
+    };
+    // No class at all needs the tick: a pack that pays for nothing is refused.
+    expect((await inject("POST", types, gym.owner.cookies, { ...pack, classTypeIds: [] })).statusCode).toBe(400);
+    expect((await inject("POST", types, gym.owner.cookies, { ...pack, classTypeIds: [], includesPt: false })).statusCode).toBe(400);
+    const created = await inject("POST", types, gym.owner.cookies, { ...pack, classTypeIds: [], includesPt: true });
+    expect(created.statusCode, created.body).toBe(201);
+    interface Listed { id: string; name: string; includesPt: boolean; classTypes: unknown[] | null; updatedAt: string }
+    const [type] = (JSON.parse(created.body) as { types: Listed[] }).types;
+    expect([type?.includesPt, type?.classTypes]).toEqual([true, []]);
+    if (type === undefined) throw new Error("no type");
+
+    const held = await hold(gym, maya, type.id, { pack: 10 });
+    expect(made(await book(gym, sam, maya)).packCharged).toBe(true);
+    expect(await left(held)).toBe(9);
+
+    // The tick taken off: the same pack, for every class now, no longer pays for a session.
+    const changed = await inject("PUT", `${types}/${type.id}`, gym.owner.cookies, { ...pack, classTypeIds: null, includesPt: false, updatedAt: type.updatedAt });
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect((JSON.parse(changed.body) as { types: Listed[] }).types[0]?.includesPt).toBe(false);
+    const refused = await book(gym, sam, maya, { minute: 660 });
+    expect([refused.statusCode, errorOf(refused)]).toEqual([409, "not_covered"]);
+    expect(await left(held)).toBe(9);
+    // A type saved by a form that does not know the tick has it off.
+    const old = await inject("POST", types, gym.owner.cookies, { ...pack, name: "Class 10", classTypeIds: null });
+    expect(old.statusCode, old.body).toBe(201);
+    expect((JSON.parse(old.body) as { types: Listed[] }).types.find((t) => t.name === "Class 10")?.includesPt).toBe(false);
+  });
+
   it("a gym with no membership types books anybody on its list; a past member and another gym's person are not found", async () => {
     const sam = await trainerWith(open, "Open Trainer");
     const tom = await listed(open, "Tom Open");
