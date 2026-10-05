@@ -21,7 +21,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import {
+  CLASS_BOOKING_WORDS,
+  CLASS_HAS_BOOKINGS_ERROR,
   CLASS_SLOT_REPLACES_ERROR,
+  confirmBookingsBodySchema,
+  confirmBookingsQuerySchema,
+  type ClassBookingsEnding,
   bulkEditGymClassSchedulesRequestSchema,
   changeGymClassSessionRequestSchema,
   createGymClassScheduleRequestSchema,
@@ -72,6 +77,17 @@ function sendReplaces(reply: FastifyReply, req: FastifyRequest, count: number) {
   });
 }
 
+/** The 409 a change answers when it would end people's bookings: who they are, for the
+ *  screen to show and send their number back as `confirmBookings`. */
+function sendBookings(reply: FastifyReply, req: FastifyRequest, ending: ClassBookingsEnding) {
+  return reply.status(409).send({
+    error: CLASS_HAS_BOOKINGS_ERROR,
+    message: CLASS_BOOKING_WORDS.class_has_bookings,
+    ending,
+    requestId: req.id,
+  });
+}
+
 function requireUserId(req: FastifyRequest): string {
   const userId = req.authUser?.id;
   if (userId === undefined) throw new Error("authenticate preHandler did not run");
@@ -81,10 +97,12 @@ function requireUserId(req: FastifyRequest): string {
 export interface ClassRouteDeps {
   sql: Sql;
   redis: RedisLike;
+  /** The clock; a test moves it. */
+  now?: () => Date;
 }
 
 export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps): void {
-  const classDeps: service.ClassesDeps = { sql: deps.sql, now: () => new Date() };
+  const classDeps: service.ClassesDeps = { sql: deps.sql, now: deps.now ?? (() => new Date()) };
 
   /** A timetable is set in bursts — a gym typing in twenty classes on its first
    *  afternoon — and then hardly touched. 300 an hour each is far above that and
@@ -157,13 +175,17 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
   app.delete("/v1/orgs/:gymId/classes/:classTypeId", guarded, async (req, reply) => {
     const params = parseOr400(classTypeParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const timetable = await service.archiveClassType(
+    const query = parseOr400(confirmBookingsQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const answer = await service.archiveClassType(
       classDeps,
       requireUserId(req),
       params.gymId,
       params.classTypeId,
+      query.confirmBookings ?? null,
     );
-    return reply.status(200).send(timetable);
+    if (answer.kind === "bookings") return sendBookings(reply, req, answer.ending);
+    return reply.status(200).send(answer.body);
   });
 
   /** BRING IT BACK. POST and not PUT: it is an action on a thing, not a
@@ -217,6 +239,7 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
       body,
     );
     if (answer.kind === "replaces") return sendReplaces(reply, req, answer.count);
+    if (answer.kind === "bookings") return sendBookings(reply, req, answer.ending);
     return reply.status(200).send(answer.body);
   });
 
@@ -243,13 +266,17 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
   app.delete("/v1/orgs/:gymId/class-repeats/:scheduleId", guarded, async (req, reply) => {
     const params = parseOr400(classScheduleParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const timetable = await service.endSchedule(
+    const query = parseOr400(confirmBookingsQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const answer = await service.endSchedule(
       classDeps,
       requireUserId(req),
       params.gymId,
       params.scheduleId,
+      query.confirmBookings ?? null,
     );
-    return reply.status(200).send(timetable);
+    if (answer.kind === "bookings") return sendBookings(reply, req, answer.ending);
+    return reply.status(200).send(answer.body);
   });
 
   // ── THE WEEK VIEW AND "THIS DAY ONLY" (17b-ii-b-i) ──────────────────────────
@@ -279,6 +306,7 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
       body,
     );
     if (answer.kind === "replaces") return sendReplaces(reply, req, answer.count);
+    if (answer.kind === "bookings") return sendBookings(reply, req, answer.ending);
     return reply.status(200).send(answer.body);
   });
 
@@ -287,13 +315,18 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
   app.post("/v1/orgs/:gymId/class-sessions/:sessionId/cancel", guarded, async (req, reply) => {
     const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const week = await service.cancelClassSession(
+    // No body at all is a cancel that confirms nothing.
+    const body = parseOr400(confirmBookingsBodySchema, req.body ?? {}, req, reply);
+    if (body === null) return;
+    const answer = await service.cancelClassSession(
       classDeps,
       requireUserId(req),
       params.gymId,
       params.sessionId,
+      body.confirmBookings ?? null,
     );
-    return reply.status(200).send(week);
+    if (answer.kind === "bookings") return sendBookings(reply, req, answer.ending);
+    return reply.status(200).send(answer.body);
   });
 
   app.post("/v1/orgs/:gymId/class-sessions/:sessionId/restore", guarded, async (req, reply) => {

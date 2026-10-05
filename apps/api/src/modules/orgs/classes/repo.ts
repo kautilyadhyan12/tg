@@ -25,6 +25,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import {
   CLASS_ARCHIVED_PAGE,
+  CLASS_BOOKINGS_ENDING_SHOWN,
   CLASS_FILL_HORIZON_DAYS,
   CLASS_SCHEDULES_LISTED_PER_TYPE_MAX,
   CLASS_SCHEDULES_PER_TYPE_MAX,
@@ -32,6 +33,8 @@ import {
   CLASS_TYPES_MAX,
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
+import { endClassBookings, handOverClasses, type BookingsEnded } from "./bookingChanges.js";
+import { endingCounts, endingPeople, type EndingCounts, type EndingPersonRow } from "./bookingsRepo.js";
 import { dayVerdict } from "./dayRule.js";
 import { fillClassSessions } from "./fill.js";
 import {
@@ -340,6 +343,38 @@ export type ClassWriteOutcome =
   /** The class's limit of time slots listed; `would` is how many it would list. */
   | { kind: "too_many_listed"; cap: number; would: number };
 
+/** People are booked on, or waiting for, classes the change would cancel or remove, and
+ *  the request did not confirm their number: nothing was written. */
+export interface HasBookings {
+  kind: "has_bookings";
+  ending: EndingCounts & { people: EndingPersonRow[] };
+}
+
+/** The question a change that ends bookings must have answered first (17c-ii-a): null
+ *  when nobody is booked or waiting, or when `confirmed` is their number as counted here,
+ *  under the gym's lock. Asked before the change's first write. */
+async function bookingsAsk(
+  tx: TransactionSql,
+  gymId: string,
+  sessionIds: readonly string[],
+  confirmed: number | null,
+): Promise<HasBookings | null> {
+  const counts = await endingCounts(tx, gymId, { sessionIds });
+  const people = counts.booked + counts.waiting;
+  if (people === 0 || people === confirmed) return null;
+  return {
+    kind: "has_bookings",
+    ending: { ...counts, people: await endingPeople(tx, gymId, { sessionIds }, null, CLASS_BOOKINGS_ENDING_SHOWN) },
+  };
+}
+
+/** What ending bookings did, for the audit line. Counts only, never a person. */
+const endedMeta = (ended: BookingsEnded): Record<string, string> => ({
+  bookingsEnded: String(ended.booked),
+  waitlistEnded: String(ended.waiting),
+  packClassesBack: String(ended.packClasses),
+});
+
 /** IS THIS PERSON THIS GYM'S STAFF — asked INSIDE the write's transaction, under
  *  the gym's lock, so it cannot be answered against a roster that changes
  *  between the check and the insert. It is the one rule the column's own foreign
@@ -456,20 +491,27 @@ export async function updateClassType(
  *  this button's business. Its repeats are stopped in the same transaction, so
  *  the nightly fill cannot put the dates back.
  *
- *  **WHEN 17c LANDS THIS BECOMES A DIFFERENT DECISION and the comment is here
- *  so it is made rather than inherited:** a future session with people booked on
- *  it cannot simply vanish — it has to be cancelled and everybody told. Today
- *  nothing can be booked, so nobody is losing anything. */
+ *  **PEOPLE BOOKED ON THOSE DATES (17c-ii-a):** the request confirms their number
+ *  first (`bookingsAsk`); then their bookings end, their packs have the classes
+ *  back, and the bookings go with the dates. */
 export async function archiveClassType(
   sql: Sql,
-  input: { gymId: string; classTypeId: string; actorUserId: string; now: Date },
-): Promise<ClassWriteOutcome> {
+  input: { gymId: string; classTypeId: string; confirmBookings: number | null; actorUserId: string; now: Date },
+): Promise<ClassWriteOutcome | HasBookings> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
     const [before] = await tx<{ id: string; name: string }[]>`
       SELECT id, name FROM gym_class_types
       WHERE id = ${input.classTypeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
     if (before === undefined) return { kind: "not_found" };
+
+    const coming = (
+      await tx<{ id: string }[]>`
+        SELECT id FROM gym_class_sessions
+        WHERE class_type_id = ${input.classTypeId} AND gym_id = ${input.gymId} AND starts_at > ${input.now}`
+    ).map((r) => r.id);
+    const ask = await bookingsAsk(tx, input.gymId, coming, input.confirmBookings);
+    if (ask !== null) return ask;
 
     await tx`
       UPDATE gym_class_types SET archived_at = ${input.now}, updated_at = ${input.now}
@@ -479,6 +521,7 @@ export async function archiveClassType(
       WHERE class_type_id = ${input.classTypeId}
         AND gym_id = ${input.gymId}
         AND ended_at IS NULL`;
+    const ended = await endClassBookings(tx, input.gymId, coming, input.now, { remove: true });
     const removed = await tx`
       DELETE FROM gym_class_sessions
       WHERE class_type_id = ${input.classTypeId}
@@ -491,7 +534,7 @@ export async function archiveClassType(
       action: "org.class_type_archived",
       targetType: "gym_class_type",
       targetId: input.classTypeId,
-      meta: { name: before.name, sessionsRemoved: String(removed.count) },
+      meta: { name: before.name, sessionsRemoved: String(removed.count), ...endedMeta(ended) },
     });
     return { kind: "ok" };
   });
@@ -733,6 +776,8 @@ export type SlotChangeOutcome =
   /** A move would replace this many classes changed or cancelled on their own,
    *  and the request did not confirm that number. */
   | { kind: "replaces"; count: number }
+  /** A move would remove classes people are booked on. */
+  | HasBookings
   /** The class opened on the Calendar has started. */
   | { kind: "started" }
   /** The class opened on the Calendar is cancelled: un-cancel it first. */
@@ -880,8 +925,10 @@ async function writeFieldsFrom(
  *  changed where it stands. A class changed on its own keeps its values either
  *  way.
  *
- *  **WHEN 17c LANDS** a replaced class may have people booked on it, and they
- *  have to be told (§13.3); today nothing can be booked. */
+ *  **BOOKINGS (17c-ii-a):** a move's replaced classes take their bookings with
+ *  them, ended and the packs given their classes back, once the request has
+ *  confirmed how many people that is. A new size hands a bigger class's free
+ *  places to its waitlist; nobody is taken out of a smaller one. */
 export async function changeSlotFrom(
   sql: Sql,
   input: ClassScheduleFields & {
@@ -889,6 +936,7 @@ export async function changeSlotFrom(
     target: SlotChangeTarget;
     startMinute: number;
     confirmReplace: number | null;
+    confirmBookings: number | null;
     actorUserId: string;
     now: Date;
   },
@@ -1113,6 +1161,11 @@ export async function changeSlotFrom(
       restamp.splice(0, restamp.length, opened.id);
     }
 
+    if (change === "move") {
+      const ask = await bookingsAsk(tx, input.gymId, replace, input.confirmBookings);
+      if (ask !== null) return ask;
+    }
+
     // ── Writes from here on ──
 
     const places = (p: number | null) => (p === null ? "none" : String(p));
@@ -1139,6 +1192,7 @@ export async function changeSlotFrom(
       }
     };
     if (change === "move") {
+      const ended = await endClassBookings(tx, input.gymId, replace, input.now, { remove: true });
       const removed =
         replace.length === 0
           ? 0
@@ -1179,6 +1233,7 @@ export async function changeSlotFrom(
           sessionsReplaced: String(removed),
           changedAloneReplaced: String(asked),
           sessionsWritten: String(filled.sessions),
+          ...endedMeta(ended),
         },
       });
       return { kind: "ok", localDate: from };
@@ -1194,6 +1249,7 @@ export async function changeSlotFrom(
         coachUserId: input.coachUserId,
         ids: restamp,
       });
+      await handOverClasses(tx, input.gymId, restamp, input.now);
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,
@@ -1219,6 +1275,7 @@ export async function changeSlotFrom(
       places: input.places,
       coachUserId: input.coachUserId,
     });
+    await handOverClasses(tx, input.gymId, restamp, input.now);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
@@ -1407,6 +1464,7 @@ export async function bulkChangeSlots(
         restamp,
         ...values,
       });
+      await handOverClasses(tx, input.gymId, restamp, input.now);
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,
@@ -1437,8 +1495,8 @@ export async function bulkChangeSlots(
  *  destroy the only record that the two ever differed. */
 export async function endSchedule(
   sql: Sql,
-  input: { gymId: string; scheduleId: string; actorUserId: string; now: Date },
-): Promise<ClassWriteOutcome> {
+  input: { gymId: string; scheduleId: string; confirmBookings: number | null; actorUserId: string; now: Date },
+): Promise<ClassWriteOutcome | HasBookings> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
     const [before] = await tx<{ id: string }[]>`
@@ -1446,9 +1504,19 @@ export async function endSchedule(
       WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId} AND ended_at IS NULL`;
     if (before === undefined) return { kind: "not_found" };
 
+    // People booked on its coming classes: asked about first, then ended with them.
+    const coming = (
+      await tx<{ id: string }[]>`
+        SELECT id FROM gym_class_sessions
+        WHERE schedule_id = ${input.scheduleId} AND gym_id = ${input.gymId} AND starts_at > ${input.now}`
+    ).map((r) => r.id);
+    const ask = await bookingsAsk(tx, input.gymId, coming, input.confirmBookings);
+    if (ask !== null) return ask;
+
     await tx`
       UPDATE gym_class_schedules SET ended_at = ${input.now}
       WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId}`;
+    const ended = await endClassBookings(tx, input.gymId, coming, input.now, { remove: true });
     const removed = await tx`
       DELETE FROM gym_class_sessions
       WHERE schedule_id = ${input.scheduleId}
@@ -1461,7 +1529,7 @@ export async function endSchedule(
       action: "org.class_schedule_ended",
       targetType: "gym_class_schedule",
       targetId: input.scheduleId,
-      meta: { sessionsRemoved: String(removed.count) },
+      meta: { sessionsRemoved: String(removed.count), ...endedMeta(ended) },
     });
     return { kind: "ok" };
   });
@@ -1610,12 +1678,13 @@ export type ClassDayOutcome =
   | { kind: "cancelled" }
   | { kind: "time_passed" }
   | { kind: "time_missing" }
-  | { kind: "clashes" };
+  | { kind: "clashes" }
+  | HasBookings;
 
 /** A change to one date: `change` carries the new values, the other two none. */
 export type ClassDayInput =
   | ({ action: "change"; startMinute: number } & ClassScheduleFields)
-  | { action: "cancel" }
+  | { action: "cancel"; confirmBookings: number | null }
   | { action: "restore" };
 
 /** CHANGE, CANCEL OR PUT BACK ONE DATE — under the gym's row lock, like every
@@ -1632,7 +1701,13 @@ export type ClassDayInput =
  *
  *  **One class, one time, one date.** A date moved to a time, or put back at a
  *  time, where the same class already runs that day is refused; `fill.ts`
- *  carries the same rule the other way round. */
+ *  carries the same rule the other way round.
+ *
+ *  **Bookings (17c-ii-a).** A cancel ends every booking of the class and gives
+ *  the packs their classes back, once the request has confirmed how many people
+ *  that is; the rows stay, as cancelled, and putting the class back does not
+ *  bring them back. A change keeps every booking, at a new time too; more places
+ *  go to the waitlist, and fewer take nobody out. */
 export async function changeSession(
   sql: Sql,
   input: ClassDayInput & { gymId: string; sessionId: string; actorUserId: string; now: Date },
@@ -1712,6 +1787,10 @@ export async function changeSession(
     if (input.action === "change" && !(await coachIsStaff(tx, input.gymId, input.coachUserId))) {
       return { kind: "coach_not_staff" };
     }
+    if (input.action === "cancel") {
+      const ask = await bookingsAsk(tx, input.gymId, [input.sessionId], input.confirmBookings);
+      if (ask !== null) return ask;
+    }
 
     if (input.action !== "cancel") {
       const minute = newMinute ?? row.local_start_minute;
@@ -1744,12 +1823,16 @@ export async function changeSession(
         places: `${places(row.places)} -> ${places(input.places)}`,
         coach: `${row.coach_user_id ?? "none"} -> ${input.coachUserId ?? "none"}`,
       };
+      await handOverClasses(tx, input.gymId, [input.sessionId], input.now);
     } else {
       const status = input.action === "cancel" ? "cancelled" : "scheduled";
       await tx`
         UPDATE gym_class_sessions SET status = ${status}
         WHERE id = ${input.sessionId} AND gym_id = ${input.gymId}`;
       meta = { date: row.local_date };
+      if (input.action === "cancel") {
+        meta = { ...meta, ...endedMeta(await endClassBookings(tx, input.gymId, [input.sessionId], input.now, { remove: false })) };
+      }
     }
 
     await insertAudit(tx, {

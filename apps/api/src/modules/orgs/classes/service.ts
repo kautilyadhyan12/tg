@@ -31,16 +31,15 @@
 // `requirePrivilege`** — §4.2's read-only console, unchanged: a gym with no live
 // plan keeps reading its own timetable and cannot change it, exactly like its
 // roster and its opening hours. No new refusal vocabulary is invented here.
-import postgres, { type Sql } from "postgres";
+import type { Sql } from "postgres";
 import {
-  CLASS_BOOKING_WORDS,
   CLASS_FILL_HORIZON_DAYS,
-  CLASS_HAS_BOOKINGS_ERROR,
   classColourSchema,
   classSessionStatusSchema,
   gymClassesResponseSchema,
   gymClassWeekResponseSchema,
   type BulkEditGymClassSchedulesRequest,
+  type ClassBookingsEnding,
   type ChangeGymClassSessionRequest,
   type CreateGymClassScheduleRequest,
   type CreateGymClassTypeRequest,
@@ -51,31 +50,33 @@ import {
   type UpdateGymClassScheduleRequest,
   type UpdateGymClassTypeRequest,
 } from "@app/shared";
+import { fullName } from "../leaderboard/rank.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import type { EndingPersonRow } from "./bookingsRepo.js";
 import * as repo from "./repo.js";
 
-/** A change that would remove a class somebody has booked is refused by the database
- *  (`gym_class_bookings_session_fk`: a pack's charge would go with the class), and
- *  answered here in plain words. ROADMAP 17c-ii ends the bookings itself instead. */
-const keepingBookings =
-  <A extends unknown[], R>(write: (...args: A) => Promise<R>) =>
-  async (...args: A): Promise<R> => {
-    try {
-      return await write(...args);
-    } catch (err) {
-      if (err instanceof postgres.PostgresError && err.constraint_name === "gym_class_bookings_session_fk") {
-        throw new OrgsError(409, CLASS_HAS_BOOKINGS_ERROR, CLASS_BOOKING_WORDS.class_has_bookings);
-      }
-      throw err;
-    }
+/** A person whose booking a change would end, as staff read them: the name as on
+ *  Members, never an email. */
+export function endingPerson(r: EndingPersonRow): ClassBookingsEnding["people"][number] {
+  const named = fullName(r);
+  return {
+    seq: r.seq,
+    name: named.name,
+    initials: named.name === null ? "" : named.initials,
+    waiting: r.waiting,
+    className: r.className,
+    localDate: r.localDate,
+    localStartMinute: r.localStartMinute,
   };
-/** The writes that delete coming classes. */
-const kept = {
-  archiveClassType: keepingBookings(repo.archiveClassType),
-  changeSlotFrom: keepingBookings(repo.changeSlotFrom),
-  bulkChangeSlots: keepingBookings(repo.bulkChangeSlots),
-  endSchedule: keepingBookings(repo.endSchedule),
-};
+}
+
+const toEnding = (h: repo.HasBookings): ClassBookingsEnding => ({ ...h.ending, people: h.ending.people.map(endingPerson) });
+
+/** A change that ends people's bookings answers either with the screen it was made on
+ *  or, until the request confirms their number, with who they are: the route turns that
+ *  into a 409 `class_has_bookings`, and the screen asks before sending the number back
+ *  as `confirmBookings` (17c-ii-a). */
+export type BookingsAnswer<T> = { kind: "ok"; body: T } | { kind: "bookings"; ending: ClassBookingsEnding };
 
 export interface ClassesDeps {
   sql: Sql;
@@ -334,17 +335,19 @@ export async function archiveClassType(
   userId: string,
   gymId: string,
   classTypeId: string,
-): Promise<GymClassesResponse> {
+  confirmBookings: number | null,
+): Promise<BookingsAnswer<GymClassesResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
-  throwOnFailure(
-    await kept.archiveClassType(deps.sql, {
-      gymId,
-      classTypeId,
-      actorUserId: userId,
-      now: deps.now(),
-    }),
-  );
-  return await readOr404(deps, gymId);
+  const outcome = await repo.archiveClassType(deps.sql, {
+    gymId,
+    classTypeId,
+    confirmBookings,
+    actorUserId: userId,
+    now: deps.now(),
+  });
+  if (outcome.kind === "has_bookings") return { kind: "bookings", ending: toEnding(outcome) };
+  throwOnFailure(outcome);
+  return { kind: "ok", body: await readOr404(deps, gymId) };
 }
 
 /** BRING A CLASS BACK (Kd, 2026-09-22 — Mindbody's way, not TeamUp's; the repo
@@ -401,7 +404,7 @@ export async function createSchedule(
  *  a move would replace classes the gym changed or cancelled on their own, with
  *  how many — the route turns that into a 409 carrying the count, and the
  *  screen asks before sending it back as `confirmReplace`. */
-export type SlotChangeAnswer<T> = { kind: "ok"; body: T } | { kind: "replaces"; count: number };
+export type SlotChangeAnswer<T> = BookingsAnswer<T> | { kind: "replaces"; count: number };
 
 /** A time slot change's refusals, in one place for both of its doors. Returns
  *  the date it was made from, or the count to ask about. */
@@ -410,11 +413,13 @@ function slotOutcome(
   /** Where the change was made: the Classes list (an Update from date) or
    *  the Calendar's "This and future classes" (a class, no date box). */
   door: "list" | "calendar",
-): { kind: "ok"; localDate: string } | { kind: "replaces"; count: number } {
+): { kind: "ok"; localDate: string } | { kind: "replaces"; count: number } | { kind: "bookings"; ending: ClassBookingsEnding } {
   switch (outcome.kind) {
     case "ok":
     case "replaces":
       return outcome;
+    case "has_bookings":
+      return { kind: "bookings", ending: toEnding(outcome) };
     case "not_found":
       throw new OrgsError(404, "class_not_found", NOT_FOUND_MESSAGE);
     case "coach_not_staff":
@@ -490,7 +495,7 @@ export async function updateSchedule(
 ): Promise<SlotChangeAnswer<GymClassesResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const done = slotOutcome(
-    await kept.changeSlotFrom(deps.sql, {
+    await repo.changeSlotFrom(deps.sql, {
       gymId,
       target: {
         by: "slot",
@@ -503,12 +508,13 @@ export async function updateSchedule(
       places: req.places,
       coachUserId: req.coachUserId,
       confirmReplace: req.confirmReplace ?? null,
+      confirmBookings: req.confirmBookings ?? null,
       actorUserId: userId,
       now: deps.now(),
     }),
     "list",
   );
-  if (done.kind === "replaces") return done;
+  if (done.kind !== "ok") return done;
   return { kind: "ok", body: await readOr404(deps, gymId) };
 }
 
@@ -522,7 +528,7 @@ export async function bulkEditSchedules(
   req: BulkEditGymClassSchedulesRequest,
 ): Promise<GymClassesResponse> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
-  const outcome = await kept.bulkChangeSlots(deps.sql, {
+  const outcome = await repo.bulkChangeSlots(deps.sql, {
     gymId,
     classTypeId,
     scheduleIds: req.scheduleIds,
@@ -599,7 +605,7 @@ async function writeDay(
   gymId: string,
   sessionId: string,
   input: repo.ClassDayInput,
-): Promise<GymClassWeekResponse> {
+): Promise<BookingsAnswer<GymClassWeekResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const outcome = await repo.changeSession(deps.sql, {
     ...input,
@@ -611,7 +617,9 @@ async function writeDay(
   switch (outcome.kind) {
     case "ok":
       // The week the date is in, so the screen redraws what it is looking at.
-      return await readWeekOr404(deps, gymId, outcome.localDate);
+      return { kind: "ok", body: await readWeekOr404(deps, gymId, outcome.localDate) };
+    case "has_bookings":
+      return { kind: "bookings", ending: toEnding(outcome) };
     case "not_found":
       throw new OrgsError(404, "class_not_found", NOT_FOUND_MESSAGE);
     case "coach_not_staff":
@@ -671,18 +679,17 @@ export async function changeClassSession(
   req: ChangeGymClassSessionRequest,
 ): Promise<SlotChangeAnswer<GymClassWeekResponse>> {
   if (req.scope === "this") {
-    const week = await writeDay(deps, userId, gymId, sessionId, {
+    return await writeDay(deps, userId, gymId, sessionId, {
       action: "change",
       startMinute: req.startMinute,
       minutes: req.minutes,
       places: req.places,
       coachUserId: req.coachUserId,
     });
-    return { kind: "ok", body: week };
   }
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const done = slotOutcome(
-    await kept.changeSlotFrom(deps.sql, {
+    await repo.changeSlotFrom(deps.sql, {
       gymId,
       target: { by: "session", sessionId },
       startMinute: req.startMinute,
@@ -690,12 +697,13 @@ export async function changeClassSession(
       places: req.places,
       coachUserId: req.coachUserId,
       confirmReplace: req.confirmReplace ?? null,
+      confirmBookings: req.confirmBookings ?? null,
       actorUserId: userId,
       now: deps.now(),
     }),
     "calendar",
   );
-  if (done.kind === "replaces") return done;
+  if (done.kind !== "ok") return done;
   return { kind: "ok", body: await readWeekOr404(deps, gymId, done.localDate) };
 }
 
@@ -704,8 +712,9 @@ export async function cancelClassSession(
   userId: string,
   gymId: string,
   sessionId: string,
-): Promise<GymClassWeekResponse> {
-  return await writeDay(deps, userId, gymId, sessionId, { action: "cancel" });
+  confirmBookings: number | null,
+): Promise<BookingsAnswer<GymClassWeekResponse>> {
+  return await writeDay(deps, userId, gymId, sessionId, { action: "cancel", confirmBookings });
 }
 
 export async function restoreClassSession(
@@ -714,7 +723,9 @@ export async function restoreClassSession(
   gymId: string,
   sessionId: string,
 ): Promise<GymClassWeekResponse> {
-  return await writeDay(deps, userId, gymId, sessionId, { action: "restore" });
+  const done = await writeDay(deps, userId, gymId, sessionId, { action: "restore" });
+  if (done.kind !== "ok") throw new Error("putting a class back asked about bookings");
+  return done.body;
 }
 
 export async function endSchedule(
@@ -722,15 +733,17 @@ export async function endSchedule(
   userId: string,
   gymId: string,
   scheduleId: string,
-): Promise<GymClassesResponse> {
+  confirmBookings: number | null,
+): Promise<BookingsAnswer<GymClassesResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
-  throwOnFailure(
-    await kept.endSchedule(deps.sql, {
-      gymId,
-      scheduleId,
-      actorUserId: userId,
-      now: deps.now(),
-    }),
-  );
-  return await readOr404(deps, gymId);
+  const outcome = await repo.endSchedule(deps.sql, {
+    gymId,
+    scheduleId,
+    confirmBookings,
+    actorUserId: userId,
+    now: deps.now(),
+  });
+  if (outcome.kind === "has_bookings") return { kind: "bookings", ending: toEnding(outcome) };
+  throwOnFailure(outcome);
+  return { kind: "ok", body: await readOr404(deps, gymId) };
 }

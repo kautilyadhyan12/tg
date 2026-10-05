@@ -338,6 +338,17 @@ const classWeekdaysField = z
  *  counts again under the gym's lock and moves only when the two agree. */
 const confirmReplaceField = z.number().int().min(1).max(1000);
 
+/** How many people's bookings a change ends (booked and waiting together), as the screen
+ *  was told when the server asked (409 `class_has_bookings`). The server counts again
+ *  under the gym's lock and goes ahead only when the two agree. */
+export const confirmBookingsField = z.number().int().min(1).max(1_000_000);
+
+/** Cancelling one class, cancelling a time slot and removing a class carry it alone. */
+export const confirmBookingsBodySchema = z.object({ confirmBookings: confirmBookingsField.optional() }).strict();
+export const confirmBookingsQuerySchema = z
+  .object({ confirmBookings: z.coerce.number().int().min(1).max(1_000_000).optional() })
+  .strict();
+
 /** A repeat, as a gym types it. */
 export const createGymClassScheduleRequestSchema = z
   .object({
@@ -378,6 +389,7 @@ export const updateGymClassScheduleRequestSchema = z
     startMinute: classStartMinuteSchema,
     ...classScheduleFieldsShape,
     confirmReplace: confirmReplaceField.optional(),
+    confirmBookings: confirmBookingsField.optional(),
   })
   .strict();
 export type UpdateGymClassScheduleRequest = z.infer<typeof updateGymClassScheduleRequestSchema>;
@@ -488,11 +500,16 @@ export const changeGymClassSessionRequestSchema = z
     startMinute: classStartMinuteSchema,
     ...classScheduleFieldsShape,
     confirmReplace: confirmReplaceField.optional(),
+    confirmBookings: confirmBookingsField.optional(),
   })
   .strict()
   .refine((r) => r.scope === "future" || r.confirmReplace === undefined, {
     message: "`confirmReplace` goes only with `scope: future`",
     path: ["confirmReplace"],
+  })
+  .refine((r) => r.scope === "future" || r.confirmBookings === undefined, {
+    message: "`confirmBookings` goes only with `scope: future`",
+    path: ["confirmBookings"],
   });
 export type ChangeGymClassSessionRequest = z.infer<typeof changeGymClassSessionRequestSchema>;
 

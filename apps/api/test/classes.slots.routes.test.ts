@@ -748,6 +748,7 @@ d("changing a time slot from a date (real Postgres)", () => {
           ...RUN,
           ...over,
           confirmReplace: null,
+          confirmBookings: null,
           actorUserId: owner.userId,
           now,
         });
@@ -818,6 +819,7 @@ d("changing a time slot from a date (real Postgres)", () => {
           startMinute: at(8),
           ...RUN,
           confirmReplace: null,
+          confirmBookings: null,
           actorUserId: owner.userId,
           now,
         }),
