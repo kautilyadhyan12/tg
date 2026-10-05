@@ -3,7 +3,7 @@ import { Flame, Info, Loader2, Trophy } from 'lucide-react';
 import { leaderboardService } from '../../api/leaderboardApi';
 import { errorText } from '../../api/orgsApi';
 import HideMeSwitch from './HideMeSwitch';
-import PersonSheet from './PersonSheet';
+import PersonProfile from './PersonProfile';
 import Sheet, { Initials } from './Sheet';
 import {
   BOARD_TABS,
@@ -406,7 +406,7 @@ export default function Leaderboard({ gym }) {
       )}
 
       {sheet?.kind === 'counted' && <CountedSheet gymId={gym.id} boardId={boardId} period={period} onClose={() => setSheet(null)} />}
-      {sheet?.kind === 'profile' && <PersonSheet gym={gym} person={sheet.row} period={period} onClose={() => setSheet(null)} />}
+      {sheet?.kind === 'profile' && <PersonProfile gym={gym} person={sheet.row} period={period} onClose={() => setSheet(null)} />}
     </section>
   );
 }

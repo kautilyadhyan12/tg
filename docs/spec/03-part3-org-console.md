@@ -2811,7 +2811,8 @@ for them and the safety tools of §15.3 are 19b-ii; video is 19b-iii.
 it is on, a live app member writes a post on their gym's Updates tab: the same words and
 photos as staff (`POST …/posts/mine`, one key a post), **10 in any 24 hours, 3 of them
 with photos** (Kd, RULINGS 2026-10-05; 429 `posts_photo_day_full`, "take the photos off to
-post the words now") counted in the database with the person's membership held (a removed
+post the words now"; both refusals say the 24 hours and in about how many hours the next
+may be made, since a post from yesterday evening still counts this morning) counted in the database with the person's membership held (a removed
 post gives none of the ten back; a removed photo post, its files deleted, gives its photo
 place back, and the ten bound that), and who
 may post — the switch and a stop — is settled before the body is read, as for staff; a
@@ -2860,13 +2861,16 @@ A member's Remove and Report ask who they are before the rate limit, so a strang
 never a 429; nothing a person wrote, as a member or as staff, offers them Report.
 
 **As built in 19b-ii-c (2026-10-05): a person's posts on their profile** (RULINGS
-2026-10-02, 2026-10-03). A member's name on a post, and a row of the leaderboard, open one
-sheet: the person's place on each board the gym shows (§15.5's profile, which answers 404
-for a hidden person, so nothing about a board is drawn for them) and **the posts they made
-as a member**, newest first, 20 a page, a pinned one in its own place
+2026-10-02, 2026-10-03). A member's picture or name on a post, and a row of the
+leaderboard, open **a page of its own, laid out as a profile is on Instagram or X** (Kd's
+click-through, RULINGS 2026-10-05): Back, the picture and name large, a row of numbers
+(how many posts, `total`; then the person's place on each board the gym shows — §15.5's
+profile, which answers 404 for a hidden person, so nothing about a board is drawn for
+them) and under it **the posts they made as a member**, newest first, 20 a page, a pinned
+one in its own place
 (`GET …/posts/people/:userId`). It is the Updates feed's own rule with one more
 condition, so a reader is sent nothing Updates would not send them: no post of somebody
-they blocked (the answer says `blocked`, and the sheet says why it is empty), none of
+they blocked (the answer says `blocked`, and the page says why it is empty), none of
 somebody who has left, been removed or deleted their account, none that was removed. A
 post the staff wrote for the gym is the gym's: its name opens nobody and it is on nobody's
 profile. An id that is nobody's reads exactly as a member who has not posted; a stranger,

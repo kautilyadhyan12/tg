@@ -553,7 +553,7 @@ describe('a person’s posts on their panel', () => {
 
   it('staff who hold “Post updates” read the person’s posts under their boards', async () => {
     postsSvc.person.mockReset();
-    postsSvc.person.mockResolvedValue({ posts: [theirPost], next: null });
+    postsSvc.person.mockResolvedValue({ posts: [theirPost], next: null, total: 1 });
     open({ ...ORG, privileges: [...ORG.privileges, 'posts.manage'] });
     fireEvent.click(await screen.findByText('Chen Wu'));
     const box = within(await screen.findByTestId('person-box'));

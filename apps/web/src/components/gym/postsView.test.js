@@ -20,6 +20,7 @@ import {
   personLink,
   personOf,
   personPostsEmpty,
+  postsCount,
   photoProblem,
   pinNote,
   postedText,
@@ -464,6 +465,12 @@ describe('a person’s posts on their profile', () => {
   it('says why a profile has no posts: none made, or the reader blocked them', () => {
     expect(personPostsEmpty('Maya O.', false)).toBe("Maya O. hasn't posted anything.");
     expect(personPostsEmpty('Maya O.', true)).toBe("You've blocked Maya O., so their posts aren't shown. You can unblock them at the bottom of Updates.");
+  });
+
+  it('counts the posts over the word for them', () => {
+    expect(postsCount(0)).toEqual({ number: '0', label: 'Posts' });
+    expect(postsCount(1)).toEqual({ number: '1', label: 'Post' });
+    expect(postsCount(10950)).toEqual({ number: '10,950', label: 'Posts' });
   });
 
   it('heads a person’s posts in the console by name, in the gym’s own word with none', () => {

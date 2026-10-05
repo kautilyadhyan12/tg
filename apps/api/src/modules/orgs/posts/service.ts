@@ -239,11 +239,14 @@ async function personPage<P>(
   userId: string,
   before: GymPostsCursor | undefined,
   shape: (rows: readonly repo.PostRow[]) => Promise<P[]>,
-): Promise<{ posts: P[]; next: string | null }> {
-  const rows = await repo.memberPostsPage(deps.sql, gymId, reader, userId, before ?? null, GYM_POSTS_PAGE + 1);
+): Promise<{ posts: P[]; next: string | null; total: number }> {
+  const [rows, total] = await Promise.all([
+    repo.memberPostsPage(deps.sql, gymId, reader, userId, before ?? null, GYM_POSTS_PAGE + 1),
+    repo.countMemberPosts(deps.sql, gymId, reader, userId),
+  ]);
   const shown = rows.slice(0, GYM_POSTS_PAGE);
   const last = shown[shown.length - 1];
-  return { posts: await shape(shown), next: rows.length > GYM_POSTS_PAGE && last !== undefined ? cursorOf(last) : null };
+  return { posts: await shape(shown), next: rows.length > GYM_POSTS_PAGE && last !== undefined ? cursorOf(last) : null, total };
 }
 
 /** The posts one person made as a member, for a live app member of a gym on a live plan;
@@ -353,12 +356,14 @@ function refusePosting(posting: GymMemberPosting, gymName: string): void {
  *  day's posts with photos. */
 async function refuseFullDay(sql: Sql | TransactionSql, gymId: string, userId: string, at: Date, withPhotos: boolean): Promise<void> {
   const since = new Date(at.getTime() - DAY_MS);
-  if ((await repo.countMemberPostsSince(sql, gymId, userId, since)) >= GYM_MEMBER_POSTS_A_DAY) {
-    throw new OrgsError(429, "posts_day_full", GYM_POST_WORDS.day_full);
-  }
-  if (withPhotos && (await repo.countMemberPhotoPostsSince(sql, gymId, userId, since)) >= GYM_MEMBER_PHOTO_POSTS_A_DAY) {
-    throw new OrgsError(429, "posts_photo_day_full", GYM_POST_WORDS.photo_day_full);
-  }
+  // Whole hours until the oldest counted post is a day old and one more may be made.
+  const hoursLeft = (counted: repo.Counted): number =>
+    counted.oldest === null ? 0 : Math.max(0, Math.round((counted.oldest.getTime() + DAY_MS - at.getTime()) / (60 * 60 * 1000)));
+  const all = await repo.countMemberPostsSince(sql, gymId, userId, since);
+  if (all.n >= GYM_MEMBER_POSTS_A_DAY) throw new OrgsError(429, "posts_day_full", GYM_POST_WORDS.day_full(hoursLeft(all)));
+  if (!withPhotos) return;
+  const photos = await repo.countMemberPhotoPostsSince(sql, gymId, userId, since);
+  if (photos.n >= GYM_MEMBER_PHOTO_POSTS_A_DAY) throw new OrgsError(429, "posts_photo_day_full", GYM_POST_WORDS.photo_day_full(hoursLeft(photos)));
 }
 
 /** A member who may post: the gym's switch is on and staff have not stopped them. The

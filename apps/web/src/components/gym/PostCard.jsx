@@ -118,6 +118,8 @@ export default function PostCard({ gymId, gymName, post, busy, onReact, onOpen, 
   const box = ownRemoveBox(post, gymName);
   const action = memberPostAction(post);
   const blocking = blockBox(post, gymName);
+  const opens = onPerson !== null && canOpenPerson(post);
+  const Who = opens ? 'button' : 'div';
 
   const run = async (request) => {
     setWorking(true);
@@ -139,32 +141,29 @@ export default function PostCard({ gymId, gymName, post, busy, onReact, onOpen, 
   return (
     <li className="rounded-xl p-3.5" style={{ background: 'rgba(255,255,255,0.03)' }} data-testid="post">
       <div className="flex items-center gap-2.5">
-        <span
-          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-          style={{ background: 'rgba(255,138,31,0.15)', color: ORANGE }}
-          aria-hidden="true"
-        >
-          {authorInitials(post, gymName)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-white truncate">
-            {onPerson !== null && canOpenPerson(post) ? (
-              <button type="button" onClick={() => onPerson(post)} aria-label={personLink(post)} className="font-semibold underline-offset-2 hover:underline" style={{ color: '#fff' }}>
-                {authorName(post, gymName)}
-              </button>
-            ) : (
-              authorName(post, gymName)
-            )}
-            {tag !== null && (
-              <span className="text-xs font-medium ml-1.5" style={{ color: MUTED }}>
-                · {tag}
-              </span>
-            )}
-          </p>
-          <p className="text-xs" style={{ color: MUTED }}>
-            {postedText(post.createdAt)}
-          </p>
-        </div>
+        {/* A member's picture and name are one thing to press: both open their profile. */}
+        <Who className="flex items-center gap-2.5 min-w-0 flex-1 text-left" {...(opens ? { type: 'button', onClick: () => onPerson(post), 'aria-label': personLink(post) } : {})}>
+          <span
+            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+            style={{ background: 'rgba(255,138,31,0.15)', color: ORANGE }}
+            aria-hidden="true"
+          >
+            {authorInitials(post, gymName)}
+          </span>
+          <span className="min-w-0 flex-1 block">
+            <span className="text-sm font-semibold text-white truncate block">
+              {authorName(post, gymName)}
+              {tag !== null && (
+                <span className="text-xs font-medium ml-1.5" style={{ color: MUTED }}>
+                  · {tag}
+                </span>
+              )}
+            </span>
+            <span className="text-xs block" style={{ color: MUTED }}>
+              {postedText(post.createdAt)}
+            </span>
+          </span>
+        </Who>
         {post.pinned && (
           <span className="flex items-center gap-1 text-xs font-semibold flex-shrink-0" style={{ color: ORANGE }}>
             <Pin className="w-3.5 h-3.5" aria-hidden="true" /> Pinned

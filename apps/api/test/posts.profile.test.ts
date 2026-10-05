@@ -170,7 +170,8 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
     }
   };
   const errorOf = (res: { body: string }): string => (JSON.parse(res.body) as { error: string }).error;
-  const NOBODY: PersonGymPostsResponse = { posts: [], next: null, blocked: false };
+  const NOBODY: PersonGymPostsResponse = { posts: [], next: null, total: 0, blocked: false };
+  const NOBODY_STAFF = { posts: [], next: null, total: 0 };
 
   beforeAll(async () => {
     await cleanup();
@@ -224,6 +225,8 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       expect(bodies(hers)).toEqual(["Wendy's newest", "Wendy's pinned one", "Wendy's first"]);
       expect(hers.blocked).toBe(false);
       expect(hers.next).toBeNull();
+      // The number beside "Posts" is what the reader is sent: the removed one is not in it.
+      expect(hers.total).toBe(3);
       expect(hers.posts.map((p) => p.authorId)).toEqual([writer.userId, writer.userId, writer.userId]);
       expect(hers.posts.map((p) => ({ name: p.author.name, own: p.own, fromMember: p.fromMember }))).toEqual(
         [0, 1, 2].map(() => ({ name: "Wendy W.", own: false, fromMember: true })),
@@ -239,7 +242,7 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       // BLOCKED: the blocker is sent none of it, by the profile either.
       expect((await inject("PUT", `${posts(gym.id)}/${first.id}/block`, blocker.cookies)).statusCode).toBe(200);
       const blockedView = await inject("GET", profilePath(gym, writer.userId), blocker.cookies);
-      expect(JSON.parse(blockedView.body)).toEqual({ posts: [], next: null, blocked: true });
+      expect(JSON.parse(blockedView.body)).toEqual({ posts: [], next: null, total: 0, blocked: true });
       expect(blockedView.body).not.toMatch(/Wendy/);
       expect((await inject("GET", photoPath(gym, first), blocker.cookies)).statusCode).toBe(404);
       // Nobody else loses anything.
@@ -250,7 +253,7 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       expect(liams.map((p) => p.body)).toEqual(["Liam's last session"]);
       await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${leaver.userId}`;
       expect(await profile(gym, reader, leaver.userId)).toEqual(NOBODY);
-      expect(await staffProfile(gym, gym.owner, leaver.userId)).toEqual({ posts: [], next: null });
+      expect(await staffProfile(gym, gym.owner, leaver.userId)).toEqual(NOBODY_STAFF);
       expect((await inject("GET", profilePath(gym, writer.userId), leaver.cookies)).statusCode).toBe(404);
       // An id that is nobody's reads exactly as somebody who left, or who never posted.
       expect(await profile(gym, reader, randomUUID())).toEqual(NOBODY);
@@ -263,12 +266,13 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
 
       // THE GYM'S OWN POSTS are nobody's profile, though the owner trains here too.
       expect(await profile(gym, reader, gym.owner.userId)).toEqual(NOBODY);
-      expect(await staffProfile(gym, gym.owner, gym.owner.userId)).toEqual({ posts: [], next: null });
+      expect(await staffProfile(gym, gym.owner, gym.owner.userId)).toEqual(NOBODY_STAFF);
 
       // STAFF read the same posts by whole name, with whether the person is stopped.
       expect((await inject("PUT", `${posts(gym.id)}/stopped/${writer.userId}`, gym.owner.cookies)).statusCode).toBe(200);
       const staffView = await staffProfile(gym, gym.owner, writer.userId);
       expect(bodies(staffView)).toEqual(["Wendy's newest", "Wendy's pinned one", "Wendy's first"]);
+      expect(staffView.total).toBe(3);
       expect(staffView.posts.map((p) => ({ name: p.author.name, authorId: p.authorId, stopped: p.authorStopped }))).toEqual(
         [0, 1, 2].map(() => ({ name: "Wendy Writer", authorId: writer.userId, stopped: true })),
       );
@@ -353,6 +357,7 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
         for (let i = 0; i < 5; i++) {
           const page = await read(before);
           sizes.push(page.posts.length);
+          expect(page.total).toBe(total);
           seen.push(...bodies(page));
           if (page.next === null) break;
           before = page.next;
@@ -393,8 +398,9 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       // Refused before a photo is cleaned or written, and in words that say what to do.
       const unread = await send(gym, writer, "With a photo that is no photo", ["AAAA"]);
       expect({ status: unread.statusCode, error: errorOf(unread) }).toEqual({ status: 429, error: "posts_photo_day_full" });
+      // It says when: the first photo post of the three is a few seconds old.
       expect((JSON.parse(unread.body) as { message: string }).message).toBe(
-        "You can post photos 3 times a day. Take the photos off to post the words now, or try again tomorrow.",
+        "You've posted photos 3 times in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again in about 24 hours.",
       );
       expect(await filesOf(gym.id)).toHaveLength(GYM_MEMBER_PHOTO_POSTS_A_DAY);
 
@@ -413,6 +419,14 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
       expect((await send(gym, writer, "In its place", [IPHONE])).statusCode).toBe(201);
       expect((await send(gym, writer, "One too many", [IPHONE])).statusCode).toBe(429);
 
+      // A photo post from yesterday evening still counts this morning, and the sentence says
+      // how long is left (Kd's click-through: two photo posts today, the third refused).
+      clock += 19 * HOUR;
+      const morning = await send(gym, writer, "Next morning", [IPHONE]);
+      expect(morning.statusCode).toBe(429);
+      expect((JSON.parse(morning.body) as { message: string }).message).toMatch(/post photos again in about 5 hours\.$/);
+      clock += 4 * HOUR + 50 * 60 * 1000;
+      expect((JSON.parse((await send(gym, writer, "Nearly", [IPHONE])).body) as { message: string }).message).toMatch(/post photos again in under an hour\.$/);
       // 24 hours after the last of them, none counts.
       clock += 24 * HOUR;
       expect((await send(gym, writer, "A new day", [IPHONE])).statusCode).toBe(201);

@@ -119,6 +119,14 @@ export async function memberPostsPage(
   return rows.map(toPost);
 }
 
+/** How many posts one person made as a member that this reader is sent. */
+export async function countMemberPosts(sql: SqlOrTx, gymId: string, reader: Reader, authorId: string): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM (${posts(sql, gymId)}) p
+    WHERE ${seenBy(sql, gymId, reader)} AND p.by_member AND p.author_id = ${authorId}`;
+  return rows[0]?.n ?? 0;
+}
+
 /** One of this gym's posts this reader is sent, or null. */
 export async function postById(sql: SqlOrTx, gymId: string, postId: string, reader: Reader): Promise<PostRow | null> {
   const rows = await sql<RawPost[]>`
@@ -361,23 +369,29 @@ export async function lockMember(tx: TransactionSql, gymId: string, userId: stri
   return rows.length > 0;
 }
 
+/** How many, and when the oldest of them was made: the count drops when that one is a day old. */
+export interface Counted {
+  n: number;
+  oldest: Date | null;
+}
+
 /** The posts this member has made at this gym since `since`, removed ones too: removing
  *  a post gives no post back. */
-export async function countMemberPostsSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<number> {
-  const rows = await sql<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM gym_posts
+export async function countMemberPostsSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<Counted> {
+  const rows = await sql<Counted[]>`
+    SELECT count(*)::int AS n, min(created_at) AS oldest FROM gym_posts
     WHERE author_user_id = ${userId} AND gym_id = ${gymId} AND by_member AND created_at > ${since}`;
-  return rows[0]?.n ?? 0;
+  return rows[0] ?? { n: 0, oldest: null };
 }
 
 /** Of those, the posts that carry photos now. A removed post's photos are deleted with it,
  *  so it is not counted here: the day's ten above are what stop post-and-remove. */
-export async function countMemberPhotoPostsSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<number> {
-  const rows = await sql<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM gym_posts p
+export async function countMemberPhotoPostsSince(sql: SqlOrTx, gymId: string, userId: string, since: Date): Promise<Counted> {
+  const rows = await sql<Counted[]>`
+    SELECT count(*)::int AS n, min(p.created_at) AS oldest FROM gym_posts p
     WHERE p.author_user_id = ${userId} AND p.gym_id = ${gymId} AND p.by_member AND p.created_at > ${since}
       AND EXISTS (SELECT 1 FROM gym_post_photos ph WHERE ph.gym_id = p.gym_id AND ph.post_id = p.id)`;
-  return rows[0]?.n ?? 0;
+  return rows[0] ?? { n: 0, oldest: null };
 }
 
 /** Marks a member's own post removed; false when it is not theirs, or was removed already. */

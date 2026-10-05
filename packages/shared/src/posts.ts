@@ -337,6 +337,8 @@ export const personGymPostsResponseSchema = z
   .object({
     posts: z.array(gymPostSchema).max(GYM_POSTS_PAGE),
     next: z.string().nullable(),
+    /** Every post of theirs the reader is sent, on this page or a later one. */
+    total: z.number().int().nonnegative(),
     /** The reader has blocked this person here, which is why no post of theirs is sent. */
     blocked: z.boolean(),
   })
@@ -344,9 +346,15 @@ export const personGymPostsResponseSchema = z
 export type PersonGymPostsResponse = z.infer<typeof personGymPostsResponseSchema>;
 
 export const staffPersonGymPostsResponseSchema = z
-  .object({ posts: z.array(staffGymPostSchema).max(GYM_POSTS_PAGE), next: z.string().nullable() })
+  .object({ posts: z.array(staffGymPostSchema).max(GYM_POSTS_PAGE), next: z.string().nullable(), total: z.number().int().nonnegative() })
   .strict();
 export type StaffPersonGymPostsResponse = z.infer<typeof staffPersonGymPostsResponseSchema>;
+
+/** "in about 5 hours", for a limit counted over any 24 hours: when its oldest post leaves the count. */
+function againIn(hours: number): string {
+  if (hours <= 0) return "in under an hour";
+  return hours === 1 ? "in about 1 hour" : `in about ${String(hours)} hours`;
+}
 
 /** What a person reads when a post cannot be made, changed or found. */
 export const GYM_POST_WORDS = {
@@ -355,8 +363,11 @@ export const GYM_POST_WORDS = {
   photo_not_found: "This photo has been removed.",
   posting_off: "Members can't post here at the moment.",
   posting_stopped: (gymName: string): string => `The staff at ${gymName} have stopped you posting here. Speak to them at the front desk.`,
-  day_full: `You can post ${String(GYM_MEMBER_POSTS_A_DAY)} times a day. Try again tomorrow.`,
-  photo_day_full: `You can post photos ${String(GYM_MEMBER_PHOTO_POSTS_A_DAY)} times a day. Take the photos off to post the words now, or try again tomorrow.`,
+  /** `hours`: whole hours until the oldest of the counted posts is 24 hours old. */
+  day_full: (hours: number): string =>
+    `You've posted ${String(GYM_MEMBER_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. You can post again ${againIn(hours)}.`,
+  photo_day_full: (hours: number): string =>
+    `You've posted photos ${String(GYM_MEMBER_PHOTO_POSTS_A_DAY)} times in the last 24 hours, which is the most allowed. Take the photos off to post the words now, or post photos again ${againIn(hours)}.`,
   own_report: "This is your own post. You can remove it instead.",
   person_not_found: "This person isn't one of your members.",
   own_block: "This is your own post.",

@@ -344,10 +344,11 @@ describe('removing one’s own post, and reporting somebody else’s', () => {
   });
 });
 
-describe('a person’s profile, opened from a name', () => {
+describe('a person’s profile, opened from their picture or name', () => {
   const notFound = () => Object.assign(new Error('not found'), { response: { status: 404 } });
   const theirs = (id, body, over = {}) => post(id, body, { fromMember: true, authorId: 'u2', author: { name: 'Chen W.', initials: 'CW' }, ...over });
-  const page = (over = {}) => ({ posts: [], next: null, blocked: false, ...over });
+  const page = (over = {}) => ({ posts: [], next: null, blocked: false, total: (over.posts ?? []).length, ...over });
+  const stats = (sheet) => within(sheet.getByTestId('person-stats')).getAllByRole('listitem').map((li) => li.textContent);
   const places = { userId: 'u2', name: 'Chen W.', initials: 'CW', boards: [{ board: 'gym_days', period: 'this_week', place: 1, value: 3 }] };
   const openChen = async () => {
     fireEvent.click(await screen.findByRole('button', { name: 'See what Chen W. has posted' }));
@@ -366,12 +367,15 @@ describe('a person’s profile, opened from a name', () => {
     await waitFor(() => expect(sheet.getAllByTestId('post')).toHaveLength(2));
     expect(svc.person).toHaveBeenCalledWith('g1', 'u2');
     expect(boards.profile).toHaveBeenCalledWith('g1', 'u2', 'this_week');
-    expect(within(sheet.getByTestId('person-boards')).getByText('1st · 3 gym days')).toBeTruthy();
+    // The numbers in a row, as a profile has them: how many posts, then each board.
+    expect(stats(sheet)).toEqual(['2Posts', '1stGym days3 gym days this week']);
+    // The picture and the name are one thing to press.
+    expect(screen.getByRole('button', { name: 'See what Chen W. has posted' }).textContent).toContain('CW');
     expect(sheet.getAllByTestId('post').map((p) => within(p).getByText(/First 5k done|Leg day/).textContent)).toEqual(['First 5k done', 'Leg day']);
     // Inside the profile a name opens nothing further.
     expect(sheet.queryByRole('button', { name: /has posted/ })).toBeNull();
     // Nothing changed, so closing reads nothing again.
-    fireEvent.click(sheet.getByRole('button', { name: 'Close' }));
+    fireEvent.click(sheet.getByRole('button', { name: 'Back' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(svc.list).toHaveBeenCalledTimes(1);
   });
@@ -383,7 +387,7 @@ describe('a person’s profile, opened from a name', () => {
     render(<Updates gym={GYM} />);
     const sheet = await openChen();
     await waitFor(() => expect(sheet.getAllByTestId('post')).toHaveLength(1));
-    expect(sheet.queryByTestId('person-boards')).toBeNull();
+    expect(stats(sheet)).toEqual(['1Post']);
     expect(sheet.queryByText(/leaderboard/i)).toBeNull();
     expect(sheet.queryByText(/gym days|weeks|workout/i)).toBeNull();
   });
@@ -423,7 +427,7 @@ describe('a person’s profile, opened from a name', () => {
     expect(svc.block).toHaveBeenCalledWith('g1', 'a');
     expect(sheet.queryAllByTestId('post')).toEqual([]);
     svc.list.mockResolvedValue(feed({ blockedCount: 1 }));
-    fireEvent.click(sheet.getByRole('button', { name: 'Close' }));
+    fireEvent.click(sheet.getByRole('button', { name: 'Back' }));
     await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryAllByTestId('post')).toEqual([]));
   });

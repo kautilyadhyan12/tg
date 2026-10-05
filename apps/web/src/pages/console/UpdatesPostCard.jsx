@@ -120,6 +120,8 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
   const stop = stopBox(post.author.name);
   const full = report === null && onPin !== null ? pinNote(post, pinnedCount) : null;
   const canStop = post.fromMember && post.authorId !== null;
+  const opens = onPerson !== null && canOpenPerson(post);
+  const Who = opens ? 'button' : 'div';
   return (
     <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid={report === null ? 'post' : 'reported-post'}>
       {report !== null ? (
@@ -142,21 +144,16 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
         </div>
       ) : null}
       <div className="flex items-center gap-3">
-        <span className="c-avatar" style={{ width: 40, height: 40, fontSize: 14 }} aria-hidden="true">
-          {authorInitials(post, gymName)}
-        </span>
-        <div className="min-w-0 flex-grow">
-          <p className="c-s15 c-w6 c-t1 c-ell">
-            {onPerson !== null && canOpenPerson(post) ? (
-              <button type="button" onClick={() => onPerson(post)} aria-label={personLink(post)} className="c-lk c-w6">
-                {authorName(post, gymName)}
-              </button>
-            ) : (
-              authorName(post, gymName)
-            )}
-          </p>
-          <p className="c-s13 c-t2">{postedText(post.createdAt)}</p>
-        </div>
+        {/* A member's picture and name are one thing to press: both open their posts. */}
+        <Who className="flex items-center gap-3 min-w-0 flex-grow text-left" {...(opens ? { type: 'button', onClick: () => onPerson(post), 'aria-label': personLink(post) } : {})}>
+          <span className="c-avatar" style={{ width: 40, height: 40, fontSize: 14 }} aria-hidden="true">
+            {authorInitials(post, gymName)}
+          </span>
+          <span className="min-w-0 flex-grow block">
+            <span className={`c-s15 c-w6 c-ell block ${opens ? 'c-lk' : 'c-t1'}`}>{authorName(post, gymName)}</span>
+            <span className="c-s13 c-t2 block">{postedText(post.createdAt)}</span>
+          </span>
+        </Who>
         {post.fromMember ? <span className="c-tag c-tag-plain">{words.personCap}</span> : null}
         {post.authorStopped ? <span className="c-tag c-tag-warn">Stopped from posting</span> : null}
         {post.pinned ? (

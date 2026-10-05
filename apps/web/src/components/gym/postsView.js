@@ -308,6 +308,11 @@ export function personPostsEmpty(name, blocked) {
   return `${name} hasn't posted anything.`;
 }
 
+/** The number over "Posts" on a profile: "1 post" reads as "1" over "Post". */
+export function postsCount(total) {
+  return { number: total.toLocaleString('en'), label: total === 1 ? 'Post' : 'Posts' };
+}
+
 /** The heading over one person's posts in the console, and the line with none. */
 export function staffPersonPosts(name, words) {
   const who = name ?? `This ${words.person}`;

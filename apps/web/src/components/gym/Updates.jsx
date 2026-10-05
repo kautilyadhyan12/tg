@@ -4,7 +4,7 @@ import { postPhotoUrl, postsService } from '../../api/postsApi';
 import { errorText } from '../../api/orgsApi';
 import { preparePagePhoto } from '../../pages/console/gymPagePhotos';
 import PhotoViewer from '../common/PhotoViewer';
-import PersonSheet from './PersonSheet';
+import PersonProfile from './PersonProfile';
 import PostCard from './PostCard';
 import {
   POST_LIMITS,
@@ -443,7 +443,7 @@ export default function Updates({ gym }) {
           )}
         </>
       )}
-      {person !== null && <PersonSheet gym={{ id: gymId, name: feed?.gymName ?? gym.name }} person={person} onClose={() => setPerson(null)} onChanged={load} />}
+      {person !== null && <PersonProfile gym={{ id: gymId, name: feed?.gymName ?? gym.name }} person={person} onClose={() => setPerson(null)} onChanged={load} />}
       {viewing !== null && (
         <PhotoViewer
           photos={viewing.post.photos.map((photo, i) => ({

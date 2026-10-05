@@ -521,7 +521,7 @@ describe('reported posts', () => {
     expect(within(reportedCards()[1]).getByText('Reported by 1 person: Spam or selling')).toBeTruthy();
     expect(within(reportedCards()[0]).getByText('Look at the state of him')).toBeTruthy();
     // The writer's name, then Keep, Remove and Stop; a reported post is not pinned from here.
-    expect(within(reportedCards()[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Wendy Writer', 'Keep post', 'Remove post', 'Stop them posting']);
+    expect(within(reportedCards()[0]).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent.trim())).toEqual(['See what Wendy Writer has posted', 'Keep post', 'Remove post', 'Stop them posting']);
   });
 
   it('shows what reporters typed, under the post it was typed about, and nothing where nobody typed', async () => {
@@ -593,7 +593,7 @@ describe('reported posts', () => {
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     await waitFor(() => expect(reportedCards()).toHaveLength(2));
     // Only the writer's name, which opens their posts to read: nothing that changes anything.
-    expect(within(reportedCards()[0]).queryAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Wendy Writer']);
+    expect(within(reportedCards()[0]).queryAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['See what Wendy Writer has posted']);
   });
 });
 
@@ -606,13 +606,15 @@ describe('a person’s posts, opened from a name', () => {
 
   it('a member’s name opens their posts in a box; a staff post’s name opens nothing', async () => {
     svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done'), post('b', 'Closed on Monday')] }));
-    svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done'), theirs('c', 'Leg day')], next: null });
+    svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done'), theirs('c', 'Leg day')], next: null, total: 2 });
     open();
     await waitFor(() => expect(cards()).toHaveLength(2));
     expect(within(cards()[1]).queryByRole('button', { name: /has posted/ })).toBeNull();
     const box = await openWendy();
     await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(2));
     expect(svc.person).toHaveBeenCalledWith('g1', 'u-wendy');
+    // The picture and the name are one thing to press.
+    expect(screen.getByRole('button', { name: 'See what Wendy Writer has posted' }).textContent).toContain('WW');
     expect(screen.getByRole('dialog', { name: "Wendy Writer's posts" })).toBeTruthy();
     expect(box.getAllByRole('heading').map((h) => h.textContent)).toEqual(["Wendy Writer's posts"]);
     // A person's own list: Remove and Stop, never Pin, and no name to press again.
@@ -623,7 +625,7 @@ describe('a person’s posts, opened from a name', () => {
 
   it('Remove in the box asks first, removes the post it was pressed on, and the page behind is read again', async () => {
     svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
-    svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done'), theirs('c', 'Leg day')], next: null });
+    svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done'), theirs('c', 'Leg day')], next: null, total: 2 });
     svc.remove.mockResolvedValue({ removed: true });
     open();
     const box = await openWendy();
@@ -640,7 +642,7 @@ describe('a person’s posts, opened from a name', () => {
 
   it('says so when they have posted nothing, and when the posts cannot be read', async () => {
     svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
-    svc.person.mockResolvedValueOnce({ posts: [], next: null });
+    svc.person.mockResolvedValueOnce({ posts: [], next: null, total: 0 });
     open();
     const box = await openWendy();
     expect(await box.findByText("Wendy Writer hasn't posted anything.")).toBeTruthy();
@@ -653,7 +655,7 @@ describe('a person’s posts, opened from a name', () => {
 
   it('a gym with no plan reads a person’s posts and changes none', async () => {
     svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
-    svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done')], next: null });
+    svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done')], next: null, total: 1 });
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     const box = await openWendy();
     await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(1));
