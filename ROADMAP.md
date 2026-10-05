@@ -201,7 +201,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 17c-ii-a. [x] **Bookings when things change, and the settings** — merged 2026-10-05 (PR #175).
        - 17c-ii-b. ~~**The emails**: booked · moved in · a place is free · class cancelled or moved.~~ **Not built (Kd, RULINGS 2026-10-05)**: members are told in the app, with the inbox (20a) and the phone app's notifications; the box keeps "the app doesn't tell them yet" until then.
      - 17c-iii. [ ] **Who is booked, on the Calendar** (RULINGS 2026-10-05; spec §13.6; after 17d): a class on the Calendar opens its list of people booked and waiting, for `schedule.manage` and the class's own coach (the server's read exists since 17c-i); a membership staff cancel on a person's page ends the bookings made on it.
-   - 17d. [ ] **The member's side**: the list by day with Book · Cancel · Join waitlist · Claim, on the member web until the phone app shows it.
+   - 17d. [x] **The member's side** — merged 2026-10-05 (PR #177).
    - 17e. [ ] **Personal training**: a trainer's hours and session length, free times worked out, an appointment the DATABASE refuses to overlap, booked at once, PT packs.
    - 17f. [ ] **Check-in meets bookings**: a desk scan near a booked class marks it "came"; a worker marks the rest no-shows at the end, safe to run twice. Needs 16a.
 18. **Money between a member and their gym** (RULINGS 2026-09-22, Part 5 of the re-plan; spec Part 3 §14) — it takes in Stage 3 item 3 and what is left of item 9. The app never holds the money and takes no part of it. Every card Opus xhigh.
