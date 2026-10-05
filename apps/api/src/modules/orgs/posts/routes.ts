@@ -226,7 +226,7 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
     return reply.status(200).send(who);
   });
 
-  // A post's body is up to 11 MB of photos, and reading it holds the server's one thread.
+  // A post's body is up to 5.6 MB of photos, and reading it holds the server's one thread.
   // So who is asking, the tick and the limit are settled BEFORE the body is read: anybody
   // who may not post is answered without it.
   const mayPost = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
