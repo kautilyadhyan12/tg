@@ -751,6 +751,8 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       const full = await classAt(sells, 4 * DAY, 1);
       const later = await classAt(sells, 5 * DAY, 10);
       const begun = await classAt(sells, -1, 10);
+      // Six hours away, inside the gym's waitlist time (a day): a freed place waits for a claim.
+      const near = await classAt(sells, 6, 1);
 
       // Booked while the pack is all she holds: this class is the pack's.
       expect(await booked(sells, maya, onPack.id)).toBe("booked");
@@ -772,6 +774,9 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       const zoe = await listed(sells, "Zoe Gold");
       const zoeGold = await holdMonthly(sells, zoe.entryId, gold);
       expect(await booked(sells, zoe, later.id)).toBe("booked");
+      expect(await booked(sells, maya, near.id)).toBe("booked");
+      const uma = await packed(sells, packType, "Uma Near", 5);
+      expect(await booked(sells, uma, near.id, true)).toBe("waitlisted");
 
       // The class's list for staff: the owner's carries each person's record on the list,
       // the way to their page; the class's own coach, who may not open that page, gets none.
@@ -791,35 +796,52 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
         ["Maya Pack", null, null],
         ["Zoe Gold", null, null],
       ]);
+      // One tick each: the timetable's tick shows what was paid with and no record; the
+      // members' tick, on the class this person coaches, shows the record and not what was paid with.
+      const timetabler = await member(sells, "Tia Timetable");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${sells.id}, ${timetabler.userId}, 'trainer', ${["members.read", "schedule.manage"]})`;
+      expect((await listOf(timetabler)).map((b) => [b.name, b.entryId, b.membership !== null])).toEqual([
+        ["Maya Pack", null, true],
+        ["Zoe Gold", null, true],
+      ]);
+      const desk = await member(sells, "Dee Desk");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${sells.id}, ${desk.userId}, 'trainer', ${["members.read", "members.confirm"]})`;
+      expect((await inject("GET", `/v1/orgs/${sells.id}/class-sessions/${later.id}/bookings`, desk.cookies)).statusCode).toBe(403);
+      await sql`UPDATE gym_class_sessions SET coach_user_id = ${desk.userId} WHERE id = ${later.id}`;
+      expect((await listOf(desk)).map((b) => [b.name, b.entryId, b.membership])).toEqual([
+        ["Maya Pack", maya.entryId, null],
+        ["Zoe Gold", zoe.entryId, null],
+      ]);
 
       // Without the number it only asks, naming the classes, and changes nothing.
       const ask = askedHeld(await cancelHeld(sells, maya.entryId, mayaGold, { when: "today" }));
-      expect({ classes: ask.classes, booked: ask.booked, waiting: ask.waiting }).toEqual({ classes: 2, booked: 2, waiting: 0 });
+      expect({ classes: ask.classes, booked: ask.booked, waiting: ask.waiting }).toEqual({ classes: 3, booked: 3, waiting: 0 });
       expect(ask.people.map((p) => [p.name, p.waiting, p.localStartMinute])).toEqual([
         ["Maya Pack", false, full.minute],
         ["Maya Pack", false, later.minute],
+        ["Maya Pack", false, near.minute],
       ]);
       // A number that is not theirs is asked again.
-      expect(askedHeld(await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: 3 })).booked).toBe(2);
+      expect(askedHeld(await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: 5 })).booked).toBe(3);
       expect((await heldStatus(mayaGold))?.status).toBe("active");
       expect(await tally(full.id)).toEqual({ booked: 1, waitlisted: 1 });
 
       // Nobody outside the gym's staff cancels it, with the right number or without.
       const stranger = await signedIn("Stranger");
       for (const who of [stranger, open.owner, zoe]) {
-        const res = await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: 2 }, who);
+        const res = await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: 3 }, who);
         expect([403, 404], who.name).toContain(res.statusCode);
       }
       expect((await inject("POST", `/v1/orgs/${sells.id}/member-list/entries/${maya.entryId}/memberships/${mayaGold}/cancel`, {}, { when: "today" })).statusCode).toBe(401);
       // Another gym's owner, through their own gym's address, finds no such membership.
-      expect((await inject("POST", `/v1/orgs/${open.id}/member-list/entries/${maya.entryId}/memberships/${mayaGold}/cancel`, open.owner.cookies, { when: "today", confirmBookings: 2 })).statusCode).toBe(404);
+      expect((await inject("POST", `/v1/orgs/${open.id}/member-list/entries/${maya.entryId}/memberships/${mayaGold}/cancel`, open.owner.cookies, { when: "today", confirmBookings: 3 })).statusCode).toBe(404);
       expect((await heldStatus(mayaGold))?.status).toBe("active");
       expect(await tally(later.id)).toEqual({ booked: 2 });
 
       // Two staff cancels on two servers, at the instant Maya cancels one class herself. A
       // cancel that lost the race is told the new number and sends it.
       const staffCancel = async (n: number): Promise<void> => {
-        let confirm = 2;
+        let confirm = 3;
         for (let tries = 0; tries < 20; tries++) {
           const res = await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: confirm }, sells.owner, either(n));
           if (res.statusCode === 200) return;
@@ -838,6 +860,10 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       expect((await bookingOf(maya, later.id)).map((b) => b.status)).toEqual(["cancelled"]);
       expect(await bookingOf(tom, full.id)).toEqual([{ status: "booked", held: tom.pack, charged: true }]);
       expect(await left(tom.pack)).toBe(4);
+      // Inside the waitlist time the place is free and nobody is moved in: Uma still waits, uncharged.
+      expect((await bookingOf(maya, near.id)).map((b) => b.status)).toEqual(["cancelled"]);
+      expect(await bookingOf(uma, near.id)).toEqual([{ status: "waitlisted", held: null, charged: false }]);
+      expect(await left(uma.pack)).toBe(5);
       // The class that had started keeps its row, and Zoe's membership and place are hers.
       expect((await bookingOf(maya, begun.id)).map((b) => b.status)).toEqual(["booked"]);
       expect(await bookingOf(zoe, later.id)).toEqual([{ status: "booked", held: zoeGold, charged: false }]);
@@ -867,11 +893,35 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
         INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, request_key, status, held_membership_id, pack_charged, created_at, booked_at)
         VALUES (${sells.id}, ${after.id}, ${ana.userId}, ${ana.entryId}, gen_random_uuid(), 'booked', ${anaGold}, false, now(), now())`;
 
+      // The edge: a class late ON the last paid day stays, one early the day after ends.
+      const read = await inject("GET", `/v1/orgs/${sells.id}/member-list/entries/${ana.entryId}/memberships`, sells.owner.cookies);
+      const lastDay = (JSON.parse(read.body) as { memberships: { id: string; view: { can: { cancelAtPeriodEnd: string | null } } }[] }).memberships.find((m) => m.id === anaGold)?.view.can.cancelAtPeriodEnd;
+      if (typeof lastDay !== "string") throw new Error("no last paid day");
+      const onDayAt = async (day: string, plusDays: number, minute: number): Promise<string> => {
+        const [type] = await sql<{ id: string }[]>`
+          INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${sells.id}, ${`Edge ${uniq()}`}, 30, 10, 'blue', false) RETURNING id`;
+        if (type === undefined) throw new Error("no class type");
+        const [row] = await sql<{ id: string }[]>`
+          INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
+          SELECT ${sells.id}, ${type.id}, d, ${minute}, (d + make_interval(mins => ${minute})) AT TIME ZONE 'Europe/London', 30, 10, 'scheduled'
+          FROM (SELECT ${day}::date + ${plusDays}::int AS d) x
+          RETURNING id`;
+        if (row === undefined) throw new Error("no class");
+        await sql`
+          INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, request_key, status, held_membership_id, pack_charged, created_at, booked_at)
+          VALUES (${sells.id}, ${row.id}, ${ana.userId}, ${ana.entryId}, gen_random_uuid(), 'booked', ${anaGold}, false, now(), now())`;
+        return row.id;
+      };
+      const lastNight = await onDayAt(lastDay, 0, 23 * 60 + 30);
+      const nextMorning = await onDayAt(lastDay, 1, 15);
+
       const ask = askedHeld(await cancelHeld(sells, ana.entryId, anaGold, { when: "period_end" }));
-      expect({ classes: ask.classes, booked: ask.booked }).toEqual({ classes: 1, booked: 1 });
-      expect(ask.people.map((p) => p.localStartMinute)).toEqual([after.minute]);
+      expect({ classes: ask.classes, booked: ask.booked }).toEqual({ classes: 2, booked: 2 });
+      expect(ask.people.map((p) => p.localStartMinute).sort((a, b) => a - b)).toEqual([15, after.minute].sort((a, b) => a - b));
       expect(await heldStatus(anaGold)).toEqual({ status: "active", renews: true });
-      expect((await cancelHeld(sells, ana.entryId, anaGold, { when: "period_end", confirmBookings: 1 })).statusCode).toBe(200);
+      expect((await cancelHeld(sells, ana.entryId, anaGold, { when: "period_end", confirmBookings: 2 })).statusCode).toBe(200);
+      expect((await bookingOf(ana, lastNight)).map((b) => b.status)).toEqual(["booked"]);
+      expect((await bookingOf(ana, nextMorning)).map((b) => b.status)).toEqual(["cancelled"]);
       expect(await heldStatus(anaGold)).toEqual({ status: "active", renews: false });
       expect((await bookingOf(ana, soon.id)).map((b) => b.status)).toEqual(["booked"]);
       expect((await bookingOf(ana, after.id)).map((b) => b.status)).toEqual(["cancelled"]);

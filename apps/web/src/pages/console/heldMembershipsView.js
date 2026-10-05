@@ -186,6 +186,10 @@ export function membershipBookingsAsked(err) {
   return parsed.success && parsed.data.booked > 0 ? parsed.data : null;
 }
 
+/** Said in the box when the classes are not the ones it listed a moment ago: the person
+ *  booked or cancelled one between the box and its button, and the press ended nothing. */
+export const ENDING_MOVED = 'The classes changed while this was open. Check them and press again.';
+
 /** How many of the classes the box lists before "See all". */
 export const ENDING_CLASSES_SHOWN = 3;
 
@@ -203,16 +207,18 @@ export function endingWords(ending, m, name, later, clockFormat) {
   }));
   return {
     title: last === null ? `${name} has ${classes} booked with ${m.typeName}` : `${name} has ${classes} booked with ${m.typeName} after ${dayWords(last)}`,
+    // What the server does with a freed place (spec §13.4): handed to the next in line, or
+    // inside the gym's waitlist time left for the first of them to claim. Never "X gets it".
     change:
       n === 1
-        ? `That booking ends, and ${name}'s place goes to the next person on the class's waitlist.`
-        : `Those bookings end, and ${name}'s place in each class goes to the next person on its waitlist.`,
+        ? `That booking ends and ${name}'s place is free again. If people are waiting, it goes to the next person on the waitlist; close to the class's start, to the first of them to claim it.`
+        : `Those bookings end and ${name}'s place in each class is free again. Where people are waiting, it goes to the next person on the waitlist; close to a class's start, to the first of them to claim it.`,
     rows,
     // The server lists a hundred at most; the count is whole.
     unlisted: Math.max(0, n - rows.length),
     kept:
       last === null
-        ? 'Classes booked with another membership or a pack stay booked. So does a class that has already started.'
+        ? `Classes booked with ${m.kind === 'pack' ? 'another pack or a membership' : 'another membership or a pack'} stay booked. So does a class that has already started.`
         : `Classes up to ${dayWords(last)} stay booked. So do classes booked with another membership or a pack.`,
     button: `${last === null ? 'Cancel today' : `Cancel on ${dayWords(last)}`} and end ${bookings}`,
   };

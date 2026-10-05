@@ -21,6 +21,7 @@ import {
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { endMembershipBookings, membershipBookingsAsk } from "../classes/bookingChanges.js";
 import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import * as repo from "./heldRepo.js";
 
@@ -158,6 +159,8 @@ export async function giveHeldMembership(
   return await readOr404(deps, gymId, entryId, today);
 }
 
+const CANCEL_BOOKINGS = { ask: membershipBookingsAsk, end: endMembershipBookings };
+
 export async function moveHeldMembership(
   deps: HeldDeps,
   userId: string,
@@ -170,7 +173,7 @@ export async function moveHeldMembership(
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
-  const outcome = await repo.moveHeld(deps.sql, { gymId, entryId, membershipId, event, today, confirmBookings, actorUserId: userId, now });
+  const outcome = await repo.moveHeld(deps.sql, CANCEL_BOOKINGS, { gymId, entryId, membershipId, event, today, confirmBookings, actorUserId: userId, now });
   if (outcome.kind === "has_bookings") {
     const ending: ClassBookingsEnding = { ...outcome.ending, people: outcome.ending.people.map(endingPerson) };
     return { kind: "bookings", ending };

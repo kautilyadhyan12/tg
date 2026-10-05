@@ -179,7 +179,9 @@ describe('cancelling a membership that classes are booked with', () => {
     const ending = within(await b.findByTestId('held-ending'));
     expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today' });
     expect(ending.getByText('Ada Lovelace has 4 classes booked with Gold Monthly')).toBeTruthy();
-    expect(ending.getByText("Those bookings end, and Ada Lovelace's place in each class goes to the next person on its waitlist.")).toBeTruthy();
+    // It never says somebody waiting HAS the place: close to a class nobody is moved in.
+    expect(ending.getByText("Those bookings end and Ada Lovelace's place in each class is free again. Where people are waiting, it goes to the next person on the waitlist; close to a class's start, to the first of them to claim it.")).toBeTruthy();
+    expect(ending.queryByText('The classes changed while this was open. Check them and press again.')).toBeNull();
     expect(ending.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Yoga · Wed 21 Oct · 7:00 AM', 'Spin · Thu 22 Oct · 6:00 PM', 'Yoga · Fri 23 Oct · 7:00 AM']);
     expect(ending.getByText(/and 1 more/)).toBeTruthy();
     expect(ending.getByText('Classes booked with another membership or a pack stay booked. So does a class that has already started.')).toBeTruthy();
@@ -213,7 +215,9 @@ describe('cancelling a membership that classes are booked with', () => {
     fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 2 bookings' }));
     expect(await b.findByText('Ada Lovelace has 1 class booked with Gold Monthly')).toBeTruthy();
     ending = within(b.getByTestId('held-ending'));
-    expect(ending.getByText("That booking ends, and Ada Lovelace's place goes to the next person on the class's waitlist.")).toBeTruthy();
+    expect(ending.getByText("That booking ends and Ada Lovelace's place is free again. If people are waiting, it goes to the next person on the waitlist; close to the class's start, to the first of them to claim it.")).toBeTruthy();
+    // The press ended nothing, and the box says why.
+    expect(ending.getByRole('status').textContent).toBe('The classes changed while this was open. Check them and press again.');
     expect(ending.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Yoga · Wed 21 Oct · 07:00']);
     fireEvent.click(ending.getByRole('button', { name: 'Keep it' }));
     expect(screen.queryByTestId('held-ending')).toBeNull();
@@ -235,6 +239,26 @@ describe('cancelling a membership that classes are booked with', () => {
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([gold]));
     fireEvent.click(ending.getByRole('button', { name: 'Cancel on 3 November 2026 and end 1 booking' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'period_end', confirmBookings: 1 }));
+  });
+});
+
+describe('cancelling a pack that classes are booked with', () => {
+  it("says another pack's classes stay, never that this pack's do", async () => {
+    const pack = held(2, PACK, '2026-10-10', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([pack]));
+    orgService.changeHeldMembership.mockRejectedValueOnce(
+      refusal(409, {
+        error: 'membership_has_bookings',
+        message: 'They have classes booked.',
+        ending: { classes: 1, booked: 1, waiting: 0, people: [{ id: '55555555-5555-4555-8555-000000000009', name: 'Ada Lovelace', initials: 'AL', waiting: false, className: 'Yoga', localDate: '2026-10-21', localStartMinute: 420 }] },
+      }),
+    );
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    const ending = within(await b.findByTestId('held-ending'));
+    expect(ending.getByText('Classes booked with another pack or a membership stay booked. So does a class that has already started.')).toBeTruthy();
   });
 });
 

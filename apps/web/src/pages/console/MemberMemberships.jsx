@@ -6,6 +6,7 @@ import { ENDING_NOT_TOLD } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
 import {
   ENDING_CLASSES_SHOWN,
+  ENDING_MOVED,
   askWords,
   classesLine,
   datesLine,
@@ -54,7 +55,8 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
   const [notice, setNotice] = useState(null);
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
-  /** The classes a cancel would end, when the server asked: { id, later, ending, all }. */
+  /** The classes a cancel would end, when the server asked: { id, later, ending, all, moved }.
+   *  `moved`: asked again after the box's own button, since the classes had changed. */
   const [ending, setEnding] = useState(null);
 
   useEffect(() => {
@@ -124,7 +126,7 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
       // Classes are booked with it: the box names them and waits for its own button.
       const booked = m === null ? null : membershipBookingsAsked(err);
       if (booked !== null) {
-        setEnding({ id: m.id, later: what === 'cancelLater', ending: booked, all: false });
+        setEnding({ id: m.id, later: what === 'cancelLater', ending: booked, all: false, moved: ending !== null && ending.id === m.id });
         return;
       }
       setEnding(null);
@@ -176,6 +178,11 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
         style={{ background: 'var(--raise)' }}
         data-testid="held-ending"
       >
+        {ending.moved ? (
+          <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }} role="status">
+            {ENDING_MOVED}
+          </p>
+        ) : null}
         <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
         <p className="c-s14 c-t2 m-0">{words.change}</p>
         <ul className="m-0 p-0 list-none flex flex-col gap-1" style={ending.all ? { maxHeight: 220, overflowY: 'auto' } : undefined}>
