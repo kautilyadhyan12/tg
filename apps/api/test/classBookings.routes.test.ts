@@ -771,18 +771,41 @@ d("booking a class, and its waitlist (real Postgres, two api instances)", () => 
       const spin = await classAt(open, 3 * DAY, 1);
       expect(view(await book(open, holder, spin.id)).mine?.status).toBe("booked");
       expect(view(await book(open, waiter, spin.id, { joinWaitlist: true })).mine?.status).toBe("waitlisted");
+      const behind = person(15);
+      expect(view(await book(open, behind, spin.id, { joinWaitlist: true })).mine?.waitlistPlace).toBe(2);
       // Staff make the class bigger.
       await sql`UPDATE gym_class_sessions SET places = 2 WHERE id = ${spin.id}`;
 
+      // The place is the first in line's to claim, and not the second's.
+      expect((await seen(open, waiter, spin.id)).can.claim).toBe(true);
+      expect((await seen(open, behind, spin.id)).can).toEqual({ book: false, joinWaitlist: false, claim: false, cancel: "free", why: null });
       // Somebody not waiting sees a class they cannot book, though one place reads free.
       const before = await seen(open, walkUp, spin.id);
-      expect([before.booked, before.places, before.waitlisted]).toEqual([1, 2, 1]);
+      expect([before.booked, before.places, before.waitlisted]).toEqual([1, 2, 2]);
       expect(before.can).toEqual({ book: false, joinWaitlist: true, claim: false, cancel: null, why: null });
       const refused = await book(open, walkUp, spin.id);
       expect([refused.statusCode, errorOf(refused)]).toEqual([409, "class_full"]);
       // Their tap gave the place to the one who was waiting.
       expect((await seen(open, waiter, spin.id)).mine).toEqual({ status: "booked", waitlistPlace: null, packCharged: false });
-      expect(await tally(spin.id)).toEqual({ booked: 2 });
+      expect(await tally(spin.id)).toEqual({ booked: 2, waitlisted: 1 });
+
+      // Two app accounts on ONE record, one booking a week between them, both waiting, two
+      // places free: the first has the week's booking and the second is passed over.
+      const [keeper, one] = await Promise.all([listed(sells, "Kit Keeper"), listed(sells, "Uma One")]);
+      await hold(sells, keeper.entryId, await typeOf(sells));
+      await hold(sells, one.entryId, await typeOf(sells, { access: "limited", limit: 1, period: "week" }));
+      const twin = await member(sells, "Uma Two");
+      await sql`UPDATE gym_members SET entry_id = ${one.entryId} WHERE gym_id = ${sells.id} AND user_id = ${twin.userId}`;
+      const shared = await classAt(sells, 3 * DAY, 1);
+      expect(view(await book(sells, keeper, shared.id)).mine?.status).toBe("booked");
+      for (const who of [one, twin]) expect(view(await book(sells, who, shared.id, { joinWaitlist: true })).mine?.status).toBe("waitlisted");
+      await sql`UPDATE gym_class_sessions SET places = 3 WHERE id = ${shared.id}`;
+      // The second's screen does not offer them a place they would not get.
+      expect((await seen(sells, twin, shared.id)).can.claim).toBe(false);
+      expect(view(await cancel(sells, keeper, shared.id)).mine?.status).toBe("cancelled");
+      expect((await seen(sells, one, shared.id)).mine?.status).toBe("booked");
+      expect((await seen(sells, twin, shared.id)).mine).toEqual({ status: "waitlisted", waitlistPlace: 1, packCharged: false });
+      expect(await tally(shared.id)).toEqual({ booked: 1, waitlisted: 1, cancelled: 1 });
 
       // Where the one waiting may not book, the place is anybody's: the screen says Book, and Book gives it.
       const unlimited = await typeOf(sells);

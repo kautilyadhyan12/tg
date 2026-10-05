@@ -122,11 +122,16 @@ interface Move {
  *  goes to the waitlist by itself, the first in line who may book, and so on down the
  *  line. Somebody who may not is passed over and keeps their place. It reads and changes
  *  nothing, in three statements whatever the waitlist's length. */
-async function handOverPlan(sql: Sql | TransactionSql, gymId: string, ctx: repo.BookingContext, now: Date): Promise<Move[]> {
+async function handOverPlan(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  ctx: repo.BookingContext,
+  now: Date,
+): Promise<{ moves: Move[]; /** The waiters' memberships by record, as they stand once the moves are made. */ covers: Map<string, HeldCover[]> }> {
   const time = bookingTime(now.getTime(), ctx.session.startsAt.getTime(), ctx.settings);
   let booked = ctx.counts.booked;
   const free = () => handsOverNow({ time, cancelled: ctx.session.cancelled, places: ctx.session.places, booked });
-  if (ctx.counts.waitlisted === 0 || !free()) return [];
+  if (ctx.counts.waitlisted === 0 || !free()) return { moves: [], covers: new Map() };
   const waiters = await repo.waitlistOf(sql, gymId, ctx.session.id);
   const entryIds = ctx.gymHasTypes ? waiters.flatMap((w) => w.booker?.entryId ?? []) : [];
   const covers = await repo.coversOf(sql, gymId, entryIds, ctx.session);
@@ -139,17 +144,31 @@ async function handOverPlan(sql: Sql | TransactionSql, gymId: string, ctx: repo.
     if (!cover.ok) continue;
     moves.push({ waiter, entryId, cover });
     booked += 1;
+    // One reading serves the whole line, so what this person takes is taken off it: two
+    // accounts on one record do not both use its last booking of the week, or its last class.
+    if (entryId !== null && cover.membershipId !== null) {
+      const { membershipId, chargePack: pack } = cover;
+      covers.set(
+        entryId,
+        (covers.get(entryId) ?? []).map((h) => {
+          if (h.id !== membershipId) return h;
+          if (!pack) return { ...h, used: h.used + 1 };
+          return { ...h, membership: { ...h.membership, classesLeft: (h.membership.classesLeft ?? 1) - 1 } };
+        }),
+      );
+    }
   }
-  return moves;
+  return { moves, covers };
 }
 
 /** The plan carried out, under the gym's lock and the class's. Answers how many were
- *  moved in. A pack with no class left when its turn comes (two people on one record)
- *  moves nobody. */
+ *  moved in. */
 async function handOver(tx: TransactionSql, gymId: string, ctx: repo.BookingContext, now: Date): Promise<number> {
   let moved = 0;
-  for (const { waiter, entryId, cover } of await handOverPlan(tx, gymId, ctx, now)) {
-    if (cover.chargePack && cover.membershipId !== null && !(await chargePack(tx, gymId, cover.membershipId, now))) continue;
+  for (const { waiter, entryId, cover } of (await handOverPlan(tx, gymId, ctx, now)).moves) {
+    if (cover.chargePack && cover.membershipId !== null && !(await chargePack(tx, gymId, cover.membershipId, now))) {
+      throw new Error("a pack the plan chose had no class left");
+    }
     await repo.moveIn(tx, {
       gymId,
       bookingId: waiter.bookingId,
@@ -173,10 +192,15 @@ async function viewOf(deps: Pick<BookingsDeps, "sql" | "now">, gymId: string, se
   const now = deps.now();
   const time = bookingTime(now.getTime(), session.startsAt.getTime(), settings);
   const mine = mineOf(ctx);
-  const cover: Cover = booker === null ? { ok: false, reason: "no_membership" } : await coverFor(deps.sql, gymId, ctx, booker.entryId);
-  // A free place the waitlist is about to be handed is taken, for anybody not waiting:
-  // their Book would hand it over first.
-  const promised = mine === null && booker !== null ? (await handOverPlan(deps.sql, gymId, ctx, now)).length : 0;
+  // A free place the waitlist is about to be handed is taken, for everybody but the
+  // person it is going to: anybody's Book would hand it over first.
+  const plan = mine !== "booked" && booker !== null ? await handOverPlan(deps.sql, gymId, ctx, now) : null;
+  const promised = plan === null ? 0 : plan.moves.filter((move) => move.waiter.userId !== userId).length;
+  // Somebody waiting who is not handed a place is covered by what their record has left
+  // once the people ahead have theirs.
+  const left = mine === "waitlisted" && promised === plan?.moves.length && booker?.entryId != null ? plan.covers.get(booker.entryId) : undefined;
+  const cover: Cover =
+    booker === null ? { ok: false, reason: "no_membership" } : left !== undefined ? pick(ctx, left) : await coverFor(deps.sql, gymId, ctx, booker.entryId);
   const ask = (joinWaitlist: boolean) =>
     decideBook({
       time,
