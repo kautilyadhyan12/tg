@@ -251,13 +251,13 @@ export function canBlock(post) {
 export function blockBox(post, gymName) {
   const name = post.author.name;
   const who = name ?? 'this member';
-  const theirs = name === null ? "this member's" : `${name}'s`;
   return {
     title: `Block ${who}?`,
-    line: `You won't see ${theirs} posts or reactions at ${gymName} any more. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.`,
+    // Posts the same person writes for the gym as staff are the gym's and still show: said here.
+    line: `You won't see the posts ${who} writes as a member, or their reactions, at ${gymName} any more. Any reaction you gave those posts is taken off. Posts they write for ${gymName} as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.`,
     confirm: `Block ${who}`,
     cancel: 'Cancel',
-    done: `Blocked. You won't see ${theirs} posts or reactions any more.`,
+    done: `Blocked. You won't see the posts ${who} writes as a member, or their reactions, any more.`,
   };
 }
 
@@ -265,6 +265,12 @@ export function blockBox(post, gymName) {
 export function blockedButton(feed) {
   if (feed.blockedCount === 0) return null;
   return feed.blockedCount === 1 ? "People you've blocked (1)" : `People you've blocked (${feed.blockedCount.toLocaleString('en')})`;
+}
+
+/** Under the blocked list when the member has blocked more people than it carries, or null. */
+export function blockedMore(feed, shown) {
+  if (shown === 0 || feed.blockedCount <= shown) return null;
+  return `Showing the ${shown.toLocaleString('en')} you blocked most recently. ${(feed.blockedCount - shown).toLocaleString('en')} more will show as you unblock these.`;
 }
 
 /** What a member reads after Unblock. */

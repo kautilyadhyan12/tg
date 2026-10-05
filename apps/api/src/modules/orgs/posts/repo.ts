@@ -523,6 +523,23 @@ export async function insertBlock(sql: SqlOrTx, gymId: string, userId: string, b
     ON CONFLICT (gym_id, user_id, blocked_user_id) DO NOTHING`;
 }
 
+/** Whether this post is one the person is not sent only because they blocked its writer. */
+export async function hiddenByOwnBlock(sql: SqlOrTx, gymId: string, postId: string, userId: string): Promise<boolean> {
+  const rows = await sql<{ ok: number }[]>`
+    SELECT 1 AS ok FROM (${posts(sql, gymId)}) p
+    JOIN gym_post_blocks b ON b.gym_id = ${gymId} AND b.user_id = ${userId} AND b.blocked_user_id = p.author_id
+    WHERE p.id = ${postId} AND p.visible AND p.by_member`;
+  return rows.length > 0;
+}
+
+/** Deletes the reactions one person gave another's member posts at this gym. */
+export async function deleteReactionsToMember(tx: TransactionSql, gymId: string, userId: string, authorId: string): Promise<void> {
+  await tx`
+    DELETE FROM gym_post_reactions r USING gym_posts p
+    WHERE r.gym_id = ${gymId} AND r.user_id = ${userId}
+      AND p.gym_id = r.gym_id AND p.id = r.post_id AND p.by_member AND p.author_user_id = ${authorId}`;
+}
+
 /** Takes one of the person's own blocks at this gym off; false when it is not theirs or is gone. */
 export async function deleteBlock(sql: SqlOrTx, gymId: string, userId: string, blockId: string): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`

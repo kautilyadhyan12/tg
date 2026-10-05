@@ -13,6 +13,7 @@ import {
   authorTag,
   blockBox,
   blockedButton,
+  blockedMore,
   canBlock,
   canPost,
   charsLine,
@@ -650,6 +651,11 @@ export default function Updates({ gym }) {
               {!blocked.loading && blocked.error === null && blocked.people.length === 0 && (
                 <p className="text-sm" style={{ color: MUTED }}>
                   You haven&apos;t blocked anyone here.
+                </p>
+              )}
+              {blockedMore(feed, blocked.people.length) !== null && (
+                <p className="text-xs" style={{ color: MUTED }}>
+                  {blockedMore(feed, blocked.people.length)}
                 </p>
               )}
               <ul className="flex flex-col gap-1">

@@ -194,7 +194,7 @@ export async function getPosts(deps: Pick<PostsDeps, "sql" | "supportEmail">, us
   if (org === null || !(await repo.isLiveMember(deps.sql, gymId, userId))) throw notFound();
   const supportEmail = deps.supportEmail;
   if (!(await gymIsLive(deps.sql, gymId, org.status))) {
-    return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "paused", posting: "off", blockedCount: 0, supportEmail, pinned: [], posts: [], next: null });
+    return gymPostsResponseSchema.parse({ gymId, gymName: org.name, status: "paused", posting: "off", blockedCount: await repo.countBlocked(deps.sql, gymId, userId), supportEmail, pinned: [], posts: [], next: null });
   }
   const [feed, posting, blockedCount] = await Promise.all([
     page(deps, gymId, before, { member: userId }, (rows) => shaped(deps, gymId, rows, userId)),
@@ -616,10 +616,21 @@ export async function block(deps: Pick<PostsDeps, "sql" | "now">, userId: string
   await requireMember(deps, gymId, userId);
   if (!(await limit())) return null;
   const post = await repo.postById(deps.sql, gymId, postId, { member: userId });
-  if (post === null) throw postNotFound();
+  if (post === null) {
+    // Sent again after a lost reply: the post is hidden only by this person's own block of
+    // its writer, and the answer is the first one's.
+    if (await repo.hiddenByOwnBlock(deps.sql, gymId, postId, userId)) return true;
+    throw postNotFound();
+  }
   if (post.authorId === userId) throw new OrgsError(400, "own_post", GYM_POST_WORDS.own_block);
-  if (!post.byMember || post.authorId === null) throw new OrgsError(400, "gym_post", GYM_POST_WORDS.gym_block);
-  await repo.insertBlock(deps.sql, gymId, userId, post.authorId, deps.now());
+  const blockedId = post.authorId;
+  if (!post.byMember || blockedId === null) throw new OrgsError(400, "gym_post", GYM_POST_WORDS.gym_block);
+  await deps.sql.begin(async (tx) => {
+    await repo.insertBlock(tx, gymId, userId, blockedId, deps.now());
+    // A reaction the blocker gave that person's posts could never be taken off again, and
+    // would go on being counted and named for staff: it goes with the block.
+    await repo.deleteReactionsToMember(tx, gymId, userId, blockedId);
+  });
   return true;
 }
 

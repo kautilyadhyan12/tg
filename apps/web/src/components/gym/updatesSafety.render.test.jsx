@@ -9,7 +9,8 @@ vi.mock('../../api/postsApi', () => ({
   postPhotoUrl: ({ gymId, postId, photoId }) => `http://api.test/v1/orgs/${gymId}/posts/${postId}/photos/${photoId}`,
 }));
 vi.mock('../../pages/console/gymPagePhotos', () => ({ preparePagePhoto: vi.fn() }));
-vi.mock('../../api/orgsApi', () => ({ errorText: (_err, fallback) => fallback }));
+// The server's own sentence where it sent one, as the real `errorText` reads it.
+vi.mock('../../api/orgsApi', () => ({ errorText: (err, fallback) => err?.response?.data?.message ?? fallback }));
 
 const Updates = (await import('./Updates')).default;
 
@@ -59,7 +60,9 @@ describe('Block', () => {
     fireEvent.click(within(posts()[0]).getByRole('button', { name: 'Block' }));
     const box = within(within(posts()[0]).getByRole('group', { name: 'Block Barry B.?' }));
     expect(
-      box.getByText("You won't see Barry B.'s posts or reactions at Iron House any more. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates."),
+      box.getByText(
+        "You won't see the posts Barry B. writes as a member, or their reactions, at Iron House any more. Any reaction you gave those posts is taken off. Posts they write for Iron House as staff still show. They aren't told, and nothing changes for anyone else. You can unblock them at the bottom of Updates.",
+      ),
     ).toBeTruthy();
     fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
     expect(svc.block).not.toHaveBeenCalled();
@@ -70,7 +73,7 @@ describe('Block', () => {
     expect(svc.block.mock.calls).toEqual([['g1', 'theirs']]);
     expect(svc.list).toHaveBeenCalledTimes(2);
     expect(screen.queryByText('Look who skipped leg day')).toBeNull();
-    expect(screen.getByRole('status').textContent).toBe("Blocked. You won't see Barry B.'s posts or reactions any more.");
+    expect(screen.getByRole('status').textContent).toBe("Blocked. You won't see the posts Barry B. writes as a member, or their reactions, any more.");
     expect(screen.getByRole('button', { name: "People you've blocked (1)" })).toBeTruthy();
   });
 
@@ -104,6 +107,31 @@ describe('Block', () => {
     expect(svc.unblock.mock.calls).toEqual([['g1', 'b1']]);
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(screen.getByRole('status').textContent).toBe("Unblocked. You'll see Barry B.'s posts and reactions again.");
+  });
+});
+
+describe('a post the app will not take', () => {
+  it('the member reads which word, in the server\'s own sentence, with their words still in the box and nothing posted', async () => {
+    const sentence = "Your post wasn't posted because it has a word that isn't allowed here: tosser. Take it out and post again.";
+    svc.list.mockResolvedValue(feed({ posts: [post('a', 'Morning all')] }));
+    svc.add.mockRejectedValue(Object.assign(new Error('refused'), { response: { status: 400, data: { error: 'post_bad_words', message: sentence } } }));
+    render(<Updates gym={GYM} />);
+    const composer = within(await screen.findByTestId('composer'));
+    const box = composer.getByRole('textbox', { name: /Write a post/ });
+    fireEvent.change(box, { target: { value: 'what a tosser' } });
+    fireEvent.click(composer.getByRole('button', { name: 'Post' }));
+    expect((await composer.findByRole('alert')).textContent).toBe(sentence);
+    expect(box.value).toBe('what a tosser');
+    expect(posts()).toHaveLength(1);
+    expect(screen.queryByRole('status')).toBeNull();
+    // Changed and sent again under the same key, it is posted.
+    svc.add.mockResolvedValue({ post: post('new', 'what a session', { own: true, wrote: true }) });
+    fireEvent.change(box, { target: { value: 'what a session' } });
+    expect(composer.queryByRole('alert')).toBeNull();
+    fireEvent.click(composer.getByRole('button', { name: 'Post' }));
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(svc.add.mock.calls[1][1]).toBe(svc.add.mock.calls[0][1]);
+    expect(box.value).toBe('');
   });
 });
 

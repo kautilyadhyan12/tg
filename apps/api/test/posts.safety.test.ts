@@ -275,6 +275,87 @@ d("block, the bad-words check and the support address (real Postgres, real disk)
   );
 
   it(
+    "the block holds on a second page, takes the blocker's own reactions with it, answers a repeat the same, and leaves the gym's posts",
+    async () => {
+      const gym = await makeGym("Review House");
+      const elsewhere = await makeGym("Review Second");
+      const bully = await member(gym, "Barry Bully");
+      const blocker = await member(gym, "Bea Blocker");
+      const bystander = await member(gym, "Bob Bystander");
+      // Two pages: thirty posts each, a minute apart, the two writers taking turns.
+      for (const [who, label] of [[bully, "Bully"], [bystander, "Fine"]] as const) {
+        await sql`
+          INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at)
+          SELECT ${gym.id}, ${who.userId}, gen_random_uuid(), ${label} || ' ' || n, true, '2026-10-01T00:00:00Z'::timestamptz + n * interval '1 minute'
+          FROM generate_series(1, 30) n`;
+      }
+      const cruel = await add(gym, bully, "With a photo", [IPHONE]);
+      const fine = await add(gym, bystander, "A fine post");
+      // The blocker reacted to both before blocking.
+      expect((await reactTo(gym, blocker, cruel.id, "love")).statusCode).toBe(200);
+      expect((await reactTo(gym, blocker, fine.id, "love")).statusCode).toBe(200);
+
+      expect((await block(gym, blocker, cruel.id)).statusCode).toBe(200);
+      // Sent again after a lost reply: the same answer, not "this post has been removed".
+      const again = await block(gym, blocker, cruel.id, other());
+      expect({ status: again.statusCode, body: JSON.parse(again.body) as unknown }).toEqual({ status: 200, body: { blocked: true } });
+      expect((await block(gym, blocker, randomUUID())).statusCode).toBe(404);
+      expect(await blockRows(gym.id)).toBe(1);
+
+      // Their reaction to the blocked person's post went with the block; the other stays.
+      const left = await sql<{ post_id: string }[]>`SELECT post_id FROM gym_post_reactions WHERE gym_id = ${gym.id} AND user_id = ${blocker.userId}`;
+      expect(left.map((r) => r.post_id)).toEqual([fine.id]);
+      const theirs = [...(await feed(gym, bully)).posts].find((p) => p.id === cruel.id);
+      expect(theirs?.reactions).toEqual({ like: 0, love: 0, strong: 0, fire: 0 });
+
+      // Every page, as the blocker: none of the blocked person's 31 posts, all 31 of the other's.
+      const seen: string[] = [];
+      let next: string | null = null;
+      let pages = 0;
+      do {
+        const res = await inject("GET", next === null ? posts(gym.id) : `${posts(gym.id)}?before=${encodeURIComponent(next)}`, blocker.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        const page = JSON.parse(res.body) as GymPostsResponse;
+        seen.push(...shown(page));
+        next = page.next;
+        pages++;
+      } while (next !== null);
+      expect(pages).toBeGreaterThan(1);
+      expect(seen.filter((body) => body.startsWith("Bully") || body === "With a photo")).toEqual([]);
+      expect(seen).toHaveLength(31);
+
+      // The blocked person is also staff: what they post for the gym still shows, as the
+      // Block box says, and cannot be blocked.
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${bully.userId}, 'manager', NULL)`;
+      const asStaff = await inject("POST", posts(gym.id), bully.cookies, { postKey: randomUUID(), body: "Closed on Monday", photos: [] });
+      expect(asStaff.statusCode, asStaff.body).toBe(201);
+      const gymPost = (JSON.parse(asStaff.body) as { post: GymPost }).post;
+      const sent = (await feed(gym, blocker)).posts.find((p) => p.id === gymPost.id);
+      expect(sent).toMatchObject({ body: "Closed on Monday", fromMember: false });
+      const refused = await block(gym, blocker, gymPost.id);
+      expect({ status: refused.statusCode, error: errorOf(refused) }).toEqual({ status: 400, error: "gym_post" });
+
+      // The blocker is staff too. Without the tick they are a member, and a blocked post's
+      // photo is not theirs to read; holding it, they read the console's posts anyway.
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${blocker.userId}, 'trainer', ${["members.read"]})`;
+      expect((await inject("GET", photoPath(gym, cruel), blocker.cookies)).statusCode).toBe(404);
+      await sql`UPDATE gym_staff SET privileges = ${["members.read", "posts.manage"]} WHERE gym_id = ${gym.id} AND user_id = ${blocker.userId}`;
+      expect((await inject("GET", photoPath(gym, cruel), blocker.cookies)).statusCode).toBe(200);
+
+      // At another gym the same two share, nothing is blocked: the post and the reaction count.
+      await sql`INSERT INTO gym_members (gym_id, user_id, joined_at) VALUES (${elsewhere.id}, ${bully.userId}, '2026-01-01T00:00:00Z'), (${elsewhere.id}, ${blocker.userId}, '2026-01-01T00:00:00Z')`;
+      const there = await staffAdd(elsewhere, "News from the second gym");
+      expect((await reactTo(elsewhere, bully, there.id, "fire")).statusCode).toBe(200);
+      expect((await feed(elsewhere, blocker)).posts[0]?.reactions).toEqual({ like: 0, love: 0, strong: 0, fire: 1 });
+
+      // A gym whose plan has lapsed still says how many they blocked, so the list can be reached.
+      await lapse(gym.id);
+      expect(await feed(gym, blocker)).toMatchObject({ status: "paused", blockedCount: 1 });
+    },
+    T,
+  );
+
+  it(
     "a member's post with a bad word is not posted: the writer is told which word, at once, and nothing is kept or sent to staff",
     async () => {
       const gym = await makeGym("Check House");

@@ -191,6 +191,10 @@ d("DPDP data export (real Postgres)", () => {
     // Their own posts as a member, and not the gym's post they wrote as staff.
     expect(out.data["gym_posts"]?.map((row) => [row["body"], row["photos"]])).toEqual([["member-post-all", 0]]);
     expect(Object.keys(out.data["gym_posts"]?.[0] ?? {}).sort()).toEqual(["body", "created_at", "gym_id", "id", "photos", "removed_at"]);
+    // Who they blocked: their own block alone (never somebody's block OF them), and without
+    // the other person's id.
+    expect(out.data["gym_post_blocks"]?.map((row) => row["user_id"])).toEqual([u.userId]);
+    expect(Object.keys(out.data["gym_post_blocks"]?.[0] ?? {}).sort()).toEqual(["created_at", "gym_id", "id", "user_id"]);
     // Nothing was cut, and the envelope says so out loud rather than by an
     // absent key (the same reason every table keeps an empty array).
     expect(out.truncated).toEqual({});
