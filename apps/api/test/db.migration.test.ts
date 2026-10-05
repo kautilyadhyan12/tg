@@ -1669,6 +1669,105 @@ d("0001_init on a real database", () => {
       });
   });
 
+  it("0074's bookings: one booking a person a class at a time, only this gym's class and record, and a class with a booking cannot be deleted", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0074-owner') RETURNING id`;
+        if (user === undefined) throw new Error("no user");
+        const gymOf = async (slug: string) => {
+          const [gym] = await tx<{ id: string; opens: number; free: number; handover: number; waitlist: number }[]>`
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0074', 'Europe/London', ${user.id})
+            RETURNING id, booking_opens_days AS opens, booking_free_cancel_minutes AS free, waitlist_handover_minutes AS handover, waitlist_max AS waitlist`;
+          if (gym === undefined) throw new Error("no gym");
+          // The starting values Kd agreed (RULINGS 2026-09-21): 7 days, 2 hours, 1 day, 20.
+          expect([gym.opens, gym.free, gym.handover, gym.waitlist]).toEqual([7, 120, 1440, 20]);
+          const [entry] = await tx<{ id: string }[]>`
+            INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+            VALUES (${gym.id}, 'Zz Person', ${slug + "@example.com"}, ${"0".repeat(63) + slug.slice(-1)}, 'typed') RETURNING id`;
+          const [type] = await tx<{ id: string }[]>`
+            INSERT INTO gym_class_types (gym_id, name, minutes, places, colour) VALUES (${gym.id}, 'Spin', 45, 10, 'blue') RETURNING id`;
+          if (entry === undefined || type === undefined) throw new Error("no fixture");
+          const [session] = await tx<{ id: string }[]>`
+            INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places)
+            VALUES (${gym.id}, ${type.id}, '2026-10-10', 600, '2026-10-10T09:00:00Z', 45, 10) RETURNING id`;
+          if (session === undefined) throw new Error("no class");
+          return { gym: gym.id, entry: entry.id, session: session.id };
+        };
+        const a = await gymOf("zz-0074-a");
+        const b = await gymOf("zz-0074-b");
+
+        const at = "2026-10-07T09:00:00Z";
+        const row = (over: Record<string, unknown> = {}) => ({
+          gym_id: a.gym,
+          session_id: a.session,
+          user_id: user.id,
+          entry_id: a.entry,
+          status: "cancelled",
+          request_key: randomUUID(),
+          booked_at: at,
+          cancelled_at: at,
+          ...over,
+        });
+        /** The constraint an insert trips, or "ok". Each in its own savepoint. */
+        const put = async (over: Record<string, unknown>): Promise<string> => {
+          try {
+            await tx.savepoint((sp) => sp`INSERT INTO gym_class_bookings ${sp(row(over))}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        const booked = { status: "booked", cancelled_at: null };
+
+        // Any number of cancelled ones, and one in use.
+        expect(await put({})).toBe("ok");
+        expect(await put({})).toBe("ok");
+        expect(await put({ ...booked, request_key: "00000000-0000-4000-8000-000000000074" })).toBe("ok");
+        const refused: [string, Record<string, unknown>, string][] = [
+          ["a second booking of the class in use", booked, "gym_class_bookings_live_uq"],
+          ["waiting while booked", { status: "waitlisted", booked_at: null, cancelled_at: null }, "gym_class_bookings_live_uq"],
+          ["came, while booked", { status: "attended", cancelled_at: null }, "gym_class_bookings_live_uq"],
+          ["a status of its own", { status: "held", cancelled_at: null }, "gym_class_bookings_status_check"],
+          ["cancelled with no time", { cancelled_at: null }, "gym_class_bookings_cancelled_check"],
+          ["a late cancel of nothing booked", { status: "late_cancelled", booked_at: null }, "gym_class_bookings_booked_check"],
+          ["a pack charged for waiting", { pack_charged: true, booked_at: null }, "gym_class_bookings_pack_check"],
+          ["the same request twice", { request_key: "00000000-0000-4000-8000-000000000074" }, "gym_class_bookings_request_uq"],
+          ["another gym's class", { session_id: b.session }, "gym_class_bookings_session_fk"],
+          ["another gym's record", { entry_id: b.entry }, "gym_class_bookings_entry_fk"],
+        ];
+        for (const [what, over, constraint] of refused) expect(await put(over), what).toBe(constraint);
+        // Booked in use: the time it was booked is required.
+        const [live] = await tx<{ id: string }[]>`SELECT id FROM gym_class_bookings WHERE request_key = '00000000-0000-4000-8000-000000000074'`;
+        const noTime = await tx
+          .savepoint((sp) => sp`UPDATE gym_class_bookings SET booked_at = NULL WHERE id = ${live?.id ?? null}`)
+          .then(() => "ok", (err: unknown) => (err instanceof postgres.PostgresError ? (err.constraint_name ?? "") : String(err)));
+        expect(noTime).toBe("gym_class_bookings_booked_check");
+
+        // A gym's settings stay inside their limits.
+        for (const [column, value] of [["booking_opens_days", 0], ["booking_opens_days", 57], ["booking_free_cancel_minutes", -1], ["waitlist_handover_minutes", 10081], ["waitlist_max", 101]] as const) {
+          const out = await tx
+            .savepoint((sp) => sp`UPDATE gyms SET ${sp({ [column]: value })} WHERE id = ${a.gym}`)
+            .then(() => "ok", (err: unknown) => (err instanceof postgres.PostgresError ? (err.constraint_name ?? "") : String(err)));
+          expect(out, `${column} ${String(value)}`).toBe("gyms_booking_settings_check");
+        }
+
+        // A class with a booking cannot be deleted from under it; a deleted record lets its bookings go.
+        const deleteClass = await tx
+          .savepoint((sp) => sp`DELETE FROM gym_class_sessions WHERE id = ${a.session}`)
+          .then(() => "deleted", (err: unknown) => (err instanceof postgres.PostgresError ? (err.constraint_name ?? "") : String(err)));
+        expect(deleteClass).toBe("gym_class_bookings_session_fk");
+        await tx`DELETE FROM gym_member_list_entries WHERE id = ${a.entry}`;
+        const left = await tx<{ entry_id: string | null; gym_id: string }[]>`SELECT entry_id, gym_id FROM gym_class_bookings WHERE gym_id = ${a.gym}`;
+        expect(left).toHaveLength(3);
+        expect(left.every((r) => r.entry_id === null && r.gym_id === a.gym)).toBe(true);
+        throw new Error("ROLLBACK-0074-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0074-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
    *  (Low-1) — which is the highest-value item that round found.
    *

@@ -2242,6 +2242,16 @@ export async function moveVisitLinks(tx: TransactionSql, gymId: string, fromEntr
   return rows.length;
 }
 
+/** Two records joined: the class bookings made on the one not kept are the kept one's
+ *  (17c-i). A booking belongs to the app account, so none is a twin of another. */
+export async function moveBookingLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<number> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_class_bookings SET entry_id = ${toEntryId}
+    WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
+    RETURNING id`;
+  return rows.length;
+}
+
 /** Two records joined: a joined lead linked to the one not kept is linked to the kept
  *  one (20c-i). */
 export async function moveLeadLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<number> {
