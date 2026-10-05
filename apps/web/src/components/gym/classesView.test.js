@@ -74,6 +74,8 @@ describe('what a class says', () => {
     expect(placesText(klass({ ...promised, mine: mine('waitlisted', { waitlistPlace: 2 }), can: can({ cancel: 'free' }) }))).toBe(
       'Full · 2 on the waitlist · a free place is going to the first in line',
     );
+    // And where the waitlist is at its limit too.
+    expect(placesText(klass({ ...promised, can: can({ why: 'waitlist_full' }) }))).toBe('Full · 2 on the waitlist · a free place is going to the first in line');
     // The first in line, somebody booked, and somebody told why they cannot book read the place as it is.
     expect(placesText(klass({ ...promised, mine: mine('waitlisted', { waitlistPlace: 1 }), can: can({ claim: true, cancel: 'free' }) }))).toBe('1 place left');
     expect(placesText(klass({ ...promised, mine: mine('booked'), can: can({ cancel: 'free' }) }))).toBe('1 place left');

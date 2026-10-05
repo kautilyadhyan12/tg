@@ -259,6 +259,15 @@ d("a member's list of classes (real Postgres)", () => {
       await ok(book(gym, f2, promised.id, { joinWaitlist: true }));
       await ok(book(gym, f3, promised.id, { joinWaitlist: true }));
       await sql`UPDATE gym_class_sessions SET places = 2 WHERE id = ${promised.id}`;
+      // The same, with the first in line no longer able to book: the place is the second's.
+      const passed = await classAt(gym, 73, 1);
+      const frz = await listed(gym, "Frz First");
+      const frzHeld = await hold(gym, frz.entryId, all);
+      await ok(book(gym, f1, passed.id));
+      await ok(book(gym, frz, passed.id, { joinWaitlist: true }));
+      await ok(book(gym, f3, passed.id, { joinWaitlist: true }));
+      await sql`UPDATE gym_held_memberships SET status = 'frozen', frozen_on = '2026-10-05' WHERE id = ${frzHeld}`;
+      await sql`UPDATE gym_class_sessions SET places = 2 WHERE id = ${passed.id}`;
       const off = await classAt(gym, 40, 4);
       await ok(book(gym, pat, off.id));
       await sql`UPDATE gym_class_sessions SET status = 'cancelled' WHERE id = ${off.id}`;
@@ -300,7 +309,7 @@ d("a member's list of classes (real Postgres)", () => {
       const openSlot = await classAt(gym, 34, 5, { openGym: true });
       const sessions = [free, second, mine, claim, promised, off, unlimited, sameWeek, monday, calOff, openSlot].map((c) => c.id);
 
-      for (const who of [pat, lim, nom, unlisted, ona, duo, cal, lat, fro, sta, gil, f1, f2, f3]) {
+      for (const who of [pat, lim, nom, unlisted, ona, duo, cal, lat, fro, sta, gil, frz, f1, f2, f3]) {
         const list = await listOf(gym, who);
         expect(list).toMatchObject({ week: 0, from: "2026-10-07", to: "2026-10-13", timezone: "Europe/London" });
         expect(list.classes.map((c) => c.sessionId)).toEqual(expect.arrayContaining(sessions));
@@ -333,6 +342,9 @@ d("a member's list of classes (real Postgres)", () => {
       expect(rowOf(pats, promised.id)).toMatchObject({ places: 2, booked: 1, mine: null, can: { book: false, joinWaitlist: true } });
       expect(rowOf(await listOf(gym, f2), promised.id).can).toMatchObject({ claim: true });
       expect(rowOf(await listOf(gym, f3), promised.id)).toMatchObject({ mine: { status: "waitlisted", waitlistPlace: 2 }, can: { claim: false } });
+      expect(rowOf(pats, passed.id)).toMatchObject({ places: 2, booked: 1, can: { book: false, joinWaitlist: true } });
+      expect(rowOf(await listOf(gym, f3), passed.id)).toMatchObject({ mine: { status: "waitlisted", waitlistPlace: 2 }, can: { claim: true } });
+      expect(rowOf(await listOf(gym, frz), passed.id)).toMatchObject({ mine: { status: "waitlisted", waitlistPlace: 1 }, can: { claim: false } });
       expect(rowOf(pats, off.id)).toMatchObject({ cancelled: true, mine: { status: "booked" }, can: { book: false, joinWaitlist: false } });
       expect(rowOf(pats, unlimited.id)).toMatchObject({ places: null, can: { book: true } });
 

@@ -240,17 +240,36 @@ export async function getMemberClasses(
   const handing = contexts.filter((ctx) => mineOf(ctx) !== "booked" && ctx.booker !== null && handsOverTo(ctx, now));
   const lines = await repo.waitlistsOf(deps.sql, gymId, handing.map((ctx) => ctx.session.id));
   const typed = contexts.some((ctx) => ctx.gymHasTypes);
-  const theirs = await repo.coversOfClasses(deps.sql, gymId, handing.map((ctx) => ctx.session), (sessionId) =>
-    typed ? (lines.get(sessionId) ?? []).flatMap((w) => w.booker?.entryId ?? []) : [],
-  );
+  // Memberships are read for as many people at the head of each line as the class has
+  // free places, and further down a line only where somebody at its head is passed over.
+  const freeIn = (ctx: repo.BookingContext): number => (ctx.session.places === null ? Infinity : ctx.session.places - ctx.counts.booked);
+  const depth = new Map(handing.map((ctx) => [ctx.session.id, freeIn(ctx)]));
+  const head = (sessionId: string): repo.Waiter[] => (lines.get(sessionId) ?? []).slice(0, depth.get(sessionId));
+  const plans = new Map<string, HandOverPlan>();
+  for (let todo = handing; todo.length > 0; ) {
+    const theirs = await repo.coversOfClasses(deps.sql, gymId, todo.map((ctx) => ctx.session), (sessionId) =>
+      typed ? head(sessionId).flatMap((w) => w.booker?.entryId ?? []) : [],
+    );
+    const further: repo.BookingContext[] = [];
+    for (const ctx of todo) {
+      const { id } = ctx.session;
+      const read = head(id);
+      const plan = planHandOver(ctx, now, read, new Map(theirs.get(id)));
+      plans.set(id, plan);
+      if (plan.moves.length < freeIn(ctx) && read.length < (lines.get(id) ?? []).length) {
+        depth.set(id, read.length * 2);
+        further.push(ctx);
+      }
+    }
+    todo = further;
+  }
   const classes: ClassBookingView[] = [];
   for (const ctx of contexts) {
     const { id } = ctx.session;
     classes.push(
       await viewFrom(deps.sql, gymId, ctx, userId, now, {
         cover: (entryId) => Promise.resolve(pick(ctx, !ctx.gymHasTypes || entryId === null ? [] : (own.get(id)?.get(entryId) ?? []))),
-        plan: () =>
-          Promise.resolve(handing.includes(ctx) ? planHandOver(ctx, now, lines.get(id) ?? [], new Map(theirs.get(id))) : { moves: [], covers: new Map<string, HeldCover[]>() }),
+        plan: () => Promise.resolve(plans.get(id) ?? { moves: [], covers: new Map<string, HeldCover[]>() }),
       }),
     );
   }

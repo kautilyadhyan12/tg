@@ -69,7 +69,8 @@ export function placesText(c) {
   const left = c.places - c.booked;
   const waiting = c.waitlisted === 1 ? '1 on the waitlist' : `${c.waitlisted} on the waitlist`;
   if (left <= 0) return c.waitlisted > 0 ? `Full · ${waiting}` : 'Full';
-  const promised = c.waitlisted > 0 && !c.can.book && !c.can.claim && c.can.why === null && c.mine?.status !== 'booked';
+  const noReason = c.can.why === null || c.can.why === 'waitlist_full';
+  const promised = c.waitlisted > 0 && !c.can.book && !c.can.claim && noReason && c.mine?.status !== 'booked';
   if (promised) return `Full · ${waiting} · a free place is going to the first in line`;
   return left === 1 ? '1 place left' : `${left} of ${c.places} places left`;
 }
