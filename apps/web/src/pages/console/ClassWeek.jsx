@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
+import BookingsEndBox from '../../components/console/BookingsEndBox';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { bookingsAsked, endingTotal } from './bookingsEndView';
 import { RunFields, StartTimePick } from './ClassFields';
 import { addDays } from './hoursView';
 import {
@@ -47,6 +49,7 @@ function DayForm({
   setScope,
   offerFuture,
   question,
+  endBox,
   onSave,
   onClose,
   onMove,
@@ -84,7 +87,9 @@ function DayForm({
           {problem}
         </p>
       )}
-      {question !== null ? (
+      {endBox !== null ? (
+        endBox
+      ) : question !== null ? (
         <ConfirmInline
           question={question}
           confirmLabel="Move anyway"
@@ -112,12 +117,24 @@ function DayForm({
 /** One date, opened. Its actions follow what the server says it is: a started
  *  class has none, a cancelled one can be un-cancelled, any other can be edited
  *  or cancelled. */
-function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange, onCancel, onRestore }) {
+function DayPanel({ gymId, session, clockFormat, staff, locked, busy, onClose, onChange, onCancel, onRestore }) {
   const [mode, setMode] = useState(null);
   const [draft, setDraft] = useState(() => dayDraft(session));
   const [scope, setScope] = useState('this');
   // How many classes a move from this date would replace, when the server asked.
   const [asked, setAsked] = useState(null);
+  // Who is booked on the classes a cancel or a move would end, when the server asked.
+  const [ending, setEnding] = useState(null);
+  // What a save answered: done, a move to ask about, or people to ask about.
+  const settle = (done) => {
+    if (done === true) {
+      setEnding(null);
+      setMode(null);
+      return;
+    }
+    if (typeof done === 'number') setAsked(done);
+    setEnding(done !== null && typeof done === 'object' ? done.ending : null);
+  };
   const tag = sessionTag(session);
   const name = sessionName(session, clockFormat);
   const cancelled = session.status === 'cancelled';
@@ -160,6 +177,7 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
             draft={draft}
             setDraft={(next) => {
               setAsked(null);
+              setEnding(null);
               setDraft(next);
             }}
             staff={staff}
@@ -168,27 +186,44 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
             scope={scope}
             setScope={(next) => {
               setAsked(null);
+              setEnding(null);
               setScope(next);
             }}
             offerFuture={typeof session.scheduleId === 'string'}
             question={asked === null ? null : replaceQuestion(asked, session.localDate)}
+            endBox={
+              ending === null ? null : (
+                <BookingsEndBox
+                  gymId={gymId}
+                  ending={ending}
+                  scope={{ by: 'slot', id: session.scheduleId, from: session.localDate }}
+                  kind="move"
+                  clockFormat={clockFormat}
+                  busy={busy}
+                  cancelLabel="Go back"
+                  onCancel={() => setEnding(null)}
+                  onConfirm={async () => {
+                    const body = dayRequest(draft, scope, asked, endingTotal(ending));
+                    if (body !== null) settle(await onChange(body));
+                  }}
+                />
+              )
+            }
             onClose={() => {
               setAsked(null);
+              setEnding(null);
               setMode(null);
             }}
             onSave={async () => {
               const body = dayRequest(draft, scope);
-              if (body === null) return;
-              const done = await onChange(body);
-              if (done === true) setMode(null);
-              else if (typeof done === 'number') setAsked(done);
+              if (body !== null) settle(await onChange(body));
             }}
             onMove={async () => {
               const body = dayRequest(draft, scope, asked);
               if (body === null) return;
               const done = await onChange(body);
-              if (done === true) setMode(null);
-              else setAsked(typeof done === 'number' ? done : null);
+              if (done === false) setAsked(null);
+              settle(done);
             }}
             onBack={() => setAsked(null)}
           />
@@ -197,17 +232,31 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
         <div>
           {/* It asks first, in place (Kd, 2026-09-22): nothing on this screen
               takes a class off the calendar on one tap. */}
-          <ConfirmInline
-            question={`Cancel ${name}?`}
-            confirmLabel="Cancel class"
-            cancelLabel="Keep it"
-            busy={busy}
-            newLook
-            onCancel={() => setMode(null)}
-            onConfirm={async () => {
-              if (await onCancel()) setMode(null);
-            }}
-          />
+          {ending === null ? (
+            <ConfirmInline
+              question={`Cancel ${name}?`}
+              confirmLabel="Cancel class"
+              cancelLabel="Keep it"
+              busy={busy}
+              newLook
+              onCancel={() => setMode(null)}
+              onConfirm={async () => settle(await onCancel(null))}
+            />
+          ) : (
+            <BookingsEndBox
+              gymId={gymId}
+              ending={ending}
+              scope={{ by: 'session', id: session.id }}
+              kind="cancel"
+              clockFormat={clockFormat}
+              busy={busy}
+              onCancel={() => {
+                setEnding(null);
+                setMode(null);
+              }}
+              onConfirm={async () => settle(await onCancel(endingTotal(ending)))}
+            />
+          )}
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
@@ -281,8 +330,9 @@ export default function ClassWeek({ gymId, staff, locked }) {
   const openDay = open === null ? -1 : columns.findIndex((c) => c.date === open.localDate);
   const thisWeek = lists.today !== '' && lists.weekStart !== '' && lists.today >= lists.weekStart && lists.today <= addDays(lists.weekStart, 6);
 
-  // True when saved; the count when a move must be asked about first (the
-  // question is the form's, not an error); false otherwise.
+  // True when saved; the count when a move must be asked about first, or
+  // `{ ending }` when people are booked on what would go (each a question of the
+  // form's, not an error); false otherwise.
   const act = async (call) => {
     setBusy(true);
     setActionError(null);
@@ -293,6 +343,8 @@ export default function ClassWeek({ gymId, staff, locked }) {
     } catch (err) {
       const count = replacesAsked(err);
       if (count !== null) return count;
+      const ending = bookingsAsked(err);
+      if (ending !== null) return { ending };
       setActionError(errorText(err, "We couldn't save that."));
       // A refusal means the week on screen is out of date — the class started,
       // or another date now holds that time — so read it again, keeping the
@@ -464,6 +516,7 @@ export default function ClassWeek({ gymId, staff, locked }) {
                   /* Keyed on the date, so a half-typed change never carries
                      from one day to another. */
                   key={open.id}
+                  gymId={gymId}
                   session={open}
                   clockFormat={lists.clockFormat}
                   staff={staff}
@@ -471,7 +524,13 @@ export default function ClassWeek({ gymId, staff, locked }) {
                   busy={busy}
                   onClose={() => setSelected(null)}
                   onChange={(body) => act(() => orgService.changeClassDay(gymId, open.id, body))}
-                  onCancel={() => act(() => orgService.cancelClassDay(gymId, open.id))}
+                  onCancel={(confirmBookings) =>
+                    act(() =>
+                      confirmBookings === null
+                        ? orgService.cancelClassDay(gymId, open.id)
+                        : orgService.cancelClassDay(gymId, open.id, confirmBookings),
+                    )
+                  }
                   onRestore={() => void act(() => orgService.restoreClassDay(gymId, open.id))}
                 />
               </div>

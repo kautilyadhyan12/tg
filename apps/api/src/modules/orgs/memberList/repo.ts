@@ -51,6 +51,7 @@ import {
   type MemberListUploadStatus,
   type MemberListUploadSummary,
 } from "@app/shared";
+import { endLeaversBookings } from "../classes/bookingChanges.js";
 import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 import type { ReviewState } from "./review.js";
@@ -2419,6 +2420,13 @@ export async function closeMemberships(
         OR (m.user_id = ANY(${staffIds}::uuid[])
             AND EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)))
     RETURNING m.id, m.user_id`;
+  // Their coming class bookings end with their membership (17c-ii-a).
+  await endLeaversBookings(
+    tx,
+    gymId,
+    rows.map((row) => row.user_id),
+    at,
+  );
   return rows.map((row) => ({ membershipId: row.id, userId: row.user_id }));
 }
 

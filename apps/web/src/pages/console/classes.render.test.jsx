@@ -115,6 +115,25 @@ afterEach(() => {
   resetConsoleOrgs();
 });
 
+const BOOKED = {
+  response: {
+    status: 409,
+    data: {
+      error: 'class_has_bookings',
+      ending: {
+        classes: 1,
+        booked: 2,
+        waiting: 1,
+        people: [
+          { id: '00000000-0000-4000-8000-000000000001', name: 'Asha Rao', initials: 'AR', waiting: false, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
+          { id: '00000000-0000-4000-8000-000000000002', name: 'Ben Okoro', initials: 'BO', waiting: false, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
+          { id: '00000000-0000-4000-8000-000000000003', name: 'Cy Diaz', initials: 'CD', waiting: true, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
+        ],
+      },
+    },
+  },
+};
+
 const drawScreen = () =>
   render(
     <MemoryRouter initialEntries={['/console/iron-house/classes']}>
@@ -898,6 +917,68 @@ describe('editing, archiving and restoring a class', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
     expect(api.archiveClass).not.toHaveBeenCalled();
     expect(screen.queryByText(/Archive Sunrise Yoga\?/)).toBeNull();
+  });
+
+  // 17c-ii-a: people booked on its coming classes are named before the class goes.
+  it('archiving a class people have booked names them first; Keep it archives nothing, and its button sends their number', async () => {
+    api.archiveClass.mockReset();
+    api.archiveClass.mockRejectedValueOnce(BOOKED);
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Sunrise Yoga' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    expect(await screen.findByText('2 people are booked and 1 is on the waitlist')).toBeTruthy();
+    expect(screen.getByText('Ben Okoro')).toBeTruthy();
+    expect(screen.getByText("Bookings for other classes and time slots don't change.")).toBeTruthy();
+    expect(screen.queryByText("We couldn't save that.")).toBeNull();
+    expect(api.archiveClass.mock.calls).toEqual([['g1', 't1']]);
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByText('2 people are booked and 1 is on the waitlist')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Archive Sunrise Yoga' })).toBeTruthy();
+    expect(api.archiveClass).toHaveBeenCalledTimes(1);
+
+    api.archiveClass.mockRejectedValueOnce(BOOKED).mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Sunrise Yoga' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive class and end 3 bookings' }));
+    await waitFor(() => expect(api.archiveClass).toHaveBeenLastCalledWith('g1', 't1', 3));
+    expect(await screen.findByRole('button', { name: /Archived classes/ })).toBeTruthy();
+  });
+
+  it('cancelling a time slot people have booked names them first, and its button sends their number', async () => {
+    api.stopClassRepeat.mockReset();
+    api.stopClassRepeat.mockRejectedValueOnce(BOOKED).mockResolvedValue(timetable({ entries: [{ type: YOGA, schedules: [] }] }));
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel the Mon & Wed 18:30 time slot of Sunrise Yoga' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel time slot' }));
+    expect(await screen.findByText('2 people are booked and 1 is on the waitlist')).toBeTruthy();
+    expect(api.stopClassRepeat.mock.calls).toEqual([['g1', 's1']]);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel time slot and end 3 bookings' }));
+    await waitFor(() => expect(api.stopClassRepeat).toHaveBeenLastCalledWith('g1', 's1', 3));
+    await screen.findByText('No time slots yet.');
+  });
+
+  it('moving a time slot people have booked names them first, and its button sends their number with the move', async () => {
+    api.updateClassRepeat.mockRejectedValueOnce(BOOKED);
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit the Mon & Wed 18:30 time slot of Sunrise Yoga' }));
+    await screen.findByLabelText('Update from');
+    fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '7' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('2 people are booked and 1 is on the waitlist')).toBeTruthy();
+    expect(screen.getByText(/^Bookings for classes before .+ don't change.$/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    expect(screen.queryByText('2 people are booked and 1 is on the waitlist')).toBeNull();
+    expect(api.updateClassRepeat).toHaveBeenCalledTimes(1);
+
+    api.updateClassRepeat.mockRejectedValueOnce(BOOKED);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Move time slot and end 3 bookings' }));
+    await waitFor(() => expect(api.updateClassRepeat).toHaveBeenCalledTimes(3));
+    expect(api.updateClassRepeat.mock.calls[2][2]).toMatchObject({ startMinute: 450, confirmBookings: 3 });
   });
 
   it('archives a class and keeps it under Archived classes, by name', async () => {

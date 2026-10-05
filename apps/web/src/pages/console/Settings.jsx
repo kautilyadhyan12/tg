@@ -7,9 +7,11 @@ import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import StaffPanel from '../../components/console/StaffPanel';
 import MembershipTypesPanel from '../../components/console/MembershipTypesPanel';
+import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { canManageStaff } from './staffView';
 import { canManageMemberships } from './membershipTypesView';
+import { canManageSchedule } from './classesView';
 import { canManageOrg } from './gymDetailsView';
 import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
@@ -79,6 +81,7 @@ export default function Settings() {
   const canEditGym = canManageOrg(privileges);
   const canEditStaff = canManageStaff(privileges);
   const canEditMemberships = canManageMemberships(privileges);
+  const canEditSchedule = canManageSchedule(privileges);
   // Part 3 §4.2's read-only console. **It gates neither section**, and that
   // distinction is the whole design: a lapsed gym's staff still SEE everything
   // (Kd's ruling, :23711 — read-only "seals nobody out"), so the panels are
@@ -167,6 +170,10 @@ export default function Settings() {
           gates its changes. Keyed per gym for the panels' reason above: it holds a form. */}
       {canEditMemberships ? <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={readOnly} /> : null}
 
+      {/* CLASS BOOKINGS (17c-ii-a): the four booking settings, on `schedule.manage` as the
+          server gates them. Keyed per gym for the panels' reason above: it holds a form. */}
+      {canEditSchedule ? <BookingSettingsPanel key={`bookings-${org.id}`} org={org} readOnly={readOnly} /> : null}
+
       {/* CHECK-IN DEVICES (16b-i): the front desk's tablets, on `org.manage` as the server
           gates them. Keyed per gym for the panels' reason above: it holds a typed name and
           a link shown once. */}
@@ -207,7 +214,7 @@ export default function Settings() {
         />
       ) : null}
 
-      {!canEditGym && !canEditStaff && !canEditMemberships ? (
+      {!canEditGym && !canEditStaff && !canEditMemberships && !canEditSchedule ? (
         /* REACHABLE BY TYPING THE ADDRESS, and that is the only way here — the
            nav does not draw this tab for somebody holding neither power, because
            every section on it would answer them with a refusal. Somebody who

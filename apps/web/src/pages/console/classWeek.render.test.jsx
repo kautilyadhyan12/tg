@@ -61,6 +61,24 @@ const day = (over) => ({
 });
 
 const SPIN_TUE = day({});
+const BOOKED = {
+  response: {
+    status: 409,
+    data: {
+      error: 'class_has_bookings',
+      ending: {
+        classes: 1,
+        booked: 2,
+        waiting: 1,
+        people: [
+          { id: '00000000-0000-4000-8000-000000000001', name: 'Asha Rao', initials: 'AR', waiting: false, className: 'Spin', localDate: '2026-09-22', localStartMinute: 1080 },
+          { id: '00000000-0000-4000-8000-000000000002', name: 'Ben Okoro', initials: 'BO', waiting: false, className: 'Spin', localDate: '2026-09-22', localStartMinute: 1080 },
+          { id: '00000000-0000-4000-8000-000000000003', name: 'Cy Diaz', initials: 'CD', waiting: true, className: 'Spin', localDate: '2026-09-22', localStartMinute: 1080 },
+        ],
+      },
+    },
+  },
+};
 const YOGA_WED = day({
   id: 'x2',
   classTypeId: 't2',
@@ -262,6 +280,62 @@ describe('one class on one date', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
     await waitFor(() => expect(api.cancelClassDay).toHaveBeenCalledWith('g1', 'x1'));
     expect(await screen.findByRole('button', { name: 'Un-cancel' })).toBeTruthy();
+  });
+
+  // 17c-ii-a: people booked on the class are named before it is cancelled.
+  it('Cancel class with people booked: the box names them, Keep it cancels nothing, and its button sends their number', async () => {
+    api.cancelClassDay.mockRejectedValueOnce(BOOKED).mockRejectedValueOnce(BOOKED);
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+    expect(await screen.findByText('2 people are booked and 1 is on the waitlist')).toBeTruthy();
+    expect(screen.getByText('Asha Rao')).toBeTruthy();
+    expect(screen.getByText('Spin · Tue 22 Sep · 18:00 · On the waitlist')).toBeTruthy();
+    expect(screen.getByText("Nobody else's bookings change.")).toBeTruthy();
+    // A question, not a failure, and the first request confirmed nothing.
+    expect(screen.queryByText("We couldn't save that.")).toBeNull();
+    expect(api.cancelClassDay.mock.calls).toEqual([['g1', 'x1']]);
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByText('2 people are booked and 1 is on the waitlist')).toBeNull();
+    expect(api.cancelClassDay).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Cancel class' })).toBeTruthy();
+
+    api.cancelClassDay.mockResolvedValue(week({ sessions: [SPIN_MON, { ...SPIN_TUE, status: 'cancelled' }, YOGA_WED, SPIN_FRI] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel class and end 3 bookings' }));
+    await waitFor(() => expect(api.cancelClassDay).toHaveBeenLastCalledWith('g1', 'x1', 3));
+    expect(await screen.findByRole('button', { name: 'Un-cancel' })).toBeTruthy();
+  });
+
+  it('a move from this date with people booked: the box says who keeps their booking, and its button sends their number', async () => {
+    api.changeClassDay.mockRejectedValueOnce(BOOKED);
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'This and future classes' }));
+    fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '19' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('2 people are booked and 1 is on the waitlist')).toBeTruthy();
+    expect(screen.getByText("Bookings for classes before Tue 22 Sep don't change.")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    // Changing the form takes the box away: it was about the old answer.
+    fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '20' } });
+    expect(screen.queryByText('2 people are booked and 1 is on the waitlist')).toBeNull();
+
+    api.changeClassDay.mockRejectedValueOnce(BOOKED);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Move time slot and end 3 bookings' }));
+    await waitFor(() => expect(api.changeClassDay).toHaveBeenCalledTimes(3));
+    expect(api.changeClassDay.mock.calls[2][2]).toEqual({
+      scope: 'future',
+      startMinute: 1200,
+      minutes: 45,
+      places: 12,
+      coachUserId: 'u8',
+      confirmBookings: 3,
+    });
   });
 
   it('Un-cancel is one tap', async () => {

@@ -47,6 +47,11 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
         }),
       ),
       updateLeadEmailSettings: vi.fn(),
+      /** Settings' class bookings box (17c-ii-a) reads on mount too: the starting values. */
+      getBookingSettings: vi.fn(() =>
+        Promise.resolve({ data: { settings: { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 } } }),
+      ),
+      updateBookingSettings: vi.fn(),
       /** Settings' check-in devices box (16b-i) reads on mount too: a gym with none. */
       getCheckinDevices: vi.fn(() => Promise.resolve({ data: { devices: [] } })),
     },

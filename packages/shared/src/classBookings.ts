@@ -4,6 +4,7 @@
 // place. Pure: the instant, the counts and the person's memberships are passed in, and
 // the server reads them under the gym's lock.
 import { z } from "zod";
+import { classDaySchema } from "./classes.js";
 import { addDays, heldMembershipView, type HeldMembership } from "./heldMemberships.js";
 import type { MembershipAccess, MembershipLimitPeriod } from "./memberships.js";
 
@@ -228,8 +229,8 @@ export const CLASS_BOOKING_WORDS = {
   late_cancel_pack: "It's too late to cancel for free. Cancelling now counts as a late cancel, and the class stays used on your pack.",
   request_reused: "That didn't go through. Try again.",
   class_not_found: "That class was not found.",
-  /** Staff, on a change that would remove a class somebody has booked. */
-  class_has_bookings: "People have booked some of these classes, so this can't be done yet.",
+  /** Staff, on a change that ends bookings, until the request confirms how many. */
+  class_has_bookings: "People have booked these classes. Their bookings will end if you go ahead.",
 } as const;
 
 export const CLASS_HAS_BOOKINGS_ERROR = "class_has_bookings";
@@ -322,3 +323,88 @@ export const classSessionBookingsResponseSchema = z
   })
   .strict();
 export type ClassSessionBookingsResponse = z.infer<typeof classSessionBookingsResponseSchema>;
+
+// ── STAFF: BOOKINGS A CHANGE WOULD END, AND THE GYM'S SETTINGS (17c-ii-a) ──
+
+/** How many names the 409 `class_has_bookings` carries, and how many a page of the whole
+ *  list holds. */
+export const CLASS_BOOKINGS_ENDING_SHOWN = 3;
+export const CLASS_BOOKINGS_ENDING_PAGE = 100;
+
+const endingPersonSchema = z
+  .object({
+    /** The booking's id: the list's key, and the cursor for the next page. */
+    id: z.string().uuid(),
+    name: z.string().nullable(),
+    initials: z.string(),
+    /** On the waitlist; false: holds a place. */
+    waiting: z.boolean(),
+    className: z.string(),
+    /** The class's own day and clock time at the gym. */
+    localDate: z.string(),
+    localStartMinute: z.number().int(),
+  })
+  .strict();
+export type ClassBookingsEndingPerson = z.infer<typeof endingPersonSchema>;
+
+/** The bookings a change to the timetable would end: cancelling a class, cancelling a
+ *  time slot, removing a class, or moving a time slot to another day or time. The 409
+ *  `class_has_bookings` carries it as `ending`, with the first few; the request goes
+ *  through when it sends `confirmBookings` equal to `booked + waiting`, counted again
+ *  under the gym's lock. The number confirmed is a count, not the list: a booking made
+ *  and another cancelled in the moment between the box and its button leave it equal. */
+export const classBookingsEndingSchema = z
+  .object({
+    /** Classes with a booking that holds a place or waits. */
+    classes: z.number().int(),
+    /** BOOKINGS that hold a place, and that wait: one person booked on three of the
+     *  classes is three. In one class they are people. */
+    booked: z.number().int(),
+    waiting: z.number().int(),
+    /** One row a booking, in the order they were made. */
+    people: z.array(endingPersonSchema),
+  })
+  .strict();
+export type ClassBookingsEnding = z.infer<typeof classBookingsEndingSchema>;
+
+export const CLASS_BOOKINGS_ENDING_SCOPES = ["session", "slot", "class"] as const;
+
+/** The whole list behind a box's "See all": one class (`session`), a time slot's coming
+ *  classes from `from` on (`slot`), or every coming class of one kind (`class`). */
+export const classBookingsEndingQuerySchema = z
+  .object({
+    by: z.enum(CLASS_BOOKINGS_ENDING_SCOPES),
+    id: z.string().uuid(),
+    from: classDaySchema.optional(),
+    /** The `id` of the last booking already shown. */
+    after: z.string().uuid().optional(),
+  })
+  .strict();
+export type ClassBookingsEndingQuery = z.infer<typeof classBookingsEndingQuerySchema>;
+
+export const classBookingsEndingResponseSchema = classBookingsEndingSchema
+  .extend({
+    /** `after` for the next page; null on the last. */
+    next: z.string().uuid().nullable(),
+  })
+  .strict();
+export type ClassBookingsEndingResponse = z.infer<typeof classBookingsEndingResponseSchema>;
+
+const setting = (key: keyof ClassBookingSettings) => z.number().int().min(CLASS_BOOKING_LIMITS[key][0]).max(CLASS_BOOKING_LIMITS[key][1]);
+
+/** The gym's four booking settings, every one every time. */
+export const classBookingSettingsSchema = z
+  .object({
+    opensDays: setting("opensDays"),
+    freeCancelMinutes: setting("freeCancelMinutes"),
+    handoverMinutes: setting("handoverMinutes"),
+    waitlistMax: setting("waitlistMax"),
+  })
+  .strict();
+
+/** `movedIn`, on a save only: how many waiting people a shorter hand-over time gave a
+ *  free place to at once. */
+export const classBookingSettingsResponseSchema = z
+  .object({ settings: classBookingSettingsSchema, movedIn: z.number().int().optional() })
+  .strict();
+export type ClassBookingSettingsResponse = z.infer<typeof classBookingSettingsResponseSchema>;
