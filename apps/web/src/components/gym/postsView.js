@@ -229,6 +229,13 @@ export function hiddenStaffNote(post, words, onList) {
   return onList ? `${why} Keep post shows it to them again.` : `${why} It is in the reported posts at the top of Updates, where you can keep or remove it.`;
 }
 
+/** The posts drawn under the reported list in the console: what members read. A hidden
+ *  post is drawn once, on the reported list; one that list does not carry stays here. */
+export function postsBelow(feed, reported) {
+  const listed = new Set((reported?.items ?? []).map((item) => item.post.id));
+  return [...feed.pinned, ...feed.posts].filter((p) => !(p.hidden && listed.has(p.id)));
+}
+
 /** The list after staff keep a post: it is no longer hidden. */
 export function withKept(feed, id) {
   const mark = (p) => (p.id === id ? { ...p, hidden: false } : p);

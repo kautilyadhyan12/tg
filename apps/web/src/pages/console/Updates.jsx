@@ -14,6 +14,7 @@ import {
   memberPostsSwitch,
   personOf,
   photoProblem,
+  postsBelow,
   reportedHelp,
   reportedMore,
   reportedTitle,
@@ -341,8 +342,9 @@ export default function Updates() {
   }
 
   const feed = state.feed;
-  const all = feed === null ? [] : [...feed.pinned, ...feed.posts];
   const reported = side.reported;
+  const all = feed === null ? [] : postsBelow(feed, reported);
+  const none = feed !== null && feed.pinned.length + feed.posts.length === 0;
   const stoppedPeople = side.stopped?.people ?? [];
   const switchLines = feed === null ? null : memberPostsSwitch(feed.membersCanPost, words);
   const waiting = reported === null ? null : reportedMore(reported);
@@ -468,7 +470,7 @@ export default function Updates() {
           {state.loading ? <ConsoleLoading label="Loading your updates…" newLook /> : null}
           {!state.loading && feed === null ? <ConsoleFailed message={state.error} onRetry={load} newLook /> : null}
 
-          {feed !== null && all.length === 0 ? (
+          {none ? (
             <section className="c-card p-5 md:p-6">
               <p className="c-s15 c-t2">{readOnly ? 'No posts yet.' : 'No posts yet. Write your first one above.'}</p>
             </section>

@@ -587,16 +587,27 @@ describe('reported posts', () => {
     expect(within(screen.getByTestId('reported')).getByText(/A post 5 people have reported is hidden from your members until you choose\./)).toBeTruthy();
     expect(within(reportedCards()[0]).getByTestId('hidden-note').textContent).toBe('Hidden from your members: 5 or more people reported it. Keep post shows it to them again.');
     expect(within(reportedCards()[1]).queryByTestId('hidden-note')).toBeNull();
-    expect(within(cards()[0]).getByTestId('hidden-note').textContent).toBe(
-      'Hidden from your members: 5 or more people reported it. It is in the reported posts at the top of Updates, where you can keep or remove it.',
-    );
-    expect(within(cards()[1]).queryByTestId('hidden-note')).toBeNull();
+    // Drawn once: a hidden post is on the reported list and not among the posts below.
+    expect(cards().map((c) => c.textContent.includes('Changing room'))).toEqual([false]);
+    expect(within(cards()[0]).queryByTestId('hidden-note')).toBeNull();
 
     fireEvent.click(within(reportedCards()[0]).getByRole('button', { name: 'Keep post' }));
     await waitFor(() => expect(reportedCards()).toHaveLength(1));
     expect(screen.getByRole('status').textContent).toBe('Kept. Your members can see the post again, and it has left this list.');
+    // Kept: back among the posts, unmarked.
     expect(cards()).toHaveLength(2);
+    expect(within(cards()[0]).getByText('Changing room, this morning')).toBeTruthy();
     expect(within(cards()[0]).queryByTestId('hidden-note')).toBeNull();
+  });
+
+  it('a hidden post the reported list does not carry is still drawn among the posts, saying where it is', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [post('h1', 'Hidden and far down the list', { ...wendy, hidden: true })] }));
+    svc.reported.mockResolvedValue(two());
+    open();
+    await waitFor(() => expect(reportedCards()).toHaveLength(2));
+    expect(within(cards()[0]).getByTestId('hidden-note').textContent).toBe(
+      'Hidden from your members: 5 or more people reported it. It is in the reported posts at the top of Updates, where you can keep or remove it.',
+    );
   });
 
   it('a report that arrived while staff were looking: Keep says so, and the post is still listed with it', async () => {
