@@ -163,6 +163,11 @@ const envSchema = z.object({
   // production, so a deploy never keeps them in a temporary folder; elsewhere unset
   // means one under the system's temporary folder.
   PHOTO_DIR: z.string().trim().min(1).max(500).optional(),
+  // The address members are told to write to for help, shown on a gym's Updates (ROADMAP
+  // 19b-ii-b; Apple and Google ask it of any app where people post). Kd has not chosen it
+  // yet (RULINGS 2026-10-05), so it is REQUIRED in production: the site cannot go online
+  // without one. Elsewhere unset means no such line is shown.
+  SUPPORT_EMAIL: z.string().trim().email().max(200).optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
@@ -196,6 +201,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     .refine((c) => c.NODE_ENV !== "production" || c.PHOTO_DIR !== undefined, {
       path: ["PHOTO_DIR"],
       message: "PHOTO_DIR is required in production (a gym page's photos)",
+    })
+    .refine((c) => c.NODE_ENV !== "production" || c.SUPPORT_EMAIL !== undefined, {
+      path: ["SUPPORT_EMAIL"],
+      message: "SUPPORT_EMAIL is required in production (the help address shown where members post)",
     })
     .refine((c) => (c.PADDLE_API_KEY === undefined) === (c.PADDLE_CLIENT_TOKEN === undefined), {
       path: ["PADDLE_CLIENT_TOKEN"],

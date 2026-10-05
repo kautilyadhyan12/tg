@@ -117,6 +117,9 @@ d("DPDP data export (real Postgres)", () => {
     // A report of a post and a gym's stop on their posting (19b-ii-a): about the person.
     await sql`INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason) VALUES (${postGymId}, ${postId}, ${userId}, 'spam')`;
     await sql`INSERT INTO gym_post_stops (gym_id, user_id) VALUES (${postGymId}, ${userId})`;
+    // Who they blocked on a gym's Updates (19b-ii-b), and somebody's block of them.
+    await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, ${userId}, owner_user_id FROM gyms WHERE id = ${postGymId}`;
+    await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, owner_user_id, ${userId} FROM gyms WHERE id = ${postGymId}`;
     // A post made as a MEMBER is the person's own and exported; one made as staff is the gym's.
     await sql`INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member) VALUES (${postGymId}, ${userId}, gen_random_uuid(), ${`member-post-${label}`}, true)`;
     await sql`INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member) VALUES (${postGymId}, ${userId}, gen_random_uuid(), ${`staff-post-${label}`}, false)`;

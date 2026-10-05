@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { BicepsFlexed, Check, Flag, Flame, Heart, ImagePlus, Pin, PinOff, ThumbsUp, Trash2, UserCheck, UserX, X } from 'lucide-react';
+import { BicepsFlexed, Check, Clock, Flag, Flame, Heart, ImagePlus, Pin, PinOff, ThumbsUp, Trash2, UserCheck, UserX, X } from 'lucide-react';
 import { postPhotoUrl, staffPostsService } from '../../api/postsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import PhotoViewer from '../../components/common/PhotoViewer';
@@ -8,10 +8,16 @@ import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/c
 import {
   POST_LIMITS,
   addPostPhotos,
+  allowedNote,
   authorInitials,
   authorName,
   canPost,
   charsLine,
+  heldIntro,
+  heldLine,
+  heldMore,
+  heldRemoveBox,
+  heldTitle,
   keepNote,
   memberPostsSwitch,
   photoProblem,
@@ -275,16 +281,23 @@ function Reactions({ gymId, post }) {
 }
 
 /** One post. `report`: its entry on the reported list, where it is drawn with why it was
- *  reported and Keep in place of Pin. */
-function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, report = null, onPin, onRemove, onKeep, onStop, onOpen }) {
+ *  reported and Keep in place of Pin. `held`: its entry on the list of posts waiting for
+ *  staff, drawn with why it was held and Allow in place of Pin. */
+function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, report = null, held = null, onPin, onRemove, onKeep, onAllow, onStop, onOpen }) {
   /** Which box is open: null, 'remove' or 'stop'. */
   const [asking, setAsking] = useState(null);
-  const box = removeBox(post, words);
+  const box = held === null ? removeBox(post, words) : heldRemoveBox(post);
   const stop = stopBox(post.author.name);
-  const full = report === null ? pinNote(post, pinnedCount) : null;
+  const full = report === null && held === null ? pinNote(post, pinnedCount) : null;
   const canStop = post.fromMember && post.authorId !== null;
   return (
-    <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid={report === null ? 'post' : 'reported-post'}>
+    <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid={held !== null ? 'held-post' : report === null ? 'post' : 'reported-post'}>
+      {held !== null ? (
+        <p className="c-s14 c-w6 flex items-start gap-2" style={{ color: 'var(--warn)' }}>
+          <Clock aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>{heldLine(held)}</span>
+        </p>
+      ) : null}
       {report !== null ? (
         <p className="c-s14 c-w6 flex items-start gap-2" style={{ color: 'var(--warn)' }}>
           <Flag aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -343,7 +356,7 @@ function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, re
           ))}
         </ul>
       ) : null}
-      <Reactions key={post.id} gymId={gymId} post={post} />
+      {held === null ? <Reactions key={post.id} gymId={gymId} post={post} /> : null}
       {readOnly ? null : asking === 'remove' ? (
         <div role="group" aria-label={box.title} className="flex flex-col gap-2 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
           <p className="c-s15 c-w6 c-t1">{box.title}</p>
@@ -372,7 +385,12 @@ function PostCard({ gymId, gymName, post, pinnedCount, words, readOnly, busy, re
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
-          {report === null ? (
+          {held !== null ? (
+            <button type="button" disabled={busy} onClick={() => onAllow(post)} className="c-btn c-btn-s c-btn-sm">
+              <Check aria-hidden="true" className="w-4 h-4" />
+              Allow post
+            </button>
+          ) : report === null ? (
             <button type="button" disabled={busy || full !== null} onClick={() => onPin(post, !post.pinned)} className="c-btn c-btn-s c-btn-sm">
               {post.pinned ? <PinOff aria-hidden="true" className="w-4 h-4" /> : <Pin aria-hidden="true" className="w-4 h-4" />}
               {post.pinned ? 'Unpin' : 'Pin to the top'}
@@ -414,8 +432,8 @@ export default function Updates() {
   const readOnly = consoleIsReadOnly(org);
 
   const [state, setState] = useState({ loading: true, error: null, refused: false, feed: null });
-  /** The reported posts and the people stopped from posting; null until read. */
-  const [side, setSide] = useState({ reported: null, stopped: null });
+  /** The reported posts, the posts waiting for staff and the people stopped from posting; null until read. */
+  const [side, setSide] = useState({ reported: null, held: null, stopped: null });
   const [switching, setSwitching] = useState(false);
   const [more, setMore] = useState({ loading: false, error: null });
   /** The post a pin or a removal is on its way for. */
@@ -427,9 +445,10 @@ export default function Updates() {
   const loadSide = useCallback(() => {
     if (gymId === null) return Promise.resolve();
     // Read beside the posts: one that fails leaves its part of the page as it was.
-    return Promise.allSettled([staffPostsService.reported(gymId), staffPostsService.stopped(gymId)]).then(([reported, stopped]) =>
+    return Promise.allSettled([staffPostsService.reported(gymId), staffPostsService.stopped(gymId), staffPostsService.held(gymId)]).then(([reported, stopped, held]) =>
       setSide((was) => ({
         reported: reported.status === 'fulfilled' ? reported.value : was.reported,
+        held: held.status === 'fulfilled' ? held.value : was.held,
         stopped: stopped.status === 'fulfilled' ? stopped.value : was.stopped,
       })),
     );
@@ -518,6 +537,8 @@ export default function Updates() {
       ),
     // Keep answers the reports this list showed and no later one; the list is read again.
     onKeep: (p, item) => act(p, () => staffPostsService.keep(gymId, p.id, item.lastReportedAt), keepNote, (shown) => shown),
+    // An allowed post joins the page of posts, so the page is read again.
+    onAllow: (p) => act(p, () => staffPostsService.allow(gymId, p.id), allowedNote(words), (shown) => shown).then(load),
     onStop: (p, stopped) =>
       act(
         p,
@@ -561,6 +582,8 @@ export default function Updates() {
   const stoppedPeople = side.stopped?.people ?? [];
   const switchLines = feed === null ? null : memberPostsSwitch(feed.membersCanPost, words);
   const waiting = reported === null ? null : reportedMore(reported);
+  const held = side.held;
+  const heldWaiting = held === null ? null : heldMore(held);
   return (
     <div className="c-page">
       <header className="flex flex-col gap-1.5 min-w-0">
@@ -639,6 +662,32 @@ export default function Updates() {
                     gymName={reported.gymName}
                     post={item.post}
                     report={item}
+                    pinnedCount={0}
+                    words={words}
+                    readOnly={readOnly}
+                    busy={busy === item.post.id}
+                    {...cardActions}
+                  />
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {held !== null && held.items.length > 0 ? (
+            <section className="flex flex-col gap-3" aria-label="Posts waiting for you to check" data-testid="held">
+              <div className="flex flex-col gap-1">
+                <h2 className="c-s15 c-w6 c-t1">{heldTitle(held.total)}</h2>
+                <p className="c-s13 c-t2">{heldIntro(words)}</p>
+                {heldWaiting !== null ? <p className="c-s13 c-t2">{heldWaiting}</p> : null}
+              </div>
+              <ul className="flex flex-col gap-3">
+                {held.items.map((item) => (
+                  <PostCard
+                    key={item.post.id}
+                    gymId={gymId}
+                    gymName={held.gymName}
+                    post={item.post}
+                    held={item}
                     pinnedCount={0}
                     words={words}
                     readOnly={readOnly}

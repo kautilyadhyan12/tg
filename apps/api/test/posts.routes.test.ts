@@ -732,7 +732,7 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       const seen = await inject("GET", posts(gym.id), viewer.cookies);
       expect(seen.statusCode).toBe(200);
       expect(seen.body).not.toMatch(/Written while/);
-      expect(JSON.parse(seen.body)).toEqual({ gymId: gym.id, gymName: "Lapsed House", status: "paused", posting: "off", pinned: [], posts: [], next: null });
+      expect(JSON.parse(seen.body)).toEqual({ gymId: gym.id, gymName: "Lapsed House", status: "paused", posting: "off", blockedCount: 0, supportEmail: null, pinned: [], posts: [], next: null });
       const photoPath = `${posts(gym.id)}/${post.id}/photos/${post.photos[0]?.id ?? ""}`;
       expect((await inject("GET", photoPath, viewer.cookies)).statusCode).toBe(404);
       expect((await react(gym, viewer, post.id, "like")).statusCode).toBe(404);

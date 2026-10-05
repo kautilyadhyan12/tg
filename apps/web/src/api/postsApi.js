@@ -1,4 +1,8 @@
 import {
+  allowedGymPostResponseSchema,
+  blockedGymPosterResponseSchema,
+  blockedGymPostersResponseSchema,
+  heldGymPostsResponseSchema,
   gymPostReactionResponseSchema,
   gymPostReactorsResponseSchema,
   gymPostResponseSchema,
@@ -57,6 +61,11 @@ export const postsService = {
       'your report',
       authApi.post(`${postPath(gymId, postId)}/report`, note.trim() === '' ? { reason } : { reason, note: note.trim() }),
     ),
+  /** Blocks whoever wrote this post: the member is sent none of their posts or reactions. */
+  block: (gymId, postId) => readThrough(blockedGymPosterResponseSchema, 'the change', authApi.put(`${postPath(gymId, postId)}/block`)),
+  /** The people the member has blocked at this gym. */
+  blocked: (gymId) => readThrough(blockedGymPostersResponseSchema, "who you've blocked", authApi.get(`${gymPath(gymId)}/blocked`)),
+  unblock: (gymId, blockId) => readThrough(blockedGymPosterResponseSchema, 'the change', authApi.delete(`${gymPath(gymId)}/blocked/${encodeURIComponent(blockId)}`)),
 };
 
 // THE CONSOLE'S UPDATES PAGE: for staff holding `posts.manage`. The server refuses anyone
@@ -79,6 +88,10 @@ export const staffPostsService = {
   /** The gym's switch: whether its members may post. */
   setMembersCanPost: (gymId, membersCanPost) => readThrough(gymPostSettingsSchema, 'the change', authApi.put(`${gymPath(gymId)}/settings`, { membersCanPost })),
   /** The people this gym has stopped posting. */
+  /** Members' posts held for a bad word, longest waiting first. */
+  held: (gymId) => readThrough(heldGymPostsResponseSchema, 'the posts waiting for you', authApi.get(`${gymPath(gymId)}/held`)),
+  /** Lets a held post through: every member sees it. */
+  allow: (gymId, postId) => readThrough(allowedGymPostResponseSchema, 'the change', authApi.post(`${postPath(gymId, postId)}/allow`)),
   stopped: (gymId) => readThrough(stoppedGymPostersResponseSchema, 'who is stopped from posting', authApi.get(`${gymPath(gymId)}/stopped`)),
   /** Stops one person posting, or lets them post again. */
   setStopped: (gymId, userId, stopped) =>

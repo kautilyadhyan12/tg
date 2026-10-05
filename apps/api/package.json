@@ -48,6 +48,7 @@
     "ioredis": "^5",
     "jsonwebtoken": "9.0.2",
     "libphonenumber-js": "1.13.13",
+    "obscenity": "0.4.6",
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
     "posthog-node": "^5.39.4",

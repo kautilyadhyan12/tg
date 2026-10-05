@@ -53,9 +53,10 @@ const post = (over = {}) => ({
   own: false,
   wrote: false,
   reported: false,
+  held: false,
   ...over,
 });
-const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', posting: 'off', pinned: [], posts: [], next: null, ...over });
+const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', posting: 'off', blockedCount: 0, supportEmail: null, pinned: [], posts: [], next: null, ...over });
 const WORDS = { people: 'members', peopleCap: 'Members' };
 
 describe('who may open the console’s Updates page', () => {

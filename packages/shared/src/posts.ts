@@ -100,6 +100,8 @@ export const gymPostSchema = z
     wrote: z.boolean(),
     /** The reader has reported it. Always false for staff reading the console. */
     reported: z.boolean(),
+    /** It held a bad word and waits for staff: only its writer and staff are sent it. */
+    held: z.boolean(),
   })
   .strict();
 export type GymPost = z.infer<typeof gymPostSchema>;
@@ -154,7 +156,15 @@ export type GymMemberPosting = z.infer<typeof gymMemberPostingSchema>;
 
 /** What a member reads. `paused`: the gym's plan has lapsed, and nothing is sent. */
 export const gymPostsResponseSchema = z
-  .object({ ...feedShape(gymPostSchema), status: z.enum(["shown", "paused"]), posting: gymMemberPostingSchema })
+  .object({
+    ...feedShape(gymPostSchema),
+    status: z.enum(["shown", "paused"]),
+    posting: gymMemberPostingSchema,
+    /** People the reader has blocked at this gym. */
+    blockedCount: z.number().int().nonnegative(),
+    /** Where to write for help with the app; null until one is set. */
+    supportEmail: z.string().email().nullable(),
+  })
   .strict();
 export type GymPostsResponse = z.infer<typeof gymPostsResponseSchema>;
 
@@ -166,6 +176,8 @@ export const staffGymPostsResponseSchema = z
     membersCanPost: z.boolean(),
     /** Posts with a report nobody has answered yet. */
     reportedCount: z.number().int().nonnegative(),
+    /** Members' posts held for a bad word, waiting for staff. */
+    heldCount: z.number().int().nonnegative(),
   })
   .strict();
 export type StaffGymPostsResponse = z.infer<typeof staffGymPostsResponseSchema>;
@@ -300,6 +312,54 @@ export const stoppedGymPostersResponseSchema = z
   .strict();
 export type StoppedGymPostersResponse = z.infer<typeof stoppedGymPostersResponseSchema>;
 
+// ── BLOCK, AND THE BAD-WORDS HOLD (19b-ii-b; spec §15.3) ──
+
+/** People one member's blocked list carries, newest first. */
+export const GYM_POST_BLOCKS_SHOWN = 200;
+/** Held posts the staff list carries, longest waiting first. */
+export const GYM_POST_HELD_SHOWN = 50;
+
+export const blockedGymPosterResponseSchema = z.object({ blocked: z.boolean() }).strict();
+export const gymPostBlockParamsSchema = z.object({ gymId: z.string().uuid(), blockId: z.string().uuid() }).strict();
+
+/** The people the reader has blocked at this gym, named as members see each other. */
+export const blockedGymPostersResponseSchema = z
+  .object({
+    people: z
+      .array(
+        z
+          .object({ id: z.string().uuid(), name: z.string().nullable(), initials: z.string(), blockedAt: z.string().datetime({ offset: true }) })
+          .strict(),
+      )
+      .max(GYM_POST_BLOCKS_SHOWN),
+  })
+  .strict();
+export type BlockedGymPostersResponse = z.infer<typeof blockedGymPostersResponseSchema>;
+
+/** Members' posts held for a bad word, for staff: longest waiting first. */
+export const heldGymPostsResponseSchema = z
+  .object({
+    gymId: z.string().uuid(),
+    gymName: z.string(),
+    items: z
+      .array(
+        z
+          .object({
+            post: staffGymPostSchema,
+            /** The listed words it holds; empty when the list has changed since. */
+            words: z.array(z.string()).max(5),
+          })
+          .strict(),
+      )
+      .max(GYM_POST_HELD_SHOWN),
+    /** Every held post waiting, listed or not. */
+    total: z.number().int().nonnegative(),
+  })
+  .strict();
+export type HeldGymPostsResponse = z.infer<typeof heldGymPostsResponseSchema>;
+
+export const allowedGymPostResponseSchema = z.object({ allowed: z.literal(true) }).strict();
+
 /** What a person reads when a post cannot be made, changed or found. */
 export const GYM_POST_WORDS = {
   not_found: "This post has been removed.",
@@ -310,6 +370,9 @@ export const GYM_POST_WORDS = {
   day_full: `You can post ${String(GYM_MEMBER_POSTS_A_DAY)} times a day. Try again tomorrow.`,
   own_report: "This is your own post. You can remove it instead.",
   person_not_found: "This person isn't one of your members.",
+  own_block: "This is your own post.",
+  gym_block: "This post is from the gym's staff, so it can't be blocked. You can report it instead.",
+  block_not_found: "This person isn't blocked any more.",
   /** Which of a post's photos was refused, counted from 1. */
   photo: (position: number, why: string): string => `Photo ${String(position)}: ${why}`,
 } as const;

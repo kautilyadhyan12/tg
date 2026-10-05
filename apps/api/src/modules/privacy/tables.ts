@@ -67,6 +67,10 @@ export const DIRECT_DELETE_TABLES = [
   // ROADMAP 19b-ii-a): about the person, deleted at Day 14 and exported.
   "gym_post_reports",
   "gym_post_stops",
+  // Who a member has blocked on a gym's Updates (migration 0074; ROADMAP 19b-ii-b): the
+  // person's own choice, deleted at Day 14 and exported without the other person's id.
+  // A block OF the person by somebody else names them too, and is deleted with it.
+  "gym_post_blocks",
   // §5.2's Day-0 sentence already says "push tokens deleted", so clearing
   // them again at Day 14 is not a widening (R0.2) — it is the same
   // defence-in-depth as workout_sets. T3 F5 probe-confirmed that a row

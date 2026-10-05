@@ -131,6 +131,11 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
 
   gym_post_stops: (sql, u) =>
     sql<Row[]>`SELECT * FROM gym_post_stops WHERE user_id = ${u} ORDER BY created_at, gym_id`,
+
+  // Explicit columns: `blocked_user_id` names somebody else. A block OF this person by
+  // somebody else is not theirs to read.
+  gym_post_blocks: (sql, u) =>
+    sql<Row[]>`SELECT id, gym_id, user_id, created_at FROM gym_post_blocks WHERE user_id = ${u} ORDER BY created_at, id`,
 };
 
 /** The most posts one export carries; `total` says how many there are. */

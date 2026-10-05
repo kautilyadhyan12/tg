@@ -65,6 +65,9 @@ importers:
       libphonenumber-js:
         specifier: 1.13.13
         version: 1.13.13
+      obscenity:
+        specifier: 0.4.6
+        version: 0.4.6
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -3636,6 +3639,10 @@ packages:
   object-keys@1.1.1:
     resolution: {integrity: sha512-NuAESUOUMrlIXOfHKzD6bpPu3tYt3xvjNdRIQ+FeT0lNb4K8WR70CaDxhuNguS2XG+GjkyMwOzsN5ZktImfhLA==}
     engines: {node: '>= 0.4'}
+
+  obscenity@0.4.6:
+    resolution: {integrity: sha512-pHk7kNN7j3L3zGhhGnwxjvXIGsPpLrcZl2r58fqWh/V/rH6b/dafscj2sMmAY+A/9/wPsocLmimgGk2DKeKsFQ==}
+    engines: {node: '>=18.0.0'}
 
   on-exit-leak-free@2.1.2:
     resolution: {integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==}
@@ -7705,6 +7712,8 @@ snapshots:
   object-hash@3.0.0: {}
 
   object-keys@1.1.1: {}
+
+  obscenity@0.4.6: {}
 
   on-exit-leak-free@2.1.2: {}
 

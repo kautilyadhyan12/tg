@@ -27,12 +27,15 @@ import {
   getPosts,
   getReported,
   getStaffPosts,
+  getBlocked,
+  getHeld,
   getStopped,
   react,
   removeOwnPost,
   removePost,
   report as reportPost,
 } from "../src/modules/orgs/posts/service.js";
+import { hasBadWords } from "../src/modules/orgs/posts/badWords.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -114,6 +117,16 @@ async function seed(): Promise<{ gymId: string; owner: string; viewer: string }>
     FROM (SELECT gym_id, id, row_number() OVER (ORDER BY created_at DESC) AS rn FROM gym_posts WHERE gym_id = ${gymId}) p
     JOIN gym_members m ON m.gym_id = p.gym_id
     WHERE random() < CASE WHEN p.rn <= 60 THEN 0.4 ELSE 0.05 END`;
+  // The viewer has blocked 200 members; the oldest 50 members' posts wait for staff.
+  await sql`
+    INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id)
+    SELECT gym_id, ${users[1]?.id ?? owner}, user_id FROM gym_members
+    WHERE gym_id = ${gymId} AND user_id <> ALL (${[owner, users[1]?.id ?? owner]}::uuid[])
+    ORDER BY user_id DESC LIMIT 200`;
+  await sql`
+    UPDATE gym_posts SET held_at = created_at, body = repeat('Words of a post. ', 17) || 'what a tosser'
+    WHERE id IN (SELECT id FROM gym_posts WHERE gym_id = ${gymId} AND by_member ORDER BY created_at LIMIT 50)`;
+  await sql`VACUUM ANALYZE gym_post_blocks`;
   await sql`VACUUM ANALYZE gym_posts`;
   await sql`VACUUM ANALYZE gym_post_photos`;
   await sql`VACUUM ANALYZE gym_post_reactions`;
@@ -152,17 +165,19 @@ function report(name: string, runs: { wall: number; js: number }[]): void {
 await cleanup();
 const { gymId, owner, viewer } = await seed();
 const folder = await mkdtemp(join(tmpdir(), "aihg-posts-cost-"));
-const counts = await sql<{ posts: string; own: string; reactions: string; reports: string; stops: string }[]>`
+const counts = await sql<{ posts: string; own: string; reactions: string; reports: string; stops: string; blocks: string; held: string }[]>`
   SELECT (SELECT count(*) FROM gym_posts WHERE gym_id = ${gymId}) AS posts,
          (SELECT count(*) FROM gym_posts WHERE gym_id = ${gymId} AND by_member) AS own,
          (SELECT count(*) FROM gym_post_reactions WHERE gym_id = ${gymId}) AS reactions,
          (SELECT count(*) FROM gym_post_reports WHERE gym_id = ${gymId}) AS reports,
-         (SELECT count(*) FROM gym_post_stops WHERE gym_id = ${gymId}) AS stops`;
+         (SELECT count(*) FROM gym_post_stops WHERE gym_id = ${gymId}) AS stops,
+         (SELECT count(*) FROM gym_post_blocks WHERE gym_id = ${gymId}) AS blocks,
+         (SELECT count(*) FROM gym_posts WHERE gym_id = ${gymId} AND held_at IS NOT NULL) AS held`;
 console.log(
-  `one gym: ${String(MEMBERS)} members, ${counts[0]?.posts ?? "?"} posts (${counts[0]?.own ?? "?"} by members), ${counts[0]?.reactions ?? "?"} reactions, ${counts[0]?.reports ?? "?"} reports, ${counts[0]?.stops ?? "?"} people stopped; cpu ${String(cpus()[0]?.speed ?? 0)} MHz; ${String(RUNS)} runs each`,
+  `one gym: ${String(MEMBERS)} members, ${counts[0]?.posts ?? "?"} posts (${counts[0]?.own ?? "?"} by members), ${counts[0]?.reactions ?? "?"} reactions, ${counts[0]?.reports ?? "?"} reports, ${counts[0]?.stops ?? "?"} people stopped, ${counts[0]?.blocks ?? "?"} blocked by the reader, ${counts[0]?.held ?? "?"} posts held; cpu ${String(cpus()[0]?.speed ?? 0)} MHz; ${String(RUNS)} runs each`,
 );
 
-const deps = { sql, now: () => new Date(), photos: createDiskPhotoStore(folder), log: { warn: () => undefined } };
+const deps = { sql, now: () => new Date(), photos: createDiskPhotoStore(folder), supportEmail: null, log: { warn: () => undefined } };
 const allowed = (): Promise<boolean> => Promise.resolve(true);
 
 const first = await getPosts(deps, viewer, gymId, undefined);
@@ -181,6 +196,10 @@ const reads: [string, () => Promise<unknown>][] = [
   ["staff, the first page", () => getStaffPosts(deps, owner, gymId, undefined, allowed)],
   ["staff, the reported list", () => getReported(deps, owner, gymId, allowed)],
   ["staff, who is stopped", () => getStopped(deps, owner, gymId, allowed)],
+  ["staff, the held list", () => getHeld(deps, owner, gymId, allowed)],
+  ["member, who they blocked", () => getBlocked(deps, viewer, gymId)],
+  // The word check on the longest post a member can write, clean, so every word is read.
+  ["the word check, 2,000 characters", () => Promise.resolve(hasBadWords("Words of a post. ".repeat(118).slice(0, 2000)))],
 ];
 // A post the viewer did not write, to report: the same statement runs each time.
 const others = [...first.pinned, ...first.posts].find((p) => !p.own)?.id ?? "";
