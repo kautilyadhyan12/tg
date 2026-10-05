@@ -4,6 +4,19 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-05 · 19b-iv (Folder B): a post's photo is made smaller before it is sent (branch `post-photos-smaller`)
+
+- **Why this job:** next in Folder B after 19b-ii-c (19b-iii, video, waits on Kd's Cloudflare Stream account). **Risky (uploads), Opus xhigh; Kd: *"go"*** (RULINGS 2026-10-05). No migration, no new package, no cost.
+- **Built:** a photo picked for a post, on the member's Updates and the console's, is drawn at most 1,600 px on its longest side (was 2,000) and has to fit in 1 MB (was 2 MB): `preparePostPhoto` in `gymPagePhotos.js`, `GYM_POST_PHOTO_SEND_SIDE` and `GYM_POST_PHOTO_MAX_BYTES` in shared. The server's request check, body limit and `cleanPhoto` (which now takes a limit) hold a post's photo to 1 MB. A gym page's photos are unchanged. Nothing new on a screen.
+- **Worst thing, first test:** an ordinary phone photo refused, or arriving on its side. Thirteen full-size phone originals from Wikimedia Commons (iPhone 13, 15 Pro and 16, Pixel 7 and 8, Galaxy A56 and S23 Ultra; 0.9 to 25 MB, two with a turn-me tag), drawn by the app's own `shrinkPhoto` in headless Edge at the post's size, then read by the server's `cleanPhoto` at the post's limit: all 13 taken, upright, no EXIF in what was sent. Those photos are not in the repository (scratchpad only).
+- **Measured, the 13 photos together:** originals 87,007 KB; at 2,000 px 7,954 KB (biggest 1,006 KB); at 1,600 px 5,555 KB (biggest 711 KB), so about 30 % less than before. At 1,080 px it would be 2,771 KB; not taken, a tall photo would be 810 px wide.
+- **Cost at full size** (`tools/measure-posts-cost.ts`, 2,100 members, 5 runs, 2,592 MHz, the battery read "discharging" both times): a post of four photos at the biggest size taken, the request read: thread busy 148 ms before (worst 165), 98 ms after (worst 120); the four photos kept: 79 ms before (worst 138), 53 ms after (worst 64).
+- **Breaks, each RED, restored sha256-identical:** a post's photo drawn at the gym page's 2,000 px · the fit check ignoring the limit · the limit put back to 2 MB (the api test and the web test). The tests write 1 MB out as a number, not the code's own constant.
+- **Verified:** api posts and gym-page photo files (six) 76/76; web photo and Updates files 105/105; shared 671/671; tsc 0 on shared and api; eslint 0 on shared, api (`src test tools`) and the touched web files. The full api and web suites were not run locally (CI's stand for them).
+- **Not done:** no real post through the running app in a browser before Kd; a photo over 1 MB sent from outside our screens gets the server's general refusal, as one over 2 MB did.
+- **Open:** round one and its re-check; the two extra passes over 19b, due before anybody uses Updates.
+- **Next in Folder B:** 19c (19b-iii still needs the Stream account).
+
 ## 2026-10-05 · 19b-ii-c (Folder B): a person's posts on their profile, and the day's photo posts (branch `updates-person-posts`)
 
 - **Why this job:** next in Folder B after 19b-ii-b. **Risky (other people's posts and photos, Hide me), Opus xhigh; Kd: *"go"*** to the plan. Before it he asked what posts cost us and ruled the limits (RULINGS 2026-10-05): a member 10 posts a day, photos on 3 of them; staff no daily limit; only the gym posts video, 20 a month (19b-iii). No migration, no new package, no new cost.

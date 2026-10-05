@@ -3,7 +3,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
 import {
-  GYM_PAGE_PHOTO_MAX_BYTES,
+  GYM_POST_PHOTO_MAX_BYTES,
   GYM_POST_MAX_PHOTOS,
   addGymPostRequestSchema,
   gymPostBlockParamsSchema,
@@ -49,7 +49,7 @@ function requireUserId(req: FastifyRequest): string {
 }
 
 /** A post's words and up to four photos as base64, with JSON's own punctuation. */
-const POST_BODY_LIMIT = GYM_POST_MAX_PHOTOS * (Math.ceil(GYM_PAGE_PHOTO_MAX_BYTES / 3) * 4 + 8) + 16 * 1024;
+const POST_BODY_LIMIT = GYM_POST_MAX_PHOTOS * (Math.ceil(GYM_POST_PHOTO_MAX_BYTES / 3) * 4 + 8) + 16 * 1024;
 
 export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.PostsDeps, "log"> & { redis: RedisLike }): void {
   const postsDeps: service.PostsDeps = { sql: deps.sql, now: deps.now, photos: deps.photos, supportEmail: deps.supportEmail, log: app.log };

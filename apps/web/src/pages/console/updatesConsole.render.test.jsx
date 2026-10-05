@@ -30,7 +30,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, orgService: orgApi };
 });
-vi.mock('./gymPagePhotos', () => ({ preparePagePhoto: prepare }));
+vi.mock('./gymPagePhotos', () => ({ preparePostPhoto: prepare }));
 
 const Updates = (await import('./Updates')).default;
 const { resetConsoleOrgs } = await import('./consoleOrgs');

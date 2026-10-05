@@ -337,9 +337,10 @@ function typeOf(b: Uint8Array): GymPagePhotoType | null {
   return null;
 }
 
-/** The photo as it will be kept and shown, or why it cannot be. */
-export function cleanPhoto(input: Uint8Array): PhotoReading {
-  if (input.length > GYM_PAGE_PHOTO_MAX_BYTES) return { ok: false, problem: "too_big" };
+/** The photo as it will be kept and shown, or why it cannot be. `maxBytes` is the gym
+ *  page's unless said; a post's photo has a smaller one. */
+export function cleanPhoto(input: Uint8Array, maxBytes: number = GYM_PAGE_PHOTO_MAX_BYTES): PhotoReading {
+  if (input.length > maxBytes) return { ok: false, problem: "too_big" };
   const type = typeOf(input);
   if (type === null) return { ok: false, problem: "not_a_photo" };
   let cleaned: { width: number; height: number; bytes: Uint8Array };

@@ -14,6 +14,7 @@ import postgres from "postgres";
 import { GYM_POSTS_PAGE, type GymPost, type GymPostReactionResponse, type GymPostsResponse, type StaffGymPostsResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { cleanPhoto } from "../src/modules/orgs/gymPage/photoBytes.js";
 import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
@@ -401,6 +402,29 @@ d("a gym's Updates (real Postgres, real disk)", () => {
     },
     T,
   );
+
+  it("a post takes four photos of 1 MB each, and a photo one byte heavier is refused with nothing kept", async () => {
+    const gym = await makeGym("Weigh House");
+    // A real phone photo with its picture data made longer, so it weighs what is asked.
+    const real = readFileSync(new URL("./fixtures/photos/iphone16.jpg", import.meta.url));
+    const end = real.lastIndexOf(Buffer.from([0xff, 0xd9]));
+    const weighing = (bytes: number): Buffer => Buffer.concat([real.subarray(0, end), Buffer.alloc(bytes - real.length, 0x55), real.subarray(end)]);
+    // Written out, not read from the code: 1 MB is the rule.
+    const MB = 1024 * 1024;
+    const atLimit = weighing(MB);
+    const over = weighing(MB + 1);
+    const res = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: randomUUID(), body: "x", photos: [PNG, over.toString("base64")] });
+    expect(res.statusCode).toBe(400);
+    expect(await rowsOf("gym_posts", gym.id)).toBe(0);
+    expect(await filesOf(gym.id)).toEqual([]);
+    // The reader itself refuses it for a post and still takes it for a gym page.
+    expect(cleanPhoto(new Uint8Array(over), MB)).toEqual({ ok: false, problem: "too_big" });
+    expect(cleanPhoto(new Uint8Array(over)).ok).toBe(true);
+    const b64 = atLimit.toString("base64");
+    const full = await add(gym, gym.owner, "Four at the limit", [b64, b64, b64, b64]);
+    expect(full.photos).toHaveLength(4);
+    expect(await filesOf(gym.id)).toHaveLength(4);
+  });
 
   it(
     "a post with nothing in it, too many words, too many photos or a file that is no photo is refused and nothing is kept",

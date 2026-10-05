@@ -15,6 +15,7 @@ import {
   GYM_POSTS_PAGE,
   GYM_POST_BLOCKS_SHOWN,
   GYM_POST_MAX_PINNED,
+  GYM_POST_PHOTO_MAX_BYTES,
   GYM_POST_REACTIONS,
   GYM_POST_REACTORS_SHOWN,
   GYM_POST_REPORTS_SHOWN,
@@ -396,10 +397,11 @@ async function keepPost(
   for (const [i, base64] of body.photos.entries()) {
     // One photo at a time, with the thread free for other requests between them.
     if (i > 0) await new Promise((resolve) => setImmediate(resolve));
-    const read = cleanPhoto(new Uint8Array(Buffer.from(base64, "base64")));
+    const read = cleanPhoto(new Uint8Array(Buffer.from(base64, "base64")), GYM_POST_PHOTO_MAX_BYTES);
     if (!read.ok) {
       const problem = PHOTO_PROBLEM_STATUS[read.problem];
-      throw new OrgsError(400, problem.code, GYM_POST_WORDS.photo(i + 1, problem.message));
+      const why = read.problem === "too_big" ? GYM_POST_WORDS.photo_too_big : problem.message;
+      throw new OrgsError(400, problem.code, GYM_POST_WORDS.photo(i + 1, why));
     }
     const id = randomUUID();
     photos.push({ id, storageKey: postPhotoKey(gymId, id, read.type), contentType: read.type, byteSize: read.bytes.length, width: read.width, height: read.height, bytes: read.bytes });

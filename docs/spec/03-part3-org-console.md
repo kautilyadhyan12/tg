@@ -2782,7 +2782,8 @@ the post goes.
 `posts.manage` ("Post updates": owner and manager by default, the owner can give it to
 a trainer), write a post on the console's **Updates** page: words, up to 4 photos (the
 gym page's limits: 2 MB each once the browser has shrunk it, cleaned by the same
-`cleanPhoto`), pin (at most 3, newest pin first) and remove. The same tick gates the
+`cleanPhoto`; **since 19b-iv a post's photo is smaller than a gym page's: the browser draws
+it at most 1,600 px on its longest side and the server takes 1 MB**), pin (at most 3, newest pin first) and remove. The same tick gates the
 page's reads and is the one the staff queue of §15.3 will read, in place of a second
 `posts.moderate`. Members read them on their gym's page under an **Updates** tab, the
 pinned ones first, 20 a page, with the author's first name and last initial (their name on the gym's list

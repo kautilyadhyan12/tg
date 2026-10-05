@@ -3,11 +3,11 @@
 // fits the page's 2 MB and its location tags stay on the phone. The server cleans every
 // photo again whatever the browser did. The drawing takes its window, so a test can
 // hand it a fake one.
-import { GYM_PAGE_PHOTO_MAX_BYTES, GYM_PAGE_PHOTO_SEND_SIDE } from '@app/shared';
+import { GYM_PAGE_PHOTO_MAX_BYTES, GYM_PAGE_PHOTO_SEND_SIDE, GYM_POST_PHOTO_MAX_BYTES, GYM_POST_PHOTO_SEND_SIDE } from '@app/shared';
 import { shrinkPhoto } from '../../utils/shrinkPhoto';
 import { bytesToBase64 } from './memberListView';
 
-/** Tried in turn until the photo fits in 2 MB. */
+/** Tried in turn until the photo fits. */
 const QUALITIES = [0.85, 0.7, 0.55];
 
 let made = 0;
@@ -15,15 +15,24 @@ let made = 0;
 /** file → `{ key, uploadKey, base64, preview }`, or throws `unreadable` / `too_big`.
  *  `uploadKey` is sent with the photo: sent again after a lost reply, the server answers
  *  with the photo it already kept. */
-export async function preparePagePhoto(file, dom = globalThis) {
+export function preparePagePhoto(file, dom = globalThis) {
+  return prepare(file, dom, GYM_PAGE_PHOTO_SEND_SIDE, GYM_PAGE_PHOTO_MAX_BYTES);
+}
+
+/** The same for a photo on a post, which is smaller: 1,600 px and 1 MB (ROADMAP 19b-iv). */
+export function preparePostPhoto(file, dom = globalThis) {
+  return prepare(file, dom, GYM_POST_PHOTO_SEND_SIDE, GYM_POST_PHOTO_MAX_BYTES);
+}
+
+async function prepare(file, dom, maxEdge, maxBytes) {
   for (const quality of QUALITIES) {
     let blob;
     try {
-      blob = await shrinkPhoto(file, dom, { maxEdge: GYM_PAGE_PHOTO_SEND_SIDE, quality });
+      blob = await shrinkPhoto(file, dom, { maxEdge, quality });
     } catch {
       throw new Error('unreadable');
     }
-    if (blob.size <= GYM_PAGE_PHOTO_MAX_BYTES) {
+    if (blob.size <= maxBytes) {
       made += 1;
       return {
         key: `new-${made}`,

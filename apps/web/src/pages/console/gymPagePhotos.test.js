@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { GYM_PAGE_MAX_PHOTOS, GYM_PAGE_PHOTO_MAX_BYTES } from '@app/shared';
 import { addPhotos, makeMainPhoto, orderedIds, pageChanged, pageDraft, photoPlan, photosChanged, removePhoto, unsentPhotos } from './gymPageView';
-import { pickProblem, preparePagePhoto } from './gymPagePhotos';
+import { pickProblem, preparePagePhoto, preparePostPhoto } from './gymPagePhotos';
 
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -139,6 +139,21 @@ describe('a picked photo made ready', () => {
     expect(fits.qualities).toEqual([0.85, 0.7]);
     const never = fakeDom({ sizes: [GYM_PAGE_PHOTO_MAX_BYTES + 1] });
     await expect(preparePagePhoto(new Blob(['raw']), never.dom)).rejects.toThrow('too_big');
+    expect(never.qualities).toEqual([0.85, 0.7, 0.55]);
+  });
+
+  it('a photo for a post is drawn at most 1,600 px on its longest side and has to fit in 1 MB', async () => {
+    const wide = fakeDom({ sizes: [700_000] });
+    const ready = await preparePostPhoto(new Blob(['raw']), wide.dom);
+    expect([wide.canvas.width, wide.canvas.height]).toEqual([1600, 1200]);
+    expect(wide.qualities).toEqual([0.85]);
+    expect(atob(ready.base64)).toHaveLength(700_000);
+    // What fits the gym page's 2 MB is drawn again for a post.
+    const heavy = fakeDom({ sizes: [1_048_576 + 1, 1_048_576] });
+    await preparePostPhoto(new Blob(['raw']), heavy.dom);
+    expect(heavy.qualities).toEqual([0.85, 0.7]);
+    const never = fakeDom({ sizes: [1_048_576 + 1] });
+    await expect(preparePostPhoto(new Blob(['raw']), never.dom)).rejects.toThrow('too_big');
     expect(never.qualities).toEqual([0.85, 0.7, 0.55]);
   });
 

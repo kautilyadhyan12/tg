@@ -20,7 +20,7 @@ import { cpus, tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import postgres from "postgres";
-import { GYM_PAGE_PHOTO_MAX_BYTES, addGymPostRequestSchema, gymPostsQuerySchema } from "@app/shared";
+import { GYM_POST_PHOTO_MAX_BYTES, addGymPostRequestSchema, gymPostsQuerySchema } from "@app/shared";
 import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
 import {
   addMemberPost,
@@ -148,7 +148,7 @@ async function seed(): Promise<{ gymId: string; owner: string; viewer: string }>
 async function biggestPhoto(): Promise<string> {
   const small = await readFile(new URL("../test/fixtures/photos/iphone16.jpg", import.meta.url));
   const end = small.lastIndexOf(Buffer.from([0xff, 0xd9]));
-  const filler = Buffer.alloc(GYM_PAGE_PHOTO_MAX_BYTES - small.length, 0x55);
+  const filler = Buffer.alloc(GYM_POST_PHOTO_MAX_BYTES - small.length, 0x55);
   return Buffer.concat([small.subarray(0, end), filler, small.subarray(end)]).toString("base64");
 }
 

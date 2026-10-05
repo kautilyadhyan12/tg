@@ -10,7 +10,7 @@ vi.mock('../../api/postsApi', () => ({
   postsService: svc,
   postPhotoUrl: ({ gymId, postId, photoId }) => `http://api.test/v1/orgs/${gymId}/posts/${postId}/photos/${photoId}`,
 }));
-vi.mock('../../pages/console/gymPagePhotos', () => ({ preparePagePhoto: prepare }));
+vi.mock('../../pages/console/gymPagePhotos', () => ({ preparePostPhoto: prepare }));
 vi.mock('../../api/leaderboardApi', () => ({ leaderboardService: boards }));
 vi.mock('../../api/orgsApi', () => ({ errorText: (_err, fallback) => fallback, errorStatus: (err) => err?.response?.status ?? null }));
 
