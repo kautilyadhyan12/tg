@@ -17,6 +17,8 @@ import {
   CLASS_BOOKING_HOLDS_PLACE,
   CLASS_BOOKING_WORDS,
   CLASS_LATE_CANCEL_ERROR,
+  addDays,
+  bookingPeriod,
   bookingTime,
   classBookingSettingsResponseSchema,
   classBookingViewSchema,
@@ -24,6 +26,7 @@ import {
   classSessionBookingsResponseSchema,
   decideBook,
   decideCancel,
+  memberClassesResponseSchema,
   type BookClassRequest,
   type ClassBookRefusal,
   type ClassBookingSettings,
@@ -33,10 +36,14 @@ import {
   type ClassBookingsEndingResponse,
   type ClassSessionBookingsResponse,
   type Cover,
+  type HeldCover,
+  type MemberClassesQuery,
+  type MemberClassesResponse,
   type StaffClassBooking,
 } from "@app/shared";
 import { getOrgById, getStaffAuthority, gymHasLivePlan, insertAudit, isLiveMember, lockOrgRow } from "../repo.js";
 import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { chargePack, givePackClassBack } from "../memberships/heldRepo.js";
 import { handOver, handOverComing, handOverPlan, pick } from "./bookingChanges.js";
@@ -57,13 +64,14 @@ const notFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisat
 const classNotFound = (): OrgsError => new OrgsError(404, "class_not_found", CLASS_BOOKING_WORDS.class_not_found);
 
 /** A live app member of a gym on a live plan; 404 for everybody else. */
-async function requireMember(deps: Pick<BookingsDeps, "sql">, gymId: string, userId: string): Promise<void> {
+async function requireMember(deps: Pick<BookingsDeps, "sql">, gymId: string, userId: string): Promise<{ timezone: string }> {
   const [org, member, live] = await Promise.all([
     getOrgById(deps.sql, gymId),
     isLiveMember(deps.sql, gymId, userId),
     gymHasLivePlan(deps.sql, gymId),
   ]);
   if (org === null || !member || !live) throw notFound();
+  return org;
 }
 
 const STATUS: Record<ClassBookRefusal, number> = {
@@ -120,19 +128,31 @@ const mineOf = (ctx: repo.BookingContext): "booked" | "waitlisted" | null =>
 async function viewOf(deps: Pick<BookingsDeps, "sql" | "now">, gymId: string, sessionId: string, userId: string): Promise<ClassBookingView> {
   const ctx = await repo.contextOf(deps.sql, gymId, sessionId, userId, false);
   if (ctx === null) throw classNotFound();
+  return await viewFrom(deps.sql, gymId, ctx, userId, deps.now(), (entryId) => coverFor(deps.sql, gymId, ctx, entryId));
+}
+
+/** The view of one class from what was read about it. `coverOf`: which membership covers
+ *  this person for it, read now. */
+async function viewFrom(
+  sql: Sql,
+  gymId: string,
+  ctx: repo.BookingContext,
+  userId: string,
+  now: Date,
+  coverOf: (entryId: string | null) => Promise<Cover>,
+): Promise<ClassBookingView> {
   const { session, settings, counts, latest, booker } = ctx;
-  const now = deps.now();
   const time = bookingTime(now.getTime(), session.startsAt.getTime(), settings);
   const mine = mineOf(ctx);
   // A free place the waitlist is about to be handed is taken, for everybody but the
   // person it is going to: anybody's Book would hand it over first.
-  const plan = mine !== "booked" && booker !== null ? await handOverPlan(deps.sql, gymId, ctx, now) : null;
+  const plan = mine !== "booked" && booker !== null ? await handOverPlan(sql, gymId, ctx, now) : null;
   const promised = plan === null ? 0 : plan.moves.filter((move) => move.waiter.userId !== userId).length;
   // Somebody waiting who is not handed a place is covered by what their record has left
   // once the people ahead have theirs.
   const left = mine === "waitlisted" && promised === plan?.moves.length && booker?.entryId != null ? plan.covers.get(booker.entryId) : undefined;
   const cover: Cover =
-    booker === null ? { ok: false, reason: "no_membership" } : left !== undefined ? pick(ctx, left) : await coverFor(deps.sql, gymId, ctx, booker.entryId);
+    booker === null ? { ok: false, reason: "no_membership" } : left !== undefined ? pick(ctx, left) : await coverOf(booker.entryId);
   const ask = (joinWaitlist: boolean) =>
     decideBook({
       time,
@@ -169,7 +189,7 @@ async function viewOf(deps: Pick<BookingsDeps, "sql" | "now">, gymId: string, se
         ? null
         : {
             status: latest.status,
-            waitlistPlace: latest.status === "waitlisted" ? await repo.waitlistPlace(deps.sql, gymId, sessionId, latest.seq) : null,
+            waitlistPlace: latest.status === "waitlisted" ? await repo.waitlistPlace(sql, gymId, session.id, latest.seq) : null,
             packCharged: latest.packCharged,
           },
     can: {
@@ -185,6 +205,38 @@ export async function getBooking(deps: Pick<BookingsDeps, "sql" | "now">, userId
   await requireMember(deps, gymId, userId);
   if (!(await limit())) return null;
   return await viewOf(deps, gymId, sessionId, userId);
+}
+
+/** A week of the gym's coming classes, each as one class's own read answers it. A
+ *  person's memberships are read once for each kind of class and each week and month the
+ *  page touches, not once a class. */
+export async function getMemberClasses(
+  deps: Pick<BookingsDeps, "sql" | "now">,
+  userId: string,
+  gymId: string,
+  query: MemberClassesQuery,
+  limit: Limit,
+): Promise<MemberClassesResponse | null> {
+  const { timezone } = await requireMember(deps, gymId, userId);
+  if (!(await limit())) return null;
+  const now = deps.now();
+  const from = addDays(dayInTz(now, timezone), query.week * 7);
+  const to = addDays(from, 6);
+  const read = new Map<string, Promise<Map<string, HeldCover[]>>>();
+  const classes: ClassBookingView[] = [];
+  for (const ctx of await repo.comingContexts(deps.sql, gymId, userId, { now, from, to })) {
+    classes.push(
+      await viewFrom(deps.sql, gymId, ctx, userId, now, async (entryId) => {
+        if (!ctx.gymHasTypes || entryId === null) return pick(ctx, []);
+        const { session } = ctx;
+        const key = `${session.classTypeId} ${bookingPeriod(session.localDate, "week").from} ${bookingPeriod(session.localDate, "month").from}`;
+        const held = read.get(key) ?? repo.coversOf(deps.sql, gymId, [entryId], session);
+        read.set(key, held);
+        return pick(ctx, (await held).get(entryId) ?? []);
+      }),
+    );
+  }
+  return memberClassesResponseSchema.parse({ week: query.week, from, to, timezone, classes });
 }
 
 /** Book, Join waitlist and Claim. */

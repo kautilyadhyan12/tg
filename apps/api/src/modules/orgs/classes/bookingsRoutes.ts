@@ -9,6 +9,7 @@ import {
   cancelClassBookingRequestSchema,
   classBookingSettingsSchema,
   classBookingsEndingQuerySchema,
+  memberClassesQuerySchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
@@ -67,6 +68,17 @@ export function registerClassBookingRoutes(app: FastifyInstance, deps: { sql: Sq
     };
 
   // ── MEMBERS ──
+
+  // A week of the gym's coming classes, each with the reader's own booking.
+  app.get("/v1/orgs/:gymId/member-classes", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberClassesQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const list = await service.getMemberClasses(bookingDeps, requireUserId(req), params.gymId, query, gate(readLimit)(req, reply));
+    if (list === null) return;
+    return reply.status(200).send(list);
+  });
 
   app.get("/v1/orgs/:gymId/class-sessions/:sessionId/booking", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(classSessionParamsSchema, req.params, req, reply);

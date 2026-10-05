@@ -153,10 +153,8 @@ const rawContext = z.object({
   mine_id: z.string().nullable(),
 });
 
-/** One class of this gym as one person meets it, or null where the gym has no such class.
- *  `lock`: the class's row is held until the transaction ends. The counts are right for
- *  a write only under the gym's lock, taken in a statement before this one. */
-export async function contextOf(sql: SqlOrTx, gymId: string, sessionId: string, userId: string, lock: boolean): Promise<BookingContext | null> {
+/** The classes of this gym that `which` chooses, each as one person meets it. */
+async function contexts(sql: SqlOrTx, gymId: string, userId: string, which: ReturnType<SqlOrTx>, tail: ReturnType<SqlOrTx>): Promise<BookingContext[]> {
   const rows = await sql`
     SELECT s.id, s.class_type_id, t.name, t.open_gym, s.local_date::text AS local_date, s.local_start_minute,
            s.starts_at, s.minutes, s.places, s.status AS session_status, s.coach_user_id,
@@ -180,31 +178,58 @@ export async function contextOf(sql: SqlOrTx, gymId: string, sessionId: string, 
       WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.user_id = ${userId}
       ORDER BY b.seq DESC LIMIT 1
     ) mine ON true
-    WHERE s.gym_id = ${gymId} AND s.id = ${sessionId}
-    ${lock ? sql`FOR UPDATE OF s` : sql``}`;
-  const row = rows[0];
-  if (row === undefined) return null;
-  const r = rawContext.parse(row);
-  return {
-    session: {
-      id: r.id,
-      classTypeId: r.class_type_id,
-      className: r.name,
-      openGym: r.open_gym,
-      localDate: r.local_date,
-      localStartMinute: r.local_start_minute,
-      startsAt: r.starts_at,
-      minutes: r.minutes,
-      places: r.places,
-      cancelled: r.session_status === "cancelled",
-      coachUserId: r.coach_user_id,
-    },
-    settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist, timezone: r.timezone },
-    counts: { booked: r.booked, waitlisted: r.waitlisted },
-    gymHasTypes: r.has_types,
-    booker: r.member ? { entryId: r.entry_id } : null,
-    latest: r.mine_id === null ? null : toBooking({ ...row, id: r.mine_id }),
-  };
+    WHERE s.gym_id = ${gymId} AND ${which}
+    ${tail}`;
+  return rows.map((row) => {
+    const r = rawContext.parse(row);
+    return {
+      session: {
+        id: r.id,
+        classTypeId: r.class_type_id,
+        className: r.name,
+        openGym: r.open_gym,
+        localDate: r.local_date,
+        localStartMinute: r.local_start_minute,
+        startsAt: r.starts_at,
+        minutes: r.minutes,
+        places: r.places,
+        cancelled: r.session_status === "cancelled",
+        coachUserId: r.coach_user_id,
+      },
+      settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist, timezone: r.timezone },
+      counts: { booked: r.booked, waitlisted: r.waitlisted },
+      gymHasTypes: r.has_types,
+      booker: r.member ? { entryId: r.entry_id } : null,
+      latest: r.mine_id === null ? null : toBooking({ ...row, id: r.mine_id }),
+    };
+  });
+}
+
+/** One class of this gym as one person meets it, or null where the gym has no such class.
+ *  `lock`: the class's row is held until the transaction ends. The counts are right for
+ *  a write only under the gym's lock, taken in a statement before this one. */
+export async function contextOf(sql: SqlOrTx, gymId: string, sessionId: string, userId: string, lock: boolean): Promise<BookingContext | null> {
+  return (await contexts(sql, gymId, userId, sql`s.id = ${sessionId}`, lock ? sql`FOR UPDATE OF s` : sql``))[0] ?? null;
+}
+
+/** How many classes one page of a member's list holds at most. */
+export const MEMBER_CLASSES_MAX = 500;
+
+/** The gym's classes that have not started, on its own days `from` to `to`, the soonest
+ *  first, each as this person meets it. A plain read. */
+export async function comingContexts(
+  sql: SqlOrTx,
+  gymId: string,
+  userId: string,
+  when: { now: Date; from: string; to: string },
+): Promise<BookingContext[]> {
+  return await contexts(
+    sql,
+    gymId,
+    userId,
+    sql`s.starts_at > ${when.now} AND s.local_date BETWEEN ${when.from}::date AND ${when.to}::date`,
+    sql`ORDER BY s.starts_at, s.id LIMIT ${MEMBER_CLASSES_MAX}`,
+  );
 }
 
 /** The booking this gym keeps under a request's key, whoever made it: the request that
