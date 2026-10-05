@@ -13,7 +13,6 @@ import {
   GYM_MEMBER_POSTS_A_DAY,
   GYM_POSTS_PAGE,
   GYM_POST_BLOCKS_SHOWN,
-  GYM_POST_HELD_SHOWN,
   GYM_POST_MAX_PINNED,
   GYM_POST_REACTIONS,
   GYM_POST_REACTORS_SHOWN,
@@ -25,7 +24,6 @@ import {
   blockedGymPostersResponseSchema,
   gymPostReactionResponseSchema,
   gymPostReactorsResponseSchema,
-  heldGymPostsResponseSchema,
   gymPostSchema,
   gymPostsResponseSchema,
   reportedGymPostsResponseSchema,
@@ -34,7 +32,6 @@ import {
   stoppedGymPostersResponseSchema,
   type AddGymPostRequest,
   type BlockedGymPostersResponse,
-  type HeldGymPostsResponse,
   type GymMemberPosting,
   type GymPost,
   type GymPostReaction,
@@ -57,7 +54,7 @@ import { postPhotoKey, type PhotoStore } from "../gymPage/photoStore.js";
 import { PHOTO_PROBLEM_STATUS, type PhotoFile } from "../gymPage/service.js";
 import { fullName, shownName } from "../leaderboard/rank.js";
 import { lockGym } from "../memberList/repo.js";
-import { badWordsIn, hasBadWords } from "./badWords.js";
+import { badWordsIn } from "./badWords.js";
 import * as repo from "./repo.js";
 
 export interface PostsDeps {
@@ -118,7 +115,6 @@ async function shaped(deps: Pick<PostsDeps, "sql">, gymId: string, rows: readonl
       own: r.byMember && r.authorId === viewerId,
       wrote: r.authorId === viewerId,
       reported: reported.has(r.id),
-      held: r.held,
     });
   });
 }
@@ -150,7 +146,6 @@ async function staffShaped(deps: Pick<PostsDeps, "sql">, gymId: string, rows: re
       own: false,
       wrote: false,
       reported: false,
-      held: r.held,
       authorId,
       authorStopped: authorId !== null && stopped.has(authorId),
     });
@@ -219,13 +214,12 @@ export async function getStaffPosts(
 ): Promise<StaffGymPostsResponse | null> {
   const { org } = await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
-  const [feed, membersCanPost, reportedCount, heldCount] = await Promise.all([
+  const [feed, membersCanPost, reportedCount] = await Promise.all([
     page(deps, gymId, before, "staff", (rows) => staffShaped(deps, gymId, rows, staffId)),
     repo.membersCanPost(deps.sql, gymId),
     repo.countReported(deps.sql, gymId),
-    repo.countHeld(deps.sql, gymId),
   ]);
-  return staffGymPostsResponseSchema.parse({ gymId, gymName: org.name, membersCanPost, reportedCount, heldCount, ...feed });
+  return staffGymPostsResponseSchema.parse({ gymId, gymName: org.name, membersCanPost, reportedCount, ...feed });
 }
 
 /** Who gave one reaction to a post, by whole name, for staff holding the tick. Members are
@@ -327,8 +321,6 @@ async function keepPost(
   byMember: boolean,
   guard: (tx: TransactionSql, at: Date) => Promise<void>,
 ): Promise<{ id: string; made: boolean }> {
-  // Only a member's words are checked: a post that holds a listed word waits for staff.
-  const held = byMember && hasBadWords(body.body);
   const photos: (repo.NewPostPhoto & { bytes: Uint8Array })[] = [];
   for (const [i, base64] of body.photos.entries()) {
     // One photo at a time, with the thread free for other requests between them.
@@ -350,7 +342,7 @@ async function keepPost(
     made = await deps.sql.begin(async (tx) => {
       await guard(tx, at);
       // The same key sent twice at once: the second finds the first's row and keeps nothing.
-      if (!(await repo.insertPost(tx, gymId, { id, postKey: body.postKey, body: body.body.trim(), byMember, held }, authorId, at))) return false;
+      if (!(await repo.insertPost(tx, gymId, { id, postKey: body.postKey, body: body.body.trim(), byMember }, authorId, at))) return false;
       await repo.insertPhotos(tx, gymId, id, photos, at);
       await insertAudit(tx, {
         actorUserId: authorId,
@@ -358,7 +350,7 @@ async function keepPost(
         action: byMember ? "org.member_post_added" : "org.post_added",
         targetType: "post",
         targetId: id,
-        meta: { photos: String(photos.length), ...(held ? { held: "yes" } : {}) },
+        meta: { photos: String(photos.length) },
       });
       return true;
     });
@@ -399,6 +391,10 @@ export async function addMemberPost(deps: PostsDeps, userId: string, gymId: stri
   // post kept, the day's last one too.
   const kept = await ownByKey(deps, gymId, userId, body.postKey);
   if (kept !== null) return kept;
+  // The app checks a member's words itself and says which it will not take: nothing is
+  // kept, no photo is cleaned, and the day's ten are not touched. Staff's posts are not checked.
+  const words = badWordsIn(body.body);
+  if (words.length > 0) throw new OrgsError(400, "post_bad_words", GYM_POST_WORDS.bad_words(words));
   // A full day is refused before any photo is cleaned or written; the count that decides
   // is made again below, with the person's membership held.
   await refuseFullDay(deps.sql, gymId, userId, deps.now());
@@ -482,9 +478,7 @@ export async function react(
   reaction: GymPostReaction | null,
 ): Promise<GymPostReactionResponse> {
   await requireMember(deps, gymId, userId);
-  const post = await repo.postById(deps.sql, gymId, postId, { member: userId });
-  // A post waiting for staff takes no reaction, its writer's own included.
-  if (post === null || post.held) throw postNotFound();
+  if ((await repo.postById(deps.sql, gymId, postId, { member: userId })) === null) throw postNotFound();
   if (reaction === null) {
     await repo.clearReaction(deps.sql, gymId, postId, userId);
   } else if (!(await repo.setReaction(deps.sql, gymId, postId, userId, reaction, deps.now()))) {
@@ -649,34 +643,6 @@ export async function unblock(deps: Pick<PostsDeps, "sql">, userId: string, gymI
   return true;
 }
 
-/** Members' posts held for a bad word, for staff holding the tick. */
-export async function getHeld(deps: Pick<PostsDeps, "sql">, staffId: string, gymId: string, limit: Limit): Promise<HeldGymPostsResponse | null> {
-  const { org } = await requirePrivilege(deps, gymId, staffId, TICK);
-  if (!(await limit())) return null;
-  const rows = await repo.heldPosts(deps.sql, gymId, GYM_POST_HELD_SHOWN);
-  const posts = await staffShaped(deps, gymId, rows.map((r) => r.post), staffId);
-  return heldGymPostsResponseSchema.parse({
-    gymId,
-    gymName: org.name,
-    total: rows[0]?.total ?? 0,
-    items: posts.map((post) => ({ post, words: badWordsIn(post.body) })),
-  });
-}
-
-/** Staff let a held post through: everyone at the gym sees it from now. Pressed twice, or
- *  by two staff at once, it is let through once. */
-export async function allowHeld(deps: Pick<PostsDeps, "sql" | "now">, staffId: string, gymId: string, postId: string, limit: Limit): Promise<true | null> {
-  await requireWritablePrivilege(deps, gymId, staffId, TICK);
-  if (!(await limit())) return null;
-  await deps.sql.begin(async (tx) => {
-    const post = await repo.postById(tx, gymId, postId, "staff_held");
-    if (post === null) throw postNotFound();
-    if (!(await repo.allowPost(tx, gymId, postId, staffId, deps.now()))) return;
-    await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.post_allowed", targetType: "post", targetId: postId, meta: {} });
-  });
-  return true;
-}
-
 /** A post's photo, for a member who may read the post or staff holding the tick. With
  *  `wantBytes` false (the reader's browser already holds it) the same checks run and null
  *  is the answer: it is still theirs to show. */
@@ -691,14 +657,13 @@ export async function getPhoto(
   const org = await getOrgById(deps.sql, gymId);
   if (org === null) throw notFound();
   const member = (await repo.isLiveMember(deps.sql, gymId, userId)) && (await gymIsLive(deps.sql, gymId, org.status));
-  // A member is sent what a member sees: nothing of anybody they blocked, and a post
-  // waiting for staff only when it is their own. Staff holding the tick are asked second,
-  // and are sent the waiting posts' photos too.
+  // A member is sent what a member sees: nothing of anybody they blocked. Staff holding
+  // the tick are asked second.
   let photo = member ? await repo.photoOf(deps.sql, gymId, postId, photoId, { member: userId }) : null;
   if (photo === null) {
     const staff = await holdsPrivilege(deps, gymId, userId, TICK);
     if (!member && !staff) throw notFound();
-    if (staff) photo = await repo.photoOf(deps.sql, gymId, postId, photoId, "staff_held");
+    if (staff) photo = await repo.photoOf(deps.sql, gymId, postId, photoId, "staff");
   }
   if (photo === null) throw new OrgsError(404, "photo_not_found", GYM_POST_WORDS.photo_not_found);
   if (!wantBytes) return null;

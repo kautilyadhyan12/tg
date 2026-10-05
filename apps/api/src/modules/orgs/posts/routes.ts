@@ -184,23 +184,6 @@ export function registerPostRoutes(app: FastifyInstance, deps: Omit<service.Post
 
   // ── STAFF HOLDING `posts.manage` ──
 
-  // Members' posts held for a bad word. Removing one is the DELETE below.
-  app.get("/v1/orgs/:gymId/posts/held", { preHandler: app.authenticate }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const held = await service.getHeld(postsDeps, requireUserId(req), params.gymId, gate(staffReadLimit)(req, reply));
-    if (held === null) return;
-    return reply.status(200).send(held);
-  });
-
-  app.post("/v1/orgs/:gymId/posts/:postId/allow", { preHandler: app.authenticate }, async (req, reply) => {
-    const params = parseOr400(gymPostParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const done = await service.allowHeld(postsDeps, requireUserId(req), params.gymId, params.postId, gate(staffWriteLimit)(req, reply));
-    if (done === null) return;
-    return reply.status(200).send({ allowed: true });
-  });
-
   app.get("/v1/orgs/:gymId/posts/staff", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;

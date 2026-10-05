@@ -1,4 +1,4 @@
-// BLOCK, A POST WAITING FOR STAFF AND THE HELP LINE, FOR A MEMBER, drawn (spec Part 3
+// BLOCK AND THE HELP LINE, FOR A MEMBER, drawn (spec Part 3
 // §15.3; ROADMAP 19b-ii-b). Only the network is mocked.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -27,7 +27,6 @@ const post = (id, body, over = {}) => ({
   own: false,
   wrote: false,
   reported: false,
-  held: false,
   ...over,
 });
 const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', posting: 'on', blockedCount: 0, supportEmail: null, pinned: [], posts: [], next: null, ...over });
@@ -105,30 +104,6 @@ describe('Block', () => {
     expect(svc.unblock.mock.calls).toEqual([['g1', 'b1']]);
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(screen.getByRole('status').textContent).toBe("Unblocked. You'll see Barry B.'s posts and reactions again.");
-  });
-});
-
-describe('a post waiting for staff', () => {
-  it('says so on the writer\'s own post, with no reactions to press, and Remove still there', async () => {
-    svc.list.mockResolvedValue(feed({ posts: [post('held', 'what a tosser', { own: true, wrote: true, held: true }), post('fine', 'Morning all', { own: true, wrote: true })] }));
-    render(<Updates gym={GYM} />);
-    await waitFor(() => expect(posts()).toHaveLength(2));
-    expect(within(posts()[0]).getByTestId('held-note').textContent).toBe('Waiting for the staff at Iron House to check it. Only you can see it until they do.');
-    expect(within(posts()[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Remove']);
-    expect(within(posts()[1]).queryByTestId('held-note')).toBeNull();
-    expect(within(posts()[1]).getAllByRole('button')).toHaveLength(5);
-  });
-
-  it('a new post that is held is said to be waiting, never "everyone can see it"', async () => {
-    svc.list.mockResolvedValue(feed());
-    svc.add.mockResolvedValue({ post: post('new', 'what a tosser', { own: true, wrote: true, held: true }) });
-    render(<Updates gym={GYM} />);
-    const composer = within(await screen.findByTestId('composer'));
-    fireEvent.change(composer.getByRole('textbox', { name: /Write a post/ }), { target: { value: 'what a tosser' } });
-    fireEvent.click(composer.getByRole('button', { name: 'Post' }));
-    await waitFor(() => expect(posts()).toHaveLength(1));
-    expect(screen.getByRole('status').textContent).toBe('Your post is waiting for the staff at Iron House to check it. Only you can see it until they do.');
-    expect(screen.queryByText(/Everyone at Iron House can see it now/)).toBeNull();
   });
 });
 

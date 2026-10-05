@@ -30,21 +30,12 @@ export const gymPosts = pgTable(
     removedByUserId: uuid("removed_by_user_id").references(() => users.id, { onDelete: "set null" }),
     /** A member's own post, as against one by the gym's staff. */
     byMember: boolean("by_member").notNull().default(false),
-    /** A member's post that held a bad word: it waits for staff from here. */
-    heldAt: timestamp("held_at", { withTimezone: true }),
-    /** Staff let a held post through. */
-    allowedAt: timestamp("allowed_at", { withTimezone: true }),
-    allowedByUserId: uuid("allowed_by_user_id").references(() => users.id, { onDelete: "set null" }),
   },
   (t) => [
     unique("gym_posts_gym_id_uq").on(t.gymId, t.id),
     unique("gym_posts_post_key_uq").on(t.gymId, t.postKey),
     check("gym_posts_body_len_check", sql`char_length(${t.body}) <= 2000`),
     check("gym_posts_removed_not_pinned_check", sql`${t.removedAt} IS NULL OR ${t.pinnedAt} IS NULL`),
-    check("gym_posts_allowed_was_held_check", sql`${t.allowedAt} IS NULL OR ${t.heldAt} IS NOT NULL`),
-    check("gym_posts_held_is_member_check", sql`${t.heldAt} IS NULL OR ${t.byMember}`),
-    check("gym_posts_waiting_not_pinned_check", sql`${t.heldAt} IS NULL OR ${t.allowedAt} IS NOT NULL OR ${t.pinnedAt} IS NULL`),
-    index("gym_posts_waiting_idx").on(t.gymId, t.heldAt).where(sql`${t.heldAt} IS NOT NULL AND ${t.allowedAt} IS NULL AND ${t.removedAt} IS NULL`),
     index("gym_posts_feed_idx").on(t.gymId, t.createdAt.desc(), t.id.desc()).where(sql`${t.removedAt} IS NULL`),
     index("gym_posts_member_author_idx").on(t.authorUserId, t.gymId, t.createdAt.desc()).where(sql`${t.byMember}`),
   ],

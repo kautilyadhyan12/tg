@@ -18,8 +18,6 @@ const svc = {
   setMembersCanPost: vi.fn(),
   stopped: vi.fn(),
   setStopped: vi.fn(),
-  held: vi.fn(),
-  allow: vi.fn(),
 };
 const orgApi = { getMine: vi.fn() };
 const prepare = vi.fn();
@@ -59,12 +57,11 @@ const post = (id, body, over = {}) => ({
   own: false,
   wrote: false,
   reported: false,
-  held: false,
   authorId: null,
   authorStopped: false,
   ...over,
 });
-const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', membersCanPost: false, reportedCount: 0, heldCount: 0, pinned: [], posts: [], next: null, ...over });
+const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', membersCanPost: false, reportedCount: 0, pinned: [], posts: [], next: null, ...over });
 const reportedList = (items = []) => ({ gymId: 'g1', gymName: 'Iron House', items, total: items.length });
 const NO_REASONS = { unkind: 0, photo_of_someone: 0, nudity: 0, spam: 0, other: 0 };
 
@@ -90,7 +87,6 @@ beforeEach(() => {
   svc.list.mockResolvedValue(feed());
   svc.reported.mockResolvedValue(reportedList());
   svc.stopped.mockResolvedValue({ people: [] });
-  svc.held.mockResolvedValue({ gymId: 'g1', gymName: 'Iron House', items: [], total: 0 });
   let made = 0;
   prepare.mockImplementation((file) => {
     if (file.name.endsWith('.pdf')) return Promise.reject(new Error('unreadable'));
@@ -596,81 +592,5 @@ describe('reported posts', () => {
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     await waitFor(() => expect(reportedCards()).toHaveLength(2));
     expect(within(reportedCards()[0]).queryAllByRole('button')).toEqual([]);
-  });
-});
-
-describe('posts waiting for staff', () => {
-  const wendy = { fromMember: true, held: true, authorId: 'u-wendy', author: { name: 'Wendy Writer', initials: 'WW' } };
-  const heldList = (items) => ({ gymId: 'g1', gymName: 'Iron House', items, total: items.length });
-  const two = () =>
-    heldList([
-      { post: post('h1', 'The new coach is a tosser', { ...wendy, photos: [{ id: 'ph1', width: 800, height: 600 }] }), words: ['tosser'] },
-      { post: post('h2', 'Second one waiting', wendy), words: [] },
-    ]);
-  const heldCards = () => screen.getAllByTestId('held-post');
-
-  it('nothing is drawn while no post waits', async () => {
-    svc.list.mockResolvedValue(feed({ posts: [post('a', 'Fine')] }));
-    open();
-    await waitFor(() => expect(cards()).toHaveLength(1));
-    expect(screen.queryByTestId('held')).toBeNull();
-  });
-
-  it('lists each waiting post with why it waits, who wrote it, and Allow, Remove and Stop', async () => {
-    svc.held.mockResolvedValue(two());
-    open();
-    await waitFor(() => expect(heldCards()).toHaveLength(2));
-    const section = within(screen.getByTestId('held'));
-    expect(section.getByRole('heading', { name: '2 posts waiting for you to check' })).toBeTruthy();
-    expect(
-      section.getByText(
-        'A post by one of your members with a word on the bad-words list waits here. Only you and the person who wrote it can see it. Allow it and every one of your members sees it; remove it and it is deleted.',
-      ),
-    ).toBeTruthy();
-    expect(within(heldCards()[0]).getByText('Held for the word: tosser')).toBeTruthy();
-    expect(within(heldCards()[1]).getByText('Held by the bad-words check.')).toBeTruthy();
-    expect(within(heldCards()[0]).getByText('Wendy Writer')).toBeTruthy();
-    expect(within(heldCards()[0]).getByRole('button', { name: 'Open photo 1 of 1' })).toBeTruthy();
-    // No Pin, and no reactions: nobody else has seen it.
-    expect(within(heldCards()[1]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Allow post', 'Remove post', 'Stop them posting']);
-  });
-
-  it('Allow lets through the post it was pressed on, and both lists are read again', async () => {
-    svc.held.mockResolvedValueOnce(two()).mockResolvedValue(heldList([two().items[1]]));
-    svc.list.mockResolvedValueOnce(feed()).mockResolvedValue(feed({ posts: [post('h1', 'The new coach is a tosser', { ...wendy, held: false })] }));
-    svc.allow.mockResolvedValue({ allowed: true });
-    open();
-    await waitFor(() => expect(heldCards()).toHaveLength(2));
-    fireEvent.click(within(heldCards()[0]).getByRole('button', { name: 'Allow post' }));
-    await waitFor(() => expect(heldCards()).toHaveLength(1));
-    expect(svc.allow.mock.calls).toEqual([['g1', 'h1']]);
-    expect(svc.remove).not.toHaveBeenCalled();
-    await waitFor(() => expect(cards()).toHaveLength(1));
-    expect(within(cards()[0]).getByText('The new coach is a tosser')).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toBe('Allowed. Your members can see the post now.');
-  });
-
-  it('Remove asks first in words for a post nobody else saw, and removes the one it was pressed on', async () => {
-    svc.held.mockResolvedValueOnce(two()).mockResolvedValue(heldList([two().items[0]]));
-    svc.remove.mockResolvedValue({ removed: true });
-    open();
-    await waitFor(() => expect(heldCards()).toHaveLength(2));
-    fireEvent.click(within(heldCards()[1]).getByRole('button', { name: 'Remove post' }));
-    const box = within(within(heldCards()[1]).getByRole('group', { name: 'Remove this post?' }));
-    expect(box.getByText("The post will be deleted. Only the person who wrote it could see it. They aren't emailed. This can't be undone.")).toBeTruthy();
-    fireEvent.click(box.getByRole('button', { name: 'Keep it waiting' }));
-    expect(svc.remove).not.toHaveBeenCalled();
-    fireEvent.click(within(heldCards()[1]).getByRole('button', { name: 'Remove post' }));
-    fireEvent.click(within(within(heldCards()[1]).getByRole('group', { name: 'Remove this post?' })).getByRole('button', { name: 'Remove post' }));
-    await waitFor(() => expect(heldCards()).toHaveLength(1));
-    expect(svc.remove.mock.calls).toEqual([['g1', 'h2']]);
-    expect(svc.allow).not.toHaveBeenCalled();
-  });
-
-  it('a gym whose plan has lapsed reads the waiting posts and is offered no button on them', async () => {
-    svc.held.mockResolvedValue(two());
-    open({ ...ORG, consoleReadOnly: true });
-    await waitFor(() => expect(heldCards()).toHaveLength(2));
-    expect(within(heldCards()[1]).queryAllByRole('button')).toEqual([]);
   });
 });

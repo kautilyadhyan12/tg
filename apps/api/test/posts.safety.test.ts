@@ -1,10 +1,9 @@
-// BLOCK, THE BAD-WORDS HOLD AND THE SUPPORT ADDRESS — the routes against real Postgres
+// BLOCK, THE BAD-WORDS CHECK AND THE SUPPORT ADDRESS — the routes against real Postgres
 // (DATABASE_URL-gated) and the real disk store in a folder of the test's own. Spec Part 3
 // §15.3; ROADMAP 19b-ii-b.
 //
 // The worst thing this job could do to a real person: somebody who blocked a person goes
-// on being sent that person's post or photo. That is the first test below. The second: a
-// post held for a bad word reaches anybody but its writer and staff.
+// on being sent that person's post or photo. That is the first test below.
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { readFileSync } from "node:fs";
@@ -12,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import type { BlockedGymPostersResponse, GymPost, GymPostsResponse, HeldGymPostsResponse, StaffGymPostsResponse } from "@app/shared";
+import type { BlockedGymPostersResponse, GymPost, GymPostsResponse, StaffGymPostsResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
@@ -48,7 +47,7 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies
 let seq = 0;
 const uniq = (): string => `${String(Date.now())}${String(seq++)}`;
 
-d("block, the bad-words hold and the support address (real Postgres, real disk)", () => {
+d("block, the bad-words check and the support address (real Postgres, real disk)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let folder = "";
   let clock = NOON.getTime();
@@ -150,11 +149,6 @@ d("block, the bad-words hold and the support address (real Postgres, real disk)"
     expect(res.statusCode, res.body).toBe(200);
     return JSON.parse(res.body) as StaffGymPostsResponse;
   };
-  const heldList = async (gym: Gym, who: Person): Promise<HeldGymPostsResponse> => {
-    const res = await inject("GET", `${posts(gym.id)}/held`, who.cookies);
-    expect(res.statusCode, res.body).toBe(200);
-    return JSON.parse(res.body) as HeldGymPostsResponse;
-  };
   const blockedList = async (gym: Gym, who: Person): Promise<BlockedGymPostersResponse> => {
     const res = await inject("GET", `${posts(gym.id)}/blocked`, who.cookies);
     expect(res.statusCode, res.body).toBe(200);
@@ -163,7 +157,6 @@ d("block, the bad-words hold and the support address (real Postgres, real disk)"
   const block = (gym: Gym, who: Person, postId: string, target = api()) => inject("PUT", `${posts(gym.id)}/${postId}/block`, who.cookies, undefined, target);
   const unblock = (gym: Gym, who: Person, blockId: string) => inject("DELETE", `${posts(gym.id)}/blocked/${blockId}`, who.cookies);
   const reactTo = (gym: Gym, who: Person, postId: string, reaction: string | null) => inject("PUT", `${posts(gym.id)}/${postId}/reaction`, who.cookies, { reaction });
-  const allow = (gym: Gym, who: Person, postId: string, target = api()) => inject("POST", `${posts(gym.id)}/${postId}/allow`, who.cookies, undefined, target);
   const shown = (f: GymPostsResponse | StaffGymPostsResponse): string[] => [...f.pinned, ...f.posts].map((p) => p.body);
   const photoPath = (gym: Gym, post: GymPost): string => `${posts(gym.id)}/${post.id}/photos/${post.photos[0]?.id ?? ""}`;
   const filesOf = async (gymId: string): Promise<string[]> => {
@@ -282,105 +275,62 @@ d("block, the bad-words hold and the support address (real Postgres, real disk)"
   );
 
   it(
-    "a post held for a bad word reaches only its writer and staff until staff allow it",
+    "a member's post with a bad word is not posted: the writer is told which word, at once, and nothing is kept or sent to staff",
     async () => {
-      const gym = await makeGym("Hold House");
+      const gym = await makeGym("Check House");
       const writer = await member(gym, "Wendy Writer");
       const reader = await member(gym, "Rita Reader");
-      const clean = await add(gym, writer, "Great class tonight");
-      expect(clean.held).toBe(false);
-      const held = await add(gym, writer, "The new coach is a total tosser", [IPHONE]);
-      expect(held).toMatchObject({ held: true, own: true });
+      await add(gym, writer, "Great class tonight");
 
-      // Nobody else is sent it, its photo, or a way to touch it.
-      expect(shown(await feed(gym, reader))).toEqual(["Great class tonight"]);
-      expect((await inject("GET", photoPath(gym, held), reader.cookies)).statusCode).toBe(404);
-      expect((await reactTo(gym, reader, held.id, "like")).statusCode).toBe(404);
-      expect((await inject("POST", `${posts(gym.id)}/${held.id}/report`, reader.cookies, { reason: "unkind" })).statusCode).toBe(404);
-      expect((await block(gym, reader, held.id)).statusCode).toBe(404);
-      // Its writer reads it, marked as waiting, with its photo, and it takes no reaction.
-      const own = await feed(gym, writer);
-      expect(own.posts.map((p) => ({ body: p.body, held: p.held }))).toEqual([
-        { body: "The new coach is a total tosser", held: true },
-        { body: "Great class tonight", held: false },
-      ]);
-      expect((await inject("GET", photoPath(gym, held), writer.cookies)).statusCode).toBe(200);
-      expect((await reactTo(gym, writer, held.id, "like")).statusCode).toBe(404);
+      const refused = await send(gym, writer, "The new coach is a total tosser", [IPHONE]);
+      expect(refused.statusCode).toBe(400);
+      expect(JSON.parse(refused.body)).toMatchObject({
+        error: "post_bad_words",
+        message: "Your post wasn't posted because it has a word that isn't allowed here: tosser. Take it out and post again.",
+      });
+      const two = await send(gym, writer, "kys you paki");
+      expect(JSON.parse(two.body)).toMatchObject({
+        error: "post_bad_words",
+        message: "Your post wasn't posted because it has words that aren't allowed here: kys, paki. Take them out and post again.",
+      });
 
-      // Staff: not on the page of posts, on the held list with the word, its photo readable, not pinnable.
+      // Nothing is kept: no row, no photo file, nothing on anybody's page, nothing for staff.
+      const rows = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_posts WHERE gym_id = ${gym.id}`;
+      expect(rows[0]?.n).toBe(1);
+      expect(await filesOf(gym.id)).toEqual([]);
+      for (const who of [writer, reader]) expect(shown(await feed(gym, who))).toEqual(["Great class tonight"]);
       const staff = await staffFeed(gym, gym.owner);
       expect(shown(staff)).toEqual(["Great class tonight"]);
-      expect(staff.heldCount).toBe(1);
-      const list = await heldList(gym, gym.owner);
-      expect(list.total).toBe(1);
-      expect(list.items.map((i) => ({ id: i.post.id, words: i.words, held: i.post.held, author: i.post.author.name, authorId: i.post.authorId }))).toEqual([
-        { id: held.id, words: ["tosser"], held: true, author: "Wendy Writer", authorId: writer.userId },
-      ]);
-      expect((await inject("GET", photoPath(gym, held), gym.owner.cookies)).statusCode).toBe(200);
-      expect((await inject("PUT", `${posts(gym.id)}/${held.id}/pin`, gym.owner.cookies, { pinned: true })).statusCode).toBe(404);
+      expect(staff.reportedCount).toBe(0);
+      const logged = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_post_added'`;
+      expect(logged[0]?.n).toBe(1);
 
-      // Allow, pressed five times at once across two servers: let through once.
-      const presses = await Promise.all([0, 1, 2, 3, 4].map((n) => allow(gym, gym.owner, held.id, either(n))));
-      expect(presses.map((r) => r.statusCode)).toEqual([200, 200, 200, 200, 200]);
-      const audit = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.post_allowed'`;
-      expect(audit[0]?.n).toBe(1);
-      const now = await feed(gym, reader);
-      expect(now.posts.map((p) => ({ body: p.body, held: p.held }))).toEqual([
-        { body: "The new coach is a total tosser", held: false },
-        { body: "Great class tonight", held: false },
-      ]);
-      expect((await inject("GET", photoPath(gym, held), reader.cookies)).statusCode).toBe(200);
-      expect((await staffFeed(gym, gym.owner)).heldCount).toBe(0);
-      expect((await heldList(gym, gym.owner)).items).toEqual([]);
-      expect((await feed(gym, writer)).posts[0]).toMatchObject({ held: false });
+      // The same words with the bad one taken out are posted, under the same key.
+      const key = randomUUID();
+      expect((await send(gym, writer, "what a wanker of a session", [], key)).statusCode).toBe(400);
+      const fixed = await send(gym, writer, "what a session", [], key, other());
+      expect(fixed.statusCode, fixed.body).toBe(201);
+      expect(shown(await feed(gym, reader))).toEqual(["what a session", "Great class tonight"]);
     },
     T,
   );
 
-  // ===========================================================================
-  // THE HOLD'S EDGES
-  // ===========================================================================
-
   it(
-    "a held post staff remove is gone with its photo; the gym's own posts are never held; a held post waits only while its writer is a member",
+    "a refused post uses none of the day's ten, and the gym's own posts are not checked",
     async () => {
-      const gym = await makeGym("Remove House");
+      const gym = await makeGym("Count House");
       const writer = await member(gym, "Wendy Writer");
       const reader = await member(gym, "Rita Reader");
-      const held = await add(gym, writer, "kys mate", [IPHONE]);
-      expect(held.held).toBe(true);
-      expect(await filesOf(gym.id)).toHaveLength(1);
-      expect((await inject("DELETE", `${posts(gym.id)}/${held.id}`, gym.owner.cookies)).statusCode).toBe(200);
-      expect(await filesOf(gym.id)).toEqual([]);
-      expect(shown(await feed(gym, writer))).toEqual([]);
-      expect((await heldList(gym, gym.owner)).items).toEqual([]);
-      // Allowing what was removed is "not found", and changes nothing.
-      expect((await allow(gym, gym.owner, held.id)).statusCode).toBe(404);
-      expect(shown(await feed(gym, reader))).toEqual([]);
+      for (let i = 0; i < 12; i++) expect((await send(gym, writer, `try ${String(i)} you tosser`)).statusCode).toBe(400);
+      for (let i = 1; i <= 10; i++) await add(gym, writer, `Post ${String(i)}`);
+      // The day is full now. The words are answered first; a clean post is told the day is full.
+      const full = await send(gym, writer, "one more, tosser");
+      expect({ status: full.statusCode, error: errorOf(full) }).toEqual({ status: 400, error: "post_bad_words" });
+      expect((await send(gym, writer, "one more")).statusCode).toBe(429);
 
       // Staff write for the gym: their words are not checked.
-      const gymPost = await staffAdd(gym, "Whoever left this mess is a tosser");
-      expect(gymPost.held).toBe(false);
-      expect(shown(await feed(gym, reader))).toEqual(["Whoever left this mess is a tosser"]);
-
-      // A writer removes their own held post; one sent again under its key is the same held post.
-      const key = randomUUID();
-      const first = await send(gym, writer, "what a wanker", [], key);
-      const again = await send(gym, writer, "what a wanker", [], key, other());
-      expect([first.statusCode, again.statusCode]).toEqual([201, 201]);
-      const kept = (JSON.parse(again.body) as { post: GymPost }).post;
-      expect(kept).toMatchObject({ id: (JSON.parse(first.body) as { post: GymPost }).post.id, held: true });
-      expect((await inject("DELETE", `${posts(gym.id)}/mine/${kept.id}`, writer.cookies)).statusCode).toBe(200);
-      expect((await staffFeed(gym, gym.owner)).heldCount).toBe(0);
-
-      // A held post whose writer has left waits for nobody.
-      const leaver = await member(gym, "Lena Leaver");
-      const waiting = await add(gym, leaver, "tosser the lot of you");
-      expect((await staffFeed(gym, gym.owner)).heldCount).toBe(1);
-      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${leaver.userId}`;
-      expect((await staffFeed(gym, gym.owner)).heldCount).toBe(0);
-      expect((await heldList(gym, gym.owner)).total).toBe(0);
-      expect((await allow(gym, gym.owner, waiting.id)).statusCode).toBe(404);
+      await staffAdd(gym, "Whoever left this mess is a tosser");
+      expect(shown(await feed(gym, reader))[0]).toBe("Whoever left this mess is a tosser");
     },
     T,
   );
@@ -390,7 +340,7 @@ d("block, the bad-words hold and the support address (real Postgres, real disk)"
   // ===========================================================================
 
   it(
-    "nobody outside the gym blocks, unblocks, reads a blocked list, reads the held list or allows a post",
+    "nobody outside the gym blocks, unblocks or reads a blocked list",
     async () => {
       const gym = await makeGym("Gate House");
       const writer = await member(gym, "Wendy Writer");
@@ -400,10 +350,7 @@ d("block, the bad-words hold and the support address (real Postgres, real disk)"
       const stranger = await signedIn("Sam Stranger");
       const left = await member(gym, "Lena Left");
       await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${left.userId}`;
-      const trainer = await signedIn("Tom Trainer");
-      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${trainer.userId}, 'trainer', ${["members.read"]})`;
       const post = await add(gym, writer, "Morning all");
-      const held = await add(gym, writer, "you absolute tosser");
       expect((await block(gym, reader, post.id)).statusCode).toBe(200);
       const blockId = (await blockedList(gym, reader)).people[0]?.id ?? "";
 
@@ -419,24 +366,14 @@ d("block, the bad-words hold and the support address (real Postgres, real disk)"
           await inject("PUT", `${posts(gym.id)}/${post.id}/block`, cookies),
           await inject("GET", `${posts(gym.id)}/blocked`, cookies),
           await inject("DELETE", `${posts(gym.id)}/blocked/${blockId}`, cookies),
-          await inject("GET", `${posts(gym.id)}/held`, cookies),
-          await inject("POST", `${posts(gym.id)}/${held.id}/allow`, cookies),
         ];
-        expect({ who, statuses: answers.map((r) => r.statusCode) }).toEqual({ who, statuses: [status, status, status, status, status] });
-        for (const res of answers) expect(res.body).not.toMatch(/Wendy|tosser|Morning all/);
+        expect({ who, statuses: answers.map((r) => r.statusCode) }).toEqual({ who, statuses: [status, status, status] });
+        for (const res of answers) expect(res.body).not.toMatch(/Wendy|Morning all/);
       }
-      // A member, and staff without the tick, are not staff holding it.
-      for (const [who, status] of [[reader, 404], [writer, 404], [trainer, 403]] as const) {
-        expect((await inject("GET", `${posts(gym.id)}/held`, who.cookies)).statusCode).toBe(status);
-        expect((await inject("POST", `${posts(gym.id)}/${held.id}/allow`, who.cookies)).statusCode).toBe(status);
-      }
-      // Another gym's staff cannot allow this gym's held post by naming it at their own.
-      expect((await allow(elsewhere, elsewhere.owner, held.id)).statusCode).toBe(404);
       // Somebody else's block is not theirs to take off, here or named at another gym.
       expect((await unblock(gym, writer, blockId)).statusCode).toBe(404);
       expect((await unblock(elsewhere, outsider, blockId)).statusCode).toBe(404);
       expect(await blockRows(gym.id)).toBe(1);
-      expect((await staffFeed(gym, gym.owner)).heldCount).toBe(1);
 
       // What cannot be blocked: your own post, and one the gym's staff wrote.
       const own = await block(gym, writer, post.id);
@@ -476,17 +413,14 @@ d("block, the bad-words hold and the support address (real Postgres, real disk)"
   );
 
   it(
-    "a lapsed gym's staff read the held list and allow nothing; its members still read and undo their blocks",
+    "a lapsed gym's members block nobody new, and still read and undo their blocks",
     async () => {
       const gym = await makeGym("Lapsed House");
       const writer = await member(gym, "Wendy Writer");
       const reader = await member(gym, "Rita Reader");
       const post = await add(gym, writer, "Morning all");
-      const held = await add(gym, writer, "tosser");
       expect((await block(gym, reader, post.id)).statusCode).toBe(200);
       await lapse(gym.id);
-      expect((await heldList(gym, gym.owner)).total).toBe(1);
-      expect((await allow(gym, gym.owner, held.id)).statusCode).toBe(409);
       expect((await block(gym, writer, post.id)).statusCode).toBe(404);
       const list = await blockedList(gym, reader);
       expect(list.people).toHaveLength(1);

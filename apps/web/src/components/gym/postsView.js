@@ -239,12 +239,12 @@ export function withStopped(feed, userId, stopped) {
   return { ...feed, pinned: feed.pinned.map(mark), posts: feed.posts.map(mark) };
 }
 
-// ── BLOCK, THE BAD-WORDS HOLD AND THE HELP LINE (19b-ii-b) ──
+// ── BLOCK AND THE HELP LINE (19b-ii-b) ──
 
 /** Whether a member is offered Block on a post: another member's post. One the gym's
  *  staff wrote cannot be blocked, and nobody blocks themselves. */
 export function canBlock(post) {
-  return post.fromMember && !post.wrote && !post.held;
+  return post.fromMember && !post.wrote;
 }
 
 /** The box before a member blocks whoever wrote a post: who changes, and who does not. */
@@ -272,57 +272,9 @@ export function unblockedNote(name) {
   return name === null ? "Unblocked. You'll see their posts and reactions again." : `Unblocked. You'll see ${name}'s posts and reactions again.`;
 }
 
-/** On a member's own post that waits for staff. */
-export function heldNote(gymName) {
-  return `Waiting for the staff at ${gymName} to check it. Only you can see it until they do.`;
-}
-
-/** What a member reads after posting: everyone sees it, or it waits for staff. */
-export function postedNote(post, gymName) {
-  return post.held ? `Your post is waiting for the staff at ${gymName} to check it. Only you can see it until they do.` : `Posted. Everyone at ${gymName} can see it now.`;
-}
-
 /** The help line under a member's Updates: null until an address is set. */
 export function helpLine(feed) {
   return feed.supportEmail === null ? null : { text: 'Need help with the app? Email', email: feed.supportEmail };
-}
-
-/** The heading over the posts waiting for staff, with how many. */
-export function heldTitle(total) {
-  return total === 1 ? '1 post waiting for you to check' : `${total.toLocaleString('en')} posts waiting for you to check`;
-}
-
-/** Under that heading: why they wait, who sees them, and what each button does. */
-export function heldIntro(words) {
-  return `A post by one of your ${words.people} with a word on the bad-words list waits here. Only you and the person who wrote it can see it. Allow it and every one of your ${words.people} sees it; remove it and it is deleted.`;
-}
-
-/** Why one post was held: "Held for the word: tosser". */
-export function heldLine(item) {
-  if (item.words.length === 0) return 'Held by the bad-words check.';
-  return item.words.length === 1 ? `Held for the word: ${item.words[0]}` : `Held for the words: ${item.words.join(', ')}`;
-}
-
-/** Under the heading when more are waiting than the list carries, or null. */
-export function heldMore(held) {
-  const left = held.total - held.items.length;
-  return left > 0 ? `Showing the ${held.items.length.toLocaleString('en')} that have waited longest. ${left.toLocaleString('en')} more will show as you answer these.` : null;
-}
-
-/** What staff read after Allow. */
-export function allowedNote(words) {
-  return `Allowed. Your ${words.people} can see the post now.`;
-}
-
-/** The box before a waiting post is removed. */
-export function heldRemoveBox(post) {
-  const photos = post.photos.length === 0 ? '' : post.photos.length === 1 ? ' and its photo' : ` and its ${post.photos.length} photos`;
-  return {
-    title: 'Remove this post?',
-    line: `The post${photos} will be deleted. Only the person who wrote it could see it. They aren't emailed. This can't be undone.`,
-    confirm: 'Remove post',
-    cancel: 'Keep it waiting',
-  };
 }
 
 // ── THE CONSOLE'S FORM ──

@@ -20,8 +20,6 @@ export interface PostRow {
   pinnedAt: Date | null;
   createdAt: Date;
   removed: boolean;
-  /** It held a bad word and staff have not let it through. */
-  held: boolean;
 }
 
 interface RawPost {
@@ -35,7 +33,6 @@ interface RawPost {
   pinned_at: Date | null;
   created_at: Date;
   removed: boolean;
-  held: boolean;
 }
 
 const toPost = (r: RawPost): PostRow => ({
@@ -49,21 +46,16 @@ const toPost = (r: RawPost): PostRow => ({
   pinnedAt: r.pinned_at,
   createdAt: r.created_at,
   removed: r.removed,
-  held: r.held,
 });
 
-/** The gym's posts. `visible`: not removed, not waiting for staff and, for a member's own
- *  post, its writer still a live app member of the gym with an active account. A member who
- *  leaves, is removed or deletes their account takes their posts and photos off the page
- *  with them. `held`: the same, but waiting for staff after the bad-words check. */
+/** The gym's posts. `visible`: not removed and, for a member's own post, its writer still a
+ *  live app member of the gym with an active account. A member who leaves, is removed or
+ *  deletes their account takes their posts and photos off the page with them. */
 function posts(sql: SqlOrTx, gymId: string) {
-  const live = sql`p.removed_at IS NULL AND (NOT p.by_member OR (u.status = 'active' AND am.user_id IS NOT NULL) IS TRUE)`;
-  const waiting = sql`(p.held_at IS NOT NULL AND p.allowed_at IS NULL)`;
   return sql`
     SELECT p.id, p.body, p.pinned_at, p.created_at, p.post_key, p.removed_at IS NOT NULL AS removed,
-           p.author_user_id AS author_id, p.by_member, p.held_at,
-           ${live} AND NOT ${waiting} AS visible,
-           ${live} AND ${waiting} AS held,
+           p.author_user_id AS author_id, p.by_member,
+           p.removed_at IS NULL AND (NOT p.by_member OR (u.status = 'active' AND am.user_id IS NOT NULL) IS TRUE) AS visible,
            CASE WHEN u.status = 'active' THEN u.display_name END AS author_name,
            CASE WHEN u.status = 'active' THEN u.email::text END AS author_email,
            CASE WHEN u.status = 'active' THEN nullif(btrim(e.full_name), '') END AS author_record_name
@@ -75,16 +67,14 @@ function posts(sql: SqlOrTx, gymId: string) {
 }
 
 /** Who is reading. A member is sent what everyone sees, less the member posts of anybody
- *  they have blocked, plus their own post that waits for staff. `staff` is sent what
- *  everyone sees; `staff_held` the posts waiting for staff as well. */
-export type Reader = { member: string } | "staff" | "staff_held";
+ *  they have blocked. `staff` is sent what everyone sees. */
+export type Reader = { member: string } | "staff";
 
 /** The posts of `p` (a row of `posts`) this reader is sent. */
 function seenBy(sql: SqlOrTx, gymId: string, reader: Reader) {
   if (reader === "staff") return sql`p.visible`;
-  if (reader === "staff_held") return sql`(p.visible OR p.held)`;
   return sql`
-    (p.visible OR (p.held AND p.author_id = ${reader.member}))
+    p.visible
     AND NOT (p.by_member AND EXISTS (
       SELECT 1 FROM gym_post_blocks b
       WHERE b.gym_id = ${gymId} AND b.user_id = ${reader.member} AND b.blocked_user_id = p.author_id))`;
@@ -207,13 +197,13 @@ export async function reactorsOf(sql: SqlOrTx, gymId: string, postId: string, re
 export async function insertPost(
   tx: TransactionSql,
   gymId: string,
-  post: { id: string; postKey: string; body: string; byMember: boolean; held: boolean },
+  post: { id: string; postKey: string; body: string; byMember: boolean },
   authorId: string,
   at: Date,
 ): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
-    INSERT INTO gym_posts (id, gym_id, author_user_id, post_key, body, by_member, created_at, held_at)
-    VALUES (${post.id}, ${gymId}, ${authorId}, ${post.postKey}, ${post.body}, ${post.byMember}, ${at}, ${post.held ? at : null})
+    INSERT INTO gym_posts (id, gym_id, author_user_id, post_key, body, by_member, created_at)
+    VALUES (${post.id}, ${gymId}, ${authorId}, ${post.postKey}, ${post.body}, ${post.byMember}, ${at})
     ON CONFLICT (gym_id, post_key) DO NOTHING
     RETURNING id`;
   return rows.length === 1;
@@ -524,7 +514,7 @@ export async function stoppedPeople(sql: SqlOrTx, gymId: string, limit: number):
   return rows.map((r) => ({ userId: r.user_id, stoppedAt: r.created_at, displayName: r.display_name, email: r.email, recordName: r.record_name }));
 }
 
-// ── BLOCK, AND THE BAD-WORDS HOLD (19b-ii-b) ──
+// ── BLOCK (19b-ii-b) ──
 
 /** `userId` blocks `blockedId` at this gym. Blocked again, nothing changes. */
 export async function insertBlock(sql: SqlOrTx, gymId: string, userId: string, blockedId: string, at: Date): Promise<void> {
@@ -566,30 +556,4 @@ export async function blockedPeople(sql: SqlOrTx, gymId: string, userId: string,
     ORDER BY b.created_at DESC, b.id
     LIMIT ${limit}`;
   return rows.map((r) => ({ id: r.id, blockedAt: r.created_at, displayName: r.display_name, email: r.email, recordName: r.record_name }));
-}
-
-/** The posts waiting for staff, longest waiting first; every one waiting, on each row. */
-export async function heldPosts(sql: SqlOrTx, gymId: string, limit: number): Promise<{ post: PostRow; total: number }[]> {
-  const rows = await sql<(RawPost & { total: number })[]>`
-    SELECT p.*, count(*) OVER ()::int AS total
-    FROM (${posts(sql, gymId)}) p
-    WHERE p.held
-    ORDER BY p.held_at, p.id
-    LIMIT ${limit}`;
-  return rows.map((r) => ({ post: toPost(r), total: r.total }));
-}
-
-/** How many posts wait for staff. */
-export async function countHeld(sql: SqlOrTx, gymId: string): Promise<number> {
-  const rows = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM (${posts(sql, gymId)}) p WHERE p.held`;
-  return rows[0]?.n ?? 0;
-}
-
-/** Lets a waiting post through; false when it is not waiting (let through already, or removed). */
-export async function allowPost(tx: TransactionSql, gymId: string, postId: string, by: string, at: Date): Promise<boolean> {
-  const rows = await tx<{ id: string }[]>`
-    UPDATE gym_posts SET allowed_at = ${at}, allowed_by_user_id = ${by}
-    WHERE gym_id = ${gymId} AND id = ${postId} AND held_at IS NOT NULL AND allowed_at IS NULL AND removed_at IS NULL
-    RETURNING id`;
-  return rows.length === 1;
 }

@@ -1,4 +1,4 @@
-// THE BAD-WORDS HOLD: the word check against cases from outside the code (ROADMAP
+// THE BAD-WORDS CHECK: the word check against cases from outside the code (ROADMAP
 // 19b-ii-b; spec Part 3 §15.3). `fixtures/bad-words/README.md` says where they come from.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -13,11 +13,11 @@ const lines = (name: string): string[] =>
 
 const inAPost = (word: string): string => `he is a ${word} honestly`;
 
-describe("the bad-words hold", () => {
+describe("the bad-words check", () => {
   const outside = lines("ldnoobw-en.txt");
   const letThrough = new Set(lines("let-through.txt"));
 
-  it("every entry of the outside list is held, or is let through on purpose", () => {
+  it("every entry of the outside list is refused, or is let through on purpose", () => {
     expect(outside.length).toBeGreaterThan(400);
     const missed = outside.filter((word) => !letThrough.has(word) && !hasBadWords(inAPost(word)));
     expect(missed).toEqual([]);
@@ -26,7 +26,7 @@ describe("the bad-words hold", () => {
     expect([...letThrough].filter((word) => !outside.includes(word))).toEqual([]);
   });
 
-  it("holds slurs, explicit words and telling somebody to hurt themselves, however they are dressed up", () => {
+  it("refuses slurs, explicit words and telling somebody to hurt themselves, however they are dressed up", () => {
     const held = [
       "what a tosser",
       "you fat paki",
@@ -48,7 +48,7 @@ describe("the bad-words hold", () => {
     expect(held.filter((text) => !hasBadWords(text))).toEqual([]);
   });
 
-  it("does not hold what a gym says every day", () => {
+  it("does not refuse what a gym says every day", () => {
     const clean = [
       "Great class tonight, thanks coach",
       "New PB on the snatch today, 60 kg",
@@ -97,13 +97,13 @@ describe("the bad-words hold", () => {
     expect(clean.filter((text) => hasBadWords(text))).toEqual([]);
   });
 
-  it("holds no exercise the app itself names", () => {
+  it("refuses no exercise the app itself names", () => {
     expect(CATALOG_58.length).toBeGreaterThan(50);
     const names = CATALOG_58.map((exercise) => exercise.slug.replaceAll("_", " "));
     expect(names.filter((name) => hasBadWords(`Did 3 sets of ${name} today`))).toEqual([]);
   });
 
-  it("names the words it found for staff, each once and no more than five", () => {
+  it("names the words it found, each once and no more than five", () => {
     expect(badWordsIn("what a tosser, a real TOSSER")).toEqual(["tosser"]);
     expect(badWordsIn("Great class tonight")).toEqual([]);
     const many = badWordsIn("tosser paki wetback raghead poof coon spic");

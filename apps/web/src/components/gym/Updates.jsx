@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Ban, BicepsFlexed, Clock, Flag, Flame, Heart, ImagePlus, Loader2, Pin, ThumbsUp, Trash2, X } from 'lucide-react';
+import { Ban, BicepsFlexed, Flag, Flame, Heart, ImagePlus, Loader2, Pin, ThumbsUp, Trash2, X } from 'lucide-react';
 import { postPhotoUrl, postsService } from '../../api/postsApi';
 import { errorText } from '../../api/orgsApi';
 import { preparePagePhoto } from '../../pages/console/gymPagePhotos';
@@ -17,14 +17,12 @@ import {
   canPost,
   charsLine,
   emptyLine,
-  heldNote,
   helpLine,
   memberCanPost,
   memberPostAction,
   memberPostHint,
   ownRemoveBox,
   photoProblem,
-  postedNote,
   postedText,
   reactionButtons,
   reportBox,
@@ -347,14 +345,8 @@ function Post({ gymId, gymName, post, busy, onReact, onOpen, onRemove, onReport,
         </p>
       )}
       <Photos gymId={gymId} post={post} onOpen={(i) => onOpen(post, i)} />
-      {post.held && (
-        <p className="text-sm mt-3 flex items-start gap-2" style={{ color: ORANGE }} data-testid="held-note">
-          <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
-          <span>{heldNote(gymName)}</span>
-        </p>
-      )}
       <div className="flex flex-wrap items-center gap-2 mt-3">
-        {(post.held ? [] : reactionButtons(post)).map((r) => {
+        {reactionButtons(post).map((r) => {
           const Icon = ICONS[r.id];
           return (
             <button
@@ -576,7 +568,7 @@ export default function Updates({ gym }) {
               gymName={feed.gymName}
               onPosted={(post) => {
                 change((shown) => withNewPost(shown, post));
-                setNotice(postedNote(post, feed.gymName));
+                setNotice(`Posted. Everyone at ${feed.gymName} can see it now.`);
               }}
             />
           )}

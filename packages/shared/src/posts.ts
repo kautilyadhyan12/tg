@@ -100,8 +100,6 @@ export const gymPostSchema = z
     wrote: z.boolean(),
     /** The reader has reported it. Always false for staff reading the console. */
     reported: z.boolean(),
-    /** It held a bad word and waits for staff: only its writer and staff are sent it. */
-    held: z.boolean(),
   })
   .strict();
 export type GymPost = z.infer<typeof gymPostSchema>;
@@ -176,8 +174,6 @@ export const staffGymPostsResponseSchema = z
     membersCanPost: z.boolean(),
     /** Posts with a report nobody has answered yet. */
     reportedCount: z.number().int().nonnegative(),
-    /** Members' posts held for a bad word, waiting for staff. */
-    heldCount: z.number().int().nonnegative(),
   })
   .strict();
 export type StaffGymPostsResponse = z.infer<typeof staffGymPostsResponseSchema>;
@@ -312,12 +308,10 @@ export const stoppedGymPostersResponseSchema = z
   .strict();
 export type StoppedGymPostersResponse = z.infer<typeof stoppedGymPostersResponseSchema>;
 
-// ── BLOCK, AND THE BAD-WORDS HOLD (19b-ii-b; spec §15.3) ──
+// ── BLOCK, AND THE BAD-WORDS CHECK (19b-ii-b; spec §15.3) ──
 
 /** People one member's blocked list carries, newest first. */
 export const GYM_POST_BLOCKS_SHOWN = 200;
-/** Held posts the staff list carries, longest waiting first. */
-export const GYM_POST_HELD_SHOWN = 50;
 
 export const blockedGymPosterResponseSchema = z.object({ blocked: z.boolean() }).strict();
 export const gymPostBlockParamsSchema = z.object({ gymId: z.string().uuid(), blockId: z.string().uuid() }).strict();
@@ -336,30 +330,6 @@ export const blockedGymPostersResponseSchema = z
   .strict();
 export type BlockedGymPostersResponse = z.infer<typeof blockedGymPostersResponseSchema>;
 
-/** Members' posts held for a bad word, for staff: longest waiting first. */
-export const heldGymPostsResponseSchema = z
-  .object({
-    gymId: z.string().uuid(),
-    gymName: z.string(),
-    items: z
-      .array(
-        z
-          .object({
-            post: staffGymPostSchema,
-            /** The listed words it holds; empty when the list has changed since. */
-            words: z.array(z.string()).max(5),
-          })
-          .strict(),
-      )
-      .max(GYM_POST_HELD_SHOWN),
-    /** Every held post waiting, listed or not. */
-    total: z.number().int().nonnegative(),
-  })
-  .strict();
-export type HeldGymPostsResponse = z.infer<typeof heldGymPostsResponseSchema>;
-
-export const allowedGymPostResponseSchema = z.object({ allowed: z.literal(true) }).strict();
-
 /** What a person reads when a post cannot be made, changed or found. */
 export const GYM_POST_WORDS = {
   not_found: "This post has been removed.",
@@ -373,6 +343,11 @@ export const GYM_POST_WORDS = {
   own_block: "This is your own post.",
   gym_block: "This post is from the gym's staff, so it can't be blocked. You can report it instead.",
   block_not_found: "This person isn't blocked any more.",
+  /** A member's post the app will not take, naming each word it found. */
+  bad_words: (words: readonly string[]): string =>
+    words.length === 1
+      ? `Your post wasn't posted because it has a word that isn't allowed here: ${words[0] ?? ""}. Take it out and post again.`
+      : `Your post wasn't posted because it has words that aren't allowed here: ${words.join(", ")}. Take them out and post again.`,
   /** Which of a post's photos was refused, counted from 1. */
   photo: (position: number, why: string): string => `Photo ${String(position)}: ${why}`,
 } as const;
