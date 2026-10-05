@@ -8,7 +8,7 @@ vi.mock('../../api/postsApi', () => ({
   postsService: svc,
   postPhotoUrl: ({ gymId, postId, photoId }) => `http://api.test/v1/orgs/${gymId}/posts/${postId}/photos/${photoId}`,
 }));
-vi.mock('../../pages/console/gymPagePhotos', () => ({ preparePagePhoto: vi.fn() }));
+vi.mock('../../pages/console/gymPagePhotos', () => ({ preparePostPhoto: vi.fn() }));
 // The server's own sentence where it sent one, as the real `errorText` reads it.
 vi.mock('../../api/orgsApi', () => ({ errorText: (err, fallback) => err?.response?.data?.message ?? fallback }));
 

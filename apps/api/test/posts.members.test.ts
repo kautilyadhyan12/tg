@@ -235,6 +235,18 @@ d("members post, Report and the staff list (real Postgres, real disk)", () => {
   // THE WORST THING, FIRST
   // ===========================================================================
 
+  it("a member's photo one byte over 1 MB is refused in words and nothing is kept", async () => {
+    const gym = await makeGym("Heavy House");
+    const writer = await member(gym, "Wendy Writer");
+    const real = Buffer.from(IPHONE, "base64");
+    const end = real.lastIndexOf(Buffer.from([0xff, 0xd9]));
+    const over = Buffer.concat([real.subarray(0, end), Buffer.alloc(1024 * 1024 + 1 - real.length, 0x55), real.subarray(end)]).toString("base64");
+    const res = await inject("POST", `${posts(gym.id)}/mine`, writer.cookies, { postKey: randomUUID(), body: "Too heavy", photos: [over] });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body)).toMatchObject({ error: "photo_too_big", message: "Photo 1: This photo is bigger than 1 MB. Choose a smaller one." });
+    expect(await filesOf(gym.id)).toEqual([]);
+  }, T);
+
   it(
     "a reported post staff remove in one tap is gone for everyone, its photo with it",
     async () => {

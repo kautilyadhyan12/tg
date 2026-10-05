@@ -22,7 +22,7 @@ import {
   withStopped,
   withoutPost,
 } from '../../components/gym/postsView';
-import { preparePagePhoto } from './gymPagePhotos';
+import { preparePostPhoto } from './gymPagePhotos';
 import { PersonPostsBox } from './PersonPosts';
 import PostCard from './UpdatesPostCard';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -55,7 +55,7 @@ function Composer({ gymId, gymName, words, onPosted }) {
     const tooBig = [];
     for (const file of files) {
       try {
-        prepared.push(await preparePagePhoto(file));
+        prepared.push(await preparePostPhoto(file));
       } catch (err) {
         (err.message === 'too_big' ? tooBig : unreadable).push(file.name);
       }
