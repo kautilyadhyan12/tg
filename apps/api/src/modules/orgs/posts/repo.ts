@@ -459,6 +459,12 @@ export async function hideIfReported(tx: TransactionSql, gymId: string, postId: 
       AND ${waitingReports(tx, gymId, postId)} >= ${GYM_POST_REPORTS_TO_HIDE}`;
 }
 
+/** Holds the post to the end of the transaction, as a report of it does: Keep and a
+ *  report of the same post run one after the other. */
+export async function holdPost(tx: TransactionSql, gymId: string, postId: string): Promise<void> {
+  await tx`SELECT 1 FROM gym_posts WHERE gym_id = ${gymId} AND id = ${postId} FOR UPDATE`;
+}
+
 /** Shows a kept post to members again. Not while five reports are waiting once more. */
 export async function showAgain(tx: TransactionSql, gymId: string, postId: string): Promise<void> {
   await tx`

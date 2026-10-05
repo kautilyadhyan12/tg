@@ -676,6 +676,7 @@ export async function keepReported(
   await requireWritablePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   return await deps.sql.begin(async (tx) => {
+    await repo.holdPost(tx, gymId, postId);
     if ((await repo.postById(tx, gymId, postId, "staff")) === null) throw postNotFound();
     const closed = await repo.closeReports(tx, gymId, postId, "kept", deps.now(), shown.reportsMark);
     const now = await repo.countReports(tx, gymId, postId);
