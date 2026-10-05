@@ -18,6 +18,7 @@ const svc = {
   setMembersCanPost: vi.fn(),
   stopped: vi.fn(),
   setStopped: vi.fn(),
+  person: vi.fn(),
 };
 const orgApi = { getMine: vi.fn() };
 const prepare = vi.fn();
@@ -519,8 +520,8 @@ describe('reported posts', () => {
     expect(within(reportedCards()[0]).getByText("Reported by 3 people: Bullying or unkind (2) · A photo of someone who didn't agree to it (1)")).toBeTruthy();
     expect(within(reportedCards()[1]).getByText('Reported by 1 person: Spam or selling')).toBeTruthy();
     expect(within(reportedCards()[0]).getByText('Look at the state of him')).toBeTruthy();
-    // Keep, Remove and Stop; a reported post is not pinned from here.
-    expect(within(reportedCards()[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Keep post', 'Remove post', 'Stop them posting']);
+    // The writer's name, then Keep, Remove and Stop; a reported post is not pinned from here.
+    expect(within(reportedCards()[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Wendy Writer', 'Keep post', 'Remove post', 'Stop them posting']);
   });
 
   it('shows what reporters typed, under the post it was typed about, and nothing where nobody typed', async () => {
@@ -591,6 +592,71 @@ describe('reported posts', () => {
     svc.reported.mockResolvedValue(two());
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     await waitFor(() => expect(reportedCards()).toHaveLength(2));
-    expect(within(reportedCards()[0]).queryAllByRole('button')).toEqual([]);
+    // Only the writer's name, which opens their posts to read: nothing that changes anything.
+    expect(within(reportedCards()[0]).queryAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Wendy Writer']);
+  });
+});
+
+describe('a person’s posts, opened from a name', () => {
+  const theirs = (id, body, over = {}) => post(id, body, { fromMember: true, authorId: 'u-wendy', author: { name: 'Wendy Writer', initials: 'WW' }, ...over });
+  const openWendy = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'See what Wendy Writer has posted' }));
+    return within(await screen.findByTestId('person-posts-box'));
+  };
+
+  it('a member’s name opens their posts in a box; a staff post’s name opens nothing', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done'), post('b', 'Closed on Monday')] }));
+    svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done'), theirs('c', 'Leg day')], next: null });
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    expect(within(cards()[1]).queryByRole('button', { name: /has posted/ })).toBeNull();
+    const box = await openWendy();
+    await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(2));
+    expect(svc.person).toHaveBeenCalledWith('g1', 'u-wendy');
+    expect(screen.getByRole('dialog', { name: "Wendy Writer's posts" })).toBeTruthy();
+    expect(box.getAllByRole('heading').map((h) => h.textContent)).toEqual(["Wendy Writer's posts"]);
+    // A person's own list: Remove and Stop, never Pin, and no name to press again.
+    expect(within(box.getAllByTestId('post')[0]).getAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Remove post', 'Stop them posting']);
+    fireEvent.click(box.getAllByRole('button', { name: 'Close' })[0]);
+    await waitFor(() => expect(screen.queryByTestId('person-posts-box')).toBeNull());
+  });
+
+  it('Remove in the box asks first, removes the post it was pressed on, and the page behind is read again', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
+    svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done'), theirs('c', 'Leg day')], next: null });
+    svc.remove.mockResolvedValue({ removed: true });
+    open();
+    const box = await openWendy();
+    await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(2));
+    const second = box.getAllByTestId('post')[1];
+    fireEvent.click(within(second).getByRole('button', { name: 'Remove post' }));
+    expect(svc.remove).not.toHaveBeenCalled();
+    fireEvent.click(within(second).getByRole('button', { name: 'Remove post' }));
+    await waitFor(() => expect(svc.remove).toHaveBeenCalledWith('g1', 'c'));
+    await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(1));
+    expect(box.getByText('Post removed. Your members no longer see it.')).toBeTruthy();
+    await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
+  });
+
+  it('says so when they have posted nothing, and when the posts cannot be read', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
+    svc.person.mockResolvedValueOnce({ posts: [], next: null });
+    open();
+    const box = await openWendy();
+    expect(await box.findByText("Wendy Writer hasn't posted anything.")).toBeTruthy();
+    fireEvent.click(box.getAllByRole('button', { name: 'Close' })[0]);
+    svc.person.mockRejectedValueOnce(refusal(500, 'The posts are not answering.'));
+    const again = await openWendy();
+    expect((await again.findByRole('alert')).textContent).toBe('The posts are not answering.');
+    expect(again.queryByText("Wendy Writer hasn't posted anything.")).toBeNull();
+  });
+
+  it('a gym with no plan reads a person’s posts and changes none', async () => {
+    svc.list.mockResolvedValue(feed({ posts: [theirs('a', 'First 5k done')] }));
+    svc.person.mockResolvedValue({ posts: [theirs('a', 'First 5k done')], next: null });
+    open({ ...ORG, subscription: null, consoleReadOnly: true });
+    const box = await openWendy();
+    await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(1));
+    expect(within(box.getAllByTestId('post')[0]).queryAllByRole('button')).toEqual([]);
   });
 });

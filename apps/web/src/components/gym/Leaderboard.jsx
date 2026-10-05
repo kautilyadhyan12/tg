@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Flame, Info, Loader2, Trophy, X } from 'lucide-react';
+import { Flame, Info, Loader2, Trophy } from 'lucide-react';
 import { leaderboardService } from '../../api/leaderboardApi';
 import { errorText } from '../../api/orgsApi';
 import HideMeSwitch from './HideMeSwitch';
+import PersonSheet from './PersonSheet';
+import Sheet, { Initials } from './Sheet';
 import {
   BOARD_TABS,
   PERIODS,
@@ -59,40 +61,6 @@ function Circles({ circles, days, boardId }) {
           </span>
         );
       })}
-    </div>
-  );
-}
-
-function Initials({ text, greyed }) {
-  return (
-    <span
-      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-      style={{ background: greyed ? 'rgba(255,255,255,0.06)' : 'rgba(255,138,31,0.15)', color: greyed ? MUTED : ORANGE }}
-      aria-hidden="true"
-    >
-      {text}
-    </span>
-  );
-}
-
-function Sheet({ title, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="w-full sm:max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5"
-        style={{ background: '#161412', border: '1px solid rgba(255,255,255,0.08)' }}
-      >
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <h3 className="text-base font-bold text-white">{title}</h3>
-          <button type="button" onClick={onClose} aria-label="Close" className="p-1 rounded-lg" style={{ color: MUTED }}>
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        {children}
-      </div>
     </div>
   );
 }
@@ -199,51 +167,6 @@ function CountedSheet({ gymId, boardId, period, onClose }) {
             </ul>
           )}
         </div>
-      )}
-    </Sheet>
-  );
-}
-
-/** Another member's places on every board. */
-function ProfileSheet({ gymId, row, period, onClose }) {
-  const [state, setState] = useState({ loading: true, error: null, data: null });
-  useEffect(() => {
-    let live = true;
-    leaderboardService
-      .profile(gymId, row.userId, period)
-      .then((data) => live && setState({ loading: false, error: null, data }))
-      .catch((err) => live && setState({ loading: false, error: errorText(err, "Couldn't load their profile."), data: null }));
-    return () => {
-      live = false;
-    };
-  }, [gymId, row.userId, period]);
-
-  const periodLabel = PERIODS.find((p) => p.id === period)?.label.toLowerCase() ?? '';
-  return (
-    <Sheet title={row.name} onClose={onClose}>
-      <div className="flex items-center gap-3 mb-4">
-        <Initials text={row.initials} />
-        <p className="text-sm text-white font-semibold">{row.name}</p>
-      </div>
-      {state.loading ? (
-        <p className="text-sm flex items-center gap-2" style={{ color: MUTED }}>
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
-        </p>
-      ) : state.error !== null ? (
-        <p className="text-sm" style={{ color: MUTED }}>{state.error}</p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {state.data.boards.map((b) => (
-            <li key={b.board} className="flex justify-between text-sm rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
-              <span className="text-white">
-                {b.board === 'streak' ? 'Streak' : `${BOARD_TABS.find((t) => t.id === b.board)?.label ?? ''}, ${periodLabel}`}
-              </span>
-              <span style={{ color: MUTED }}>
-                {b.place === null ? '—' : ordinal(b.place)} · {valueText(b.value, b.board)}
-              </span>
-            </li>
-          ))}
-        </ul>
       )}
     </Sheet>
   );
@@ -483,7 +406,7 @@ export default function Leaderboard({ gym }) {
       )}
 
       {sheet?.kind === 'counted' && <CountedSheet gymId={gym.id} boardId={boardId} period={period} onClose={() => setSheet(null)} />}
-      {sheet?.kind === 'profile' && <ProfileSheet gymId={gym.id} row={sheet.row} period={period} onClose={() => setSheet(null)} />}
+      {sheet?.kind === 'profile' && <PersonSheet gym={gym} person={sheet.row} period={period} onClose={() => setSheet(null)} />}
     </section>
   );
 }

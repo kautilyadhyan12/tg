@@ -7,6 +7,7 @@ import {
   authorName,
   authorTag,
   canManagePosts,
+  canOpenPerson,
   canPost,
   charsLine,
   emptyLine,
@@ -16,6 +17,9 @@ import {
   memberPostHint,
   memberPostsSwitch,
   ownRemoveBox,
+  personLink,
+  personOf,
+  personPostsEmpty,
   photoProblem,
   pinNote,
   postedText,
@@ -29,6 +33,7 @@ import {
   reportedLine,
   reportedMore,
   reportedTitle,
+  staffPersonPosts,
   stopBox,
   stoppedNote,
   withNewPost,
@@ -50,6 +55,7 @@ const post = (over = {}) => ({
   reactions: { like: 0, love: 0, strong: 0, fire: 0 },
   mine: null,
   fromMember: false,
+  authorId: null,
   own: false,
   wrote: false,
   reported: false,
@@ -311,7 +317,7 @@ describe('a member’s own post', () => {
 
   it('says who sees a post and the day’s limit', () => {
     expect(memberPostHint('Iron House')).toBe(
-      'Everyone at Iron House in the app sees it straight away. You can post 10 times a day. Where a photo was taken is never kept.',
+      'Everyone at Iron House in the app sees it straight away. You can post 10 times a day, 3 of them with photos. Where a photo was taken is never kept.',
     );
   });
 
@@ -433,5 +439,35 @@ describe('the console’s tools for members’ posts', () => {
       ['b', true],
       ['c', false],
     ]);
+  });
+});
+
+describe('a person’s posts on their profile', () => {
+  const U = '22222222-2222-4222-8222-222222222222';
+
+  it('a member’s name opens their posts; a post the staff wrote for the gym opens nobody', () => {
+    expect(canOpenPerson(post({ fromMember: true, authorId: U }))).toBe(true);
+    expect(canOpenPerson(post({ fromMember: false, authorId: null }))).toBe(false);
+    // A staff post never opens a person, whatever id rides on it.
+    expect(canOpenPerson(post({ fromMember: false, authorId: U }))).toBe(false);
+    expect(canOpenPerson(post({ fromMember: true, authorId: null }))).toBe(false);
+    expect(canOpenPerson(post({ fromMember: true }))).toBe(false);
+  });
+
+  it('names the person the profile opens for, and one with no name as “A member”', () => {
+    expect(personOf(post({ fromMember: true, authorId: U }))).toEqual({ userId: U, name: 'Maya O.', initials: 'MO' });
+    expect(personOf(post({ fromMember: true, authorId: U, author: { name: null, initials: '' } }))).toEqual({ userId: U, name: 'A member', initials: 'M' });
+    expect(personLink(post({ fromMember: true, authorId: U }))).toBe('See what Maya O. has posted');
+    expect(personLink(post({ fromMember: true, authorId: U, author: { name: null, initials: '' } }))).toBe('See what this member has posted');
+  });
+
+  it('says why a profile has no posts: none made, or the reader blocked them', () => {
+    expect(personPostsEmpty('Maya O.', false)).toBe("Maya O. hasn't posted anything.");
+    expect(personPostsEmpty('Maya O.', true)).toBe("You've blocked Maya O., so their posts aren't shown. You can unblock them at the bottom of Updates.");
+  });
+
+  it('heads a person’s posts in the console by name, in the gym’s own word with none', () => {
+    expect(staffPersonPosts('Maya Okafor', { person: 'member' })).toEqual({ title: "Maya Okafor's posts", empty: "Maya Okafor hasn't posted anything." });
+    expect(staffPersonPosts(null, { person: 'client' })).toEqual({ title: 'Their posts', empty: "This client hasn't posted anything." });
   });
 });

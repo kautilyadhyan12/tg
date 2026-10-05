@@ -15,7 +15,9 @@ const svc = {
   setBoardOff: vi.fn(),
 };
 const orgApi = { getMine: vi.fn(), addVisit: vi.fn(), removeVisit: vi.fn() };
+const postsSvc = { person: vi.fn(), remove: vi.fn(), setStopped: vi.fn(), reactors: vi.fn() };
 vi.mock('../../api/leaderboardApi', () => ({ staffLeaderboardService: svc }));
+vi.mock('../../api/postsApi', () => ({ staffPostsService: postsSvc, postPhotoUrl: () => 'http://api.test/photo' }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, orgService: orgApi };
@@ -528,5 +530,45 @@ describe('fixing a visit from a person’s panel', () => {
     fireEvent.change(await box.findByTestId('add-visit-day'), { target: { value: '2026-09-30' } });
     fireEvent.click(box.getByTestId('visit-press'));
     expect(await screen.findByText('Chen Wu already had a visit that counts on that day. Nothing was added.')).toBeTruthy();
+  });
+});
+
+describe('a person’s posts on their panel', () => {
+  const theirPost = {
+    id: 'p1',
+    author: { name: 'Chen Wu', initials: 'CW' },
+    body: 'First 5k done',
+    photos: [],
+    pinned: false,
+    createdAt: '2026-10-07T06:30:00.000Z',
+    reactions: { like: 0, love: 0, strong: 0, fire: 0 },
+    mine: null,
+    fromMember: true,
+    own: false,
+    wrote: false,
+    reported: false,
+    authorId: 'u-chen',
+    authorStopped: false,
+  };
+
+  it('staff who hold “Post updates” read the person’s posts under their boards', async () => {
+    postsSvc.person.mockReset();
+    postsSvc.person.mockResolvedValue({ posts: [theirPost], next: null });
+    open({ ...ORG, privileges: [...ORG.privileges, 'posts.manage'] });
+    fireEvent.click(await screen.findByText('Chen Wu'));
+    const box = within(await screen.findByTestId('person-box'));
+    expect(await box.findByRole('heading', { name: "Chen Wu's posts" })).toBeTruthy();
+    expect(await box.findByText('First 5k done')).toBeTruthy();
+    expect(postsSvc.person).toHaveBeenCalledWith('g1', 'u-chen');
+  });
+
+  it('staff without it are shown no posts, and none are asked for', async () => {
+    postsSvc.person.mockReset();
+    open();
+    fireEvent.click(await screen.findByText('Chen Wu'));
+    const box = within(await screen.findByTestId('person-box'));
+    await waitFor(() => expect(box.getByTestId('person-gym_days')).toBeTruthy());
+    expect(box.queryByTestId('person-posts')).toBeNull();
+    expect(postsSvc.person).not.toHaveBeenCalled();
   });
 });

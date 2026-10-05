@@ -2,6 +2,7 @@
 // every sentence is tested without a browser. Shared by the member's Updates tab and the
 // console's page.
 import {
+  GYM_MEMBER_PHOTO_POSTS_A_DAY,
   GYM_MEMBER_POSTS_A_DAY,
   GYM_POST_MAX_CHARS,
   GYM_POST_MAX_PHOTOS,
@@ -117,7 +118,7 @@ export function stoppedNote(feed) {
 
 /** Under the member's box: who sees a post, and the day's limit. */
 export function memberPostHint(gymName) {
-  return `Everyone at ${gymName} in the app sees it straight away. You can post ${GYM_MEMBER_POSTS_A_DAY} times a day. Where a photo was taken is never kept.`;
+  return `Everyone at ${gymName} in the app sees it straight away. You can post ${GYM_MEMBER_POSTS_A_DAY} times a day, ${GYM_MEMBER_PHOTO_POSTS_A_DAY} of them with photos. Where a photo was taken is never kept.`;
 }
 
 /** The list with the member's new post at the top of the unpinned ones; never twice. */
@@ -281,6 +282,36 @@ export function unblockedNote(name) {
 /** The help line under a member's Updates: null until an address is set. */
 export function helpLine(feed) {
   return feed.supportEmail === null ? null : { text: 'Need help with the app? Email', email: feed.supportEmail };
+}
+
+// ── A PERSON'S POSTS, ON THEIR PROFILE (19b-ii-c) ──
+
+/** Whether a post's name opens its writer's posts: a member's own post. One the staff
+ *  wrote for the gym is the gym's, and opens nobody. */
+export function canOpenPerson(post) {
+  return post.fromMember && typeof post.authorId === 'string';
+}
+
+/** What a screen reader says for the name that opens a person's posts. */
+export function personLink(post) {
+  return `See what ${post.author.name ?? 'this member'} has posted`;
+}
+
+/** The person a post's name opens, as the profile names them. */
+export function personOf(post) {
+  return { userId: post.authorId, name: post.author.name ?? 'A member', initials: post.author.name === null || post.author.initials === '' ? 'M' : post.author.initials };
+}
+
+/** What a member reads on a profile with no posts to show. */
+export function personPostsEmpty(name, blocked) {
+  if (blocked) return `You've blocked ${name}, so their posts aren't shown. You can unblock them at the bottom of Updates.`;
+  return `${name} hasn't posted anything.`;
+}
+
+/** The heading over one person's posts in the console, and the line with none. */
+export function staffPersonPosts(name, words) {
+  const who = name ?? `This ${words.person}`;
+  return { title: name === null ? 'Their posts' : `${name}'s posts`, empty: `${who} hasn't posted anything.` };
 }
 
 // ── THE CONSOLE'S FORM ──

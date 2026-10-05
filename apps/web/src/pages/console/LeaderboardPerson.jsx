@@ -27,6 +27,7 @@ import {
   staffWorkoutNotCountedText,
   takeOffBox,
 } from './leaderboardStaffView';
+import PersonPosts from './PersonPosts';
 
 // One person on the console's leaderboard (ROADMAP 19a-iii): their place and number on all
 // three boards, what counted for each, and Take off the board / Put back. Before either
@@ -155,7 +156,7 @@ function Counted({ gymId, userId, boardId, period, canFix, onRemove, onAdd }) {
   );
 }
 
-export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, words, readOnly, canFix, onClose, onChanged }) {
+export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, words, readOnly, canFix, canSeePosts = false, onClose, onChanged }) {
   const [state, setState] = useState({ loading: true, error: null, profile: null });
   /** The board whose "what counted" is open. */
   const [counted, setCounted] = useState(null);
@@ -353,6 +354,8 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
             );
           })}
         </section>
+
+        {canSeePosts ? <PersonPosts gymId={gymId} gymName={gym.name} person={{ userId: row.userId, name: profile.name }} words={words} readOnly={readOnly} /> : null}
 
         <p className="c-s14 c-t2">
           <Link to={`/console/${orgSlug}/members?view=app`} className="c-lk c-w6">
