@@ -38,6 +38,7 @@ import { underAgeAt, underAgeOn } from "./age.js";
 import { addressInApp } from "./inApp.js";
 import * as repo from "./repo.js";
 import type { InviteSettings } from "./settings.js";
+import { heldOnListOf, heldPassing } from "../memberships/onList.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -103,7 +104,14 @@ export async function workOutGroup(
   filters: repo.WordFilters,
   today: string,
 ): Promise<Group> {
-  const candidates = await repo.inviteCandidates(sql, gymId, filters);
+  // A word filter reads what the list shows: somebody who holds a membership here passes
+  // by the app's own words (23a-i), as on the list's own pages (`entriesFilter`).
+  let held: repo.WordFilters["held"] = null;
+  if (filters.statuses !== null || filters.membershipTypes !== null || filters.paymentStatuses !== null) {
+    const shown = await heldOnListOf(sql, gymId, today, null);
+    held = { ids: [...shown.keys()], passing: heldPassing(shown, filters) };
+  }
+  const candidates = await repo.inviteCandidates(sql, gymId, { ...filters, held });
   const members = await listRepo.membersAgainstList(sql, gymId);
   const inAppEntryIds = members.flatMap((member) => (member.entryId === null ? [] : [member.entryId]));
   // An address is in the app when ANY current entry holding it is matched to a member,

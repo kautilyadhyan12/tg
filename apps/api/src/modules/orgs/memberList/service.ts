@@ -38,6 +38,7 @@ import {
   MEMBER_LIST_MAX_EXTRA_FIELDS,
   MEMBER_LIST_PARSES_PER_GYM,
   MEMBER_LIST_ROWS_PAGE,
+  MEMBER_LIST_STATUS_CHIPS_MAX,
   MEMBER_LIST_UPLOAD_GONE_WORDS,
   MEMBER_LIST_UPLOAD_TTL_MINUTES,
   memberFileRefusalWords,
@@ -98,6 +99,8 @@ import { currentRecordOf, inAppRecordIds, pastRecordOf } from "./whose.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
 import { bustAfterRemoval } from "./byHandService.js";
 import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type RemovalPlan } from "./removeSelected.js";
+import { dayInTz } from "../../gamification/streak.js";
+import { heldChips, heldOnListOf, heldPassing, mergeChips, type WordCount } from "../memberships/onList.js";
 
 export interface MemberListDeps {
   sql: Sql;
@@ -1404,15 +1407,20 @@ export async function readList(
   gymId: string,
   limit: () => Promise<boolean>,
 ): Promise<MemberListView | null> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const [state, members, fields] = await Promise.all([
+  const [state, members, fields, held] = await Promise.all([
     repo.listState(deps.sql, gymId),
     repo.membersAgainstList(deps.sql, gymId),
     repo.listFields(deps.sql, gymId),
+    // The people who hold a membership here: their chips are counted by the app's own
+    // words, on the gym's own day (23a-i).
+    heldOnListOf(deps.sql, gymId, dayInTz(deps.now(), org.timezone), null),
   ]);
+  const inApp = inAppEntryIds(members);
+  const mine = heldChips(held, new Set(inApp));
   const [{ totals, statuses, membershipTypes, paymentStatuses }, app, review, duplicates] = await Promise.all([
-    repo.listStatusCounts(deps.sql, gymId, inAppEntryIds(members)),
+    repo.listStatusCounts(deps.sql, gymId, inApp, [...held.keys()]),
     currentAppWords(deps.sql, deps.invites ?? null, gymId, members, deps.now()),
     repo.reviewSign(deps.sql, gymId),
     repo.duplicatesSign(deps.sql, gymId),
@@ -1432,11 +1440,11 @@ export async function readList(
     version: state?.version ?? 0,
     lastConfirmedAt: state?.lastConfirmedAt?.toISOString() ?? null,
     counts,
-    statuses: chipsOf(statuses),
+    statuses: chipsOf(mine.statuses, statuses),
     // THE GYM'S OTHER TWO KINDS OF WORD (§11.1), from the same statement, so the three
     // sets of chips and the header's numbers cannot be answers asked a moment apart.
-    membershipTypes: chipsOf(membershipTypes),
-    paymentStatuses: chipsOf(paymentStatuses),
+    membershipTypes: chipsOf(mine.membershipTypes, membershipTypes),
+    paymentStatuses: chipsOf(mine.paymentStatuses, paymentStatuses),
     fields: fields.map((field) => ({ key: field.key, label: field.label })),
     appWords: app.counts,
     review,
@@ -1452,11 +1460,16 @@ export async function readList(
  *  a list of 312, which tells staff nothing and invites a click that filters nothing
  *  out. Where a gym really uses the word, the empty group is meaningful ("Gold 40 ·
  *  Student 12 · none 3") and it stays. The counts in the header are taken from the rows
- *  and are untouched by this. */
-const chipsOf = (rows: readonly repo.StatusCountRow[]): { label: string; count: number; inApp: number; canBeInvited: number }[] =>
-  rows.length === 1 && rows[0]?.label === ""
+ *  and are untouched by this.
+ *
+ *  `app` are the chips of the people who hold a membership here, by the app's own words
+ *  (23a-i); `own` the list's, which leave those people out. One set comes back. */
+const chipsOf = (app: readonly WordCount[], own: readonly repo.StatusCountRow[]): { label: string; count: number; inApp: number; canBeInvited: number }[] => {
+  const rows = mergeChips(app, own, MEMBER_LIST_STATUS_CHIPS_MAX);
+  return rows.length === 1 && rows[0]?.label === ""
     ? []
     : rows.map((row) => ({ label: row.label, count: row.count, inApp: row.inApp, canBeInvited: row.canBeInvited }));
+};
 
 /** A search as LIKE reads it. The three characters LIKE gives its own meaning to are
  *  escaped, so a member number of `10%` finds that member and not every member. */
@@ -1502,14 +1515,24 @@ export async function entriesFilter(
     const { choices } = await currentAppWords(deps.sql, settings, gymId, members, deps.now());
     appIds = [...choices].flatMap(([id, mine]) => (mine.some((choice) => asked.has(choice)) ? [id] : []));
   }
+  // A WORD FILTER READS WHAT THE LIST SHOWS (23a-i). Somebody who holds a membership here
+  // is shown the app's own words, so they pass a word filter by those and not by whatever
+  // the gym's file once said: worked out for the whole gym by the one rule, on its own day,
+  // and only when a word filter is asked.
+  const words = { statuses: foldedFilter(query.status), membershipTypes: foldedFilter(query.membershipType), paymentStatuses: foldedFilter(query.paymentStatus) };
+  let held: repo.EntriesFilterInput["held"] = null;
+  if (words.statuses !== null || words.membershipTypes !== null || words.paymentStatuses !== null) {
+    const today = dayInTz(deps.now(), await repo.gymTimeZone(deps.sql, gymId));
+    const shown = await heldOnListOf(deps.sql, gymId, today, null);
+    held = { ids: [...shown.keys()], passing: heldPassing(shown, words) };
+  }
   return {
     members,
     input: {
       gymId,
       inAppEntryIds: records === "current" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),
-      statuses: foldedFilter(query.status),
-      membershipTypes: foldedFilter(query.membershipType),
-      paymentStatuses: foldedFilter(query.paymentStatus),
+      ...words,
+      held,
       // CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5): what every
       // screen means by "the list" is the people on it.
       records,
@@ -1534,7 +1557,7 @@ export async function readEntries(
   query: MemberListEntriesQuery,
   limit: () => Promise<boolean>,
 ): Promise<MemberListEntriesPage | null> {
-  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges, org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const seesStaff = privileges.includes("staff.manage");
 
@@ -1551,7 +1574,14 @@ export async function readEntries(
   const page = await repo.entriesPage(deps.sql, { ...input, cursor, limit: MEMBER_LIST_ENTRIES_PAGE + 1 });
   const shown = page.entries.slice(0, MEMBER_LIST_ENTRIES_PAGE);
   const last = page.entries.length > MEMBER_LIST_ENTRIES_PAGE ? shown[shown.length - 1] : undefined;
-  const [invitations, app] = await Promise.all([
+  const [held, invitations, app] = await Promise.all([
+    // What the memberships these people hold say, for the row's four columns (23a-i).
+    heldOnListOf(
+      deps.sql,
+      gymId,
+      dayInTz(deps.now(), org.timezone),
+      shown.flatMap((entry) => (entry.formerAt === null ? [entry.entryId] : [])),
+    ),
     invites.invitationsOf(
       deps.sql,
       settings,
@@ -1597,6 +1627,7 @@ export async function readEntries(
       endsOnKind: entry.endsOnKind,
       paymentStatus: entry.paymentStatus,
       dateOfBirth: entry.dateOfBirth,
+      held: held.get(entry.entryId)?.shown ?? null,
       formerAt: entry.formerAt?.toISOString() ?? null,
       source: entry.source,
       inApp: entry.inApp,

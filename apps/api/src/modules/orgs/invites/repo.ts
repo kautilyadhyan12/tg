@@ -26,6 +26,9 @@ export interface WordFilters {
   paymentStatuses: readonly string[] | null;
   /** Only these records (the people selected, §18.5), or null for no such limit. */
   entryIds: readonly string[] | null;
+  /** The people whose words the app answers (23a-i) and which of them pass the word
+   *  filters asked, as `entriesPage` reads them; null where no word filter is asked. */
+  held?: { ids: readonly string[]; passing: readonly string[] } | null;
 }
 
 export interface Candidate {
@@ -47,6 +50,8 @@ export async function inviteCandidates(sql: SqlOrTx, gymId: string, filters: Wor
   const membershipTypes = filters.membershipTypes === null ? null : [...filters.membershipTypes];
   const paymentStatuses = filters.paymentStatuses === null ? null : [...filters.paymentStatuses];
   const entryIds = filters.entryIds === null ? null : [...filters.entryIds];
+  const heldIds = [...(filters.held?.ids ?? [])];
+  const heldPassing = [...(filters.held?.passing ?? [])];
   const rows = await sql<
     {
       id: string;
@@ -63,11 +68,15 @@ export async function inviteCandidates(sql: SqlOrTx, gymId: string, filters: Wor
     FROM gym_member_list_entries e
     WHERE e.gym_id = ${gymId}
       AND e.former_at IS NULL
-      AND (${statuses}::text[] IS NULL OR lower(coalesce(e.status, '')) = ANY(${statuses}::text[]))
-      AND (${membershipTypes}::text[] IS NULL
-           OR lower(coalesce(e.membership_type, '')) = ANY(${membershipTypes}::text[]))
-      AND (${paymentStatuses}::text[] IS NULL
-           OR lower(coalesce(e.payment_status, '')) = ANY(${paymentStatuses}::text[]))
+      -- Somebody whose words the app answers passes by the app's words and never by the
+      -- list's own; everybody else by the list's, as before.
+      AND (e.id = ANY(${heldPassing}::uuid[])
+           OR (e.id <> ALL(${heldIds}::uuid[])
+               AND (${statuses}::text[] IS NULL OR lower(coalesce(e.status, '')) = ANY(${statuses}::text[]))
+               AND (${membershipTypes}::text[] IS NULL
+                    OR lower(coalesce(e.membership_type, '')) = ANY(${membershipTypes}::text[]))
+               AND (${paymentStatuses}::text[] IS NULL
+                    OR lower(coalesce(e.payment_status, '')) = ANY(${paymentStatuses}::text[]))))
       AND (${entryIds}::uuid[] IS NULL OR e.id = ANY(${entryIds}::uuid[]))
     ORDER BY e.listed_seq`;
   return rows.map((row) => ({

@@ -60,6 +60,7 @@ import * as repo from "./repo.js";
 import { reviewAfterChecked, reviewAfterEdit, reviewAfterMerge, sameReview } from "./review.js";
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { appOrThrow, type MemberListDeps } from "./service.js";
+import { heldOnListOf, type HeldShown } from "../memberships/onList.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 
 type Sql = MemberListDeps["sql"];
@@ -94,8 +95,12 @@ async function detailOf(
   );
   const ends = appPeopleIn(reached, entry).map((member) => member.userId);
   const { values } = entry;
-  const [visits, app] = await Promise.all([
+  const [visits, held, app] = await Promise.all([
     repo.memberVisits(sql, gymId, [...mine.map((member) => member.userId), ...shared]),
+    // What their memberships here say, as their row on the list says it (23a-i).
+    entry.formerAt === null
+      ? repo.gymTimeZone(sql, gymId).then((zone) => heldOnListOf(sql, gymId, dayInTz(now, zone), [entry.id]))
+      : Promise.resolve(new Map<string, HeldShown>()),
     appViewsOf(
       sql,
       settings,
@@ -118,6 +123,7 @@ async function detailOf(
     endsOnKind: values.endsOnKind,
     paymentStatus: values.paymentStatus,
     dateOfBirth: values.dateOfBirth,
+    held: held.get(entry.id)?.shown ?? null,
     formerAt: entry.formerAt?.toISOString() ?? null,
     source: entry.source,
     inApp: mine.length > 0 || shared.size > 0,
