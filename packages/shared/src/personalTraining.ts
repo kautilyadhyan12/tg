@@ -3,7 +3,7 @@
 // A trainer's hours and session length, the free times worked out from them, and the ONE
 // rule for booking and cancelling a session. Pure: the instant, what is already booked and
 // the person's memberships are passed in, and the server reads them under the gym's lock.
-// The database refuses two overlapping sessions of one trainer by itself (`0077`); this
+// The database refuses two overlapping sessions of one trainer by itself (`0078`); this
 // rule is what answers in words before it has to. A class the trainer coaches takes their
 // time too: it comes off their free times, and a session cannot be booked over it.
 import { z } from "zod";

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { BicepsFlexed, Check, Flag, Flame, Heart, Pin, PinOff, ThumbsUp, Trash2, UserCheck, UserX } from 'lucide-react';
+import { BicepsFlexed, Check, EyeOff, Flag, Flame, Heart, Pin, PinOff, ThumbsUp, Trash2, UserCheck, UserX } from 'lucide-react';
 import { postPhotoUrl, staffPostsService } from '../../api/postsApi';
 import { errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
@@ -7,6 +7,7 @@ import {
   authorInitials,
   authorName,
   canOpenPerson,
+  hiddenStaffNote,
   personLink,
   pinNote,
   postedText,
@@ -113,12 +114,13 @@ function Reactions({ gymId, post }) {
 /** One post. `report`: its entry on the reported list, where it is drawn with why it was
  *  reported and Keep in place of Pin. With `onPin` null (a person's own list) there is no
  *  Pin; with `onPerson` a member's name opens that person's posts. */
-export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words, readOnly, busy, report = null, onPin = null, onRemove, onKeep, onStop, onOpen, onPerson = null }) {
+export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words, readOnly, busy, report = null, reportedRead = false, onPin = null, onRemove, onKeep, onStop, onOpen, onPerson = null }) {
   /** Which box is open: null, 'remove' or 'stop'. */
   const [asking, setAsking] = useState(null);
   const box = removeBox(post, words);
   const stop = stopBox(post.author.name);
   const full = report === null && onPin !== null ? pinNote(post, pinnedCount) : null;
+  const hidden = hiddenStaffNote(post, words, report !== null ? 'list' : reportedRead ? 'later' : null);
   const canStop = post.fromMember && post.authorId !== null;
   const opens = onPerson !== null && canOpenPerson(post);
   const Who = opens ? 'button' : 'div';
@@ -142,6 +144,12 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
             ))}
           </ul>
         </div>
+      ) : null}
+      {hidden !== null ? (
+        <p className="c-s14 c-w6 flex items-start gap-2" style={{ color: 'var(--warn)' }} data-testid="hidden-note">
+          <EyeOff aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>{hidden}</span>
+        </p>
       ) : null}
       <div className="flex items-center gap-3">
         {/* A member's picture and name are one thing to press: both open their posts. */}

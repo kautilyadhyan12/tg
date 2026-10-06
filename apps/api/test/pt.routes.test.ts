@@ -4,7 +4,7 @@
 // The worst thing this job could do to a real person: book two people with one trainer at
 // the same time, so one is turned away, or take a session off somebody's pack for a
 // booking that never happened. Those are the first tests below.
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import type { PtAppointment, PtPeopleResponse, PtTrainersResponse, PtWeekResponse } from "@app/shared";
@@ -44,7 +44,7 @@ const redisUrl = process.env["TEST_REDIS_URL"];
 let seq = 0;
 const uniq = (): string => `${String(Date.now())}${String(seq++)}`;
 
-d("personal training (real Postgres, two api instances)", () => {
+d("personal training (real Postgres, two api instances)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let clock = NOW.getTime();
   let app: App | undefined;
@@ -991,7 +991,8 @@ d("personal training (real Postgres, two api instances)", () => {
     const gym = await makeGym("Limit PT");
     const tom = await listed(gym, "Tom Limit");
     const nobody = await signedIn("Limit Not Staff");
-    const desk = nextIp();
+    // An address no other run has used: the address is counted for an hour too.
+    const desk = `10.78.${String(randomInt(250))}.${String(randomInt(1, 251))}`;
     // Each asks to book with somebody who is not on the staff: counted by the limit, answered 404.
     const statuses: number[] = [];
     for (let done = 0; done < 305; done += 25) {

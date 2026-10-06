@@ -31,6 +31,7 @@ const post = (id, body, over = {}) => ({
   own: false,
   wrote: false,
   reported: false,
+  hidden: false,
   ...over,
 });
 const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', posting: 'off', blockedCount: 0, supportEmail: null, pinned: [], posts: [], next: null, ...over });
@@ -252,6 +253,18 @@ describe('removing one’s own post, and reporting somebody else’s', () => {
         post('seen', 'Already reported', { fromMember: true, reported: true }),
       ],
     });
+
+  it('the member’s own post that is hidden says so, on that post alone, and can still be removed', async () => {
+    const list = three();
+    list.posts[1] = { ...list.posts[1], hidden: true };
+    svc.list.mockResolvedValue(list);
+    render(<Updates gym={GYM} />);
+    await waitFor(() => expect(posts()).toHaveLength(3));
+    expect(within(posts()[1]).getByTestId('hidden-note').textContent).toBe('Hidden from other members while the staff at Iron House check it.');
+    expect(within(posts()[0]).queryByTestId('hidden-note')).toBeNull();
+    expect(within(posts()[2]).queryByTestId('hidden-note')).toBeNull();
+    expect(button(posts()[1], 'Remove')).toBeTruthy();
+  });
 
   it('Remove is on the member’s own post alone, asks first, and removes the post it was pressed on', async () => {
     svc.list.mockResolvedValue(three());
