@@ -357,6 +357,16 @@ export async function classesCoached(
   }));
 }
 
+/** The running time slots this member of staff coaches: the ones whose classes take their
+ *  time, for a booking at the calendar's far edge to write first. */
+export async function coachedSlotIds(sql: SqlOrTx, gymId: string, trainerId: string): Promise<string[]> {
+  const rows = await sql<{ id: string }[]>`
+    SELECT s.id FROM gym_class_schedules s
+    JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
+    WHERE s.gym_id = ${gymId} AND s.coach_user_id = ${trainerId} AND s.ended_at IS NULL AND t.archived_at IS NULL`;
+  return rows.map((r) => r.id);
+}
+
 export interface SessionUnderClass {
   appointmentId: string;
   trainerName: string;

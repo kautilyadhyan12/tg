@@ -20,7 +20,7 @@ import os from "node:os";
 import postgres from "postgres";
 import { addDays } from "@app/shared";
 import { bulkEditSchedules, createClassType, createSchedule } from "../src/modules/orgs/classes/service.js";
-import { saveTrainer } from "../src/modules/orgs/pt/service.js";
+import { book, saveTrainer } from "../src/modules/orgs/pt/service.js";
 import { dayInTz } from "../src/modules/gamification/streak.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -241,6 +241,38 @@ await measure("bulk edit: the same, confirmed", twelveSlots, async ({ type, ids 
     confirmTrainerSessions: bulkMark,
   });
   if (done.kind !== "ok") throw new Error("not saved");
+});
+
+// A BOOKING AT THE CALENDAR'S FAR EDGE writes the trainer's own classes for that day first,
+// in case the nightly job missed it. Sixty time slots every day with that trainer as coach,
+// five minutes each from midnight (outside their hours), and the last three days of the
+// calendar not written: 180 classes to write inside the booking. Beside it, the same
+// booking with the calendar whole, and one in the middle of the window, which writes nothing.
+const edgeType = randomUUID();
+await sql`INSERT INTO gym_class_types (id, gym_id, name, minutes, places, colour) VALUES (${edgeType}, ${gymId}, 'Edge class', 5, 20, 'blue')`;
+await sql`
+  INSERT INTO gym_class_schedules (gym_id, class_type_id, weekdays, local_start_minute, starts_on, minutes, places, coach_user_id)
+  SELECT ${gymId}, ${edgeType}, '{1,2,3,4,5,6,7}'::int[], n * 5, ${today}::date, 5, 20, ${trainer}
+  FROM generate_series(0, 59) AS n`;
+const { fillClassSessions } = await import("../src/modules/orgs/classes/fill.js");
+await fillClassSessions(sql, { gymIds: [gymId] });
+const EDGE = addDays(today, 55);
+const MIDDLE = addDays(today, 20);
+const person = entries[0]?.id;
+if (person === undefined) throw new Error("no person");
+const session = (localDate: string) => ({ requestKey: randomUUID(), trainerId: trainer, entryId: person, localDate, startMinute: 360, minutes: 30 });
+const freeTheTime = async (missedNights: boolean): Promise<void> => {
+  await sql`DELETE FROM gym_pt_appointments WHERE gym_id = ${gymId} AND local_date IN (${EDGE}::date, ${MIDDLE}::date) AND local_start_minute = 360`;
+  if (missedNights) await sql`DELETE FROM gym_class_sessions WHERE gym_id = ${gymId} AND class_type_id = ${edgeType} AND local_date > ${addDays(today, 52)}::date`;
+};
+await measure("a booking in the middle of the window (writes no class)", () => freeTheTime(false), async () => {
+  if ((await book(deps, owner, gymId, session(MIDDLE), yes)) === null) throw new Error("not booked");
+});
+await measure("a booking at the far edge, the calendar whole", () => freeTheTime(false), async () => {
+  if ((await book(deps, owner, gymId, session(EDGE), yes)) === null) throw new Error("not booked");
+});
+await measure("a booking at the far edge, three nights missed: 180 classes written", () => freeTheTime(true), async () => {
+  if ((await book(deps, owner, gymId, session(EDGE), yes)) === null) throw new Error("not booked");
 });
 
 await cleanup();

@@ -80,7 +80,7 @@ const toEnding = (h: repo.HasBookings): ClassBookingsEnding => ({ ...h.ending, p
 export type BookingsAnswer<T> = { kind: "ok"; body: T } | { kind: "bookings"; ending: ClassBookingsEnding };
 
 /** A change that would put a class over personal training sessions booked with its coach
- *  answers with the sessions until the request confirms their number: the route turns
+ *  answers with the sessions until the request confirms their mark: the route turns
  *  that into a 409 `class_over_pt_sessions`, and the screen asks before sending their
  *  mark back as `confirmTrainerSessions` (17e-iii-a). */
 export type SessionsAnswer<T> = { kind: "ok"; body: T } | { kind: "sessions"; sessions: ClassOverSessions };
