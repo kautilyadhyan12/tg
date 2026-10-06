@@ -45,6 +45,7 @@ import { registerLeadRoutes } from "./leads/routes.js";
 import { registerLeaderboardRoutes } from "./leaderboard/routes.js";
 import { registerGymPageRoutes } from "./gymPage/routes.js";
 import { registerPostRoutes } from "./posts/routes.js";
+import { registerEventRoutes } from "./events/routes.js";
 import type { PhotoStore } from "./gymPage/photoStore.js";
 import type { RobotCheck } from "./gymPage/robotCheck.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
@@ -147,6 +148,9 @@ export function registerOrgRoutes(
 
   // The gym's Updates: posts by staff, read by its members (Part 3 §15.2).
   registerPostRoutes(app, { sql: deps.sql, redis: deps.redis, photos: deps.photos, supportEmail: deps.supportEmail, now: overrides.now ?? (() => new Date()) });
+
+  // The gym's events: made by staff, read by its members (Part 3 §15.4).
+  registerEventRoutes(app, { sql: deps.sql, redis: deps.redis, photos: deps.photos, now: overrides.now ?? (() => new Date()) });
 
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).

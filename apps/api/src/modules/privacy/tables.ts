@@ -404,6 +404,9 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // deleted, deleted at Day 14 with its photos by a statement of its own in `repo.ts`,
   // and exported (`exportRepo.ts`, `selectExportMemberPosts`).
   "gym_posts",
+  // gym_events.created_by_user_id — which member of staff made one of the gym's events
+  // (`0078`), on gym_posts' footing: the gym's own announcement; `ON DELETE set null`.
+  "gym_events",
   // gym_membership_word_links.linked_by — which member of staff linked one of the list's
   // membership words to a type (`0073`), on gym_leads' footing: the gym's record;
   // `ON DELETE set null`. Deleted when the gym closes.
