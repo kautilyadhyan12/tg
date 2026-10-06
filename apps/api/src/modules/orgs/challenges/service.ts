@@ -380,14 +380,15 @@ async function staffChallenge(deps: ChallengesDeps, gymId: string, challengeId: 
     repo.joinedCounts(deps.sql, gymId, [challengeId]),
   ]);
   if (row === null || today === null) throw challengeNotFound();
-  return staffGymChallengeSchema.parse({ ...shaped(row, today), joinedCount: row.who === "joined" ? (counts.get(row.id) ?? 0) : null });
+  return staffGymChallengeSchema.parse({ ...shaped(row, today), joinedCount: row.who === "joined" ? (counts.get(row.id) ?? 0) : null, top: [], withNumber: null });
 }
 
 /** The gym's challenges, current and ended, for its staff holding the tick. */
 export async function getStaffChallenges(deps: ChallengesDeps, staffId: string, gymId: string, limit: Limit): Promise<StaffGymChallengesResponse | null> {
   const { org } = await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
-  const gym = await boards.boardGym(deps.sql, gymId, deps.now());
+  const now = deps.now();
+  const gym = await boards.boardGym(deps.sql, gymId, now);
   if (gym === null) throw notFound();
   const [current, past, pastTotal, inApp] = await Promise.all([
     repo.currentChallenges(deps.sql, gymId, gym.today),
@@ -396,7 +397,22 @@ export async function getStaffChallenges(deps: ChallengesDeps, staffId: string, 
     repo.inAppCount(deps.sql, gymId),
   ]);
   const counts = await repo.joinedCounts(deps.sql, gymId, [...current, ...past].filter((row) => row.who === "joined").map((row) => row.id));
-  const sent = (row: repo.ChallengeRow): StaffGymChallenge => ({ ...shaped(row, gym.today), joinedCount: row.who === "joined" ? (counts.get(row.id) ?? 0) : null });
+  // The card of a challenge that has not ended carries its first three and how many have a
+  // number: one read for all of them (six at most).
+  const counted = current.length === 0 ? null : await countFor(deps, { gymId, gym, at: now.toISOString() }, current, null);
+  const leading = (row: repo.ChallengeRow): Pick<StaffGymChallenge, "top" | "withNumber"> => {
+    if (counted === null || row.cancelled || challengeState(row, gym.today) === "coming") return { top: [], withNumber: null };
+    const entrants = entrantsOf(row, counted);
+    // Placed as members see them (nobody hidden), under the full name staff read.
+    const named = entrants.map((e) => {
+      const full = fullName(counted.members.get(e.userId)?.facts ?? { displayName: "", email: null, recordName: null });
+      return { ...e, shown: e.hidden === null && full.name !== null ? { name: full.name, initials: full.initials } : null };
+    });
+    const places = placeEntrants(named, "", GYM_CHALLENGE_PODIUM, row.target);
+    return { top: places.top.map((p) => ({ userId: p.userId, name: p.name, initials: p.initials, place: p.place, value: turned(row, p.value) })), withNumber: entrants.length };
+  };
+  const sent = (row: repo.ChallengeRow): StaffGymChallenge => ({ ...shaped(row, gym.today), joinedCount: row.who === "joined" ? (counts.get(row.id) ?? 0) : null, top: [], withNumber: null });
+  const sentCurrent = (row: repo.ChallengeRow): StaffGymChallenge => ({ ...sent(row), ...leading(row) });
   return staffGymChallengesResponseSchema.parse({
     gymId,
     gymName: org.name,
@@ -404,7 +420,7 @@ export async function getStaffChallenges(deps: ChallengesDeps, staffId: string, 
     today: gym.today,
     checkingIn: gym.checkingIn,
     inApp,
-    current: inOrder(current, gym.today).map(sent),
+    current: inOrder(current, gym.today).map(sentCurrent),
     past: past.map(sent),
     pastTotal,
   });

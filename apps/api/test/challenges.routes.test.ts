@@ -371,6 +371,12 @@ d("a gym's challenges (real Postgres)", () => {
         [["hide_me", null, 7], ["no_name", null, 7], ["taken_off", null, 7], ["under_18", null, 7], ["under_18", null, 7]].sort(),
       );
       for (const g of gone) expect(JSON.stringify(staff)).not.toContain(g.userId);
+      // Staff's card: the first three as members see them placed, by full name; nobody
+      // hidden among them, though the hidden are in how many have a number.
+      const card = (await staffList(gym)).current.find((x) => x.id === joiners.id);
+      expect(places(card?.top ?? [])).toEqual([["Asha Rao", 1, 3], ["Bilal Khan", 2, 2], ["Chen Wu", 2, 2]]);
+      expect(card?.withNumber).toBe(9);
+      for (const h of [...hidden, ...gone]) expect(JSON.stringify(card?.top)).not.toContain(h.userId);
     },
     T,
   );
@@ -530,6 +536,9 @@ d("a gym's challenges (real Postgres)", () => {
       const staff = await staffBoard(gym, c.id);
       expect(places(staff.rows)).toEqual([["Asha Rao", null, 2], ["Vera Viewer", null, 1]]);
       expect([staff.memberStatus, staff.ranked, staff.reached]).toEqual(["too_few", 0, 2]);
+      // Two people: the card names nobody, and says two have a number.
+      const card = (await staffList(gym)).current[0];
+      expect([card?.top, card?.withNumber]).toEqual([[], 2]);
     },
     T,
   );
@@ -764,6 +773,8 @@ d("a gym's challenges (real Postgres)", () => {
         cancelled: false,
         state: "running",
         joinedCount: 0,
+        top: [],
+        withNumber: null,
       });
       expect((await staffList(gym)).current).toHaveLength(1);
       expect(await audits(gym.id, "org.challenge_added")).toBe(1);
@@ -993,6 +1004,8 @@ d("a gym's challenges (real Postgres)", () => {
       expect(mine.me).toEqual({ value: 130, place: 4, hidden: null, toNextPlace: 20, nextPlace: 2, reached: false, days: [] });
       expect(places((await boardOf(gym, vera, c.id)).rows)).toEqual([["Asha R.", 1, 95], ["Bilal K.", 2, 110], ["Chen W.", 2, 110], ["Vera V.", 4, 130]]);
       expect(places((await staffBoard(gym, c.id)).rows)).toEqual([["Asha Rao", 1, 95], ["Bilal Khan", 2, 110], ["Chen Wu", 2, 110], ["Vera Viewer", 4, 130]]);
+      const card = (await staffList(gym)).current.find((x) => x.id === c.id);
+      expect([places(card?.top ?? []), card?.withNumber]).toEqual([[["Asha Rao", 1, 95], ["Bilal Khan", 2, 110], ["Chen Wu", 2, 110]], 4]);
 
       const refusedAdd = async (over: Record<string, unknown>) => (await inject("POST", base(gym.id), gym.owner.cookies, fields(over))).statusCode;
       expect(await refusedAdd({ lowestWins: true })).toBe(400); // the app's counts are never lowest-wins

@@ -20,11 +20,13 @@ import {
   challengeTag,
   datesLine,
   dayAfter,
+  daysBar,
   detailsLine,
   draftOf,
   emptyBoard,
   fieldsOf,
   isLocked,
+  leadersLine,
   newChallengeDraft,
   notCheckingInNote,
   numbersToSave,
@@ -38,6 +40,7 @@ import {
   whoChoices,
   winChoices,
   withCounts,
+  withNumberLine,
   withStartDay,
 } from './challengesView';
 import { nameOf } from './leaderboardStaffView';
@@ -402,6 +405,10 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
   const tag = challengeTag(challenge, list.today);
   const past = challenge.state === 'ended';
   const box = asking ? cancelBox(challenge, words) : null;
+  const bar = daysBar(challenge, list.today);
+  const numbered = withNumberLine(challenge);
+  const leaders = leadersLine(challenge, words);
+  const top = challenge.top ?? [];
   return (
     <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid="challenge">
       <div className="flex flex-col gap-3 min-w-0">
@@ -431,6 +438,36 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
             </div>
           ))}
         </dl>
+        {bar !== null ? (
+          <div className="flex flex-col gap-1.5" data-testid="challenge-days">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5">
+              <span className="c-s13 c-w6 c-t1">{bar.text}</span>
+              {numbered !== null ? <span className="c-s13 c-t2">{numbered}</span> : null}
+            </div>
+            <div className="c-bar" role="progressbar" aria-label={bar.text} aria-valuemin={0} aria-valuemax={100} aria-valuenow={bar.percent}>
+              <div className="c-bar-fill" style={{ width: `${bar.percent}%` }} />
+            </div>
+          </div>
+        ) : null}
+        {leaders !== null ? (
+          <div className="flex flex-col gap-2">
+            <span className={top.length > 0 ? 'c-s13 c-w6 c-t1' : 'c-s13 c-t2'}>{leaders}</span>
+            {top.length > 0 ? (
+              <ol className="grid grid-cols-1 sm:grid-cols-3 gap-2.5" aria-label={`In the lead: ${challenge.name}`}>
+                {top.map((person) => (
+                  <li key={person.userId} className={`c-podium ${person.place === 1 ? 'c-podium-1' : ''}`}>
+                    <span className={`flex items-center gap-1 c-s13 c-w7 flex-shrink-0 c-medal-${Math.min(person.place, 3)}`}>
+                      <Medal aria-hidden="true" className="w-[18px] h-[18px]" />
+                      {ordinal(person.place)}
+                    </span>
+                    <span className="c-s14 c-w6 c-t1 c-ell flex-grow">{person.name}</span>
+                    <span className="c-s16 c-w7 c-num c-t1 flex-shrink-0">{person.value.toLocaleString('en')}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </div>
+        ) : null}
         {challenge.prize !== '' ? (
           <p className="c-s14 c-t2 flex items-start gap-2">
             <Gift aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3 mt-0.5" />

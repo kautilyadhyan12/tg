@@ -13,12 +13,14 @@ import {
   challengeProblem,
   challengeTag,
   datesLine,
+  daysBar,
   detailsLine,
   draftDays,
   draftOf,
   emptyBoard,
   fieldsOf,
   isLocked,
+  leadersLine,
   newChallengeDraft,
   notCheckingInNote,
   numbersToSave,
@@ -35,6 +37,7 @@ import {
   whoText,
   winChoices,
   withCounts,
+  withNumberLine,
   withStartDay,
 } from './challengesView';
 
@@ -292,6 +295,24 @@ describe('a challenge on the page', () => {
     expect(whoText(challenge({ who: 'joined', joinedCount: 0 }), 143, WORDS)).toBe('Only members who join · nobody has joined yet');
     expect(whoText(challenge({ who: 'joined', joinedCount: 1 }), 143, WORDS)).toBe('Only members who join · 1 person has joined');
     expect(whoText(challenge({ who: 'joined', joinedCount: 24 }), 143, WORDS)).toBe('Only members who join · 24 people have joined');
+  });
+
+  it('says how far through its days it is', () => {
+    expect(daysBar(challenge(), TODAY)).toEqual({ percent: 43, text: 'Day 3 of 7' });
+    expect(daysBar(challenge({ startsOn: TODAY, endsOn: TODAY }), TODAY)).toEqual({ percent: 100, text: 'Day 1 of 1' });
+    expect(daysBar(challenge({ state: 'ended', endsOn: '2026-10-06' }), TODAY)).toEqual({ percent: 100, text: 'All 2 days done' });
+    expect([daysBar(challenge({ state: 'coming', startsOn: '2026-10-12' }), TODAY), daysBar(challenge({ cancelled: true }), TODAY)]).toEqual([null, null]);
+  });
+
+  it('says how many have a number, and why there are no first three', () => {
+    expect(withNumberLine(challenge({ withNumber: 12 }))).toBe('12 people have a gym day');
+    expect(withNumberLine(challenge({ withNumber: 1, counts: 'workout_days' }))).toBe('1 person has a workout day');
+    expect(withNumberLine(challenge({ withNumber: 0, counts: 'own', unit: 'push-ups' }))).toBe('Nobody has a number yet');
+    expect([withNumberLine(challenge({ withNumber: null })), withNumberLine(challenge())]).toEqual([null, null]);
+    const top = [{ userId: 'a', name: 'Asha Rao', initials: 'AR', place: 1, value: 3 }];
+    expect(leadersLine(challenge({ withNumber: 5, top }), WORDS)).toBe('In the lead');
+    expect(leadersLine(challenge({ withNumber: 2, top: [] }), WORDS)).toBe('Members see no places until 3 people they can see have a gym day.');
+    expect([leadersLine(challenge({ withNumber: 0, top: [] }), WORDS), leadersLine(challenge({ withNumber: null, top: [] }), WORDS)]).toEqual([null, null]);
   });
 
   it('names the board button for what it opens', () => {

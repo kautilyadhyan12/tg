@@ -106,7 +106,17 @@ describe("the console's Challenges page", () => {
   it('draws each challenge: its tag, days, how it is won, who is in it and its prize', async () => {
     svc.list.mockResolvedValue(
       listOf([
-        challenge('a', 'October Week', { target: 5, prize: 'A shaker', details: 'Any five days.' }),
+        challenge('a', 'October Week', {
+          target: 5,
+          prize: 'A shaker',
+          details: 'Any five days.',
+          withNumber: 12,
+          top: [
+            { userId: 'u1', name: 'Priya Sharma', initials: 'PS', place: 1, value: 3 },
+            { userId: 'u2', name: 'Neha Kapoor', initials: 'NK', place: 2, value: 2 },
+            { userId: 'u3', name: 'Arjun Mehta', initials: 'AM', place: 2, value: 2 },
+          ],
+        }),
         challenge('b', 'Next Week', { state: 'coming', startsOn: '2026-10-12', endsOn: '2026-10-18', who: 'joined', joinedCount: 24, counts: 'workout_days' }),
       ]),
     );
@@ -119,7 +129,16 @@ describe("the console's Challenges page", () => {
     expect(within(a.getByTestId('challenge-facts')).getAllByRole('definition').map((d) => d.textContent)).toEqual(['Gym days', 'Counted by the app', 'Reach 5', 'Everybody who gets there', 'Everyone in the app · 143']);
     expect(a.getByText('Prize: A shaker')).toBeTruthy();
     expect(a.getByText('Any five days.')).toBeTruthy();
+    // How far through it is, how many have a number, and the first three with their places.
+    const days = within(a.getByTestId('challenge-days'));
+    expect(days.getByText('Day 3 of 7')).toBeTruthy();
+    expect(days.getByText('12 people have a gym day')).toBeTruthy();
+    expect(days.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('43');
+    expect(within(a.getByRole('list', { name: 'In the lead: October Week' })).getAllByRole('listitem').map((li) => li.textContent.replace(/\s+/g, ' ').trim())).toEqual(['1stPriya Sharma3', '2ndNeha Kapoor2', '2ndArjun Mehta2']);
     const b = within(cardOf('Next Week'));
+    // Not started: no bar and nobody in the lead.
+    expect(b.queryByTestId('challenge-days')).toBeNull();
+    expect(b.queryByRole('list', { name: /In the lead/ })).toBeNull();
     expect(b.getByText('Starts in 5 days')).toBeTruthy();
     expect(within(b.getByTestId('challenge-facts')).getAllByRole('definition').map((d) => d.textContent)).toEqual(['Workout days', 'Counted by the app', 'Most wins', 'First place', 'Members who join · 24']);
     expect(b.getByRole('button', { name: 'See who has joined: Next Week' })).toBeTruthy();

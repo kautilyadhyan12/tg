@@ -331,6 +331,13 @@ export const staffGymChallengeSchema = challengeSchema
   .extend({
     /** Everyone who has joined and is in the app here now; null for everyone's challenge. */
     joinedCount: z.number().int().min(0).nullable(),
+    /** The first three as MEMBERS see them placed, by full name; empty while members see
+     *  no places, and on a list that does not carry them (an ended challenge's). */
+    top: z
+      .array(z.object({ userId: z.string().uuid(), name: z.string(), initials: z.string(), place: z.number().int().min(1), value: z.number().int().min(1) }).strict())
+      .max(GYM_CHALLENGE_PODIUM),
+    /** People with a number in it, the hidden included; null where it was not counted. */
+    withNumber: z.number().int().min(0).nullable(),
   })
   .strict();
 export type StaffGymChallenge = z.infer<typeof staffGymChallengeSchema>;

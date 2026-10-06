@@ -241,6 +241,34 @@ export function cardFacts(challenge, inApp, words) {
   ];
 }
 
+/** How far through its days a challenge is: "Day 2 of 7" and the bar's fill; null before
+ *  it starts and for a cancelled one. An ended one is full. */
+export function daysBar(challenge, today) {
+  if (challenge.cancelled || challenge.state === 'coming') return null;
+  const days = dayNumber(challenge.endsOn) - dayNumber(challenge.startsOn) + 1;
+  if (challenge.state === 'ended') return { percent: 100, text: `All ${plural(days, 'day')} done` };
+  const day = dayNumber(today) - dayNumber(challenge.startsOn) + 1;
+  return { percent: Math.round((day / days) * 100), text: `Day ${count(day)} of ${count(days)}` };
+}
+
+/** How many people have a number so far, in the challenge's own words; null where the
+ *  card was not sent it. */
+export function withNumberLine(challenge) {
+  if (challenge.withNumber === null || challenge.withNumber === undefined) return null;
+  const what = isOwn(challenge) ? 'a number' : `a ${UNIT[challenge.counts]}`;
+  if (challenge.withNumber === 0) return `Nobody has ${what} yet`;
+  return `${peopleCount(challenge.withNumber)} ${challenge.withNumber === 1 ? 'has' : 'have'} ${what}`;
+}
+
+/** Above the first three on a card, or why there are none to show. Null where the card
+ *  was not sent them. */
+export function leadersLine(challenge, words) {
+  if (challenge.withNumber === null || challenge.withNumber === undefined) return null;
+  if ((challenge.top ?? []).length > 0) return 'In the lead';
+  if (challenge.withNumber === 0) return null;
+  return `${words.peopleCap} see no places until 3 people they can see have ${isOwn(challenge) ? 'a number' : `a ${UNIT[challenge.counts]}`}.`;
+}
+
 /** Whether staff type this challenge's numbers now: the gym's own count, started, not cancelled. */
 export function takesNumbers(challenge) {
   return isOwn(challenge) && !challenge.cancelled && challenge.state !== 'coming';
