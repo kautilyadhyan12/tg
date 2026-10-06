@@ -14,11 +14,13 @@ import {
   classOptions,
   draftBody,
   draftFromType,
+  draftIncludesPt,
   draftProblems,
   emptyDraft,
   firstProblem,
   includesLine,
   kindTag,
+  packForPtOnly,
   priceExample,
   termLine,
   termUnitOptions,
@@ -255,7 +257,7 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
         ) : null}
       </Part>
 
-      {hasTerm || picksClasses ? (
+      {hasTerm || picksClasses || choice === 'pack' ? (
         <Part title="What it includes">
           {hasTerm ? (
             <Field id={id('access')} label="Classes">
@@ -297,6 +299,7 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
               <select id={id('scope')} aria-invalid={problems?.classes ? 'true' : undefined} value={draft.classScope} onChange={text('classScope')} className={inputClass} style={inputStyle}>
                 <option value="all">Every class</option>
                 <option value="some">Only the classes I tick</option>
+                {choice === 'pack' ? <option value="none">No classes: personal training only</option> : null}
               </select>
               {draft.classScope === 'some' ? (
                 <div className="flex flex-col mt-1">
@@ -314,6 +317,26 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
                 </div>
               ) : null}
             </Field>
+          ) : null}
+
+          {choice !== 'day_pass' ? (
+            <label className="flex items-start gap-3 min-h-11 text-sm" style={{ color: '#fff' }}>
+              <input
+                type="checkbox"
+                className="w-5 h-5 mt-0.5 flex-shrink-0"
+                checked={draftIncludesPt(draft)}
+                disabled={packForPtOnly(draft)}
+                onChange={(event) => set({ includesPt: event.target.checked })}
+              />
+              <span className="flex flex-col gap-0.5">
+                <span>Includes personal training</span>
+                <span style={{ color: 'rgba(255,255,255,0.6)' }}>
+                  {choice === 'pack'
+                    ? 'Each session booked with a trainer uses one from the pack.'
+                    : 'Sessions with a trainer can be booked on this membership, with no limit.'}
+                </span>
+              </span>
+            </label>
           ) : null}
         </Part>
       ) : null}

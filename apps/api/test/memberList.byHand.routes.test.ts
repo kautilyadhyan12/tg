@@ -1121,7 +1121,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // (`db.migration.test.ts`).
       "gym_class_bookings.entry_id",
       "gym_class_bookings.gym_id",
-      // A place at an event (0079): the app account's, as a class booking is; the join moves
+      // A place at an event (0080): the app account's, as a class booking is; the join moves
       // it to the kept record (driven in `events.coming.routes.test.ts`) and a deleted
       // record lets it go (`db.migration.test.ts`).
       "gym_event_places.entry_id",
@@ -1142,6 +1142,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
       "gym_members.gym_id",
       // The record a membership was removed with (0048): moved by a merge with the rest.
       "gym_members.removed_entry_id",
+      // A personal-training session (0079): moved by the join (`pt.routes.test.ts`); a
+      // deleted record lets it go.
+      "gym_pt_appointments.entry_id",
+      "gym_pt_appointments.gym_id",
     ]);
   });
 });

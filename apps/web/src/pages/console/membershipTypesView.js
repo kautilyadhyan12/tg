@@ -79,7 +79,8 @@ export function termLine(type) {
   const choice = kindChoice(type);
   if (choice === 'day_pass') return `${price} · 1 visit, on the day`;
   if (choice === 'pack') {
-    return `${price} · ${plural(type.packClasses, 'class', 'classes')}, used within ${plural(type.packDays, 'day', 'days')}`;
+    const holds = ptOnly(type) ? plural(type.packClasses, 'session', 'sessions') : plural(type.packClasses, 'class', 'classes');
+    return `${price} · ${holds}, used within ${plural(type.packDays, 'day', 'days')}`;
   }
   const [one, many] = unitWords(type.termUnit);
   if (choice === 'recurring') {
@@ -90,8 +91,22 @@ export function termLine(type) {
   return choice === 'one_time' ? `${price} once · ${lasts}` : `${price} · ${lasts}`;
 }
 
-/** What it includes: "Unlimited classes", "8 classes a month · only Yoga", "No classes, gym only". */
+/** A membership for personal training alone: no class ticked, and the tick for it. */
+function ptOnly(type) {
+  return type.includesPt === true && Array.isArray(type.classTypes) && type.classTypes.length === 0;
+}
+
+const PT_WORDS = 'Personal training';
+
+/** What it includes: "Unlimited classes", "8 classes a month · only Yoga", "No classes, gym
+ *  only", each with "· Personal training" where the type includes it. */
 export function includesLine(type) {
+  if (ptOnly(type)) return `${PT_WORDS} only`;
+  const classes = classesLine(type);
+  return type.includesPt === true ? `${classes} · ${PT_WORDS}` : classes;
+}
+
+function classesLine(type) {
   if (type.access === 'gym_only') return 'No classes, gym only';
   const limited = type.access === 'limited';
   const amount = limited
@@ -146,6 +161,7 @@ export function emptyDraft() {
     bookingsPeriod: 'month',
     classScope: 'all',
     classIds: [],
+    includesPt: false,
   };
 }
 
@@ -168,8 +184,9 @@ export function draftFromType(type) {
     access: type.access,
     bookingsLimit: type.bookingsLimit === null ? base.bookingsLimit : String(type.bookingsLimit),
     bookingsPeriod: type.bookingsPeriod ?? base.bookingsPeriod,
-    classScope: type.classTypes === null ? 'all' : 'some',
+    classScope: type.classTypes === null ? 'all' : ptOnly(type) && choice === 'pack' ? 'none' : 'some',
     classIds: type.classTypes === null ? [] : type.classTypes.map((c) => c.id),
+    includesPt: type.includesPt === true,
   };
 }
 
@@ -269,6 +286,17 @@ function coversSomeClasses(draft) {
   return !gymOnly && draft.classScope === 'some';
 }
 
+/** A class pack set to "No classes: personal training only". */
+export function packForPtOnly(draft) {
+  return draft.choice === 'pack' && draft.classScope === 'none';
+}
+
+/** Whether the type includes personal training: the tick, or a pack for nothing else. A
+ *  day pass is one visit and never does. */
+export function draftIncludesPt(draft) {
+  return draft.choice !== 'day_pass' && (draft.includesPt === true || packForPtOnly(draft));
+}
+
 /** The request the form sends: every field every time. Call only when `draftProblems`
  *  is null. */
 export function draftBody(draft, currency) {
@@ -286,7 +314,8 @@ export function draftBody(draft, currency) {
     access,
     bookingsLimit: access === 'limited' ? wholeNumber(draft.bookingsLimit, 1, MEMBERSHIP_BOOKINGS_LIMIT_MAX) : null,
     bookingsPeriod: access === 'limited' ? draft.bookingsPeriod : null,
-    classTypeIds: coversSomeClasses(draft) ? [...draft.classIds] : null,
+    classTypeIds: packForPtOnly(draft) ? [] : coversSomeClasses(draft) ? [...draft.classIds] : null,
+    includesPt: draftIncludesPt(draft),
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
   };
@@ -295,5 +324,8 @@ export function draftBody(draft, currency) {
 /** The form after its kind changes: a repeating type cannot be charged by the day. */
 export function withChoice(draft, choice) {
   const termUnit = choice === 'recurring' && draft.termUnit === 'day' ? 'month' : draft.termUnit;
-  return { ...draft, choice, termUnit };
+  // "No classes: personal training only" is a pack's choice; another kind says it with
+  // "No classes, gym only" and the tick.
+  const classScope = choice !== 'pack' && draft.classScope === 'none' ? 'all' : draft.classScope;
+  return { ...draft, choice, termUnit, classScope };
 }

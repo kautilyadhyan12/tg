@@ -169,6 +169,7 @@ describe('the form', () => {
       bookingsLimit: null,
       bookingsPeriod: null,
       classTypeIds: null,
+      includesPt: false,
     });
     expect(draftBody(named({ description: '  All classes and open gym  ' }), 'USD').description).toBe('All classes and open gym');
     expect(draftBody(named({ choice: 'pack' }), 'USD')).toMatchObject({ kind: 'pack', packClasses: 10, packDays: 60, termCount: null, termUnit: null, access: 'all_classes' });
@@ -253,12 +254,41 @@ describe('the form', () => {
       bookingsLimit: 3,
       bookingsPeriod: 'week',
       classTypeIds: [YOGA.id],
+      includesPt: false,
       // A change carries the stamp the list gave; a new type has none.
       updatedAt: '2026-10-04T09:00:00.000Z',
     });
     expect('updatedAt' in draftBody(named(), 'USD')).toBe(false);
     expect(draftFromType(packType({ packClasses: 1, packDays: 1 })).choice).toBe('day_pass');
     expect(draftBody(draftFromType(packType({ packClasses: 5, packDays: 30 })), 'USD')).toMatchObject({ kind: 'pack', packClasses: 5, packDays: 30 });
+  });
+
+  it('personal training: the tick is sent, a pack can be for nothing else, and a day pass never has it', () => {
+    // Off unless ticked; ticked, it rides with whatever classes the type has.
+    expect(draftBody(named({ includesPt: true }), 'USD')).toMatchObject({ includesPt: true, classTypeIds: null });
+    expect(draftBody(named({ access: 'gym_only', includesPt: true }), 'USD')).toMatchObject({ access: 'gym_only', includesPt: true, classTypeIds: null });
+    // "No classes: personal training only" on a pack: no class, and the tick whatever the box says.
+    const ptPack = named({ choice: 'pack', classScope: 'none', includesPt: false });
+    expect(draftBody(ptPack, 'USD')).toMatchObject({ kind: 'pack', classTypeIds: [], includesPt: true });
+    expect(draftProblems(ptPack, 'USD')).toBeNull();
+    expect(valid(draftBody(ptPack, 'USD'))).toBe(true);
+    expect(valid(draftBody(named({ includesPt: true }), 'USD'))).toBe(true);
+    // A day pass is one visit.
+    expect(draftBody(named({ choice: 'day_pass', includesPt: true }), 'USD').includesPt).toBe(false);
+    // Changing a personal-training pack into another kind leaves "every class", not a hidden "none".
+    expect(withChoice(ptPack, 'recurring').classScope).toBe('all');
+    expect(withChoice(ptPack, 'pack').classScope).toBe('none');
+
+    // A saved one opens as it was saved, and reads in a gym's words.
+    const saved = packType({ packClasses: 10, packDays: 90, classTypes: [], includesPt: true });
+    expect(draftFromType(saved)).toMatchObject({ choice: 'pack', classScope: 'none', includesPt: true });
+    expect(draftBody(draftFromType(saved), 'USD')).toMatchObject({ classTypeIds: [], includesPt: true });
+    expect(includesLine(saved)).toBe('Personal training only');
+    expect(termLine(saved)).toContain('10 sessions, used within 90 days');
+    expect(includesLine(type({ includesPt: true }))).toBe('Unlimited classes · Personal training');
+    expect(includesLine(type({ access: 'gym_only', includesPt: true }))).toBe('No classes, gym only · Personal training');
+    expect(includesLine(type({ includesPt: false }))).toBe('Unlimited classes');
+    expect(includesLine(packType({ includesPt: true }))).toBe('Any class · Personal training');
   });
 
   it('offers the live classes, and keeps one the type already covers', () => {

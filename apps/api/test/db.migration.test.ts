@@ -1769,14 +1769,14 @@ d("0001_init on a real database", () => {
       });
   });
 
-  it("0079's places: one place a person an event at a time, only this gym's event and record, and a place goes with its event", async () => {
+  it("0080's places: one place a person an event at a time, only this gym's event and record, and a place goes with its event", async () => {
     await sql
       .begin(async (tx) => {
-        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0079-owner') RETURNING id`;
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0080-owner') RETURNING id`;
         if (user === undefined) throw new Error("no user");
         const gymOf = async (slug: string) => {
           const [gym] = await tx<{ id: string }[]>`
-            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0079', 'Europe/London', ${user.id}) RETURNING id`;
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0080', 'Europe/London', ${user.id}) RETURNING id`;
           if (gym === undefined) throw new Error("no gym");
           const [entry] = await tx<{ id: string }[]>`
             INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
@@ -1788,8 +1788,8 @@ d("0001_init on a real database", () => {
           if (entry === undefined || event === undefined) throw new Error("no fixture");
           return { gym: gym.id, entry: entry.id, event: event.id };
         };
-        const a = await gymOf("zz-0079-a");
-        const b = await gymOf("zz-0079-b");
+        const a = await gymOf("zz-0080-a");
+        const b = await gymOf("zz-0080-b");
 
         const at = "2026-10-07T09:00:00Z";
         const row = (over: Record<string, unknown> = {}) => ({
@@ -1843,10 +1843,10 @@ d("0001_init on a real database", () => {
         await tx`DELETE FROM gym_events WHERE id = ${a.event}`;
         const [gone] = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_event_places WHERE gym_id = ${a.gym}`;
         expect(gone?.n).toBe(0);
-        throw new Error("ROLLBACK-0079-FIXTURE");
+        throw new Error("ROLLBACK-0080-PLACES-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0079-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0080-PLACES-FIXTURE") return;
         throw err;
       });
   });

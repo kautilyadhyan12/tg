@@ -39,6 +39,8 @@ function openableToday(privileges) {
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
     ...(has('schedule.manage') ? [`${BASE}/classes`] : []),
+    // Personal training (17e-i) is every member of staff's: their own hours and sessions.
+    `${BASE}/personal-training`,
     ...(has('posts.manage') ? [`${BASE}/updates`, `${BASE}/events`] : []),
     ...(has('leaderboard.manage') ? [`${BASE}/leaderboard`] : []),
     // Settings also holds Class bookings since 17c-ii-a, on `schedule.manage`.

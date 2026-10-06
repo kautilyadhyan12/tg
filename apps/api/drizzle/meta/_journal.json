@@ -551,8 +551,15 @@
     {
       "idx": 78,
       "version": "7",
-      "when": 1788307200063,
-      "tag": "0079_gym_event_places",
+      "when": 1788220800063,
+      "tag": "0079_personal_training",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1788307200064,
+      "tag": "0080_gym_event_places",
       "breakpoints": true
     }
   ]

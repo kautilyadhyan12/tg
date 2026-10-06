@@ -236,7 +236,7 @@ export const gymEvents = pgTable(
   ],
 );
 
-/** One person's place at one event (`0079_gym_event_places.sql`, which is the record; spec
+/** One person's place at one event (`0080_gym_event_places.sql`, which is the record; spec
  *  Part 3 §15.4). The migration also holds `(gym_id, entry_id)` → the record, ON DELETE
  *  SET NULL (entry_id). `seq` is the waitlist's order. On `gym_class_bookings`' footing in
  *  `USER_LINKED_NOT_PURGED_TABLES`. */

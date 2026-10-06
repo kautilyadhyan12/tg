@@ -1046,6 +1046,16 @@ export async function requireWritablePrivilege(
   return authorised;
 }
 
+/** The read-only half of `requireWritablePrivilege`, for a write no tick gates: a member
+ *  of staff changing their own personal-training hours (17e-i). The caller has already
+ *  answered a stranger's 404. */
+export async function requireWritableGym(deps: Pick<OrgsDeps, "sql">, org: repo.OrgRow): Promise<void> {
+  if (!(await repo.gymHasLivePlan(deps.sql, org.id))) {
+    throw new OrgsError(409, "gym_not_on_plan", notOnPlanMessage(org.orgType));
+  }
+  if (org.status !== "active") throw new OrgsError(409, "org_archived", archivedMessage(org.orgType));
+}
+
 /** START THE GYM'S OWN FREE TRIAL.
  *
  *  **KD RULING 2026-08-27, reversing :11072 ruling 1: a gym starts its own trial,

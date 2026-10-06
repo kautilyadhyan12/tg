@@ -47,6 +47,7 @@ import ConsoleMembersReview from './pages/console/MembersReview';
 import ConsoleMembersDuplicates from './pages/console/MembersDuplicates';
 import ConsoleAttendance from './pages/console/Attendance';
 import ConsoleClasses  from './pages/console/Classes';
+import ConsolePersonalTraining from './pages/console/PersonalTraining';
 import ConsoleLeads    from './pages/console/Leads';
 import ConsoleLeaderboard from './pages/console/Leaderboard';
 import ConsoleUpdates  from './pages/console/Updates';
@@ -279,6 +280,14 @@ export default function App() {
             <Route path="/console/:orgSlug/classes" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleClasses /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* PERSONAL TRAINING (Part 3 §13.5, ROADMAP 17e-i): every member of staff has
+                the page, for their own hours and sessions; the server decides whose
+                they may see. */}
+            <Route path="/console/:orgSlug/personal-training" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsolePersonalTraining /></ConsoleLayout>
               </ProtectedRoute>
             } />
             {/* THE LEADERBOARD FOR STAFF (19a-iii). The nav draws it for `leaderboard.manage`;

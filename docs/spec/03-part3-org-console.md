@@ -2619,6 +2619,51 @@ one trainer (an exclusion constraint on the range) — the structural rule, befo
 check in code. A member picks a free time, is booked at once, and the trainer is told;
 the same free-cancel time applies; PT packs are a pack type that covers personal
 training. A trainer keeps their own hours.
+*(17e-i, 2026-10-06: **the staff side.** `gym_trainers` (offers, session length),
+`gym_trainer_hours` (ISO weekday, minutes from midnight on the gym's clock, three ranges a
+day at most, none overlapping) and `gym_pt_appointments`, whose EXCLUDE constraint on
+`(gym_id, trainer_user_id, tstzrange(starts_at, ends_at))` over the statuses that hold
+time is the structural rule (`btree_gist`, migration `0079`). The rule in words is
+`decidePtBook`, `decidePtCancel` and `pickPtCover` in `packages/shared/src/personalTraining.ts`,
+decided under the gym's lock. A session is held by the person's RECORD, so somebody
+without the app can be booked; it keeps its request's key, so the same request again
+changes nothing. Free times are each range of hours cut into sessions from its start,
+less what is booked and what has started; a time the gym's clock skips is never offered.
+**What pays:** a membership type has `includes_pt`; "every class" does not include it. A
+membership that includes it pays first and is not charged; else a pack, the one ending
+soonest, is charged one; a class limit a week or a month does not count sessions; a gym
+with no membership types books anybody on its list. **Cancel** is free until the gym's
+free-cancel time (the one classes use) and gives a pack its session back; after it the
+request says which: a late cancel that keeps the session used, or `giveBack`. **Who:**
+`schedule.manage` sees and changes every trainer; anybody else on staff has their own
+hours and sessions; booking also needs `members.confirm`, since it picks a person from
+the member list. The console's Personal training page (`/console/:slug/personal-training`)
+is in every member of staff's menu. **From Kd's click-through (RULINGS 2026-10-06):** a
+session is any length from 10 to 240 minutes on a five-minute mark; whoever runs the
+timetable sees a Trainers list and Add a trainer, never themselves as a trainer they are
+not; a free time is a button reading its whole session; the booking box lists the member
+list at once (`GET …/pt/people`, `members.confirm`: people holding something that
+includes personal training first, with a pack's sessions left; `query` narrows it by
+part of a name or an email), and where the gym sells memberships somebody holding
+nothing that pays is named and cannot be picked. **A class the trainer coaches takes
+their time too** (RULINGS 2026-10-06; TeamUp blocks it the same way): a taught class on the
+calendar with them as its coach, not cancelled, comes off their free times and refuses a
+booking over it (409 `trainer_in_class`), read from `gym_class_sessions` under the gym's
+lock; an open-gym slot takes nobody's time. The week answers each day's `classes` and
+the page lists them as not free; a session that a class was put over afterwards says it
+runs into it (the class side asking first is 17e-iii). The calendar is written 56 days
+ahead and sessions are booked 55, so the classes of every bookable day are there once the
+nightly fill has run. **From the review (2026-10-06):** the people list runs `pickPtCover`
+itself for the session's day (`day` on the request, else the gym's today), so what it names
+is what the booking charges; a booking carries the session's `minutes` and is refused
+`not_a_time` when the trainer's length has changed since the page was read; a session
+already late-cancelled answers 409 `kept_used` to a give-back or a plain cancel, and 200
+only to the same late cancel again (a late-cancelled session cannot be given back
+afterwards yet); the other way round, a late cancel on a session already cancelled with
+nothing kept answers 409 `not_kept`; the membership's name on a session goes only to staff with
+`members.confirm`; changing a membership type must say `includesPt`. Nobody is told yet (the inbox, 20a). Not done: the class side asking first and a trainer's time off (17e-iii, built next);
+the member's own booking (17e-ii); sessions ended when a person leaves, a membership is
+cancelled or a trainer leaves the staff, came and no-show (17e-iv).)*
 
 ### 13.6 The calendar, the desk and the messages
 
@@ -3047,7 +3092,7 @@ cancelled one too, marked, so nobody wonders where it went; an ended event is st
 alone ("Past events"), and of it only the poster can change, by being taken off (a
 person in it may ask). Anybody else gets the 404 of a gym that does not exist, for the
 list and for a poster. The console has an Events page; the member's gym page an Events
-tab. **19c-ii, "I'm coming":** `gym_event_places` (migration `0079`), one row a person an
+tab. **19c-ii, "I'm coming":** `gym_event_places` (migration `0080`), one row a person an
 event in use (`coming` · `waitlisted` · `cancelled`), counted by 13.4's own rule
 (`decideComing`, `decideNotComing` and `eventGoing` in `packages/shared/src/gymEvents.ts`
 call `decideBook` and `decideCancel`). An event is free: nothing is checked or charged, any
