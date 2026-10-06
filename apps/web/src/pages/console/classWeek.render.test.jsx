@@ -490,7 +490,7 @@ describe('one class on one date', () => {
     draw();
     await openDay('Yoga on Wed 23 Sep 2026 at 07:00, cancelled');
     fireEvent.click(screen.getByRole('button', { name: 'Un-cancel' }));
-    await waitFor(() => expect(api.restoreClassDay).toHaveBeenCalledWith('g1', 'x2'));
+    await waitFor(() => expect(api.restoreClassDay).toHaveBeenCalledWith('g1', 'x2', null));
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   });
 
@@ -646,5 +646,71 @@ describe('one class on one date', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Classes' }));
     await waitFor(() => expect(api.getClasses.mock.calls.length).toBe(before + 1));
     expect(lastSearch).toBe('');
+  });
+});
+
+const overSession = (n, over = {}) => ({
+  id: `00000000-0000-4000-8000-00000000010${String(n)}`,
+  trainerName: 'Priya Sharma',
+  name: `Member ${String(n)}`,
+  className: 'Sunrise Yoga',
+  localDate: '2026-10-09',
+  localStartMinute: 600,
+  minutes: 60,
+  ...over,
+});
+const overSessions = (count, shown) => ({
+  response: { status: 409, data: { error: 'class_over_pt_sessions', sessions: { count, shown } } },
+});
+
+describe("a class on the Calendar saved over its coach's personal training sessions", () => {
+  const TITLE = 'Priya Sharma has a personal training session at this time';
+
+  it('Un-cancel names the session first, and Save anyway sends its number', async () => {
+    api.restoreClassDay.mockRejectedValueOnce(overSessions(1, [overSession(1, { name: 'Maya Lopez' })]));
+    draw();
+    await openDay('Yoga on Wed 23 Sep 2026 at 07:00, cancelled');
+    fireEvent.click(screen.getByRole('button', { name: 'Un-cancel' }));
+    expect(await screen.findByText(TITLE)).toBeTruthy();
+    expect(screen.getByText('Maya Lopez')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Un-cancel' })).toBeNull();
+    expect(api.restoreClassDay.mock.calls).toEqual([['g1', 'x2', null]]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    expect(screen.queryByText(TITLE)).toBeNull();
+    expect(api.restoreClassDay).toHaveBeenCalledTimes(1);
+
+    api.restoreClassDay.mockRejectedValueOnce(overSessions(1, [overSession(1, { name: 'Maya Lopez' })]));
+    fireEvent.click(screen.getByRole('button', { name: 'Un-cancel' }));
+    expect(await screen.findByText(/^If you un-cancel it, the class goes back on the calendar/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Un-cancel anyway' }));
+    await waitFor(() => expect(api.restoreClassDay).toHaveBeenLastCalledWith('g1', 'x2', 1));
+    expect(api.restoreClassDay).toHaveBeenCalledTimes(3);
+  });
+
+  it('an edited class names the session where Save was, a change to the form takes the box away, and Save anyway sends the body with its number', async () => {
+    api.changeClassDay.mockRejectedValueOnce(overSessions(1, [overSession(1)]));
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '19' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText(TITLE);
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '20' } });
+    expect(screen.queryByText(TITLE)).toBeNull();
+
+    api.changeClassDay.mockRejectedValueOnce(overSessions(1, [overSession(1)]));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Save anyway' }));
+    await waitFor(() => expect(api.changeClassDay).toHaveBeenCalledTimes(3));
+    expect(api.changeClassDay.mock.calls[2][2]).toEqual({
+      scope: 'this',
+      startMinute: 1200,
+      minutes: 45,
+      places: 12,
+      coachUserId: 'u8',
+      confirmTrainerSessions: 1,
+    });
   });
 });

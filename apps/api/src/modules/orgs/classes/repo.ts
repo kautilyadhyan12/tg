@@ -27,12 +27,14 @@ import {
   CLASS_ARCHIVED_PAGE,
   CLASS_BOOKINGS_ENDING_SHOWN,
   CLASS_FILL_HORIZON_DAYS,
+  CLASS_OVER_SESSIONS_SHOWN,
   CLASS_SCHEDULES_LISTED_PER_TYPE_MAX,
   CLASS_SCHEDULES_PER_TYPE_MAX,
   CLASS_SCHEDULE_PREVIEW_DATES,
   CLASS_TYPES_MAX,
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
+import { sessionsUnderClasses, type SessionUnderClass } from "../pt/repo.js";
 import { endClassBookings, handOverClasses, type BookingsEnded } from "./bookingChanges.js";
 import { endingCounts, endingPeople, type EndingCounts, type EndingPersonRow } from "./bookingsRepo.js";
 import { dayVerdict } from "./dayRule.js";
@@ -392,6 +394,65 @@ async function coachIsStaff(
   return rows.length > 0;
 }
 
+/** A change would put a class over this many personal training sessions already booked
+ *  with its coach, and the request did not confirm their number: nothing was written. */
+export interface OverSessions {
+  kind: "over_sessions";
+  count: number;
+  shown: SessionUnderClass[];
+}
+
+class OverSessionsAsk extends Error {
+  constructor(readonly sessions: SessionUnderClass[]) {
+    super("a class would run over booked personal training sessions");
+  }
+}
+
+/** Names the coaches whose classes a write is about to add or change. Called once, before
+ *  the write's first statement that touches the calendar. */
+type Watch = (coachIds: readonly (string | null)[]) => Promise<void>;
+
+/** A WRITE TO THE TIMETABLE THAT ASKS BEFORE IT PUTS A CLASS OVER A BOOKED SESSION
+ *  (17e-iii-a). One transaction under the gym's lock, which a session's booking takes too.
+ *  The write names its coaches (`watch`), which reads the sessions their classes already
+ *  run into; once the write is done they are read again, and a session under a class of a
+ *  kind that was not over it before is new (the same class moved or made longer over a
+ *  session staff already said yes to is not). With any new one the request must have confirmed
+ *  their number, or everything the write did is rolled back and the sessions are the
+ *  answer. Read off the calendar as written, so no way of writing a class goes round it. */
+async function askingTrainers<T extends { kind: string }>(
+  sql: Sql,
+  w: { gymId: string; confirmTrainerSessions: number | null; now: Date },
+  write: (tx: TransactionSql, watch: Watch) => Promise<T>,
+): Promise<T | OverSessions> {
+  const pair = (r: SessionUnderClass): string => `${r.appointmentId}|${r.classTypeId}`;
+  // Held in objects: both are set inside a callback.
+  const held: { outcome: T | null } = { outcome: null };
+  try {
+    await sql.begin(async (tx) => {
+      await lockOrgRow(tx, w.gymId);
+      const watched: { coaches: string[] | null; before: Set<string> } = { coaches: null, before: new Set() };
+      const done = await write(tx, async (coachIds) => {
+        if (watched.coaches !== null) throw new Error("a timetable write named its coaches twice");
+        watched.coaches = [...new Set(coachIds.flatMap((id) => (id === null ? [] : [id])))];
+        watched.before = new Set((await sessionsUnderClasses(tx, w.gymId, watched.coaches, w.now)).map(pair));
+      });
+      held.outcome = done;
+      if (done.kind !== "ok" || watched.coaches === null) return;
+      const fresh = new Map<string, SessionUnderClass>();
+      for (const row of await sessionsUnderClasses(tx, w.gymId, watched.coaches, w.now)) {
+        if (!watched.before.has(pair(row)) && !fresh.has(row.appointmentId)) fresh.set(row.appointmentId, row);
+      }
+      if (fresh.size > 0 && fresh.size !== w.confirmTrainerSessions) throw new OverSessionsAsk([...fresh.values()]);
+    });
+  } catch (err) {
+    if (!(err instanceof OverSessionsAsk)) throw err;
+    return { kind: "over_sessions", count: err.sessions.length, shown: err.sessions.slice(0, CLASS_OVER_SESSIONS_SHOWN) };
+  }
+  if (held.outcome === null) throw new Error("a timetable write gave no answer");
+  return held.outcome;
+}
+
 export async function createClassType(
   sql: Sql,
   input: ClassTypeInput & { gymId: string; actorUserId: string },
@@ -436,17 +497,32 @@ export async function createClassType(
 
 export async function updateClassType(
   sql: Sql,
-  input: ClassTypeInput & { gymId: string; classTypeId: string; actorUserId: string; now: Date },
-): Promise<ClassWriteOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
+  input: ClassTypeInput & {
+    gymId: string;
+    classTypeId: string;
+    confirmTrainerSessions: number | null;
+    actorUserId: string;
+    now: Date;
+  },
+): Promise<ClassWriteOutcome | OverSessions> {
+  return await askingTrainers<ClassWriteOutcome>(sql, input, async (tx, watch) => {
     // THE PAIR IS THE KEY. `id` alone would let a uuid from another gym through.
-    const [before] = await tx<{ id: string; name: string }[]>`
-      SELECT id, name FROM gym_class_types
+    const [before] = await tx<{ id: string; name: string; open_gym: boolean }[]>`
+      SELECT id, name, open_gym FROM gym_class_types
       WHERE id = ${input.classTypeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
     if (before === undefined) return { kind: "not_found" };
     if (!(await coachIsStaff(tx, input.gymId, input.coachUserId))) {
       return { kind: "coach_not_staff" };
+    }
+    // An open-gym slot takes nobody's time; made a taught class, its coming classes take
+    // their coaches'.
+    if (before.open_gym && !input.openGym) {
+      const coaching = await tx<{ coach_user_id: string }[]>`
+        SELECT DISTINCT coach_user_id FROM gym_class_sessions
+        WHERE class_type_id = ${input.classTypeId} AND gym_id = ${input.gymId}
+          AND status = 'scheduled' AND coach_user_id IS NOT NULL
+          AND starts_at > ${input.now}::timestamptz - make_interval(mins => minutes)`;
+      await watch(coaching.map((r) => r.coach_user_id));
     }
 
     await tx`
@@ -646,12 +722,12 @@ export async function createSchedule(
     ClassScheduleFields & {
       gymId: string;
       classTypeId: string;
+      confirmTrainerSessions: number | null;
       actorUserId: string;
       now: Date;
     },
-): Promise<ClassWriteOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
+): Promise<ClassWriteOutcome | OverSessions> {
+  return await askingTrainers<ClassWriteOutcome>(sql, input, async (tx, watch) => {
     const [type] = await tx<{ id: string; name: string }[]>`
       SELECT id, name FROM gym_class_types
       WHERE id = ${input.classTypeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
@@ -716,6 +792,7 @@ export async function createSchedule(
       LIMIT 1`;
     if (clash !== undefined) return { kind: "clashes" };
 
+    await watch([input.coachUserId]);
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_class_schedules
         (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on,
@@ -788,7 +865,9 @@ export type SlotChangeOutcome =
   /** The class would run more time slots at once than it may. */
   | { kind: "too_many"; cap: number }
   /** The class would list more time slots than it may; `would` is how many. */
-  | { kind: "too_many_listed"; cap: number; would: number };
+  | { kind: "too_many_listed"; cap: number; would: number }
+  /** The change would put a class over sessions booked with its coach. */
+  | OverSessions;
 
 /** Where the change is made from: a time slot and a date (the Classes list), or
  *  one class on the Calendar ("This and future classes") — its time slot, its
@@ -937,12 +1016,12 @@ export async function changeSlotFrom(
     startMinute: number;
     confirmReplace: number | null;
     confirmBookings: number | null;
+    confirmTrainerSessions: number | null;
     actorUserId: string;
     now: Date;
   },
 ): Promise<SlotChangeOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
+  return await askingTrainers<SlotChangeOutcome>(sql, input, async (tx, watch) => {
 
     // THE DATE AND THE TIME SLOT. The pair is the key at every step: an id from
     // another gym is a 404 here, never a write.
@@ -1039,6 +1118,8 @@ export async function changeSlotFrom(
     // A class that would run at the new time on the date itself, when that time
     // has gone: the opened class always runs on it, a moved time slot only on
     // one of its days.
+    await watch([input.coachUserId]);
+
     const runsOnFrom = openedId !== null || (change === "move" && weekdays.includes(slot.from_weekday));
     if (runsOnFrom && slot.new_start_passed) return { kind: "time_passed" };
 
@@ -1294,7 +1375,7 @@ export async function changeSlotFrom(
 
 export type BulkEditOutcome = Extract<
   SlotChangeOutcome,
-  { kind: "ok" | "not_found" | "coach_not_staff" | "from_outside" | "too_many_listed" }
+  { kind: "ok" | "not_found" | "coach_not_staff" | "from_outside" | "too_many_listed" | "over_sessions" }
 >;
 
 /** What a bulk edit sets; a key left out keeps each time slot's own value. */
@@ -1325,12 +1406,12 @@ export async function bulkChangeSlots(
     scheduleIds: readonly string[];
     updateFrom: string;
     set: BulkEditSet;
+    confirmTrainerSessions: number | null;
     actorUserId: string;
     now: Date;
   },
 ): Promise<BulkEditOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
+  return await askingTrainers<BulkEditOutcome>(sql, input, async (tx, watch) => {
 
     const [type] = await tx<{ id: string }[]>`
       SELECT id FROM gym_class_types
@@ -1405,6 +1486,7 @@ export async function bulkChangeSlots(
     // single Edit does, so a later fill cannot write one with the new. This is
     // what the nightly job would write anyway, so a refusal below leaves only
     // that behind.
+    await watch(plans.map((plan) => plan.values.coachUserId));
     const work = [];
     for (const plan of plans) {
       await fillClassSessions(tx, {
@@ -1679,7 +1761,8 @@ export type ClassDayOutcome =
   | { kind: "time_passed" }
   | { kind: "time_missing" }
   | { kind: "clashes" }
-  | HasBookings;
+  | HasBookings
+  | OverSessions;
 
 /** A change to one date: `change` carries the new values, the other two none. */
 export type ClassDayInput =
@@ -1703,6 +1786,9 @@ export type ClassDayInput =
  *  time, where the same class already runs that day is refused; `fill.ts`
  *  carries the same rule the other way round.
  *
+ *  **Sessions of personal training (17e-iii-a).** A change, or a class put back, that
+ *  would run over a session booked with its coach asks first (`askingTrainers`).
+ *
  *  **Bookings (17c-ii-a).** A cancel ends every booking of the class and gives
  *  the packs their classes back, once the request has confirmed how many people
  *  that is; the rows stay, as cancelled, and putting the class back does not
@@ -1710,10 +1796,15 @@ export type ClassDayInput =
  *  go to the waitlist, and fewer take nobody out. */
 export async function changeSession(
   sql: Sql,
-  input: ClassDayInput & { gymId: string; sessionId: string; actorUserId: string; now: Date },
+  input: ClassDayInput & {
+    gymId: string;
+    sessionId: string;
+    confirmTrainerSessions: number | null;
+    actorUserId: string;
+    now: Date;
+  },
 ): Promise<ClassDayOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
+  return await askingTrainers<ClassDayOutcome>(sql, input, async (tx, watch) => {
     const newMinute = input.action === "change" ? input.startMinute : null;
     // The pair is the key: an id from another gym is a 404 here, not a write.
     const [row] = await tx<
@@ -1804,6 +1895,8 @@ export async function changeSession(
           AND id <> ${input.sessionId}
         LIMIT 1`;
       if (clash !== undefined) return { kind: "clashes" };
+      // A class changed, or put back, takes its coach's time.
+      await watch([input.action === "change" ? input.coachUserId : row.coach_user_id]);
     }
 
     let meta: Record<string, string>;

@@ -1671,11 +1671,16 @@ export const orgService = {
   updateBookingSettings: (gymId, body) =>
     readThrough(classBookingSettingsResponseSchema, 'your booking settings', authApi.put(`/v1/orgs/${gymId}/booking-settings`, body)),
 
-  restoreClassDay: (gymId, sessionId) =>
+  /** `confirmTrainerSessions`: the number of personal training sessions the server said
+   *  the class would run over (409 `class_over_pt_sessions`); nothing until then. */
+  restoreClassDay: (gymId, sessionId, confirmTrainerSessions = null) =>
     readThrough(
       gymClassWeekResponseSchema,
       'that day',
-      authApi.post(`/v1/orgs/${gymId}/class-sessions/${sessionId}/restore`, {}),
+      authApi.post(
+        `/v1/orgs/${gymId}/class-sessions/${sessionId}/restore`,
+        Number.isInteger(confirmTrainerSessions) && confirmTrainerSessions > 0 ? { confirmTrainerSessions } : {},
+      ),
     ),
 
   // PERSONAL TRAINING (spec Part 3 §13.5; ROADMAP 17e-i). Staff who run the timetable see

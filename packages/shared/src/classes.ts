@@ -122,7 +122,8 @@ export const classDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 /** How long a class runs, in minutes. Five is the shortest thing anybody
  *  timetables; 600 is ten hours, which an all-day open-gym block reaches and
  *  nothing honest exceeds. */
-export const classMinutesSchema = z.number().int().min(5).max(600);
+export const CLASS_MINUTES_MAX = 600;
+export const classMinutesSchema = z.number().int().min(5).max(CLASS_MINUTES_MAX);
 
 /** HOW MANY PEOPLE FIT, and `null` MEANS NO LIMIT rather than "not set".
  *
@@ -281,6 +282,49 @@ export const gymClassesResponseSchema = z
   .strict();
 export type GymClassesResponse = z.infer<typeof gymClassesResponseSchema>;
 
+// ── A CLASS PUT OVER A PERSONAL TRAINING SESSION (17e-iii-a) ──
+
+/** The 409 a change to the timetable answers when it would put a class a trainer coaches
+ *  over personal training sessions already booked with them. Nothing is written until the
+ *  request sends `confirmTrainerSessions` equal to `sessions.count`, counted again under the
+ *  gym's lock; the sessions then stay booked, for staff to move or cancel. */
+export const CLASS_OVER_SESSIONS_ERROR = "class_over_pt_sessions";
+export const CLASS_OVER_SESSIONS_MESSAGE =
+  "This puts a class over personal training sessions that are already booked with its coach.";
+
+/** How many sessions the 409 names; `count` is whole. */
+export const CLASS_OVER_SESSIONS_SHOWN = 100;
+
+export const classOverSessionsSchema = z
+  .object({
+    count: z.number().int().min(1),
+    /** The earliest first. */
+    shown: z.array(
+      z
+        .object({
+          id: z.string().uuid(),
+          trainerName: z.string().nullable(),
+          /** The person booked; null where their record has gone. */
+          name: z.string().nullable(),
+          /** The class that would run over it. */
+          className: z.string(),
+          /** The session's own day and clock time at the gym. */
+          localDate: z.string(),
+          localStartMinute: z.number().int(),
+          minutes: z.number().int(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type ClassOverSessions = z.infer<typeof classOverSessionsSchema>;
+
+/** How many sessions the screen was told the change would put a class over. */
+export const confirmTrainerSessionsField = z.number().int().min(1).max(100_000);
+
+/** Un-cancelling one class carries it alone. */
+export const confirmTrainerSessionsBodySchema = z.object({ confirmTrainerSessions: confirmTrainerSessionsField.optional() }).strict();
+
 /** The fields a gym types. `description` accepts an empty string and stores
  *  null — a box the owner cleared means "no description", and a screen that then
  *  rendered "" under a dangling heading is `closeGymDayRequestSchema`'s lesson. */
@@ -304,7 +348,9 @@ export type CreateGymClassTypeRequest = z.infer<typeof createGymClassTypeRequest
  *  here are few enough that the form always holds all of them. `places: null`
  *  therefore means "no limit" and never "leave it alone", which is the
  *  distinction a merge would destroy. */
-export const updateGymClassTypeRequestSchema = createGymClassTypeRequestSchema;
+export const updateGymClassTypeRequestSchema = createGymClassTypeRequestSchema
+  .extend({ confirmTrainerSessions: confirmTrainerSessionsField.optional() })
+  .strict();
 export type UpdateGymClassTypeRequest = z.infer<typeof updateGymClassTypeRequestSchema>;
 
 /** WHAT A REPEAT'S OWN THREE FIELDS LOOK LIKE ON THE WIRE — one shape, so
@@ -357,6 +403,7 @@ export const createGymClassScheduleRequestSchema = z
     startsOn: classDaySchema,
     endsOn: classDaySchema.nullable().optional(),
     ...classScheduleFieldsShape,
+    confirmTrainerSessions: confirmTrainerSessionsField.optional(),
   })
   .strict()
   // AN INVERTED WINDOW IS A 400, NOT A REPEAT THAT SILENTLY RUNS ON NO DAY.
@@ -390,6 +437,7 @@ export const updateGymClassScheduleRequestSchema = z
     ...classScheduleFieldsShape,
     confirmReplace: confirmReplaceField.optional(),
     confirmBookings: confirmBookingsField.optional(),
+    confirmTrainerSessions: confirmTrainerSessionsField.optional(),
   })
   .strict();
 export type UpdateGymClassScheduleRequest = z.infer<typeof updateGymClassScheduleRequestSchema>;
@@ -417,6 +465,7 @@ export const bulkEditGymClassSchedulesRequestSchema = z
       })
       .strict()
       .refine((s) => Object.keys(s).length > 0, { message: "nothing to change" }),
+    confirmTrainerSessions: confirmTrainerSessionsField.optional(),
   })
   .strict();
 export type BulkEditGymClassSchedulesRequest = z.infer<
@@ -501,6 +550,7 @@ export const changeGymClassSessionRequestSchema = z
     ...classScheduleFieldsShape,
     confirmReplace: confirmReplaceField.optional(),
     confirmBookings: confirmBookingsField.optional(),
+    confirmTrainerSessions: confirmTrainerSessionsField.optional(),
   })
   .strict()
   .refine((r) => r.scope === "future" || r.confirmReplace === undefined, {

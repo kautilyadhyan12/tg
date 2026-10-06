@@ -9,7 +9,9 @@
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import {
+  CLASS_MINUTES_MAX,
   PT_HOLDS_TIME,
+  PT_SESSION_MINUTES_MAX,
   ptAppointmentStatusSchema,
   ptHoursRangeSchema,
   ptSessionMinutesSchema,
@@ -352,5 +354,67 @@ export async function classesCoached(
     minutes: r.minutes,
     fromMs: r.starts_at.getTime(),
     toMs: r.starts_at.getTime() + r.minutes * 60_000,
+  }));
+}
+
+export interface SessionUnderClass {
+  appointmentId: string;
+  trainerName: string;
+  trainerEmail: string | null;
+  personName: string | null;
+  localDate: string;
+  localStartMinute: number;
+  minutes: number;
+  className: string;
+  classTypeId: string;
+}
+
+/** The sessions booked with these trainers, not yet over, that a taught class they coach
+ *  runs into: one row a session and class, the earliest session first. The other side of
+ *  `classesCoached`, for the timetable to ask before it puts a class over one (17e-iii-a).
+ *  The calendar is walked by the gym's own index; each class looks up the trainer's sessions
+ *  near its time. */
+export async function sessionsUnderClasses(sql: SqlOrTx, gymId: string, trainerIds: readonly string[], now: Date): Promise<SessionUnderClass[]> {
+  if (trainerIds.length === 0) return [];
+  const rows = await sql<
+    {
+      id: string;
+      trainer_name: string;
+      trainer_email: string | null;
+      person_name: string | null;
+      local_date: string;
+      local_start_minute: number;
+      minutes: number;
+      class_name: string;
+      class_type_id: string;
+    }[]
+  >`
+    SELECT a.id, u.display_name AS trainer_name, u.email AS trainer_email, e.full_name AS person_name,
+           a.local_date::text AS local_date, a.local_start_minute, a.minutes,
+           t.name AS class_name, s.class_type_id
+    FROM gym_class_sessions s
+    JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id AND NOT t.open_gym
+    JOIN gym_pt_appointments a
+      ON a.gym_id = s.gym_id AND a.trainer_user_id = s.coach_user_id
+     AND a.status = ANY(${[...PT_HOLDS_TIME]}::text[])
+     AND a.starts_at < s.starts_at + make_interval(mins => s.minutes)
+     AND a.starts_at > s.starts_at - make_interval(mins => ${PT_SESSION_MINUTES_MAX}::int)
+     AND a.ends_at > s.starts_at
+     AND a.ends_at > ${now}
+    JOIN users u ON u.id = a.trainer_user_id
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = a.gym_id AND e.id = a.entry_id
+    WHERE s.gym_id = ${gymId} AND s.coach_user_id = ANY(${[...trainerIds]}::uuid[]) AND s.status = 'scheduled'
+      AND s.starts_at > ${now}::timestamptz - make_interval(mins => ${CLASS_MINUTES_MAX}::int)
+    ORDER BY a.starts_at, a.id, s.starts_at, s.id`;
+  return rows.map((r) => ({
+    appointmentId: r.id,
+    trainerName: r.trainer_name,
+    trainerEmail: r.trainer_email,
+    personName: r.person_name,
+    localDate: r.local_date,
+    localStartMinute: r.local_start_minute,
+    minutes: r.minutes,
+    className: r.class_name,
+    classTypeId: r.class_type_id,
   }));
 }

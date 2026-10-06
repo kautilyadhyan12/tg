@@ -40,6 +40,7 @@ import {
   gymClassWeekResponseSchema,
   type BulkEditGymClassSchedulesRequest,
   type ClassBookingsEnding,
+  type ClassOverSessions,
   type ChangeGymClassSessionRequest,
   type CreateGymClassScheduleRequest,
   type CreateGymClassTypeRequest,
@@ -77,6 +78,32 @@ const toEnding = (h: repo.HasBookings): ClassBookingsEnding => ({ ...h.ending, p
  *  into a 409 `class_has_bookings`, and the screen asks before sending the number back
  *  as `confirmBookings` (17c-ii-a). */
 export type BookingsAnswer<T> = { kind: "ok"; body: T } | { kind: "bookings"; ending: ClassBookingsEnding };
+
+/** A change that would put a class over personal training sessions booked with its coach
+ *  answers with the sessions until the request confirms their number: the route turns
+ *  that into a 409 `class_over_pt_sessions`, and the screen asks before sending the
+ *  number back as `confirmTrainerSessions` (17e-iii-a). */
+export type SessionsAnswer<T> = { kind: "ok"; body: T } | { kind: "sessions"; sessions: ClassOverSessions };
+
+/** The sessions as staff who run the timetable read them: the trainer and the person by
+ *  name, never an email where there is a name. */
+function toSessions(over: repo.OverSessions): { kind: "sessions"; sessions: ClassOverSessions } {
+  return {
+    kind: "sessions",
+    sessions: {
+      count: over.count,
+      shown: over.shown.map((r) => ({
+        id: r.appointmentId,
+        trainerName: fullName({ displayName: r.trainerName, email: r.trainerEmail, recordName: null }).name ?? r.trainerEmail,
+        name: r.personName === null ? null : fullName({ displayName: r.personName, email: null, recordName: null }).name,
+        className: r.className,
+        localDate: r.localDate,
+        localStartMinute: r.localStartMinute,
+        minutes: r.minutes,
+      })),
+    },
+  };
+}
 
 export interface ClassesDeps {
   sql: Sql;
@@ -316,18 +343,19 @@ export async function updateClassType(
   gymId: string,
   classTypeId: string,
   req: UpdateGymClassTypeRequest,
-): Promise<GymClassesResponse> {
+): Promise<SessionsAnswer<GymClassesResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
-  throwOnFailure(
-    await repo.updateClassType(deps.sql, {
-      ...typeInput(req),
-      gymId,
-      classTypeId,
-      actorUserId: userId,
-      now: deps.now(),
-    }),
-  );
-  return await readOr404(deps, gymId);
+  const outcome = await repo.updateClassType(deps.sql, {
+    ...typeInput(req),
+    gymId,
+    classTypeId,
+    confirmTrainerSessions: req.confirmTrainerSessions ?? null,
+    actorUserId: userId,
+    now: deps.now(),
+  });
+  if (outcome.kind === "over_sessions") return toSessions(outcome);
+  throwOnFailure(outcome);
+  return { kind: "ok", body: await readOr404(deps, gymId) };
 }
 
 export async function archiveClassType(
@@ -377,34 +405,35 @@ export async function createSchedule(
   gymId: string,
   classTypeId: string,
   req: CreateGymClassScheduleRequest,
-): Promise<GymClassesResponse> {
+): Promise<SessionsAnswer<GymClassesResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
-  throwOnFailure(
-    await repo.createSchedule(deps.sql, {
-      gymId,
-      classTypeId,
-      weekdays: req.weekdays,
-      startMinute: req.startMinute,
-      startsOn: requireCalendarDate(req.startsOn, "startsOn"),
-      endsOn:
-        req.endsOn === undefined || req.endsOn === null
-          ? null
-          : requireCalendarDate(req.endsOn, "endsOn"),
-      minutes: req.minutes,
-      places: req.places,
-      coachUserId: req.coachUserId,
-      actorUserId: userId,
-      now: deps.now(),
-    }),
-  );
-  return await readOr404(deps, gymId);
+  const outcome = await repo.createSchedule(deps.sql, {
+    gymId,
+    classTypeId,
+    weekdays: req.weekdays,
+    startMinute: req.startMinute,
+    startsOn: requireCalendarDate(req.startsOn, "startsOn"),
+    endsOn:
+      req.endsOn === undefined || req.endsOn === null
+        ? null
+        : requireCalendarDate(req.endsOn, "endsOn"),
+    minutes: req.minutes,
+    places: req.places,
+    coachUserId: req.coachUserId,
+    confirmTrainerSessions: req.confirmTrainerSessions ?? null,
+    actorUserId: userId,
+    now: deps.now(),
+  });
+  if (outcome.kind === "over_sessions") return toSessions(outcome);
+  throwOnFailure(outcome);
+  return { kind: "ok", body: await readOr404(deps, gymId) };
 }
 
 /** A change from a date answers either with the screen it was made on or, when
  *  a move would replace classes the gym changed or cancelled on their own, with
  *  how many — the route turns that into a 409 carrying the count, and the
  *  screen asks before sending it back as `confirmReplace`. */
-export type SlotChangeAnswer<T> = BookingsAnswer<T> | { kind: "replaces"; count: number };
+export type SlotChangeAnswer<T> = BookingsAnswer<T> | SessionsAnswer<T> | { kind: "replaces"; count: number };
 
 /** A time slot change's refusals, in one place for both of its doors. Returns
  *  the date it was made from, or the count to ask about. */
@@ -413,13 +442,19 @@ function slotOutcome(
   /** Where the change was made: the Classes list (an Update from date) or
    *  the Calendar's "This and future classes" (a class, no date box). */
   door: "list" | "calendar",
-): { kind: "ok"; localDate: string } | { kind: "replaces"; count: number } | { kind: "bookings"; ending: ClassBookingsEnding } {
+):
+  | { kind: "ok"; localDate: string }
+  | { kind: "replaces"; count: number }
+  | { kind: "bookings"; ending: ClassBookingsEnding }
+  | { kind: "sessions"; sessions: ClassOverSessions } {
   switch (outcome.kind) {
     case "ok":
     case "replaces":
       return outcome;
     case "has_bookings":
       return { kind: "bookings", ending: toEnding(outcome) };
+    case "over_sessions":
+      return toSessions(outcome);
     case "not_found":
       throw new OrgsError(404, "class_not_found", NOT_FOUND_MESSAGE);
     case "coach_not_staff":
@@ -509,6 +544,7 @@ export async function updateSchedule(
       coachUserId: req.coachUserId,
       confirmReplace: req.confirmReplace ?? null,
       confirmBookings: req.confirmBookings ?? null,
+      confirmTrainerSessions: req.confirmTrainerSessions ?? null,
       actorUserId: userId,
       now: deps.now(),
     }),
@@ -526,7 +562,7 @@ export async function bulkEditSchedules(
   gymId: string,
   classTypeId: string,
   req: BulkEditGymClassSchedulesRequest,
-): Promise<GymClassesResponse> {
+): Promise<SessionsAnswer<GymClassesResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const outcome = await repo.bulkChangeSlots(deps.sql, {
     gymId,
@@ -534,6 +570,7 @@ export async function bulkEditSchedules(
     scheduleIds: req.scheduleIds,
     updateFrom: requireCalendarDate(req.updateFrom, "updateFrom"),
     set: req.set,
+    confirmTrainerSessions: req.confirmTrainerSessions ?? null,
     actorUserId: userId,
     now: deps.now(),
   });
@@ -544,8 +581,9 @@ export async function bulkEditSchedules(
       "Pick a date on the calendar while every ticked time slot runs.",
     );
   }
-  slotOutcome(outcome, "list");
-  return await readOr404(deps, gymId);
+  const done = slotOutcome(outcome, "list");
+  if (done.kind === "sessions") return done;
+  return { kind: "ok", body: await readOr404(deps, gymId) };
 }
 
 // ── THE WEEK VIEW AND "THIS DAY ONLY" (17b-ii-b-i) ──────────────────────────
@@ -605,12 +643,14 @@ async function writeDay(
   gymId: string,
   sessionId: string,
   input: repo.ClassDayInput,
-): Promise<BookingsAnswer<GymClassWeekResponse>> {
+  confirmTrainerSessions: number | null = null,
+): Promise<BookingsAnswer<GymClassWeekResponse> | SessionsAnswer<GymClassWeekResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const outcome = await repo.changeSession(deps.sql, {
     ...input,
     gymId,
     sessionId,
+    confirmTrainerSessions,
     actorUserId: userId,
     now: deps.now(),
   });
@@ -620,6 +660,8 @@ async function writeDay(
       return { kind: "ok", body: await readWeekOr404(deps, gymId, outcome.localDate) };
     case "has_bookings":
       return { kind: "bookings", ending: toEnding(outcome) };
+    case "over_sessions":
+      return toSessions(outcome);
     case "not_found":
       throw new OrgsError(404, "class_not_found", NOT_FOUND_MESSAGE);
     case "coach_not_staff":
@@ -679,13 +721,14 @@ export async function changeClassSession(
   req: ChangeGymClassSessionRequest,
 ): Promise<SlotChangeAnswer<GymClassWeekResponse>> {
   if (req.scope === "this") {
-    return await writeDay(deps, userId, gymId, sessionId, {
-      action: "change",
-      startMinute: req.startMinute,
-      minutes: req.minutes,
-      places: req.places,
-      coachUserId: req.coachUserId,
-    });
+    return await writeDay(
+      deps,
+      userId,
+      gymId,
+      sessionId,
+      { action: "change", startMinute: req.startMinute, minutes: req.minutes, places: req.places, coachUserId: req.coachUserId },
+      req.confirmTrainerSessions ?? null,
+    );
   }
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const done = slotOutcome(
@@ -698,6 +741,7 @@ export async function changeClassSession(
       coachUserId: req.coachUserId,
       confirmReplace: req.confirmReplace ?? null,
       confirmBookings: req.confirmBookings ?? null,
+      confirmTrainerSessions: req.confirmTrainerSessions ?? null,
       actorUserId: userId,
       now: deps.now(),
     }),
@@ -714,7 +758,9 @@ export async function cancelClassSession(
   sessionId: string,
   confirmBookings: number | null,
 ): Promise<BookingsAnswer<GymClassWeekResponse>> {
-  return await writeDay(deps, userId, gymId, sessionId, { action: "cancel", confirmBookings });
+  const done = await writeDay(deps, userId, gymId, sessionId, { action: "cancel", confirmBookings });
+  if (done.kind === "sessions") throw new Error("cancelling a class asked about a trainer's sessions");
+  return done;
 }
 
 export async function restoreClassSession(
@@ -722,10 +768,11 @@ export async function restoreClassSession(
   userId: string,
   gymId: string,
   sessionId: string,
-): Promise<GymClassWeekResponse> {
-  const done = await writeDay(deps, userId, gymId, sessionId, { action: "restore" });
-  if (done.kind !== "ok") throw new Error("putting a class back asked about bookings");
-  return done.body;
+  confirmTrainerSessions: number | null,
+): Promise<SessionsAnswer<GymClassWeekResponse>> {
+  const done = await writeDay(deps, userId, gymId, sessionId, { action: "restore" }, confirmTrainerSessions);
+  if (done.kind === "bookings") throw new Error("putting a class back asked about bookings");
+  return done;
 }
 
 export async function endSchedule(

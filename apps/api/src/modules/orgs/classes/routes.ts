@@ -23,10 +23,14 @@ import type { z } from "zod";
 import {
   CLASS_BOOKING_WORDS,
   CLASS_HAS_BOOKINGS_ERROR,
+  CLASS_OVER_SESSIONS_ERROR,
+  CLASS_OVER_SESSIONS_MESSAGE,
   CLASS_SLOT_REPLACES_ERROR,
   confirmBookingsBodySchema,
   confirmBookingsQuerySchema,
+  confirmTrainerSessionsBodySchema,
   type ClassBookingsEnding,
+  type ClassOverSessions,
   bulkEditGymClassSchedulesRequestSchema,
   changeGymClassSessionRequestSchema,
   createGymClassScheduleRequestSchema,
@@ -84,6 +88,18 @@ function sendBookings(reply: FastifyReply, req: FastifyRequest, ending: ClassBoo
     error: CLASS_HAS_BOOKINGS_ERROR,
     message: CLASS_BOOKING_WORDS.class_has_bookings,
     ending,
+    requestId: req.id,
+  });
+}
+
+/** The 409 a change answers when it would put a class over personal training sessions
+ *  booked with its coach: which they are, for the screen to show and send their number
+ *  back as `confirmTrainerSessions`. */
+function sendSessions(reply: FastifyReply, req: FastifyRequest, sessions: ClassOverSessions) {
+  return reply.status(409).send({
+    error: CLASS_OVER_SESSIONS_ERROR,
+    message: CLASS_OVER_SESSIONS_MESSAGE,
+    sessions,
     requestId: req.id,
   });
 }
@@ -157,14 +173,15 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     if (params === null) return;
     const body = parseOr400(updateGymClassTypeRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const timetable = await service.updateClassType(
+    const answer = await service.updateClassType(
       classDeps,
       requireUserId(req),
       params.gymId,
       params.classTypeId,
       body,
     );
-    return reply.status(200).send(timetable);
+    if (answer.kind === "sessions") return sendSessions(reply, req, answer.sessions);
+    return reply.status(200).send(answer.body);
   });
 
   /** DELETE is the honest method for "take this off my timetable", and what it
@@ -208,14 +225,15 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     if (params === null) return;
     const body = parseOr400(createGymClassScheduleRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const timetable = await service.createSchedule(
+    const answer = await service.createSchedule(
       classDeps,
       requireUserId(req),
       params.gymId,
       params.classTypeId,
       body,
     );
-    return reply.status(201).send(timetable);
+    if (answer.kind === "sessions") return sendSessions(reply, req, answer.sessions);
+    return reply.status(201).send(answer.body);
   });
 
   /** CHANGE A TIME SLOT FROM A DATE — its days, start time, length, places and
@@ -240,6 +258,7 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     );
     if (answer.kind === "replaces") return sendReplaces(reply, req, answer.count);
     if (answer.kind === "bookings") return sendBookings(reply, req, answer.ending);
+    if (answer.kind === "sessions") return sendSessions(reply, req, answer.sessions);
     return reply.status(200).send(answer.body);
   });
 
@@ -250,14 +269,15 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     if (params === null) return;
     const body = parseOr400(bulkEditGymClassSchedulesRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const timetable = await service.bulkEditSchedules(
+    const answer = await service.bulkEditSchedules(
       classDeps,
       requireUserId(req),
       params.gymId,
       params.classTypeId,
       body,
     );
-    return reply.status(200).send(timetable);
+    if (answer.kind === "sessions") return sendSessions(reply, req, answer.sessions);
+    return reply.status(200).send(answer.body);
   });
 
   /** STOP A REPEAT. The repeat id is addressed under its GYM, never alone — the
@@ -307,6 +327,7 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     );
     if (answer.kind === "replaces") return sendReplaces(reply, req, answer.count);
     if (answer.kind === "bookings") return sendBookings(reply, req, answer.ending);
+    if (answer.kind === "sessions") return sendSessions(reply, req, answer.sessions);
     return reply.status(200).send(answer.body);
   });
 
@@ -332,12 +353,17 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
   app.post("/v1/orgs/:gymId/class-sessions/:sessionId/restore", guarded, async (req, reply) => {
     const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const week = await service.restoreClassSession(
+    // No body at all is a class put back that confirms nothing.
+    const body = parseOr400(confirmTrainerSessionsBodySchema, req.body ?? {}, req, reply);
+    if (body === null) return;
+    const answer = await service.restoreClassSession(
       classDeps,
       requireUserId(req),
       params.gymId,
       params.sessionId,
+      body.confirmTrainerSessions ?? null,
     );
-    return reply.status(200).send(week);
+    if (answer.kind === "sessions") return sendSessions(reply, req, answer.sessions);
+    return reply.status(200).send(answer.body);
   });
 }
