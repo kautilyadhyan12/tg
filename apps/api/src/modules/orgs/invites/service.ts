@@ -7,6 +7,7 @@
 // limit, then the handler. Every write is one transaction holding the gym's row, the
 // lock every change to the list takes, so the group a press counts cannot move before
 // it is queued.
+import { createHash } from "node:crypto";
 import {
   MEMBER_INVITE_AGAIN_PER_GYM_DAY,
   MEMBER_INVITE_AGAIN_PER_PERSON,
@@ -200,6 +201,12 @@ export async function readyToSend(deps: MemberListDeps, gymId: string): Promise<
   return settings;
 }
 
+/** One value for exactly the people an Invite would email, whatever order they are in. */
+export const reachDigest = (gymId: string, reach: readonly { hmac: string }[]): string =>
+  createHash("sha256")
+    .update(`${gymId}:${reach.map((person) => person.hmac).sort().join(",")}`)
+    .digest("hex");
+
 /** What an Invite with these filters would do now (§9.12's count on the button). */
 export async function previewInvite(
   deps: MemberListDeps,
@@ -213,9 +220,9 @@ export async function previewInvite(
   const settings = deps.invites ?? null;
   const state = await listRepo.listState(deps.sql, gymId);
   const blocked = await blockedFor(deps.sql, settings, gymId, org.status);
-  if (settings === null) return { version: state?.version ?? 0, reach: 0, skipped: noneSkipped(), blocked };
+  if (settings === null) return { version: state?.version ?? 0, reach: 0, skipped: noneSkipped(), blocked, digest: reachDigest(gymId, []) };
   const group = await workOutGroup(deps.sql, settings, gymId, await filtersFor(deps, gymId, query), dayInTz(deps.now(), org.timezone));
-  return { version: state?.version ?? 0, reach: group.reach.length, skipped: group.skipped, blocked };
+  return { version: state?.version ?? 0, reach: group.reach.length, skipped: group.skipped, blocked, digest: reachDigest(gymId, group.reach) };
 }
 
 
@@ -224,8 +231,14 @@ export async function previewInvite(
  *  other writes are answered in between (measured in spec §9.12's notes). */
 export const INVITE_PRESS_BATCH = 500;
 
-/** Press Invite: queue the first email for everybody the preview counted, if the list
- *  and the count are still the ones staff saw.
+/** Press Invite: queue the first email for everybody the preview counted, if the list,
+ *  the count and the people are still the ones staff saw.
+ *
+ *  **The people, not only how many.** A word filter chooses people by what the list shows,
+ *  and for somebody who holds a membership that follows the membership and the day: a
+ *  payment marked, or midnight, changes who "Payment due" is without the list's version or
+ *  the number moving. So the press sends back the preview's `digest` of who would be
+ *  emailed, and a press without the digest of the people reached now invites nobody.
  *
  *  The group is worked out one statement at a time; the first batch is written under
  *  the gym's lock after the list's version is checked again, so a list changed since the
@@ -252,13 +265,14 @@ export async function pressInvite(
   const changed = async (): Promise<InviteChanged> => {
     const version = (await listRepo.listState(deps.sql, gymId))?.version ?? 0;
     const group = await workOutGroup(deps.sql, settings, gymId, filters, today);
-    return new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, blocked: null });
+    return new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, blocked: null, digest: reachDigest(gymId, group.reach) });
   };
 
   const version = (await listRepo.listState(deps.sql, gymId))?.version ?? 0;
   const group = await workOutGroup(deps.sql, settings, gymId, filters, today);
-  if (version !== request.version || group.reach.length !== request.expectedCount) {
-    throw new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, blocked: null });
+  const digest = reachDigest(gymId, group.reach);
+  if (version !== request.version || group.reach.length !== request.expectedCount || digest !== request.expectedDigest) {
+    throw new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, blocked: null, digest });
   }
   await deps.afterInviteGroupRead?.();
   const batches: (typeof group.reach)[] = [];

@@ -16,6 +16,8 @@ const people = new Map<string, HeldShown>([
   ["free", shown({ memberships: ["Free week"], payment: { state: "free" } })],
   ["frozen", shown({ status: "frozen" }, true)],
   ["gone", shown({ status: "cancelled", payment: null })],
+  // Still to start and not paid: nothing is owed before its day.
+  ["soon", shown({ status: "upcoming", payment: { state: "later", on: "2026-10-20" } })],
 ]);
 const none: AskedWords = { statuses: null, membershipTypes: null, paymentStatuses: null };
 
@@ -23,9 +25,12 @@ describe("which people a word filter passes, by the app's own words", () => {
   it("each kind asked must match, in any capitals, and nothing asked passes everybody", () => {
     // [the filter, who passes]
     const cases: [Partial<AskedWords>, string[]][] = [
-      [{}, ["paid", "owes", "free", "frozen", "gone"]],
+      [{}, ["paid", "owes", "free", "frozen", "gone", "soon"]],
       [{ paymentStatuses: ["paid"] }, ["paid", "frozen"]],
+      // Only who owes today: not somebody whose payment day has not come.
       [{ paymentStatuses: ["payment due"] }, ["owes"]],
+      [{ paymentStatuses: ["not due yet"] }, ["soon"]],
+      [{ statuses: ["not started"] }, ["soon"]],
       [{ paymentStatuses: ["paid", "free"] }, ["paid", "free", "frozen"]],
       // "" is the people with no word of the kind: a membership that is over owes nothing.
       [{ paymentStatuses: [""] }, ["gone"]],
@@ -34,7 +39,7 @@ describe("which people a word filter passes, by the app's own words", () => {
       [{ statuses: [""] }, []],
       // Somebody with two memberships is found under either name.
       [{ membershipTypes: ["pt 10"] }, ["owes"]],
-      [{ membershipTypes: ["gold monthly"] }, ["paid", "owes", "frozen", "gone"]],
+      [{ membershipTypes: ["gold monthly"] }, ["paid", "owes", "frozen", "gone", "soon"]],
       [{ membershipTypes: [""] }, []],
       // A word of the gym's old file is nobody's here.
       [{ statuses: ["expired"] }, []],
@@ -53,15 +58,17 @@ describe("the chips of the people the app answers for", () => {
     expect(read(chips.statuses)).toEqual([
       ["Active", 3, 1, 2, 0],
       ["Frozen", 1, 0, 0, 1],
+      ["Not started", 1, 0, 1, 0],
       ["Cancelled", 1, 0, 1, 0],
     ]);
     expect(read(chips.membershipTypes)).toEqual([
       ["Free week", 1, 0, 1, 0],
-      ["Gold Monthly", 4, 1, 2, 1],
+      ["Gold Monthly", 5, 1, 3, 1],
       ["PT 10", 1, 0, 1, 0],
     ]);
     expect(read(chips.paymentStatuses)).toEqual([
       ["Payment due", 1, 0, 1, 0],
+      ["Not due yet", 1, 0, 1, 0],
       ["Paid", 2, 1, 0, 1],
       ["Free", 1, 0, 1, 0],
       ["", 1, 0, 1, 0],

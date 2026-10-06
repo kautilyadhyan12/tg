@@ -207,7 +207,11 @@ d("the people selected (real Postgres)", () => {
   };
 
   const press = (gymId: string, who: User, selection: MemberListSelection, preview: MemberInvitePreview) =>
-    post(`${listUrl(gymId)}/invites`, { selection, version: preview.version, expectedCount: preview.reach, permissionConfirmed: true }, who.cookies);
+    post(
+      `${listUrl(gymId)}/invites`,
+      { selection, version: preview.version, expectedCount: preview.reach, expectedDigest: preview.digest, permissionConfirmed: true },
+      who.cookies,
+    );
 
   const exportOf = (gymId: string, who: User, selection: MemberListSelection) => post(`${listUrl(gymId)}/export.csv`, { selection }, who.cookies);
 

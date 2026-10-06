@@ -658,23 +658,36 @@ export interface OverForList {
   /** The membership name the gym's own list gives this record, where it names something
    *  the person does not hold and never has; null otherwise. */
   listedUnheld: string | null;
-  /** The newest membership of theirs stored over; null where none is. */
+  /** The membership of theirs stored over that finished last; null where none is. */
   held: ListHeld | null;
 }
 
-/** For the current records with nothing stored in use: the newest membership of each that
- *  is stored over, and what the list's own word names. Asked of the records named
+/** For the current records with nothing stored in use: the membership of each stored over
+ *  that finished last, and what the list's own word names. Asked of the records named
  *  (`entryIds`) or of the whole gym (null), and also of `alsoIds` whatever they hold: the
- *  records whose every membership stored in use the clock has ended. A plain read.
+ *  records whose every membership stored in use the clock has ended. `today` is the gym's
+ *  own day. A plain read.
  *
- *  `listedUnheld` is `listedMembership`'s own question asked for many records at once: the
- *  live type the list's word names is the one staff said it is, else the live type of that
- *  very name, and the word is "unheld" unless this record has held that type. */
+ *  **Which stored row.** One a record, by the rule's own order (`finishedLast` in
+ *  `@app/shared`): the day it finished, a membership before a pack on the same day, then the
+ *  newest start. The day is worked out here as the rule works it out, since a person who
+ *  buys a day pass a visit has hundreds of rows and all of them cannot be read: the day it
+ *  was cancelled; else its last day (the start, so many terms on, plus the days frozen,
+ *  less one); a pack used up before that day by its start day. Postgres adds months and
+ *  years as the rule does (31 Jan and a month is 28 Feb). `memberships.overForList.test.ts`
+ *  holds the two to the same choice.
+ *
+ *  **`listedUnheld`** is the list's word where it names something this record has never
+ *  held: no membership of theirs is of the type staff said that word is, nor of a type of
+ *  that very name. A type archived since still counts, so somebody cancelled here does not
+ *  go back to their old file's words because the type left the price list (a person's own
+ *  page says "Not set up" of an archived type, which is about setting it up again). */
 export async function overForList(
   sql: Sql | TransactionSql,
   gymId: string,
   entryIds: readonly string[] | null,
   alsoIds: readonly string[],
+  today: string,
 ): Promise<OverForList[]> {
   if (entryIds !== null && entryIds.length === 0 && alsoIds.length === 0) return [];
   const ids = entryIds === null ? null : [...entryIds];
@@ -696,16 +709,12 @@ export async function overForList(
              WHEN e.membership_type IS NULL OR e.membership_type = '' THEN NULL
              WHEN EXISTS (
                SELECT 1
-               FROM gym_membership_types lt
-               JOIN gym_held_memberships lh
-                 ON lh.gym_id = lt.gym_id AND lh.membership_type_id = lt.id AND lh.entry_id = e.id
-               WHERE lt.gym_id = e.gym_id AND lt.archived_at IS NULL
-                 AND lt.id = COALESCE(
-                   (SELECT l.membership_type_id FROM gym_membership_word_links l
-                    WHERE l.gym_id = e.gym_id AND l.word_key = lower(e.membership_type)),
-                   (SELECT s.id FROM gym_membership_types s
-                    WHERE s.gym_id = e.gym_id AND s.archived_at IS NULL AND lower(s.name) = lower(e.membership_type))
-                 )
+               FROM gym_held_memberships lh
+               JOIN gym_membership_types lt ON lt.gym_id = lh.gym_id AND lt.id = lh.membership_type_id
+               WHERE lh.gym_id = e.gym_id AND lh.entry_id = e.id
+                 AND (lower(lt.name) = lower(e.membership_type)
+                      OR lt.id = (SELECT l.membership_type_id FROM gym_membership_word_links l
+                                  WHERE l.gym_id = e.gym_id AND l.word_key = lower(e.membership_type)))
              ) THEN NULL
              ELSE e.membership_type
            END AS listed_unheld
@@ -716,7 +725,29 @@ export async function overForList(
       FROM gym_held_memberships h
       JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
       WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status = ANY(${[...OVER]}::text[])
-      ORDER BY h.starts_on DESC, h.id
+      ORDER BY
+        CASE
+          WHEN h.status = 'cancelled' THEN h.cancelled_on
+          -- One that renews has no last day; the rule falls back on its start day.
+          WHEN h.kind = 'recurring' AND h.renews THEN h.starts_on
+          ELSE (
+            SELECT CASE WHEN d.last_day <= ${today}::date THEN d.last_day ELSE h.starts_on END
+            FROM (
+              SELECT (h.starts_on + make_interval(
+                       years  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'year'  THEN h.term_count * n.periods ELSE 0 END,
+                       months => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'month' THEN h.term_count * n.periods ELSE 0 END,
+                       weeks  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'week'  THEN h.term_count * n.periods ELSE 0 END,
+                       days   => CASE WHEN h.kind = 'pack' THEN h.pack_days
+                                      WHEN h.term_unit = 'day' THEN h.term_count * n.periods ELSE 0 END
+                     ))::date + h.frozen_days - 1 AS last_day
+              -- A repeating one that will not renew runs to the end of what is paid.
+              FROM (SELECT CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END AS periods) n
+            ) d
+          )
+        END DESC,
+        (h.kind = 'pack') ASC,
+        h.starts_on DESC,
+        h.id::text ASC
       LIMIT 1
     ) o ON true`;
   return rows.map((row) => ({

@@ -21,11 +21,25 @@ const IN_USE: readonly HeldOnList["status"][] = ["active", "frozen", "upcoming"]
 /** Each record whose columns the app answers, by its id: the records named, or every
  *  current record of the gym (null). `today` is the gym's own day.
  *
- *  Two reads. The memberships stored in use say most people's answer by themselves. The
- *  second read is for the rest: the people with nothing stored in use, and the few whose
- *  every membership stored in use the clock has ended since anybody wrote to it, who are
- *  judged with their newest one that is over and what the list's own word names. */
+ *  Two reads at ONE moment: on the pool they share a read-only snapshot, so a membership
+ *  cancelled between them is not handed to the rule as both in use and over. Inside a
+ *  caller's own transaction they run as they stand: a write there holds the gym's lock,
+ *  which every change to a membership takes first. */
 export async function heldOnListOf(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  today: string,
+  entryIds: readonly string[] | null,
+): Promise<Map<string, HeldShown>> {
+  if ("savepoint" in sql) return await bothReads(sql, gymId, today, entryIds);
+  return await sql.begin("isolation level repeatable read read only", (tx) => bothReads(tx, gymId, today, entryIds));
+}
+
+/** The memberships stored in use say most people's answer by themselves. The second read is
+ *  for the rest: the people with nothing stored in use, and the few whose every membership
+ *  stored in use the clock has ended since anybody wrote to it, who are judged with the one
+ *  stored over that finished last and what the list's own word names. */
+async function bothReads(
   sql: Sql | TransactionSql,
   gymId: string,
   today: string,
@@ -44,7 +58,7 @@ export async function heldOnListOf(
     if (shown !== null && IN_USE.includes(shown.status)) out.set(entryId, { shown, noEmail: mine.noEmail });
     else ended.push(entryId);
   }
-  for (const row of await overForList(sql, gymId, entryIds, ended)) {
+  for (const row of await overForList(sql, gymId, entryIds, ended, today)) {
     const held = [...(byEntry.get(row.entryId)?.held ?? []), ...(row.held === null ? [] : [row.held])];
     const shown = heldOnList({ held, listedUnheld: row.listedUnheld, today });
     if (shown !== null) out.set(row.entryId, { shown, noEmail: row.noEmail });
@@ -93,7 +107,7 @@ export interface WordCount {
 /** The Filter's order for the app's own words: the states of a membership, then what is
  *  owed first. Membership names go by the alphabet. */
 const STATUS_ORDER = (["active", "frozen", "upcoming", "ended", "cancelled"] as const).map((status) => fold(HELD_STATUS_WORDS[status]));
-const PAYMENT_ORDER = [HELD_PAYMENT_WORDS.due, HELD_PAYMENT_WORDS.paid, HELD_PAYMENT_WORDS.free].map(fold);
+const PAYMENT_ORDER = [HELD_PAYMENT_WORDS.due, HELD_PAYMENT_WORDS.later, HELD_PAYMENT_WORDS.paid, HELD_PAYMENT_WORDS.free].map(fold);
 
 function ordered(chips: Map<string, WordCount>, order: readonly string[] | null): WordCount[] {
   const place = (key: string): number => (order === null ? 0 : order.includes(key) ? order.indexOf(key) : order.length);

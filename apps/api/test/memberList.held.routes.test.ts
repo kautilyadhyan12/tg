@@ -7,10 +7,12 @@
 // rule, on the gym's own day, and one gym's memberships never reach another gym's list.
 //
 // The first test is the worst thing this could do to a real person: the list reads
-// "Paid" for somebody who owes the gym money.
+// "Paid" for somebody who owes the gym money. The second is its other half: somebody who
+// owes nothing yet is found under "Payment due" and chased.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
+  MEMBER_INVITE_WORDS,
   addDays,
   memberInvitePeopleSchema,
   memberInvitePreviewSchema,
@@ -20,11 +22,13 @@ import {
   memberListViewSchema,
   type GymMembershipTypesResponse,
   type HeldMembershipsResponse,
+  type MemberInvitePreview,
   type MemberListEntriesPage,
   type MemberListEntry,
   type MemberListSelection,
   type MemberListView,
 } from "@app/shared";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -42,6 +46,8 @@ const baseEnv = {
   WEB_ORIGIN: "http://localhost:5173",
   JWT_SECRET: "member-list-held-routes-secret-01234", // dummy test value, gitleaks:allow
   LOG_LEVEL: "error",
+  // The join door is how this file makes a trainer; join codes are off by default (ROADMAP 3c).
+  JOIN_CODES: "on",
 };
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -55,6 +61,7 @@ interface User {
 const TEST_TIMEOUT_MS = 120_000;
 const HOOK_TIMEOUT_MS = 90_000;
 const LIVE_PLAN = "zz_member_list_held";
+const DAY_MS = 86_400_000;
 
 let ipCounter = 0;
 const nextIp = () => `10.71.${String(Math.floor(ipCounter / 250))}.${String((ipCounter++ % 250) + 1)}`;
@@ -81,6 +88,7 @@ const monthly = (over: Record<string, unknown> = {}) => ({
 });
 const pack = (over: Record<string, unknown> = {}) =>
   monthly({ name: "PT 10", kind: "pack", priceMinor: 30000, termCount: null, termUnit: null, packClasses: 10, packDays: 90, includesPt: true, ...over });
+const dayPass = () => pack({ name: "Day pass", packClasses: 1, packDays: 1, priceMinor: 1500, includesPt: false });
 
 d("the Members list says what each person holds (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
@@ -92,10 +100,13 @@ d("the Members list says what each person holds (real Postgres)", () => {
 
   const cleanup = async () => {
     const mine = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'mlh-t-%@example.com')`;
+    await sql`DELETE FROM gym_invite_sends WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_invites WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_membership_word_links WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
+    await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
@@ -104,7 +115,7 @@ d("the Members list says what each person holds (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const send = (method: "POST" | "DELETE" | "GET", path: string, payload: unknown, cookies: Cookies) =>
+  const send = (method: "POST" | "DELETE" | "GET" | "PATCH", path: string, payload: unknown, cookies: Cookies) =>
     api().inject({
       method,
       url: path,
@@ -125,14 +136,17 @@ d("the Members list says what each person holds (real Postgres)", () => {
     return { userId, email, cookies: cookieMap(login) };
   };
 
+  /** Each gym's join code, for the one test that makes a trainer. */
+  const joinCodes = new Map<string, string>();
   const makeGym = async (owner: User, name: string, timezone = "Europe/London"): Promise<string> => {
     const res = await post("/v1/orgs", { trainsHere: false, name, city: "Leeds", country: "GB", timezone }, owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
-    const gymId = (JSON.parse(res.body) as { org: { id: string } }).org.id;
+    const made = JSON.parse(res.body) as { org: { id: string }; joinCode: { code: string } };
+    joinCodes.set(made.org.id, made.joinCode.code);
     await sql`
       INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
-      VALUES ('gym', ${gymId}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'trialing', 'pilot')`;
-    return gymId;
+      VALUES ('gym', ${made.org.id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'trialing', 'pilot')`;
+    return made.org.id;
   };
 
   const addType = async (gymId: string, who: User, body: { name: string }): Promise<string> => {
@@ -166,6 +180,14 @@ d("the Members list says what each person holds (real Postgres)", () => {
     if (made === undefined) throw new Error("the membership given is not on the page");
     return made.id;
   };
+  /** Give one as it was given so many days ago: the same service, its clock set back. */
+  const gaveDaysAgo = async (days: number, owner: User, gymId: string, entryId: string, body: { typeId: string; startsOn: string; paid: boolean }): Promise<string> => {
+    const then = new Date(Date.now() - days * DAY_MS);
+    const page = await heldService.giveHeldMembership({ sql, now: () => then }, owner.userId, gymId, entryId, { requestKey: nextKey(), ...body });
+    const made = page.memberships.find((m) => m.typeId === body.typeId);
+    if (made === undefined) throw new Error("the membership given is not on the page");
+    return made.id;
+  };
   const change = async (gymId: string, entryId: string, id: string, what: string, body: unknown, who: User) => {
     const res = await post(`${heldUrl(gymId, entryId)}/${id}/${what}`, body, who.cookies);
     expect(res.statusCode, res.body).toBe(200);
@@ -195,11 +217,19 @@ d("the Members list says what each person holds (real Postgres)", () => {
     const got = memberListSelectedAllSchema.parse((JSON.parse(res.body) as { selection: unknown }).selection);
     return { kind: "all", filter, count: got.count, digest: got.digest };
   };
-  const inviteGroup = async (gymId: string, who: User, query: string): Promise<number> => {
+  const previewOf = async (gymId: string, who: User, query: string): Promise<MemberInvitePreview> => {
     const res = await get(`${listUrl(gymId)}/invites/preview${query}`, who.cookies);
     expect(res.statusCode, res.body).toBe(200);
-    const preview = memberInvitePreviewSchema.parse((JSON.parse(res.body) as { preview: unknown }).preview);
+    return memberInvitePreviewSchema.parse((JSON.parse(res.body) as { preview: unknown }).preview);
+  };
+  const inviteGroup = async (gymId: string, who: User, query: string): Promise<number> => {
+    const preview = await previewOf(gymId, who, query);
     return preview.reach + Object.values(preview.skipped).reduce((sum, n) => sum + n, 0);
+  };
+  const reachOf = async (gymId: string, who: User, query: string): Promise<string[]> => {
+    const res = await get(`${listUrl(gymId)}/invites/people?group=reach&${query}`, who.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    return memberInvitePeopleSchema.parse((JSON.parse(res.body) as { page: unknown }).page).people.map((p) => p.fullName);
   };
   const csvOf = async (gymId: string, who: User, selection: MemberListSelection): Promise<Record<string, string>[]> => {
     const res = await post(`${listUrl(gymId)}/export.csv`, { selection }, who.cookies);
@@ -211,6 +241,30 @@ d("the Members list says what each person holds (real Postgres)", () => {
       .map((line) => line.slice(1, -1).split('","'));
     const [head, ...rows] = lines;
     return rows.map((cells) => Object.fromEntries((head ?? []).map((heading, at) => [heading, cells[at] ?? ""])));
+  };
+
+  /** Every count is the number of rows its filter shows, selects, invites and downloads.
+   *  Answers how many chips were checked. */
+  const countsAgree = async (gymId: string, who: User, view: MemberListView): Promise<number> => {
+    const kinds = [
+      ["status", view.statuses],
+      ["membershipType", view.membershipTypes],
+      ["paymentStatus", view.paymentStatuses],
+    ] as const;
+    let checked = 0;
+    for (const [kind, list] of kinds) {
+      for (const chip of list) {
+        const query = `?${kind}=${encodeURIComponent(chip.label)}`;
+        const what = `${kind} "${chip.label}"`;
+        expect((await pageOf(gymId, who, query)).total, what).toBe(chip.count);
+        const selection = await selectAll(gymId, who, { [kind]: chip.label });
+        expect(selection.count, what).toBe(chip.count);
+        expect(await inviteGroup(gymId, who, query), what).toBe(chip.count);
+        expect(await csvOf(gymId, who, selection), what).toHaveLength(chip.count);
+        checked += 1;
+      }
+    }
+    return checked;
   };
 
   /** The list service on a moved clock, as the routes call it. */
@@ -258,13 +312,7 @@ d("the Members list says what each person holds (real Postgres)", () => {
       await give(gymId, maya, owner, { typeId: pt, startsOn: today, paid: false });
       await give(gymId, leo, owner, { typeId: gold, startsOn: today, paid: true });
       // Tom paid for the month that started 40 days ago, and nothing since: the clock made him owe.
-      const then = new Date(Date.now() - 40 * 86_400_000);
-      await heldService.giveHeldMembership({ sql, now: () => then }, owner.userId, gymId, tom, {
-        requestKey: nextKey(),
-        typeId: gold,
-        startsOn: addDays(today, -40),
-        paid: true,
-      });
+      await gaveDaysAgo(40, owner, gymId, tom, { typeId: gold, startsOn: addDays(today, -40), paid: true });
 
       const page = await pageOf(gymId, owner);
       expect(rowOf(page, maya).held?.payment).toEqual({ state: "due", since: today });
@@ -291,11 +339,50 @@ d("the Members list says what each person holds (real Postgres)", () => {
       });
 
       // Forty days on with nobody pressing anything, Leo owes too.
-      const later = new Date(Date.now() + 40 * 86_400_000);
-      const then2 = await listService.readEntries(at(later), owner.userId, gymId, {}, yes);
-      expect(then2?.entries.find((entry) => entry.entryId === leo)?.held?.payment?.state).toBe("due");
+      const later = new Date(Date.now() + 40 * DAY_MS);
+      const then = await listService.readEntries(at(later), owner.userId, gymId, {}, yes);
+      expect(then?.entries.find((entry) => entry.entryId === leo)?.held?.payment?.state).toBe("due");
       const paidThen = await listService.readEntries(at(later), owner.userId, gymId, { paymentStatus: "Paid" }, yes);
       expect(paidThen?.entries.map((entry) => entry.fullName)).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "never puts somebody who owes nothing yet under Payment due: a membership still to start, not paid, is Not due yet until its day",
+    async () => {
+      const owner = await makeUser("notyet-owner");
+      const gymId = await makeGym(owner, "Mlh Not Yet Gym");
+      const gold = await addType(gymId, owner, monthly());
+      const uma = await addPerson(gymId, owner, "Uma Costa");
+      const vik = await addPerson(gymId, owner, "Vik Rao");
+      // Wren holds one paid and running, and another still to start that is not paid.
+      const wren = await addPerson(gymId, owner, "Wren Hale");
+      const today = await todayOf(gymId, uma, owner);
+      const starts = addDays(today, 10);
+      await give(gymId, uma, owner, { typeId: gold, startsOn: starts, paid: false });
+      await give(gymId, vik, owner, { typeId: gold, startsOn: today, paid: false });
+      await give(gymId, wren, owner, { typeId: gold, startsOn: today, paid: true });
+      await give(gymId, wren, owner, { typeId: await addType(gymId, owner, monthly({ name: "Annual", termUnit: "year", priceMinor: 40000 })), startsOn: starts, paid: false });
+
+      const page = await pageOf(gymId, owner);
+      expect(rowOf(page, uma).held).toMatchObject({ status: "upcoming", payment: { state: "later", on: starts } });
+      expect(rowOf(page, vik).held?.payment).toEqual({ state: "due", since: today });
+      expect(rowOf(page, wren).held).toMatchObject({ status: "active", memberships: ["Gold Monthly", "Annual"], payment: { state: "later", on: starts } });
+
+      // "Payment due" is Vik alone: in the Filter, the count, Select all, Invite and the file.
+      expect(namesOf(await pageOf(gymId, owner, "?paymentStatus=payment%20due"))).toEqual(["Vik Rao"]);
+      expect(namesOf(await pageOf(gymId, owner, "?paymentStatus=not%20due%20yet"))).toEqual(["Uma Costa", "Wren Hale"]);
+      const view = await viewOf(gymId, owner);
+      expect(chips(view.paymentStatuses)).toEqual({ "Payment due": 1, "Not due yet": 2 });
+      expect(view.paymentStatuses.map((chip) => chip.label)).toEqual(["Payment due", "Not due yet"]);
+      expect(await countsAgree(gymId, owner, view)).toBe(6);
+      const file = new Map((await csvOf(gymId, owner, await selectAll(gymId, owner, {}))).map((row) => [row["Name"] ?? "", row["Payment status"]]));
+      expect(Object.fromEntries(file)).toEqual({ "Uma Costa": "Not due yet", "Vik Rao": "Payment due", "Wren Hale": "Not due yet" });
+
+      // On its day, with nobody pressing anything, it is owed.
+      const onTheDay = await listService.readEntries(at(new Date(Date.now() + 10 * DAY_MS)), owner.userId, gymId, { paymentStatus: "payment due" }, yes);
+      expect(onTheDay?.entries.map((entry) => entry.fullName).sort()).toEqual(["Uma Costa", "Vik Rao", "Wren Hale"]);
     },
     TEST_TIMEOUT_MS,
   );
@@ -340,7 +427,7 @@ d("the Members list says what each person holds (real Postgres)", () => {
         status: "upcoming",
         memberships: ["Gold Monthly"],
         day: { what: "starts", on: addDays(today, 10) },
-        payment: { state: "due", since: addDays(today, 10) },
+        payment: { state: "later", on: addDays(today, 10) },
       });
       expect(rowOf(page, gone).held).toEqual({ status: "cancelled", memberships: ["Gold Monthly"], day: { what: "cancelled", on: today }, payment: null });
       // A membership before a pack bought after it.
@@ -360,7 +447,7 @@ d("the Members list says what each person holds (real Postgres)", () => {
       expect(file.get("Asha Patel")).toMatchObject({ Status: "Active", Membership: "Bronze", "Renewal date": "2027-03-01", "Payment status": "Paid" });
       expect(file.get("Cara Diaz")).toMatchObject({ Status: "Active", Membership: "Gold Monthly", "Renewal date": renews?.on, "End date": "", "Payment status": "Paid" });
       expect(file.get("Dev Shah")).toMatchObject({ Status: "Frozen", "Renewal date": "", "End date": "" });
-      expect(file.get("Elif Kaya")).toMatchObject({ Status: "Not started", "Payment status": "Payment due" });
+      expect(file.get("Elif Kaya")).toMatchObject({ Status: "Not started", "Payment status": "Not due yet" });
       expect(file.get("Finn Moore")).toMatchObject({ Status: "Cancelled", Membership: "Gold Monthly", "End date": today, "Payment status": "" });
       expect(file.get("Gia Rossi")).toMatchObject({ Membership: "Gold Monthly; PT 10" });
       expect(file.get("Ben Okafor")).toMatchObject({ Status: "", Membership: "", "Payment status": "" });
@@ -397,26 +484,7 @@ d("the Members list says what each person holds (real Postgres)", () => {
       expect(namesOf(await pageOf(gymId, owner, "?paymentStatus=Unpaid"))).toEqual([]);
       expect(namesOf(await pageOf(gymId, owner, "?status=active&paymentStatus=paid"))).toEqual(["Asha Patel", "Ben Okafor"]);
       expect(namesOf(await pageOf(gymId, owner, "?membershipType=PT%2010"))).toEqual(["Cara Diaz"]);
-
-      const kinds = [
-        ["status", view.statuses],
-        ["membershipType", view.membershipTypes],
-        ["paymentStatus", view.paymentStatuses],
-      ] as const;
-      let checked = 0;
-      for (const [kind, list] of kinds) {
-        for (const chip of list) {
-          const query = `?${kind}=${encodeURIComponent(chip.label)}`;
-          const what = `${kind} "${chip.label}"`;
-          expect((await pageOf(gymId, owner, query)).total, what).toBe(chip.count);
-          const selection = await selectAll(gymId, owner, { [kind]: chip.label });
-          expect(selection.count, what).toBe(chip.count);
-          expect(await inviteGroup(gymId, owner, query), what).toBe(chip.count);
-          expect(await csvOf(gymId, owner, selection), what).toHaveLength(chip.count);
-          checked += 1;
-        }
-      }
-      expect(checked).toBe(10);
+      expect(await countsAgree(gymId, owner, view)).toBe(10);
 
       // Invite's own list of people says each one's status and membership as their row does.
       const res = await get(`${listUrl(gymId)}/invites/people?group=reach`, owner.cookies);
@@ -436,13 +504,88 @@ d("the Members list says what each person holds (real Postgres)", () => {
   );
 
   it(
-    "agrees with the person's own page about a membership the gym's list names",
+    "says the membership that finished last on the day somebody is cancelled, whenever it started",
+    async () => {
+      const owner = await makeUser("finished-owner");
+      const gymId = await makeGym(owner, "Mlh Finished Gym");
+      const annual = await addType(gymId, owner, monthly({ name: "Gold Annual", termUnit: "year", priceMinor: 40000 }));
+      const pass = await addType(gymId, owner, dayPass());
+      // Fay has held a one-year membership for 300 days, and bought a day pass 10 days ago.
+      const fay = await addPerson(gymId, owner, "Fay Wood");
+      const today = await todayOf(gymId, fay, owner);
+      const held = await gaveDaysAgo(300, owner, gymId, fay, { typeId: annual, startsOn: addDays(today, -300), paid: true });
+      await gaveDaysAgo(10, owner, gymId, fay, { typeId: pass, startsOn: addDays(today, -10), paid: true });
+      expect(rowOf(await pageOf(gymId, owner), fay).held).toMatchObject({ status: "active", memberships: ["Gold Annual"] });
+
+      // Staff cancel her membership today. Both are over now; the pass started later.
+      await change(gymId, fay, held, "cancel", { when: "today" }, owner);
+      expect(rowOf(await pageOf(gymId, owner), fay).held).toEqual({
+        status: "cancelled",
+        memberships: ["Gold Annual"],
+        day: { what: "cancelled", on: today },
+        payment: null,
+      });
+      expect(namesOf(await pageOf(gymId, owner, "?status=Cancelled"))).toEqual(["Fay Wood"]);
+      expect(namesOf(await pageOf(gymId, owner, "?status=Ended"))).toEqual([]);
+      const view = await viewOf(gymId, owner);
+      expect(chips(view.statuses)).toEqual({ Cancelled: 1 });
+      expect(chips(view.membershipTypes)).toEqual({ "Gold Annual": 1 });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the clock ends a membership with nobody pressing anything: the row, the counts and the Filter follow",
+    async () => {
+      const owner = await makeUser("clock-owner");
+      const gymId = await makeGym(owner, "Mlh Clock Gym");
+      const gold = await addType(gymId, owner, monthly());
+      const pass = await addType(gymId, owner, dayPass());
+      const month = await addType(gymId, owner, monthly({ name: "One month", kind: "one_time" }));
+      const cy = await addPerson(gymId, owner, "Cy Brandt");
+      const ed = await addPerson(gymId, owner, "Ed Novak");
+      // Di's record names a membership she never had here; her day pass is over too.
+      const di = await addPerson(gymId, owner, "Di Okoro", { status: "Active", membershipType: "Gold Plus" });
+      const flo = await addPerson(gymId, owner, "Flo Marsh");
+      const today = await todayOf(gymId, cy, owner);
+      // Cy's day pass three days ago, never paid; Ed's month forty days ago. Nobody has
+      // written to either since: the table still calls them active.
+      await gaveDaysAgo(3, owner, gymId, cy, { typeId: pass, startsOn: addDays(today, -3), paid: false });
+      await gaveDaysAgo(40, owner, gymId, ed, { typeId: month, startsOn: addDays(today, -40), paid: true });
+      await gaveDaysAgo(3, owner, gymId, di, { typeId: pass, startsOn: addDays(today, -3), paid: true });
+      await give(gymId, flo, owner, { typeId: gold, startsOn: today, paid: true });
+      const stored = await sql<{ status: string }[]>`SELECT status FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id IN (${cy}, ${ed}, ${di})`;
+      expect(stored.map((row) => row.status)).toEqual(["active", "active", "active"]);
+
+      const page = await pageOf(gymId, owner);
+      expect(rowOf(page, cy).held).toEqual({ status: "ended", memberships: ["Day pass"], day: { what: "ended", on: addDays(today, -3) }, payment: null });
+      const month1 = rowOf(page, ed).held;
+      expect(month1).toMatchObject({ status: "ended", memberships: ["One month"], payment: null });
+      expect(month1?.day?.what).toBe("ended");
+      expect((month1?.day?.on ?? "9999") < today).toBe(true);
+      // Di keeps her list's own words: what it names she never had here.
+      expect(rowOf(page, di)).toMatchObject({ held: null, status: "Active", membershipType: "Gold Plus" });
+      expect(rowOf(page, flo).held?.status).toBe("active");
+
+      const view = await viewOf(gymId, owner);
+      expect(chips(view.statuses)).toEqual({ Active: 2, Ended: 2 });
+      expect(chips(view.membershipTypes)).toEqual({ "Day pass": 1, "Gold Monthly": 1, "One month": 1, "Gold Plus": 1 });
+      expect(chips(view.paymentStatuses)).toEqual({ Paid: 1, "": 3 });
+      expect(namesOf(await pageOf(gymId, owner, "?status=Ended"))).toEqual(["Cy Brandt", "Ed Novak"]);
+      expect(await countsAgree(gymId, owner, view)).toBe(8);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "agrees with the person's own page about a membership the gym's list names, and goes on saying who was cancelled once a type leaves the price list",
     async () => {
       const owner = await makeUser("listed-owner");
       const gymId = await makeGym(owner, "Mlh Listed Gym");
       const gold = await addType(gymId, owner, monthly());
-      const day = await addType(gymId, owner, pack({ name: "Day pass", packClasses: 1, packDays: 1, priceMinor: 1500, includesPt: false }));
+      const day = await addType(gymId, owner, dayPass());
       const old = await addType(gymId, owner, monthly({ name: "Old Silver" }));
+      const retired = await addType(gymId, owner, monthly({ name: "Retired" }));
       // [the name on their record, the membership they once had here and no longer do]
       const cases: [string, string, string | null][] = [
         ["Asha Patel", "Gold Plus", day], // a name with no price here: not set up
@@ -450,8 +593,9 @@ d("the Members list says what each person holds (real Postgres)", () => {
         ["Cara Diaz", "Gold Monthly", gold], // the type they did have
         ["Dev Shah", "GOLD MONTHLY", gold], // the same, in other capitals
         ["Elif Kaya", "Gold", gold], // a name staff said is Gold Monthly
-        ["Finn Moore", "Old Silver", old], // a type since archived
+        ["Finn Moore", "Old Silver", old], // a type they had, archived since
         ["Gia Rossi", "Bronze", null], // nothing held at all
+        ["Ivo Lang", "Legacy", retired], // a name staff said is a type they had, archived since
       ];
       const ids = new Map<string, string>();
       for (const [name, word] of cases) ids.set(name, await addPerson(gymId, owner, name, { membershipType: word, status: "Active" }));
@@ -462,24 +606,23 @@ d("the Members list says what each person holds (real Postgres)", () => {
         if (typeId === null) continue;
         await change(gymId, id, await give(gymId, id, owner, { typeId, startsOn: today, paid: true }), "cancel", { when: "today" }, owner);
       }
-      // Staff say the list's "Gold" is Gold Monthly: the link alone, nobody given anything.
+      // Staff say the list's "Gold" is Gold Monthly and "Legacy" is Retired: the links alone.
       await sql`
         INSERT INTO gym_membership_word_links (gym_id, word_key, word, membership_type_id, linked_by)
-        VALUES (${gymId}, 'gold', 'Gold', ${gold}, ${owner.userId})`;
-      await sql`UPDATE gym_membership_types SET archived_at = now() WHERE gym_id = ${gymId} AND id = ${old}`;
+        VALUES (${gymId}, 'gold', 'Gold', ${gold}, ${owner.userId}), (${gymId}, 'legacy', 'Legacy', ${retired}, ${owner.userId})`;
+      // Two types leave the price list.
+      await sql`UPDATE gym_membership_types SET archived_at = now() WHERE gym_id = ${gymId} AND id IN (${old}, ${retired})`;
 
       const page = await pageOf(gymId, owner);
       const shows: Record<string, "list" | "app"> = {};
+      /** The page draws the list's name as a row of its own ("Not set up", "Not added")
+       *  unless they have, or have had, the live type that name is: the web's `listedRow`. */
+      const pageDrawsListName: Record<string, boolean> = {};
       for (const [name] of cases) {
         const id = ids.get(name) ?? "";
-        const row = rowOf(page, id);
         const theirs = JSON.parse((await get(heldUrl(gymId, id), owner.cookies)).body) as HeldMembershipsResponse;
-        // The page draws the list's name as a row of its own ("Not set up", "Not added")
-        // unless they have, or have had, the type that name is: the web's `listedRow`.
-        const pageSaysList = theirs.listed !== null && !(theirs.listed.type !== null && theirs.listed.held);
-        const held = theirs.memberships.length > 0;
-        expect(row.held === null, name).toBe(pageSaysList || !held);
-        shows[name] = row.held === null ? "list" : "app";
+        pageDrawsListName[name] = theirs.listed !== null && !(theirs.listed.type !== null && theirs.listed.held);
+        shows[name] = rowOf(page, id).held === null ? "list" : "app";
       }
       expect(shows).toEqual({
         "Asha Patel": "list",
@@ -487,12 +630,28 @@ d("the Members list says what each person holds (real Postgres)", () => {
         "Cara Diaz": "app",
         "Dev Shah": "app",
         "Elif Kaya": "app",
-        "Finn Moore": "list",
+        "Finn Moore": "app",
         "Gia Rossi": "list",
+        "Ivo Lang": "app",
       });
-      // Where the app answers, it is the membership that is over, not the list's "Active".
-      expect(rowOf(page, ids.get("Elif Kaya") ?? "").held).toMatchObject({ status: "cancelled", memberships: ["Gold Monthly"] });
-      expect(namesOf(await pageOf(gymId, owner, "?status=Active"))).toEqual(["Asha Patel", "Ben Okafor", "Finn Moore", "Gia Rossi"]);
+      // The two agree, except about a type archived since: the page offers to set the
+      // name up again, and the list goes on saying the person was cancelled.
+      expect(pageDrawsListName).toEqual({
+        "Asha Patel": true,
+        "Ben Okafor": true,
+        "Cara Diaz": false,
+        "Dev Shah": false,
+        "Elif Kaya": false,
+        "Finn Moore": true,
+        "Gia Rossi": true,
+        "Ivo Lang": true,
+      });
+      // Where the app answers, it is the membership that is over, never the old file's "Active".
+      for (const [name, type] of [["Elif Kaya", "Gold Monthly"], ["Finn Moore", "Old Silver"], ["Ivo Lang", "Retired"]] as const) {
+        expect(rowOf(page, ids.get(name) ?? "").held, name).toMatchObject({ status: "cancelled", memberships: [type] });
+      }
+      expect(namesOf(await pageOf(gymId, owner, "?status=Active"))).toEqual(["Asha Patel", "Ben Okafor", "Gia Rossi"]);
+      expect(chips((await viewOf(gymId, owner)).statuses)).toEqual({ Cancelled: 5, Active: 3 });
 
       // Holding something here: the row says that and nothing else, whatever name the
       // list gives, and the Filter finds them under what the row says.
@@ -506,27 +665,37 @@ d("the Members list says what each person holds (real Postgres)", () => {
   );
 
   it(
-    "one gym's memberships never reach another gym's list, and a stranger reads neither",
+    "one gym's memberships never reach another gym's list, and nobody without the tick reads what a person owes",
     async () => {
       const owner = await makeUser("tenant-owner");
       const rival = await makeUser("tenant-rival");
       const gymId = await makeGym(owner, "Mlh Tenant Gym");
       const rivalGym = await makeGym(rival, "Mlh Tenant Rival");
       const gold = await addType(gymId, owner, monthly());
-      await addType(rivalGym, rival, monthly());
+      const theirGold = await addType(rivalGym, rival, monthly());
       const sam = await addPerson(gymId, owner, "Sam Reed");
       const theirSam = await addPerson(rivalGym, rival, "Sam Reed");
+      const theirKit = await addPerson(rivalGym, rival, "Kit Vance");
       // The same person at both gyms, by the same address.
       await sql`UPDATE gym_member_list_entries SET email = 'mlh-p-sam@example.com' WHERE id IN (${sam}, ${theirSam})`;
       const today = await todayOf(gymId, sam, owner);
       await give(gymId, sam, owner, { typeId: gold, startsOn: today, paid: false });
+      // At the other gym: one cancelled today, so it has somebody whose answer is one that is over.
+      await change(rivalGym, theirKit, await give(rivalGym, theirKit, rival, { typeId: theirGold, startsOn: today, paid: true }), "cancel", { when: "today" }, rival);
 
       expect(rowOf(await pageOf(gymId, owner), sam).held?.payment).toEqual({ state: "due", since: today });
       const theirs = await pageOf(rivalGym, rival);
       expect(rowOf(theirs, theirSam).held).toBeNull();
+      expect(rowOf(theirs, theirKit).held?.status).toBe("cancelled");
       expect(namesOf(await pageOf(rivalGym, rival, "?paymentStatus=payment%20due"))).toEqual([]);
-      const view = await viewOf(rivalGym, rival);
-      expect([view.statuses, view.membershipTypes, view.paymentStatuses]).toEqual([[], [], []]);
+      // This gym sees nobody cancelled, in its rows, its Filter or its counts.
+      expect(namesOf(await pageOf(gymId, owner, "?status=Cancelled"))).toEqual([]);
+      const view = await viewOf(gymId, owner);
+      expect(chips(view.statuses)).toEqual({ Active: 1 });
+      expect(chips(view.membershipTypes)).toEqual({ "Gold Monthly": 1 });
+      // A ticked id of the other gym's person brings nothing of theirs into this gym's file.
+      const file = await csvOf(gymId, owner, { kind: "ticked", entryIds: [sam, theirKit] });
+      expect(file.map((row) => [row["Name"], row["Status"]])).toEqual([["Sam Reed", "Active"]]);
 
       // A stranger to the gym: its list, with or without a word filter, is not theirs to read.
       for (const query of ["", "?paymentStatus=Paid", "?status=Active"]) {
@@ -536,6 +705,22 @@ d("the Members list says what each person holds (real Postgres)", () => {
       expect((await get(`${listUrl(gymId)}/entries`)).statusCode).toBe(401);
       // A filter word of the wrong shape is refused before anything is read.
       expect((await get(`${listUrl(gymId)}/entries?paymentStatus=${"x".repeat(200)}`, owner.cookies)).statusCode).toBe(400);
+
+      // A trainer of this gym, who may not open a person's page: no row, count, person,
+      // invite or file says what anybody holds or owes.
+      const trainer = await makeUser("tenant-trainer");
+      const applied = await post("/v1/orgs/join", { code: joinCodes.get(gymId) }, trainer.cookies);
+      expect(applied.statusCode, applied.body).toBe(200);
+      const application = (JSON.parse(applied.body) as { application?: { id: string } }).application?.id;
+      if (application === undefined) throw new Error("apply returned no application");
+      expect((await post(`/v1/orgs/${gymId}/applications/${application}/confirm`, {}, owner.cookies)).statusCode).toBe(200);
+      await proveAddress(sql, trainer.email);
+      expect((await post(`/v1/orgs/${gymId}/staff`, { email: trainer.email, role: "trainer" }, owner.cookies)).statusCode).toBe(201);
+      for (const path of ["", "/entries", "/entries?paymentStatus=payment%20due", `/entries/${sam}`, "/invites/preview?paymentStatus=Paid", "/invites/people?group=reach"]) {
+        expect((await get(`${listUrl(gymId)}${path}`, trainer.cookies)).statusCode, path).toBe(403);
+      }
+      expect((await post(`${listUrl(gymId)}/selection`, { filter: { paymentStatus: "Paid" } }, trainer.cookies)).statusCode).toBe(403);
+      expect((await post(`${listUrl(gymId)}/export.csv`, { selection: { kind: "ticked", entryIds: [sam] } }, trainer.cookies)).statusCode).toBe(403);
     },
     TEST_TIMEOUT_MS,
   );
@@ -570,6 +755,63 @@ d("the Members list says what each person holds (real Postgres)", () => {
         Auckland: { state: "due", since: "2026-11-04" },
         "Auckland under Paid": 0,
       });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a press of Invite emails only the people its box showed: the same number of other people is refused",
+    async () => {
+      const owner = await makeUser("press-owner");
+      const gymId = await makeGym(owner, "Mlh Press Gym");
+      expect((await send("PATCH", `/v1/orgs/${gymId}`, { postalAddress: "12 High Street, Leeds LS1 1AA" }, owner.cookies)).statusCode).toBe(200);
+      const gold = await addType(gymId, owner, monthly());
+      const ann = await addPerson(gymId, owner, "Ann Reyes");
+      const bob = await addPerson(gymId, owner, "Bob Tran");
+      const today = await todayOf(gymId, ann, owner);
+      const hers = await give(gymId, ann, owner, { typeId: gold, startsOn: today, paid: false });
+      const his = await give(gymId, bob, owner, { typeId: gold, startsOn: today, paid: true });
+      const due = "?paymentStatus=payment%20due";
+      const invited = async () => (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_invites WHERE gym_id = ${gymId}`)[0]?.n;
+      const press = (preview: MemberInvitePreview, extra: Record<string, unknown> = {}) =>
+        post(
+          `${listUrl(gymId)}/invites`,
+          { paymentStatus: "payment due", version: preview.version, expectedCount: preview.reach, expectedDigest: preview.digest, permissionConfirmed: true, ...extra },
+          owner.cookies,
+        );
+
+      // The box shows Ann, who owes.
+      const first = await previewOf(gymId, owner, due);
+      expect(first).toMatchObject({ reach: 1, blocked: null });
+      expect(await reachOf(gymId, owner, "paymentStatus=payment%20due")).toEqual(["Ann Reyes"]);
+
+      // Before the press, Ann is marked paid and Bob's mark is taken back: one person still
+      // owes, the list's version has not moved, and it is not the person the box showed.
+      await change(gymId, ann, hers, "paid", { paidPeriods: 1 }, owner);
+      await change(gymId, bob, his, "paid", { paidPeriods: 0 }, owner);
+      const second = await previewOf(gymId, owner, due);
+      expect(second).toMatchObject({ reach: 1, version: first.version });
+      expect(second.digest).not.toBe(first.digest);
+      expect(await reachOf(gymId, owner, "paymentStatus=payment%20due")).toEqual(["Bob Tran"]);
+
+      const refused = await press(first);
+      expect(refused.statusCode, refused.body).toBe(409);
+      expect(JSON.parse(refused.body)).toMatchObject({ error: "invite_changed", message: MEMBER_INVITE_WORDS.invite_changed, preview: { reach: 1, digest: second.digest } });
+      expect(await invited()).toBe(0);
+      // A press that says nothing of who it saw invites nobody either.
+      const blind = await post(`${listUrl(gymId)}/invites`, { paymentStatus: "payment due", version: second.version, expectedCount: 1, permissionConfirmed: true }, owner.cookies);
+      expect(blind.statusCode, blind.body).toBe(409);
+      expect((JSON.parse(blind.body) as { error: string }).error).toBe("invite_changed");
+      expect(await invited()).toBe(0);
+
+      // With what the box shows now, it goes: one invitation, Bob's.
+      const pressed = await press(second);
+      expect(pressed.statusCode, pressed.body).toBe(200);
+      expect(await invited()).toBe(1);
+      expect(await reachOf(gymId, owner, "paymentStatus=payment%20due")).toEqual([]);
+      const bobRow = rowOf(await pageOf(gymId, owner), bob);
+      expect(bobRow.invitation).not.toBeNull();
+      expect(rowOf(await pageOf(gymId, owner), ann).invitation).toBeNull();
     },
     TEST_TIMEOUT_MS,
   );

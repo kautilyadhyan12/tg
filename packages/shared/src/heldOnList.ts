@@ -28,8 +28,10 @@ export const HELD_STATUS_WORDS: Readonly<Record<HeldMembershipShown, string>> = 
   cancelled: "Cancelled",
 };
 
-/** The Payment column's words, which are also the Filter's choices. */
-export const HELD_PAYMENT_WORDS = { due: "Payment due", paid: "Paid", free: "Free" } as const;
+/** The Payment column's words, which are also the Filter's choices. "Payment due" is
+ *  money owed today; a payment whose day has not come is "Not due yet", so nobody who
+ *  owes nothing is found under the word staff chase people by. */
+export const HELD_PAYMENT_WORDS = { due: "Payment due", later: "Not due yet", paid: "Paid", free: "Free" } as const;
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -45,12 +47,14 @@ export const heldOnListSchema = z
       .object({ what: z.enum(["renews", "ends", "starts", "frozen", "ended", "cancelled"]), on: daySchema.nullable() })
       .strict()
       .nullable(),
-    /** `due` where ANY membership in use has a payment due, since the earliest day
-     *  (null where none of them says a day); `paid` only where none is due; `free` where
-     *  there is nothing to pay. Null once every membership is over. */
+    /** `due` where ANY membership in use is owed today, since the earliest day (null
+     *  where none of them says a day); else `later` where one has a payment whose day
+     *  has not come, on the nearest such day; else `paid`; `free` where there is nothing
+     *  to pay. Null once every membership is over. */
     payment: z
       .discriminatedUnion("state", [
         z.object({ state: z.literal("due"), since: daySchema.nullable() }).strict(),
+        z.object({ state: z.literal("later"), on: daySchema }).strict(),
         z.object({ state: z.literal("paid") }).strict(),
         z.object({ state: z.literal("free") }).strict(),
       ])
@@ -99,16 +103,41 @@ function dayOf(m: Seen, today: string): HeldOnList["day"] {
   return endsOn === null ? null : { what: "ends", on: endsOn };
 }
 
-/** Any payment due makes the person's payment due: a row never reads "Paid" for somebody
- *  who owes on one of the memberships they hold. */
-function paymentOf(inUse: readonly Seen[]): NonNullable<HeldOnList["payment"]> {
+/** Any payment owed today makes the person's payment due: a row never reads "Paid" for
+ *  somebody who owes on one of the memberships they hold. One whose day has not come (a
+ *  membership still to start, not paid) is not owed yet, and never reads "Payment due". */
+function paymentOf(inUse: readonly Seen[], today: string): NonNullable<HeldOnList["payment"]> {
   const due = inUse.flatMap((m) => (m.view.payment?.state === "due" ? [m.view.payment.since] : []));
-  if (due.length > 0) {
-    const days = due.filter((day): day is string => day !== null).sort();
+  const owed = due.filter((since) => since === null || since <= today);
+  if (owed.length > 0) {
+    const days = owed.filter((day): day is string => day !== null).sort();
     return { state: "due", since: days[0] ?? null };
   }
+  const later = due.filter((day): day is string => day !== null).sort()[0];
+  if (later !== undefined) return { state: "later", on: later };
   return inUse.some((m) => m.view.payment?.state === "paid") ? { state: "paid" } : { state: "free" };
 }
+
+/** The day a membership that is over finished: the day it was cancelled, which is stored
+ *  and counts as it stands; else its last day. A pack used up before its last day finished
+ *  on a day nobody stored, so its start day stands in: the earliest it can have been. */
+function finishedOn(m: Seen, today: string): string {
+  const { status, endsOn } = m.view;
+  if (endsOn !== null && (status === "cancelled" || endsOn <= today)) return endsOn;
+  return m.membership.startsOn;
+}
+
+/** Which of the ones that are over a row names: the one that finished last; a membership
+ *  before a pack that finished the same day; then the newest. `overForList` in the api
+ *  picks each record's one stored row by this same order. */
+const finishedLast =
+  (today: string) =>
+  (a: Seen, b: Seen): number => {
+    const [x, y] = [finishedOn(a, today), finishedOn(b, today)];
+    if (x !== y) return x < y ? 1 : -1;
+    const pack = Number(a.membership.kind === "pack") - Number(b.membership.kind === "pack");
+    return pack !== 0 ? pack : newestFirst(a, b);
+  };
 
 const fold = (name: string): string => name.trim().toLowerCase();
 
@@ -125,7 +154,7 @@ function names(list: readonly string[]): string[] {
 /** What the list's four columns show for somebody who holds, or has held, memberships
  *  here; null where the gym's own words show instead.
  *
- *  `held`: every membership of theirs in use, and the newest that is over. `listedUnheld`:
+ *  `held`: every membership of theirs in use, and the ones that are over. `listedUnheld`:
  *  the membership name the gym's own list gives them, where it names something they do
  *  not hold and never have (not set up, or not added); null otherwise.
  *
@@ -133,7 +162,8 @@ function names(list: readonly string[]): string[] {
  *     only those. A name on their record from the gym's old file is not a second
  *     membership; their own page still shows it.
  *  2. Nothing in use and the list names a membership they never had here: the list's words.
- *  3. Nothing in use otherwise: the newest one that is over, "Ended" or "Cancelled".
+ *  3. Nothing in use otherwise: the one that finished last, "Ended" or "Cancelled",
+ *     whenever it started (`finishedLast`).
  *  4. Nothing held at all: the list's words. */
 export function heldOnList(input: { held: readonly HeldForList[]; listedUnheld: string | null; today: string }): HeldOnList | null {
   const seen: Seen[] = input.held.map((m) => ({ ...m, view: heldMembershipFacts(m.membership, input.today) }));
@@ -144,11 +174,11 @@ export function heldOnList(input: { held: readonly HeldForList[]; listedUnheld: 
       status: first.view.status,
       memberships: names(inUse.map((m) => m.typeName)).slice(0, HELD_LIVE_MAX),
       day: dayOf(first, input.today),
-      payment: paymentOf(inUse),
+      payment: paymentOf(inUse, input.today),
     };
   }
   if (input.listedUnheld !== null) return null;
-  const last = [...seen].sort(newestFirst)[0];
+  const last = [...seen].sort(finishedLast(input.today))[0];
   if (last === undefined) return null;
   return { status: last.view.status, memberships: [last.typeName], day: dayOf(last, input.today), payment: null };
 }

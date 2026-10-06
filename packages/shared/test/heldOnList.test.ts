@@ -85,7 +85,12 @@ describe("the list never reads Paid for somebody who owes", () => {
     const cases: [string, HeldForList[], unknown][] = [
       ["unpaid from its first day", [unpaidMonthly], { state: "due", since: "2026-10-03" }],
       ["frozen while unpaid: no day to say", [frozenUnpaid], { state: "due", since: null }],
-      ["paid now, the next one unpaid and still to start", [gold(), startsLaterUnpaid], { state: "due", since: "2026-10-20" }],
+      // Not owed before its day: it has a word of its own, and is never "Payment due".
+      ["paid now, the next one unpaid and still to start", [gold(), startsLaterUnpaid], { state: "later", on: "2026-10-20" }],
+      ["nothing held yet but one unpaid and still to start", [startsLaterUnpaid], { state: "later", on: "2026-10-20" }],
+      ["free now, the next one unpaid and still to start", [free, startsLaterUnpaid], { state: "later", on: "2026-10-20" }],
+      ["owed now beside one not owed yet: due, since the day already owed", [unpaidMonthly, startsLaterUnpaid], { state: "due", since: "2026-10-03" }],
+      ["frozen while unpaid beside one not owed yet: due, with no day", [frozenUnpaid, startsLaterUnpaid], { state: "due", since: null }],
       ["free now, a pack unpaid", [free, unpaidPack], { state: "due", since: "2026-10-02" }],
       ["two unpaid: since the earlier day", [unpaidMonthly, unpaidPack], { state: "due", since: "2026-10-02" }],
       ["a day beside no day: the day", [frozenUnpaid, unpaidPack], { state: "due", since: "2026-10-02" }],
@@ -98,6 +103,19 @@ describe("the list never reads Paid for somebody who owes", () => {
     for (const [what, list, payment] of cases) {
       expect(on(list, today)?.payment, what).toEqual(payment);
     }
+  });
+
+  it("a payment is not due before its day: the day before, the day, the day after", () => {
+    // Given on 7 October to start on the 16th, not paid. Nobody owes anything until the 16th.
+    const annual = held("Annual", given(yearly, "2026-10-16", false, "2026-10-07"));
+    expect(on([annual], "2026-10-07")?.payment).toEqual({ state: "later", on: "2026-10-16" });
+    expect(on([annual], "2026-10-15")?.payment).toEqual({ state: "later", on: "2026-10-16" });
+    expect(on([annual], "2026-10-16")?.payment).toEqual({ state: "due", since: "2026-10-16" });
+    expect(on([annual], "2026-10-17")?.payment).toEqual({ state: "due", since: "2026-10-16" });
+    // Two not owed yet: the nearer day.
+    const pack = held("PT 10", given(tenPack, "2026-10-12", false, "2026-10-07"));
+    expect(on([annual, pack], "2026-10-07")?.payment).toEqual({ state: "later", on: "2026-10-12" });
+    expect(on([pack, annual], "2026-10-07")?.payment).toEqual({ state: "later", on: "2026-10-12" });
   });
 
   it("a membership that is over owes nothing here, as on the person's own page", () => {
@@ -122,7 +140,19 @@ describe("the list never reads Paid for somebody who owes", () => {
       held("Day pass", given(dayPass, "2026-11-09", false, "2026-11-09")), // over since yesterday
       held("Silver", moved(given(monthly, "2026-09-01", false, "2026-09-01"), { type: "cancel", when: "today" }, "2026-09-20")),
     ];
-    const owes = (m: HeldForList) => heldMembershipView(m.membership, today).payment?.state === "due";
+    const dueSince = (m: HeldForList): string | null | undefined => {
+      const payment = heldMembershipView(m.membership, today).payment;
+      return payment?.state === "due" ? payment.since : undefined;
+    };
+    // Owed today: due with no day to say, or since a day that has come.
+    const owes = (m: HeldForList) => {
+      const since = dueSince(m);
+      return since !== undefined && (since === null || since <= today);
+    };
+    const owesLater = (m: HeldForList) => {
+      const since = dueSince(m);
+      return typeof since === "string" && since > today;
+    };
     const inUse = (m: HeldForList) => ["active", "frozen", "upcoming"].includes(heldMembershipView(m.membership, today).status);
     let sets = 0;
     for (let a = 0; a < pool.length; a++) {
@@ -132,7 +162,13 @@ describe("the list never reads Paid for somebody who owes", () => {
           const using = list.filter(inUse);
           if (using.length === 0) continue;
           sets += 1;
-          const expected = using.some(owes) ? "due" : using.some((m) => heldMembershipView(m.membership, today).payment?.state === "paid") ? "paid" : "free";
+          const expected = using.some(owes)
+            ? "due"
+            : using.some(owesLater)
+              ? "later"
+              : using.some((m) => heldMembershipView(m.membership, today).payment?.state === "paid")
+                ? "paid"
+                : "free";
           for (const order of [list, [...list].reverse()]) {
             expect(on(order, today)?.payment?.state, order.map((m) => m.id).join("+")).toBe(expected);
           }
@@ -240,6 +276,43 @@ describe("somebody with nothing in use", () => {
     expect(on([olderPass], today)).toEqual({ status: "ended", memberships: ["Day pass"], day: { what: "ended", on: "2026-07-10" }, payment: null });
   });
 
+  it("names the one that finished last, whenever it started", () => {
+    // Fay held a one-year membership for 300 days and bought a day pass 10 days ago. Staff
+    // cancel the membership today: she is a cancelled member, not somebody whose day pass ended.
+    const year = held("Gold Annual", moved(given(yearly, "2025-12-11", true, "2025-12-11"), { type: "cancel", when: "today" }, today));
+    const pass = held("Day pass", given(dayPass, "2026-09-27", true, "2026-09-27"));
+    for (const order of [[year, pass], [pass, year]]) {
+      expect(on(order, today)).toEqual({ status: "cancelled", memberships: ["Gold Annual"], day: { what: "cancelled", on: today }, payment: null });
+    }
+  });
+
+  it("orders the ones that are over by the day each finished, a membership before a pack on the same day, then the newest", () => {
+    const ended = (name: string, type: HeldMembershipTerms, startsOn: string, extra: Partial<HeldForList> = {}) => held(name, given(type, startsOn, true, startsOn), extra);
+    const cancelledOn = (name: string, type: HeldMembershipTerms, startsOn: string, day: string) =>
+      held(name, moved(given(type, startsOn, true, startsOn), { type: "cancel", when: "today" }, day));
+    // [what is over, the name the row gives, why]
+    const cases: [string, HeldForList[], string][] = [
+      ["a long one that ran out last week beside a pass from last month", [ended("Three months", threeMonths, "2026-07-01"), ended("Day pass", dayPass, "2026-09-10")], "Three months"],
+      ["a pass yesterday beside a membership cancelled last month", [ended("Day pass", dayPass, "2026-10-06"), cancelledOn("Gold Monthly", monthly, "2026-06-01", "2026-09-05")], "Day pass"],
+      ["a membership and a pack that finished the same day", [ended("Day pass", dayPass, "2026-09-30"), ended("Three months", threeMonths, "2026-07-01")], "Three months"],
+      ["two cancelled the same day: the newer start", [cancelledOn("Silver", monthly, "2026-05-01", "2026-09-05"), cancelledOn("Gold Monthly", monthly, "2026-06-01", "2026-09-05")], "Gold Monthly"],
+      // A pack used up before its last day finished on a day nobody stored; its start day stands in.
+      ["a used-up pack bought after a membership ended", [held("PT 10", { ...given(tenPack, "2026-09-20", true, "2026-09-20"), classesLeft: 0 }), ended("Three months", threeMonths, "2026-06-01")], "PT 10"],
+      ["a used-up pack bought before a membership ended", [held("PT 10", { ...given(tenPack, "2026-08-01", true, "2026-08-01"), classesLeft: 0 }), ended("Three months", threeMonths, "2026-06-10")], "Three months"],
+      // The day somebody was cancelled is stored, so it counts as it stands: a gym that
+      // moves its clock back can hold one cancelled on what is now tomorrow.
+      ["one cancelled on a day after today", [cancelledOn("Gold Monthly", monthly, "2026-06-01", "2026-10-08"), cancelledOn("Silver", monthly, "2026-09-01", "2026-09-20")], "Gold Monthly"],
+    ];
+    for (const [what, list, name] of cases) {
+      for (const order of [list, [...list].reverse()]) expect(on(order, today)?.memberships, what).toEqual([name]);
+    }
+    // Alike in every way: one order, whichever comes first.
+    const a = ended("Day pass", dayPass, "2026-09-10", { id: "a" });
+    const b = ended("Guest pass", dayPass, "2026-09-10", { id: "b" });
+    expect(on([a, b], today)?.memberships).toEqual(["Day pass"]);
+    expect(on([b, a], today)?.memberships).toEqual(["Day pass"]);
+  });
+
   it("reads the gym's own words where its list names a membership they never had here", () => {
     expect(on([olderPass], today, "Gold")).toBeNull();
   });
@@ -268,6 +341,9 @@ describe("the words the Filter, the counts and the download use", () => {
     if (over === null) throw new Error("nothing shown");
     expect(heldListWords(over)).toEqual({ status: "Cancelled", memberships: ["Gold Monthly"], payment: null });
     expect(Object.values(HELD_STATUS_WORDS)).toEqual(["Not started", "Active", "Frozen", "Ended", "Cancelled"]);
-    expect(HELD_PAYMENT_WORDS).toEqual({ due: "Payment due", paid: "Paid", free: "Free" });
+    expect(HELD_PAYMENT_WORDS).toEqual({ due: "Payment due", later: "Not due yet", paid: "Paid", free: "Free" });
+    const notYet = on([held("Annual", given(yearly, "2026-10-20", false, today))], today);
+    if (notYet === null) throw new Error("nothing shown");
+    expect(heldListWords(notYet)).toEqual({ status: "Not started", memberships: ["Annual"], payment: "Not due yet" });
   });
 });
