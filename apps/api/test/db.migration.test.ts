@@ -1851,6 +1851,73 @@ d("0001_init on a real database", () => {
       });
   });
 
+  it("0081's challenges: a target within its days, a person in a challenge once, only this gym's challenge, and who joined goes with it", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0081-owner') RETURNING id`;
+        if (user === undefined) throw new Error("no user");
+        const gymOf = async (slug: string) => {
+          const [gym] = await tx<{ id: string }[]>`
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0081', 'Europe/London', ${user.id}) RETURNING id`;
+          if (gym === undefined) throw new Error("no gym");
+          return gym.id;
+        };
+        const a = await gymOf("zz-0081-a");
+        const b = await gymOf("zz-0081-b");
+        const row = (over: Record<string, unknown> = {}) => ({
+          gym_id: a,
+          challenge_key: randomUUID(),
+          name: "October",
+          counts: "gym_days",
+          starts_on: "2026-10-01",
+          ends_on: "2026-10-31",
+          target: null,
+          who: "everyone",
+          ...over,
+        });
+        /** The constraint an insert trips, or "ok". Each in its own savepoint. */
+        const put = async (table: "gym_challenges" | "gym_challenge_people", values: Record<string, unknown>): Promise<string> => {
+          try {
+            await tx.savepoint((sp) => sp`INSERT INTO ${sp(table)} ${sp(values)}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        const key = "00000000-0000-4000-8000-000000000081";
+        expect(await put("gym_challenges", row({ challenge_key: key, target: 31 }))).toBe("ok");
+        expect(await put("gym_challenges", row({ starts_on: "2026-10-01", ends_on: "2027-10-01" }))).toBe("ok");
+        const refused: [string, Record<string, unknown>, string][] = [
+          ["the same key twice", { challenge_key: key }, "gym_challenges_key_uq"],
+          ["a target above its days", { target: 32 }, "gym_challenges_target_check"],
+          ["a target of nothing", { target: 0 }, "gym_challenges_target_check"],
+          ["a last day before the first", { ends_on: "2026-09-30" }, "gym_challenges_days_check"],
+          ["367 days", { ends_on: "2027-10-02" }, "gym_challenges_days_check"],
+          ["something else counted", { counts: "streak" }, "gym_challenges_counts_check"],
+          ["somebody else in it", { who: "staff" }, "gym_challenges_who_check"],
+          ["no name", { name: "" }, "gym_challenges_name_check"],
+        ];
+        for (const [what, over, constraint] of refused) expect(await put("gym_challenges", row(over)), what).toBe(constraint);
+
+        const [mine] = await tx<{ id: string }[]>`SELECT id FROM gym_challenges WHERE gym_id = ${a} AND challenge_key = ${key}`;
+        if (mine === undefined) throw new Error("no challenge");
+        const joined = { gym_id: a, challenge_id: mine.id, user_id: user.id };
+        expect(await put("gym_challenge_people", joined)).toBe("ok");
+        expect(await put("gym_challenge_people", joined), "joined twice").toBe("gym_challenge_people_pk");
+        const [other] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0081-other') RETURNING id`;
+        expect(await put("gym_challenge_people", { ...joined, user_id: other?.id ?? null, gym_id: b }), "under another gym").toBe("gym_challenge_people_challenge_fk");
+
+        await tx`DELETE FROM gym_challenges WHERE id = ${mine.id}`;
+        const [gone] = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_challenge_people WHERE user_id = ${user.id}`;
+        expect(gone?.n).toBe(0);
+        throw new Error("ROLLBACK-0081-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0081-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
    *  (Low-1) — which is the highest-value item that round found.
    *

@@ -561,6 +561,13 @@
       "when": 1788307200064,
       "tag": "0080_gym_event_places",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1788393600065,
+      "tag": "0081_gym_challenges",
+      "breakpoints": true
     }
   ]
 }
