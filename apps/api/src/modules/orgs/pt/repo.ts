@@ -20,6 +20,7 @@ import {
   type PtSessionMinutes,
   type PtSpan,
   type PtTime,
+  type PtTimeOffSpan,
 } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -428,4 +429,159 @@ export async function sessionsUnderClasses(sql: SqlOrTx, gymId: string, trainerI
     className: r.class_name,
     classId: r.class_id,
   }));
+}
+
+// ── A TRAINER'S TIME OFF (17e-iii-b) ──
+
+export interface TimeOffRow extends PtTimeOffSpan {
+  id: string;
+  userId: string;
+  fromMs: number;
+  toMs: number;
+}
+
+interface RawTimeOff {
+  id: string;
+  user_id: string;
+  from_date: string;
+  to_date: string;
+  from_minute: number | null;
+  to_minute: number | null;
+  starts_at: Date;
+  ends_at: Date;
+}
+
+const toTimeOff = (r: RawTimeOff): TimeOffRow => ({
+  id: r.id,
+  userId: r.user_id,
+  fromDate: r.from_date,
+  toDate: r.to_date,
+  fromMinute: r.from_minute,
+  toMinute: r.to_minute,
+  fromMs: r.starts_at.getTime(),
+  toMs: r.ends_at.getTime(),
+});
+
+const TIME_OFF = (sql: SqlOrTx) => sql`
+  o.id, o.user_id, o.from_date::text AS from_date, o.to_date::text AS to_date, o.from_minute, o.to_minute, o.starts_at, o.ends_at`;
+
+/** The time off, not over at `now`, of the gym's trainers (`onlyUserId` names one), the
+ *  earliest first. */
+export async function timeOffComing(sql: SqlOrTx, gymId: string, onlyUserId: string | null, now: Date): Promise<TimeOffRow[]> {
+  const rows = await sql<RawTimeOff[]>`
+    SELECT ${TIME_OFF(sql)} FROM gym_trainer_time_off o
+    WHERE o.gym_id = ${gymId} AND (${onlyUserId}::uuid IS NULL OR o.user_id = ${onlyUserId}::uuid) AND o.ends_at > ${now}
+    ORDER BY o.starts_at, o.id`;
+  return rows.map(toTimeOff);
+}
+
+/** One trainer's time off that touches these days of the gym's. */
+export async function timeOffOn(sql: SqlOrTx, gymId: string, trainerId: string, fromDay: string, toDay: string): Promise<TimeOffRow[]> {
+  const rows = await sql<RawTimeOff[]>`
+    SELECT ${TIME_OFF(sql)} FROM gym_trainer_time_off o
+    WHERE o.gym_id = ${gymId} AND o.user_id = ${trainerId} AND o.from_date <= ${toDay}::date AND o.to_date >= ${fromDay}::date
+    ORDER BY o.starts_at, o.id`;
+  return rows.map(toTimeOff);
+}
+
+/** The time off a request made, if it has made one. */
+export async function timeOffByKey(sql: SqlOrTx, gymId: string, requestKey: string): Promise<TimeOffRow | null> {
+  const rows = await sql<RawTimeOff[]>`
+    SELECT ${TIME_OFF(sql)} FROM gym_trainer_time_off o WHERE o.gym_id = ${gymId} AND o.request_key = ${requestKey}`;
+  const row = rows[0];
+  return row === undefined ? null : toTimeOff(row);
+}
+
+/** A time off as two instants in the gym's zone: whole days run from the first midnight to
+ *  the midnight after the last. `onTheClock`: the end comes after the start, and for hours
+ *  of one day both times are ones the gym's clock has on it (the hour the clocks go
+ *  forward over is not, and Postgres would read it as the hour after). */
+export async function timeOffInstants(sql: SqlOrTx, timezone: string, off: PtTimeOffSpan): Promise<{ from: Date; to: Date; onTheClock: boolean }> {
+  const rows = await sql<{ starts_at: Date; ends_at: Date; start_real: boolean; end_real: boolean }[]>`
+    SELECT i.starts_at, i.ends_at,
+           (i.starts_at AT TIME ZONE ${timezone}) = c.starts AS start_real,
+           (i.ends_at AT TIME ZONE ${timezone}) = c.ends AS end_real
+    FROM (SELECT ${off.fromDate}::date + make_interval(mins => ${off.fromMinute ?? 0}::int) AS starts,
+                 ${off.toDate}::date + make_interval(mins => ${off.toMinute ?? 1440}::int) AS ends) c
+    CROSS JOIN LATERAL (SELECT c.starts AT TIME ZONE ${timezone} AS starts_at, c.ends AT TIME ZONE ${timezone} AS ends_at) i`;
+  const r = rows[0];
+  if (r === undefined) throw new Error("a time off had no instants");
+  const wholeDays = off.fromMinute === null || off.toMinute === null;
+  return { from: r.starts_at, to: r.ends_at, onTheClock: r.ends_at.getTime() > r.starts_at.getTime() && (wholeDays || (r.start_real && r.end_real)) };
+}
+
+/** Works out again the two instants of every time off of a gym from its own days and
+ *  times, in the zone the gym has now: called in the step that changes the zone, so a day
+ *  off goes on being that day on the gym's clock. One whose times the new zone's clock
+ *  would put out of order keeps the instants it had. */
+export async function reworkTimeOffInstants(tx: TransactionSql, gymId: string): Promise<void> {
+  await tx`
+    UPDATE gym_trainer_time_off o SET starts_at = t.starts_at, ends_at = t.ends_at
+    FROM (
+      SELECT x.id,
+             ((x.from_date + make_interval(mins => COALESCE(x.from_minute, 0))) AT TIME ZONE g.timezone) AS starts_at,
+             ((x.to_date + make_interval(mins => COALESCE(x.to_minute, 1440))) AT TIME ZONE g.timezone) AS ends_at
+      FROM gym_trainer_time_off x JOIN gyms g ON g.id = x.gym_id
+      WHERE x.gym_id = ${gymId}
+    ) t
+    WHERE o.gym_id = ${gymId} AND o.id = t.id AND t.ends_at > t.starts_at`;
+}
+
+/** A time off written. The caller holds the gym's lock and has checked the trainer. */
+export async function insertTimeOff(
+  tx: TransactionSql,
+  input: { gymId: string; userId: string; off: PtTimeOffSpan; from: Date; to: Date; requestKey: string; createdBy: string; now: Date },
+): Promise<string> {
+  const rows = await tx<{ id: string }[]>`
+    INSERT INTO gym_trainer_time_off (gym_id, user_id, from_date, to_date, from_minute, to_minute, starts_at, ends_at, request_key, created_by, created_at)
+    VALUES (${input.gymId}, ${input.userId}, ${input.off.fromDate}::date, ${input.off.toDate}::date, ${input.off.fromMinute}, ${input.off.toMinute},
+            ${input.from}, ${input.to}, ${input.requestKey}, ${input.createdBy}, ${input.now})
+    RETURNING id`;
+  const id = rows[0]?.id;
+  if (id === undefined) throw new Error("a time off's insert returned no row");
+  return id;
+}
+
+/** One time off of this trainer's removed; false where it was not there. */
+export async function deleteTimeOff(tx: TransactionSql, gymId: string, userId: string, id: string): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    DELETE FROM gym_trainer_time_off WHERE gym_id = ${gymId} AND user_id = ${userId} AND id = ${id} RETURNING id`;
+  return rows.length > 0;
+}
+
+export interface InTimeOff {
+  id: string;
+  name: string | null;
+  localDate: string;
+  localStartMinute: number;
+  minutes: number;
+}
+
+/** The sessions booked with a trainer, not over at `now`, that run into a span of time: the
+ *  earliest first. */
+export async function sessionsInSpan(sql: SqlOrTx, gymId: string, trainerId: string, from: Date, to: Date, now: Date): Promise<InTimeOff[]> {
+  const rows = await sql<{ id: string; name: string | null; local_date: string; local_start_minute: number; minutes: number }[]>`
+    SELECT a.id, e.full_name AS name, a.local_date::text AS local_date, a.local_start_minute, a.minutes
+    FROM gym_pt_appointments a
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = a.gym_id AND e.id = a.entry_id
+    WHERE a.gym_id = ${gymId} AND a.trainer_user_id = ${trainerId}
+      AND a.status = ANY(${[...PT_HOLDS_TIME]}::text[])
+      AND a.starts_at < ${to} AND a.ends_at > ${from} AND a.ends_at > ${now}
+    ORDER BY a.starts_at, a.id`;
+  return rows.map((r) => ({ id: r.id, name: r.name, localDate: r.local_date, localStartMinute: r.local_start_minute, minutes: r.minutes }));
+}
+
+/** The taught classes on the calendar a member of staff coaches, not over at `now`, that
+ *  run into a span of time: as `classesCoached` counts them, the earliest first. */
+export async function classesInSpan(sql: SqlOrTx, gymId: string, trainerId: string, from: Date, to: Date, now: Date): Promise<InTimeOff[]> {
+  const rows = await sql<{ id: string; name: string; local_date: string; local_start_minute: number; minutes: number }[]>`
+    SELECT s.id, t.name, s.local_date::text AS local_date, s.local_start_minute, s.minutes
+    FROM gym_class_sessions s
+    JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
+    WHERE s.gym_id = ${gymId} AND s.coach_user_id = ${trainerId} AND s.status = 'scheduled' AND NOT t.open_gym
+      AND s.starts_at < ${to}
+      AND s.starts_at > ${from}::timestamptz - make_interval(mins => ${CLASS_MINUTES_MAX}::int)
+      AND s.starts_at + make_interval(mins => s.minutes) > GREATEST(${from}::timestamptz, ${now}::timestamptz)
+    ORDER BY s.starts_at, s.id`;
+  return rows.map((r) => ({ id: r.id, name: r.name, localDate: r.local_date, localStartMinute: r.local_start_minute, minutes: r.minutes }));
 }

@@ -1851,19 +1851,19 @@ d("0001_init on a real database", () => {
       });
   });
 
-  it("0081's challenges: a target within its days, a person in a challenge once, only this gym's challenge, and who joined goes with it", async () => {
+  it("0082's challenges: a target within its days, a person in a challenge once, only this gym's challenge, and who joined goes with it", async () => {
     await sql
       .begin(async (tx) => {
-        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0081-owner') RETURNING id`;
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0082-owner') RETURNING id`;
         if (user === undefined) throw new Error("no user");
         const gymOf = async (slug: string) => {
           const [gym] = await tx<{ id: string }[]>`
-            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0081', 'Europe/London', ${user.id}) RETURNING id`;
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0082', 'Europe/London', ${user.id}) RETURNING id`;
           if (gym === undefined) throw new Error("no gym");
           return gym.id;
         };
-        const a = await gymOf("zz-0081-a");
-        const b = await gymOf("zz-0081-b");
+        const a = await gymOf("zz-0082-a");
+        const b = await gymOf("zz-0082-b");
         const row = (over: Record<string, unknown> = {}) => ({
           gym_id: a,
           challenge_key: randomUUID(),
@@ -1884,7 +1884,7 @@ d("0001_init on a real database", () => {
             return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
           }
         };
-        const key = "00000000-0000-4000-8000-000000000081";
+        const key = "00000000-0000-4000-8000-000000000082";
         expect(await put("gym_challenges", row({ challenge_key: key, target: 31 }))).toBe("ok");
         expect(await put("gym_challenges", row({ starts_on: "2026-10-01", ends_on: "2027-10-01" }))).toBe("ok");
         const refused: [string, Record<string, unknown>, string][] = [
@@ -1904,16 +1904,16 @@ d("0001_init on a real database", () => {
         const joined = { gym_id: a, challenge_id: mine.id, user_id: user.id };
         expect(await put("gym_challenge_people", joined)).toBe("ok");
         expect(await put("gym_challenge_people", joined), "joined twice").toBe("gym_challenge_people_pk");
-        const [other] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0081-other') RETURNING id`;
+        const [other] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0082-other') RETURNING id`;
         expect(await put("gym_challenge_people", { ...joined, user_id: other?.id ?? null, gym_id: b }), "under another gym").toBe("gym_challenge_people_challenge_fk");
 
         await tx`DELETE FROM gym_challenges WHERE id = ${mine.id}`;
         const [gone] = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_challenge_people WHERE user_id = ${user.id}`;
         expect(gone?.n).toBe(0);
-        throw new Error("ROLLBACK-0081-FIXTURE");
+        throw new Error("ROLLBACK-0082-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0081-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0082-FIXTURE") return;
         throw err;
       });
   });

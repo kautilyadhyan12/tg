@@ -17,6 +17,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { slotKeyFor } from "./attendanceSlot.js";
 import { endLeaversBookings } from "./classes/bookingChanges.js";
 import { reworkInstants as reworkEventInstants } from "./events/repo.js";
+import { reworkTimeOffInstants } from "./pt/repo.js";
 import { streaks, visitsWithOwner } from "./leaderboard/visits.js";
 import {
   ATTENDANCE_PAGE_LIMIT,
@@ -1048,8 +1049,12 @@ export async function updateOrg(
                 currency_display, clock_format, manual_attendance_enabled, status`;
     const raw = rows[0];
     if (raw === undefined) throw new Error("UPDATE gyms changed no row under the org lock");
-    // An event's instants were worked out in the zone the gym had (`events/repo.ts`).
-    if (raw.timezone !== before.timezone) await reworkEventInstants(tx, input.gymId);
+    // An event's instants were worked out in the zone the gym had (`events/repo.ts`), and
+    // so were a trainer's time off's (`pt/repo.ts`).
+    if (raw.timezone !== before.timezone) {
+      await reworkEventInstants(tx, input.gymId);
+      await reworkTimeOffInstants(tx, input.gymId);
+    }
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,

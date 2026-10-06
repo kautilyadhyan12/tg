@@ -277,7 +277,7 @@ export const gymEventPlaces = pgTable(
   ],
 );
 
-/** A gym's challenges (`0081_gym_challenges.sql`, which is the record; spec Part 3 §15.6).
+/** A gym's challenges (`0082_gym_challenges.sql`, which is the record; spec Part 3 §15.6).
  *  The gym's own: who made one is its only user link, `ON DELETE set null`, so
  *  `gym_challenges` is on `USER_LINKED_NOT_PURGED_TABLES`. */
 export const gymChallenges = pgTable(
@@ -327,7 +327,7 @@ export const gymChallenges = pgTable(
   ],
 );
 
-/** Who joined a challenge people join (`0081_gym_challenges.sql`). The person's own
+/** Who joined a challenge people join (`0082_gym_challenges.sql`). The person's own
  *  choice: deleted with their account (`DIRECT_DELETE_TABLES`). */
 export const gymChallengePeople = pgTable(
   "gym_challenge_people",
@@ -349,7 +349,7 @@ export const gymChallengePeople = pgTable(
 );
 
 /** A person's number in a challenge of the gym's own count, typed by staff
- *  (`0081_gym_challenges.sql`). About the person: deleted with their account
+ *  (`0082_gym_challenges.sql`). About the person: deleted with their account
  *  (`DIRECT_DELETE_TABLES`). */
 export const gymChallengeScores = pgTable(
   "gym_challenge_scores",

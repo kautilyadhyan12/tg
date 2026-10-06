@@ -1,4 +1,5 @@
--- A gym's challenges (ROADMAP Stage 2 item 19d-i; spec Part 3 §15.6).
+-- A gym's challenges (ROADMAP Stage 2 item 19d-i; spec Part 3 §15.6). Written as 0081;
+-- renumbered when Folder A's `0081_trainer_time_off` merged first.
 -- Forward-only. Hand-written, as `0016` onwards are; its journal entry is part of this commit.
 --
 -- A challenge's first and last day are days on the gym's own calendar, both counted.

@@ -50,6 +50,40 @@ export const gymTrainerHours = pgTable(
   ],
 );
 
+// A trainer's time off (17e-iii-b). Mirrors `0081_trainer_time_off.sql`.
+export const gymTrainerTimeOff = pgTable(
+  "gym_trainer_time_off",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    fromDate: date("from_date").notNull(),
+    toDate: date("to_date").notNull(),
+    fromMinute: integer("from_minute"),
+    toMinute: integer("to_minute"),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    requestKey: uuid("request_key").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: "gym_trainer_time_off_trainer_fk",
+      columns: [t.gymId, t.userId],
+      foreignColumns: [gymTrainers.gymId, gymTrainers.userId],
+    }).onDelete("cascade"),
+    unique("gym_trainer_time_off_request_uq").on(t.gymId, t.requestKey),
+    check("gym_trainer_time_off_days_check", sql`${t.toDate} >= ${t.fromDate}`),
+    check(
+      "gym_trainer_time_off_hours_check",
+      sql`(${t.fromMinute} IS NULL AND ${t.toMinute} IS NULL) OR (${t.fromMinute} IS NOT NULL AND ${t.toMinute} IS NOT NULL AND ${t.fromDate} = ${t.toDate} AND ${t.fromMinute} >= 0 AND ${t.fromMinute} < ${t.toMinute} AND ${t.toMinute} <= 1440)`,
+    ),
+    check("gym_trainer_time_off_span_check", sql`${t.endsAt} > ${t.startsAt}`),
+    index("gym_trainer_time_off_trainer_idx").on(t.gymId, t.userId, t.endsAt),
+  ],
+);
+
 export const gymPtAppointments = pgTable(
   "gym_pt_appointments",
   {

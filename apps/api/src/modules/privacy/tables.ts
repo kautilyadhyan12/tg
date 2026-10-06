@@ -71,10 +71,10 @@ export const DIRECT_DELETE_TABLES = [
   // person's own choice, deleted at Day 14 and exported without the other person's id.
   // A block OF the person by somebody else names them too, and is deleted with it.
   "gym_post_blocks",
-  // Which of a gym's challenges a member joined (migration 0081; ROADMAP 19d-i): the
+  // Which of a gym's challenges a member joined (migration 0082; ROADMAP 19d-i): the
   // person's own choice, deleted at Day 14 and exported.
   "gym_challenge_people",
-  // A person's number in a challenge of the gym's own count, typed by staff (0081): about
+  // A person's number in a challenge of the gym's own count, typed by staff (0082): about
   // the person, deleted at Day 14 and exported.
   "gym_challenge_scores",
   // §5.2's Day-0 sentence already says "push tokens deleted", so clearing
@@ -414,7 +414,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // (`0078`), on gym_posts' footing: the gym's own announcement; `ON DELETE set null`.
   "gym_events",
   // gym_challenges.created_by_user_id — which member of staff made one of the gym's
-  // challenges (`0081`), on gym_events' footing: the gym's own; `ON DELETE set null`.
+  // challenges (`0082`), on gym_events' footing: the gym's own; `ON DELETE set null`.
   "gym_challenges",
   // gym_event_places.user_id — which events a member said they were coming to, waited for or
   // pulled out of (Part 3 §15.4, migration `0080`). On gym_class_bookings' footing: the
@@ -428,6 +428,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_trainers.user_id — a member of staff's personal-training hours (`0079`), on
   // gym_class_types' footing: a worker's rota, the gym's record; `ON DELETE cascade`.
   "gym_trainers",
+  // gym_trainer_time_off.user_id and created_by — a member of staff's time off from
+  // personal training and who wrote it down (`0081`), on the same footing; it goes with
+  // the trainer's row, and `created_by` is `ON DELETE set null`.
+  "gym_trainer_time_off",
   // gym_pt_appointments.trainer_user_id and booked_by — which member of staff takes a
   // personal-training session and who booked it (`0079`), on the same footing;
   // `ON DELETE set null`, the session kept since a pack may have been charged for it. The

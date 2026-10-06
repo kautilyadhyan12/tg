@@ -2695,6 +2695,34 @@ safe while a booking can only land on a day whose classes are written: a booking
 in the last week of its window writes that gym's calendar first (`pt/service.ts` `book`), so
 a night the job missed cannot leave a session under a class written later. Nobody is told
 (the inbox, 20a). Not done: a trainer's time off (17e-iii-b, built next).)*
+*(17e-iii-b, 2026-10-06: **a trainer's time off.** `gym_trainer_time_off` (migration `0081`):
+whole days of the gym's, or some hours of one day, with that time kept as two instants in the
+gym's zone; up to a year long, starting up to a year ahead, 50 not yet over a trainer. It
+takes the trainer's time as a session or a class does: it comes off their free times, and a
+booking in it is refused 409 `trainer_off` (`decidePtBook`), read under the gym's lock.
+`POST …/pt/trainers/:userId/time-off` adds one and `DELETE …/time-off/:id` removes one;
+staff who run the timetable for anybody, a trainer for themselves; each answers the trainers
+list, whose rows carry `timeOff` (those not over). **It asks first:** with sessions booked
+with the trainer in it, or taught classes on the calendar they coach in it, it answers 409
+`time_off_over_bookings` with `over` (a `mark` for exactly those, each kind's whole count
+and first 100, and `classesUpTo`, the last day whose classes are on the calendar) and writes
+nothing; the same request with `confirm` equal to the mark, worked out again under the lock,
+adds it, and every session, pack and class stays as it was. A booking takes the same lock, so
+of a booking and a time off sent together one always sees the other. The same `requestKey`
+again adds nothing. The week answers each day's `timeOff`; the page marks the day, and a
+session or class left in it says so. The console's **Time off** button is on each trainer's
+row and on a trainer's own card. **From Kd's click-through (RULINGS 2026-10-06):** the days
+are pressed on the console's calendar (`DatePick`), never typed, and Remove asks first in a
+box under its own row (whose time off, which days, that nothing booked changes).
+**From the review (2026-10-06):** a gym's change of time zone works every time off's two
+instants out again in the same step (`reworkTimeOffInstants`, as events' are), so a day off
+stays that day on the gym's clock; hours of one day whose start or end the gym's clock skips
+that day (the hour the clocks go forward over) are refused 409 `time_off_not_a_time`, and
+whole days are as long as those days are; the Remove box says the times can be booked again
+only where no other time off of that trainer covers them, and otherwise that the other one
+stays; a request the server answers `request_reused` gets a new key and the list is read
+again; somebody who cannot book is told to ask a manager, in the box and on a session. Not done: the Classes page does not ask before it gives a
+trainer a class inside their time off (their week marks it); nobody is told (the inbox, 20a).)*
 
 ### 13.6 The calendar, the desk and the messages
 
@@ -3289,7 +3317,7 @@ members pick one), a prize in words. Its board is 15.5's query over its dates an
 people; at the end the result is posted to Updates. Knock-out brackets are later.
 
 **Challenges, as built (19d-i).** `gym_challenges` and `gym_challenge_people` (migration
-`0081`). A challenge counts **gym days** or **workout days** over its own first and last
+`0082`). A challenge counts **gym days** or **workout days** over its own first and last
 day (the gym's calendar, both counted, 366 days at most), for **everyone in the app** or
 **only people who join**, and is won by **the most** or by **reaching a number** that
 everybody who gets there wins (a target is never more than the challenge's days: one a

@@ -4,7 +4,10 @@
 // every day in half-hour sessions: 32 a day, 224 a week, the most a week can hold. The gym
 // also runs 20 classes a day that week, coached in turn by its staff, after those hours.
 // Measured: that trainer's week with every time free and with every time booked, one
-// booking, one cancel, the staff list, and 20 staff booking at the same instant.
+// booking, one cancel, the staff list, and 20 staff booking at the same instant. And a
+// trainer's time off (17e-iii-b): every trainer holding 50, the most one may; the week and
+// a booking read with them there; one added over a week of 224 booked sessions, asked and
+// then confirmed.
 // The numbers that matter are how long the server's one thread answers nobody, and how
 // long the gym's own row is held (its other writes wait that long; no other gym's do).
 //
@@ -17,7 +20,7 @@ import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
 import { addDays } from "@app/shared";
-import { book, cancel, getPeople, getTrainers, getWeek, saveTrainer } from "../src/modules/orgs/pt/service.js";
+import { PtTimeOffAsk, addTimeOff, book, cancel, getPeople, getTrainers, getWeek, saveTrainer } from "../src/modules/orgs/pt/service.js";
 import { dayInTz } from "../src/modules/gamification/streak.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -51,7 +54,7 @@ async function cleanup(): Promise<void> {
   await sql`DELETE FROM plans WHERE code = ${PLAN}`;
 }
 
-const TABLES = ["users", "gym_staff", "gym_member_list_entries", "gym_held_memberships", "gym_trainers", "gym_trainer_hours", "gym_pt_appointments", "gym_class_sessions"];
+const TABLES = ["users", "gym_staff", "gym_member_list_entries", "gym_held_memberships", "gym_trainers", "gym_trainer_hours", "gym_trainer_time_off", "gym_pt_appointments", "gym_class_sessions"];
 /** A table filled seconds ago has no statistics, and a plan made without them is not the
  *  one a gym meets (`measure-bookings-cost.ts`). */
 async function analyse(): Promise<void> {
@@ -147,6 +150,7 @@ async function measure<T>(name: string, prepare: () => Promise<T>, run: (made: T
   const stalls: number[] = [];
   for (let i = 0; i < RUNS + 1; i++) {
     await sql`DELETE FROM gym_pt_appointments WHERE gym_id = ${gymId}`;
+    await sql`DELETE FROM gym_trainer_time_off WHERE gym_id = ${gymId}`;
     await sql`UPDATE gym_held_memberships SET status = 'active', classes_left = 300 WHERE gym_id = ${gymId}`;
     const made = await prepare();
     await analyse();
@@ -215,6 +219,69 @@ await measure("20 staff book 20 trainers at the same instant", () => Promise.res
 await measure("20 staff ask for one trainer's one time at the same instant", () => Promise.resolve(), async () => {
   const answers = await Promise.allSettled(Array.from({ length: 20 }, (_, n) => book(deps, owner, gymId, request(n, 600), yes)));
   if (answers.filter((a) => a.status === "fulfilled").length !== 1) throw new Error("not exactly one booked");
+});
+
+// ── A TRAINER'S TIME OFF ──
+
+/** Every trainer holds 50 times off, a day each, from 100 days on: none touches the week. */
+async function fiftyEach(): Promise<void> {
+  await sql`
+    INSERT INTO gym_trainer_time_off (gym_id, user_id, from_date, to_date, starts_at, ends_at, request_key, created_by)
+    SELECT ${gymId}, t.user_id, d::date, d::date, d::date::timestamp AT TIME ZONE 'Europe/London', (d::date + 1)::timestamp AT TIME ZONE 'Europe/London',
+           gen_random_uuid(), ${owner}
+    FROM gym_trainers t, generate_series(${addDays(today, 100)}::date, ${addDays(today, 149)}::date, interval '1 day') AS d
+    WHERE t.gym_id = ${gymId}`;
+}
+const weekOff = (confirm?: string) => ({
+  requestKey: randomUUID(),
+  fromDate: WEEK_FROM,
+  toDate: addDays(WEEK_FROM, 6),
+  fromMinute: null,
+  toMinute: null,
+  ...(confirm === undefined ? {} : { confirm }),
+});
+/** The mark the server asks for, read from its own answer. */
+async function askedMark(): Promise<string> {
+  try {
+    await addTimeOff(deps, owner, gymId, trainer, weekOff(), yes);
+  } catch (err) {
+    if (err instanceof PtTimeOffAsk) {
+      if (err.over.sessions.count !== 224 || err.over.classes.count !== 7) throw new Error("not 224 sessions and 7 classes");
+      return err.over.mark;
+    }
+    throw err;
+  }
+  throw new Error("a time off over a booked week did not ask");
+}
+
+await measure(`the staff list: ${String(STAFF)} staff, each trainer with 50 times off`, fiftyEach, async () => {
+  const list = await getTrainers(deps, owner, gymId, yes);
+  if (list?.trainers.filter((t) => t.timeOff.length === 50).length !== STAFF - 1) throw new Error("not 50 each");
+});
+await measure("a trainer's week, all 224 booked, 50 times off held", async () => { await fiftyEach(); await fillWeek(); }, async () => {
+  const w = await getWeek(deps, owner, gymId, week, yes);
+  if (w?.days.reduce((n, d) => n + d.appointments.length, 0) !== 224) throw new Error("not 224 sessions");
+});
+await measure("one booking, 50 times off held", fiftyEach, async () => {
+  const made = await book(deps, owner, gymId, request(0, 600), yes);
+  if (made?.packCharged !== true) throw new Error("not booked");
+});
+await measure("time off over a week of 224 sessions and 7 classes: asked, nothing written", fillWeek, async () => {
+  await askedMark();
+});
+await measure("the same, confirmed and added", async () => { await fillWeek(); return await askedMark(); }, async (mark) => {
+  const list = await addTimeOff(deps, owner, gymId, trainer, weekOff(mark), yes);
+  if (list?.trainers.find((t) => t.userId === trainer)?.timeOff.length !== 1) throw new Error("not added");
+});
+await measure("one time off with nothing in it", () => Promise.resolve(), async () => {
+  const list = await addTimeOff(deps, owner, gymId, trainer, { ...weekOff(), fromDate: addDays(today, 200), toDate: addDays(today, 213) }, yes);
+  if (list?.trainers.find((t) => t.userId === trainer)?.timeOff.length !== 1) throw new Error("not added");
+});
+// A morning off on the week's first day: no class of theirs is in it, so it is added unasked.
+const morningOff = () => ({ requestKey: randomUUID(), fromDate: WEEK_FROM, toDate: WEEK_FROM, fromMinute: 540, toMinute: 720 });
+await measure("a booking refused by time off", async () => { await addTimeOff(deps, owner, gymId, trainer, morningOff(), yes); }, async () => {
+  const answer = await book(deps, owner, gymId, request(0, 600), yes).then(() => "booked", (err: unknown) => (err instanceof Error ? err.message : "?"));
+  if (answer !== "This trainer has time off at that time.") throw new Error(`not refused: ${answer}`);
 });
 
 await cleanup();

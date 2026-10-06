@@ -4,10 +4,10 @@ import { ChevronLeft, ChevronRight, Loader2, Plus, Search, X } from 'lucide-reac
 import { orgService, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import TimePick from '../../components/console/TimePick';
-import { Tick } from './ClassFields';
+import { DateField, Tick } from './ClassFields';
 import { useConsoleOrg } from './useConsoleOrg';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
-import { WEEKDAYS, addDays } from './hoursView';
+import { WEEKDAYS, addDays, gymToday } from './hoursView';
 import {
   HOURS_REPEAT,
   HOURS_REPEAT_OWN,
@@ -18,6 +18,8 @@ import {
   PT_INTRO_OWN,
   PT_TITLE,
   SESSION_LENGTH_HINT,
+  TIME_OFF_BOX_FIRST,
+  TIME_OFF_INTRO,
   SESSION_LENGTH_USUAL,
   addRange,
   bookCost,
@@ -27,8 +29,10 @@ import {
   canGoEarlier,
   canGoLater,
   cancelBox,
+  classInTimeOff,
   coachedClassRow,
   dayHeading,
+  dayTimeOffRow,
   freeTimeLabel,
   hoursDraft,
   hoursFormProblem,
@@ -44,6 +48,17 @@ import {
   sessionRow,
   sessionsAWeek,
   setRange,
+  timeOffAsked,
+  timeOffBoxLines,
+  timeOffBoxRow,
+  timeOffBoxTitle,
+  timeOffDayLimits,
+  timeOffDraft,
+  timeOffFormProblem,
+  timeOffLine,
+  timeOffRemoveBox,
+  timeOffRequest,
+  timeOffSummary,
   trainerGroups,
   trainerName,
   trainerSummary,
@@ -188,6 +203,279 @@ function HoursForm({ trainer, clockFormat, saving, error, onSave, onClose }) {
           Close
         </button>
       </div>
+    </div>
+  );
+}
+
+/** The sessions or the classes inside a time off being added: the first few, then See all. */
+function InTimeOffList({ label, found, kind, clockFormat, today }) {
+  const [all, setAll] = useState(false);
+  if (found.count === 0) return null;
+  const rows = all ? found.shown : found.shown.slice(0, TIME_OFF_BOX_FIRST);
+  const more = found.count - rows.length;
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="c-s13 c-w6 c-t3">{label}</span>
+      <ul className="m-0 p-0 list-none flex flex-col gap-2" style={all ? { maxHeight: 260, overflowY: 'auto', paddingRight: 4 } : undefined}>
+        {rows.map((item) => {
+          const row = timeOffBoxRow(item, clockFormat, today, kind);
+          return (
+            <li key={item.id} className="min-w-0">
+              <div className="c-s15 c-t1 c-ell">{row.name}</div>
+              <div className="c-s13 c-t3 c-ell c-num">{row.detail}</div>
+            </li>
+          );
+        })}
+      </ul>
+      {more > 0 ? (
+        <p className="c-s14 c-t2 m-0">
+          {`and ${more.toLocaleString('en')} more`}
+          {!all && found.shown.length > rows.length ? (
+            <>
+              {' · '}
+              <button type="button" onClick={() => setAll(true)} className="c-btn-link c-w6">
+                See all
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** One trainer's time off: what is coming, each with Remove, and a form that adds one.
+ *  Sessions and classes already in a new one are named before it is added. */
+function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, canBook, onChanged, onStale, onClose }) {
+  const [draft, setDraft] = useState(timeOffDraft);
+  const [asked, setAsked] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  // The time off whose Remove was pressed: it is removed only from the box that asks.
+  const [removing, setRemoving] = useState(null);
+  // One key until it is added: pressing twice, or again after a lost answer, adds once.
+  const requestKey = useRef(crypto.randomUUID());
+  const coming = Array.isArray(trainer.timeOff) ? trainer.timeOff : [];
+  const problem = timeOffFormProblem(draft, today, coming.length);
+  const untouched = draft.fromDate === '' && draft.toDate === '' && draft.from === '' && draft.to === '';
+  const limits = timeOffDayLimits(today, draft.fromDate);
+  // A change to the form takes the box away: it was about other days.
+  const change = (patch) => {
+    setDraft({ ...draft, ...patch });
+    setAsked(null);
+    setError(null);
+  };
+
+  const add = async (confirm) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await orgService.addPtTimeOff(gymId, trainer.userId, timeOffRequest(draft, requestKey.current, confirm));
+      requestKey.current = crypto.randomUUID();
+      setDraft(timeOffDraft());
+      setAsked(null);
+      onChanged(res.data);
+    } catch (err) {
+      const over = timeOffAsked(err);
+      setAsked(over);
+      if (err?.response?.data?.error === 'request_reused') {
+        // The server has this key on another time off: an earlier press went through and
+        // its answer was lost. A new key, and the list read again so that one is shown.
+        requestKey.current = crypto.randomUUID();
+        setError("That didn't go through. The list above is up to date now: check it before you add this again.");
+        onStale();
+      } else if (over === null) setError(errorText(err, "We couldn't add that time off."));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (off) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await orgService.removePtTimeOff(gymId, trainer.userId, off.id);
+      setRemoving(null);
+      onChanged(res.data);
+    } catch (err) {
+      setError(errorText(err, "We couldn't remove that time off."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-5" data-testid="pt-time-off">
+      <div className="flex flex-col gap-1">
+        <h3 className="c-h3 m-0">Time off for {trainerName(trainer)}</h3>
+        <p className="c-s14 c-t2 m-0">{TIME_OFF_INTRO}</p>
+      </div>
+
+      {coming.length === 0 ? (
+        <p className="c-s14 c-t3 m-0">No time off coming.</p>
+      ) : (
+        <ul className="m-0 p-0 list-none flex flex-col" aria-label="Time off coming">
+          {coming.map((off, index) => {
+            const line = timeOffLine(off, clockFormat, today);
+            const asking = removing === off.id;
+            const box = asking ? timeOffRemoveBox(off, trainer, clockFormat, today) : null;
+            return (
+              <li key={off.id} className="py-2 flex flex-col gap-3 min-w-0" style={index === 0 ? undefined : { borderTop: '1px solid var(--line)' }}>
+                <div className="min-h-11 flex items-center justify-between gap-3 min-w-0">
+                  <span className="c-s15 c-t1 c-num c-ell">{line}</span>
+                  {locked || asking ? null : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError(null);
+                        setRemoving(off.id);
+                      }}
+                      disabled={busy}
+                      aria-label={`Remove time off ${line}`}
+                      className="c-btn c-btn-sm c-btn-s flex-shrink-0"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {box !== null ? (
+                  <div className="flex flex-col gap-3 pb-1" role="group" aria-label="Remove this time off">
+                    <p className="c-s14 c-t1 m-0">{box.question}</p>
+                    <p className="c-s14 c-t2 m-0">{box.after}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={() => void remove(off)} disabled={busy} className="c-btn c-btn-sm c-btn-danger">
+                        {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                        Remove time off
+                      </button>
+                      <button type="button" onClick={() => setRemoving(null)} disabled={busy} className="c-btn c-btn-sm c-btn-s">
+                        Keep it
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {locked ? null : (
+        <div className="flex flex-col gap-4 pt-4" style={{ borderTop: '1px solid var(--line)' }}>
+          <span className="c-label">Add time off</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { kind: 'days', label: 'Whole days' },
+              { kind: 'hours', label: 'Part of one day' },
+            ].map((choice) => (
+              <button
+                key={choice.kind}
+                type="button"
+                onClick={() => change({ kind: choice.kind })}
+                disabled={busy}
+                aria-pressed={draft.kind === choice.kind}
+                className={draft.kind === choice.kind ? 'c-chip c-chip-on' : 'c-chip'}
+              >
+                {choice.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-start gap-3">
+            <div style={{ width: 320, maxWidth: '100%' }}>
+              <DateField
+                label={draft.kind === 'days' ? 'First day' : 'Day'}
+                value={draft.fromDate}
+                min={limits.min}
+                max={limits.max}
+                today={today}
+                // The last day follows the first until it is picked later than it.
+                onChange={(day) => change({ fromDate: day, toDate: draft.toDate === '' || draft.toDate < day ? day : draft.toDate })}
+                disabled={busy}
+              />
+            </div>
+            {draft.kind === 'days' ? (
+              <div style={{ width: 320, maxWidth: '100%' }}>
+                <DateField
+                  label="Last day"
+                  value={draft.toDate}
+                  min={limits.lastMin}
+                  max={limits.lastMax}
+                  today={today}
+                  onChange={(day) => change({ toDate: day })}
+                  disabled={busy}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="c-field">
+                  <span className="c-label">From</span>
+                  <TimePick label="Time off from" kind="opens" value={draft.from} clockFormat={clockFormat} onChange={(value) => change({ from: value })} disabled={busy} newLook />
+                </div>
+                <div className="c-field">
+                  <span className="c-label">To</span>
+                  <TimePick label="Time off to" kind="closes" value={draft.to} clockFormat={clockFormat} onChange={(value) => change({ to: value })} disabled={busy} newLook />
+                </div>
+              </>
+            )}
+          </div>
+
+          {problem !== null && !untouched ? (
+            <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
+              {problem}
+            </p>
+          ) : null}
+          {error !== null ? (
+            <p className="c-s14 c-w5 m-0" role="alert" style={{ color: 'var(--bad)' }}>
+              {error}
+            </p>
+          ) : null}
+
+          {asked !== null ? (
+            <div
+              role="group"
+              aria-label="Sessions and classes in this time off"
+              className="rounded-xl p-4 flex flex-col gap-3"
+              style={{ background: 'var(--raise)', border: '1px solid var(--card-line)' }}
+              data-testid="pt-time-off-box"
+            >
+              <p className="c-s15 c-w6 c-t1 m-0">{timeOffBoxTitle(asked, trainer)}</p>
+              <InTimeOffList key={`s:${asked.mark}`} label="Sessions booked" found={asked.sessions} kind="session" clockFormat={clockFormat} today={today} />
+              <InTimeOffList key={`c:${asked.mark}`} label="Classes they coach" found={asked.classes} kind="class" clockFormat={clockFormat} today={today} />
+              {timeOffBoxLines(asked, trainer, draft, canBook).map((line) => (
+                <p key={line} className="c-s14 c-t2 m-0">
+                  {line}
+                </p>
+              ))}
+              {asked.sessions.count > 0 ? <p className="c-s14 c-t2 m-0">{NOT_TOLD}</p> : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => void add(asked.mark)} disabled={busy} className="c-btn c-btn-sm c-btn-danger">
+                  {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                  Add time off anyway
+                </button>
+                <button type="button" onClick={() => setAsked(null)} disabled={busy} className="c-btn c-btn-sm c-btn-s">
+                  Go back
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => void add()} disabled={busy || problem !== null} className="c-btn c-btn-p">
+                {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                Add time off
+              </button>
+              <button type="button" onClick={onClose} disabled={busy} className="c-btn c-btn-ghost">
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {locked ? (
+        <div>
+          <button type="button" onClick={onClose} className="c-btn c-btn-ghost">
+            Close
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -352,9 +640,9 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
 }
 
 /** One booked session, with its Cancel and the box that asks first. */
-function SessionRow({ appointment, classes, first, clockFormat, freeCancelMinutes, locked, asking, settled, busy, error, onAsk, onKeep, onCancel, onClose }) {
+function SessionRow({ appointment, classes, timeOff, canBook, first, clockFormat, freeCancelMinutes, locked, asking, settled, busy, error, onAsk, onKeep, onCancel, onClose }) {
   const row = sessionRow(appointment, clockFormat);
-  const clash = sessionClash(appointment, classes);
+  const clash = sessionClash(appointment, classes, timeOff, canBook);
   const box = asking ? cancelBox(appointment, { freeCancelMinutes, clockFormat }) : null;
   return (
     <li className="flex flex-col gap-3 py-3 min-w-0" style={first ? undefined : { borderTop: '1px solid var(--line)' }} data-testid="pt-session">
@@ -425,6 +713,8 @@ export default function PersonalTraining() {
   const [adding, setAdding] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  // Whose time off is open: a trainer's id, and never beside an hours form.
+  const [timeOffFor, setTimeOffFor] = useState(null);
 
   // The week on screen, with the trainer and first day it is of: never drawn under another.
   // Reading the same week again (`weekKey`) keeps the one on screen until the new one arrives.
@@ -523,6 +813,7 @@ export default function PersonalTraining() {
 
   const show = (userId) => {
     setEditing(null);
+    setTimeOffFor(null);
     setAdding('');
     setSaveError(null);
     setFrom(null);
@@ -532,8 +823,38 @@ export default function PersonalTraining() {
   };
   const openHours = (userId) => {
     setSaveError(null);
+    setTimeOffFor(null);
     setEditing(userId);
   };
+  // Their week is shown under it, so the sessions and classes in the time off can be seen.
+  const openTimeOff = (userId) => {
+    if (list.canManage) show(userId);
+    setEditing(null);
+    setTimeOffFor(userId);
+  };
+  const today = list === null ? null : gymToday(list.timezone);
+  const timeOffTrainer = list?.trainers.find((t) => t.userId === timeOffFor && t.sessionMinutes !== null) ?? null;
+  const timeOffPanel =
+    timeOffTrainer === null || today === null ? null : (
+      <TimeOffPanel
+        key={timeOffTrainer.userId}
+        gymId={gymId}
+        trainer={timeOffTrainer}
+        clockFormat={org.clockFormat}
+        today={today}
+        locked={consoleIsReadOnly(org)}
+        canBook={list.canBook}
+        onChanged={(data) => {
+          setList(data);
+          readWeekAgain();
+        }}
+        onStale={() => {
+          setListKey((n) => n + 1);
+          readWeekAgain();
+        }}
+        onClose={() => setTimeOffFor(null)}
+      />
+    );
 
   const saveHours = async (body) => {
     setSaving(true);
@@ -652,6 +973,9 @@ export default function PersonalTraining() {
                           {line}
                         </span>
                       ))}
+                      {timeOffSummary(t, clockFormat, today) === null ? null : (
+                        <span className="c-s13 c-w5 c-t2 c-num">{timeOffSummary(t, clockFormat, today)}</span>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
                       {shown ? (
@@ -666,6 +990,11 @@ export default function PersonalTraining() {
                           Edit hours
                         </button>
                       ) : null}
+                      {!readOnly || (t.timeOff ?? []).length > 0 ? (
+                        <button type="button" onClick={() => openTimeOff(t.userId)} aria-label={`Time off for ${trainerName(t)}`} className="c-btn c-btn-sm c-btn-s">
+                          Time off
+                        </button>
+                      ) : null}
                     </div>
                   </li>
                 );
@@ -673,7 +1002,7 @@ export default function PersonalTraining() {
             </ul>
           )}
 
-          {!readOnly && groups.others.length > 0 && editingTrainer === null ? (
+          {!readOnly && groups.others.length > 0 && editingTrainer === null && timeOffPanel === null ? (
             <div className="flex flex-col gap-2 pt-3" style={{ borderTop: '1px solid var(--line)' }}>
               <label className="c-label" htmlFor="pt-add-trainer">
                 Add a trainer
@@ -700,6 +1029,11 @@ export default function PersonalTraining() {
               {hoursForm}
             </div>
           ) : null}
+          {hoursForm === null && timeOffPanel !== null ? (
+            <div className="pt-4" style={{ borderTop: '1px solid var(--line)' }}>
+              {timeOffPanel}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -712,9 +1046,16 @@ export default function PersonalTraining() {
               {trainer.sessionMinutes === null ? null : <p className="c-s13 c-t3 m-0">{HOURS_REPEAT_OWN}</p>}
             </div>
             {!readOnly && editingTrainer === null ? (
-              <button type="button" onClick={() => openHours(trainer.userId)} className="c-btn c-btn-s w-full md:w-auto">
-                {trainer.sessionMinutes === null ? 'Set my hours' : 'Edit my hours'}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => openHours(trainer.userId)} className="c-btn c-btn-s w-full md:w-auto">
+                  {trainer.sessionMinutes === null ? 'Set my hours' : 'Edit my hours'}
+                </button>
+                {trainer.sessionMinutes !== null && timeOffPanel === null ? (
+                  <button type="button" onClick={() => openTimeOff(trainer.userId)} className="c-btn c-btn-s w-full md:w-auto">
+                    Time off
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
           {hoursForm ?? (
@@ -724,8 +1065,16 @@ export default function PersonalTraining() {
                   {line}
                 </li>
               ))}
+              {timeOffSummary(trainer, clockFormat, today) === null ? null : (
+                <li className="c-s14 c-w5 c-t2 c-num">{timeOffSummary(trainer, clockFormat, today)}</li>
+              )}
             </ul>
           )}
+          {hoursForm === null && timeOffPanel !== null ? (
+            <div className="pt-4" style={{ borderTop: '1px solid var(--line)' }}>
+              {timeOffPanel}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -779,18 +1128,29 @@ export default function PersonalTraining() {
                   const openSlot = booking !== null && booking.localDate === day.localDate ? booking : null;
                   const minutes = shownWeek.data.sessionMinutes;
                   const canBook = list.canBook && !readOnly && minutes !== null;
+                  const dayOff = day.timeOff ?? [];
                   // A day with nothing on it and nothing to book is one line, so a week reads at a glance.
                   if (day.appointments.length === 0 && day.free.length === 0 && day.classes.length === 0) {
                     return (
                       <section key={day.localDate} className="c-card px-5 py-3 flex items-center justify-between gap-3 min-w-0" data-testid="pt-day">
                         <h3 className="c-s15 c-w6 c-t2 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
-                        <span className="c-s13 c-t3">No free times</span>
+                        <span className="c-s13 c-t3 c-num">{dayOff.length > 0 ? dayOff.map((o) => dayTimeOffRow(o, clockFormat)).join(', ') : 'No free times'}</span>
                       </section>
                     );
                   }
                   return (
                     <section key={day.localDate} className="c-card p-5 flex flex-col gap-4 min-w-0" data-testid="pt-day">
                       <h3 className="c-h3 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
+
+                      {dayOff.length > 0 ? (
+                        <ul className="m-0 p-0 list-none flex flex-wrap gap-2" data-testid="pt-day-off">
+                          {dayOff.map((o) => (
+                            <li key={o.id} className="c-tag c-tag-warn c-num">
+                              {dayTimeOffRow(o, clockFormat)}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
 
                       {day.appointments.length > 0 ? (
                         <div className="flex flex-col gap-1">
@@ -801,6 +1161,8 @@ export default function PersonalTraining() {
                                 key={appointment.id}
                                 appointment={appointment}
                                 classes={day.classes}
+                                timeOff={dayOff}
+                                canBook={list.canBook}
                                 first={index === 0}
                                 clockFormat={clockFormat}
                                 freeCancelMinutes={list.freeCancelMinutes}
@@ -832,8 +1194,13 @@ export default function PersonalTraining() {
                           <span className="c-s13 c-w6 c-t3">Coaching a class, so not free</span>
                           <ul className="m-0 p-0 list-none flex flex-col gap-0.5">
                             {day.classes.map((coached) => (
-                              <li key={`${String(coached.localStartMinute)}:${coached.name}`} className="c-s15 c-t2 c-num">
-                                {coachedClassRow(coached, clockFormat)}
+                              <li key={`${String(coached.localStartMinute)}:${coached.name}`} className="flex flex-col">
+                                <span className="c-s15 c-t2 c-num">{coachedClassRow(coached, clockFormat)}</span>
+                                {classInTimeOff(coached, dayOff) === null ? null : (
+                                  <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+                                    {classInTimeOff(coached, dayOff)}
+                                  </span>
+                                )}
                               </li>
                             ))}
                           </ul>
