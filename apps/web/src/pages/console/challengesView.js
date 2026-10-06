@@ -5,6 +5,8 @@ import {
   GYM_CHALLENGE_MAX_DAYS_BACK,
   GYM_CHALLENGE_NAME_MAX,
   GYM_CHALLENGE_PRIZE_MAX,
+  GYM_CHALLENGE_SCORE_MAX,
+  GYM_CHALLENGE_UNIT_MAX,
   GYM_CHALLENGE_WORDS,
   challengeSaveProblem,
   eventNameIsSeen,
@@ -21,7 +23,7 @@ export function canManageChallenges(privileges) {
   return Array.isArray(privileges) && privileges.includes('leaderboard.manage');
 }
 
-export const CHALLENGE_LIMITS = { name: GYM_CHALLENGE_NAME_MAX, details: GYM_CHALLENGE_DETAILS_MAX, prize: GYM_CHALLENGE_PRIZE_MAX, days: GYM_CHALLENGE_MAX_DAYS, back: GYM_CHALLENGE_MAX_DAYS_BACK, ahead: GYM_CHALLENGE_MAX_DAYS_AHEAD };
+export const CHALLENGE_LIMITS = { unit: GYM_CHALLENGE_UNIT_MAX, score: GYM_CHALLENGE_SCORE_MAX, name: GYM_CHALLENGE_NAME_MAX, details: GYM_CHALLENGE_DETAILS_MAX, prize: GYM_CHALLENGE_PRIZE_MAX, days: GYM_CHALLENGE_MAX_DAYS, back: GYM_CHALLENGE_MAX_DAYS_BACK, ahead: GYM_CHALLENGE_MAX_DAYS_AHEAD };
 
 const UNIT = { gym_days: 'gym day', workout_days: 'workout day' };
 const count = (n) => n.toLocaleString('en');
@@ -36,13 +38,24 @@ export const dayAfter = (day, days) => new Date((dayNumber(day) + days) * 86_400
 export const COUNT_CHOICES = [
   { id: 'gym_days', title: 'Gym days', sub: 'A day somebody is checked in at the front desk or by staff' },
   { id: 'workout_days', title: 'Workout days', sub: 'A day somebody finishes a workout in the app' },
+  { id: 'own', title: 'Your own count', sub: 'Anything you count yourself, in the gym or away from it. Your staff type each person\'s number.' },
 ];
 
-/** How it is won. */
-export const WIN_CHOICES = [
-  { id: 'most', title: 'Whoever has the most', sub: 'One board. First place wins.' },
-  { id: 'target', title: 'Everyone who reaches a number', sub: 'You set the number. Everybody who gets there wins.' },
-];
+/** How it is won. The lowest number can win only where the gym counts for itself (a time). */
+export function winChoices(counts) {
+  const choices = [
+    { id: 'most', title: 'Whoever has the most', sub: 'One board. First place wins.' },
+    { id: 'target', title: 'Everyone who reaches a number', sub: 'You set the number. Everybody who gets there wins.' },
+  ];
+  if (counts === 'own') choices.push({ id: 'lowest', title: 'Whoever has the lowest', sub: 'For a fastest time. The lowest number wins.' });
+  return choices;
+}
+export const WIN_CHOICES = winChoices('gym_days');
+
+const isOwn = (c) => c.counts === 'own';
+/** The word after a number, for the app's counts or the gym's own. */
+const wordsOf = (c) => (isOwn(c) ? (c.unit ?? '').trim() : `${UNIT[c.counts]}s`);
+const capital = (text) => (text === '' ? text : text.charAt(0).toUpperCase() + text.slice(1));
 
 /** Who is in it. */
 export function whoChoices(words, inApp) {
@@ -54,7 +67,7 @@ export function whoChoices(words, inApp) {
 
 /** An empty form: the commonest challenge, most gym days, everyone in. */
 export function newChallengeDraft() {
-  return { name: '', details: '', prize: '', counts: 'gym_days', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone' };
+  return { name: '', details: '', prize: '', counts: 'gym_days', unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone' };
 }
 
 /** The form filled in from a challenge as the server has it. */
@@ -64,12 +77,19 @@ export function draftOf(challenge) {
     details: challenge.details,
     prize: challenge.prize,
     counts: challenge.counts,
+    unit: challenge.unit ?? '',
     startsOn: challenge.startsOn,
     endsOn: challenge.endsOn,
-    win: challenge.target === null ? 'most' : 'target',
+    win: challenge.target !== null ? 'target' : challenge.lowestWins ? 'lowest' : 'most',
     target: challenge.target === null ? '' : String(challenge.target),
     who: challenge.who,
   };
+}
+
+/** Another thing counted: the lowest number wins only for the gym's own count, and its
+ *  word is the gym's own count's alone. */
+export function withCounts(draft, counts) {
+  return { ...draft, counts, win: counts !== 'own' && draft.win === 'lowest' ? 'most' : draft.win };
 }
 
 /** A new first day moves a last day that is unpicked, or before it, to the same day. */
@@ -83,7 +103,7 @@ export function draftDays(draft) {
   return dayNumber(draft.endsOn) - dayNumber(draft.startsOn) + 1;
 }
 
-const wholeNumber = (text) => (/^\d{1,3}$/.test(text.trim()) ? Number(text.trim()) : null);
+const wholeNumber = (text) => (/^\d{1,7}$/.test(text.trim()) ? Number(text.trim()) : null);
 
 /** The rules a draft would be saved with; `target` null where the most wins. */
 const rulesOf = (draft) => ({
@@ -92,6 +112,7 @@ const rulesOf = (draft) => ({
   endsOn: draft.endsOn,
   target: draft.win === 'target' ? wholeNumber(draft.target) : null,
   who: draft.who,
+  lowestWins: isOwn(draft) && draft.win === 'lowest',
 });
 
 /** Once a challenge has started, what it counts, its first day, who is in it and its
@@ -110,11 +131,17 @@ export function challengeProblem(draft, today, before = null) {
   const days = draftDays(draft);
   if (days === null) return { field: 'endsOn', text: 'The last day must not be before the first day.' };
   if (days > CHALLENGE_LIMITS.days) return { field: 'endsOn', text: `A challenge can run for ${CHALLENGE_LIMITS.days} days at most.` };
+  if (isOwn(draft)) {
+    if (!eventNameIsSeen(draft.unit)) return { field: 'unit', text: 'Say what you are counting, for example push-ups.' };
+    if (postLength(draft.unit.trim()) > CHALLENGE_LIMITS.unit) return { field: 'unit', text: `Keep what you are counting to ${CHALLENGE_LIMITS.unit} characters.` };
+  }
   if (draft.win === 'target') {
     const target = wholeNumber(draft.target);
-    const unit = `${UNIT[draft.counts]}s`;
+    const unit = wordsOf(draft);
     if (target === null || target < 1) return { field: 'target', text: `Type how many ${unit} to reach, as a whole number.` };
-    if (target > days) {
+    if (isOwn(draft)) {
+      if (target > CHALLENGE_LIMITS.score) return { field: 'target', text: `The number to reach can be ${count(CHALLENGE_LIMITS.score)} at most.` };
+    } else if (target > days) {
       return { field: 'target', text: `One a day is counted and this challenge is ${plural(days, 'day')} long, so the most anyone can reach is ${count(days)}. Type ${count(days)} or less, or make it longer.` };
     }
   }
@@ -122,7 +149,7 @@ export function challengeProblem(draft, today, before = null) {
   if (postLength(draft.details.trim()) > CHALLENGE_LIMITS.details) return { field: 'details', text: `Keep the details to ${CHALLENGE_LIMITS.details} characters.` };
   const rule = challengeSaveProblem({
     today,
-    before: before === null ? null : { counts: before.counts, startsOn: before.startsOn, endsOn: before.endsOn, target: before.target, who: before.who },
+    before: before === null ? null : { counts: before.counts, startsOn: before.startsOn, endsOn: before.endsOn, target: before.target, who: before.who, lowestWins: before.lowestWins === true },
     next: rulesOf(draft),
   });
   if (rule === null) return null;
@@ -132,13 +159,13 @@ export function challengeProblem(draft, today, before = null) {
 
 /** What is sent for a draft with no problem. */
 export function fieldsOf(draft) {
-  return { name: draft.name.trim(), details: draft.details.trim(), prize: draft.prize.trim(), ...rulesOf(draft) };
+  return { name: draft.name.trim(), details: draft.details.trim(), prize: draft.prize.trim(), unit: isOwn(draft) ? draft.unit.trim() : '', ...rulesOf(draft) };
 }
 
 /** Whether the challenge the server kept is the one this form holds: a save whose reply
  *  was lost and whose form was then changed is answered with the first one. */
 export function sameAsSent(challenge, fields) {
-  return ['name', 'details', 'prize', 'counts', 'startsOn', 'endsOn', 'target', 'who'].every((key) => challenge[key] === fields[key]);
+  return ['name', 'details', 'prize', 'counts', 'unit', 'startsOn', 'endsOn', 'target', 'who', 'lowestWins'].every((key) => challenge[key] === fields[key]);
 }
 
 /** "500 characters left", and whether it is over. */
@@ -150,6 +177,7 @@ export function detailsLine(text) {
 
 /** Under the target box: the most that can be reached, once the days are known. */
 export function targetHint(draft) {
+  if (isOwn(draft)) return 'Everybody whose number reaches this wins.';
   const days = draftDays(draft);
   const unit = UNIT[draft.counts];
   if (days === null) return `One ${unit} a day is the most anybody can get.`;
@@ -158,7 +186,7 @@ export function targetHint(draft) {
 
 /** Under the first day: a start in the past already counts. */
 export function startHint(draft, today) {
-  if (draft.startsOn === '' || draft.startsOn >= today) return null;
+  if (draft.startsOn === '' || draft.startsOn >= today || isOwn(draft)) return null;
   return `${UNIT[draft.counts] === 'gym day' ? 'Gym days' : 'Workout days'} since ${dayLabel(draft.startsOn)} already count.`;
 }
 
@@ -191,10 +219,61 @@ export function datesLine(challenge, today) {
 
 /** "Counts gym days · whoever has the most wins" */
 export function rulesLine(challenge) {
-  const what = `Counts ${UNIT[challenge.counts]}s`;
-  if (challenge.target === null) return `${what} · whoever has the most wins`;
+  const what = `Counts ${wordsOf(challenge)}`;
+  if (challenge.target === null) return `${what} · whoever has the ${challenge.lowestWins ? 'lowest' : 'most'} wins`;
   return `${what} · everyone who reaches ${count(challenge.target)} wins`;
 }
+
+/** The three facts on a challenge's card, each a few words. */
+export function cardFacts(challenge, inApp, words) {
+  const counts = isOwn(challenge) ? capital(wordsOf(challenge)) : challenge.counts === 'gym_days' ? 'Gym days' : 'Workout days';
+  const won = challenge.target !== null ? `Reach ${count(challenge.target)}` : challenge.lowestWins ? 'Lowest wins' : 'Most wins';
+  const who =
+    challenge.who === 'everyone'
+      ? `Everyone in the app · ${count(inApp)}`
+      : challenge.joinedCount === 0
+        ? `${words.peopleCap} who join · none yet`
+        : `${words.peopleCap} who join · ${count(challenge.joinedCount)}`;
+  return [
+    { label: 'Counts', value: counts, note: isOwn(challenge) ? 'Typed in by your staff' : 'Counted by the app' },
+    { label: 'How it is won', value: won, note: challenge.target !== null ? 'Everybody who gets there' : 'First place' },
+    { label: 'Who is in it', value: who, note: null },
+  ];
+}
+
+/** Whether staff type this challenge's numbers now: the gym's own count, started, not cancelled. */
+export function takesNumbers(challenge) {
+  return isOwn(challenge) && !challenge.cancelled && challenge.state !== 'coming';
+}
+
+/** What is typed in a person's number box, as the number to save: "" is none; null is not a number. */
+export function typedNumber(text) {
+  const t = String(text).trim();
+  if (t === '') return { ok: true, value: null };
+  if (!/^\d{1,7}$/.test(t) || Number(t) > CHALLENGE_LIMITS.score) return { ok: false, value: null };
+  return { ok: true, value: Number(t) };
+}
+
+/** The numbers to send: only the people whose box no longer says what is kept. Null when a box holds something that is no number. */
+export function numbersToSave(rows, typed) {
+  const scores = [];
+  for (const row of rows) {
+    const text = typed[row.userId];
+    if (text === undefined) continue;
+    const parsed = typedNumber(text);
+    if (!parsed.ok) return null;
+    const value = parsed.value ?? 0;
+    if (value !== row.value) scores.push({ userId: row.userId, value: value === 0 ? null : value });
+  }
+  return scores;
+}
+
+export const NUMBER_NOTES = {
+  bad: `A number is a whole number up to ${count(CHALLENGE_LIMITS.score)}. Leave a box empty for no number.`,
+  saved: (n, words) => `Saved. ${n === 1 ? '1 number' : `${count(n)} numbers`} changed, and your ${words.people} see the board now.`,
+  none: 'Nothing has changed yet.',
+  help: (challenge, words) => `Type each person's ${wordsOf(challenge)} and press Save numbers. An empty box is no number. Your ${words.people} see the board as soon as you save.`,
+};
 
 /** Who is in it, with the number where there is one. */
 export function whoText(challenge, inApp, words) {
@@ -206,6 +285,7 @@ export function whoText(challenge, inApp, words) {
 /** The button that opens a challenge's board. */
 export function boardButton(challenge, open) {
   if (open) return 'Hide the board';
+  if (takesNumbers(challenge) && challenge.state === 'running') return 'Enter numbers';
   return challenge.state === 'coming' && challenge.who === 'joined' ? 'See who has joined' : 'See the board';
 }
 
@@ -227,9 +307,10 @@ export function boardLines(board, challenge, words) {
     if (challenge.who === 'joined' && board.total > 0) lines.push(`${peopleCount(board.total)} ${board.total === 1 ? 'has' : 'have'} joined so far.`);
     return lines;
   }
-  const hidden = board.total - board.ranked;
+  // For the gym's own count everybody in it is listed, most of them only waiting for a number.
+  const hidden = isOwn(challenge) ? 0 : board.total - board.ranked;
   if (board.memberStatus === 'too_few') {
-    lines.push(`${words.peopleCap} see no places yet: fewer than 3 people they can see have a ${UNIT[challenge.counts]} in it.`);
+    lines.push(`${words.peopleCap} see no places yet: fewer than 3 people they can see have a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]} in it.`);
   } else {
     lines.push(`${words.peopleCap} see ${peopleCount(board.ranked)} on its board${hidden > 0 ? `; ${count(hidden)} more ${hidden === 1 ? 'is' : 'are'} listed here and hidden from them` : ''}.`);
   }
@@ -241,11 +322,11 @@ export function boardLines(board, challenge, words) {
 
 /** What a board's row says after the name: why members do not see the person, or that
  *  nothing of theirs has counted yet. Null for somebody members see. */
-export function rowNote(row) {
+export function rowNote(row, challenge = null) {
   // The name's own place already reads "No name yet": the tag says what follows from it.
   if (row.hidden === 'no_name') return 'Hidden until they add a name';
   if (row.hidden !== null) return HIDDEN_TAG[row.hidden];
-  if (row.value === 0) return 'Nothing counted yet';
+  if (row.value === 0) return challenge !== null && isOwn(challenge) ? 'No number yet' : 'Nothing counted yet';
   return null;
 }
 
@@ -253,7 +334,7 @@ export function rowNote(row) {
 export function emptyBoard(board, challenge) {
   if (board.memberStatus === 'not_started' && challenge.who === 'joined') return 'Nobody has joined yet.';
   if (board.memberStatus === 'not_started') return null;
-  return challenge.who === 'joined' ? 'Nobody has joined yet.' : `Nobody has a ${UNIT[challenge.counts]} in it yet.`;
+  return challenge.who === 'joined' ? 'Nobody has joined yet.' : isOwn(challenge) ? 'Nobody is in the app here yet.' : `Nobody has a ${UNIT[challenge.counts]} in it yet.`;
 }
 
 /** "Showing 1–100 of 240" */

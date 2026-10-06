@@ -23,6 +23,7 @@ const rules = (over: Partial<ChallengeRules> = {}): ChallengeRules => ({
   endsOn: "2026-10-31",
   target: null,
   who: "everyone",
+  lowestWins: false,
   ...over,
 });
 

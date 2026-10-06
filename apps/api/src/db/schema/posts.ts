@@ -300,6 +300,9 @@ export const gymChallenges = pgTable(
     /** The number to reach; null where the most wins. */
     target: integer("target"),
     who: text("who").notNull(),
+    /** The gym's own count: its word for what is counted, and whether the lowest wins. */
+    unit: text("unit").notNull().default(""),
+    lowestWins: boolean("lowest_wins").notNull().default(false),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: createdAt(),
@@ -311,10 +314,15 @@ export const gymChallenges = pgTable(
     check("gym_challenges_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 80`),
     check("gym_challenges_details_check", sql`char_length(${t.details}) <= 500`),
     check("gym_challenges_prize_check", sql`char_length(${t.prize}) <= 120`),
-    check("gym_challenges_counts_check", sql`${t.counts} IN ('gym_days','workout_days')`),
+    check("gym_challenges_counts_check", sql`${t.counts} IN ('gym_days','workout_days','own')`),
     check("gym_challenges_who_check", sql`${t.who} IN ('everyone','joined')`),
     check("gym_challenges_days_check", sql`${t.endsOn} >= ${t.startsOn} AND ${t.endsOn} - ${t.startsOn} < 366`),
-    check("gym_challenges_target_check", sql`${t.target} IS NULL OR ${t.target} BETWEEN 1 AND ${t.endsOn} - ${t.startsOn} + 1`),
+    check(
+      "gym_challenges_target_check",
+      sql`${t.target} IS NULL OR (${t.counts} = 'own' AND ${t.target} BETWEEN 1 AND 1000000) OR (${t.counts} <> 'own' AND ${t.target} BETWEEN 1 AND ${t.endsOn} - ${t.startsOn} + 1)`,
+    ),
+    check("gym_challenges_unit_check", sql`char_length(${t.unit}) <= 30 AND (${t.counts} = 'own') = (${t.unit} <> '')`),
+    check("gym_challenges_lowest_check", sql`NOT ${t.lowestWins} OR (${t.counts} = 'own' AND ${t.target} IS NULL)`),
     index("gym_challenges_ends_idx").on(t.gymId, t.endsOn),
   ],
 );
@@ -337,5 +345,29 @@ export const gymChallengePeople = pgTable(
     primaryKey({ name: "gym_challenge_people_pk", columns: [t.challengeId, t.userId] }),
     foreignKey({ name: "gym_challenge_people_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
     index("gym_challenge_people_user_idx").on(t.userId),
+  ],
+);
+
+/** A person's number in a challenge of the gym's own count, typed by staff
+ *  (`0081_gym_challenges.sql`). About the person: deleted with their account
+ *  (`DIRECT_DELETE_TABLES`). */
+export const gymChallengeScores = pgTable(
+  "gym_challenge_scores",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    challengeId: uuid("challenge_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    value: integer("value").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_challenge_scores_pk", columns: [t.challengeId, t.userId] }),
+    foreignKey({ name: "gym_challenge_scores_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
+    check("gym_challenge_scores_value_check", sql`${t.value} BETWEEN 1 AND 1000000`),
+    index("gym_challenge_scores_user_idx").on(t.userId),
   ],
 );

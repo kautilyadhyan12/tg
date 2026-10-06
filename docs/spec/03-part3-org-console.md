@@ -3318,6 +3318,17 @@ gym on no plan: its members are sent none.
 
 Left for **19d-ii**: teams, and the result posted to Updates when it ends.
 
+**The gym's own count (Kd, RULINGS 2026-10-06, built in 19d-i).** A third thing a challenge
+can count: `counts` `own`, with `unit` the gym's word for it ("push-ups", 30 characters).
+Nothing is counted by the app: staff holding `leaderboard.manage` type each person's number
+on the challenge's board (`gym_challenge_scores`, one whole number a person, 1 to
+1,000,000; an empty box takes it off; `PUT …/challenges/{id}/scores`, up to 200 people a
+save, noted once in `audit_log`), from its first day, for a live app member in it. It can
+be won by the most, by reaching a number (not bound by its days), or by **the lowest**
+(`lowest_wins`, a fastest time; only for this count and with no target). Places, the
+hidden rule and the three-people rule are the same as every other challenge's; it has no
+flames, since it has no days. A number a member types is still never ranked (§15.5).
+
 ### 15.7 A gym's own plan for a member
 
 A trainer with `plans.write` (a new tick) opens a member's weekly workout plan and

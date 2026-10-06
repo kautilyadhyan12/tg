@@ -23,6 +23,9 @@ export interface ChallengeRow {
   endsOn: string;
   target: number | null;
   who: GymChallengeWho;
+  /** The gym's own count: its word for what is counted, and whether the lowest wins. */
+  unit: string;
+  lowestWins: boolean;
   cancelled: boolean;
 }
 
@@ -36,6 +39,8 @@ interface RawChallenge {
   ends_on: string;
   target: number | null;
   who: GymChallengeWho;
+  unit: string;
+  lowest_wins: boolean;
   cancelled: boolean;
 }
 
@@ -49,12 +54,14 @@ const toRow = (r: RawChallenge): ChallengeRow => ({
   endsOn: r.ends_on,
   target: r.target,
   who: r.who,
+  unit: r.unit,
+  lowestWins: r.lowest_wins,
   cancelled: r.cancelled,
 });
 
 const columns = (sql: SqlOrTx) => sql`
   c.id, c.name, c.details, c.prize, c.counts, c.starts_on::text AS starts_on, c.ends_on::text AS ends_on,
-  c.target, c.who, (c.cancelled_at IS NOT NULL) AS cancelled`;
+  c.target, c.who, c.unit, c.lowest_wins, (c.cancelled_at IS NOT NULL) AS cancelled`;
 
 /** What a member is sent: every challenge that has not ended (a cancelled one for a week
  *  after it was cancelled), and the newest few that ended in the last fortnight. */
@@ -143,6 +150,8 @@ export interface ChallengeFields {
   endsOn: string;
   target: number | null;
   who: GymChallengeWho;
+  unit: string;
+  lowestWins: boolean;
 }
 
 /** Keeps a new challenge. False when the gym already keeps one under this key. */
@@ -154,9 +163,9 @@ export async function insertChallenge(
   at: Date,
 ): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
-    INSERT INTO gym_challenges (id, gym_id, challenge_key, name, details, prize, counts, starts_on, ends_on, target, who, created_by_user_id, created_at, updated_at)
+    INSERT INTO gym_challenges (id, gym_id, challenge_key, name, details, prize, counts, starts_on, ends_on, target, who, unit, lowest_wins, created_by_user_id, created_at, updated_at)
     VALUES (${challenge.id}, ${gymId}, ${challenge.challengeKey}, ${challenge.name}, ${challenge.details}, ${challenge.prize}, ${challenge.counts},
-            ${challenge.startsOn}::date, ${challenge.endsOn}::date, ${challenge.target}, ${challenge.who}, ${byUserId}, ${at}, ${at})
+            ${challenge.startsOn}::date, ${challenge.endsOn}::date, ${challenge.target}, ${challenge.who}, ${challenge.unit}, ${challenge.lowestWins}, ${byUserId}, ${at}, ${at})
     ON CONFLICT (gym_id, challenge_key) DO NOTHING
     RETURNING id`;
   return rows.length === 1;
@@ -167,7 +176,7 @@ export async function updateChallenge(tx: TransactionSql, gymId: string, challen
     UPDATE gym_challenges SET
       name = ${challenge.name}, details = ${challenge.details}, prize = ${challenge.prize}, counts = ${challenge.counts},
       starts_on = ${challenge.startsOn}::date, ends_on = ${challenge.endsOn}::date, target = ${challenge.target}, who = ${challenge.who},
-      updated_at = ${at}
+      unit = ${challenge.unit}, lowest_wins = ${challenge.lowestWins}, updated_at = ${at}
     WHERE gym_id = ${gymId} AND id = ${challengeId}`;
 }
 
@@ -235,4 +244,52 @@ export async function inAppCount(sql: SqlOrTx, gymId: string): Promise<number> {
     FROM gym_members m JOIN users u ON u.id = m.user_id AND u.status = 'active'
     WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL`;
   return rows[0]?.n ?? 0;
+}
+
+// ── THE GYM'S OWN COUNT: NUMBERS STAFF TYPE ──
+
+/** Each person's typed number in each of the gym's `challengeIds`. Somebody who is not a
+ *  live member now may still be listed; the caller keeps only the people it knows. */
+export async function scoresOf(sql: SqlOrTx, gymId: string, challengeIds: readonly string[]): Promise<Map<string, { userId: string; value: number }[]>> {
+  if (challengeIds.length === 0) return new Map();
+  // As text, split here: the driver reads an array a character at a time.
+  const rows = await sql<{ challenge_id: string; scores: string }[]>`
+    SELECT s.challenge_id, string_agg(s.user_id::text || ':' || s.value::text, ',') AS scores
+    FROM gym_challenge_scores s
+    WHERE s.gym_id = ${gymId} AND s.challenge_id = ANY(${[...challengeIds]}::uuid[])
+    GROUP BY s.challenge_id`;
+  return new Map(
+    rows.map((row) => [
+      row.challenge_id,
+      row.scores.split(",").map((pair) => {
+        const [userId = "", value = "0"] = pair.split(":");
+        return { userId, value: Number(value) };
+      }),
+    ]),
+  );
+}
+
+/** Whether each of `userIds` is a live app member of the gym now, and has joined the
+ *  challenge where it is one people join: the people a number may be typed for. */
+export async function inChallenge(tx: TransactionSql, gymId: string, challengeId: string, joinedOnly: boolean, userIds: readonly string[]): Promise<Set<string>> {
+  const rows = await tx<{ user_id: string }[]>`
+    SELECT m.user_id
+    FROM gym_members m JOIN users u ON u.id = m.user_id AND u.status = 'active'
+    WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL AND m.user_id = ANY(${[...userIds]}::uuid[])
+      AND (NOT ${joinedOnly} OR EXISTS (
+        SELECT 1 FROM gym_challenge_people p WHERE p.gym_id = ${gymId} AND p.challenge_id = ${challengeId} AND p.user_id = m.user_id
+      ))`;
+  return new Set(rows.map((row) => row.user_id));
+}
+
+/** Keeps a person's number; typed again it replaces the one before. */
+export async function putScore(tx: TransactionSql, gymId: string, challengeId: string, userId: string, value: number, at: Date): Promise<void> {
+  await tx`
+    INSERT INTO gym_challenge_scores (gym_id, challenge_id, user_id, value, updated_at)
+    VALUES (${gymId}, ${challengeId}, ${userId}, ${value}, ${at})
+    ON CONFLICT (challenge_id, user_id) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`;
+}
+
+export async function removeScore(tx: TransactionSql, gymId: string, challengeId: string, userId: string): Promise<void> {
+  await tx`DELETE FROM gym_challenge_scores WHERE gym_id = ${gymId} AND challenge_id = ${challengeId} AND user_id = ${userId}`;
 }

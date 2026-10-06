@@ -759,6 +759,8 @@ d("a gym's challenges (real Postgres)", () => {
         endsOn: "2026-10-11",
         target: 5,
         who: "joined",
+        unit: "",
+        lowestWins: false,
         cancelled: false,
         state: "running",
         joinedCount: 0,
@@ -864,6 +866,148 @@ d("a gym's challenges (real Postgres)", () => {
       expect(await audits(gym.id, "org.challenge_uncancelled")).toBe(1);
       const back = await seen(gym, vera, c.id);
       expect([back.cancelled, back.joined, back.joinedCount, back.me?.value]).toEqual([false, true, 1, 0]);
+    },
+    T,
+  );
+
+  // ===========================================================================
+  // THE GYM'S OWN COUNT: NUMBERS STAFF TYPE
+  // ===========================================================================
+
+  const setScores = (gym: Gym, id: string, scores: { userId: string; value: number | null }[], who: Person = gym.owner, target = api()) =>
+    inject("PUT", `${base(gym.id)}/${id}/scores`, who.cookies, { scores }, nextIp(), target);
+  const scoreRows = async (id: string): Promise<[string, number][]> => {
+    const rows = await sql<{ user_id: string; value: number }[]>`SELECT user_id, value FROM gym_challenge_scores WHERE challenge_id = ${id} ORDER BY value DESC, user_id`;
+    return rows.map((r) => [r.user_id, r.value]);
+  };
+
+  it(
+    "the gym's own count: staff type each person's number; a hidden person still shows to nobody; a number typed again replaces the one before",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Push-up Place");
+      const other = await makeGym("Next Door");
+      const vera = await member(gym, "Vera Viewer");
+      const asha = await account("Asha Rao");
+      const bilal = await account("Bilal Khan");
+      const chen = await account("Chen Wu");
+      for (const p of [asha, bilal, chen]) await inGym(gym.id, p.userId);
+      const hema = await member(gym, "Hema Hidden");
+      await sql`UPDATE users SET leaderboard_opt_out = true WHERE id = ${hema.userId}`;
+      const outsider = await member(other, "Otto Other");
+      const trainer = await signedIn("Tia Trainer");
+      await addStaff(gym.id, trainer.userId, "trainer");
+
+      const c = await add(gym, { name: "Push-up Day", counts: "own", unit: "push-ups", target: 50 });
+      expect([c.counts, c.unit, c.target, c.lowestWins]).toEqual(["own", "push-ups", 50, false]);
+      // Nothing typed yet: staff are sent everybody in it, each at 0, to type beside.
+      const empty = await staffBoard(gym, c.id);
+      expect([empty.total, empty.rows.every((r) => r.value === 0 && r.place === null)]).toEqual([5, true]);
+
+      const first = await setScores(gym, c.id, [
+        { userId: asha.userId, value: 60 },
+        { userId: bilal.userId, value: 40 },
+        { userId: chen.userId, value: 40 },
+        { userId: vera.userId, value: 10 },
+        { userId: hema.userId, value: 99 },
+      ]);
+      expect([first.statusCode, JSON.parse(first.body)]).toEqual([200, { saved: 5 }]);
+
+      const res = await inject("GET", base(gym.id), vera.cookies);
+      expect(res.body).not.toContain(hema.userId);
+      expect(res.body).not.toContain("Hema");
+      const mine = (JSON.parse(res.body) as GymChallengesResponse).challenges.find((x) => x.id === c.id);
+      expect(mine?.board).toEqual({
+        status: "shown",
+        ranked: 4,
+        top: [
+          { userId: asha.userId, name: "Asha R.", initials: "AR", place: 1, value: 60, reached: true, isMe: false },
+          { userId: bilal.userId, name: "Bilal K.", initials: "BK", place: 2, value: 40, reached: false, isMe: false },
+          { userId: chen.userId, name: "Chen W.", initials: "CW", place: 2, value: 40, reached: false, isMe: false },
+        ],
+        leaders: 1,
+        reached: 1,
+      });
+      expect(mine?.me).toEqual({ value: 10, place: 4, hidden: null, toNextPlace: 30, nextPlace: 2, reached: false, days: [] });
+      // Staff see her, with the reason, and no place.
+      const staff = await staffBoard(gym, c.id);
+      expect(places(staff.rows)).toEqual([["Hema Hidden", null, 99], ["Asha Rao", 1, 60], ["Bilal Khan", 2, 40], ["Chen Wu", 2, 40], ["Vera Viewer", 4, 10]]);
+      expect([staff.reached, staff.rows[0]?.hidden]).toEqual([2, "hide_me"]);
+
+      // Typed again, a number replaces the one before; sent twice it is the same; null and 0 take one off.
+      const again = [{ userId: asha.userId, value: 45 }, { userId: chen.userId, value: null }, { userId: hema.userId, value: 0 }];
+      const twice = await Promise.all([setScores(gym, c.id, again), setScores(gym, c.id, again, gym.owner, second)]);
+      expect(twice.map((r) => r.statusCode)).toEqual([200, 200]);
+      expect(await scoreRows(c.id)).toEqual([[asha.userId, 45], [bilal.userId, 40], [vera.userId, 10]]);
+      const after = await seen(gym, vera, c.id);
+      expect([places(after.board.top), after.board.reached, after.me?.place]).toEqual([[["Asha R.", 1, 45], ["Bilal K.", 2, 40], ["Vera V.", 3, 10]], 0, 3]);
+
+      // Who may not, and for whom not: nothing of a refused save is kept.
+      const refusedSave = async (res: ReturnType<typeof setScores>) => {
+        const r = await res;
+        return [r.statusCode, codeOf(r)];
+      };
+      const one = [{ userId: asha.userId, value: 999 }];
+      expect(await refusedSave(setScores(gym, c.id, [...one, { userId: outsider.userId, value: 5 }]))).toEqual([409, "challenge_person_not_in"]);
+      expect(await refusedSave(setScores(gym, c.id, one, trainer))).toEqual([403, "forbidden"]);
+      for (const who of [vera, outsider, other.owner]) expect(await refusedSave(setScores(gym, c.id, one, who))).toEqual([404, "org_not_found"]);
+      expect(await refusedSave(setScores(other, c.id, one, other.owner))).toEqual([404, "challenge_not_found"]);
+      expect(await refusedSave(setScores(gym, c.id, [{ userId: asha.userId, value: 1_000_001 }]))).toEqual([400, "validation_error"]);
+      expect(await refusedSave(setScores(gym, c.id, []))).toEqual([400, "validation_error"]);
+      const counted = await add(gym, { name: "Gym days" });
+      expect(await refusedSave(setScores(gym, counted.id, one))).toEqual([409, "challenge_not_own"]);
+      const coming = await add(gym, { name: "Next week", counts: "own", unit: "laps", startsOn: "2026-10-12", endsOn: "2026-10-18" });
+      expect(await refusedSave(setScores(gym, coming.id, one))).toEqual([409, "challenge_not_started"]);
+      // One people join: a number only for somebody who joined.
+      const joiners = await add(gym, { name: "Joiners", counts: "own", unit: "laps", who: "joined" });
+      expect(await refusedSave(setScores(gym, joiners.id, one))).toEqual([409, "challenge_person_not_in"]);
+      expect((await joinAs(gym, vera, joiners.id)).statusCode).toBe(200);
+      expect((await setScores(gym, joiners.id, [{ userId: vera.userId, value: 7 }])).statusCode).toBe(200);
+      expect(await scoreRows(c.id)).toEqual([[asha.userId, 45], [bilal.userId, 40], [vera.userId, 10]]);
+      expect(await scoreRows(joiners.id)).toEqual([[vera.userId, 7]]);
+      // A removed member's number is nobody's to see, and cannot be typed.
+      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${bilal.userId}`;
+      expect(places((await seen(gym, vera, c.id)).board.top)).toEqual([]);
+      expect(places((await staffBoard(gym, c.id)).rows).map(([name]) => name)).not.toContain("Bilal Khan");
+      expect(await refusedSave(setScores(gym, c.id, [{ userId: bilal.userId, value: 3 }]))).toEqual([409, "challenge_person_not_in"]);
+    },
+    T,
+  );
+
+  it(
+    "lowest wins: the smallest number is first, for members and for staff; and what cannot be asked for is refused",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Fast Lane");
+      const vera = await member(gym, "Vera Viewer");
+      const asha = await account("Asha Rao");
+      const bilal = await account("Bilal Khan");
+      const chen = await account("Chen Wu");
+      for (const p of [asha, bilal, chen]) await inGym(gym.id, p.userId);
+      const c = await add(gym, { name: "Row 500 m", counts: "own", unit: "seconds", lowestWins: true });
+      expect((await setScores(gym, c.id, [{ userId: asha.userId, value: 95 }, { userId: bilal.userId, value: 110 }, { userId: chen.userId, value: 110 }, { userId: vera.userId, value: 130 }])).statusCode).toBe(200);
+      const mine = await seen(gym, vera, c.id);
+      expect(places(mine.board.top)).toEqual([["Asha R.", 1, 95], ["Bilal K.", 2, 110], ["Chen W.", 2, 110]]);
+      expect([mine.board.ranked, mine.board.leaders, mine.board.reached]).toEqual([4, 1, null]);
+      // Twenty seconds less would reach second.
+      expect(mine.me).toEqual({ value: 130, place: 4, hidden: null, toNextPlace: 20, nextPlace: 2, reached: false, days: [] });
+      expect(places((await boardOf(gym, vera, c.id)).rows)).toEqual([["Asha R.", 1, 95], ["Bilal K.", 2, 110], ["Chen W.", 2, 110], ["Vera V.", 4, 130]]);
+      expect(places((await staffBoard(gym, c.id)).rows)).toEqual([["Asha Rao", 1, 95], ["Bilal Khan", 2, 110], ["Chen Wu", 2, 110], ["Vera Viewer", 4, 130]]);
+
+      const refusedAdd = async (over: Record<string, unknown>) => (await inject("POST", base(gym.id), gym.owner.cookies, fields(over))).statusCode;
+      expect(await refusedAdd({ lowestWins: true })).toBe(400); // the app's counts are never lowest-wins
+      expect(await refusedAdd({ counts: "own", unit: "seconds", lowestWins: true, target: 60 })).toBe(400);
+      expect(await refusedAdd({ counts: "own" })).toBe(400); // no word for what is counted
+      expect(await refusedAdd({ counts: "own", unit: "  " })).toBe(400);
+      expect(await refusedAdd({ unit: "push-ups" })).toBe(400); // a word on the app's own count
+      expect(await refusedAdd({ counts: "own", unit: "u".repeat(31) })).toBe(400);
+      // The gym's own count may aim past the challenge's days.
+      expect(await refusedAdd({ counts: "own", unit: "kilometres", target: 500 })).toBe(201);
+      // Once started, lowest-wins cannot be switched.
+      const put = await inject("PUT", `${base(gym.id)}/${c.id}`, gym.owner.cookies, changed({ name: "Row 500 m", counts: "own", unit: "seconds", lowestWins: false }));
+      expect([put.statusCode, codeOf(put)]).toEqual([409, "challenge_started"]);
+      // Its word can still be corrected.
+      expect((await inject("PUT", `${base(gym.id)}/${c.id}`, gym.owner.cookies, changed({ name: "Row 500 m", counts: "own", unit: "secs", lowestWins: true }))).statusCode).toBe(200);
     },
     T,
   );

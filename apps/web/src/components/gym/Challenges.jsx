@@ -216,7 +216,7 @@ function BoardSheet({ gym, challenge, onClose, onPerson }) {
                     disabled={row.isMe}
                     className="w-full flex items-center gap-3 rounded-xl px-2 py-1.5 text-left min-h-11"
                     style={{ background: row.isMe ? 'rgba(255,138,31,0.08)' : 'transparent' }}
-                    aria-label={`${ordinal(row.place)}: ${row.isMe ? 'You' : row.name}, ${countText(row.value, challenge.counts)}${row.reached ? ', reached the target' : ''}`}
+                    aria-label={`${ordinal(row.place)}: ${row.isMe ? 'You' : row.name}, ${countText(row.value, challenge.counts, challenge.unit)}${row.reached ? ', reached the target' : ''}`}
                   >
                     <span className="w-9 text-sm font-bold text-right" style={{ color: MEDAL[row.place] ?? MUTED }}>{ordinal(row.place)}</span>
                     <Initials text={row.initials} />

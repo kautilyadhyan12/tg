@@ -74,6 +74,9 @@ export const DIRECT_DELETE_TABLES = [
   // Which of a gym's challenges a member joined (migration 0081; ROADMAP 19d-i): the
   // person's own choice, deleted at Day 14 and exported.
   "gym_challenge_people",
+  // A person's number in a challenge of the gym's own count, typed by staff (0081): about
+  // the person, deleted at Day 14 and exported.
+  "gym_challenge_scores",
   // §5.2's Day-0 sentence already says "push tokens deleted", so clearing
   // them again at Day 14 is not a widening (R0.2) — it is the same
   // defence-in-depth as workout_sets. T3 F5 probe-confirmed that a row

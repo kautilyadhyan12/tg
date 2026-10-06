@@ -172,6 +172,12 @@ d("DPDP Day-14 purge (real Postgres)", () => {
         VALUES (${postGymId}, gen_random_uuid(), 'fixture challenge', 'gym_days', current_date, current_date + 7, 'joined') RETURNING id
       )
       INSERT INTO gym_challenge_people (gym_id, challenge_id, user_id) SELECT ${postGymId}, c.id, ${userId} FROM c`;
+    await sql`
+      WITH c AS (
+        INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, unit, starts_on, ends_on, who)
+        VALUES (${postGymId}, gen_random_uuid(), 'fixture own challenge', 'own', 'push-ups', current_date, current_date + 7, 'everyone') RETURNING id
+      )
+      INSERT INTO gym_challenge_scores (gym_id, challenge_id, user_id, value) SELECT ${postGymId}, c.id, ${userId}, 40 FROM c`;
     // Kept after the purge, as proof (tables.ts) — asserted to survive below.
     await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
               VALUES (${userId}, 'sign_up', 'v1', 'fixture wording', 'test')`;

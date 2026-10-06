@@ -216,7 +216,7 @@ try {
     let id = "";
     adds.push(
       await time(async () => {
-        const made = await addChallenge(deps, owner, gymId, { challengeKey: randomUUID(), name: "Added", details: "", prize: "", counts: "gym_days", startsOn: today, endsOn: today, target: null, who: "everyone" }, allowed);
+        const made = await addChallenge(deps, owner, gymId, { challengeKey: randomUUID(), name: "Added", details: "", prize: "", counts: "gym_days", startsOn: today, endsOn: today, target: null, who: "everyone", unit: "", lowestWins: false }, allowed);
         id = made?.id ?? "";
       }),
     );

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { CalendarDays, Check, Gift, Pencil, Plus, Target, Users } from 'lucide-react';
+import { CalendarDays, Check, Gift, Medal, Pencil, Plus } from 'lucide-react';
 import { staffChallengesService } from '../../api/challengesApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -11,10 +11,11 @@ import {
   CHALLENGE_NOTES,
   COUNT_CHOICES,
   LOCKED_NOTE,
-  WIN_CHOICES,
+  NUMBER_NOTES,
   boardButton,
   boardLines,
   cancelBox,
+  cardFacts,
   challengeProblem,
   challengeTag,
   datesLine,
@@ -26,15 +27,17 @@ import {
   isLocked,
   newChallengeDraft,
   notCheckingInNote,
+  numbersToSave,
   pageLine,
   pastTitle,
   rowNote,
-  rulesLine,
   sameAsSent,
   startHint,
+  takesNumbers,
   targetHint,
   whoChoices,
-  whoText,
+  winChoices,
+  withCounts,
   withStartDay,
 } from './challengesView';
 import { nameOf } from './leaderboardStaffView';
@@ -76,7 +79,7 @@ function Choices({ label, choices, value, onPick, disabled }) {
   return (
     <div className="c-field">
       <span className="c-label">{label}</span>
-      <div role="radiogroup" aria-label={label} className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+      <div role="radiogroup" aria-label={label} className={`grid grid-cols-1 gap-2.5 ${choices.length === 3 ? 'md:grid-cols-3' : 'sm:grid-cols-2'}`}>
         {choices.map((choice) => (
           <Choice key={choice.id} on={value === choice.id} title={choice.title} sub={choice.sub} onClick={() => onPick(choice.id)} disabled={disabled} />
         ))}
@@ -103,7 +106,8 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
   const title = adding ? 'Add a challenge' : `Edit ${challenge.name}`;
   const quiet = notCheckingInNote(draft.counts, list, words);
   const started = startHint(draft, list.today);
-  const unit = draft.counts === 'gym_days' ? 'Gym days' : 'Workout days';
+  const own = draft.counts === 'own';
+  const toReach = own ? 'Number to reach' : `${draft.counts === 'gym_days' ? 'Gym days' : 'Workout days'} to reach`;
 
   const save = async () => {
     const wrong = challengeProblem(draft, list.today, challenge);
@@ -141,7 +145,24 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
       ) : null}
 
       <div className="flex flex-col gap-1.5">
-        <Choices label="What it counts" choices={COUNT_CHOICES} value={draft.counts} onPick={(counts) => set({ counts })} disabled={saving || locked} />
+        <Choices
+          label="What it counts"
+          choices={COUNT_CHOICES}
+          value={draft.counts}
+          onPick={(counts) => {
+            setDraft((d) => withCounts(d, counts));
+            setProblem(null);
+            setError(null);
+          }}
+          disabled={saving || locked}
+        />
+        {own ? (
+          <label className="c-field mt-2">
+            <span className="c-label">What are you counting?</span>
+            <input value={draft.unit} onChange={(e) => set({ unit: e.target.value })} aria-label="What are you counting?" disabled={saving} maxLength={CHALLENGE_LIMITS.unit * 2} className="c-input" style={{ maxWidth: 320 }} placeholder="push-ups" />
+            <span className="c-hint">{`As you would say it after a number: push-ups, kilometres, seconds. Your staff type each person's number on the challenge's board, so it works for anything, in the gym or away from it.`}</span>
+          </label>
+        ) : null}
         {quiet !== null ? (
           <span className="c-hint" role="note" style={{ color: 'var(--warn)' }}>
             {quiet}
@@ -181,14 +202,14 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
       </div>
 
       <div className="flex flex-col gap-3">
-        <Choices label="How it is won" choices={WIN_CHOICES} value={draft.win} onPick={(win) => set({ win })} disabled={saving || locked} />
+        <Choices label="How it is won" choices={winChoices(draft.counts)} value={draft.win} onPick={(win) => set({ win })} disabled={saving || locked} />
         {draft.win === 'target' ? (
           <div className="c-field">
-            <span className="c-label">{`${unit} to reach`}</span>
+            <span className="c-label">{toReach}</span>
             <input
               value={draft.target}
               onChange={(e) => set({ target: e.target.value })}
-              aria-label={`${unit} to reach`}
+              aria-label={toReach}
               disabled={saving || locked}
               inputMode="numeric"
               className="c-input"
@@ -239,9 +260,13 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
 }
 
 /** A challenge's board for staff: everybody's full name, and why members do not see some. */
-function ChallengeBoard({ gymId, challenge, timezone, words }) {
+function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
   const [page, setPage] = useState(1);
   const [state, setState] = useState({ loading: true, error: null, board: null });
+  /** What is typed in each person's box and not yet saved, by person. */
+  const [typed, setTyped] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [said, setSaid] = useState(null);
   const load = useCallback(
     () =>
       staffChallengesService.board(gymId, challenge.id, page).then(
@@ -260,8 +285,32 @@ function ChallengeBoard({ gymId, challenge, timezone, words }) {
   }
   const empty = emptyBoard(board, challenge);
   const pages = pageLine(board);
+  const saveNumbers = async () => {
+    const scores = numbersToSave(board.rows, typed);
+    if (scores === null) {
+      setSaid({ bad: true, text: NUMBER_NOTES.bad });
+      return;
+    }
+    if (scores.length === 0) {
+      setSaid({ bad: false, text: NUMBER_NOTES.none });
+      return;
+    }
+    setSaving(true);
+    setSaid(null);
+    try {
+      await staffChallengesService.setScores(gymId, challenge.id, scores);
+      setTyped({});
+      await load();
+      setSaid({ bad: false, text: NUMBER_NOTES.saved(scores.length, words) });
+    } catch (err) {
+      setSaid({ bad: true, text: errorText(err, "We couldn't save the numbers. Please try again.") });
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <section className="flex flex-col gap-2" aria-label={`The board of ${challenge.name}`} data-testid="challenge-board">
+      {canType ? <p className="c-s14 c-t1">{NUMBER_NOTES.help(challenge, words)}</p> : null}
       {boardLines(board, challenge, words).map((line) => (
         <p key={line} className="c-s14 c-t2">
           {line}
@@ -272,7 +321,7 @@ function ChallengeBoard({ gymId, challenge, timezone, words }) {
       ) : (
         <ol className="rounded-[12px] overflow-hidden" style={{ border: '1px solid var(--line)' }}>
           {board.rows.map((row, i) => {
-            const note = rowNote(row);
+            const note = rowNote(row, challenge);
             return (
               <li
                 key={row.userId}
@@ -291,12 +340,40 @@ function ChallengeBoard({ gymId, challenge, timezone, words }) {
                     Reached
                   </span>
                 ) : null}
-                <span className="c-s15 c-w6 c-num c-t1 w-10 text-right flex-shrink-0">{row.value}</span>
+                {canType ? (
+                  <input
+                    value={typed[row.userId] ?? (row.value === 0 ? '' : String(row.value))}
+                    onChange={(e) => {
+                      setTyped((t) => ({ ...t, [row.userId]: e.target.value }));
+                      setSaid(null);
+                    }}
+                    aria-label={`${nameOf(row)}: number`}
+                    disabled={saving}
+                    inputMode="numeric"
+                    className="c-input c-num text-right flex-shrink-0"
+                    style={{ width: 96 }}
+                    placeholder="—"
+                  />
+                ) : (
+                  <span className="c-s15 c-w6 c-num c-t1 w-10 text-right flex-shrink-0">{row.value.toLocaleString('en')}</span>
+                )}
               </li>
             );
           })}
         </ol>
       )}
+      {canType && board.rows.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={saveNumbers} disabled={saving} className="c-btn c-btn-p">
+            {saving ? 'Saving…' : 'Save numbers'}
+          </button>
+          {said !== null ? (
+            <span className="c-s14" role={said.bad ? 'alert' : 'status'} style={{ color: said.bad ? 'var(--bad)' : 'var(--good)' }}>
+              {said.text}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-3">
         {pages !== null ? (
           <>
@@ -327,25 +404,33 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
   const box = asking ? cancelBox(challenge, words) : null;
   return (
     <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid="challenge">
-      <div className="flex flex-col gap-1.5 min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="c-s16 c-w6 c-t1 break-words min-w-0" style={challenge.cancelled ? { textDecoration: 'line-through' } : undefined}>
-            {challenge.name}
-          </h3>
-          <span className={TAG[tag.tone]}>{tag.text}</span>
+      <div className="flex flex-col gap-3 min-w-0">
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="c-avatar flex-shrink-0" aria-hidden="true" style={{ width: 44, height: 44, borderRadius: 12 }}>
+            <Medal className="w-5 h-5" />
+          </span>
+          <div className="flex flex-col gap-1 min-w-0 flex-grow">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="c-h3 break-words min-w-0" style={challenge.cancelled ? { textDecoration: 'line-through' } : undefined}>
+                {challenge.name}
+              </h3>
+              <span className={TAG[tag.tone]}>{tag.text}</span>
+            </div>
+            <p className="c-s14 c-t2 flex items-center gap-2">
+              <CalendarDays aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3" />
+              {datesLine(challenge, list.today)}
+            </p>
+          </div>
         </div>
-        <p className="c-s14 c-t1 flex items-center gap-2">
-          <CalendarDays aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3" />
-          {datesLine(challenge, list.today)}
-        </p>
-        <p className="c-s14 c-t2 flex items-center gap-2">
-          <Target aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3" />
-          {rulesLine(challenge)}
-        </p>
-        <p className="c-s14 c-t2 flex items-center gap-2">
-          <Users aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3" />
-          {whoText(challenge, list.inApp, words)}
-        </p>
+        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2.5" data-testid="challenge-facts">
+          {cardFacts(challenge, list.inApp, words).map((fact) => (
+            <div key={fact.label} className="rounded-[12px] px-3.5 py-3 flex flex-col gap-0.5 min-w-0" style={{ background: 'var(--raise)' }}>
+              <dt className="c-s13 c-t3">{fact.label}</dt>
+              <dd className="c-s15 c-w6 c-t1 break-words">{fact.value}</dd>
+              {fact.note !== null ? <dd className="c-s13 c-t2">{fact.note}</dd> : null}
+            </div>
+          ))}
+        </dl>
         {challenge.prize !== '' ? (
           <p className="c-s14 c-t2 flex items-start gap-2">
             <Gift aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3 mt-0.5" />
@@ -358,7 +443,7 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
       {box === null ? (
         <div className="flex flex-wrap gap-2">
           {!challenge.cancelled ? (
-            <button type="button" onClick={() => setShowBoard((v) => !v)} aria-expanded={showBoard} className="c-btn c-btn-s c-btn-sm" aria-label={`${boardButton(challenge, showBoard)}: ${challenge.name}`}>
+            <button type="button" onClick={() => setShowBoard((v) => !v)} aria-expanded={showBoard} className={`c-btn c-btn-sm ${showBoard ? 'c-btn-s' : 'c-btn-soft'}`} aria-label={`${boardButton(challenge, showBoard)}: ${challenge.name}`}>
               {boardButton(challenge, showBoard)}
             </button>
           ) : null}
@@ -382,7 +467,7 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
         </div>
       ) : null}
 
-      {showBoard && !challenge.cancelled && box === null ? <ChallengeBoard gymId={gymId} challenge={challenge} timezone={list.timezone} words={words} /> : null}
+      {showBoard && !challenge.cancelled && box === null ? <ChallengeBoard gymId={gymId} challenge={challenge} timezone={list.timezone} words={words} canType={takesNumbers(challenge) && !readOnly} /> : null}
 
       {box !== null ? (
         <div className="c-callout flex-col" role="group" aria-label={box.title}>

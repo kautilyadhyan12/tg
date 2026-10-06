@@ -9,8 +9,10 @@ import { eventNameIsSeen } from "./gymEvents.js";
 import { LEADERBOARD_HIDDEN_REASONS, LEADERBOARD_STAFF_PAGE, LEADERBOARD_TOP } from "./leaderboard.js";
 import { postLength } from "./posts.js";
 
-/** What a challenge counts: one of the leaderboard's checked facts, one a day at most. */
-export const GYM_CHALLENGE_COUNTS = ["gym_days", "workout_days"] as const;
+/** What a challenge counts: one of the leaderboard's checked facts, one a day at most; or
+ *  "own", something the gym names and counts itself, whose numbers its staff type in (a
+ *  challenge held away from the app: Kd, RULINGS 2026-10-06). */
+export const GYM_CHALLENGE_COUNTS = ["gym_days", "workout_days", "own"] as const;
 export type GymChallengeCounts = (typeof GYM_CHALLENGE_COUNTS)[number];
 
 /** Who is in it: every member in the app, or the people who join. */
@@ -20,6 +22,12 @@ export type GymChallengeWho = (typeof GYM_CHALLENGE_WHO)[number];
 export const GYM_CHALLENGE_NAME_MAX = 80;
 export const GYM_CHALLENGE_DETAILS_MAX = 500;
 export const GYM_CHALLENGE_PRIZE_MAX = 120;
+/** The gym's own word for what it counts: "push-ups", "kilometres". */
+export const GYM_CHALLENGE_UNIT_MAX = 30;
+/** The largest number staff may type for a person, and the largest target of the gym's own count. */
+export const GYM_CHALLENGE_SCORE_MAX = 1_000_000;
+/** How many people's numbers one save carries. */
+export const GYM_CHALLENGE_SCORES_A_SAVE = 200;
 /** The longest a challenge runs, first day to last, both counted. */
 export const GYM_CHALLENGE_MAX_DAYS = 366;
 /** How far ahead of the gym's today a challenge may start. */
@@ -84,14 +92,21 @@ const challengeFields = {
   startsOn: challengeDaySchema,
   endsOn: challengeDaySchema,
   /** The number to reach, which everybody who reaches it wins; null: the most wins. */
-  target: z.number().int().min(1).max(GYM_CHALLENGE_MAX_DAYS).nullable(),
+  target: z.number().int().min(1).max(GYM_CHALLENGE_SCORE_MAX).nullable(),
   who: z.enum(GYM_CHALLENGE_WHO),
+  /** The gym's own count only: its word for what is counted. Empty for the app's counts. */
+  unit: words(GYM_CHALLENGE_UNIT_MAX).default(""),
+  /** The gym's own count only, with no target: the lowest number wins (a fastest time). */
+  lowestWins: z.boolean().default(false),
 };
 
 interface Dated {
+  counts: GymChallengeCounts;
   startsOn: string;
   endsOn: string;
   target: number | null;
+  unit: string;
+  lowestWins: boolean;
 }
 
 const datesInOrder = (c: Dated): boolean => {
@@ -99,7 +114,11 @@ const datesInOrder = (c: Dated): boolean => {
   return days >= 1 && days <= GYM_CHALLENGE_MAX_DAYS;
 };
 /** One a day at most is counted, so a target above the challenge's days cannot be reached. */
-const targetInReach = (c: Dated): boolean => c.target === null || !datesInOrder(c) || c.target <= challengeLength(c);
+const targetInReach = (c: Dated): boolean => c.counts === "own" || c.target === null || !datesInOrder(c) || c.target <= challengeLength(c);
+/** The gym's own count has its word; the app's counts have none. */
+const unitFits = (c: Dated): boolean => (c.counts === "own" ? eventNameIsSeen(c.unit) : c.unit === "");
+/** Lowest wins only for the gym's own count, and never with a number to reach. */
+const lowestFits = (c: Dated): boolean => !c.lowestWins || (c.counts === "own" && c.target === null);
 
 export const addGymChallengeRequestSchema = z
   .object({
@@ -109,19 +128,36 @@ export const addGymChallengeRequestSchema = z
   })
   .strict()
   .refine(datesInOrder, { message: "the last day must not be before the first", path: ["endsOn"] })
-  .refine(targetInReach, { message: "the target is more than the challenge's days", path: ["target"] });
+  .refine(targetInReach, { message: "the target is more than the challenge's days", path: ["target"] })
+  .refine(unitFits, { message: "say what is counted", path: ["unit"] })
+  .refine(lowestFits, { message: "lowest wins is for the gym's own count with no target", path: ["lowestWins"] });
 export type AddGymChallengeRequest = z.infer<typeof addGymChallengeRequestSchema>;
 
 export const changeGymChallengeRequestSchema = z
   .object(challengeFields)
   .strict()
   .refine(datesInOrder, { message: "the last day must not be before the first", path: ["endsOn"] })
-  .refine(targetInReach, { message: "the target is more than the challenge's days", path: ["target"] });
+  .refine(targetInReach, { message: "the target is more than the challenge's days", path: ["target"] })
+  .refine(unitFits, { message: "say what is counted", path: ["unit"] })
+  .refine(lowestFits, { message: "lowest wins is for the gym's own count with no target", path: ["lowestWins"] });
 export type ChangeGymChallengeRequest = z.infer<typeof changeGymChallengeRequestSchema>;
 
 export const cancelGymChallengeRequestSchema = z.object({ cancelled: z.boolean() }).strict();
 
 export const gymChallengeParamsSchema = z.object({ gymId: z.string().uuid(), challengeId: z.string().uuid() }).strict();
+
+/** Staff type people's numbers for a challenge of the gym's own count. A person's number
+ *  null: it is taken off. */
+export const setChallengeScoresRequestSchema = z
+  .object({
+    scores: z
+      .array(z.object({ userId: z.string().uuid(), value: z.number().int().min(0).max(GYM_CHALLENGE_SCORE_MAX).nullable() }).strict())
+      .min(1)
+      .max(GYM_CHALLENGE_SCORES_A_SAVE),
+  })
+  .strict();
+export type SetChallengeScoresRequest = z.infer<typeof setChallengeScoresRequestSchema>;
+export const challengeScoresResponseSchema = z.object({ saved: z.number().int().min(0) }).strict();
 
 export const staffChallengeBoardQuerySchema = z.object({ page: z.coerce.number().int().min(1).max(10_000).default(1) }).strict();
 
@@ -140,6 +176,7 @@ export interface ChallengeRules {
   endsOn: string;
   target: number | null;
   who: GymChallengeWho;
+  lowestWins: boolean;
 }
 
 const dayAfter = (day: string, days: number): string => new Date((dayNumber(day) + days) * 86_400_000).toISOString().slice(0, 10);
@@ -150,7 +187,7 @@ export function challengeSaveProblem(input: { today: string; before: ChallengeRu
   const { today, before, next } = input;
   if (before !== null && challengeState(before, today) === "ended") return "ended";
   if (before !== null && challengeState(before, today) === "running") {
-    const same = before.counts === next.counts && before.startsOn === next.startsOn && before.who === next.who && before.target === next.target;
+    const same = before.counts === next.counts && before.startsOn === next.startsOn && before.who === next.who && before.target === next.target && before.lowestWins === next.lowestWins;
     if (!same) return "started_locked";
   } else {
     if (next.startsOn < dayAfter(today, -GYM_CHALLENGE_MAX_DAYS_BACK)) return "starts_too_early";
@@ -180,6 +217,9 @@ const challengeSchema = z
     endsOn: classDaySchema,
     target: z.number().int().positive().nullable(),
     who: z.enum(GYM_CHALLENGE_WHO),
+    /** The gym's word for what it counts; empty for the app's counts. */
+    unit: z.string(),
+    lowestWins: z.boolean(),
     cancelled: z.boolean(),
     /** By the gym's own date when it was read. */
     state: z.enum(GYM_CHALLENGE_STATES),
@@ -368,4 +408,7 @@ export const GYM_CHALLENGE_WORDS = {
   cancelled: "This challenge has been cancelled.",
   join_ended: "This challenge has ended.",
   join_everyone: "Everyone is already in this challenge.",
+  scores_not_own: "This challenge is counted by the app, so numbers can't be typed for it.",
+  scores_not_started: "This challenge hasn't started yet. Numbers can be typed from its first day.",
+  scores_person: "One of these people isn't in this challenge any more. Load the list again.",
 } as const;

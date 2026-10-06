@@ -8,6 +8,7 @@ import {
   cancelGymChallengeRequestSchema,
   changeGymChallengeRequestSchema,
   gymChallengeParamsSchema,
+  setChallengeScoresRequestSchema,
   staffChallengeBoardQuerySchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
@@ -147,5 +148,16 @@ export function registerChallengeRoutes(app: FastifyInstance, deps: service.Chal
     const challenge = await service.setCancelled(challengesDeps, requireUserId(req), params.gymId, params.challengeId, body.cancelled, gate(staffWriteLimit)(req, reply));
     if (challenge === null) return;
     return reply.status(200).send({ challenge });
+  });
+
+  // Numbers staff type for a challenge of the gym's own count.
+  app.put("/v1/orgs/:gymId/challenges/:challengeId/scores", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymChallengeParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(setChallengeScoresRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const saved = await service.setScores(challengesDeps, requireUserId(req), params.gymId, params.challengeId, body, gate(staffWriteLimit)(req, reply));
+    if (saved === null) return;
+    return reply.status(200).send(saved);
   });
 }

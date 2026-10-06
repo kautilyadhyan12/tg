@@ -4,10 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { GYM_CHALLENGE_WORDS, ROLE_PRIVILEGES } from '@app/shared';
 import {
   CHALLENGE_NOTES,
+  NUMBER_NOTES,
   boardButton,
   boardLines,
   canManageChallenges,
   cancelBox,
+  cardFacts,
   challengeProblem,
   challengeTag,
   datesLine,
@@ -19,15 +21,20 @@ import {
   isLocked,
   newChallengeDraft,
   notCheckingInNote,
+  numbersToSave,
   pageLine,
   pastTitle,
   rowNote,
   rulesLine,
   sameAsSent,
   startHint,
+  takesNumbers,
   targetHint,
+  typedNumber,
   whoChoices,
   whoText,
+  winChoices,
+  withCounts,
   withStartDay,
 } from './challengesView';
 
@@ -44,6 +51,8 @@ const challenge = (over = {}) => ({
   endsOn: '2026-10-11',
   target: null,
   who: 'everyone',
+  unit: '',
+  lowestWins: false,
   cancelled: false,
   state: 'running',
   joinedCount: null,
@@ -60,12 +69,13 @@ describe('who may open it', () => {
 
 describe('the form', () => {
   it('starts on the commonest challenge and fills in from one that is kept', () => {
-    expect(newChallengeDraft()).toEqual({ name: '', details: '', prize: '', counts: 'gym_days', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone' });
+    expect(newChallengeDraft()).toEqual({ name: '', details: '', prize: '', counts: 'gym_days', unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone' });
     expect(draftOf(challenge({ target: 12, who: 'joined', prize: 'A shaker' }))).toEqual({
       name: 'October Challenge',
       details: '',
       prize: 'A shaker',
       counts: 'gym_days',
+      unit: '',
       startsOn: '2026-10-05',
       endsOn: '2026-10-11',
       win: 'target',
@@ -135,11 +145,13 @@ describe('the form', () => {
       name: 'October',
       details: 'Come often',
       prize: 'A shaker',
+      unit: '',
       counts: 'workout_days',
       startsOn: '2026-10-08',
       endsOn: '2026-10-31',
       target: 12,
       who: 'joined',
+      lowestWins: false,
     });
   });
 
@@ -175,6 +187,86 @@ describe('the form', () => {
   it('counts the details down', () => {
     expect(detailsLine('')).toEqual({ over: false, text: '500 characters left' });
     expect(detailsLine('d'.repeat(503))).toEqual({ over: true, text: '3 characters too many' });
+  });
+});
+
+describe("the gym's own count", () => {
+  const own = (over = {}) => draft({ counts: 'own', unit: 'push-ups', ...over });
+
+  it('offers the lowest-wins choice only for it, and drops that choice when the count changes back', () => {
+    expect(winChoices('gym_days').map((c) => c.id)).toEqual(['most', 'target']);
+    expect(winChoices('own').map((c) => c.id)).toEqual(['most', 'target', 'lowest']);
+    expect(withCounts(own({ win: 'lowest' }), 'gym_days')).toMatchObject({ counts: 'gym_days', win: 'most' });
+    expect(withCounts(own({ win: 'target' }), 'workout_days').win).toBe('target');
+    expect(withCounts(draft({ win: 'most' }), 'own').win).toBe('most');
+  });
+
+  it.each([
+    ['as filled in', {}, null],
+    ['with nothing said to be counted', { unit: ' ' }, 'Say what you are counting, for example push-ups.'],
+    ['a word of 31 characters', { unit: 'u'.repeat(31) }, 'Keep what you are counting to 30 characters.'],
+    ['a number to reach above its days', { win: 'target', target: '500' }, null],
+    ['a number to reach above a million', { win: 'target', target: '1000001' }, 'The number to reach can be 1,000,000 at most.'],
+    ['no number to reach typed', { win: 'target', target: '' }, 'Type how many push-ups to reach, as a whole number.'],
+    ['the lowest wins', { win: 'lowest' }, null],
+  ])('%s', (_what, over, text) => {
+    expect(challengeProblem(own(over), TODAY)?.text ?? null).toBe(text);
+  });
+
+  it('sends its word and whether the lowest wins; the app\'s counts send neither', () => {
+    expect(fieldsOf(own({ unit: ' seconds ', win: 'lowest' }))).toMatchObject({ counts: 'own', unit: 'seconds', lowestWins: true, target: null });
+    expect(fieldsOf(own({ win: 'target', target: '500' }))).toMatchObject({ unit: 'push-ups', lowestWins: false, target: 500 });
+    expect(fieldsOf(draft({ unit: 'left over', win: 'lowest' }))).toMatchObject({ counts: 'gym_days', unit: '', lowestWins: false });
+    expect(draftOf(challenge({ counts: 'own', unit: 'seconds', lowestWins: true }))).toMatchObject({ counts: 'own', unit: 'seconds', win: 'lowest' });
+  });
+
+  it('once started, lowest-wins cannot be switched, and its word still can be', () => {
+    const running = challenge({ counts: 'own', unit: 'seconds', lowestWins: true });
+    const same = draftOf(running);
+    expect(challengeProblem({ ...same, win: 'most' }, TODAY, running)?.text).toBe(GYM_CHALLENGE_WORDS.started_locked);
+    expect(challengeProblem({ ...same, unit: 'secs' }, TODAY, running)).toBeNull();
+  });
+
+  it('the card says what is counted, how it is won and who is in it, each in a few words', () => {
+    expect(cardFacts(challenge({ target: 12 }), 143, WORDS)).toEqual([
+      { label: 'Counts', value: 'Gym days', note: 'Counted by the app' },
+      { label: 'How it is won', value: 'Reach 12', note: 'Everybody who gets there' },
+      { label: 'Who is in it', value: 'Everyone in the app · 143', note: null },
+    ]);
+    expect(cardFacts(challenge({ counts: 'own', unit: 'seconds', lowestWins: true, who: 'joined', joinedCount: 6 }), 143, WORDS)).toEqual([
+      { label: 'Counts', value: 'Seconds', note: 'Typed in by your staff' },
+      { label: 'How it is won', value: 'Lowest wins', note: 'First place' },
+      { label: 'Who is in it', value: 'Members who join · 6', note: null },
+    ]);
+    expect(cardFacts(challenge({ counts: 'workout_days', who: 'joined', joinedCount: 0 }), 143, WORDS).map((f) => f.value)).toEqual(['Workout days', 'Most wins', 'Members who join · none yet']);
+  });
+
+  it('numbers are typed once it has started, and never for a cancelled one or the app\'s counts', () => {
+    const c = (over) => challenge({ counts: 'own', unit: 'push-ups', ...over });
+    expect([takesNumbers(c({})), takesNumbers(c({ state: 'ended' })), takesNumbers(c({ state: 'coming' })), takesNumbers(c({ cancelled: true })), takesNumbers(challenge())]).toEqual([true, true, false, false, false]);
+    expect([boardButton(c({}), false), boardButton(c({ state: 'ended' }), false), boardButton(c({}), true)]).toEqual(['Enter numbers', 'See the board', 'Hide the board']);
+  });
+
+  it('reads what is typed in a box', () => {
+    expect([typedNumber(''), typedNumber(' 40 '), typedNumber('1000000'), typedNumber('1000001'), typedNumber('4.5'), typedNumber('-3'), typedNumber('forty')]).toEqual([
+      { ok: true, value: null },
+      { ok: true, value: 40 },
+      { ok: true, value: 1000000 },
+      { ok: false, value: null },
+      { ok: false, value: null },
+      { ok: false, value: null },
+      { ok: false, value: null },
+    ]);
+  });
+
+  it('saves only the boxes that changed; an emptied box takes the number off; one bad box stops the save', () => {
+    const rows = [{ userId: 'a', value: 60 }, { userId: 'b', value: 40 }, { userId: 'c', value: 0 }, { userId: 'd', value: 5 }];
+    expect(numbersToSave(rows, {})).toEqual([]);
+    expect(numbersToSave(rows, { a: '60', b: '45', c: '12', d: '' })).toEqual([{ userId: 'b', value: 45 }, { userId: 'c', value: 12 }, { userId: 'd', value: null }]);
+    expect(numbersToSave(rows, { c: '', d: '0' })).toEqual([{ userId: 'd', value: null }]);
+    expect(numbersToSave(rows, { a: '70', b: 'lots' })).toBeNull();
+    expect(NUMBER_NOTES.saved(1, WORDS)).toBe('Saved. 1 number changed, and your members see the board now.');
+    expect(NUMBER_NOTES.help(challenge({ counts: 'own', unit: 'push-ups' }), WORDS)).toBe("Type each person's push-ups and press Save numbers. An empty box is no number. Your members see the board as soon as you save.");
   });
 });
 
@@ -262,6 +354,13 @@ describe('its board', () => {
       'Nothing counted yet',
       null,
     ]);
+  });
+
+  it("the gym's own count lists everybody in it: a person with no number says so, and nobody is called hidden for it", () => {
+    const own = challenge({ counts: 'own', unit: 'push-ups' });
+    expect(rowNote({ value: 0, hidden: null }, own)).toBe('No number yet');
+    expect(rowNote({ value: 0, hidden: 'hide_me' }, own)).toBe('Chose Hide me');
+    expect(boardLines(board({ total: 28, ranked: 4 }), own, WORDS)).toEqual(['Members see 4 people on its board.']);
   });
 
   it('says which of its people a page shows', () => {

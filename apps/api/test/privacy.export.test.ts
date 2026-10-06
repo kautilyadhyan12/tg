@@ -127,6 +127,12 @@ d("DPDP data export (real Postgres)", () => {
         VALUES (${postGymId}, gen_random_uuid(), 'fixture challenge', 'gym_days', current_date, current_date + 7, 'joined') RETURNING id
       )
       INSERT INTO gym_challenge_people (gym_id, challenge_id, user_id) SELECT ${postGymId}, c.id, ${userId} FROM c`;
+    await sql`
+      WITH c AS (
+        INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, unit, starts_on, ends_on, who)
+        VALUES (${postGymId}, gen_random_uuid(), 'fixture own challenge', 'own', 'push-ups', current_date, current_date + 7, 'everyone') RETURNING id
+      )
+      INSERT INTO gym_challenge_scores (gym_id, challenge_id, user_id, value) SELECT ${postGymId}, c.id, ${userId}, 40 FROM c`;
     // A post made as a MEMBER is the person's own and exported; one made as staff is the gym's.
     await sql`INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member) VALUES (${postGymId}, ${userId}, gen_random_uuid(), ${`member-post-${label}`}, true)`;
     await sql`INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member) VALUES (${postGymId}, ${userId}, gen_random_uuid(), ${`staff-post-${label}`}, false)`;

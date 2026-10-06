@@ -1,4 +1,5 @@
 import {
+  challengeScoresResponseSchema,
   gymChallengeBoardResponseSchema,
   gymChallengeResponseSchema,
   gymChallengesResponseSchema,
@@ -49,6 +50,9 @@ export const staffChallengesService = {
     readThrough(gymChallengeResponseSchema, 'the challenge', authApi.post(gymPath(gymId), { challengeKey, ...fields })).then((data) => data.challenge),
   change: (gymId, challengeId, fields) =>
     readThrough(gymChallengeResponseSchema, 'the challenge', authApi.put(challengePath(gymId, challengeId), fields)).then((data) => data.challenge),
+  /** Numbers staff type for the gym's own count: `scores` is [{ userId, value }], null takes one off. */
+  setScores: (gymId, challengeId, scores) =>
+    readThrough(challengeScoresResponseSchema, 'the numbers', authApi.put(`${challengePath(gymId, challengeId)}/scores`, { scores })).then((data) => data.saved),
   setCancelled: (gymId, challengeId, cancelled) =>
     readThrough(gymChallengeResponseSchema, 'the challenge', authApi.put(`${challengePath(gymId, challengeId)}/cancelled`, { cancelled })).then((data) => data.challenge),
 };
