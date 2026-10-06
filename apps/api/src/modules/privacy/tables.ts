@@ -407,6 +407,11 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_events.created_by_user_id — which member of staff made one of the gym's events
   // (`0078`), on gym_posts' footing: the gym's own announcement; `ON DELETE set null`.
   "gym_events",
+  // gym_event_places.user_id — which events a member said they were coming to, waited for or
+  // pulled out of (Part 3 §15.4, migration `0080`). On gym_class_bookings' footing: the
+  // same dated record of a person at a gym, kept as the gym's count of its event, and
+  // ruled with it.
+  "gym_event_places",
   // gym_membership_word_links.linked_by — which member of staff linked one of the list's
   // membership words to a type (`0073`), on gym_leads' footing: the gym's record;
   // `ON DELETE set null`. Deleted when the gym closes.

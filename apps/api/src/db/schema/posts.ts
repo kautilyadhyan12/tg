@@ -7,7 +7,7 @@
 // is deleted with their account by a statement of its own (`privacy/repo.ts`), as their
 // reactions, reports and a stop on their posting are (`DIRECT_DELETE_TABLES`).
 import { sql } from "drizzle-orm";
-import { boolean, check, date, foreignKey, index, integer, pgTable, primaryKey, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, foreignKey, index, integer, pgTable, primaryKey, smallint, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gyms } from "./tenancy.js";
@@ -233,5 +233,46 @@ export const gymEvents = pgTable(
     check("gym_events_poster_width_check", sql`${t.posterWidth} IS NULL OR ${t.posterWidth} BETWEEN 1 AND 8000`),
     check("gym_events_poster_height_check", sql`${t.posterHeight} IS NULL OR ${t.posterHeight} BETWEEN 1 AND 8000`),
     index("gym_events_coming_idx").on(t.gymId, t.endsAt),
+  ],
+);
+
+/** One person's place at one event (`0080_gym_event_places.sql`, which is the record; spec
+ *  Part 3 §15.4). The migration also holds `(gym_id, entry_id)` → the record, ON DELETE
+ *  SET NULL (entry_id). `seq` is the waitlist's order. On `gym_class_bookings`' footing in
+ *  `USER_LINKED_NOT_PURGED_TABLES`. */
+export const gymEventPlaces = pgTable(
+  "gym_event_places",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    seq: bigint("seq", { mode: "number" }).notNull().generatedAlwaysAsIdentity(),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    entryId: uuid("entry_id"),
+    status: text("status").notNull(),
+    requestKey: uuid("request_key").notNull(),
+    /** The request that claimed the place from the waitlist, where a person did. */
+    claimKey: uuid("claim_key"),
+    createdAt: createdAt(),
+    comingAt: timestamp("coming_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  },
+  (t) => [
+    foreignKey({ name: "gym_event_places_event_fk", columns: [t.gymId, t.eventId], foreignColumns: [gymEvents.gymId, gymEvents.id] }).onDelete("cascade"),
+    unique("gym_event_places_request_uq").on(t.gymId, t.requestKey),
+    unique("gym_event_places_claim_uq").on(t.gymId, t.claimKey),
+    check("gym_event_places_status_check", sql`${t.status} IN ('coming','waitlisted','cancelled')`),
+    check("gym_event_places_coming_check", sql`${t.status} <> 'coming' OR ${t.comingAt} IS NOT NULL`),
+    check("gym_event_places_cancelled_check", sql`(${t.status} = 'cancelled') = (${t.cancelledAt} IS NOT NULL)`),
+    uniqueIndex("gym_event_places_live_uq")
+      .on(t.eventId, t.userId)
+      .where(sql`${t.status} IN ('coming','waitlisted')`),
+    index("gym_event_places_event_idx").on(t.gymId, t.eventId, t.status, t.seq),
+    index("gym_event_places_user_idx").on(t.userId, t.gymId),
+    index("gym_event_places_entry_idx").on(t.gymId, t.entryId).where(sql`${t.entryId} IS NOT NULL`),
   ],
 );

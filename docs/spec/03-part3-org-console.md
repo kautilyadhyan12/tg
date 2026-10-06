@@ -3092,7 +3092,21 @@ cancelled one too, marked, so nobody wonders where it went; an ended event is st
 alone ("Past events"), and of it only the poster can change, by being taken off (a
 person in it may ask). Anybody else gets the 404 of a gym that does not exist, for the
 list and for a poster. The console has an Events page; the member's gym page an Events
-tab. **19c-ii:** "I'm coming", counted by 13.4's rule, the waitlist, and who is coming.
+tab. **19c-ii, "I'm coming":** `gym_event_places` (migration `0080`), one row a person an
+event in use (`coming` · `waitlisted` · `cancelled`), counted by 13.4's own rule
+(`decideComing`, `decideNotComing` and `eventGoing` in `packages/shared/src/gymEvents.ts`
+call `decideBook` and `decideCancel`). An event is free: nothing is checked or charged, any
+live app member may come from the day it is posted until it starts, and "Can't come" is
+free until it starts. The waitlist's size and its hand-over time are the gym's own booking
+settings (13.4): outside that time a freed place is the first in line's, inside it the
+first to tap has it. A place is given in one transaction under the gym's row and then the
+event's, and a request's key is kept on it. Staff holding `posts.manage` read who is
+coming and waiting by name and take a person off (`…/events/:eventId/people`). Places
+cannot be cut below the people coming; more places, a later start and an un-cancel hand
+what is free to the waitlist; a cancelled event keeps everybody's place, so an event
+brought back is as it was. Somebody removed from the gym, or whose account is deleted,
+loses their places at events that have not started. Nobody is told of any of it yet (the
+inbox, 20a): the member's card and the console's boxes say so.
 
 ### 15.5 The leaderboard — only what the desk, staff or the app recorded
 

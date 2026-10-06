@@ -106,17 +106,92 @@ export function posterProblem(reason) {
     : "This file isn't a picture we can read. Choose a JPEG, PNG or WebP.";
 }
 
-/** The box before an event is cancelled: what happens, and to whom. */
-export function cancelBox(event, words, today) {
-  return {
-    title: `Cancel ${event.name}?`,
-    lines: [
-      `Your ${words.people} still see it on their Events list, marked Cancelled, until ${eventDay(event.endsOn, today)}.`,
-      "Nobody is emailed. You can un-cancel it until then.",
-    ],
-    yes: 'Cancel event',
-    no: 'Keep it',
-  };
+const count = (n) => n.toLocaleString('en-GB');
+const peopleCount = (n) => (n === 1 ? '1 person' : `${count(n)} people`);
+
+/** The card's places line: "40 places · 12 coming · 3 on the waitlist", "40 places · full",
+ *  "No limit on places · 12 coming"; for an event that has ended, how many had said so.
+ *  Nothing is said of people until somebody is down for it. */
+export function eventTaken(event, past = false) {
+  const places = event.places === null ? 'No limit on places' : event.places === 1 ? '1 place' : `${count(event.places)} places`;
+  const parts = [places];
+  if (past) {
+    if (event.coming > 0) parts.push(`${peopleCount(event.coming)} said they were coming`);
+    return parts.join(' · ');
+  }
+  if (event.coming > 0) parts.push(event.places !== null && event.coming >= event.places ? 'full' : `${count(event.coming)} coming`);
+  if (event.waiting > 0) parts.push(`${count(event.waiting)} on the waitlist`);
+  return parts.join(' · ');
+}
+
+/** How many people are down for an event, coming or waiting. */
+export const eventPeopleCount = (event) => event.coming + event.waiting;
+
+/** "Ann Smith, Bea Jones, Cal Brown and 9 more"; a person with no name yet is counted,
+ *  never named. Null with nobody. */
+export function namesLine(people, total) {
+  const named = people.map((p) => p.name).filter((name) => name !== null).slice(0, 3);
+  if (total === 0) return null;
+  if (named.length === 0) return peopleCount(total);
+  const more = total - named.length;
+  return more > 0 ? `${named.join(', ')} and ${count(more)} more` : named.join(', ');
+}
+
+/** The box before an event is cancelled: what happens, and to whom. `people`: who is
+ *  coming and waiting, once read; null until then, and the counts stand in. */
+export function cancelBox(event, words, today, people = null) {
+  const lines = [`Your ${words.people} still see it on their Events list, marked Cancelled, until ${eventDay(event.endsOn, today)}.`];
+  const coming = event.coming ?? 0;
+  const waiting = event.waiting ?? 0;
+  if (coming > 0) {
+    const names = people === null ? null : namesLine(people.coming, coming);
+    lines.push(`${peopleCount(coming)} said they're coming${names === null || names === peopleCount(coming) ? '' : `: ${names}`}.`);
+  }
+  if (waiting > 0) lines.push(`${peopleCount(waiting)} ${waiting === 1 ? 'is' : 'are'} on the waitlist.`);
+  if (coming + waiting > 0) {
+    lines.push("The app doesn't tell them yet, so let them know yourself. They keep their places if you un-cancel.");
+  }
+  lines.push('Nobody is emailed. You can un-cancel it until then.');
+  return { title: `Cancel ${event.name}?`, lines, yes: 'Cancel event', no: 'Keep it' };
+}
+
+/** "Coming (12 of 40)", "Coming (12)", "Waitlist (3), first in line first". */
+export function peopleHeading(kind, people) {
+  if (kind === 'waiting') return `Waitlist (${count(people.waitingTotal)}), first in line first`;
+  return people.places === null ? `Coming (${count(people.comingTotal)})` : `Coming (${count(people.comingTotal)} of ${count(people.places)})`;
+}
+
+/** The box before staff take one person off an event. `waiting`: the person is on the
+ *  waitlist, not coming. `people`: the list as the server sent it, which says whether a
+ *  freed place is handed to the first in line now, and whether the event has started. */
+export function removeBox(person, waiting, event, people) {
+  const name = person.name ?? 'this person';
+  const lines = [];
+  if (waiting) {
+    lines.push('They leave the waitlist. Nobody else moves.');
+  } else if (people.waitingTotal > 0 && !people.started && !event.cancelled) {
+    const next = people.waiting[0]?.name ?? null;
+    lines.push(
+      people.handsOver
+        ? `Their place goes to ${next === null ? 'the first person' : next}, first on the waitlist.`
+        : 'Their place is free for the first person to take it. This close to the event, nobody on the waitlist is moved in automatically.',
+    );
+  }
+  const again = people.started || event.cancelled ? '' : " They can say they're coming again.";
+  lines.push(`The app doesn't tell them yet, so let them know yourself.${again}`);
+  return { title: `Remove ${name} from ${event.name}?`, lines, yes: 'Remove', no: 'Keep them' };
+}
+
+/** Under the form's Places box while people are coming; null with nobody. */
+export function placesHint(event) {
+  if (event === null || event.coming === 0) return null;
+  return `${peopleCount(event.coming)} ${event.coming === 1 ? 'is' : 'are'} coming, so places can't be fewer than ${count(event.coming)}.`;
+}
+
+/** Under the form's buttons while people are down for the event; null with nobody. */
+export function changeHint(event) {
+  if (event === null || event.coming + event.waiting === 0) return null;
+  return "People have said they're coming. The app doesn't tell them about changes yet, so let them know yourself.";
 }
 
 /** The box before a past event's poster is taken off. */

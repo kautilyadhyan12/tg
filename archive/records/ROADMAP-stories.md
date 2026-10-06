@@ -289,3 +289,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 17e-i, as first written: **Trainers' hours, and staff book a session**: each trainer's hours and session length, the free times worked out, staff book and cancel for a person on the member list, a pack that includes personal training charged once; the DATABASE refuses two sessions of one trainer that overlap.
 
 - 19b-vi, as first written: **A post five people have reported is hidden until staff decide** (RULINGS 2026-10-05): five different members, any reason; members stop seeing it at once, staff Keep it (shown again) or Remove it. Risky (other people's posts). Before anybody uses Updates.
+
+- 19c-ii, as it stood when built (2026-10-06): **"I'm coming"**, counted by 17c's Book rule on an event: the last place never given to two people, the waitlist, and staff seeing who is coming.

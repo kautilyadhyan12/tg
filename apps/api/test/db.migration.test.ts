@@ -1769,6 +1769,88 @@ d("0001_init on a real database", () => {
       });
   });
 
+  it("0080's places: one place a person an event at a time, only this gym's event and record, and a place goes with its event", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0080-owner') RETURNING id`;
+        if (user === undefined) throw new Error("no user");
+        const gymOf = async (slug: string) => {
+          const [gym] = await tx<{ id: string }[]>`
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0080', 'Europe/London', ${user.id}) RETURNING id`;
+          if (gym === undefined) throw new Error("no gym");
+          const [entry] = await tx<{ id: string }[]>`
+            INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+            VALUES (${gym.id}, 'Zz Person', ${slug + "@example.com"}, ${"0".repeat(63) + slug.slice(-1)}, 'typed') RETURNING id`;
+          const [event] = await tx<{ id: string }[]>`
+            INSERT INTO gym_events (gym_id, event_key, name, starts_on, start_minute, ends_on, end_minute, starts_at, ends_at, places)
+            VALUES (${gym.id}, ${randomUUID()}, 'Open Day', '2026-10-17', 600, '2026-10-17', 780, '2026-10-17T09:00:00Z', '2026-10-17T12:00:00Z', 10)
+            RETURNING id`;
+          if (entry === undefined || event === undefined) throw new Error("no fixture");
+          return { gym: gym.id, entry: entry.id, event: event.id };
+        };
+        const a = await gymOf("zz-0080-a");
+        const b = await gymOf("zz-0080-b");
+
+        const at = "2026-10-07T09:00:00Z";
+        const row = (over: Record<string, unknown> = {}) => ({
+          gym_id: a.gym,
+          event_id: a.event,
+          user_id: user.id,
+          entry_id: a.entry,
+          status: "cancelled",
+          request_key: randomUUID(),
+          coming_at: at,
+          cancelled_at: at,
+          ...over,
+        });
+        /** The constraint an insert trips, or "ok". Each in its own savepoint. */
+        const put = async (over: Record<string, unknown>): Promise<string> => {
+          try {
+            await tx.savepoint((sp) => sp`INSERT INTO gym_event_places ${sp(row(over))}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        const coming = { status: "coming", cancelled_at: null };
+
+        // Any number given up, and one in use.
+        expect(await put({})).toBe("ok");
+        expect(await put({})).toBe("ok");
+        expect(await put({ ...coming, request_key: "00000000-0000-4000-8000-000000000079", claim_key: "00000000-0000-4000-8000-000000000080" })).toBe("ok");
+        const refused: [string, Record<string, unknown>, string][] = [
+          ["a second place in use", coming, "gym_event_places_live_uq"],
+          ["waiting while coming", { status: "waitlisted", coming_at: null, cancelled_at: null }, "gym_event_places_live_uq"],
+          ["a status of its own", { status: "booked", cancelled_at: null }, "gym_event_places_status_check"],
+          ["given up with no time", { cancelled_at: null }, "gym_event_places_cancelled_check"],
+          ["the same request twice", { request_key: "00000000-0000-4000-8000-000000000079" }, "gym_event_places_request_uq"],
+          ["a claim's request twice", { claim_key: "00000000-0000-4000-8000-000000000080" }, "gym_event_places_claim_uq"],
+          ["another gym's event", { event_id: b.event }, "gym_event_places_event_fk"],
+          ["another gym's record", { entry_id: b.entry }, "gym_event_places_entry_fk"],
+        ];
+        for (const [what, over, constraint] of refused) expect(await put(over), what).toBe(constraint);
+        const [live] = await tx<{ id: string }[]>`SELECT id FROM gym_event_places WHERE request_key = '00000000-0000-4000-8000-000000000079'`;
+        const noTime = await tx
+          .savepoint((sp) => sp`UPDATE gym_event_places SET coming_at = NULL WHERE id = ${live?.id ?? null}`)
+          .then(() => "ok", (err: unknown) => (err instanceof postgres.PostgresError ? (err.constraint_name ?? "") : String(err)));
+        expect(noTime).toBe("gym_event_places_coming_check");
+
+        // A deleted record lets its places go; the places go with their gym's event.
+        await tx`DELETE FROM gym_member_list_entries WHERE id = ${a.entry}`;
+        const left = await tx<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_event_places WHERE gym_id = ${a.gym}`;
+        expect(left).toHaveLength(3);
+        expect(left.every((r) => r.entry_id === null)).toBe(true);
+        await tx`DELETE FROM gym_events WHERE id = ${a.event}`;
+        const [gone] = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_event_places WHERE gym_id = ${a.gym}`;
+        expect(gone?.n).toBe(0);
+        throw new Error("ROLLBACK-0080-PLACES-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0080-PLACES-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
    *  (Low-1) — which is the highest-value item that round found.
    *

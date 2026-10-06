@@ -370,6 +370,8 @@ d("a gym's events (real Postgres, real disk)", () => {
         places: 40,
         cancelled: false,
         poster: null,
+        // Nobody is down for it yet, and this member may say they are coming (19c-ii).
+        going: { coming: 0, waiting: 0, mine: null, can: { come: true, joinWaitlist: false, claim: false, cancel: false, why: null } },
       });
       expect(list.events[1]?.startsAt).toBe("2026-12-05T19:00:00.000Z");
       expect(list.events[1]?.places).toBeNull();

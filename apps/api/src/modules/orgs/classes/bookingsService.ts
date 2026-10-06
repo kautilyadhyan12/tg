@@ -47,6 +47,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { chargePack, givePackClassBack } from "../memberships/heldRepo.js";
 import { handOver, handOverComing, handOverPlan, handsOverTo, pick, planHandOver, type HandOverPlan } from "./bookingChanges.js";
+import { handOverComingEvents } from "../events/places.js";
 import * as repo from "./bookingsRepo.js";
 import { endingPerson } from "./service.js";
 
@@ -584,7 +585,11 @@ export async function setBookingSettings(
       targetId: gymId,
       meta: Object.fromEntries(changed.map((k) => [k, `${String(before[k])} -> ${String(settings[k])}`])),
     });
-    if (settings.handoverMinutes < before.handoverMinutes) movedIn = await handOverComing(tx, gymId, deps.now());
+    if (settings.handoverMinutes < before.handoverMinutes) {
+      movedIn = await handOverComing(tx, gymId, deps.now());
+      // An event's waitlist is handed over by the same setting (19c-ii).
+      movedIn += await handOverComingEvents(tx, gymId, deps.now());
+    }
     return settings;
   });
   if (saved === null) throw notFound();
