@@ -530,7 +530,13 @@ export async function addTimeOff(
     const now = deps.now();
     const today = dayInTz(now, clock.timezone);
     const [span, coming] = await Promise.all([repo.timeOffInstants(tx, clock.timezone, req), repo.timeOffComing(tx, gymId, trainerId, now)]);
-    const refusal = ptTimeOffRefusal({ over: span.to.getTime() <= now.getTime(), today, fromDate: req.fromDate, coming: coming.length });
+    const refusal = ptTimeOffRefusal({
+      onTheClock: span.onTheClock,
+      over: span.to.getTime() <= now.getTime(),
+      today,
+      fromDate: req.fromDate,
+      coming: coming.length,
+    });
     if (refusal !== null) return new OrgsError(409, refusal, PT_WORDS[refusal]);
 
     // The calendar's far edge is written by the nightly job; should it have missed a night,

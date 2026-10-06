@@ -595,12 +595,54 @@ describe("a trainer's time off", () => {
     fireEvent.click(panel().getByRole('button', { name: 'Remove time off Fri 9 Oct · all day' }));
     const box = within(panel().getByRole('group', { name: 'Remove this time off' }));
     expect(box.getByText("Remove Sam Reed's time off on Fri 9 Oct · all day?")).toBeTruthy();
-    expect(box.getByText('Sessions can be booked with Sam Reed at those times again. Nothing that is booked changes.')).toBeTruthy();
+    expect(box.getByText("These times go back to Sam Reed's usual hours, so sessions can be booked in them again. Nothing that is booked changes.")).toBeTruthy();
     expect(api.removePtTimeOff).not.toHaveBeenCalled();
     fireEvent.click(box.getByRole('button', { name: 'Keep it' }));
     expect(panel().queryByRole('group', { name: 'Remove this time off' })).toBeNull();
     expect(panel().getByText('Fri 9 Oct · all day')).toBeTruthy();
     expect(api.removePtTimeOff).not.toHaveBeenCalled();
+  });
+
+  it('removing one of two times off that overlap does not say the times can be booked again', async () => {
+    api.getPtTrainers.mockResolvedValue({ data: withOff([fridayOff, { id: 'o-hour', fromDate: '2026-10-09', toDate: '2026-10-09', fromMinute: 600, toMinute: 660 }]) });
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Time off for Sam Reed' }));
+    fireEvent.click(panel().getByRole('button', { name: 'Remove time off Fri 9 Oct · 10:00 – 11:00' }));
+    const box = within(panel().getByRole('group', { name: 'Remove this time off' }));
+    expect(box.getByText('Sam Reed has other time off in these times, and that stays. Nothing that is booked changes.')).toBeTruthy();
+    expect(box.queryByText(/can be booked in them again/)).toBeNull();
+  });
+
+  it('a request the server says it has seen before gets a new key, and the list is read again', async () => {
+    const reused = Object.assign(new Error('409'), { response: { status: 409, data: { error: 'request_reused', message: "That didn't go through. Try again." } } });
+    api.addPtTimeOff.mockRejectedValueOnce(reused).mockResolvedValueOnce({ data: withOff([fridayOff]) });
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Time off for Sam Reed' }));
+    const reads = api.getPtTrainers.mock.calls.length;
+    pickDays('Fri 9 Oct 2026');
+    fireEvent.click(panel().getByRole('button', { name: 'Add time off' }));
+    expect((await panel().findByRole('alert')).textContent).toBe("That didn't go through. The list above is up to date now: check it before you add this again.");
+    await waitFor(() => expect(api.getPtTrainers.mock.calls.length).toBe(reads + 1));
+    fireEvent.click(panel().getByRole('button', { name: 'Add time off' }));
+    await waitFor(() => expect(api.addPtTimeOff).toHaveBeenCalledTimes(2));
+    const [first, second] = api.addPtTimeOff.mock.calls.map((call) => call[2].requestKey);
+    expect(second).not.toBe(first);
+  });
+
+  it('a trainer who cannot book is told to ask a manager, in the box and on the session', async () => {
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ canManage: false, canBook: false, trainers: [{ ...sam, mine: true, timeOff: [] }] }) });
+    api.getPtWeek.mockResolvedValue({
+      data: week([mayaSession()], { days: week().days.map((day) => ({ ...day, timeOff: day.localDate === '2026-10-09' ? [{ id: OFF, fromMinute: null, toMinute: null }] : [] })) }),
+    });
+    api.addPtTimeOff.mockRejectedValue(asks());
+    open();
+    expect((await friday()).getByTestId('pt-session').textContent).toContain('Cancel it and ask a manager to book another time, or remove the time off.');
+    fireEvent.click(screen.getByRole('button', { name: 'Time off' }));
+    pickDays('Fri 9 Oct 2026');
+    fireEvent.click(panel().getByRole('button', { name: 'Add time off' }));
+    const box = within(await screen.findByTestId('pt-time-off-box'));
+    expect(box.getByText(/To move one, cancel it on this page and ask a manager to book another time\./)).toBeTruthy();
+    expect(box.queryByText(/and book another time\./)).toBeNull();
   });
 
   it('Remove takes one time off away, by its own name', async () => {

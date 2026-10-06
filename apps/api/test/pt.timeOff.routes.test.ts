@@ -4,7 +4,7 @@
 // The worst thing this job could do to a real person: somebody is booked with a trainer
 // for a time the trainer is away, and turns up to nobody. A booking and a time off for
 // the same time at the same instant is the first test below: one of them always sees the other.
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import type { PtAppointment, PtTimeOffOver, PtTrainersResponse, PtWeekResponse } from "@app/shared";
@@ -76,7 +76,7 @@ d("a trainer's time off (real Postgres, two api instances)", { timeout: T }, () 
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const inject = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, cookies: Cookies, payload?: unknown, ip = nextIp(), target = api()) =>
+  const inject = (method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH", path: string, cookies: Cookies, payload?: unknown, ip = nextIp(), target = api()) =>
     target.inject({
       method,
       url: path,
@@ -324,7 +324,6 @@ d("a trainer's time off (real Postgres, two api instances)", { timeout: T }, () 
     "a booking and a time off for the same time at the same instant, on two servers: the booking is refused or the time off names it, never neither",
     async () => {
       const sam = await trainerWith(open, "Race Trainer");
-      const seen = new Set<string>();
       for (let round = 0; round < 12; round++) {
         const day = plus(FRIDAY, round);
         const maya = await listed(open, `Race Person ${String(round)}`);
@@ -343,17 +342,71 @@ d("a trainer's time off (real Postgres, two api instances)", { timeout: T }, () 
           expect(over.sessions.shown.map((s) => s.id)).toEqual([made(b).id]);
           expect(row).toBeUndefined();
           expect(session?.id).toBe(made(b).id);
-          seen.add("booked");
         } else {
           // The time off was first: the booking saw it and was refused.
           expect([b.statusCode, errorOf(b)]).toEqual([409, "trainer_off"]);
           expect(o.statusCode, o.body).toBe(200);
           expect(row).toBeDefined();
           expect(session).toBeUndefined();
-          seen.add("off");
         }
       }
-      expect(seen.size).toBeGreaterThan(0);
+    },
+    T,
+  );
+
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  /** Two requests in a known order: the gym's row is held, `first` is sent and seen waiting
+   *  for it, `second` is sent and seen waiting behind, and only then is the row let go. */
+  const oneThenOther = async <A, B>(gym: Gym, first: () => PromiseLike<A>, second: () => PromiseLike<B>): Promise<[A, B]> => {
+    const sent: { a?: Promise<A>; b?: Promise<B> } = {};
+    await sql.begin(async (tx) => {
+      await tx`SELECT 1 FROM gyms WHERE id = ${gym.id} FOR UPDATE`;
+      const [me] = await tx<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+      if (me === undefined) throw new Error("no backend");
+      const waitingOn = async (pids: number[]): Promise<number[]> =>
+        (
+          await sql<{ pid: number }[]>`
+            SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND pg_blocking_pids(pid) && ${pids}::int[]`
+        ).map((r) => r.pid);
+      sent.a = (async () => await first())();
+      let ahead: number[] = [];
+      for (let tries = 0; ahead.length === 0; tries++) {
+        if (tries === 400) throw new Error("the first request never waited for the gym's row");
+        await pause(25);
+        ahead = await waitingOn([me.pid]);
+      }
+      sent.b = (async () => await second())();
+      for (let tries = 0; (await waitingOn([me.pid, ...ahead])).every((pid) => ahead.includes(pid)); tries++) {
+        if (tries === 400) throw new Error("the second request never waited behind the first");
+        await pause(25);
+      }
+    });
+    if (sent.a === undefined || sent.b === undefined) throw new Error("nothing was sent");
+    return [await sent.a, await sent.b];
+  };
+
+  it(
+    "both orders, each made to happen on two servers: the time off first refuses the booking; the booking first is named by the time off",
+    async () => {
+      const sam = await trainerWith(open, "Order Trainer");
+      const maya = await listed(open, "Maya Order");
+      const [offFirst, refused] = await oneThenOther(
+        open,
+        () => off(open, sam, {}, { ip: DESK, target: api() }),
+        () => book(open, sam, maya, { ip: DESK, target: second ?? api() }),
+      );
+      expect(offFirst.statusCode, offFirst.body).toBe(200);
+      expect([refused.statusCode, errorOf(refused)]).toEqual([409, "trainer_off"]);
+      expect(await sessions(open, sam)).toHaveLength(0);
+
+      const monday = "2026-10-12";
+      const [bookedFirst, asked] = await oneThenOther(
+        open,
+        () => book(open, sam, maya, { day: monday, ip: DESK, target: second ?? api() }),
+        () => off(open, sam, { fromDate: monday }, { ip: DESK, target: api() }),
+      );
+      expect(overOf(asked).sessions.shown.map((s) => s.id)).toEqual([made(bookedFirst).id]);
+      expect((await offRows(open, sam)).map((r) => r.from_date)).toEqual([FRIDAY]);
     },
     T,
   );
@@ -475,6 +528,133 @@ d("a trainer's time off (real Postgres, two api instances)", { timeout: T }, () 
         SELECT s.status, s.coach_user_id FROM gym_class_sessions s JOIN gym_class_types t ON t.id = s.class_type_id
         WHERE s.gym_id = ${open.id} AND t.name = 'Spin'`;
       expect(spin).toEqual({ status: "scheduled", coach_user_id: sam.userId });
+    },
+    T,
+  );
+
+  it(
+    "a class given to the trainer while the box is open makes the mark stale: asked again, naming it",
+    async () => {
+      const sam = await trainerWith(open, "Sam Marked");
+      await coaches(open, sam, FRIDAY, 600, 45, { name: "Spin" });
+      const first = overOf(await off(open, sam));
+      expect(first.classes.shown.map((c) => c.name)).toEqual(["Spin"]);
+      await coaches(open, sam, FRIDAY, 720, 45, { name: "Row" });
+      const second = overOf(await off(open, sam, { confirm: first.mark }));
+      expect(second.classes.shown.map((c) => c.name)).toEqual(["Spin", "Row"]);
+      expect(second.mark).not.toBe(first.mark);
+      expect(await offRows(open, sam)).toHaveLength(0);
+      trainersOf(await off(open, sam, { confirm: second.mark }));
+    },
+    T,
+  );
+
+  it(
+    "a class at the far edge of the calendar that was not written yet is written first, and named",
+    async () => {
+      const gym = await makeGym(`Edge Off ${uniq()}`);
+      const sam = await trainerWith(gym, "Sam Edge");
+      const made = await inject("POST", `/v1/orgs/${gym.id}/classes`, gym.owner.cookies, { name: "Spin", minutes: 45, places: 10, colour: "blue" });
+      expect(made.statusCode, made.body).toBe(201);
+      const typeId = (JSON.parse(made.body) as { entries: { type: { id: string; name: string } }[] }).entries.find((e) => e.type.name === "Spin")?.type.id ?? "";
+      const slot = await inject("POST", `/v1/orgs/${gym.id}/classes/${typeId}/repeats`, gym.owner.cookies, {
+        weekdays: [5],
+        startMinute: 630,
+        minutes: 45,
+        places: 10,
+        coachUserId: sam.userId,
+        startsOn: TODAY,
+      });
+      expect(slot.statusCode, slot.body).toBe(201);
+      // Friday 27 November is in the calendar's last week. The nightly job missed it.
+      const far = "2026-11-27";
+      const gone = await sql`DELETE FROM gym_class_sessions WHERE gym_id = ${gym.id} AND local_date = ${far}::date`;
+      expect(gone.count).toBe(1);
+      const over = overOf(await off(gym, sam, { fromDate: far }));
+      expect(over.classes.shown.map((c) => [c.name, c.localDate, c.localStartMinute])).toEqual([["Spin", far, 630]]);
+      expect(await offRows(gym, sam)).toHaveLength(0);
+    },
+    T,
+  );
+
+  it(
+    "one member of staff's writes are limited on both routes: after three hundred, a Remove and an Add are told to slow down; a colleague at that address is not",
+    async () => {
+      const gym = await makeGym(`Limit Off ${uniq()}`);
+      const sam = await trainerWith(gym, "Sam Limit");
+      const tom = await trainerWith(gym, "Tom Limit");
+      // An address no other run has used: the address is counted for an hour too.
+      const desk = `10.78.${String(randomInt(250))}.${String(randomInt(1, 251))}`;
+      const removeNothing = (by: Person, target: App) =>
+        inject("DELETE", `/v1/orgs/${gym.id}/pt/trainers/${by.userId}/time-off/${randomUUID()}`, by.cookies, undefined, desk, target);
+      const statuses: number[] = [];
+      for (let done = 0; done < 300; done += 25) {
+        statuses.push(...(await Promise.all(Array.from({ length: 25 }, (_, n) => removeNothing(sam, either(n))))).map((r) => r.statusCode));
+      }
+      expect(statuses.filter((s) => s === 200)).toHaveLength(300);
+      expect((await removeNothing(sam, api())).statusCode).toBe(429);
+      expect((await off(gym, sam, {}, { by: sam, ip: desk })).statusCode).toBe(429);
+      expect(await offRows(gym, sam)).toHaveLength(0);
+      // Somebody else at the same address is answered.
+      expect((await removeNothing(tom, api())).statusCode).toBe(200);
+      expect((await off(gym, tom, {}, { by: tom, ip: desk })).statusCode).toBe(200);
+    },
+    T,
+  );
+
+  it(
+    "after the gym changes its time zone a day off is still that day, off: no free time on it, and no booking",
+    async () => {
+      const gym = await makeGym(`Zone Off ${uniq()}`);
+      const sam = await trainerWith(gym, "Sam Zone");
+      const maya = await listed(gym, "Maya Zone");
+      trainersOf(await off(gym, sam));
+      trainersOf(await off(gym, sam, { fromDate: "2026-10-10", fromMinute: 600, toMinute: 660 }));
+      expect(dayOf(await week(gym, gym.owner, sam), FRIDAY).free).toEqual([]);
+
+      // 07:30 on Wednesday in London is 19:30 on Wednesday in Auckland, thirteen hours ahead.
+      const moved = await inject("PATCH", `/v1/orgs/${gym.id}`, gym.owner.cookies, { timezone: "Pacific/Auckland" });
+      expect(moved.statusCode, moved.body).toBe(200);
+      const w = await week(gym, gym.owner, sam);
+      expect(dayOf(w, FRIDAY).free).toEqual([]);
+      expect(dayOf(w, FRIDAY).timeOff.map((o) => [o.fromMinute, o.toMinute])).toEqual([[null, null]]);
+      expect(dayOf(w, "2026-10-10").free).toEqual([540, 660, 720]);
+      for (const [day, minute] of [[FRIDAY, 540], [FRIDAY, 720], ["2026-10-10", 600]] as const) {
+        const res = await book(gym, sam, maya, { day, minute });
+        expect([day, minute, res.statusCode, errorOf(res)]).toEqual([day, minute, 409, "trainer_off"]);
+      }
+      made(await book(gym, sam, maya, { day: "2026-10-08", minute: 540 }));
+      made(await book(gym, sam, maya, { day: "2026-10-10", minute: 540 }));
+      // The two instants are the gym's own Friday and Saturday hour in the zone it has now.
+      expect((await offRows(gym, sam)).map((r) => [r.starts_at.toISOString(), r.ends_at.toISOString()])).toEqual([
+        ["2026-10-08T11:00:00.000Z", "2026-10-09T11:00:00.000Z"],
+        ["2026-10-09T21:00:00.000Z", "2026-10-09T22:00:00.000Z"],
+      ]);
+    },
+    T,
+  );
+
+  it(
+    "hours on the night the clocks go forward: a time the clock skips is refused in words, never kept as another hour",
+    async () => {
+      const sam = await trainerWith(open, "Spring Trainer");
+      // London, Sunday 28 March 2027: 01:00 becomes 02:00, so 01:00 to 01:55 is on no clock.
+      const sunday = "2027-03-28";
+      for (const [fromMinute, toMinute] of [[60, 120], [90, 150], [60, 90], [30, 60], [0, 115]] as const) {
+        const res = await off(open, sam, { fromDate: sunday, fromMinute, toMinute });
+        expect([fromMinute, toMinute, res.statusCode, errorOf(res)]).toEqual([fromMinute, toMinute, 409, "time_off_not_a_time"]);
+      }
+      expect(await offRows(open, sam)).toHaveLength(0);
+      // Times the clock has that night are taken, each as the instant it is.
+      trainersOf(await off(open, sam, { fromDate: sunday, fromMinute: 0, toMinute: 120 }));
+      trainersOf(await off(open, sam, { fromDate: sunday, fromMinute: 120, toMinute: 180 }));
+      // The whole day is the twenty-three hours it has.
+      trainersOf(await off(open, sam, { fromDate: sunday }));
+      expect((await offRows(open, sam)).map((r) => [r.starts_at.toISOString(), r.ends_at.toISOString()])).toEqual([
+        ["2027-03-28T00:00:00.000Z", "2027-03-28T01:00:00.000Z"],
+        ["2027-03-28T00:00:00.000Z", "2027-03-28T23:00:00.000Z"],
+        ["2027-03-28T01:00:00.000Z", "2027-03-28T02:00:00.000Z"],
+      ]);
     },
     T,
   );

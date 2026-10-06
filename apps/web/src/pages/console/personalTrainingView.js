@@ -212,12 +212,14 @@ export function coachedClassRow(coached, clockFormat) {
 
 /** The class a booked session runs into, if the trainer was given one over it afterwards;
  *  null where there is none. */
-export function sessionClash(appointment, classes, timeOff) {
+export function sessionClash(appointment, classes, timeOff, canBook = true) {
   const from = appointment.localStartMinute;
   const to = from + appointment.minutes;
   const hit = (Array.isArray(classes) ? classes : []).find((c) => c.localStartMinute < to && from < c.localStartMinute + c.minutes);
   // Time off is said first: the trainer is not there at all, whatever else is at that time.
-  if (inTimeOff(from, to, timeOff)) return 'This is in their time off. Cancel it and book another time, or remove the time off.';
+  if (inTimeOff(from, to, timeOff)) {
+    return `This is in their time off. Cancel it and ${canBook ? 'book another time' : 'ask a manager to book another time'}, or remove the time off.`;
+  }
   return hit === undefined ? null : `This runs into ${hit.name}, a class they coach at the same time. Move one of them.`;
 }
 
@@ -276,12 +278,25 @@ export function timeOffDayLimits(today, fromDate) {
   return { min: today, max: addDays(today, PT_TIME_OFF_AHEAD_DAYS), lastMin: first, lastMax: addDays(first, PT_TIME_OFF_DAYS_MAX - 1) };
 }
 
-/** The box before a time off is removed: which one, what removing does, and what stays. */
+/** Whether two times off share any time: days in common, and on a shared day either is
+ *  the whole day or their hours cross. */
+export function timeOffOverlap(a, b) {
+  if (a.fromDate > b.toDate || b.fromDate > a.toDate) return false;
+  const whole = (o) => o.fromMinute === null || o.toMinute === null;
+  return whole(a) || whole(b) || (a.fromMinute < b.toMinute && b.fromMinute < a.toMinute);
+}
+
+/** The box before a time off is removed: which one, what removing does, and what stays.
+ *  Where another time off of theirs covers some of the same time, it says that one stays
+ *  and promises nothing about booking. */
 export function timeOffRemoveBox(off, trainer, clockFormat, today) {
   const who = trainerName(trainer);
+  const others = (Array.isArray(trainer?.timeOff) ? trainer.timeOff : []).filter((o) => o.id !== off.id);
   return {
     question: `Remove ${who}'s time off on ${timeOffLine(off, clockFormat, today)}?`,
-    after: `Sessions can be booked with ${who} at those times again. Nothing that is booked changes.`,
+    after: others.some((o) => timeOffOverlap(o, off))
+      ? `${who} has other time off in these times, and that stays. Nothing that is booked changes.`
+      : `These times go back to ${who}'s usual hours, so sessions can be booked in them again. Nothing that is booked changes.`,
   };
 }
 
@@ -358,12 +373,12 @@ export function timeOffBoxRow(row, clockFormat, today, kind) {
 }
 
 /** What adding it does, and who does not change. */
-export function timeOffBoxLines(over, trainer, draft) {
+export function timeOffBoxLines(over, trainer, draft, canBook = true) {
   const who = trainerName(trainer);
   const lines = [`If you add this time off, no new session can be booked with ${who} in it.`];
   if (over.sessions.count > 0) {
     lines.push(
-      `${over.sessions.count === 1 ? 'This session stays' : 'These sessions stay'} booked: nobody is cancelled and nothing comes off or goes back on a pack. To move one, cancel it on this page and book another time.`,
+      `${over.sessions.count === 1 ? 'This session stays' : 'These sessions stay'} booked: nobody is cancelled and nothing comes off or goes back on a pack. To move one, cancel it on this page and ${canBook ? 'book another time' : 'ask a manager to book another time'}.`,
     );
   }
   if (over.classes.count > 0) {

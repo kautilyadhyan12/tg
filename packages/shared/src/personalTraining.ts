@@ -273,9 +273,17 @@ export function ptTimeOffProblem(o: PtTimeOffSpan): "not_a_day" | "order" | "hal
   return null;
 }
 
-/** Why a time off is not added now, or null: it is already over, it starts too far ahead,
- *  or the trainer holds as many as one may. */
-export function ptTimeOffRefusal(i: { over: boolean; today: string; fromDate: string; coming: number }): "time_off_ended" | "time_off_too_far" | "time_off_too_many" | null {
+/** Why a time off is not added now, or null: one of its times is not on the gym's clock
+ *  that day (the hour the clocks go forward over), it is already over, it starts too far
+ *  ahead, or the trainer holds as many as one may. */
+export function ptTimeOffRefusal(i: {
+  onTheClock: boolean;
+  over: boolean;
+  today: string;
+  fromDate: string;
+  coming: number;
+}): "time_off_not_a_time" | "time_off_ended" | "time_off_too_far" | "time_off_too_many" | null {
+  if (!i.onTheClock) return "time_off_not_a_time";
   if (i.over) return "time_off_ended";
   if (i.fromDate > addDays(i.today, PT_TIME_OFF_AHEAD_DAYS)) return "time_off_too_far";
   if (i.coming >= PT_TIME_OFF_MAX) return "time_off_too_many";
@@ -314,6 +322,7 @@ export const PT_WORDS = {
   hours_too_many: `A day can have up to ${String(PT_RANGES_PER_DAY)} sets of hours.`,
   hours_overlap: "Two sets of hours on the same day overlap.",
   time_off_no_hours: "Set this trainer's hours first.",
+  time_off_not_a_time: "The clocks change on that day, and one of those times doesn't exist. Pick a different start or end time.",
   time_off_ended: "That time has already passed.",
   time_off_too_far: "Time off can start up to a year ahead.",
   time_off_too_many: `A trainer can have up to ${String(PT_TIME_OFF_MAX)} times off coming. Remove one first.`,

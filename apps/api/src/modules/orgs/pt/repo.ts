@@ -493,14 +493,38 @@ export async function timeOffByKey(sql: SqlOrTx, gymId: string, requestKey: stri
 }
 
 /** A time off as two instants in the gym's zone: whole days run from the first midnight to
- *  the midnight after the last. */
-export async function timeOffInstants(sql: SqlOrTx, timezone: string, off: PtTimeOffSpan): Promise<{ from: Date; to: Date }> {
-  const rows = await sql<{ starts_at: Date; ends_at: Date }[]>`
-    SELECT (${off.fromDate}::date + make_interval(mins => ${off.fromMinute ?? 0}::int)) AT TIME ZONE ${timezone} AS starts_at,
-           (${off.toDate}::date + make_interval(mins => ${off.toMinute ?? 1440}::int)) AT TIME ZONE ${timezone} AS ends_at`;
+ *  the midnight after the last. `onTheClock`: the end comes after the start, and for hours
+ *  of one day both times are ones the gym's clock has on it (the hour the clocks go
+ *  forward over is not, and Postgres would read it as the hour after). */
+export async function timeOffInstants(sql: SqlOrTx, timezone: string, off: PtTimeOffSpan): Promise<{ from: Date; to: Date; onTheClock: boolean }> {
+  const rows = await sql<{ starts_at: Date; ends_at: Date; start_real: boolean; end_real: boolean }[]>`
+    SELECT i.starts_at, i.ends_at,
+           (i.starts_at AT TIME ZONE ${timezone}) = c.starts AS start_real,
+           (i.ends_at AT TIME ZONE ${timezone}) = c.ends AS end_real
+    FROM (SELECT ${off.fromDate}::date + make_interval(mins => ${off.fromMinute ?? 0}::int) AS starts,
+                 ${off.toDate}::date + make_interval(mins => ${off.toMinute ?? 1440}::int) AS ends) c
+    CROSS JOIN LATERAL (SELECT c.starts AT TIME ZONE ${timezone} AS starts_at, c.ends AT TIME ZONE ${timezone} AS ends_at) i`;
   const r = rows[0];
   if (r === undefined) throw new Error("a time off had no instants");
-  return { from: r.starts_at, to: r.ends_at };
+  const wholeDays = off.fromMinute === null || off.toMinute === null;
+  return { from: r.starts_at, to: r.ends_at, onTheClock: r.ends_at.getTime() > r.starts_at.getTime() && (wholeDays || (r.start_real && r.end_real)) };
+}
+
+/** Works out again the two instants of every time off of a gym from its own days and
+ *  times, in the zone the gym has now: called in the step that changes the zone, so a day
+ *  off goes on being that day on the gym's clock. One whose times the new zone's clock
+ *  would put out of order keeps the instants it had. */
+export async function reworkTimeOffInstants(tx: TransactionSql, gymId: string): Promise<void> {
+  await tx`
+    UPDATE gym_trainer_time_off o SET starts_at = t.starts_at, ends_at = t.ends_at
+    FROM (
+      SELECT x.id,
+             ((x.from_date + make_interval(mins => COALESCE(x.from_minute, 0))) AT TIME ZONE g.timezone) AS starts_at,
+             ((x.to_date + make_interval(mins => COALESCE(x.to_minute, 1440))) AT TIME ZONE g.timezone) AS ends_at
+      FROM gym_trainer_time_off x JOIN gyms g ON g.id = x.gym_id
+      WHERE x.gym_id = ${gymId}
+    ) t
+    WHERE o.gym_id = ${gymId} AND o.id = t.id AND t.ends_at > t.starts_at`;
 }
 
 /** A time off written. The caller holds the gym's lock and has checked the trainer. */

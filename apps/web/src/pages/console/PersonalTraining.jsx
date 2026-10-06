@@ -246,7 +246,7 @@ function InTimeOffList({ label, found, kind, clockFormat, today }) {
 
 /** One trainer's time off: what is coming, each with Remove, and a form that adds one.
  *  Sessions and classes already in a new one are named before it is added. */
-function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, onChanged, onClose }) {
+function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, canBook, onChanged, onStale, onClose }) {
   const [draft, setDraft] = useState(timeOffDraft);
   const [asked, setAsked] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -278,7 +278,13 @@ function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, onChanged, o
     } catch (err) {
       const over = timeOffAsked(err);
       setAsked(over);
-      if (over === null) setError(errorText(err, "We couldn't add that time off."));
+      if (err?.response?.data?.error === 'request_reused') {
+        // The server has this key on another time off: an earlier press went through and
+        // its answer was lost. A new key, and the list read again so that one is shown.
+        requestKey.current = crypto.randomUUID();
+        setError("That didn't go through. The list above is up to date now: check it before you add this again.");
+        onStale();
+      } else if (over === null) setError(errorText(err, "We couldn't add that time off."));
     } finally {
       setBusy(false);
     }
@@ -434,7 +440,7 @@ function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, onChanged, o
               <p className="c-s15 c-w6 c-t1 m-0">{timeOffBoxTitle(asked, trainer)}</p>
               <InTimeOffList key={`s:${asked.mark}`} label="Sessions booked" found={asked.sessions} kind="session" clockFormat={clockFormat} today={today} />
               <InTimeOffList key={`c:${asked.mark}`} label="Classes they coach" found={asked.classes} kind="class" clockFormat={clockFormat} today={today} />
-              {timeOffBoxLines(asked, trainer, draft).map((line) => (
+              {timeOffBoxLines(asked, trainer, draft, canBook).map((line) => (
                 <p key={line} className="c-s14 c-t2 m-0">
                   {line}
                 </p>
@@ -634,9 +640,9 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
 }
 
 /** One booked session, with its Cancel and the box that asks first. */
-function SessionRow({ appointment, classes, timeOff, first, clockFormat, freeCancelMinutes, locked, asking, settled, busy, error, onAsk, onKeep, onCancel, onClose }) {
+function SessionRow({ appointment, classes, timeOff, canBook, first, clockFormat, freeCancelMinutes, locked, asking, settled, busy, error, onAsk, onKeep, onCancel, onClose }) {
   const row = sessionRow(appointment, clockFormat);
-  const clash = sessionClash(appointment, classes, timeOff);
+  const clash = sessionClash(appointment, classes, timeOff, canBook);
   const box = asking ? cancelBox(appointment, { freeCancelMinutes, clockFormat }) : null;
   return (
     <li className="flex flex-col gap-3 py-3 min-w-0" style={first ? undefined : { borderTop: '1px solid var(--line)' }} data-testid="pt-session">
@@ -837,8 +843,13 @@ export default function PersonalTraining() {
         clockFormat={org.clockFormat}
         today={today}
         locked={consoleIsReadOnly(org)}
+        canBook={list.canBook}
         onChanged={(data) => {
           setList(data);
+          readWeekAgain();
+        }}
+        onStale={() => {
+          setListKey((n) => n + 1);
           readWeekAgain();
         }}
         onClose={() => setTimeOffFor(null)}
@@ -1151,6 +1162,7 @@ export default function PersonalTraining() {
                                 appointment={appointment}
                                 classes={day.classes}
                                 timeOff={dayOff}
+                                canBook={list.canBook}
                                 first={index === 0}
                                 clockFormat={clockFormat}
                                 freeCancelMinutes={list.freeCancelMinutes}

@@ -2713,7 +2713,15 @@ again adds nothing. The week answers each day's `timeOff`; the page marks the da
 session or class left in it says so. The console's **Time off** button is on each trainer's
 row and on a trainer's own card. **From Kd's click-through (RULINGS 2026-10-06):** the days
 are pressed on the console's calendar (`DatePick`), never typed, and Remove asks first in a
-box under its own row (whose time off, which days, that nothing booked changes). Not done: the Classes page does not ask before it gives a
+box under its own row (whose time off, which days, that nothing booked changes).
+**From the review (2026-10-06):** a gym's change of time zone works every time off's two
+instants out again in the same step (`reworkTimeOffInstants`, as events' are), so a day off
+stays that day on the gym's clock; hours of one day whose start or end the gym's clock skips
+that day (the hour the clocks go forward over) are refused 409 `time_off_not_a_time`, and
+whole days are as long as those days are; the Remove box says the times can be booked again
+only where no other time off of that trainer covers them, and otherwise that the other one
+stays; a request the server answers `request_reused` gets a new key and the list is read
+again; somebody who cannot book is told to ask a manager, in the box and on a session. Not done: the Classes page does not ask before it gives a
 trainer a class inside their time off (their week marks it); nobody is told (the inbox, 20a).)*
 
 ### 13.6 The calendar, the desk and the messages

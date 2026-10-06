@@ -389,7 +389,14 @@ describe("a trainer's time off", () => {
     ["the fiftieth", { over: false, today: "2026-10-07", fromDate: "2026-10-08", coming: 49 }, null],
     ["the fifty-first", { over: false, today: "2026-10-07", fromDate: "2026-10-08", coming: 50 }, "time_off_too_many"],
   ] as const)("now: %s", (_name, input, refusal) => {
-    expect(ptTimeOffRefusal(input)).toBe(refusal);
+    expect(ptTimeOffRefusal({ onTheClock: true, ...input })).toBe(refusal);
+  });
+
+  it("a time the gym's clock does not have that day is refused before anything else is said", () => {
+    const fine = { onTheClock: true, over: false, today: "2026-10-07", fromDate: "2027-03-28", coming: 0 };
+    expect(ptTimeOffRefusal(fine)).toBeNull();
+    expect(ptTimeOffRefusal({ ...fine, onTheClock: false })).toBe("time_off_not_a_time");
+    expect(ptTimeOffRefusal({ ...fine, onTheClock: false, over: true, coming: 50 })).toBe("time_off_not_a_time");
   });
 
   it("what it takes of a day: nothing outside it, all of a whole day, the hours of a part day", () => {

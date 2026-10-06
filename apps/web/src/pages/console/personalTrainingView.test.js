@@ -38,6 +38,7 @@ import {
   timeOffDraft,
   timeOffFormProblem,
   timeOffLine,
+  timeOffOverlap,
   timeOffRemoveBox,
   timeOffRequest,
   timeOffSummary,
@@ -361,6 +362,10 @@ describe("a trainer's time off", () => {
     const morning = [{ id: 'o', fromMinute: 600, toMinute: 720 }];
     const inIt = 'This is in their time off. Cancel it and book another time, or remove the time off.';
     expect(sessionClash(session(600), [], morning)).toBe(inIt);
+    // Somebody who cannot book is told who can.
+    expect(sessionClash(session(600), [], morning, false)).toBe(
+      'This is in their time off. Cancel it and ask a manager to book another time, or remove the time off.',
+    );
     expect(sessionClash(session(570), [], morning)).toBe(inIt);
     expect(sessionClash(session(690), [], morning)).toBe(inIt);
     expect(sessionClash(session(540), [], morning)).toBeNull();
@@ -413,13 +418,39 @@ describe("a trainer's time off", () => {
   });
 
   it('the box before a removal names whose time off and which, and says nothing booked changes', () => {
-    expect(timeOffRemoveBox(days('2026-10-12', '2026-10-16'), samReed, '24h', TODAY)).toEqual({
+    const week = days('2026-10-12', '2026-10-16');
+    expect(timeOffRemoveBox(week, { ...samReed, timeOff: [week] }, '24h', TODAY)).toEqual({
       question: "Remove Sam Reed's time off on Mon 12 Oct – Fri 16 Oct · all day?",
-      after: 'Sessions can be booked with Sam Reed at those times again. Nothing that is booked changes.',
+      after: "These times go back to Sam Reed's usual hours, so sessions can be booked in them again. Nothing that is booked changes.",
     });
     expect(timeOffRemoveBox(hours('2026-10-09', 540, 720), { name: 'Sam Reed', mine: true }, '12h', TODAY).question).toBe(
       "Remove Sam Reed (you)'s time off on Fri 9 Oct · 9:00 AM – 12:00 PM?",
     );
+  });
+
+  it('the removal box never says the times can be booked again while other time off still covers them', () => {
+    const friday = { ...days('2026-10-09', '2026-10-09'), id: 'all-day' };
+    const hour = { ...hours('2026-10-09', 600, 660), id: 'hour' };
+    const nextWeek = { ...days('2026-10-12', '2026-10-16'), id: 'week' };
+    const sam = { ...samReed, timeOff: [friday, hour, nextWeek] };
+    const stays = 'Sam Reed has other time off in these times, and that stays. Nothing that is booked changes.';
+    expect(timeOffRemoveBox(hour, sam, '24h', TODAY).after).toBe(stays);
+    expect(timeOffRemoveBox(friday, sam, '24h', TODAY).after).toBe(stays);
+    expect(timeOffRemoveBox(nextWeek, sam, '24h', TODAY).after).toContain('so sessions can be booked in them again');
+  });
+
+  it.each([
+    ['the same day, whole and part', days('2026-10-09', '2026-10-09'), hours('2026-10-09', 600, 660), true],
+    ['whole days that share one day', days('2026-10-09', '2026-10-12'), days('2026-10-12', '2026-10-16'), true],
+    ['whole days side by side', days('2026-10-09', '2026-10-11'), days('2026-10-12', '2026-10-16'), false],
+    ['hours that cross', hours('2026-10-09', 540, 660), hours('2026-10-09', 630, 720), true],
+    ['hours that touch', hours('2026-10-09', 540, 600), hours('2026-10-09', 600, 660), false],
+    ['the same hours on another day', hours('2026-10-09', 540, 660), hours('2026-10-10', 540, 660), false],
+    ['hours on a day inside whole days', hours('2026-10-14', 540, 660), days('2026-10-12', '2026-10-16'), true],
+    ['hours on the day after whole days', hours('2026-10-17', 540, 660), days('2026-10-12', '2026-10-16'), false],
+  ])('two times off overlap or not: %s', (_name, a, b, yes) => {
+    expect(timeOffOverlap(a, b)).toBe(yes);
+    expect(timeOffOverlap(b, a)).toBe(yes);
   });
 
   it('what is sent is what the form shows: whole days carry no times, part of a day carries one day, and the mark only when confirming', () => {
@@ -468,6 +499,10 @@ describe("a trainer's time off", () => {
       'If you add this time off, no new session can be booked with Sam Reed in it.',
       'This session stays booked: nobody is cancelled and nothing comes off or goes back on a pack. To move one, cancel it on this page and book another time.',
     ]);
+    // A trainer who cannot book is told who can.
+    expect(timeOffBoxLines(over([maya], []), samReed, friday, false)[1]).toBe(
+      'This session stays booked: nobody is cancelled and nothing comes off or goes back on a pack. To move one, cancel it on this page and ask a manager to book another time.',
+    );
     expect(timeOffBoxLines(over([], [spin, { ...spin, id: 'y' }]), samReed, friday)).toEqual([
       'If you add this time off, no new session can be booked with Sam Reed in it.',
       'These classes stay on the calendar with Sam Reed as coach. To change the coach, open the class on the Calendar.',
