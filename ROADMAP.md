@@ -207,7 +207,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 17e-ii. [ ] **The member books and cancels their own** in the app (the member web until the phone app), by 17e-i's rule; booking opens as the gym's class bookings do. After 17e-iii.
      - 17e-iii. **Classes and sessions agree both ways, and a trainer's time off** (Kd, RULINGS 2026-10-06; straight after 17e-i), split 2026-10-06 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
        - 17e-iii-a. [x] **The Classes page asks first** — merged 2026-10-06 (PR #184).
-       - 17e-iii-b. [ ] **A trainer's time off**: a day or some hours, taken off their free times, a session already booked in it named first. Straight after 17e-iii-a.
+       - 17e-iii-b. [x] **A trainer's time off** — merged 2026-10-06 (PR #185).
      - 17e-iv. [ ] **Sessions when people change**: a person removed or taken off the list, a membership cancelled and a trainer leaving the staff end the coming sessions and give packs their sessions back, each naming the people first; came and no-show.
    - 17f. [ ] **Check-in meets bookings**: a desk scan near a booked class marks it "came"; a worker marks the rest no-shows at the end, safe to run twice. Needs 16a.
 18. **Money between a member and their gym** (RULINGS 2026-09-22, Part 5 of the re-plan; spec Part 3 §14) — it takes in Stage 3 item 3 and what is left of item 9. The app never holds the money and takes no part of it. Every card Opus xhigh.
