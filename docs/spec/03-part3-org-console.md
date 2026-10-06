@@ -2474,6 +2474,39 @@ memberships, Settings → Memberships.
   the box sits in Settings → Memberships, which opens on `memberships.manage`, so in
   practice both. The word travels in the request's body, never its address.
 
+*(23a-i's notes, 2026-10-07.)* **The Members list says what each person holds** (RULINGS
+2026-10-07; §18.2). The list's Status, Membership, Renews-or-ends and Payment columns were
+the gym's own words from its file and nothing else, so somebody given a membership here
+read as having none. ONE rule, `heldOnList` in `@app/shared` (`heldOnList.ts`), now says
+what those four show for a person, on the gym's own day:
+- **Something in use** (running, frozen or still to start): the app's own facts, and only
+  those. Status is the first membership's ("Active", "Frozen", "Not started": the words of
+  the person's own page, `HELD_STATUS_WORDS`). Membership names each once, a running one
+  before a frozen one before one still to start, a membership before a pack, then the
+  newest: "Gold Monthly +1". The day is the first one's: "Renews 6 Nov", "Ends 31 Dec",
+  "Starts 18 Oct", "Frozen since 6 Oct". **Payment is "Payment due" where ANY of them is
+  owed**, "Paid" only where none is, "Free" where there is nothing to pay: a row never
+  reads Paid for somebody who owes. A name on their record from the gym's old file is not
+  a second membership; their own page still shows it.
+- **Nothing in use, and the list names a membership they never had here** (not set up, or
+  not added: the page's own question, `listedMembership`, asked for many records at once):
+  the gym's own words, as before.
+- **Nothing in use otherwise**: the newest one that is over, "Cancelled 6 Oct" or "Ended
+  31 Aug", with no payment. So somebody the gym cancelled here never reads "Active" from
+  its old file.
+- **Nothing held at all**, and every past member: the gym's own words.
+The row carries it as `held` beside the four words, which stay the list's own; a person's
+page carries the same. **The Filter, its counts, Select all, Invite and Download CSV read
+what the rows show**: somebody the app answers for passes a word filter by the app's words
+and never by their record's; a person with two memberships is under both names; the file
+writes the app's words in the list's own columns ("Gold Monthly; PT 10"). Worked out for
+the page's people on every read, and for the whole gym only for the counts and a word
+filter (`memberships/onList.ts`), with two plain reads (`inUseForList`, `overForList`).
+The membership rule itself was split so a list reads a membership's state, dates and what
+is owed without what staff can do to it (`heldMembershipFacts`; `heldMembershipView` is
+that and the buttons). Not done: Add member, a person's Details and Edit, and the front
+desk still read the list's own words (23a-ii).
+
 **The membership row carries its record.** Since 2026-09-21 a person joins only by
 accepting an invitation (§10.2), and the invitation knows which record it was for; so
 `gym_members` gains `entry_id`, written at the accept. It replaces 9.2 rule 3's
@@ -4015,7 +4048,9 @@ section wins and the drawing is corrected in the same job.
   Name (email, else phone) · Status · Membership · Renews or ends ("Renews 3 Oct", "Ends 30
   Sep", "Ended 31 Aug" once past) · Payment · App · ›. A row opens the person (18.7). On a
   phone each row is a card with the tick box on the left and "Active · Gold · Renews 3 Oct ·
-  Paid" as one line.
+  Paid" as one line. *(23a-i, 2026-10-07: for somebody who holds a membership in the app
+  those four say what it says, "Active · Gold Monthly +1 · Renews 6 Nov · Payment due", and
+  the Filter reads the same; §13.2 has the rule.)*
 - **Show** (in the Filter, one choice): **Members** (the list, the default) · **Past members** ·
   **Not on your list** — people in the app with no current member at their details (paid
   places, amber, with the reason and the fix on the row: "Moved to past members on 3 Sep" +
