@@ -7,12 +7,16 @@ import {
   addGymEventRequestSchema,
   cancelGymEventRequestSchema,
   changeGymEventRequestSchema,
+  comeToEventRequestSchema,
   gymEventParamsSchema,
+  gymEventPersonParamsSchema,
   gymEventPosterParamsSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
+import { createLine } from "../classes/bookingsService.js";
 import { orgParamsSchema } from "../schemas.js";
+import * as places from "./places.js";
 import * as service from "./service.js";
 
 const ISSUES_SAID = 10;
@@ -42,6 +46,7 @@ const EVENT_BODY_LIMIT = Math.ceil(GYM_EVENT_POSTER_MAX_BYTES / 3) * 4 + 64 * 10
 
 export function registerEventRoutes(app: FastifyInstance, deps: Omit<service.EventsDeps, "log"> & { redis: RedisLike }): void {
   const eventsDeps: service.EventsDeps = { sql: deps.sql, now: deps.now, photos: deps.photos, log: app.log };
+  const placesDeps: places.PlacesDeps = { sql: deps.sql, now: deps.now, inLine: createLine() };
   const limiter = (name: string, max: number, ipMax: number) =>
     createDualRateLimit({
       name,
@@ -53,6 +58,7 @@ export function registerEventRoutes(app: FastifyInstance, deps: Omit<service.Eve
     });
   // A whole gym's members share one address on its wi-fi, hence each explicit `ipMax`.
   const readLimit = limiter("orgs_events_read", 600, 6000);
+  const comingLimit = limiter("orgs_events_coming", 120, 6000);
   const posterLimit = limiter("orgs_events_poster", 6000, 60_000);
   const staffReadLimit = limiter("orgs_events_staff_read", 1200, 6000);
   const staffSaveLimit = limiter("orgs_events_staff_save", 120, 600);
@@ -98,7 +104,45 @@ export function registerEventRoutes(app: FastifyInstance, deps: Omit<service.Eve
       .send(Buffer.from(file.bytes.buffer, file.bytes.byteOffset, file.bytes.byteLength));
   });
 
+  // "I'm coming", "Join the waitlist" and the claim of a freed place: the request's key
+  // makes the same tap twice one place.
+  app.post("/v1/orgs/:gymId/events/:eventId/coming", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymEventParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(comeToEventRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const userId = requireUserId(req);
+    if ((await places.come(placesDeps, userId, params.gymId, params.eventId, body, gate(comingLimit)(req, reply))) === null) return;
+    return reply.status(200).send({ event: await service.memberEvent(eventsDeps, userId, params.gymId, params.eventId) });
+  });
+
+  // "Can't come", or leaving the waitlist.
+  app.delete("/v1/orgs/:gymId/events/:eventId/coming", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymEventParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const userId = requireUserId(req);
+    if ((await places.notComing(placesDeps, userId, params.gymId, params.eventId, gate(comingLimit)(req, reply))) === null) return;
+    return reply.status(200).send({ event: await service.memberEvent(eventsDeps, userId, params.gymId, params.eventId) });
+  });
+
   // ── STAFF HOLDING `posts.manage` ──
+
+  app.get("/v1/orgs/:gymId/events/:eventId/people", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymEventParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const people = await places.getPeople(placesDeps, requireUserId(req), params.gymId, params.eventId, gate(staffReadLimit)(req, reply));
+    if (people === null) return;
+    return reply.status(200).send(people);
+  });
+
+  app.delete("/v1/orgs/:gymId/events/:eventId/people/:placeId", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymEventPersonParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const staffId = requireUserId(req);
+    if ((await places.removePerson(placesDeps, staffId, params.gymId, params.eventId, params.placeId, gate(staffWriteLimit)(req, reply))) === null) return;
+    const people = await places.getPeople(placesDeps, staffId, params.gymId, params.eventId, () => Promise.resolve(true));
+    return reply.status(200).send(people);
+  });
 
   app.get("/v1/orgs/:gymId/events/staff", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);

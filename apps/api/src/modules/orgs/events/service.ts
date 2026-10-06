@@ -10,16 +10,20 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   GYM_EVENTS_COMING_MAX,
   GYM_EVENTS_PAST_SHOWN,
+  GYM_EVENT_COMING_WORDS,
   GYM_EVENT_MAX_DAYS_AHEAD,
   GYM_EVENT_POSTER_MAX_BYTES,
   GYM_EVENT_WORDS,
-  gymEventSchema,
   gymEventsResponseSchema,
+  memberGymEventSchema,
+  staffGymEventSchema,
   staffGymEventsResponseSchema,
   type AddGymEventRequest,
   type ChangeGymEventRequest,
   type GymEvent,
   type GymEventsResponse,
+  type MemberGymEvent,
+  type StaffGymEvent,
   type StaffGymEventsResponse,
 } from "@app/shared";
 import { getOrgById, gymHasLivePlan, insertAudit } from "../repo.js";
@@ -30,6 +34,7 @@ import { PHOTO_PROBLEM_STATUS, type PhotoFile } from "../gymPage/service.js";
 import { lockGym } from "../memberList/repo.js";
 import { removeListed } from "../posts/photoFiles.js";
 import { isLiveMember, queueFiles, unqueueFiles } from "../posts/repo.js";
+import { comingCount, countsOf, goingFor, handOverEvent } from "./places.js";
 import * as repo from "./repo.js";
 
 export interface EventsDeps {
@@ -85,7 +90,16 @@ export async function getEvents(deps: Pick<EventsDeps, "sql" | "now">, userId: s
   const head = { gymId, gymName: org.name, timezone: org.timezone, today };
   if (!(await gymIsLive(deps.sql, gymId, org.status))) return gymEventsResponseSchema.parse({ ...head, status: "paused", events: [] });
   const rows = await repo.comingEvents(deps.sql, gymId, now, GYM_EVENTS_COMING_MAX);
-  return gymEventsResponseSchema.parse({ ...head, status: "shown", events: rows.map(shaped) });
+  const going = await goingFor(deps.sql, gymId, userId, rows, now);
+  return gymEventsResponseSchema.parse({ ...head, status: "shown", events: rows.map((row) => ({ ...shaped(row), going: going.get(row.id) })) });
+}
+
+/** One event as the member who just said "I'm coming" or "Can't come" reads it now. */
+export async function memberEvent(deps: Pick<EventsDeps, "sql" | "now">, userId: string, gymId: string, eventId: string): Promise<MemberGymEvent> {
+  const row = await repo.eventById(deps.sql, gymId, eventId);
+  if (row === null) throw eventNotFound();
+  const going = await goingFor(deps.sql, gymId, userId, [row], deps.now());
+  return memberGymEventSchema.parse({ ...shaped(row), going: going.get(row.id) });
 }
 
 /** The gym's events, coming and ended, for its staff holding the tick. */
@@ -100,13 +114,15 @@ export async function getStaffEvents(deps: Pick<EventsDeps, "sql" | "now">, staf
     repo.gymToday(deps.sql, gymId, now),
   ]);
   if (today === null) throw notFound();
+  const counts = await countsOf(deps.sql, gymId, [...coming, ...past].map((row) => row.id));
+  const counted = (row: repo.EventRow) => ({ ...shaped(row), coming: counts.get(row.id)?.coming ?? 0, waiting: counts.get(row.id)?.waitlisted ?? 0 });
   return staffGymEventsResponseSchema.parse({
     gymId,
     gymName: org.name,
     timezone: org.timezone,
     today,
-    coming: coming.map(shaped),
-    past: past.map(shaped),
+    coming: coming.map(counted),
+    past: past.map(counted),
     pastTotal,
   });
 }
@@ -153,14 +169,14 @@ async function instantsFor(sql: Sql | TransactionSql, gymId: string, times: repo
   return { startsAt: at.startsAt, endsAt: at.endsAt };
 }
 
-async function staffEvent(deps: Pick<EventsDeps, "sql">, gymId: string, eventId: string): Promise<GymEvent> {
-  const row = await repo.eventById(deps.sql, gymId, eventId);
+async function staffEvent(deps: Pick<EventsDeps, "sql">, gymId: string, eventId: string): Promise<StaffGymEvent> {
+  const [row, counts] = await Promise.all([repo.eventById(deps.sql, gymId, eventId), countsOf(deps.sql, gymId, [eventId])]);
   if (row === null) throw eventNotFound();
-  return gymEventSchema.parse(shaped(row));
+  return staffGymEventSchema.parse({ ...shaped(row), coming: counts.get(eventId)?.coming ?? 0, waiting: counts.get(eventId)?.waitlisted ?? 0 });
 }
 
 /** A new event. Sent twice under one key (a reply lost on the way back), it is one event. */
-export async function addEvent(deps: EventsDeps, staffId: string, gymId: string, body: AddGymEventRequest): Promise<GymEvent> {
+export async function addEvent(deps: EventsDeps, staffId: string, gymId: string, body: AddGymEventRequest): Promise<StaffGymEvent> {
   await requireEventStaff(deps, staffId, gymId);
   const kept = await repo.eventIdByKey(deps.sql, gymId, body.eventKey);
   if (kept !== null) return await staffEvent(deps, gymId, kept);
@@ -198,7 +214,7 @@ export async function addEvent(deps: EventsDeps, staffId: string, gymId: string,
 }
 
 /** Staff take the poster off an event that has ended; nothing else of it changes. */
-async function removeEndedPoster(deps: EventsDeps, staffId: string, gymId: string, eventId: string, at: Date): Promise<GymEvent> {
+async function removeEndedPoster(deps: EventsDeps, staffId: string, gymId: string, eventId: string, at: Date): Promise<StaffGymEvent> {
   const dropped = await deps.sql.begin(async (tx) => {
     const row = await repo.lockEvent(tx, gymId, eventId);
     if (row === null) throw eventNotFound();
@@ -215,7 +231,7 @@ async function removeEndedPoster(deps: EventsDeps, staffId: string, gymId: strin
 /** Staff change an event that has not ended: its words, its times, its poster. Of one
  *  that has ended only the poster can change, and only by being taken off (a person in
  *  it may ask). */
-export async function changeEvent(deps: EventsDeps, staffId: string, gymId: string, eventId: string, body: ChangeGymEventRequest): Promise<GymEvent> {
+export async function changeEvent(deps: EventsDeps, staffId: string, gymId: string, eventId: string, body: ChangeGymEventRequest): Promise<StaffGymEvent> {
   await requireEventStaff(deps, staffId, gymId);
   const at = deps.now();
   // The event is asked about before its new times are judged: one that is gone or has
@@ -234,10 +250,17 @@ export async function changeEvent(deps: EventsDeps, staffId: string, gymId: stri
   try {
     if (poster !== null && poster !== undefined) await deps.photos.put(poster.storageKey, poster.bytes);
     dropped = await deps.sql.begin(async (tx) => {
+      // The gym and then the event, as every write of who is coming takes them.
+      await lockGym(tx, gymId);
       const row = await repo.lockEvent(tx, gymId, eventId);
       if (row === null) throw eventNotFound();
       if (row.endsAt.getTime() <= at.getTime()) throw new OrgsError(409, "event_ended", GYM_EVENT_WORDS.ended);
+      // Nobody who was told they have a place loses it to a smaller number.
+      const coming = await comingCount(tx, gymId, eventId);
+      if (body.places !== null && coming > body.places) throw new OrgsError(409, "event_places_below_coming", GYM_EVENT_COMING_WORDS.places_below_coming(coming));
       await repo.updateEvent(tx, gymId, eventId, { ...body, ...instants }, poster, at);
+      // More places, or a later start: what is free now goes to the waitlist.
+      await handOverEvent(tx, gymId, eventId, at);
       // The poster this one takes the place of: its file is listed to remove in this step.
       const old = poster !== undefined && row.poster !== null ? [row.poster.storageKey] : [];
       await queueFiles(tx, old);
@@ -255,17 +278,21 @@ export async function changeEvent(deps: EventsDeps, staffId: string, gymId: stri
 
 /** Staff cancel an event that has not ended, or un-cancel it. A cancelled event stays on
  *  the members' list, marked, until it would have ended. */
-export async function setCancelled(deps: EventsDeps, staffId: string, gymId: string, eventId: string, cancelled: boolean, limit: Limit): Promise<GymEvent | null> {
+export async function setCancelled(deps: EventsDeps, staffId: string, gymId: string, eventId: string, cancelled: boolean, limit: Limit): Promise<StaffGymEvent | null> {
   await requireEventStaff(deps, staffId, gymId);
   if (!(await limit())) return null;
   await deps.sql.begin(async (tx) => {
     const at = deps.now();
+    await lockGym(tx, gymId);
     const row = await repo.lockEvent(tx, gymId, eventId);
     if (row === null) throw eventNotFound();
     if (row.endsAt.getTime() <= at.getTime()) throw new OrgsError(409, "event_ended", GYM_EVENT_WORDS.ended);
     // Asked again, it is already so: nothing is written twice.
     if (row.cancelled === cancelled) return;
     await repo.setCancelled(tx, gymId, eventId, cancelled ? at : null, at);
+    // Everybody keeps their place through a cancel, so an event brought back is as it
+    // was; a place given up while it was cancelled goes to the waitlist now.
+    if (!cancelled) await handOverEvent(tx, gymId, eventId, at);
     await insertAudit(tx, { actorUserId: staffId, gymId, action: cancelled ? "org.event_cancelled" : "org.event_uncancelled", targetType: "event", targetId: eventId, meta: {} });
   });
   return await staffEvent(deps, gymId, eventId);

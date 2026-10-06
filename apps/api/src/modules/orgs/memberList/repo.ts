@@ -2250,6 +2250,10 @@ export async function moveBookingLinks(tx: TransactionSql, gymId: string, fromEn
     UPDATE gym_class_bookings SET entry_id = ${toEntryId}
     WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
     RETURNING id`;
+  // Their places at the gym's events follow the person too (19c-ii).
+  await tx`
+    UPDATE gym_event_places SET entry_id = ${toEntryId}
+    WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}`;
   return rows.length;
 }
 

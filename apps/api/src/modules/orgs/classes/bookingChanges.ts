@@ -9,6 +9,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import { MEMBERSHIP_BOOKINGS_ENDING_SHOWN, bookingTime, handsOverNow, pickCover, type Cover, type HeldCover } from "@app/shared";
 import { chargePack, givePackClassesBack } from "../memberships/heldRepo.js";
+import { endLeaversPlaces } from "../events/places.js";
 import * as repo from "./bookingsRepo.js";
 
 export const pick = (ctx: Pick<repo.ClassContext, "session" | "gymHasTypes">, held: readonly HeldCover[]): Cover =>
@@ -173,6 +174,8 @@ export async function endLeaversBookings(tx: TransactionSql, gymId: string, user
   const packClasses = await giveBack(tx, gymId, ended, at);
   const freed = [...new Set(ended.filter((b) => b.was === "booked").map((b) => b.sessionId))];
   await handOverClasses(tx, gymId, freed, at);
+  // Their places at the gym's events end with them (19c-ii).
+  await endLeaversPlaces(tx, gymId, userIds, at);
   const waiting = ended.filter((b) => b.was === "waitlisted").length;
   return { booked: ended.length - waiting, waiting, packClasses };
 }
