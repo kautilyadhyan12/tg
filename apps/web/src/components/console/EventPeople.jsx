@@ -8,13 +8,13 @@ import { ConsoleLoading } from './ConsoleStates';
 // with a place and the waitlist, first in line first, and Remove on each. Drawn inside
 // the event's card on the console's Events page.
 
-function PersonRow({ person, eventName, canRemove, busy, onAsk }) {
+function PersonRow({ person, waiting, eventName, canRemove, busy, onAsk }) {
   const name = person.name ?? 'No name yet';
   return (
     <li className="flex items-center justify-between gap-3 min-w-0">
       <span className="c-s14 c-t1 break-words min-w-0">{name}</span>
       {canRemove ? (
-        <button type="button" onClick={() => onAsk(person)} disabled={busy} className="c-btn c-btn-quiet c-btn-sm flex-shrink-0" aria-label={`Remove ${name} from ${eventName}`}>
+        <button type="button" onClick={() => onAsk({ person, waiting })} disabled={busy} className="c-btn c-btn-quiet c-btn-sm flex-shrink-0" aria-label={`Remove ${name} from ${eventName}`}>
           Remove
         </button>
       ) : null}
@@ -24,7 +24,7 @@ function PersonRow({ person, eventName, canRemove, busy, onAsk }) {
 
 /** `canRemove`: the event has not ended and the console can be changed. `onChanged`: a
  *  person was removed, so the event's numbers have changed. */
-export default function EventPeople({ gymId, event, words, canRemove, onChanged }) {
+export default function EventPeople({ gymId, event, canRemove, onChanged }) {
   const [state, setState] = useState({ loading: true, error: null, people: null });
   const [asking, setAsking] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -64,7 +64,7 @@ export default function EventPeople({ gymId, event, words, canRemove, onChanged 
   };
 
   const { people } = state;
-  const box = asking === null ? null : removeBox(asking, event, people?.waitingTotal ?? 0, words);
+  const box = asking === null || people === null ? null : removeBox(asking.person, asking.waiting, event, people);
   const lists =
     people === null
       ? []
@@ -87,7 +87,7 @@ export default function EventPeople({ gymId, event, words, canRemove, onChanged 
           <h4 className="c-s14 c-w6 c-t1">{list.title}</h4>
           <ul className="flex flex-col gap-1.5">
             {list.rows.map((person) => (
-              <PersonRow key={person.id} person={person} eventName={event.name} canRemove={canRemove && box === null} busy={busy} onAsk={setAsking} />
+              <PersonRow key={person.id} person={person} waiting={list.key === 'waiting'} eventName={event.name} canRemove={canRemove && box === null} busy={busy} onAsk={setAsking} />
             ))}
           </ul>
           {list.total > list.rows.length ? <p className="c-s13 c-t2">{`and ${(list.total - list.rows.length).toLocaleString('en-GB')} more`}</p> : null}
@@ -102,7 +102,7 @@ export default function EventPeople({ gymId, event, words, canRemove, onChanged 
             </p>
           ))}
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => remove(asking)} disabled={busy} className="c-btn c-btn-danger c-btn-sm">
+            <button type="button" onClick={() => remove(asking.person)} disabled={busy} className="c-btn c-btn-danger c-btn-sm">
               {busy ? 'Working…' : box.yes}
             </button>
             <button type="button" onClick={() => setAsking(null)} disabled={busy} className="c-btn c-btn-s c-btn-sm">

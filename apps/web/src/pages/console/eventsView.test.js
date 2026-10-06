@@ -220,14 +220,37 @@ describe('the form', () => {
     expect(peopleHeading('coming', { places: 40, comingTotal: 12, waitingTotal: 0 })).toBe('Coming (12 of 40)');
     expect(peopleHeading('coming', { places: null, comingTotal: 12, waitingTotal: 0 })).toBe('Coming (12)');
     expect(peopleHeading('waiting', { places: 40, comingTotal: 40, waitingTotal: 3 })).toBe('Waitlist (3), first in line first');
-    const tell = "The app doesn't tell them yet, so let them know yourself. They can say they're coming again.";
-    expect(removeBox({ id: '1', name: 'Ann Smith' }, EVENT, 0, { people: 'members' })).toEqual({ title: 'Remove Ann Smith from Saturday Open Day?', lines: [tell], yes: 'Remove', no: 'Keep them' });
-    expect(removeBox({ id: '1', name: null }, EVENT, 2, { people: 'clients' })).toEqual({
-      title: 'Remove this person from Saturday Open Day?',
-      lines: ['If they had a place, it goes to the next of your clients on the waitlist.', tell],
+  });
+
+  it('the Remove box says what happens to the place as the server will do it, never a hand-over that will not happen', () => {
+    const ann = { id: '1', name: 'Ann Smith' };
+    const list = (over = {}) => ({ handsOver: true, started: false, waiting: [{ id: '9', name: 'Cal Brown' }], waitingTotal: 1, ...over });
+    const tell = "The app doesn't tell them yet, so let them know yourself.";
+    const again = `${tell} They can say they're coming again.`;
+    const lines = (waiting, people, event = EVENT) => removeBox(ann, waiting, event, people).lines;
+    expect(removeBox(ann, false, EVENT, list())).toEqual({
+      title: 'Remove Ann Smith from Saturday Open Day?',
+      lines: ['Their place goes to Cal Brown, first on the waitlist.', again],
       yes: 'Remove',
       no: 'Keep them',
     });
+    expect(removeBox({ id: '1', name: null }, false, EVENT, list()).title).toBe('Remove this person from Saturday Open Day?');
+    // The first in line has no name yet.
+    expect(lines(false, list({ waiting: [{ id: '9', name: null }] }))[0]).toBe('Their place goes to the first person, first on the waitlist.');
+    // Nobody waiting: nothing is said of the place.
+    expect(lines(false, list({ waiting: [], waitingTotal: 0 }))).toEqual([again]);
+    // Inside the gym's hand-over time nobody is moved in.
+    expect(lines(false, list({ handsOver: false }))).toEqual([
+      'Their place is free for the first person to take it. This close to the event, nobody on the waitlist is moved in automatically.',
+      again,
+    ]);
+    // Started: no place moves, and they cannot say they are coming again.
+    expect(lines(false, list({ handsOver: false, started: true }))).toEqual([tell]);
+    // Cancelled: the same.
+    expect(lines(false, list({ handsOver: false }), { ...EVENT, cancelled: true })).toEqual([tell]);
+    // Somebody on the waitlist: nobody else moves.
+    expect(lines(true, list())).toEqual(['They leave the waitlist. Nobody else moves.', again]);
+    expect(lines(true, list({ handsOver: false, started: true }))).toEqual(['They leave the waitlist. Nobody else moves.', tell]);
   });
 
   it('the form says the fewest places it can have, and that nobody is told of a change', () => {

@@ -70,13 +70,20 @@ export function eventActions(event) {
 export function eventWhyNot(event) {
   const { mine, can } = event.going;
   if (can.why === 'waitlist_full') return 'This event and its waitlist are full.';
+  if (can.why === 'event_full') return 'This event is full.';
   if (can.why === 'event_started' && mine === null) return "This event has started, so it's too late to say you're coming.";
+  if (can.why === 'event_started' && mine.status === 'waitlisted') return 'This event has started, so the waitlist is closed.';
   if (mine?.status === 'coming' && !can.cancel && !event.cancelled) return "This event has started, so this can't be changed.";
   return null;
 }
 
-/** Under a member's own waitlist line. */
-export const WAITLIST_NOTE = "If a place comes free it can go to you. The app doesn't tell you yet, so check back here.";
+/** Under a member's own waitlist line, while a place can still come to them: not once
+ *  the event has started or been cancelled, nor when a place is theirs to take now. */
+export function waitlistNote(event) {
+  const { mine, can } = event.going;
+  if (mine?.status !== 'waitlisted' || can.claim || can.why !== null || event.cancelled) return null;
+  return "If a place comes free it can go to you. The app doesn't tell you yet, so check back here.";
+}
 
 /** Whether "Can't come" asks first: somebody else would take the place at once. */
 export function givingUpAsks(event) {

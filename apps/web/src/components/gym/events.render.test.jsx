@@ -188,6 +188,36 @@ describe("a member's Events", () => {
     expect(rowOf('My Turn').queryByText(/check back here/)).toBeNull();
   });
 
+  it('somebody waiting when the event started is told the waitlist is closed, not that a place can come', async () => {
+    svc.list.mockResolvedValue(
+      listOf([event('a', 'All Day Fair', { startsAt: '2020-01-01T00:00:00.000Z', places: 5, going: going({ coming: 5, waiting: 2, mine: { status: 'waitlisted', waitlistPlace: 2 }, can: { ...NO, cancel: true, why: 'event_started' } }) })]),
+    );
+    render(<Events gym={GYM} />);
+    expect(await screen.findByText("You're 2nd on the waitlist")).toBeTruthy();
+    expect(rowOf('All Day Fair').getByText('This event has started, so the waitlist is closed.')).toBeTruthy();
+    expect(rowOf('All Day Fair').queryByText(/check back here/)).toBeNull();
+    expect(rowOf('All Day Fair').getByRole('button', { name: 'Leave the waitlist: All Day Fair' })).toBeTruthy();
+  });
+
+  it('a tap whose reply was lost keeps its key for that button only', async () => {
+    const full = event('a', 'Saturday Open Day', { places: 30, going: going({ coming: 30, can: { ...NO, joinWaitlist: true } }) });
+    svc.list.mockResolvedValue(listOf([full]));
+    render(<Events gym={GYM} />);
+    const row = () => rowOf('Saturday Open Day');
+    // "Join the waitlist" landed and its reply was lost.
+    svc.come.mockRejectedValueOnce(new Error('Network Error'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Join the waitlist: Saturday Open Day' }));
+    await screen.findByText("That didn't go through. Try again.");
+    // The tab is shown again: she is waiting, and a place is hers to take.
+    svc.list.mockResolvedValue(listOf([{ ...full, going: going({ coming: 29, waiting: 1, mine: { status: 'waitlisted', waitlistPlace: 1 }, can: { ...NO, claim: true, cancel: true } }) }]));
+    document.dispatchEvent(new Event('visibilitychange'));
+    svc.come.mockResolvedValue({ ...full, going: going({ coming: 30, mine: { status: 'coming', waitlistPlace: null }, can: { ...NO, cancel: true } }) });
+    fireEvent.click(await screen.findByRole('button', { name: 'Take the place: Saturday Open Day' }));
+    await waitFor(() => expect(row().getByText("You're coming")).toBeTruthy());
+    // The claim went under a key of its own, not the lost tap's.
+    expect(svc.come.mock.calls[1][2]).not.toBe(svc.come.mock.calls[0][2]);
+  });
+
   it('marks a cancelled event and an event that is on now', async () => {
     svc.list.mockResolvedValue(
       listOf([

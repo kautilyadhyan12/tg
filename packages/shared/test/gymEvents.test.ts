@@ -101,7 +101,8 @@ describe("what a member reads and can do", () => {
     ["full, room in the line", { places: 10, coming: 10, waitlisted: 3 }, null, can({ joinWaitlist: true })],
     ["full, an empty line", { places: 10, coming: 10 }, null, can({ joinWaitlist: true })],
     ["full, the line full", { places: 10, coming: 10, waitlisted: 20 }, null, can({ why: "waitlist_full" })],
-    ["full, a gym with no waitlist", { places: 10, coming: 10, settings: eventBookingSettings({ handoverMinutes: 1440, waitlistMax: 0 }) }, null, can({ why: "waitlist_full" })],
+    // No waitlist to be full: the event is full and no more.
+    ["full, a gym with no waitlist", { places: 10, coming: 10, settings: eventBookingSettings({ handoverMinutes: 1440, waitlistMax: 0 }) }, null, can({ why: "event_full" })],
     // ── already down for it ──
     ["coming", { places: 10, coming: 10, mine: "coming" }, null, can({ cancel: true })],
     ["coming, no limit", { places: null, coming: 3, mine: "coming" }, null, can({ cancel: true })],

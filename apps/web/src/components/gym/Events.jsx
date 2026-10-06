@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CalendarDays, Loader2, MapPin, Users } from 'lucide-react';
 import { eventPosterUrl, eventsService } from '../../api/eventsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
-import { WAITLIST_NOTE, eventActions, eventIsOn, eventMine, eventPlacesLeft, eventWhen, eventWhyNot, eventsZoneNote, givingUpAsks, noEvents } from './eventsView';
+import { eventActions, eventIsOn, eventMine, eventPlacesLeft, eventWhen, eventWhyNot, eventsZoneNote, givingUpAsks, noEvents, waitlistNote } from './eventsView';
 
 // A GYM'S EVENTS FOR ITS MEMBER (spec Part 3 §15.4; ROADMAP 19c-i, 19c-ii): the coming
 // events, soonest first, each with its poster where the gym added one, and "I'm coming"
@@ -31,6 +31,7 @@ function EventCard({ gymId, event, today, readAt, busy, said, asking, onAct, onA
   const mine = eventMine(event);
   const actions = eventActions(event);
   const whyNot = eventWhyNot(event);
+  const waitNote = waitlistNote(event);
   return (
     <li className="rounded-xl overflow-hidden flex flex-col" style={{ background: 'rgba(255,255,255,0.03)' }}>
       {event.poster !== null && (
@@ -76,7 +77,7 @@ function EventCard({ gymId, event, today, readAt, busy, said, asking, onAct, onA
         {mine !== null && (
           <p className="text-sm font-semibold mt-1" style={{ color: mine.good ? GREEN : ORANGE }}>{mine.text}</p>
         )}
-        {mine !== null && !mine.good && !event.cancelled && <p className="text-xs" style={{ color: MUTED }}>{WAITLIST_NOTE}</p>}
+        {waitNote !== null && <p className="text-xs" style={{ color: MUTED }}>{waitNote}</p>}
         {whyNot !== null && <p className="text-xs" style={{ color: MUTED }}>{whyNot}</p>}
         {asking ? (
           <div role="group" aria-label={`Give up your place at ${event.name}?`} className="flex flex-col gap-2 mt-1 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }}>
@@ -124,8 +125,8 @@ export default function Events({ gym }) {
   /** What the last tap on an event answered, by event. */
   const [said, setSaid] = useState({});
   const [asking, setAsking] = useState(null);
-  /** One key a tap, by event: kept until the server answers, so a tap sent again after a
-   *  lost reply is the same tap. */
+  /** One key a tap, by event and button: kept until the server answers, so the same tap
+   *  sent again after a lost reply is the same tap, and another button's is not. */
   const keys = useRef(new Map());
 
   const load = useCallback(() => {
@@ -162,17 +163,18 @@ export default function Events({ gym }) {
 
   const act = async (event, kind) => {
     if (busyId !== null) return;
-    const key = keys.current.get(event.id) ?? crypto.randomUUID();
-    if (kind !== 'cancel') keys.current.set(event.id, key);
+    const tap = `${event.id}:${kind}`;
+    const key = keys.current.get(tap) ?? crypto.randomUUID();
+    if (kind !== 'cancel') keys.current.set(tap, key);
     setBusyId(event.id);
     setSaid((m) => ({ ...m, [event.id]: null }));
     try {
       const now = kind === 'cancel' ? await eventsService.notComing(gym.id, event.id) : await eventsService.come(gym.id, event.id, key, kind === 'wait');
-      keys.current.delete(event.id);
+      keys.current.delete(tap);
       setState((s) => (s.list === null ? s : { ...s, list: { ...s.list, events: s.list.events.map((e) => (e.id === now.id ? now : e)) } }));
     } catch (err) {
       // An answer from the server ends this tap; no answer keeps its key for the retry.
-      if (err?.response !== undefined) keys.current.delete(event.id);
+      if (err?.response !== undefined) keys.current.delete(tap);
       setSaid((m) => ({ ...m, [event.id]: { text: errorText(err, "That didn't go through. Try again."), bad: true } }));
       // The event is not as this card showed it: read the list again.
       if (err?.response !== undefined) load();

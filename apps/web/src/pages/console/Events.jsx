@@ -303,7 +303,7 @@ function EventCard({ gymId, event, words, today, past, readAt, readOnly, busy, a
         </button>
       ) : null}
       {showPeople && peopleCount > 0 && box === null ? (
-        <EventPeople gymId={gymId} event={event} words={words} canRemove={!past && !readOnly} onChanged={onPeopleChanged} />
+        <EventPeople gymId={gymId} event={event} canRemove={!past && !readOnly} onChanged={onPeopleChanged} />
       ) : null}
 
       {past && !readOnly && event.poster !== null && box === null ? (

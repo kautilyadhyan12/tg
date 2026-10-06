@@ -71,9 +71,12 @@ const cardOf = (name) => cards().find((el) => within(el).queryByRole('heading', 
 const form = () => within(screen.getByTestId('event-form'));
 const refusal = (status, message) => Object.assign(new Error(message), { response: { status, data: { error: 'x', message } } });
 /** Who is coming and waiting, as the server sends it: ids `c0`, `c1` … and `w0`, `w1` …. */
-const peopleOf = (coming, waiting = [], places = 40) => ({
+const peopleOf = (coming, waiting = [], over = {}) => ({
   eventId: 'a',
-  places,
+  places: 40,
+  handsOver: true,
+  started: false,
+  ...over,
   coming: coming.map((name, i) => ({ id: `c${i}`, name, initials: '', at: '2026-10-07T09:00:00.000Z' })),
   comingTotal: coming.length,
   waiting: waiting.map((name, i) => ({ id: `w${i}`, name, initials: '', at: '2026-10-07T09:00:00.000Z' })),
@@ -502,7 +505,7 @@ describe('who is coming', () => {
     fireEvent.click(card().getByRole('button', { name: "See who's coming to Saturday Open Day" }));
     fireEvent.click(await card().findByRole('button', { name: 'Remove Bea Jones from Saturday Open Day' }));
     const box = within(card().getByRole('group', { name: 'Remove Bea Jones from Saturday Open Day?' }));
-    expect(box.getByText('If they had a place, it goes to the next of your members on the waitlist.')).toBeTruthy();
+    expect(box.getByText('Their place goes to Cal Brown, first on the waitlist.')).toBeTruthy();
     expect(box.getByText("The app doesn't tell them yet, so let them know yourself. They can say they're coming again.")).toBeTruthy();
     // Keep them: nothing is sent.
     fireEvent.click(box.getByRole('button', { name: 'Keep them' }));
@@ -518,6 +521,23 @@ describe('who is coming', () => {
     await waitFor(() => expect(card().queryByText('Bea Jones')).toBeNull());
     expect(card().getByText('Cal Brown')).toBeTruthy();
     expect(await card().findByText('40 places · 2 coming')).toBeTruthy();
+  });
+
+  it('close to the event the Remove box promises nobody a place', async () => {
+    svc.list.mockResolvedValue(listOf([busy()]));
+    svc.people.mockResolvedValue(peopleOf(['Ann Smith', 'Bea Jones'], ['Cal Brown'], { handsOver: false }));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    const card = () => within(cardOf('Saturday Open Day'));
+    fireEvent.click(card().getByRole('button', { name: "See who's coming to Saturday Open Day" }));
+    fireEvent.click(await card().findByRole('button', { name: 'Remove Ann Smith from Saturday Open Day' }));
+    const box = within(card().getByRole('group', { name: 'Remove Ann Smith from Saturday Open Day?' }));
+    expect(box.getByText('Their place is free for the first person to take it. This close to the event, nobody on the waitlist is moved in automatically.')).toBeTruthy();
+    expect(box.queryByText(/goes to/)).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Keep them' }));
+    // Somebody waiting: the box says nobody else moves.
+    fireEvent.click(card().getByRole('button', { name: 'Remove Cal Brown from Saturday Open Day' }));
+    expect(within(card().getByRole('group', { name: 'Remove Cal Brown from Saturday Open Day?' })).getByText('They leave the waitlist. Nobody else moves.')).toBeTruthy();
   });
 
   it('a removal the server refuses is said, and the list is read again', async () => {

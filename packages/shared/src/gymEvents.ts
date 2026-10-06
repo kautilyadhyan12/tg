@@ -213,11 +213,12 @@ export function eventHandsOverNow(i: Omit<EventPlaceInput, "mine">): boolean {
 export const GYM_EVENT_COMING_REFUSALS = ["event_cancelled", "event_started", "event_full", "waitlist_full"] as const;
 export type GymEventComingRefusal = (typeof GYM_EVENT_COMING_REFUSALS)[number];
 
-/** The class rule's "no", in an event's words. */
-export function eventRefusal(reason: ClassBookRefusal): GymEventComingRefusal {
+/** The class rule's "no", in an event's words. A gym whose waitlist holds nobody has no
+ *  waitlist to be full: its full event is full and no more. */
+export function eventRefusal(reason: ClassBookRefusal, waitlistMax: number): GymEventComingRefusal {
   if (reason === "class_cancelled") return "event_cancelled";
   if (reason === "class_started") return "event_started";
-  if (reason === "waitlist_full") return "waitlist_full";
+  if (reason === "waitlist_full" && waitlistMax > 0) return "waitlist_full";
   return "event_full";
 }
 
@@ -269,7 +270,7 @@ export function eventGoing(i: EventPlaceInput & { waitlistPlace: number | null }
       joinWaitlist: wait.kind === "waitlist",
       claim: come.kind === "book" && come.fromWaitlist,
       cancel: decideNotComing(i).kind === "cancel",
-      why: wait.kind === "refuse" ? eventRefusal(wait.reason) : null,
+      why: wait.kind === "refuse" ? eventRefusal(wait.reason, i.settings.waitlistMax) : null,
     },
   };
 }
@@ -310,6 +311,11 @@ export const gymEventPeopleResponseSchema = z
   .object({
     eventId: z.string().uuid(),
     places: z.number().int().positive().nullable(),
+    /** A place freed now goes to the first in line by itself; false: it stays free for the
+     *  first person to take it (inside the gym's hand-over time, started, or cancelled). */
+    handsOver: z.boolean(),
+    /** The event has started: nobody new can say they are coming. */
+    started: z.boolean(),
     coming: z.array(eventPersonSchema).max(GYM_EVENT_PEOPLE_SHOWN),
     comingTotal: z.number().int().nonnegative(),
     waiting: z.array(eventPersonSchema).max(GYM_EVENT_PEOPLE_SHOWN),

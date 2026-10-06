@@ -15,6 +15,7 @@ import {
   GYM_EVENT_COMING_WORDS,
   GYM_EVENT_PEOPLE_SHOWN,
   GYM_EVENT_WORDS,
+  bookingTime,
   decideComing,
   decideNotComing,
   eventGoing,
@@ -43,7 +44,9 @@ export interface PlacesDeps {
   inLine: Line;
 }
 
-/** The route's rate limit, asked after membership: false when it has already answered 429. */
+/** The route's rate limit, asked after membership: false when it has already answered
+ *  429. A signed-in stranger's 404 is therefore never counted, as on every gym page's
+ *  routes: counting it would let ten strangers on a gym's wi-fi use up its members' hour. */
 export type Limit = () => Promise<boolean>;
 
 const TICK = "posts.manage";
@@ -165,7 +168,7 @@ export async function come(deps: PlacesDeps, userId: string, gymId: string, even
   if (seen.member === null) throw notFound();
   if (sent === null) {
     const first = decideComing({ ...placeInput(seen, deps.now()), mine: mineOf(seen), joinWaitlist: req.joinWaitlist });
-    if (first.kind === "refuse") throw refusal(eventRefusal(first.reason));
+    if (first.kind === "refuse") throw refusal(eventRefusal(first.reason, seen.settings.waitlistMax));
   }
 
   // A refusal is carried out of the transaction, so a place handed over inside it is kept.
@@ -194,7 +197,7 @@ export async function come(deps: PlacesDeps, userId: string, gymId: string, even
         case "already":
           return null;
         case "refuse":
-          return refusal(eventRefusal(decision.reason));
+          return refusal(eventRefusal(decision.reason, ctx.settings.waitlistMax));
         case "waitlist":
           await repo.insertPlace(tx, { gymId, eventId, userId, entryId: member.entryId, requestKey: req.requestKey, status: "waitlisted", now });
           return null;
@@ -240,7 +243,7 @@ export async function notComing(deps: PlacesDeps, userId: string, gymId: string,
 }
 
 /** Who is coming to an event and who is waiting, for staff holding the tick. */
-export async function getPeople(deps: Pick<PlacesDeps, "sql">, staffId: string, gymId: string, eventId: string, limit: Limit): Promise<GymEventPeopleResponse | null> {
+export async function getPeople(deps: Pick<PlacesDeps, "sql" | "now">, staffId: string, gymId: string, eventId: string, limit: Limit): Promise<GymEventPeopleResponse | null> {
   await requirePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   const ctx = await repo.contextOf(deps.sql, gymId, eventId, null, false);
@@ -254,9 +257,12 @@ export async function getPeople(deps: Pick<PlacesDeps, "sql">, staffId: string, 
       const named = fullName(r);
       return { id: r.placeId, name: named.name, initials: named.name === null ? "" : named.initials, at: r.at.toISOString() };
     });
+  const time = bookingTime(deps.now().getTime(), ctx.event.startsAt.getTime(), ctx.settings);
   return gymEventPeopleResponseSchema.parse({
     eventId,
     places: ctx.event.places,
+    handsOver: time.handsOver && !ctx.event.cancelled,
+    started: time.phase === "started",
     coming: shown(coming),
     comingTotal: ctx.counts.coming,
     waiting: shown(waiting),

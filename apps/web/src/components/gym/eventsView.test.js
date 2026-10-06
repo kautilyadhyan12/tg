@@ -1,6 +1,6 @@
 // A member's words for an event's places (ROADMAP 19c-ii; spec Part 3 §15.4).
 import { describe, expect, it } from 'vitest';
-import { eventActions, eventMine, eventPlacesLeft, eventWhyNot, givingUpAsks, ordinal } from './eventsView';
+import { eventActions, eventMine, eventPlacesLeft, eventWhyNot, givingUpAsks, ordinal, waitlistNote } from './eventsView';
 
 const NO = { come: false, joinWaitlist: false, claim: false, cancel: false, why: null };
 const event = (places, going, over = {}) => ({ name: 'Open Day', places, cancelled: false, going: { coming: 0, waiting: 0, mine: null, can: NO, ...going }, ...over });
@@ -50,9 +50,24 @@ describe("the member's own line and buttons", () => {
     expect(eventWhyNot(event(30, { can: { ...NO, why: 'waitlist_full' } }))).toBe('This event and its waitlist are full.');
     expect(eventWhyNot(event(30, { can: { ...NO, why: 'event_started' } }))).toBe("This event has started, so it's too late to say you're coming.");
     expect(eventWhyNot(event(30, { mine: coming, can: NO }))).toBe("This event has started, so this can't be changed.");
+    // A gym with no waitlist: nothing is said of one.
+    expect(eventWhyNot(event(30, { can: { ...NO, why: 'event_full' } }))).toBe('This event is full.');
+    // Waiting when it started: nobody is moved in any more, and the card says so.
+    expect(eventWhyNot(event(30, { mine: waiting(2), can: { ...NO, cancel: true, why: 'event_started' } }))).toBe('This event has started, so the waitlist is closed.');
     // A cancelled event's own line says it.
     expect(eventWhyNot(event(30, { can: { ...NO, why: 'event_cancelled' } }, { cancelled: true }))).toBeNull();
     expect(eventWhyNot(event(30, { can: { ...NO, come: true } }))).toBeNull();
+  });
+
+  it('promises a place can come only while one still can', () => {
+    const note = "If a place comes free it can go to you. The app doesn't tell you yet, so check back here.";
+    expect(waitlistNote(event(30, { mine: waiting(2), can: { ...NO, cancel: true } }))).toBe(note);
+    // Started, cancelled, theirs to take now, coming, or not down for it: no promise.
+    expect(waitlistNote(event(30, { mine: waiting(2), can: { ...NO, cancel: true, why: 'event_started' } }))).toBeNull();
+    expect(waitlistNote(event(30, { mine: waiting(1), can: { ...NO, cancel: true, why: 'event_cancelled' } }, { cancelled: true }))).toBeNull();
+    expect(waitlistNote(event(30, { mine: waiting(1), can: { ...NO, claim: true, cancel: true } }))).toBeNull();
+    expect(waitlistNote(event(30, { mine: coming, can: { ...NO, cancel: true } }))).toBeNull();
+    expect(waitlistNote(event(30, {}))).toBeNull();
   });
 
   it('asks before a place is given up only where somebody else would take it', () => {

@@ -161,11 +161,24 @@ export function peopleHeading(kind, people) {
   return people.places === null ? `Coming (${count(people.comingTotal)})` : `Coming (${count(people.comingTotal)} of ${count(people.places)})`;
 }
 
-/** The box before staff take one person off an event. */
-export function removeBox(person, event, waitingTotal, words) {
+/** The box before staff take one person off an event. `waiting`: the person is on the
+ *  waitlist, not coming. `people`: the list as the server sent it, which says whether a
+ *  freed place is handed to the first in line now, and whether the event has started. */
+export function removeBox(person, waiting, event, people) {
   const name = person.name ?? 'this person';
-  const lines = ["The app doesn't tell them yet, so let them know yourself. They can say they're coming again."];
-  if (waitingTotal > 0) lines.unshift(`If they had a place, it goes to the next of your ${words.people} on the waitlist.`);
+  const lines = [];
+  if (waiting) {
+    lines.push('They leave the waitlist. Nobody else moves.');
+  } else if (people.waitingTotal > 0 && !people.started && !event.cancelled) {
+    const next = people.waiting[0]?.name ?? null;
+    lines.push(
+      people.handsOver
+        ? `Their place goes to ${next === null ? 'the first person' : next}, first on the waitlist.`
+        : 'Their place is free for the first person to take it. This close to the event, nobody on the waitlist is moved in automatically.',
+    );
+  }
+  const again = people.started || event.cancelled ? '' : " They can say they're coming again.";
+  lines.push(`The app doesn't tell them yet, so let them know yourself.${again}`);
   return { title: `Remove ${name} from ${event.name}?`, lines, yes: 'Remove', no: 'Keep them' };
 }
 

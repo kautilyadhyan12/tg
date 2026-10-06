@@ -72,6 +72,8 @@ d("\"I'm coming\" on a gym's event (real Postgres, two apis)", () => {
    *  so two requests race only across two of them. */
   let second: App | undefined;
   let redis: RedisLike | undefined;
+  /** The codes "delete my account" would have emailed, by address. */
+  const deleteCodes = new Map<string, string>();
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
@@ -106,6 +108,7 @@ d("\"I'm coming\" on a gym's event (real Postgres, two apis)", () => {
     userId: string;
     cookies: Cookies;
     name: string;
+    email: string;
   }
 
   const signedIn = async (displayName: string): Promise<Person> => {
@@ -116,7 +119,7 @@ d("\"I'm coming\" on a gym's event (real Postgres, two apis)", () => {
     await proveAddress(sql, email);
     const login = await inject("POST", "/v1/auth/login", {}, { email, password: PASSWORD });
     expect(login.statusCode).toBe(200);
-    return { userId, cookies: cookieMap(login), name: displayName };
+    return { userId, cookies: cookieMap(login), name: displayName, email };
   };
 
   interface Gym {
@@ -215,7 +218,18 @@ d("\"I'm coming\" on a gym's event (real Postgres, two apis)", () => {
       if (tries === 100) throw new Error("the Redis at TEST_REDIS_URL never connected");
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    const overrides = { redis, photoStore: createDiskPhotoStore(folder), orgs: { now: () => new Date(clock) } };
+    const overrides = {
+      redis,
+      photoStore: createDiskPhotoStore(folder),
+      orgs: { now: () => new Date(clock) },
+      usersEmailSender: {
+        sendAccountDeleteCodeEmail: (to: string, code: string) => {
+          deleteCodes.set(to.toLowerCase(), code);
+          return Promise.resolve();
+        },
+        sendAccountDeletionEmail: () => Promise.resolve(),
+      },
+    };
     app = await buildApp(loadConfig(baseEnv), overrides);
     await api().ready();
     second = await buildApp(loadConfig(baseEnv), overrides);
@@ -470,6 +484,54 @@ d("\"I'm coming\" on a gym's event (real Postgres, two apis)", () => {
   );
 
   it(
+    "a claim's tap sent again after the place was given up does not put the person back",
+    async () => {
+      const gym = await makeGym("Claim Key House");
+      const event = await add(gym, 1);
+      const [ann, bea] = await members(gym, ["Ann Claim", "Bea Claim"]);
+      if (ann === undefined || bea === undefined) throw new Error("no members");
+      eventOf(await come(gym, event.id, ann));
+      const waitKey = randomUUID();
+      eventOf(await come(gym, event.id, bea, true, waitKey));
+      // Inside the last day Ann gives up her place; Bea claims it under a key of its own.
+      clock = DAY_BEFORE.getTime();
+      eventOf(await cantCome(gym, event.id, ann));
+      const claimKey = randomUUID();
+      expect(eventOf(await come(gym, event.id, bea, false, claimKey)).going.mine?.status).toBe("coming");
+      const [row] = await sql<{ request_key: string; claim_key: string | null }[]>`SELECT request_key, claim_key FROM gym_event_places WHERE event_id = ${event.id} AND user_id = ${bea.userId}`;
+      expect(row).toEqual({ request_key: waitKey, claim_key: claimKey });
+      // She gives it up; the claim's reply had been lost and the tap arrives again, and so
+      // does the first one: neither puts her back.
+      eventOf(await cantCome(gym, event.id, bea));
+      for (const key of [claimKey, waitKey, claimKey]) expect(eventOf(await come(gym, event.id, bea, false, key)).going.mine).toBeNull();
+      expect(await stored(event.id)).toEqual({ cancelled: 2 });
+      // Somebody else's tap under her claim's key takes nothing.
+      const reused = await come(gym, event.id, ann, false, claimKey);
+      expect([reused.statusCode, codeOf(reused)]).toEqual([409, "request_reused"]);
+    },
+    T,
+  );
+
+  it(
+    "somebody waiting who is no longer a member is passed over and keeps their place in line",
+    async () => {
+      const gym = await makeGym("Passed Over House");
+      const event = await add(gym, 1);
+      const [ann, bea, cal] = await members(gym, ["Ann Passed", "Bea Passed", "Cal Passed"]);
+      if (ann === undefined || bea === undefined || cal === undefined) throw new Error("no members");
+      eventOf(await come(gym, event.id, ann));
+      eventOf(await come(gym, event.id, bea, true));
+      eventOf(await come(gym, event.id, cal, true));
+      // Bea's membership closed without her places being ended: only this statement does that.
+      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${bea.userId}`;
+      eventOf(await cantCome(gym, event.id, ann));
+      const list = await people(gym, event.id);
+      expect([names(list.coming), names(list.waiting)]).toEqual([["Cal Passed"], ["Bea Passed"]]);
+    },
+    T,
+  );
+
+  it(
     "the gym's own waitlist size and hand-over time are the ones used",
     async () => {
       const gym = await makeGym("Settings House");
@@ -495,6 +557,16 @@ d("\"I'm coming\" on a gym's event (real Postgres, two apis)", () => {
       const saved = await inject("PUT", `/v1/orgs/${gym.id}/booking-settings`, gym.owner.cookies, { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 60, waitlistMax: 1 });
       expect(saved.statusCode, saved.body).toBe(200);
       expect(await stored(far.id)).toEqual({ coming: 1, cancelled: 1 });
+      // The settings screen is told somebody moved in.
+      expect((JSON.parse(saved.body) as { movedIn: number }).movedIn).toBe(1);
+
+      // A gym with no waitlist: its full event is full, and nothing is said of a waitlist.
+      await sql`UPDATE gyms SET waitlist_max = 0 WHERE id = ${gym.id}`;
+      const none = await add(gym, 1, { name: "No Line" });
+      eventOf(await come(gym, none.id, ann));
+      const told = await come(gym, none.id, cal, true);
+      expect([told.statusCode, codeOf(told)]).toEqual([409, "event_full"]);
+      expect((await seenBy(gym, cal, none.id)).going.can).toEqual({ come: false, joinWaitlist: false, claim: false, cancel: false, why: "event_full" });
     },
     T,
   );
@@ -629,6 +701,23 @@ d("\"I'm coming\" on a gym's event (real Postgres, two apis)", () => {
       const deePlace = after.waiting[0]?.id ?? "";
       const waitOff = JSON.parse((await inject("DELETE", `${events(gym.id)}/${event.id}/people/${deePlace}`, gym.owner.cookies)).body) as GymEventPeopleResponse;
       expect([names(waitOff.coming), names(waitOff.waiting)]).toEqual([["Bea Staffed", "Cal Staffed"], ["Ann Staffed"]]);
+      // Ten days out the list says a freed place is handed over.
+      expect([waitOff.handsOver, waitOff.started]).toEqual([true, false]);
+
+      // Inside the last day it says it is not, and a removal moves nobody in: the place is
+      // free, and Ann, waiting, is offered it.
+      clock = DAY_BEFORE.getTime();
+      expect((await people(gym, event.id)).handsOver).toBe(false);
+      const late = JSON.parse((await inject("DELETE", `${events(gym.id)}/${event.id}/people/${waitOff.coming[0]?.id ?? ""}`, gym.owner.cookies)).body) as GymEventPeopleResponse;
+      expect([names(late.coming), names(late.waiting), late.handsOver]).toEqual([["Cal Staffed"], ["Ann Staffed"], false]);
+      expect((await seenBy(gym, ann, event.id)).going.can.claim).toBe(true);
+      // Started: the list says so, and staff may still take somebody off.
+      clock = STARTED.getTime();
+      expect(await people(gym, event.id)).toMatchObject({ handsOver: false, started: true });
+      // A cancelled event hands nothing over either.
+      clock = MORNING.getTime();
+      expect((await inject("PUT", `${events(gym.id)}/${event.id}/cancelled`, gym.owner.cookies, { cancelled: true })).statusCode).toBe(200);
+      expect(await people(gym, event.id)).toMatchObject({ handsOver: false, started: false });
     },
     T,
   );
@@ -662,6 +751,18 @@ d("\"I'm coming\" on a gym's event (real Postgres, two apis)", () => {
       // Somebody waiting who is removed just leaves the line.
       expect((await inject("DELETE", `/v1/orgs/${gym.id}/members/${cal.userId}`, gym.owner.cookies)).statusCode).toBe(200);
       expect(await stored(event.id)).toEqual({ coming: 1, cancelled: 2 });
+
+      // Bea, coming, deletes her own account: her place ends and goes to Dee, waiting.
+      const dee = await member(gym, "Dee Leaver");
+      eventOf(await come(gym, event.id, dee, true));
+      expect((await inject("POST", "/v1/users/me/delete-code", bea.cookies, {})).statusCode).toBe(200);
+      const code = deleteCodes.get(bea.email);
+      if (code === undefined) throw new Error("no delete code");
+      const gone = await inject("DELETE", "/v1/users/me", bea.cookies, { code });
+      expect(gone.statusCode, gone.body).toBe(200);
+      const after = await people(gym, event.id);
+      expect([names(after.coming), names(after.waiting)]).toEqual([["Dee Leaver"], []]);
+      expect(await stored(event.id)).toEqual({ coming: 1, cancelled: 3 });
     },
     T,
   );

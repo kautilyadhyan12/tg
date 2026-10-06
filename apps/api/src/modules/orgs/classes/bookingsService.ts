@@ -588,7 +588,7 @@ export async function setBookingSettings(
     if (settings.handoverMinutes < before.handoverMinutes) {
       movedIn = await handOverComing(tx, gymId, deps.now());
       // An event's waitlist is handed over by the same setting (19c-ii).
-      await handOverComingEvents(tx, gymId, deps.now());
+      movedIn += await handOverComingEvents(tx, gymId, deps.now());
     }
     return settings;
   });
