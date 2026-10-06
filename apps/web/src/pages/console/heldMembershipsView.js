@@ -4,6 +4,7 @@
 // The one thing worked out here is the Add form's line under the start date, by the same
 // shared rule the server gives the membership with.
 import {
+  HELD_STATUS_WORDS,
   HELD_START_AHEAD_DAYS,
   HELD_START_MIN,
   MEMBERSHIP_HAS_BOOKINGS_ERROR,
@@ -21,13 +22,13 @@ import { clockLabel } from './hoursView';
 import { dayWords } from './memberListView';
 
 const TONES = { upcoming: 'plain', active: 'green', frozen: 'orange', ended: 'plain', cancelled: 'plain' };
-const TAGS = { upcoming: 'Not started', active: 'Active', frozen: 'Frozen', ended: 'Ended', cancelled: 'Cancelled' };
 
 /** The word beside a membership's name. A past member's memberships are kept and not in
  *  use, so one that would be running says so instead of "Active". */
 export function statusTag(m, past = false) {
   if (past && isLive(m)) return { tag: 'Not in use', tone: 'plain' };
-  return { tag: TAGS[m.view.status] ?? '', tone: TONES[m.view.status] ?? 'plain' };
+  // The list's rows say each state in the same words (`HELD_STATUS_WORDS`).
+  return { tag: HELD_STATUS_WORDS[m.view.status] ?? '', tone: TONES[m.view.status] ?? 'plain' };
 }
 
 /** Still in use or still to start: drawn open, with its buttons. */

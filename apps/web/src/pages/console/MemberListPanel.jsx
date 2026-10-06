@@ -17,7 +17,6 @@ import {
   appView,
   chipText,
   contactWords,
-  endsWords,
   entriesQueryString,
   filtersAreEmpty,
   gymToday,
@@ -27,6 +26,7 @@ import {
   pageTickState,
   reviewSignWords,
   duplicatesSignWords,
+  rowCells,
   rowWords,
   selectedCount,
   selectedWords,
@@ -887,6 +887,8 @@ export default function MemberListPanel({
             {page.entries.map((e, i) => {
               const app = appView(e.app, today);
               const past = e.formerAt !== null;
+              // What the membership they hold says, or the gym's own words (23a-i).
+              const cells = rowCells(e, today);
               return (
                 <li
                   key={e.entryId}
@@ -922,17 +924,21 @@ export default function MemberListPanel({
                       {rowWords(e, today, words.person).join(' · ')}
                     </span>
                     <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'status' }}>
-                      {e.status || <span className="c-t3">—</span>}
+                      {cells.status ?? <span className="c-t3">—</span>}
                     </span>
                     <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'type' }}>
-                      {e.membershipType || <span className="c-t3">—</span>}
+                      {cells.membership ?? <span className="c-t3">—</span>}
                     </span>
                     <span className="hidden md:block c-s14 c-t2 c-ell" style={{ gridArea: 'ends' }}>
-                      {past ? pastSince(e) : (endsWords(e, today) ?? <span className="c-t3">—</span>)}
+                      {past ? pastSince(e) : (cells.ends ?? <span className="c-t3">—</span>)}
                     </span>
                     {past ? null : (
-                      <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'pay' }}>
-                        {e.paymentStatus || <span className="c-t3">—</span>}
+                      <span
+                        className="hidden md:block c-s14 c-t1 c-ell"
+                        style={cells.owes ? { gridArea: 'pay', color: 'var(--warn)' } : { gridArea: 'pay' }}
+                        data-testid="row-pay"
+                      >
+                        {cells.payment ?? <span className="c-t3">—</span>}
                       </span>
                     )}
                     <span className="pt-1 md:pt-0 min-w-0" style={{ gridArea: 'app' }}>
