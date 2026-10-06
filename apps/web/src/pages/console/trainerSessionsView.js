@@ -45,10 +45,10 @@ export function overTitle(sessions) {
 export function overChangeLine(sessions, kind = 'save') {
   const one = (sessions?.count ?? 0) === 1;
   const who = oneTrainer(sessions) ?? 'the coach';
-  const start = kind === 'uncancel' ? 'If you un-cancel it, the class goes back on the calendar' : 'If you save, the class goes on the calendar';
+  const start = kind === 'uncancel' ? 'If you un-cancel it, the class goes back on the calendar' : 'If you save, this change is made';
   return one
-    ? `${start} and this session stays booked, so ${who} would be in two places at once. Move or cancel the session on the Personal training page.`
-    : `${start} and these sessions stay booked, so ${who} would be in two places at once. Move or cancel each session on the Personal training page.`;
+    ? `${start} and this session stays booked, so ${who} would be in two places at once. To move the session, cancel it on the Personal training page and book another time.`
+    : `${start} and these sessions stay booked, so ${who} would be in two places at once. To move a session, cancel it on the Personal training page and book another time.`;
 }
 
 /** Who does not change. */

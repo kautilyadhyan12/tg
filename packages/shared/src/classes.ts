@@ -286,8 +286,8 @@ export type GymClassesResponse = z.infer<typeof gymClassesResponseSchema>;
 
 /** The 409 a change to the timetable answers when it would put a class a trainer coaches
  *  over personal training sessions already booked with them. Nothing is written until the
- *  request sends `confirmTrainerSessions` equal to `sessions.count`, counted again under the
- *  gym's lock; the sessions then stay booked, for staff to move or cancel. */
+ *  request sends `confirmTrainerSessions` equal to `sessions.mark`, worked out again under
+ *  the gym's lock; the sessions then stay booked, for staff to cancel and book again. */
 export const CLASS_OVER_SESSIONS_ERROR = "class_over_pt_sessions";
 export const CLASS_OVER_SESSIONS_MESSAGE =
   "This puts a class over personal training sessions that are already booked with its coach.";
@@ -298,6 +298,10 @@ export const CLASS_OVER_SESSIONS_SHOWN = 100;
 export const classOverSessionsSchema = z
   .object({
     count: z.number().int().min(1),
+    /** One value for exactly these sessions, all `count` of them: what the request sends
+     *  back. A session cancelled and another booked in between leaves the number equal and
+     *  the mark different. */
+    mark: z.string().regex(/^[0-9a-f]{64}$/),
     /** The earliest first. */
     shown: z.array(
       z
@@ -319,8 +323,8 @@ export const classOverSessionsSchema = z
   .strict();
 export type ClassOverSessions = z.infer<typeof classOverSessionsSchema>;
 
-/** How many sessions the screen was told the change would put a class over. */
-export const confirmTrainerSessionsField = z.number().int().min(1).max(100_000);
+/** The `mark` of the sessions the screen was told the change would put a class over. */
+export const confirmTrainerSessionsField = z.string().regex(/^[0-9a-f]{64}$/);
 
 /** Un-cancelling one class carries it alone. */
 export const confirmTrainerSessionsBodySchema = z.object({ confirmTrainerSessions: confirmTrainerSessionsField.optional() }).strict();

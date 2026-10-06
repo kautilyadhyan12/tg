@@ -22,6 +22,7 @@
 // repeat and a single date carry their own. `coach_user_id` is a FK to
 // `users`, so nothing structural stops one gym naming another gym's trainer on
 // its timetable; `coachIsStaff` under the lock is what does.
+import { createHash } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
 import {
   CLASS_ARCHIVED_PAGE,
@@ -399,8 +400,16 @@ async function coachIsStaff(
 export interface OverSessions {
   kind: "over_sessions";
   count: number;
+  mark: string;
   shown: SessionUnderClass[];
 }
+
+/** One value for exactly these sessions: the request confirms it, so a session cancelled
+ *  and another booked between the question and its answer is asked about again. */
+const sessionsMark = (sessions: readonly SessionUnderClass[]): string =>
+  createHash("sha256")
+    .update(sessions.map((s) => s.appointmentId).sort().join(","))
+    .digest("hex");
 
 class OverSessionsAsk extends Error {
   constructor(readonly sessions: SessionUnderClass[]) {
@@ -415,17 +424,19 @@ type Watch = (coachIds: readonly (string | null)[]) => Promise<void>;
 /** A WRITE TO THE TIMETABLE THAT ASKS BEFORE IT PUTS A CLASS OVER A BOOKED SESSION
  *  (17e-iii-a). One transaction under the gym's lock, which a session's booking takes too.
  *  The write names its coaches (`watch`), which reads the sessions their classes already
- *  run into; once the write is done they are read again, and a session under a class of a
- *  kind that was not over it before is new (the same class moved or made longer over a
- *  session staff already said yes to is not). With any new one the request must have confirmed
- *  their number, or everything the write did is rolled back and the sessions are the
- *  answer. Read off the calendar as written, so no way of writing a class goes round it. */
+ *  run into; once the write is done they are read again, and a session under a class that
+ *  was not over it before is new. The same class changed where it stands, made longer or
+ *  moved on its day, over a session staff already said yes to is not; a second class over
+ *  that session is, and so is a time slot moved, whose classes are written again. With any
+ *  new one the request must have confirmed exactly those sessions (their mark), or
+ *  everything the write did is rolled back and the sessions are the answer. Read off the
+ *  calendar as written, so no way of writing a class goes round it. */
 async function askingTrainers<T extends { kind: string }>(
   sql: Sql,
-  w: { gymId: string; confirmTrainerSessions: number | null; now: Date },
+  w: { gymId: string; confirmTrainerSessions: string | null; now: Date },
   write: (tx: TransactionSql, watch: Watch) => Promise<T>,
 ): Promise<T | OverSessions> {
-  const pair = (r: SessionUnderClass): string => `${r.appointmentId}|${r.classTypeId}`;
+  const pair = (r: SessionUnderClass): string => `${r.appointmentId}|${r.classId}`;
   // Held in objects: both are set inside a callback.
   const held: { outcome: T | null } = { outcome: null };
   try {
@@ -443,11 +454,17 @@ async function askingTrainers<T extends { kind: string }>(
       for (const row of await sessionsUnderClasses(tx, w.gymId, watched.coaches, w.now)) {
         if (!watched.before.has(pair(row)) && !fresh.has(row.appointmentId)) fresh.set(row.appointmentId, row);
       }
-      if (fresh.size > 0 && fresh.size !== w.confirmTrainerSessions) throw new OverSessionsAsk([...fresh.values()]);
+      const found = [...fresh.values()];
+      if (found.length > 0 && sessionsMark(found) !== w.confirmTrainerSessions) throw new OverSessionsAsk(found);
     });
   } catch (err) {
     if (!(err instanceof OverSessionsAsk)) throw err;
-    return { kind: "over_sessions", count: err.sessions.length, shown: err.sessions.slice(0, CLASS_OVER_SESSIONS_SHOWN) };
+    return {
+      kind: "over_sessions",
+      count: err.sessions.length,
+      mark: sessionsMark(err.sessions),
+      shown: err.sessions.slice(0, CLASS_OVER_SESSIONS_SHOWN),
+    };
   }
   if (held.outcome === null) throw new Error("a timetable write gave no answer");
   return held.outcome;
@@ -500,7 +517,7 @@ export async function updateClassType(
   input: ClassTypeInput & {
     gymId: string;
     classTypeId: string;
-    confirmTrainerSessions: number | null;
+    confirmTrainerSessions: string | null;
     actorUserId: string;
     now: Date;
   },
@@ -722,7 +739,7 @@ export async function createSchedule(
     ClassScheduleFields & {
       gymId: string;
       classTypeId: string;
-      confirmTrainerSessions: number | null;
+      confirmTrainerSessions: string | null;
       actorUserId: string;
       now: Date;
     },
@@ -1016,7 +1033,7 @@ export async function changeSlotFrom(
     startMinute: number;
     confirmReplace: number | null;
     confirmBookings: number | null;
-    confirmTrainerSessions: number | null;
+    confirmTrainerSessions: string | null;
     actorUserId: string;
     now: Date;
   },
@@ -1406,7 +1423,7 @@ export async function bulkChangeSlots(
     scheduleIds: readonly string[];
     updateFrom: string;
     set: BulkEditSet;
-    confirmTrainerSessions: number | null;
+    confirmTrainerSessions: string | null;
     actorUserId: string;
     now: Date;
   },
@@ -1799,7 +1816,7 @@ export async function changeSession(
   input: ClassDayInput & {
     gymId: string;
     sessionId: string;
-    confirmTrainerSessions: number | null;
+    confirmTrainerSessions: string | null;
     actorUserId: string;
     now: Date;
   },

@@ -93,7 +93,7 @@ function sendBookings(reply: FastifyReply, req: FastifyRequest, ending: ClassBoo
 }
 
 /** The 409 a change answers when it would put a class over personal training sessions
- *  booked with its coach: which they are, for the screen to show and send their number
+ *  booked with its coach: which they are, for the screen to show and send their mark
  *  back as `confirmTrainerSessions`. */
 function sendSessions(reply: FastifyReply, req: FastifyRequest, sessions: ClassOverSessions) {
   return reply.status(409).send({

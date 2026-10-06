@@ -81,8 +81,8 @@ export type BookingsAnswer<T> = { kind: "ok"; body: T } | { kind: "bookings"; en
 
 /** A change that would put a class over personal training sessions booked with its coach
  *  answers with the sessions until the request confirms their number: the route turns
- *  that into a 409 `class_over_pt_sessions`, and the screen asks before sending the
- *  number back as `confirmTrainerSessions` (17e-iii-a). */
+ *  that into a 409 `class_over_pt_sessions`, and the screen asks before sending their
+ *  mark back as `confirmTrainerSessions` (17e-iii-a). */
 export type SessionsAnswer<T> = { kind: "ok"; body: T } | { kind: "sessions"; sessions: ClassOverSessions };
 
 /** The sessions as staff who run the timetable read them: the trainer and the person by
@@ -92,6 +92,7 @@ function toSessions(over: repo.OverSessions): { kind: "sessions"; sessions: Clas
     kind: "sessions",
     sessions: {
       count: over.count,
+      mark: over.mark,
       shown: over.shown.map((r) => ({
         id: r.appointmentId,
         trainerName: fullName({ displayName: r.trainerName, email: r.trainerEmail, recordName: null }).name ?? r.trainerEmail,
@@ -643,7 +644,7 @@ async function writeDay(
   gymId: string,
   sessionId: string,
   input: repo.ClassDayInput,
-  confirmTrainerSessions: number | null = null,
+  confirmTrainerSessions: string | null = null,
 ): Promise<BookingsAnswer<GymClassWeekResponse> | SessionsAnswer<GymClassWeekResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const outcome = await repo.changeSession(deps.sql, {
@@ -768,7 +769,7 @@ export async function restoreClassSession(
   userId: string,
   gymId: string,
   sessionId: string,
-  confirmTrainerSessions: number | null,
+  confirmTrainerSessions: string | null,
 ): Promise<SessionsAnswer<GymClassWeekResponse>> {
   const done = await writeDay(deps, userId, gymId, sessionId, { action: "restore" }, confirmTrainerSessions);
   if (done.kind === "bookings") throw new Error("putting a class back asked about bookings");

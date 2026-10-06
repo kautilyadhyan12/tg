@@ -1082,14 +1082,15 @@ const overSession = (n, over = {}) => ({
   minutes: 60,
   ...over,
 });
+const OVER_MARK = 'a'.repeat(64);
 const overSessions = (count, shown) => ({
-  response: { status: 409, data: { error: 'class_over_pt_sessions', sessions: { count, shown } } },
+  response: { status: 409, data: { error: 'class_over_pt_sessions', sessions: { count, mark: OVER_MARK, shown } } },
 });
 
 describe("a class saved over its coach's personal training sessions", () => {
   const TITLE = 'Priya Sharma has a personal training session at this time';
 
-  it('a new time slot names the session where Add was, Go back sends nothing, and Save anyway sends the same body with its number', async () => {
+  it('a new time slot names the session where Add was, Go back sends nothing, and Save anyway sends the same body with its mark', async () => {
     api.addClassRepeat.mockRejectedValueOnce(overSessions(1, [overSession(1, { name: 'Maya Lopez' })]));
     drawScreen();
     await screen.findByText('Sunrise Yoga');
@@ -1103,7 +1104,7 @@ describe("a class saved over its coach's personal training sessions", () => {
     expect(await screen.findByText(TITLE)).toBeTruthy();
     expect(screen.getByText('Maya Lopez')).toBeTruthy();
     expect(screen.getByText('Fri 9 Oct · 10:00–11:00')).toBeTruthy();
-    expect(screen.getByText(/this session stays booked, so Priya Sharma would be in two places at once/)).toBeTruthy();
+    expect(screen.getByText(/this session stays booked, so Priya Sharma would be in two places at once\. To move the session, cancel it/)).toBeTruthy();
     expect(screen.getByText("Saving doesn't cancel anybody's session or take anything off a pack.")).toBeTruthy();
     // The box stands where the form's own button was.
     expect(screen.queryByRole('button', { name: 'Add time slot' })).toBeNull();
@@ -1120,7 +1121,7 @@ describe("a class saved over its coach's personal training sessions", () => {
     const first = api.addClassRepeat.mock.calls[0][2];
     expect(first).not.toHaveProperty('confirmTrainerSessions');
     expect(first).toMatchObject({ weekdays: [5], startMinute: 630 });
-    expect(api.addClassRepeat.mock.calls[2][2]).toEqual({ ...first, confirmTrainerSessions: 1 });
+    expect(api.addClassRepeat.mock.calls[2][2]).toEqual({ ...first, confirmTrainerSessions: OVER_MARK });
     // Saved: the form has closed.
     await waitFor(() => expect(screen.queryByText('New time slot')).toBeNull());
   });
@@ -1157,7 +1158,7 @@ describe("a class saved over its coach's personal training sessions", () => {
     expect(screen.getByText('Member 5')).toBeTruthy();
   });
 
-  it('an edited time slot asks the same way, and Save anyway sends what Save sent with the number', async () => {
+  it('an edited time slot asks the same way, and Save anyway sends what Save sent with the mark', async () => {
     api.updateClassRepeat.mockRejectedValueOnce(overSessions(1, [overSession(1)]));
     drawScreen();
     await screen.findByText('Sunrise Yoga');
@@ -1171,7 +1172,7 @@ describe("a class saved over its coach's personal training sessions", () => {
     await waitFor(() => expect(api.updateClassRepeat).toHaveBeenCalledTimes(2));
     const first = api.updateClassRepeat.mock.calls[0][2];
     expect(first).toMatchObject({ coachUserId: 'u9' });
-    expect(api.updateClassRepeat.mock.calls[1][2]).toEqual({ ...first, confirmTrainerSessions: 1 });
+    expect(api.updateClassRepeat.mock.calls[1][2]).toEqual({ ...first, confirmTrainerSessions: OVER_MARK });
     await waitFor(() => expect(screen.queryByLabelText('Update from')).toBeNull());
   });
 
@@ -1186,7 +1187,7 @@ describe("a class saved over its coach's personal training sessions", () => {
     await screen.findByText(TITLE);
     fireEvent.click(screen.getByRole('button', { name: 'Save anyway' }));
     await waitFor(() => expect(api.updateClass).toHaveBeenCalledTimes(2));
-    expect(api.updateClass.mock.calls[1][2]).toEqual({ ...api.updateClass.mock.calls[0][2], confirmTrainerSessions: 1 });
+    expect(api.updateClass.mock.calls[1][2]).toEqual({ ...api.updateClass.mock.calls[0][2], confirmTrainerSessions: OVER_MARK });
   });
 
   it('a bulk edit asks the same way', async () => {
@@ -1204,6 +1205,6 @@ describe("a class saved over its coach's personal training sessions", () => {
     expect(screen.getByText('Fri 9 Oct · 10:00–11:00 · with Dana Okafor')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Save anyway' }));
     await waitFor(() => expect(api.bulkEditClass).toHaveBeenCalledTimes(2));
-    expect(api.bulkEditClass.mock.calls[1][2]).toEqual({ ...api.bulkEditClass.mock.calls[0][2], confirmTrainerSessions: 2 });
+    expect(api.bulkEditClass.mock.calls[1][2]).toEqual({ ...api.bulkEditClass.mock.calls[0][2], confirmTrainerSessions: OVER_MARK });
   });
 });

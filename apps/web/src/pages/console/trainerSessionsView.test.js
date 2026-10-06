@@ -19,7 +19,7 @@ const session = (n, over = {}) => ({
   minutes: 60,
   ...over,
 });
-const sessions = (count, shown) => ({ count, shown });
+const sessions = (count, shown) => ({ count, mark: 'a'.repeat(64), shown });
 const refusal = (data) => ({ response: { status: 409, data } });
 
 describe('a class over personal training sessions, in words', () => {
@@ -28,7 +28,8 @@ describe('a class over personal training sessions, in words', () => {
     expect(sessionsAsked(refusal({ error: 'class_over_pt_sessions', sessions: asked }))).toEqual(asked);
     expect(sessionsAsked(refusal({ error: 'class_has_bookings', sessions: asked }))).toBeNull();
     expect(sessionsAsked(refusal({ error: 'class_over_pt_sessions' }))).toBeNull();
-    expect(sessionsAsked(refusal({ error: 'class_over_pt_sessions', sessions: { count: 1, shown: [] } }))).toBeNull();
+    expect(sessionsAsked(refusal({ error: 'class_over_pt_sessions', sessions: { count: 1, mark: 'a'.repeat(64), shown: [] } }))).toBeNull();
+    expect(sessionsAsked(refusal({ error: 'class_over_pt_sessions', sessions: { count: 1, shown: [session(1)] } }))).toBeNull();
     expect(sessionsAsked(refusal({ error: 'class_over_pt_sessions', sessions: { count: 1, shown: [{ name: 'Maya' }] } }))).toBeNull();
     expect(sessionsAsked(new Error('offline'))).toBeNull();
     expect(sessionsAsked(null)).toBeNull();
@@ -45,16 +46,16 @@ describe('a class over personal training sessions, in words', () => {
 
   it('says what saving does, to whom, and who does not change', () => {
     expect(overChangeLine(sessions(1, [session(1)]))).toBe(
-      'If you save, the class goes on the calendar and this session stays booked, so Sam Reed would be in two places at once. Move or cancel the session on the Personal training page.',
+      'If you save, this change is made and this session stays booked, so Sam Reed would be in two places at once. To move the session, cancel it on the Personal training page and book another time.',
     );
     expect(overChangeLine(sessions(2, [session(1), session(2, { trainerName: 'Ana Diaz' })]))).toBe(
-      'If you save, the class goes on the calendar and these sessions stay booked, so the coach would be in two places at once. Move or cancel each session on the Personal training page.',
+      'If you save, this change is made and these sessions stay booked, so the coach would be in two places at once. To move a session, cancel it on the Personal training page and book another time.',
     );
     expect(overKeptLine()).toBe("Saving doesn't cancel anybody's session or take anything off a pack.");
     expect(overConfirmLabel()).toBe('Save anyway');
     // A cancelled class put back has no Save: its words are Un-cancel's.
     expect(overChangeLine(sessions(1, [session(1)]), 'uncancel')).toBe(
-      'If you un-cancel it, the class goes back on the calendar and this session stays booked, so Sam Reed would be in two places at once. Move or cancel the session on the Personal training page.',
+      'If you un-cancel it, the class goes back on the calendar and this session stays booked, so Sam Reed would be in two places at once. To move the session, cancel it on the Personal training page and book another time.',
     );
     expect(overKeptLine('uncancel')).toBe("Un-cancelling doesn't cancel anybody's session or take anything off a pack.");
     expect(overConfirmLabel('uncancel')).toBe('Un-cancel anyway');

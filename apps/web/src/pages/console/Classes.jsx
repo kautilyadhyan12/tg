@@ -584,7 +584,7 @@ export default function Classes() {
 
   // A save the server may ask about first: a class over personal training sessions
   // booked with its coach is a question, shown where Save was, and its answer is the same
-  // body sent again with their number. True when saved, null when asked, false otherwise.
+  // body sent again with their mark. True when saved, null when asked, false otherwise.
   const saveAsking = async (key, body, call) => {
     setBusy(key);
     setActionError(null);
@@ -617,7 +617,7 @@ export default function Classes() {
         clockFormat={lists.clockFormat}
         busy={busy !== null}
         onCancel={() => setSessionAsk(null)}
-        onConfirm={() => void resend({ ...sessionAsk.body, confirmTrainerSessions: sessionAsk.sessions.count })}
+        onConfirm={() => void resend({ ...sessionAsk.body, confirmTrainerSessions: sessionAsk.sessions.mark })}
       />
     );
   };

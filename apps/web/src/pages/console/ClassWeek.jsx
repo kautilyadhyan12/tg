@@ -149,7 +149,7 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
     setEnding(done !== null && typeof done === 'object' ? (done.ending ?? null) : null);
   };
   // A change sent, and what it answered; a class over a trainer's sessions is kept with
-  // the body that asked, so its answer is that body again with their number.
+  // the body that asked, so its answer is that body again with their mark.
   const send = async (body) => {
     const done = await onChange(body);
     const sessions = done !== null && typeof done === 'object' ? (done.sessions ?? null) : null;
@@ -170,8 +170,8 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
         busy={busy}
         onCancel={() => setOver(null)}
         onConfirm={async () => {
-          if (over.body === null) await restore(over.sessions.count);
-          else settle(await send({ ...over.body, confirmTrainerSessions: over.sessions.count }));
+          if (over.body === null) await restore(over.sessions.mark);
+          else settle(await send({ ...over.body, confirmTrainerSessions: over.sessions.mark }));
         }}
       />
     );

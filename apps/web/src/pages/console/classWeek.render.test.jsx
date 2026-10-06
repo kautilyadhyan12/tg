@@ -659,14 +659,15 @@ const overSession = (n, over = {}) => ({
   minutes: 60,
   ...over,
 });
+const OVER_MARK = 'a'.repeat(64);
 const overSessions = (count, shown) => ({
-  response: { status: 409, data: { error: 'class_over_pt_sessions', sessions: { count, shown } } },
+  response: { status: 409, data: { error: 'class_over_pt_sessions', sessions: { count, mark: OVER_MARK, shown } } },
 });
 
 describe("a class on the Calendar saved over its coach's personal training sessions", () => {
   const TITLE = 'Priya Sharma has a personal training session at this time';
 
-  it('Un-cancel names the session first, and Save anyway sends its number', async () => {
+  it('Un-cancel names the session first, and Save anyway sends its mark', async () => {
     api.restoreClassDay.mockRejectedValueOnce(overSessions(1, [overSession(1, { name: 'Maya Lopez' })]));
     draw();
     await openDay('Yoga on Wed 23 Sep 2026 at 07:00, cancelled');
@@ -684,11 +685,11 @@ describe("a class on the Calendar saved over its coach's personal training sessi
     fireEvent.click(screen.getByRole('button', { name: 'Un-cancel' }));
     expect(await screen.findByText(/^If you un-cancel it, the class goes back on the calendar/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Un-cancel anyway' }));
-    await waitFor(() => expect(api.restoreClassDay).toHaveBeenLastCalledWith('g1', 'x2', 1));
+    await waitFor(() => expect(api.restoreClassDay).toHaveBeenLastCalledWith('g1', 'x2', OVER_MARK));
     expect(api.restoreClassDay).toHaveBeenCalledTimes(3);
   });
 
-  it('an edited class names the session where Save was, a change to the form takes the box away, and Save anyway sends the body with its number', async () => {
+  it('an edited class names the session where Save was, a change to the form takes the box away, and Save anyway sends the body with its mark', async () => {
     api.changeClassDay.mockRejectedValueOnce(overSessions(1, [overSession(1)]));
     draw();
     await openDay('Spin on Tue 22 Sep 2026 at 18:00');
@@ -710,7 +711,7 @@ describe("a class on the Calendar saved over its coach's personal training sessi
       minutes: 45,
       places: 12,
       coachUserId: 'u8',
-      confirmTrainerSessions: 1,
+      confirmTrainerSessions: OVER_MARK,
     });
   });
 });

@@ -366,7 +366,8 @@ export interface SessionUnderClass {
   localStartMinute: number;
   minutes: number;
   className: string;
-  classTypeId: string;
+  /** The class's own row on the calendar. */
+  classId: string;
 }
 
 /** The sessions booked with these trainers, not yet over, that a taught class they coach
@@ -386,12 +387,12 @@ export async function sessionsUnderClasses(sql: SqlOrTx, gymId: string, trainerI
       local_start_minute: number;
       minutes: number;
       class_name: string;
-      class_type_id: string;
+      class_id: string;
     }[]
   >`
     SELECT a.id, u.display_name AS trainer_name, u.email AS trainer_email, e.full_name AS person_name,
            a.local_date::text AS local_date, a.local_start_minute, a.minutes,
-           t.name AS class_name, s.class_type_id
+           t.name AS class_name, s.id AS class_id
     FROM gym_class_sessions s
     JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id AND NOT t.open_gym
     JOIN gym_pt_appointments a
@@ -415,6 +416,6 @@ export async function sessionsUnderClasses(sql: SqlOrTx, gymId: string, trainerI
     localStartMinute: r.local_start_minute,
     minutes: r.minutes,
     className: r.class_name,
-    classTypeId: r.class_type_id,
+    classId: r.class_id,
   }));
 }

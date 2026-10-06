@@ -1671,7 +1671,7 @@ export const orgService = {
   updateBookingSettings: (gymId, body) =>
     readThrough(classBookingSettingsResponseSchema, 'your booking settings', authApi.put(`/v1/orgs/${gymId}/booking-settings`, body)),
 
-  /** `confirmTrainerSessions`: the number of personal training sessions the server said
+  /** `confirmTrainerSessions`: the mark of the personal training sessions the server said
    *  the class would run over (409 `class_over_pt_sessions`); nothing until then. */
   restoreClassDay: (gymId, sessionId, confirmTrainerSessions = null) =>
     readThrough(
@@ -1679,7 +1679,7 @@ export const orgService = {
       'that day',
       authApi.post(
         `/v1/orgs/${gymId}/class-sessions/${sessionId}/restore`,
-        Number.isInteger(confirmTrainerSessions) && confirmTrainerSessions > 0 ? { confirmTrainerSessions } : {},
+        typeof confirmTrainerSessions === 'string' && confirmTrainerSessions !== '' ? { confirmTrainerSessions } : {},
       ),
     ),
 

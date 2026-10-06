@@ -147,7 +147,7 @@ async function newClass(): Promise<string> {
 
 const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
 /** A time slot every day from 08:00 to 18:00: over twenty of the trainer's sessions a day. */
-const slotOf = (coachUserId: string | null, startMinute = 480, minutes = 600, confirm?: number) => ({
+const slotOf = (coachUserId: string | null, startMinute = 480, minutes = 600, confirm?: string) => ({
   weekdays: EVERY_DAY,
   startMinute,
   startsOn: today,
@@ -191,6 +191,7 @@ console.log(
 );
 
 let under = 0;
+let underMark = "";
 await measure("a new time slot every day, no coach (as before this job)", newClass, async (type) => {
   const done = await createSchedule(deps, owner, gymId, type, slotOf(null));
   if (done.kind !== "ok") throw new Error("not saved");
@@ -203,9 +204,10 @@ await measure("the same, the trainer as coach: asked, nothing written", newClass
   const done = await createSchedule(deps, owner, gymId, type, slotOf(trainer));
   if (done.kind !== "sessions") throw new Error("not asked");
   under = done.sessions.count;
+  underMark = done.sessions.mark;
 });
 await measure("the same, confirmed: saved over the sessions", newClass, async (type) => {
-  const done = await createSchedule(deps, owner, gymId, type, slotOf(trainer, 480, 600, under));
+  const done = await createSchedule(deps, owner, gymId, type, slotOf(trainer, 480, 600, underMark));
   if (done.kind !== "ok") throw new Error("not saved");
 });
 console.log(`  (that time slot runs over ${String(under)} of the trainer's sessions; the box is sent the first 100)`);
@@ -221,7 +223,7 @@ async function twelveSlots(): Promise<{ type: string; ids: string[] }> {
   }
   return { type, ids };
 }
-let bulkUnder = 0;
+let bulkMark = "";
 await measure("bulk edit: twelve time slots given to a coach with no session", twelveSlots, async ({ type, ids }) => {
   const done = await bulkEditSchedules(deps, owner, gymId, type, { scheduleIds: ids, updateFrom: today, set: { coachUserId: idle } });
   if (done.kind !== "ok") throw new Error("not saved");
@@ -229,14 +231,14 @@ await measure("bulk edit: twelve time slots given to a coach with no session", t
 await measure("bulk edit: twelve time slots given to the trainer, asked", twelveSlots, async ({ type, ids }) => {
   const done = await bulkEditSchedules(deps, owner, gymId, type, { scheduleIds: ids, updateFrom: today, set: { coachUserId: trainer } });
   if (done.kind !== "sessions") throw new Error("not asked");
-  bulkUnder = done.sessions.count;
+  bulkMark = done.sessions.mark;
 });
 await measure("bulk edit: the same, confirmed", twelveSlots, async ({ type, ids }) => {
   const done = await bulkEditSchedules(deps, owner, gymId, type, {
     scheduleIds: ids,
     updateFrom: today,
     set: { coachUserId: trainer },
-    confirmTrainerSessions: bulkUnder,
+    confirmTrainerSessions: bulkMark,
   });
   if (done.kind !== "ok") throw new Error("not saved");
 });

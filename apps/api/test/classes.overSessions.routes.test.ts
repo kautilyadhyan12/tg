@@ -39,6 +39,8 @@ const TODAY = "2026-10-07";
 const FRIDAY = "2026-10-09";
 const NEXT_FRIDAY = "2026-10-16";
 const at = (hour: number, minute = 0): number => hour * 60 + minute;
+/** A mark no set of sessions has. */
+const WRONG = "0".repeat(64);
 
 let ipCounter = 0;
 const nextIp = () => `10.78.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
@@ -63,6 +65,7 @@ d("a class put over a personal training session (real Postgres, two api instance
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_pt_appointments WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_trainers WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_bookings WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_class_schedules WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_class_types WHERE gym_id IN (${mine})`;
@@ -198,7 +201,7 @@ d("a class put over a personal training session (real Postgres, two api instance
     places: 10,
     coachUserId: over.coachUserId ?? null,
   });
-  const addSlot = (gym: Gym, typeId: string, over: SlotBody, confirm?: number, by: Person = gym.owner, target = api()) =>
+  const addSlot = (gym: Gym, typeId: string, over: SlotBody, confirm?: string, by: Person = gym.owner, target = api()) =>
     inject(
       "POST",
       `/v1/orgs/${gym.id}/classes/${typeId}/repeats`,
@@ -218,10 +221,11 @@ d("a class put over a personal training session (real Postgres, two api instance
     if (found === undefined) throw new Error("the time slot was not answered");
     return found.id;
   };
-  const editSlot = (gym: Gym, scheduleId: string, over: SlotBody, confirm?: number) =>
+  const editSlot = (gym: Gym, scheduleId: string, over: SlotBody, confirm?: string, more: Record<string, number> = {}) =>
     inject("PUT", `/v1/orgs/${gym.id}/class-repeats/${scheduleId}`, gym.owner.cookies, {
       ...slotBody(over),
       updateFrom: TODAY,
+      ...more,
       ...(confirm === undefined ? {} : { confirmTrainerSessions: confirm }),
     });
   /** The class of one kind on a day of the calendar. */
@@ -232,7 +236,7 @@ d("a class put over a personal training session (real Postgres, two api instance
     if (found === undefined) throw new Error(`no class on ${day}`);
     return found.id;
   };
-  const changeClass = (gym: Gym, sessionId: string, scope: "this" | "future", over: SlotBody, confirm?: number) => {
+  const changeClass = (gym: Gym, sessionId: string, scope: "this" | "future", over: SlotBody, confirm?: string) => {
     const fields = slotBody(over);
     return inject("PUT", `/v1/orgs/${gym.id}/class-sessions/${sessionId}`, gym.owner.cookies, {
       scope,
@@ -261,8 +265,11 @@ d("a class put over a personal training session (real Postgres, two api instance
     const classes = await sql`
       SELECT id, schedule_id, local_date::text, local_start_minute, starts_at, minutes, places, coach_user_id, status, changed_alone
       FROM gym_class_sessions WHERE gym_id = ${gym.id} ORDER BY id`;
+    const bookings = await sql`SELECT id, session_id, status, pack_charged, cancelled_at FROM gym_class_bookings WHERE gym_id = ${gym.id} ORDER BY id`;
+    const packs = await sql`SELECT id, status, classes_left FROM gym_held_memberships WHERE gym_id = ${gym.id} ORDER BY id`;
+    const sessions = await sql`SELECT id, status, pack_charged FROM gym_pt_appointments WHERE gym_id = ${gym.id} ORDER BY id`;
     const [audit] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id}`;
-    return JSON.stringify({ types, slots, classes, audit: audit?.n });
+    return JSON.stringify({ types, slots, classes, bookings, packs, sessions, audit: audit?.n });
   };
 
   beforeAll(async () => {
@@ -299,8 +306,10 @@ d("a class put over a personal training session (real Postgres, two api instance
     /** What is on the timetable before Maya books. */
     before?: (gym: Gym, sam: Person) => Promise<Record<string, string>>;
     /** The change itself; `made` is what `before` answered. */
-    act: (gym: Gym, sam: Person, made: Record<string, string>, confirm?: number) => Promise<Reply>;
+    act: (gym: Gym, sam: Person, made: Record<string, string>, confirm?: string) => Promise<Reply>;
     ok: number;
+    /** What the same change answers once it is saved: its status, and its error if refused. */
+    again: [number, string | null];
     className: string;
   }
   const WAYS: Way[] = [
@@ -309,6 +318,7 @@ d("a class put over a personal training session (real Postgres, two api instance
       before: async (gym) => ({ type: await makeType(gym, "Spin") }),
       act: (gym, sam, made, confirm) => addSlot(gym, made["type"] ?? "", { coachUserId: sam.userId }, confirm),
       ok: 201,
+      again: [409, "repeat_clashes"],
       className: "Spin",
     },
     {
@@ -319,6 +329,7 @@ d("a class put over a personal training session (real Postgres, two api instance
       },
       act: (gym, sam, made, confirm) => editSlot(gym, made["slot"] ?? "", { coachUserId: sam.userId }, confirm),
       ok: 200,
+      again: [200, null],
       className: "Spin",
     },
     {
@@ -329,6 +340,8 @@ d("a class put over a personal training session (real Postgres, two api instance
       },
       act: (gym, sam, made, confirm) => editSlot(gym, made["slot"] ?? "", { coachUserId: sam.userId }, confirm),
       ok: 200,
+      // A move ends the time slot and starts another: the old one is no longer there.
+      again: [404, "class_not_found"],
       className: "Spin",
     },
     {
@@ -339,6 +352,7 @@ d("a class put over a personal training session (real Postgres, two api instance
       },
       act: (gym, sam, made, confirm) => editSlot(gym, made["slot"] ?? "", { startMinute: at(9), minutes: 90, coachUserId: sam.userId }, confirm),
       ok: 200,
+      again: [200, null],
       className: "Spin",
     },
     {
@@ -350,6 +364,7 @@ d("a class put over a personal training session (real Postgres, two api instance
       },
       act: (gym, sam, made, confirm) => changeClass(gym, made["session"] ?? "", "future", { coachUserId: sam.userId }, confirm),
       ok: 200,
+      again: [200, null],
       className: "Spin",
     },
     {
@@ -368,6 +383,7 @@ d("a class put over a personal training session (real Postgres, two api instance
           ...(confirm === undefined ? {} : { confirmTrainerSessions: confirm }),
         }),
       ok: 200,
+      again: [200, null],
       className: "Spin",
     },
     {
@@ -379,6 +395,7 @@ d("a class put over a personal training session (real Postgres, two api instance
       },
       act: (gym, sam, made, confirm) => changeClass(gym, made["session"] ?? "", "this", { coachUserId: sam.userId }, confirm),
       ok: 200,
+      again: [200, null],
       className: "Spin",
     },
     {
@@ -390,6 +407,7 @@ d("a class put over a personal training session (real Postgres, two api instance
       },
       act: (gym, sam, made, confirm) => changeClass(gym, made["session"] ?? "", "this", { startMinute: at(10, 45), coachUserId: sam.userId }, confirm),
       ok: 200,
+      again: [200, null],
       className: "Spin",
     },
     {
@@ -410,6 +428,7 @@ d("a class put over a personal training session (real Postgres, two api instance
           confirm === undefined ? {} : { confirmTrainerSessions: confirm },
         ),
       ok: 200,
+      again: [200, null],
       className: "Spin",
     },
     {
@@ -429,6 +448,7 @@ d("a class put over a personal training session (real Postgres, two api instance
           ...(confirm === undefined ? {} : { confirmTrainerSessions: confirm }),
         }),
       ok: 200,
+      again: [200, null],
       className: "Open floor",
     },
   ];
@@ -445,9 +465,11 @@ d("a class put over a personal training session (real Postgres, two api instance
       expect(await packLeft(held)).toBe(9);
       const stood = await written(gym);
 
-      // No confirm, and a confirm of the wrong number: asked, and nothing written.
-      for (const confirm of [undefined, 2]) {
+      // No confirm, and a confirm that is not these sessions' mark: asked, and nothing written.
+      let mark = "";
+      for (const confirm of [undefined, WRONG]) {
         const ask = asked(await way.act(gym, sam, made, confirm));
+        mark = ask.mark;
         expect(ask.count).toBe(1);
         expect(ask.shown).toEqual([
           { id: session.id, trainerName: "Sam Reed", name: "Maya Lopez", className: way.className, localDate: FRIDAY, localStartMinute: at(10), minutes: 60 },
@@ -456,7 +478,7 @@ d("a class put over a personal training session (real Postgres, two api instance
       }
 
       // Confirmed: the class is on the timetable, and Maya's session and her pack are as they were.
-      const res = await way.act(gym, sam, made, 1);
+      const res = await way.act(gym, sam, made, mark);
       expect(res.statusCode, res.body).toBe(way.ok);
       expect(await written(gym)).not.toBe(stood);
       const [over] = await sql<{ n: number }[]>`
@@ -467,9 +489,10 @@ d("a class put over a personal training session (real Postgres, two api instance
       expect(await appointments(gym)).toEqual([{ id: session.id, status: "booked", pack_charged: true }]);
       expect(await packLeft(held)).toBe(9);
 
-      // The same change again has nothing new to ask about.
+      // The same change again has nothing new to ask about, and answers as it would have
+      // with no session there.
       const again = await way.act(gym, sam, made);
-      expect(again.statusCode === 409 ? errorOf(again) : "saved").not.toBe("class_over_pt_sessions");
+      expect([again.statusCode, again.statusCode === 200 ? null : errorOf(again)], again.body).toEqual(way.again);
     },
   );
 
@@ -486,6 +509,7 @@ d("a class put over a personal training session (real Postgres, two api instance
 
     const ask = asked(await addSlot(gym, type, { coachUserId: sam.userId }));
     expect(ask.count).toBe(2);
+    expect(ask.mark).toMatch(/^[0-9a-f]{64}$/);
     expect(ask.shown.map((s) => [s.id, s.name, s.localDate])).toEqual([
       [first.id, "Maya Lopez", FRIDAY],
       [later.id, "Leo Park", NEXT_FRIDAY],
@@ -494,10 +518,87 @@ d("a class put over a personal training session (real Postgres, two api instance
     // A third is booked before staff press the button: the number they were shown is no longer it.
     const third = await booked(gym, sam, maya, { day: "2026-10-23", minute: at(10) });
     const stood = await written(gym);
-    const stale = asked(await addSlot(gym, type, { coachUserId: sam.userId }, 2));
+    const stale = asked(await addSlot(gym, type, { coachUserId: sam.userId }, ask.mark));
     expect([stale.count, stale.shown.map((s) => s.id)]).toEqual([3, [first.id, later.id, third.id]]);
+    expect(stale.mark).not.toBe(ask.mark);
     expect(await written(gym)).toBe(stood);
-    expect((await addSlot(gym, type, { coachUserId: sam.userId }, 3)).statusCode).toBe(201);
+    expect((await addSlot(gym, type, { coachUserId: sam.userId }, stale.mark)).statusCode).toBe(201);
+  });
+
+  it("one session cancelled and another booked while the box is open: the number is the same, and the new person is still asked about", async () => {
+    const gym = await makeGym(`Swap ${uniq()}`);
+    const sam = await trainer(gym, "Sam Reed");
+    const maya = await listed(gym, "Maya Lopez");
+    const leo = await listed(gym, "Leo Park");
+    const type = await makeType(gym, "Spin");
+    const mayas = await booked(gym, sam, maya);
+    const shown = asked(await addSlot(gym, type, { coachUserId: sam.userId }));
+    expect([shown.count, shown.shown.map((s) => s.name)]).toEqual([1, ["Maya Lopez"]]);
+
+    const cancel = await inject("POST", `/v1/orgs/${gym.id}/pt/appointments/${mayas.id}/cancel`, gym.owner.cookies, { lateOk: false, giveBack: false });
+    expect(cancel.statusCode, cancel.body).toBe(200);
+    await booked(gym, sam, leo);
+    const stood = await written(gym);
+    // Staff press the button under Maya's name. Leo was never shown to them.
+    const swapped = asked(await addSlot(gym, type, { coachUserId: sam.userId }, shown.mark));
+    expect([swapped.count, swapped.shown.map((s) => s.name)]).toEqual([1, ["Leo Park"]]);
+    expect(swapped.mark).not.toBe(shown.mark);
+    expect(await written(gym)).toBe(stood);
+    expect((await addSlot(gym, type, { coachUserId: sam.userId }, swapped.mark)).statusCode).toBe(201);
+  });
+
+  it("a move that ends people's class bookings and is then stopped by the sessions question ends nobody's booking", async () => {
+    const gym = await makeGym(`Both ${uniq()}`);
+    const sam = await trainer(gym, "Sam Reed");
+    const maya = await listed(gym, "Maya Lopez");
+    const leo = await listed(gym, "Leo Park");
+    await pack(gym, maya);
+    const leosPack = await pack(gym, leo);
+    const type = await makeType(gym, "Spin");
+    const slotId = await slot(gym, type, { startMinute: at(15), coachUserId: sam.userId });
+    const friday = await classOn(gym, type, FRIDAY);
+    // Leo holds a place on Friday's 15:00 class, paid with a class off his pack.
+    await sql`UPDATE gym_held_memberships SET classes_left = 9 WHERE id = ${leosPack}`;
+    await sql`
+      INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, held_membership_id, status, pack_charged, request_key, booked_at)
+      VALUES (${gym.id}, ${friday}, ${gym.owner.userId}, ${leo}, ${leosPack}, 'booked', true, gen_random_uuid(), now())`;
+    await booked(gym, sam, maya);
+    const stood = await written(gym);
+
+    // The move to 10:30 first asks about Leo's booking, which the move would end.
+    const first = await editSlot(gym, slotId, { coachUserId: sam.userId });
+    expect([first.statusCode, errorOf(first)]).toEqual([409, "class_has_bookings"]);
+    // Staff say yes to that. Now it asks about Maya's session, and Leo's booking and pack are as they were.
+    const second = asked(await editSlot(gym, slotId, { coachUserId: sam.userId }, undefined, { confirmBookings: 1 }));
+    expect(second.shown.map((s) => s.name)).toEqual(["Maya Lopez"]);
+    expect(await written(gym)).toBe(stood);
+    expect(await packLeft(leosPack)).toBe(9);
+
+    // Both answered: the time slot moves, Leo's booking ends and his pack has its class back.
+    const done = await editSlot(gym, slotId, { coachUserId: sam.userId }, second.mark, { confirmBookings: 1 });
+    expect(done.statusCode, done.body).toBe(200);
+    const [left] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_class_bookings WHERE gym_id = ${gym.id} AND status = 'booked'`;
+    expect([left?.n, await packLeft(leosPack)]).toEqual([0, 10]);
+  });
+
+  it("a day at the far edge of the calendar whose classes were not written yet is written before a session is booked on it", async () => {
+    const gym = await makeGym(`Edge ${uniq()}`);
+    const sam = await trainer(gym, "Sam Reed");
+    const maya = await listed(gym, "Maya Lopez");
+    const type = await makeType(gym, "Spin");
+    await slot(gym, type, { coachUserId: sam.userId });
+    // Friday 27 November is in the last week sessions can be booked for. The nightly job
+    // missed it: its class is not on the calendar.
+    const far = "2026-11-27";
+    const gone = await sql`DELETE FROM gym_class_sessions WHERE gym_id = ${gym.id} AND local_date = ${far}::date`;
+    expect(gone.count).toBe(1);
+    const res = await book(gym, sam, maya, { day: far, minute: at(10) });
+    expect([res.statusCode, errorOf(res)]).toEqual([409, "trainer_in_class"]);
+    const [back] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_class_sessions WHERE gym_id = ${gym.id} AND local_date = ${far}::date`;
+    expect(back?.n).toBe(1);
+    expect(await appointments(gym)).toEqual([]);
+    // The hour before the class is still his to give.
+    expect((await book(gym, sam, maya, { day: far, minute: at(9) })).statusCode).toBe(200);
   });
 
   it("does not ask where no session is run into: another coach, nobody, an open-gym slot, the hour before and after, a cancelled session", async () => {
@@ -528,14 +629,15 @@ d("a class put over a personal training session (real Postgres, two api instance
     }
   });
 
-  it("a session already under a class staff confirmed is not asked about again by a change that leaves it there", async () => {
+  it("a session already under a class staff confirmed is not asked about again by a change to that class, and is by every other class put over it", async () => {
     const gym = await makeGym(`Again ${uniq()}`);
     const sam = await trainer(gym, "Sam Reed");
     const maya = await listed(gym, "Maya Lopez");
     const leo = await listed(gym, "Leo Park");
     const type = await makeType(gym, "Spin");
     await booked(gym, sam, maya);
-    expect((await addSlot(gym, type, { coachUserId: sam.userId }, 1)).statusCode).toBe(201);
+    const yes = asked(await addSlot(gym, type, { coachUserId: sam.userId }));
+    expect((await addSlot(gym, type, { coachUserId: sam.userId }, yes.mark)).statusCode).toBe(201);
     const slotId = timetable(await inject("GET", `/v1/orgs/${gym.id}/classes`, gym.owner.cookies)).entries.find((e) => e.type.id === type)?.schedules[0]?.id;
     if (slotId === undefined) throw new Error("no time slot");
 
@@ -556,6 +658,33 @@ d("a class put over a personal training session (real Postgres, two api instance
     const yoga = await makeType(gym, "Yoga");
     const second = asked(await addSlot(gym, yoga, { startMinute: at(10, 15), coachUserId: sam.userId }));
     expect([second.count, second.shown.map((s) => [s.name, s.className])]).toEqual([1, [["Maya Lopez", "Yoga"]]]);
+
+    // And so is a SECOND Spin class over her hour: staff said yes to the 10:30 one only.
+    const ana = await trainer(gym, "Ana Diaz");
+    const named = (res: Reply) => {
+      const ask = asked(res);
+      return [ask.count, ask.shown.map((s) => [s.name, s.className])];
+    };
+    const maya1 = [1, [["Maya Lopez", "Spin"]]];
+    // By a new time slot of the same class.
+    expect(named(await addSlot(gym, type, { startMinute: at(10), coachUserId: sam.userId }))).toEqual(maya1);
+    // By one class of Ana's given to Sam, this class only.
+    await slot(gym, type, { startMinute: at(9, 45), coachUserId: ana.userId });
+    const anas = (await sql<{ id: string }[]>`
+      SELECT id FROM gym_class_sessions WHERE gym_id = ${gym.id} AND local_date = ${FRIDAY}::date AND local_start_minute = ${at(9, 45)}`)[0]?.id;
+    if (anas === undefined) throw new Error("no 9:45 class");
+    expect(named(await changeClass(gym, anas, "this", { startMinute: at(9, 45), coachUserId: sam.userId }))).toEqual(maya1);
+    // By a bulk edit that gives Ana's time slot to Sam.
+    const anaSlot = timetable(await inject("GET", `/v1/orgs/${gym.id}/classes`, gym.owner.cookies))
+      .entries.find((e) => e.type.id === type)
+      ?.schedules.find((x) => x.startMinute === at(9, 45))?.id;
+    if (anaSlot === undefined) throw new Error("no 9:45 time slot");
+    const bulk = await inject("POST", `/v1/orgs/${gym.id}/classes/${type}/bulk-edit`, gym.owner.cookies, {
+      scheduleIds: [anaSlot],
+      updateFrom: TODAY,
+      set: { coachUserId: sam.userId },
+    });
+    expect(named(bulk)).toEqual(maya1);
   });
 
   it("the sessions of one gym are never named to another, to a stranger, or to staff who do not run the timetable", async () => {
@@ -595,10 +724,10 @@ d("a class put over a personal training session (real Postgres, two api instance
     expect(await written(gym)).toBe(stood);
   });
 
-  it("a confirm that is not a whole number above zero is refused before anything is read", async () => {
+  it("a confirm that is not a mark is refused before anything is read", async () => {
     const gym = await makeGym(`Bad ${uniq()}`);
     const type = await makeType(gym, "Spin");
-    for (const confirm of [0, -1, 1.5, "1", null]) {
+    for (const confirm of [0, 1, "1", "A".repeat(64), "a".repeat(63), null]) {
       const res = await inject("POST", `/v1/orgs/${gym.id}/classes/${type}/repeats`, gym.owner.cookies, {
         ...slotBody({}),
         startsOn: TODAY,
@@ -624,8 +753,9 @@ d("a class put over a personal training session (real Postgres, two api instance
         await booked(gym, sam, maya, { day, minute: at(10) });
         // The class runs 10:30 to 12:30: over Maya's 10:00, and over the 11:00 Leo is booking now.
         const body: SlotBody = { minutes: 120, coachUserId: sam.userId };
+        const { mark } = asked(await addSlot(gym, type, body));
         const [save, booking] = await Promise.all([
-          addSlot(gym, type, body, 1, gym.owner, round % 2 === 0 ? api() : (second ?? api())),
+          addSlot(gym, type, body, mark, gym.owner, round % 2 === 0 ? api() : (second ?? api())),
           book(gym, sam, leo, { day, minute: at(11), target: round % 2 === 0 ? (second ?? api()) : api() }),
         ]);
         const saved = save.statusCode === 201;
@@ -647,9 +777,10 @@ d("a class put over a personal training session (real Postgres, two api instance
     const maya = await listed(gym, "Maya Lopez");
     const type = await makeType(gym, "Spin");
     await booked(gym, sam, maya);
+    const { mark } = asked(await addSlot(gym, type, { coachUserId: sam.userId }));
     const both = await Promise.all([
-      addSlot(gym, type, { coachUserId: sam.userId }, 1, gym.owner, api()),
-      addSlot(gym, type, { coachUserId: sam.userId }, 1, gym.owner, second ?? api()),
+      addSlot(gym, type, { coachUserId: sam.userId }, mark, gym.owner, api()),
+      addSlot(gym, type, { coachUserId: sam.userId }, mark, gym.owner, second ?? api()),
     ]);
     expect(both.map((r) => r.statusCode).sort()).toEqual([201, 409]);
     expect(both.map((r) => (r.statusCode === 409 ? errorOf(r) : "saved")).sort()).toEqual(["repeat_clashes", "saved"]);

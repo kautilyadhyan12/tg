@@ -2666,28 +2666,35 @@ the member's own booking (17e-ii); sessions ended when a person leaves, a member
 cancelled or a trainer leaves the staff, came and no-show (17e-iv).)*
 *(17e-iii-a, 2026-10-06: **the class side asks first.** A change to the timetable that would
 put a taught class over a session already booked with its coach answers 409
-`class_over_pt_sessions` with `sessions` (their whole `count`, and the first 100, the
-earliest first: the person, the trainer, the class, the session's own day and time) and
-writes nothing. The same request with `confirmTrainerSessions` equal to that count, counted
-again under the gym's lock, goes through, and the sessions stay booked and charged as they
-were: the app never cancels a paid session by itself, and the session goes on saying it runs
-into the class until staff move or cancel it. It is asked on every write that can do it: a
+`class_over_pt_sessions` with `sessions` (their whole `count`, a `mark` that is one value
+for exactly those sessions, and the first 100, the earliest first: the person, the trainer,
+the class, the session's own day and time) and writes nothing. The same request with
+`confirmTrainerSessions` equal to that mark, worked out again under the gym's lock, goes
+through, and the sessions stay booked and charged as they were: the app never cancels a paid
+session by itself, and the session goes on saying it runs into the class until staff cancel
+it and book another time. A mark and not a number: one session cancelled and another booked
+while the box is open leaves the number the same, and is asked about again. It is asked on every write that can do it: a
 new time slot, a time slot changed from a date (its coach, its length, its days or time),
 "This and future classes", the bulk edit, one class changed, a cancelled class put back
 (its route now takes a body), and an open-gym class made a taught one. One wrapper in
 `classes/repo.ts` (`askingTrainers`) does it for all of them: the write names its coaches,
 the sessions their classes run into are read before and after it in the write's own
-transaction (`sessionsUnderClasses` in `pt/repo.ts`), and a session under a KIND of class
-that was not over it before is new; with a new one unconfirmed the whole write is rolled
-back. So the same class moved or made longer over a session staff already said yes to is not
-asked about again, and another class put on that trainer over it is. A booking takes the
+transaction (`sessionsUnderClasses` in `pt/repo.ts`), and a session under a class (its own
+row on the calendar) that was not over it before is new; with a new one unconfirmed the
+whole write is rolled back. So the same class made longer, or moved on its own day, over a
+session staff already said yes to is not asked about again; any other class put on that
+trainer over it is, a second time slot of the same class included, and so is a time slot
+moved to other days or another time, whose classes are written again. A booking takes the
 same lock, so a session booked while the box is open changes the count and the box is shown
 again. Never asked: another coach, no coach, an open-gym slot, a cancelled class, a cancelled
 session, a class that only touches the session's start or end. The console shows the box
 where the form's Save was (`TrainerSessionsBox.jsx`): the sessions, what saving does, that
 nobody's session or pack changes, **Save anyway** (or **Un-cancel anyway**) and **Go back**;
-a change to the form takes the box away. Nobody is told (the inbox, 20a). Not done: a
-trainer's time off (17e-iii-b, built next).)*
+a change to the form takes the box away. **The nightly fill is outside the wrapper**, and
+safe while a booking can only land on a day whose classes are written: a booking for a day
+in the last week of its window writes that gym's calendar first (`pt/service.ts` `book`), so
+a night the job missed cannot leave a session under a class written later. Nobody is told
+(the inbox, 20a). Not done: a trainer's time off (17e-iii-b, built next).)*
 
 ### 13.6 The calendar, the desk and the messages
 
