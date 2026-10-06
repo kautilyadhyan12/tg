@@ -181,7 +181,7 @@ export default function BookingSettingsPanel({ org, readOnly }) {
 
           <Row
             title="When a place comes free"
-            hint="Closer to the class than that, everyone on the waitlist can take it and the first to tap Claim gets it. Saving a shorter time gives places that are free now to people already on a waitlist, straight away."
+            hint="Closer to the class than that, everyone on the waitlist can take it and the first to tap Claim gets it. Saving a shorter time gives places that are free now to people already on a waitlist, straight away. Your events' waitlists use this time too."
           >
             <span>The first person on the waitlist gets it automatically until</span>
             <NumberBox label="How long before a class a free place goes to the waitlist automatically" value={draft.handoverAmount} onChange={(handoverAmount) => edit({ handoverAmount })} disabled={off} />
@@ -189,7 +189,7 @@ export default function BookingSettingsPanel({ org, readOnly }) {
             <span>before the class</span>
           </Row>
 
-          <Row title="Waitlist size" hint="0 means a full class has no waitlist. People already waiting stay on it.">
+          <Row title="Waitlist size" hint="0 means a full class has no waitlist. People already waiting stay on it. Your events' waitlists hold this many too.">
             <span>Up to</span>
             <NumberBox label="How many people a waitlist holds" value={draft.waitlistMax} onChange={(waitlistMax) => edit({ waitlistMax })} disabled={off} />
             <span>people for each class</span>

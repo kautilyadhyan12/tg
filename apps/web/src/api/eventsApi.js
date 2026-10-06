@@ -1,4 +1,4 @@
-import { gymEventResponseSchema, gymEventsResponseSchema, staffGymEventsResponseSchema } from '@app/shared';
+import { gymEventPeopleResponseSchema, gymEventResponseSchema, gymEventsResponseSchema, memberGymEventResponseSchema, staffGymEventsResponseSchema } from '@app/shared';
 import authApi from './authApi';
 
 // A GYM'S EVENTS (spec Part 3 §15.4; ROADMAP 19c-i). Every answer is read through its
@@ -28,6 +28,13 @@ export function eventPosterUrl({ gymId, eventId, posterId }) {
 export const eventsService = {
   /** The gym's coming events, for a member. */
   list: (gymId) => readThrough(gymEventsResponseSchema, 'the events', authApi.get(gymPath(gymId))),
+  /** "I'm coming", "Join the waitlist" or the claim of a freed place. One key is one tap:
+   *  sent again after a lost reply, it changes nothing. Answers the event as it is now. */
+  come: (gymId, eventId, requestKey, joinWaitlist) =>
+    readThrough(memberGymEventResponseSchema, 'the event', authApi.post(`${eventPath(gymId, eventId)}/coming`, { requestKey, joinWaitlist })).then((data) => data.event),
+  /** "Can't come", or leaving the waitlist. */
+  notComing: (gymId, eventId) =>
+    readThrough(memberGymEventResponseSchema, 'the event', authApi.delete(`${eventPath(gymId, eventId)}/coming`)).then((data) => data.event),
 };
 
 // THE CONSOLE'S EVENTS PAGE: for staff holding `posts.manage`. The server refuses anyone
@@ -42,4 +49,9 @@ export const staffEventsService = {
     readThrough(gymEventResponseSchema, 'the event', authApi.put(eventPath(gymId, eventId), fields)).then((data) => data.event),
   setCancelled: (gymId, eventId, cancelled) =>
     readThrough(gymEventResponseSchema, 'the event', authApi.put(`${eventPath(gymId, eventId)}/cancelled`, { cancelled })).then((data) => data.event),
+  /** Who is coming and who is waiting, first in line first. */
+  people: (gymId, eventId) => readThrough(gymEventPeopleResponseSchema, 'who is coming', authApi.get(`${eventPath(gymId, eventId)}/people`)),
+  /** Takes one person off the event; answers the list as it is after. */
+  removePerson: (gymId, eventId, placeId) =>
+    readThrough(gymEventPeopleResponseSchema, 'who is coming', authApi.delete(`${eventPath(gymId, eventId)}/people/${encodeURIComponent(placeId)}`)),
 };

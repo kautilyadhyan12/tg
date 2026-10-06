@@ -26,6 +26,71 @@ export function eventPlaces(event) {
   return event.places === 1 ? '1 place' : `${event.places.toLocaleString('en-GB')} places`;
 }
 
+const count = (n) => n.toLocaleString('en-GB');
+
+/** "1st", "2nd", "3rd", "11th". */
+export function ordinal(n) {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+}
+
+/** What a member reads about an event's places: "12 of 30 places left", "Full",
+ *  "Full · 3 on the waitlist", and with no limit "12 coming". Null where there is nothing
+ *  to say: no limit and nobody down for it yet. */
+export function eventPlacesLeft(event) {
+  const { coming, waiting } = event.going;
+  if (event.places === null) return coming === 0 ? null : `${count(coming)} coming`;
+  const left = Math.max(0, event.places - coming);
+  if (left === 0) return waiting === 0 ? 'Full' : `Full · ${count(waiting)} on the waitlist`;
+  return `${count(left)} of ${count(event.places)} ${event.places === 1 ? 'place' : 'places'} left`;
+}
+
+/** The member's own line: null when they are not down for it. */
+export function eventMine(event) {
+  const { mine, can } = event.going;
+  if (mine === null) return null;
+  if (mine.status === 'coming') return { text: "You're coming", good: true };
+  if (can.claim) return { text: 'A place is free for you. Take it before somebody else does.', good: true };
+  return { text: mine.waitlistPlace === null ? "You're on the waitlist" : `You're ${ordinal(mine.waitlistPlace)} on the waitlist`, good: false };
+}
+
+/** The buttons an event offers this member, in order: `kind` is what the tap sends. */
+export function eventActions(event) {
+  const { mine, can } = event.going;
+  const actions = [];
+  if (can.come) actions.push({ kind: 'come', label: "I'm coming", main: true });
+  if (can.claim) actions.push({ kind: 'come', label: 'Take the place', main: true });
+  if (can.joinWaitlist) actions.push({ kind: 'wait', label: 'Join the waitlist', main: true });
+  if (can.cancel) actions.push({ kind: 'cancel', label: mine?.status === 'waitlisted' ? 'Leave the waitlist' : "Can't come", main: false });
+  return actions;
+}
+
+/** Why there is no button, where the card does not already say (a cancelled event does). */
+export function eventWhyNot(event) {
+  const { mine, can } = event.going;
+  if (can.why === 'waitlist_full') return 'This event and its waitlist are full.';
+  if (can.why === 'event_full') return 'This event is full.';
+  if (can.why === 'event_started' && mine === null) return "This event has started, so it's too late to say you're coming.";
+  if (can.why === 'event_started' && mine.status === 'waitlisted') return 'This event has started, so the waitlist is closed.';
+  if (mine?.status === 'coming' && !can.cancel && !event.cancelled) return "This event has started, so this can't be changed.";
+  return null;
+}
+
+/** Under a member's own waitlist line, while a place can still come to them: not once
+ *  the event has started or been cancelled, nor when a place is theirs to take now. */
+export function waitlistNote(event) {
+  const { mine, can } = event.going;
+  if (mine?.status !== 'waitlisted' || can.claim || can.why !== null || event.cancelled) return null;
+  return "If a place comes free it can go to you. The app doesn't tell you yet, so check back here.";
+}
+
+/** Whether "Can't come" asks first: somebody else would take the place at once. */
+export function givingUpAsks(event) {
+  const { mine, coming, waiting } = event.going;
+  return mine?.status === 'coming' && event.places !== null && (coming >= event.places || waiting > 0);
+}
+
 /** Whether it has started and not ended, at `now`. */
 export function eventIsOn(event, now) {
   return Date.parse(event.startsAt) <= now && now < Date.parse(event.endsAt);
