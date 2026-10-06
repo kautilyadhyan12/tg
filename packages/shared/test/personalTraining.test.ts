@@ -8,6 +8,7 @@
 // The tables' expected answers are written out case by case, not read back from the rule.
 import { describe, expect, it } from "vitest";
 import {
+  addPtTimeOffRequestSchema,
   bookPtRequestSchema,
   decidePtBook,
   decidePtCancel,
@@ -19,6 +20,9 @@ import {
   ptHoursProblem,
   ptOfferedTimes,
   ptTime,
+  ptTimeOffOnDay,
+  ptTimeOffProblem,
+  ptTimeOffRefusal,
   savePtTrainerRequestSchema,
   saveGymMembershipTypeRequestSchema,
   type HeldMembership,
@@ -44,7 +48,7 @@ const held = (id: string, membership: HeldMembership, includesPt: boolean): PtHe
 const cover = (list: PtHeld[], gymHasTypes = true): PtCover => pickPtCover({ gymHasTypes, day: DAY, held: list });
 
 const covered: PtCover = { ok: true, membershipId: "m", chargePack: true };
-const fine: PtBookInput = { offers: true, offered: true, started: false, tooFar: false, trainerBusy: false, trainerInClass: false, personBusy: false, cover: covered };
+const fine: PtBookInput = { offers: true, offered: true, started: false, tooFar: false, trainerBusy: false, trainerInClass: false, trainerOff: false, personBusy: false, cover: covered };
 
 describe("the worst thing: two people with one trainer at one time, or a pack charged for nothing", () => {
   it("a time the trainer already has a session in is refused, whoever asks and whatever they hold", () => {
@@ -322,5 +326,86 @@ describe("a membership type that includes personal training", () => {
     expect(saveGymMembershipTypeRequestSchema.safeParse({ ...type, classTypeIds: [], includesPt: true }).success).toBe(true);
     expect(saveGymMembershipTypeRequestSchema.safeParse({ ...type, classTypeIds: [], includesPt: false }).success).toBe(false);
     expect(saveGymMembershipTypeRequestSchema.safeParse({ ...type, classTypeIds: [] }).success).toBe(false);
+  });
+});
+
+// 17e-iii-b. The worst thing: somebody booked with a trainer for a time the trainer is away.
+describe("a trainer's time off", () => {
+  it("a time the trainer has off is refused, whoever asks and whatever they hold, and says so", () => {
+    expect(decidePtBook({ ...fine, trainerOff: true })).toEqual({ kind: "refuse", reason: "trainer_off" });
+    expect(decidePtBook({ ...fine, trainerOff: true, cover: { ok: true, membershipId: null, chargePack: false } })).toEqual({
+      kind: "refuse",
+      reason: "trainer_off",
+    });
+    expect(decidePtBook(fine).kind).toBe("book");
+  });
+
+  it("free times leave out what runs into time off, to the minute", () => {
+    const at = (h: number, m = 0) => Date.UTC(2026, 9, 20, h, m);
+    const offered = [9, 10, 11, 12].map((h) => ({ startsAtMs: at(h) }));
+    // Off 10:30 to 12:00: the 10:00 and 11:00 sessions run into it; 09:00 ends as it starts and 12:00 starts as it ends.
+    const free = ptFreeTimes(offered, { minutes: 60, taken: [{ fromMs: at(10, 30), toMs: at(12) }], nowMs: at(0) });
+    expect(free.map((t) => t.startsAtMs)).toEqual([at(9), at(12)]);
+  });
+
+  const days = (fromDate: string, toDate: string) => ({ fromDate, toDate, fromMinute: null, toMinute: null });
+  const hours = (day: string, fromMinute: number | null, toMinute: number | null) => ({ fromDate: day, toDate: day, fromMinute, toMinute });
+
+  it.each([
+    ["one whole day", days("2026-10-20", "2026-10-20"), null],
+    ["a week", days("2026-10-20", "2026-10-26"), null],
+    ["a morning", hours("2026-10-20", 540, 720), null],
+    ["up to midnight", hours("2026-10-20", 1320, 1440), null],
+    ["a year, the longest", days("2026-10-20", "2027-10-20"), null],
+    ["a day more than the longest", days("2026-10-20", "2027-10-21"), "too_long"],
+    ["ends before it starts", days("2026-10-20", "2026-10-19"), "order"],
+    ["hours that end as they start", hours("2026-10-20", 540, 540), "range"],
+    ["hours backwards", hours("2026-10-20", 720, 540), "range"],
+    ["a start with no end", hours("2026-10-20", 540, null), "half"],
+    ["an end with no start", hours("2026-10-20", null, 720), "half"],
+    ["hours across two days", { fromDate: "2026-10-20", toDate: "2026-10-21", fromMinute: 540, toMinute: 720 }, "one_day"],
+    ["the 30th of February", days("2027-02-30", "2027-03-02"), "not_a_day"],
+    ["a thirteenth month", days("2026-10-20", "2026-13-01"), "not_a_day"],
+  ] as const)("as written: %s", (_name, off, problem) => {
+    expect(ptTimeOffProblem(off)).toBe(problem);
+    expect(addPtTimeOffRequestSchema.safeParse({ requestKey: "00000000-0000-4000-8000-000000000081", ...off }).success).toBe(problem === null);
+  });
+
+  it("the request takes five-minute marks only, and a mark that is one", () => {
+    const base = { requestKey: "00000000-0000-4000-8000-000000000081", ...hours("2026-10-20", 540, 720) };
+    expect(addPtTimeOffRequestSchema.safeParse({ ...base, fromMinute: 541 }).success).toBe(false);
+    expect(addPtTimeOffRequestSchema.safeParse({ ...base, toMinute: 1445 }).success).toBe(false);
+    expect(addPtTimeOffRequestSchema.safeParse({ ...base, confirm: "yes" }).success).toBe(false);
+    expect(addPtTimeOffRequestSchema.safeParse({ ...base, confirm: "a".repeat(64) }).success).toBe(true);
+    expect(addPtTimeOffRequestSchema.safeParse({ ...base, extra: 1 }).success).toBe(false);
+  });
+
+  it.each([
+    ["one that is not over", { over: false, today: "2026-10-07", fromDate: "2026-10-07", coming: 0 }, null],
+    ["one already over", { over: true, today: "2026-10-07", fromDate: "2026-10-06", coming: 0 }, "time_off_ended"],
+    ["one that started yesterday and is not over", { over: false, today: "2026-10-07", fromDate: "2026-10-06", coming: 0 }, null],
+    ["one starting a year ahead to the day", { over: false, today: "2026-10-07", fromDate: "2027-10-08", coming: 0 }, null],
+    ["one starting a day past that", { over: false, today: "2026-10-07", fromDate: "2027-10-09", coming: 0 }, "time_off_too_far"],
+    ["the fiftieth", { over: false, today: "2026-10-07", fromDate: "2026-10-08", coming: 49 }, null],
+    ["the fifty-first", { over: false, today: "2026-10-07", fromDate: "2026-10-08", coming: 50 }, "time_off_too_many"],
+  ] as const)("now: %s", (_name, input, refusal) => {
+    expect(ptTimeOffRefusal({ onTheClock: true, ...input })).toBe(refusal);
+  });
+
+  it("a time the gym's clock does not have that day is refused before anything else is said", () => {
+    const fine = { onTheClock: true, over: false, today: "2026-10-07", fromDate: "2027-03-28", coming: 0 };
+    expect(ptTimeOffRefusal(fine)).toBeNull();
+    expect(ptTimeOffRefusal({ ...fine, onTheClock: false })).toBe("time_off_not_a_time");
+    expect(ptTimeOffRefusal({ ...fine, onTheClock: false, over: true, coming: 50 })).toBe("time_off_not_a_time");
+  });
+
+  it("what it takes of a day: nothing outside it, all of a whole day, the hours of a part day", () => {
+    const week = days("2026-10-20", "2026-10-26");
+    expect(ptTimeOffOnDay(week, "2026-10-19")).toBeNull();
+    expect(ptTimeOffOnDay(week, "2026-10-20")).toEqual({ fromMinute: null, toMinute: null });
+    expect(ptTimeOffOnDay(week, "2026-10-26")).toEqual({ fromMinute: null, toMinute: null });
+    expect(ptTimeOffOnDay(week, "2026-10-27")).toBeNull();
+    expect(ptTimeOffOnDay(hours("2026-10-20", 540, 720), "2026-10-20")).toEqual({ fromMinute: 540, toMinute: 720 });
+    expect(ptTimeOffOnDay(hours("2026-10-20", 540, 720), "2026-10-21")).toBeNull();
   });
 });

@@ -2,7 +2,7 @@
 // screen could do is say a cancel is free when it keeps a session used, or send hours the
 // trainer did not type: both are read here from what the server sent.
 import { describe, expect, it } from 'vitest';
-import { savePtTrainerRequestSchema } from '@app/shared';
+import { addPtTimeOffRequestSchema, savePtTrainerRequestSchema } from '@app/shared';
 import {
   addRange,
   bookCost,
@@ -12,8 +12,10 @@ import {
   canGoEarlier,
   canGoLater,
   cancelBox,
+  classInTimeOff,
   coachedClassRow,
   dayHeading,
+  dayTimeOffRow,
   durationWords,
   freeTimeLabel,
   hoursDraft,
@@ -28,6 +30,18 @@ import {
   removeRange,
   sessionClash,
   sessionLength,
+  timeOffAsked,
+  timeOffBoxLines,
+  timeOffBoxRow,
+  timeOffBoxTitle,
+  timeOffDayLimits,
+  timeOffDraft,
+  timeOffFormProblem,
+  timeOffLine,
+  timeOffOverlap,
+  timeOffRemoveBox,
+  timeOffRequest,
+  timeOffSummary,
   sessionRow,
   sessionsAWeek,
   setRange,
@@ -310,5 +324,196 @@ describe('the box before a cancel', () => {
 
   it('a length of time in words', () => {
     expect([30, 60, 90, 120, 1440, 2880].map(durationWords)).toEqual(['30 minutes', '1 hour', '90 minutes', '2 hours', '1 day', '2 days']);
+  });
+});
+
+// 17e-iii-b. The worst thing these words could do: say a time off cancels nobody while the
+// box hides a session in it, or send days the form did not show.
+describe("a trainer's time off", () => {
+  const TODAY = '2026-10-07';
+  const KEY = '00000000-0000-4000-8000-000000000081';
+  const days = (fromDate, toDate) => ({ id: 'o1', fromDate, toDate, fromMinute: null, toMinute: null });
+  const hours = (day, fromMinute, toMinute) => ({ id: 'o2', fromDate: day, toDate: day, fromMinute, toMinute });
+  const samReed = { name: 'Sam Reed', mine: false };
+
+  it('one time off reads as its days, or its day and hours, on the gym’s clock, with the year when it is not this one', () => {
+    expect(timeOffLine(days('2026-10-09', '2026-10-09'), '24h', TODAY)).toBe('Fri 9 Oct · all day');
+    expect(timeOffLine(days('2026-10-12', '2026-10-16'), '24h', TODAY)).toBe('Mon 12 Oct – Fri 16 Oct · all day');
+    expect(timeOffLine(hours('2026-10-09', 540, 720), '12h', TODAY)).toBe('Fri 9 Oct · 9:00 AM – 12:00 PM');
+    expect(timeOffLine(days('2026-12-28', '2027-01-04'), '24h', TODAY)).toBe('Mon 28 Dec – Mon 4 Jan 2027 · all day');
+  });
+
+  it('a trainer’s row names the next one and counts the rest, and says nothing with none', () => {
+    expect(timeOffSummary({ timeOff: [] }, '24h', TODAY)).toBeNull();
+    expect(timeOffSummary({}, '24h', TODAY)).toBeNull();
+    expect(timeOffSummary({ timeOff: [days('2026-10-09', '2026-10-09')] }, '24h', TODAY)).toBe('Time off: Fri 9 Oct · all day');
+    expect(timeOffSummary({ timeOff: [hours('2026-10-09', 540, 720), days('2026-10-12', '2026-10-16'), days('2026-11-02', '2026-11-02')] }, '24h', TODAY)).toBe(
+      'Time off: Fri 9 Oct · 09:00 – 12:00, and 2 more',
+    );
+  });
+
+  it('a day of the week says what is off', () => {
+    expect(dayTimeOffRow({ id: 'o', fromMinute: null, toMinute: null }, '24h')).toBe('Time off · all day');
+    expect(dayTimeOffRow({ id: 'o', fromMinute: 540, toMinute: 720 }, '12h')).toBe('Time off · 9:00 AM – 12:00 PM');
+  });
+
+  it('a session or a class inside the time off says so; one beside it does not', () => {
+    const session = (localStartMinute) => ({ localStartMinute, minutes: 60 });
+    const morning = [{ id: 'o', fromMinute: 600, toMinute: 720 }];
+    const inIt = 'This is in their time off. Cancel it and book another time, or remove the time off.';
+    expect(sessionClash(session(600), [], morning)).toBe(inIt);
+    // Somebody who cannot book is told who can.
+    expect(sessionClash(session(600), [], morning, false)).toBe(
+      'This is in their time off. Cancel it and ask a manager to book another time, or remove the time off.',
+    );
+    expect(sessionClash(session(570), [], morning)).toBe(inIt);
+    expect(sessionClash(session(690), [], morning)).toBe(inIt);
+    expect(sessionClash(session(540), [], morning)).toBeNull();
+    expect(sessionClash(session(720), [], morning)).toBeNull();
+    expect(sessionClash(session(1380), [], [{ id: 'o', fromMinute: null, toMinute: null }])).toBe(inIt);
+    expect(sessionClash(session(600), [], [])).toBeNull();
+    expect(sessionClash(session(600), [], undefined)).toBeNull();
+    // Time off is said before a class over it; outside the time off the class is still said.
+    expect(sessionClash(session(600), [{ name: 'Spin', localStartMinute: 630, minutes: 45 }], morning)).toBe(inIt);
+    expect(sessionClash(session(720), [{ name: 'Spin', localStartMinute: 730, minutes: 45 }], morning)).toContain('Spin');
+    const spin = { name: 'Spin', localStartMinute: 630, minutes: 45 };
+    expect(classInTimeOff(spin, morning)).toBe('In their time off. Give this class another coach on the Calendar.');
+    expect(classInTimeOff({ ...spin, localStartMinute: 720 }, morning)).toBeNull();
+    expect(classInTimeOff(spin, [])).toBeNull();
+  });
+
+  it.each([
+    ['nothing picked', { kind: 'days', fromDate: '', toDate: '', from: '', to: '' }, 'Pick the first and the last day.'],
+    ['no last day', { kind: 'days', fromDate: '2026-10-09', toDate: '', from: '', to: '' }, 'Pick the first and the last day.'],
+    ['one whole day', { kind: 'days', fromDate: '2026-10-09', toDate: '2026-10-09', from: '', to: '' }, null],
+    ['today', { kind: 'days', fromDate: TODAY, toDate: TODAY, from: '', to: '' }, null],
+    ['started yesterday, ends tomorrow', { kind: 'days', fromDate: '2026-10-06', toDate: '2026-10-08', from: '', to: '' }, null],
+    ['backwards', { kind: 'days', fromDate: '2026-10-09', toDate: '2026-10-08', from: '', to: '' }, 'The last day is before the first day.'],
+    ['all in the past', { kind: 'days', fromDate: '2026-10-01', toDate: '2026-10-06', from: '', to: '' }, 'That day has already passed.'],
+    ['longer than a year', { kind: 'days', fromDate: '2026-10-09', toDate: '2027-10-10', from: '', to: '' }, 'Time off can be up to a year long.'],
+    ['starting more than a year ahead', { kind: 'days', fromDate: '2027-10-09', toDate: '2027-10-09', from: '', to: '' }, 'Time off can start up to a year ahead.'],
+    ['a day that is not one', { kind: 'days', fromDate: '2027-02-30', toDate: '2027-03-02', from: '', to: '' }, "That isn't a day on the calendar."],
+    ['part of a day, no day', { kind: 'hours', fromDate: '', toDate: '', from: '09:00', to: '12:00' }, 'Pick the day.'],
+    ['part of a day, no times', { kind: 'hours', fromDate: '2026-10-09', toDate: '', from: '', to: '' }, 'Pick a start and an end time.'],
+    ['part of a day, no end', { kind: 'hours', fromDate: '2026-10-09', toDate: '', from: '09:00', to: '' }, 'Pick a start and an end time.'],
+    ['part of a day', { kind: 'hours', fromDate: '2026-10-09', toDate: '', from: '09:00', to: '12:00' }, null],
+    ['part of a day, backwards', { kind: 'hours', fromDate: '2026-10-09', toDate: '', from: '12:00', to: '09:00' }, 'The end time must be after the start time.'],
+    ['part of a day, a last day left over from Whole days', { kind: 'hours', fromDate: '2026-10-09', toDate: '2026-10-16', from: '09:00', to: '12:00' }, null],
+  ])('the form: %s', (_name, draft, problem) => {
+    expect(timeOffFormProblem(draft, TODAY)).toBe(problem);
+    // Whatever the form lets through, the server's own schema takes.
+    if (problem === null) expect(addPtTimeOffRequestSchema.safeParse(timeOffRequest(draft, KEY)).success).toBe(true);
+  });
+
+  it('the form starts empty, takes days from today to a year on, and stops at fifty', () => {
+    expect(timeOffDraft()).toEqual({ kind: 'days', fromDate: '', toDate: '', from: '', to: '' });
+    // The last day's calendar starts at the first day picked and runs a year from it.
+    expect(timeOffDayLimits(TODAY, '')).toEqual({ min: TODAY, max: '2027-10-08', lastMin: TODAY, lastMax: '2027-10-07' });
+    expect(timeOffDayLimits(TODAY, '2026-12-28')).toEqual({ min: TODAY, max: '2027-10-08', lastMin: '2026-12-28', lastMax: '2027-12-28' });
+    // Whatever both calendars let through is a time off the form takes.
+    expect(timeOffFormProblem({ kind: 'days', fromDate: '2027-10-08', toDate: '2028-10-07', from: '', to: '' }, TODAY)).toBeNull();
+    const fine = { kind: 'days', fromDate: '2026-10-09', toDate: '2026-10-09', from: '', to: '' };
+    expect(timeOffFormProblem(fine, TODAY, 49)).toBeNull();
+    expect(timeOffFormProblem(fine, TODAY, 50)).toBe('A trainer can have up to 50 times off coming. Remove one first.');
+  });
+
+  it('the box before a removal names whose time off and which, and says nothing booked changes', () => {
+    const week = days('2026-10-12', '2026-10-16');
+    expect(timeOffRemoveBox(week, { ...samReed, timeOff: [week] }, '24h', TODAY)).toEqual({
+      question: "Remove Sam Reed's time off on Mon 12 Oct – Fri 16 Oct · all day?",
+      after: "These times go back to Sam Reed's usual hours, so sessions can be booked in them again. Nothing that is booked changes.",
+    });
+    expect(timeOffRemoveBox(hours('2026-10-09', 540, 720), { name: 'Sam Reed', mine: true }, '12h', TODAY).question).toBe(
+      "Remove Sam Reed (you)'s time off on Fri 9 Oct · 9:00 AM – 12:00 PM?",
+    );
+  });
+
+  it('the removal box never says the times can be booked again while other time off still covers them', () => {
+    const friday = { ...days('2026-10-09', '2026-10-09'), id: 'all-day' };
+    const hour = { ...hours('2026-10-09', 600, 660), id: 'hour' };
+    const nextWeek = { ...days('2026-10-12', '2026-10-16'), id: 'week' };
+    const sam = { ...samReed, timeOff: [friday, hour, nextWeek] };
+    const stays = 'Sam Reed has other time off in these times, and that stays. Nothing that is booked changes.';
+    expect(timeOffRemoveBox(hour, sam, '24h', TODAY).after).toBe(stays);
+    expect(timeOffRemoveBox(friday, sam, '24h', TODAY).after).toBe(stays);
+    expect(timeOffRemoveBox(nextWeek, sam, '24h', TODAY).after).toContain('so sessions can be booked in them again');
+  });
+
+  it.each([
+    ['the same day, whole and part', days('2026-10-09', '2026-10-09'), hours('2026-10-09', 600, 660), true],
+    ['whole days that share one day', days('2026-10-09', '2026-10-12'), days('2026-10-12', '2026-10-16'), true],
+    ['whole days side by side', days('2026-10-09', '2026-10-11'), days('2026-10-12', '2026-10-16'), false],
+    ['hours that cross', hours('2026-10-09', 540, 660), hours('2026-10-09', 630, 720), true],
+    ['hours that touch', hours('2026-10-09', 540, 600), hours('2026-10-09', 600, 660), false],
+    ['the same hours on another day', hours('2026-10-09', 540, 660), hours('2026-10-10', 540, 660), false],
+    ['hours on a day inside whole days', hours('2026-10-14', 540, 660), days('2026-10-12', '2026-10-16'), true],
+    ['hours on the day after whole days', hours('2026-10-17', 540, 660), days('2026-10-12', '2026-10-16'), false],
+  ])('two times off overlap or not: %s', (_name, a, b, yes) => {
+    expect(timeOffOverlap(a, b)).toBe(yes);
+    expect(timeOffOverlap(b, a)).toBe(yes);
+  });
+
+  it('what is sent is what the form shows: whole days carry no times, part of a day carries one day, and the mark only when confirming', () => {
+    expect(timeOffRequest({ kind: 'days', fromDate: '2026-10-12', toDate: '2026-10-16', from: '09:00', to: '12:00' }, KEY)).toEqual({
+      requestKey: KEY, fromDate: '2026-10-12', toDate: '2026-10-16', fromMinute: null, toMinute: null,
+    });
+    expect(timeOffRequest({ kind: 'hours', fromDate: '2026-10-09', toDate: '2026-10-16', from: '09:00', to: '12:00' }, KEY, 'a'.repeat(64))).toEqual({
+      requestKey: KEY, fromDate: '2026-10-09', toDate: '2026-10-09', fromMinute: 540, toMinute: 720, confirm: 'a'.repeat(64),
+    });
+  });
+
+  const row = (id, name, localDate, localStartMinute, minutes) => ({ id, name, localDate, localStartMinute, minutes });
+  const S1 = '33333333-3333-4333-8333-000000000001';
+  const C1 = '44444444-4444-4444-8444-000000000001';
+  const over = (sessions, classes) => ({
+    mark: 'b'.repeat(64),
+    sessions: { count: sessions.length, shown: sessions },
+    classes: { count: classes.length, shown: classes },
+    classesUpTo: '2026-12-01',
+  });
+  const maya = row(S1, 'Maya Lopez', '2026-10-09', 600, 60);
+  const spin = row(C1, 'Spin', '2026-10-09', 630, 45);
+
+  it('reads the server’s answer only when it is that answer, whole', () => {
+    const answer = (data) => ({ response: { data } });
+    expect(timeOffAsked(answer({ error: 'time_off_over_bookings', over: over([maya], []) }))).toEqual(over([maya], []));
+    expect(timeOffAsked(answer({ error: 'time_off_ended', message: 'That time has already passed.' }))).toBeNull();
+    expect(timeOffAsked(answer({ error: 'time_off_over_bookings', over: { ...over([maya], []), mark: 'no' } }))).toBeNull();
+    expect(timeOffAsked(answer({ error: 'time_off_over_bookings', over: over([], []) }))).toBeNull();
+    expect(timeOffAsked(new Error('offline'))).toBeNull();
+  });
+
+  it('the box says who has what in the time, and names each one with its day and time', () => {
+    expect(timeOffBoxTitle(over([maya], []), samReed)).toBe('Sam Reed has 1 session booked in this time');
+    expect(timeOffBoxTitle(over([maya, { ...maya, id: 'x' }], [spin]), samReed)).toBe('Sam Reed has 2 sessions booked and coaches 1 class in this time');
+    expect(timeOffBoxTitle(over([], [spin, { ...spin, id: 'y' }]), samReed)).toBe('Sam Reed coaches 2 classes in this time');
+    expect(timeOffBoxTitle(over([maya], []), { name: 'Sam Reed', mine: true })).toBe('Sam Reed (you) has 1 session booked in this time');
+    expect(timeOffBoxRow(maya, '12h', TODAY, 'session')).toEqual({ name: 'Maya Lopez', detail: 'Fri 9 Oct · 10:00 AM – 11:00 AM' });
+    expect(timeOffBoxRow({ ...maya, name: null }, '24h', TODAY, 'session')).toEqual({ name: 'Somebody no longer on your list', detail: 'Fri 9 Oct · 10:00 – 11:00' });
+    expect(timeOffBoxRow(spin, '24h', TODAY, 'class')).toEqual({ name: 'Spin', detail: 'Fri 9 Oct · 10:30 – 11:15' });
+  });
+
+  it('the box says what adding it does and that nobody is cancelled, for what is in it and nothing else', () => {
+    const friday = { kind: 'days', fromDate: '2026-10-09', toDate: '2026-10-09', from: '', to: '' };
+    expect(timeOffBoxLines(over([maya], []), samReed, friday)).toEqual([
+      'If you add this time off, no new session can be booked with Sam Reed in it.',
+      'This session stays booked: nobody is cancelled and nothing comes off or goes back on a pack. To move one, cancel it on this page and book another time.',
+    ]);
+    // A trainer who cannot book is told who can.
+    expect(timeOffBoxLines(over([maya], []), samReed, friday, false)[1]).toBe(
+      'This session stays booked: nobody is cancelled and nothing comes off or goes back on a pack. To move one, cancel it on this page and ask a manager to book another time.',
+    );
+    expect(timeOffBoxLines(over([], [spin, { ...spin, id: 'y' }]), samReed, friday)).toEqual([
+      'If you add this time off, no new session can be booked with Sam Reed in it.',
+      'These classes stay on the calendar with Sam Reed as coach. To change the coach, open the class on the Calendar.',
+    ]);
+    // A time off that runs past the calendar's last day says its later classes are not listed.
+    const long = { kind: 'days', fromDate: '2026-11-20', toDate: '2026-12-20', from: '', to: '' };
+    expect(timeOffBoxLines(over([maya, { ...maya, id: 'x' }], [spin]), samReed, long).at(-1)).toBe(
+      "Classes after Tue 1 Dec aren't on the calendar yet, so they aren't listed here. Sam Reed's week will mark them when they are.",
+    );
+    expect(timeOffBoxLines(over([maya], [spin]), samReed, { ...long, toDate: '2026-12-01' })).toHaveLength(3);
+    // Part of one day reads its own day, not a last day left over from Whole days.
+    expect(timeOffBoxLines(over([maya], []), samReed, { kind: 'hours', fromDate: '2026-10-09', toDate: '2026-12-20', from: '09:00', to: '12:00' })).toHaveLength(2);
   });
 });
