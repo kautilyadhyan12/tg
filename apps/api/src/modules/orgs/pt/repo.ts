@@ -296,10 +296,11 @@ export interface PersonRow {
 }
 
 /** People on the gym's list now whose name or email holds `query` (everybody for an empty
- *  one). Those holding anything in use whose type includes personal training come first,
- *  then by name: an order only, so the page of people is the likely ones. What each of
+ *  one). Those holding anything in use whose type includes personal training come first
+ *  (a pack with nothing left, or past its days on `day`, does not count), then by name:
+ *  an order only, so the page of people is the likely ones. What each of
  *  them can be booked on is the booking rule's to say, never this statement's. */
-export async function peopleFor(sql: SqlOrTx, gymId: string, query: string, limit: number): Promise<PersonRow[]> {
+export async function peopleFor(sql: SqlOrTx, gymId: string, query: string, day: string, limit: number): Promise<PersonRow[]> {
   // `%`, `_` and `\` typed by staff are letters to look for, not patterns.
   const like = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
   const rows = await sql<{ id: string; full_name: string }[]>`
@@ -310,7 +311,8 @@ export async function peopleFor(sql: SqlOrTx, gymId: string, query: string, limi
     ORDER BY NOT EXISTS (
                SELECT 1 FROM gym_held_memberships h
                JOIN gym_membership_types mt ON mt.gym_id = h.gym_id AND mt.id = h.membership_type_id
-               WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status IN ('active','frozen') AND mt.includes_pt),
+               WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status IN ('active','frozen') AND mt.includes_pt
+                 AND NOT (h.kind = 'pack' AND (h.classes_left = 0 OR h.starts_on + h.pack_days + h.frozen_days < ${day}::date))),
              lower(e.full_name), e.id
     LIMIT ${limit}`;
   return rows.map((r) => ({ entryId: r.id, fullName: r.full_name }));

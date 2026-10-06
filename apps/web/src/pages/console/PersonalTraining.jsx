@@ -570,6 +570,9 @@ export default function PersonalTraining() {
         // Already cancelled as a late cancel by somebody else: say so, and offer nothing more.
         setCancelError(errorText(err, 'This session was already cancelled as a late cancel. The session stays used.'));
         setCancelSettled(true);
+      } else if (err?.response?.data?.error === 'not_kept') {
+        setCancelError(errorText(err, 'This session was already cancelled, and not as a late cancel. No session was used.'));
+        setCancelSettled(true);
       } else {
         setCancelError(errorText(err, "We couldn't cancel that session."));
       }

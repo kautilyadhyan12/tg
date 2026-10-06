@@ -363,6 +363,20 @@ describe('cancelling', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 
+  it('a late cancel on a session somebody already gave back is not shown as done either', async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([mayaSession({ cancel: 'late' })]) });
+    api.cancelPt.mockRejectedValue({
+      response: { status: 409, data: { error: 'not_kept', message: 'This session was already cancelled, and not as a late cancel. No session was used.' } },
+    });
+    open();
+    const day = await friday();
+    fireEvent.click(day.getByRole('button', { name: "Cancel Maya Lopez's session" }));
+    fireEvent.click(day.getByRole('button', { name: 'Late cancel: the session stays used' }));
+    expect((await day.findByRole('alert')).textContent).toBe('This session was already cancelled, and not as a late cancel. No session was used.');
+    expect(day.queryByRole('button', { name: 'Late cancel: the session stays used' })).toBeNull();
+    expect(api.getPtWeek).toHaveBeenCalledTimes(1);
+  });
+
   it('a trainer who is not sent what the person pays with still reads that a session of a pack is used', async () => {
     api.getPtTrainers.mockResolvedValue({ data: trainers({ canManage: false, canBook: false, trainers: [{ ...sam, mine: true }] }) });
     api.getPtWeek.mockResolvedValue({ data: week([mayaSession({ membership: null, entryId: null })]) });

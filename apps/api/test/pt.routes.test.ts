@@ -442,6 +442,13 @@ d("personal training (real Postgres, two api instances)", { timeout: T }, () => 
     const again = made(await cancel(sells, session.id, { lateOk: true }));
     expect([again.status, again.packCharged, await left(pack)]).toEqual(["late_cancelled", true, 9]);
 
+    // The other way round: given back, then "Late cancel" from a page left open.
+    const given = made(await book(sells, sam, maya, { day: TODAY, minute: 660 }));
+    expect(made(await cancel(sells, given.id, { lateOk: true, giveBack: true })).status).toBe("cancelled");
+    const lateAfter = await cancel(sells, given.id, { by: sam, lateOk: true });
+    expect([lateAfter.statusCode, errorOf(lateAfter), await left(pack)]).toEqual([409, "not_kept", 9]);
+    expect(made(await cancel(sells, given.id, { lateOk: true, giveBack: true })).status).toBe("cancelled");
+
     // Both buttons at once on two servers, six times: whatever each is told is what happened.
     for (let round = 0; round < 6; round++) {
       const one = made(await book(sells, sam, maya, { day: TODAY, minute: 600 }));
@@ -457,9 +464,8 @@ d("personal training (real Postgres, two api instances)", { timeout: T }, () => 
           // The late cancel won: the give-back is told the session stays used.
           expect([late.statusCode, back.statusCode, errorOf(back), row.pack_charged, await left(pack)]).toEqual([200, 409, "kept_used", true, before]);
         } else {
-          // The give-back won: the session is back, and the late cancel finds nothing kept.
-          expect([late.statusCode, back.statusCode, row?.status, row?.pack_charged, await left(pack)]).toEqual([200, 200, "cancelled", false, (before ?? 0) + 1]);
-          expect(made(late).packCharged).toBe(false);
+          // The give-back won: the session is back, and the late cancel is told nothing was kept.
+          expect([late.statusCode, errorOf(late), back.statusCode, row?.status, row?.pack_charged, await left(pack)]).toEqual([409, "not_kept", 200, "cancelled", false, (before ?? 0) + 1]);
         }
       } finally {
         clock = NOW.getTime();
@@ -985,6 +991,23 @@ d("personal training (real Postgres, two api instances)", { timeout: T }, () => 
       [409, "org_archived"],
     ]);
     expect((await sessions(closed, sam)).map((r) => r.status)).toEqual(["booked"]);
+  });
+
+  it("the first page of people is not filled by packs that are used up or over by their days", async () => {
+    const gym = await makeGym("Page PT");
+    const pack = await typeOf(gym, { kind: "pack", includesPt: true });
+    // Thirty-one people ahead in the alphabet, each still stored as holding a pack in use.
+    for (let n = 0; n < 31; n++) {
+      const held = await hold(gym, await listed(gym, `Aa Over ${String(n).padStart(2, "0")}`), pack, { pack: n % 2 === 0 ? 0 : 4 });
+      if (n % 2 === 1) await sql`UPDATE gym_held_memberships SET starts_on = '2026-06-01' WHERE id = ${held}`;
+    }
+    await hold(gym, await listed(gym, "Zed Bookable"), pack, { pack: 5 });
+    const res = await inject("GET", `/v1/orgs/${gym.id}/pt/people?day=${FRIDAY}`, gym.owner.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    const page = JSON.parse(res.body) as PtPeopleResponse;
+    expect([page.people.length, page.more]).toEqual([30, true]);
+    expect(page.people[0]?.name).toBe("Zed Bookable");
+    expect(page.people.filter((p) => p.pt !== null).map((p) => p.name)).toEqual(["Zed Bookable"]);
   });
 
   it("one member of staff's writes are limited: the 301st in an hour is told to slow down, and nothing before it is", async () => {

@@ -107,9 +107,12 @@ describe("the worst thing: two people with one trainer at one time, or a pack ch
     expect(decidePtCancel({ ...late, lateOk: false, freeCancel: true })).toEqual({ kind: "refuse", reason: "kept_used" });
     // Whatever the clock says by then.
     expect(decidePtCancel({ ...late, giveBack: true, started: true })).toEqual({ kind: "refuse", reason: "kept_used" });
-    // A session cancelled free has nothing kept: any cancel of it again changes nothing.
+    // A session cancelled with nothing kept: a give-back or a plain cancel again changes
+    // nothing, and the late cancel is told nothing was kept.
     expect(decidePtCancel({ ...late, status: "cancelled", packCharged: false, giveBack: true })).toEqual({ kind: "already" });
-    expect(decidePtCancel({ ...late, status: "cancelled", packCharged: false })).toEqual({ kind: "already" });
+    expect(decidePtCancel({ ...late, status: "cancelled", packCharged: false, lateOk: false })).toEqual({ kind: "already" });
+    expect(decidePtCancel({ ...late, status: "cancelled", packCharged: false })).toEqual({ kind: "refuse", reason: "not_kept" });
+    expect(decidePtCancel({ ...late, status: "cancelled", packCharged: false, started: true })).toEqual({ kind: "refuse", reason: "not_kept" });
   });
 });
 

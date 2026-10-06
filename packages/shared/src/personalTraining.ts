@@ -197,8 +197,9 @@ export type PtCancelDecision =
   /** `already`: it was cancelled before, and nothing changes. */
   | { kind: "already" }
   /** `kept_used`: it was already cancelled late, and this request believes the session
-   *  comes back. Nothing changes, and the answer must not read as a yes. */
-  | { kind: "refuse"; reason: "started" | "late_cancel" | "kept_used" };
+   *  comes back. `not_kept`: it was already cancelled with nothing kept, and this request
+   *  is the late cancel. Nothing changes, and neither answer may read as a yes. */
+  | { kind: "refuse"; reason: "started" | "late_cancel" | "kept_used" | "not_kept" };
 
 /** Cancel a session. Free until the gym's cancel time before the start, and the pack has
  *  its session back. After that staff say which it is (`lateOk`): a late cancel, which
@@ -214,6 +215,8 @@ export function decidePtCancel(i: {
   // A late cancel already made keeps the session used. A request that expects it back (a
   // free cancel, or `giveBack`) is told so; the late cancel sent again is the same answer.
   if (i.status === "late_cancelled" && (i.giveBack || !i.lateOk)) return { kind: "refuse", reason: "kept_used" };
+  // The other way round: cancelled with nothing kept, and this is the late cancel.
+  if (i.status === "cancelled" && i.lateOk && !i.giveBack) return { kind: "refuse", reason: "not_kept" };
   if (i.status === "cancelled" || i.status === "late_cancelled") return { kind: "already" };
   if (i.started || i.status !== "booked") return { kind: "refuse", reason: "started" };
   if (i.freeCancel) return { kind: "cancel", status: "cancelled", refundPack: i.packCharged };
@@ -243,6 +246,7 @@ export const PT_WORDS = {
   started: "This session has already started, so it can't be cancelled.",
   late_cancel: "It's too late to cancel for free.",
   kept_used: "This session was already cancelled as a late cancel. The session stays used.",
+  not_kept: "This session was already cancelled, and not as a late cancel. No session was used.",
   request_reused: "That didn't go through. Try again.",
   appointment_not_found: "That session was not found.",
   person_not_found: "That person isn't on your member list.",
@@ -254,6 +258,7 @@ export const PT_WORDS = {
 
 export const PT_LATE_CANCEL_ERROR = "late_cancel";
 export const PT_KEPT_USED_ERROR = "kept_used";
+export const PT_NOT_KEPT_ERROR = "not_kept";
 
 // ── THE WIRE ──
 

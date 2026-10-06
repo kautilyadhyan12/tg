@@ -17,6 +17,7 @@ import type { Sql } from "postgres";
 import {
   PT_HORIZON_DAYS,
   PT_KEPT_USED_ERROR,
+  PT_NOT_KEPT_ERROR,
   PT_PEOPLE_SHOWN,
   PT_WEEK_DAYS,
   PT_WORDS,
@@ -240,10 +241,11 @@ export async function getPeople(deps: PtDeps, staffId: string, gymId: string, qu
   const standing = await standingOf(deps, gymId, staffId);
   if (!standing.confirms) throw forbidden();
   if (!(await limit())) return null;
-  const [clock, rows] = await Promise.all([repo.gymClock(deps.sql, gymId), repo.peopleFor(deps.sql, gymId, query.query ?? "", PT_PEOPLE_SHOWN + 1)]);
+  const clock = await repo.gymClock(deps.sql, gymId);
   if (clock === null) throw notFound();
-  const page = rows.slice(0, PT_PEOPLE_SHOWN);
   const day = query.day ?? dayInTz(deps.now(), clock.timezone);
+  const rows = await repo.peopleFor(deps.sql, gymId, query.query ?? "", day, PT_PEOPLE_SHOWN + 1);
+  const page = rows.slice(0, PT_PEOPLE_SHOWN);
   const held = clock.hasTypes ? await heldForPtOf(deps.sql, gymId, page.map((r) => r.entryId)) : [];
   const people = page.map((r) => {
     const theirs = held.filter((h) => h.entryId === r.entryId);
@@ -409,6 +411,7 @@ export async function cancel(
     if (decision.kind === "refuse") {
       if (decision.reason === "late_cancel") return new PtLateCancel(row.packCharged);
       if (decision.reason === "kept_used") return new OrgsError(409, PT_KEPT_USED_ERROR, PT_WORDS.kept_used);
+      if (decision.reason === "not_kept") return new OrgsError(409, PT_NOT_KEPT_ERROR, PT_WORDS.not_kept);
       return new OrgsError(409, "started", PT_WORDS.started);
     }
     await repo.markCancelled(tx, { gymId, id: row.id, status: decision.status, packCharged: row.packCharged && !decision.refundPack, now });
