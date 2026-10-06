@@ -459,10 +459,14 @@ describe("a trainer's time off", () => {
   };
   const asks = () => Object.assign(new Error('409'), { response: { status: 409, data: { error: 'time_off_over_bookings', message: 'x', over } } });
   const panel = () => within(screen.getByTestId('pt-time-off'));
-  const pickDays = (first, last) => {
-    const [from, to] = screen.getByTestId('pt-time-off').querySelectorAll('input[type="date"]');
-    fireEvent.change(from, { target: { value: first } });
-    if (last !== undefined) fireEvent.change(to, { target: { value: last } });
+  // Days are pressed on the calendar, by the name each day's button reads ("Fri 9 Oct 2026").
+  const pickDay = (box, day) => {
+    fireEvent.click(panel().getByRole('button', { name: box }));
+    fireEvent.click(panel().getByRole('button', { name: day }));
+  };
+  const pickDays = (first, last, box = 'First day') => {
+    pickDay(box, first);
+    if (last !== undefined) pickDay('Last day', last);
   };
 
   // The gym's today is read from the clock: Wednesday 7 October 2026.
@@ -484,10 +488,21 @@ describe("a trainer's time off", () => {
     // Nothing is picked: the button waits, and the form does not scold an untouched box.
     expect(panel().getByRole('button', { name: 'Add time off' }).disabled).toBe(true);
     expect(panel().queryByText('Pick the first and the last day.')).toBeNull();
+    // Nothing is typed: there is no date box to type in, only the two calendars.
+    expect(screen.getByTestId('pt-time-off').querySelector('input')).toBeNull();
+    expect(panel().getByRole('button', { name: 'First day' }).textContent).toBe('Pick a date');
+    // Days before today cannot be pressed.
+    fireEvent.click(panel().getByRole('button', { name: 'First day' }));
+    expect(panel().getByRole('button', { name: 'Tue 6 Oct 2026' }).disabled).toBe(true);
+    fireEvent.click(panel().getByRole('button', { name: 'Fri 9 Oct 2026' }));
     // The last day follows the first until it is picked.
-    pickDays('2026-10-09');
+    expect(panel().getByRole('button', { name: 'First day' }).textContent).toBe('Fri 9 Oct 2026');
+    expect(panel().getByRole('button', { name: 'Last day' }).textContent).toBe('Fri 9 Oct 2026');
     expect(panel().getByRole('button', { name: 'Add time off' }).disabled).toBe(false);
-    pickDays('2026-10-09', '2026-10-12');
+    // The last day's calendar starts at the first day.
+    fireEvent.click(panel().getByRole('button', { name: 'Last day' }));
+    expect(panel().getByRole('button', { name: 'Thu 8 Oct 2026' }).disabled).toBe(true);
+    fireEvent.click(panel().getByRole('button', { name: 'Mon 12 Oct 2026' }));
     fireEvent.click(panel().getByRole('button', { name: 'Add time off' }));
     await waitFor(() => expect(api.addPtTimeOff).toHaveBeenCalledTimes(1));
     const [gym, who, body] = api.addPtTimeOff.mock.calls[0];
@@ -505,7 +520,7 @@ describe("a trainer's time off", () => {
     open();
     fireEvent.click(await screen.findByRole('button', { name: 'Time off for Sam Reed' }));
     fireEvent.click(panel().getByRole('button', { name: 'Part of one day' }));
-    pickDays('2026-10-09');
+    pickDays('Fri 9 Oct 2026', undefined, 'Day');
     expect(panel().getByText('Pick a start and an end time.')).toBeTruthy();
     const pick = (label, hour, minute) => {
       fireEvent.change(panel().getByLabelText(`${label} hour`), { target: { value: hour } });
@@ -523,7 +538,7 @@ describe("a trainer's time off", () => {
     api.addPtTimeOff.mockRejectedValueOnce(asks()).mockResolvedValueOnce({ data: withOff([fridayOff]) });
     open();
     fireEvent.click(await screen.findByRole('button', { name: 'Time off for Sam Reed' }));
-    pickDays('2026-10-09');
+    pickDays('Fri 9 Oct 2026');
     fireEvent.click(panel().getByRole('button', { name: 'Add time off' }));
     const box = within(await screen.findByTestId('pt-time-off-box'));
     expect(box.getByText('Sam Reed has 1 session booked and coaches 1 class in this time')).toBeTruthy();
@@ -551,13 +566,13 @@ describe("a trainer's time off", () => {
     api.addPtTimeOff.mockRejectedValue(asks());
     open();
     fireEvent.click(await screen.findByRole('button', { name: 'Time off for Sam Reed' }));
-    pickDays('2026-10-09');
+    pickDays('Fri 9 Oct 2026');
     fireEvent.click(panel().getByRole('button', { name: 'Add time off' }));
     fireEvent.click(within(await screen.findByTestId('pt-time-off-box')).getByRole('button', { name: 'Go back' }));
     expect(screen.queryByTestId('pt-time-off-box')).toBeNull();
     fireEvent.click(panel().getByRole('button', { name: 'Add time off' }));
     await screen.findByTestId('pt-time-off-box');
-    pickDays('2026-10-10');
+    pickDays('Sat 10 Oct 2026');
     expect(screen.queryByTestId('pt-time-off-box')).toBeNull();
     expect(api.addPtTimeOff).toHaveBeenCalledTimes(2);
     expect(api.addPtTimeOff.mock.calls.every((call) => call[2].confirm === undefined)).toBe(true);
@@ -567,10 +582,25 @@ describe("a trainer's time off", () => {
     api.addPtTimeOff.mockRejectedValue(Object.assign(new Error('409'), { response: { status: 409, data: { error: 'time_off_ended', message: 'That time has already passed.' } } }));
     open();
     fireEvent.click(await screen.findByRole('button', { name: 'Time off for Sam Reed' }));
-    pickDays('2026-10-07');
+    pickDays('Wed 7 Oct 2026');
     fireEvent.click(panel().getByRole('button', { name: 'Add time off' }));
     expect((await panel().findByRole('alert')).textContent).toBe('That time has already passed.');
-    expect(screen.getByTestId('pt-time-off').querySelector('input[type="date"]').value).toBe('2026-10-07');
+    expect(panel().getByRole('button', { name: 'First day' }).value).toBe('2026-10-07');
+  });
+
+  it('Remove asks first, naming the time off, and Keep it removes nothing', async () => {
+    api.getPtTrainers.mockResolvedValue({ data: withOff([fridayOff]) });
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Time off for Sam Reed' }));
+    fireEvent.click(panel().getByRole('button', { name: 'Remove time off Fri 9 Oct · all day' }));
+    const box = within(panel().getByRole('group', { name: 'Remove this time off' }));
+    expect(box.getByText("Remove Sam Reed's time off on Fri 9 Oct · all day?")).toBeTruthy();
+    expect(box.getByText('Sessions can be booked with Sam Reed at those times again. Nothing that is booked changes.')).toBeTruthy();
+    expect(api.removePtTimeOff).not.toHaveBeenCalled();
+    fireEvent.click(box.getByRole('button', { name: 'Keep it' }));
+    expect(panel().queryByRole('group', { name: 'Remove this time off' })).toBeNull();
+    expect(panel().getByText('Fri 9 Oct · all day')).toBeTruthy();
+    expect(api.removePtTimeOff).not.toHaveBeenCalled();
   });
 
   it('Remove takes one time off away, by its own name', async () => {
@@ -580,6 +610,10 @@ describe("a trainer's time off", () => {
     expect((await screen.findByTestId('pt-trainer')).textContent).toContain('Time off: Fri 9 Oct · all day, and 1 more');
     fireEvent.click(screen.getByRole('button', { name: 'Time off for Sam Reed' }));
     fireEvent.click(panel().getByRole('button', { name: 'Remove time off Mon 12 Oct – Fri 16 Oct · all day' }));
+    // The box is under its own row, and the other time off keeps its Remove.
+    expect(panel().getByText("Remove Sam Reed's time off on Mon 12 Oct – Fri 16 Oct · all day?")).toBeTruthy();
+    expect(panel().getByRole('button', { name: 'Remove time off Fri 9 Oct · all day' })).toBeTruthy();
+    fireEvent.click(panel().getByRole('button', { name: 'Remove time off' }));
     await waitFor(() => expect(api.removePtTimeOff).toHaveBeenCalledWith('g1', SAM, 'o-2'));
     await waitFor(() => expect(panel().queryByText('Mon 12 Oct – Fri 16 Oct · all day')).toBeNull());
     expect(panel().getByText('Fri 9 Oct · all day')).toBeTruthy();

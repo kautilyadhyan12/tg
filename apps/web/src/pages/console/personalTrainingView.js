@@ -6,6 +6,7 @@ import {
   PT_SESSION_MINUTES_MIN,
   PT_SESSION_MINUTES_USUAL,
   PT_TIME_OFF_AHEAD_DAYS,
+  PT_TIME_OFF_DAYS_MAX,
   PT_TIME_OFF_MAX,
   PT_TIME_OFF_OVER_ERROR,
   ptHoursProblem,
@@ -268,9 +269,20 @@ export function timeOffDraft() {
   return { kind: 'days', fromDate: '', toDate: '', from: '', to: '' };
 }
 
-/** The first and last day the date boxes take. */
-export function timeOffDayLimits(today) {
-  return { min: today, max: addDays(today, PT_TIME_OFF_AHEAD_DAYS) };
+/** The days the two calendars offer: the first day from today to a year on; the last day
+ *  from the first day picked to a year after it. */
+export function timeOffDayLimits(today, fromDate) {
+  const first = typeof fromDate === 'string' && fromDate !== '' ? fromDate : today;
+  return { min: today, max: addDays(today, PT_TIME_OFF_AHEAD_DAYS), lastMin: first, lastMax: addDays(first, PT_TIME_OFF_DAYS_MAX - 1) };
+}
+
+/** The box before a time off is removed: which one, what removing does, and what stays. */
+export function timeOffRemoveBox(off, trainer, clockFormat, today) {
+  const who = trainerName(trainer);
+  return {
+    question: `Remove ${who}'s time off on ${timeOffLine(off, clockFormat, today)}?`,
+    after: `Sessions can be booked with ${who} at those times again. Nothing that is booked changes.`,
+  };
 }
 
 function draftSpan(draft) {

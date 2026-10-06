@@ -38,6 +38,7 @@ import {
   timeOffDraft,
   timeOffFormProblem,
   timeOffLine,
+  timeOffRemoveBox,
   timeOffRequest,
   timeOffSummary,
   sessionRow,
@@ -401,10 +402,24 @@ describe("a trainer's time off", () => {
 
   it('the form starts empty, takes days from today to a year on, and stops at fifty', () => {
     expect(timeOffDraft()).toEqual({ kind: 'days', fromDate: '', toDate: '', from: '', to: '' });
-    expect(timeOffDayLimits(TODAY)).toEqual({ min: TODAY, max: '2027-10-08' });
+    // The last day's calendar starts at the first day picked and runs a year from it.
+    expect(timeOffDayLimits(TODAY, '')).toEqual({ min: TODAY, max: '2027-10-08', lastMin: TODAY, lastMax: '2027-10-07' });
+    expect(timeOffDayLimits(TODAY, '2026-12-28')).toEqual({ min: TODAY, max: '2027-10-08', lastMin: '2026-12-28', lastMax: '2027-12-28' });
+    // Whatever both calendars let through is a time off the form takes.
+    expect(timeOffFormProblem({ kind: 'days', fromDate: '2027-10-08', toDate: '2028-10-07', from: '', to: '' }, TODAY)).toBeNull();
     const fine = { kind: 'days', fromDate: '2026-10-09', toDate: '2026-10-09', from: '', to: '' };
     expect(timeOffFormProblem(fine, TODAY, 49)).toBeNull();
     expect(timeOffFormProblem(fine, TODAY, 50)).toBe('A trainer can have up to 50 times off coming. Remove one first.');
+  });
+
+  it('the box before a removal names whose time off and which, and says nothing booked changes', () => {
+    expect(timeOffRemoveBox(days('2026-10-12', '2026-10-16'), samReed, '24h', TODAY)).toEqual({
+      question: "Remove Sam Reed's time off on Mon 12 Oct – Fri 16 Oct · all day?",
+      after: 'Sessions can be booked with Sam Reed at those times again. Nothing that is booked changes.',
+    });
+    expect(timeOffRemoveBox(hours('2026-10-09', 540, 720), { name: 'Sam Reed', mine: true }, '12h', TODAY).question).toBe(
+      "Remove Sam Reed (you)'s time off on Fri 9 Oct · 9:00 AM – 12:00 PM?",
+    );
   });
 
   it('what is sent is what the form shows: whole days carry no times, part of a day carries one day, and the mark only when confirming', () => {

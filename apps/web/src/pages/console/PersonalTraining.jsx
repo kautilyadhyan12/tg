@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Loader2, Plus, Search, X } from 'lucide-reac
 import { orgService, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import TimePick from '../../components/console/TimePick';
-import { Tick } from './ClassFields';
+import { DateField, Tick } from './ClassFields';
 import { useConsoleOrg } from './useConsoleOrg';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import { WEEKDAYS, addDays, gymToday } from './hoursView';
@@ -56,6 +56,7 @@ import {
   timeOffDraft,
   timeOffFormProblem,
   timeOffLine,
+  timeOffRemoveBox,
   timeOffRequest,
   timeOffSummary,
   trainerGroups,
@@ -250,12 +251,14 @@ function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, onChanged, o
   const [asked, setAsked] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // The time off whose Remove was pressed: it is removed only from the box that asks.
+  const [removing, setRemoving] = useState(null);
   // One key until it is added: pressing twice, or again after a lost answer, adds once.
   const requestKey = useRef(crypto.randomUUID());
   const coming = Array.isArray(trainer.timeOff) ? trainer.timeOff : [];
   const problem = timeOffFormProblem(draft, today, coming.length);
   const untouched = draft.fromDate === '' && draft.toDate === '' && draft.from === '' && draft.to === '';
-  const limits = timeOffDayLimits(today);
+  const limits = timeOffDayLimits(today, draft.fromDate);
   // A change to the form takes the box away: it was about other days.
   const change = (patch) => {
     setDraft({ ...draft, ...patch });
@@ -285,6 +288,7 @@ function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, onChanged, o
     setError(null);
     try {
       const res = await orgService.removePtTimeOff(gymId, trainer.userId, off.id);
+      setRemoving(null);
       onChanged(res.data);
     } catch (err) {
       setError(errorText(err, "We couldn't remove that time off."));
@@ -306,18 +310,42 @@ function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, onChanged, o
         <ul className="m-0 p-0 list-none flex flex-col" aria-label="Time off coming">
           {coming.map((off, index) => {
             const line = timeOffLine(off, clockFormat, today);
+            const asking = removing === off.id;
+            const box = asking ? timeOffRemoveBox(off, trainer, clockFormat, today) : null;
             return (
-              <li
-                key={off.id}
-                className="py-2 min-h-11 flex items-center justify-between gap-3 min-w-0"
-                style={index === 0 ? undefined : { borderTop: '1px solid var(--line)' }}
-              >
-                <span className="c-s15 c-t1 c-num c-ell">{line}</span>
-                {locked ? null : (
-                  <button type="button" onClick={() => void remove(off)} disabled={busy} aria-label={`Remove time off ${line}`} className="c-btn c-btn-sm c-btn-s flex-shrink-0">
-                    Remove
-                  </button>
-                )}
+              <li key={off.id} className="py-2 flex flex-col gap-3 min-w-0" style={index === 0 ? undefined : { borderTop: '1px solid var(--line)' }}>
+                <div className="min-h-11 flex items-center justify-between gap-3 min-w-0">
+                  <span className="c-s15 c-t1 c-num c-ell">{line}</span>
+                  {locked || asking ? null : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError(null);
+                        setRemoving(off.id);
+                      }}
+                      disabled={busy}
+                      aria-label={`Remove time off ${line}`}
+                      className="c-btn c-btn-sm c-btn-s flex-shrink-0"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {box !== null ? (
+                  <div className="flex flex-col gap-3 pb-1" role="group" aria-label="Remove this time off">
+                    <p className="c-s14 c-t1 m-0">{box.question}</p>
+                    <p className="c-s14 c-t2 m-0">{box.after}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={() => void remove(off)} disabled={busy} className="c-btn c-btn-sm c-btn-danger">
+                        {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                        Remove time off
+                      </button>
+                      <button type="button" onClick={() => setRemoving(null)} disabled={busy} className="c-btn c-btn-sm c-btn-s">
+                        Keep it
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </li>
             );
           })}
@@ -345,36 +373,31 @@ function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, onChanged, o
             ))}
           </div>
 
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="c-field">
-              <span className="c-label">{draft.kind === 'days' ? 'First day' : 'Day'}</span>
-              <input
-                type="date"
+          <div className="flex flex-wrap items-start gap-3">
+            <div style={{ width: 320, maxWidth: '100%' }}>
+              <DateField
+                label={draft.kind === 'days' ? 'First day' : 'Day'}
                 value={draft.fromDate}
                 min={limits.min}
                 max={limits.max}
+                today={today}
                 // The last day follows the first until it is picked later than it.
-                onChange={(e) =>
-                  change({ fromDate: e.target.value, toDate: draft.toDate === '' || draft.toDate < e.target.value ? e.target.value : draft.toDate })
-                }
+                onChange={(day) => change({ fromDate: day, toDate: draft.toDate === '' || draft.toDate < day ? day : draft.toDate })}
                 disabled={busy}
-                className="c-input"
-                style={{ width: 180 }}
               />
-            </label>
+            </div>
             {draft.kind === 'days' ? (
-              <label className="c-field">
-                <span className="c-label">Last day</span>
-                <input
-                  type="date"
+              <div style={{ width: 320, maxWidth: '100%' }}>
+                <DateField
+                  label="Last day"
                   value={draft.toDate}
-                  min={draft.fromDate === '' ? limits.min : draft.fromDate}
-                  onChange={(e) => change({ toDate: e.target.value })}
+                  min={limits.lastMin}
+                  max={limits.lastMax}
+                  today={today}
+                  onChange={(day) => change({ toDate: day })}
                   disabled={busy}
-                  className="c-input"
-                  style={{ width: 180 }}
                 />
-              </label>
+              </div>
             ) : (
               <>
                 <div className="c-field">

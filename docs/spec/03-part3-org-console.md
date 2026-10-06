@@ -2711,7 +2711,9 @@ adds it, and every session, pack and class stays as it was. A booking takes the 
 of a booking and a time off sent together one always sees the other. The same `requestKey`
 again adds nothing. The week answers each day's `timeOff`; the page marks the day, and a
 session or class left in it says so. The console's **Time off** button is on each trainer's
-row and on a trainer's own card. Not done: the Classes page does not ask before it gives a
+row and on a trainer's own card. **From Kd's click-through (RULINGS 2026-10-06):** the days
+are pressed on the console's calendar (`DatePick`), never typed, and Remove asks first in a
+box under its own row (whose time off, which days, that nothing booked changes). Not done: the Classes page does not ask before it gives a
 trainer a class inside their time off (their week marks it); nobody is told (the inbox, 20a).)*
 
 ### 13.6 The calendar, the desk and the messages
