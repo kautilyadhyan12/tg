@@ -313,7 +313,6 @@ export function whoText(challenge, inApp, words) {
 /** The button that opens a challenge's board. */
 export function boardButton(challenge, open) {
   if (open) return 'Hide the board';
-  if (takesNumbers(challenge) && challenge.state === 'running') return 'Enter numbers';
   return challenge.state === 'coming' && challenge.who === 'joined' ? 'See who has joined' : 'See the board';
 }
 

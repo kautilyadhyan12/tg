@@ -247,7 +247,7 @@ describe("the gym's own count", () => {
   it('numbers are typed once it has started, and never for a cancelled one or the app\'s counts', () => {
     const c = (over) => challenge({ counts: 'own', unit: 'push-ups', ...over });
     expect([takesNumbers(c({})), takesNumbers(c({ state: 'ended' })), takesNumbers(c({ state: 'coming' })), takesNumbers(c({ cancelled: true })), takesNumbers(challenge())]).toEqual([true, true, false, false, false]);
-    expect([boardButton(c({}), false), boardButton(c({ state: 'ended' }), false), boardButton(c({}), true)]).toEqual(['Enter numbers', 'See the board', 'Hide the board']);
+    expect([boardButton(c({}), false), boardButton(c({ state: 'ended' }), false), boardButton(c({}), true)]).toEqual(['See the board', 'See the board', 'Hide the board']);
   });
 
   it('reads what is typed in a box', () => {

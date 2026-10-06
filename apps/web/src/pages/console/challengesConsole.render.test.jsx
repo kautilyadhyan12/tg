@@ -354,6 +354,11 @@ describe("the console's Challenges page", () => {
     svc.setScores.mockResolvedValue(2);
     open();
     await waitFor(() => expect(cards()).toHaveLength(1));
+    // The board is there to read, with no boxes; Enter numbers is its own button.
+    fireEvent.click(within(cardOf('Push-up Day')).getByRole('button', { name: 'See the board: Push-up Day' }));
+    const reading = within(await screen.findByTestId('challenge-board'));
+    await reading.findByText('Asha Rao');
+    expect(reading.queryByRole('textbox')).toBeNull();
     fireEvent.click(within(cardOf('Push-up Day')).getByRole('button', { name: 'Enter numbers: Push-up Day' }));
     const board = within(await screen.findByTestId('challenge-board'));
     expect(board.getByText("Type each person's push-ups and press Save numbers. An empty box is no number. Your members see the board as soon as you save.")).toBeTruthy();
@@ -384,7 +389,8 @@ describe("the console's Challenges page", () => {
     svc.board.mockResolvedValue(boardOf([row('1', 'Asha Rao', 1, 3)]));
     open({ ...ORG, consoleReadOnly: true });
     await waitFor(() => expect(cards()).toHaveLength(2));
-    fireEvent.click(within(cardOf('Push-up Day')).getByRole('button', { name: 'Enter numbers: Push-up Day' }));
+    expect(within(cardOf('Push-up Day')).queryByRole('button', { name: 'Enter numbers: Push-up Day' })).toBeNull();
+    fireEvent.click(within(cardOf('Push-up Day')).getByRole('button', { name: 'See the board: Push-up Day' }));
     const board = within(await screen.findByTestId('challenge-board'));
     await board.findByText('Asha Rao');
     expect(board.queryByRole('textbox')).toBeNull();

@@ -401,7 +401,10 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
 }
 
 function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, onEdit, onAsk, onCancel, onUncancel }) {
-  const [showBoard, setShowBoard] = useState(false);
+  /** The board that is open: 'see' to read it, 'type' with a box a person; null for none. */
+  const [board, setBoard] = useState(null);
+  const showBoard = board !== null;
+  const canType = takesNumbers(challenge) && !readOnly;
   const tag = challengeTag(challenge, list.today);
   const past = challenge.state === 'ended';
   const box = asking ? cancelBox(challenge, words) : null;
@@ -480,8 +483,13 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
       {box === null ? (
         <div className="flex flex-wrap gap-2">
           {!challenge.cancelled ? (
-            <button type="button" onClick={() => setShowBoard((v) => !v)} aria-expanded={showBoard} className={`c-btn c-btn-sm ${showBoard ? 'c-btn-s' : 'c-btn-soft'}`} aria-label={`${boardButton(challenge, showBoard)}: ${challenge.name}`}>
+            <button type="button" onClick={() => setBoard((b) => (b === null ? 'see' : null))} aria-expanded={showBoard} className={`c-btn c-btn-sm ${showBoard ? 'c-btn-s' : 'c-btn-soft'}`} aria-label={`${boardButton(challenge, showBoard)}: ${challenge.name}`}>
               {boardButton(challenge, showBoard)}
+            </button>
+          ) : null}
+          {canType && board !== 'type' ? (
+            <button type="button" onClick={() => setBoard('type')} className="c-btn c-btn-s c-btn-sm" aria-label={`Enter numbers: ${challenge.name}`}>
+              Enter numbers
             </button>
           ) : null}
           {!past && !readOnly ? (
@@ -504,7 +512,7 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
         </div>
       ) : null}
 
-      {showBoard && !challenge.cancelled && box === null ? <ChallengeBoard gymId={gymId} challenge={challenge} timezone={list.timezone} words={words} canType={takesNumbers(challenge) && !readOnly} /> : null}
+      {showBoard && !challenge.cancelled && box === null ? <ChallengeBoard gymId={gymId} challenge={challenge} timezone={list.timezone} words={words} canType={canType && board === 'type'} /> : null}
 
       {box !== null ? (
         <div className="c-callout flex-col" role="group" aria-label={box.title}>
