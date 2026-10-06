@@ -508,7 +508,9 @@ describe('a row says what the person holds in the app (23a-i)', () => {
     const leo = entry('Leo Grant', { held: { status: 'active', memberships: ['Gold Monthly'], day: { what: 'renews', on: '2099-11-06' }, payment: { state: 'paid' } } });
     const dev = entry('Dev Shah', { status: null, held: { status: 'cancelled', memberships: ['Gold Monthly'], day: { what: 'cancelled', on: '2026-09-03' }, payment: null } });
     const asha = entry('Asha Patel', { status: 'Active', membershipType: 'Bronze', paymentStatus: 'Paid' });
-    orgService.getMemberListEntries.mockResolvedValue(pageOf([maya, leo, dev, asha]));
+    // Uma's membership starts later and is not paid: nothing is owed before its day.
+    const uma = entry('Uma Costa', { held: { status: 'upcoming', memberships: ['Gold Monthly'], day: { what: 'starts', on: '2099-10-17' }, payment: { state: 'later', on: '2099-10-17' } } });
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([maya, leo, dev, asha, uma]));
     draw();
 
     const mayaRow = await rowOf('Maya Lopez');
@@ -522,6 +524,13 @@ describe('a row says what the person holds in the app (23a-i)', () => {
     const paid = within(await rowOf('Leo Grant')).getByTestId('row-pay');
     expect(paid.textContent).toBe('Paid');
     expect(paid.style.color).toBe('');
+
+    const umaRow = await rowOf('Uma Costa');
+    expect(umaRow.textContent).toContain('Not started');
+    expect(umaRow.textContent).toContain('Starts 17 Oct 2099');
+    const notYet = within(umaRow).getByTestId('row-pay');
+    expect(notYet.textContent).toBe('Not due yet');
+    expect(notYet.style.color).toBe('');
 
     const devRow = await rowOf('Dev Shah');
     expect(devRow.textContent).toContain('Cancelled');

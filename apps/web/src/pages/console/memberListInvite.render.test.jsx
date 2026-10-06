@@ -48,7 +48,10 @@ const IRON = { name: 'Iron House', slug: 'iron-house' };
 const NONE = { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
 const FILTERS = { records: 'current', app: 'all', status: ['Active'], membershipType: [], paymentStatus: [], query: '' };
 
-const preview = (over = {}) => memberInvitePreviewSchema.parse({ version: 7, reach: 2, skipped: NONE, blocked: null, ...over });
+/** The server's value for exactly the people a preview would email: the box that was shown, and the one after a change. */
+const SEEN = 'a1'.repeat(32);
+const NOW = 'b2'.repeat(32);
+const preview = (over = {}) => memberInvitePreviewSchema.parse({ version: 7, reach: 2, skipped: NONE, blocked: null, digest: SEEN, ...over });
 const previewAnswer = (p) => ({ data: { preview: p } });
 const refusal = (status, data) => Object.assign(new Error('refused'), { response: { status, data } });
 
@@ -173,13 +176,14 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     await waitFor(() => expect(orgService.getInvitePeople).toHaveBeenCalledWith(GYM, 'status=Active&group=left_out'));
     fireEvent.click(send);
     await waitFor(() => expect(orgService.pressInvite).toHaveBeenCalledTimes(1));
-    expect(orgService.pressInvite).toHaveBeenCalledWith(GYM, { status: ['Active'], version: 7, expectedCount: 2, permissionConfirmed: true });
+    // The press says who the box showed, not only how many.
+    expect(orgService.pressInvite).toHaveBeenCalledWith(GYM, { status: ['Active'], version: 7, expectedCount: 2, expectedDigest: SEEN, permissionConfirmed: true });
   });
 
   it('a list that changed meanwhile invites nobody, says so, and shows the new number to send', async () => {
     openInvite(preview());
     orgService.pressInvite.mockRejectedValueOnce(
-      refusal(409, { error: 'invite_changed', message: MEMBER_INVITE_WORDS.invite_changed, preview: preview({ version: 8, reach: 1 }) }),
+      refusal(409, { error: 'invite_changed', message: MEMBER_INVITE_WORDS.invite_changed, preview: preview({ version: 8, reach: 1, digest: NOW }) }),
     );
     const button = await box().findByRole('button', { name: 'Send 2 invitations' });
     await waitFor(() => expect(rows()).toHaveLength(2));
@@ -199,7 +203,10 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     tick();
     orgService.pressInvite.mockResolvedValue({ data: { invited: { queued: 1, skipped: NONE, version: 8 } } });
     fireEvent.click(box().getByRole('button', { name: 'Send 1 invitation' }));
-    await waitFor(() => expect(orgService.pressInvite).toHaveBeenLastCalledWith(GYM, { status: ['Active'], version: 8, expectedCount: 1, permissionConfirmed: true }));
+    // The next press is for the people the box shows now.
+    await waitFor(() =>
+      expect(orgService.pressInvite).toHaveBeenLastCalledWith(GYM, { status: ['Active'], version: 8, expectedCount: 1, expectedDigest: NOW, permissionConfirmed: true }),
+    );
   });
 
   it("the numbers add up: how many of the people it looked at get an email, and how many don't (Kd, 2026-09-27)", async () => {

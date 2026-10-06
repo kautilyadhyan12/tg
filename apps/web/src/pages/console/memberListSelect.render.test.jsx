@@ -75,6 +75,8 @@ const entry = (fullName, over = {}) => {
   };
 };
 const pageOf = (entries, total = entries.length) => ({ data: { page: memberListEntriesPageSchema.parse({ total, entries, cursor: null }) } });
+/** The server's value for exactly the people a preview would email. */
+const SEEN = 'a1'.repeat(32);
 const preview = (reach) => ({
   data: {
     preview: memberInvitePreviewSchema.parse({
@@ -82,6 +84,7 @@ const preview = (reach) => ({
       reach,
       skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 },
       blocked: null,
+      digest: SEEN,
     }),
   },
 });
@@ -140,7 +143,7 @@ describe('selecting people', () => {
     fireEvent.click(box.getByRole('checkbox', { name: /I have permission to email them/ }));
     fireEvent.click(box.getByRole('button', { name: 'Send 1 invitation' }));
     await waitFor(() => expect(orgService.pressInvite).toHaveBeenCalledTimes(1));
-    expect(orgService.pressInvite).toHaveBeenCalledWith(GYM, { selection: ticked, version: 3, expectedCount: 1, permissionConfirmed: true });
+    expect(orgService.pressInvite).toHaveBeenCalledWith(GYM, { selection: ticked, version: 3, expectedCount: 1, expectedDigest: SEEN, permissionConfirmed: true });
   });
 
   it('the heading ticks the page, then "Select all 312 members" selects everyone the list shows, and Download sends that', async () => {

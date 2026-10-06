@@ -217,7 +217,9 @@ describe('a row for somebody who holds a membership in the app (23a-i)', () => {
       [held({ day: { what: 'ends', on: '2027-01-03' } }), ['Active', 'Gold Monthly', 'Ends 3 Jan 2027', 'Paid'], false],
       [held({ day: null, payment: { state: 'free' } }), ['Active', 'Gold Monthly', null, 'Free'], false],
       [held({ status: 'frozen', day: { what: 'frozen', on: '2026-09-09' }, payment: { state: 'due', since: null } }), ['Frozen', 'Gold Monthly', 'Frozen since 9 Sep', 'Payment due'], true],
-      [held({ status: 'upcoming', day: { what: 'starts', on: '2026-10-20' }, payment: { state: 'due', since: '2026-10-20' } }), ['Not started', 'Gold Monthly', 'Starts 20 Oct', 'Payment due'], false],
+      // A payment whose day has not come is not owed: never the word staff chase people by.
+      [held({ status: 'upcoming', day: { what: 'starts', on: '2026-10-20' }, payment: { state: 'later', on: '2026-10-20' } }), ['Not started', 'Gold Monthly', 'Starts 20 Oct', 'Not due yet'], false],
+      [held({ memberships: ['Gold Monthly', 'Annual'], payment: { state: 'later', on: '2026-10-20' } }), ['Active', 'Gold Monthly +1', 'Renews 6 Nov', 'Not due yet'], false],
       [held({ payment: { state: 'due', since: TODAY } }), ['Active', 'Gold Monthly', 'Renews 6 Nov', 'Payment due'], true],
       [held({ status: 'cancelled', day: { what: 'cancelled', on: '2026-09-03' }, payment: null }), ['Cancelled', 'Gold Monthly', 'Cancelled 3 Sep', null], false],
       [held({ status: 'ended', day: { what: 'ended', on: '2026-08-31' }, payment: null }), ['Ended', 'Gold Monthly', 'Ended 31 Aug', null], false],
@@ -470,6 +472,12 @@ describe('Invite: what the count asks and the press sends', () => {
   it('sends the same words, the version and the number shown, and the server takes it', () => {
     const body = inviteBody(ticked, { version: 9, reach: 214 }, true);
     expect(body).toEqual({ status: ['Active', ''], membershipType: ['Gold'], version: 9, expectedCount: 214, permissionConfirmed: true });
+    expect(memberInviteRequestSchema.safeParse(body).success).toBe(true);
+  });
+  it('sends back the value the box came with for the people it showed, and the server takes it', () => {
+    const digest = 'a1'.repeat(32);
+    const body = inviteBody(ticked, { version: 9, reach: 214, digest }, true);
+    expect(body).toEqual({ status: ['Active', ''], membershipType: ['Gold'], version: 9, expectedCount: 214, expectedDigest: digest, permissionConfirmed: true });
     expect(memberInviteRequestSchema.safeParse(body).success).toBe(true);
   });
   it('with nothing ticked, everyone: no words at all', () => {

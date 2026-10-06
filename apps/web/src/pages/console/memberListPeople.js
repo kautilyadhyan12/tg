@@ -218,7 +218,8 @@ function heldDayWords(day, today) {
 
 /** A row's Status, Membership, Renews-or-ends and Payment (23a-i). Somebody who holds a
  *  membership in the app reads what it says (`entry.held`, worked out by the server);
- *  everybody else reads the gym's own words. `owes`: a payment is due today or earlier. */
+ *  everybody else reads the gym's own words. `owes`: the server says a payment is due,
+ *  which is money owed today; one whose day has not come is "Not due yet" and not owed. */
 export function rowCells(entry, today = null) {
   const held = entry.held ?? null;
   if (held === null) {
@@ -231,7 +232,7 @@ export function rowCells(entry, today = null) {
     membership: heldNamesLine(held.memberships),
     ends: heldDayWords(held.day, today),
     payment: pay === null ? null : HELD_PAYMENT_WORDS[pay.state],
-    owes: pay !== null && pay.state === 'due' && (pay.since === null || today === null || pay.since <= today),
+    owes: pay !== null && pay.state === 'due',
   };
 }
 
@@ -302,10 +303,16 @@ export function inviteQueryString(filters) {
   return params.toString();
 }
 
+/** The preview's value for exactly the people it showed, sent back with the press: the
+ *  server invites nobody if the people it would reach now are any others. */
+function previewDigest(preview) {
+  return typeof preview.digest === 'string' ? { expectedDigest: preview.digest } : {};
+}
+
 /** The press: the same words, the version and number the count showed, so a list that
  *  moved in between invites nobody, and staff's permission tick. */
 export function inviteBody(filters, preview, permissionConfirmed) {
-  const body = { version: preview.version, expectedCount: preview.reach, permissionConfirmed };
+  const body = { version: preview.version, expectedCount: preview.reach, ...previewDigest(preview), permissionConfirmed };
   for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) body[kind] = [...filters[kind]];
   return body;
 }
@@ -363,7 +370,7 @@ export function selectedWords(k) {
 
 /** The press on the people selected: the version and number the count showed, and the tick. */
 export function selectedInviteBody(selection, preview, permissionConfirmed) {
-  return { selection, version: preview.version, expectedCount: preview.reach, permissionConfirmed };
+  return { selection, version: preview.version, expectedCount: preview.reach, ...previewDigest(preview), permissionConfirmed };
 }
 
 /** Invite's top line for the people selected, as `inviteSummary` says it for the list.
