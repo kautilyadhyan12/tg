@@ -285,5 +285,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 17d, as first written: **The member's side**: the list by day with Book · Cancel · Join waitlist · Claim, on the member web until the phone app shows it.
 
 - 17c-iii, as first written: **Who is booked, on the Calendar** (RULINGS 2026-10-05; spec §13.6; after 17d): a class on the Calendar opens its list of people booked and waiting, for `schedule.manage` and the class's own coach (the server's read exists since 17c-i); a membership staff cancel on a person's page ends the bookings made on it.
+- 17e, as first written (split 2026-10-06 into 17e-i, 17e-ii and 17e-iii): **Personal training**: a trainer's hours and session length, free times worked out, an appointment the DATABASE refuses to overlap, booked at once, PT packs.
+- 17e-i, as first written: **Trainers' hours, and staff book a session**: each trainer's hours and session length, the free times worked out, staff book and cancel for a person on the member list, a pack that includes personal training charged once; the DATABASE refuses two sessions of one trainer that overlap.
 
 - 19b-vi, as first written: **A post five people have reported is hidden until staff decide** (RULINGS 2026-10-05): five different members, any reason; members stop seeing it at once, staff Keep it (shown again) or Remove it. Risky (other people's posts). Before anybody uses Updates.

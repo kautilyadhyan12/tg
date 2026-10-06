@@ -47,6 +47,7 @@ export const gymMembershipTypes = pgTable(
     bookingsLimit: integer("bookings_limit"),
     bookingsPeriod: text("bookings_period"),
     coversAllClasses: boolean("covers_all_classes").notNull().default(true),
+    includesPt: boolean("includes_pt").notNull().default(false),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

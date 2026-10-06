@@ -100,6 +100,8 @@ export const gymMembershipTypeSchema = z
     classTypes: z
       .array(z.object({ id: z.string().uuid(), name: z.string().min(1).max(80) }).strict())
       .nullable(),
+    /** It includes personal training (17e-i). "Every class" does not by itself. */
+    includesPt: z.boolean(),
     archivedAt: z.string().datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
@@ -146,7 +148,9 @@ const membershipTypeFields = {
   access: membershipAccessSchema,
   bookingsLimit: bookingsLimitSchema.nullable(),
   bookingsPeriod: membershipLimitPeriodSchema.nullable(),
-  classTypeIds: z.array(z.string().uuid()).min(1).max(MEMBERSHIP_CLASS_TYPES_MAX).nullable(),
+  classTypeIds: z.array(z.string().uuid()).max(MEMBERSHIP_CLASS_TYPES_MAX).nullable(),
+  /** Left out of a NEW type is "no"; a change must say it (below). */
+  includesPt: z.boolean().default(false),
 };
 const membershipTypeObject = z.object(membershipTypeFields);
 
@@ -172,6 +176,8 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
   if ((value.access === "limited") !== (value.bookingsLimit !== null)) wrong("bookingsLimit");
   if ((value.access === "limited") !== (value.bookingsPeriod !== null)) wrong("bookingsPeriod");
   if (value.access === "gym_only" && value.classTypeIds !== null) wrong("classTypeIds");
+  // No class at all is a membership for personal training alone.
+  if (value.classTypeIds !== null && value.classTypeIds.length === 0 && !value.includesPt) wrong("classTypeIds");
   if (value.classTypeIds !== null && new Set(value.classTypeIds).size !== value.classTypeIds.length) {
     wrong("classTypeIds");
   }
@@ -185,7 +191,9 @@ export type SaveGymMembershipTypeRequest = z.infer<typeof saveGymMembershipTypeR
 
 /** A change: the same fields, and the `updatedAt` the list gave for the type. */
 export const updateGymMembershipTypeRequestSchema = membershipTypeObject
-  .extend({ updatedAt: z.string().datetime({ offset: true }) })
+  // A change states the tick outright, as it states every other field: a default here
+  // would take personal training off everybody who holds the type.
+  .extend({ updatedAt: z.string().datetime({ offset: true }), includesPt: z.boolean() })
   .strict()
   .superRefine(refineMembershipType);
 export type UpdateGymMembershipTypeRequest = z.infer<typeof updateGymMembershipTypeRequestSchema>;

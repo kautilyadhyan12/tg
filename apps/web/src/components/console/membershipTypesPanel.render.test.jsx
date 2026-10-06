@@ -133,6 +133,7 @@ describe('adding a type', () => {
       bookingsLimit: null,
       bookingsPeriod: null,
       classTypeIds: null,
+      includesPt: false,
     });
     expect(await screen.findByText('£49.99 every month')).toBeTruthy();
     // The form closes on a save.
