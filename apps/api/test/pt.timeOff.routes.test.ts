@@ -303,7 +303,7 @@ d("a trainer's time off (real Postgres, two api instances)", { timeout: T }, () 
     inject("DELETE", `/v1/orgs/${gym.id}/pt/trainers/${trainer.userId}/time-off/${id}`, by.cookies);
   const offRows = (gym: Gym, trainer: Person) => sql<{ id: string; from_date: string; to_date: string; starts_at: Date; ends_at: Date }[]>`
     SELECT id, from_date::text AS from_date, to_date::text AS to_date, starts_at, ends_at
-    FROM gym_trainer_time_off WHERE gym_id = ${gym.id} AND user_id = ${trainer.userId} ORDER BY starts_at, id`;
+    FROM gym_trainer_time_off WHERE gym_id = ${gym.id} AND user_id = ${trainer.userId} ORDER BY starts_at, ends_at, id`;
   const overOf = (res: { statusCode: number; body: string }): PtTimeOffOver => {
     expect(res.statusCode, res.body).toBe(409);
     const body = JSON.parse(res.body) as { error: string; over: PtTimeOffOver };
@@ -648,7 +648,8 @@ d("a trainer's time off (real Postgres, two api instances)", { timeout: T }, () 
       // Times the clock has that night are taken, each as the instant it is.
       trainersOf(await off(open, sam, { fromDate: sunday, fromMinute: 0, toMinute: 120 }));
       trainersOf(await off(open, sam, { fromDate: sunday, fromMinute: 120, toMinute: 180 }));
-      // The whole day is the twenty-three hours it has.
+      // The whole day is the twenty-three hours it has. Two of the three start at the same
+      // instant: the rows are read by their start and then their end.
       trainersOf(await off(open, sam, { fromDate: sunday }));
       expect((await offRows(open, sam)).map((r) => [r.starts_at.toISOString(), r.ends_at.toISOString()])).toEqual([
         ["2027-03-28T00:00:00.000Z", "2027-03-28T01:00:00.000Z"],
