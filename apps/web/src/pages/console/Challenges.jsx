@@ -12,6 +12,7 @@ import {
   COUNT_CHOICES,
   LOCKED_NOTE,
   NUMBER_NOTES,
+  badBox,
   boardButton,
   boardLines,
   cancelBox,
@@ -278,7 +279,7 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
     () =>
       staffChallengesService.board(gymId, challenge.id, page).then(
         (board) => {
-          setKept((k) => ({ ...k, ...Object.fromEntries(board.rows.map((row) => [row.userId, row.value])) }));
+          setKept((k) => ({ ...k, ...Object.fromEntries(board.rows.map((row) => [row.userId, { value: row.value, name: row.name }])) }));
           setState({ loading: false, error: null, board });
         },
         (err) => setState((s) => ({ loading: false, error: errorText(err, "We couldn't load the board."), board: s.board })),
@@ -297,9 +298,11 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
   const pages = pageLine(board);
   const saveNumbers = async () => {
     // Every box typed in, on whichever page: not only the page that is open.
-    const scores = numbersToSave(Object.entries(kept).map(([userId, value]) => ({ userId, value })), typed);
+    const known = Object.entries(kept).map(([userId, person]) => ({ userId, ...person }));
+    const scores = numbersToSave(known, typed);
     if (scores === null) {
-      setSaid({ bad: true, text: NUMBER_NOTES.bad });
+      // Named, since the box may be on a page that is not open.
+      setSaid({ bad: true, text: NUMBER_NOTES.badFor(badBox(known, typed)?.name ?? null) });
       return;
     }
     if (scores.length === 0) {

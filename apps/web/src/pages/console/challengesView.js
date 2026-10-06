@@ -315,7 +315,13 @@ export function numbersToSave(rows, typed) {
   return scores;
 }
 
+/** The first person whose box holds something that is no number, on whichever page; null with none. */
+export function badBox(rows, typed) {
+  return rows.find((row) => typed[row.userId] !== undefined && !typedNumber(typed[row.userId]).ok) ?? null;
+}
+
 export const NUMBER_NOTES = {
+  badFor: (name) => `${name ?? 'One person'}'s box isn't a number. Type a whole number up to ${count(CHALLENGE_LIMITS.score)}, or leave it empty.`,
   bad: `A number is a whole number up to ${count(CHALLENGE_LIMITS.score)}. Leave a box empty for no number.`,
   saved: (n) => `Saved. ${n === 1 ? '1 number' : `${count(n)} numbers`} changed.`,
   none: 'Nothing has changed yet.',

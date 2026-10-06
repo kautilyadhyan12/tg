@@ -371,7 +371,7 @@ describe("the console's Challenges page", () => {
     // Something that is no number stops the whole save.
     fireEvent.change(box('Chen Wu'), { target: { value: 'lots' } });
     fireEvent.click(board.getByRole('button', { name: 'Save numbers' }));
-    expect(board.getByRole('alert').textContent).toMatch(/^A number is a whole number up to 1,000,000\./);
+    expect(board.getByRole('alert').textContent).toBe("Chen Wu's box isn't a number. Type a whole number up to 1,000,000, or leave it empty.");
     expect(svc.setScores).not.toHaveBeenCalled();
 
     fireEvent.change(box('Chen Wu'), { target: { value: '55' } });
@@ -396,7 +396,19 @@ describe("the console's Challenges page", () => {
     fireEvent.change(await board.findByLabelText('Person 1: number'), { target: { value: '11' } });
     expect(board.getByRole('note').textContent).toMatch(/^1 number is typed and not saved yet\./);
     fireEvent.click(board.getByRole('button', { name: 'Next' }));
+    // A box on page 1 that is no number is named from page 2.
+    await board.findByLabelText('Person 101: number');
+    fireEvent.click(board.getByRole('button', { name: 'Previous' }));
+    fireEvent.change(await board.findByLabelText('Person 2: number'), { target: { value: 'lots' } });
+    fireEvent.click(board.getByRole('button', { name: 'Next' }));
     fireEvent.change(await board.findByLabelText('Person 101: number'), { target: { value: '22' } });
+    fireEvent.click(board.getByRole('button', { name: 'Save numbers' }));
+    expect(board.getByRole('alert').textContent).toMatch(/^Person 2's box isn't a number\./);
+    expect(svc.setScores).not.toHaveBeenCalled();
+    fireEvent.click(board.getByRole('button', { name: 'Previous' }));
+    fireEvent.change(await board.findByLabelText('Person 2: number'), { target: { value: '' } });
+    fireEvent.click(board.getByRole('button', { name: 'Next' }));
+    await board.findByLabelText('Person 101: number');
     fireEvent.click(board.getByRole('button', { name: 'Save numbers' }));
     await waitFor(() => expect(svc.setScores).toHaveBeenCalledTimes(1));
     expect(svc.setScores.mock.calls[0][2]).toEqual([{ userId: 'u1', value: 11 }, { userId: 'u101', value: 22 }]);

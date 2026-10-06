@@ -5,6 +5,7 @@ import { GYM_CHALLENGE_WORDS, ROLE_PRIVILEGES } from '@app/shared';
 import {
   CHALLENGE_NOTES,
   NUMBER_NOTES,
+  badBox,
   boardButton,
   boardLines,
   canManageChallenges,
@@ -273,6 +274,12 @@ describe("the gym's own count", () => {
     expect(numbersToSave(rows, { a: '60', b: '45', c: '12', d: '' })).toEqual([{ userId: 'b', value: 45 }, { userId: 'c', value: 12 }, { userId: 'd', value: null }]);
     expect(numbersToSave(rows, { c: '', d: '0' })).toEqual([{ userId: 'd', value: null }]);
     expect(numbersToSave(rows, { a: '70', b: 'lots' })).toBeNull();
+    // The box that stops it is named, whichever page it is on.
+    const named = [{ userId: 'a', value: 60, name: 'Asha Rao' }, { userId: 'b', value: 40, name: 'Bilal Khan' }, { userId: 'n', value: 0, name: null }];
+    expect(badBox(named, { a: '70', b: 'lots' })?.name).toBe('Bilal Khan');
+    expect(badBox(named, { a: '70' })).toBeNull();
+    expect(NUMBER_NOTES.badFor('Bilal Khan')).toBe("Bilal Khan's box isn't a number. Type a whole number up to 1,000,000, or leave it empty.");
+    expect(NUMBER_NOTES.badFor(badBox(named, { n: 'x' })?.name ?? null)).toBe("One person's box isn't a number. Type a whole number up to 1,000,000, or leave it empty.");
     expect([NUMBER_NOTES.saved(1), NUMBER_NOTES.saved(120)]).toEqual(['Saved. 1 number changed.', 'Saved. 120 numbers changed.']);
     expect(NUMBER_NOTES.help(challenge({ counts: 'own', unit: 'push-ups' }), WORDS)).toBe("Type each person's push-ups and press Save numbers. An empty box is no number. Your members see a saved number straight away.");
   });
