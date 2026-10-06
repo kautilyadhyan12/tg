@@ -1,7 +1,7 @@
 // A GYM'S UPDATES, in the database (spec Part 3 §15.2, §15.3; ROADMAP 19b-i, 19b-ii-a, 19b-ii-c).
 // Every read and write names the gym.
 import type { Sql, TransactionSql } from "postgres";
-import type { GymPostReaction, GymPostReportReason } from "@app/shared";
+import { GYM_POST_REPORTS_TO_HIDE, type GymPostReaction, type GymPostReportReason } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -20,6 +20,8 @@ export interface PostRow {
   pinnedAt: Date | null;
   createdAt: Date;
   removed: boolean;
+  /** Reported by enough people to be hidden from members until staff decide. */
+  hidden: boolean;
 }
 
 interface RawPost {
@@ -33,6 +35,7 @@ interface RawPost {
   pinned_at: Date | null;
   created_at: Date;
   removed: boolean;
+  hidden: boolean;
 }
 
 const toPost = (r: RawPost): PostRow => ({
@@ -46,16 +49,19 @@ const toPost = (r: RawPost): PostRow => ({
   pinnedAt: r.pinned_at,
   createdAt: r.created_at,
   removed: r.removed,
+  hidden: r.hidden,
 });
 
 /** The gym's posts. `visible`: not removed and, for a member's own post, its writer still a
  *  live app member of the gym with an active account. A member who leaves, is removed or
- *  deletes their account takes their posts and photos off the page with them. */
+ *  deletes their account takes their posts and photos off the page with them. `hidden`:
+ *  five people reported it (`hideIfReported`) and staff have not kept it since. */
 function posts(sql: SqlOrTx, gymId: string) {
   return sql`
     SELECT p.id, p.body, p.pinned_at, p.created_at, p.post_key, p.removed_at IS NOT NULL AS removed,
            p.author_user_id AS author_id, p.by_member,
            p.removed_at IS NULL AND (NOT p.by_member OR (u.status = 'active' AND am.user_id IS NOT NULL) IS TRUE) AS visible,
+           p.hidden_at IS NOT NULL AS hidden,
            CASE WHEN u.status = 'active' THEN u.display_name END AS author_name,
            CASE WHEN u.status = 'active' THEN u.email::text END AS author_email,
            CASE WHEN u.status = 'active' THEN nullif(btrim(e.full_name), '') END AS author_record_name
@@ -67,7 +73,8 @@ function posts(sql: SqlOrTx, gymId: string) {
 }
 
 /** Who is reading. A member is sent what everyone sees, less the member posts of anybody
- *  they have blocked. `staff` is sent what everyone sees. */
+ *  they have blocked and less a hidden post they did not write. `staff` is sent what
+ *  everyone sees, hidden posts too. */
 export type Reader = { member: string } | "staff";
 
 /** The posts of `p` (a row of `posts`) this reader is sent. */
@@ -75,6 +82,7 @@ function seenBy(sql: SqlOrTx, gymId: string, reader: Reader) {
   if (reader === "staff") return sql`p.visible`;
   return sql`
     p.visible
+    AND (NOT p.hidden OR p.author_id = ${reader.member})
     AND NOT (p.by_member AND EXISTS (
       SELECT 1 FROM gym_post_blocks b
       WHERE b.gym_id = ${gymId} AND b.user_id = ${reader.member} AND b.blocked_user_id = p.author_id))`;
@@ -414,9 +422,10 @@ export async function markRemovedOwn(tx: TransactionSql, gymId: string, postId: 
 }
 
 /** The person's one report of this gym's post; false when the post is not there. Reported
- *  again, nothing changes. The post is held while it is written, as a reaction's is. */
+ *  again, nothing changes. The post is held to the end of the transaction, so reports of
+ *  one post are counted one at a time (`hideIfReported`). */
 export async function insertReport(
-  sql: SqlOrTx,
+  sql: TransactionSql,
   gymId: string,
   postId: string,
   userId: string,
@@ -428,7 +437,7 @@ export async function insertReport(
     WITH post AS (
       SELECT p.gym_id, p.id FROM gym_posts p
       WHERE p.gym_id = ${gymId} AND p.id = ${postId} AND p.removed_at IS NULL
-      FOR SHARE
+      FOR UPDATE
     ), made AS (
       INSERT INTO gym_post_reports (gym_id, post_id, user_id, reason, note, created_at)
       SELECT post.gym_id, post.id, ${userId}, ${reason}, ${note}, ${at} FROM post
@@ -436,6 +445,42 @@ export async function insertReport(
     )
     SELECT id FROM post`;
   return rows.length === 1;
+}
+
+const waitingReports = (sql: SqlOrTx, gymId: string, postId: string) =>
+  sql`(SELECT count(*) FROM gym_post_reports r WHERE r.gym_id = ${gymId} AND r.post_id = ${postId} AND r.closed_at IS NULL)`;
+
+/** Hides the post from members once five reports of it are waiting. One report a person a
+ *  post, so that is five people. Run after `insertReport`, in its transaction. */
+export async function hideIfReported(tx: TransactionSql, gymId: string, postId: string, at: Date): Promise<void> {
+  await tx`
+    UPDATE gym_posts SET hidden_at = ${at}
+    WHERE gym_id = ${gymId} AND id = ${postId} AND removed_at IS NULL AND hidden_at IS NULL
+      AND ${waitingReports(tx, gymId, postId)} >= ${GYM_POST_REPORTS_TO_HIDE}`;
+}
+
+/** Holds the post to the end of the transaction, as a report of it does: Keep and a
+ *  report of the same post run one after the other. */
+export async function holdPost(tx: TransactionSql, gymId: string, postId: string): Promise<void> {
+  await tx`SELECT 1 FROM gym_posts WHERE gym_id = ${gymId} AND id = ${postId} FOR UPDATE`;
+}
+
+/** Shows a kept post to members again. Not while five reports are waiting once more. */
+export async function showAgain(tx: TransactionSql, gymId: string, postId: string): Promise<void> {
+  await tx`
+    UPDATE gym_posts SET hidden_at = NULL
+    WHERE gym_id = ${gymId} AND id = ${postId} AND hidden_at IS NOT NULL
+      AND ${waitingReports(tx, gymId, postId)} < ${GYM_POST_REPORTS_TO_HIDE}`;
+}
+
+/** Whether this person's report is on a post now hidden from them: their report sent again
+ *  after a lost reply is answered as the first was. */
+export async function reportedHidden(sql: SqlOrTx, gymId: string, postId: string, userId: string): Promise<boolean> {
+  const rows = await sql<{ ok: number }[]>`
+    SELECT 1 AS ok FROM (${posts(sql, gymId)}) p
+    JOIN gym_post_reports r ON r.gym_id = ${gymId} AND r.post_id = p.id AND r.user_id = ${userId}
+    WHERE p.id = ${postId} AND p.visible AND p.hidden`;
+  return rows.length > 0;
 }
 
 /** Which of these posts the person has reported, answered or not. */
@@ -474,9 +519,10 @@ export async function countReports(tx: TransactionSql, gymId: string, postId: st
   return rows[0] ?? { all: 0, open: 0 };
 }
 
-/** Unpins this gym's pinned posts nobody can see (a member's post whose writer has left):
- *  a hidden post must not hold one of the three pins. */
-export async function unpinHidden(tx: TransactionSql, gymId: string): Promise<void> {
+/** Unpins this gym's pinned posts nobody is sent (a member's post whose writer has left):
+ *  such a post must not hold one of the three pins. A post hidden while staff decide
+ *  (`hidden`) keeps its pin: Keep shows it again where it was. */
+export async function unpinUnseen(tx: TransactionSql, gymId: string): Promise<void> {
   await tx`
     UPDATE gym_posts g SET pinned_at = NULL
     WHERE g.gym_id = ${gymId} AND g.pinned_at IS NOT NULL

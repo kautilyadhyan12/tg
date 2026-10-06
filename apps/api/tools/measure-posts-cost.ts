@@ -111,6 +111,10 @@ async function seed(): Promise<{ gymId: string; owner: string; viewer: string }>
     SELECT p.gym_id, p.id, m.user_id, (ARRAY['unkind','photo_of_someone','nudity','spam','other'])[1 + floor(random() * 5)::int], repeat('Words of a note. ', 17)
     FROM (SELECT gym_id, id FROM gym_posts WHERE gym_id = ${gymId} AND by_member ORDER BY created_at DESC LIMIT 60) p
     CROSS JOIN (SELECT user_id FROM gym_members WHERE gym_id = ${gymId} ORDER BY user_id LIMIT 40 OFFSET 10) m`;
+  // Forty is past five: those 60 are hidden from members, as a report would have left them.
+  await sql`
+    UPDATE gym_posts p SET hidden_at = now()
+    WHERE p.gym_id = ${gymId} AND EXISTS (SELECT 1 FROM gym_post_reports r WHERE r.gym_id = p.gym_id AND r.post_id = p.id)`;
   await sql`
     INSERT INTO gym_post_stops (gym_id, user_id)
     SELECT gym_id, user_id FROM gym_members WHERE gym_id = ${gymId} AND user_id <> ALL (${[owner, users[1]?.id ?? owner]}::uuid[])

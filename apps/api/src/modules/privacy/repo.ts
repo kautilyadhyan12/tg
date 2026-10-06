@@ -116,7 +116,16 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   // The person's reactions to their gym's posts (tables.ts, 0071).
   await tx`DELETE FROM gym_post_reactions WHERE user_id = ${userId}`;
   // Their reports of posts and a gym's stop on their posting (tables.ts, 0072).
-  await tx`DELETE FROM gym_post_reports WHERE user_id = ${userId}`;
+  // A post their report helped hide stays hidden for staff to decide (0077), unless no
+  // other report of it is waiting: then nothing is left on the staff's list to answer.
+  await tx`
+    WITH gone AS (DELETE FROM gym_post_reports WHERE user_id = ${userId} RETURNING gym_id, post_id)
+    UPDATE gym_posts p SET hidden_at = NULL
+    FROM gone
+    WHERE p.gym_id = gone.gym_id AND p.id = gone.post_id AND p.hidden_at IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_post_reports r
+        WHERE r.gym_id = p.gym_id AND r.post_id = p.id AND r.closed_at IS NULL AND r.user_id <> ${userId})`;
   await tx`DELETE FROM gym_post_stops WHERE user_id = ${userId}`;
   // Who they blocked, and anybody's block of them (tables.ts, 0074).
   await tx`DELETE FROM gym_post_blocks WHERE user_id = ${userId} OR blocked_user_id = ${userId}`;

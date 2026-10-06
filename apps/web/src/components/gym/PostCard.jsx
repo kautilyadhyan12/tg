@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Ban, BicepsFlexed, Flag, Flame, Heart, Pin, ThumbsUp, Trash2 } from 'lucide-react';
+import { Ban, BicepsFlexed, EyeOff, Flag, Flame, Heart, Pin, ThumbsUp, Trash2 } from 'lucide-react';
 import { postPhotoUrl } from '../../api/postsApi';
 import { errorText } from '../../api/orgsApi';
 import {
@@ -10,6 +10,7 @@ import {
   blockBox,
   canBlock,
   canOpenPerson,
+  hiddenOwnNote,
   memberPostAction,
   ownRemoveBox,
   personLink,
@@ -118,6 +119,7 @@ export default function PostCard({ gymId, gymName, post, busy, onReact, onOpen, 
   const box = ownRemoveBox(post, gymName);
   const action = memberPostAction(post);
   const blocking = blockBox(post, gymName);
+  const hidden = hiddenOwnNote(post, gymName);
   const opens = onPerson !== null && canOpenPerson(post);
   const Who = opens ? 'button' : 'div';
 
@@ -170,6 +172,12 @@ export default function PostCard({ gymId, gymName, post, busy, onReact, onOpen, 
           </span>
         )}
       </div>
+      {hidden !== null && (
+        <p className="flex items-start gap-2 text-xs font-semibold mt-3" style={{ color: ORANGE }} data-testid="hidden-note">
+          <EyeOff className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <span>{hidden}</span>
+        </p>
+      )}
       {post.body !== '' && (
         <p className="text-sm mt-3 whitespace-pre-wrap break-words" style={{ color: 'rgba(255,255,255,0.88)' }}>
           {post.body}

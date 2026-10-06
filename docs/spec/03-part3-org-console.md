@@ -2932,6 +2932,26 @@ Every Updates route asks who is reading or writing before the rate limit, so a s
 404 is never a 429 and never counts against the address a gym's members share; nothing a
 person wrote, as a member or as staff, offers them Report.
 
+**As built in 19b-vi (2026-10-05): a post five people have reported is hidden until staff
+decide** (RULINGS 2026-10-05). A post with five reports nobody has answered
+(`GYM_POST_REPORTS_TO_HIDE`; one report a person a post, so five people, whatever reason
+each picked) is sent to no member but the one who wrote it: not on Updates, not pinned, not
+on the writer's profile, not its photo by its own address, and a reaction, a report or a
+block of it answers 404, except that one of the five sending their report again is
+answered as the first time. The moment is kept on the post (`gym_posts.hidden_at`,
+migration 0077), written in the fifth report's own transaction with the post held, so two
+reports at one instant are counted one after the other. It is NOT worked out from the
+waiting reports on each read: a reporter whose account is purged would then bring the post
+back with no staff decision (round one's review). The purge clears the mark only when no
+report of the post is left waiting, since staff then have nothing on their list to answer.
+The gym's own staff posts follow the same rule. The writer still reads it, marked `hidden`
+("Hidden from other members while the staff at {gym} check it."), and can remove it. Staff
+read it marked, once, on the reported list (the console's list below leaves it out; one
+the list of 50 has not reached stays below and says it will show above): **Keep post**
+answers the reports and clears the mark, so every member reads it again and it takes five
+NEW people to hide it again; **Remove post** is the removal above. A hidden pinned post
+keeps its pin.
+
 **A photo's file is never lost track of** (the feature's passes, 2026-10-05). A photo's
 row goes in the database's own step and its file after it, so the file's key is written
 to `photo_files_to_remove` in that same step (a removal, a purged account) and taken off

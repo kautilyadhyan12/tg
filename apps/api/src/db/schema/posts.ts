@@ -30,6 +30,9 @@ export const gymPosts = pgTable(
     removedByUserId: uuid("removed_by_user_id").references(() => users.id, { onDelete: "set null" }),
     /** A member's own post, as against one by the gym's staff. */
     byMember: boolean("by_member").notNull().default(false),
+    /** When its fifth waiting report landed (`0077_post_hidden_at.sql`): hidden from
+     *  members until staff keep or remove it. */
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
   },
   (t) => [
     unique("gym_posts_gym_id_uq").on(t.gymId, t.id),

@@ -14,9 +14,12 @@ import {
   memberPostsSwitch,
   personOf,
   photoProblem,
+  postsBelow,
+  reportedHelp,
   reportedMore,
   reportedTitle,
   stopBox,
+  withKept,
   withPage,
   withPinChange,
   withStopped,
@@ -293,7 +296,13 @@ export default function Updates() {
         (shown) => withoutPost(shown, p.id),
       ),
     // Keep answers the reports this list showed, and none when another has arrived; the list is read again.
-    onKeep: (p, item) => act(p, () => staffPostsService.keep(gymId, p.id, item), keepNote, (shown) => shown),
+    onKeep: (p, item) =>
+      act(
+        p,
+        () => staffPostsService.keep(gymId, p.id, item),
+        (answer) => keepNote(answer, p, words),
+        (shown, answer) => (answer.kept ? withKept(shown, p.id) : shown),
+      ),
     onStop: (p, stopped) =>
       act(
         p,
@@ -333,8 +342,9 @@ export default function Updates() {
   }
 
   const feed = state.feed;
-  const all = feed === null ? [] : [...feed.pinned, ...feed.posts];
   const reported = side.reported;
+  const all = feed === null ? [] : postsBelow(feed, reported);
+  const none = feed !== null && feed.pinned.length + feed.posts.length === 0;
   const stoppedPeople = side.stopped?.people ?? [];
   const switchLines = feed === null ? null : memberPostsSwitch(feed.membersCanPost, words);
   const waiting = reported === null ? null : reportedMore(reported);
@@ -405,7 +415,7 @@ export default function Updates() {
             <section className="flex flex-col gap-3" aria-label="Reported posts" data-testid="reported">
               <div className="flex flex-col gap-1">
                 <h2 className="c-s15 c-w6 c-t1">{reportedTitle(reported.total)}</h2>
-                <p className="c-s13 c-t2">{`Remove a post and it's gone for everyone. Keep it and it stays on Updates. Your ${words.people} are never told who reported a post, and neither are you.`}</p>
+                <p className="c-s13 c-t2">{reportedHelp(words)}</p>
                 {waiting !== null ? <p className="c-s13 c-t2">{waiting}</p> : null}
               </div>
               <ul className="flex flex-col gap-3">
@@ -460,7 +470,7 @@ export default function Updates() {
           {state.loading ? <ConsoleLoading label="Loading your updates…" newLook /> : null}
           {!state.loading && feed === null ? <ConsoleFailed message={state.error} onRetry={load} newLook /> : null}
 
-          {feed !== null && all.length === 0 ? (
+          {none ? (
             <section className="c-card p-5 md:p-6">
               <p className="c-s15 c-t2">{readOnly ? 'No posts yet.' : 'No posts yet. Write your first one above.'}</p>
             </section>
@@ -475,6 +485,7 @@ export default function Updates() {
                   gymName={feed.gymName}
                   post={post}
                   pinnedCount={feed.pinned.length}
+                  reportedRead={reported !== null}
                   words={words}
                   readOnly={readOnly}
                   busy={busy === post.id}

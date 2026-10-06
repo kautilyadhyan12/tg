@@ -12,6 +12,7 @@ import {
   GYM_POST_REPORT_NOTE_MAX,
   GYM_POST_REPORT_REASONS,
   GYM_POST_REPORT_REASON_WORDS,
+  GYM_POST_REPORTS_TO_HIDE,
   GYM_POST_WORDS,
   postLength,
 } from '@app/shared';
@@ -201,10 +202,47 @@ export function reportedMore(reported) {
 
 /** What Keep did, from its answer. A report that arrived while staff were looking was not
  *  answered: the post is still on the list, with that report to read. */
-export function keepNote(answer) {
+export function keepNote(answer, post = null, words = null) {
+  if (answer.waiting === 0 && post !== null && post.hidden && words !== null) return `Kept. Your ${words.people} can see the post again, and it has left this list.`;
   if (answer.waiting === 0) return 'Kept. The post stays on Updates and has left this list.';
   const more = answer.waiting === 1 ? '1 more person reported this post' : `${answer.waiting.toLocaleString('en')} more people reported this post`;
   return `${more} while you were looking, so it is still on this list. Read what is new, then choose again.`;
+}
+
+// ── HIDDEN WHILE STAFF DECIDE (19b-vi) ──
+
+/** Under the reported list's heading: what each button does, and when a post is hidden. */
+export function reportedHelp(words) {
+  return `Remove a post and it's gone for everyone. Keep it and it stays on Updates. A post ${GYM_POST_REPORTS_TO_HIDE} people have reported is hidden from your ${words.people} until you choose. Your ${words.people} are never told who reported a post, and neither are you.`;
+}
+
+/** What the member who wrote a hidden post reads on it, or null. Nobody else is sent one. */
+export function hiddenOwnNote(post, gymName) {
+  return post.hidden ? GYM_POST_WORDS.hidden_own(gymName) : null;
+}
+
+/** What staff read on a hidden post, or null. `where`: "list" on the reported list, where
+ *  Keep is; "later" among the posts when that list has not reached it yet (it carries the
+ *  ones that have waited longest); anything else when the list could not be read. */
+export function hiddenStaffNote(post, words, where) {
+  if (!post.hidden) return null;
+  const why = `Hidden from your ${words.people}: ${GYM_POST_REPORTS_TO_HIDE} or more people reported it.`;
+  if (where === 'list') return `${why} Keep post shows it to them again.`;
+  return where === 'later' ? `${why} It will show in the reported posts above once you have answered the ones before it.` : why;
+}
+
+/** The posts drawn under the reported list in the console: what members read. A hidden
+ *  post is drawn once, on the reported list; one that list does not carry stays here. The
+ *  reported list is read again after every change and says which are hidden. */
+export function postsBelow(feed, reported) {
+  const listed = new Set((reported?.items ?? []).filter((item) => item.post.hidden).map((item) => item.post.id));
+  return [...feed.pinned, ...feed.posts].filter((p) => !listed.has(p.id));
+}
+
+/** The list after staff keep a post: it is no longer hidden. */
+export function withKept(feed, id) {
+  const mark = (p) => (p.id === id ? { ...p, hidden: false } : p);
+  return { ...feed, pinned: feed.pinned.map(mark), posts: feed.posts.map(mark) };
 }
 
 /** What a member may press on a post: Remove on their own member post, Report on a post
