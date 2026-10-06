@@ -40,6 +40,9 @@ vi.mock('../api/classesApi', () => ({ classesService: classes }));
 // And its events (events.render.test.jsx).
 const events = { list: vi.fn(() => new Promise(() => {})) };
 vi.mock('../api/eventsApi', () => ({ eventsService: events, eventPosterUrl: () => '' }));
+// And its challenges (challenges.render.test.jsx).
+const challenges = { list: vi.fn(() => new Promise(() => {})) };
+vi.mock('../api/challengesApi', () => ({ challengesService: challenges }));
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', displayName: 'Kd' }, logout: vi.fn(), loading: false }),
 }));
@@ -305,6 +308,13 @@ describe('the screen', () => {
     expect(screen.getByRole('tab', { name: 'Events' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('region', { name: `${GYM.name}'s events` })).toBeTruthy();
     await waitFor(() => expect(events.list).toHaveBeenCalledWith('g1'));
+    expect(challenges.list).not.toHaveBeenCalled();
+
+    // Its challenges (19d-i): read only when their tab is opened.
+    fireEvent.click(screen.getByRole('tab', { name: 'Challenges' }));
+    expect(screen.getByRole('tab', { name: 'Challenges' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('region', { name: `${GYM.name}'s challenges` })).toBeTruthy();
+    await waitFor(() => expect(challenges.list).toHaveBeenCalledWith('g1'));
   });
 
   // THE TAP IS GONE FOR EVERY GYM (ROADMAP 16c), whatever the gym's old switch says.
