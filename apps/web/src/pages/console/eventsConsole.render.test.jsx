@@ -261,6 +261,38 @@ describe('adding an event', () => {
     expect(await screen.findByText('Event added. Your members can see it now.')).toBeTruthy();
   });
 
+  it('after a lost reply, a poster picked instead is sent as a change even with the words the same', async () => {
+    await openAdd();
+    fillOpenDay();
+    const picker = form().getByLabelText('Choose a poster');
+    fireEvent.change(picker, { target: { files: [new File(['x'], 'first.jpg')] } });
+    await waitFor(() => expect(form().getByAltText("The event's poster")).toBeTruthy());
+    svc.add.mockRejectedValueOnce(Object.assign(new Error('Network Error'), { request: {} }));
+    fireEvent.click(form().getByRole('button', { name: 'Add event' }));
+    expect(await form().findByRole('alert')).toBeTruthy();
+    fireEvent.change(picker, { target: { files: [new File(['x'], 'second.jpg')] } });
+    await waitFor(() => expect(form().getByAltText("The event's poster").getAttribute('src')).toBe('blob:second.jpg'));
+    // The server kept the first press: it answers with that event, the same words.
+    const kept = event('a', 'Saturday Open Day', { poster: { id: 'p1', width: 800, height: 1000 } });
+    svc.add.mockResolvedValue(kept);
+    svc.change.mockResolvedValue(kept);
+    fireEvent.click(form().getByRole('button', { name: 'Add event' }));
+    await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
+    expect(svc.change.mock.calls[0].slice(0, 2)).toEqual(['g1', 'a']);
+    expect(svc.change.mock.calls[0][2].poster).toBe('POSTER64');
+  });
+
+  it('a first press that goes through is one request, poster or not', async () => {
+    await openAdd();
+    fillOpenDay();
+    fireEvent.change(form().getByLabelText('Choose a poster'), { target: { files: [new File(['x'], 'first.jpg')] } });
+    await waitFor(() => expect(form().getByAltText("The event's poster")).toBeTruthy());
+    svc.add.mockResolvedValue(event('a', 'Saturday Open Day', { poster: { id: 'p1', width: 800, height: 1000 } }));
+    fireEvent.click(form().getByRole('button', { name: 'Add event' }));
+    expect(await screen.findByText('Event added. Your members can see it now.')).toBeTruthy();
+    expect(svc.change).not.toHaveBeenCalled();
+  });
+
   it('Close sends nothing', async () => {
     await openAdd();
     fillOpenDay();

@@ -36,6 +36,8 @@ function EventForm({ gymId, event, today, clockFormat, words, onSaved, onClose }
   const [eventKey] = useState(newKey);
   const [preparing, setPreparing] = useState(false);
   const [saving, setSaving] = useState(false);
+  /** A save of this form has failed: an earlier press may have been kept all the same. */
+  const [failedOnce, setFailedOnce] = useState(false);
   const [problem, setProblem] = useState(null);
   const [error, setError] = useState(null);
   const pickerRef = useRef(null);
@@ -76,11 +78,14 @@ function EventForm({ gymId, event, today, clockFormat, words, onSaved, onClose }
       const fields = fieldsOf(draft, adding);
       let saved = adding ? await staffEventsService.add(gymId, eventKey, fields) : await staffEventsService.change(gymId, event.id, fields);
       // An earlier press of this form was kept and its reply lost: the server answered
-      // with that event, so what the form holds now is sent as a change to it.
-      if (adding && !sameAsSent(saved, fields)) saved = await staffEventsService.change(gymId, saved.id, fields);
+      // with that event, so what the form holds now is sent as a change to it. A poster
+      // cannot be compared, so after a failed press a picked one is always sent again.
+      const posterMayDiffer = failedOnce && draft.poster.kind === 'new';
+      if (adding && (!sameAsSent(saved, fields) || posterMayDiffer)) saved = await staffEventsService.change(gymId, saved.id, fields);
       if (draft.poster.kind === 'new') URL.revokeObjectURL?.(draft.poster.preview);
       onSaved(saved, adding);
     } catch (err) {
+      setFailedOnce(true);
       setError(errorText(err, "We couldn't save that. Please try again."));
     } finally {
       setSaving(false);
