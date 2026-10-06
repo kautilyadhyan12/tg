@@ -1438,7 +1438,8 @@ sent by a confirm. Staff press **Invite** — for everyone, or for the status wo
 ticked ("Active", "Pending") — and the button says the number before it sends:
 `POST /v1/orgs/:gymId/member-list/invites` `{ statuses?: string[], version,
 expectedCount }` (`members.confirm`, a gym on a plan; a different version or count →
-409 and nothing is queued). It queues every entry in that group that has an email, is
+409 and nothing is queued; since 23a-i also `expectedDigest`, the preview's value for
+exactly the people it would email, §13.2). It queues every entry in that group that has an email, is
 not in the app, has no invite record for this gym and no suppression, and answers how
 many were queued and how many were skipped for each reason. Adding one person by hand
 offers "Add and invite" (the same call for that one entry). **One email per person per
@@ -1552,7 +1553,7 @@ one-click unsubscribe for this kind of mail.
 **Out of 3b-i-a (built 2026-09-23).** 3b-i was split in two: 3b-i-a is below; 3b-i-b (the webhook, bounces and complaints, the first 50 then wait, the 2 % and complaint stops, the "have a look" list) is next.
 
 - Migration `0038`: `gyms.postal_address` (≤ 200, set through `PATCH /v1/orgs/:gymId` `postalAddress`, stored as every invitation prints it — lines joined with ", ", links, `@` and control characters out; staff read it on `/mine`); `gym_invites` (one row an address a gym, `UNIQUE (gym_id, email_hmac)`, the state CHECK of §10.2); `gym_invite_sends` (one row an email, `first` or `again`; at most one `first` an invitation that is waiting, went or may have gone, by a partial unique index; the address is held only while the email waits and a CHECK clears it after; `maybe_sent_at` marks an email that may have reached Resend); `email_suppressions` (a CHECK makes a bounce every gym's and an unsubscribe or complaint one gym's). No foreign key to a list record: the sender reads the address on the send row and asks at send time whether a current record still holds it.
-- Routes: `GET …/member-list/invites/preview` (the three word filters; `reach`, the left-out counts by reason — no email · in the app · already invited · unsubscribed · bounced · shared mailbox — and `blocked`), `POST …/member-list/invites` (`version`, `expectedCount`; 409 `invite_changed` with a fresh preview), `POST …/entries/:entryId/invite`, `POST …/entries/:entryId/invite/resend`, and `invite: true` on "Add member" (added and invited together, or neither). A list row and a person's page carry `invitation`; `GET /entries` filters by `invitation`. `GET` and `POST /v1/email/unsubscribe?t=` (public). The token (the invitation's id and a MAC) rides in the query string, which the api's request log drops (`logSafety.ts`) and, since this job, Caddy's access log drops too (`infra/Caddyfile`; checked with the `caddy:2-alpine` image, v2.11.4: the log reads `/v1/email/unsubscribe`). It also drops a member-list search's words, which Caddy was writing.
+- Routes: `GET …/member-list/invites/preview` (the three word filters; `reach`, the left-out counts by reason — no email · in the app · already invited · unsubscribed · bounced · shared mailbox — and `blocked`; `digest` since 23a-i), `POST …/member-list/invites` (`version`, `expectedCount`, and `expectedDigest` since 23a-i; 409 `invite_changed` with a fresh preview), `POST …/entries/:entryId/invite`, `POST …/entries/:entryId/invite/resend`, and `invite: true` on "Add member" (added and invited together, or neither). A list row and a person's page carry `invitation`; `GET /entries` filters by `invitation`. `GET` and `POST /v1/email/unsubscribe?t=` (public). The token (the invitation's id and a MAC) rides in the query string, which the api's request log drops (`logSafety.ts`) and, since this job, Caddy's access log drops too (`infra/Caddyfile`; checked with the `caddy:2-alpine` image, v2.11.4: the log reads `/v1/email/unsubscribe`). It also drops a member-list search's words, which Caddy was writing.
 - "In the app" is asked of the ADDRESS: if any current record holding it is matched to a member (§9.7), nobody is invited at it, so a household's second record never invites the member the first one is.
 - Shared mailboxes are RFC 2142's names and Mailchimp's role list (both read 2026-09-23), whole local part, any case, a `+tag` ignored; a word neither names (reception@, hello@) is emailed.
 - The press works out the group one statement at a time, checks the version again under the gym's lock with the first 500, then writes the rest in batches of 500; an address another press invited meanwhile is left alone by the unique key and counted as already invited.
@@ -2485,15 +2486,27 @@ what those four show for a person, on the gym's own day:
   before a frozen one before one still to start, a membership before a pack, then the
   newest: "Gold Monthly +1". The day is the first one's: "Renews 6 Nov", "Ends 31 Dec",
   "Starts 18 Oct", "Frozen since 6 Oct". **Payment is "Payment due" where ANY of them is
-  owed**, "Paid" only where none is, "Free" where there is nothing to pay: a row never
-  reads Paid for somebody who owes. A name on their record from the gym's old file is not
-  a second membership; their own page still shows it.
-- **Nothing in use, and the list names a membership they never had here** (not set up, or
-  not added: the page's own question, `listedMembership`, asked for many records at once):
-  the gym's own words, as before.
-- **Nothing in use otherwise**: the newest one that is over, "Cancelled 6 Oct" or "Ended
-  31 Aug", with no payment. So somebody the gym cancelled here never reads "Active" from
-  its old file.
+  owed today**; else "Not due yet" where one has a payment whose day has not come (a
+  membership still to start, not paid); "Paid" only where nothing is owed or to come;
+  "Free" where there is nothing to pay. A row never reads Paid for somebody who owes, and
+  nobody who owes nothing yet is under the word staff chase people by (`HELD_PAYMENT_WORDS`).
+  A name on their record from the gym's old file is not a second membership; their own
+  page still shows it.
+- **Nothing in use, and the list names a membership they never had here**: the gym's own
+  words, as before. "Had" is any membership of theirs of the type staff said that name is,
+  or of a type of that very name, whether or not the type is still on the price list:
+  archiving a type sends nobody cancelled here back to their old file's "Active". (Their
+  own page says "Not set up" of an archived type; that is about setting it up again.)
+- **Nothing in use otherwise**: the one that FINISHED last, "Cancelled 6 Oct" or "Ended 31
+  Aug", with no payment: the day it was cancelled, else its last day; a membership before
+  a pack that finished the same day; then the newest start. A pack used up before its last
+  day finished on a day nobody stored, so its start day stands in. So somebody whose year
+  membership is cancelled today is "Cancelled", not "Ended" under a day pass from last week,
+  and never "Active" from the gym's old file. A person can have hundreds of rows that are
+  over, so `overForList` picks each one's row in SQL by this same order;
+  `memberships.overForList.test.ts` holds SQL and the rule to the same choice.
+- An unpaid membership the clock has ended is over, so it is under no payment word; what
+  somebody still owes for one comes with bills (18a).
 - **Nothing held at all**, and every past member: the gym's own words.
 The row carries it as `held` beside the four words, which stay the list's own; a person's
 page carries the same. **The Filter, its counts, Select all, Invite and Download CSV read
@@ -2501,7 +2514,13 @@ what the rows show**: somebody the app answers for passes a word filter by the a
 and never by their record's; a person with two memberships is under both names; the file
 writes the app's words in the list's own columns ("Gold Monthly; PT 10"). Worked out for
 the page's people on every read, and for the whole gym only for the counts and a word
-filter (`memberships/onList.ts`), with two plain reads (`inUseForList`, `overForList`).
+filter (`memberships/onList.ts`), with two plain reads (`inUseForList`, `overForList`)
+at one moment (one read-only snapshot). **A press of Invite says who its box showed**: who
+a word filter chooses follows memberships and the day, so the people can change with the
+list's version and the number both as they were (a payment marked, midnight). The preview
+carries `digest`, one value for exactly the addresses it would email; the press sends it
+back as `expectedDigest`, and for other people, or with none, it is 409 `invite_changed`
+with the new preview and nobody is invited.
 The membership rule itself was split so a list reads a membership's state, dates and what
 is owed without what staff can do to it (`heldMembershipFacts`; `heldMembershipView` is
 that and the buttons). Not done: Add member, a person's Details and Edit, and the front
@@ -4050,7 +4069,8 @@ section wins and the drawing is corrected in the same job.
   phone each row is a card with the tick box on the left and "Active · Gold · Renews 3 Oct ·
   Paid" as one line. *(23a-i, 2026-10-07: for somebody who holds a membership in the app
   those four say what it says, "Active · Gold Monthly +1 · Renews 6 Nov · Payment due", and
-  the Filter reads the same; §13.2 has the rule.)*
+  the Filter reads the same; Payment is one of Payment due · Not due yet · Paid · Free;
+  §13.2 has the rule.)*
 - **Show** (in the Filter, one choice): **Members** (the list, the default) · **Past members** ·
   **Not on your list** — people in the app with no current member at their details (paid
   places, amber, with the reason and the fix on the row: "Moved to past members on 3 Sep" +
