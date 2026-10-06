@@ -137,15 +137,16 @@ export interface EventTimes {
 /** The instants an event's days and times are on the gym's own clock, and today's date on
  *  it. Postgres's zone database answers, per date, so a summer-time change is its to get
  *  right; a time the clocks skip reads as the hour after it. Null for no such gym. */
-export async function instantsOf(sql: SqlOrTx, gymId: string, times: EventTimes, now: Date): Promise<{ startsAt: Date; endsAt: Date; today: string } | null> {
-  const rows = await sql<{ starts_at: Date; ends_at: Date; today: string }[]>`
+export async function instantsOf(sql: SqlOrTx, gymId: string, times: EventTimes, now: Date): Promise<{ startsAt: Date; endsAt: Date; today: string; daysAhead: number } | null> {
+  const rows = await sql<{ starts_at: Date; ends_at: Date; today: string; days_ahead: number }[]>`
     SELECT
       ((${times.startsOn}::date + make_interval(mins => ${times.startMinute}::int)) AT TIME ZONE g.timezone) AS starts_at,
       ((${times.endsOn}::date + make_interval(mins => ${times.endMinute}::int)) AT TIME ZONE g.timezone) AS ends_at,
-      ((${now}::timestamptz AT TIME ZONE g.timezone)::date)::text AS today
+      ((${now}::timestamptz AT TIME ZONE g.timezone)::date)::text AS today,
+      (${times.startsOn}::date - (${now}::timestamptz AT TIME ZONE g.timezone)::date)::int AS days_ahead
     FROM gyms g WHERE g.id = ${gymId}`;
   const r = rows[0];
-  return r === undefined ? null : { startsAt: r.starts_at, endsAt: r.ends_at, today: r.today };
+  return r === undefined ? null : { startsAt: r.starts_at, endsAt: r.ends_at, today: r.today, daysAhead: r.days_ahead };
 }
 
 /** Today's date on the gym's own clock. */
@@ -208,6 +209,30 @@ export async function updateEvent(
     UPDATE gym_events SET
       poster_id = ${poster?.id ?? null}, poster_key = ${poster?.storageKey ?? null}, poster_type = ${poster?.contentType ?? null},
       poster_bytes = ${poster?.byteSize ?? null}, poster_width = ${poster?.width ?? null}, poster_height = ${poster?.height ?? null}
+    WHERE gym_id = ${gymId} AND id = ${eventId}`;
+}
+
+/** Works out again the instants of every event of a gym from its own clock days and
+ *  times, in the zone the gym has now: called in the step that changes the zone, so
+ *  "coming" and "ended" go on meaning the gym's clock. One whose times the new zone's
+ *  clock change would put out of order keeps the instants it had. */
+export async function reworkInstants(tx: TransactionSql, gymId: string): Promise<void> {
+  await tx`
+    UPDATE gym_events e SET starts_at = t.starts_at, ends_at = t.ends_at
+    FROM (
+      SELECT x.id,
+             ((x.starts_on + make_interval(mins => x.start_minute::int)) AT TIME ZONE g.timezone) AS starts_at,
+             ((x.ends_on + make_interval(mins => x.end_minute::int)) AT TIME ZONE g.timezone) AS ends_at
+      FROM gym_events x JOIN gyms g ON g.id = x.gym_id
+      WHERE x.gym_id = ${gymId}
+    ) t
+    WHERE e.gym_id = ${gymId} AND e.id = t.id AND t.ends_at > t.starts_at`;
+}
+
+/** Takes an event's poster off and nothing else. */
+export async function clearPoster(tx: TransactionSql, gymId: string, eventId: string, at: Date): Promise<void> {
+  await tx`
+    UPDATE gym_events SET poster_id = NULL, poster_key = NULL, poster_type = NULL, poster_bytes = NULL, poster_width = NULL, poster_height = NULL, updated_at = ${at}
     WHERE gym_id = ${gymId} AND id = ${eventId}`;
 }
 

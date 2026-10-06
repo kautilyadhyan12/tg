@@ -33,7 +33,7 @@ const event = (id, name, over = {}) => ({
   ...over,
 });
 const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-const listOf = (events, over = {}) => ({ gymId: 'g1', gymName: 'Iron House', timezone: deviceZone, status: 'shown', events, ...over });
+const listOf = (events, over = {}) => ({ gymId: 'g1', gymName: 'Iron House', timezone: deviceZone, today: '2026-10-07', status: 'shown', events, ...over });
 const refused = (status, message) => Object.assign(new Error(message), { response: { status, data: { error: 'x', message } } });
 const rowOf = (name) => within(screen.getByText(name).closest('li'));
 
@@ -99,6 +99,18 @@ describe("a member's Events", () => {
     render(<Events gym={GYM} />);
     expect(await screen.findByText("Iron House's events aren't available right now.")).toBeTruthy();
     expect(screen.queryByText('Iron House has no events coming up.')).toBeNull();
+  });
+
+  it('says the year of an event in another year, and reads the list again when the tab is shown again', async () => {
+    svc.list.mockResolvedValue(listOf([event('a', 'New Year Run', { startsOn: '2027-01-01', endsOn: '2027-01-01' }), event('b', 'On Today', { startsAt: '2020-01-01T00:00:00.000Z' })]));
+    render(<Events gym={GYM} />);
+    expect(await screen.findByText('Fri 1 Jan 2027 · 10:00 am – 1:00 pm')).toBeTruthy();
+    expect(rowOf('On Today').getByText('On now')).toBeTruthy();
+    // It ended while the tab was hidden.
+    svc.list.mockResolvedValue(listOf([event('a', 'New Year Run', { startsOn: '2027-01-01', endsOn: '2027-01-01' })]));
+    document.dispatchEvent(new Event('visibilitychange'));
+    await waitFor(() => expect(screen.queryByText('On Today')).toBeNull());
+    expect(svc.list).toHaveBeenCalledTimes(2);
   });
 
   it('names whose clock the times are on when this device’s differs', async () => {

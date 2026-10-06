@@ -5,13 +5,19 @@ import { dayLabel } from './leaderboardView';
 // clock times arrive as the gym's own and are printed as they are, never moved to the
 // phone's zone. The member's list and the console's page both read these.
 
+/** "Sat 17 Oct", with its year where that is not the year of `today` (the gym's day). */
+export function eventDay(day, today) {
+  const year = day.slice(0, 4);
+  return typeof today === 'string' && today.slice(0, 4) !== year ? `${dayLabel(day)} ${year}` : dayLabel(day);
+}
+
 /** "Sat 17 Oct · 10:00 am – 1:00 pm", or for one that runs past its day
- *  "Sat 17 Oct, 10:00 am – Sun 18 Oct, 4:00 pm". */
-export function eventWhen(event) {
+ *  "Sat 17 Oct, 10:00 am – Sun 18 Oct, 4:00 pm". A day in another year says its year. */
+export function eventWhen(event, today) {
   const from = clockText(event.startMinute);
   const to = clockText(event.endMinute);
-  if (event.startsOn === event.endsOn) return `${dayLabel(event.startsOn)} · ${from} – ${to}`;
-  return `${dayLabel(event.startsOn)}, ${from} – ${dayLabel(event.endsOn)}, ${to}`;
+  if (event.startsOn === event.endsOn) return `${eventDay(event.startsOn, today)} · ${from} – ${to}`;
+  return `${eventDay(event.startsOn, today)}, ${from} – ${eventDay(event.endsOn, today)}, ${to}`;
 }
 
 /** "40 places", "1 place"; null for an event with no limit. */

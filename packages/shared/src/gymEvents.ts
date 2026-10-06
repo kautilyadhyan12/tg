@@ -13,6 +13,8 @@ export const GYM_EVENT_NAME_MAX = 80;
 export const GYM_EVENT_DETAILS_MAX = 1000;
 export const GYM_EVENT_PLACE_MAX = 120;
 export const GYM_EVENT_PLACES_MAX = 10_000;
+/** How far ahead an event may start, in days from the gym's today. */
+export const GYM_EVENT_MAX_DAYS_AHEAD = 730;
 /** The longest an event runs, first day to last. */
 export const GYM_EVENT_MAX_DAYS = 31;
 /** The most coming events a gym keeps at once, and so the most a member is sent. With the
@@ -40,19 +42,30 @@ const posterBase64 = z
   .max(Math.ceil(GYM_EVENT_POSTER_MAX_BYTES / 3) * 4)
   .regex(/^[A-Za-z0-9+/]+={0,2}$/);
 
-/** A real calendar day: `2026-02-31` has the shape and is no day. */
+/** A real calendar day of this century: `2026-02-31` has the shape and is no day, and
+ *  Postgres has no year 0000. */
 const eventDaySchema = classDaySchema.refine(
   (day) => {
     const at = new Date(`${day}T00:00:00Z`);
-    return !Number.isNaN(at.getTime()) && at.toISOString().slice(0, 10) === day;
+    return !Number.isNaN(at.getTime()) && at.toISOString().slice(0, 10) === day && day >= "2000-01-01" && day <= "2099-12-31";
   },
   { message: "not a real date" },
 );
 
 const dayNumber = (day: string): number => Date.parse(`${day}T00:00:00Z`) / 86_400_000;
 
+/** The letters that draw nothing: the Hangul fillers. Built from their numbers, so no
+ *  invisible character sits in this file. */
+const BLANK_LETTERS = new RegExp(`[${[0x115f, 0x1160, 0x3164, 0xffa0].map((code) => String.fromCodePoint(code)).join("")}]`, "g");
+
+/** Whether a name has a letter or a number somebody can see: one made of spaces and
+ *  marks that draw nothing is no name. */
+export function eventNameIsSeen(text: string): boolean {
+  return /[\p{L}\p{N}]/u.test(text.replace(BLANK_LETTERS, ""));
+}
+
 const eventFields = {
-  name: words(GYM_EVENT_NAME_MAX).refine((text) => text !== "", { message: "a name is needed" }),
+  name: words(GYM_EVENT_NAME_MAX).refine(eventNameIsSeen, { message: "a name is needed" }),
   details: words(GYM_EVENT_DETAILS_MAX),
   place: words(GYM_EVENT_PLACE_MAX),
   startsOn: eventDaySchema,
@@ -128,6 +141,8 @@ export const gymEventsResponseSchema = z
     gymName: z.string(),
     /** The zone the events' days and times are in. */
     timezone: z.string(),
+    /** Today on the gym's clock. */
+    today: classDaySchema,
     /** "paused": the gym is not on a plan, and its events are not shown. */
     status: z.enum(["shown", "paused"]),
     events: z.array(gymEventSchema).max(GYM_EVENTS_COMING_MAX),
@@ -160,6 +175,7 @@ export const GYM_EVENT_WORDS = {
   poster_not_found: "This poster has been removed.",
   ended: "This event has ended, so it can't be changed.",
   already_ended: "This date and time have already passed. Choose a later end.",
+  too_far: "An event can start up to two years from today. Choose an earlier day.",
   ends_before_start: "The end must be after the start.",
   full: `You have ${String(GYM_EVENTS_COMING_MAX)} coming events, which is the most allowed. Wait for one to end, then add this.`,
   poster_too_big: "This poster is bigger than 1 MB. Choose a smaller picture.",

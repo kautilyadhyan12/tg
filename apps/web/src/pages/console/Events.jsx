@@ -7,7 +7,7 @@ import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleS
 import TimePick from '../../components/console/TimePick';
 import { eventIsOn, eventPlaces, eventWhen } from '../../components/gym/eventsView';
 import { DateField, Field, Tick } from './ClassFields';
-import { EVENT_LIMITS, EVENT_NOTES, cancelBox, dayAfter, detailsLine, draftOf, eventProblem, fieldsOf, newEventDraft, pastTitle, posterProblem, withStartDay } from './eventsView';
+import { EVENT_LIMITS, EVENT_NOTES, cancelBox, dayAfter, detailsLine, draftOf, eventProblem, fieldsOf, newEventDraft, pastTitle, posterBox, posterProblem, sameAsSent, withStartDay } from './eventsView';
 import { preparePostPhoto } from './gymPagePhotos';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords } from './consoleView';
@@ -74,7 +74,10 @@ function EventForm({ gymId, event, today, clockFormat, words, onSaved, onClose }
     setError(null);
     try {
       const fields = fieldsOf(draft, adding);
-      const saved = adding ? await staffEventsService.add(gymId, eventKey, fields) : await staffEventsService.change(gymId, event.id, fields);
+      let saved = adding ? await staffEventsService.add(gymId, eventKey, fields) : await staffEventsService.change(gymId, event.id, fields);
+      // An earlier press of this form was kept and its reply lost: the server answered
+      // with that event, so what the form holds now is sent as a change to it.
+      if (adding && !sameAsSent(saved, fields)) saved = await staffEventsService.change(gymId, saved.id, fields);
       if (draft.poster.kind === 'new') URL.revokeObjectURL?.(draft.poster.preview);
       onSaved(saved, adding);
     } catch (err) {
@@ -187,10 +190,10 @@ function EventForm({ gymId, event, today, clockFormat, words, onSaved, onClose }
   );
 }
 
-function EventCard({ gymId, event, words, past, readAt, readOnly, busy, asking, onEdit, onAsk, onCancel, onUncancel }) {
+function EventCard({ gymId, event, words, today, past, readAt, readOnly, busy, asking, onEdit, onAsk, onCancel, onUncancel, onRemovePoster }) {
   const places = eventPlaces(event);
   const on = !past && !event.cancelled && eventIsOn(event, readAt);
-  const box = asking ? cancelBox(event, words) : null;
+  const box = !asking ? null : past ? posterBox(event) : cancelBox(event, words, today);
   return (
     <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid="event">
       <div className="flex flex-col gap-4 md:flex-row">
@@ -212,7 +215,7 @@ function EventCard({ gymId, event, words, past, readAt, readOnly, busy, asking, 
           </div>
           <p className="c-s14 c-t1 flex items-center gap-2">
             <CalendarDays aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3" />
-            {eventWhen(event)}
+            {eventWhen(event, today)}
           </p>
           {event.place !== '' ? (
             <p className="c-s14 c-t2 flex items-center gap-2">
@@ -246,6 +249,14 @@ function EventCard({ gymId, event, words, past, readAt, readOnly, busy, asking, 
         </div>
       ) : null}
 
+      {past && !readOnly && event.poster !== null && box === null ? (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => onAsk(event.id)} disabled={busy} className="c-btn c-btn-quiet c-btn-sm" aria-label={`Remove the poster from ${event.name}`}>
+            Remove poster
+          </button>
+        </div>
+      ) : null}
+
       {box !== null ? (
         <div className="c-callout flex-col" role="group" aria-label={box.title}>
           <p className="c-s15 c-w6 c-t1">{box.title}</p>
@@ -255,8 +266,8 @@ function EventCard({ gymId, event, words, past, readAt, readOnly, busy, asking, 
             </p>
           ))}
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => onCancel(event)} disabled={busy} className="c-btn c-btn-danger c-btn-sm">
-              {busy ? 'Cancelling…' : box.yes}
+            <button type="button" onClick={() => (past ? onRemovePoster(event) : onCancel(event))} disabled={busy} className="c-btn c-btn-danger c-btn-sm">
+              {busy ? 'Working…' : box.yes}
             </button>
             <button type="button" onClick={() => onAsk(null)} disabled={busy} className="c-btn c-btn-s c-btn-sm">
               {box.no}
@@ -277,7 +288,7 @@ export default function Events() {
 
   // `readAt`: when the list was read, which is the moment "On now" is true of.
   const [state, setState] = useState({ loading: true, error: null, refused: false, list: null, readAt: 0 });
-  /** The form that is open: `{ event }`, with null for a new one; null when none is. */
+  /** The form that is open: `{ id }`, the event's id or null for a new one; null when none is. */
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(null);
   const [asking, setAsking] = useState(null);
@@ -302,6 +313,12 @@ export default function Events() {
 
   useEffect(() => {
     load();
+    // Read again when the tab or window is shown again: an event may have ended meanwhile.
+    const shown = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+    document.addEventListener('visibilitychange', shown);
+    return () => document.removeEventListener('visibilitychange', shown);
   }, [load]);
 
   const setCancelled = async (event, cancelled) => {
@@ -319,6 +336,22 @@ export default function Events() {
       // Ended or changed somewhere else in the meantime: show what is true now.
       if (errorStatus(err) === 404 || errorStatus(err) === 409) await load();
     } finally {
+      setBusy(null);
+    }
+  };
+
+  const removePoster = async (event) => {
+    setBusy(event.id);
+    setNotice(null);
+    setActionError(null);
+    try {
+      await staffEventsService.change(gymId, event.id, { ...fieldsOf(draftOf(event), false), poster: null });
+      setNotice(EVENT_NOTES.posterRemoved);
+    } catch (err) {
+      setActionError(errorText(err, "We couldn't change that. Please try again."));
+    } finally {
+      setAsking(null);
+      await load();
       setBusy(null);
     }
   };
@@ -351,14 +384,16 @@ export default function Events() {
   }
 
   const list = state.list;
+  // An event that has gone from the coming list (it ended) takes its open form with it.
+  const formOpen = form !== null && list !== null && (form.id === null || list.coming.some((e) => e.id === form.id));
   const open = (event) => {
     setNotice(null);
     setActionError(null);
     setAsking(null);
-    setForm({ event });
+    setForm({ id: event === null ? null : event.id });
   };
   const formFor = (event) =>
-    form !== null && form.event === event && list !== null ? (
+    formOpen && form.id === (event === null ? null : event.id) ? (
       <EventForm
         key={event === null ? 'new' : event.id}
         gymId={gymId}
@@ -382,7 +417,7 @@ export default function Events() {
           <h1 className="c-h1">Events</h1>
           <p className="c-sub">{`What's coming up at ${org.name}, shown to your ${words.people} in their app`}</p>
         </div>
-        {!readOnly && !state.refused && list !== null && form === null ? (
+        {!readOnly && !state.refused && list !== null && !formOpen ? (
           <button type="button" onClick={() => open(null)} className="c-btn c-btn-p self-start md:self-auto">
             <Plus aria-hidden="true" className="w-[18px] h-[18px]" />
             Add event
@@ -418,7 +453,7 @@ export default function Events() {
           {state.loading ? <ConsoleLoading label="Loading your events…" newLook /> : null}
           {!state.loading && list === null ? <ConsoleFailed message={state.error} onRetry={load} newLook /> : null}
 
-          {list !== null && list.coming.length === 0 && form === null ? (
+          {list !== null && list.coming.length === 0 && !formOpen ? (
             <section className="c-card p-5 md:p-6">
               <p className="c-s15 c-t2">{readOnly ? 'No events coming up.' : 'No events coming up. Add your first one with Add event.'}</p>
             </section>
@@ -429,7 +464,7 @@ export default function Events() {
               <h2 className="c-s15 c-w6 c-t1">{`Coming events (${list.coming.length})`}</h2>
               <ul className="flex flex-col gap-3">
                 {list.coming.map((event) =>
-                  form !== null && form.event === event ? (
+                  formOpen && form.id === event.id ? (
                     <li key={event.id}>{formFor(event)}</li>
                   ) : (
                     <EventCard
@@ -437,6 +472,7 @@ export default function Events() {
                       gymId={gymId}
                       event={event}
                       words={words}
+                      today={list.today}
                       past={false}
                       readAt={state.readAt}
                       readOnly={readOnly}
@@ -463,7 +499,20 @@ export default function Events() {
                   <p className="c-s13 c-t2">{`Events that have ended. Your ${words.people} no longer see them, and they can't be changed.`}</p>
                   <ul className="flex flex-col gap-3">
                     {list.past.map((event) => (
-                      <EventCard key={event.id} gymId={gymId} event={event} words={words} past readAt={state.readAt} readOnly={readOnly} busy={false} asking={false} />
+                      <EventCard
+                        key={event.id}
+                        gymId={gymId}
+                        event={event}
+                        words={words}
+                        today={list.today}
+                        past
+                        readAt={state.readAt}
+                        readOnly={readOnly}
+                        busy={busy === event.id}
+                        asking={asking === event.id}
+                        onAsk={setAsking}
+                        onRemovePoster={removePoster}
+                      />
                     ))}
                   </ul>
                 </>

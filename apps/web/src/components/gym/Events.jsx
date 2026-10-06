@@ -21,7 +21,7 @@ const deviceZone = () => {
   }
 };
 
-function EventCard({ gymId, event, readAt }) {
+function EventCard({ gymId, event, today, readAt }) {
   const places = eventPlaces(event);
   const on = !event.cancelled && eventIsOn(event, readAt);
   return (
@@ -48,7 +48,7 @@ function EventCard({ gymId, event, readAt }) {
         </div>
         <p className="text-sm flex items-center gap-1.5" style={{ color: 'rgba(255,255,255,0.8)' }}>
           <CalendarDays aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: ORANGE }} />
-          {eventWhen(event)}
+          {eventWhen(event, today)}
         </p>
         {event.place !== '' && (
           <p className="text-sm flex items-center gap-1.5" style={{ color: 'rgba(255,255,255,0.8)' }}>
@@ -92,7 +92,13 @@ export default function Events({ gym }) {
   }, [gym.id, gym.name]);
   useEffect(() => {
     load();
+    // Read again when the tab or window is shown again: an event may have ended meanwhile.
+    const shown = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+    document.addEventListener('visibilitychange', shown);
     return () => {
+      document.removeEventListener('visibilitychange', shown);
       asked.current += 1;
     };
   }, [load]);
@@ -127,7 +133,7 @@ export default function Events({ gym }) {
           {note !== null && <p className="text-xs" style={{ color: ORANGE }}>{note}</p>}
           <ul className="flex flex-col gap-3" aria-label="Coming events">
             {list.events.map((event) => (
-              <EventCard key={event.id} gymId={gym.id} event={event} readAt={state.readAt} />
+              <EventCard key={event.id} gymId={gym.id} event={event} today={list.today} readAt={state.readAt} />
             ))}
           </ul>
         </>

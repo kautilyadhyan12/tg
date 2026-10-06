@@ -145,6 +145,8 @@ describe('the page', () => {
     expect(screen.getByText("Events that have ended. Your members no longer see them, and they can't be changed.")).toBeTruthy();
     const past = within(cardOf('Summer Fair'));
     expect(past.queryByRole('button')).toBeNull();
+    // In another year than the gym's today, it says which.
+    expect(within(cardOf('Summer Fair')).getByText('Sat 17 Oct · 10:00 am – 1:00 pm')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Hide past events' }));
     expect(cards()).toHaveLength(0);
   });
@@ -241,6 +243,24 @@ describe('adding an event', () => {
     expect(svc.add.mock.calls[0][2].poster).toBe('POSTER64');
   });
 
+  it('a press the server already kept, then changed and pressed again, is saved as the form now reads', async () => {
+    await openAdd();
+    fillOpenDay();
+    // The first press was kept and its reply lost.
+    svc.add.mockRejectedValueOnce(Object.assign(new Error('Network Error'), { request: {} }));
+    fireEvent.click(form().getByRole('button', { name: 'Add event' }));
+    expect(await form().findByRole('alert')).toBeTruthy();
+    type('Event name', 'Sunday Open Day');
+    // Under the same key the server answers with the event it kept the first time.
+    svc.add.mockResolvedValue(event('a', 'Saturday Open Day'));
+    svc.change.mockResolvedValue(event('a', 'Sunday Open Day'));
+    fireEvent.click(form().getByRole('button', { name: 'Add event' }));
+    await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
+    expect(svc.change.mock.calls[0].slice(0, 2)).toEqual(['g1', 'a']);
+    expect(svc.change.mock.calls[0][2]).toMatchObject({ name: 'Sunday Open Day', startMinute: 600, endMinute: 780 });
+    expect(await screen.findByText('Event added. Your members can see it now.')).toBeTruthy();
+  });
+
   it('Close sends nothing', async () => {
     await openAdd();
     fillOpenDay();
@@ -275,6 +295,54 @@ describe('changing an event', () => {
     expect(fields).toMatchObject({ name: 'Sunday Open Day', startMinute: 600, endMinute: 780, places: 40 });
     expect('poster' in fields).toBe(false);
     expect(await screen.findByText('Changes saved. Your members see them now.')).toBeTruthy();
+  });
+
+  it('cancelling another event leaves an open Edit form and what was typed in it', async () => {
+    svc.list.mockResolvedValue(listOf(two()));
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Saturday Open Day' }));
+    type('Event name', 'Half typed');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel Winter Social' }));
+    svc.setCancelled.mockResolvedValue(event('b', 'Winter Social', { cancelled: true }));
+    // The list is read again and every event in it is a new object.
+    svc.list.mockResolvedValue(listOf([two()[0], event('b', 'Winter Social', { startsOn: '2026-12-05', endsOn: '2026-12-05', cancelled: true })]));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel event' }));
+    expect(await screen.findByText('Event cancelled. Your members see it marked Cancelled.')).toBeTruthy();
+    expect(form().getByLabelText('Event name').value).toBe('Half typed');
+    // Closed, Add event is offered again.
+    fireEvent.click(form().getByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('button', { name: 'Add event' })).toBeTruthy();
+  });
+
+  it('an event that ended while its form was open takes the form with it, and Add event comes back', async () => {
+    svc.list.mockResolvedValue(listOf(two()));
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Saturday Open Day' }));
+    svc.list.mockResolvedValue(listOf([two()[1]], { past: [two()[0]], pastTotal: 1 }));
+    document.dispatchEvent(new Event('visibilitychange'));
+    await waitFor(() => expect(screen.queryByTestId('event-form')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Add event' })).toBeTruthy();
+  });
+
+  it('a past event’s poster can be taken off, behind a box, and nothing else of it', async () => {
+    const old = event('old', 'Summer Fair', { startsAt: '2026-08-01T09:00:00.000Z', endsAt: '2026-08-01T12:00:00.000Z', startsOn: '2026-08-01', endsOn: '2026-08-01', poster: { id: 'p9', width: 800, height: 1000 } });
+    svc.list.mockResolvedValue(listOf([], { past: [old, event('bare', 'Spring Fair', { startsAt: '2026-04-01T09:00:00.000Z', endsAt: '2026-04-01T12:00:00.000Z' })], pastTotal: 2 }));
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Past events (2)' }));
+    // Only the one with a poster offers it, and neither offers Edit or Cancel.
+    expect(within(cardOf('Spring Fair')).queryByRole('button')).toBeNull();
+    expect(within(cardOf('Summer Fair')).getAllByRole('button')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove the poster from Summer Fair' }));
+    const box = within(screen.getByRole('group', { name: 'Remove the poster from Summer Fair?' }));
+    expect(box.getByText("The picture is deleted and can't be brought back. The rest of the event stays as it is.")).toBeTruthy();
+    expect(svc.change).not.toHaveBeenCalled();
+    svc.change.mockResolvedValue({ ...old, poster: null });
+    svc.list.mockResolvedValue(listOf([], { past: [{ ...old, poster: null }], pastTotal: 1 }));
+    fireEvent.click(box.getByRole('button', { name: 'Remove poster' }));
+    await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
+    expect(svc.change.mock.calls[0].slice(0, 2)).toEqual(['g1', 'old']);
+    expect(svc.change.mock.calls[0][2]).toMatchObject({ name: 'Summer Fair', poster: null });
+    expect(await screen.findByText('Poster removed.')).toBeTruthy();
   });
 
   it('Remove poster takes it off on Save, not before', async () => {

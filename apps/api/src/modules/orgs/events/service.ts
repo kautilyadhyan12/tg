@@ -10,6 +10,7 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   GYM_EVENTS_COMING_MAX,
   GYM_EVENTS_PAST_SHOWN,
+  GYM_EVENT_MAX_DAYS_AHEAD,
   GYM_EVENT_POSTER_MAX_BYTES,
   GYM_EVENT_WORDS,
   gymEventSchema,
@@ -78,9 +79,12 @@ export async function getEvents(deps: Pick<EventsDeps, "sql" | "now">, userId: s
   const org = await getOrgById(deps.sql, gymId);
   if (org === null || !(await isLiveMember(deps.sql, gymId, userId))) throw notFound();
   if (!(await limit())) return null;
-  const head = { gymId, gymName: org.name, timezone: org.timezone };
+  const now = deps.now();
+  const today = await repo.gymToday(deps.sql, gymId, now);
+  if (today === null) throw notFound();
+  const head = { gymId, gymName: org.name, timezone: org.timezone, today };
   if (!(await gymIsLive(deps.sql, gymId, org.status))) return gymEventsResponseSchema.parse({ ...head, status: "paused", events: [] });
-  const rows = await repo.comingEvents(deps.sql, gymId, deps.now(), GYM_EVENTS_COMING_MAX);
+  const rows = await repo.comingEvents(deps.sql, gymId, now, GYM_EVENTS_COMING_MAX);
   return gymEventsResponseSchema.parse({ ...head, status: "shown", events: rows.map(shaped) });
 }
 
@@ -138,13 +142,14 @@ function readPoster(gymId: string, base64: string): repo.EventPoster & { bytes: 
 }
 
 /** The instants of an event's days and times on the gym's clock, refused where the end is
- *  not after the start (the clocks changing can do it to times that read in order) or has
- *  already passed. */
+ *  not after the start (the clocks changing can do it to times that read in order), has
+ *  already passed, or the start is more than two years away. */
 async function instantsFor(sql: Sql | TransactionSql, gymId: string, times: repo.EventTimes, now: Date): Promise<{ startsAt: Date; endsAt: Date }> {
   const at = await repo.instantsOf(sql, gymId, times, now);
   if (at === null) throw notFound();
   if (at.endsAt.getTime() <= at.startsAt.getTime()) throw new OrgsError(400, "event_ends_before_start", GYM_EVENT_WORDS.ends_before_start);
   if (at.endsAt.getTime() <= now.getTime()) throw new OrgsError(400, "event_already_ended", GYM_EVENT_WORDS.already_ended);
+  if (at.daysAhead > GYM_EVENT_MAX_DAYS_AHEAD) throw new OrgsError(400, "event_too_far", GYM_EVENT_WORDS.too_far);
   return { startsAt: at.startsAt, endsAt: at.endsAt };
 }
 
@@ -192,10 +197,35 @@ export async function addEvent(deps: EventsDeps, staffId: string, gymId: string,
   return await staffEvent(deps, gymId, first);
 }
 
-/** Staff change an event that has not ended: its words, its times, its poster. */
+/** Staff take the poster off an event that has ended; nothing else of it changes. */
+async function removeEndedPoster(deps: EventsDeps, staffId: string, gymId: string, eventId: string, at: Date): Promise<GymEvent> {
+  const dropped = await deps.sql.begin(async (tx) => {
+    const row = await repo.lockEvent(tx, gymId, eventId);
+    if (row === null) throw eventNotFound();
+    if (row.poster === null) return [];
+    await repo.clearPoster(tx, gymId, eventId, at);
+    await queueFiles(tx, [row.poster.storageKey]);
+    await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.event_changed", targetType: "event", targetId: eventId, meta: { poster: "removed" } });
+    return [row.poster.storageKey];
+  });
+  await removeFiles(deps, dropped);
+  return await staffEvent(deps, gymId, eventId);
+}
+
+/** Staff change an event that has not ended: its words, its times, its poster. Of one
+ *  that has ended only the poster can change, and only by being taken off (a person in
+ *  it may ask). */
 export async function changeEvent(deps: EventsDeps, staffId: string, gymId: string, eventId: string, body: ChangeGymEventRequest): Promise<GymEvent> {
   await requireEventStaff(deps, staffId, gymId);
   const at = deps.now();
+  // The event is asked about before its new times are judged: one that is gone or has
+  // ended is said to be so, whatever the times sent.
+  const before = await repo.eventById(deps.sql, gymId, eventId);
+  if (before === null) throw eventNotFound();
+  if (before.endsAt.getTime() <= at.getTime()) {
+    if (body.poster === null) return await removeEndedPoster(deps, staffId, gymId, eventId, at);
+    throw new OrgsError(409, "event_ended", GYM_EVENT_WORDS.ended);
+  }
   const instants = await instantsFor(deps.sql, gymId, body, at);
   const poster = typeof body.poster === "string" ? readPoster(gymId, body.poster) : body.poster;
   const added = poster === null || poster === undefined ? [] : [poster.storageKey];

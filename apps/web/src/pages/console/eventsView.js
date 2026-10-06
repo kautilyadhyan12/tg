@@ -1,5 +1,5 @@
-import { GYM_EVENT_DETAILS_MAX, GYM_EVENT_MAX_DAYS, GYM_EVENT_NAME_MAX, GYM_EVENT_PLACES_MAX, GYM_EVENT_PLACE_MAX, postLength } from '@app/shared';
-import { dayLabel } from '../../components/gym/leaderboardView';
+import { GYM_EVENT_DETAILS_MAX, GYM_EVENT_MAX_DAYS, GYM_EVENT_NAME_MAX, GYM_EVENT_PLACES_MAX, GYM_EVENT_PLACE_MAX, eventNameIsSeen, postLength } from '@app/shared';
+import { eventDay } from '../../components/gym/eventsView';
 
 // THE CONSOLE'S EVENTS PAGE, IN WORDS AND RULES (spec Part 3 §15.4; ROADMAP 19c-i). Pure.
 // The form's draft, what is wrong with it in a sentence staff can act on, and what is sent.
@@ -52,7 +52,7 @@ const wholePlaces = (text) => (/^\d{1,5}$/.test(text.trim()) ? Number(text.trim(
 
 /** The first thing that stops the form being saved, as `{ field, text }`, or null. */
 export function eventProblem(draft) {
-  if (draft.name.trim() === '') return { field: 'name', text: 'Give the event a name.' };
+  if (!eventNameIsSeen(draft.name)) return { field: 'name', text: 'Give the event a name.' };
   if (postLength(draft.name.trim()) > EVENT_LIMITS.name) return { field: 'name', text: `Keep the name to ${EVENT_LIMITS.name} characters.` };
   if (draft.startsOn === '') return { field: 'startsOn', text: 'Pick the day it starts.' };
   const start = minuteOf(draft.startTime);
@@ -107,11 +107,11 @@ export function posterProblem(reason) {
 }
 
 /** The box before an event is cancelled: what happens, and to whom. */
-export function cancelBox(event, words) {
+export function cancelBox(event, words, today) {
   return {
     title: `Cancel ${event.name}?`,
     lines: [
-      `Your ${words.people} still see it on their Events list, marked Cancelled, until ${dayLabel(event.endsOn)}.`,
+      `Your ${words.people} still see it on their Events list, marked Cancelled, until ${eventDay(event.endsOn, today)}.`,
       "Nobody is emailed. You can un-cancel it until then.",
     ],
     yes: 'Cancel event',
@@ -119,7 +119,19 @@ export function cancelBox(event, words) {
   };
 }
 
+/** The box before a past event's poster is taken off. */
+export function posterBox(event) {
+  return { title: `Remove the poster from ${event.name}?`, lines: ["The picture is deleted and can't be brought back. The rest of the event stays as it is."], yes: 'Remove poster', no: 'Keep it' };
+}
+
+/** Whether the event the server kept is the one this form holds: a save whose reply was
+ *  lost and whose form was then changed is answered with the first one. */
+export function sameAsSent(event, fields) {
+  return ['name', 'details', 'place', 'startsOn', 'startMinute', 'endsOn', 'endMinute', 'places'].every((key) => event[key] === fields[key]);
+}
+
 export const EVENT_NOTES = {
+  posterRemoved: 'Poster removed.',
   added: (words) => `Event added. Your ${words.people} can see it now.`,
   saved: (words) => `Changes saved. Your ${words.people} see them now.`,
   cancelled: (words) => `Event cancelled. Your ${words.people} see it marked Cancelled.`,

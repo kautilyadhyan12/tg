@@ -57,6 +57,12 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies
 const redisUrl = process.env["TEST_REDIS_URL"];
 let seq = 0;
 const uniq = (): string => `${String(Date.now())}${String(seq++)}`;
+/** An address of this run's own for a limit test: a real Redis keeps its counters for the
+ *  hour, across runs. */
+const desk = (): string => {
+  const hex = randomUUID().replaceAll("-", "");
+  return `10.${String(100 + (parseInt(hex.slice(0, 2), 16) % 100))}.${String(parseInt(hex.slice(2, 4), 16))}.${String((parseInt(hex.slice(4, 6), 16) % 254) + 1)}`;
+};
 
 d("a gym's events (real Postgres, real disk)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
@@ -229,7 +235,7 @@ d("a gym's events (real Postgres, real disk)", () => {
       const other = await makeGym("Other House");
       const outsider = await member(other, "Olga Outsider");
       const stranger = await signedIn("Sam Stranger");
-      // Somebody the gym removed, and a past member whose account was then closed.
+      // Somebody the gym removed.
       const removed = await member(gym, "Rita Removed");
       await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${removed.userId}`;
       const trainer = await signedIn("Tara Trainer");
@@ -296,6 +302,9 @@ d("a gym's events (real Postgres, real disk)", () => {
       expect(picture.statusCode).toBe(200);
       expect(picture.headers["content-type"]).toBe("image/jpeg");
       expect(picture.headers["x-content-type-options"]).toBe("nosniff");
+      // Kept by one person's browser alone and asked for again each time; never run as a page.
+      expect(picture.headers["cache-control"]).toBe("private, no-cache");
+      expect(picture.headers["content-security-policy"]).toBe("default-src 'none'; sandbox");
       expect((await staffList(gym, gym.owner)).coming).toHaveLength(1);
       expect((await staffList(other, other.owner)).coming).toHaveLength(0);
     },
@@ -425,6 +434,10 @@ d("a gym's events (real Postgres, real disk)", () => {
         ["a minute past midnight's last", { startMinute: 1440 }],
         ["a field nobody asked for", { colour: "red" }],
         ["details too long", { details: "x".repeat(1001) }],
+        ["a name nobody can see", { name: String.fromCodePoint(0x200b, 0x200b) }],
+        ["a name of a filler character", { name: String.fromCodePoint(0x3164) }],
+        ["a day in the year 0000", { startsOn: "0000-01-01", endsOn: "0000-01-01" }],
+        ["a day in the year 9999", { startsOn: "9999-12-30", endsOn: "9999-12-30" }],
         ["a place too long", { place: "x".repeat(121) }],
       ];
       for (const [why, over] of refused) {
@@ -435,15 +448,26 @@ d("a gym's events (real Postgres, real disk)", () => {
       const gone = await inject("POST", events(gym.id), gym.owner.cookies, openDay({ startsOn: "2026-10-07", startMinute: 360, endsOn: "2026-10-07", endMinute: 420 }));
       expect(gone.statusCode).toBe(400);
       expect(JSON.parse(gone.body)).toMatchObject({ error: "event_already_ended", message: GYM_EVENT_WORDS.already_ended });
+      // A start more than two years from the gym's today (7 October 2026).
+      const far = await inject("POST", events(gym.id), gym.owner.cookies, openDay({ startsOn: "2028-10-07", endsOn: "2028-10-07" }));
+      expect(far.statusCode).toBe(400);
+      expect(JSON.parse(far.body)).toMatchObject({ error: "event_too_far", message: GYM_EVENT_WORDS.too_far });
+      expect((await inject("POST", events(gym.id), gym.owner.cookies, openDay({ name: "Two years on", startsOn: "2028-10-06", endsOn: "2028-10-06" }))).statusCode).toBe(201);
       // One that has started and not ended is taken.
       expect((await inject("POST", events(gym.id), gym.owner.cookies, openDay({ name: "On now", startsOn: "2026-10-07", startMinute: 360, endsOn: "2026-10-07", endMinute: 480 }))).statusCode).toBe(201);
       // The night the clocks go back in London, 01:30 comes twice; 01:10 to 01:50 is in order.
       expect((await inject("POST", events(gym.id), gym.owner.cookies, openDay({ name: "Clocks back", startsOn: "2026-10-25", startMinute: 70, endsOn: "2026-10-25", endMinute: 110 }))).statusCode).toBe(201);
-      // The night they go forward, 01:40 to 02:10 reads in order and 02:10 is not on the clock.
-      const skipped = await inject("POST", events(gym.id), gym.owner.cookies, openDay({ name: "Clocks forward", startsOn: "2027-03-28", startMinute: 100, endsOn: "2027-03-28", endMinute: 130 }));
-      expect([201, 400]).toContain(skipped.statusCode);
+      // The night they go forward London has no 01:00 to 01:59: a time in it reads as the
+      // hour after. 00:40 to 01:10 is 00:40 to 02:10 on the clock, thirty minutes apart.
+      const skipped = await inject("POST", events(gym.id), gym.owner.cookies, openDay({ name: "Clocks forward", startsOn: "2027-03-28", startMinute: 40, endsOn: "2027-03-28", endMinute: 70 }));
+      expect(skipped.statusCode, skipped.body).toBe(201);
+      expect((JSON.parse(skipped.body) as { event: GymEvent }).event).toMatchObject({ startsAt: "2027-03-28T00:40:00.000Z", endsAt: "2027-03-28T01:10:00.000Z" });
+      // 01:40 to 02:10 reads in order and is not: 01:40 is 02:40 on that night's clock.
+      const backwards = await inject("POST", events(gym.id), gym.owner.cookies, openDay({ name: "Out of order", startsOn: "2027-03-28", startMinute: 100, endsOn: "2027-03-28", endMinute: 130 }));
+      expect(backwards.statusCode).toBe(400);
+      expect(JSON.parse(backwards.body)).toMatchObject({ error: "event_ends_before_start", message: GYM_EVENT_WORDS.ends_before_start });
       const names = (await staffList(gym, gym.owner)).coming.map((e) => e.name);
-      expect(names.filter((n) => n !== "Clocks forward")).toEqual(["On now", "Clocks back"]);
+      expect(names).toEqual(["On now", "Clocks back", "Clocks forward", "Two years on"]);
       for (const e of (await staffList(gym, gym.owner)).coming) expect(Date.parse(e.endsAt)).toBeGreaterThan(Date.parse(e.startsAt));
     },
     T,
@@ -542,8 +566,24 @@ d("a gym's events (real Postgres, real disk)", () => {
         const change = await inject("PUT", `${events(gym.id)}/${event.id}`, gym.owner.cookies, changed({ name: "Rewritten", startsOn: "2026-11-01", endsOn: "2026-11-01" }));
         expect(change.statusCode).toBe(409);
         expect(JSON.parse(change.body)).toMatchObject({ error: "event_ended", message: GYM_EVENT_WORDS.ended });
+        // Saved with its own times, which have passed, it is told the same thing: that it
+        // has ended, never to choose a later end.
+        const asItWas = await inject("PUT", `${events(gym.id)}/${event.id}`, gym.owner.cookies, changed({ name: "Rewritten" }));
+        expect(asItWas.statusCode).toBe(409);
+        expect((JSON.parse(asItWas.body) as { error: string }).error).toBe("event_ended");
         expect((await inject("PUT", `${events(gym.id)}/${event.id}/cancelled`, gym.owner.cookies, { cancelled: true })).statusCode).toBe(409);
         expect((await staffList(gym, gym.owner)).past[0]).toMatchObject({ name: "Saturday Open Day", cancelled: false });
+        // Its poster can still be taken off (a person in it may ask), and nothing else with it.
+        expect(await filesOf(gym.id)).toHaveLength(1);
+        const bare = await inject("PUT", `${events(gym.id)}/${event.id}`, gym.owner.cookies, changed({ name: "Rewritten with the poster", places: 3, poster: null }));
+        expect(bare.statusCode, bare.body).toBe(200);
+        expect((JSON.parse(bare.body) as { event: GymEvent }).event).toMatchObject({ name: "Saturday Open Day", places: 40, poster: null });
+        expect(await filesOf(gym.id)).toEqual([]);
+        expect(await queued(gym.id)).toBe(0);
+        expect((await inject("GET", posterPath(gym, event), gym.owner.cookies)).statusCode).toBe(404);
+        // Asked again, there is none to take off.
+        expect((await inject("PUT", `${events(gym.id)}/${event.id}`, gym.owner.cookies, changed({ poster: null }))).statusCode).toBe(200);
+        expect(await audits(gym.id, "org.event_changed")).toBe(1);
       } finally {
         clock = started;
       }
@@ -560,7 +600,7 @@ d("a gym's events (real Postgres, real disk)", () => {
       await addStaff(gym.id, poster.userId, "trainer", ["posts.manage"]);
       const manager = await signedIn("Mo Manager");
       await addStaff(gym.id, manager.userId, "manager", null);
-      const event = await add(gym, poster, { name: "By a trainer with the tick" });
+      const event = await add(gym, poster, { name: "By a trainer with the tick", poster: IPHONE });
       expect((await inject("POST", events(gym.id), manager.cookies, openDay({ name: "By a manager" }))).statusCode).toBe(201);
       expect((await staffList(gym, poster)).coming).toHaveLength(2);
 
@@ -579,6 +619,11 @@ d("a gym's events (real Postgres, real disk)", () => {
       const paused = await coming(gym, reader);
       expect(paused.status).toBe("paused");
       expect(paused.events).toEqual([]);
+      // Nor a poster, to a member whose browser holds it either; staff still see it.
+      expect((await inject("GET", posterPath(gym, event), reader.cookies)).statusCode).toBe(404);
+      const held = await api().inject({ method: "GET", url: posterPath(gym, event), remoteAddress: nextIp(), cookies: reader.cookies, headers: { "if-none-match": `"${event.poster?.id ?? ""}"` } });
+      expect(held.statusCode).toBe(404);
+      expect((await inject("GET", posterPath(gym, event), gym.owner.cookies)).statusCode).toBe(200);
     },
     T,
   );
@@ -592,15 +637,105 @@ d("a gym's events (real Postgres, real disk)", () => {
         SELECT ${gym.id}, gen_random_uuid(), 'Event ' || n, '2026-11-01', 600, '2026-11-01', 660,
                '2026-11-01T10:00:00Z'::timestamptz + make_interval(mins => n), '2026-11-01T11:00:00Z'::timestamptz + make_interval(mins => n)
         FROM generate_series(1, ${GYM_EVENTS_COMING_MAX - 1}) AS n`;
-      expect((await inject("POST", events(gym.id), gym.owner.cookies, openDay({ name: "The last one" }))).statusCode).toBe(201);
+      // Four at the same moment through two apis: the one place left goes to one of them.
+      const rush = await Promise.all(
+        [0, 1, 2, 3].map((n) => inject("POST", events(gym.id), gym.owner.cookies, openDay({ name: `The last one ${String(n)}`, poster: IPHONE }), nextIp(), n % 2 === 0 ? api() : (second ?? api()))),
+      );
+      expect(rush.map((r) => r.statusCode).sort()).toEqual([201, 409, 409, 409]);
+      expect(await filesOf(gym.id)).toHaveLength(1);
       const over = await inject("POST", events(gym.id), gym.owner.cookies, openDay({ name: "One too many", poster: IPHONE }));
       expect(over.statusCode).toBe(409);
       expect(JSON.parse(over.body)).toMatchObject({ error: "events_full", message: GYM_EVENT_WORDS.full });
-      expect(await filesOf(gym.id)).toEqual([]);
+      expect(await filesOf(gym.id)).toHaveLength(1);
       expect(await queued(gym.id)).toBe(0);
       const reader = await member(gym, "Maya Member");
       expect((await coming(gym, reader)).events).toHaveLength(GYM_EVENTS_COMING_MAX);
       expect((await staffList(gym, gym.owner)).coming).toHaveLength(GYM_EVENTS_COMING_MAX);
+    },
+    T,
+  );
+
+  it(
+    "a gym that changes its time zone keeps its events on its own clock",
+    async () => {
+      const gym = await makeGym("Moving House");
+      const reader = await member(gym, "Maya Member");
+      // 09:00 to 10:00 today on the gym's clock; it is 07:30 in London.
+      const event = await add(gym, gym.owner, { name: "Breakfast", startsOn: "2026-10-07", startMinute: 540, endsOn: "2026-10-07", endMinute: 600 });
+      expect(event.startsAt).toBe("2026-10-07T08:00:00.000Z");
+      const started = clock;
+      try {
+        // The gym is in Los Angeles after all, where it is 23:30 the evening before.
+        const moved = await api().inject({ method: "PATCH", url: `/v1/orgs/${gym.id}`, remoteAddress: nextIp(), cookies: gym.owner.cookies, headers: { "content-type": "application/json" }, payload: JSON.stringify({ timezone: "America/Los_Angeles" }) });
+        expect(moved.statusCode, moved.body).toBe(200);
+        const there = await coming(gym, reader);
+        expect(there.timezone).toBe("America/Los_Angeles");
+        expect(there.today).toBe("2026-10-06");
+        expect(there.events.map((e) => [e.startsOn, e.startMinute, e.startsAt, e.endsAt])).toEqual([["2026-10-07", 540, "2026-10-07T16:00:00.000Z", "2026-10-07T17:00:00.000Z"]]);
+        // 09:30 on the gym's own clock: on, and still listed. 10:00 there: ended.
+        clock = Date.parse("2026-10-07T16:30:00Z");
+        expect((await coming(gym, reader)).events).toHaveLength(1);
+        clock = Date.parse("2026-10-07T17:00:00Z");
+        expect((await coming(gym, reader)).events).toEqual([]);
+        expect((await staffList(gym, gym.owner)).past.map((e) => e.id)).toEqual([event.id]);
+        // Another gym's events did not move with it.
+      } finally {
+        clock = started;
+      }
+      const other = await makeGym("Staying House");
+      const stays = await add(other, other.owner);
+      await api().inject({ method: "PATCH", url: `/v1/orgs/${gym.id}`, remoteAddress: nextIp(), cookies: gym.owner.cookies, headers: { "content-type": "application/json" }, payload: JSON.stringify({ timezone: "Asia/Kolkata" }) });
+      expect((await staffList(other, other.owner)).coming[0]?.startsAt).toBe(stays.startsAt);
+    },
+    T,
+  );
+
+  it(
+    "two changes of one event at the same moment leave one poster and its one file",
+    async () => {
+      const gym = await makeGym("Race House");
+      const event = await add(gym, gym.owner, { poster: IPHONE });
+      for (let round = 0; round < 3; round++) {
+        const both = await Promise.all(
+          [IPHONE, PNG].map((poster, n) => inject("PUT", `${events(gym.id)}/${event.id}`, gym.owner.cookies, changed({ poster }), nextIp(), n === 0 ? api() : (second ?? api()))),
+        );
+        expect(both.map((r) => r.statusCode)).toEqual([200, 200]);
+        const now = (await staffList(gym, gym.owner)).coming[0];
+        const files = await filesOf(gym.id);
+        expect(files).toHaveLength(1);
+        expect(files[0]?.startsWith(now?.poster?.id ?? "none")).toBe(true);
+        expect(await queued(gym.id)).toBe(0);
+      }
+    },
+    T,
+  );
+
+  it(
+    "a gym's people at one address all read; one member of staff's saves are limited, alone",
+    async () => {
+      const gym = await makeGym("Wifi House");
+      const event = await add(gym, gym.owner, { poster: IPHONE });
+      const wifi = desk();
+      const people = [];
+      for (let n = 0; n < 6; n++) people.push(await member(gym, `Member ${String(n)}`));
+      for (let round = 0; round < 5; round++) {
+        for (const person of people) {
+          expect((await inject("GET", events(gym.id), person.cookies, undefined, wifi)).statusCode).toBe(200);
+          expect((await inject("GET", posterPath(gym, event), person.cookies, undefined, wifi)).statusCode).toBe(200);
+        }
+      }
+      // A stranger's tries at that address are 404 and count against nobody.
+      const stranger = await signedIn("Sam Stranger");
+      for (let n = 0; n < 30; n++) expect((await inject("POST", events(gym.id), stranger.cookies, openDay(), wifi)).statusCode).toBe(404);
+      // One member of staff: 120 saves an hour (the add above was the first), then 429.
+      const manager = await signedIn("Mo Manager");
+      await addStaff(gym.id, manager.userId, "manager", null);
+      for (let n = 0; n < 120; n++) expect((await inject("POST", events(gym.id), manager.cookies, openDay({ name: "" }), wifi)).statusCode, `save ${String(n + 1)}`).toBe(400);
+      expect((await inject("POST", events(gym.id), manager.cookies, openDay(), wifi)).statusCode).toBe(429);
+      // The owner at the same address still saves; the manager is limited from another too.
+      expect((await inject("POST", events(gym.id), gym.owner.cookies, openDay({ name: "Still saved" }), wifi)).statusCode).toBe(201);
+      expect((await inject("POST", events(gym.id), manager.cookies, openDay())).statusCode).toBe(429);
+      expect((await inject("GET", events(gym.id), people[0]?.cookies ?? {}, undefined, wifi)).statusCode).toBe(200);
     },
     T,
   );

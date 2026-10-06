@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { addGymEventRequestSchema, changeGymEventRequestSchema } from '@app/shared';
 import { eventIsOn, eventPlaces, eventWhen, eventsZoneNote } from '../../components/gym/eventsView';
-import { cancelBox, clockOf, dayAfter, detailsLine, draftOf, eventProblem, fieldsOf, minuteOf, newEventDraft, pastTitle, withStartDay } from './eventsView';
+import { cancelBox, clockOf, dayAfter, detailsLine, draftOf, eventProblem, fieldsOf, minuteOf, newEventDraft, pastTitle, posterBox, sameAsSent, withStartDay } from './eventsView';
 
 const EVENT = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -27,6 +27,10 @@ describe('an event in words', () => {
     expect(eventWhen(EVENT)).toBe('Sat 17 Oct · 10:00 am – 1:00 pm');
     expect(eventWhen({ ...EVENT, endsOn: '2026-10-18', endMinute: 960 })).toBe('Sat 17 Oct, 10:00 am – Sun 18 Oct, 4:00 pm');
     expect(eventWhen({ ...EVENT, startMinute: 0, endMinute: 725 })).toBe('Sat 17 Oct · 12:00 am – 12:05 pm');
+    // The year is said only where it is not the year of the gym's today.
+    expect(eventWhen(EVENT, '2026-10-07')).toBe('Sat 17 Oct · 10:00 am – 1:00 pm');
+    expect(eventWhen({ ...EVENT, startsOn: '2027-10-16', endsOn: '2027-10-16' }, '2026-10-07')).toBe('Sat 16 Oct 2027 · 10:00 am – 1:00 pm');
+    expect(eventWhen({ ...EVENT, startsOn: '2026-12-31', endsOn: '2027-01-01', endMinute: 60 }, '2026-10-07')).toBe('Thu 31 Dec, 10:00 am – Fri 1 Jan 2027, 1:00 am');
   });
 
   it('counts places, and says nothing for no limit', () => {
@@ -71,6 +75,9 @@ describe('the form', () => {
     const cases = [
       [newEventDraft(), 'name', 'Give the event a name.'],
       [good({ name: '   ' }), 'name', 'Give the event a name.'],
+      // Characters that draw nothing: a zero-width space, a Hangul filler.
+      [good({ name: String.fromCodePoint(0x200b, 0x200b) }), 'name', 'Give the event a name.'],
+      [good({ name: String.fromCodePoint(0x3164) }), 'name', 'Give the event a name.'],
       [good({ name: 'x'.repeat(81) }), 'name', 'Keep the name to 80 characters.'],
       [good({ startsOn: '' }), 'startsOn', 'Pick the day it starts.'],
       [good({ startTime: '' }), 'startTime', 'Pick the time it starts: the hour and the minute.'],
@@ -89,7 +96,7 @@ describe('the form', () => {
       [good({ details: 'x'.repeat(1001) }), 'details', 'Keep the details to 1,000 characters.'],
     ];
     for (const [draft, field, text] of cases) expect(eventProblem(draft), text).toEqual({ field, text });
-    const fine = [good(), good({ endsOn: '2026-10-18', endTime: '09:00' }), good({ endsOn: '2026-11-17' }), good({ unlimited: false, places: ' 40 ' }), good({ unlimited: true, places: 'junk' }), good({ name: 'x'.repeat(80) }), good({ details: 'x'.repeat(1000) })];
+    const fine = [good(), good({ endsOn: '2026-10-18', endTime: '09:00' }), good({ endsOn: '2026-11-17' }), good({ unlimited: false, places: ' 40 ' }), good({ unlimited: true, places: 'junk' }), good({ name: 'x'.repeat(80) }), good({ details: 'x'.repeat(1000) }), good({ name: '5K' }), good({ name: String.fromCodePoint(0xc694, 0xac00) })];
     for (const draft of fine) expect(eventProblem(draft)).toBeNull();
   });
 
@@ -134,6 +141,13 @@ describe('the form', () => {
       yes: 'Cancel event',
       no: 'Keep it',
     });
+    expect(cancelBox({ ...EVENT, endsOn: '2027-01-02' }, { people: 'members' }, '2026-10-07').lines[0]).toBe('Your members still see it on their Events list, marked Cancelled, until Sat 2 Jan 2027.');
+    expect(posterBox(EVENT)).toEqual({ title: 'Remove the poster from Saturday Open Day?', lines: ["The picture is deleted and can't be brought back. The rest of the event stays as it is."], yes: 'Remove poster', no: 'Keep it' });
+    // The event the server answers an add with is the one sent, or an earlier press's.
+    const sent = fieldsOf(good({ unlimited: false, places: '40' }), true);
+    expect(sameAsSent({ ...EVENT, details: '', place: '' }, sent)).toBe(true);
+    expect(sameAsSent({ ...EVENT, details: '', place: '', name: 'Saturday Open Dya' }, sent)).toBe(false);
+    expect(sameAsSent({ ...EVENT, details: '', place: '', places: null }, sent)).toBe(false);
     expect(pastTitle({ past: [EVENT], pastTotal: 1 })).toBe('Past events (1)');
     expect(pastTitle({ past: Array(50).fill(EVENT), pastTotal: 73 })).toBe('Past events (the newest 50 of 73)');
   });
