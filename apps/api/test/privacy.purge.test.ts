@@ -165,6 +165,19 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     // Who they blocked on a gym's Updates (19b-ii-b), and somebody's block of them.
     await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, ${userId}, owner_user_id FROM gyms WHERE id = ${postGymId}`;
     await sql`INSERT INTO gym_post_blocks (gym_id, user_id, blocked_user_id) SELECT ${postGymId}, owner_user_id, ${userId} FROM gyms WHERE id = ${postGymId}`;
+    // A challenge of the gym's that they joined (19d-i): the person's own choice.
+    await sql`
+      WITH c AS (
+        INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, starts_on, ends_on, who)
+        VALUES (${postGymId}, gen_random_uuid(), 'fixture challenge', 'gym_days', current_date, current_date + 7, 'joined') RETURNING id
+      )
+      INSERT INTO gym_challenge_people (gym_id, challenge_id, user_id) SELECT ${postGymId}, c.id, ${userId} FROM c`;
+    await sql`
+      WITH c AS (
+        INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, unit, starts_on, ends_on, who)
+        VALUES (${postGymId}, gen_random_uuid(), 'fixture own challenge', 'own', 'push-ups', current_date, current_date + 7, 'everyone') RETURNING id
+      )
+      INSERT INTO gym_challenge_scores (gym_id, challenge_id, user_id, value) SELECT ${postGymId}, c.id, ${userId}, 40 FROM c`;
     // Kept after the purge, as proof (tables.ts) — asserted to survive below.
     await sql`INSERT INTO consent_log (user_id, purpose, wording_version, wording, app_version)
               VALUES (${userId}, 'sign_up', 'v1', 'fixture wording', 'test')`;

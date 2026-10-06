@@ -1043,6 +1043,32 @@
 }
 .c-flame-open { opacity: 0.5; }
 .c-flame-head { width: 16px; text-align: center; font-size: 10px; line-height: 18px; }
+/* A challenge's card (19d-i): how far through its days it is, and its first three. Gold,
+   silver and bronze always sit beside the place in words. */
+.c-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--raise);
+  overflow: hidden;
+}
+.c-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.c-medal-1 { color: #E0A800; }
+.c-medal-2 { color: #8E99A8; }
+.c-medal-3 { color: #C0763F; }
+.c-podium {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.c-podium-1 { border-color: #E0A800; background: color-mix(in srgb, #E0A800 9%, transparent); }
 .c-avatar {
   display: inline-flex;
   align-items: center;

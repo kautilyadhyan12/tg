@@ -52,6 +52,7 @@ import ConsoleLeads    from './pages/console/Leads';
 import ConsoleLeaderboard from './pages/console/Leaderboard';
 import ConsoleUpdates  from './pages/console/Updates';
 import ConsoleEvents   from './pages/console/Events';
+import ConsoleChallenges from './pages/console/Challenges';
 import ConsoleSettings from './pages/console/Settings';
 import ConsoleMore     from './pages/console/More';
 
@@ -308,6 +309,12 @@ export default function App() {
             <Route path="/console/:orgSlug/events" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleEvents /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* THE GYM'S CHALLENGES FOR STAFF (19d-i): `leaderboard.manage`'s. */}
+            <Route path="/console/:orgSlug/challenges" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleChallenges /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={
