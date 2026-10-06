@@ -2695,6 +2695,24 @@ safe while a booking can only land on a day whose classes are written: a booking
 in the last week of its window writes that gym's calendar first (`pt/service.ts` `book`), so
 a night the job missed cannot leave a session under a class written later. Nobody is told
 (the inbox, 20a). Not done: a trainer's time off (17e-iii-b, built next).)*
+*(17e-iii-b, 2026-10-06: **a trainer's time off.** `gym_trainer_time_off` (migration `0081`):
+whole days of the gym's, or some hours of one day, with that time kept as two instants in the
+gym's zone; up to a year long, starting up to a year ahead, 50 not yet over a trainer. It
+takes the trainer's time as a session or a class does: it comes off their free times, and a
+booking in it is refused 409 `trainer_off` (`decidePtBook`), read under the gym's lock.
+`POST …/pt/trainers/:userId/time-off` adds one and `DELETE …/time-off/:id` removes one;
+staff who run the timetable for anybody, a trainer for themselves; each answers the trainers
+list, whose rows carry `timeOff` (those not over). **It asks first:** with sessions booked
+with the trainer in it, or taught classes on the calendar they coach in it, it answers 409
+`time_off_over_bookings` with `over` (a `mark` for exactly those, each kind's whole count
+and first 100, and `classesUpTo`, the last day whose classes are on the calendar) and writes
+nothing; the same request with `confirm` equal to the mark, worked out again under the lock,
+adds it, and every session, pack and class stays as it was. A booking takes the same lock, so
+of a booking and a time off sent together one always sees the other. The same `requestKey`
+again adds nothing. The week answers each day's `timeOff`; the page marks the day, and a
+session or class left in it says so. The console's **Time off** button is on each trainer's
+row and on a trainer's own card. Not done: the Classes page does not ask before it gives a
+trainer a class inside their time off (their week marks it); nobody is told (the inbox, 20a).)*
 
 ### 13.6 The calendar, the desk and the messages
 

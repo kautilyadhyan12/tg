@@ -1,7 +1,18 @@
 // PERSONAL TRAINING, its words and its form's rules (spec Part 3 §13.5; ROADMAP 17e-i).
 // Pure, so the tests read every state without a browser. Every time is the gym's own clock.
-import { PT_RANGES_PER_DAY, PT_SESSION_MINUTES_MAX, PT_SESSION_MINUTES_MIN, PT_SESSION_MINUTES_USUAL, ptHoursProblem } from '@app/shared';
-import { WEEKDAYS, clockLabel, clockToMinutes, minutesToClock } from './hoursView';
+import {
+  PT_RANGES_PER_DAY,
+  PT_SESSION_MINUTES_MAX,
+  PT_SESSION_MINUTES_MIN,
+  PT_SESSION_MINUTES_USUAL,
+  PT_TIME_OFF_AHEAD_DAYS,
+  PT_TIME_OFF_MAX,
+  PT_TIME_OFF_OVER_ERROR,
+  ptHoursProblem,
+  ptTimeOffOverSchema,
+  ptTimeOffProblem,
+} from '@app/shared';
+import { WEEKDAYS, addDays, clockLabel, clockToMinutes, minutesToClock } from './hoursView';
 import { dayLabel } from '../../components/gym/leaderboardView';
 
 export const PT_TITLE = 'Personal training';
@@ -200,11 +211,159 @@ export function coachedClassRow(coached, clockFormat) {
 
 /** The class a booked session runs into, if the trainer was given one over it afterwards;
  *  null where there is none. */
-export function sessionClash(appointment, classes) {
+export function sessionClash(appointment, classes, timeOff) {
   const from = appointment.localStartMinute;
   const to = from + appointment.minutes;
   const hit = (Array.isArray(classes) ? classes : []).find((c) => c.localStartMinute < to && from < c.localStartMinute + c.minutes);
+  // Time off is said first: the trainer is not there at all, whatever else is at that time.
+  if (inTimeOff(from, to, timeOff)) return 'This is in their time off. Cancel it and book another time, or remove the time off.';
   return hit === undefined ? null : `This runs into ${hit.name}, a class they coach at the same time. Move one of them.`;
+}
+
+// ── TIME OFF (17e-iii-b) ──
+
+/** Whether a stretch of one day (minutes from midnight) runs into that day's time off. */
+function inTimeOff(from, to, timeOff) {
+  return (Array.isArray(timeOff) ? timeOff : []).some((o) => o.fromMinute === null || o.toMinute === null || (o.fromMinute < to && from < o.toMinute));
+}
+
+/** A class the trainer coaches inside their time off says so; null otherwise. */
+export function classInTimeOff(coached, timeOff) {
+  return inTimeOff(coached.localStartMinute, coached.localStartMinute + coached.minutes, timeOff)
+    ? 'In their time off. Give this class another coach on the Calendar.'
+    : null;
+}
+
+/** Time off on one day of the week: "Time off · all day", "Time off · 09:00 – 12:00". */
+export function dayTimeOffRow(off, clockFormat) {
+  return off.fromMinute === null || off.toMinute === null ? 'Time off · all day' : `Time off · ${timeRange(off.fromMinute, off.toMinute, clockFormat)}`;
+}
+
+/** A day with its year where that is not this year's: "Fri 9 Oct", "Mon 4 Jan 2027". */
+function dayWithYear(day, today) {
+  return typeof today === 'string' && day.slice(0, 4) !== today.slice(0, 4) ? `${dayLabel(day)} ${day.slice(0, 4)}` : dayLabel(day);
+}
+
+/** One time off in a list: "Fri 9 Oct · all day", "Mon 12 Oct – Fri 16 Oct · all day",
+ *  "Fri 9 Oct · 09:00 – 12:00". */
+export function timeOffLine(off, clockFormat, today) {
+  if (off.fromMinute !== null && off.toMinute !== null) return `${dayWithYear(off.fromDate, today)} · ${timeRange(off.fromMinute, off.toMinute, clockFormat)}`;
+  if (off.fromDate === off.toDate) return `${dayWithYear(off.fromDate, today)} · all day`;
+  return `${dayWithYear(off.fromDate, today)} – ${dayWithYear(off.toDate, today)} · all day`;
+}
+
+/** The line under a trainer's hours: their next time off and how many more; null with none. */
+export function timeOffSummary(trainer, clockFormat, today) {
+  const list = Array.isArray(trainer?.timeOff) ? trainer.timeOff : [];
+  const [next] = list;
+  if (next === undefined) return null;
+  const more = list.length - 1;
+  return `Time off: ${timeOffLine(next, clockFormat, today)}${more > 0 ? `, and ${String(more)} more` : ''}`;
+}
+
+export const TIME_OFF_INTRO = 'A holiday, a day away or a few hours. No session can be booked in it. The weekly hours stay as they are.';
+
+/** The form for one new time off. `kind`: 'days' for whole days, 'hours' for part of one day. */
+export function timeOffDraft() {
+  return { kind: 'days', fromDate: '', toDate: '', from: '', to: '' };
+}
+
+/** The first and last day the date boxes take. */
+export function timeOffDayLimits(today) {
+  return { min: today, max: addDays(today, PT_TIME_OFF_AHEAD_DAYS) };
+}
+
+function draftSpan(draft) {
+  const whole = draft.kind === 'days';
+  return {
+    fromDate: draft.fromDate,
+    toDate: whole ? draft.toDate : draft.fromDate,
+    fromMinute: whole ? null : clockToMinutes(draft.from),
+    toMinute: whole ? null : clockToMinutes(draft.to),
+  };
+}
+
+/** What is wrong with the form in one sentence, or null when it can be added. */
+export function timeOffFormProblem(draft, today, coming = 0) {
+  const whole = draft.kind === 'days';
+  if (coming >= PT_TIME_OFF_MAX) return `A trainer can have up to ${String(PT_TIME_OFF_MAX)} times off coming. Remove one first.`;
+  if (draft.fromDate === '' || (whole && draft.toDate === '')) return whole ? 'Pick the first and the last day.' : 'Pick the day.';
+  const span = draftSpan(draft);
+  if (!whole && (span.fromMinute === null || span.toMinute === null)) return 'Pick a start and an end time.';
+  switch (ptTimeOffProblem(span)) {
+    case 'order':
+      return 'The last day is before the first day.';
+    case 'range':
+      return 'The end time must be after the start time.';
+    case 'too_long':
+      return 'Time off can be up to a year long.';
+    case null:
+      break;
+    default:
+      return "That isn't a day on the calendar.";
+  }
+  if (span.toDate < today) return 'That day has already passed.';
+  if (span.fromDate > addDays(today, PT_TIME_OFF_AHEAD_DAYS)) return 'Time off can start up to a year ahead.';
+  return null;
+}
+
+/** The request the form sends. Call only when `timeOffFormProblem` is null. */
+export function timeOffRequest(draft, requestKey, confirm) {
+  return { requestKey, ...draftSpan(draft), ...(typeof confirm === 'string' ? { confirm } : {}) };
+}
+
+/** The sessions and classes the server says are in the time off; null for any other answer. */
+export function timeOffAsked(err) {
+  const data = err?.response?.data;
+  if (data?.error !== PT_TIME_OFF_OVER_ERROR) return null;
+  const parsed = ptTimeOffOverSchema.safeParse(data?.over);
+  return parsed.success && parsed.data.sessions.count + parsed.data.classes.count > 0 ? parsed.data : null;
+}
+
+/** How many of each the box lists before "See all". */
+export const TIME_OFF_BOX_FIRST = 3;
+
+const counted = (n, one, many) => (n === 1 ? `1 ${one}` : `${n.toLocaleString('en')} ${many}`);
+
+/** "Sam Reed has 2 sessions booked and coaches 1 class in this time" */
+export function timeOffBoxTitle(over, trainer) {
+  const who = trainerName(trainer);
+  const s = over.sessions.count;
+  const c = over.classes.count;
+  const sessions = `${counted(s, 'session', 'sessions')} booked`;
+  const classes = counted(c, 'class', 'classes');
+  if (s > 0 && c > 0) return `${who} has ${sessions} and coaches ${classes} in this time`;
+  return s > 0 ? `${who} has ${sessions} in this time` : `${who} coaches ${classes} in this time`;
+}
+
+/** One session or class in the box: who or what, and when. */
+export function timeOffBoxRow(row, clockFormat, today, kind) {
+  const fallback = kind === 'session' ? 'Somebody no longer on your list' : 'A class';
+  return {
+    name: typeof row.name === 'string' && row.name !== '' ? row.name : fallback,
+    detail: `${dayWithYear(row.localDate, today)} · ${timeRange(row.localStartMinute, row.localStartMinute + row.minutes, clockFormat)}`,
+  };
+}
+
+/** What adding it does, and who does not change. */
+export function timeOffBoxLines(over, trainer, draft) {
+  const who = trainerName(trainer);
+  const lines = [`If you add this time off, no new session can be booked with ${who} in it.`];
+  if (over.sessions.count > 0) {
+    lines.push(
+      `${over.sessions.count === 1 ? 'This session stays' : 'These sessions stay'} booked: nobody is cancelled and nothing comes off or goes back on a pack. To move one, cancel it on this page and book another time.`,
+    );
+  }
+  if (over.classes.count > 0) {
+    lines.push(
+      `${over.classes.count === 1 ? 'This class stays' : 'These classes stay'} on the calendar with ${who} as coach. To change the coach, open the class on the Calendar.`,
+    );
+  }
+  const last = draft.kind === 'days' ? draft.toDate : draft.fromDate;
+  if (typeof last === 'string' && last > over.classesUpTo) {
+    lines.push(`Classes after ${dayLabel(over.classesUpTo)} aren't on the calendar yet, so they aren't listed here. ${who}'s week will mark them when they are.`);
+  }
+  return lines;
 }
 
 /** "Today · Wed 7 Oct", or the day alone. */

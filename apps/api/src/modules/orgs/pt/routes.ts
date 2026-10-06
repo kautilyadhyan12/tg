@@ -6,6 +6,8 @@ import type { Sql } from "postgres";
 import { z } from "zod";
 import {
   PT_LATE_CANCEL_ERROR,
+  PT_TIME_OFF_OVER_ERROR,
+  addPtTimeOffRequestSchema,
   bookPtRequestSchema,
   cancelPtRequestSchema,
   ptPeopleQuerySchema,
@@ -18,6 +20,7 @@ import { orgParamsSchema } from "../schemas.js";
 import * as service from "./service.js";
 
 const trainerParamsSchema = z.object({ gymId: z.string().uuid(), userId: z.string().uuid() }).strict();
+const timeOffParamsSchema = z.object({ gymId: z.string().uuid(), userId: z.string().uuid(), timeOffId: z.string().uuid() }).strict();
 const appointmentParamsSchema = z.object({ gymId: z.string().uuid(), appointmentId: z.string().uuid() }).strict();
 
 function parseOr400<S extends z.ZodTypeAny>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
@@ -83,6 +86,31 @@ export function registerPtRoutes(app: FastifyInstance, deps: { sql: Sql; redis: 
     const body = parseOr400(savePtTrainerRequestSchema, req.body, req, reply);
     if (body === null) return;
     const list = await service.saveTrainer(ptDeps, requireUserId(req), params.gymId, params.userId, body, gate(writeLimit)(req, reply));
+    if (list === null) return;
+    return reply.status(200).send(list);
+  });
+
+  // A trainer's time off. With sessions or classes in it, 409 `time_off_over_bookings` names
+  // them until the request sends their `mark` as `confirm`. The same `requestKey` again adds nothing.
+  app.post("/v1/orgs/:gymId/pt/trainers/:userId/time-off", staff, async (req, reply) => {
+    const params = parseOr400(trainerParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(addPtTimeOffRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const list = await service.addTimeOff(ptDeps, requireUserId(req), params.gymId, params.userId, body, gate(writeLimit)(req, reply));
+      if (list === null) return;
+      return await reply.status(200).send(list);
+    } catch (err) {
+      if (!(err instanceof service.PtTimeOffAsk)) throw err;
+      return reply.status(409).send({ error: PT_TIME_OFF_OVER_ERROR, message: err.message, over: err.over, requestId: req.id });
+    }
+  });
+
+  app.delete("/v1/orgs/:gymId/pt/trainers/:userId/time-off/:timeOffId", staff, async (req, reply) => {
+    const params = parseOr400(timeOffParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await service.removeTimeOff(ptDeps, requireUserId(req), params.gymId, params.userId, params.timeOffId, gate(writeLimit)(req, reply));
     if (list === null) return;
     return reply.status(200).send(list);
   });

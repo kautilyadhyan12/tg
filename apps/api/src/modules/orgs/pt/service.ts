@@ -13,12 +13,21 @@
 // else on staff has their own hours and their own sessions. Booking also needs
 // `members.confirm`, the tick the member list and a person's page need, since it picks a
 // person from that list. A stranger gets the 404 of a gym that does not exist.
+//
+// A trainer's time off (17e-iii-b) takes their time as a session or a class does. The worst
+// thing there: somebody booked with a trainer for a time the trainer is away. A booking
+// reads the time off, and a time off reads the bookings, each under the gym's lock, so one
+// of them always sees the other; a time off over a session or a class already there names
+// them and writes nothing until the request confirms exactly those.
+import { createHash } from "node:crypto";
 import type { Sql } from "postgres";
 import {
   PT_HORIZON_DAYS,
   PT_KEPT_USED_ERROR,
   PT_NOT_KEPT_ERROR,
   PT_PEOPLE_SHOWN,
+  PT_TIME_OFF_OVER_MESSAGE,
+  PT_TIME_OFF_OVER_SHOWN,
   PT_WEEK_DAYS,
   PT_WORDS,
   addDays,
@@ -31,14 +40,19 @@ import {
   ptOfferedTimes,
   ptPeopleResponseSchema,
   ptTime,
+  ptTimeOffOnDay,
+  ptTimeOffOverSchema,
+  ptTimeOffRefusal,
   ptTrainersResponseSchema,
   ptWeekResponseSchema,
+  type AddPtTimeOffRequest,
   type BookPtRequest,
   type CancelPtRequest,
   type PtAppointment,
   type PtBookRefusal,
   type PtPeopleQuery,
   type PtPeopleResponse,
+  type PtTimeOffOver,
   type PtTrainersResponse,
   type PtWeekQuery,
   type PtWeekResponse,
@@ -90,6 +104,7 @@ const STATUS: Record<PtBookRefusal, number> = {
   too_far: 409,
   time_taken: 409,
   trainer_in_class: 409,
+  trainer_off: 409,
   person_busy: 409,
   no_membership: 409,
   not_covered: 409,
@@ -128,7 +143,12 @@ function shown(row: repo.AppointmentRow, view: { now: Date; freeCancelMinutes: n
 export async function getTrainers(deps: PtDeps, staffId: string, gymId: string, limit: Limit): Promise<PtTrainersResponse | null> {
   const standing = await standingOf(deps, gymId, staffId);
   if (!(await limit())) return null;
-  const [clock, rows] = await Promise.all([repo.gymClock(deps.sql, gymId), repo.staffTrainers(deps.sql, gymId, standing.manages ? null : staffId)]);
+  const only = standing.manages ? null : staffId;
+  const [clock, rows, timeOff] = await Promise.all([
+    repo.gymClock(deps.sql, gymId),
+    repo.staffTrainers(deps.sql, gymId, only),
+    repo.timeOffComing(deps.sql, gymId, only, deps.now()),
+  ]);
   if (clock === null) throw notFound();
   return ptTrainersResponseSchema.parse({
     timezone: clock.timezone,
@@ -142,6 +162,9 @@ export async function getTrainers(deps: PtDeps, staffId: string, gymId: string, 
       offers: r.offers,
       sessionMinutes: r.sessionMinutes,
       hours: r.hours,
+      timeOff: timeOff
+        .filter((o) => o.userId === r.userId)
+        .map((o) => ({ id: o.id, fromDate: o.fromDate, toDate: o.toDate, fromMinute: o.fromMinute, toMinute: o.toMinute })),
       mine: r.userId === staffId,
     })),
   });
@@ -206,13 +229,19 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
     trainer.offers && trainer.sessionMinutes !== null
       ? ptOfferedTimes(trainer.hours, trainer.sessionMinutes, days.filter((day) => day <= lastDay))
       : [];
-  const [slots, appointments, coached] = await Promise.all([
+  const [slots, appointments, coached, timeOff] = await Promise.all([
     repo.instantsOf(deps.sql, clock.timezone, offered),
     repo.appointmentsOf(deps.sql, gymId, trainer.userId, from, to),
     repo.classesCoached(deps.sql, gymId, trainer.userId, clock.timezone, from, to),
+    repo.timeOffOn(deps.sql, gymId, trainer.userId, from, to),
   ]);
-  // What takes the trainer's time: the sessions booked with them, and the classes they coach.
-  const taken = [...appointments.map((a) => ({ fromMs: a.startsAt.getTime(), toMs: a.startsAt.getTime() + a.minutes * 60_000 })), ...coached];
+  // What takes the trainer's time: the sessions booked with them, the classes they coach
+  // and their time off.
+  const taken = [
+    ...appointments.map((a) => ({ fromMs: a.startsAt.getTime(), toMs: a.startsAt.getTime() + a.minutes * 60_000 })),
+    ...coached,
+    ...timeOff,
+  ];
   const free = ptFreeTimes(slots, { minutes: trainer.sessionMinutes ?? 0, taken, nowMs: now.getTime() });
   const view = { now, freeCancelMinutes: clock.freeCancelMinutes, opens: standing.confirms };
   return ptWeekResponseSchema.parse({
@@ -231,6 +260,10 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
       classes: coached
         .filter((c) => c.localDate === localDate)
         .map((c) => ({ name: c.name, localStartMinute: c.localStartMinute, minutes: c.minutes })),
+      timeOff: timeOff.flatMap((o) => {
+        const on = ptTimeOffOnDay(o, localDate);
+        return on === null ? [] : [{ id: o.id, ...on }];
+      }),
     })),
   });
 }
@@ -313,11 +346,13 @@ export async function book(deps: PtDeps, staffId: string, gymId: string, req: Bo
       const scheduleIds = await repo.coachedSlotIds(tx, gymId, trainer.userId);
       if (scheduleIds.length > 0) await fillClassSessions(tx, { gymIds: [gymId], scheduleIds, now });
     }
-    const [trainerTaken, personTaken, coached, held] = await Promise.all([
+    const [trainerTaken, personTaken, coached, timeOff, held] = await Promise.all([
       span === null ? [] : repo.takenBy(tx, gymId, { trainerId: trainer.userId }, span.from, span.to),
       span === null ? [] : repo.takenBy(tx, gymId, { entryId: req.entryId }, span.from, span.to),
       // The timetable is written under this same lock, so the classes read here stand.
       span === null ? [] : repo.classesCoached(tx, gymId, trainer.userId, clock.timezone, req.localDate, req.localDate),
+      // Time off is written under this same lock too.
+      span === null ? [] : repo.timeOffOn(tx, gymId, trainer.userId, req.localDate, req.localDate),
       clock.hasTypes ? heldForPt(tx, gymId, req.entryId) : [],
     ]);
     const busy = (taken: Awaited<ReturnType<typeof repo.takenBy>>) => startsAt !== null && minutes !== null && ptBusy(startsAt.getTime(), minutes, taken);
@@ -328,6 +363,7 @@ export async function book(deps: PtDeps, staffId: string, gymId: string, req: Bo
       tooFar: req.localDate > addDays(today, PT_HORIZON_DAYS - 1),
       trainerBusy: busy(trainerTaken),
       trainerInClass: busy(coached),
+      trainerOff: busy(timeOff),
       personBusy: busy(personTaken),
       cover: pickPtCover({ gymHasTypes: clock.hasTypes, day: req.localDate, held }),
     });
@@ -436,4 +472,143 @@ export async function cancel(
   });
   if (refused !== null) throw refused;
   return await appointmentView(deps, standing, gymId, appointmentId);
+}
+
+// ── A TRAINER'S TIME OFF (17e-iii-b) ──
+
+/** The 409 a time off answers while sessions or classes in it are not confirmed. */
+export class PtTimeOffAsk extends Error {
+  readonly over: PtTimeOffOver;
+  constructor(over: PtTimeOffOver) {
+    super(PT_TIME_OFF_OVER_MESSAGE);
+    this.name = "PtTimeOffAsk";
+    this.over = over;
+  }
+}
+
+/** One value for exactly these sessions and classes. */
+const timeOffMark = (sessions: readonly repo.InTimeOff[], classes: readonly repo.InTimeOff[]): string =>
+  createHash("sha256")
+    .update(`s:${sessions.map((x) => x.id).sort().join(",")}|c:${classes.map((x) => x.id).sort().join(",")}`)
+    .digest("hex");
+
+/** Time off for a trainer: whole days, or some hours of one day. Sessions already booked
+ *  with them in it, and classes they coach in it, are named first and nothing is written;
+ *  confirmed, they stay as they are, since the app never cancels a paid session by itself. */
+export async function addTimeOff(
+  deps: PtDeps,
+  staffId: string,
+  gymId: string,
+  trainerId: string,
+  req: AddPtTimeOffRequest,
+  limit: Limit,
+): Promise<PtTrainersResponse | null> {
+  const standing = await standingOf(deps, gymId, staffId);
+  if (!standing.manages && trainerId !== staffId) throw forbidden();
+  await requireWritableGym(deps, standing.org);
+  if (!(await limit())) return null;
+
+  const refused = await deps.sql.begin(async (tx): Promise<OrgsError | PtTimeOffAsk | null> => {
+    await lockOrgRow(tx, gymId);
+    // The same request again: the time off it made stands, and nothing is added.
+    const again = await repo.timeOffByKey(tx, gymId, req.requestKey);
+    if (again !== null) {
+      const same =
+        again.userId === trainerId &&
+        again.fromDate === req.fromDate &&
+        again.toDate === req.toDate &&
+        again.fromMinute === req.fromMinute &&
+        again.toMinute === req.toMinute;
+      return same ? null : new OrgsError(409, "request_reused", PT_WORDS.request_reused);
+    }
+    const [clock, trainers] = await Promise.all([repo.gymClock(tx, gymId), repo.staffTrainers(tx, gymId, trainerId)]);
+    const trainer = trainers[0];
+    if (clock === null) return notFound();
+    if (trainer === undefined) return new OrgsError(404, "trainer_not_found", PT_WORDS.trainer_not_found);
+    if (trainer.sessionMinutes === null) return new OrgsError(409, "time_off_no_hours", PT_WORDS.time_off_no_hours);
+
+    const now = deps.now();
+    const today = dayInTz(now, clock.timezone);
+    const [span, coming] = await Promise.all([repo.timeOffInstants(tx, clock.timezone, req), repo.timeOffComing(tx, gymId, trainerId, now)]);
+    const refusal = ptTimeOffRefusal({ over: span.to.getTime() <= now.getTime(), today, fromDate: req.fromDate, coming: coming.length });
+    if (refusal !== null) return new OrgsError(409, refusal, PT_WORDS[refusal]);
+
+    // The calendar's far edge is written by the nightly job; should it have missed a night,
+    // this trainer's classes are written first, so every class in the window can be named.
+    const lastDay = addDays(today, PT_HORIZON_DAYS - 1);
+    if (req.fromDate <= lastDay && req.toDate > addDays(today, PT_HORIZON_DAYS - 8)) {
+      const scheduleIds = await repo.coachedSlotIds(tx, gymId, trainerId);
+      if (scheduleIds.length > 0) await fillClassSessions(tx, { gymIds: [gymId], scheduleIds, now });
+    }
+    // Bookings and the timetable are written under this same lock, so what is read here stands.
+    const [sessions, classes] = await Promise.all([
+      repo.sessionsInSpan(tx, gymId, trainerId, span.from, span.to, now),
+      repo.classesInSpan(tx, gymId, trainerId, span.from, span.to, now),
+    ]);
+    if (sessions.length + classes.length > 0 && timeOffMark(sessions, classes) !== req.confirm) {
+      const named = (rows: readonly repo.InTimeOff[]) => ({
+        count: rows.length,
+        shown: rows.slice(0, PT_TIME_OFF_OVER_SHOWN).map((r) => ({
+          ...r,
+          name: r.name === null ? null : fullName({ displayName: r.name, email: null, recordName: null }).name,
+        })),
+      });
+      return new PtTimeOffAsk(
+        ptTimeOffOverSchema.parse({
+          mark: timeOffMark(sessions, classes),
+          sessions: named(sessions),
+          classes: { count: classes.length, shown: classes.slice(0, PT_TIME_OFF_OVER_SHOWN) },
+          classesUpTo: lastDay,
+        }),
+      );
+    }
+
+    const id = await repo.insertTimeOff(tx, { gymId, userId: trainerId, off: req, from: span.from, to: span.to, requestKey: req.requestKey, createdBy: staffId, now });
+    await insertAudit(tx, {
+      actorUserId: staffId,
+      gymId,
+      action: "org.trainer_time_off_added",
+      targetType: "user",
+      targetId: trainerId,
+      meta: {
+        timeOffId: id,
+        from: req.fromDate,
+        to: req.toDate,
+        hours: req.fromMinute === null || req.toMinute === null ? "all day" : `${String(req.fromMinute)}-${String(req.toMinute)}`,
+        sessionsInIt: String(sessions.length),
+        classesInIt: String(classes.length),
+      },
+    });
+    return null;
+  });
+  if (refused !== null) throw refused;
+  return await getTrainers(deps, staffId, gymId, () => Promise.resolve(true));
+}
+
+/** One time off removed: the trainer's times are free again. One already gone changes nothing. */
+export async function removeTimeOff(
+  deps: PtDeps,
+  staffId: string,
+  gymId: string,
+  trainerId: string,
+  timeOffId: string,
+  limit: Limit,
+): Promise<PtTrainersResponse | null> {
+  const standing = await standingOf(deps, gymId, staffId);
+  if (!standing.manages && trainerId !== staffId) throw forbidden();
+  await requireWritableGym(deps, standing.org);
+  if (!(await limit())) return null;
+  await deps.sql.begin(async (tx) => {
+    await lockOrgRow(tx, gymId);
+    if (!(await repo.deleteTimeOff(tx, gymId, trainerId, timeOffId))) return;
+    await insertAudit(tx, {
+      actorUserId: staffId,
+      gymId,
+      action: "org.trainer_time_off_removed",
+      targetType: "user",
+      targetId: trainerId,
+      meta: { timeOffId },
+    });
+  });
+  return await getTrainers(deps, staffId, gymId, () => Promise.resolve(true));
 }

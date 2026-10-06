@@ -1698,6 +1698,24 @@ export const orgService = {
       authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/pt/trainers/${encodeURIComponent(userId)}`, body),
     ),
 
+  /** POST …/pt/trainers/:userId/time-off — whole days or some hours of one day. With
+   *  sessions or classes in it the server answers 409 `time_off_over_bookings` until the
+   *  body carries their `mark` as `confirm`. The same `requestKey` again adds nothing. */
+  addPtTimeOff: (gymId, userId, body) =>
+    readThrough(
+      ptTrainersResponseSchema,
+      'that time off',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/pt/trainers/${encodeURIComponent(userId)}/time-off`, body),
+    ),
+
+  /** DELETE …/pt/trainers/:userId/time-off/:id — the trainer's times are free again. */
+  removePtTimeOff: (gymId, userId, timeOffId) =>
+    readThrough(
+      ptTrainersResponseSchema,
+      'that time off',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/pt/trainers/${encodeURIComponent(userId)}/time-off/${encodeURIComponent(timeOffId)}`),
+    ),
+
   /** GET …/pt/week — seven days of one trainer from `from`: free times and sessions. */
   getPtWeek: (gymId, trainerId, from) =>
     readThrough(

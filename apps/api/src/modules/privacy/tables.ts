@@ -419,6 +419,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_trainers.user_id — a member of staff's personal-training hours (`0079`), on
   // gym_class_types' footing: a worker's rota, the gym's record; `ON DELETE cascade`.
   "gym_trainers",
+  // gym_trainer_time_off.user_id and created_by — a member of staff's time off from
+  // personal training and who wrote it down (`0081`), on the same footing; it goes with
+  // the trainer's row, and `created_by` is `ON DELETE set null`.
+  "gym_trainer_time_off",
   // gym_pt_appointments.trainer_user_id and booked_by — which member of staff takes a
   // personal-training session and who booked it (`0079`), on the same footing;
   // `ON DELETE set null`, the session kept since a pack may have been charged for it. The

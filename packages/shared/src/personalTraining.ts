@@ -8,7 +8,7 @@
 // time too: it comes off their free times, and a session cannot be booked over it.
 import { z } from "zod";
 import { CLASS_FILL_HORIZON_DAYS, classDaySchema } from "./classes.js";
-import { heldMembershipView, type HeldMembership } from "./heldMemberships.js";
+import { addDays, heldMembershipView, type HeldMembership } from "./heldMemberships.js";
 
 /** A session is as long as the gym says (RULINGS 2026-10-06; PushPress and TeamUp take any
  *  length): from 10 minutes to 4 hours, on a five-minute mark. */
@@ -151,6 +151,7 @@ export const PT_BOOK_REFUSALS = [
   "too_far",
   "time_taken",
   "trainer_in_class",
+  "trainer_off",
   "person_busy",
   "no_membership",
   "not_covered",
@@ -172,6 +173,8 @@ export interface PtBookInput {
   trainerBusy: boolean;
   /** The trainer coaches a class that runs into it. */
   trainerInClass: boolean;
+  /** The trainer has time off that runs into it. */
+  trainerOff: boolean;
   /** The person has a session that runs into it. */
   personBusy: boolean;
   cover: PtCover;
@@ -187,6 +190,7 @@ export function decidePtBook(i: PtBookInput): PtBookDecision {
   if (i.tooFar) return { kind: "refuse", reason: "too_far" };
   if (i.trainerBusy) return { kind: "refuse", reason: "time_taken" };
   if (i.trainerInClass) return { kind: "refuse", reason: "trainer_in_class" };
+  if (i.trainerOff) return { kind: "refuse", reason: "trainer_off" };
   if (i.personBusy) return { kind: "refuse", reason: "person_busy" };
   if (!i.cover.ok) return { kind: "refuse", reason: i.cover.reason };
   return { kind: "book", membershipId: i.cover.membershipId, chargePack: i.cover.chargePack };
@@ -231,6 +235,60 @@ export function ptTime(nowMs: number, startsAtMs: number, freeCancelMinutes: num
   return { started: left <= 0, freeCancel: left > 0 && left >= freeCancelMinutes * 60_000 };
 }
 
+// ── A TRAINER'S TIME OFF (17e-iii-b) ──
+
+/** How many times off, not yet over, one trainer holds. */
+export const PT_TIME_OFF_MAX = 50;
+/** The longest one time off, in days, and how far ahead one may start. */
+export const PT_TIME_OFF_DAYS_MAX = 366;
+export const PT_TIME_OFF_AHEAD_DAYS = 366;
+
+/** Time off as staff gave it, on the gym's own clock: whole days from `fromDate` to
+ *  `toDate` (both minutes null), or some hours of one day. */
+export interface PtTimeOffSpan {
+  fromDate: string;
+  toDate: string;
+  fromMinute: number | null;
+  toMinute: number | null;
+}
+
+function isDay(day: string): boolean {
+  const [y, m, d] = day.split("-").map(Number);
+  if (y === undefined || m === undefined || d === undefined) return false;
+  const made = new Date(Date.UTC(y, m - 1, d));
+  return made.getUTCFullYear() === y && made.getUTCMonth() === m - 1 && made.getUTCDate() === d;
+}
+
+/** What is wrong with a time off as written, or null. */
+export function ptTimeOffProblem(o: PtTimeOffSpan): "not_a_day" | "order" | "half" | "one_day" | "range" | "too_long" | null {
+  // The 30th of February is written like a day and is not one.
+  if (!isDay(o.fromDate) || !isDay(o.toDate)) return "not_a_day";
+  if (o.toDate < o.fromDate) return "order";
+  if ((o.fromMinute === null) !== (o.toMinute === null)) return "half";
+  if (o.fromMinute !== null && o.toMinute !== null) {
+    if (o.fromDate !== o.toDate) return "one_day";
+    if (o.fromMinute >= o.toMinute) return "range";
+  }
+  if (o.toDate > addDays(o.fromDate, PT_TIME_OFF_DAYS_MAX - 1)) return "too_long";
+  return null;
+}
+
+/** Why a time off is not added now, or null: it is already over, it starts too far ahead,
+ *  or the trainer holds as many as one may. */
+export function ptTimeOffRefusal(i: { over: boolean; today: string; fromDate: string; coming: number }): "time_off_ended" | "time_off_too_far" | "time_off_too_many" | null {
+  if (i.over) return "time_off_ended";
+  if (i.fromDate > addDays(i.today, PT_TIME_OFF_AHEAD_DAYS)) return "time_off_too_far";
+  if (i.coming >= PT_TIME_OFF_MAX) return "time_off_too_many";
+  return null;
+}
+
+/** What a time off takes of one day of the gym's: nothing (null), all of it (both minutes
+ *  null), or some hours. */
+export function ptTimeOffOnDay(o: PtTimeOffSpan, day: string): { fromMinute: number | null; toMinute: number | null } | null {
+  if (day < o.fromDate || day > o.toDate) return null;
+  return { fromMinute: o.fromMinute, toMinute: o.toMinute };
+}
+
 /** What staff read when the server says no. */
 export const PT_WORDS = {
   trainer_not_offering: "This trainer isn't taking personal training sessions.",
@@ -239,6 +297,7 @@ export const PT_WORDS = {
   too_far: "Sessions can be booked up to 8 weeks ahead.",
   time_taken: "This trainer already has a session at that time.",
   trainer_in_class: "This trainer is coaching a class at that time.",
+  trainer_off: "This trainer has time off at that time.",
   person_busy: "This person already has a personal training session at that time.",
   no_membership: "This person has no membership in use on that day.",
   not_covered: "None of this person's memberships includes personal training.",
@@ -254,6 +313,10 @@ export const PT_WORDS = {
   hours_range: "Each set of hours must end after it starts.",
   hours_too_many: `A day can have up to ${String(PT_RANGES_PER_DAY)} sets of hours.`,
   hours_overlap: "Two sets of hours on the same day overlap.",
+  time_off_no_hours: "Set this trainer's hours first.",
+  time_off_ended: "That time has already passed.",
+  time_off_too_far: "Time off can start up to a year ahead.",
+  time_off_too_many: `A trainer can have up to ${String(PT_TIME_OFF_MAX)} times off coming. Remove one first.`,
 } as const;
 
 export const PT_LATE_CANCEL_ERROR = "late_cancel";
@@ -264,6 +327,18 @@ export const PT_NOT_KEPT_ERROR = "not_kept";
 
 const personNameSchema = { name: z.string().nullable(), initials: z.string() };
 
+/** One time off of a trainer's. Both minutes null: whole days. */
+export const ptTimeOffSchema = z
+  .object({
+    id: z.string().uuid(),
+    fromDate: classDaySchema,
+    toDate: classDaySchema,
+    fromMinute: z.number().int().nullable(),
+    toMinute: z.number().int().nullable(),
+  })
+  .strict();
+export type PtTimeOff = z.infer<typeof ptTimeOffSchema>;
+
 /** One member of staff as the Personal training page lists them. `sessionMinutes` is null
  *  until their hours are first saved. */
 export const ptTrainerSchema = z
@@ -273,6 +348,8 @@ export const ptTrainerSchema = z
     offers: z.boolean(),
     sessionMinutes: ptSessionMinutesSchema.nullable(),
     hours: z.array(ptHoursRangeSchema),
+    /** Their time off that is not over yet, the earliest first. */
+    timeOff: z.array(ptTimeOffSchema),
     /** The reader's own row. */
     mine: z.boolean(),
   })
@@ -367,6 +444,8 @@ export const ptWeekResponseSchema = z
           free: z.array(z.number().int()),
           appointments: z.array(ptAppointmentSchema),
           classes: z.array(ptCoachedClassSchema),
+          /** Their time off on this day: both minutes null for the whole day. */
+          timeOff: z.array(z.object({ id: z.string().uuid(), fromMinute: z.number().int().nullable(), toMinute: z.number().int().nullable() }).strict()),
         })
         .strict(),
     ),
@@ -427,3 +506,58 @@ export type CancelPtRequest = z.infer<typeof cancelPtRequestSchema>;
 
 export const ptAppointmentResponseSchema = z.object({ appointment: ptAppointmentSchema }).strict();
 export type PtAppointmentResponse = z.infer<typeof ptAppointmentResponseSchema>;
+
+// ── TIME OFF ON THE WIRE (17e-iii-b) ──
+
+/** The 409 a time off answers when sessions are already booked with the trainer in it, or
+ *  they coach a class in it. Nothing is written until the request sends `confirm` equal to
+ *  `mark`, worked out again under the gym's lock; the sessions and classes then stay as
+ *  they are, for staff to move. */
+export const PT_TIME_OFF_OVER_ERROR = "time_off_over_bookings";
+export const PT_TIME_OFF_OVER_MESSAGE = "This trainer has sessions or classes in that time.";
+/** How many of each the 409 names; each `count` is whole. */
+export const PT_TIME_OFF_OVER_SHOWN = 100;
+
+const overRow = z
+  .object({
+    id: z.string().uuid(),
+    /** The person booked (null where their record has gone), or the class's name. */
+    name: z.string().nullable(),
+    localDate: z.string(),
+    localStartMinute: z.number().int(),
+    minutes: z.number().int(),
+  })
+  .strict();
+
+export const ptTimeOffOverSchema = z
+  .object({
+    /** One value for exactly these sessions and classes, all of them. */
+    mark: z.string().regex(/^[0-9a-f]{64}$/),
+    /** Each the earliest first. */
+    sessions: z.object({ count: z.number().int().min(0), shown: z.array(overRow).max(PT_TIME_OFF_OVER_SHOWN) }).strict(),
+    classes: z.object({ count: z.number().int().min(0), shown: z.array(overRow).max(PT_TIME_OFF_OVER_SHOWN) }).strict(),
+    /** The last day whose classes are on the calendar: later ones cannot be named yet. */
+    classesUpTo: classDaySchema,
+  })
+  .strict();
+export type PtTimeOffOver = z.infer<typeof ptTimeOffOverSchema>;
+
+export const addPtTimeOffRequestSchema = z
+  .object({
+    requestKey: z.string().uuid(),
+    fromDate: classDaySchema,
+    toDate: classDaySchema,
+    fromMinute: minuteOfDay(1435).nullable(),
+    toMinute: minuteOfDay(1440).nullable(),
+    /** The `mark` the screen was shown. */
+    confirm: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const problem = ptTimeOffProblem(value);
+    if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["toDate"], message: problem });
+  });
+export type AddPtTimeOffRequest = z.infer<typeof addPtTimeOffRequestSchema>;
