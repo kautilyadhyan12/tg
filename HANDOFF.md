@@ -4,6 +4,19 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-06 · 19c-i (Folder B): the gym makes events, with a poster, and members see them (branch `gym-events`)
+
+- **Why this job:** next in Folder B (19b-iii, video, waits for the Stream account). 19c split in two in the plan: 19c-i this, 19c-ii "I'm coming". Planned as Ordinary; Kd's *"go also if gym wants they can also post even poster"* added an upload, so it is **Risky, Opus xhigh**. Migration 0078 (`gym_events`), no new package, no cost.
+- **Built:** `events/` on the api (list for members, list for staff, add under one key, change, cancel and un-cancel, the poster's picture); a poster goes through `cleanPhoto` and the store as a post's photo does (`gym-event/…`, old files listed in `photo_files_to_remove`). Console: an Events page (menu, under More on a phone) with the form, Edit, Cancel event behind a box, Un-cancel, Past events. Member: an Events tab on My Gyms. Spec §15.4 has the note.
+- **Worst thing, first test:** somebody the gym removed, another gym's member or owner, a stranger, or staff without the tick reads an event or its poster, or changes one. `events.routes.test.ts`, 11 tests on real Postgres, the real disk store and two apis.
+- **Four breaks of that rule, each RED, restored:** the members' list asking nobody · the poster asking nobody · a change finding an event without its gym (green at first: the missing case, no note left in either gym's record, was added and it went red) · a read finding an event without its gym.
+- **Verified:** api `events.routes` and `db.migration` 51/51; web five files 112/112 (`eventsView`, `eventsConsole.render`, `events.render`, `consoleMenu`, `myGyms.render`); tsc 0 on shared and api; eslint 0 on shared, the api's touched files and the web's. The full api and web suites were not run locally (CI's stand for them).
+- **Cost at full size** (`tools/measure-events-cost.ts`: 200 members, 99 coming events each with a poster and 1,000 characters of details, 5,000 ended; on mains at 2,592 MHz, 5 runs): a member's list 11.7 ms, the thread busy 5.2 ms (152 KB of JSON); staff's list 9.6 ms, 5.6 ms; 200 members asking at the same instant 0.84 s in all, the thread busy 0.78 s; an event added with a 1 MB poster 117 ms, busy 12.9 ms; changed with a new one 190 ms, busy 23.6 ms; a member reading a 1 MB poster 10.2 ms, busy 1.8 ms; a cancel 38 ms, busy 2.6 ms. A first run at 200 events of 2,000 characters was made on battery and is not a number; the limits were set to 100 and 1,000 after it.
+- **Real run on :3001/:5174 in headless Edge** (Iron Temple; staff at 1280 and 400 wide, a member at 400 and 1280): the form filled in by its own date, time and file boxes, Add event, Edit and Save, the cancel box, Cancel event; the member's tab with both posters loaded and the cancelled one marked. No browser errors, no sideways scroll. Left on Iron Temple for Kd: two events and two accounts tagged `smoke19ci-`.
+- **My calls, not asked:** in the RULINGS line of 2026-10-06. Also: no Remove for an event (Cancel is the way; 19c-ii decides it with bookings); the member's list offers no button until 19c-ii.
+- **Open:** round one's review, then Kd's click-through. Old, not this job's: the member web's side menu stays 220 wide on a phone, so the Events tab is narrow there until it is folded.
+- **Next in Folder B:** 19c-ii ("I'm coming").
+
 ## 2026-10-05 · 19b-vi (Folder B): a post five people have reported is hidden until staff decide (branch `hide-reported-posts`)
 
 - **Why this job:** next in Folder B (RULINGS 2026-10-05), before anybody uses Updates. **Risky (other people's posts), Opus xhigh; Kd: *"go"*** to a plan rewritten short after he said the first was an essay. Migration 0077 (`gym_posts.hidden_at`), no new package, no cost.
