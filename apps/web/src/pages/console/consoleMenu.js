@@ -37,6 +37,7 @@ export function consoleMenu(orgSlug, privileges, orgType) {
     },
     canManageSchedule(privileges) && { key: 'classes', to: `${base}/classes`, end: false, label: 'Classes', phone: 'tab' },
     canManagePosts(privileges) && { key: 'updates', to: `${base}/updates`, end: false, label: 'Updates', phone: 'more' },
+    canManagePosts(privileges) && { key: 'events', to: `${base}/events`, end: false, label: 'Events', phone: 'more' },
     canSeeLeaderboard(privileges) && {
       key: 'leaderboard',
       to: `${base}/leaderboard`,

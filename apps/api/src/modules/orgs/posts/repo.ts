@@ -720,12 +720,14 @@ export async function queuedAmong(sql: SqlOrTx, keys: readonly string[]): Promis
   return rows.map((r) => r.storage_key);
 }
 
-/** The store keys of this gym's newest post photos. */
+/** The store keys of this gym's newest post photos and event posters. */
 export async function newestPhotoKeys(sql: SqlOrTx, gymId: string, limit: number): Promise<string[]> {
   // A listed key's gym is read out of the key: one that is no id names no gym.
   if (!/^[0-9a-f-]{36}$/.test(gymId)) return [];
   const rows = await sql<{ storage_key: string }[]>`
-    SELECT storage_key FROM gym_post_photos WHERE gym_id = ${gymId} ORDER BY created_at DESC, id LIMIT ${limit}`;
+    (SELECT storage_key FROM gym_post_photos WHERE gym_id = ${gymId} ORDER BY created_at DESC, id LIMIT ${limit})
+    UNION ALL
+    (SELECT poster_key FROM gym_events WHERE gym_id = ${gymId} AND poster_key IS NOT NULL ORDER BY updated_at DESC, id LIMIT ${limit})`;
   return rows.map((r) => r.storage_key);
 }
 

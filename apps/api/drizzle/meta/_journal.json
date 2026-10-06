@@ -540,6 +540,13 @@
       "when": 1788220800061,
       "tag": "0077_post_hidden_at",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1788220800062,
+      "tag": "0078_gym_events",
+      "breakpoints": true
     }
   ]
 }

@@ -39,7 +39,7 @@ function openableToday(privileges) {
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
     ...(has('schedule.manage') ? [`${BASE}/classes`] : []),
-    ...(has('posts.manage') ? [`${BASE}/updates`] : []),
+    ...(has('posts.manage') ? [`${BASE}/updates`, `${BASE}/events`] : []),
     ...(has('leaderboard.manage') ? [`${BASE}/leaderboard`] : []),
     // Settings also holds Class bookings since 17c-ii-a, on `schedule.manage`.
     ...(has('staff.manage') || has('org.manage') || has('memberships.manage') || has('schedule.manage') ? [`${BASE}/settings`] : []),
