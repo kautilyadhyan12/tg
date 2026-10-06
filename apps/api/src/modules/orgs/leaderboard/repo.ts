@@ -189,35 +189,38 @@ export async function allMemberFacts(sql: SqlOrTx, gymId: string, at: string): P
   return rows.map(toFacts);
 }
 
-/** A span of the gym's calendar, both days counted, under a name of the caller's. */
+/** A span of the gym's calendar, both days counted. */
 export interface DayRange {
-  id: string;
   from: string;
   to: string;
 }
 
-export interface RangeDays {
-  rangeId: string;
-  userId: string;
-  value: number;
-  /** The counted days themselves, oldest first; only for the person asked for. */
+/** Counted days inside several spans, from one read. */
+export interface RangeCounts {
+  /** One row a person with a counted day between the first span's start and the last one's
+   *  end: their number in each span, in the spans' own order. */
+  rows: { userId: string; counts: number[] }[];
+  /** The counted days of the person asked for, oldest first; empty for nobody. */
   days: string[];
 }
 
 /** Several spans in one read (a gym's challenges, 19d-i): each person's counted days
- *  inside each span. `counted` is (owner_id, day), one row a counted day. An owner who is
- *  not a live member now is the caller's to leave out. */
-async function daysInRanges(sql: SqlOrTx, counted: PendingQuery<Row[]>, ranges: readonly DayRange[], daysOf: string | null): Promise<RangeDays[]> {
-  const rows = await sql<{ range_id: string; owner_id: string; value: number; days: string[] | null }[]>`
-    WITH r AS (
-      SELECT * FROM unnest(${ranges.map((r) => r.id)}::uuid[], ${ranges.map((r) => r.from)}::date[], ${ranges.map((r) => r.to)}::date[])
-        AS r(id, from_day, to_day)
-    )
-    SELECT r.id AS range_id, d.owner_id, count(*)::int AS value,
-           CASE WHEN d.owner_id = ${daysOf}::uuid THEN array_agg(d.day::text ORDER BY d.day) END AS days
-    FROM r JOIN (${counted}) d ON d.day BETWEEN r.from_day AND r.to_day
-    GROUP BY r.id, d.owner_id`;
-  return rows.map((r) => ({ rangeId: r.range_id, userId: r.owner_id, value: r.value, days: r.days ?? [] }));
+ *  inside each span. `counted` is (owner_id, day), one row a counted day, already cut to
+ *  the days from the first span's start to the last one's end. One pass over those days,
+ *  a count a span, so twenty spans cost what one does. An owner who is not a live member
+ *  now is the caller's to leave out. */
+async function daysInRanges(sql: SqlOrTx, counted: PendingQuery<Row[]>, ranges: readonly DayRange[], daysOf: string | null): Promise<RangeCounts> {
+  const counts = ranges
+    .map((r) => sql`count(*) FILTER (WHERE d.day BETWEEN ${r.from}::date AND ${r.to}::date)`)
+    .reduce((all, one) => sql`${all}, ${one}`);
+  // As text, split here: the driver reads an array a character at a time.
+  const rows = await sql<{ owner_id: string; counts: string; days: string | null }[]>`
+    SELECT d.owner_id, concat_ws(',', ${counts}) AS counts,
+           string_agg(d.day::text, ',') FILTER (WHERE d.owner_id = ${daysOf}::uuid) AS days
+    FROM (${counted}) d
+    GROUP BY d.owner_id`;
+  const days = rows.find((row) => row.days !== null)?.days ?? null;
+  return { rows: rows.map((row) => ({ userId: row.owner_id, counts: row.counts.split(",").map(Number) })), days: days === null ? [] : days.split(",").sort() };
 }
 
 export interface RangesInput {
@@ -233,8 +236,8 @@ const firstDay = (ranges: readonly DayRange[]): string => ranges.reduce((min, r)
 const lastDay = (ranges: readonly DayRange[]): string => ranges.reduce((max, r) => (r.to > max ? r.to : max), ranges[0]?.to ?? "");
 
 /** Gym days inside each span: the Gym days board's own count (`countedDays`). */
-export async function gymDaysInRanges(sql: SqlOrTx, input: RangesInput): Promise<RangeDays[]> {
-  if (input.ranges.length === 0) return [];
+export async function gymDaysInRanges(sql: SqlOrTx, input: RangesInput): Promise<RangeCounts> {
+  if (input.ranges.length === 0) return { rows: [], days: [] };
   const counted = sql`
     SELECT c.owner_id, c.day FROM (${countedDays(sql, input.gymId, input.today)}) c
     WHERE c.day >= ${firstDay(input.ranges)}::date AND c.day <= ${lastDay(input.ranges)}::date`;
@@ -242,8 +245,8 @@ export async function gymDaysInRanges(sql: SqlOrTx, input: RangesInput): Promise
 }
 
 /** Workout days inside each span: the Workout days board's own count (`countedWorkoutDays`). */
-export async function workoutDaysInRanges(sql: SqlOrTx, input: RangesInput): Promise<RangeDays[]> {
-  if (input.ranges.length === 0) return [];
+export async function workoutDaysInRanges(sql: SqlOrTx, input: RangesInput): Promise<RangeCounts> {
+  if (input.ranges.length === 0) return { rows: [], days: [] };
   const counted = countedWorkoutDays(sql, { gymId: input.gymId, at: input.at, from: firstDay(input.ranges), to: lastDay(input.ranges) });
   return daysInRanges(sql, counted, input.ranges, input.daysOf);
 }

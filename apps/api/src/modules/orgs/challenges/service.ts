@@ -2,11 +2,11 @@
 //
 // The worst thing this could do to a real person: show somebody who chose Hide me, or
 // somebody the gym removed, to another member — in a challenge's places, in its count of
-// who joined, or in its count of who reached the target. So a challenge's places come from
-// the leaderboard's own function (`rankBoard`), which takes hidden people out before a
-// place is given; every other number a member is sent about other people is counted from
-// the people `hiddenReason` lets them see; and only a live app member of the gym now is
-// ever counted at all.
+// who joined, or in its count of who reached the target. So who is hidden and under what
+// name a person is shown are the leaderboard's own rules (`hiddenReason`, `shownName`);
+// hidden people are taken out before a place is given (`place.ts`); every number a member
+// is sent about other people is counted from the people left; and only a live app member
+// of the gym now is ever counted at all.
 import { randomUUID } from "node:crypto";
 import type { Sql } from "postgres";
 import {
@@ -15,6 +15,7 @@ import {
   GYM_CHALLENGE_PODIUM,
   GYM_CHALLENGE_WORDS,
   LEADERBOARD_STAFF_PAGE,
+  LEADERBOARD_TOP,
   challengeCan,
   challengeSaveProblem,
   challengeState,
@@ -32,19 +33,20 @@ import {
   type GymChallengeSaveProblem,
   type GymChallengeState,
   type GymChallengesResponse,
-  type LeaderboardRow,
+  type LeaderboardHiddenReason,
   type MemberGymChallenge,
   type StaffGymChallenge,
   type StaffGymChallengeBoardResponse,
   type StaffGymChallengeRow,
   type StaffGymChallengesResponse,
 } from "@app/shared";
-import { getOrgById, insertAudit } from "../repo.js";
+import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { gymToday } from "../events/repo.js";
-import { fullName, hiddenReason, rankBoard, rankStaffBoard, type BoardPerson } from "../leaderboard/rank.js";
+import { fullName, hiddenReason, rankStaffBoard, shownName, type BoardPerson } from "../leaderboard/rank.js";
 import * as boards from "../leaderboard/repo.js";
 import { lockGym } from "../memberList/repo.js";
+import { placeEntrants, type Entrant } from "./place.js";
 import * as repo from "./repo.js";
 
 export interface ChallengesDeps {
@@ -117,136 +119,159 @@ interface Read {
   at: string;
 }
 
+/** A live app member of the gym, as a board needs them: their name and why members do not
+ *  see them, each worked out once a read by the leaderboard's own rule. */
+interface Member {
+  facts: boards.MemberFacts;
+  hidden: LeaderboardHiddenReason | null;
+  shown: { name: string; initials: string } | null;
+}
+
+/** One kind's read: each live member with a counted day, and their number in each of that
+ *  kind's challenges. */
+interface Numbers {
+  rows: { member: Member; counts: number[] }[];
+  /** The asker's own numbers, when they have a counted day; and those days, oldest first. */
+  mine: number[] | null;
+  days: string[];
+}
+
 interface Counted {
   /** Every live app member of the gym now. */
-  facts: Map<string, boards.MemberFacts>;
-  /** Each started challenge's numbers: person → counted days. */
-  values: Map<string, Map<string, number>>;
-  /** The asker's own counted days in each. */
-  myDays: Map<string, string[]>;
-  /** Who joined each challenge people join. */
-  joined: Map<string, Set<string>>;
+  members: Map<string, Member>;
+  /** Where each started challenge's numbers are: its kind's read, and its place in it. */
+  numbers: Map<string, { of: Numbers; at: number }>;
+  /** Who joined each challenge people join, of the live app members. */
+  joined: Map<string, Set<Member>>;
 }
+
+const person = (facts: boards.MemberFacts, value: number): BoardPerson => ({ ...facts, value, circles: null });
 
 /** One read of everything the challenges' boards are made of: the leaderboard's own count
  *  over each challenge's dates. A cancelled challenge and one not started count nothing. */
 async function countFor(deps: ChallengesDeps, read: Read, rows: readonly repo.ChallengeRow[], daysOf: string | null): Promise<Counted> {
   const counting = rows.filter((row) => !row.cancelled && row.startsOn <= read.gym.today);
-  const ranges = (counts: repo.ChallengeRow["counts"]): boards.DayRange[] =>
-    counting.filter((row) => row.counts === counts).map((row) => ({ id: row.id, from: row.startsOn, to: row.endsOn }));
+  const ofKind = (counts: repo.ChallengeRow["counts"]): repo.ChallengeRow[] => counting.filter((row) => row.counts === counts);
+  const ranges = (kind: readonly repo.ChallengeRow[]): boards.DayRange[] => kind.map((row) => ({ from: row.startsOn, to: row.endsOn }));
+  const gymKind = ofKind("gym_days");
+  const workoutKind = ofKind("workout_days");
   const input = { gymId: read.gymId, at: read.at, today: read.gym.today, daysOf };
-  const [facts, pairs, gymDays, workoutDays] = await Promise.all([
+  const [facts, joinedIds, gymDays, workoutDays] = await Promise.all([
     boards.allMemberFacts(deps.sql, read.gymId, read.at),
-    repo.joinedPairs(deps.sql, read.gymId, rows.filter((row) => row.who === "joined").map((row) => row.id)),
-    boards.gymDaysInRanges(deps.sql, { ...input, ranges: ranges("gym_days") }),
-    boards.workoutDaysInRanges(deps.sql, { ...input, ranges: ranges("workout_days") }),
+    repo.joinedBy(deps.sql, read.gymId, rows.filter((row) => row.who === "joined").map((row) => row.id)),
+    boards.gymDaysInRanges(deps.sql, { ...input, ranges: ranges(gymKind) }),
+    boards.workoutDaysInRanges(deps.sql, { ...input, ranges: ranges(workoutKind) }),
   ]);
-  const values = new Map<string, Map<string, number>>();
-  const myDays = new Map<string, string[]>();
-  for (const r of [...gymDays, ...workoutDays]) {
-    const of = values.get(r.rangeId) ?? new Map<string, number>();
-    of.set(r.userId, r.value);
-    values.set(r.rangeId, of);
-    if (r.userId === daysOf) myDays.set(r.rangeId, r.days);
+  const members = new Map<string, Member>();
+  for (const f of facts) members.set(f.userId, { facts: f, hidden: hiddenReason(person(f, 1)), shown: shownName(f) });
+  const numbers = new Map<string, { of: Numbers; at: number }>();
+  for (const [kind, counts] of [[gymKind, gymDays], [workoutKind, workoutDays]] as const) {
+    // Only a live app member of the gym now is counted: anybody else's days are dropped here.
+    const of: Numbers = { rows: [], mine: null, days: counts.days };
+    for (const row of counts.rows) {
+      const member = members.get(row.userId);
+      if (member === undefined) continue;
+      of.rows.push({ member, counts: row.counts });
+      if (row.userId === daysOf) of.mine = row.counts;
+    }
+    kind.forEach((row, at) => numbers.set(row.id, { of, at }));
   }
-  const joined = new Map<string, Set<string>>();
-  for (const pair of pairs) {
-    const of = joined.get(pair.challengeId) ?? new Set<string>();
-    of.add(pair.userId);
-    joined.set(pair.challengeId, of);
+  const joined = new Map<string, Set<Member>>();
+  for (const [challengeId, userIds] of joinedIds) {
+    const of = new Set<Member>();
+    for (const userId of userIds) {
+      const member = members.get(userId);
+      if (member !== undefined) of.add(member);
+    }
+    joined.set(challengeId, of);
   }
-  return { facts: new Map(facts.map((f) => [f.userId, f])), values, myDays, joined };
+  return { members, numbers, joined };
 }
 
-const person = (facts: boards.MemberFacts, value: number): BoardPerson => ({ ...facts, value, circles: null });
-
 /** Who joined a challenge people join; null for everyone's. */
-const joinedOf = (row: repo.ChallengeRow, counted: Counted): Set<string> | null =>
-  row.who === "joined" ? (counted.joined.get(row.id) ?? new Set<string>()) : null;
+const joinedOf = (row: repo.ChallengeRow, counted: Counted): Set<Member> | null =>
+  row.who === "joined" ? (counted.joined.get(row.id) ?? new Set<Member>()) : null;
 
 /** The people in a challenge with a number in it: live app members of the gym now, and
  *  for a challenge people join, only the ones who joined. */
-function peopleOf(row: repo.ChallengeRow, counted: Counted): BoardPerson[] {
+function entrantsOf(row: repo.ChallengeRow, counted: Counted): Entrant[] {
   const joined = joinedOf(row, counted);
-  const people: BoardPerson[] = [];
-  for (const [userId, value] of counted.values.get(row.id) ?? []) {
-    const facts = counted.facts.get(userId);
-    if (facts === undefined || (joined !== null && !joined.has(userId))) continue;
-    people.push(person(facts, value));
+  const numbers = counted.numbers.get(row.id);
+  const entrants: Entrant[] = [];
+  if (numbers === undefined) return entrants;
+  for (const { member, counts } of numbers.of.rows) {
+    const value = counts[numbers.at] ?? 0;
+    if (value === 0 || (joined !== null && !joined.has(member))) continue;
+    entrants.push({ userId: member.facts.userId, value, hidden: member.hidden, shown: member.shown });
   }
-  return people;
+  return entrants;
 }
 
 const reachedBy = (row: repo.ChallengeRow, value: number): boolean => row.target !== null && value >= row.target;
 
-const sentRow = (row: repo.ChallengeRow, r: LeaderboardRow): GymChallengeRow => ({
-  userId: r.userId,
-  name: r.name,
-  initials: r.initials,
-  place: r.place,
-  value: r.value,
-  reached: reachedBy(row, r.value),
-  isMe: r.isMe,
-});
-
 interface MemberView {
   challenge: MemberGymChallenge;
-  /** The whole board, the first hundred: what the board's own read sends. */
+  /** The board's first rows, as many as were asked for. */
   rows: GymChallengeRow[];
 }
 
-/** A challenge as one member reads it. Nothing here about other people is computed from
- *  somebody they may not see. */
-function memberView(row: repo.ChallengeRow, today: string, counted: Counted, viewerId: string): MemberView {
+/** A challenge as one member reads it, with the first `limit` rows of its board. Nothing
+ *  here about other people is computed from somebody they may not see. */
+function memberView(row: repo.ChallengeRow, today: string, counted: Counted, viewerId: string, limit: number): MemberView {
   const base = shaped(row, today);
   const joined = joinedOf(row, counted);
-  const iJoined = joined?.has(viewerId) ?? false;
+  const viewer = counted.members.get(viewerId);
+  const iJoined = viewer !== undefined && (joined?.has(viewer) ?? false);
   const can = challengeCan({ who: row.who, cancelled: row.cancelled, state: base.state, joined: iJoined });
   // The people who joined that this member may count: nobody hidden, and themselves.
-  const joinedCount =
-    joined === null
-      ? null
-      : [...joined].filter((userId) => {
-          const facts = counted.facts.get(userId);
-          return facts !== undefined && (userId === viewerId || hiddenReason(person(facts, 1)) === null);
-        }).length;
-  const none = { status: "not_started" as const, ranked: 0, top: [], reached: null };
+  let joinedCount: number | null = null;
+  if (joined !== null) {
+    joinedCount = 0;
+    for (const member of joined) {
+      if (member === viewer || member.hidden === null) joinedCount += 1;
+    }
+  }
+  const none = { status: "not_started" as const, ranked: 0, top: [], leaders: 0, reached: null };
   // A cancelled challenge has no board and no line of anybody's.
   if (row.cancelled) return { challenge: { ...base, joined: iJoined, can, joinedCount, board: none, me: null }, rows: [] };
 
   const inIt = joined === null || iJoined;
-  const people = base.state === "coming" ? [] : peopleOf(row, counted);
-  const viewer = counted.facts.get(viewerId);
+  const entrants = base.state === "coming" ? [] : entrantsOf(row, counted);
+  const numbers = counted.numbers.get(row.id);
   // In it, they have a line of their own even at nothing.
-  if (inIt && viewer !== undefined && !people.some((p) => p.userId === viewerId)) people.push(person(viewer, 0));
-  const board = rankBoard(people, viewerId);
-  const shown = base.state !== "coming" && board.status === "shown";
-  const seen = people.filter((p) => p.value > 0 && hiddenReason(p) === null);
-  const rows = shown ? board.rows.map((r) => sentRow(row, r)) : [];
+  if (inIt && viewer !== undefined && (numbers?.of.mine?.[numbers.at] ?? 0) === 0) {
+    entrants.push({ userId: viewerId, value: 0, hidden: viewer.hidden, shown: viewer.shown });
+  }
+  // `placeEntrants` leaves hidden people out before it counts: every number below is of
+  // the people members may see.
+  const places = placeEntrants(entrants, viewerId, Math.max(limit, GYM_CHALLENGE_PODIUM), row.target);
+  const shown = base.state !== "coming" && places.status === "shown";
+  const rows: GymChallengeRow[] = shown ? places.top.map((p) => ({ ...p, reached: reachedBy(row, p.value) })) : [];
   const challenge: MemberGymChallenge = {
     ...base,
     joined: iJoined,
     can,
     joinedCount,
     board: {
-      status: base.state === "coming" ? "not_started" : board.status,
-      ranked: shown ? board.ranked : 0,
+      status: base.state === "coming" ? "not_started" : places.status,
+      ranked: shown ? places.ranked : 0,
       top: rows.slice(0, GYM_CHALLENGE_PODIUM),
-      reached: shown && row.target !== null ? seen.filter((p) => reachedBy(row, p.value)).length : null,
+      leaders: shown ? places.leaders : 0,
+      reached: shown ? places.reached : null,
     },
     me: inIt
       ? {
-          value: board.me.value,
-          place: shown ? board.me.place : null,
-          hidden: board.me.hidden,
-          toNextPlace: shown ? board.me.toNextPlace : null,
-          nextPlace: shown ? board.me.nextPlace : null,
-          reached: reachedBy(row, board.me.value),
-          days: counted.myDays.get(row.id) ?? [],
+          value: places.me.value,
+          place: shown ? places.me.place : null,
+          hidden: places.me.hidden,
+          toNextPlace: shown ? places.me.toNextPlace : null,
+          nextPlace: shown ? places.me.nextPlace : null,
+          reached: reachedBy(row, places.me.value),
+          days: numbers === undefined ? [] : numbers.of.days.filter((day) => day >= row.startsOn && day <= row.endsOn),
         }
       : null,
   };
-  return { challenge, rows };
+  return { challenge, rows: rows.slice(0, limit) };
 }
 
 // ── MEMBERS ──
@@ -255,13 +280,9 @@ function memberView(row: repo.ChallengeRow, today: string, counted: Counted, vie
  *  the gym is closed or on no plan, and its members are shown no challenge. */
 async function forMember(deps: ChallengesDeps, gymId: string, userId: string): Promise<Read & { now: Date; paused: boolean }> {
   const now = deps.now();
-  const [org, gym, me] = await Promise.all([
-    getOrgById(deps.sql, gymId),
-    boards.boardGym(deps.sql, gymId, now),
-    boards.memberFacts(deps.sql, gymId, userId, now.toISOString()),
-  ]);
-  if (org === null || gym === null || me === null) throw notFound();
-  return { gymId, gym, at: now.toISOString(), now, paused: !(org.status === "active" && gym.live) };
+  const [gate, gym] = await Promise.all([repo.memberGate(deps.sql, gymId, userId), boards.boardGym(deps.sql, gymId, now)]);
+  if (gate === null || gym === null || !gate.member) throw notFound();
+  return { gymId, gym, at: now.toISOString(), now, paused: !(gate.status === "active" && gym.live) };
 }
 
 /** The gym's challenges for a live app member of it; 404 for everybody else. */
@@ -276,23 +297,23 @@ export async function getChallenges(deps: ChallengesDeps, userId: string, gymId:
   return gymChallengesResponseSchema.parse({
     ...head,
     status: "shown",
-    challenges: rows.map((row) => memberView(row, read.gym.today, counted, userId).challenge),
+    challenges: rows.map((row) => memberView(row, read.gym.today, counted, userId, GYM_CHALLENGE_PODIUM).challenge),
   });
 }
 
 /** One challenge a member is sent, read fresh; 404 for one they are not. */
-async function oneForMember(deps: ChallengesDeps, read: Read & { now: Date; paused: boolean }, challengeId: string, userId: string): Promise<MemberView> {
+async function oneForMember(deps: ChallengesDeps, read: Read & { now: Date; paused: boolean }, challengeId: string, userId: string, limit: number): Promise<MemberView> {
   if (read.paused) throw challengeNotFound();
   const row = await repo.memberChallenge(deps.sql, read.gymId, challengeId, read.gym.today, read.now);
   if (row === null) throw challengeNotFound();
-  return memberView(row, read.gym.today, await countFor(deps, read, [row], userId), userId);
+  return memberView(row, read.gym.today, await countFor(deps, read, [row], userId), userId, limit);
 }
 
 /** A challenge's whole board: the first hundred, and the asker's own line. */
 export async function getBoard(deps: ChallengesDeps, userId: string, gymId: string, challengeId: string, limit: Limit): Promise<GymChallengeBoardResponse | null> {
   const read = await forMember(deps, gymId, userId);
   if (!(await limit())) return null;
-  const view = await oneForMember(deps, read, challengeId, userId);
+  const view = await oneForMember(deps, read, challengeId, userId, LEADERBOARD_TOP);
   return gymChallengeBoardResponseSchema.parse({
     challengeId,
     status: view.challenge.board.status,
@@ -323,7 +344,7 @@ export async function setJoined(
   if (challengeState(row, read.gym.today) === "ended") throw new OrgsError(409, "challenge_ended", GYM_CHALLENGE_WORDS.join_ended);
   if (joined) await repo.join(deps.sql, gymId, challengeId, userId, read.now);
   else await repo.leave(deps.sql, gymId, challengeId, userId);
-  const view = memberView(row, read.gym.today, await countFor(deps, read, [row], userId), userId);
+  const view = memberView(row, read.gym.today, await countFor(deps, read, [row], userId), userId, GYM_CHALLENGE_PODIUM);
   return memberGymChallengeSchema.parse(view.challenge);
 }
 
@@ -386,7 +407,12 @@ export async function getStaffBoard(
   if (row === null) throw challengeNotFound();
   const counted = await countFor(deps, { gymId, gym, at: now.toISOString() }, [row], null);
   const started = challengeState(row, gym.today) !== "coming" && !row.cancelled;
-  const people = started ? peopleOf(row, counted) : [];
+  const people = started
+    ? entrantsOf(row, counted).flatMap((e) => {
+        const member = counted.members.get(e.userId);
+        return member === undefined ? [] : [person(member.facts, e.value)];
+      })
+    : [];
   const staff = rankStaffBoard(people);
   // A place is the place MEMBERS see: while they see no board, nobody has one.
   const shown = started && staff.status === "shown";
@@ -401,11 +427,11 @@ export async function getStaffBoard(
   }));
   const has = new Set(numbered.map((r) => r.userId));
   const waiting: StaffGymChallengeRow[] = [...(joinedOf(row, counted) ?? [])]
-    .flatMap((userId) => {
-      const facts = counted.facts.get(userId);
-      if (facts === undefined || has.has(userId)) return [];
-      const named = fullName(facts);
-      return [{ userId, name: named.name, initials: named.initials, place: null, value: 0, hidden: hiddenReason(person(facts, 0)), reached: false }];
+    .flatMap((member) => {
+      const userId = member.facts.userId;
+      if (has.has(userId)) return [];
+      const named = fullName(member.facts);
+      return [{ userId, name: named.name, initials: named.initials, place: null, value: 0, hidden: member.hidden, reached: false }];
     })
     .sort((a, b) => byName(a.name, b.name) || (a.userId < b.userId ? -1 : 1));
   const rows = [...numbered, ...waiting];

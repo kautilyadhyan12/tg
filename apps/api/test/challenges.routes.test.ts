@@ -340,6 +340,8 @@ d("a gym's challenges (real Postgres)", () => {
         expect(places(c?.board.top ?? [])).toEqual([["Asha R.", 1, 3], ["Bilal K.", 2, 2], ["Chen W.", 2, 2]]);
         // Only Asha: the seven people past the target whom Vera may not see are not counted.
         expect(c?.board.reached).toBe(1);
+        // One leader: the hidden seven who are ahead of her make no tie and no gap.
+        expect(c?.board.leaders).toBe(1);
         expect([c?.me?.value, c?.me?.place, c?.me?.toNextPlace, c?.me?.nextPlace]).toEqual([1, 4, 1, 2]);
 
         const board = await boardOf(gym, vera, id);
@@ -519,7 +521,7 @@ d("a gym's challenges (real Postgres)", () => {
       await visits(gym, vera.userId, ["2026-10-06"]);
       const c = await add(gym, { target: 1 });
       const mine = await seen(gym, vera, c.id);
-      expect(mine.board).toEqual({ status: "too_few", ranked: 0, top: [], reached: null });
+      expect(mine.board).toEqual({ status: "too_few", ranked: 0, top: [], leaders: 0, reached: null });
       expect([mine.me?.value, mine.me?.place, mine.me?.toNextPlace, mine.me?.reached]).toEqual([1, null, null, true]);
       const board = await boardOf(gym, vera, c.id);
       expect([board.status, board.ranked, board.rows]).toEqual(["too_few", 0, []]);
@@ -659,16 +661,17 @@ d("a gym's challenges (real Postgres)", () => {
       const names = async () => (await list(gym, vera)).challenges.map((c) => [c.name, c.state]);
       expect(await names()).toEqual([["Ends today", "running"], ["This week", "running"], ["Next week", "coming"], ["November", "coming"]]);
       // A challenge not started counts nothing, though people have gym days.
-      expect((await seen(gym, vera, next.id)).board).toEqual({ status: "not_started", ranked: 0, top: [], reached: null });
+      expect((await seen(gym, vera, next.id)).board).toEqual({ status: "not_started", ranked: 0, top: [], leaders: 0, reached: null });
 
       // 23:59 on its last day in Kolkata it is still running; a minute past midnight it has ended.
       clock = new Date("2026-10-07T18:29:00Z");
       expect((await seen(gym, vera, today.id)).state).toBe("running");
       clock = new Date("2026-10-07T18:31:00Z");
       const ended = await seen(gym, vera, today.id);
-      expect([ended.state, ended.board.status, ended.me?.value, places(ended.board.top)]).toEqual([
+      expect([ended.state, ended.board.status, ended.board.leaders, ended.me?.value, places(ended.board.top)]).toEqual([
         "ended",
         "shown",
+        3,
         2,
         [["Asha R.", 1, 2], ["Bilal K.", 1, 2], ["Vera V.", 1, 2]],
       ]);
@@ -694,7 +697,7 @@ d("a gym's challenges (real Postgres)", () => {
       clock = new Date("2026-11-02T06:30:00Z");
       expect((await inject("PUT", `${base(gym.id)}/${later.id}/cancelled`, gym.owner.cookies, { cancelled: true })).statusCode).toBe(200);
       const marked = await seen(gym, vera, later.id);
-      expect([marked.cancelled, marked.board, marked.me, marked.can]).toEqual([true, { status: "not_started", ranked: 0, top: [], reached: null }, null, { join: false, leave: false }]);
+      expect([marked.cancelled, marked.board, marked.me, marked.can]).toEqual([true, { status: "not_started", ranked: 0, top: [], leaders: 0, reached: null }, null, { join: false, leave: false }]);
       clock = new Date("2026-11-09T06:29:00Z");
       expect((await names()).some(([name]) => name === "November")).toBe(true);
       clock = new Date("2026-11-09T06:31:00Z");
@@ -785,10 +788,10 @@ d("a gym's challenges (real Postgres)", () => {
   );
 
   it(
-    "a gym keeps ten that have not ended: the eleventh is refused, four added at once at nine leave ten, and an ended one frees a place",
+    "a gym keeps six that have not ended: one more is refused, four added at once with room for one leave six, and an ended one frees a place",
     async () => {
       clock = WEDNESDAY;
-      const gym = await makeGym("Ten Only");
+      const gym = await makeGym("Six Only");
       for (let i = 0; i < GYM_CHALLENGES_CURRENT_MAX - 1; i++) await add(gym, { name: `Challenge ${String(i)}`, endsOn: i === 0 ? "2026-10-07" : "2026-10-11" });
       const four = await Promise.all([0, 1, 2, 3].map((i) => inject("POST", base(gym.id), gym.owner.cookies, fields({ name: `At once ${String(i)}` }), nextIp(), i % 2 === 0 ? api() : second)));
       expect(four.map((r) => r.statusCode).sort()).toEqual([201, 409, 409, 409]);

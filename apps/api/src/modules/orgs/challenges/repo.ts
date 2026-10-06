@@ -175,16 +175,32 @@ export async function setCancelled(tx: TransactionSql, gymId: string, challengeI
   await tx`UPDATE gym_challenges SET cancelled_at = ${cancelledAt}, updated_at = ${at} WHERE gym_id = ${gymId} AND id = ${challengeId}`;
 }
 
+/** Whether the gym is open (`status`), and whether this person is a live app member of it
+ *  now: the same people the boards are made of (`leaderboard/repo.ts`, `members`). Null
+ *  for no such gym. */
+export async function memberGate(sql: SqlOrTx, gymId: string, userId: string): Promise<{ status: string; member: boolean } | null> {
+  const rows = await sql<{ status: string; member: boolean }[]>`
+    SELECT g.status,
+           EXISTS (
+             SELECT 1 FROM gym_members m JOIN users u ON u.id = m.user_id AND u.status = 'active'
+             WHERE m.gym_id = g.id AND m.user_id = ${userId} AND m.removed_at IS NULL
+           ) AS member
+    FROM gyms g WHERE g.id = ${gymId}`;
+  return rows[0] ?? null;
+}
+
 // ── WHO JOINED ──
 
-/** Who joined each of the gym's `challengeIds`: (challenge, person). Somebody who is not a
+/** Who joined each of the gym's `challengeIds`, one row a challenge. Somebody who is not a
  *  live member now may still be listed; the caller keeps only the people it knows. */
-export async function joinedPairs(sql: SqlOrTx, gymId: string, challengeIds: readonly string[]): Promise<{ challengeId: string; userId: string }[]> {
-  if (challengeIds.length === 0) return [];
-  const rows = await sql<{ challenge_id: string; user_id: string }[]>`
-    SELECT p.challenge_id, p.user_id FROM gym_challenge_people p
-    WHERE p.gym_id = ${gymId} AND p.challenge_id = ANY(${[...challengeIds]}::uuid[])`;
-  return rows.map((r) => ({ challengeId: r.challenge_id, userId: r.user_id }));
+export async function joinedBy(sql: SqlOrTx, gymId: string, challengeIds: readonly string[]): Promise<Map<string, Set<string>>> {
+  if (challengeIds.length === 0) return new Map();
+  // As text, split here: the driver reads an array a character at a time.
+  const rows = await sql<{ challenge_id: string; user_ids: string }[]>`
+    SELECT p.challenge_id, string_agg(p.user_id::text, ',') AS user_ids FROM gym_challenge_people p
+    WHERE p.gym_id = ${gymId} AND p.challenge_id = ANY(${[...challengeIds]}::uuid[])
+    GROUP BY p.challenge_id`;
+  return new Map(rows.map((row) => [row.challenge_id, new Set(row.user_ids.split(","))]));
 }
 
 /** How many live app members have joined each of the gym's `challengeIds`. */

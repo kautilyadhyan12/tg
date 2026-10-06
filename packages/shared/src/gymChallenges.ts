@@ -28,10 +28,10 @@ export const GYM_CHALLENGE_MAX_DAYS_AHEAD = 365;
 export const GYM_CHALLENGE_MAX_DAYS_BACK = 31;
 /** The most challenges a gym keeps that have not ended. With `GYM_CHALLENGES_ENDED_SHOWN`
  *  it bounds what one read of the members' list costs (`tools/measure-challenges-cost.ts`). */
-export const GYM_CHALLENGES_CURRENT_MAX = 10;
+export const GYM_CHALLENGES_CURRENT_MAX = 6;
 /** Members see an ended challenge's result for this many days, the newest few of them. */
 export const GYM_CHALLENGE_ENDED_DAYS = 14;
-export const GYM_CHALLENGES_ENDED_SHOWN = 5;
+export const GYM_CHALLENGES_ENDED_SHOWN = 3;
 /** Members see a cancelled challenge, marked, for this many days after it was cancelled. */
 export const GYM_CHALLENGE_CANCELLED_DAYS = 7;
 /** The ended challenges staff are sent, newest first. */
@@ -236,6 +236,8 @@ export const memberGymChallengeSchema = challengeSchema
         /** People on the board. */
         ranked: z.number().int().min(0),
         top: z.array(gymChallengeRowSchema).max(GYM_CHALLENGE_PODIUM),
+        /** People sharing first place; 0 with no board. */
+        leaders: z.number().int().min(0),
         /** People who have reached the target; null with no target or no board. */
         reached: z.number().int().min(0).nullable(),
       })
