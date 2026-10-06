@@ -240,6 +240,8 @@ describe('the week', () => {
     expect(sessionRow(session(), '24h')).toEqual({ time: '10:00 – 11:00', name: 'Maya Lopez', detail: 'PT 10 · 1 session used' });
     expect(sessionRow(session({ packCharged: false, membership: 'PT Unlimited' }), '24h').detail).toBe('PT Unlimited');
     expect(sessionRow(session({ packCharged: false, membership: null }), '24h').detail).toBe('');
+    // A reader who is not sent the membership's name still reads that a session is used.
+    expect(sessionRow(session({ packCharged: true, membership: null }), '24h').detail).toBe('1 session used from their pack');
     expect(sessionRow(session({ name: null }), '12h')).toMatchObject({ time: '10:00 AM – 11:00 AM', name: 'Somebody no longer on your list' });
   });
 });

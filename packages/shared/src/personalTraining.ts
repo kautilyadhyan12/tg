@@ -196,7 +196,9 @@ export type PtCancelDecision =
   | { kind: "cancel"; status: "cancelled" | "late_cancelled"; refundPack: boolean }
   /** `already`: it was cancelled before, and nothing changes. */
   | { kind: "already" }
-  | { kind: "refuse"; reason: "started" | "late_cancel" };
+  /** `kept_used`: it was already cancelled late, and this request believes the session
+   *  comes back. Nothing changes, and the answer must not read as a yes. */
+  | { kind: "refuse"; reason: "started" | "late_cancel" | "kept_used" };
 
 /** Cancel a session. Free until the gym's cancel time before the start, and the pack has
  *  its session back. After that staff say which it is (`lateOk`): a late cancel, which
@@ -209,6 +211,9 @@ export function decidePtCancel(i: {
   lateOk: boolean;
   giveBack: boolean;
 }): PtCancelDecision {
+  // A late cancel already made keeps the session used. A request that expects it back (a
+  // free cancel, or `giveBack`) is told so; the late cancel sent again is the same answer.
+  if (i.status === "late_cancelled" && (i.giveBack || !i.lateOk)) return { kind: "refuse", reason: "kept_used" };
   if (i.status === "cancelled" || i.status === "late_cancelled") return { kind: "already" };
   if (i.started || i.status !== "booked") return { kind: "refuse", reason: "started" };
   if (i.freeCancel) return { kind: "cancel", status: "cancelled", refundPack: i.packCharged };
@@ -237,6 +242,7 @@ export const PT_WORDS = {
   pack_used: "This person's pack has no sessions left.",
   started: "This session has already started, so it can't be cancelled.",
   late_cancel: "It's too late to cancel for free.",
+  kept_used: "This session was already cancelled as a late cancel. The session stays used.",
   request_reused: "That didn't go through. Try again.",
   appointment_not_found: "That session was not found.",
   person_not_found: "That person isn't on your member list.",
@@ -247,6 +253,7 @@ export const PT_WORDS = {
 } as const;
 
 export const PT_LATE_CANCEL_ERROR = "late_cancel";
+export const PT_KEPT_USED_ERROR = "kept_used";
 
 // ── THE WIRE ──
 
@@ -314,7 +321,8 @@ export const ptAppointmentSchema = z
     /** Their record on the gym's list, for staff who may open a person's page
      *  (`members.confirm`); null for anybody else. */
     entryId: z.string().uuid().nullable(),
-    /** The membership it was booked on; null where the gym has no membership types. */
+    /** The membership it was booked on; null where the gym has no membership types, and
+     *  for a reader who may not open a person's page. */
     membership: z.string().nullable(),
     packCharged: z.boolean(),
     /** What a cancel now would be; null once it has started or is cancelled. */
@@ -369,6 +377,9 @@ export const bookPtRequestSchema = z
     entryId: z.string().uuid(),
     localDate: classDaySchema,
     startMinute: minuteOfDay(1435),
+    /** The session's length as the screen showed it: a trainer whose length has changed
+     *  since is not booked for a time nobody read. */
+    minutes: ptSessionMinutesSchema,
   })
   .strict();
 export type BookPtRequest = z.infer<typeof bookPtRequestSchema>;
@@ -376,14 +387,15 @@ export type BookPtRequest = z.infer<typeof bookPtRequestSchema>;
 /** How many people one read of the picker answers. */
 export const PT_PEOPLE_SHOWN = 30;
 
-/** `query`: part of a name or an email; left out, the start of the list. */
-export const ptPeopleQuerySchema = z.object({ query: z.string().trim().max(100).optional() }).strict();
+/** `query`: part of a name or an email; left out, the start of the list. `day`: the day
+ *  of the session being booked, the gym's own; today when left out. */
+export const ptPeopleQuerySchema = z.object({ query: z.string().trim().max(100).optional(), day: classDaySchema.optional() }).strict();
 export type PtPeopleQuery = z.infer<typeof ptPeopleQuerySchema>;
 
 /** The people on the member list a session can be booked for, those who hold something
- *  that includes personal training first, then by name. `pt` is what they hold: the
- *  membership's name and, for a pack, the sessions left; null where they hold nothing
- *  that includes it. It is what the list says now: the booking itself decides. */
+ *  that pays for a session on that day first, then by name. `pt` is what a booking on
+ *  that day would be made on, by the booking's own rule (`pickPtCover`): the membership's
+ *  name and, for a pack, the sessions left; null where nothing they hold pays for it. */
 export const ptPeopleResponseSchema = z
   .object({
     /** The gym sells memberships: somebody with `pt` null cannot be booked. */

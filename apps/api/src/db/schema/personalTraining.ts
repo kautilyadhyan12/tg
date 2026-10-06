@@ -1,8 +1,8 @@
 // PERSONAL TRAINING (Part 3 §13.5; ROADMAP Stage 2 item 17e-i). Mirrors
 // `0077_personal_training.sql`, which carries the reasoning and holds what Drizzle's
-// builder cannot express: the three EXCLUDE constraints (a trainer's hours on one weekday,
-// a trainer's sessions and a person's sessions never overlap) and the `(gym_id, entry_id)`
-// foreign key with ON DELETE SET NULL (entry_id).
+// builder cannot express: the two EXCLUDE constraints (a trainer's hours on one weekday
+// never overlap, nor do a trainer's sessions) and the `(gym_id, entry_id)` foreign key
+// with ON DELETE SET NULL (entry_id).
 import { sql } from "drizzle-orm";
 import { boolean, check, date, foreignKey, index, integer, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";

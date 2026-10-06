@@ -211,7 +211,7 @@ describe('booking', () => {
     expect(box.getByRole('heading').textContent).toBe('Book Sam Reed · Fri 9 Oct · 11:00 – 12:00');
     // Nothing is typed: the list is asked for as the box opens.
     expect(await box.findByText('Your members, people with personal training first')).toBeTruthy();
-    expect(api.getPtPeople).toHaveBeenCalledWith('g1', '');
+    expect(api.getPtPeople).toHaveBeenCalledWith('g1', '', '2026-10-09');
     expect(box.getByText('PT 10 · 9 sessions left')).toBeTruthy();
     // Leo holds nothing that pays for a session: he is named, says why, and cannot be picked.
     expect(box.getByText('No membership that includes personal training')).toBeTruthy();
@@ -226,7 +226,7 @@ describe('booking', () => {
     await waitFor(() => expect(api.bookPt).toHaveBeenCalledTimes(1));
     const [gymId, body] = api.bookPt.mock.calls[0];
     expect(gymId).toBe('g1');
-    expect(body).toMatchObject({ trainerId: SAM, entryId: MAYA, localDate: '2026-10-09', startMinute: 660 });
+    expect(body).toMatchObject({ trainerId: SAM, entryId: MAYA, localDate: '2026-10-09', startMinute: 660, minutes: 60 });
     expect(body.requestKey).toMatch(/^[0-9a-f-]{36}$/);
     // The week is read again and the box is gone.
     await waitFor(() => expect(api.getPtWeek).toHaveBeenCalledTimes(2));
@@ -241,7 +241,7 @@ describe('booking', () => {
     api.getPtPeople.mockResolvedValue({ data: { gymHasTypes: true, people: [], more: false } });
     fireEvent.change(box.getByPlaceholderText('Search by name or email'), { target: { value: 'zz' } });
     expect(await box.findByText('Nobody on your member list matches.')).toBeTruthy();
-    expect(api.getPtPeople).toHaveBeenLastCalledWith('g1', 'zz');
+    expect(api.getPtPeople).toHaveBeenLastCalledWith('g1', 'zz', '2026-10-09');
   });
 
   it("the server's refusal is shown in its own words, the box stays, and a second press sends the same request", async () => {
@@ -341,6 +341,33 @@ describe('cancelling', () => {
     expect(day.getByRole('alert').textContent).toBe("It's now too late to cancel for free. Choose again.");
     expect(await day.findByRole('button', { name: 'Cancel and give the session back' })).toBeTruthy();
     expect(api.cancelPt).toHaveBeenCalledTimes(1);
+  });
+
+  it('a give-back on a session somebody already cancelled late is not shown as done: the words stay until Close', async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([mayaSession({ cancel: 'late' })]) });
+    api.cancelPt.mockRejectedValue({
+      response: { status: 409, data: { error: 'kept_used', message: 'This session was already cancelled as a late cancel. The session stays used.' } },
+    });
+    open();
+    const day = await friday();
+    fireEvent.click(day.getByRole('button', { name: "Cancel Maya Lopez's session" }));
+    fireEvent.click(day.getByRole('button', { name: 'Cancel and give the session back' }));
+    expect((await day.findByRole('alert')).textContent).toBe('This session was already cancelled as a late cancel. The session stays used.');
+    // Nothing more to choose, and the week is not read again behind the message.
+    expect(day.queryByRole('button', { name: 'Cancel and give the session back' })).toBeNull();
+    expect(day.queryByRole('button', { name: 'Late cancel: the session stays used' })).toBeNull();
+    expect(api.getPtWeek).toHaveBeenCalledTimes(1);
+    api.getPtWeek.mockResolvedValue({ data: week([]) });
+    fireEvent.click(day.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(api.getPtWeek).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('a trainer who is not sent what the person pays with still reads that a session of a pack is used', async () => {
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ canManage: false, canBook: false, trainers: [{ ...sam, mine: true }] }) });
+    api.getPtWeek.mockResolvedValue({ data: week([mayaSession({ membership: null, entryId: null })]) });
+    open();
+    expect((await friday()).getByTestId('pt-session').textContent).toContain('1 session used from their pack');
   });
 
   it('a session that has started has no Cancel', async () => {

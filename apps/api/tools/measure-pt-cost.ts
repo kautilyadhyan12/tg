@@ -191,7 +191,7 @@ await measure("the picker: a typed part of a name", () => Promise.resolve(), asy
   const list = await getPeople(deps, owner, gymId, { query: "son1999 co" }, yes);
   if (list?.people.length !== 1) throw new Error("not the one person");
 });
-const request = (n: number, minute: number, trainerId = trainer) => ({ requestKey: randomUUID(), trainerId, entryId: entryAt(n), localDate: WEEK_FROM, startMinute: minute });
+const request = (n: number, minute: number, trainerId = trainer) => ({ requestKey: randomUUID(), trainerId, entryId: entryAt(n), localDate: WEEK_FROM, startMinute: minute, minutes: 30 });
 await measure("one booking, the pack charged", () => Promise.resolve(), async () => {
   const made = await book(deps, owner, gymId, request(0, 600), yes);
   if (made?.packCharged !== true) throw new Error("not booked");

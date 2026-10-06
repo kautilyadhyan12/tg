@@ -209,7 +209,7 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
     // The list as the box opens; a typed search waits a moment for the next letter.
     const timer = setTimeout(
       () => {
-        orgService.getPtPeople(gymId, query).then(
+        orgService.getPtPeople(gymId, query, slot.localDate).then(
           (res) => {
             if (live) setFound({ query, data: res.data, failed: null });
           },
@@ -224,7 +224,7 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
       live = false;
       clearTimeout(timer);
     };
-  }, [gymId, query]);
+  }, [gymId, query, slot.localDate]);
 
   const results = found !== null && found.query === query ? found : null;
   const book = async () => {
@@ -238,6 +238,7 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
         entryId: person.entryId,
         localDate: slot.localDate,
         startMinute: slot.startMinute,
+        minutes,
       });
       onBooked();
     } catch (err) {
@@ -351,7 +352,7 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
 }
 
 /** One booked session, with its Cancel and the box that asks first. */
-function SessionRow({ appointment, classes, first, clockFormat, freeCancelMinutes, locked, asking, busy, error, onAsk, onKeep, onCancel }) {
+function SessionRow({ appointment, classes, first, clockFormat, freeCancelMinutes, locked, asking, settled, busy, error, onAsk, onKeep, onCancel, onClose }) {
   const row = sessionRow(appointment, clockFormat);
   const clash = sessionClash(appointment, classes);
   const box = asking ? cancelBox(appointment, { freeCancelMinutes, clockFormat }) : null;
@@ -377,23 +378,32 @@ function SessionRow({ appointment, classes, first, clockFormat, freeCancelMinute
       </div>
       {box !== null ? (
         <div className="flex flex-col gap-3" role="group" aria-label="Cancel this session">
-          <p className="c-s14 c-t1 m-0">{box.question}</p>
-          <p className="c-s14 c-t2 m-0">{NOT_TOLD}</p>
+          {settled ? null : <p className="c-s14 c-t1 m-0">{box.question}</p>}
+          {settled ? null : <p className="c-s14 c-t2 m-0">{NOT_TOLD}</p>}
           {error !== null ? (
             <p className="c-s14 c-w5 m-0" role="alert" style={{ color: 'var(--bad)' }}>
               {error}
             </p>
           ) : null}
-          <div className="flex flex-wrap items-center gap-2">
-            {box.choices.map((choice) => (
-              <button key={choice.key} type="button" onClick={() => onCancel(choice)} disabled={busy} className="c-btn c-btn-sm c-btn-danger">
-                {choice.label}
+          {settled ? (
+            // Somebody else has already cancelled it: nothing is left to choose.
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={onClose} className="c-btn c-btn-sm c-btn-s">
+                Close
               </button>
-            ))}
-            <button type="button" onClick={onKeep} disabled={busy} className="c-btn c-btn-sm c-btn-s">
-              Keep it
-            </button>
-          </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              {box.choices.map((choice) => (
+                <button key={choice.key} type="button" onClick={() => onCancel(choice)} disabled={busy} className="c-btn c-btn-sm c-btn-danger">
+                  {choice.label}
+                </button>
+              ))}
+              <button type="button" onClick={onKeep} disabled={busy} className="c-btn c-btn-sm c-btn-s">
+                Keep it
+              </button>
+            </div>
+          )}
         </div>
       ) : null}
     </li>
@@ -425,6 +435,9 @@ export default function PersonalTraining() {
   const [cancelling, setCancelling] = useState(null);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+  // The server said the session was already cancelled another way: its words stay on
+  // screen until staff close the box, and only then is the week read again.
+  const [cancelSettled, setCancelSettled] = useState(false);
 
   useEffect(() => {
     if (gymId === undefined) return undefined;
@@ -468,6 +481,7 @@ export default function PersonalTraining() {
     setBooking(null);
     setCancelling(null);
     setCancelError(null);
+    setCancelSettled(false);
     setWeekKey((n) => n + 1);
   };
 
@@ -552,6 +566,10 @@ export default function PersonalTraining() {
       if (err?.response?.data?.error === 'late_cancel') {
         setWeekKey((n) => n + 1);
         setCancelError("It's now too late to cancel for free. Choose again.");
+      } else if (err?.response?.data?.error === 'kept_used') {
+        // Already cancelled as a late cancel by somebody else: say so, and offer nothing more.
+        setCancelError(errorText(err, 'This session was already cancelled as a late cancel. The session stays used.'));
+        setCancelSettled(true);
       } else {
         setCancelError(errorText(err, "We couldn't cancel that session."));
       }
@@ -785,11 +803,14 @@ export default function PersonalTraining() {
                                 freeCancelMinutes={list.freeCancelMinutes}
                                 locked={readOnly}
                                 asking={cancelling === appointment.id}
+                                settled={cancelling === appointment.id && cancelSettled}
+                                onClose={readWeekAgain}
                                 busy={cancelBusy}
                                 error={cancelling === appointment.id ? cancelError : null}
                                 onAsk={() => {
                                   setBooking(null);
                                   setCancelError(null);
+                                  setCancelSettled(false);
                                   setCancelling(appointment.id);
                                 }}
                                 onKeep={() => {

@@ -197,6 +197,8 @@ d("personal training (real Postgres, two api instances)", () => {
     key?: string;
     day?: string;
     minute?: number;
+    /** The session's length as the screen showed it; an hour unless said. */
+    minutes?: number;
     ip?: string;
     target?: App;
   }
@@ -205,7 +207,7 @@ d("personal training (real Postgres, two api instances)", () => {
       "POST",
       `/v1/orgs/${gym.id}/pt/appointments`,
       (opts.by ?? gym.owner).cookies,
-      { requestKey: opts.key ?? randomUUID(), trainerId: trainer.userId, entryId, localDate: opts.day ?? FRIDAY, startMinute: opts.minute ?? 600 },
+      { requestKey: opts.key ?? randomUUID(), trainerId: trainer.userId, entryId, localDate: opts.day ?? FRIDAY, startMinute: opts.minute ?? 600, minutes: opts.minutes ?? 60 },
       opts.ip ?? nextIp(),
       opts.target ?? api(),
     );
@@ -417,6 +419,53 @@ d("personal training (real Postgres, two api instances)", () => {
       clock = NOW.getTime();
     }
   });
+
+  it("a session already cancelled late is never answered as given back, alone or with the two buttons pressed at once", async () => {
+    const sam = await trainerWith(sells, "Kept Trainer");
+    const maya = await listed(sells, "Maya Kept");
+    const pack = await hold(sells, maya, ptPack, { pack: 10 });
+    // Today at 09:00: it is 07:30, inside the two hours.
+    const session = made(await book(sells, sam, maya, { day: TODAY, minute: 540 }));
+    // The trainer reads the session by name without what the person pays with; the owner reads both.
+    const own = dayOf(await week(sells, sam, sam), TODAY).appointments[0];
+    expect([own?.name, own?.membership, own?.packCharged, own?.entryId]).toEqual(["Maya Kept", null, true, null]);
+    expect(dayOf(await week(sells, sells.owner, sam), TODAY).appointments[0]?.membership).toMatch(/^Type /);
+
+    expect(made(await cancel(sells, session.id, { by: sam, lateOk: true })).status).toBe("late_cancelled");
+    // A manager's page, open since before: "Cancel and give the session back", then a plain cancel.
+    for (const press of [{ lateOk: true, giveBack: true }, { lateOk: false, giveBack: false }, { lateOk: false, giveBack: true }]) {
+      const res = await cancel(sells, session.id, press);
+      expect([res.statusCode, errorOf(res)]).toEqual([409, "kept_used"]);
+      expect((JSON.parse(res.body) as { message: string }).message).toBe("This session was already cancelled as a late cancel. The session stays used.");
+    }
+    // The late cancel sent again is the answer it had.
+    const again = made(await cancel(sells, session.id, { lateOk: true }));
+    expect([again.status, again.packCharged, await left(pack)]).toEqual(["late_cancelled", true, 9]);
+
+    // Both buttons at once on two servers, six times: whatever each is told is what happened.
+    for (let round = 0; round < 6; round++) {
+      const one = made(await book(sells, sam, maya, { day: TODAY, minute: 600 }));
+      clock = NOW.getTime() + 61 * 60_000; // 08:31: the 10:00 session is inside the two hours
+      try {
+        const before = await left(pack);
+        const [late, back] = await Promise.all([
+          cancel(sells, one.id, { lateOk: true }),
+          cancel(sells, one.id, { lateOk: true, giveBack: true, target: second ?? api() }),
+        ]);
+        const [row] = await sql<{ status: string; pack_charged: boolean }[]>`SELECT status, pack_charged FROM gym_pt_appointments WHERE id = ${one.id}`;
+        if (row?.status === "late_cancelled") {
+          // The late cancel won: the give-back is told the session stays used.
+          expect([late.statusCode, back.statusCode, errorOf(back), row.pack_charged, await left(pack)]).toEqual([200, 409, "kept_used", true, before]);
+        } else {
+          // The give-back won: the session is back, and the late cancel finds nothing kept.
+          expect([late.statusCode, back.statusCode, row?.status, row?.pack_charged, await left(pack)]).toEqual([200, 200, "cancelled", false, (before ?? 0) + 1]);
+          expect(made(late).packCharged).toBe(false);
+        }
+      } finally {
+        clock = NOW.getTime();
+      }
+    }
+  }, T);
 
   it("a session that has started cannot be cancelled, and its time cannot be booked", async () => {
     const sam = await trainerWith(sells, "Started Trainer");
@@ -643,7 +692,7 @@ d("personal training (real Postgres, two api instances)", () => {
     expect((await cancel(open, randomUUID(), { by: sam })).statusCode).toBe(404);
 
     // Their own session: booked and cancelled by themselves.
-    const own = made(await book(open, sam, tom, { by: sam, minute: 960 }));
+    const own = made(await book(open, sam, tom, { by: sam, minute: 960, minutes: 45 }));
     expect([own.name, own.entryId]).toEqual(["Tom Own", tom]);
     expect(made(await cancel(open, own.id, { by: sam })).status).toBe("cancelled");
 
@@ -691,14 +740,17 @@ d("personal training (real Postgres, two api instances)", () => {
     const hours = [{ weekday: 5, fromMinute: 540, toMinute: 660 }];
     expect((await setHours(open, open.owner, sam, { sessionMinutes: 20, hours })).statusCode).toBe(200);
     expect(dayOf(await week(open, open.owner, sam), FRIDAY).free).toEqual([540, 560, 580, 600, 620, 640]);
-    const short = made(await book(open, sam, tom, { minute: 560 }));
+    const short = made(await book(open, sam, tom, { minute: 560, minutes: 20 }));
     expect([short.minutes, short.startsAt]).toEqual([20, "2026-10-09T08:20:00.000Z"]);
     // 75 minutes from now on: one fits in the two hours, and the 20 minutes booked blocks it.
     expect((await setHours(open, open.owner, sam, { sessionMinutes: 75, hours })).statusCode).toBe(200);
     expect(dayOf(await week(open, open.owner, sam), FRIDAY).free).toEqual([]);
     expect(made(await cancel(open, short.id)).status).toBe("cancelled");
     expect(dayOf(await week(open, open.owner, sam), FRIDAY).free).toEqual([540]);
-    expect(made(await book(open, sam, tom, { minute: 540 })).minutes).toBe(75);
+    // A page still showing the 20-minute times books nothing: that time is no longer his.
+    const stale = await book(open, sam, tom, { minute: 540, minutes: 20 });
+    expect([stale.statusCode, errorOf(stale)]).toEqual([409, "not_a_time"]);
+    expect(made(await book(open, sam, tom, { minute: 540, minutes: 75 })).minutes).toBe(75);
   });
 
   it("a class the trainer coaches takes its time off their free times, and a session cannot be booked over it", async () => {
@@ -729,6 +781,12 @@ d("personal training (real Postgres, two api instances)", () => {
     // Up to the class and straight after it are his to give.
     expect(made(await book(gym, sam, tom, { minute: 540 })).status).toBe("booked");
     expect(made(await book(gym, sam, tom, { minute: 660 })).status).toBe("booked");
+
+    // The same coach teaching in ANOTHER gym at 12:00 takes no time here.
+    const elsewhere = await makeGym("Coach Elsewhere");
+    await coaches(elsewhere, sam, FRIDAY, 720, 60, { name: "Away" });
+    expect(dayOf(await week(gym, gym.owner, sam), FRIDAY).free).toEqual([720]);
+    expect(dayOf(await week(gym, gym.owner, sam), FRIDAY).classes.map((c) => c.name)).toEqual(["Spin"]);
 
     // The class cancelled gives its time back.
     await sql`UPDATE gym_class_sessions SET status = 'cancelled' WHERE gym_id = ${gym.id} AND coach_user_id = ${sam.userId} AND local_start_minute = 615`;
@@ -795,6 +853,45 @@ d("personal training (real Postgres, two api instances)", () => {
     expect(made(await book(gym, sam, zara)).packCharged).toBe(true);
     expect((await people(gym.owner, "Zara")).people[0]?.pt?.sessionsLeft).toBe(6);
 
+    // The three ways a list of its own could say what the booking does not do. Each
+    // person's row is read for the session's day, and then the booking is made.
+    const row = async (name: string, day?: string) => {
+      const res = await inject("GET", `/v1/orgs/${gym.id}/pt/people?query=${encodeURIComponent(name)}${day === undefined ? "" : `&day=${day}`}`, gym.owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      return (JSON.parse(res.body) as PtPeopleResponse).people[0]?.pt ?? null;
+    };
+    // A pack over by its days, still stored in use with sessions left: nothing pays.
+    const stale = await listed(gym, "Eve Expired");
+    const stalePack = await hold(gym, stale, pack, { pack: 9 });
+    await sql`UPDATE gym_held_memberships SET starts_on = '2026-06-01' WHERE id = ${stalePack}`;
+    expect(await row("Eve Expired", FRIDAY)).toBeNull();
+    const overByDays = await book(gym, sam, stale, { minute: 660 });
+    expect([overByDays.statusCode, errorOf(overByDays)]).toEqual([409, "no_membership"]);
+    expect(await left(stalePack)).toBe(9);
+    // A membership that starts on 1 November pays from that day, and not for 9 October.
+    const later = await listed(gym, "Flo Later");
+    const laterHeld = await hold(gym, later, unlimited);
+    await sql`UPDATE gym_held_memberships SET starts_on = '2026-11-01' WHERE id = ${laterHeld}`;
+    expect(await row("Flo Later", FRIDAY)).toBeNull();
+    expect(await row("Flo Later")).toBeNull();
+    expect((await row("Flo Later", "2026-11-06"))?.sessionsLeft).toBeNull();
+    expect(await row("Flo Later", "2026-11-06")).not.toBeNull();
+    const tooSoon = await book(gym, sam, later, { minute: 660 });
+    expect([tooSoon.statusCode, errorOf(tooSoon)]).toEqual([409, "no_membership"]);
+    expect(made(await book(gym, sam, later, { day: "2026-11-06", minute: 660 })).packCharged).toBe(false);
+    // Two packs: the list names the one that ends sooner, and that is the one charged.
+    const intro = await typeOf(gym, { kind: "pack", includesPt: true });
+    await sql`UPDATE gym_membership_types SET name = 'PT 5 Intro' WHERE id = ${intro}`;
+    await sql`UPDATE gym_membership_types SET name = 'PT 10' WHERE id = ${pack}`;
+    const two = await listed(gym, "Gus Two Packs");
+    const big = await hold(gym, two, pack, { pack: 10 });
+    const small = await hold(gym, two, intro, { pack: 3 });
+    await sql`UPDATE gym_held_memberships SET starts_on = '2026-09-01' WHERE id = ${small}`;
+    expect(await row("Gus Two Packs", FRIDAY)).toEqual({ membership: "PT 5 Intro", sessionsLeft: 3 });
+    const charged = made(await book(gym, sam, two, { minute: 720 }));
+    expect([charged.membership, await left(small), await left(big)]).toEqual(["PT 5 Intro", 2, 10]);
+    expect(await row("Gus Two Packs", FRIDAY)).toEqual({ membership: "PT 5 Intro", sessionsLeft: 2 });
+
     // A trainer on the usual ticks cannot read the member list here either; nor anybody outside the gym.
     expect((await inject("GET", `/v1/orgs/${gym.id}/pt/people`, sam.cookies)).statusCode).toBe(403);
     expect((await inject("GET", `/v1/orgs/${gym.id}/pt/people`, open.owner.cookies)).statusCode).toBe(404);
@@ -803,7 +900,7 @@ d("personal training (real Postgres, two api instances)", () => {
     // A gym that sells no memberships says so, and nobody has anything to show.
     const none = JSON.parse((await inject("GET", `/v1/orgs/${open.id}/pt/people?query=Tom%20Length`, open.owner.cookies)).body) as PtPeopleResponse;
     expect([none.gymHasTypes, none.people.map((p) => p.pt)]).toEqual([false, [null]]);
-  });
+  }, T);
 
   it("a stranger, another gym's owner and somebody signed out get nothing, and a member of the gym is not staff", async () => {
     const sam = await trainerWith(open, "Tenancy Trainer");
@@ -819,8 +916,9 @@ d("personal training (real Postgres, two api instances)", () => {
         setHours(open, who, sam),
         book(open, sam, tom, { by: who, minute: 660 }),
         cancel(open, session.id, { by: who }),
+        inject("GET", `/v1/orgs/${open.id}/pt/people`, who.cookies),
       ]);
-      expect(answers.map((r) => r.statusCode)).toEqual([404, 404, 404, 404, 404]);
+      expect(answers.map((r) => r.statusCode)).toEqual([404, 404, 404, 404, 404, 404]);
       expect(new Set(answers.map(errorOf))).toEqual(new Set(["org_not_found"]));
     }
     // The other gym's owner, asking their own gym for this gym's trainer and session.
@@ -844,17 +942,18 @@ d("personal training (real Postgres, two api instances)", () => {
     const sam = await trainerWith(open, "Parse Trainer");
     const tom = await listed(open, "Tom Parse");
     const post = (payload: unknown) => inject("POST", `/v1/orgs/${open.id}/pt/appointments`, open.owner.cookies, payload);
-    const good = { requestKey: randomUUID(), trainerId: sam.userId, entryId: tom, localDate: FRIDAY, startMinute: 600 };
+    const good = { requestKey: randomUUID(), trainerId: sam.userId, entryId: tom, localDate: FRIDAY, startMinute: 600, minutes: 60 };
     const answers = await Promise.all([
       post({ ...good, startMinute: 601 }),
       post({ ...good, localDate: "9 Oct" }),
       post({ ...good, entryId: "tom" }),
       post({ ...good, extra: true }),
+      post({ ...good, minutes: undefined }),
       post({}),
       inject("GET", `/v1/orgs/${open.id}/pt/week?trainer=sam`, open.owner.cookies),
       inject("GET", `/v1/orgs/${open.id}/pt/week`, open.owner.cookies),
     ]);
-    expect(answers.map((r) => r.statusCode)).toEqual([400, 400, 400, 400, 400, 400, 400]);
+    expect(answers.map((r) => r.statusCode)).toEqual([400, 400, 400, 400, 400, 400, 400, 400]);
     expect(await sessions(open, sam)).toHaveLength(0);
   });
 
@@ -872,6 +971,42 @@ d("personal training (real Postgres, two api instances)", () => {
     ]);
     expect(dayOf(await week(lapsed, lapsed.owner, sam), FRIDAY).appointments).toHaveLength(1);
   });
+
+  it("a gym that has been closed changes nothing, whatever its plan says", async () => {
+    const closed = await makeGym("Closed PT");
+    const sam = await trainerWith(closed, "Closed Trainer");
+    const tom = await listed(closed, "Tom Closed");
+    const session = made(await book(closed, sam, tom));
+    await sql`UPDATE gyms SET status = 'archived' WHERE id = ${closed.id}`;
+    const answers = await Promise.all([setHours(closed, closed.owner, sam), book(closed, sam, tom, { minute: 660 }), cancel(closed, session.id)]);
+    expect(answers.map((r) => [r.statusCode, errorOf(r)])).toEqual([
+      [409, "org_archived"],
+      [409, "org_archived"],
+      [409, "org_archived"],
+    ]);
+    expect((await sessions(closed, sam)).map((r) => r.status)).toEqual(["booked"]);
+  });
+
+  it("one member of staff's writes are limited: the 301st in an hour is told to slow down, and nothing before it is", async () => {
+    const gym = await makeGym("Limit PT");
+    const tom = await listed(gym, "Tom Limit");
+    const nobody = await signedIn("Limit Not Staff");
+    const desk = nextIp();
+    // Each asks to book with somebody who is not on the staff: counted by the limit, answered 404.
+    const statuses: number[] = [];
+    for (let done = 0; done < 305; done += 25) {
+      const chunk = await Promise.all(
+        Array.from({ length: Math.min(25, 305 - done) }, (_, n) => book(gym, nobody, tom, { ip: desk, target: either(n) })),
+      );
+      statuses.push(...chunk.map((r) => r.statusCode));
+    }
+    expect(statuses.filter((s) => s === 404)).toHaveLength(300);
+    expect(statuses.filter((s) => s === 429)).toHaveLength(5);
+    // The first three hundred are all answered; the refusals are the last ones sent.
+    expect(statuses.slice(0, 275).every((s) => s === 404)).toBe(true);
+    // A read is counted apart, and still answers.
+    expect((await inject("GET", `/v1/orgs/${gym.id}/pt/trainers`, gym.owner.cookies, undefined, desk)).statusCode).toBe(200);
+  }, T);
 
   it("two records of one person joined: the sessions booked for the one not kept are the kept one's", async () => {
     const sam = await trainerWith(open, "Join Trainer");

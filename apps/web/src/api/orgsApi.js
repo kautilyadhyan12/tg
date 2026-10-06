@@ -1705,12 +1705,16 @@ export const orgService = {
 
   /** GET …/pt/people — who a session can be booked for: the member list, people with
    *  personal training first; `query` is part of a name or an email. */
-  getPtPeople: (gymId, query) =>
+  getPtPeople: (gymId, query, day) =>
     readThrough(
       ptPeopleResponseSchema,
       'your members',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/pt/people`, {
-        params: typeof query === 'string' && query.trim() !== '' ? { query: query.trim() } : {},
+        params: {
+          ...(typeof query === 'string' && query.trim() !== '' ? { query: query.trim() } : {}),
+          // The session's day: what each person would be booked on is worked out for it.
+          ...(typeof day === 'string' && day !== '' ? { day } : {}),
+        },
       }),
     ),
 

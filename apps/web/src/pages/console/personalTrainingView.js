@@ -228,8 +228,15 @@ export function freeTimeLabel(startMinute, minutes, clockFormat) {
 export function sessionRow(appointment, clockFormat) {
   const time = timeRange(appointment.localStartMinute, appointment.localStartMinute + appointment.minutes, clockFormat);
   const name = appointment.name ?? 'Somebody no longer on your list';
+  // A trainer is not sent what the person pays with, only whether a pack's session is used.
   const paid =
-    appointment.membership === null ? '' : appointment.packCharged ? `${appointment.membership} · 1 session used` : appointment.membership;
+    appointment.membership === null
+      ? appointment.packCharged
+        ? '1 session used from their pack'
+        : ''
+      : appointment.packCharged
+        ? `${appointment.membership} · 1 session used`
+        : appointment.membership;
   return { time, name, detail: paid };
 }
 

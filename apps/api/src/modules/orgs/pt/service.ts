@@ -16,6 +16,7 @@
 import type { Sql } from "postgres";
 import {
   PT_HORIZON_DAYS,
+  PT_KEPT_USED_ERROR,
   PT_PEOPLE_SHOWN,
   PT_WEEK_DAYS,
   PT_WORDS,
@@ -46,7 +47,7 @@ import { getOrgById, getStaffAuthority, insertAudit, lockOrgRow, type OrgRow } f
 import { OrgsError, holdsPrivilege, requireWritableGym } from "../service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
-import { chargePack, givePackClassBack, heldForPt } from "../memberships/heldRepo.js";
+import { chargePack, givePackClassBack, heldForPt, heldForPtOf } from "../memberships/heldRepo.js";
 import * as repo from "./repo.js";
 
 export interface PtDeps {
@@ -113,7 +114,8 @@ function shown(row: repo.AppointmentRow, view: { now: Date; freeCancelMinutes: n
     name: named.name,
     initials: named.name === null ? "" : named.initials,
     entryId: view.opens ? row.entryId : null,
-    membership: row.membership,
+    // What a person pays with is for staff who may open their page, not for a trainer's list.
+    membership: view.opens ? row.membership : null,
     packCharged: row.packCharged,
     cancel: row.status !== "booked" || time.started ? null : time.freeCancel ? "free" : "late",
   });
@@ -231,24 +233,34 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
   });
 }
 
-/** The people a session can be booked for, for staff who may read the member list. */
+/** The people a session can be booked for, for staff who may read the member list. What
+ *  each of them would be booked on is the booking's own rule, run for the session's day:
+ *  the list never says a pack the booking would not charge. */
 export async function getPeople(deps: PtDeps, staffId: string, gymId: string, query: PtPeopleQuery, limit: Limit): Promise<PtPeopleResponse | null> {
   const standing = await standingOf(deps, gymId, staffId);
   if (!standing.confirms) throw forbidden();
   if (!(await limit())) return null;
   const [clock, rows] = await Promise.all([repo.gymClock(deps.sql, gymId), repo.peopleFor(deps.sql, gymId, query.query ?? "", PT_PEOPLE_SHOWN + 1)]);
   if (clock === null) throw notFound();
-  return ptPeopleResponseSchema.parse({
-    gymHasTypes: clock.hasTypes,
-    people: rows.slice(0, PT_PEOPLE_SHOWN).map((r) => ({
+  const page = rows.slice(0, PT_PEOPLE_SHOWN);
+  const day = query.day ?? dayInTz(deps.now(), clock.timezone);
+  const held = clock.hasTypes ? await heldForPtOf(deps.sql, gymId, page.map((r) => r.entryId)) : [];
+  const people = page.map((r) => {
+    const theirs = held.filter((h) => h.entryId === r.entryId);
+    const cover = pickPtCover({ gymHasTypes: clock.hasTypes, day, held: theirs });
+    const paying = cover.ok ? theirs.find((h) => h.id === cover.membershipId) : undefined;
+    return {
       entryId: r.entryId,
       name: r.fullName,
-      pt: r.ptMembership === null ? null : { membership: r.ptMembership, sessionsLeft: r.ptSessionsLeft },
-    })),
-    more: rows.length > PT_PEOPLE_SHOWN,
+      pt: paying === undefined ? null : { membership: paying.typeName, sessionsLeft: paying.membership.kind === "pack" ? paying.membership.classesLeft : null },
+    };
   });
+  // The people a session can be booked for first, then by name; the statement's order
+  // only chose who is on the page.
+  const byName = (a: string, b: string): number => (a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0);
+  people.sort((a, b) => Number(a.pt === null) - Number(b.pt === null) || byName(a.name, b.name) || (a.entryId < b.entryId ? -1 : 1));
+  return ptPeopleResponseSchema.parse({ gymHasTypes: clock.hasTypes, people, more: rows.length > PT_PEOPLE_SHOWN });
 }
-
 /** Book a session for a person on the member list. */
 export async function book(deps: PtDeps, staffId: string, gymId: string, req: BookPtRequest, limit: Limit): Promise<PtAppointment | null> {
   const standing = await standingOf(deps, gymId, staffId);
@@ -262,7 +274,11 @@ export async function book(deps: PtDeps, staffId: string, gymId: string, req: Bo
     const again = await repo.byKey(tx, gymId, req.requestKey);
     if (again !== null) {
       const same =
-        again.trainerId === req.trainerId && again.entryId === req.entryId && again.localDate === req.localDate && again.localStartMinute === req.startMinute;
+        again.trainerId === req.trainerId &&
+        again.entryId === req.entryId &&
+        again.localDate === req.localDate &&
+        again.localStartMinute === req.startMinute &&
+        again.minutes === req.minutes;
       return same ? again.id : new OrgsError(409, "request_reused", PT_WORDS.request_reused);
     }
     const [clock, trainers, entry] = await Promise.all([
@@ -279,8 +295,10 @@ export async function book(deps: PtDeps, staffId: string, gymId: string, req: Bo
     const today = dayInTz(now, clock.timezone);
     const minutes = trainer.sessionMinutes;
     const offers = trainer.offers && minutes !== null;
+    // The length the screen showed is the one booked: a trainer whose length has changed
+    // since offers different times, and this one is no longer theirs.
     const isOffered =
-      offers && ptOfferedTimes(trainer.hours, minutes, [req.localDate]).some((t) => t.startMinute === req.startMinute);
+      offers && minutes === req.minutes && ptOfferedTimes(trainer.hours, minutes, [req.localDate]).some((t) => t.startMinute === req.startMinute);
     // The time as an instant; none where the gym's clock skips it on that day.
     const [slot] = isOffered ? await repo.instantsOf(tx, clock.timezone, [{ localDate: req.localDate, startMinute: req.startMinute }]) : [];
     const startsAt = slot === undefined ? null : new Date(slot.startsAtMs);
@@ -368,14 +386,10 @@ export async function cancel(
   limit: Limit,
 ): Promise<PtAppointment | null> {
   const standing = await standingOf(deps, gymId, staffId);
-  // Whose session it is decides who may cancel it, so it is read before the lock; a
-  // session that is not this trainer's reads as one that is not there.
+  // Whose session it is decides who may cancel it, so it is read before the lock.
   const seen = await repo.appointmentById(deps.sql, gymId, appointmentId, false);
-  if (!standing.manages && (seen === null || seen.trainerId !== staffId)) {
-    if (seen === null) throw appointmentNotFound();
-    throw forbidden();
-  }
   if (seen === null) throw appointmentNotFound();
+  if (!standing.manages && seen.trainerId !== staffId) throw forbidden();
   await requireWritableGym(deps, standing.org);
   if (!(await limit())) return null;
 
@@ -393,7 +407,9 @@ export async function cancel(
     });
     if (decision.kind === "already") return null;
     if (decision.kind === "refuse") {
-      return decision.reason === "late_cancel" ? new PtLateCancel(row.packCharged) : new OrgsError(409, "started", PT_WORDS.started);
+      if (decision.reason === "late_cancel") return new PtLateCancel(row.packCharged);
+      if (decision.reason === "kept_used") return new OrgsError(409, PT_KEPT_USED_ERROR, PT_WORDS.kept_used);
+      return new OrgsError(409, "started", PT_WORDS.started);
     }
     await repo.markCancelled(tx, { gymId, id: row.id, status: decision.status, packCharged: row.packCharged && !decision.refundPack, now });
     if (decision.refundPack && row.heldMembershipId !== null) await givePackClassBack(tx, gymId, row.heldMembershipId, now);

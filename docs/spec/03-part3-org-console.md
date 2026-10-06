@@ -2653,7 +2653,14 @@ lock; an open-gym slot takes nobody's time. The week answers each day's `classes
 the page lists them as not free; a session that a class was put over afterwards says it
 runs into it (the class side asking first is 17e-iii). The calendar is written 56 days
 ahead and sessions are booked 55, so the classes of every bookable day are there once the
-nightly fill has run. Nobody is told yet (the inbox, 20a). Not done: the class side asking first and a trainer's time off (17e-iii, built next);
+nightly fill has run. **From the review (2026-10-06):** the people list runs `pickPtCover`
+itself for the session's day (`day` on the request, else the gym's today), so what it names
+is what the booking charges; a booking carries the session's `minutes` and is refused
+`not_a_time` when the trainer's length has changed since the page was read; a session
+already late-cancelled answers 409 `kept_used` to a give-back or a plain cancel, and 200
+only to the same late cancel again (a late-cancelled session cannot be given back
+afterwards yet); the membership's name on a session goes only to staff with
+`members.confirm`; changing a membership type must say `includesPt`. Nobody is told yet (the inbox, 20a). Not done: the class side asking first and a trainer's time off (17e-iii, built next);
 the member's own booking (17e-ii); sessions ended when a person leaves, a membership is
 cancelled or a trainer leaves the staff, came and no-show (17e-iv).)*
 

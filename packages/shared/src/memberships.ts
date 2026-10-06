@@ -149,7 +149,7 @@ const membershipTypeFields = {
   bookingsLimit: bookingsLimitSchema.nullable(),
   bookingsPeriod: membershipLimitPeriodSchema.nullable(),
   classTypeIds: z.array(z.string().uuid()).max(MEMBERSHIP_CLASS_TYPES_MAX).nullable(),
-  /** Left out is "no": only the form that shows the tick sends it. */
+  /** Left out of a NEW type is "no"; a change must say it (below). */
   includesPt: z.boolean().default(false),
 };
 const membershipTypeObject = z.object(membershipTypeFields);
@@ -191,7 +191,9 @@ export type SaveGymMembershipTypeRequest = z.infer<typeof saveGymMembershipTypeR
 
 /** A change: the same fields, and the `updatedAt` the list gave for the type. */
 export const updateGymMembershipTypeRequestSchema = membershipTypeObject
-  .extend({ updatedAt: z.string().datetime({ offset: true }) })
+  // A change states the tick outright, as it states every other field: a default here
+  // would take personal training off everybody who holds the type.
+  .extend({ updatedAt: z.string().datetime({ offset: true }), includesPt: z.boolean() })
   .strict()
   .superRefine(refineMembershipType);
 export type UpdateGymMembershipTypeRequest = z.infer<typeof updateGymMembershipTypeRequestSchema>;

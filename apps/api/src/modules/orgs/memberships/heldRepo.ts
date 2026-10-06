@@ -532,6 +532,27 @@ export async function heldForPt(tx: Sql | TransactionSql, gymId: string, entryId
   });
 }
 
+/** `heldForPt` for several records at once, each row with its record and its type's name:
+ *  what the list of people to book reads, so it runs the booking's own rule. A plain read. */
+export async function heldForPtOf(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  entryIds: readonly string[],
+): Promise<(PtHeld & { entryId: string; typeName: string })[]> {
+  if (entryIds.length === 0) return [];
+  const rows = await sql`
+    SELECT ${COLUMNS(sql)}, h.entry_id, t.includes_pt
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    WHERE h.gym_id = ${gymId} AND h.entry_id = ANY(${[...entryIds]}::uuid[]) AND h.status = ANY(${[...IN_USE]}::text[])
+    ORDER BY h.id`;
+  return rows.map((row) => {
+    const h = shape(row);
+    const extra = z.object({ entry_id: z.string(), includes_pt: z.boolean() }).parse(row);
+    return { id: h.id, membership: h.membership, includesPt: extra.includes_pt, entryId: extra.entry_id, typeName: h.typeName };
+  });
+}
+
 /** One class off a pack, for a booking. False where the pack has none left: the caller
  *  holds the gym's lock and has just read one, so that is a fault and it throws. */
 export async function chargePack(tx: TransactionSql, gymId: string, membershipId: string, now: Date): Promise<boolean> {

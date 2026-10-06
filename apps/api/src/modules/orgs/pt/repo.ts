@@ -4,8 +4,8 @@
 // Every statement carries `gym_id`. Every write runs under the gym's row lock
 // (`lockOrgRow`), the lock every timetable, member-list and membership write takes first,
 // so a session is decided against hours, bookings and memberships nobody else is changing.
-// Under that, the table's own EXCLUDE constraints refuse two sessions of one trainer, or
-// of one person, that overlap.
+// Under that, the table's own EXCLUDE constraint refuses two sessions of one trainer that
+// overlap; one person in two sessions at once is refused by the rule under the lock.
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import {
@@ -239,8 +239,8 @@ export async function currentEntry(sql: SqlOrTx, gymId: string, entryId: string)
 /** Postgres's code for a row an EXCLUDE constraint refused. */
 const EXCLUSION_VIOLATION = "23P01";
 
-/** A session booked. False where the table itself refused it: the trainer, or the person,
- *  already has one that overlaps. */
+/** A session booked. Null where the table itself refused it: the trainer already has one
+ *  that overlaps. */
 export async function insertAppointment(
   tx: TransactionSql,
   input: {
@@ -293,36 +293,28 @@ export async function markCancelled(
 export interface PersonRow {
   entryId: string;
   fullName: string;
-  /** The membership in use that includes personal training, if they hold one: a pack with
-   *  sessions left, or any other kind. */
-  ptMembership: string | null;
-  ptSessionsLeft: number | null;
 }
 
 /** People on the gym's list now whose name or email holds `query` (everybody for an empty
- *  one), those holding something that includes personal training first, then by name. */
+ *  one). Those holding anything in use whose type includes personal training come first,
+ *  then by name: an order only, so the page of people is the likely ones. What each of
+ *  them can be booked on is the booking rule's to say, never this statement's. */
 export async function peopleFor(sql: SqlOrTx, gymId: string, query: string, limit: number): Promise<PersonRow[]> {
   // `%`, `_` and `\` typed by staff are letters to look for, not patterns.
   const like = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-  const rows = await sql<{ id: string; full_name: string; pt_membership: string | null; pt_left: number | null }[]>`
-    SELECT e.id, e.full_name, pt.name AS pt_membership, pt.classes_left AS pt_left
+  const rows = await sql<{ id: string; full_name: string }[]>`
+    SELECT e.id, e.full_name
     FROM gym_member_list_entries e
-    LEFT JOIN LATERAL (
-      SELECT mt.name, CASE WHEN h.kind = 'pack' THEN h.classes_left END AS classes_left
-      FROM gym_held_memberships h
-      JOIN gym_membership_types mt ON mt.gym_id = h.gym_id AND mt.id = h.membership_type_id
-      WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status = 'active' AND mt.includes_pt
-        AND (h.kind <> 'pack' OR h.classes_left > 0)
-      ORDER BY (h.kind = 'pack'), h.id
-      LIMIT 1
-    ) pt ON true
     WHERE e.gym_id = ${gymId} AND e.former_at IS NULL
       AND (${query} = '' OR e.full_name ILIKE ${like} OR e.email ILIKE ${like})
-    ORDER BY (pt.name IS NULL), lower(e.full_name), e.id
+    ORDER BY NOT EXISTS (
+               SELECT 1 FROM gym_held_memberships h
+               JOIN gym_membership_types mt ON mt.gym_id = h.gym_id AND mt.id = h.membership_type_id
+               WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status IN ('active','frozen') AND mt.includes_pt),
+             lower(e.full_name), e.id
     LIMIT ${limit}`;
-  return rows.map((r) => ({ entryId: r.id, fullName: r.full_name, ptMembership: r.pt_membership, ptSessionsLeft: r.pt_left }));
+  return rows.map((r) => ({ entryId: r.id, fullName: r.full_name }));
 }
-
 export interface CoachedClass {
   name: string;
   localDate: string;

@@ -95,7 +95,21 @@ describe("the worst thing: two people with one trainer at one time, or a pack ch
     const booked = { status: "booked" as const, started: false, freeCancel: true, packCharged: true, lateOk: false, giveBack: false };
     expect(decidePtCancel(booked)).toEqual({ kind: "cancel", status: "cancelled", refundPack: true });
     expect(decidePtCancel({ ...booked, status: "cancelled" })).toEqual({ kind: "already" });
-    expect(decidePtCancel({ ...booked, status: "late_cancelled", lateOk: true, giveBack: true })).toEqual({ kind: "already" });
+    // The late cancel sent again is the same answer; nothing changes.
+    expect(decidePtCancel({ ...booked, status: "late_cancelled", freeCancel: false, lateOk: true })).toEqual({ kind: "already" });
+  });
+
+  it("a session already cancelled late is never answered as given back: a give-back, or a plain cancel, is told it stays used", () => {
+    const late = { status: "late_cancelled" as const, started: false, freeCancel: false, packCharged: true, lateOk: true, giveBack: false };
+    expect(decidePtCancel({ ...late, giveBack: true })).toEqual({ kind: "refuse", reason: "kept_used" });
+    // A page still showing it as free to cancel.
+    expect(decidePtCancel({ ...late, lateOk: false })).toEqual({ kind: "refuse", reason: "kept_used" });
+    expect(decidePtCancel({ ...late, lateOk: false, freeCancel: true })).toEqual({ kind: "refuse", reason: "kept_used" });
+    // Whatever the clock says by then.
+    expect(decidePtCancel({ ...late, giveBack: true, started: true })).toEqual({ kind: "refuse", reason: "kept_used" });
+    // A session cancelled free has nothing kept: any cancel of it again changes nothing.
+    expect(decidePtCancel({ ...late, status: "cancelled", packCharged: false, giveBack: true })).toEqual({ kind: "already" });
+    expect(decidePtCancel({ ...late, status: "cancelled", packCharged: false })).toEqual({ kind: "already" });
   });
 });
 
@@ -271,11 +285,14 @@ describe("a trainer's hours and the times they make", () => {
 
   it("a booking names a day and a time on the five-minute marks", () => {
     const id = "00000000-0000-4000-8000-000000000001";
-    const ok = { requestKey: id, trainerId: id, entryId: id, localDate: DAY, startMinute: 960 };
+    const ok = { requestKey: id, trainerId: id, entryId: id, localDate: DAY, startMinute: 960, minutes: 60 };
     expect(bookPtRequestSchema.safeParse(ok).success).toBe(true);
     expect(bookPtRequestSchema.safeParse({ ...ok, startMinute: 961 }).success).toBe(false);
     expect(bookPtRequestSchema.safeParse({ ...ok, startMinute: 1440 }).success).toBe(false);
     expect(bookPtRequestSchema.safeParse({ ...ok, localDate: "20 Oct" }).success).toBe(false);
+    // The length the screen showed travels with it.
+    expect(bookPtRequestSchema.safeParse({ ...ok, minutes: undefined }).success).toBe(false);
+    expect(bookPtRequestSchema.safeParse({ ...ok, minutes: 52 }).success).toBe(false);
   });
 });
 
