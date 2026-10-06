@@ -4,6 +4,7 @@ import { canManageOrg } from './gymDetailsView';
 import { canReadAttendance } from './attendanceView';
 import { canManageSchedule } from './classesView';
 import { canSeeLeaderboard } from './leaderboardStaffView';
+import { canManageChallenges } from './challengesView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManagePosts } from '../../components/gym/postsView';
 
@@ -48,6 +49,7 @@ export function consoleMenu(orgSlug, privileges, orgType) {
       label: 'Leaderboard',
       phone: 'more',
     },
+    canManageChallenges(privileges) && { key: 'challenges', to: `${base}/challenges`, end: false, label: 'Challenges', phone: 'more' },
     settingsIsReachable(privileges) && {
       key: 'settings',
       to: `${base}/settings`,

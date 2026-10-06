@@ -6,6 +6,7 @@ import { useMyGyms } from '../hooks/useMyGyms';
 import GymHoursNote from '../components/gym/GymHoursNote';
 import AttendancePanel from '../components/gym/AttendancePanel';
 import { cheerNote, myOrgsWords } from '../components/gym/gymMembershipView';
+import Challenges from '../components/gym/Challenges';
 import Classes from '../components/gym/Classes';
 import Events from '../components/gym/Events';
 import Leaderboard from '../components/gym/Leaderboard';
@@ -61,6 +62,7 @@ const PAGE_TABS = [
   { id: 'updates', label: 'Updates' },
   { id: 'events', label: 'Events' },
   { id: 'leaderboard', label: 'Leaderboard' },
+  { id: 'challenges', label: 'Challenges' },
   { id: 'classes', label: 'Classes' },
 ];
 
@@ -226,7 +228,7 @@ export default function MyGyms() {
                 <AttendancePanel gym={gym} />
               </div>
             </div>
-            {/* THE GYM'S SHARED PAGE (spec Part 3 §15.1): Updates, Events, the Leaderboard, and its classes (§13.6). One
+            {/* THE GYM'S SHARED PAGE (spec Part 3 §15.1): Updates, Events, the Leaderboard, Challenges, and its classes (§13.6). One
                 is drawn at a time, so the other asks the server nothing until it is opened. */}
             <div role="tablist" aria-label={`${gym.name}'s page`} className="flex flex-wrap gap-2 mt-4">
               {PAGE_TABS.map((t) => (
@@ -251,6 +253,8 @@ export default function MyGyms() {
               <Updates key={`updates-${gym.id}`} gym={gym} />
             ) : tab === 'events' ? (
               <Events key={`events-${gym.id}`} gym={gym} />
+            ) : tab === 'challenges' ? (
+              <Challenges key={`challenges-${gym.id}`} gym={gym} />
             ) : tab === 'classes' ? (
               <Classes key={`classes-${gym.id}`} gym={gym} />
             ) : (

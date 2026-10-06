@@ -568,6 +568,13 @@
       "when": 1788393600065,
       "tag": "0081_trainer_time_off",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1788393600066,
+      "tag": "0082_gym_challenges",
+      "breakpoints": true
     }
   ]
 }

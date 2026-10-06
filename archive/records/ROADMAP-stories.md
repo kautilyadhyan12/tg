@@ -294,3 +294,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 19b-vi, as first written: **A post five people have reported is hidden until staff decide** (RULINGS 2026-10-05): five different members, any reason; members stop seeing it at once, staff Keep it (shown again) or Remove it. Risky (other people's posts). Before anybody uses Updates.
 
 - 19c-ii, as it stood when built (2026-10-06): **"I'm coming"**, counted by 17c's Book rule on an event: the last place never given to two people, the waitlist, and staff seeing who is coming.
+
+## 19d-i, as it stood when it merged (2026-10-07, PR #186)
+
+- 19d-i. [ ] **A gym runs a challenge, members see its board**: a console Challenges page and a members' Challenges tab; Gym days or Workout days over its dates, for everyone or the people who join, won by the most or by reaching a number.
