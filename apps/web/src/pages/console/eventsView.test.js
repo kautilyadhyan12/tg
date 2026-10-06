@@ -3,7 +3,27 @@
 import { describe, expect, it } from 'vitest';
 import { addGymEventRequestSchema, changeGymEventRequestSchema } from '@app/shared';
 import { eventIsOn, eventPlaces, eventWhen, eventsZoneNote } from '../../components/gym/eventsView';
-import { cancelBox, clockOf, dayAfter, detailsLine, draftOf, eventProblem, fieldsOf, minuteOf, newEventDraft, pastTitle, posterBox, sameAsSent, withStartDay } from './eventsView';
+import {
+  cancelBox,
+  changeHint,
+  clockOf,
+  dayAfter,
+  detailsLine,
+  draftOf,
+  eventProblem,
+  eventTaken,
+  fieldsOf,
+  minuteOf,
+  namesLine,
+  newEventDraft,
+  pastTitle,
+  peopleHeading,
+  placesHint,
+  posterBox,
+  removeBox,
+  sameAsSent,
+  withStartDay,
+} from './eventsView';
 
 const EVENT = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -150,5 +170,73 @@ describe('the form', () => {
     expect(sameAsSent({ ...EVENT, details: '', place: '', places: null }, sent)).toBe(false);
     expect(pastTitle({ past: [EVENT], pastTotal: 1 })).toBe('Past events (1)');
     expect(pastTitle({ past: Array(50).fill(EVENT), pastTotal: 73 })).toBe('Past events (the newest 50 of 73)');
+  });
+
+  it("says how many are coming, and nothing of people until somebody is", () => {
+    const taken = (places, coming, waiting, past) => eventTaken({ places, coming, waiting }, past);
+    expect(taken(40, 0, 0)).toBe('40 places');
+    expect(taken(null, 0, 0)).toBe('No limit on places');
+    expect(taken(40, 12, 0)).toBe('40 places · 12 coming');
+    expect(taken(1, 1, 0)).toBe('1 place · full');
+    expect(taken(40, 40, 3)).toBe('40 places · full · 3 on the waitlist');
+    expect(taken(null, 1200, 0)).toBe('No limit on places · 1,200 coming');
+    // An event that has ended: what people had said, never "coming".
+    expect(taken(40, 12, 2, true)).toBe('40 places · 12 people said they were coming');
+    expect(taken(40, 1, 0, true)).toBe('40 places · 1 person said they were coming');
+    expect(taken(40, 0, 0, true)).toBe('40 places');
+  });
+
+  it('names a few of the people and counts the rest; somebody with no name is counted, never named', () => {
+    const people = (...names) => names.map((name, i) => ({ id: String(i), name }));
+    expect(namesLine([], 0)).toBeNull();
+    expect(namesLine(people('Ann Smith'), 1)).toBe('Ann Smith');
+    expect(namesLine(people('Ann Smith', 'Bea Jones', 'Cal Brown'), 3)).toBe('Ann Smith, Bea Jones, Cal Brown');
+    expect(namesLine(people('Ann Smith', 'Bea Jones', 'Cal Brown', 'Dee Hall'), 12)).toBe('Ann Smith, Bea Jones, Cal Brown and 9 more');
+    expect(namesLine(people(null, 'Bea Jones'), 2)).toBe('Bea Jones and 1 more');
+    expect(namesLine(people(null, null), 2)).toBe('2 people');
+  });
+
+  it('the cancel box says who is down for the event and that the app does not tell them', () => {
+    const busy = { ...EVENT, coming: 12, waiting: 1 };
+    const tell = "The app doesn't tell them yet, so let them know yourself. They keep their places if you un-cancel.";
+    // Before the names are read, the numbers stand.
+    expect(cancelBox(busy, { people: 'members' }, '2026-10-07').lines).toEqual([
+      'Your members still see it on their Events list, marked Cancelled, until Sat 17 Oct.',
+      "12 people said they're coming.",
+      '1 person is on the waitlist.',
+      tell,
+      'Nobody is emailed. You can un-cancel it until then.',
+    ]);
+    const read = { coming: [{ id: '1', name: 'Ann Smith' }, { id: '2', name: 'Bea Jones' }, { id: '3', name: 'Cal Brown' }, { id: '4', name: 'Dee Hall' }], waiting: [] };
+    expect(cancelBox(busy, { people: 'members' }, '2026-10-07', read).lines[1]).toBe("12 people said they're coming: Ann Smith, Bea Jones, Cal Brown and 9 more.");
+    expect(cancelBox({ ...EVENT, coming: 1, waiting: 0 }, { people: 'clients' }, '2026-10-07', { coming: [{ id: '1', name: 'Ann Smith' }], waiting: [] }).lines.slice(1, 3)).toEqual([
+      "1 person said they're coming: Ann Smith.",
+      tell,
+    ]);
+    expect(cancelBox({ ...EVENT, coming: 0, waiting: 2 }, { people: 'members' }, '2026-10-07').lines.slice(1, 3)).toEqual(['2 people are on the waitlist.', tell]);
+  });
+
+  it('heads the two lists, and says what removing a person does', () => {
+    expect(peopleHeading('coming', { places: 40, comingTotal: 12, waitingTotal: 0 })).toBe('Coming (12 of 40)');
+    expect(peopleHeading('coming', { places: null, comingTotal: 12, waitingTotal: 0 })).toBe('Coming (12)');
+    expect(peopleHeading('waiting', { places: 40, comingTotal: 40, waitingTotal: 3 })).toBe('Waitlist (3), first in line first');
+    const tell = "The app doesn't tell them yet, so let them know yourself. They can say they're coming again.";
+    expect(removeBox({ id: '1', name: 'Ann Smith' }, EVENT, 0, { people: 'members' })).toEqual({ title: 'Remove Ann Smith from Saturday Open Day?', lines: [tell], yes: 'Remove', no: 'Keep them' });
+    expect(removeBox({ id: '1', name: null }, EVENT, 2, { people: 'clients' })).toEqual({
+      title: 'Remove this person from Saturday Open Day?',
+      lines: ['If they had a place, it goes to the next of your clients on the waitlist.', tell],
+      yes: 'Remove',
+      no: 'Keep them',
+    });
+  });
+
+  it('the form says the fewest places it can have, and that nobody is told of a change', () => {
+    expect(placesHint(null)).toBeNull();
+    expect(placesHint({ coming: 0, waiting: 3 })).toBeNull();
+    expect(placesHint({ coming: 1, waiting: 0 })).toBe("1 person is coming, so places can't be fewer than 1.");
+    expect(placesHint({ coming: 12, waiting: 0 })).toBe("12 people are coming, so places can't be fewer than 12.");
+    expect(changeHint(null)).toBeNull();
+    expect(changeHint({ coming: 0, waiting: 0 })).toBeNull();
+    expect(changeHint({ coming: 0, waiting: 1 })).toBe("People have said they're coming. The app doesn't tell them about changes yet, so let them know yourself.");
   });
 });

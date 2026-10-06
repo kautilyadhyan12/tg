@@ -9,7 +9,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { closureDateLabel } from './hoursView';
 
-const svc = { list: vi.fn(), add: vi.fn(), change: vi.fn(), setCancelled: vi.fn() };
+const svc = { list: vi.fn(), add: vi.fn(), change: vi.fn(), setCancelled: vi.fn(), people: vi.fn(), removePerson: vi.fn() };
 const orgApi = { getMine: vi.fn() };
 const prepare = vi.fn();
 vi.mock('../../api/eventsApi', () => ({
@@ -50,6 +50,8 @@ const event = (id, name, over = {}) => ({
   places: null,
   cancelled: false,
   poster: null,
+  coming: 0,
+  waiting: 0,
   ...over,
 });
 const listOf = (coming = [], over = {}) => ({ gymId: 'g1', gymName: 'Iron House', timezone: 'Europe/London', today: '2026-10-07', coming, past: [], pastTotal: 0, ...over });
@@ -68,6 +70,15 @@ const cards = () => screen.queryAllByTestId('event');
 const cardOf = (name) => cards().find((el) => within(el).queryByRole('heading', { name }) !== null);
 const form = () => within(screen.getByTestId('event-form'));
 const refusal = (status, message) => Object.assign(new Error(message), { response: { status, data: { error: 'x', message } } });
+/** Who is coming and waiting, as the server sends it: ids `c0`, `c1` … and `w0`, `w1` …. */
+const peopleOf = (coming, waiting = [], places = 40) => ({
+  eventId: 'a',
+  places,
+  coming: coming.map((name, i) => ({ id: `c${i}`, name, initials: '', at: '2026-10-07T09:00:00.000Z' })),
+  comingTotal: coming.length,
+  waiting: waiting.map((name, i) => ({ id: `w${i}`, name, initials: '', at: '2026-10-07T09:00:00.000Z' })),
+  waitingTotal: waiting.length,
+});
 
 /** Pick a date the way a person does: open the calendar under the box named `label`, go
  *  forward a month at a time until the day is there, press it. */
@@ -420,6 +431,30 @@ describe('changing an event', () => {
     expect(svc.setCancelled.mock.calls[1]).toEqual(['g1', 'b', false]);
   });
 
+  it('an event people are coming to: the cancel box names them, and the form says the fewest places', async () => {
+    const busy = event('a', 'Saturday Open Day', { places: 40, coming: 4, waiting: 1 });
+    svc.list.mockResolvedValue(listOf([busy]));
+    svc.people.mockResolvedValue(peopleOf(['Ann Smith', 'Bea Jones', 'Cal Brown', 'Dee Hall'], ['Eve Wait']));
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel Saturday Open Day' }));
+    const box = within(screen.getByRole('group', { name: 'Cancel Saturday Open Day?' }));
+    expect(await box.findByText("4 people said they're coming: Ann Smith, Bea Jones, Cal Brown and 1 more.")).toBeTruthy();
+    expect(box.getByText('1 person is on the waitlist.')).toBeTruthy();
+    expect(box.getByText("The app doesn't tell them yet, so let them know yourself. They keep their places if you un-cancel.")).toBeTruthy();
+    expect(svc.people).toHaveBeenCalledWith('g1', 'a');
+    fireEvent.click(box.getByRole('button', { name: 'Keep it' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Saturday Open Day' }));
+    expect(form().getByText("4 people are coming, so places can't be fewer than 4.")).toBeTruthy();
+    expect(form().getByText("People have said they're coming. The app doesn't tell them about changes yet, so let them know yourself.")).toBeTruthy();
+    // The server's own refusal of fewer places is what the form says.
+    fireEvent.change(form().getByLabelText('Places'), { target: { value: '3' } });
+    svc.change.mockRejectedValue(refusal(409, "4 people are coming, so the places can't be fewer than 4."));
+    fireEvent.click(form().getByRole('button', { name: 'Save changes' }));
+    expect(await form().findByText("4 people are coming, so the places can't be fewer than 4.")).toBeTruthy();
+    expect(svc.change.mock.calls[0][2].places).toBe(3);
+  });
+
   it('an event that ended meanwhile is said, and the list is read again', async () => {
     svc.list.mockResolvedValue(listOf(two()));
     open();
@@ -429,5 +464,87 @@ describe('changing an event', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel event' }));
     expect(await screen.findByText("This event has ended, so it can't be changed.")).toBeTruthy();
     await waitFor(() => expect(cards()).toHaveLength(1));
+  });
+});
+
+describe('who is coming', () => {
+  const busy = () => event('a', 'Saturday Open Day', { places: 40, coming: 2, waiting: 1 });
+
+  it('the card counts them, and the list behind its button names who is coming and who is waiting', async () => {
+    svc.list.mockResolvedValue(listOf([busy(), event('b', 'Winter Social')]));
+    svc.people.mockResolvedValue(peopleOf(['Ann Smith', null], ['Cal Brown']));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    const card = () => within(cardOf('Saturday Open Day'));
+    expect(card().getByText('40 places · 2 coming · 1 on the waitlist')).toBeTruthy();
+    // An event nobody is down for says nothing of people and offers no list.
+    expect(within(cardOf('Winter Social')).getByText('No limit on places')).toBeTruthy();
+    expect(within(cardOf('Winter Social')).queryByRole('button', { name: /who's coming/ })).toBeNull();
+    expect(svc.people).not.toHaveBeenCalled();
+
+    fireEvent.click(card().getByRole('button', { name: "See who's coming to Saturday Open Day" }));
+    const coming = within(await card().findByRole('region', { name: 'Coming (2 of 40)' }));
+    expect(coming.getByText('Ann Smith')).toBeTruthy();
+    // Somebody with no name yet is still a row.
+    expect(coming.getByText('No name yet')).toBeTruthy();
+    expect(within(card().getByRole('region', { name: 'Waitlist (1), first in line first' })).getByText('Cal Brown')).toBeTruthy();
+    expect(svc.people).toHaveBeenCalledWith('g1', 'a');
+    fireEvent.click(card().getByRole('button', { name: "Hide who's coming to Saturday Open Day" }));
+    expect(card().queryByText('Ann Smith')).toBeNull();
+  });
+
+  it('Remove asks first, names the person, and takes off the one it was pressed on', async () => {
+    svc.list.mockResolvedValue(listOf([busy()]));
+    svc.people.mockResolvedValue(peopleOf(['Ann Smith', 'Bea Jones'], ['Cal Brown']));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    const card = () => within(cardOf('Saturday Open Day'));
+    fireEvent.click(card().getByRole('button', { name: "See who's coming to Saturday Open Day" }));
+    fireEvent.click(await card().findByRole('button', { name: 'Remove Bea Jones from Saturday Open Day' }));
+    const box = within(card().getByRole('group', { name: 'Remove Bea Jones from Saturday Open Day?' }));
+    expect(box.getByText('If they had a place, it goes to the next of your members on the waitlist.')).toBeTruthy();
+    expect(box.getByText("The app doesn't tell them yet, so let them know yourself. They can say they're coming again.")).toBeTruthy();
+    // Keep them: nothing is sent.
+    fireEvent.click(box.getByRole('button', { name: 'Keep them' }));
+    expect(svc.removePerson).not.toHaveBeenCalled();
+
+    fireEvent.click(card().getByRole('button', { name: 'Remove Bea Jones from Saturday Open Day' }));
+    svc.removePerson.mockResolvedValue(peopleOf(['Ann Smith', 'Cal Brown']));
+    svc.list.mockResolvedValue(listOf([event('a', 'Saturday Open Day', { places: 40, coming: 2, waiting: 0 })]));
+    fireEvent.click(within(card().getByRole('group', { name: 'Remove Bea Jones from Saturday Open Day?' })).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(svc.removePerson).toHaveBeenCalledTimes(1));
+    expect(svc.removePerson).toHaveBeenCalledWith('g1', 'a', 'c1');
+    // The list is as the server answered, and the card's numbers are read again.
+    await waitFor(() => expect(card().queryByText('Bea Jones')).toBeNull());
+    expect(card().getByText('Cal Brown')).toBeTruthy();
+    expect(await card().findByText('40 places · 2 coming')).toBeTruthy();
+  });
+
+  it('a removal the server refuses is said, and the list is read again', async () => {
+    svc.list.mockResolvedValue(listOf([busy()]));
+    svc.people.mockResolvedValue(peopleOf(['Ann Smith', 'Bea Jones'], ['Cal Brown']));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    const card = () => within(cardOf('Saturday Open Day'));
+    fireEvent.click(card().getByRole('button', { name: "See who's coming to Saturday Open Day" }));
+    fireEvent.click(await card().findByRole('button', { name: 'Remove Ann Smith from Saturday Open Day' }));
+    svc.removePerson.mockRejectedValue(refusal(404, "This person isn't down for this event any more."));
+    svc.people.mockResolvedValue(peopleOf(['Bea Jones'], ['Cal Brown']));
+    fireEvent.click(card().getByRole('button', { name: 'Remove' }));
+    expect(await card().findByText("This person isn't down for this event any more.")).toBeTruthy();
+    await waitFor(() => expect(card().queryByText('Ann Smith')).toBeNull());
+  });
+
+  it('a past event, and a gym off its plan, read the names and remove nobody', async () => {
+    const ended = event('p', 'Summer Fair', { startsAt: '2020-01-01T09:00:00.000Z', endsAt: '2020-01-01T12:00:00.000Z', places: 40, coming: 2, waiting: 0 });
+    svc.list.mockResolvedValue(listOf([], { past: [ended], pastTotal: 1 }));
+    svc.people.mockResolvedValue(peopleOf(['Ann Smith', 'Bea Jones']));
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Past events (1)' }));
+    const card = () => within(cardOf('Summer Fair'));
+    expect(card().getByText('40 places · 2 people said they were coming')).toBeTruthy();
+    fireEvent.click(card().getByRole('button', { name: "See who's coming to Summer Fair" }));
+    expect(await card().findByText('Ann Smith')).toBeTruthy();
+    expect(card().queryByRole('button', { name: /^Remove Ann Smith/ })).toBeNull();
   });
 });

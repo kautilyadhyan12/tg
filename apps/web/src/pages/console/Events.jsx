@@ -4,18 +4,39 @@ import { CalendarDays, ImagePlus, MapPin, Pencil, Plus, Users } from 'lucide-rea
 import { eventPosterUrl, staffEventsService } from '../../api/eventsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import EventPeople from '../../components/console/EventPeople';
 import TimePick from '../../components/console/TimePick';
-import { eventIsOn, eventPlaces, eventWhen } from '../../components/gym/eventsView';
+import { eventIsOn, eventWhen } from '../../components/gym/eventsView';
 import { DateField, Field, Tick } from './ClassFields';
-import { EVENT_LIMITS, EVENT_NOTES, cancelBox, dayAfter, detailsLine, draftOf, eventProblem, fieldsOf, newEventDraft, pastTitle, posterBox, posterProblem, sameAsSent, withStartDay } from './eventsView';
+import {
+  EVENT_LIMITS,
+  EVENT_NOTES,
+  cancelBox,
+  changeHint,
+  dayAfter,
+  detailsLine,
+  draftOf,
+  eventPeopleCount,
+  eventProblem,
+  eventTaken,
+  fieldsOf,
+  newEventDraft,
+  pastTitle,
+  placesHint,
+  posterBox,
+  posterProblem,
+  sameAsSent,
+  withStartDay,
+} from './eventsView';
 import { preparePostPhoto } from './gymPagePhotos';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 
-// The gym's Events, for staff (ROADMAP 19c-i; spec Part 3 §15.4): add an event with its
-// day, time, place, places and a poster; edit it; cancel or un-cancel it. `posts.manage`'s;
-// the server refuses anyone else whatever this screen shows.
+// The gym's Events, for staff (ROADMAP 19c-i, 19c-ii; spec Part 3 §15.4): add an event with
+// its day, time, place, places and a poster; edit it; cancel or un-cancel it; see who is
+// coming and who is waiting. `posts.manage`'s; the server refuses anyone else whatever this
+// screen shows.
 
 const newKey = () => globalThis.crypto.randomUUID();
 
@@ -48,6 +69,8 @@ function EventForm({ gymId, event, today, clockFormat, words, onSaved, onClose }
   };
   const chars = detailsLine(draft.details);
   const title = adding ? 'Add an event' : `Edit ${event.name}`;
+  const placesNote = placesHint(event);
+  const changeNote = changeHint(event);
 
   const pickPoster = async (file) => {
     setPreparing(true);
@@ -130,6 +153,7 @@ function EventForm({ gymId, event, today, clockFormat, words, onSaved, onClose }
             No limit
           </Tick>
         </div>
+        {placesNote !== null ? <span className="c-hint">{placesNote}</span> : null}
       </div>
 
       <label className="c-field">
@@ -191,14 +215,33 @@ function EventForm({ gymId, event, today, clockFormat, words, onSaved, onClose }
         </button>
       </div>
       <p className="c-hint">{`Every one of your ${words.people} in the app sees it straight away. Nobody is emailed.`}</p>
+      {changeNote !== null ? <p className="c-hint">{changeNote}</p> : null}
     </section>
   );
 }
 
-function EventCard({ gymId, event, words, today, past, readAt, readOnly, busy, asking, onEdit, onAsk, onCancel, onUncancel, onRemovePoster }) {
-  const places = eventPlaces(event);
+function EventCard({ gymId, event, words, today, past, readAt, readOnly, busy, asking, onEdit, onAsk, onCancel, onUncancel, onRemovePoster, onPeopleChanged }) {
   const on = !past && !event.cancelled && eventIsOn(event, readAt);
-  const box = !asking ? null : past ? posterBox(event) : cancelBox(event, words, today);
+  const peopleCount = eventPeopleCount(event);
+  const [showPeople, setShowPeople] = useState(false);
+  /** Who is coming, read for the cancel box so it can name them. */
+  const [named, setNamed] = useState(null);
+  const naming = asking && !past && peopleCount > 0;
+  useEffect(() => {
+    if (!naming) return undefined;
+    let live = true;
+    staffEventsService.people(gymId, event.id).then(
+      (people) => {
+        if (live) setNamed(people);
+      },
+      // The box still says how many; only the names are missing.
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [naming, gymId, event.id]);
+  const box = !asking ? null : past ? posterBox(event) : cancelBox(event, words, today, named);
   return (
     <li className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid="event">
       <div className="flex flex-col gap-4 md:flex-row">
@@ -230,7 +273,7 @@ function EventCard({ gymId, event, words, today, past, readAt, readOnly, busy, a
           ) : null}
           <p className="c-s14 c-t2 flex items-center gap-2">
             <Users aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3" />
-            {places ?? 'No limit on places'}
+            {eventTaken(event, past)}
           </p>
           {event.details !== '' ? <p className="c-s14 c-t2 whitespace-pre-wrap break-words mt-1">{event.details}</p> : null}
         </div>
@@ -252,6 +295,15 @@ function EventCard({ gymId, event, words, today, past, readAt, readOnly, busy, a
             </button>
           )}
         </div>
+      ) : null}
+
+      {peopleCount > 0 && box === null ? (
+        <button type="button" onClick={() => setShowPeople((v) => !v)} aria-expanded={showPeople} className="c-btn c-btn-s c-btn-sm self-start" aria-label={`${showPeople ? 'Hide' : 'See'} who's coming to ${event.name}`}>
+          {showPeople ? "Hide who's coming" : `See who's coming (${peopleCount.toLocaleString('en-GB')})`}
+        </button>
+      ) : null}
+      {showPeople && peopleCount > 0 && box === null ? (
+        <EventPeople gymId={gymId} event={event} words={words} canRemove={!past && !readOnly} onChanged={onPeopleChanged} />
       ) : null}
 
       {past && !readOnly && event.poster !== null && box === null ? (
@@ -487,6 +539,7 @@ export default function Events() {
                       onAsk={setAsking}
                       onCancel={(e) => setCancelled(e, true)}
                       onUncancel={(e) => setCancelled(e, false)}
+                      onPeopleChanged={load}
                     />
                   ),
                 )}
@@ -517,6 +570,7 @@ export default function Events() {
                         asking={asking === event.id}
                         onAsk={setAsking}
                         onRemovePoster={removePoster}
+                        onPeopleChanged={load}
                       />
                     ))}
                   </ul>
