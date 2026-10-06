@@ -19,6 +19,7 @@ import {
   placeLine,
   progress,
   resultOf,
+  unitOf,
   whatCounts,
   whoLine,
 } from './challengesView';
@@ -55,7 +56,7 @@ function Flames({ challenge, today }) {
   const marks = dayMarks(challenge, today);
   if (marks === null) return null;
   return (
-    <div className="mt-3" aria-label={marks.whole ? 'Your days in this challenge' : 'Your days this week'}>
+    <div className="flex-shrink-0" aria-label={marks.whole ? 'Your days in this challenge' : 'Your days this week'}>
       <div className="grid gap-y-1" style={{ gridTemplateColumns: 'repeat(7, 22px)' }}>
         {WEEKDAYS.map((letter, i) => (
           <span key={`${letter}${i}`} aria-hidden="true" className="text-center text-[10px]" style={{ color: MUTED }}>
@@ -80,7 +81,10 @@ function Flames({ challenge, today }) {
           );
         })}
       </div>
-      {!marks.whole && <p className="text-xs mt-1" style={{ color: MUTED }}>This week. Your number counts every day of the challenge.</p>}
+      <p aria-hidden="true" className="flex items-center gap-1 text-[10px] mt-1.5" style={{ color: MUTED }}>
+        <Flame className="w-3 h-3" style={{ color: ORANGE, fill: ORANGE }} /> {`a ${unitOf(challenge.counts)}`}
+      </p>
+      {!marks.whole && <p className="text-xs mt-1" style={{ color: MUTED, maxWidth: 170 }}>This week. Your number counts every day of the challenge.</p>}
     </div>
   );
 }
@@ -97,6 +101,8 @@ function Mine({ challenge, today, gymName }) {
       style={{ background: mine.done ? 'rgba(255,138,31,0.10)' : 'rgba(255,255,255,0.04)', border: `1px solid ${mine.done ? 'rgba(255,138,31,0.45)' : 'rgba(255,255,255,0.06)'}` }}
       aria-label="Your number in this challenge"
     >
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
+      <div className="flex-1" style={{ minWidth: 200 }}>
       <div className="flex items-end justify-between gap-3">
         <p className="text-white leading-none">
           <span className="text-4xl font-bold tabular-nums">{mine.big.toLocaleString('en')}</span>
@@ -126,7 +132,9 @@ function Mine({ challenge, today, gymName }) {
       {mine.note !== null && <p className="text-sm mt-2" style={{ color: mine.done ? ORANGE : SOFT }}>{mine.note}</p>}
       {place !== null && <p className="text-sm mt-1" style={{ color: SOFT }}>{place}</p>}
       {hidden !== null && <p className="text-xs mt-1" style={{ color: MUTED }}>{hidden}</p>}
+      </div>
       <Flames challenge={challenge} today={today} />
+      </div>
     </div>
   );
 }
@@ -142,12 +150,15 @@ function Podium({ challenge }) {
           <li
             key={row.userId}
             className="rounded-xl px-2 py-3 flex flex-col items-center text-center min-w-0"
-            style={{ background: row.isMe ? 'rgba(255,138,31,0.10)' : 'rgba(255,255,255,0.04)', border: `1px solid ${row.place === 1 ? 'rgba(245,197,66,0.45)' : 'rgba(255,255,255,0.06)'}` }}
+            style={{
+              background: row.place === 1 ? 'linear-gradient(180deg, rgba(245,197,66,0.16), rgba(255,255,255,0.03))' : row.isMe ? 'rgba(255,138,31,0.10)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${row.place === 1 ? 'rgba(245,197,66,0.5)' : row.isMe ? 'rgba(255,138,31,0.45)' : 'rgba(255,255,255,0.06)'}`,
+            }}
           >
-            <span className="flex items-center gap-1 text-xs font-bold" style={{ color: colour }}>
-              <Medal aria-hidden="true" className="w-4 h-4" /> {ordinal(row.place)}
+            <span className="flex items-center gap-1 text-sm font-bold" style={{ color: colour }}>
+              <Medal aria-hidden="true" className="w-5 h-5" /> {ordinal(row.place)}
             </span>
-            <span className="mt-2">
+            <span className="mt-2 rounded-full" style={{ boxShadow: `0 0 0 2px ${colour}` }}>
               <Initials text={row.initials} />
             </span>
             <span className="text-sm text-white font-semibold mt-1.5 max-w-full truncate">{row.isMe ? 'You' : row.name}</span>

@@ -10,6 +10,9 @@ const people = (n) => (n === 1 ? '1 person' : `${n.toLocaleString('en')} people`
 const dayNumber = (day) => Date.parse(`${day}T00:00:00Z`) / 86_400_000;
 const dayAt = (number) => new Date(number * 86_400_000).toISOString().slice(0, 10);
 
+/** What one counted day is called: "gym day", "workout day". */
+export const unitOf = (counts) => UNIT[counts];
+
 /** "3 gym days", "1 workout day" */
 export const countText = (value, counts) => plural(value, UNIT[counts]);
 
