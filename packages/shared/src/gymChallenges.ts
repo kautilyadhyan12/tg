@@ -197,6 +197,13 @@ export function challengeSaveProblem(input: { today: string; before: ChallengeRu
   return null;
 }
 
+/** Whether staff may type numbers for a challenge of the gym's own count on `today`: from
+ *  its first day until members stop seeing its result (`GYM_CHALLENGE_ENDED_DAYS` after its
+ *  last day), and never for a cancelled one. */
+export function challengeTakesNumbers(c: { counts: GymChallengeCounts; startsOn: string; endsOn: string; cancelled: boolean }, today: string): boolean {
+  return c.counts === "own" && !c.cancelled && today >= c.startsOn && today <= dayAfter(c.endsOn, GYM_CHALLENGE_ENDED_DAYS);
+}
+
 /** What a member can do about a challenge. Joining stays open until its last day ends:
  *  what is counted was checked at the time, so a late joiner's days since the start count. */
 export function challengeCan(c: { who: GymChallengeWho; cancelled: boolean; state: GymChallengeState; joined: boolean }): { join: boolean; leave: boolean } {
@@ -393,6 +400,8 @@ export const staffGymChallengeBoardResponseSchema = z
     ranked: z.number().int().min(0),
     /** Everyone listed, the hidden included. */
     total: z.number().int().min(0),
+    /** How many of the people listed members do not see, whatever their number. */
+    hidden: z.number().int().min(0),
     /** Everyone listed who has reached the target; null with no target. */
     reached: z.number().int().min(0).nullable(),
     page: z.number().int().min(1),
@@ -418,4 +427,5 @@ export const GYM_CHALLENGE_WORDS = {
   scores_not_own: "This challenge is counted by the app, so numbers can't be typed for it.",
   scores_not_started: "This challenge hasn't started yet. Numbers can be typed from its first day.",
   scores_person: "One of these people isn't in this challenge any more. Load the list again.",
+  scores_closed: `This challenge ended more than ${String(GYM_CHALLENGE_ENDED_DAYS)} days ago, so its numbers can't be changed now.`,
 } as const;

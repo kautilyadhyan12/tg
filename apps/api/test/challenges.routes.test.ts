@@ -366,7 +366,7 @@ d("a gym's challenges (real Postgres)", () => {
 
       // Staff see everyone still in the app here, the hidden with the reason; never the removed or deleted.
       const staff = await staffBoard(gym, joiners.id);
-      expect([staff.total, staff.ranked, staff.reached, staff.memberStatus]).toEqual([9, 4, 6, "shown"]);
+      expect([staff.total, staff.ranked, staff.hidden, staff.reached, staff.memberStatus]).toEqual([9, 4, 5, 6, "shown"]);
       expect(staff.rows.filter((r) => r.hidden !== null).map((r) => [r.hidden, r.place, r.value]).sort()).toEqual(
         [["hide_me", null, 7], ["no_name", null, 7], ["taken_off", null, 7], ["under_18", null, 7], ["under_18", null, 7]].sort(),
       );
@@ -611,7 +611,7 @@ d("a gym's challenges (real Postgres)", () => {
       const mine = await seen(gym, vera, c.id);
       expect([mine.state, mine.board.status, mine.me?.value, mine.me?.days, mine.joinedCount]).toEqual(["coming", "not_started", 0, [], 1]);
       const staff = await staffBoard(gym, c.id);
-      expect([staff.memberStatus, staff.total, places(staff.rows)]).toEqual(["not_started", 1, [["Vera Viewer", null, 0]]]);
+      expect([staff.memberStatus, staff.total, staff.hidden, places(staff.rows)]).toEqual(["not_started", 1, 0, [["Vera Viewer", null, 0]]]);
     },
     T,
   );
@@ -923,6 +923,9 @@ d("a gym's challenges (real Postgres)", () => {
         { userId: hema.userId, value: 99 },
       ]);
       expect([first.statusCode, JSON.parse(first.body)]).toEqual([200, { saved: 5 }]);
+      // Noted once, with how many people and nobody's name.
+      const noted = await sql<{ meta: Record<string, string> }[]>`SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.challenge_scores_set'`;
+      expect(noted.map((n) => n.meta)).toEqual([{ people: "5" }]);
 
       const res = await inject("GET", base(gym.id), vera.cookies);
       expect(res.body).not.toContain(hema.userId);
@@ -943,7 +946,7 @@ d("a gym's challenges (real Postgres)", () => {
       // Staff see her, with the reason, and no place.
       const staff = await staffBoard(gym, c.id);
       expect(places(staff.rows)).toEqual([["Hema Hidden", null, 99], ["Asha Rao", 1, 60], ["Bilal Khan", 2, 40], ["Chen Wu", 2, 40], ["Vera Viewer", 4, 10]]);
-      expect([staff.reached, staff.rows[0]?.hidden]).toEqual([2, "hide_me"]);
+      expect([staff.reached, staff.rows[0]?.hidden, staff.hidden, staff.total]).toEqual([2, "hide_me", 1, 5]);
 
       // Typed again, a number replaces the one before; sent twice it is the same; null and 0 take one off.
       const again = [{ userId: asha.userId, value: 45 }, { userId: chen.userId, value: null }, { userId: hema.userId, value: 0 }];
@@ -1025,6 +1028,102 @@ d("a gym's challenges (real Postgres)", () => {
     T,
   );
 
+  it(
+    "staff's board counts the hidden as hidden, and nobody else: people who joined with nothing yet are not called hidden",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Six Joined");
+      const people = [];
+      for (const name of ["Asha Rao", "Bilal Khan", "Chen Wu", "Dina Das", "Esha Entry", "Farid Fox"]) {
+        const p = await account(name);
+        await inGym(gym.id, p.userId);
+        people.push(p);
+      }
+      const c = await add(gym, { who: "joined" });
+      await putIn(gym.id, c.id, people.map((p) => p.userId));
+      for (const p of people.slice(0, 4)) await visits(gym, p.userId, ["2026-10-06"]);
+      const open = await staffBoard(gym, c.id);
+      expect([open.total, open.ranked, open.hidden]).toEqual([6, 4, 0]);
+      // One of the two with nothing yet chooses Hide me: one hidden, though she has no number.
+      await sql`UPDATE users SET leaderboard_opt_out = true WHERE id = ${people[5]?.userId ?? ""}`;
+      const after = await staffBoard(gym, c.id);
+      expect([after.total, after.ranked, after.hidden]).toEqual([6, 4, 1]);
+    },
+    T,
+  );
+
+  it(
+    "a board longer than a page is read a hundred at a time, each person once; numbers can be typed for a fortnight after it ends and no longer",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Big Board");
+      const c = await add(gym, { name: "Push-up Day", counts: "own", unit: "push-ups", endsOn: "2026-10-07" });
+      // 105 people, each with a number of their own, put in the database directly.
+      const made = await sql<{ id: string }[]>`
+        INSERT INTO users (email, display_name)
+        SELECT 'chal-t-big-' || n || '-' || ${uniq()} || '@example.com', 'Person ' || lpad(n::text, 3, '0') || ' Test' FROM generate_series(1, 105) AS n
+        RETURNING id`;
+      const ids = made.map((m) => m.id);
+      await sql`INSERT INTO gym_members (gym_id, user_id, joined_at) SELECT ${gym.id}, u, '2026-01-01T00:00:00Z' FROM unnest(${ids}::uuid[]) AS u`;
+      await sql`INSERT INTO gym_challenge_scores (gym_id, challenge_id, user_id, value) SELECT ${gym.id}, ${c.id}, u, n FROM unnest(${ids}::uuid[]) WITH ORDINALITY AS t(u, n)`;
+      const pageOf = async (page: number) => {
+        const res = await inject("GET", `${base(gym.id)}/${c.id}/board/staff?page=${String(page)}`, gym.owner.cookies);
+        expect(res.statusCode).toBe(200);
+        return JSON.parse(res.body) as StaffGymChallengeBoardResponse;
+      };
+      const one = await pageOf(1);
+      const two = await pageOf(2);
+      expect([one.page, one.pages, one.total, one.rows.length, two.page, two.rows.length]).toEqual([1, 2, 105, 100, 2, 5]);
+      expect(new Set([...one.rows, ...two.rows].map((r) => r.userId)).size).toBe(105);
+      expect([one.rows[0]?.value, one.rows[99]?.value, two.rows[0]?.value, two.rows[4]?.value]).toEqual([105, 6, 5, 1]);
+      // Past the last page: the last page.
+      expect((await pageOf(99)).page).toBe(2);
+
+      // It ended on the 7th: numbers can still be typed on the 21st, and not on the 22nd.
+      const someone = ids[0] ?? "";
+      clock = new Date("2026-10-21T06:30:00Z");
+      expect((await setScores(gym, c.id, [{ userId: someone, value: 500 }])).statusCode).toBe(200);
+      clock = new Date("2026-10-22T06:30:00Z");
+      const late = await setScores(gym, c.id, [{ userId: someone, value: 600 }]);
+      expect([late.statusCode, codeOf(late), (JSON.parse(late.body) as { message: string }).message]).toEqual([409, "challenge_numbers_closed", GYM_CHALLENGE_WORDS.scores_closed]);
+      expect((await scoreRows(c.id))[0]).toEqual([someone, 500]);
+      clock = WEDNESDAY;
+    },
+    T,
+  );
+
+  it(
+    "a member is sent the newest three that ended, and a gym west of Greenwich ends its day at its own midnight",
+    async () => {
+      const gym = await makeGym("West Coast", "America/Los_Angeles");
+      const vera = await member(gym, "Vera Viewer");
+      // 22:00 on Wednesday 7 October in Los Angeles; it is already the 8th in Greenwich.
+      clock = new Date("2026-10-08T05:00:00Z");
+      const today = await add(gym, { name: "Ends tonight", who: "joined", endsOn: "2026-10-07" });
+      expect((await seen(gym, vera, today.id)).state).toBe("running");
+      expect((await joinAs(gym, vera, today.id)).statusCode).toBe(200);
+      await visit(gym, { userId: vera.userId }, "2026-10-07");
+      expect((await seen(gym, vera, today.id)).me?.value).toBe(1);
+      // A minute past its own midnight.
+      clock = new Date("2026-10-08T07:01:00Z");
+      expect((await seen(gym, vera, today.id)).state).toBe("ended");
+      const left = await leaveAs(gym, vera, today.id);
+      expect([left.statusCode, codeOf(left)]).toEqual([409, "challenge_ended"]);
+      const yesterday = await inject("POST", base(gym.id), gym.owner.cookies, fields({ name: "Too late", startsOn: "2026-10-05", endsOn: "2026-10-07" }));
+      expect([yesterday.statusCode, codeOf(yesterday)]).toEqual([400, "challenge_ends_before_today"]);
+
+      // Three more that ended earlier: of the four, the newest three are sent.
+      for (const [name, ends] of [["Ended 6th", "2026-10-06"], ["Ended 5th", "2026-10-05"], ["Ended 4th", "2026-10-04"]] as const) {
+        await sql`
+          INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, starts_on, ends_on, who)
+          VALUES (${gym.id}, ${randomUUID()}, ${name}, 'gym_days', '2026-09-28', ${ends}::date, 'everyone')`;
+      }
+      expect((await list(gym, vera)).challenges.map((x) => [x.name, x.state])).toEqual([["Ends tonight", "ended"], ["Ended 6th", "ended"], ["Ended 5th", "ended"]]);
+      clock = WEDNESDAY;
+    },
+    T,
+  );
+
   // ===========================================================================
   // ONE ADDRESS, MANY PEOPLE
   // ===========================================================================
@@ -1046,7 +1145,7 @@ d("a gym's challenges (real Postgres)", () => {
       for (const p of others) expect((await inject("PUT", path, p.cookies, undefined, wifi)).statusCode).toBe(200);
       for (const p of others) expect((await inject("GET", base(gym.id), p.cookies, undefined, wifi)).statusCode).toBe(200);
       // A stranger is told 404 however often they ask, and uses up nobody's hour.
-      for (let i = 0; i < 5; i++) expect((await inject("PUT", path, stranger.cookies, undefined, wifi)).statusCode).toBe(404);
+      for (let i = 0; i < 125; i++) expect((await inject("PUT", path, stranger.cookies, undefined, wifi)).statusCode).toBe(404);
       expect(await joinRows(c.id)).toBe(3);
     },
     T,

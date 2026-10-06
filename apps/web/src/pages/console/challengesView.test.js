@@ -19,6 +19,7 @@ import {
   draftOf,
   emptyBoard,
   fieldsOf,
+  inSaves,
   isLocked,
   leadersLine,
   newChallengeDraft,
@@ -33,6 +34,7 @@ import {
   takesNumbers,
   targetHint,
   typedNumber,
+  unsavedNote,
   whoChoices,
   whoText,
   winChoices,
@@ -62,7 +64,7 @@ const challenge = (over = {}) => ({
   ...over,
 });
 const draft = (over = {}) => ({ ...newChallengeDraft(), name: 'October Challenge', startsOn: '2026-10-08', endsOn: '2026-10-31', ...over });
-const board = (over = {}) => ({ memberStatus: 'shown', ranked: 4, total: 4, reached: null, page: 1, pages: 1, rows: [], ...over });
+const board = (over = {}) => ({ memberStatus: 'shown', ranked: 4, total: 4, hidden: 0, reached: null, page: 1, pages: 1, rows: [], ...over });
 
 describe('who may open it', () => {
   it('the staff who run the leaderboard: an owner and a manager, not a trainer', () => {
@@ -246,7 +248,10 @@ describe("the gym's own count", () => {
 
   it('numbers are typed once it has started, and never for a cancelled one or the app\'s counts', () => {
     const c = (over) => challenge({ counts: 'own', unit: 'push-ups', ...over });
-    expect([takesNumbers(c({})), takesNumbers(c({ state: 'ended' })), takesNumbers(c({ state: 'coming' })), takesNumbers(c({ cancelled: true })), takesNumbers(challenge())]).toEqual([true, true, false, false, false]);
+    expect([takesNumbers(c({}), TODAY), takesNumbers(c({ startsOn: '2026-10-08' }), TODAY), takesNumbers(c({ cancelled: true }), TODAY), takesNumbers(challenge(), TODAY)]).toEqual([true, false, false, false]);
+    // After it ends: for the fourteen days members still see its result, and no longer.
+    const ended = c({ startsOn: '2026-09-01', endsOn: '2026-09-23' });
+    expect([takesNumbers(ended, TODAY), takesNumbers({ ...ended, endsOn: '2026-09-22' }, TODAY)]).toEqual([true, false]);
     expect([boardButton(c({}), false), boardButton(c({ state: 'ended' }), false), boardButton(c({}), true)]).toEqual(['See the board', 'See the board', 'Hide the board']);
   });
 
@@ -268,8 +273,17 @@ describe("the gym's own count", () => {
     expect(numbersToSave(rows, { a: '60', b: '45', c: '12', d: '' })).toEqual([{ userId: 'b', value: 45 }, { userId: 'c', value: 12 }, { userId: 'd', value: null }]);
     expect(numbersToSave(rows, { c: '', d: '0' })).toEqual([{ userId: 'd', value: null }]);
     expect(numbersToSave(rows, { a: '70', b: 'lots' })).toBeNull();
-    expect(NUMBER_NOTES.saved(1, WORDS)).toBe('Saved. 1 number changed, and your members see the board now.');
-    expect(NUMBER_NOTES.help(challenge({ counts: 'own', unit: 'push-ups' }), WORDS)).toBe("Type each person's push-ups and press Save numbers. An empty box is no number. Your members see the board as soon as you save.");
+    expect([NUMBER_NOTES.saved(1), NUMBER_NOTES.saved(120)]).toEqual(['Saved. 1 number changed.', 'Saved. 120 numbers changed.']);
+    expect(NUMBER_NOTES.help(challenge({ counts: 'own', unit: 'push-ups' }), WORDS)).toBe("Type each person's push-ups and press Save numbers. An empty box is no number. Your members see a saved number straight away.");
+  });
+
+  it('numbers typed on any page are all saved, 200 a save, and the page says some are waiting', () => {
+    const scores = Array.from({ length: 450 }, (_, i) => ({ userId: `u${i}`, value: i + 1 }));
+    expect(inSaves(scores).map((save) => save.length)).toEqual([200, 200, 50]);
+    expect(inSaves([])).toEqual([]);
+    expect(unsavedNote({})).toBeNull();
+    expect(unsavedNote({ a: '5' })).toBe('1 number is typed and not saved yet. They are kept while you change page; press Save numbers to save them all.');
+    expect(unsavedNote({ a: '5', b: '6' })).toMatch(/^2 numbers are typed and not saved yet\./);
   });
 });
 
@@ -339,8 +353,10 @@ describe('a challenge on the page', () => {
 
 describe('its board', () => {
   it('says what members see of it', () => {
-    expect(boardLines(board({ total: 9, ranked: 4 }), challenge(), WORDS)).toEqual(['Members see 4 people on its board; 5 more are listed here and hidden from them.']);
-    expect(boardLines(board({ total: 5, ranked: 4 }), challenge(), WORDS)).toEqual(['Members see 4 people on its board; 1 more is listed here and hidden from them.']);
+    expect(boardLines(board({ total: 9, ranked: 4, hidden: 5 }), challenge(), WORDS)).toEqual(['Members see 4 people on its board; 5 more are listed here and hidden from them.']);
+    expect(boardLines(board({ total: 5, ranked: 4, hidden: 1 }), challenge(), WORDS)).toEqual(['Members see 4 people on its board; 1 more is listed here and hidden from them.']);
+    // People who joined and have nothing yet are listed and are not hidden: nobody is said to be.
+    expect(boardLines(board({ total: 6, ranked: 4, hidden: 0 }), challenge({ who: 'joined' }), WORDS)).toEqual(['Members see 4 people on its board.']);
     expect(boardLines(board(), challenge(), WORDS)).toEqual(['Members see 4 people on its board.']);
     expect(boardLines(board({ memberStatus: 'too_few', ranked: 0, total: 2 }), challenge(), WORDS)).toEqual(['Members see no places yet: fewer than 3 people they can see have a gym day in it.']);
   });
@@ -381,7 +397,9 @@ describe('its board', () => {
     const own = challenge({ counts: 'own', unit: 'push-ups' });
     expect(rowNote({ value: 0, hidden: null }, own)).toBe('No number yet');
     expect(rowNote({ value: 0, hidden: 'hide_me' }, own)).toBe('Chose Hide me');
-    expect(boardLines(board({ total: 28, ranked: 4 }), own, WORDS)).toEqual(['Members see 4 people on its board.']);
+    expect(boardLines(board({ total: 28, ranked: 4, hidden: 0 }), own, WORDS)).toEqual(['Members see 4 people on its board.']);
+    // And a hidden person in it is said to be, as for every other kind.
+    expect(boardLines(board({ total: 28, ranked: 4, hidden: 2 }), own, WORDS)).toEqual(['Members see 4 people on its board; 2 more are listed here and hidden from them.']);
   });
 
   it('says which of its people a page shows', () => {

@@ -282,14 +282,17 @@ export async function inChallenge(tx: TransactionSql, gymId: string, challengeId
   return new Set(rows.map((row) => row.user_id));
 }
 
-/** Keeps a person's number; typed again it replaces the one before. */
-export async function putScore(tx: TransactionSql, gymId: string, challengeId: string, userId: string, value: number, at: Date): Promise<void> {
+/** Keeps people's numbers in one statement; typed again a number replaces the one before. */
+export async function putScores(tx: TransactionSql, gymId: string, challengeId: string, scores: readonly { userId: string; value: number }[], at: Date): Promise<void> {
+  if (scores.length === 0) return;
   await tx`
     INSERT INTO gym_challenge_scores (gym_id, challenge_id, user_id, value, updated_at)
-    VALUES (${gymId}, ${challengeId}, ${userId}, ${value}, ${at})
+    SELECT ${gymId}, ${challengeId}, s.user_id, s.value, ${at}
+    FROM unnest(${scores.map((s) => s.userId)}::uuid[], ${scores.map((s) => s.value)}::int[]) AS s(user_id, value)
     ON CONFLICT (challenge_id, user_id) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`;
 }
 
-export async function removeScore(tx: TransactionSql, gymId: string, challengeId: string, userId: string): Promise<void> {
-  await tx`DELETE FROM gym_challenge_scores WHERE gym_id = ${gymId} AND challenge_id = ${challengeId} AND user_id = ${userId}`;
+export async function removeScores(tx: TransactionSql, gymId: string, challengeId: string, userIds: readonly string[]): Promise<void> {
+  if (userIds.length === 0) return;
+  await tx`DELETE FROM gym_challenge_scores WHERE gym_id = ${gymId} AND challenge_id = ${challengeId} AND user_id = ANY(${[...userIds]}::uuid[])`;
 }

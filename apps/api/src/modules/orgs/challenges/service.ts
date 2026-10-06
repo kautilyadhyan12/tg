@@ -20,6 +20,7 @@ import {
   challengeCan,
   challengeSaveProblem,
   challengeState,
+  challengeTakesNumbers,
   gymChallengeBoardResponseSchema,
   gymChallengesResponseSchema,
   memberGymChallengeSchema,
@@ -485,6 +486,7 @@ export async function getStaffBoard(
     memberStatus: !started ? "not_started" : staff.status,
     ranked: shown ? staff.ranked : 0,
     total: rows.length,
+    hidden: rows.filter((r) => r.hidden !== null).length,
     reached: row.target === null ? null : numbered.filter((r) => r.reached).length,
     page: at,
     pages,
@@ -593,14 +595,20 @@ export async function setScores(
     if (row.counts !== "own") throw new OrgsError(409, "challenge_not_own", GYM_CHALLENGE_WORDS.scores_not_own);
     if (row.cancelled) throw new OrgsError(409, "challenge_cancelled", GYM_CHALLENGE_WORDS.cancelled);
     if (challengeState(row, today) === "coming") throw new OrgsError(409, "challenge_not_started", GYM_CHALLENGE_WORDS.scores_not_started);
+    if (!challengeTakesNumbers(row, today)) throw new OrgsError(409, "challenge_numbers_closed", GYM_CHALLENGE_WORDS.scores_closed);
     const inIt = await repo.inChallenge(tx, gymId, challengeId, row.who === "joined", [...wanted.keys()]);
     for (const userId of wanted.keys()) {
       if (!inIt.has(userId)) throw new OrgsError(409, "challenge_person_not_in", GYM_CHALLENGE_WORDS.scores_person);
     }
+    // Two statements whatever the number of people: the gym's row is held meanwhile.
+    const kept: { userId: string; value: number }[] = [];
+    const gone: string[] = [];
     for (const [userId, value] of wanted) {
-      if (value === null || value === 0) await repo.removeScore(tx, gymId, challengeId, userId);
-      else await repo.putScore(tx, gymId, challengeId, userId, value, at);
+      if (value === null || value === 0) gone.push(userId);
+      else kept.push({ userId, value });
     }
+    await repo.putScores(tx, gymId, challengeId, kept, at);
+    await repo.removeScores(tx, gymId, challengeId, gone);
     await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.challenge_scores_set", targetType: "challenge", targetId: challengeId, meta: { people: String(wanted.size) } });
   });
   return { saved: wanted.size };

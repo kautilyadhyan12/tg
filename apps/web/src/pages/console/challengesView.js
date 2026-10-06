@@ -7,8 +7,10 @@ import {
   GYM_CHALLENGE_PRIZE_MAX,
   GYM_CHALLENGE_SCORE_MAX,
   GYM_CHALLENGE_UNIT_MAX,
+  GYM_CHALLENGE_SCORES_A_SAVE,
   GYM_CHALLENGE_WORDS,
   challengeSaveProblem,
+  challengeTakesNumbers,
   eventNameIsSeen,
   postLength,
 } from '@app/shared';
@@ -269,9 +271,24 @@ export function leadersLine(challenge, words) {
   return `${words.peopleCap} see no places until 3 people they can see have ${isOwn(challenge) ? 'a number' : `a ${UNIT[challenge.counts]}`}.`;
 }
 
-/** Whether staff type this challenge's numbers now: the gym's own count, started, not cancelled. */
-export function takesNumbers(challenge) {
-  return isOwn(challenge) && !challenge.cancelled && challenge.state !== 'coming';
+/** Whether staff type this challenge's numbers on `today`: the gym's own count, from its
+ *  first day until members stop seeing its result; never a cancelled one (the server's rule). */
+export function takesNumbers(challenge, today) {
+  return challengeTakesNumbers(challenge, today);
+}
+
+/** The numbers to send, a save's worth at a time. */
+export function inSaves(scores) {
+  const saves = [];
+  for (let i = 0; i < scores.length; i += GYM_CHALLENGE_SCORES_A_SAVE) saves.push(scores.slice(i, i + GYM_CHALLENGE_SCORES_A_SAVE));
+  return saves;
+}
+
+/** What Previous and Next say beside them while boxes are typed and not saved; null with none. */
+export function unsavedNote(typed) {
+  const n = Object.keys(typed).length;
+  if (n === 0) return null;
+  return `${n === 1 ? '1 number is' : `${count(n)} numbers are`} typed and not saved yet. They are kept while you change page; press Save numbers to save them all.`;
 }
 
 /** What is typed in a person's number box, as the number to save: "" is none; null is not a number. */
@@ -282,7 +299,9 @@ export function typedNumber(text) {
   return { ok: true, value: Number(t) };
 }
 
-/** The numbers to send: only the people whose box no longer says what is kept. Null when a box holds something that is no number. */
+/** The numbers to send: only the people whose box no longer says what is kept, on whichever
+ *  page they were typed. `rows`: every person loaded so far with the number that is kept.
+ *  Null when a box holds something that is no number. */
 export function numbersToSave(rows, typed) {
   const scores = [];
   for (const row of rows) {
@@ -298,9 +317,9 @@ export function numbersToSave(rows, typed) {
 
 export const NUMBER_NOTES = {
   bad: `A number is a whole number up to ${count(CHALLENGE_LIMITS.score)}. Leave a box empty for no number.`,
-  saved: (n, words) => `Saved. ${n === 1 ? '1 number' : `${count(n)} numbers`} changed, and your ${words.people} see the board now.`,
+  saved: (n) => `Saved. ${n === 1 ? '1 number' : `${count(n)} numbers`} changed.`,
   none: 'Nothing has changed yet.',
-  help: (challenge, words) => `Type each person's ${wordsOf(challenge)} and press Save numbers. An empty box is no number. Your ${words.people} see the board as soon as you save.`,
+  help: (challenge, words) => `Type each person's ${wordsOf(challenge)} and press Save numbers. An empty box is no number. Your ${words.people} see a saved number straight away.`,
 };
 
 /** Who is in it, with the number where there is one. */
@@ -334,8 +353,7 @@ export function boardLines(board, challenge, words) {
     if (challenge.who === 'joined' && board.total > 0) lines.push(`${peopleCount(board.total)} ${board.total === 1 ? 'has' : 'have'} joined so far.`);
     return lines;
   }
-  // For the gym's own count everybody in it is listed, most of them only waiting for a number.
-  const hidden = isOwn(challenge) ? 0 : board.total - board.ranked;
+  const hidden = board.hidden;
   if (board.memberStatus === 'too_few') {
     lines.push(`${words.peopleCap} see no places yet: fewer than 3 people they can see have a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]} in it.`);
   } else {

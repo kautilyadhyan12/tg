@@ -25,6 +25,7 @@ import {
   draftOf,
   emptyBoard,
   fieldsOf,
+  inSaves,
   isLocked,
   leadersLine,
   newChallengeDraft,
@@ -37,6 +38,7 @@ import {
   startHint,
   takesNumbers,
   targetHint,
+  unsavedNote,
   whoChoices,
   winChoices,
   withCounts,
@@ -266,14 +268,19 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
 function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
   const [page, setPage] = useState(1);
   const [state, setState] = useState({ loading: true, error: null, board: null });
-  /** What is typed in each person's box and not yet saved, by person. */
+  /** What is typed in each person's box and not yet saved, by person, on every page. */
   const [typed, setTyped] = useState({});
+  /** The number kept for each person loaded so far, on every page opened. */
+  const [kept, setKept] = useState({});
   const [saving, setSaving] = useState(false);
   const [said, setSaid] = useState(null);
   const load = useCallback(
     () =>
       staffChallengesService.board(gymId, challenge.id, page).then(
-        (board) => setState({ loading: false, error: null, board }),
+        (board) => {
+          setKept((k) => ({ ...k, ...Object.fromEntries(board.rows.map((row) => [row.userId, row.value])) }));
+          setState({ loading: false, error: null, board });
+        },
         (err) => setState((s) => ({ loading: false, error: errorText(err, "We couldn't load the board."), board: s.board })),
       ),
     [gymId, challenge.id, page],
@@ -289,7 +296,8 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
   const empty = emptyBoard(board, challenge);
   const pages = pageLine(board);
   const saveNumbers = async () => {
-    const scores = numbersToSave(board.rows, typed);
+    // Every box typed in, on whichever page: not only the page that is open.
+    const scores = numbersToSave(Object.entries(kept).map(([userId, value]) => ({ userId, value })), typed);
     if (scores === null) {
       setSaid({ bad: true, text: NUMBER_NOTES.bad });
       return;
@@ -301,10 +309,10 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
     setSaving(true);
     setSaid(null);
     try {
-      await staffChallengesService.setScores(gymId, challenge.id, scores);
+      for (const save of inSaves(scores)) await staffChallengesService.setScores(gymId, challenge.id, save);
       setTyped({});
       await load();
-      setSaid({ bad: false, text: NUMBER_NOTES.saved(scores.length, words) });
+      setSaid({ bad: false, text: NUMBER_NOTES.saved(scores.length) });
     } catch (err) {
       setSaid({ bad: true, text: errorText(err, "We couldn't save the numbers. Please try again.") });
     } finally {
@@ -387,6 +395,11 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
               Next
             </button>
             <span className="c-s13 c-t2">{pages}</span>
+            {canType && unsavedNote(typed) !== null ? (
+              <span className="c-s13 c-t1" role="note">
+                {unsavedNote(typed)}
+              </span>
+            ) : null}
           </>
         ) : null}
         <span className="c-s13 c-t3">{updatedText(board.asOf, timezone)}</span>
@@ -404,7 +417,7 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
   /** The board that is open: 'see' to read it, 'type' with a box a person; null for none. */
   const [board, setBoard] = useState(null);
   const showBoard = board !== null;
-  const canType = takesNumbers(challenge) && !readOnly;
+  const canType = takesNumbers(challenge, list.today) && !readOnly;
   const tag = challengeTag(challenge, list.today);
   const past = challenge.state === 'ended';
   const box = asking ? cancelBox(challenge, words) : null;

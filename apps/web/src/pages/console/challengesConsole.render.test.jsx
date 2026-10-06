@@ -51,7 +51,7 @@ const challenge = (id, name, over = {}) => ({
 });
 const listOf = (current = [], over = {}) => ({ gymId: 'g1', gymName: 'Iron House', timezone: 'Asia/Kolkata', today: '2026-10-07', checkingIn: true, inApp: 143, current, past: [], pastTotal: 0, ...over });
 const row = (id, name, place, value, over = {}) => ({ userId: id, name, initials: name === null ? '?' : name.slice(0, 1), place, value, hidden: null, reached: false, ...over });
-const boardOf = (rows, over = {}) => ({ challengeId: 'a', memberStatus: 'shown', ranked: rows.filter((r) => r.place !== null).length, total: rows.length, reached: null, page: 1, pages: 1, rows, asOf: '2026-10-07T06:30:00.000Z', ...over });
+const boardOf = (rows, over = {}) => ({ challengeId: 'a', memberStatus: 'shown', ranked: rows.filter((r) => r.place !== null).length, total: rows.length, hidden: rows.filter((r) => r.hidden !== null).length, reached: null, page: 1, pages: 1, rows, asOf: '2026-10-07T06:30:00.000Z', ...over });
 
 const open = (org = ORG) => {
   orgApi.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
@@ -305,7 +305,7 @@ describe("the console's Challenges page", () => {
     fireEvent.click(within(cardOf('October Week')).getByRole('button', { name: 'See the board: October Week' }));
     const board = within(await screen.findByTestId('challenge-board'));
     await waitFor(() => expect(svc.board).toHaveBeenCalledWith('g1', 'a', 1));
-    expect(board.getByText('Members see 3 people on its board; 3 more are listed here and hidden from them.')).toBeTruthy();
+    expect(board.getByText('Members see 3 people on its board; 2 more are listed here and hidden from them.')).toBeTruthy();
     expect(board.getByText('2 people have reached 3.')).toBeTruthy();
     expect(board.getAllByTestId('challenge-row').map((li) => li.textContent.replace(/\s+/g, ' ').trim())).toEqual([
       '—Hema HiddenChose Hide meReached7',
@@ -361,7 +361,7 @@ describe("the console's Challenges page", () => {
     expect(reading.queryByRole('textbox')).toBeNull();
     fireEvent.click(within(cardOf('Push-up Day')).getByRole('button', { name: 'Enter numbers: Push-up Day' }));
     const board = within(await screen.findByTestId('challenge-board'));
-    expect(board.getByText("Type each person's push-ups and press Save numbers. An empty box is no number. Your members see the board as soon as you save.")).toBeTruthy();
+    expect(board.getByText("Type each person's push-ups and press Save numbers. An empty box is no number. Your members see a saved number straight away.")).toBeTruthy();
     const box = (name) => board.getByLabelText(`${name}: number`);
     expect([box('Asha Rao').value, box('Bilal Khan').value, box('Chen Wu').value, box('Hema Hidden').value]).toEqual(['60', '40', '', '']);
 
@@ -380,8 +380,31 @@ describe("the console's Challenges page", () => {
     fireEvent.click(board.getByRole('button', { name: 'Save numbers' }));
     await waitFor(() => expect(svc.setScores).toHaveBeenCalledTimes(1));
     expect(svc.setScores.mock.calls[0]).toEqual(['g1', 'a', [{ userId: '2', value: null }, { userId: '3', value: 55 }]]);
-    expect((await board.findByRole('status')).textContent).toBe('Saved. 2 numbers changed, and your members see the board now.');
+    expect((await board.findByRole('status')).textContent).toBe('Saved. 2 numbers changed.');
     expect([box('Chen Wu').value, box('Bilal Khan').value]).toEqual(['55', '']);
+  });
+
+  it('numbers typed on page 1 are still saved after staff go to page 2 and save there', async () => {
+    svc.list.mockResolvedValue(listOf([challenge('a', 'Push-up Day', { counts: 'own', unit: 'push-ups' })]));
+    const hundred = (from) => Array.from({ length: 100 }, (_, i) => row(`u${from + i}`, `Person ${from + i}`, null, 0));
+    svc.board.mockImplementation(async (_gym, _id, page) => boardOf(hundred((page - 1) * 100 + 1), { page, pages: 2, total: 200, ranked: 0, memberStatus: 'too_few' }));
+    svc.setScores.mockResolvedValue(2);
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(within(cardOf('Push-up Day')).getByRole('button', { name: 'Enter numbers: Push-up Day' }));
+    const board = within(await screen.findByTestId('challenge-board'));
+    fireEvent.change(await board.findByLabelText('Person 1: number'), { target: { value: '11' } });
+    expect(board.getByRole('note').textContent).toMatch(/^1 number is typed and not saved yet\./);
+    fireEvent.click(board.getByRole('button', { name: 'Next' }));
+    fireEvent.change(await board.findByLabelText('Person 101: number'), { target: { value: '22' } });
+    fireEvent.click(board.getByRole('button', { name: 'Save numbers' }));
+    await waitFor(() => expect(svc.setScores).toHaveBeenCalledTimes(1));
+    expect(svc.setScores.mock.calls[0][2]).toEqual([{ userId: 'u1', value: 11 }, { userId: 'u101', value: 22 }]);
+    expect((await board.findByRole('status')).textContent).toBe('Saved. 2 numbers changed.');
+    expect(board.queryByRole('note')).toBeNull();
+    // Back on page 1 the box it typed in is still what it typed until the page is read again.
+    fireEvent.click(board.getByRole('button', { name: 'Previous' }));
+    await board.findByLabelText('Person 1: number');
   });
 
   it("the app's own counts and a gym on no plan have no boxes to type in", async () => {

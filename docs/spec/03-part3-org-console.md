@@ -3323,7 +3323,8 @@ can count: `counts` `own`, with `unit` the gym's word for it ("push-ups", 30 cha
 Nothing is counted by the app: staff holding `leaderboard.manage` type each person's number
 on the challenge's board (`gym_challenge_scores`, one whole number a person, 1 to
 1,000,000; an empty box takes it off; `PUT …/challenges/{id}/scores`, up to 200 people a
-save, noted once in `audit_log`), from its first day, for a live app member in it. It can
+save, noted once in `audit_log`), from its first day until 14 days after its last (the days
+members still see its result), for a live app member in it. It can
 be won by the most, by reaching a number (not bound by its days), or by **the lowest**
 (`lowest_wins`, a fastest time; only for this count and with no target). Places, the
 hidden rule and the three-people rule are the same as every other challenge's; it has no

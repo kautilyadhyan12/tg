@@ -19,7 +19,7 @@ import { cpus } from "node:os";
 import { performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { GYM_CHALLENGES_CURRENT_MAX, GYM_CHALLENGES_ENDED_SHOWN } from "@app/shared";
-import { addChallenge, getBoard, getChallenges, getStaffBoard, getStaffChallenges, setCancelled, setJoined } from "../src/modules/orgs/challenges/service.js";
+import { addChallenge, getBoard, getChallenges, getStaffBoard, getStaffChallenges, setCancelled, setJoined, setScores } from "../src/modules/orgs/challenges/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -223,6 +223,16 @@ try {
     cancels.push(await time(() => setCancelled(deps, owner, gymId, id, true, allowed)));
     await sql`DELETE FROM gym_challenges WHERE gym_id = ${gymId} AND id = ${id}`;
   }
+  // The gym's own count: staff save a page's worth of typed numbers, under the gym's row.
+  const [own] = await sql<{ id: string }[]>`
+    INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, unit, starts_on, ends_on, who)
+    VALUES (${gymId}, gen_random_uuid(), 'Own count', 'own', 'push-ups', ${today}::date, ${today}::date, 'everyone') RETURNING id`;
+  const typed = [];
+  for (let i = 0; i < RUNS; i++) {
+    const scores = crowd.map((userId, n) => ({ userId, value: 1 + ((n + i) % 90) }));
+    typed.push(await time(() => setScores(deps, owner, gymId, own?.id ?? "", { scores }, allowed)));
+  }
+  report(`staff save ${String(CROWD)} typed numbers`, typed);
   report("staff add a challenge", adds);
   report("staff cancel one", cancels);
 } finally {
