@@ -1164,6 +1164,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           name={p.fullName || 'this person'}
           readOnly={readOnly}
           clockFormat={gym?.clockFormat}
+          onChanged={onChanged}
         />
         {membership.length > 0 ? (
           // What the gym's own list says about them, in its words; the box above is what

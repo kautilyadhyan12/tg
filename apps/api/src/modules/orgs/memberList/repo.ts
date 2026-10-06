@@ -1556,7 +1556,11 @@ export async function listStatusCounts(
   sql: SqlOrTx,
   gymId: string,
   inAppEntryIds: readonly string[],
+  /** The people whose words the app answers (23a-i): counted in the totals and left out
+   *  of the three kinds of chip here, which the caller counts by the app's own words. */
+  heldIds: readonly string[] = [],
 ): Promise<StatusCounts> {
+  const held = [...heldIds];
   const rows = await sql<
     {
       t_entries: number;
@@ -1579,7 +1583,8 @@ export async function listStatusCounts(
       SELECT e.status, e.membership_type, e.payment_status, e.listed_seq,
              (e.id = ANY(${inAppEntryIds}::uuid[])) AS in_app,
              (e.id <> ALL(${inAppEntryIds}::uuid[]) AND e.email IS NOT NULL) AS can_be_invited,
-             (e.email IS NULL) AS no_email
+             (e.email IS NULL) AS no_email,
+             (e.id = ANY(${held}::uuid[])) AS held
       FROM gym_member_list_entries e
       -- THE LIST AS IT STANDS. A former record is somebody the gym has taken off, so
       -- it is in no chip and no count here: a chip is what staff click to act on
@@ -1621,6 +1626,7 @@ export async function listStatusCounts(
              count(*) FILTER (WHERE mine.no_email)::int AS no_email,
              min(mine.listed_seq) AS first_seq
       FROM mine
+      WHERE NOT mine.held
       GROUP BY lower(coalesce(mine.status, ''))
       UNION ALL
       SELECT 'membership_type' AS kind,
@@ -1631,6 +1637,7 @@ export async function listStatusCounts(
              count(*) FILTER (WHERE mine.no_email)::int AS no_email,
              min(mine.listed_seq) AS first_seq
       FROM mine
+      WHERE NOT mine.held
       GROUP BY lower(coalesce(mine.membership_type, ''))
       UNION ALL
       SELECT 'payment_status' AS kind,
@@ -1641,6 +1648,7 @@ export async function listStatusCounts(
              count(*) FILTER (WHERE mine.no_email)::int AS no_email,
              min(mine.listed_seq) AS first_seq
       FROM mine
+      WHERE NOT mine.held
       GROUP BY lower(coalesce(mine.payment_status, ''))
     ),
     -- EACH KIND CAPPED ON ITS OWN, so a gym with two hundred status words does not
@@ -1731,6 +1739,10 @@ export interface EntriesPageInput {
   invitation: { ids: readonly string[]; include: boolean } | null;
   /** Only these records (the App words asked for, §18.4), or null for no filter. */
   appIds: readonly string[] | null;
+  /** The people whose three kinds of word the app answers (23a-i: they hold a membership
+   *  here), and which of them pass the word filters asked, by the app's own words. Null
+   *  where no word filter is asked. */
+  held: { ids: readonly string[]; passing: readonly string[] } | null;
   /** Already escaped for LIKE by the caller, or null. */
   like: string | null;
   cursor: { name: string; id: string } | null;
@@ -1749,6 +1761,8 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
   const invitedIds = input.invitation === null ? null : [...input.invitation.ids];
   const invitedInclude = input.invitation?.include ?? true;
   const appIds = input.appIds === null ? null : [...input.appIds];
+  const heldIds = [...(input.held?.ids ?? [])];
+  const heldPassing = [...(input.held?.passing ?? [])];
   return sql`
         e.gym_id = ${input.gymId}
         -- CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5). The
@@ -1758,12 +1772,17 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
         AND (${input.records}::text = 'all'
              OR (${input.records}::text = 'current' AND e.former_at IS NULL)
              OR (${input.records}::text = 'former' AND e.former_at IS NOT NULL))
-        AND (${statuses}::text[] IS NULL
-             OR lower(coalesce(e.status, '')) = ANY(${statuses}::text[]))
-        AND (${membershipTypes}::text[] IS NULL
-             OR lower(coalesce(e.membership_type, '')) = ANY(${membershipTypes}::text[]))
-        AND (${paymentStatuses}::text[] IS NULL
-             OR lower(coalesce(e.payment_status, '')) = ANY(${paymentStatuses}::text[]))
+        -- THE THREE WORD FILTERS. Somebody whose words the app answers (they hold a
+        -- membership here) passes by the app's words, worked out by the caller with the
+        -- one rule, and never by the list's own; everybody else by the list's, as before.
+        AND (e.id = ANY(${heldPassing}::uuid[])
+             OR (e.id <> ALL(${heldIds}::uuid[])
+                 AND (${statuses}::text[] IS NULL
+                      OR lower(coalesce(e.status, '')) = ANY(${statuses}::text[]))
+                 AND (${membershipTypes}::text[] IS NULL
+                      OR lower(coalesce(e.membership_type, '')) = ANY(${membershipTypes}::text[]))
+                 AND (${paymentStatuses}::text[] IS NULL
+                      OR lower(coalesce(e.payment_status, '')) = ANY(${paymentStatuses}::text[]))))
         AND (${input.like}::text IS NULL
              OR e.full_name ILIKE ${input.like}::text
              OR e.email::text ILIKE ${input.like}::text
@@ -1916,11 +1935,15 @@ export async function exportShapeOf(
   sql: SqlOrTx,
   gymId: string,
   ids: readonly string[],
+  /** The people whose dates the app answers (23a-i): the caller counts theirs, so the
+   *  list's own are left out of `ends` and `renews` here. */
+  heldIds: readonly string[] = [],
 ): Promise<{ people: number; ends: number; renews: number; former: number }> {
+  const held = [...heldIds];
   const rows = await sql<{ people: number; ends: number; renews: number; former: number }[]>`
     SELECT count(*)::int AS people,
-           (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind IS DISTINCT FROM 'renews'))::int AS ends,
-           (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind = 'renews'))::int AS renews,
+           (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind IS DISTINCT FROM 'renews' AND id <> ALL(${held}::uuid[])))::int AS ends,
+           (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind = 'renews' AND id <> ALL(${held}::uuid[])))::int AS renews,
            (count(*) FILTER (WHERE former_at IS NOT NULL))::int AS former
     FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[])`;

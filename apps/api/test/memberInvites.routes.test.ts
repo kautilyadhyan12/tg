@@ -193,7 +193,12 @@ d("press Invite (real Postgres)", () => {
   };
 
   const press = (gymId: string, who: User, preview: MemberInvitePreview, filter: Record<string, unknown> = {}, ip?: string) =>
-    post(`${listUrl(gymId)}/invites`, { ...filter, version: preview.version, expectedCount: preview.reach, permissionConfirmed: true }, who.cookies, ip);
+    post(
+      `${listUrl(gymId)}/invites`,
+      { ...filter, version: preview.version, expectedCount: preview.reach, expectedDigest: preview.digest, permissionConfirmed: true },
+      who.cookies,
+      ip,
+    );
 
   const errorOf = (res: { body: string }) => JSON.parse(res.body) as { error: string; message: string };
 
@@ -779,7 +784,7 @@ d("press Invite (real Postgres)", () => {
         deps,
         owner.userId,
         gym,
-        { version: seen.version, expectedCount: seen.reach, permissionConfirmed: true },
+        { version: seen.version, expectedCount: seen.reach, expectedDigest: seen.digest, permissionConfirmed: true },
         () => Promise.resolve(true),
       );
       const takenOff = taken.email;
@@ -862,7 +867,13 @@ d("press Invite (real Postgres)", () => {
         },
       };
       await expect(
-        pressInvite(deps, owner.userId, gym, { version: seen.version, expectedCount: seen.reach, permissionConfirmed: true }, () => Promise.resolve(true)),
+        pressInvite(
+          deps,
+          owner.userId,
+          gym,
+          { version: seen.version, expectedCount: seen.reach, expectedDigest: seen.digest, permissionConfirmed: true },
+          () => Promise.resolve(true),
+        ),
       ).rejects.toBeInstanceOf(InviteChanged);
       const invited = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_invites WHERE gym_id = ${gym}`;
       expect(invited[0]?.n).toBe(0);

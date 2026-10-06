@@ -493,3 +493,52 @@ describe('the Invite button', () => {
     await waitFor(() => expect(screen.queryByTestId('invite-button')).toBeNull());
   });
 });
+// 23a-i: somebody given a membership in the app read as having none on the list.
+describe('a row says what the person holds in the app (23a-i)', () => {
+  const rowOf = async (name) => (await screen.findAllByTestId('list-row')).find((r) => r.textContent.includes(name));
+
+  it("shows the membership, its day and what is owed, and never the record's own word beside it", async () => {
+    // Maya's record still says "Paid" from the gym's old file; she owes on a pack she holds.
+    const maya = entry('Maya Lopez', {
+      status: 'Expired',
+      membershipType: 'Gold',
+      paymentStatus: 'Paid',
+      held: { status: 'active', memberships: ['Gold Monthly', 'PT 10'], day: { what: 'renews', on: '2099-11-06' }, payment: { state: 'due', since: '2026-10-01' } },
+    });
+    const leo = entry('Leo Grant', { held: { status: 'active', memberships: ['Gold Monthly'], day: { what: 'renews', on: '2099-11-06' }, payment: { state: 'paid' } } });
+    const dev = entry('Dev Shah', { status: null, held: { status: 'cancelled', memberships: ['Gold Monthly'], day: { what: 'cancelled', on: '2026-09-03' }, payment: null } });
+    const asha = entry('Asha Patel', { status: 'Active', membershipType: 'Bronze', paymentStatus: 'Paid' });
+    // Uma's membership starts later and is not paid: nothing is owed before its day.
+    const uma = entry('Uma Costa', { held: { status: 'upcoming', memberships: ['Gold Monthly'], day: { what: 'starts', on: '2099-10-17' }, payment: { state: 'later', on: '2099-10-17' } } });
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([maya, leo, dev, asha, uma]));
+    draw();
+
+    const mayaRow = await rowOf('Maya Lopez');
+    expect(mayaRow.textContent).toContain('Gold Monthly +1');
+    expect(mayaRow.textContent).toContain('Renews 6 Nov 2099');
+    expect(mayaRow.textContent).not.toContain('Expired');
+    const owed = within(mayaRow).getByTestId('row-pay');
+    expect(owed.textContent).toBe('Payment due');
+    expect(owed.style.color).toBe('var(--warn)');
+
+    const paid = within(await rowOf('Leo Grant')).getByTestId('row-pay');
+    expect(paid.textContent).toBe('Paid');
+    expect(paid.style.color).toBe('');
+
+    const umaRow = await rowOf('Uma Costa');
+    expect(umaRow.textContent).toContain('Not started');
+    expect(umaRow.textContent).toContain('Starts 17 Oct 2099');
+    const notYet = within(umaRow).getByTestId('row-pay');
+    expect(notYet.textContent).toBe('Not due yet');
+    expect(notYet.style.color).toBe('');
+
+    const devRow = await rowOf('Dev Shah');
+    expect(devRow.textContent).toContain('Cancelled');
+    expect(within(devRow).getByTestId('row-pay').textContent).toBe('—');
+
+    // Nothing held here: the gym's own words, as before.
+    const ashaRow = await rowOf('Asha Patel');
+    expect(ashaRow.textContent).toContain('Bronze');
+    expect(within(ashaRow).getByTestId('row-pay').textContent).toBe('Paid');
+  });
+});

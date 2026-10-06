@@ -6,6 +6,8 @@
 // list's own App word, so a reason reads as it does on their row and their page.
 import {
   MEMBER_INVITE_PEOPLE_PAGE,
+  heldListWords,
+  heldNamesLine,
   turns18On,
   type MemberInvitePeople,
   type MemberInvitePeopleQuery,
@@ -13,6 +15,7 @@ import {
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { appViewsOf } from "../memberList/appViews.js";
+import { heldOnListOf } from "../memberships/onList.js";
 import type { MemberListDeps } from "../memberList/service.js";
 import { OrgsError, requirePrivilege } from "../service.js";
 import { entrySeq } from "./repo.js";
@@ -30,7 +33,8 @@ export async function invitePeople(
   const settings = deps.invites ?? null;
   if (settings === null) return { total: 0, people: [], cursor: null };
   const now = deps.now();
-  const group = await workOutGroup(deps.sql, settings, gymId, await filtersFor(deps, gymId, query), dayInTz(now, org.timezone));
+  const today = dayInTz(now, org.timezone);
+  const group = await workOutGroup(deps.sql, settings, gymId, await filtersFor(deps, gymId, query), today);
   const chosen = group.people.filter(({ why }) => (query.group === "reach") === (why === "reach"));
   // A page continues after the last person the one before showed, in the list's order
   // (a keyset): the group can gain or lose people in between — another press, the
@@ -41,6 +45,13 @@ export async function invitePeople(
   }
   const rest = after === null ? chosen : chosen.filter(({ candidate }) => candidate.listedSeq > after);
   const shown = rest.slice(0, MEMBER_INVITE_PEOPLE_PAGE);
+  // Each person's Status and Membership as their row on the list says them (23a-i).
+  const held = await heldOnListOf(
+    deps.sql,
+    gymId,
+    today,
+    shown.map(({ candidate }) => candidate.entryId),
+  );
   const apps = await appViewsOf(
     deps.sql,
     settings,
@@ -58,13 +69,15 @@ export async function invitePeople(
   const people = shown.flatMap(({ candidate, why, sameAddressAs }, at) => {
     const app = apps[at];
     if (app === undefined) return [];
+    const mine = held.get(candidate.entryId);
+    const words = mine === undefined ? null : heldListWords(mine.shown);
     return [
       {
         entryId: candidate.entryId,
         fullName: candidate.fullName,
         email: candidate.email,
-        status: candidate.status,
-        membershipType: candidate.membershipType,
+        status: words === null ? candidate.status : words.status,
+        membershipType: words === null ? candidate.membershipType : heldNamesLine(words.memberships),
         reason: why,
         turns18On: why === "underAge" && candidate.dateOfBirth !== null ? turns18On(candidate.dateOfBirth) : null,
         sameAddressAs,

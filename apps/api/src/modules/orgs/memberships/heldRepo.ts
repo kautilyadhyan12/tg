@@ -553,6 +553,252 @@ export async function heldForPtOf(
   });
 }
 
+// ── What the Members list reads (23a-i) ─────────────────────────────────────
+//
+// The list asks about every person of a gym at once (its Filter and its counts), so these
+// two reads return plain rows and check them by hand: parsing each of a few thousand rows
+// through a schema kept the server's one thread busy for 150 ms at 2,100 people
+// (`tools/measure-members-held-cost.ts`). Past members are left out: their memberships
+// are kept and not in use.
+
+/** One membership as the list's rule needs it. */
+export interface ListHeld {
+  id: string;
+  typeName: string;
+  fromList: boolean;
+  membership: HeldMembership;
+}
+
+interface ListHeldColumns {
+  id: string;
+  type_name: string;
+  kind: string;
+  term_count: number | null;
+  term_unit: string | null;
+  pack_classes: number | null;
+  pack_days: number | null;
+  free: boolean;
+  starts_on: string;
+  frozen_days: number;
+  status: string;
+  frozen_on: string | null;
+  cancelled_on: string | null;
+  paid_periods: number;
+  paid_floor: number;
+  renews: boolean;
+  classes_left: number | null;
+  from_list: boolean;
+}
+
+/** A row of an outer join: every column may be missing. */
+type Nullable<T> = { [K in keyof T]: T[K] | null };
+
+const LIST_COLUMNS = (sql: Sql | TransactionSql) => sql`
+  h.id, t.name AS type_name, h.kind, h.term_count, h.term_unit, h.pack_classes, h.pack_days,
+  (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.status,
+  h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
+  h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list`;
+
+/** A text column under a CHECK, as one of the values the rule knows: a value this build
+ *  does not know fails here, as it does in `shape`. */
+function oneOf<T extends string>(options: readonly T[], value: string, what: string): T {
+  const found = options.find((option) => option === value);
+  if (found === undefined) throw new Error(`a held membership holds a ${what} that no longer parses: ${value}`);
+  return found;
+}
+
+function listHeld(row: ListHeldColumns): ListHeld {
+  return {
+    id: row.id,
+    typeName: row.type_name,
+    fromList: row.from_list,
+    membership: {
+      kind: oneOf(membershipKindSchema.options, row.kind, "kind"),
+      termCount: row.term_count,
+      termUnit: row.term_unit === null ? null : oneOf(membershipTermUnitSchema.options, row.term_unit, "term unit"),
+      packClasses: row.pack_classes,
+      packDays: row.pack_days,
+      free: row.free,
+      startsOn: row.starts_on,
+      frozenDays: row.frozen_days,
+      status: oneOf(heldMembershipStatusSchema.options, row.status, "status"),
+      frozenOn: row.frozen_on,
+      cancelledOn: row.cancelled_on,
+      paidPeriods: row.paid_periods,
+      paidFloor: row.paid_floor,
+      renews: row.renews,
+      classesLeft: row.classes_left,
+    },
+  };
+}
+
+/** Every membership stored in use of the current records named (`entryIds`), or of every
+ *  current record of the gym (null). A plain read. */
+export async function inUseForList(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  entryIds: readonly string[] | null,
+): Promise<{ entryId: string; noEmail: boolean; held: ListHeld }[]> {
+  if (entryIds !== null && entryIds.length === 0) return [];
+  const ids = entryIds === null ? null : [...entryIds];
+  const rows = await sql<(ListHeldColumns & { entry_id: string; no_email: boolean })[]>`
+    SELECT ${LIST_COLUMNS(sql)}, h.entry_id, (e.email IS NULL) AS no_email
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
+    WHERE h.gym_id = ${gymId} AND h.status = ANY(${[...IN_USE]}::text[])
+      AND (${ids}::uuid[] IS NULL OR h.entry_id = ANY(${ids}::uuid[]))`;
+  return rows.map((row) => ({ entryId: row.entry_id, noEmail: row.no_email, held: listHeld(row) }));
+}
+
+export interface OverForList {
+  entryId: string;
+  /** The record has no address: what a chip's "can be invited" count needs. */
+  noEmail: boolean;
+  /** The membership name the gym's own list gives this record, where it names something
+   *  the person does not hold and never has; null otherwise. */
+  listedUnheld: string | null;
+  /** The membership of theirs stored over that finished last; null where none is. */
+  held: ListHeld | null;
+}
+
+/** For the current records with nothing stored in use: the membership of each stored over
+ *  that finished last, and what the list's own word names. Asked of the records named
+ *  (`entryIds`) or of the whole gym (null), and also of `alsoIds` whatever they hold: the
+ *  records whose every membership stored in use the clock has ended. `today` is the gym's
+ *  own day. A plain read.
+ *
+ *  **Which stored row.** One a record, by the rule's own order (`finishedLast` in
+ *  `@app/shared`): the day it finished, a membership before a pack on the same day, then the
+ *  newest start. The day is worked out here as the rule works it out, since a person who
+ *  buys a day pass a visit has hundreds of rows and all of them cannot be read: the day it
+ *  was cancelled; else its last day (the start, so many terms on, plus the days frozen,
+ *  less one); a pack used up before that day by its start day. Postgres adds months and
+ *  years as the rule does (31 Jan and a month is 28 Feb). `memberships.overForList.test.ts`
+ *  holds the two to the same choice.
+ *
+ *  **`listedUnheld`** is the list's word where it names something this record has never
+ *  held: no membership of theirs is of the type staff said that word is, nor of a type of
+ *  that very name. A type archived since still counts, so somebody cancelled here does not
+ *  go back to their old file's words because the type left the price list (a person's own
+ *  page says "Not set up" of an archived type, which is about setting it up again). */
+export async function overForList(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  entryIds: readonly string[] | null,
+  alsoIds: readonly string[],
+  today: string,
+): Promise<OverForList[]> {
+  if (entryIds !== null && entryIds.length === 0 && alsoIds.length === 0) return [];
+  const ids = entryIds === null ? null : [...entryIds];
+  const rows = await sql<(Nullable<ListHeldColumns> & { entry_id: string; no_email: boolean; listed_unheld: string | null })[]>`
+    WITH asked AS (
+      SELECT DISTINCT x.entry_id
+      FROM gym_held_memberships x
+      WHERE x.gym_id = ${gymId} AND x.status = ANY(${[...OVER]}::text[])
+        AND (${ids}::uuid[] IS NULL OR x.entry_id = ANY(${ids}::uuid[]))
+        AND NOT EXISTS (
+          SELECT 1 FROM gym_held_memberships y
+          WHERE y.gym_id = x.gym_id AND y.entry_id = x.entry_id AND y.status = ANY(${[...IN_USE]}::text[])
+        )
+      UNION
+      SELECT unnest(${[...alsoIds]}::uuid[])
+    )
+    SELECT e.id AS entry_id, (e.email IS NULL) AS no_email, o.*,
+           CASE
+             WHEN e.membership_type IS NULL OR e.membership_type = '' THEN NULL
+             WHEN EXISTS (
+               SELECT 1
+               FROM gym_held_memberships lh
+               JOIN gym_membership_types lt ON lt.gym_id = lh.gym_id AND lt.id = lh.membership_type_id
+               WHERE lh.gym_id = e.gym_id AND lh.entry_id = e.id
+                 AND (lower(lt.name) = lower(e.membership_type)
+                      OR lt.id = (SELECT l.membership_type_id FROM gym_membership_word_links l
+                                  WHERE l.gym_id = e.gym_id AND l.word_key = lower(e.membership_type)))
+             ) THEN NULL
+             ELSE e.membership_type
+           END AS listed_unheld
+    FROM asked
+    JOIN gym_member_list_entries e ON e.gym_id = ${gymId} AND e.id = asked.entry_id AND e.former_at IS NULL
+    LEFT JOIN LATERAL (
+      SELECT ${LIST_COLUMNS(sql)}
+      FROM gym_held_memberships h
+      JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+      WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status = ANY(${[...OVER]}::text[])
+      ORDER BY
+        CASE
+          WHEN h.status = 'cancelled' THEN h.cancelled_on
+          -- One that renews has no last day; the rule falls back on its start day.
+          WHEN h.kind = 'recurring' AND h.renews THEN h.starts_on
+          ELSE (
+            SELECT CASE WHEN d.last_day <= ${today}::date THEN d.last_day ELSE h.starts_on END
+            FROM (
+              SELECT (h.starts_on + make_interval(
+                       years  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'year'  THEN h.term_count * n.periods ELSE 0 END,
+                       months => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'month' THEN h.term_count * n.periods ELSE 0 END,
+                       weeks  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'week'  THEN h.term_count * n.periods ELSE 0 END,
+                       days   => CASE WHEN h.kind = 'pack' THEN h.pack_days
+                                      WHEN h.term_unit = 'day' THEN h.term_count * n.periods ELSE 0 END
+                     ))::date + h.frozen_days - 1 AS last_day
+              -- A repeating one that will not renew runs to the end of what is paid.
+              FROM (SELECT CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END AS periods) n
+            ) d
+          )
+        END DESC,
+        (h.kind = 'pack') ASC,
+        h.starts_on DESC,
+        h.id::text ASC
+      LIMIT 1
+    ) o ON true`;
+  return rows.map((row) => ({
+    entryId: row.entry_id,
+    noEmail: row.no_email,
+    listedUnheld: row.listed_unheld,
+    held: wholeRow(row),
+  }));
+}
+
+/** The LEFT JOIN's membership: null where the record has none stored over, and every
+ *  column of it where it has. */
+function wholeRow(row: Nullable<ListHeldColumns>): ListHeld | null {
+  const { id, type_name, kind, free, starts_on, frozen_days, status, paid_periods, paid_floor, renews, from_list } = row;
+  if (id === null) return null;
+  if (
+    type_name === null ||
+    kind === null ||
+    free === null ||
+    starts_on === null ||
+    frozen_days === null ||
+    status === null ||
+    paid_periods === null ||
+    paid_floor === null ||
+    renews === null ||
+    from_list === null
+  ) {
+    throw new Error("a held membership came back without one of its columns");
+  }
+  return listHeld({
+    id,
+    type_name,
+    kind,
+    free,
+    starts_on,
+    frozen_days,
+    status,
+    paid_periods,
+    paid_floor,
+    renews,
+    from_list,
+    term_count: row.term_count,
+    term_unit: row.term_unit,
+    pack_classes: row.pack_classes,
+    pack_days: row.pack_days,
+    frozen_on: row.frozen_on,
+    cancelled_on: row.cancelled_on,
+    classes_left: row.classes_left,
+  });
+}
+
 /** One class off a pack, for a booking. False where the pack has none left: the caller
  *  holds the gym's lock and has just read one, so that is a fault and it throws. */
 export async function chargePack(tx: TransactionSql, gymId: string, membershipId: string, now: Date): Promise<boolean> {

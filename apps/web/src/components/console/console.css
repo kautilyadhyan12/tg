@@ -757,7 +757,9 @@
 }
 @media (min-width: 768px) {
   .c-member-grid {
-    grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 2.1fr) 20px;
+    /* Wide enough for "Gold Monthly +1", "Frozen since 6 Oct" and "Payment due" (23a-i);
+       the App column holds one tag. */
+    grid-template-columns: minmax(0, 2.3fr) minmax(0, 0.95fr) minmax(0, 1.35fr) minmax(0, 1.35fr) minmax(0, 1.1fr) minmax(0, 1.55fr) 20px;
     grid-template-areas: "who status type ends pay app go";
     column-gap: 16px;
     row-gap: 4px;

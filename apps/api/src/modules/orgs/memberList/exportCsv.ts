@@ -12,13 +12,14 @@
 // save). The phone column holds only E.164 numbers the server made and is written as it
 // is, so "+44 …" keeps its plus; an email address may start with + or - (round one, L5),
 // so it is guarded like free text.
-import { MEMBER_APP_FILTER_WORDS, orgWords, type MemberListExportRequest, type MemberListFilter } from "@app/shared";
+import { MEMBER_APP_FILTER_WORDS, heldListWords, orgWords, type HeldOnList, type MemberListExportRequest, type MemberListFilter } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { requirePrivilege } from "../service.js";
 import * as repo from "./repo.js";
 import { selectedIds } from "./selection.js";
 import type { MemberListDeps } from "./service.js";
+import { heldOnListOf } from "../memberships/onList.js";
 
 /** How many records one read of the file takes. */
 export const EXPORT_PAGE = 500;
@@ -91,6 +92,30 @@ export function csvLine(row: Row, shape: CsvShape): string {
   return `${cells.join(",")}\r\n`;
 }
 
+/** The day the file writes for somebody whose columns the app answers (23a-i): a renewal
+ *  day, or the day it ends or ended. One frozen or still to start has neither. */
+function heldDay(shown: HeldOnList): { on: string; kind: "ends" | "renews" } | null {
+  const day = shown.day;
+  if (day === null || day.on === null || day.what === "frozen" || day.what === "starts") return null;
+  return { on: day.on, kind: day.what === "renews" ? "renews" : "ends" };
+}
+
+/** A person's line as their row on the list reads: the app's own words for the membership
+ *  they hold here, in the columns the list's own words would fill. */
+export function shownRow(row: Row, shown: HeldOnList | undefined): Row {
+  if (shown === undefined) return row;
+  const words = heldListWords(shown);
+  const day = heldDay(shown);
+  return {
+    ...row,
+    status: words.status,
+    membershipType: words.memberships.join("; "),
+    endsOn: day?.on ?? null,
+    endsOnKind: day?.kind ?? null,
+    paymentStatus: words.payment,
+  };
+}
+
 const NONE_WORDS = { status: "No status", membershipType: "No membership", paymentStatus: "No payment status" } as const;
 
 const asList = <T>(asked: T | T[] | undefined): T[] => (asked === undefined ? [] : Array.isArray(asked) ? asked : [asked]);
@@ -159,8 +184,16 @@ export async function exportSelected(
   if (!(await limit())) return null;
   const { selection } = request;
   const ids = await selectedIds(deps, gymId, selection);
-  const [counts, fields] = await Promise.all([repo.exportShapeOf(deps.sql, gymId, ids), repo.listFields(deps.sql, gymId)]);
-  const shape: CsvShape = { fields, dated: { ends: counts.ends, renews: counts.renews }, withPast: counts.former > 0 };
+  const today = dayInTz(deps.now(), org.timezone);
+  // What the memberships these people hold say, so the file reads as the list does.
+  const held = await heldOnListOf(deps.sql, gymId, today, ids);
+  const [counts, fields] = await Promise.all([repo.exportShapeOf(deps.sql, gymId, ids, [...held.keys()]), repo.listFields(deps.sql, gymId)]);
+  const dated = { ends: counts.ends, renews: counts.renews };
+  for (const { shown } of held.values()) {
+    const day = heldDay(shown);
+    if (day !== null) dated[day.kind] += 1;
+  }
+  const shape: CsvShape = { fields, dated, withPast: counts.former > 0 };
   await deps.sql.begin(async (tx) => {
     await insertAudit(tx, {
       actorUserId: userId,
@@ -177,10 +210,10 @@ export async function exportSelected(
     yield BOM + csvHeader(shape);
     for (let from = 0; from < ids.length; from += EXPORT_PAGE) {
       const rows = await repo.exportRows(deps.sql, gymId, ids.slice(from, from + EXPORT_PAGE));
-      yield rows.map((row) => csvLine(row, shape)).join("");
+      yield rows.map((row) => csvLine(shownRow(row, held.get(row.entryId)?.shown), shape)).join("");
     }
   }
 
   const filter = selection.kind === "all" ? selection.filter : null;
-  return { filename: exportFileName(filter, orgWords(org.orgType).people, dayInTz(deps.now(), org.timezone)), chunks: chunks() };
+  return { filename: exportFileName(filter, orgWords(org.orgType).people, today), chunks: chunks() };
 }

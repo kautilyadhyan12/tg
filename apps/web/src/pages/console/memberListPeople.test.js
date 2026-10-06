@@ -29,6 +29,7 @@ import {
   patchFrom,
   personInviteAction,
   pageTickState,
+  rowCells,
   rowWords,
   selectedInviteSummary,
   selectionFilter,
@@ -192,6 +193,46 @@ describe("how a row shows the server's App word (spec Part 3 §18.4)", () => {
     expect(rowWords(entry({ endsOn: '2026-08-31', endsOnKind: 'ends' }), TODAY)).toEqual(['Active', 'Gold', 'Ended 31 Aug']);
     expect(rowWords(entry({ endsOn: '2027-01-31', endsOnKind: 'ends' }), TODAY)).toEqual(['Active', 'Gold', 'Ends 31 Jan 2027']);
     expect(rowWords(entry({ formerAt: '2026-09-03T10:00:00.000Z' }), TODAY)).toEqual(['Past member since 3 Sep 2026']);
+  });
+});
+
+// 23a-i. The worst thing a row could say: "Paid", from the gym's old file, about somebody
+// who owes on a membership they hold here.
+describe('a row for somebody who holds a membership in the app (23a-i)', () => {
+  const TODAY = '2026-09-27';
+  const held = (over = {}) => ({ status: 'active', memberships: ['Gold Monthly'], day: { what: 'renews', on: '2026-11-06' }, payment: { state: 'paid' }, ...over });
+
+  it("reads what the membership says, never the record's own words", () => {
+    const e = entry({ status: 'Expired', membershipType: 'Gold', paymentStatus: 'Paid', held: held({ payment: { state: 'due', since: '2026-09-20' } }) });
+    expect(rowCells(e, TODAY)).toEqual({ status: 'Active', membership: 'Gold Monthly', ends: 'Renews 6 Nov', payment: 'Payment due', owes: true });
+    expect(rowWords(e, TODAY)).toEqual(['Active', 'Gold Monthly', 'Renews 6 Nov', 'Payment due']);
+  });
+
+  it("says every state in the words of the person's own page", () => {
+    // [what the server says they hold, the four cells, a payment is owed now]
+    const cases = [
+      [held(), ['Active', 'Gold Monthly', 'Renews 6 Nov', 'Paid'], false],
+      [held({ memberships: ['Gold Monthly', 'PT 10'] }), ['Active', 'Gold Monthly +1', 'Renews 6 Nov', 'Paid'], false],
+      [held({ memberships: ['A', 'B', 'C'] }), ['Active', 'A +2', 'Renews 6 Nov', 'Paid'], false],
+      [held({ day: { what: 'ends', on: '2027-01-03' } }), ['Active', 'Gold Monthly', 'Ends 3 Jan 2027', 'Paid'], false],
+      [held({ day: null, payment: { state: 'free' } }), ['Active', 'Gold Monthly', null, 'Free'], false],
+      [held({ status: 'frozen', day: { what: 'frozen', on: '2026-09-09' }, payment: { state: 'due', since: null } }), ['Frozen', 'Gold Monthly', 'Frozen since 9 Sep', 'Payment due'], true],
+      // A payment whose day has not come is not owed: never the word staff chase people by.
+      [held({ status: 'upcoming', day: { what: 'starts', on: '2026-10-20' }, payment: { state: 'later', on: '2026-10-20' } }), ['Not started', 'Gold Monthly', 'Starts 20 Oct', 'Not due yet'], false],
+      [held({ memberships: ['Gold Monthly', 'Annual'], payment: { state: 'later', on: '2026-10-20' } }), ['Active', 'Gold Monthly +1', 'Renews 6 Nov', 'Not due yet'], false],
+      [held({ payment: { state: 'due', since: TODAY } }), ['Active', 'Gold Monthly', 'Renews 6 Nov', 'Payment due'], true],
+      [held({ status: 'cancelled', day: { what: 'cancelled', on: '2026-09-03' }, payment: null }), ['Cancelled', 'Gold Monthly', 'Cancelled 3 Sep', null], false],
+      [held({ status: 'ended', day: { what: 'ended', on: '2026-08-31' }, payment: null }), ['Ended', 'Gold Monthly', 'Ended 31 Aug', null], false],
+      [held({ status: 'ended', day: { what: 'ended', on: null }, payment: null }), ['Ended', 'Gold Monthly', null, null], false],
+    ];
+    for (const [says, [status, membership, ends, payment], owes] of cases) {
+      expect(rowCells(entry({ held: says }), TODAY), JSON.stringify(says)).toEqual({ status, membership, ends, payment, owes });
+    }
+  });
+
+  it("reads the gym's own words for somebody who holds nothing here, an empty one as none", () => {
+    expect(rowCells(entry({ paymentStatus: 'Paid' }), TODAY)).toEqual({ status: 'Active', membership: 'Gold', ends: 'Renews 3 Oct', payment: 'Paid', owes: false });
+    expect(rowCells(entry({ status: null, membershipType: '', endsOn: null, endsOnKind: null }), TODAY)).toEqual({ status: null, membership: null, ends: null, payment: null, owes: false });
   });
 });
 
@@ -431,6 +472,12 @@ describe('Invite: what the count asks and the press sends', () => {
   it('sends the same words, the version and the number shown, and the server takes it', () => {
     const body = inviteBody(ticked, { version: 9, reach: 214 }, true);
     expect(body).toEqual({ status: ['Active', ''], membershipType: ['Gold'], version: 9, expectedCount: 214, permissionConfirmed: true });
+    expect(memberInviteRequestSchema.safeParse(body).success).toBe(true);
+  });
+  it('sends back the value the box came with for the people it showed, and the server takes it', () => {
+    const digest = 'a1'.repeat(32);
+    const body = inviteBody(ticked, { version: 9, reach: 214, digest }, true);
+    expect(body).toEqual({ status: ['Active', ''], membershipType: ['Gold'], version: 9, expectedCount: 214, expectedDigest: digest, permissionConfirmed: true });
     expect(memberInviteRequestSchema.safeParse(body).success).toBe(true);
   });
   it('with nothing ticked, everyone: no words at all', () => {

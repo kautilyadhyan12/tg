@@ -1,4 +1,6 @@
 import {
+  HELD_PAYMENT_WORDS,
+  HELD_STATUS_WORDS,
   MEMBER_APP_FILTER_ORDER,
   MEMBER_APP_FILTER_WORDS,
   MEMBER_APP_WORDS,
@@ -6,6 +8,7 @@ import {
   MEMBER_LIST_MERGE_FILLS,
   MEMBER_LIST_MERGE_KEEPS_OWN,
   MEMBER_LIST_TICKED_MAX,
+  heldNamesLine,
   turns18On,
   underAgeOn,
 } from '@app/shared';
@@ -189,10 +192,55 @@ export function pastWords(entry, person = 'member') {
   return since === null ? null : `Past ${person} since ${since}`;
 }
 
-/** The gym's own words about the person in one line, as a phone's row shows them. */
+/** The day of a membership held in the app, in the Renews-or-ends column's words; null
+ *  where there is none to say (one that ended on no day the app knows). */
+function heldDayWords(day, today) {
+  if (day === null || day === undefined) return null;
+  if (day.on === null) return null;
+  const on = shortDay(day.on, today);
+  switch (day.what) {
+    case 'renews':
+      return `Renews ${on}`;
+    case 'ends':
+      return `Ends ${on}`;
+    case 'starts':
+      return `Starts ${on}`;
+    case 'frozen':
+      return `Frozen since ${on}`;
+    case 'ended':
+      return `Ended ${on}`;
+    case 'cancelled':
+      return `Cancelled ${on}`;
+    default:
+      return null;
+  }
+}
+
+/** A row's Status, Membership, Renews-or-ends and Payment (23a-i). Somebody who holds a
+ *  membership in the app reads what it says (`entry.held`, worked out by the server);
+ *  everybody else reads the gym's own words. `owes`: the server says a payment is due,
+ *  which is money owed today; one whose day has not come is "Not due yet" and not owed. */
+export function rowCells(entry, today = null) {
+  const held = entry.held ?? null;
+  if (held === null) {
+    const word = (w) => (w === null || w === undefined || w === '' ? null : w);
+    return { status: word(entry.status), membership: word(entry.membershipType), ends: endsWords(entry, today), payment: word(entry.paymentStatus), owes: false };
+  }
+  const pay = held.payment;
+  return {
+    status: HELD_STATUS_WORDS[held.status] ?? null,
+    membership: heldNamesLine(held.memberships),
+    ends: heldDayWords(held.day, today),
+    payment: pay === null ? null : HELD_PAYMENT_WORDS[pay.state],
+    owes: pay !== null && pay.state === 'due',
+  };
+}
+
+/** What the list says about the person in one line, as a phone's row shows it. */
 export function rowWords(entry, today = null, person = 'member') {
   if (entry.formerAt !== null) return [pastWords(entry, person)].filter((w) => w !== null);
-  return [entry.status, entry.membershipType, endsWords(entry, today), entry.paymentStatus].filter((w) => w !== null && w !== '');
+  const cells = rowCells(entry, today);
+  return [cells.status, cells.membership, cells.ends, cells.payment].filter((w) => w !== null && w !== '');
 }
 
 export function contactWords(entry) {
@@ -255,10 +303,16 @@ export function inviteQueryString(filters) {
   return params.toString();
 }
 
+/** The preview's value for exactly the people it showed, sent back with the press: the
+ *  server invites nobody if the people it would reach now are any others. */
+function previewDigest(preview) {
+  return typeof preview.digest === 'string' ? { expectedDigest: preview.digest } : {};
+}
+
 /** The press: the same words, the version and number the count showed, so a list that
  *  moved in between invites nobody, and staff's permission tick. */
 export function inviteBody(filters, preview, permissionConfirmed) {
-  const body = { version: preview.version, expectedCount: preview.reach, permissionConfirmed };
+  const body = { version: preview.version, expectedCount: preview.reach, ...previewDigest(preview), permissionConfirmed };
   for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) body[kind] = [...filters[kind]];
   return body;
 }
@@ -316,7 +370,7 @@ export function selectedWords(k) {
 
 /** The press on the people selected: the version and number the count showed, and the tick. */
 export function selectedInviteBody(selection, preview, permissionConfirmed) {
-  return { selection, version: preview.version, expectedCount: preview.reach, permissionConfirmed };
+  return { selection, version: preview.version, expectedCount: preview.reach, ...previewDigest(preview), permissionConfirmed };
 }
 
 /** Invite's top line for the people selected, as `inviteSummary` says it for the list.

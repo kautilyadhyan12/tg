@@ -211,7 +211,7 @@ export const MEMBER_INVITE_PERMISSION_WORDS = "These are {gym}'s {people}, and I
 
 /** The server's sentences for invitations, printed as sent. */
 export const MEMBER_INVITE_WORDS = {
-  invite_changed: "Your list changed, so no invitations were sent. Review the updated numbers and try again.",
+  invite_changed: "Your list changed since you opened this, so no invitations were sent. Check who will be invited and try again.",
   permission_needed: "Confirm that you have permission to email these people. No invitations were sent.",
   no_postal_address: "Add your postal address in Settings. The law requires it in every invitation email.",
   invites_off: "Invitations can't be sent yet.",

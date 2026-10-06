@@ -677,4 +677,62 @@ describe("on the person's page", () => {
     fireEvent.click(box().getByRole('button', { name: 'Mark paid' }));
     expect(within(screen.getByTestId('held-ask-paid')).getByText("Mark Ada Lovelace's Gold Monthly as paid?")).toBeTruthy();
   });
+
+  // 23a-i: the list behind the page says what the person holds, so a change here must
+  // reach it, or the row goes on saying "Payment due" beside a page that says "Paid".
+  it('a membership changed in the box tells the page behind it once, and a refused change does not', async () => {
+    const ada = memberListEntryDetailSchema.parse({
+      entryId: ADA,
+      fullName: 'Ada Lovelace',
+      email: 'ada@members.example',
+      phone: null,
+      memberNumber: null,
+      status: null,
+      membershipType: null,
+      joinedOn: null,
+      endsOn: null,
+      endsOnKind: null,
+      paymentStatus: null,
+      dateOfBirth: null,
+      formerAt: null,
+      source: 'typed',
+      inApp: false,
+      invitation: null,
+      app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
+      extra: [],
+      handEdited: [],
+      members: [],
+    });
+    const unpaid = held(1, GOLD, '2026-10-04', false);
+    orgService.getMemberListEntry.mockResolvedValue({ data: { entry: ada } });
+    orgService.getHeldMemberships.mockResolvedValue(answer([unpaid]));
+    const onChanged = vi.fn();
+    render(
+      <MemberListPerson
+        gymId={GYM}
+        gym={{ name: 'Iron Temple', slug: 'iron-temple', timezone: 'Europe/London' }}
+        entryId={ADA}
+        list={{ fields: [] }}
+        words={{ people: 'members', person: 'member', peopleCap: 'Members', personCap: 'Member', it: 'gym' }}
+        readOnly={false}
+        onClose={() => {}}
+        onChanged={onChanged}
+      />,
+    );
+    await (await boxSoon()).findByText('Gold Monthly');
+
+    // Refused: nothing changed, so nothing behind the page reads again.
+    orgService.changeHeldMembership.mockRejectedValueOnce({ response: { status: 409, data: { error: 'conflict', message: 'Try again.' } } });
+    fireEvent.click(box().getByRole('button', { name: 'Mark paid' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-paid')).getByRole('button', { name: 'Mark paid' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
+    await box().findByText('Try again.');
+    expect(onChanged).not.toHaveBeenCalled();
+
+    // Saved: told once.
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([held(1, GOLD, '2026-10-04', true)]));
+    fireEvent.click(within(screen.getByTestId('held-ask-paid')).getByRole('button', { name: 'Mark paid' }));
+    expect(await box().findByText('Gold Monthly marked paid.')).toBeTruthy();
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
 });

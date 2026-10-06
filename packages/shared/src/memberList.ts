@@ -14,6 +14,7 @@ import {
   memberListInvitationFilterSchema,
   memberListInvitationSchema,
 } from "./memberInvites.js";
+import { heldOnListSchema } from "./heldOnList.js";
 
 // ---------------------------------------------------------------------------
 // Limits (§9.9)
@@ -1711,6 +1712,11 @@ export const memberListEntrySchema = z.object({
   endsOnKind: z.enum(["ends", "renews"]).nullable(),
   paymentStatus: z.string().nullable(),
   dateOfBirth: memberListDaySchema.nullable(),
+  /** What the memberships they hold in the app say (23a-i; `heldOnList`): where it is
+   *  set, the row's Status, Membership, Renews-or-ends and Payment columns show THIS and
+   *  not the four words above, which stay the gym's own list's. Null for somebody the app
+   *  holds no membership for, and for a past member. */
+  held: heldOnListSchema.nullable().default(null),
   /** When this person was taken off the list, or null while they are on it (§11.1).
    *  A former record admits nobody, is invited by nothing, and is left out of a page
    *  unless it is asked for. */
@@ -2069,6 +2075,13 @@ export const memberInvitePreviewSchema = z
     reach: z.number().int().min(0),
     skipped: memberInviteSkippedSchema,
     blocked: memberInviteBlockedSchema.nullable(),
+    /** One value for exactly the people it would email. The press sends it back
+     *  (`expectedDigest`): who a word filter chooses can change with the number and the
+     *  list's version both as they were (a payment marked, a day gone by). */
+    digest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
   })
   .strict();
 export type MemberInvitePreview = z.infer<typeof memberInvitePreviewSchema>;
@@ -2158,8 +2171,8 @@ export type MemberInvitePeople = z.infer<typeof memberInvitePeopleSchema>;
 export const memberInvitePeopleResponseSchema = z.object({ page: memberInvitePeopleSchema });
 export type MemberInvitePreviewResponse = z.infer<typeof memberInvitePreviewResponseSchema>;
 
-/** Press Invite. If the list's version or the number the preview showed has moved,
- *  nobody is invited and the answer carries the new preview. `permissionConfirmed` is
+/** Press Invite. If the list's version, the number the preview showed or the people
+ *  themselves have moved, nobody is invited and the answer carries the new preview. `permissionConfirmed` is
  *  the tick (`MEMBER_INVITE_PERMISSION_WORDS`); without it nobody is invited. */
 export const memberInviteRequestSchema = z
   .object({
@@ -2169,6 +2182,12 @@ export const memberInviteRequestSchema = z
     selection: memberListSelectionSchema.optional(),
     version: z.number().int().min(0),
     expectedCount: z.number().int().min(0),
+    /** The preview's `digest`: without the one for the people the server would reach now,
+     *  nobody is invited and the answer carries the new preview. */
+    expectedDigest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
     permissionConfirmed: z.boolean().optional(),
   })
   .strict()

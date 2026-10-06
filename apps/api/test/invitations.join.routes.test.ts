@@ -974,11 +974,18 @@ d("join by invitation (real Postgres)", () => {
             });
           },
         });
+      type Body = (tx: postgres.TransactionSql) => Promise<unknown>;
       const watched = new Proxy(pool, {
-        get: (target, prop, receiver): unknown =>
-          prop === "begin"
-            ? (body: (tx: postgres.TransactionSql) => Promise<unknown>) => target.begin((tx) => body(atRead(tx)))
-            : Reflect.get(target, prop, receiver),
+        get: (target, prop, receiver): unknown => {
+          if (prop !== "begin") return Reflect.get(target, prop, receiver);
+          // Both of postgres's forms: begin(body), and begin(options, body) for a read-only snapshot.
+          return (...args: [Body] | [string, Body]) => {
+            const [first, second] = args;
+            if (typeof first !== "string") return target.begin((tx) => first(atRead(tx)));
+            if (second === undefined) throw new Error("begin was given no body");
+            return target.begin(first, (tx) => second(atRead(tx)));
+          };
+        },
       });
       try {
         const deps = { sql: watched, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date(), invites: settings };
