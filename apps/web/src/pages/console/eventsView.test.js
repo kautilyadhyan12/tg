@@ -86,10 +86,10 @@ describe('the form', () => {
       [good({ unlimited: false, places: '10001' }), 'places', 'Type how many places there are, from 1 to 10,000, or tick No limit.'],
       [good({ unlimited: false, places: '2.5' }), 'places', 'Type how many places there are, from 1 to 10,000, or tick No limit.'],
       [good({ unlimited: false, places: 'forty' }), 'places', 'Type how many places there are, from 1 to 10,000, or tick No limit.'],
-      [good({ details: 'x'.repeat(2001) }), 'details', 'Keep the details to 2,000 characters.'],
+      [good({ details: 'x'.repeat(1001) }), 'details', 'Keep the details to 1,000 characters.'],
     ];
     for (const [draft, field, text] of cases) expect(eventProblem(draft), text).toEqual({ field, text });
-    const fine = [good(), good({ endsOn: '2026-10-18', endTime: '09:00' }), good({ endsOn: '2026-11-17' }), good({ unlimited: false, places: ' 40 ' }), good({ unlimited: true, places: 'junk' }), good({ name: 'x'.repeat(80) })];
+    const fine = [good(), good({ endsOn: '2026-10-18', endTime: '09:00' }), good({ endsOn: '2026-11-17' }), good({ unlimited: false, places: ' 40 ' }), good({ unlimited: true, places: 'junk' }), good({ name: 'x'.repeat(80) }), good({ details: 'x'.repeat(1000) })];
     for (const draft of fine) expect(eventProblem(draft)).toBeNull();
   });
 
@@ -126,8 +126,8 @@ describe('the form', () => {
   });
 
   it('counts the details down, and says what a cancel does and to whom', () => {
-    expect(detailsLine('')).toEqual({ over: false, text: '2,000 characters left' });
-    expect(detailsLine('x'.repeat(2003))).toEqual({ over: true, text: '3 characters too many' });
+    expect(detailsLine('')).toEqual({ over: false, text: '1,000 characters left' });
+    expect(detailsLine('x'.repeat(1003))).toEqual({ over: true, text: '3 characters too many' });
     expect(cancelBox(EVENT, { people: 'members' })).toEqual({
       title: 'Cancel Saturday Open Day?',
       lines: ['Your members still see it on their Events list, marked Cancelled, until Sat 17 Oct.', 'Nobody is emailed. You can un-cancel it until then.'],

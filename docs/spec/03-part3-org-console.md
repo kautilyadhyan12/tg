@@ -3027,6 +3027,24 @@ Updates once it is set. Kd has not chosen it yet (RULINGS 2026-10-05).
 Name, words, place, start and end in the gym's time zone, places or no limit. "I'm
 coming" is 13.4's Book rule on an event row — one counting rule in the app, not two.
 
+**Built in two jobs (ROADMAP 19c-i, 19c-ii).** **19c-i, the gym makes events and members
+see them:** `gym_events` (migration `0078`): name (80 characters), details (1,000), place
+(120), places (1 to 10,000, or none for no limit), and a start and an end kept twice: as
+the gym's own clock reads them (a day and minutes after midnight) and as the instants
+those were in the gym's time zone when it was saved. The end is after the start, at most
+31 days after it, and not already passed. Staff holding `posts.manage` ("Post updates",
+no new tick) add an event (one key, one event), change it, and cancel or un-cancel it
+(`PUT …/events/:eventId/cancelled`), all only until it ends; a gym keeps at most 100
+coming events. **A poster** (Kd, RULINGS 2026-10-06) is one picture an event, kept as a
+post's photo is: made smaller by the browser, 1 MB at most, cleaned of where it was
+taken, stored under a key the server makes (`gym-event/{gymId}/{posterId}`), its old file
+listed in `photo_files_to_remove` in the step that replaces or removes it. A live app
+member of a gym on a live plan is sent every event that has not ended, soonest first, a
+cancelled one too, marked, so nobody wonders where it went; an ended event is staff's
+alone ("Past events"). Anybody else gets the 404 of a gym that does not exist, for the
+list and for a poster. The console has an Events page; the member's gym page an Events
+tab. **19c-ii:** "I'm coming", counted by 13.4's rule, the waitlist, and who is coming.
+
 ### 15.5 The leaderboard — only what the desk, staff or the app recorded
 
 *(RE-PLANNED 2026-10-02 for accuracy at Kd's request — *"people will get angry and feel

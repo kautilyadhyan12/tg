@@ -219,7 +219,7 @@ export const gymEvents = pgTable(
     unique("gym_events_event_key_uq").on(t.gymId, t.eventKey),
     unique("gym_events_poster_key_uq").on(t.posterKey),
     check("gym_events_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 80`),
-    check("gym_events_details_check", sql`char_length(${t.details}) <= 2000`),
+    check("gym_events_details_check", sql`char_length(${t.details}) <= 1000`),
     check("gym_events_place_check", sql`char_length(${t.place}) <= 120`),
     check("gym_events_minutes_check", sql`${t.startMinute} BETWEEN 0 AND 1439 AND ${t.endMinute} BETWEEN 0 AND 1439`),
     check("gym_events_order_check", sql`${t.endsAt} > ${t.startsAt}`),

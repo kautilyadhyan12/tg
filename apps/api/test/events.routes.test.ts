@@ -283,6 +283,8 @@ d("a gym's events (real Postgres, real disk)", () => {
       expect((await inject("PUT", `${through}/cancelled`, other.owner.cookies, { cancelled: true })).statusCode).toBe(404);
       expect((await inject("GET", `${through}/poster/${event.poster?.id ?? ""}`, other.owner.cookies)).statusCode).toBe(404);
       expect((await inject("GET", `${through}/poster/${event.poster?.id ?? ""}`, outsider.cookies)).statusCode).toBe(404);
+      // And leaves no note of having changed it in either gym's record.
+      for (const id of [gym.id, other.id]) expect((await audits(id, "org.event_changed")) + (await audits(id, "org.event_cancelled"))).toBe(0);
       // A member of this gym is not its staff.
       expect((await inject("GET", staffRead, inside.cookies)).statusCode).toBe(404);
       expect((await inject("POST", events(gym.id), inside.cookies, openDay())).statusCode).toBe(404);
@@ -422,7 +424,8 @@ d("a gym's events (real Postgres, real disk)", () => {
         ["half a place", { places: 2.5 }],
         ["a minute past midnight's last", { startMinute: 1440 }],
         ["a field nobody asked for", { colour: "red" }],
-        ["details too long", { details: "x".repeat(2001) }],
+        ["details too long", { details: "x".repeat(1001) }],
+        ["a place too long", { place: "x".repeat(121) }],
       ];
       for (const [why, over] of refused) {
         const res = await inject("POST", events(gym.id), gym.owner.cookies, openDay(over));

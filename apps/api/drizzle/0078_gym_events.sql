@@ -33,7 +33,7 @@ CREATE TABLE "gym_events" (
 	CONSTRAINT "gym_events_event_key_uq" UNIQUE ("gym_id", "event_key"),
 	CONSTRAINT "gym_events_poster_key_uq" UNIQUE ("poster_key"),
 	CONSTRAINT "gym_events_name_check" CHECK (char_length("name") BETWEEN 1 AND 80),
-	CONSTRAINT "gym_events_details_check" CHECK (char_length("details") <= 2000),
+	CONSTRAINT "gym_events_details_check" CHECK (char_length("details") <= 1000),
 	CONSTRAINT "gym_events_place_check" CHECK (char_length("place") <= 120),
 	CONSTRAINT "gym_events_minutes_check" CHECK ("start_minute" BETWEEN 0 AND 1439 AND "end_minute" BETWEEN 0 AND 1439),
 	CONSTRAINT "gym_events_order_check" CHECK ("ends_at" > "starts_at"),

@@ -92,7 +92,7 @@ export function fieldsOf(draft, adding) {
   return fields;
 }
 
-/** "2,000 characters left", and whether it is over. */
+/** "1,000 characters left", and whether it is over. */
 export function detailsLine(text) {
   const left = EVENT_LIMITS.details - postLength(text.trim());
   if (left >= 0) return { over: false, text: `${left.toLocaleString('en-GB')} characters left` };

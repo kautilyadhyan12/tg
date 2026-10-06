@@ -10,13 +10,14 @@ import { gymPagePhotoSchema } from "./gymPage.js";
 import { GYM_POST_PHOTO_MAX_BYTES, postLength } from "./posts.js";
 
 export const GYM_EVENT_NAME_MAX = 80;
-export const GYM_EVENT_DETAILS_MAX = 2000;
+export const GYM_EVENT_DETAILS_MAX = 1000;
 export const GYM_EVENT_PLACE_MAX = 120;
 export const GYM_EVENT_PLACES_MAX = 10_000;
 /** The longest an event runs, first day to last. */
 export const GYM_EVENT_MAX_DAYS = 31;
-/** The most coming events a gym keeps at once, and so the most a member is sent. */
-export const GYM_EVENTS_COMING_MAX = 200;
+/** The most coming events a gym keeps at once, and so the most a member is sent. With the
+ *  details' length it bounds what one read of the list costs (`tools/measure-events-cost.ts`). */
+export const GYM_EVENTS_COMING_MAX = 100;
 /** The ended events staff are sent, newest first. */
 export const GYM_EVENTS_PAST_SHOWN = 50;
 /** A poster is kept as a post's photo is: shrunk by the browser, 1 MB at most here. */

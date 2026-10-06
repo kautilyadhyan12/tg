@@ -49,8 +49,9 @@ const notFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisat
 const eventNotFound = (): OrgsError => new OrgsError(404, "event_not_found", GYM_EVENT_WORDS.not_found);
 const posterNotFound = (): OrgsError => new OrgsError(404, "poster_not_found", GYM_EVENT_WORDS.poster_not_found);
 
+/** An event as it is sent. Not checked here: a list's own response check reads every one. */
 function shaped(row: repo.EventRow): GymEvent {
-  return gymEventSchema.parse({
+  return {
     id: row.id,
     name: row.name,
     details: row.details,
@@ -64,7 +65,7 @@ function shaped(row: repo.EventRow): GymEvent {
     places: row.places,
     cancelled: row.cancelled,
     poster: row.poster === null ? null : { id: row.poster.id, width: row.poster.width, height: row.poster.height },
-  });
+  };
 }
 
 /** The gym is open and on a trial or a paid plan: its members see its page. */
@@ -150,7 +151,7 @@ async function instantsFor(sql: Sql | TransactionSql, gymId: string, times: repo
 async function staffEvent(deps: Pick<EventsDeps, "sql">, gymId: string, eventId: string): Promise<GymEvent> {
   const row = await repo.eventById(deps.sql, gymId, eventId);
   if (row === null) throw eventNotFound();
-  return shaped(row);
+  return gymEventSchema.parse(shaped(row));
 }
 
 /** A new event. Sent twice under one key (a reply lost on the way back), it is one event. */
