@@ -721,6 +721,7 @@ d("changing a time slot from a date (real Postgres)", () => {
         if (id === undefined) throw new Error("create answered no class");
         const slot = await createSchedule(sql, {
           gymId: gym,
+          confirmTrainerSessions: null,
           classTypeId: id,
           weekdays: EVERY_DAY,
           startMinute: at(7),
@@ -743,6 +744,7 @@ d("changing a time slot from a date (real Postgres)", () => {
       ) =>
         changeSlotFrom(sql, {
           gymId: gym,
+          confirmTrainerSessions: null,
           target: { by: "slot", scheduleId: slotId, updateFrom, weekdays: EVERY_DAY },
           startMinute,
           ...RUN,
@@ -815,6 +817,7 @@ d("changing a time slot from a date (real Postgres)", () => {
       expect(
         await changeSlotFrom(sql, {
           gymId: gym,
+          confirmTrainerSessions: null,
           target: { by: "session", sessionId: ran.id },
           startMinute: at(8),
           ...RUN,

@@ -49,6 +49,7 @@ import { OrgsError, holdsPrivilege, requireWritableGym } from "../service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { chargePack, givePackClassBack, heldForPt, heldForPtOf } from "../memberships/heldRepo.js";
+import { fillClassSessions } from "../classes/fill.js";
 import * as repo from "./repo.js";
 
 export interface PtDeps {
@@ -305,6 +306,13 @@ export async function book(deps: PtDeps, staffId: string, gymId: string, req: Bo
     const [slot] = isOffered ? await repo.instantsOf(tx, clock.timezone, [{ localDate: req.localDate, startMinute: req.startMinute }]) : [];
     const startsAt = slot === undefined ? null : new Date(slot.startsAtMs);
     const span = startsAt === null || minutes === null ? null : { from: startsAt, to: new Date(startsAt.getTime() + minutes * 60_000) };
+    // The calendar's far edge is written by the nightly job. Should it have missed a night,
+    // the classes this trainer coaches are written here first for a day in the last week
+    // of the window, so no session is booked on a day whose classes are not on the calendar yet.
+    if (span !== null && req.localDate > addDays(today, PT_HORIZON_DAYS - 8)) {
+      const scheduleIds = await repo.coachedSlotIds(tx, gymId, trainer.userId);
+      if (scheduleIds.length > 0) await fillClassSessions(tx, { gymIds: [gymId], scheduleIds, now });
+    }
     const [trainerTaken, personTaken, coached, held] = await Promise.all([
       span === null ? [] : repo.takenBy(tx, gymId, { trainerId: trainer.userId }, span.from, span.to),
       span === null ? [] : repo.takenBy(tx, gymId, { entryId: req.entryId }, span.from, span.to),

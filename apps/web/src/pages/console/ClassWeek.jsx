@@ -3,9 +3,11 @@ import { orgWords } from '@app/shared';
 import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import BookingsEndBox from '../../components/console/BookingsEndBox';
+import TrainerSessionsBox from '../../components/console/TrainerSessionsBox';
 import ClassBookingsList from '../../components/console/ClassBookingsList';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { bookingsAsked, endingTotal } from './bookingsEndView';
+import { sessionsAsked } from './trainerSessionsView';
 import { RunFields, StartTimePick } from './ClassFields';
 import MemberListPerson from './MemberListPerson';
 import { canRemoveMembers, viewerPrivileges } from './consoleView';
@@ -130,6 +132,9 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
   const [asked, setAsked] = useState(null);
   // Who is booked on the classes a cancel or a move would end, when the server asked.
   const [ending, setEnding] = useState(null);
+  // Personal training sessions the class would run over, when the server asked: the
+  // sessions, and the body that was sent (null for an un-cancel, which has none).
+  const [over, setOver] = useState(null);
   // Saves so far: a save can move people in from the waitlist, so the list is read again.
   const [saves, setSaves] = useState(0);
   // What a save answered: done, a move to ask about, or people to ask about.
@@ -141,8 +146,35 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
       return;
     }
     if (typeof done === 'number') setAsked(done);
-    setEnding(done !== null && typeof done === 'object' ? done.ending : null);
+    setEnding(done !== null && typeof done === 'object' ? (done.ending ?? null) : null);
   };
+  // A change sent, and what it answered; a class over a trainer's sessions is kept with
+  // the body that asked, so its answer is that body again with their mark.
+  const send = async (body) => {
+    const done = await onChange(body);
+    const sessions = done !== null && typeof done === 'object' ? (done.sessions ?? null) : null;
+    setOver(sessions === null ? null : { sessions, body });
+    return done;
+  };
+  const restore = async (confirm = null) => {
+    const done = await onRestore(confirm);
+    const sessions = done !== null && typeof done === 'object' ? (done.sessions ?? null) : null;
+    setOver(sessions === null ? null : { sessions, body: null });
+  };
+  const overBox =
+    over === null ? null : (
+      <TrainerSessionsBox
+        sessions={over.sessions}
+        clockFormat={clockFormat}
+        kind={over.body === null ? 'uncancel' : 'save'}
+        busy={busy}
+        onCancel={() => setOver(null)}
+        onConfirm={async () => {
+          if (over.body === null) await restore(over.sessions.mark);
+          else settle(await send({ ...over.body, confirmTrainerSessions: over.sessions.mark }));
+        }}
+      />
+    );
   const tag = sessionTag(session);
   const name = sessionName(session, clockFormat);
   const cancelled = session.status === 'cancelled';
@@ -178,12 +210,14 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
       {session.started ? (
         <p className="c-s14 c-t3">This class has started, so it can&apos;t be changed.</p>
       ) : locked ? null : cancelled ? (
-        <div>
-          <button type="button" onClick={onRestore} disabled={busy} className="c-btn c-btn-soft">
-            {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-            Un-cancel
-          </button>
-        </div>
+        overBox ?? (
+          <div>
+            <button type="button" onClick={() => void restore()} disabled={busy} className="c-btn c-btn-soft">
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              Un-cancel
+            </button>
+          </div>
+        )
       ) : mode === 'change' ? (
         <div className="c-narrow">
           <DayForm
@@ -191,6 +225,7 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
             setDraft={(next) => {
               setAsked(null);
               setEnding(null);
+              setOver(null);
               setDraft(next);
             }}
             staff={staff}
@@ -200,12 +235,15 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
             setScope={(next) => {
               setAsked(null);
               setEnding(null);
+              setOver(null);
               setScope(next);
             }}
             offerFuture={typeof session.scheduleId === 'string'}
             question={asked === null ? null : replaceQuestion(asked, session.localDate)}
             endBox={
-              ending === null ? null : (
+              overBox !== null ? (
+                overBox
+              ) : ending === null ? null : (
                 <BookingsEndBox
                   gymId={gymId}
                   ending={ending}
@@ -217,7 +255,7 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
                   onCancel={() => setEnding(null)}
                   onConfirm={async () => {
                     const body = dayRequest(draft, scope, asked, endingTotal(ending));
-                    if (body !== null) settle(await onChange(body));
+                    if (body !== null) settle(await send(body));
                   }}
                 />
               )
@@ -225,16 +263,17 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
             onClose={() => {
               setAsked(null);
               setEnding(null);
+              setOver(null);
               setMode(null);
             }}
             onSave={async () => {
               const body = dayRequest(draft, scope);
-              if (body !== null) settle(await onChange(body));
+              if (body !== null) settle(await send(body));
             }}
             onMove={async () => {
               const body = dayRequest(draft, scope, asked);
               if (body === null) return;
-              const done = await onChange(body);
+              const done = await send(body);
               if (done === false) setAsked(null);
               settle(done);
             }}
@@ -358,9 +397,10 @@ export default function ClassWeek({ gymId, org, readOnly, staff, locked }) {
   const openDay = open === null ? -1 : columns.findIndex((c) => c.date === open.localDate);
   const thisWeek = lists.today !== '' && lists.weekStart !== '' && lists.today >= lists.weekStart && lists.today <= addDays(lists.weekStart, 6);
 
-  // True when saved; the count when a move must be asked about first, or
-  // `{ ending }` when people are booked on what would go (each a question of the
-  // form's, not an error); false otherwise.
+  // True when saved; the count when a move must be asked about first, `{ ending }`
+  // when people are booked on what would go, or `{ sessions }` when the class would run
+  // over its coach's personal training sessions (each a question of the form's, not an
+  // error); false otherwise.
   const act = async (call) => {
     setBusy(true);
     setActionError(null);
@@ -373,6 +413,8 @@ export default function ClassWeek({ gymId, org, readOnly, staff, locked }) {
       if (count !== null) return count;
       const ending = bookingsAsked(err);
       if (ending !== null) return { ending };
+      const sessions = sessionsAsked(err);
+      if (sessions !== null) return { sessions };
       setActionError(errorText(err, "We couldn't save that."));
       // A refusal means the week on screen is out of date — the class started,
       // or another date now holds that time — so read it again, keeping the
@@ -561,7 +603,7 @@ export default function ClassWeek({ gymId, org, readOnly, staff, locked }) {
                         : orgService.cancelClassDay(gymId, open.id, confirmBookings),
                     )
                   }
-                  onRestore={() => void act(() => orgService.restoreClassDay(gymId, open.id))}
+                  onRestore={(confirm) => act(() => orgService.restoreClassDay(gymId, open.id, confirm))}
                 />
               </div>
             )}

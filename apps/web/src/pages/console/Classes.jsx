@@ -9,6 +9,7 @@ import {
   ConsoleSection,
 } from '../../components/console/ConsoleStates';
 import BookingsEndBox from '../../components/console/BookingsEndBox';
+import TrainerSessionsBox from '../../components/console/TrainerSessionsBox';
 import {
   CoachField,
   DateField,
@@ -60,6 +61,7 @@ import {
   weekdayLine,
 } from './classesView';
 import { bookingsAsked, endingTotal } from './bookingsEndView';
+import { sessionsAsked } from './trainerSessionsView';
 
 // CLASSES — the gym's timetable (Part 3 §13.3). Its words are gym software's
 // (Kd, RULINGS 2026-09-23): a class, its time slots, Cancel, Archive, Restore;
@@ -98,7 +100,7 @@ function Problem({ text }) {
 
 /** One form for adding a class and for editing one. The parent keys it on the
  *  class id so a draft is never carried from one class to another. */
-function ClassForm({ draft, setDraft, staff, disabled, onSave, onClose, saving, problem, saveLabel }) {
+function ClassForm({ draft, setDraft, staff, disabled, onSave, onClose, saving, problem, saveLabel, ask = null }) {
   const set = (patch) => setDraft({ ...draft, ...patch });
   return (
     <div className="flex flex-col gap-5">
@@ -153,20 +155,22 @@ function ClassForm({ draft, setDraft, staff, disabled, onSave, onClose, saving, 
       </Tick>
 
       <Problem text={problem} />
-      <FormButtons
-        saveLabel={saveLabel}
-        onSave={onSave}
-        onClose={onClose}
-        saving={saving}
-        blocked={disabled || problem !== null}
-      />
+      {ask ?? (
+        <FormButtons
+          saveLabel={saveLabel}
+          onSave={onSave}
+          onClose={onClose}
+          saving={saving}
+          blocked={disabled || problem !== null}
+        />
+      )}
     </div>
   );
 }
 
 /** A new time slot: its days, its start time and dates, and its length, coach
  *  and size, filled in from the class's defaults. */
-function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, saving, onSave, onClose }) {
+function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, saving, onSave, onClose, ask = null }) {
   const problem = repeatProblem(draft);
   const set = (patch) => setDraft({ ...draft, ...patch });
   return (
@@ -213,13 +217,15 @@ function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, savi
       <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass={false} />
 
       <Problem text={problem} />
-      <FormButtons
-        saveLabel="Add time slot"
-        onSave={onSave}
-        onClose={onClose}
-        saving={saving}
-        blocked={disabled || problem !== null}
-      />
+      {ask ?? (
+        <FormButtons
+          saveLabel="Add time slot"
+          onSave={onSave}
+          onClose={onClose}
+          saving={saving}
+          blocked={disabled || problem !== null}
+        />
+      )}
     </div>
   );
 }
@@ -239,6 +245,7 @@ function RepeatEditForm({
   saving,
   question,
   endBox,
+  ask = null,
   onSave,
   onClose,
   onMove,
@@ -271,7 +278,9 @@ function RepeatEditForm({
       />
       <p className="c-hint">{repeatEditNote(repeatEditMoves(schedule, draft))}</p>
       <Problem text={problem} />
-      {endBox !== null ? (
+      {ask !== null ? (
+        ask
+      ) : endBox !== null ? (
         endBox
       ) : question === null ? (
         <FormButtons
@@ -320,6 +329,7 @@ function BulkEditForm({
   clockFormat,
   disabled,
   saving,
+  ask = null,
   onSave,
   onClose,
 }) {
@@ -387,13 +397,15 @@ function BulkEditForm({
       />
       <p className="c-hint">{repeatEditNote(false)}</p>
       <Problem text={problem} />
-      <FormButtons
-        saveLabel="Save"
-        onSave={onSave}
-        onClose={onClose}
-        saving={saving}
-        blocked={disabled || problem !== null}
-      />
+      {ask ?? (
+        <FormButtons
+          saveLabel="Save"
+          onSave={onSave}
+          onClose={onClose}
+          saving={saving}
+          blocked={disabled || problem !== null}
+        />
+      )}
     </div>
   );
 }
@@ -426,6 +438,9 @@ export default function Classes() {
   // People booked on the classes a change would end, when the server asked: which
   // row asked (`archive:<id>`, `stop:<id>` or `move:<id>`) and who they are.
   const [endAsk, setEndAsk] = useState(null);
+  // Personal training sessions a save would put a class over, when the server asked:
+  // which form asked, the sessions, and the body it sent.
+  const [sessionAsk, setSessionAsk] = useState(null);
   // Which class is open for a bulk edit, and its form.
   const [bulkFor, setBulkFor] = useState(null);
   const [bulkState, setBulkState] = useState(() => bulkEditDraft([], ''));
@@ -567,18 +582,56 @@ export default function Classes() {
     }
   };
 
-  const saveEdit = async (typeId) => {
-    const body = classRequest(editDraft);
+  // A save the server may ask about first: a class over personal training sessions
+  // booked with its coach is a question, shown where Save was, and its answer is the same
+  // body sent again with their mark. True when saved, null when asked, false otherwise.
+  const saveAsking = async (key, body, call) => {
+    setBusy(key);
+    setActionError(null);
+    try {
+      const res = await call(body);
+      setTimetable(res.data);
+      setSessionAsk(null);
+      return true;
+    } catch (err) {
+      const sessions = sessionsAsked(err);
+      if (sessions !== null) {
+        setSessionAsk({ key, sessions, body });
+        return null;
+      }
+      setSessionAsk(null);
+      setActionError(errorText(err, "We couldn't save that."));
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // The question stands only while the form still holds what was asked about.
+  const asked = (body) => JSON.stringify({ ...body, confirmReplace: undefined, confirmBookings: undefined, confirmTrainerSessions: undefined });
+  const sessionsBox = (key, body, resend) => {
+    if (sessionAsk === null || sessionAsk.key !== key || body === null || asked(sessionAsk.body) !== asked(body)) return null;
+    return (
+      <TrainerSessionsBox
+        sessions={sessionAsk.sessions}
+        clockFormat={lists.clockFormat}
+        busy={busy !== null}
+        onCancel={() => setSessionAsk(null)}
+        onConfirm={() => void resend({ ...sessionAsk.body, confirmTrainerSessions: sessionAsk.sessions.mark })}
+      />
+    );
+  };
+
+  const saveEdit = async (typeId, body = classRequest(editDraft)) => {
     if (body === null) return;
-    if (await run(`edit:${typeId}`, () => orgService.updateClass(gymId, typeId, body))) {
+    if (await saveAsking(`edit:${typeId}`, body, (sent) => orgService.updateClass(gymId, typeId, sent))) {
       setEditing(null);
     }
   };
 
-  const saveRepeat = async (typeId) => {
-    const body = repeatRequest(repeatDraftState);
+  const saveRepeat = async (typeId, body = repeatRequest(repeatDraftState)) => {
     if (body === null) return;
-    if (await run(`repeat:${typeId}`, () => orgService.addClassRepeat(gymId, typeId, body))) {
+    if (await saveAsking(`repeat:${typeId}`, body, (sent) => orgService.addClassRepeat(gymId, typeId, sent))) {
       setRepeatFor(null);
     }
   };
@@ -586,8 +639,9 @@ export default function Classes() {
   const editBounds = (schedule) => updateFromBounds(schedule, today, lists.horizonDays);
 
   // Not `run`: a move the server asks about is a question, not a failure.
-  const saveRepeatEdit = async (schedule, confirmReplace = null, confirmBookings = null) => {
-    const body = repeatEditRequest(repeatEditState, editBounds(schedule), confirmReplace, confirmBookings);
+  // `sent`: the body a sessions box sends again, with its number.
+  const saveRepeatEdit = async (schedule, confirmReplace = null, confirmBookings = null, sent = null) => {
+    const body = sent ?? repeatEditRequest(repeatEditState, editBounds(schedule), confirmReplace, confirmBookings);
     if (body === null) return;
     setBusy(`repeatEdit:${schedule.id}`);
     setActionError(null);
@@ -596,16 +650,22 @@ export default function Classes() {
       setTimetable(res.data);
       setReplaceAsk(null);
       setEndAsk(null);
+      setSessionAsk(null);
       setEditingRepeat(null);
     } catch (err) {
       const count = replacesAsked(err);
       const ending = bookingsAsked(err);
-      if (ending !== null) {
+      const sessions = sessionsAsked(err);
+      if (sessions !== null) {
+        // Whatever was asked before has been answered; the body carries those answers.
+        setSessionAsk({ key: `repeatEdit:${schedule.id}`, sessions, body });
+      } else if (ending !== null) {
         // The move was agreed to (or needed no asking); the people are asked about next.
         setEndAsk({ key: `move:${schedule.id}`, ending, from: body.updateFrom, confirmReplace });
       } else if (count === null) {
         setEndAsk(null);
         setReplaceAsk(null);
+        setSessionAsk(null);
         setActionError(errorText(err, "We couldn't save that."));
         // A refusal can mean the list on screen is out of date — the same Save
         // pressed again after the first one went through — so read it again
@@ -631,13 +691,11 @@ export default function Classes() {
       lists.horizonDays,
     );
 
-  const saveBulk = async (typeId, slots) => {
-    const body = bulkEditRequest(bulkState, bulkBounds(slots));
+  const saveBulk = async (typeId, slots, body = bulkEditRequest(bulkState, bulkBounds(slots))) => {
     if (body === null) return;
-    if (await run(`bulk:${typeId}`, () => orgService.bulkEditClass(gymId, typeId, body))) {
-      setBulkFor(null);
-      return;
-    }
+    const saved = await saveAsking(`bulk:${typeId}`, body, (sent) => orgService.bulkEditClass(gymId, typeId, sent));
+    if (saved === true) setBulkFor(null);
+    if (saved !== false) return;
     // A refusal can mean the list on screen is out of date, as for one time
     // slot's Edit; read it again.
     try {
@@ -870,6 +928,7 @@ export default function Classes() {
                         saving={busy === `edit:${type.id}`}
                         problem={classProblem(editDraft)}
                         saveLabel="Save"
+                        ask={sessionsBox(`edit:${type.id}`, classRequest(editDraft), (sent) => saveEdit(type.id, sent))}
                         onSave={() => void saveEdit(type.id)}
                         onClose={() => setEditing(null)}
                       />
@@ -887,6 +946,9 @@ export default function Classes() {
                         clockFormat={lists.clockFormat}
                         disabled={locked}
                         saving={busy === `bulk:${type.id}`}
+                        ask={sessionsBox(`bulk:${type.id}`, bulkEditRequest(bulkState, bulkBounds(bulkSlots)), (sent) =>
+                          saveBulk(type.id, bulkSlots, sent),
+                        )}
                         onSave={() => void saveBulk(type.id, bulkSlots)}
                         onClose={() => setBulkFor(null)}
                       />
@@ -987,6 +1049,11 @@ export default function Classes() {
                                     />
                                   )
                                 }
+                                ask={sessionsBox(
+                                  `repeatEdit:${schedule.id}`,
+                                  repeatEditRequest(repeatEditState, editBounds(schedule)),
+                                  (sent) => saveRepeatEdit(schedule, null, null, sent),
+                                )}
                                 bounds={editBounds(schedule)}
                                 today={today}
                                 staff={staff}
@@ -1050,6 +1117,7 @@ export default function Classes() {
                             today={today}
                             disabled={locked}
                             saving={busy === `repeat:${type.id}`}
+                            ask={sessionsBox(`repeat:${type.id}`, repeatRequest(repeatDraftState), (sent) => saveRepeat(type.id, sent))}
                             onSave={() => void saveRepeat(type.id)}
                             onClose={() => setRepeatFor(null)}
                           />

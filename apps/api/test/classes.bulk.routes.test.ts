@@ -726,6 +726,7 @@ d("bulk edit of a class's time slots (real Postgres)", () => {
       for (const minute of [at(7), at(18)]) {
         const made = await createSchedule(sql, {
           gymId: gym,
+          confirmTrainerSessions: null,
           classTypeId: type,
           weekdays: EVERY_DAY,
           startMinute: minute,
@@ -740,6 +741,7 @@ d("bulk edit of a class's time slots (real Postgres)", () => {
       const ids = (await slotRows(type)).map((s) => s.id);
       const out = await bulkChangeSlots(sql, {
         gymId: gym,
+        confirmTrainerSessions: null,
         classTypeId: type,
         scheduleIds: ids,
         updateFrom: "2026-10-05",
