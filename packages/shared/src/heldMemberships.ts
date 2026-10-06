@@ -53,10 +53,25 @@ export const HELD_START_AHEAD_DAYS = 366;
 const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MS_A_DAY = 86_400_000;
 
+/** The digits of `day` from `from` up to `to` as a number; -1 where one is not a digit. */
+function digits(day: string, from: number, to: number): number {
+  let n = 0;
+  for (let i = from; i < to; i++) {
+    const c = day.charCodeAt(i) - 48;
+    if (c < 0 || c > 9) return -1;
+    n = n * 10 + c;
+  }
+  return n;
+}
+
+/** The year, month and day of a 'YYYY-MM-DD' text, or null where it is not written so.
+ *  Read by position: a list of a gym's people asks this of every membership on it. */
 function parts(day: string): [number, number, number] | null {
-  const m = DAY.exec(day);
-  if (m === null) return null;
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (day.length !== 10 || day.charCodeAt(4) !== 45 || day.charCodeAt(7) !== 45) return null;
+  const y = digits(day, 0, 4);
+  const m = digits(day, 5, 7);
+  const d = digits(day, 8, 10);
+  return y < 0 || m < 0 || d < 0 ? null : [y, m, d];
 }
 
 const pad = (n: number, width: number) => String(n).padStart(width, "0");
@@ -233,26 +248,32 @@ export const heldMembershipViewSchema = z
   .strict();
 export type HeldMembershipView = z.infer<typeof heldMembershipViewSchema>;
 
-/** What a held membership is on `today`, the gym's own day. */
-export function heldMembershipView(stored: HeldMembership, today: string): HeldMembershipView {
-  const m = settle(stored, today);
-  const none = { freeze: false, unfreeze: false, cancel: false, cancelAtPeriodEnd: null, markPaid: null, undoPaid: null };
-  if (m.status === "ended" || m.status === "cancelled") {
-    const last = lastDay(m);
-    return {
-      status: m.status,
-      endsOn: m.status === "cancelled" ? m.cancelledOn : last,
-      renewsOn: null,
-      payment: null,
-      can: none,
-    };
-  }
+/** A membership's state, its dates and what is owed: `heldMembershipView` without what
+ *  staff can do to it. A list of many people reads this alone. */
+export type HeldMembershipFacts = Pick<HeldMembershipView, "status" | "endsOn" | "renewsOn" | "payment">;
 
+/** What both readings of a membership the clock has been applied to work from. */
+interface Settled {
+  facts: HeldMembershipFacts;
+  frozen: boolean;
+  /** The day its dates are read on: a frozen membership's stand still at the day it was frozen. */
+  asOf: string;
+  upcoming: boolean;
+  recurring: boolean;
+  /** The day a repeating one is paid up to. */
+  until: string | null;
+}
+
+function settled(m: HeldMembership, today: string): Settled {
   const frozen = m.status === "frozen";
-  // A frozen membership's dates stand still at the day it was frozen.
   const asOf = frozen && m.frozenOn !== null ? m.frozenOn : today;
   const upcoming = !frozen && today < m.startsOn;
   const recurring = m.kind === "recurring";
+  if (m.status === "ended" || m.status === "cancelled") {
+    const last = lastDay(m);
+    const facts = { status: m.status, endsOn: m.status === "cancelled" ? m.cancelledOn : last, renewsOn: null, payment: null };
+    return { facts, frozen, asOf, upcoming, recurring, until: null };
+  }
   const until = recurring ? paidUntil(m) : null;
 
   let payment: HeldMembershipView["payment"] = null;
@@ -266,6 +287,27 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
     } else {
       payment = m.paidPeriods >= 1 ? { state: "paid", until: null } : { state: "due", since: frozen ? null : m.startsOn };
     }
+  }
+  const facts: HeldMembershipFacts = {
+    status: upcoming ? "upcoming" : m.status,
+    endsOn: frozen ? null : lastDay(m),
+    renewsOn: frozen || !recurring || !m.renews ? null : periodStart(m, periodIndex(m, today) + 1),
+    payment,
+  };
+  return { facts, frozen, asOf, upcoming, recurring, until };
+}
+
+/** What a held membership is on `today`, the gym's own day, without what staff can do. */
+export function heldMembershipFacts(stored: HeldMembership, today: string): HeldMembershipFacts {
+  return settled(settle(stored, today), today).facts;
+}
+
+/** What a held membership is on `today`, the gym's own day. */
+export function heldMembershipView(stored: HeldMembership, today: string): HeldMembershipView {
+  const m = settle(stored, today);
+  const { facts, frozen, asOf, upcoming, recurring, until } = settled(m, today);
+  if (m.status === "ended" || m.status === "cancelled") {
+    return { ...facts, can: { freeze: false, unfreeze: false, cancel: false, cancelAtPeriodEnd: null, markPaid: null, undoPaid: null } };
   }
 
   let markPaid: HeldMembershipView["can"]["markPaid"] = null;
@@ -289,10 +331,7 @@ export function heldMembershipView(stored: HeldMembership, today: string): HeldM
   }
 
   return {
-    status: upcoming ? "upcoming" : m.status,
-    endsOn: frozen ? null : lastDay(m),
-    renewsOn: frozen || !recurring || !m.renews ? null : periodStart(m, periodIndex(m, today) + 1),
-    payment,
+    ...facts,
     can: {
       freeze: m.status === "active" && !upcoming,
       unfreeze: frozen,

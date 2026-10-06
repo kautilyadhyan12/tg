@@ -794,7 +794,14 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
     };
     // The invitation (3b-i-a) is null for a person never invited, and for a row from a
     // server too old to send it.
-    expect(memberListEntrySchema.parse(entry)).toEqual({ ...entry, invitation: null, needsReview: false, staff: null });
+    // What the memberships they hold say (23a-i) is null for a person holding none, and
+    // for a row from a server too old to send it.
+    expect(memberListEntrySchema.parse(entry)).toEqual({ ...entry, invitation: null, needsReview: false, staff: null, held: null });
+    const held = { status: "active" as const, memberships: ["Gold Monthly"], day: { what: "renews" as const, on: "2026-11-06" }, payment: { state: "due" as const, since: null } };
+    expect(memberListEntrySchema.parse({ ...entry, held }).held).toEqual(held);
+    // A shape the rule never makes is refused, not shown: no names, or a payment it has no word for.
+    expect(memberListEntrySchema.safeParse({ ...entry, held: { ...held, memberships: [] } }).success).toBe(false);
+    expect(memberListEntrySchema.safeParse({ ...entry, held: { ...held, payment: { state: "overdue" } } }).success).toBe(false);
     // EVERY FIELD A GYM MAY LEAVE EMPTY IS NULLABLE — a gym whose export has four
     // columns is not a gym with a broken record.
     expect(
