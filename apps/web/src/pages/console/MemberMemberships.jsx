@@ -43,7 +43,7 @@ const PLAIN = 'c-btn c-btn-s';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 const DANGER = 'c-btn c-btn-danger';
 
-export default function MemberMemberships({ gymId, entryId, name, readOnly, clockFormat }) {
+export default function MemberMemberships({ gymId, entryId, name, readOnly, clockFormat, onChanged }) {
   /** The answer on screen, and the record it is about: never shown under another. */
   const [held, setHeld] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -122,6 +122,8 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
       setForm(null);
       setEnding(null);
       setNotice(doneWords(what, m));
+      // The list behind this page says what the person holds (23a-i): it reads again.
+      onChanged?.();
     } catch (err) {
       // Classes are booked with it: the box names them and waits for its own button.
       const booked = m === null ? null : membershipBookingsAsked(err);
