@@ -76,14 +76,14 @@ const placeInput = (ctx: repo.PlaceContext, now: Date) => ({
 async function handOver(tx: TransactionSql, gymId: string, ctx: repo.PlaceContext, now: Date): Promise<number> {
   if (!eventHandsOverNow(placeInput(ctx, now))) return 0;
   const free = ctx.event.places === null ? Infinity : ctx.event.places - ctx.counts.coming;
-  let moved = 0;
+  const moves: { placeId: string; entryId: string | null }[] = [];
   for (const waiter of await repo.waitlistOf(tx, gymId, ctx.event.id)) {
-    if (moved >= free) break;
+    if (moves.length >= free) break;
     if (!waiter.member) continue;
-    await repo.moveIn(tx, { gymId, placeId: waiter.placeId, entryId: waiter.entryId, claimKey: null, now });
-    moved += 1;
+    moves.push({ placeId: waiter.placeId, entryId: waiter.entryId });
   }
-  return moved;
+  await repo.moveInMany(tx, gymId, moves, now);
+  return moves.length;
 }
 
 /** As `handOver`, for an event whose places, time or cancelling staff just changed, or

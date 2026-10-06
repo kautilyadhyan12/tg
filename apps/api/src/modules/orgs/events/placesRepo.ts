@@ -186,6 +186,19 @@ export async function moveIn(tx: TransactionSql, input: { gymId: string; placeId
   if (rows.length !== 1) throw new Error("a waitlisted place was not there to move in");
 }
 
+/** The people at the head of the line are given the places handed to them, in one
+ *  statement however many there are. */
+export async function moveInMany(tx: TransactionSql, gymId: string, moves: readonly { placeId: string; entryId: string | null }[], now: Date): Promise<void> {
+  if (moves.length === 0) return;
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_event_places p
+    SET status = 'coming', coming_at = ${now}, entry_id = v.entry_id, claim_key = NULL
+    FROM unnest(${moves.map((m) => m.placeId)}::uuid[], ${moves.map((m) => m.entryId)}::uuid[]) AS v(id, entry_id)
+    WHERE p.gym_id = ${gymId} AND p.id = v.id AND p.status = 'waitlisted'
+    RETURNING p.id`;
+  if (rows.length !== moves.length) throw new Error("a waitlisted place was not there to move in");
+}
+
 export async function markCancelled(tx: TransactionSql, gymId: string, placeId: string, now: Date): Promise<void> {
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_event_places SET status = 'cancelled', cancelled_at = ${now}
