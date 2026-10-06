@@ -1,5 +1,5 @@
 // PERSONAL TRAINING (Part 3 §13.5; ROADMAP Stage 2 item 17e-i). Mirrors
-// `0078_personal_training.sql`, which carries the reasoning and holds what Drizzle's
+// `0079_personal_training.sql`, which carries the reasoning and holds what Drizzle's
 // builder cannot express: the two EXCLUDE constraints (a trainer's hours on one weekday
 // never overlap, nor do a trainer's sessions) and the `(gym_id, entry_id)` foreign key
 // with ON DELETE SET NULL (entry_id).

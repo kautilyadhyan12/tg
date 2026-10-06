@@ -45,3 +45,4 @@ export * from "./staffInvites.js";
 export * from "./checkin.js";
 export * from "./leaderboard.js";
 export * from "./posts.js";
+export * from "./gymEvents.js";

@@ -40,6 +40,7 @@ export function consoleMenu(orgSlug, privileges, orgType) {
     // runs the timetable.
     Array.isArray(privileges) && { key: 'training', to: `${base}/personal-training`, end: false, label: 'Personal training', phone: 'more' },
     canManagePosts(privileges) && { key: 'updates', to: `${base}/updates`, end: false, label: 'Updates', phone: 'more' },
+    canManagePosts(privileges) && { key: 'events', to: `${base}/events`, end: false, label: 'Events', phone: 'more' },
     canSeeLeaderboard(privileges) && {
       key: 'leaderboard',
       to: `${base}/leaderboard`,

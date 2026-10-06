@@ -1,6 +1,6 @@
 -- Personal training (ROADMAP Stage 2 item 17e-i; spec Part 3 §13.5).
 -- Forward-only. Hand-written, as `0016` onwards are; its journal entry is part of this commit.
--- Written as `0077`; renumbered when `0077_post_hidden_at` merged first.
+-- Written as `0077`; renumbered twice, as `0077_post_hidden_at` and `0078_gym_events` merged first.
 --
 -- gym_trainers          a member of staff who takes personal training, and their session length;
 -- gym_trainer_hours     the hours they offer, by weekday, on the gym's own clock;

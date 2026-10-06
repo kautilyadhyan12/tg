@@ -1137,7 +1137,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       "gym_members.gym_id",
       // The record a membership was removed with (0048): moved by a merge with the rest.
       "gym_members.removed_entry_id",
-      // A personal-training session (0078): moved by the join (`pt.routes.test.ts`); a
+      // A personal-training session (0079): moved by the join (`pt.routes.test.ts`); a
       // deleted record lets it go.
       "gym_pt_appointments.entry_id",
       "gym_pt_appointments.gym_id",

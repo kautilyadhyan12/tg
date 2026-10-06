@@ -7,7 +7,7 @@
 // is deleted with their account by a statement of its own (`privacy/repo.ts`), as their
 // reactions, reports and a stop on their posting are (`DIRECT_DELETE_TABLES`).
 import { sql } from "drizzle-orm";
-import { boolean, check, foreignKey, index, integer, pgTable, primaryKey, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, foreignKey, index, integer, pgTable, primaryKey, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gyms } from "./tenancy.js";
@@ -176,4 +176,62 @@ export const photoFilesToRemove = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("photo_files_to_remove_created_idx").on(t.createdAt)],
+);
+
+/** A gym's events (`0078_gym_events.sql`, which is the record; spec Part 3 §15.4). The
+ *  gym's own: who made one is its only user link, `ON DELETE set null`, so `gym_events` is
+ *  on `USER_LINKED_NOT_PURGED_TABLES`. */
+export const gymEvents = pgTable(
+  "gym_events",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    /** The browser's key for the event: sent twice, it is one event. */
+    eventKey: uuid("event_key").notNull(),
+    name: text("name").notNull(),
+    details: text("details").notNull().default(""),
+    place: text("place").notNull().default(""),
+    /** The gym's own clock. */
+    startsOn: date("starts_on").notNull(),
+    startMinute: smallint("start_minute").notNull(),
+    endsOn: date("ends_on").notNull(),
+    endMinute: smallint("end_minute").notNull(),
+    /** The instants those were, in the gym's time zone, when the event was saved. */
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    /** How many people fit; null is no limit. */
+    places: integer("places"),
+    posterId: uuid("poster_id"),
+    posterKey: text("poster_key"),
+    posterType: text("poster_type"),
+    posterBytes: integer("poster_bytes"),
+    posterWidth: integer("poster_width"),
+    posterHeight: integer("poster_height"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("gym_events_gym_id_uq").on(t.gymId, t.id),
+    unique("gym_events_event_key_uq").on(t.gymId, t.eventKey),
+    unique("gym_events_poster_key_uq").on(t.posterKey),
+    check("gym_events_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 80`),
+    check("gym_events_details_check", sql`char_length(${t.details}) <= 1000`),
+    check("gym_events_place_check", sql`char_length(${t.place}) <= 120`),
+    check("gym_events_minutes_check", sql`${t.startMinute} BETWEEN 0 AND 1439 AND ${t.endMinute} BETWEEN 0 AND 1439`),
+    check("gym_events_order_check", sql`${t.endsAt} > ${t.startsAt}`),
+    check("gym_events_places_check", sql`${t.places} IS NULL OR ${t.places} BETWEEN 1 AND 10000`),
+    check(
+      "gym_events_poster_whole_check",
+      sql`num_nulls(${t.posterId}, ${t.posterKey}, ${t.posterType}, ${t.posterBytes}, ${t.posterWidth}, ${t.posterHeight}) IN (0, 6)`,
+    ),
+    check("gym_events_poster_type_check", sql`${t.posterType} IS NULL OR ${t.posterType} IN ('image/jpeg','image/png','image/webp')`),
+    check("gym_events_poster_size_check", sql`${t.posterBytes} IS NULL OR ${t.posterBytes} BETWEEN 1 AND 2097152`),
+    check("gym_events_poster_width_check", sql`${t.posterWidth} IS NULL OR ${t.posterWidth} BETWEEN 1 AND 8000`),
+    check("gym_events_poster_height_check", sql`${t.posterHeight} IS NULL OR ${t.posterHeight} BETWEEN 1 AND 8000`),
+    index("gym_events_coming_idx").on(t.gymId, t.endsAt),
+  ],
 );

@@ -51,6 +51,7 @@ import ConsolePersonalTraining from './pages/console/PersonalTraining';
 import ConsoleLeads    from './pages/console/Leads';
 import ConsoleLeaderboard from './pages/console/Leaderboard';
 import ConsoleUpdates  from './pages/console/Updates';
+import ConsoleEvents   from './pages/console/Events';
 import ConsoleSettings from './pages/console/Settings';
 import ConsoleMore     from './pages/console/More';
 
@@ -301,6 +302,12 @@ export default function App() {
             <Route path="/console/:orgSlug/updates" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleUpdates /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* THE GYM'S EVENTS FOR STAFF (19c-i): `posts.manage`'s too. */}
+            <Route path="/console/:orgSlug/events" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleEvents /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={

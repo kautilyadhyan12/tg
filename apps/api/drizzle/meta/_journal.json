@@ -545,7 +545,14 @@
       "idx": 77,
       "version": "7",
       "when": 1788220800062,
-      "tag": "0078_personal_training",
+      "tag": "0078_gym_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1788220800063,
+      "tag": "0079_personal_training",
       "breakpoints": true
     }
   ]

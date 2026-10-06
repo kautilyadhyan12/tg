@@ -18,8 +18,9 @@ export interface PhotoStore {
 }
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-/** `gym-page/…` is a gym page's photo, `gym-post/…` a photo on one of its posts (19b-i). */
-const KEY = new RegExp(`^gym-(page|post)/${UUID}/${UUID}\\.(jpg|png|webp)$`);
+/** `gym-page/…` is a gym page's photo, `gym-post/…` a photo on one of its posts (19b-i),
+ *  `gym-event/…` an event's poster (19c-i). */
+const KEY = new RegExp(`^gym-(page|post|event)/${UUID}/${UUID}\\.(jpg|png|webp)$`);
 
 const EXTENSION = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as const;
 
@@ -32,6 +33,12 @@ export function photoKey(gymId: string, photoId: string, type: keyof typeof EXTE
 
 export function postPhotoKey(gymId: string, photoId: string, type: keyof typeof EXTENSION): string {
   const key = `gym-post/${gymId.toLowerCase()}/${photoId.toLowerCase()}.${EXTENSION[type]}`;
+  if (!KEY.test(key)) throw new Error("photo key out of shape");
+  return key;
+}
+
+export function eventPosterKey(gymId: string, posterId: string, type: keyof typeof EXTENSION): string {
+  const key = `gym-event/${gymId.toLowerCase()}/${posterId.toLowerCase()}.${EXTENSION[type]}`;
   if (!KEY.test(key)) throw new Error("photo key out of shape");
   return key;
 }
