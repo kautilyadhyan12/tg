@@ -218,6 +218,25 @@ describe("a member's Events", () => {
     expect(svc.come.mock.calls[1][2]).not.toBe(svc.come.mock.calls[0][2]);
   });
 
+  it('a lost tap that landed, then undone, is not sent again under its old key', async () => {
+    const full = event('a', 'Saturday Open Day', { places: 30, going: going({ coming: 30, can: { ...NO, joinWaitlist: true } }) });
+    const waiting = { ...full, going: going({ coming: 30, waiting: 1, mine: { status: 'waitlisted', waitlistPlace: 1 }, can: { ...NO, cancel: true } }) };
+    svc.list.mockResolvedValue(listOf([full]));
+    render(<Events gym={GYM} />);
+    svc.come.mockRejectedValueOnce(new Error('Network Error'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Join the waitlist: Saturday Open Day' }));
+    await screen.findByText("That didn't go through. Try again.");
+    // It had landed: the list read again shows her waiting. She leaves, then joins again.
+    svc.list.mockResolvedValue(listOf([waiting]));
+    document.dispatchEvent(new Event('visibilitychange'));
+    svc.notComing.mockResolvedValue(full);
+    fireEvent.click(await screen.findByRole('button', { name: 'Leave the waitlist: Saturday Open Day' }));
+    svc.come.mockResolvedValue(waiting);
+    fireEvent.click(await screen.findByRole('button', { name: 'Join the waitlist: Saturday Open Day' }));
+    await screen.findByText("You're 1st on the waitlist");
+    expect(svc.come.mock.calls[1][2]).not.toBe(svc.come.mock.calls[0][2]);
+  });
+
   it('marks a cancelled event and an event that is on now', async () => {
     svc.list.mockResolvedValue(
       listOf([

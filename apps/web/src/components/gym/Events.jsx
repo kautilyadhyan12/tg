@@ -170,7 +170,8 @@ export default function Events({ gym }) {
     setSaid((m) => ({ ...m, [event.id]: null }));
     try {
       const now = kind === 'cancel' ? await eventsService.notComing(gym.id, event.id) : await eventsService.come(gym.id, event.id, key, kind === 'wait');
-      keys.current.delete(tap);
+      // The event has changed hands: a key kept for any of its buttons is spent.
+      for (const kept of [...keys.current.keys()]) if (kept.startsWith(`${event.id}:`)) keys.current.delete(kept);
       setState((s) => (s.list === null ? s : { ...s, list: { ...s.list, events: s.list.events.map((e) => (e.id === now.id ? now : e)) } }));
     } catch (err) {
       // An answer from the server ends this tap; no answer keeps its key for the retry.
