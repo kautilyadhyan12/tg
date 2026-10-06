@@ -232,7 +232,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 19b-vi. [x] **A post five people have reported is hidden until staff decide** — merged 2026-10-06 (PR #180).
    - 19c. **Events** (spec Part 3 §15.4), split 2026-10-06 in two (the gym's side, a poster, and "I'm coming" with its waitlist are more than one terminal):
      - 19c-i. [x] **The gym makes events, with a poster, and members see them** — merged 2026-10-06 (PR #182).
-     - 19c-ii. [ ] **"I'm coming"**, counted by 17c's Book rule on an event: the last place never given to two people, the waitlist, and staff seeing who is coming.
+     - 19c-ii. [x] **"I'm coming"** — merged 2026-10-06 (PR #183).
    - 19d. [ ] **Challenges** (the document's leagues and tournaments; knock-outs later).
    - 19e. [ ] **A gym's own plan for a member**, after Stage 1 items 6a and 6b. **Its plan first settles §15.7's open question with Kd: whether a trainer sees a member's food, weight and plan only after the member's own tap.**
 20. **Messages, in the app** (RULINGS 2026-09-22, Part 7 of the re-plan; spec Part 3 §16.1–16.4) — it takes in item 2. Every card Opus xhigh (it sends data out to real people).
