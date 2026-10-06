@@ -3288,6 +3288,36 @@ facts), everyone or people who join, alone or in teams (staff make the teams, or
 members pick one), a prize in words. Its board is 15.5's query over its dates and its
 people; at the end the result is posted to Updates. Knock-out brackets are later.
 
+**Challenges, as built (19d-i).** `gym_challenges` and `gym_challenge_people` (migration
+`0081`). A challenge counts **gym days** or **workout days** over its own first and last
+day (the gym's calendar, both counted, 366 days at most), for **everyone in the app** or
+**only people who join**, and is won by **the most** or by **reaching a number** that
+everybody who gets there wins (a target is never more than the challenge's days: one a
+day is counted). A prize and details in words. Staff holding `leaderboard.manage` make
+one on the console's Challenges page (six that have not ended at most; a new one may
+start up to 31 days back, the days since then already counting, and up to a year ahead).
+Once it has started, what it counts, its first day, who is in it and its target cannot
+change; its name, prize, details and last day can. Cancel is behind a box and can be
+undone until its last day; nothing is ever deleted.
+
+Its board is the leaderboard's own count (`countedDays`, `countedWorkoutDays`) and its own
+ranking (`rankBoard`) over the challenge's dates, so a hidden person (Hide me, under 18,
+taken off, staff, no name), a removed member and a deleted account show to nobody else:
+not in a place, not in the count who joined, not in the count who reached the target.
+Fewer than three people with a number: no places. Nothing is stored; a visit fixed later
+changes a result.
+
+A member's Challenges tab (the member web until the phone app): running first, then
+coming, then the newest three that ended in the last 14 days with who won; a cancelled one stays,
+marked, for 7 days. Each card: how it is won, its days, the prize, who is in it, the
+member's own number with a bar toward the target and a flame for every counted day, their
+place and what it takes to move up, the top three, Join or Leave, and the whole board
+(the first hundred). Joining is open to its last day and counts the days since it
+started. A gym-days challenge at a gym that checks nobody in says so, never a bare 0. A
+gym on no plan: its members are sent none.
+
+Left for **19d-ii**: teams, and the result posted to Updates when it ends.
+
 ### 15.7 A gym's own plan for a member
 
 A trainer with `plans.write` (a new tick) opens a member's weekly workout plan and
