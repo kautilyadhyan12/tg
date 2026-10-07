@@ -179,6 +179,11 @@ describe('staff who may', () => {
     draw([gym()]);
     expect(await screen.findByText(/Ask the owner to set it in Gym details./)).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Open Settings' })).toBeNull();
+    // A studio's section has the studio's name, as Settings writes it.
+    cleanup();
+    resetConsoleOrgs();
+    draw([gym({ orgType: 'studio' })]);
+    expect(await screen.findByText(/Ask the owner to set it in Studio details./)).toBeTruthy();
   });
 
   it("moving to another gym throws away what was typed for the first, and reads the second gym's own list", async () => {

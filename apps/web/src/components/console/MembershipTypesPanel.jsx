@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX } from '@app/shared';
+import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, orgWords } from '@app/shared';
 import { Link } from 'react-router-dom';
 import { Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
@@ -593,6 +593,8 @@ export default function MembershipTypesPanel({ org, readOnly }) {
   );
   const summary = withSetUpCount(typesSummary(list), fromList.words);
   const canSetCountry = canManageOrg(viewerPrivileges(org));
+  // Settings' own name for that section: "Gym details", "Studio details".
+  const details = `${orgWords(org.orgType).itCap} details`;
 
   return (
     <div className="c-page">
@@ -636,8 +638,8 @@ export default function MembershipTypesPanel({ org, readOnly }) {
             <div className="c-callout flex-col items-start">
               <p className="c-s15 m-0">
                 {canSetCountry
-                  ? "Set your country in Gym details before adding a membership type. Prices are in your country's own money."
-                  : "Your country isn't set yet, so a membership type can't be added. Ask the owner to set it in Gym details. Prices are in your country's own money."}
+                  ? `Set your country in ${details} before adding a membership type. Prices are in your country's own money.`
+                  : `Your country isn't set yet, so a membership type can't be added. Ask the owner to set it in ${details}. Prices are in your country's own money.`}
               </p>
               {canSetCountry && typeof org.slug === 'string' ? (
                 <Link to={`/console/${org.slug}/settings`} className="c-btn c-btn-s">
