@@ -411,6 +411,18 @@ describe('the banner above every console screen', () => {
     const plan = document.getElementById('plan');
     expect(plan).not.toBeNull();
     expect(plan.textContent).toMatch(/trial/i);
+    // Pressed on the Overview itself, already at that address: the press brings the plan
+    // into view, since an address that does not change moves nothing.
+    const had = Element.prototype.scrollIntoView;
+    const into = vi.fn();
+    Element.prototype.scrollIntoView = into;
+    try {
+      fireEvent.click(within(screen.getByTestId('console-banner')).getByRole('link', { name: 'Open Plan' }));
+      fireEvent.click(within(screen.getByTestId('console-banner')).getByRole('link', { name: 'Open Plan' }));
+      expect(into.mock.instances.filter((el) => el === plan).length).toBeGreaterThanOrEqual(2);
+    } finally {
+      Element.prototype.scrollIntoView = had;
+    }
   });
 
   it('a banner that sends nobody anywhere has no button', async () => {

@@ -1144,6 +1144,30 @@ describe('a link to one section of Settings', () => {
     expect(heading.getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('a link to another section, followed while Settings is already open, opens that section too (23d)', async () => {
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/settings#opening-hours']}>
+        <Link to="/console/iron-house/settings#follow-up-emails">elsewhere</Link>
+        <Routes>
+          <Route path="/console/:orgSlug/settings" element={<Settings />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const hours = await screen.findByRole('button', { name: /^When we're open/ });
+    const emails = screen.getByRole('button', { name: /^Follow-up emails to leads/ });
+    expect(hours.getAttribute('aria-expanded')).toBe('true');
+    expect(emails.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('link', { name: 'elsewhere' }));
+    await waitFor(() => expect(emails.getAttribute('aria-expanded')).toBe('true'));
+    // The one opened first is left as it was, and the new one still folds shut and stays shut.
+    expect(hours.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(emails);
+    expect(emails.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(hours);
+    expect(hours.getAttribute('aria-expanded')).toBe('false');
+    expect(emails.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('with no section named, every section starts closed and nothing is moved', async () => {
     drawAt('/console/iron-house/settings');
     expect(await screen.findByRole('button', { name: /^Gym details/ })).toBeTruthy();

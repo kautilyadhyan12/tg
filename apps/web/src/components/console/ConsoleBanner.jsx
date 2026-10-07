@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { bannerFor, bannerIsDismissed, dismissBanner } from '../../pages/console/billingView';
 import { viewerPrivileges } from '../../pages/console/consoleView';
-import { placeFor } from '../../pages/console/consolePlaces';
+import { PLAN_SECTION, placeFor } from '../../pages/console/consolePlaces';
 import PlaceLink from './PlaceLink';
 
 // Part 3 §4.2's "persistent trial/renewal banner slot [that] sits above all
@@ -72,6 +72,9 @@ export default function ConsoleBanner({ org }) {
               to={placeFor(org?.slug, viewerPrivileges(org), banner.place)}
               className="c-btn-link c-w6 underline"
               style={{ color: 'inherit', display: 'inline' }}
+              // Already on the Overview, at this address: the address does not change, so
+              // nothing would move. The plan is brought into view by the press itself.
+              onClick={() => document.getElementById(PLAN_SECTION)?.scrollIntoView?.({ block: 'start' })}
             >
               Open Plan
             </PlaceLink>

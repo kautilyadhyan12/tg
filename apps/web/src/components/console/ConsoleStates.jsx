@@ -229,6 +229,16 @@ export function ConsoleSection({
   // is simply open, closable like any other.
   if (forceOpen && !open) setOpen(true);
 
+  // A LINK TO THIS SECTION THAT ARRIVES WHILE THE PAGE IS ALREADY OPEN OPENS IT TOO (23d).
+  // `defaultOpen` seeds the state once, and the address can change to this section
+  // without the page being built again. It opens on that change alone, so the heading
+  // still folds it shut afterwards.
+  const [wasDefaultOpen, setWasDefaultOpen] = useState(defaultOpen);
+  if (defaultOpen !== wasDefaultOpen) {
+    setWasDefaultOpen(defaultOpen);
+    if (defaultOpen) setOpen(true);
+  }
+
   if (newLook) {
     return (
       <section className="c-card">
