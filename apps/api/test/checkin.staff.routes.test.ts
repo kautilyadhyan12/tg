@@ -204,7 +204,9 @@ d("staff check-in and the live log (real Postgres)", () => {
       const meera = await makeUser("meera", "Meera Iyer");
       const meeraRecord = await addRecord(ironHouse, { fullName: "Meera Iyer", email: meera.email, memberNumber: "7001" });
       await join(ironHouse, meera, meeraRecord);
-      const raghu = await addRecord(ironHouse, { fullName: "Raghu Nair", memberNumber: "7002" });
+      // A number no test address can hold: an address carries a time in digits (`uniq`), and a
+      // search for bare digits once found one (CI, 2026-10-07).
+      const raghu = await addRecord(ironHouse, { fullName: "Raghu Nair", memberNumber: "RN-7002" });
       // Iron House's own staff see them.
       expect((await found(ironHouse, "Meera", owner)).map((p) => p.name)).toEqual(["Meera Iyer"]);
       expect((await checkIn(ironHouse, { entryId: raghu }, owner)).statusCode).toBe(200);
@@ -224,7 +226,7 @@ d("staff check-in and the live log (real Postgres)", () => {
       // At their own gym, with Iron House's people's ids: nobody, and nothing written.
       const before = await visits(studio9);
       expect(await found(studio9, "Meera", rival)).toEqual([]);
-      expect(await found(studio9, "7002", rival)).toEqual([]);
+      expect(await found(studio9, "RN-7002", rival)).toEqual([]);
       for (const pick of [{ entryId: meeraRecord }, { entryId: raghu }, { userId: meera.userId }]) {
         const res = await checkIn(studio9, pick, rival);
         expect(res.statusCode).toBe(404);
@@ -241,11 +243,11 @@ d("staff check-in and the live log (real Postgres)", () => {
   it(
     "a former member is never found and never checked in; the person picked is the person checked in",
     async () => {
-      const gone = await addRecord(ironHouse, { fullName: "Farah Left", memberNumber: "7101", former: true });
+      const gone = await addRecord(ironHouse, { fullName: "Farah Left", memberNumber: "FL-7101", former: true });
       const anil = await addRecord(ironHouse, { fullName: "Anil Kumar", memberNumber: "7102" });
       const anita = await addRecord(ironHouse, { fullName: "Anita Kumar", memberNumber: "7103" });
       expect(await found(ironHouse, "Farah", owner)).toEqual([]);
-      expect(await found(ironHouse, "7101", owner)).toEqual([]);
+      expect(await found(ironHouse, "FL-7101", owner)).toEqual([]);
       const before = (await visits(ironHouse)).length;
       const res = await checkIn(ironHouse, { entryId: gone }, owner);
       expect(res.statusCode).toBe(404);
