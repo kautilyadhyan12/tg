@@ -50,6 +50,8 @@ async function cleanup(): Promise<void> {
 }
 
 await cleanup();
+// Whatever happens below, the gym and its list are removed.
+try {
 const owner = randomUUID();
 const coach = randomUUID();
 await sql`INSERT INTO users (id, email, display_name) VALUES (${owner}, ${`${PREFIX}${owner}@example.com`}, 'Cost Owner')`;
@@ -137,6 +139,7 @@ await sql`ANALYZE gym_member_list_entries`;
 console.log(`everybody taken off the list (${String(PEOPLE)} former people)`);
 await measure("one read", () => read(5));
 await measure(`${String(BURST)} staff at the same moment`, () => Promise.all(Array.from({ length: BURST }, () => read(5))));
-
-await cleanup();
-await sql.end({ timeout: 5 });
+} finally {
+  await cleanup();
+  await sql.end({ timeout: 5 });
+}

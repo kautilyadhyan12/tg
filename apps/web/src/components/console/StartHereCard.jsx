@@ -3,6 +3,7 @@ import { CheckCircle2, Circle } from 'lucide-react';
 import { orgWords } from '@app/shared';
 import { ConsoleCard } from './ConsoleStates';
 import { startHereCount } from '../../pages/console/startHereView';
+import { readOnlyNote } from '../../pages/console/billingView';
 
 // Overview's "Start here" list (ROADMAP 23b): what a new gym sets up, each line a button
 // to the page where it is done, ticked by the server once the gym has it. In Overview's
@@ -16,16 +17,18 @@ const NEXT_STYLE = { background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', colo
 const PLAIN_STYLE = { background: 'rgba(255,255,255,0.08)', color: '#fff' };
 const DONE_STYLE = { background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.12)' };
 
-function StepAction({ action, style, readOnly }) {
+const LOOKS = { next: NEXT_STYLE, plain: PLAIN_STYLE, done: DONE_STYLE };
+
+function StepAction({ action, look, readOnly }) {
   if (readOnly && action.changes === true) {
     return (
-      <button type="button" disabled className={`${BUTTON} opacity-50 cursor-not-allowed`} style={style}>
+      <button type="button" disabled data-look={look} className={`${BUTTON} opacity-50 cursor-not-allowed`} style={LOOKS[look]}>
         {action.label}
       </button>
     );
   }
   return (
-    <Link to={action.to} className={BUTTON} style={style}>
+    <Link to={action.to} data-look={look} className={BUTTON} style={LOOKS[look]}>
       {action.label}
     </Link>
   );
@@ -58,6 +61,11 @@ export default function StartHereCard({ view, orgType, readOnly = false, onHide,
             ? 'Every step is done. Each button still opens its page.'
             : `Do these in any order. Each one is ticked by itself once it's done. Leave out anything your ${words.it} doesn't use.`}
         </p>
+        {readOnly ? (
+          <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.45)' }} data-testid="start-here-read-only">
+            {readOnlyNote(orgType)}
+          </p>
+        ) : null}
 
         <ol className="mt-2 flex flex-col">
           {view.rows.map((row) => (
@@ -94,7 +102,7 @@ export default function StartHereCard({ view, orgType, readOnly = false, onHide,
                     readOnly={readOnly}
                     // The step to do next has the orange button, on its last action as
                     // "Bring your members in" always had it.
-                    style={row.done ? DONE_STYLE : row.next && index === row.actions.length - 1 ? NEXT_STYLE : PLAIN_STYLE}
+                    look={row.done ? 'done' : row.next && index === row.actions.length - 1 ? 'next' : 'plain'}
                   />
                 ))}
               </div>
@@ -115,7 +123,7 @@ export default function StartHereCard({ view, orgType, readOnly = false, onHide,
                 Hide this list
               </button>
               <span className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                It is hidden for everyone at your {words.it}. You can show it again from the bottom of this page.
+                This hides it for everyone at your {words.it}. You can show it again from the bottom of this page.
               </span>
             </div>
             {error !== null ? (

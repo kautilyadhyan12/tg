@@ -13,7 +13,7 @@ export interface StartHereRow {
  *
  *  A step is done while the thing is there: a membership type that is archived, a person
  *  who is off the list, an invitation that was cancelled or has run out, a time slot that
- *  was cancelled and a device that was switched off or never opened its link do not count. */
+ *  was cancelled or is past its last day and a device that was switched off or never opened its link do not count. */
 export async function readStartHere(sql: Sql | TransactionSql, gymId: string, now: Date): Promise<StartHereRow | null> {
   const rows = await sql<
     {
@@ -49,7 +49,11 @@ export async function readStartHere(sql: Sql | TransactionSql, gymId: string, no
       EXISTS (
         SELECT 1 FROM gym_class_schedules s
         JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
-        WHERE s.gym_id = g.id AND s.ended_at IS NULL AND t.archived_at IS NULL
+        WHERE s.gym_id = g.id AND s.ended_at IS NULL
+          -- A time slot given a last day is over once the gym's own day passes it.
+          AND (s.ends_on IS NULL OR s.ends_on >= (${now}::timestamptz AT TIME ZONE g.timezone)::date)
+          -- Archiving a class cancels its time slots too; this is the backstop.
+          AND t.archived_at IS NULL
       ) AS classes,
       g.hours_mode <> 'unset' AS hours,
       EXISTS (

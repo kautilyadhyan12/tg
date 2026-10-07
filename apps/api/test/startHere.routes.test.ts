@@ -344,12 +344,24 @@ d("Overview's Start here list: whose ticks, who sees which step, and who hides i
         UPDATE gym_staff_invites SET created_at = now() - interval '30 days', expires_at = now() - interval '1 day'
         WHERE gym_id = ${invites} AND id = ${secondId}`;
       expect(await done(invites)).toEqual(NOTHING_DONE);
+      // An invitation the person said no to is still on the owner's list, and is nobody.
+      const declined = await fresh("Declined");
+      const declinedId = await inviteStaff(declined, owner, "steps-coach-d");
+      expect(await done(declined)).toEqual(only("staff"));
+      await sql`
+        UPDATE gym_staff_invites SET state = 'declined', answered_at = now()
+        WHERE gym_id = ${declined} AND id = ${declinedId}`;
+      expect(await done(declined)).toEqual(NOTHING_DONE);
       // Somebody else on the staff is the step done too; the owner alone is not.
       const staffed = await fresh("Staffed");
       expect(await done(staffed)).toEqual(NOTHING_DONE);
       const coach = await makeUser("steps-coach-c");
       await makeStaff(staffed, coach, "trainer", ["members.read"]);
       expect(await done(staffed)).toEqual(only("staff"));
+      // Not somebody whose account is deleted: the Staff list does not show them either.
+      await sql`UPDATE users SET status = 'deleted' WHERE id = ${coach.userId}`;
+      expect(await done(staffed)).toEqual(NOTHING_DONE);
+      await sql`UPDATE users SET status = 'active' WHERE id = ${coach.userId}`;
 
       // Classes: a class with a time slot; a class with none is not on the calendar,
       // nor is one whose time slot was cancelled or that was archived.
@@ -364,8 +376,26 @@ d("Overview's Start here list: whose ticks, who sees which step, and who hides i
       const goneId = await addClass(archived, owner, "Spin");
       await addTimeSlot(archived, owner, goneId);
       expect(await done(archived)).toEqual(only("classes"));
+      // Archived alone, its time slot left running: the tick's own condition, not the
+      // route's (which cancels the time slots as well).
+      await sql`UPDATE gym_class_types SET archived_at = now() WHERE gym_id = ${archived} AND id = ${goneId}`;
+      expect(await done(archived)).toEqual(NOTHING_DONE);
+      await sql`UPDATE gym_class_types SET archived_at = NULL WHERE gym_id = ${archived} AND id = ${goneId}`;
+      expect(await done(archived)).toEqual(only("classes"));
       expect((await del(`/v1/orgs/${archived}/classes/${goneId}`, owner.cookies)).statusCode).toBe(200);
       expect(await done(archived)).toEqual(NOTHING_DONE);
+      // A time slot with a last day: on the calendar through that day, over after it.
+      const dated = await fresh("Dated Class");
+      const datedSlot = await addTimeSlot(dated, owner, await addClass(dated, owner, "Pilates"));
+      await sql`
+        UPDATE gym_class_schedules
+        SET starts_on = (now() AT TIME ZONE 'Europe/London')::date - 30, ends_on = (now() AT TIME ZONE 'Europe/London')::date
+        WHERE gym_id = ${dated} AND id = ${datedSlot}`;
+      expect(await done(dated)).toEqual(only("classes"));
+      await sql`
+        UPDATE gym_class_schedules SET ends_on = (now() AT TIME ZONE 'Europe/London')::date - 1
+        WHERE gym_id = ${dated} AND id = ${datedSlot}`;
+      expect(await done(dated)).toEqual(NOTHING_DONE);
 
       // Opening hours: a week, always open, or closed every day. A gym that has not said
       // is the fresh gym each block above starts from.

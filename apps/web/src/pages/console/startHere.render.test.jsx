@@ -154,6 +154,35 @@ describe('ticks', () => {
     );
   });
 
+  it('only the next step has the orange button: the last button of the first step not done', async () => {
+    draw();
+    const first = await box();
+    const looks = (card) => [...card.querySelectorAll('[data-look]')].map((b) => [b.textContent, b.getAttribute('data-look')]);
+    expect(looks(first).filter(([, look]) => look === 'next')).toEqual([['Set up memberships', 'next']]);
+    cleanup();
+
+    orgService.getStartHere.mockResolvedValue(answer({ done: ['memberships', 'hours'] }));
+    draw();
+    expect(looks(await box())).toEqual([
+      ['Set up memberships', 'done'],
+      ['Import members', 'plain'],
+      ['Add member', 'next'],
+      ['Invite staff', 'plain'],
+      ['Set up classes', 'plain'],
+      ['Set opening hours', 'done'],
+      ['Set up check-in', 'plain'],
+    ]);
+  });
+
+  it('members done says the people are on the list, and what brings them into the app', async () => {
+    orgService.getStartHere.mockResolvedValue(answer({ done: ['members'] }));
+    draw();
+    const card = await box();
+    expect(rowOf(card, 'members').textContent).toMatch(
+      /Your member list has people on it\. They join the app once you tick them on Members and press Invite\./,
+    );
+  });
+
   it('every step done: the box says so and can be hidden', async () => {
     orgService.getStartHere.mockResolvedValue(answer({ done: ALL }));
     draw();
@@ -202,7 +231,7 @@ describe('Hide this list, and showing it again', () => {
     orgService.setStartHereHidden.mockResolvedValue(answer({ hidden: true }));
     draw();
     const card = await box();
-    expect(within(card).getByText(/It is hidden for everyone at your gym\. You can show it again from the bottom of this page\./)).toBeTruthy();
+    expect(within(card).getByText(/This hides it for everyone at your gym\. You can show it again from the bottom of this page\./)).toBeTruthy();
     fireEvent.click(within(card).getByRole('button', { name: 'Hide this list' }));
     await waitFor(() => expect(screen.queryByTestId('start-here')).toBeNull());
     expect(orgService.setStartHereHidden).toHaveBeenCalledTimes(1);
@@ -293,6 +322,8 @@ describe('when the list cannot be read, or the gym has no plan', () => {
     expect(within(members).getByRole('button', { name: 'Import members' }).disabled).toBe(true);
     expect(within(members).getByRole('button', { name: 'Add member' }).disabled).toBe(true);
     expect(within(card).getByRole('button', { name: 'Hide this list' }).disabled).toBe(true);
+    // And the box says why.
+    expect(within(card).getByTestId('start-here-read-only').textContent).toMatch(/needs a plan/);
     expect(within(card).getByRole('link', { name: 'Set up memberships' })).toBeTruthy();
     expect(within(card).getByRole('link', { name: 'Set opening hours' })).toBeTruthy();
   });

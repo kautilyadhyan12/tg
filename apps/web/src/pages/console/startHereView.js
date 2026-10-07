@@ -75,7 +75,15 @@ export function startHereView(startHere, orgSlug, orgType) {
   const rows = startHere.steps
     .map((s) => {
       const words = stepWords(s.step, orgSlug, orgType);
-      return words === null ? null : { step: s.step, done: s.done === true, ...words };
+      if (words === null) return null;
+      const done = s.done === true;
+      // Done means people are on the LIST. The card under this box counts who has joined
+      // the app, so the line says which this is and what brings them in.
+      const line =
+        s.step === 'members' && done
+          ? `Your ${orgWords(orgType).person} list has people on it. They join the app once you tick them on ${orgWords(orgType).peopleCap} and press Invite.`
+          : words.line;
+      return { step: s.step, done, ...words, line };
     })
     .filter((row) => row !== null);
   if (rows.length === 0) return none;

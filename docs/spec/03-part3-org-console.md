@@ -467,7 +467,7 @@ that opens the page where it is done:
 | What you sell | Settings, Memberships open | a membership type that is not archived | `memberships.manage` |
 | Bring your members in | Members, with Import or Add open | a person on its list | `members.confirm` |
 | Invite your staff | Settings, Staff open | somebody on the staff besides the owner, or an invitation still waiting | `staff.manage` |
-| Add your classes | Classes | a class with a time slot, neither cancelled nor archived | `schedule.manage` |
+| Add your classes | Classes | a class with a time slot, neither cancelled, past its last day nor archived | `schedule.manage` |
 | Opening hours | Settings, When we're open, open | its hours said (a week, always open, or closed every day) | `org.manage` |
 | Front desk check-in | Settings, Check-in devices open | a device that opened its link and is not switched off | `org.manage` |
 
