@@ -10,6 +10,7 @@ import MembershipTypesPanel from '../../components/console/MembershipTypesPanel'
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
+import { SETTINGS_SECTION } from './startHereView';
 import { canManageStaff } from './staffView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManageSchedule } from './classesView';
@@ -161,20 +162,29 @@ export default function Settings() {
           one fiber without scheduling its deletion, which was worse than the
           defect it replaced. */}
       {canEditGym ? (
-        <OpeningHoursPanel
-          key={`hours-${org.id}`}
-          org={org}
-          privileges={privileges}
-          readOnly={readOnly}
-        />
+        // `id`: Overview's Start here list opens the page here (23b), as Memberships below.
+        <div id={SETTINGS_SECTION.hours} style={{ scrollMarginTop: 16 }}>
+          <OpeningHoursPanel
+            key={`hours-${org.id}`}
+            org={org}
+            privileges={privileges}
+            readOnly={readOnly}
+            startOpen={section === SETTINGS_SECTION.hours}
+          />
+        </div>
       ) : null}
 
       {/* MEMBERSHIPS (17a-i): what the gym sells, on `memberships.manage` as the server
           gates its changes. Keyed per gym for the panels' reason above: it holds a form. */}
       {canEditMemberships ? (
         // `id`: Add member's "Set up memberships" opens the page here (23a-ii).
-        <div id="memberships" style={{ scrollMarginTop: 16 }}>
-          <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={readOnly} startOpen={section === 'memberships'} />
+        <div id={SETTINGS_SECTION.memberships} style={{ scrollMarginTop: 16 }}>
+          <MembershipTypesPanel
+            key={`memberships-${org.id}`}
+            org={org}
+            readOnly={readOnly}
+            startOpen={section === SETTINGS_SECTION.memberships}
+          />
         </div>
       ) : null}
 
@@ -185,7 +195,16 @@ export default function Settings() {
       {/* CHECK-IN DEVICES (16b-i): the front desk's tablets, on `org.manage` as the server
           gates them. Keyed per gym for the panels' reason above: it holds a typed name and
           a link shown once. */}
-      {canEditGym ? <CheckinDevicesPanel key={`checkin-devices-${org.id}`} org={org} readOnly={readOnly} /> : null}
+      {canEditGym ? (
+        <div id={SETTINGS_SECTION.frontDesk} style={{ scrollMarginTop: 16 }}>
+          <CheckinDevicesPanel
+            key={`checkin-devices-${org.id}`}
+            org={org}
+            readOnly={readOnly}
+            startOpen={section === SETTINGS_SECTION.frontDesk}
+          />
+        </div>
+      ) : null}
 
       {/* FOLLOW-UP EMAILS TO LEADS (20c-v): the owner's "Send them for me", on the
           privilege the server gates it with. Keyed per gym for the panels' reason above:
@@ -213,13 +232,16 @@ export default function Settings() {
           handed the defect to this panel instead. The prefix removes the
           ordering dependency along with the duplicate. */}
       {canEditStaff ? (
-        <StaffPanel
-          key={`staff-${org.id}`}
-          gymId={org.id}
-          privileges={privileges}
-          orgType={org.orgType}
-          readOnly={readOnly}
-        />
+        <div id={SETTINGS_SECTION.staff} style={{ scrollMarginTop: 16 }}>
+          <StaffPanel
+            key={`staff-${org.id}`}
+            gymId={org.id}
+            privileges={privileges}
+            orgType={org.orgType}
+            readOnly={readOnly}
+            startOpen={section === SETTINGS_SECTION.staff}
+          />
+        </div>
       ) : null}
 
       {!canEditGym && !canEditStaff && !canEditMemberships && !canEditSchedule ? (

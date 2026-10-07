@@ -872,7 +872,8 @@ function InvitedList({ invites, orgType, busyId, readOnly, onCancel, onResend })
   );
 }
 
-export default function StaffPanel({ gymId, privileges, orgType, readOnly = false }) {
+// `startOpen`: the page was opened by a link to this section (Overview's Start here list).
+export default function StaffPanel({ gymId, privileges, orgType, readOnly = false, startOpen = false }) {
   const allowed = canManageStaff(privileges);
   // The words this panel speaks (roadmap 2b).
   const words = orgWords(orgType);
@@ -1244,6 +1245,7 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
       summary={`Who can help you run this ${words.it}. ${staffSeatsNote()}`}
       aside={countLabel}
       forceOpen={!state.loading && state.error !== null}
+      defaultOpen={startOpen}
     >
       {state.loading ? <ConsoleLoading label={`Loading who runs this ${words.it}…`} /> : null}
 

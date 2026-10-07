@@ -25,6 +25,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getCodes: vi.fn(),
       getApplications: vi.fn(),
       getOverview: vi.fn(),
+      getStartHere: vi.fn(),
       getAttendanceDay: vi.fn(),
       getStaff: vi.fn(),
       // Settings → Staff reads its invitations (4a-i); the console's front page, the person's own.

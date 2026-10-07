@@ -53,7 +53,8 @@ const inputStyle = {
 };
 
 
-export default function OpeningHoursPanel({ org, privileges, readOnly = false }) {
+// `startOpen`: the page was opened by a link to this section (Overview's Start here list).
+export default function OpeningHoursPanel({ org, privileges, readOnly = false, startOpen = false }) {
   const allowed = canManageOrg(privileges);
   const gymId = org?.id;
   // The words this panel speaks (roadmap 2b).
@@ -351,6 +352,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
          shut, and a heading that says nothing about it is a failure nobody
          sees. */
       forceOpen={loadError !== null}
+      defaultOpen={startOpen}
     >
       <div className="flex flex-col gap-5">
         {readOnly ? (
