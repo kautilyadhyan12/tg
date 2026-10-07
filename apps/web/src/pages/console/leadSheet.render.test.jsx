@@ -541,13 +541,19 @@ describe('the follow-up emails (20c-ii): the gym sends them, the app reminds', (
     expect(screen.getByRole('button', { name: 'Mark email 1 as sent' }).disabled).toBe(true);
   });
 
-  it('where replies go has a button to that box in Settings, for whoever may change it, opened beside the lead (23d)', async () => {
+  it('where replies go has a button to that box in Settings, for whoever may change it (23d)', async () => {
     const sentForYou = { ...dueTom, followUp: { ...dueTom.followUp, by: 'app', notSent: null, optedOutAt: null } };
     await open(sentForYou, { gym: { ...GYM_INFO, slug: 'iron-house', privileges: ['org.manage', 'members.confirm'] } });
     expect(screen.getByText('Sent for you from 8 in the morning, by your clock. Replies go to your reply address.')).toBeTruthy();
-    const link = screen.getByRole('link', { name: /^Change reply address/ });
+    const link = screen.getByRole('link', { name: 'Change reply address' });
     expect(link.getAttribute('href')).toBe('/console/iron-house/settings#follow-up-emails');
-    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('target')).toBeNull();
+    // With something typed on the lead and not saved, the press asks before it leaves.
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Call back on Friday' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Change reply address' }));
+    expect(screen.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/settings#follow-up-emails');
+    fireEvent.click(screen.getByRole('button', { name: 'Stay here' }));
+    expect(screen.getByLabelText('Notes').value).toBe('Call back on Friday');
     cleanup();
     // Staff who work the leads and cannot change the gym's details get the words alone.
     await open(sentForYou, { gym: { ...GYM_INFO, slug: 'iron-house', privileges: ['members.confirm', 'members.manage'] } });

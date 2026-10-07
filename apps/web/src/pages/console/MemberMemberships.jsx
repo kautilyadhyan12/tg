@@ -3,6 +3,7 @@ import { Check, Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import MembershipChoice from './MembershipChoice';
+import { useCameBack } from './useCameBack';
 import { ENDING_NOT_TOLD } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
 import {
@@ -94,16 +95,9 @@ export default function MemberMemberships({
   const shown = held !== null && held.entryId === entryId ? held : null;
   // What their list says their membership is, where they do not hold it here.
   const listed = shown === null ? null : listedRow(shown.listed, name, managesTypes);
-
-  // Open Memberships opens beside this page, so a box that sent staff there reads again
-  // when they come back: the type they set up is then here to pick.
-  const sentToMemberships = membershipsTo !== null && shown !== null && (listed !== null || shown.types.length === 0);
-  useEffect(() => {
-    if (!sentToMemberships) return undefined;
-    const again = () => setAttempt((n) => n + 1);
-    window.addEventListener('focus', again);
-    return () => window.removeEventListener('focus', again);
-  }, [sentToMemberships]);
+  // A box that sends staff to Memberships reads again when they come back to this tab, so
+  // a type set up in another one is here to pick.
+  useCameBack(membershipsTo !== null && shown !== null && (listed !== null || shown.types.length === 0), () => setAttempt((n) => n + 1));
 
   if (loadError !== null && shown === null) {
     return (
@@ -357,9 +351,7 @@ export default function MemberMemberships({
             <p className="c-s14 c-t2 m-0">
               {managesTypes ? 'You have no membership types yet. Add them in Memberships.' : 'There are no membership types yet. Ask the owner to add them.'}
             </p>
-            <PlaceLink to={membershipsTo} beside>
-              Open Memberships
-            </PlaceLink>
+            <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink>
           </>
         ) : (
           <MembershipChoice types={types} today={today} value={form} onChange={(next) => setForm((f) => ({ ...f, ...next }))} />
@@ -420,11 +412,7 @@ export default function MemberMemberships({
           </div>
           <span className="c-s14 c-t2">{listed.from}</span>
           <span className="c-s14 c-t2">{listed.note}</span>
-          {listed.toMemberships ? (
-            <PlaceLink to={membershipsTo} beside>
-              Open Memberships
-            </PlaceLink>
-          ) : null}
+          {listed.toMemberships ? <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink> : null}
         </div>
       ) : null}
       {live.length === 0 && over.length === 0 && open === null && listed === null ? <p className="c-s14 c-t3 m-0">No membership yet.</p> : null}

@@ -30,8 +30,10 @@ import MembershipChoice from './MembershipChoice';
 import { giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
 import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
-import { placeFor } from './consolePlaces';
+import { canOpenPlace, placeFor } from './consolePlaces';
+import { useCameBack } from './useCameBack';
 import PlaceLink from '../../components/console/PlaceLink';
+import PostalAddressBox from '../../components/console/PostalAddressBox';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
 import {
@@ -498,14 +500,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       live = false;
     };
   }, [gymId, adding, priceAsk]);
-  // Set up memberships opens beside this form, so a form with nothing to pick from reads
-  // the price list again when staff come back to it.
-  useEffect(() => {
-    if (!adding || sells) return undefined;
-    const again = () => setPriceAsk((n) => n + 1);
-    window.addEventListener('focus', again);
-    return () => window.removeEventListener('focus', again);
-  }, [adding, sells]);
+  // Somebody who set memberships up in another tab finds them here on coming back: a form
+  // with nothing to pick from reads the price list again.
+  useCameBack(adding && !sells, () => setPriceAsk((n) => n + 1));
 
   useEffect(() => {
     const before = document.body.style.overflow;
@@ -676,12 +673,13 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const refused = (err, fallback, extra = {}) => {
     const code = errorCode(err);
     const other = err?.response?.data?.entryId;
-    // A gym with no postal address cannot invite: said as the Invite page says it, with a
-    // button to the box for whoever may fill it in, and who can for anybody else (23d).
-    const addressTo = code === 'no_postal_address' ? placeFor(gym?.slug, viewerPrivileges(gym), 'postalAddress') : null;
+    // A gym with no postal address cannot invite: said as the Invite page says it, with
+    // the box to type it in for whoever may, and who can for anybody else (23d).
+    const noAddress = code === 'no_postal_address';
+    const canSetAddress = noAddress && canOpenPlace(viewerPrivileges(gym), 'postalAddress');
     setRefusal({
-      message: code === 'no_postal_address' ? inviteBlockedWords(code, words, addressTo !== null) : errorText(err, fallback),
-      addressTo,
+      message: noAddress ? inviteBlockedWords(code, words, canSetAddress) : errorText(err, fallback),
+      canSetAddress,
       openId: (code === 'already_on_list' || code === 'former_record') && typeof other === 'string' ? other : null,
       ack: code === 'leaves_list' ? extra.ack ?? null : null,
     });
@@ -1117,7 +1115,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 ? `You haven't set up the memberships you sell yet. Once you have, you pick one here. Until then, type this ${words.person}'s status and payment yourself.`
                 : `Your ${words.it ?? 'gym'} hasn't set up the memberships it sells yet. Until the owner does, type this ${words.person}'s status and payment yourself.`}
             </p>
-            <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')} beside className="c-btn c-btn-s c-btn-sm">
+            {/* It leaves this form, so it asks first once something has been typed. */}
+            <PlaceLink
+              to={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
+              guard={JSON.stringify(form) !== JSON.stringify(formFrom(null, fields))}
+              className="c-btn c-btn-s c-btn-sm"
+            >
               Set up memberships
             </PlaceLink>
           </div>
@@ -1734,11 +1737,17 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                         Go ahead anyway
                       </button>
                     ) : null}
-                    {/* Beside this page, so the person stays open to invite afterwards. */}
-                    <PlaceLink to={refusal.addressTo} beside className={PLAIN}>
-                      Add postal address
-                    </PlaceLink>
                   </div>
+                  {/* Typed here, so the person stays open to invite straight afterwards. */}
+                  {refusal.canSetAddress ? (
+                    <PostalAddressBox
+                      gymId={gymId}
+                      onSaved={() => {
+                        setRefusal(null);
+                        setNotice('Postal address saved. You can invite them now.');
+                      }}
+                    />
+                  ) : null}
                 </div>
               ) : null}
               {maybe !== null && id === null ? (

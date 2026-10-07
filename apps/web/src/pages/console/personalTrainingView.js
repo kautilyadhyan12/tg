@@ -21,12 +21,12 @@ import { placeFor } from './consolePlaces';
 export const PT_TITLE = 'Personal training';
 
 /** What the page is for, in one line under its name. */
-export const PT_INTRO_MANAGER = 'One-to-one sessions with a trainer. Set when each trainer is free, then book members into their free times.';
-export const PT_INTRO_OWN = 'One-to-one sessions. Set when you are free; the sessions booked with you appear below.';
+export const PT_INTRO_MANAGER = 'One-to-one sessions with a trainer. Set when each trainer is available, then book members into their available times.';
+export const PT_INTRO_OWN = 'One-to-one sessions. Set when you are available; the sessions booked with you appear below.';
 
 /** Said once beside the hours: they are set once, and the timetable is already counted. */
-export const HOURS_REPEAT = 'These hours repeat every week. A class a trainer coaches is taken off their free times by itself.';
-export const HOURS_REPEAT_OWN = 'These hours repeat every week. A class you coach is taken off your free times by itself.';
+export const HOURS_REPEAT = 'These hours repeat every week. A class a trainer coaches is taken off their available times by itself.';
+export const HOURS_REPEAT_OWN = 'These hours repeat every week. A class you coach is taken off your available times by itself.';
 
 /** EVERY STEP TO A FIRST SESSION, each with a tick once it is done and a button that opens
  *  the place it is done in (ROADMAP 23d). For whoever runs the timetable.
@@ -58,8 +58,8 @@ export function setupSteps(list, { orgSlug, privileges, orgType } = {}) {
       title: 'Add a trainer and set their hours',
       line:
         inviteTo === null
-          ? 'Pick somebody on your staff under Add a trainer, and set the hours they are free. The owner can invite somebody who is not on your staff yet.'
-          : 'Pick somebody on your staff under Add a trainer, and set the hours they are free. Invite anybody who is not on your staff yet.',
+          ? 'Pick somebody on your staff under Add a trainer, and set the hours they are available. The owner can invite somebody who is not on your staff yet.'
+          : 'Pick somebody on your staff under Add a trainer, and set the hours they are available. Invite anybody who is not on your staff yet.',
       // Inviting changes the gym, so a gym with no live plan gets it greyed.
       action: inviteTo === null ? null : { label: 'Invite staff', to: inviteTo, changes: true },
     },
@@ -96,7 +96,7 @@ export function setupSteps(list, { orgSlug, privileges, orgType } = {}) {
       key: 'book',
       done: setup.sessionBooked === true,
       title: 'Book a session',
-      line: "Press one of a trainer's free times below, and pick the person.",
+      line: "Press one of a trainer's available times below, and pick the person.",
       action: null,
     },
   ];

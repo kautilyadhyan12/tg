@@ -626,13 +626,13 @@ describe('the steps to a first session, with a tick on each one done', () => {
   it('a step with no button says who can do it, and never names a place its reader cannot open', () => {
     const lines = (privileges) => Object.fromEntries(steps(list(), privileges).rows.map((r) => [r.key, r.line]));
     expect(lines(OWNER)).toEqual({
-      trainer: 'Pick somebody on your staff under Add a trainer, and set the hours they are free. Invite anybody who is not on your staff yet.',
+      trainer: 'Pick somebody on your staff under Add a trainer, and set the hours they are available. Invite anybody who is not on your staff yet.',
       type: 'On Memberships, tick "Includes personal training" on a membership or pack you sell. A session is booked on it.',
       held: 'Open the person on Members and press Add membership. They can then be booked.',
-      book: "Press one of a trainer's free times below, and pick the person.",
+      book: "Press one of a trainer's available times below, and pick the person.",
     });
     expect(lines(SCHEDULER)).toMatchObject({
-      trainer: 'Pick somebody on your staff under Add a trainer, and set the hours they are free. The owner can invite somebody who is not on your staff yet.',
+      trainer: 'Pick somebody on your staff under Add a trainer, and set the hours they are available. The owner can invite somebody who is not on your staff yet.',
       type: 'Ask the owner to tick "Includes personal training" on a membership or pack you sell. A session is booked on it.',
     });
     expect(lines(SCHEDULER).type).not.toContain('On Memberships');

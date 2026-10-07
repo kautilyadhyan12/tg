@@ -309,7 +309,7 @@ describe('Remove on In the app', () => {
     expect(JSON.stringify([...orgService.previewRemoveRoster.mock.calls, ...orgService.removeRoster.mock.calls])).not.toContain('bbbbbbbb-bbbb-4bbb-8bbb-000000000007');
   });
 
-  it('staff the owner ticked keep their staff access, and the Staff tab that line names has a button, opened beside the box (23d)', async () => {
+  it('staff the owner ticked keep their staff access, and the Staff tab that line names has a button (23d)', async () => {
     drawRoster();
     await screen.findByText('Sam Roy');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Rita Sen' }));
@@ -320,8 +320,8 @@ describe('Remove on In the app', () => {
     expect(group.getByText('They can still open the console. To remove someone from staff too, use the Staff tab, or Remove on their own panel.')).toBeTruthy();
     const link = group.getByRole('link', { name: /^Open the Staff tab/ });
     expect(link.getAttribute('href')).toBe('/console/iron-house/members?view=staff');
-    // A new tab: the people selected here stay selected, and nobody has been removed.
-    expect(link.getAttribute('target')).toBe('_blank');
+    // In this tab, as every button inside the console; nobody has been removed.
+    expect(link.getAttribute('target')).toBeNull();
     expect(orgService.removeRoster).not.toHaveBeenCalled();
     // No other group in the box sends anybody anywhere.
     expect(within(screen.getByTestId('remove-box')).getAllByRole('link')).toHaveLength(1);

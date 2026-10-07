@@ -123,7 +123,7 @@ function HoursForm({ trainer, clockFormat, saving, error, onSave, onClose }) {
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <span className="c-label">Hours they are free each week, on {`the gym's`} clock</span>
+          <span className="c-label">Hours they are available each week, on {`the gym's`} clock</span>
           <span className="c-s13 c-t3">A split day? Add a second set of hours, for example a morning and an evening.</span>
         </div>
         {WEEKDAYS.map((day) => {
@@ -452,10 +452,10 @@ function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, canBook, cal
                   {line}
                 </p>
               ))}
-              {/* Beside this box, so the time off being added is kept. It opens on the
-                  week of the first class named here. */}
+              {/* It opens on the week of the first class named here, and leaves the time off
+                  being added: so it asks first. */}
               {asked.classes.count > 0 ? (
-                <PlaceLink to={calendarFor(asked.classes.shown[0]?.localDate ?? draft.fromDate)} beside>
+                <PlaceLink to={calendarFor(asked.classes.shown[0]?.localDate ?? draft.fromDate)} guard>
                   Open the Calendar
                 </PlaceLink>
               ) : null}
@@ -743,6 +743,13 @@ export default function PersonalTraining() {
   // The server said the session was already cancelled another way: its words stay on
   // screen until staff close the box, and only then is the week read again.
   const [cancelSettled, setCancelSettled] = useState(false);
+  // A press on a trainer's name or See week: their week is brought into view once it is
+  // drawn, so the press is seen to do something in a short window (Kd, 23d's click-through).
+  const weekRef = useRef(null);
+  const [weekAsked, setWeekAsked] = useState(0);
+  useEffect(() => {
+    if (weekAsked > 0) weekRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+  }, [weekAsked]);
 
   useEffect(() => {
     if (gymId === undefined) return undefined;
@@ -846,6 +853,10 @@ export default function PersonalTraining() {
     setBooking(null);
     setCancelling(null);
     setSearchParams({ trainer: userId });
+  };
+  const seeWeek = (userId) => {
+    show(userId);
+    setWeekAsked((n) => n + 1);
   };
   const openHours = (userId) => {
     setSaveError(null);
@@ -1039,8 +1050,20 @@ export default function PersonalTraining() {
                     data-testid="pt-trainer"
                   >
                     <div className="flex flex-col gap-0.5 min-w-0">
-                      <span className="c-s15 c-w6 c-t1 c-ell">
-                        {trainerName(t)} · <span className="c-t2 c-w5">{trainerSummary(t)}</span>
+                      <span className="c-s15 c-w6 c-t1 min-w-0">
+                        {/* Their name opens their week, as See week does. */}
+                        <button
+                          type="button"
+                          onClick={() => seeWeek(t.userId)}
+                          className="c-btn c-btn-link"
+                          // A long name wraps rather than running off a phone.
+                          style={{ whiteSpace: 'normal', textAlign: 'left' }}
+                          data-testid="pt-trainer-name"
+                        >
+                          {trainerName(t)}
+                        </button>
+                        {' · '}
+                        <span className="c-t2 c-w5">{trainerSummary(t)}</span>
                       </span>
                       {hoursLines(t, clockFormat).map((line) => (
                         <span key={line} className="c-s13 c-t3">
@@ -1055,7 +1078,7 @@ export default function PersonalTraining() {
                       {shown ? (
                         <span className="c-tag c-tag-soft">Week shown below</span>
                       ) : (
-                        <button type="button" onClick={() => show(t.userId)} aria-label={`See ${trainerName(t)}'s week`} className="c-btn c-btn-sm c-btn-s">
+                        <button type="button" onClick={() => seeWeek(t.userId)} aria-label={`See ${trainerName(t)}'s week`} className="c-btn c-btn-sm c-btn-s">
                           See week
                         </button>
                       )}
@@ -1163,7 +1186,7 @@ export default function PersonalTraining() {
       ) : null}
 
       {list !== null && trainer !== null && !settingUpOther ? (
-        <section className="flex flex-col gap-4" aria-label="Sessions">
+        <section ref={weekRef} className="flex flex-col gap-4" aria-label="Sessions" style={{ scrollMarginTop: 16 }}>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h2 className="c-h2">
               {list.canManage ? `${trainerName(trainer)} · ` : ''}
@@ -1218,7 +1241,7 @@ export default function PersonalTraining() {
                     return (
                       <section key={day.localDate} className="c-card px-5 py-3 flex items-center justify-between gap-3 min-w-0" data-testid="pt-day">
                         <h3 className="c-s15 c-w6 c-t2 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
-                        <span className="c-s13 c-t3 c-num">{dayOff.length > 0 ? dayOff.map((o) => dayTimeOffRow(o, clockFormat)).join(', ') : 'No free times'}</span>
+                        <span className="c-s13 c-t3 c-num">{dayOff.length > 0 ? dayOff.map((o) => dayTimeOffRow(o, clockFormat)).join(', ') : 'No available times'}</span>
                       </section>
                     );
                   }
@@ -1275,7 +1298,7 @@ export default function PersonalTraining() {
 
                       {day.classes.length > 0 ? (
                         <div className="flex flex-col gap-1" data-testid="pt-coaching">
-                          <span className="c-s13 c-w6 c-t3">Coaching a class, so not free</span>
+                          <span className="c-s13 c-w6 c-t3">Coaching a class, so not available</span>
                           <ul className="m-0 p-0 list-none flex flex-col gap-0.5">
                             {day.classes.map((coached) => (
                               <li key={`${String(coached.localStartMinute)}:${coached.name}`} className="flex flex-col">
@@ -1296,10 +1319,10 @@ export default function PersonalTraining() {
                         </div>
                       ) : null}
 
-                      {day.free.length === 0 && minutes !== null ? <span className="c-s13 c-t3">No free times</span> : null}
+                      {day.free.length === 0 && minutes !== null ? <span className="c-s13 c-t3">No available times</span> : null}
                       {day.free.length > 0 && minutes !== null ? (
                         <div className="flex flex-col gap-2">
-                          <span className="c-s13 c-w6 c-t3">{canBook ? 'Free times. Press one to book it.' : 'Free times'}</span>
+                          <span className="c-s13 c-w6 c-t3">{canBook ? 'Available times. Press one to book it.' : 'Available times'}</span>
                           <div className="flex flex-wrap gap-2">
                             {day.free.map((minute) => {
                               const picked = openSlot !== null && openSlot.startMinute === minute;

@@ -6,6 +6,7 @@
 // and a press sends exactly the membership and the step its question named.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import {
   giveHeldMembership,
   heldMembershipView,
@@ -96,7 +97,12 @@ function later() {
   return { promise, resolve };
 }
 
-const draw = (entryId, name, extra = {}) => <MemberMemberships gymId={GYM} entryId={entryId} name={name} readOnly={false} {...extra} />;
+// In a router, as the console draws it: a button to Memberships is a link inside the app.
+const draw = (entryId, name, extra = {}) => (
+  <MemoryRouter>
+    <MemberMemberships gymId={GYM} entryId={entryId} name={name} readOnly={false} {...extra} />
+  </MemoryRouter>
+);
 const box = () => within(screen.getByTestId('held-memberships'));
 /** The box once it has been read: it draws nothing until then. */
 const boxSoon = async () => within(await screen.findByTestId('held-memberships'));
@@ -289,19 +295,22 @@ describe('what the box draws', () => {
     expect(b.getByRole('button', { name: 'Add membership' })).toBeTruthy();
   });
 
-  it('a sentence that names the Memberships page has a button that opens it beside the person, and the box reads again when staff come back (23d)', async () => {
+  it('a sentence that names the Memberships page has a button that opens it, and the box reads again when staff come back to the tab (23d)', async () => {
     const listed = { word: 'Gold Plus', endsOn: '2026-10-13', endsOnKind: 'renews', type: null, ownName: false, held: false };
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { listed }));
     render(draw(ADA, 'Leo Grant', { membershipsTo: '/console/iron-house/memberships' }));
     const row = within((await boxSoon()).getByTestId('held-listed'));
-    const link = row.getByRole('link', { name: /^Open Memberships/ });
+    const link = row.getByRole('link', { name: 'Open Memberships' });
     expect(link.getAttribute('href')).toBe('/console/iron-house/memberships');
-    // A new tab: the person's page, and anything typed on it, stays.
-    expect(link.getAttribute('target')).toBe('_blank');
+    // In this tab, as every button inside the console.
+    expect(link.getAttribute('target')).toBeNull();
     expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(1);
 
-    // Back from Memberships with Gold Plus set up and given: read again, the row is theirs.
+    // Somebody who set Gold Plus up in another tab and came back to this one: read again, the
+    // row is theirs. A switch of tab is heard as the tab being shown, and the window's focus
+    // straight after it is the same return: one read, not two.
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)], false, { listed: null }));
+    fireEvent(document, new Event('visibilitychange'));
     fireEvent(window, new Event('focus'));
     await waitFor(() => expect(screen.queryByTestId('held-listed')).toBeNull());
     expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2);
@@ -471,9 +480,9 @@ describe('adding a membership', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)], false, { types: [] }));
     render(draw(ADA, 'Ada Lovelace', { membershipsTo: '/console/iron-house/memberships' }));
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
-    const link = within(screen.getByTestId('held-add')).getByRole('link', { name: /^Open Memberships/ });
+    const link = within(screen.getByTestId('held-add')).getByRole('link', { name: 'Open Memberships' });
     expect(link.getAttribute('href')).toBe('/console/iron-house/memberships');
-    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('target')).toBeNull();
   });
 });
 
@@ -704,7 +713,11 @@ describe('Add member gives a membership in the same form', () => {
   const before = (a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
   const OWNER = { ...IRON, privileges: ['members.confirm', 'memberships.manage'] };
   const openAddAs = (gym) =>
-    render(<MemberListPerson gymId={GYM} gym={gym} entryId={null} list={{ fields: [] }} words={WORDS} readOnly={false} onClose={() => {}} onChanged={() => {}} />);
+    render(
+      <MemoryRouter>
+        <MemberListPerson gymId={GYM} gym={gym} entryId={null} list={{ fields: [] }} words={WORDS} readOnly={false} onClose={() => {}} onChanged={() => {}} />
+      </MemoryRouter>,
+    );
 
   it('asks for the membership straight after name, email and phone, before the member number and the dates', async () => {
     openAdd();
@@ -735,19 +748,25 @@ describe('Add member gives a membership in the same form', () => {
     expect(callout.textContent).toContain(
       "You haven't set up the memberships you sell yet. Once you have, you pick one here. Until then, type this member's status and payment yourself.",
     );
-    const link = within(callout).getByRole('link', { name: /^Set up memberships/ });
+    // With nothing typed yet it opens Memberships, in this tab.
+    const link = within(callout).getByRole('link', { name: 'Set up memberships' });
     expect(link.getAttribute('href')).toBe('/console/iron-temple/memberships');
-    // It opens beside the form, so nothing typed here is lost.
-    expect(link.getAttribute('target')).toBe('_blank');
-    expect(link.textContent).toContain('(opens in a new tab)');
+    expect(link.getAttribute('target')).toBeNull();
     const typed = [screen.getByLabelText('Status'), screen.getByLabelText('Membership'), screen.getByLabelText('Payment status'), screen.getByRole('button', { name: /End or renewal date/ })];
     for (const box of typed) {
       expect(before(screen.getByLabelText('Phone'), box)).toBe(true);
       expect(before(callout, box)).toBe(true);
       expect(before(box, screen.getByLabelText('Member number'))).toBe(true);
     }
-    // What is typed there is sent, as before.
+    // Once something is typed it would be lost by leaving, so the press asks first (23d).
     typeName('Name', 'Bea Hart');
+    expect(within(callout).queryByRole('link')).toBeNull();
+    fireEvent.click(within(callout).getByRole('button', { name: 'Set up memberships' }));
+    expect(within(callout).getByText("You'll leave this page, and what you typed here won't be saved.")).toBeTruthy();
+    expect(within(callout).getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-temple/memberships');
+    fireEvent.click(within(callout).getByRole('button', { name: 'Stay here' }));
+    expect(screen.getByLabelText('Name').value).toBe('Bea Hart');
+    // What is typed there is sent, as before.
     typeName('Email', 'bea@members.example');
     typeName('Status', 'Active');
     typeName('Payment status', 'Paid');

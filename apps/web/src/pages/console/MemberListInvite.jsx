@@ -4,9 +4,9 @@ import { MEMBER_INVITE_PERMISSION_WORDS } from '@app/shared';
 import { orgService, errorText, inviteChangedPreview, selectionChanged } from '../../api/orgsApi';
 import MemberListPerson from './MemberListPerson';
 import { ShareInvite } from './ShareInvite';
-import PlaceLink from '../../components/console/PlaceLink';
+import PostalAddressBox from '../../components/console/PostalAddressBox';
 import { viewerPrivileges } from './consoleView';
-import { placeFor } from './consolePlaces';
+import { canOpenPlace } from './consolePlaces';
 import {
   gymToday,
   inviteBlockedWords,
@@ -245,18 +245,12 @@ export default function MemberListInvite({
     onListChanged();
   };
 
-  // The gym's postal address is set in Settings, by whoever may change the gym's details.
-  const addressTo = placeFor(gym?.slug, viewerPrivileges(gym), 'postalAddress');
-  const blocked = preview === null ? null : inviteBlockedWords(preview.blocked, words, addressTo !== null);
-  // Its button opens Settings beside this page, so the people ticked here are kept; the
-  // count is read again when staff come back, and Send is there once the address is.
+  // A gym with no postal address cannot invite. Whoever may change the gym's details types
+  // it here and saves, and the count is read again: nobody leaves this page, and the people
+  // ticked are kept (Kd at 23d's click-through). Anybody else is told who can add it.
+  const canSetAddress = canOpenPlace(viewerPrivileges(gym), 'postalAddress');
+  const blocked = preview === null ? null : inviteBlockedWords(preview.blocked, words, canSetAddress);
   const needsAddress = preview?.blocked === 'no_postal_address';
-  useEffect(() => {
-    if (!needsAddress) return undefined;
-    const again = () => setCountTick((t) => t + 1);
-    window.addEventListener('focus', again);
-    return () => window.removeEventListener('focus', again);
-  }, [needsAddress]);
   const reach = preview?.reach ?? 0;
   const ignores = selection === null ? inviteIgnores(filters) : null;
   const chosen = selection === null ? inviteWho(filters) : null;
@@ -352,11 +346,7 @@ export default function MemberListInvite({
               <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--warn)' }} />
               {blocked}
             </p>
-            {needsAddress ? (
-              <PlaceLink to={addressTo} beside className="c-btn c-btn-s self-start">
-                Add postal address
-              </PlaceLink>
-            ) : null}
+            {needsAddress && canSetAddress ? <PostalAddressBox gymId={gymId} onSaved={() => setCountTick((t) => t + 1)} /> : null}
           </div>
         ) : null}
 

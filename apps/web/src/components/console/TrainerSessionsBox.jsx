@@ -19,7 +19,7 @@ import {
 // `sessions` is the server's answer (409 `class_over_pt_sessions`), which carries the
 // sessions themselves, so See all reads nothing more. `kind` is 'save' for a form's Save
 // and 'uncancel' for a cancelled class put back. `trainingTo`: the Personal training page,
-// where a session is moved; its button opens beside this box, so the form is kept.
+// where a session is moved; its button leaves the form being saved, so it asks first.
 
 export default function TrainerSessionsBox({ sessions, clockFormat, kind = 'save', busy = false, trainingTo = null, onConfirm, onCancel }) {
   const [all, setAll] = useState(false);
@@ -64,7 +64,7 @@ export default function TrainerSessionsBox({ sessions, clockFormat, kind = 'save
         </p>
       ) : null}
       <p className="c-s14 c-t2">{overChangeLine(sessions, kind)}</p>
-      <PlaceLink to={trainingTo} beside>
+      <PlaceLink to={trainingTo} guard>
         Open Personal training
       </PlaceLink>
       <p className="c-s14 c-t2">{overKeptLine(kind)}</p>

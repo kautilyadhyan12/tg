@@ -1150,11 +1150,15 @@ describe("a class saved over its coach's personal training sessions", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fri' }));
     fireEvent.click(add);
     expect(await screen.findByText('Priya Sharma has 5 personal training sessions at these times')).toBeTruthy();
-    // The page it sends staff to has a button, in a new tab so the form here is kept (23d).
+    // The page it sends staff to has a button (23d). It opens in this tab and leaves the
+    // form being saved, so the press asks first.
     expect(screen.getByText(/cancel it on the Personal training page and book another time\./)).toBeTruthy();
-    const training = screen.getByRole('link', { name: /^Open Personal training/ });
-    expect(training.getAttribute('href')).toBe('/console/iron-house/personal-training');
-    expect(training.getAttribute('target')).toBe('_blank');
+    fireEvent.click(screen.getByRole('button', { name: 'Open Personal training' }));
+    const leave = screen.getByRole('link', { name: 'Leave this page' });
+    expect(leave.getAttribute('href')).toBe('/console/iron-house/personal-training');
+    expect(leave.getAttribute('target')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Stay here' }));
+    expect(screen.queryByRole('link', { name: 'Leave this page' })).toBeNull();
     expect(screen.getByTestId('over-sessions').children).toHaveLength(3);
     expect(screen.getByText(/and 2 more/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'See all' }));

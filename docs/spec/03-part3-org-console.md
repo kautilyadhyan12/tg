@@ -2878,7 +2878,10 @@ on your list" (somebody on the list). The step to do next has the orange button.
 whose place the reader cannot open has no button and says who can. "Somebody holds it" is
 the rule the picker orders its people by (`holdsPt`), so the tick and "people with personal
 training first" agree; what one person can be booked on is still `pickPtCover`'s to say.
-A booking or a cancel reads the steps again while they are on screen.)*
+A booking or a cancel reads the steps again while they are on screen. **From Kd's
+click-through:** a time that can be booked is an "available time" on every line of the page
+(it was "free time"), a trainer is "available", and a trainer's name in the Trainers list
+opens their week as See week does, with the week brought into view.)*
 
 ### 13.6 The calendar, the desk and the messages
 
@@ -3885,22 +3888,30 @@ member of staff), Updates and Events (`posts.manage`), Leaderboard and Challenge
 one's way in").** A sentence that sends staff to another place has a button that opens that
 exact place, with its box open and in view. `consolePlaces.js` is the one list of those
 places, each with its address and the rule that opens it, the menu's own; `PlaceLink` is the
-button. Somebody who cannot open a place gets no button, and the sentence says who can. A
-button inside a form or a box that holds something typed or ticked opens its place in a new
-tab, and what sent staff there is read again when they come back.
+button. Somebody who cannot open a place gets no button, and the sentence says who can.
+**Every button opens its place in this same tab** (Kd at the click-through, RULINGS
+2026-10-07: new tabs "become a pile of tabs"; a link inside an app opens where it is, and a
+new tab is for an outside site). A button that sits in a form or a box holding something
+typed **asks first**, in place: "You'll leave this page, and what you typed here won't be
+saved." with Leave this page and Stay here. **The gym's postal address, which stops an
+invitation, is typed where it is asked for** (`PostalAddressBox`: Invite, and a person's
+page), saved by the route Settings uses, so nobody leaves that page and the people ticked
+are kept. A box that sends staff to Memberships reads again when they come back to its tab
+(`useCameBack`, which hears a switch of tab as well as of window).
 
 | Sentence, on | Button | Opens |
 |---|---|---|
-| Invite: the gym has no postal address | Add postal address (new tab) | Settings, Gym details open, at the postal address |
+| Invite, and a person's page: the gym has no postal address | none: **Postal address** and **Save address**, there | nothing; the count is read again |
 | Memberships: the country is not set | Set your country | Settings, Gym details open, at the country |
-| Leads → Your gym page: its opening hours | Change opening hours (new tab) | Settings, When we're open, open |
-| A lead's follow-up: where replies go | Change reply address (new tab) | Settings, Follow-up emails to leads, open |
+| Leads → Your gym page: its opening hours | Change opening hours (asks first while the page has changes not saved) | Settings, When we're open, open |
+| A lead's follow-up: where replies go | Change reply address (asks first while the lead has typing not saved) | Settings, Follow-up emails to leads, open |
 | Settings → Follow-up emails: the rest wait on Leads | Open Leads | Leads |
-| A person's Memberships box (a name with no price here; a type not given; no types to pick) | Open Memberships (new tab) | Memberships |
-| The Remove box: staff who keep their staff access | Open the Staff tab (new tab) | Members → Staff |
+| A person's Memberships box (a name with no price here; a type not given; no types to pick) | Open Memberships | Memberships |
+| Add member, in a gym with nothing to sell (23a-ii) | Set up memberships (asks first once something is typed) | Memberships |
+| The Remove box: staff who keep their staff access | Open the Staff tab | Members → Staff |
 | Personal training: an empty member list in the picker | Open Members | Members |
-| Personal training: a class in a trainer's time off (their week; the time-off box, new tab) | Open the Calendar | Classes → Calendar, on that class's week (`&week=`) |
-| Classes: sessions a class would go over | Open Personal training (new tab) | Personal training |
+| Personal training: a class in a trainer's time off (their week; the time-off box, which asks first) | Open the Calendar | Classes → Calendar, on that class's week (`&week=`) |
+| Classes: sessions a class would go over | Open Personal training (asks first) | Personal training |
 | The banner: pay, choose a plan or change size "under Plan on the Overview" | Open Plan | Overview, at the plan (`#plan`) |
 
 Settings' sections take a link by their `id` (`gym-details`, `opening-hours`,

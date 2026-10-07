@@ -46,7 +46,11 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 const drawSheet = (props = {}) =>
-  render(<GymPageSheet gymId={GYM} gym={{ name: 'Canal Street Gym' }} words={WORDS} readOnly={false} onClose={() => undefined} {...props} />);
+  render(
+    <MemoryRouter>
+      <GymPageSheet gymId={GYM} gym={{ name: 'Canal Street Gym' }} words={WORDS} readOnly={false} onClose={() => undefined} {...props} />
+    </MemoryRouter>,
+  );
 const tick = (name) => screen.getByRole('checkbox', { name });
 const addOwn = (text) => {
   fireEvent.change(screen.getByLabelText('Add a facility'), { target: { value: text } });
@@ -95,14 +99,22 @@ describe('the worst thing: a page switched on or changed by mistake', () => {
     expect(api.setGymPage).not.toHaveBeenCalled();
   });
 
-  it('the opening hours it shows have a button to where they are set, opened beside the panel (23d)', async () => {
+  it('the opening hours it shows have a button to where they are set, which asks first once the page has changes not saved (23d)', async () => {
     api.getGymPage.mockResolvedValue({ data: { page: PAGE } });
     drawSheet({ gym: { name: 'Canal Street Gym', slug: 'canal-street', privileges: ['org.manage', 'members.confirm'] } });
     expect(await screen.findByText("Your page also shows your opening hours, and on a day you close, that day's closure note.")).toBeTruthy();
-    const link = screen.getByRole('link', { name: /^Change opening hours/ });
+    const link = screen.getByRole('link', { name: 'Change opening hours' });
     expect(link.getAttribute('href')).toBe('/console/canal-street/settings#opening-hours');
-    // A new tab: changes to the page that are not saved yet stay on screen.
-    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('target')).toBeNull();
+    // With a change to the page not saved, the press asks before it leaves.
+    fireEvent.click(tick('Show my page'));
+    expect(screen.queryByRole('link', { name: 'Change opening hours' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Change opening hours' }));
+    expect(screen.getByText("You'll leave this page, and what you typed here won't be saved.")).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/canal-street/settings#opening-hours');
+    fireEvent.click(screen.getByRole('button', { name: 'Stay here' }));
+    expect(screen.queryByRole('link', { name: 'Leave this page' })).toBeNull();
+    expect(api.setGymPage).not.toHaveBeenCalled();
   });
 
   it('somebody who cannot change the opening hours has no button to them', async () => {

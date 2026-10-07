@@ -431,8 +431,8 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
 
               <div className="flex flex-col gap-2">
                 <p className="c-s14 c-t2">Your page also shows your opening hours, and on a day you close, that day's closure note.</p>
-                {/* Beside this panel, so changes to the page that are not saved yet are kept. */}
-                <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), 'openingHours')} beside>
+                {/* It leaves this panel, so it asks first while changes to the page are not saved. */}
+                <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), 'openingHours')} guard={changed}>
                   Change opening hours
                 </PlaceLink>
               </div>

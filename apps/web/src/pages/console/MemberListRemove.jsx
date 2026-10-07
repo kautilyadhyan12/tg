@@ -185,12 +185,8 @@ export default function MemberListRemove({ door, gym, words, load, press, onSele
             <h3 className="c-s16 c-w6 c-t1">{group.heading}</h3>
             <Names people={group.people} testId={`remove-names-${group.key}`} />
             <p className="c-s14 c-t2">{group.line}</p>
-            {/* Beside this box, so the people selected stay selected. */}
-            {group.place ? (
-              <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), group.place)} beside>
-                Open the Staff tab
-              </PlaceLink>
-            ) : null}
+            {/* It leaves this box with nobody removed. */}
+            {group.place ? <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), group.place)}>Open the Staff tab</PlaceLink> : null}
           </section>
         ))}
         {button === null ? <p className="c-s15 c-t1">{`Nobody you selected can be removed.`}</p> : null}

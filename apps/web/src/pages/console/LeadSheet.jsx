@@ -171,7 +171,7 @@ function NotesBox({ value, onChange, disabled }) {
  *  gym's own email program with the words written, and "Mark as sent". With "Send them
  *  for me" on (20c-v) it says when the app sends it instead, and has no buttons; when
  *  the app could not send one, it says why and the buttons come back. */
-function FollowUpBox({ lead, gym, readOnly, busy, working, onMark }) {
+function FollowUpBox({ lead, gym, readOnly, busy, working, unsaved, onMark }) {
   const state = followUpState(lead);
   if (state === null) return null;
   const email = state.next === null ? null : followUpEmail(state.next, lead, gym);
@@ -183,9 +183,9 @@ function FollowUpBox({ lead, gym, readOnly, busy, working, onMark }) {
         {state.sentLine !== null ? <p className="c-s14 c-t2">{state.sentLine}</p> : null}
         {state.note ? <p className="c-s14 c-t2">{state.note}</p> : null}
       </div>
-      {/* Beside this panel, so nothing typed on the lead is lost. */}
+      {/* It leaves this lead, so it asks first while something typed on it is not saved. */}
       {state.notePlace ? (
-        <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), state.notePlace)} beside>
+        <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), state.notePlace)} guard={unsaved}>
           Change reply address
         </PlaceLink>
       ) : null}
@@ -582,7 +582,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
           {lead !== null ? (
             <>
               {lead.enquiredAt ? <PageMessages gymId={gymId} lead={lead} /> : null}
-              <FollowUpBox lead={lead} gym={gym} readOnly={readOnly} busy={busy} working={working} onMark={markSent} />
+              <FollowUpBox lead={lead} gym={gym} readOnly={readOnly} busy={busy} working={working} unsaved={unsaved} onMark={markSent} />
               <DetailsForm draft={draft} setDraft={setLeadDraft} disabled={off} />
               <MayEmailTick
                 checked={draft.mayEmail && draft.email.trim() !== ''}

@@ -102,8 +102,8 @@ afterEach(cleanup);
 describe('the page for whoever runs the timetable', () => {
   it('lists the trainers who are set up, says what the page is for, and shows the first one’s week: never the reader as a trainer', async () => {
     open();
-    expect(await screen.findByText('One-to-one sessions with a trainer. Set when each trainer is free, then book members into their free times.')).toBeTruthy();
-    expect(screen.getByText('These hours repeat every week. A class a trainer coaches is taken off their free times by itself.')).toBeTruthy();
+    expect(await screen.findByText('One-to-one sessions with a trainer. Set when each trainer is available, then book members into their available times.')).toBeTruthy();
+    expect(screen.getByText('These hours repeat every week. A class a trainer coaches is taken off their available times by itself.')).toBeTruthy();
     const rows = screen.getAllByTestId('pt-trainer');
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain('Sam Reed · 60-minute sessions');
@@ -116,7 +116,7 @@ describe('the page for whoever runs the timetable', () => {
 
     const day = await friday();
     expect(day.getByText('Fri 9 Oct')).toBeTruthy();
-    expect(day.getByText('Free times. Press one to book it.')).toBeTruthy();
+    expect(day.getByText('Available times. Press one to book it.')).toBeTruthy();
     expect(day.getByRole('button', { name: 'Book 09:00 – 10:00' })).toBeTruthy();
     expect(day.getByTestId('pt-session').textContent).toContain('10:00 – 11:00 · Maya Lopez');
     expect(day.getByTestId('pt-session').textContent).toContain('PT 10 · 1 session used');
@@ -196,6 +196,35 @@ describe('the page for whoever runs the timetable', () => {
     // The trainers are listed under it as before.
     expect(screen.getAllByTestId('pt-trainer')).toHaveLength(1);
     expect(screen.queryByTestId('pt-no-trainers')).toBeNull();
+  });
+
+  it("a trainer's name opens their week, as See week does, and brings it into view (Kd's click-through)", async () => {
+    const anaSetUp = { ...ana, offers: true, sessionMinutes: 30, hours: [{ weekday: 2, fromMinute: 600, toMinute: 720 }] };
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ trainers: [anaSetUp, owner, sam] }) });
+    const had = Element.prototype.scrollIntoView;
+    const into = vi.fn();
+    Element.prototype.scrollIntoView = into;
+    try {
+      open();
+      await friday();
+      const names = screen.getAllByTestId('pt-trainer-name');
+      expect(names.map((b) => b.textContent)).toEqual(['Ana Diaz', 'Sam Reed']);
+      expect(names.every((b) => b.tagName === 'BUTTON')).toBe(true);
+      // Ana's week is the one shown first; Sam's name asks for his.
+      api.getPtWeek.mockClear();
+      fireEvent.click(names[1]);
+      await waitFor(() => expect(api.getPtWeek).toHaveBeenCalledWith('g1', SAM, null));
+      expect(await screen.findByRole('heading', { name: /^Sam Reed · / })).toBeTruthy();
+      const week = screen.getByLabelText('Sessions');
+      await waitFor(() => expect(into.mock.instances.some((el) => el === week)).toBe(true));
+      // See week does the same for the other trainer.
+      into.mockClear();
+      fireEvent.click(screen.getByRole('button', { name: "See Ana Diaz's week" }));
+      await waitFor(() => expect(api.getPtWeek).toHaveBeenLastCalledWith('g1', ANA, null));
+      await waitFor(() => expect(into.mock.instances.some((el) => el === screen.getByLabelText('Sessions'))).toBe(true));
+    } finally {
+      Element.prototype.scrollIntoView = had;
+    }
   });
 
   it('with every step done there is no list, and none where the server sent no steps', async () => {
@@ -281,13 +310,13 @@ describe('the page for whoever runs the timetable', () => {
     open();
     const day = await friday();
     expect(within(day.getByTestId('pt-coaching')).getByText('10:15 AM – 11:00 AM · Spin')).toBeTruthy();
-    expect(day.getByText('Coaching a class, so not free')).toBeTruthy();
+    expect(day.getByText('Coaching a class, so not available')).toBeTruthy();
     expect(day.getByRole('button', { name: 'Book 11:00 AM – 12:00 PM' })).toBeTruthy();
     // The session booked from 10:00 runs into the class given to the trainer afterwards, and says so.
     expect(day.getByText('This runs into Spin, a class they coach at the same time. Move one of them.')).toBeTruthy();
     const saturday = within(screen.getAllByTestId('pt-day')[3]);
     expect(saturday.getByText('6:00 PM – 7:00 PM · Yoga')).toBeTruthy();
-    expect(saturday.getByText('No free times')).toBeTruthy();
+    expect(saturday.getByText('No available times')).toBeTruthy();
   });
 
   it('Add a trainer: pick a member of staff, set their hours, and their week is the one shown', async () => {
@@ -454,8 +483,8 @@ describe('a trainer on the usual permissions', () => {
   it('sees their own hours and week, the free times as plain times with why, and no Book; their own session can be cancelled', async () => {
     open();
     expect(await screen.findByRole('heading', { name: 'Your hours' })).toBeTruthy();
-    expect(screen.getByText('One-to-one sessions. Set when you are free; the sessions booked with you appear below.')).toBeTruthy();
-    expect(screen.getByText('These hours repeat every week. A class you coach is taken off your free times by itself.')).toBeTruthy();
+    expect(screen.getByText('One-to-one sessions. Set when you are available; the sessions booked with you appear below.')).toBeTruthy();
+    expect(screen.getByText('These hours repeat every week. A class you coach is taken off your available times by itself.')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Trainers' })).toBeNull();
     expect(screen.queryByLabelText('Add a trainer')).toBeNull();
     const day = await friday();
@@ -733,10 +762,17 @@ describe("a trainer's time off", () => {
     expect(box.getByText('Fri 9 Oct · 10:30 – 11:15')).toBeTruthy();
     expect(box.getByText(/This session stays booked: nobody is cancelled and nothing comes off or goes back on a pack\./)).toBeTruthy();
     expect(box.getByText(/This class stays on the calendar with Sam Reed as coach\. To change the coach, open the class on the Calendar\./)).toBeTruthy();
-    // The Calendar opens on that class's week, beside this box: the time off being added is kept.
-    const calendar = box.getByRole('link', { name: /^Open the Calendar/ });
-    expect(calendar.getAttribute('href')).toBe('/console/iron-house/classes?view=week&week=2026-10-09');
-    expect(calendar.getAttribute('target')).toBe('_blank');
+    // The Calendar opens on that class's week, in this tab. It leaves the time off being
+    // added, so the press asks first; Stay here changes nothing.
+    expect(box.queryByRole('link')).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Open the Calendar' }));
+    expect(box.getByText("You'll leave this page, and what you typed here won't be saved.")).toBeTruthy();
+    const leave = box.getByRole('link', { name: 'Leave this page' });
+    expect(leave.getAttribute('href')).toBe('/console/iron-house/classes?view=week&week=2026-10-09');
+    expect(leave.getAttribute('target')).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Stay here' }));
+    expect(box.queryByRole('link')).toBeNull();
+    expect(box.getByRole('button', { name: 'Open the Calendar' })).toBeTruthy();
     expect(box.getByText("The app doesn't tell them yet. Let them know yourself.")).toBeTruthy();
     // The plain Add is gone while the box asks.
     expect(panel().queryByRole('button', { name: 'Add time off' })).toBeNull();
@@ -872,7 +908,7 @@ describe("a trainer's time off", () => {
     // A day with nothing else on it says it is off, not only that nothing is free.
     const days = screen.getAllByTestId('pt-day');
     expect(days[3].textContent).toBe('Sat 10 OctTime off · all day');
-    expect(days[4].textContent).toBe('Sun 11 OctNo free times');
+    expect(days[4].textContent).toBe('Sun 11 OctNo available times');
   });
 
   it('a trainer who runs no timetable has Time off for themselves', async () => {
