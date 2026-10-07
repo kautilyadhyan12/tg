@@ -77,7 +77,7 @@ function listDatesLine(m) {
  *  box (17a-iii), so the box never reads "No membership yet" beside a list that names one.
  *  Null where the list says nothing, or the person has, or has had, the type that name
  *  is: then their own membership's row says it. `name` is the person. */
-export function listedRow(listed, name) {
+export function listedRow(listed, name, managesTypes = true) {
   if (listed === null || listed === undefined) return null;
   if (listed.type !== null && listed.held) return null;
   const who = `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
@@ -88,14 +88,18 @@ export function listedRow(listed, name) {
       title: listed.word,
       tag: 'Not set up',
       from: withDay('From your member list'),
-      note: `This membership has no price here yet. Set it up in Memberships, and ${name} gets it.`,
+      note: managesTypes
+        ? `This membership has no price here yet. Set it up in Memberships, and ${name} gets it.`
+        : `This membership has no price here yet. Once the owner sets it up, ${name} gets it.`,
     };
   }
   return {
     title: listed.type.name,
     tag: 'Not added',
     from: withDay(listed.ownName ? 'From your member list' : `Your member list says “${listed.word}”`),
-    note: `${who} doesn't have it here yet. Add it with Add membership, or go to Memberships to give it to everyone on your list who is missing it.`,
+    note: managesTypes
+      ? `${who} doesn't have it here yet. Add it with Add membership, or go to Memberships to give it to everyone on your list who is missing it.`
+      : `${who} doesn't have it here yet. Add it with Add membership.`,
   };
 }
 

@@ -153,6 +153,11 @@ describe('staff who may', () => {
     // More is lit while the page is open, as for every page reached from it.
     const more = within(screen.getByTestId('console-tabbar')).getByText('More').closest('a');
     expect(more.className).toContain('c-tab-on');
+    // Members is not, though its address is the start of this one: on the phone or the computer.
+    expect(within(screen.getByTestId('console-tabbar')).getByText('Members').closest('a').className).not.toContain('c-tab-on');
+    const rail = within(screen.getByTestId('console-rail'));
+    expect(rail.getByText('Members').closest('a').className).not.toContain('c-nav-on');
+    expect(rail.getByText('Memberships').closest('a').className).toContain('c-nav-on');
   });
 
   it('a gym with no live plan still sees its list, is told why nothing can be changed, and its buttons are off', async () => {
@@ -162,6 +167,18 @@ describe('staff who may', () => {
     expect(screen.getByRole('button', { name: 'Add a membership type' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Change Gold Monthly' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Archive Gold Monthly' }).disabled).toBe(true);
+  });
+
+  it('a gym with no country: the owner gets a button to Settings, and somebody who cannot change the details is told to ask', async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ currency: null }) });
+    draw([gym({ staffRole: 'owner', privileges: [...ROLE_PRIVILEGES.owner] })]);
+    expect(await screen.findByText("Set your country in Gym details before adding a membership type. Prices are in your country's own money.")).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open Settings' }).getAttribute('href')).toBe('/console/iron-house/settings');
+    cleanup();
+    resetConsoleOrgs();
+    draw([gym()]);
+    expect(await screen.findByText(/Ask the owner to set it in Gym details./)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Open Settings' })).toBeNull();
   });
 
   it("moving to another gym throws away what was typed for the first, and reads the second gym's own list", async () => {

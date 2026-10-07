@@ -213,7 +213,9 @@ describe('adding a type', () => {
 
   it('a gym with no country is told to set it, and is offered no form', async () => {
     open(listOf({ currency: null }));
-    expect(await screen.findByText(/Set your country in your details/)).toBeTruthy();
+    // Somebody who may not change the gym's details is told who can, and given no button.
+    expect(await screen.findByText(/Your country isn't set yet, so a membership type can't be added\. Ask the owner to set it in Gym details\./)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Open Settings' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add a membership type' })).toBeNull();
   });
 
@@ -409,6 +411,23 @@ describe('where the form opens', () => {
     } finally {
       Element.prototype.scrollIntoView = had;
     }
+  });
+});
+
+// Round one, H1: a form drawn in a row must never be left open with its row gone.
+describe('while a form is open, nothing can take its row away', () => {
+  const OLD = { ...type({ name: 'Old' }), archivedAt: '2026-10-01T09:00:00.000Z' };
+
+  it('Put back waits, as Change and Archive do, and is back once the form is cancelled', async () => {
+    open(listOf({ types: [type()], archived: [OLD], archivedTotal: 1 }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Show archived (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Change Gold Monthly' }));
+    expect(screen.getByRole('button', { name: 'Put back Old' }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Put back Old' }).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Add a membership type' }));
+    expect(screen.getByRole('button', { name: 'Put back Old' }).disabled).toBe(true);
+    expect(orgService.restoreMembershipType).not.toHaveBeenCalled();
   });
 });
 

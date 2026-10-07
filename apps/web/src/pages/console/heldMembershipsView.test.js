@@ -139,6 +139,9 @@ describe("what the member list says their membership is, where they do not hold 
   });
 
   it('says nothing where the list says nothing, or they have, or have had, that type', () => {
+    // Somebody who may not open Memberships is not sent there.
+    expect(listedRow(listed(), 'Leo Grant', false).note).toBe('This membership has no price here yet. Once the owner sets it up, Leo Grant gets it.');
+    expect(listedRow(listed({ word: 'Gold', type: TYPE }), 'Zara Ali', false).note).toBe("Zara Ali doesn't have it here yet. Add it with Add membership.");
     expect(listedRow(null, 'Leo Grant')).toBeNull();
     expect(listedRow(undefined, 'Leo Grant')).toBeNull();
     expect(listedRow(listed({ word: 'Gold', type: TYPE, held: true }), 'Leo Grant')).toBeNull();

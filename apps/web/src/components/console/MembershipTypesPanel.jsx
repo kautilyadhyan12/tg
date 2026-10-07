@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX } from '@app/shared';
+import { Link } from 'react-router-dom';
 import { Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
+import { viewerPrivileges } from '../../pages/console/consoleView';
+import { canManageOrg } from '../../pages/console/gymDetailsView';
 import {
   ACCESS_CHOICES,
   KIND_CHOICES,
@@ -561,7 +564,11 @@ export default function MembershipTypesPanel({ org, readOnly }) {
   const formOpen = draft !== null && draftCurrency !== null;
   // Where the open form is drawn: under the title for a new type, in its own row for a
   // type being changed, in the name's row for a name from the member list.
-  const formAt = !formOpen ? null : draft.id !== null ? 'row' : draftWord !== null ? 'word' : 'top';
+  // A row that has gone from the list (archived by somebody else, a name that became a
+  // type) cannot hold it, so it is drawn under the title: a form is never open and unseen.
+  const hasRow = formOpen && draft.id !== null && (list?.types ?? []).some((t) => t.id === draft.id);
+  const hasWord = formOpen && draftWord !== null && notSetUp(fromList.words).some((w) => w.word === draftWord.word);
+  const formAt = !formOpen ? null : hasRow ? 'row' : draft.id === null && hasWord ? 'word' : 'top';
   const form = formOpen ? (
     <TypeForm
       gymId={gymId}
@@ -585,6 +592,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
     </div>
   );
   const summary = withSetUpCount(typesSummary(list), fromList.words);
+  const canSetCountry = canManageOrg(viewerPrivileges(org));
 
   return (
     <div className="c-page">
@@ -625,11 +633,17 @@ export default function MembershipTypesPanel({ org, readOnly }) {
       ) : (
         <>
           {formOpen ? null : list.currency === null ? (
-            <div className="c-callout">
+            <div className="c-callout flex-col items-start">
               <p className="c-s15 m-0">
-                Set your country in your details, at the top of Settings, before adding a membership type. Prices are in
-                your country&apos;s own money.
+                {canSetCountry
+                  ? "Set your country in Gym details before adding a membership type. Prices are in your country's own money."
+                  : "Your country isn't set yet, so a membership type can't be added. Ask the owner to set it in Gym details. Prices are in your country's own money."}
               </p>
+              {canSetCountry && typeof org.slug === 'string' ? (
+                <Link to={`/console/${org.slug}/settings`} className="c-btn c-btn-s">
+                  Open Settings
+                </Link>
+              ) : null}
             </div>
           ) : canAddType(list) ? null : (
             <p className="c-s15 c-t2 m-0">{TOO_MANY_TYPES}</p>
@@ -733,7 +747,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
                           </div>
                           <button
                             type="button"
-                            disabled={readOnly || busy}
+                            disabled={readOnly || anyBusy || locked}
                             onClick={() => void run(() => orgService.restoreMembershipType(gymId, type.id), "We couldn't put that back. Please try again.")}
                             aria-label={`Put back ${type.name}`}
                             className="c-btn c-btn-s c-btn-sm"

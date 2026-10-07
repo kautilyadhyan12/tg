@@ -1040,6 +1040,8 @@ describe('a manager or trainer at this address', () => {
   it('the owner: Settings holds nothing about Memberships, and reads no price list', async () => {
     drawSettings();
     expect(await screen.findByRole('button', { name: /^Staff/ })).toBeTruthy();
+    // `drawSettings` draws the page alone: with the menu around it, its Memberships line
+    // would be found here, and this check would need the page's own element instead.
     expect(screen.queryByText(/Memberships/)).toBeNull();
     expect(screen.queryByRole('link', { name: /Memberships/ })).toBeNull();
     await new Promise((r) => setTimeout(r, 20));

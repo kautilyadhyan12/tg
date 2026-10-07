@@ -35,7 +35,8 @@ describe('where each page sits on a phone', () => {
     expect(keys(menu.more)).toEqual(['memberships', 'leads', 'training', 'updates', 'events', 'leaderboard', 'challenges']);
   });
 
-  it('Members is not lit on the Memberships page, though its address starts the same', () => {
+  // That Members itself is not lit there is checked on the drawn menu (memberships.render.test.jsx).
+  it('More is lit on the Memberships page, and not on Members, though the two addresses start the same', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.owner, 'gym');
     expect(moreIsCurrent(menu, '/console/iron-house/memberships')).toBe(true);
     expect(moreIsCurrent(menu, '/console/iron-house/members')).toBe(false);

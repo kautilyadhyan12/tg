@@ -235,7 +235,7 @@ describe('Set up, in a gym that has set no price yet', () => {
   it('with no country set there is nothing to set it up as: Set up waits, and the page says why', async () => {
     await open([], [name()], { currency: null });
     expect((await screen.findByRole('button', { name: 'Set up Gold' })).disabled).toBe(true);
-    expect(screen.getByText(/Set your country in your details/)).toBeTruthy();
+    expect(screen.getByText(/Your country isn't set yet, so a membership type can't be added/)).toBeTruthy();
   });
 });
 
@@ -339,6 +339,26 @@ describe('where the form for a name opens', () => {
     fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: 'Set up Silver' }).disabled).toBe(false);
     expect(orgService.createMembershipType).not.toHaveBeenCalled();
+  });
+});
+
+// Round one, H1: the reviewer's own case. The list says "Gold", the gym's Gold is archived,
+// and Set up has opened the form in that name's row. Put back would take the row away.
+describe("while a name's form is open", () => {
+  it('Put back on an archived type waits, so the row and its form cannot go; Cancel frees it', async () => {
+    const OLD = { ...type(7, { name: 'Gold' }), archivedAt: '2026-10-01T09:00:00.000Z' };
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [], archived: [OLD], archivedTotal: 1 }) });
+    orgService.getMembershipWords.mockResolvedValue(wordsOf([name()]));
+    render(<MembershipTypesPanel org={ORG} readOnly={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Show archived (1)' }));
+    expect(screen.getByRole('button', { name: 'Put back Gold' }).disabled).toBe(false);
+    fireEvent.click(await screen.findByRole('button', { name: 'Set up Gold' }));
+    const form = screen.getByRole('form', { name: 'Add “Gold” as a membership type' });
+    expect(screen.getByRole('button', { name: 'Put back Gold' }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Put back Gold' }));
+    expect(orgService.restoreMembershipType).not.toHaveBeenCalled();
+    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Put back Gold' }).disabled).toBe(false);
   });
 });
 
