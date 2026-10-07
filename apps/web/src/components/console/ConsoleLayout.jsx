@@ -196,7 +196,7 @@ export default function ConsoleLayout({ children }) {
                   <Icon size={22} />
                   {reviewDot(page)}
                 </span>
-                <span>{page.label}</span>
+                <span>{page.tabLabel ?? page.label}</span>
               </NavLink>
             );
           })}

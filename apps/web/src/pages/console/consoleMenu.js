@@ -8,11 +8,21 @@ import { canManageChallenges } from './challengesView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManagePosts } from '../../components/gym/postsView';
 
-/** Settings holds sections gated on three permissions (Staff: `staff.manage`; the gym's
- *  details: `org.manage`; Class bookings: `schedule.manage`), so its page is drawn for
- *  whoever holds any of them. What the gym sells left it for a page of its own (23c-i). */
+/** Settings holds sections gated on two permissions (the gym's details: `org.manage`;
+ *  Class bookings: `schedule.manage`), so its page is drawn for whoever holds either.
+ *  What the gym sells left it for a page of its own (23c-i), and staff for Members → Staff
+ *  (23c-ii). */
 function settingsIsReachable(privileges) {
-  return canManageStaff(privileges) || canManageOrg(privileges) || canManageSchedule(privileges);
+  return canManageOrg(privileges) || canManageSchedule(privileges);
+}
+
+/** WHAT THE MEMBERS PAGE IS CALLED, in the menu and as its own title: "Members & staff"
+ *  for whoever has its Staff tab (Kd, RULINGS 2026-10-07: staff are on this page, so its
+ *  name says so), and "Members" for everybody else, whose page holds no staff. A studio
+ *  and a trainer have clients. */
+export function membersPageName(privileges, orgType) {
+  const people = orgWords(orgType).peopleCap;
+  return canManageStaff(privileges) ? `${people} & staff` : people;
 }
 
 /** THE CONSOLE'S PAGES THIS PERSON MAY OPEN, in the menu's order (spec Part 3 §17.5).
@@ -25,7 +35,8 @@ export function consoleMenu(orgSlug, privileges, orgType) {
   const base = `/console/${orgSlug}`;
   const pages = [
     { key: 'overview', to: base, end: true, label: 'Overview', phone: 'tab' },
-    { key: 'members', to: `${base}/members`, end: false, label: orgWords(orgType).peopleCap, phone: 'tab' },
+    // `tabLabel`: the phone's bottom bar has room for one word.
+    { key: 'members', to: `${base}/members`, end: false, label: membersPageName(privileges, orgType), tabLabel: orgWords(orgType).peopleCap, phone: 'tab' },
     // What the gym sells (23c-i): its own line, straight after the people who hold it.
     canManageMemberships(privileges) && { key: 'memberships', to: `${base}/memberships`, end: false, label: 'Memberships', phone: 'more' },
     has('members.confirm') && { key: 'leads', to: `${base}/leads`, end: false, label: 'Leads', phone: 'more' },

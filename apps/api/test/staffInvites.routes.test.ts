@@ -791,6 +791,143 @@ d("staff invited by email (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  // 23c-ii (Kd's click-through): a profile's Role offers the gym's own roles.
+  it(
+    "somebody already on the staff is given one of the gym's own roles: its name and its ticks, and never another gym's role",
+    async () => {
+      const gym = await makeGym("Give Role Gym");
+      const rival = await makeGym("Rival Give Role Gym");
+      const makeRole = async (g: Gym, name: string, privileges: string[]) => {
+        const res = await post(`/v1/orgs/${g.id}/staff/roles`, { name, privileges }, g.owner.cookies);
+        expect(res.statusCode, res.body).toBe(201);
+        return (JSON.parse(res.body) as { role: { id: string } }).role.id;
+      };
+      const desk = await makeRole(gym, "Front desk", ["attendance.read", "attendance.mark"]);
+      const rivalRole = await makeRole(rival, "Rival desk", ["members.read", "members.confirm", "members.remove"]);
+
+      // A manager, made the ordinary way.
+      const pending = await invited(gym, addr("gr-1"), "manager");
+      const person = await signIn(addr("gr-1"));
+      expect((await accept(person, pending.id)).statusCode).toBe(200);
+      const staffUrl = `/v1/orgs/${gym.id}/staff/${person.userId}`;
+      const row = async () => {
+        const rows = await sql<{ role: string; role_name: string | null; privileges: string[] }[]>`
+          SELECT role, role_name, privileges FROM gym_staff WHERE gym_id = ${gym.id} AND user_id = ${person.userId}`;
+        const found = rows[0];
+        if (found === undefined) throw new Error("the staff row is gone");
+        return { role: found.role, roleName: found.role_name, privileges: [...found.privileges].sort() };
+      };
+      const before = await row();
+      expect(before).toMatchObject({ role: "manager", roleName: null });
+      expect(await readsMembers(gym, person)).toBe(200);
+
+      // THE WORST THING HERE: another gym's role, with more in it. Not found, nothing changes.
+      const stolen = await send("PATCH", staffUrl, gym.owner.cookies, { roleId: rivalRole });
+      expect(stolen.statusCode).toBe(404);
+      expect(errorOf(stolen).error).toBe("role_not_found");
+      // A role nobody has, and bodies that are not one or the other.
+      expect((await send("PATCH", staffUrl, gym.owner.cookies, { roleId: "00000000-0000-4000-8000-000000000000" })).statusCode).toBe(404);
+      for (const body of [{ roleId: "not-an-id" }, { role: "trainer", roleId: desk }, {}, { roleId: desk, privileges: ["members.remove"] }]) {
+        expect((await send("PATCH", staffUrl, gym.owner.cookies, body)).statusCode, JSON.stringify(body)).toBe(400);
+      }
+      // Nobody but this gym's owner: the other gym's owner, the person themselves, a stranger, nobody.
+      const stranger = await signIn(addr("gr-stranger"));
+      for (const who of [rival.owner, person, stranger]) {
+        expect([403, 404], who.email).toContain((await send("PATCH", staffUrl, who.cookies, { roleId: desk })).statusCode);
+      }
+      expect((await send("PATCH", staffUrl, {}, { roleId: desk })).statusCode).toBe(401);
+      expect(await row()).toEqual(before);
+
+      // Given: a trainer underneath, the role's name, the role's ticks.
+      const given = await send("PATCH", staffUrl, gym.owner.cookies, { roleId: desk });
+      expect(given.statusCode, given.body).toBe(200);
+      expect((JSON.parse(given.body) as { staff: { role: string; roleName?: string | null } }).staff).toMatchObject({ role: "trainer", roleName: "Front desk" });
+      expect(await row()).toEqual({ role: "trainer", roleName: "Front desk", privileges: ["attendance.mark", "attendance.read"] });
+      // What the manager could read, the Front desk cannot.
+      expect(await readsMembers(gym, person)).toBe(403);
+      // The same again is no change: one audit row, not two.
+      expect((await send("PATCH", staffUrl, gym.owner.cookies, { roleId: desk })).statusCode).toBe(200);
+      const audit = await sql<{ meta: { from?: string; to?: string; fromName?: string | null; toName?: string | null } }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.staff_role_changed' ORDER BY at`;
+      expect(audit.map((a) => [a.meta.from, a.meta.to, a.meta.fromName, a.meta.toName])).toEqual([["manager", "trainer", null, "Front desk"]]);
+
+      // Front desk to plain trainer is a change: the name goes, the ticks are a trainer's.
+      expect((await send("PATCH", staffUrl, gym.owner.cookies, { role: "trainer" })).statusCode).toBe(200);
+      expect(await row()).toEqual({ role: "trainer", roleName: null, privileges: [...ROLE_PRIVILEGES.trainer].sort() });
+
+      // The owner's own row is given no role; a role that was deleted is not found.
+      const own = await send("PATCH", `/v1/orgs/${gym.id}/staff/${gym.owner.userId}`, gym.owner.cookies, { roleId: desk });
+      expect(own.statusCode).toBe(409);
+      expect(errorOf(own).error).toBe("owner_role_locked");
+      expect((await del(`/v1/orgs/${gym.id}/staff/roles/${desk}`, gym.owner.cookies)).statusCode).toBe(200);
+      expect((await send("PATCH", staffUrl, gym.owner.cookies, { roleId: desk })).statusCode).toBe(404);
+      expect(await row()).toMatchObject({ role: "trainer", roleName: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // 23c-ii round one (L1, T3, T5).
+  it(
+    "a role made again under its name with other ticks is a change; two gives at once end as one of them; a gym with no plan gives no role",
+    async () => {
+      const gym = await makeGym("Same Name Gym");
+      const rolesUrl = `/v1/orgs/${gym.id}/staff/roles`;
+      const makeRole = async (name: string, privileges: string[]) => {
+        const res = await post(rolesUrl, { name, privileges }, gym.owner.cookies);
+        expect(res.statusCode, res.body).toBe(201);
+        return (JSON.parse(res.body) as { role: { id: string } }).role.id;
+      };
+      const pending = await invited(gym, addr("sn-1"), "trainer");
+      const person = await signIn(addr("sn-1"));
+      expect((await accept(person, pending.id)).statusCode).toBe(200);
+      const staffUrl = `/v1/orgs/${gym.id}/staff/${person.userId}`;
+      const row = async () => {
+        const rows = await sql<{ role: string; role_name: string | null; privileges: string[] }[]>`
+          SELECT role, role_name, privileges FROM gym_staff WHERE gym_id = ${gym.id} AND user_id = ${person.userId}`;
+        const found = rows[0];
+        if (found === undefined) throw new Error("the staff row is gone");
+        return { roleName: found.role_name, privileges: [...found.privileges].sort() };
+      };
+      const changes = async () =>
+        (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.staff_role_changed'`)[0]?.n;
+
+      // The old Front desk, given; then deleted and made again with other ticks.
+      const old = await makeRole("Front desk", ["attendance.read", "attendance.mark"]);
+      expect((await send("PATCH", staffUrl, gym.owner.cookies, { roleId: old })).statusCode).toBe(200);
+      expect((await del(`${rolesUrl}/${old}`, gym.owner.cookies)).statusCode).toBe(200);
+      const made = await makeRole("Front desk", ["members.read", "members.confirm"]);
+      expect(await row()).toEqual({ roleName: "Front desk", privileges: ["attendance.mark", "attendance.read"] });
+      expect(await changes()).toBe(1);
+      // The same name is not "no change": they get the role as it now stands.
+      expect((await send("PATCH", staffUrl, gym.owner.cookies, { roleId: made })).statusCode).toBe(200);
+      expect(await row()).toEqual({ roleName: "Front desk", privileges: ["members.confirm", "members.read"] });
+      expect(await changes()).toBe(2);
+      // And that one again IS no change.
+      expect((await send("PATCH", staffUrl, gym.owner.cookies, { roleId: made })).statusCode).toBe(200);
+      expect(await changes()).toBe(2);
+
+      // Two at once, to two roles: both answered, and the row is wholly one of them.
+      const other = await makeRole("Cleaner", ["attendance.read"]);
+      const both = await Promise.all([
+        send("PATCH", staffUrl, gym.owner.cookies, { roleId: other }),
+        send("PATCH", staffUrl, gym.owner.cookies, { role: "manager" }),
+      ]);
+      expect(both.map((r) => r.statusCode)).toEqual([200, 200]);
+      const after = await row();
+      expect([
+        JSON.stringify({ roleName: "Cleaner", privileges: ["attendance.read"] }),
+        JSON.stringify({ roleName: null, privileges: [...ROLE_PRIVILEGES.manager].sort() }),
+      ]).toContain(JSON.stringify(after));
+
+      // No live plan: nothing is given.
+      await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      const lapsed = await send("PATCH", staffUrl, gym.owner.cookies, { roleId: made });
+      expect(lapsed.statusCode).toBe(409);
+      expect(await row()).toEqual(after);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "Accept by somebody made staff another way meanwhile keeps the permissions they have",
     async () => {

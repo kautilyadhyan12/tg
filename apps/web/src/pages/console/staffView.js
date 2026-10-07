@@ -1,7 +1,7 @@
-import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, STAFF_INVITE_EMAIL_REASON_WORDS, STAFF_INVITE_RESENDS_MAX, orgWords } from '@app/shared';
+import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, STAFF_INVITE_EMAIL_REASON_WORDS, STAFF_INVITE_RESENDS_MAX, orgWords, withArticle } from '@app/shared';
 import { formatJoinedAt, roleLabel } from './consoleView';
 
-// Pure view helpers for the console's Staff section — Part 3 §4.7 ("list,
+// Pure view helpers for Members → Staff (it was Settings' Staff box until 23c-ii) — Part 3 §4.7 ("list,
 // invite by email/phone with role, change role, remove; every staff mutation
 // audit-logged; last-owner removal blocked"), behind §2.2's owner-only "Staff
 // management" row.
@@ -99,15 +99,47 @@ export function staffRoleChoices(orgType) {
   ];
 }
 
-/** The role the "switch to…" button offers, or null when there is nothing to
- *  offer. There are exactly two assignable roles, so a change is a single tap
- *  rather than a picker — and an OWNER gets null, because `updateStaffRole`
- *  refuses the owner's row with a 409 and a button that fails is worse than no
- *  button at all. */
-export function otherStaffRole(role) {
-  if (role === 'manager') return 'trainer';
-  if (role === 'trainer') return 'manager';
-  return null;
+/** THE ROLES THIS PERSON CAN BE GIVEN from their own panel: manager and trainer, and the
+ *  gym's own roles (RULINGS 2026-10-07), less the one they hold. Each carries what the
+ *  server is sent (`body`), the button's words and the question asked first. The owner
+ *  gets none: the server refuses their row (`owner_role_locked`).
+ *
+ *  A role of the gym's own is a trainer's underneath, so somebody on one is offered plain
+ *  trainer as well; and one whose own role has since been deleted keeps its name and is
+ *  offered every role there is. The role they hold is left out only while they hold its
+ *  ticks too: a role made again under the same name, or ticks changed by hand since, and
+ *  it is offered, to give them the role as it now stands. */
+export function roleTargets(person, roles, orgType) {
+  if (!canChangeStaff(person)) return [];
+  const ownName = typeof person.roleName === 'string' && person.roleName !== '' ? person.roleName : null;
+  const builtIn = ['manager', 'trainer']
+    .filter((role) => ownName !== null || role !== person.role)
+    .map((role) => ({
+      key: role,
+      body: { role },
+      label: `Make ${roleLabel(role, orgType).toLowerCase()}`,
+      question: roleChangeWarning(person, role, orgType),
+    }));
+  const own = (Array.isArray(roles) ? roles : [])
+    .filter((r) => r.name !== ownName || privilegesDiffer(heldPrivileges(person), r.privileges))
+    .map((r) =>
+      // The role they already hold by name, offered because their ticks are not its: the
+      // button says what it does, and does not offer them a role their tag says they have.
+      r.name === ownName
+        ? {
+            key: r.id,
+            body: { roleId: r.id },
+            label: `Reset to ${r.name}'s permissions`,
+            question: `Give ${person.displayName ?? 'them'} the permissions saved for ${r.name}? This replaces what is ticked now.`,
+          }
+        : {
+            key: r.id,
+            body: { roleId: r.id },
+            label: `Make ${r.name}`,
+            question: `Make ${person.displayName ?? 'them'} ${withArticle(r.name)}? Their permissions become the ones saved for that role.`,
+          },
+    );
+  return [...builtIn, ...own];
 }
 
 /** Does this row get controls?
@@ -121,7 +153,7 @@ export function canChangeStaff(person) {
   return person?.role === 'manager' || person?.role === 'trainer';
 }
 
-/** "3 people run this gym", from the whole list.
+/** "3 people run your gym", from the whole list.
  *
  *  It takes the ARRAY and not a page because `listStaff` has no LIMIT and no
  *  cursor — a gym's staff is small by construction and the endpoint returns all
@@ -141,7 +173,7 @@ export function staffCountLabel(staff, orgType) {
   // owner's own row is always in the list), and one empty array away, which is
   // the distance :5104 F5 says not to leave.
   if (n === 0) return null;
-  return n === 1 ? `1 person runs this ${it}` : `${n} people run this ${it}`;
+  return n === 1 ? `1 person runs your ${it}` : `${n} people run your ${it}`;
 }
 
 /** WHAT BECOMING STAFF COSTS A GYM, in one sentence the screen can print (spec Part 3
@@ -212,6 +244,14 @@ function privilegeCopy(orgType) {
       hint: `Write posts your ${words.people} read in their app, pin them and remove them.`,
     },
     {
+      // Spec Part 3 §13.3 (17b-i): owner and manager by default. It had no box until
+      // 23c-ii, so every manager's panel said they held a permission the screen could
+      // not show.
+      value: 'schedule.manage',
+      label: 'Run classes and personal training',
+      hint: `Set up classes, the calendar and class bookings, and every ${words.coach}'s hours and sessions.`,
+    },
+    {
       value: 'members.confirm',
       label: `Keep the ${words.person} list and invite`,
       hint: `Import and change the list, send invitations, and see Leads and your ${words.it}'s page.`,
@@ -234,9 +274,20 @@ function privilegeCopy(orgType) {
       hint: `What your ${words.it} sells and what each costs, in Memberships.`,
     },
     {
+      // The owner's by default: drawn on the owner's own row (`OWNER_ROW_ONLY`).
+      value: 'org.manage',
+      label: `Change ${words.it} details`,
+      hint: "The name, address and time zone, when you're open, the front desk's devices and follow-up emails to leads.",
+    },
+    {
+      value: 'billing.manage',
+      label: 'Manage the plan and billing',
+      hint: "Choose the plan's size, pay for it, change how it is paid and cancel it.",
+    },
+    {
       value: 'staff.manage',
       label: 'Manage staff',
-      hint: 'Add people, change what they can do, and take their keys back.',
+      hint: 'Invite people, change what they can do, and remove them from staff.',
     },
   ];
 }
@@ -259,7 +310,7 @@ const PRIVILEGE_ORDER = privilegeCopy('gym').map((p) => p.value);
  *  route" :11429 rule 4 names in advance — so it is not drawn.
  *
  *  **This is NOT the enforcement and must never be read as it** (R3.3). The 409
- *  is, wherever the request comes from, and `StaffPanel` still shows the
+ *  is, wherever the request comes from, and the person's panel still shows the
  *  server's sentence if one arrives.
  *
  *  An unknown role takes the REFUSING side, like `canManageStaff` above: a role
@@ -267,8 +318,14 @@ const PRIVILEGE_ORDER = privilegeCopy('gym').map((p) => p.value);
 export function privilegeChoices(role, orgType) {
   const copy = privilegeCopy(orgType).filter((choice) => !isRetiredPrivilege(choice.value));
   if (role === 'owner') return copy;
-  return copy.filter((choice) => !isOwnerOnlyPrivilege(choice.value));
+  return copy.filter((choice) => !isOwnerOnlyPrivilege(choice.value) && !OWNER_ROW_ONLY.includes(choice.value));
 }
+
+/** Ticks drawn on the owner's own row and offered to nobody else. They are the owner's by
+ *  default, and whether another member of staff may be given them from this screen has
+ *  not been decided; the server does not refuse them, so one held by somebody else is
+ *  carried through a save (`carriedPrivileges`). */
+const OWNER_ROW_ONLY = ['org.manage', 'billing.manage'];
 
 /** The join code's two ticks: kept on a person and carried through a save, but no box
  *  is drawn, since join codes are switched off and they let nobody do anything (ROADMAP
@@ -277,11 +334,6 @@ const RETIRED_PRIVILEGES = ['codes.invite', 'codes.manage'];
 
 export function isRetiredPrivilege(privilege) {
   return RETIRED_PRIVILEGES.includes(privilege);
-}
-
-/** The retired ticks this person holds, for the save to keep. */
-export function retiredPrivileges(person) {
-  return effectivePrivileges(person).filter(isRetiredPrivilege);
 }
 
 /** Is this one of the ticks only an owner's row may carry? Read from the shared
@@ -308,40 +360,59 @@ export function isOwnerOnlyPrivilege(privilege) {
  *  Ordered by `PRIVILEGE_ORDER` rather than by the server's order so one row
  *  cannot list its ticks differently from the next. */
 export function effectivePrivileges(person) {
-  const held = Array.isArray(person?.privileges)
-    ? person.privileges
-    : (ROLE_PRIVILEGES[person?.role] ?? []);
+  const held = heldPrivileges(person);
   return PRIVILEGE_ORDER.filter((value) => held.includes(value));
 }
 
-/** TICKS THIS BUILD HAS NO WORDS FOR — held by the row, unknown to this screen.
+/** The ticks this person holds: the stored set, or, from a server that sends none, what
+ *  their role gives. */
+export function heldPrivileges(person) {
+  return Array.isArray(person?.privileges)
+    ? person.privileges.filter((value) => typeof value === 'string')
+    : [...(ROLE_PRIVILEGES[person?.role] ?? [])];
+}
+
+/** THE TICKS A SAVE CARRIES THROUGH UNCHANGED: held by this person, with no box on their
+ *  row.
  *
- *  **Empty today and it must not stay unhandled, because the whole set is what
- *  gets saved.** The api can gain a privilege before the web is redeployed (they
- *  ship separately — Vercel and Hetzner), and `OWED.md` already schedules a
- *  BILLING tick. If this screen simply drew the six it knows and then saved
- *  them, the seventh would be stripped from that person by an owner who never
- *  saw it and never agreed to it — a real loss of access, silently, which is
- *  worse than anything a tick box was meant to fix.
+ *  **The whole set is what gets saved**, so a tick the screen draws no box for would be
+ *  stripped from that person by an owner who never saw it: a real loss of access,
+ *  silently. Three kinds are carried: the retired join-code ticks; a tick this row is not
+ *  offered (`OWNER_ROW_ONLY`, held by somebody who is not the owner); and one this build
+ *  has no words for at all (the api can gain a privilege before the web is redeployed).
  *
- *  So they are carried through the save UNCHANGED, and the panel says a line
- *  about them rather than pretending they are not there. */
-export function unknownPrivileges(person) {
-  if (!Array.isArray(person?.privileges)) return [];
-  return person.privileges.filter(
-    (value) => typeof value === 'string' && !PRIVILEGE_ORDER.includes(value),
+ *  **One is dropped on purpose**: "Manage staff" on a row that is not the owner's. The
+ *  server refuses it there (409 `owner_only_privilege`), so carrying it would make every
+ *  save of that row fail. */
+export function carriedPrivileges(person, orgType) {
+  const offered = privilegeChoices(person?.role, orgType).map((choice) => choice.value);
+  const ownerRow = person?.role === 'owner';
+  return [...new Set(heldPrivileges(person))].filter(
+    (value) => !offered.includes(value) && (ownerRow || !isOwnerOnlyPrivilege(value)),
   );
 }
 
-/** The sentence for those, or null when there are none. Said rather than
- *  omitted (:9390's "say it" shape): an owner pressing Save is entitled to know
- *  the save is not the whole story. */
-export function unknownPrivilegesNote(person) {
-  const extra = unknownPrivileges(person);
-  if (extra.length === 0) return null;
-  return extra.length === 1
-    ? 'They also have 1 permission this screen is too old to show. Saving leaves it alone.'
-    : `They also have ${extra.length} permissions this screen is too old to show. Saving leaves them alone.`;
+/** The sentence for the carried ticks that let somebody do something, or null when there
+ *  are none (the retired ticks do nothing, so they are not counted). Said rather than
+ *  omitted: an owner pressing Save is entitled to know the boxes are not the whole story. */
+export function carriedNote(person, orgType) {
+  const carried = carriedPrivileges(person, orgType).filter((value) => !isRetiredPrivilege(value));
+  if (carried.length === 0) return null;
+  const you = person?.isYou === true;
+  // Named where this screen has the words (the two drawn only on the owner's row), counted
+  // where it has none.
+  const copy = privilegeCopy(orgType);
+  const named = copy.filter((choice) => carried.includes(choice.value)).map((choice) => choice.label);
+  const unnamed = carried.length - named.length;
+  const parts = [];
+  if (named.length > 0) parts.push(`${you ? 'You' : 'They'} can also: ${named.join(', ')}.`);
+  if (unnamed > 0) {
+    const also = you ? 'You also have' : 'They also have';
+    parts.push(unnamed === 1 ? `${also} 1 permission this screen has no box for.` : `${also} ${unnamed} permissions this screen has no box for.`);
+  }
+  // The owner's row is never saved.
+  if (person?.role !== 'owner') parts.push(carried.length === 1 ? 'Saving leaves it alone.' : 'Saving leaves these alone.');
+  return parts.join(' ');
 }
 
 /** Has the owner actually moved anything? Compared as SETS, because the order a
@@ -398,7 +469,7 @@ export function abilityLabels(privileges, orgType) {
  *  unsubscribed. The reason line already says what to do. */
 const BLOCKED_REASONS = ['bounced', 'refused', 'complained', 'unsubscribed'];
 
-/** One invitation's line on Settings → Staff: who, as what, and where it stands, and
+/** One invitation's line on Members → Staff: who, as what, and where it stands, and
  *  whether Send again is offered (4a-ii) or, when it is not, why. */
 export function staffInviteView(invite, orgType, now = Date.now()) {
   const role = invite.roleName || roleLabel(invite.role, orgType);

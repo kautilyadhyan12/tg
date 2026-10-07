@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
-// A LINK TO ONE SECTION OF A LONG PAGE (ROADMAP 23a-ii, 23b): "/settings#staff" opens
-// Settings with the Staff section in view. The sections above it load after the page
+// A LINK TO ONE SECTION OF A LONG PAGE (ROADMAP 23a-ii, 23b): "/settings#opening-hours" opens
+// Settings with When we're open in view. The sections above it load after the page
 // draws and push it down, so it is brought into view again as they settle, and never once
 // the person has scrolled, pressed a key or touched the page themselves.
 //

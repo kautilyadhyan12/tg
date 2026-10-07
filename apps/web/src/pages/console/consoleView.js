@@ -208,7 +208,7 @@ export function staffRemoveView(member, words) {
     isOwner: false,
     staffLine: `${name} is also staff here (${role}).`,
     tickLabel: `Also remove ${name} from staff`,
-    keepLine: `They keep their staff access and can still open the console. You can change this in Settings, Staff.`,
+    keepLine: `They keep their staff access and can still open the console. You can change this on the Staff tab.`,
     goLine: `They lose their staff access too and can't open the console any more.`,
   };
 }

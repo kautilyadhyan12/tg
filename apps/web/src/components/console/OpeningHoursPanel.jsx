@@ -39,7 +39,7 @@ import { orgService, errorText } from '../../api/orgsApi';
 // them off `/v1/orgs/mine`, which is loaded on every dashboard paint and capped
 // at 100 gyms). So this panel owns one read, and passes `forceOpen` when that
 // read fails — a failure that arrives while the section is shut would otherwise
-// be invisible, which is `StaffPanel`'s case and its reason for the same flag.
+// be invisible.
 //
 // WHO SEES IT: whoever holds `org.manage` — the owner by default, and a manager
 // an owner has ticked it across to. It asks for the POWER, never the job title
@@ -347,7 +347,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false, s
     <ConsoleSection
       title="When we're open"
       summary={loading || loadError !== null ? 'Your opening times.' : hoursSummary(hours, org?.orgType)}
-      /* FORCED OPEN ON A FAILED READ — `StaffPanel`'s rule and its reason. This
+      /* FORCED OPEN ON A FAILED READ. This
          panel fetches, so it has a failure that can arrive while the section is
          shut, and a heading that says nothing about it is a failure nobody
          sees. */

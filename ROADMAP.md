@@ -277,7 +277,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 23b. [x] **A "Start here" list on Overview** — merged 2026-10-07 (PR #189).
    - 23c. **Memberships and Staff where a gym looks**, split 2026-10-07 in two (both boxes are redrawn in the console's new look, more than one terminal); nothing removed. Before R6 restyles Settings.
      - 23c-i. [x] **Memberships, its own line in the menu** — merged 2026-10-07 (PR #190).
-     - 23c-ii. [ ] **Staff invited and managed on Members → Staff**, which only points at Settings today, in the new look. Its plan says in one line whether Settings keeps anything about staff; for Memberships Kd said it is not needed.
+     - 23c-ii. [x] **Staff invited and managed on Members → Staff** — merged 2026-10-07 (PR #191).
    - 23d. [ ] **Buttons, not words**: every "in Settings, under …" (at least 12, two of them buttons, 2026-10-07) opens that exact place; Personal training lists all its steps, with ticks.
 
 ## Stage 3 — Money

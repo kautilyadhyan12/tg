@@ -3504,7 +3504,8 @@ export type UpdateStaffOutcome =
   | { kind: "not_staff" }
   | { kind: "is_owner" };
 
-/** Change somebody between manager and trainer.
+/** Change somebody between manager and trainer, or to one of the gym's own roles
+ *  (`roleName`: the name shown in the role's place; null for manager and trainer).
  *
  *  **AN OWNER'S ROLE IS REFUSED HERE.** Demoting the owner is last-owner lockout
  *  wearing a different hat — §4.7 blocks removing them and :11429's rule 2 makes
@@ -3524,6 +3525,8 @@ export async function updateStaffRole(
     gymId: string;
     userId: string;
     role: OrgRole;
+    /** The name of the gym's own role being given, or null for manager and trainer. */
+    roleName: string | null;
     /** The new role's DEFAULT ticks. A role change RESETS them — see the
      *  service's note: without that, "demote to trainer" would leave every
      *  manager tick standing and demote nobody. */
@@ -3532,8 +3535,8 @@ export async function updateStaffRole(
   },
 ): Promise<UpdateStaffOutcome> {
   return await sql.begin(async (tx) => {
-    const rows = await tx<{ role: string }[]>`
-      SELECT role FROM gym_staff
+    const rows = await tx<{ role: string; role_name: string | null; privileges: string[] | null }[]>`
+      SELECT role, role_name, privileges FROM gym_staff
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
       FOR UPDATE`;
     const before = rows[0];
@@ -3541,14 +3544,21 @@ export async function updateStaffRole(
     const previous = toOrgRole(before.role);
     if (previous === "owner") return { kind: "is_owner" };
 
-    if (previous === input.role) {
+    // The same role under the same name. A gym's own role is a trainer's underneath, so
+    // the name is part of the question: "Front desk" to plain trainer is a change. And a
+    // role of the gym's own is changed by deleting it and making it again under its name,
+    // so for one of those the ticks are part of the question too. Manager and trainer are
+    // left as they were: the same role again never resets ticks an owner set by hand.
+    const held = [...(before.privileges ?? [])].sort().join(",");
+    const sameTicks = input.roleName === null || held === [...input.privileges].sort().join(",");
+    if (previous === input.role && before.role_name === input.roleName && sameTicks) {
       const staff = await readStaffRow(tx, input.gymId, input.userId);
       if (staff === null) throw new Error("gym_staff row vanished under FOR UPDATE");
       return { kind: "unchanged", staff };
     }
 
     await tx`
-      UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}, role_name = NULL
+      UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}, role_name = ${input.roleName}
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
 
     const staff = await readStaffRow(tx, input.gymId, input.userId);
@@ -3565,7 +3575,7 @@ export async function updateStaffRole(
       // The ticks the change RESET them to are recorded for the same reason: a
       // role change is now also a permission change, and an audit row that
       // names only the role would hide half of what happened.
-      meta: { from: previous, to: input.role, privileges: [...input.privileges] },
+      meta: { from: previous, to: input.role, fromName: before.role_name, toName: input.roleName, privileges: [...input.privileges] },
     });
 
     return { kind: "updated", staff };

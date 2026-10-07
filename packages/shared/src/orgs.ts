@@ -2085,7 +2085,13 @@ export const addOrgStaffRequestSchema = z
   .strict();
 export type AddOrgStaffRequest = z.infer<typeof addOrgStaffRequestSchema>;
 
-export const updateOrgStaffRequestSchema = z.object({ role: staffAssignableRoleSchema }).strict();
+/** CHANGING SOMEBODY'S ROLE: to manager or trainer (`role`), or to one of the gym's own
+ *  roles (`roleId`; RULINGS 2026-10-07), which is a trainer's underneath, is shown by its
+ *  name and carries the ticks saved with it. One or the other, never both. */
+export const updateOrgStaffRequestSchema = z.union([
+  z.object({ role: staffAssignableRoleSchema }).strict(),
+  z.object({ roleId: z.string().uuid() }).strict(),
+]);
 export type UpdateOrgStaffRequest = z.infer<typeof updateOrgStaffRequestSchema>;
 
 /** CHANGING SOMEBODY'S TICKS. The WHOLE set every time, never a diff.

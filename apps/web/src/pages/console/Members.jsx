@@ -10,6 +10,7 @@ import MemberListPanel, { Tick } from './MemberListPanel';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
 import MembersStaffTab from './MembersStaffTab';
+import { membersPageName } from './consoleMenu';
 import { MEMBER_REMOVE_TICKED_MAX, orgWords } from '@app/shared';
 import {
   canRemoveMembers,
@@ -89,7 +90,7 @@ function RosterRow({ member, words, onOpen, picked = null, onTick }) {
  *  them on the list, or Remove (One Remove, RULINGS 2026-09-27: someone on the list moves
  *  to past members AND leaves the app in the same step). A side panel on a computer, the
  *  whole screen on a phone, as a lead's panel is. */
-function RosterSheet({ member, words, seesList, canRemove, managesStaff, readOnly, busy, onClose, onRemove, onPutOnList, onOpenRecord }) {
+function RosterSheet({ member, words, seesList, canRemove, managesStaff, readOnly, busy, onClose, onRemove, onPutOnList, onOpenRecord, onOpenStaff }) {
   const [asking, setAsking] = useState(false);
   const [alsoStaff, setAlsoStaff] = useState(false);
   const off = offListView(member.offList);
@@ -130,11 +131,20 @@ function RosterSheet({ member, words, seesList, canRemove, managesStaff, readOnl
         </div>
         <div className="flex flex-col gap-4 px-4 py-5 md:px-7">
           {staffTag(member, words) !== null ? (
-            <p className="c-s14 c-t2">
-              <span className="c-tag c-tag-soft mr-2">{staffTag(member, words)}</span>
-              {member.staff.role === 'owner' ? `Runs this ${words.it}.` : 'Also works here.'} Their place in the app counts in your
-              plan, like any {words.person}&apos;s. Manage staff in Settings.
-            </p>
+            <>
+              <p className="c-s14 c-t2">
+                <span className="c-tag c-tag-soft mr-2">{staffTag(member, words)}</span>
+                {member.staff.role === 'owner' ? `Runs this ${words.it}.` : 'Also works here.'} Their place in the app counts in
+                your plan, like any {words.person}&apos;s.
+                {managesStaff ? ' Their role and what they can do are on the Staff tab.' : ''}
+              </p>
+              {/* The Staff tab is the owner's: nobody else is sent to it. */}
+              {managesStaff ? (
+                <button type="button" onClick={onOpenStaff} className="c-btn c-btn-s c-btn-sm self-start">
+                  Open the Staff tab
+                </button>
+              ) : null}
+            </>
           ) : free ? (
             <p className="c-s14 c-t2">
               <span className="c-tag c-tag-soft mr-2">Complimentary</span>
@@ -292,6 +302,10 @@ export default function Members() {
   const [choosing, setChoosing] = useState(false);
   /** Import or Add member, pressed in the header, for the list to open. */
   const [action, setAction] = useState(null);
+  /** The gym whose Invite staff form is open on the Staff tab, or null. An address can ask
+   *  for it (Overview's Start here list). Kept by gym: a form open under one gym is not
+   *  open under the next. */
+  const [staffInviteFor, setStaffInviteFor] = useState(null);
   /** The record of a person in the app whose page is open, and the list view it reads. */
   const [openRecord, setOpenRecord] = useState(null);
   const [recordList, setRecordList] = useState(null);
@@ -456,7 +470,7 @@ export default function Members() {
     }
   };
 
-  // Overview's "Bring your members in" opens Import or Add here (`?open=`), once.
+  // Overview's Start here list opens Import, Add or Invite staff here (`?open=`), once.
   const opening = searchParams.get('open');
   useEffect(() => {
     if (opening === null || !org) return undefined;
@@ -469,8 +483,9 @@ export default function Members() {
       { replace: true },
     );
     if ((opening === 'import' || opening === 'add') && canSeeList && !readOnly) setAction(opening);
+    if (opening === 'invite' && view === 'staff' && managesStaff && !readOnly) setStaffInviteFor(org.id);
     return undefined;
-  }, [opening, org, canSeeList, readOnly, setSearchParams]);
+  }, [opening, view, org, canSeeList, managesStaff, readOnly, setSearchParams]);
 
   if (orgLoading) {
     return (
@@ -564,7 +579,7 @@ export default function Members() {
     <div className="c-page">
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
         <div className="flex flex-col gap-1.5 min-w-0">
-          <h1 className="c-h1">{words.peopleCap}</h1>
+          <h1 className="c-h1">{membersPageName(viewerPrivileges(org), org?.orgType)}</h1>
           <p className="c-sub">
             <span className={meterText === null ? '' : 'hidden md:inline'}>{org.name}</span>
             {meterText !== null ? (
@@ -583,7 +598,7 @@ export default function Members() {
             </button>
           ) : null}
           {/* The note explains greyed controls, so only to somebody who has them. */}
-          {readOnly && canRemove ? <p className="c-s14 c-t2">{readOnlyNote(org?.orgType)}</p> : null}
+          {readOnly && (canRemove || managesStaff) ? <p className="c-s14 c-t2">{readOnlyNote(org?.orgType)}</p> : null}
         </div>
         {canSeeList ? (
           <div className="grid grid-cols-2 gap-2 md:flex">
@@ -650,7 +665,20 @@ export default function Members() {
         />
       ) : null}
 
-      {tab === 'staff' && gymId !== null ? <MembersStaffTab gymId={gymId} orgSlug={orgSlug} words={words} readOnly={readOnly} onChanged={reloadRoster} /> : null}
+      {/* Keyed on the gym: the address is one route for every gym, and a row pressed under
+          another gym would be sent to that gym's id. */}
+      {tab === 'staff' && gymId !== null ? (
+        <MembersStaffTab
+          key={`staff-${gymId}`}
+          gymId={gymId}
+          orgType={org.orgType}
+          words={words}
+          readOnly={readOnly}
+          inviting={staffInviteFor === gymId}
+          onInviting={(open) => setStaffInviteFor(open ? gymId : null)}
+          onChanged={reloadRoster}
+        />
+      ) : null}
 
       {/* Search and, with people ticked, the bar stay at the top on a computer (as on the list). */}
       {tab === 'app' ? (
@@ -772,6 +800,10 @@ export default function Members() {
           onOpenRecord={(recordId) => {
             setOpenUserId(null);
             setOpenRecord(recordId);
+          }}
+          onOpenStaff={() => {
+            setOpenUserId(null);
+            showTab('staff');
           }}
         />
       ) : null}

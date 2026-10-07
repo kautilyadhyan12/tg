@@ -12,7 +12,7 @@
 // that only ever renders a studio would go green on a console that says
 // "studio" to everybody.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -28,7 +28,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getStartHere: vi.fn(),
       getAttendanceDay: vi.fn(),
       getStaff: vi.fn(),
-      // Settings → Staff reads its invitations (4a-i); the console's front page, the person's own.
+      // Members → Staff reads its invitations (4a-i); the console's front page, the person's own.
       getStaffInvites: vi.fn(() => Promise.resolve({ data: { invites: [] } })),
       getStaffRoles: vi.fn(() => Promise.resolve({ data: { roles: [] } })),
       getMyStaffInvitations: vi.fn(() => Promise.resolve({ data: { address: 'a@example.com', addressProved: true, invitations: [] } })),
@@ -158,6 +158,8 @@ const overviewAs = (orgType) =>
   mountAs(orgType, '/console/flow-studio', <Overview />, '/console/:orgSlug');
 const membersAs = (orgType) =>
   mountAs(orgType, '/console/flow-studio/members?view=app', <Members />, '/console/:orgSlug/members');
+const staffTabAs = (orgType) =>
+  mountAs(orgType, '/console/flow-studio/members?view=staff', <Members />, '/console/:orgSlug/members');
 const settingsAs = (orgType) =>
   mountAs(orgType, '/console/flow-studio/settings', <ConsoleSettings />, '/console/:orgSlug/settings');
 
@@ -241,15 +243,16 @@ describe('the roster', () => {
   it('is headed Clients for a studio, and says clients when it is empty', async () => {
     orgService.getMembers.mockResolvedValue({ data: { items: [], nextCursor: null } });
     membersAs('studio');
-    expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
+    // The owner's page holds the staff too, and its title says so (23c-ii).
+    expect(await screen.findByRole('heading', { name: 'Clients & staff' })).toBeTruthy();
     expect(await screen.findByText(/Invite clients from Your list\. They appear here once they join\./i)).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Members' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /Members/ })).toBeNull();
   });
 
   it('is headed Members for a gym — the control', async () => {
     orgService.getMembers.mockResolvedValue({ data: { items: [], nextCursor: null } });
     membersAs('gym');
-    expect(await screen.findByRole('heading', { name: 'Members' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Members & staff' })).toBeTruthy();
     expect(await screen.findByText(/Invite members from Your list\. They appear here once they join\./i)).toBeTruthy();
   });
 });
@@ -271,29 +274,27 @@ describe('Settings', () => {
   });
 
   /** §2.2's third role: a gym has a Trainer, a studio and a personal trainer
-   *  have a Coach. The row's own meta line is where an owner reads it. */
+   *  have a Coach. The person's row on Members → Staff is where an owner reads it. */
   it('calls the third staff role Coach at a studio and Trainer at a gym', async () => {
-    settingsAs('studio');
-    await openSection('Staff');
-    const staffRow = await screen.findByText('Priya Sen');
-    await waitFor(() =>
-      expect(staffRow.parentElement.textContent).toMatch(/Coach/),
-    );
-    expect(staffRow.parentElement.textContent).not.toMatch(/Trainer/);
+    staffTabAs('studio');
+    const studioRow = await screen.findByTestId('staff-tab-u2');
+    expect(within(studioRow).getByText('Coach')).toBeTruthy();
+    expect(studioRow.textContent).not.toMatch(/Trainer/);
 
     cleanup();
     resetConsoleOrgs();
-    settingsAs('gym');
-    await openSection('Staff');
-    const gymRow = await screen.findByText('Priya Sen');
-    await waitFor(() => expect(gymRow.parentElement.textContent).toMatch(/Trainer/));
+    staffTabAs('gym');
+    const gymRow = await screen.findByTestId('staff-tab-u2');
+    expect(within(gymRow).getByText('Trainer')).toBeTruthy();
   });
 
   it('says who runs this studio, and that the member app takes a place (§10.4)', async () => {
-    settingsAs('studio');
+    staffTabAs('studio');
     expect(
-      await screen.findByText('Who can help you run this studio. Staff use the console free. Using the member app here takes one of your places.'),
+      await screen.findByText(
+        'The people who run your studio. Staff use the console free. Using the member app here takes one of your places. Those who also train here are on In the app too.',
+      ),
     ).toBeTruthy();
-    expect(await screen.findByText('2 people run this studio')).toBeTruthy();
+    expect(await screen.findByText('2 people run your studio')).toBeTruthy();
   });
 });
