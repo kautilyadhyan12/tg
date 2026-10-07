@@ -745,7 +745,12 @@ export function mergePreview(keep, remove, fields, person = 'member') {
     if (own !== null && other !== null && other !== own) lost.push({ key, label: f.label, value: other, why: `The kept record keeps its own ${f.label}.` });
   }
   rows.push({ key: 'list', label: 'On the list', value: keep.formerAt === null || remove.formerAt === null ? 'On the list' : `Past ${person}`, fromOther: false });
-  return { rows, lost };
+  // Where the app answers for either person, the old file's four words are not said here
+  // either (23a-ii): the comparison above says what each holds, and a merge moves
+  // memberships with their records.
+  if (!appAnswers(keep) && !appAnswers(remove)) return { rows, lost, memberships: false };
+  const said = (row) => !HELD_ANSWERS.includes(row.key);
+  return { rows: rows.filter(said), lost: lost.filter(said), memberships: true };
 }
 
 /** What a write did, in a line for the top of the person's page. */

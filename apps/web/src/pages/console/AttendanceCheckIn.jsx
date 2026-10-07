@@ -336,7 +336,7 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
 
   const read = useCallback(
     (whole) => {
-      if (inFlight.current) return;
+      if (inFlight.current) return false;
       inFlight.current = true;
       const since = whole ? null : newestAt(held.current.visits);
       void orgService
@@ -371,6 +371,7 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
         .finally(() => {
           inFlight.current = false;
         });
+      return true;
     },
     [gymId],
   );
@@ -379,11 +380,14 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
     read(true);
     // Every poll asks for the visits since the newest. Once a minute the whole of today is
     // read instead, so a row's words follow a payment marked on another screen.
+    // A whole read that meets one still on its way stays owed to the next poll.
     let polls = 0;
+    let owed = false;
     const timer = setInterval(() => {
       if (!pageVisible() || held.current.status === 'failed') return;
       polls += 1;
-      read(polls % WHOLE_READ_EVERY === 0);
+      if (polls % WHOLE_READ_EVERY === 0) owed = true;
+      if (read(owed)) owed = false;
     }, CHECKIN_LOG_POLL_MS);
     // Back in view after a while: the whole of today again, not a gap.
     const onVisible = () => {

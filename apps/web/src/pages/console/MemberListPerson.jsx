@@ -370,7 +370,7 @@ function CompareRecords({ first, second, fields, person, keepId, onChoose, disab
 /** What the merge leaves, before Merge is pressed: the one record, each detail marked when it
  *  comes from the other record, and what the removed record holds that is not kept, with why. */
 function MergePreview({ keep, remove, fields, person }) {
-  const { rows, lost } = mergePreview(keep, remove, fields, person);
+  const { rows, lost, memberships } = mergePreview(keep, remove, fields, person);
   return (
     <section className="c-card p-3 flex flex-col gap-3" data-testid="merge-preview">
       <h3 className="c-s15 c-w6 c-t1 m-0">After the merge</h3>
@@ -389,6 +389,11 @@ function MergePreview({ keep, remove, fields, person }) {
           </div>
         ))}
       </dl>
+      {memberships ? (
+        <p className="c-s13 c-t2 m-0" data-testid="merge-memberships">
+          Their memberships stay as they are.
+        </p>
+      ) : null}
       {lost.length > 0 ? (
         <div className="flex flex-col gap-1.5" data-testid="merge-lost">
           <h4 className="c-s14 c-w6 m-0" style={{ color: 'var(--bad)' }}>

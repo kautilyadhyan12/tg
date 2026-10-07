@@ -335,6 +335,25 @@ describe('the "Showing:" line', () => {
 });
 
 describe("Merge duplicate's side-by-side view", () => {
+  it("After the merge leaves the old file's four words out where either person holds a membership here, and says their memberships stay", () => {
+    const holds = { status: 'active', memberships: ['Gold Monthly'], day: { what: 'renews', on: '2026-11-03' }, payment: { state: 'paid' } };
+    const old = { status: 'Expired', membershipType: 'Gold 2019', paymentStatus: 'Unpaid', endsOn: '2026-09-01', endsOnKind: 'ends' };
+    const other = entry({ entryId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'Lapsed', membershipType: 'Bronze', paymentStatus: 'Overdue', joinedOn: '2024-01-05' });
+    for (const [keep, gone] of [
+      [entry({ ...old, held: holds }), other],
+      [other, entry({ ...old, held: holds })],
+    ]) {
+      const shown = mergePreview(keep, gone, FIELDS);
+      expect(shown.memberships).toBe(true);
+      expect(JSON.stringify(shown)).not.toMatch(/Expired|Gold 2019|Unpaid|Lapsed|Bronze|Overdue/);
+      expect(shown.rows.map((r) => r.key)).toContain('joinedOn');
+    }
+    // Nobody holds anything here: every word, as before.
+    const plain = mergePreview(entry(old), other, FIELDS);
+    expect(plain.memberships).toBe(false);
+    expect(plain.rows.map((r) => r.key)).toEqual(expect.arrayContaining(['status', 'membershipType', 'endsOn', 'paymentStatus']));
+  });
+
   // 23a-ii: the page says what a person holds once; the comparison says the same.
   it("compares a record the app answers for by what its person holds, never by the old file's four words", () => {
     const holds = { status: 'active', memberships: ['Gold Monthly', 'PT 10'], day: { what: 'renews', on: '2026-11-03' }, payment: { state: 'due', since: '2026-10-03' } };
