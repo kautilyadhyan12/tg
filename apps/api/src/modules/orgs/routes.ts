@@ -54,6 +54,7 @@ import { registerInvitationRoutes } from "./invites/joinRoutes.js";
 import { registerStaffInviteRoutes } from "./staffInvites/routes.js";
 import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
+import { registerStartHereRoutes } from "./startHere/routes.js";
 import * as service from "./service.js";
 
 /** Zod-parse a request part; 400 with issue paths/codes only (R3.10 — never
@@ -166,6 +167,9 @@ export function registerOrgRoutes(
 
   // Staff invited by email, and the invited person's Accept (Part 3 §10.3).
   registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
+
+  // Overview's "Start here" list: what the gym has set up (ROADMAP 23b).
+  registerStartHereRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseOr400(createOrgRequestSchema, req.body, req, reply);
