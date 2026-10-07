@@ -11,7 +11,9 @@ import {
 } from '@app/shared';
 import {
   EMPTY_FILTERS,
+  HELD_ANSWERS,
   activeFilters,
+  appAnswers,
   appView,
   compareRecords,
   mergePreview,
@@ -282,6 +284,26 @@ describe('what the form sends', () => {
 
   it('names the fields changed by hand, the gym columns under their own heading', () => {
     expect(handEditedWords(entry({ handEdited: ['phone', 'extra:locker'] }), FIELDS, FIELD_LABELS)).toEqual(['Phone', 'Locker']);
+  });
+
+  // 23a-ii: where a membership is picked or held, the list's own words for it are not asked.
+  it('a box the form does not show sends nothing, whatever it holds', () => {
+    const typed = { ...formFrom(null, FIELDS), fullName: 'Bea', status: 'Active', membershipType: 'Gold', paymentStatus: 'Paid', endsOn: '2027-01-01', endsOnKind: 'renews', joinedOn: '2026-01-05' };
+    expect(inputFrom(typed, HELD_ANSWERS)).toEqual({ fullName: 'Bea', joinedOn: '2026-01-05' });
+    const e = entry();
+    const changed = { ...formFrom(e, FIELDS), phone: '+447700900999', status: 'Frozen', membershipType: 'Silver', paymentStatus: 'Overdue', endsOn: '', endsOnKind: 'ends' };
+    expect(patchFrom(changed, e, FIELDS, HELD_ANSWERS)).toEqual({ phone: '+447700900999' });
+    // Shown, every one of them is sent, as before.
+    expect(Object.keys(patchFrom(changed, e, FIELDS)).sort()).toEqual(['endsOn', 'endsOnKind', 'membershipType', 'paymentStatus', 'phone', 'status']);
+  });
+
+  it('the app answers for a person exactly where their row reads what they hold', () => {
+    expect(appAnswers(entry())).toBe(false);
+    expect(appAnswers(entry({ held: null }))).toBe(false);
+    expect(appAnswers(null)).toBe(false);
+    expect(appAnswers(entry({ held: { status: 'cancelled', memberships: ['Gold Monthly'], day: null, payment: null } }))).toBe(true);
+    // The four things a row reads from a membership, and no others.
+    expect([...HELD_ANSWERS].sort()).toEqual(['endsOn', 'membershipType', 'paymentStatus', 'status']);
   });
 });
 

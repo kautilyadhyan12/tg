@@ -338,6 +338,30 @@ describe('what the box draws', () => {
     expect(within(rows[1]).queryAllByRole('button')).toEqual([]);
   });
 
+  // 23a-ii: the ones that are over are folded away, so with nothing in use the box says
+  // what the person's row on the list says, in the words the page is given.
+  it('with nothing in use, says what the list says of the one that finished last; never beside a membership in use', async () => {
+    const cancelled = held(2, GOLD, '2026-06-01', true, [[{ type: 'cancel', when: 'today' }, '2026-07-01']]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([cancelled]));
+    const view = render(draw(ADA, 'Ada Lovelace', { nothingNow: 'Gold Monthly · Cancelled 1 Jul' }));
+    expect((await (await boxSoon()).findByTestId('held-nothing-now')).textContent).toBe('No membership now. Gold Monthly · Cancelled 1 Jul');
+    expect(box().getByRole('button', { name: 'Show 1 earlier membership' })).toBeTruthy();
+    view.unmount();
+
+    // Something in use: the row itself says it.
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true), cancelled]));
+    const live = render(draw(ADA, 'Ada Lovelace', { nothingNow: 'Gold Monthly · Cancelled 1 Jul' }));
+    await (await boxSoon()).findByText('Active');
+    expect(box().queryByTestId('held-nothing-now')).toBeNull();
+    live.unmount();
+
+    // Not given the words (the list shows the gym's own for this person): no line.
+    orgService.getHeldMemberships.mockResolvedValue(answer([cancelled]));
+    render(draw(ADA, 'Ada Lovelace'));
+    await (await boxSoon()).findByRole('button', { name: 'Show 1 earlier membership' });
+    expect(box().queryByTestId('held-nothing-now')).toBeNull();
+  });
+
   it('a past member and a gym with no plan see the memberships and no buttons', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)], true));
     const view = render(draw(ADA, 'Ada Lovelace'));
@@ -521,10 +545,11 @@ describe('Add member gives a membership in the same form', () => {
     ]);
     // Nothing picked: no date, no tick.
     expect(choice.queryByRole('checkbox')).toBeNull();
-    // One membership question, not two: the list's own Membership word is not asked beside it.
-    expect(screen.queryByLabelText('Membership')).toBeNull();
-    expect(screen.getByLabelText('Status')).toBeTruthy();
-    expect(screen.getByLabelText('Payment status')).toBeTruthy();
+    // One membership question, not two (23a-ii): none of the list's own words for a
+    // membership is asked beside the price list.
+    for (const label of ['Membership', 'Status', 'Payment status']) expect(screen.queryByLabelText(label), label).toBeNull();
+    expect(screen.queryByRole('button', { name: /End or renewal date/ })).toBeNull();
+    expect(screen.queryByTestId('set-up-memberships')).toBeNull();
     typeName('Name', 'Bea Hart');
     typeName('Email', 'bea@members.example');
     fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
@@ -624,10 +649,107 @@ describe('Add member gives a membership in the same form', () => {
     orgService.getMembershipTypes.mockResolvedValue({ data: { types: [] } });
     openAdd();
     await waitFor(() => expect(orgService.getMembershipTypes).toHaveBeenCalledWith(GYM));
-    await new Promise((r) => setTimeout(r, 0));
+    // Its own words for a membership are still asked.
+    expect(await screen.findByLabelText('Membership')).toBeTruthy();
     expect(screen.queryByTestId('add-membership')).toBeNull();
-    // Its own word for a membership is still asked.
-    expect(screen.getByLabelText('Membership')).toBeTruthy();
+  });
+
+  // ── 23a-ii: the membership is asked straight after who the person is ──
+
+  const before = (a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  const OWNER = { ...IRON, privileges: ['members.confirm', 'memberships.manage'] };
+  const openAddAs = (gym) =>
+    render(<MemberListPerson gymId={GYM} gym={gym} entryId={null} list={{ fields: [] }} words={WORDS} readOnly={false} onClose={() => {}} onChanged={() => {}} />);
+
+  it('asks for the membership straight after name, email and phone, before the member number and the dates', async () => {
+    openAdd();
+    const box = await screen.findByTestId('add-membership');
+    expect(within(box).getByText('Membership')).toBeTruthy();
+    for (const label of ['Name', 'Email', 'Phone']) expect(before(screen.getByLabelText(label), box), label).toBe(true);
+    expect(before(box, screen.getByLabelText('Member number'))).toBe(true);
+    for (const name of [/Join date/, /Date of birth/]) expect(before(box, screen.getByRole('button', { name })), String(name)).toBe(true);
+    expect(before(box, screen.getByRole('button', { name: 'Add member' }))).toBe(true);
+  });
+
+  it('asks nothing about a membership until the price list is read', async () => {
+    const wait = later();
+    orgService.getMembershipTypes.mockReturnValue(wait.promise);
+    openAdd();
+    expect(await screen.findByText('Checking the memberships you sell…')).toBeTruthy();
+    for (const label of ['Membership', 'Status', 'Payment status']) expect(screen.queryByLabelText(label), label).toBeNull();
+    expect(screen.queryByTestId('add-membership')).toBeNull();
+    wait.resolve({ data: { types: [GOLD] } });
+    expect(await screen.findByTestId('add-membership')).toBeTruthy();
+    expect(screen.queryByText('Checking the memberships you sell…')).toBeNull();
+  });
+
+  it("a gym that has set up nothing to sell types its own words, in the membership's place, and is offered Set up memberships", async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: { types: [] } });
+    openAddAs(OWNER);
+    const callout = await screen.findByTestId('set-up-memberships');
+    expect(callout.textContent).toContain(
+      "You haven't set up the memberships you sell yet. Once you have, you pick one here. Until then, type this member's status and payment yourself.",
+    );
+    const link = within(callout).getByRole('link', { name: /^Set up memberships/ });
+    expect(link.getAttribute('href')).toBe('/console/iron-temple/settings#memberships');
+    // It opens beside the form, so nothing typed here is lost.
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.textContent).toContain('(opens in a new tab)');
+    const typed = [screen.getByLabelText('Status'), screen.getByLabelText('Membership'), screen.getByLabelText('Payment status'), screen.getByRole('button', { name: /End or renewal date/ })];
+    for (const box of typed) {
+      expect(before(screen.getByLabelText('Phone'), box)).toBe(true);
+      expect(before(callout, box)).toBe(true);
+      expect(before(box, screen.getByLabelText('Member number'))).toBe(true);
+    }
+    // What is typed there is sent, as before.
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea@members.example');
+    typeName('Status', 'Active');
+    typeName('Payment status', 'Paid');
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
+    expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example', status: 'Active', paymentStatus: 'Paid' });
+  });
+
+  it('staff who cannot change the price list are told who can, with no button to a page they cannot use', async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: { types: [] } });
+    openAddAs({ ...IRON, privileges: ['members.confirm'] });
+    const callout = await screen.findByTestId('set-up-memberships');
+    expect(callout.textContent).toBe("Your gym hasn't set up the memberships it sells yet. Until the owner does, type this member's status and payment yourself.");
+    expect(within(callout).queryByRole('link')).toBeNull();
+    expect(screen.getByLabelText('Status')).toBeTruthy();
+  });
+
+  it('a price list that cannot be read: the words are typed, and nothing says the gym has none', async () => {
+    orgService.getMembershipTypes.mockRejectedValue(refusal(500, { error: 'internal', message: 'Something went wrong.' }));
+    openAddAs(OWNER);
+    expect(await screen.findByLabelText('Status')).toBeTruthy();
+    expect(screen.queryByTestId('set-up-memberships')).toBeNull();
+    expect(screen.queryByTestId('add-membership')).toBeNull();
+  });
+
+  it('back from setting memberships up, the form offers them, keeps who was typed, and a box it no longer shows sends nothing', async () => {
+    orgService.getMembershipTypes.mockResolvedValueOnce({ data: { types: [] } }).mockResolvedValue({ data: { types: [GOLD] } });
+    openAddAs(OWNER);
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea@members.example');
+    fireEvent.change(await screen.findByLabelText('Status'), { target: { value: 'Active' } });
+    typeName('Payment status', 'Overdue');
+    // Staff come back to this window from Settings.
+    fireEvent(window, new Event('focus'));
+    const choice = within(await screen.findByTestId('add-membership'));
+    expect(choice.getAllByRole('option').map((o) => o.textContent)).toEqual(['No membership', 'Gold Monthly · £49.99 every month']);
+    expect(screen.queryByTestId('set-up-memberships')).toBeNull();
+    for (const label of ['Membership', 'Status', 'Payment status']) expect(screen.queryByLabelText(label), label).toBeNull();
+    expect(screen.getByLabelText('Name').value).toBe('Bea Hart');
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
+    expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
+    // With a price list to pick from, coming back to the window asks nothing more.
+    const asked = orgService.getMembershipTypes.mock.calls.length;
+    fireEvent(window, new Event('focus'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(orgService.getMembershipTypes).toHaveBeenCalledTimes(asked);
   });
 });
 
@@ -734,5 +856,88 @@ describe("on the person's page", () => {
     fireEvent.click(within(screen.getByTestId('held-ask-paid')).getByRole('button', { name: 'Mark paid' }));
     expect(await box().findByText('Gold Monthly marked paid.')).toBeTruthy();
     expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  // 23a-ii: the page's own Details leave out what the person's memberships answer, so a
+  // membership given in the box must reach the page too, or the old file's "Expired" stays
+  // on screen beside a box that says "Active".
+  it("a membership given in the box takes the old file's words off the page's Details", async () => {
+    const fromFile = {
+      entryId: ADA,
+      fullName: 'Ada Lovelace',
+      email: 'ada@members.example',
+      phone: null,
+      memberNumber: null,
+      status: 'Expired',
+      membershipType: null,
+      joinedOn: '2024-01-05',
+      endsOn: null,
+      endsOnKind: null,
+      paymentStatus: 'Unpaid',
+      dateOfBirth: null,
+      formerAt: null,
+      source: 'upload',
+      inApp: false,
+      invitation: null,
+      app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
+      extra: [],
+      handEdited: [],
+      members: [],
+    };
+    const before = memberListEntryDetailSchema.parse(fromFile);
+    const after = memberListEntryDetailSchema.parse({
+      ...fromFile,
+      held: { status: 'active', memberships: ['Gold Monthly'], day: { what: 'renews', on: '2026-11-20' }, payment: { state: 'paid' } },
+    });
+    orgService.getMemberListEntry.mockResolvedValueOnce({ data: { entry: before } }).mockResolvedValue({ data: { entry: after } });
+    orgService.getHeldMemberships.mockResolvedValue(answer([]));
+    render(<MemberListPerson gymId={GYM} gym={IRON} entryId={ADA} list={{ fields: [] }} words={WORDS} readOnly={false} onClose={() => {}} onChanged={() => {}} />);
+    await boxSoon();
+    expect(screen.getByText('Expired')).toBeTruthy();
+    expect(screen.getByText('Unpaid')).toBeTruthy();
+
+    orgService.giveHeldMembership.mockResolvedValue(answer([held(1, GOLD, TODAY, true)]));
+    fireEvent.click(box().getByRole('button', { name: 'Add membership' }));
+    fireEvent.change(box().getByRole('combobox'), { target: { value: GOLD.id } });
+    fireEvent.click(box().getByRole('button', { name: 'Add membership' }));
+    await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText('Expired')).toBeNull());
+    expect(screen.queryByText('Unpaid')).toBeNull();
+    // The page was read for the same person, and what the box does not say stays.
+    expect(orgService.getMemberListEntry).toHaveBeenLastCalledWith(GYM, ADA);
+    expect(screen.getByText('Join date')).toBeTruthy();
+  });
+
+  it("somebody whose membership here is over reads the list's own answer on their page, never their old file's", async () => {
+    const cara = memberListEntryDetailSchema.parse({
+      entryId: ADA,
+      fullName: 'Cara Cole',
+      email: 'cara@members.example',
+      phone: null,
+      memberNumber: null,
+      status: 'Active',
+      membershipType: null,
+      joinedOn: null,
+      endsOn: null,
+      endsOnKind: null,
+      paymentStatus: 'Paid',
+      dateOfBirth: null,
+      formerAt: null,
+      source: 'upload',
+      inApp: false,
+      invitation: null,
+      app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
+      extra: [],
+      handEdited: [],
+      members: [],
+      held: { status: 'cancelled', memberships: ['Gold Monthly'], day: { what: 'cancelled', on: '2026-07-01' }, payment: null },
+    });
+    orgService.getMemberListEntry.mockResolvedValue({ data: { entry: cara } });
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(2, GOLD, '2026-06-01', true, [[{ type: 'cancel', when: 'today' }, '2026-07-01']])]));
+    render(<MemberListPerson gymId={GYM} gym={IRON} entryId={ADA} list={{ fields: [] }} words={WORDS} readOnly={false} onClose={() => {}} onChanged={() => {}} />);
+    expect((await (await boxSoon()).findByTestId('held-nothing-now')).textContent).toMatch(/^No membership now\. Gold Monthly · Cancelled 1 Jul/);
+    expect(screen.queryByText('Active')).toBeNull();
+    expect(screen.queryByText('Paid')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Details' })).toBeNull();
   });
 });

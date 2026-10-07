@@ -820,6 +820,86 @@ describe('a person on the list', () => {
   });
 });
 
+// 23a-ii: where the app answers for a person (`held`, what the Members list's row reads),
+// their page says their status, membership, dates and payment ONCE, in the Memberships box.
+describe('23a-ii: Details and Edit agree with the Memberships box', () => {
+  const heldGold = {
+    status: 'active',
+    memberships: ['Gold Monthly'],
+    day: { what: 'renews', on: '2026-11-03' },
+    payment: { state: 'due', since: '2026-10-03' },
+  };
+  // Her record came from the gym's old file; here she holds Gold Monthly.
+  const fromFile = { status: 'Expired', membershipType: 'Gold 2019', paymentStatus: 'Unpaid', endsOn: '2026-09-01', endsOnKind: 'ends', joinedOn: '2024-01-05', dateOfBirth: '1990-04-02' };
+  const priya = person(ADA, 'Priya Shah', { ...fromFile, held: heldGold });
+  const nina = person(ADA, 'Nina Nothing', fromFile);
+  const HELD_LABELS = ['Status', 'Membership', 'Payment status'];
+
+  it("leaves the old file's status, membership, end date and payment out of Details for somebody who holds a membership here", async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(priya));
+    openBox(ADA);
+    await dialog().findByRole('heading', { name: 'Priya Shah' });
+    for (const word of ['Expired', 'Gold 2019', 'Unpaid', 'Ends 1 Sep 2026']) expect(dialog().queryByText(word), word).toBeNull();
+    for (const label of [...HELD_LABELS, 'End or renewal date']) expect(dialog().queryByText(label), label).toBeNull();
+    // What the Memberships box does not say stays under Details.
+    const details = within(dialog().getByRole('heading', { name: 'Details' }).closest('section'));
+    expect(details.getByText('Join date')).toBeTruthy();
+    expect(details.getByText('Date of birth')).toBeTruthy();
+  });
+
+  it("keeps every one of the gym's own words for somebody the app holds nothing for", async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(nina));
+    openBox(ADA);
+    await dialog().findByRole('heading', { name: 'Nina Nothing' });
+    for (const word of ['Expired', 'Gold 2019', 'Unpaid', 'Ends 1 Sep 2026']) expect(dialog().getByText(word), word).toBeTruthy();
+    fireEvent.click(dialog().getByRole('button', { name: 'Edit' }));
+    for (const label of HELD_LABELS) expect(dialog().getByLabelText(label), label).toBeTruthy();
+    expect(dialog().getByRole('button', { name: /End or renewal date/ })).toBeTruthy();
+    expect(dialog().queryByTestId('edit-held-note')).toBeNull();
+    // Edit keeps the order it had.
+    const order = [...dialog().getByLabelText('Name').closest('form').querySelectorAll('.c-label')].map((el) => el.textContent);
+    expect(order).toEqual(['Name', 'Email', 'Phone', 'Member number', 'Status', 'Membership', 'Payment status', 'Join date', 'End or renewal date', 'Date of birth', 'Locker']);
+  });
+
+  it('Edit asks for none of them, says where they are changed, and Save sends only what staff changed', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(priya));
+    orgService.changeMemberListEntry.mockResolvedValue(written('changed', { ...priya, phone: '+447700900555' }));
+    openBox(ADA);
+    fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
+    for (const label of HELD_LABELS) expect(dialog().queryByLabelText(label), label).toBeNull();
+    expect(dialog().queryByRole('button', { name: /End or renewal date/ })).toBeNull();
+    expect(dialog().getByTestId('edit-held-note').textContent).toContain(
+      "Priya Shah's status, payment and dates come from their memberships. Change them under Memberships.",
+    );
+    // The rest of the form is as it was.
+    const order = [...dialog().getByLabelText('Name').closest('form').querySelectorAll('.c-label')].map((el) => el.textContent);
+    expect(order).toEqual(['Name', 'Email', 'Phone', 'Member number', 'Join date', 'Date of birth', 'Locker']);
+    fireEvent.change(dialog().getByLabelText('Phone'), { target: { value: '+447700900555' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.changeMemberListEntry).toHaveBeenCalledTimes(1));
+    expect(orgService.changeMemberListEntry).toHaveBeenCalledWith(GYM, ADA, { phone: '+447700900555' });
+    expect(await dialog().findByText('Changes saved.')).toBeTruthy();
+  });
+
+  it('Go to Memberships goes back to their page, sending nothing', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(priya));
+    openBox(ADA);
+    fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
+    fireEvent.click(within(dialog().getByTestId('edit-held-note')).getByRole('button', { name: 'Go to Memberships' }));
+    expect(await dialog().findByRole('button', { name: 'Edit' })).toBeTruthy();
+    expect(dialog().queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(orgService.changeMemberListEntry).not.toHaveBeenCalled();
+  });
+
+  it('a membership that is over is said once too: her old file\'s "Paid" is not put beside "Cancelled"', async () => {
+    const over = { status: 'cancelled', memberships: ['Gold Monthly'], day: { what: 'cancelled', on: '2026-10-01' }, payment: null };
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(person(ADA, 'Cara Cancelled', { ...fromFile, status: 'Active', paymentStatus: 'Paid', held: over })));
+    openBox(ADA);
+    await dialog().findByRole('heading', { name: 'Cara Cancelled' });
+    for (const word of ['Active', 'Paid', 'Gold 2019']) expect(dialog().queryByText(word), word).toBeNull();
+  });
+});
+
 describe('Add member', () => {
   it('sends the boxes filled in, then shows the person added', async () => {
     const added = person(BEA, 'Bea Hart', { extra: [{ key: 'locker', label: 'Locker', value: '7' }] });

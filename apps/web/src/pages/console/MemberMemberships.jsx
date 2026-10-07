@@ -43,7 +43,10 @@ const PLAIN = 'c-btn c-btn-s';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 const DANGER = 'c-btn c-btn-danger';
 
-export default function MemberMemberships({ gymId, entryId, name, readOnly, clockFormat, onChanged }) {
+// `nothingNow`: for somebody with nothing in use, what their row on the list says of the
+// one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
+// folded away, so without it the page would say nothing where the list says "Cancelled".
+export default function MemberMemberships({ gymId, entryId, name, readOnly, clockFormat, onChanged, nothingNow = null }) {
   /** The answer on screen, and the record it is about: never shown under another. */
   const [held, setHeld] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -389,6 +392,11 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
         </div>
       ) : null}
       {live.length === 0 && over.length === 0 && open === null && listed === null ? <p className="c-s14 c-t3 m-0">No membership yet.</p> : null}
+      {nothingNow !== null && live.length === 0 && over.length > 0 && !shown.past ? (
+        <p className="c-s14 c-t2 m-0" data-testid="held-nothing-now">
+          {`No membership now. ${nothingNow}`}
+        </p>
+      ) : null}
       {live.length > 0 ? <ul className="m-0 p-0 list-none flex flex-col">{live.map(renderOne)}</ul> : null}
       {over.length > 0 ? (
         <div className="flex flex-col">
