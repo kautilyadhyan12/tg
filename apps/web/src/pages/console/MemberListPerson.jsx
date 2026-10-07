@@ -1239,7 +1239,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     const lastOver = appAnswers(p) && (p.held.status === 'cancelled' || p.held.status === 'ended') ? rowCells(p, today) : null;
     const nothingNow = lastOver === null ? null : [lastOver.membership, lastOver.ends ?? lastOver.status].filter((w) => w !== null && w !== '').join(' · ');
     const extra = p.extra.filter((x) => x.value !== '');
-    const byHand = handEditedWords(p, fields, FIELD_LABELS);
+    // Nor is a note that one of those words was changed by hand: picking a membership in
+    // Add member writes the type's name as the list's Membership word.
+    const byHand = handEditedWords({ ...p, handEdited: p.handEdited.filter((k) => !answered.includes(k)) }, fields, FIELD_LABELS);
     return (
       <div className="flex flex-col gap-5">
         {action === 'under_age' ? (

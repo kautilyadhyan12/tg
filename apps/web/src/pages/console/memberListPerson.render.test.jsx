@@ -891,6 +891,25 @@ describe('23a-ii: Details and Edit agree with the Memberships box', () => {
     expect(orgService.changeMemberListEntry).not.toHaveBeenCalled();
   });
 
+  it('says nothing was changed by hand about a word the page does not show; a word it shows is still named', async () => {
+    // Picking a membership in Add member writes the type's name as the list's Membership word.
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...priya, handEdited: ['membershipType'] }));
+    const first = openBox(ADA);
+    await dialog().findByRole('heading', { name: 'Priya Shah' });
+    expect(dialog().queryByText(/Changed by hand/)).toBeNull();
+    first.unmount();
+
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...priya, phone: '+447700900123', handEdited: ['membershipType', 'phone', 'status'] }));
+    const second = openBox(ADA);
+    expect(await dialog().findByText('Changed by hand: Phone. An import asks before it writes over these.')).toBeTruthy();
+    second.unmount();
+
+    // Somebody the app holds nothing for is shown the word, and told it was changed.
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...nina, handEdited: ['membershipType'] }));
+    openBox(ADA);
+    expect(await dialog().findByText('Changed by hand: Membership. An import asks before it writes over these.')).toBeTruthy();
+  });
+
   it('a membership that is over is said once too: her old file\'s "Paid" is not put beside "Cancelled"', async () => {
     const over = { status: 'cancelled', memberships: ['Gold Monthly'], day: { what: 'cancelled', on: '2026-10-01' }, payment: null };
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer(person(ADA, 'Cara Cancelled', { ...fromFile, status: 'Active', paymentStatus: 'Paid', held: over })));
