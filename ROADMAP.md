@@ -274,7 +274,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 23a. **One answer for membership**, split 2026-10-07 in two (the list's read and Add member's form are more than one terminal):
      - 23a-i. [x] **The Members list shows what each person holds** — merged 2026-10-07 (PR #187).
      - 23a-ii. [x] **Add member asks for the membership first** — merged 2026-10-07 (PR #188).
-   - 23b. [ ] **A "Start here" list on Overview**: what you sell · members · staff · classes · opening hours · the front desk, each a button to its exact place, ticked by itself when done, hideable (PushPress, Gymdesk and TeamUp each have one). A new gym's first page says only "Bring your members in".
+   - 23b. [x] **A "Start here" list on Overview** — merged 2026-10-07 (PR #189).
    - 23c. [ ] **Memberships and Staff where a gym looks**: Memberships its own line in the menu; staff invited and managed on Members → Staff, which only points at Settings today; nothing removed. Before R6 restyles Settings.
    - 23d. [ ] **Buttons, not words**: every "in Settings, under …" (at least 12, two of them buttons, 2026-10-07) opens that exact place; Personal training lists all its steps, with ticks.
 
