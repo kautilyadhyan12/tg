@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
+import PlaceLink from '../../components/console/PlaceLink';
 import MembershipChoice from './MembershipChoice';
 import { ENDING_NOT_TOLD } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
@@ -47,8 +48,19 @@ const DANGER = 'c-btn c-btn-danger';
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
 // folded away, so without it the page would say nothing where the list says "Cancelled".
 // `managesTypes`: whether this member of staff may open the Memberships page; a sentence
-// names it only for somebody who can.
-export default function MemberMemberships({ gymId, entryId, name, readOnly, clockFormat, onChanged, nothingNow = null, managesTypes = true }) {
+// names it only for somebody who can, and `membershipsTo` is the page's address for the
+// button under that sentence (null: no button).
+export default function MemberMemberships({
+  gymId,
+  entryId,
+  name,
+  readOnly,
+  clockFormat,
+  onChanged,
+  nothingNow = null,
+  managesTypes = true,
+  membershipsTo = null,
+}) {
   /** The answer on screen, and the record it is about: never shown under another. */
   const [held, setHeld] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -80,6 +92,18 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
   }, [gymId, entryId, attempt]);
 
   const shown = held !== null && held.entryId === entryId ? held : null;
+  // What their list says their membership is, where they do not hold it here.
+  const listed = shown === null ? null : listedRow(shown.listed, name, managesTypes);
+
+  // Open Memberships opens beside this page, so a box that sent staff there reads again
+  // when they come back: the type they set up is then here to pick.
+  const sentToMemberships = membershipsTo !== null && shown !== null && (listed !== null || shown.types.length === 0);
+  useEffect(() => {
+    if (!sentToMemberships) return undefined;
+    const again = () => setAttempt((n) => n + 1);
+    window.addEventListener('focus', again);
+    return () => window.removeEventListener('focus', again);
+  }, [sentToMemberships]);
 
   if (loadError !== null && shown === null) {
     return (
@@ -111,8 +135,6 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
   const live = shown.memberships.filter(isLive);
   const over = shown.memberships.filter((m) => !isLive(m));
   const canAct = !readOnly && !shown.past;
-  // What their list says their membership is, where they do not hold it here.
-  const listed = listedRow(shown.listed, name, managesTypes);
 
   /** A write: its answer is kept for the person it was asked about. */
   const run = async (what, m, work) => {
@@ -331,9 +353,14 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
       >
         <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
         {types.length === 0 ? (
-          <p className="c-s14 c-t2 m-0">
-            {managesTypes ? 'You have no membership types yet. Add them in Memberships.' : 'There are no membership types yet. Ask the owner to add them.'}
-          </p>
+          <>
+            <p className="c-s14 c-t2 m-0">
+              {managesTypes ? 'You have no membership types yet. Add them in Memberships.' : 'There are no membership types yet. Ask the owner to add them.'}
+            </p>
+            <PlaceLink to={membershipsTo} beside>
+              Open Memberships
+            </PlaceLink>
+          </>
         ) : (
           <MembershipChoice types={types} today={today} value={form} onChange={(next) => setForm((f) => ({ ...f, ...next }))} />
         )}
@@ -393,6 +420,11 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
           </div>
           <span className="c-s14 c-t2">{listed.from}</span>
           <span className="c-s14 c-t2">{listed.note}</span>
+          {listed.toMemberships ? (
+            <PlaceLink to={membershipsTo} beside>
+              Open Memberships
+            </PlaceLink>
+          ) : null}
         </div>
       ) : null}
       {live.length === 0 && over.length === 0 && open === null && listed === null ? <p className="c-s14 c-t3 m-0">No membership yet.</p> : null}

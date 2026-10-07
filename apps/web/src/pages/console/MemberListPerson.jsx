@@ -5,7 +5,6 @@ import {
   ArrowLeftRight,
   Check,
   Copy,
-  ExternalLink,
   Loader2,
   Mail,
   MoreHorizontal,
@@ -31,6 +30,8 @@ import MembershipChoice from './MembershipChoice';
 import { giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
 import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
+import { placeFor } from './consolePlaces';
+import PlaceLink from '../../components/console/PlaceLink';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
 import {
@@ -63,6 +64,7 @@ import {
   mergePreview,
   underAgeWhen,
   whenWords,
+  inviteBlockedWords,
 } from './memberListPeople';
 
 // One person on the gym's own list (ROADMAP 5b-i, 5b-v-c; spec Part 3 §18.7): everything
@@ -674,8 +676,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const refused = (err, fallback, extra = {}) => {
     const code = errorCode(err);
     const other = err?.response?.data?.entryId;
+    // A gym with no postal address cannot invite: said as the Invite page says it, with a
+    // button to the box for whoever may fill it in, and who can for anybody else (23d).
+    const addressTo = code === 'no_postal_address' ? placeFor(gym?.slug, viewerPrivileges(gym), 'postalAddress') : null;
     setRefusal({
-      message: errorText(err, fallback),
+      message: code === 'no_postal_address' ? inviteBlockedWords(code, words, addressTo !== null) : errorText(err, fallback),
+      addressTo,
       openId: (code === 'already_on_list' || code === 'former_record') && typeof other === 'string' ? other : null,
       ack: code === 'leaves_list' ? extra.ack ?? null : null,
     });
@@ -1111,13 +1117,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 ? `You haven't set up the memberships you sell yet. Once you have, you pick one here. Until then, type this ${words.person}'s status and payment yourself.`
                 : `Your ${words.it ?? 'gym'} hasn't set up the memberships it sells yet. Until the owner does, type this ${words.person}'s status and payment yourself.`}
             </p>
-            {mayManage && typeof gym?.slug === 'string' ? (
-              <a href={`/console/${gym.slug}/memberships`} target="_blank" rel="noreferrer" className="c-btn c-btn-s c-btn-sm">
-                Set up memberships
-                <ExternalLink aria-hidden="true" className="w-4 h-4" />
-                <span className="sr-only">(opens in a new tab)</span>
-              </a>
-            ) : null}
+            <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')} beside className="c-btn c-btn-s c-btn-sm">
+              Set up memberships
+            </PlaceLink>
           </div>
         ) : null}
         {typedWords()}
@@ -1299,6 +1301,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           onChanged={membershipsChanged}
           nothingNow={nothingNow}
           managesTypes={canManageMemberships(viewerPrivileges(gym))}
+          membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
         />
         {membership.length > 0 ? (
           // What the gym's own list says about them, in its words; the box above is what
@@ -1731,6 +1734,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                         Go ahead anyway
                       </button>
                     ) : null}
+                    {/* Beside this page, so the person stays open to invite afterwards. */}
+                    <PlaceLink to={refusal.addressTo} beside className={PLAIN}>
+                      Add postal address
+                    </PlaceLink>
                   </div>
                 </div>
               ) : null}

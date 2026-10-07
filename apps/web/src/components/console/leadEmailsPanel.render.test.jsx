@@ -2,6 +2,7 @@
 // Save sends. The switch and the address wait for Save together.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { LEAD_EMAIL_SETTINGS_WORDS } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -39,6 +40,29 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Follow-up emails to leads', () => {
+  it('the Leads page it names has a button that opens it, for somebody who can; pressing it ticks nothing (23d)', async () => {
+    vi.mocked(orgService.getLeadEmailSettings).mockReturnValue(answer(OFF));
+    const drawFor = (privileges) =>
+      render(
+        <MemoryRouter>
+          <LeadEmailsPanel org={{ ...ORG, slug: 'iron-house', privileges }} readOnly={false} />
+        </MemoryRouter>,
+      );
+    drawFor(['org.manage', 'members.confirm']);
+    const box = await open();
+    expect(screen.getByText(/the rest wait for you on the Leads page/)).toBeTruthy();
+    const link = screen.getByRole('link', { name: 'Open Leads' });
+    expect(link.getAttribute('href')).toBe('/console/iron-house/leads');
+    // Outside the tick's own label, so it cannot switch "Send them for me".
+    expect(link.closest('label')).toBeNull();
+    expect(box.checked).toBe(false);
+    cleanup();
+    // Somebody who changes the gym's details and cannot open Leads is not sent there.
+    drawFor(['org.manage']);
+    await open();
+    expect(screen.queryByRole('link', { name: 'Open Leads' })).toBeNull();
+  });
+
   it("is off until the owner turns it on; ticking it fills in their own address, and Save sends both", async () => {
     vi.mocked(orgService.getLeadEmailSettings).mockReturnValue(answer(OFF));
     vi.mocked(orgService.updateLeadEmailSettings).mockReturnValue(answer({ ...OFF, sendForMe: true, replyTo: 'owner@ironhouse.example.com' }));

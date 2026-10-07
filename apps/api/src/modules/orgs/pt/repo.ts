@@ -6,7 +6,7 @@
 // so a session is decided against hours, bookings and memberships nobody else is changing.
 // Under that, the table's own EXCLUDE constraint refuses two sessions of one trainer that
 // overlap; one person in two sessions at once is refused by the rule under the lock.
-import type { Sql, TransactionSql } from "postgres";
+import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import {
   CLASS_MINUTES_MAX,
@@ -18,12 +18,23 @@ import {
   type PtAppointmentStatus,
   type PtHoursRange,
   type PtSessionMinutes,
+  type PtSetup,
   type PtSpan,
   type PtTime,
   type PtTimeOffSpan,
 } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
+
+/** Whether the member-list row `e` holds anything in use whose type includes personal
+ *  training: a pack with nothing left, or past its days on `day`, does not count. One
+ *  rule for who the picker lists first and for the setup list's tick. */
+const holdsPt = (sql: SqlOrTx, day: PendingQuery<Row[]>) => sql`
+  EXISTS (
+    SELECT 1 FROM gym_held_memberships h
+    JOIN gym_membership_types mt ON mt.gym_id = h.gym_id AND mt.id = h.membership_type_id
+    WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status IN ('active','frozen') AND mt.includes_pt
+      AND NOT (h.kind = 'pack' AND (h.classes_left = 0 OR h.starts_on + h.pack_days + h.frozen_days < ${day})))`;
 
 export interface GymClock {
   timezone: string;
@@ -311,14 +322,45 @@ export async function peopleFor(sql: SqlOrTx, gymId: string, query: string, day:
     FROM gym_member_list_entries e
     WHERE e.gym_id = ${gymId} AND e.former_at IS NULL
       AND (${query} = '' OR e.full_name ILIKE ${like} OR e.email ILIKE ${like})
-    ORDER BY NOT EXISTS (
-               SELECT 1 FROM gym_held_memberships h
-               JOIN gym_membership_types mt ON mt.gym_id = h.gym_id AND mt.id = h.membership_type_id
-               WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status IN ('active','frozen') AND mt.includes_pt
-                 AND NOT (h.kind = 'pack' AND (h.classes_left = 0 OR h.starts_on + h.pack_days + h.frozen_days < ${day}::date))),
-             lower(e.full_name), e.id
+    ORDER BY NOT ${holdsPt(sql, sql`${day}::date`)}, lower(e.full_name), e.id
     LIMIT ${limit}`;
   return rows.map((r) => ({ entryId: r.id, fullName: r.full_name }));
+}
+
+/** What this gym has done towards its first session (ROADMAP 23d), or null when there is
+ *  no such gym. Each fact holds while its thing is there: a type that is archived, a
+ *  person who is off the list and a session that was cancelled do not count. The day is
+ *  the gym's own. */
+export async function setupOf(sql: SqlOrTx, gymId: string, now: Date): Promise<PtSetup | null> {
+  const rows = await sql<{ type_includes_pt: boolean; somebody_holds_it: boolean; list_has_people: boolean; session_booked: boolean }[]>`
+    SELECT
+      EXISTS (
+        SELECT 1 FROM gym_membership_types mt
+        WHERE mt.gym_id = g.id AND mt.archived_at IS NULL AND mt.includes_pt
+      ) AS type_includes_pt,
+      EXISTS (
+        SELECT 1 FROM gym_member_list_entries e
+        WHERE e.gym_id = g.id AND e.former_at IS NULL
+          AND ${holdsPt(sql, sql`(${now}::timestamptz AT TIME ZONE g.timezone)::date`)}
+      ) AS somebody_holds_it,
+      EXISTS (
+        SELECT 1 FROM gym_member_list_entries e
+        WHERE e.gym_id = g.id AND e.former_at IS NULL
+      ) AS list_has_people,
+      EXISTS (
+        SELECT 1 FROM gym_pt_appointments a
+        WHERE a.gym_id = g.id AND a.status = ANY(${[...PT_HOLDS_TIME]}::text[])
+      ) AS session_booked
+    FROM gyms g
+    WHERE g.id = ${gymId}`;
+  const r = rows[0];
+  if (r === undefined) return null;
+  return {
+    typeIncludesPt: r.type_includes_pt,
+    somebodyHoldsIt: r.somebody_holds_it,
+    listHasPeople: r.list_has_people,
+    sessionBooked: r.session_booked,
+  };
 }
 export interface CoachedClass {
   name: string;

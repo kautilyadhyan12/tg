@@ -22,11 +22,11 @@ import {
   hoursFormProblem,
   hoursLines,
   hoursRequest,
-  howItWorks,
   noTimesNote,
   peopleHeading,
   personRow,
   pickTrainer,
+  pickerIsEmpty,
   removeRange,
   sessionClash,
   sessionLength,
@@ -45,6 +45,8 @@ import {
   sessionRow,
   sessionsAWeek,
   setRange,
+  setupCount,
+  setupSteps,
   trainerGroups,
   trainerName,
   trainerSummary,
@@ -239,11 +241,6 @@ describe('the week', () => {
     expect(sessionClash(session(), undefined)).toBeNull();
   });
 
-  it('the steps a new gym reads leave out the membership one where the gym sells none', () => {
-    expect(howItWorks(true)).toHaveLength(3);
-    expect(howItWorks(true)[1]).toContain('Includes personal training');
-    expect(howItWorks(false)).toEqual(['Add a trainer and set the hours they are free.', "Press one of the trainer's free times and pick the member."]);
-  });
 
   it('a free time reads as the whole session, start to end', () => {
     expect(freeTimeLabel(540, 60, '24h')).toBe('09:00 – 10:00');
@@ -280,6 +277,13 @@ describe('picking the person', () => {
     expect(peopleHeading({ gymHasTypes: true, people: [maya] }, '')).toBe('Your members, people with personal training first');
     expect(peopleHeading({ gymHasTypes: false, people: [maya] }, '  ')).toBe('Your members');
     expect(peopleHeading({ gymHasTypes: true, people: [] }, '')).toBe('Your member list is empty. Add people on Members first.');
+    // The page is named as this kind of organisation's menu names it.
+    expect(peopleHeading({ gymHasTypes: true, people: [] }, '', 'studio')).toBe('Your member list is empty. Add people on Clients first.');
+    // Its button is offered for an empty list alone, never for a search that found nobody.
+    expect(pickerIsEmpty({ people: [] }, '  ')).toBe(true);
+    expect(pickerIsEmpty({ people: [] }, 'zzz')).toBe(false);
+    expect(pickerIsEmpty({ people: [maya] }, '')).toBe(false);
+    expect(pickerIsEmpty(null, '')).toBe(false);
     expect(peopleHeading({ gymHasTypes: true, people: [maya] }, 'may')).toBe('Matching people');
     expect(peopleHeading({ gymHasTypes: true, people: [] }, 'zzz')).toBe('Nobody on your member list matches.');
   });
@@ -378,6 +382,9 @@ describe("a trainer's time off", () => {
     expect(sessionClash(session(720), [{ name: 'Spin', localStartMinute: 730, minutes: 45 }], morning)).toContain('Spin');
     const spin = { name: 'Spin', localStartMinute: 630, minutes: 45 };
     expect(classInTimeOff(spin, morning)).toBe('In their time off. Give this class another coach on the Calendar.');
+    // Somebody who cannot open the Calendar is told who can, and is not sent there.
+    expect(classInTimeOff(spin, morning, false)).toBe('In their time off. Whoever runs the timetable can give this class another coach.');
+    expect(classInTimeOff({ ...spin, localStartMinute: 720 }, morning, false)).toBeNull();
     expect(classInTimeOff({ ...spin, localStartMinute: 720 }, morning)).toBeNull();
     expect(classInTimeOff(spin, [])).toBeNull();
   });
@@ -507,6 +514,10 @@ describe("a trainer's time off", () => {
       'If you add this time off, no new session can be booked with Sam Reed in it.',
       'These classes stay on the calendar with Sam Reed as coach. To change the coach, open the class on the Calendar.',
     ]);
+    // A trainer adding their own time off cannot open the Calendar, and is not sent there.
+    expect(timeOffBoxLines(over([], [spin]), samReed, friday, true, false)[1]).toBe(
+      'This class stays on the calendar with Sam Reed as coach. Whoever runs the timetable can change the coach.',
+    );
     // A time off that runs past the calendar's last day says its later classes are not listed.
     const long = { kind: 'days', fromDate: '2026-11-20', toDate: '2026-12-20', from: '', to: '' };
     expect(timeOffBoxLines(over([maya, { ...maya, id: 'x' }], [spin]), samReed, long).at(-1)).toBe(
@@ -515,5 +526,129 @@ describe("a trainer's time off", () => {
     expect(timeOffBoxLines(over([maya], [spin]), samReed, { ...long, toDate: '2026-12-01' })).toHaveLength(3);
     // Part of one day reads its own day, not a last day left over from Whole days.
     expect(timeOffBoxLines(over([maya], []), samReed, { kind: 'hours', fromDate: '2026-10-09', toDate: '2026-12-20', from: '09:00', to: '12:00' })).toHaveLength(2);
+  });
+});
+
+// EVERY STEP TO A FIRST SESSION (ROADMAP 23d). The ticks are the server's facts and the
+// list on screen, never a guess; a button goes only to somebody who can open its place.
+describe('the steps to a first session, with a tick on each one done', () => {
+  const OWNER = ['org.manage', 'staff.manage', 'memberships.manage', 'schedule.manage', 'members.read', 'members.confirm'];
+  const MANAGER = ['memberships.manage', 'schedule.manage', 'members.read', 'members.confirm'];
+  const SCHEDULER = ['schedule.manage', 'members.read'];
+  const NONE = { typeIncludesPt: false, somebodyHoldsIt: false, listHasPeople: false, sessionBooked: false };
+  const list = (over = {}) => ({ canManage: true, gymHasTypes: true, setup: NONE, trainers: [notSetUp()], ...over });
+  const steps = (l, privileges = OWNER, orgType = 'gym') => setupSteps(l, { orgSlug: 'iron-house', privileges, orgType });
+  const ticks = (view) => Object.fromEntries(view.rows.map((r) => [r.key, r.done]));
+
+  it('a gym that sells memberships has four steps, and a gym that sells none has three', () => {
+    expect(steps(list()).rows.map((r) => r.key)).toEqual(['trainer', 'type', 'held', 'book']);
+    expect(steps(list({ gymHasTypes: false })).rows.map((r) => r.key)).toEqual(['trainer', 'people', 'book']);
+    // With no types the membership facts are not asked about, whatever they say.
+    const stale = list({ gymHasTypes: false, setup: { ...NONE, typeIncludesPt: true, somebodyHoldsIt: true } });
+    expect(ticks(steps(stale))).toEqual({ trainer: false, people: false, book: false });
+  });
+
+  it.each([
+    ['nothing done', {}, [notSetUp()], { trainer: false, type: false, held: false, book: false }, 'trainer', '0 of 4 done'],
+    ['a trainer has hours', {}, [trainer()], { trainer: true, type: false, held: false, book: false }, 'type', '1 of 4 done'],
+    ['one of two trainers has hours', {}, [notSetUp(), trainer({ userId: 'u-ana' })], { trainer: true, type: false, held: false, book: false }, 'type', '1 of 4 done'],
+    ['a type includes it', { typeIncludesPt: true }, [trainer()], { trainer: true, type: true, held: false, book: false }, 'held', '2 of 4 done'],
+    ['somebody holds it', { typeIncludesPt: true, somebodyHoldsIt: true }, [trainer()], { trainer: true, type: true, held: true, book: false }, 'book', '3 of 4 done'],
+    // A trainer who is not taking sessions, or has no hours left, cannot be booked: not ticked.
+    ['a trainer set up who is not taking sessions', {}, [trainer({ offers: false })], { trainer: false, type: false, held: false, book: false }, 'trainer', '0 of 4 done'],
+    ['a trainer whose hours were all removed', {}, [trainer({ hours: [] })], { trainer: false, type: false, held: false, book: false }, 'trainer', '0 of 4 done'],
+    // Each tick follows its own fact: a later step done does not tick an earlier one.
+    ['a session, and no trainer now', { sessionBooked: true }, [notSetUp()], { trainer: false, type: false, held: false, book: true }, 'trainer', '1 of 4 done'],
+    ['held, its type archived since', { somebodyHoldsIt: true }, [trainer()], { trainer: true, type: false, held: true, book: false }, 'type', '2 of 4 done'],
+    // People on the list tick nothing for a gym that sells memberships.
+    ['people on the list', { listHasPeople: true }, [notSetUp()], { trainer: false, type: false, held: false, book: false }, 'trainer', '0 of 4 done'],
+  ])('a gym that sells memberships, %s', (_what, setup, trainers, expected, next, count) => {
+    const view = steps(list({ setup: { ...NONE, ...setup }, trainers }));
+    expect(view.show).toBe(true);
+    expect(ticks(view)).toEqual(expected);
+    // The step to do next is the first one not done, and the only one marked.
+    expect(view.rows.filter((r) => r.next).map((r) => r.key)).toEqual([next]);
+    expect(setupCount(view)).toBe(count);
+  });
+
+  it.each([
+    ['nothing done', {}, [notSetUp()], { trainer: false, people: false, book: false }, '0 of 3 done'],
+    ['people on the list', { listHasPeople: true }, [notSetUp()], { trainer: false, people: true, book: false }, '1 of 3 done'],
+    ['a trainer and people', { listHasPeople: true }, [trainer()], { trainer: true, people: true, book: false }, '2 of 3 done'],
+  ])('a gym that sells none, %s', (_what, setup, trainers, expected, count) => {
+    const view = steps(list({ gymHasTypes: false, setup: { ...NONE, ...setup }, trainers }));
+    expect(ticks(view)).toEqual(expected);
+    expect(setupCount(view)).toBe(count);
+  });
+
+  it('the list goes once every step is done, and comes back when one is not', () => {
+    const all = { typeIncludesPt: true, somebodyHoldsIt: true, listHasPeople: true, sessionBooked: true };
+    expect(steps(list({ setup: all, trainers: [trainer()] }))).toEqual({ show: false, rows: [], doneCount: 0, total: 0 });
+    expect(steps(list({ gymHasTypes: false, setup: { ...NONE, listHasPeople: true, sessionBooked: true }, trainers: [trainer()] })).show).toBe(false);
+    // The only trainer leaves, or the type is archived: the list is back, with that step open.
+    expect(steps(list({ setup: all, trainers: [notSetUp()] })).rows.filter((r) => !r.done).map((r) => r.key)).toEqual(['trainer']);
+    expect(steps(list({ setup: { ...all, typeIncludesPt: false }, trainers: [trainer()] })).rows.filter((r) => !r.done).map((r) => r.key)).toEqual(['type']);
+  });
+
+  it('is for whoever runs the timetable, and only where the server sent the steps', () => {
+    const none = { show: false, rows: [], doneCount: 0, total: 0 };
+    expect(steps(list({ canManage: false, setup: null }))).toEqual(none);
+    // A reader who does not run the timetable is shown none, whatever arrived.
+    expect(steps(list({ canManage: false }))).toEqual(none);
+    for (const setup of [null, undefined, 'yes', 3]) expect(steps(list({ setup }))).toEqual(none);
+    expect(steps(null)).toEqual(none);
+    expect(steps(undefined)).toEqual(none);
+    // A fact that is not a plain yes is a no: nothing is ticked on a guess.
+    const odd = list({ setup: { typeIncludesPt: 'yes', somebodyHoldsIt: 1, listHasPeople: null }, trainers: [trainer()] });
+    expect(ticks(steps(odd))).toEqual({ trainer: true, type: false, held: false, book: false });
+  });
+
+  it("each button opens the place its step is done in, and only for somebody who can open it", () => {
+    const buttons = (view) => Object.fromEntries(view.rows.map((r) => [r.key, r.action === null ? null : [r.action.label, r.action.to]]));
+    const members = ['Open Members', '/console/iron-house/members'];
+    expect(buttons(steps(list(), OWNER))).toEqual({
+      trainer: ['Invite staff', '/console/iron-house/members?view=staff&open=invite'],
+      type: ['Open Memberships', '/console/iron-house/memberships'],
+      held: members,
+      book: null,
+    });
+    // A manager cannot invite staff; somebody with the timetable alone cannot open Memberships.
+    expect(buttons(steps(list(), MANAGER))).toEqual({ trainer: null, type: ['Open Memberships', '/console/iron-house/memberships'], held: members, book: null });
+    expect(buttons(steps(list(), SCHEDULER))).toEqual({ trainer: null, type: null, held: members, book: null });
+    expect(buttons(steps(list({ gymHasTypes: false }), SCHEDULER))).toEqual({ trainer: null, people: members, book: null });
+    // Inviting changes the gym: the page greys it for a gym with no live plan.
+    expect(steps(list(), OWNER).rows[0].action.changes).toBe(true);
+    expect(steps(list(), OWNER).rows[1].action.changes).toBeUndefined();
+    // With no gym in the address there is nowhere to go.
+    expect(setupSteps(list(), { orgSlug: undefined, privileges: OWNER, orgType: 'gym' }).rows.every((r) => r.action === null)).toBe(true);
+  });
+
+  it('a step with no button says who can do it, and never names a place its reader cannot open', () => {
+    const lines = (privileges) => Object.fromEntries(steps(list(), privileges).rows.map((r) => [r.key, r.line]));
+    expect(lines(OWNER)).toEqual({
+      trainer: 'Pick somebody on your staff under Add a trainer, and set the hours they are free. Invite anybody who is not on your staff yet.',
+      type: 'On Memberships, tick "Includes personal training" on a membership or pack you sell. A session is booked on it.',
+      held: 'Open the person on Members and press Add membership. They can then be booked.',
+      book: "Press one of a trainer's free times below, and pick the person.",
+    });
+    expect(lines(SCHEDULER)).toMatchObject({
+      trainer: 'Pick somebody on your staff under Add a trainer, and set the hours they are free. The owner can invite somebody who is not on your staff yet.',
+      type: 'Ask the owner to tick "Includes personal training" on a membership or pack you sell. A session is booked on it.',
+    });
+    expect(lines(SCHEDULER).type).not.toContain('On Memberships');
+  });
+
+  it("a studio's and a trainer's own words", () => {
+    const studio = steps(list(), OWNER, 'studio').rows;
+    expect(studio.find((r) => r.key === 'held')).toMatchObject({
+      title: 'Give it to a client',
+      line: 'Open the person on Clients and press Add membership. They can then be booked.',
+      action: { label: 'Open Clients', to: '/console/iron-house/members' },
+    });
+    const noTypes = steps(list({ gymHasTypes: false }), OWNER, 'studio').rows;
+    expect(noTypes.find((r) => r.key === 'people')).toMatchObject({
+      title: 'Put your clients on your list',
+      line: 'Anybody on your client list can be booked. Import your list, or add people one at a time.',
+    });
   });
 });

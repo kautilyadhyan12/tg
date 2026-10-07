@@ -95,6 +95,23 @@ describe('the worst thing: a page switched on or changed by mistake', () => {
     expect(api.setGymPage).not.toHaveBeenCalled();
   });
 
+  it('the opening hours it shows have a button to where they are set, opened beside the panel (23d)', async () => {
+    api.getGymPage.mockResolvedValue({ data: { page: PAGE } });
+    drawSheet({ gym: { name: 'Canal Street Gym', slug: 'canal-street', privileges: ['org.manage', 'members.confirm'] } });
+    expect(await screen.findByText("Your page also shows your opening hours, and on a day you close, that day's closure note.")).toBeTruthy();
+    const link = screen.getByRole('link', { name: /^Change opening hours/ });
+    expect(link.getAttribute('href')).toBe('/console/canal-street/settings#opening-hours');
+    // A new tab: changes to the page that are not saved yet stay on screen.
+    expect(link.getAttribute('target')).toBe('_blank');
+  });
+
+  it('somebody who cannot change the opening hours has no button to them', async () => {
+    api.getGymPage.mockResolvedValue({ data: { page: PAGE } });
+    drawSheet({ gym: { name: 'Canal Street Gym', slug: 'canal-street', privileges: ['members.confirm', 'members.manage'] } });
+    expect(await screen.findByText(/Your page also shows your opening hours/)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /opening hours/ })).toBeNull();
+  });
+
   it('a manager sees the page and its link, and nothing to change', async () => {
     api.getGymPage.mockResolvedValue({ data: { page: { ...PAGE, shown: true, facilities: ['showers'], mayChange: false } } });
     drawSheet();

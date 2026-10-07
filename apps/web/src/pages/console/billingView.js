@@ -746,7 +746,10 @@ export function memberMeterText(meter, orgType) {
  *  else | no banner"*. `tone` is `'info' | 'warn' | 'danger'`; the screen owns
  *  the colours.
  *
- *  Every string here is complete without a button — see rule 1 at the top. */
+ *  Every string here is complete without a button — see rule 1 at the top. Where a
+ *  sentence sends the reader to Plan on the Overview it also carries `place: 'plan'`,
+ *  and the banner puts a button to that card after it (ROADMAP 23d): the card exists,
+ *  so the button goes somewhere. Only somebody who manages billing is sent there. */
 export function bannerFor(org, now = Date.now()) {
   const sub = org?.subscription;
   const meter = seatMeter(org);
@@ -787,6 +790,7 @@ export function bannerFor(org, now = Date.now()) {
     return {
       key: 'past_due',
       tone: 'warn',
+      ...(canManageBilling(viewerPrivileges(org)) ? { place: 'plan' } : {}),
       text: isPaidThroughRazorpay(org)
         ? canManageBilling(viewerPrivileges(org))
           ? `A payment for your ${words.it} didn't go through. Razorpay tries again by itself, or you can pay now under Plan on the Overview. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
@@ -823,7 +827,7 @@ export function bannerFor(org, now = Date.now()) {
           ? `Your trial is past its end date. Your ${words.people} keep your ${words.it}'s features while it is still running.`
           : `Trial ends ${date ?? 'soon'}. Your ${words.people} keep your ${words.it}'s features only while a plan is active.` +
             (canPayDuringTrial(org) ? ' To keep them, choose a plan under Plan on the Overview: you pay today and get its full size at once.' : '');
-      return { key: 'trial_urgent', tone: 'warn', text, dismissible: false };
+      return { key: 'trial_urgent', tone: 'warn', text, dismissible: false, ...(days >= 0 && canPayDuringTrial(org) ? { place: 'plan' } : {}) };
     }
   }
 
@@ -836,6 +840,7 @@ export function bannerFor(org, now = Date.now()) {
       text:
         seatLineText(meter, org?.orgType) +
         (canMakeRoomNow(org) ? ' Press Change size under Plan on the Overview.' : ''),
+      ...(canMakeRoomNow(org) ? { place: 'plan' } : {}),
       dismissible: false,
     };
   }

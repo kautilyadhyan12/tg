@@ -30,7 +30,21 @@ const SESSION = '33333333-3333-4333-8333-000000000001';
 const sam = { userId: SAM, name: 'Sam Reed', initials: 'SR', offers: true, sessionMinutes: 60, hours: [{ weekday: 5, fromMinute: 540, toMinute: 720 }], mine: false };
 const owner = { userId: OWNER, name: 'Harbour Owner', initials: 'HO', offers: false, sessionMinutes: null, hours: [], mine: true };
 const ana = { userId: ANA, name: 'Ana Diaz', initials: 'AD', offers: false, sessionMinutes: null, hours: [], mine: false };
-const trainers = (over = {}) => ({ timezone: 'Europe/London', canManage: true, canBook: true, freeCancelMinutes: 120, gymHasTypes: true, trainers: [ana, owner, sam], ...over });
+// The steps to a first session (23d), as the server says them: all done unless a test says not.
+const ALL_DONE = { typeIncludesPt: true, somebodyHoldsIt: true, listHasPeople: true, sessionBooked: true };
+const NOT_DONE = { typeIncludesPt: false, somebodyHoldsIt: false, listHasPeople: false, sessionBooked: false };
+const OWNER_CAN = ['org.manage', 'staff.manage', 'memberships.manage', 'schedule.manage', 'members.read', 'members.confirm'];
+const TRAINER_CAN = ['members.read', 'attendance.read'];
+const trainers = (over = {}) => ({
+  timezone: 'Europe/London',
+  canManage: true,
+  canBook: true,
+  freeCancelMinutes: 120,
+  gymHasTypes: true,
+  setup: ALL_DONE,
+  trainers: [ana, owner, sam],
+  ...over,
+});
 const mayaSession = (over = {}) => ({
   id: SESSION, trainerId: SAM, localDate: '2026-10-09', localStartMinute: 600, minutes: 60, startsAt: '2026-10-09T09:00:00.000Z', status: 'booked',
   name: 'Maya Lopez', initials: 'ML', entryId: MAYA, membership: 'PT 10', packCharged: true, cancel: 'free', ...over,
@@ -68,7 +82,16 @@ const friday = async () => {
 };
 
 beforeEach(() => {
-  ORG = { id: 'g1', slug: 'iron-house', name: 'Iron House', orgType: 'gym', timezone: 'Europe/London', clockFormat: '24h', consoleReadOnly: false };
+  ORG = {
+    id: 'g1',
+    slug: 'iron-house',
+    name: 'Iron House',
+    orgType: 'gym',
+    timezone: 'Europe/London',
+    clockFormat: '24h',
+    consoleReadOnly: false,
+    privileges: OWNER_CAN,
+  };
   for (const fn of Object.values(api)) fn.mockReset();
   api.getPtTrainers.mockResolvedValue({ data: trainers() });
   api.getPtWeek.mockResolvedValue({ data: week() });
@@ -104,28 +127,147 @@ describe('the page for whoever runs the timetable', () => {
     await waitFor(() => expect(api.getPtWeek).toHaveBeenLastCalledWith('g1', SAM, '2026-10-14'));
   });
 
-  it('with nobody set up it says so and how to start, and asks for no week', async () => {
-    api.getPtTrainers.mockResolvedValue({ data: trainers({ trainers: [ana, owner] }) });
+  // EVERY STEP TO A FIRST SESSION, with a tick on each one done (23d).
+  const setupBox = () => within(screen.getByTestId('pt-setup'));
+  const stepRows = () => [...screen.getByTestId('pt-setup').querySelectorAll('li')].map((li) => [li.dataset.step, li.dataset.done]);
+  const stepText = (key) => screen.getByTestId('pt-setup').querySelector(`li[data-step="${key}"]`).textContent;
+  const hrefOf = (name) => setupBox().getByRole('link', { name }).getAttribute('href');
+
+  it('with nobody set up it lists every step with a button to its place and nothing ticked, and asks for no week', async () => {
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ setup: NOT_DONE, trainers: [ana, owner] }) });
     open();
-    expect(await screen.findByText('No trainers yet. This is how it works:')).toBeTruthy();
-    expect([...screen.getByTestId('pt-how').querySelectorAll('li')].map((li) => li.textContent)).toEqual([
-      'Add a trainer and set the hours they are free.',
-      'Tick "Includes personal training" on a membership or pack (in Memberships) and give it to the member on their page.',
-      "Press one of the trainer's free times and pick the member.",
+    expect(await screen.findByRole('heading', { name: 'How to set up personal training' })).toBeTruthy();
+    expect(screen.getByTestId('pt-setup-count').textContent).toBe('0 of 4 done');
+    expect(stepRows()).toEqual([
+      ['trainer', 'false'],
+      ['type', 'false'],
+      ['held', 'false'],
+      ['book', 'false'],
     ]);
+    expect(stepText('trainer')).toContain('1. Add a trainer and set their hours · Not done yet');
+    expect(stepText('type')).toContain('2. Sell a membership or pack that includes personal training · Not done yet');
+    expect(stepText('type')).toContain('On Memberships, tick "Includes personal training" on a membership or pack you sell.');
+    expect(stepText('held')).toContain('3. Give it to a member · Not done yet');
+    expect(stepText('book')).toContain("4. Book a session · Not done yet");
+    // Each button opens the place its step is done in.
+    expect(hrefOf('Invite staff')).toBe('/console/iron-house/members?view=staff&open=invite');
+    expect(hrefOf('Open Memberships')).toBe('/console/iron-house/memberships');
+    expect(hrefOf('Open Members')).toBe('/console/iron-house/members');
+    expect(setupBox().getAllByRole('link')).toHaveLength(3);
+    // The step to do next has the orange button, and only that one.
+    expect(setupBox().getByRole('link', { name: 'Invite staff' }).className).toContain('c-btn-p');
+    expect(setupBox().getByRole('link', { name: 'Open Memberships' }).className).not.toContain('c-btn-p');
+
+    expect(screen.getByTestId('pt-no-trainers').textContent).toBe('No trainers yet.');
     expect(screen.getByRole('button', { name: 'Set their hours' }).disabled).toBe(true);
     expect(screen.queryByTestId('pt-day')).toBeNull();
     expect(api.getPtWeek).not.toHaveBeenCalled();
   });
 
-  it('a gym that sells no memberships is not told to tick one', async () => {
-    api.getPtTrainers.mockResolvedValue({ data: trainers({ gymHasTypes: false, trainers: [ana, owner] }) });
+  it('a gym that sells no memberships has three steps, and is not told to tick one', async () => {
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ gymHasTypes: false, setup: NOT_DONE, trainers: [ana, owner] }) });
     open();
-    await screen.findByText('No trainers yet. This is how it works:');
-    expect([...screen.getByTestId('pt-how').querySelectorAll('li')].map((li) => li.textContent)).toEqual([
-      'Add a trainer and set the hours they are free.',
-      "Press one of the trainer's free times and pick the member.",
+    await screen.findByTestId('pt-setup');
+    expect(screen.getByTestId('pt-setup-count').textContent).toBe('0 of 3 done');
+    expect(stepRows().map(([key]) => key)).toEqual(['trainer', 'people', 'book']);
+    expect(stepText('people')).toContain('2. Put your members on your list · Not done yet');
+    expect(screen.getByTestId('pt-setup').textContent).not.toContain('Includes personal training');
+    expect(setupBox().queryByRole('link', { name: 'Open Memberships' })).toBeNull();
+  });
+
+  it("each tick is the server's: what is done says Done, and the next step has the orange button", async () => {
+    // Sam has hours, and a type includes personal training; nobody holds it yet.
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ setup: { ...NOT_DONE, typeIncludesPt: true } }) });
+    open();
+    await screen.findByTestId('pt-setup');
+    expect(screen.getByTestId('pt-setup-count').textContent).toBe('2 of 4 done');
+    expect(stepRows()).toEqual([
+      ['trainer', 'true'],
+      ['type', 'true'],
+      ['held', 'false'],
+      ['book', 'false'],
     ]);
+    expect(stepText('trainer')).toContain('1. Add a trainer and set their hours · Done');
+    expect(stepText('type')).toContain('· Done');
+    expect(stepText('held')).toContain('· Not done yet');
+    expect(setupBox().getByRole('link', { name: 'Open Members' }).className).toContain('c-btn-p');
+    expect(setupBox().getByRole('link', { name: 'Open Memberships' }).className).not.toContain('c-btn-p');
+    expect(setupBox().getByRole('link', { name: 'Invite staff' }).className).not.toContain('c-btn-p');
+    // The trainers are listed under it as before.
+    expect(screen.getAllByTestId('pt-trainer')).toHaveLength(1);
+    expect(screen.queryByTestId('pt-no-trainers')).toBeNull();
+  });
+
+  it('with every step done there is no list, and none where the server sent no steps', async () => {
+    open();
+    await friday();
+    expect(screen.queryByTestId('pt-setup')).toBeNull();
+    cleanup();
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ setup: undefined, trainers: [ana, owner] }) });
+    open();
+    expect((await screen.findByTestId('pt-no-trainers')).textContent).toBe('No trainers yet.');
+    expect(screen.queryByTestId('pt-setup')).toBeNull();
+  });
+
+  it('a booking reads the steps again, so the last tick lands without a reload', async () => {
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ setup: { ...ALL_DONE, sessionBooked: false } }) });
+    api.bookPt.mockResolvedValue({ data: { appointment: mayaSession() } });
+    open();
+    const day = await friday();
+    expect(screen.getByTestId('pt-setup-count').textContent).toBe('3 of 4 done');
+    expect(api.getPtTrainers).toHaveBeenCalledTimes(1);
+    fireEvent.click(day.getByRole('button', { name: 'Book 11:00 – 12:00' }));
+    const box = within(await screen.findByTestId('pt-book-box'));
+    fireEvent.click(await box.findByRole('button', { name: 'Pick Maya Lopez' }));
+    api.getPtTrainers.mockResolvedValue({ data: trainers() });
+    fireEvent.click(box.getByRole('button', { name: 'Book session' }));
+    await waitFor(() => expect(screen.queryByTestId('pt-setup')).toBeNull());
+    expect(api.getPtTrainers).toHaveBeenCalledTimes(2);
+  });
+
+  it('with the steps done, a booking reads the trainers no second time', async () => {
+    api.bookPt.mockResolvedValue({ data: { appointment: mayaSession() } });
+    open();
+    fireEvent.click((await friday()).getByRole('button', { name: 'Book 11:00 – 12:00' }));
+    const box = within(await screen.findByTestId('pt-book-box'));
+    fireEvent.click(await box.findByRole('button', { name: 'Pick Maya Lopez' }));
+    fireEvent.click(box.getByRole('button', { name: 'Book session' }));
+    await waitFor(() => expect(api.getPtWeek).toHaveBeenCalledTimes(2));
+    expect(api.getPtTrainers).toHaveBeenCalledTimes(1);
+  });
+
+  it('staff who cannot open a place get no button to it, and are told who can', async () => {
+    // Somebody given the timetable alone: no Staff tab, no Memberships page.
+    ORG = { ...ORG, privileges: ['schedule.manage', 'members.read'] };
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ setup: NOT_DONE, trainers: [ana, owner] }) });
+    open();
+    await screen.findByTestId('pt-setup');
+    expect(setupBox().getAllByRole('link').map((a) => a.textContent)).toEqual(['Open Members']);
+    expect(stepText('trainer')).toContain('The owner can invite somebody who is not on your staff yet.');
+    expect(stepText('type')).toContain('Ask the owner to tick "Includes personal training" on a membership or pack you sell.');
+    expect(screen.getByTestId('pt-setup').textContent).not.toContain('On Memberships');
+    // With no button on the first step, the next button down is not painted as the next step.
+    expect(setupBox().getByRole('link', { name: 'Open Members' }).className).not.toContain('c-btn-p');
+    expect(screen.queryByRole('link', { name: 'Invite staff' })).toBeNull();
+  });
+
+  it('a gym with no live plan has Invite staff greyed, and the pages still open', async () => {
+    ORG = { ...ORG, consoleReadOnly: true };
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ setup: NOT_DONE, trainers: [ana, owner] }) });
+    open();
+    await screen.findByTestId('pt-setup');
+    expect(setupBox().getByRole('button', { name: 'Invite staff' }).disabled).toBe(true);
+    expect(setupBox().queryByRole('link', { name: 'Invite staff' })).toBeNull();
+    expect(hrefOf('Open Memberships')).toBe('/console/iron-house/memberships');
+  });
+
+  it("a studio's steps name its own page", async () => {
+    ORG = { ...ORG, orgType: 'studio' };
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ setup: { ...NOT_DONE, typeIncludesPt: true } }) });
+    open();
+    await screen.findByTestId('pt-setup');
+    expect(stepText('held')).toContain('3. Give it to a client · Not done yet');
+    expect(hrefOf('Open Clients')).toBe('/console/iron-house/members');
   });
 
   it('a class the trainer coaches is listed on its day as time that is not free, on the clock the gym reads', async () => {
@@ -244,6 +386,19 @@ describe('booking', () => {
     fireEvent.change(box.getByPlaceholderText('Search by name or email'), { target: { value: 'zz' } });
     expect(await box.findByText('Nobody on your member list matches.')).toBeTruthy();
     expect(api.getPtPeople).toHaveBeenLastCalledWith('g1', 'zz', '2026-10-09');
+    // A search that found nobody sends staff nowhere.
+    expect(box.queryByRole('link')).toBeNull();
+  });
+
+  it('an empty member list says where people are added, with a button that opens it', async () => {
+    api.getPtPeople.mockResolvedValue({ data: { gymHasTypes: true, people: [], more: false } });
+    open();
+    fireEvent.click((await friday()).getByRole('button', { name: 'Book 09:00 – 10:00' }));
+    const box = within(await screen.findByTestId('pt-book-box'));
+    expect(await box.findByText('Your member list is empty. Add people on Members first.')).toBeTruthy();
+    const link = box.getByRole('link', { name: 'Open Members' });
+    expect(link.getAttribute('href')).toBe('/console/iron-house/members');
+    expect(link.getAttribute('target')).toBeNull();
   });
 
   it("the server's refusal is shown in its own words, the box stays, and a second press sends the same request", async () => {
@@ -263,7 +418,37 @@ describe('booking', () => {
 
 describe('a trainer on the usual permissions', () => {
   beforeEach(() => {
-    api.getPtTrainers.mockResolvedValue({ data: trainers({ canManage: false, canBook: false, trainers: [{ ...sam, mine: true }] }) });
+    ORG = { ...ORG, privileges: TRAINER_CAN };
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ canManage: false, canBook: false, setup: null, trainers: [{ ...sam, mine: true }] }) });
+  });
+
+  it('is shown no steps, whatever arrives', async () => {
+    open();
+    await screen.findByRole('heading', { name: 'Your hours' });
+    expect(screen.queryByTestId('pt-setup')).toBeNull();
+    cleanup();
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ canManage: false, canBook: false, setup: NOT_DONE, trainers: [{ ...sam, mine: true }] }) });
+    open();
+    await screen.findByRole('heading', { name: 'Your hours' });
+    expect(screen.queryByTestId('pt-setup')).toBeNull();
+  });
+
+  it('a class they coach in their own time off names who can change its coach, with no button to the Calendar', async () => {
+    api.getPtWeek.mockResolvedValue({
+      data: week([], {
+        days: week().days.map((day) => ({
+          ...day,
+          free: [],
+          appointments: [],
+          classes: day.localDate === '2026-10-09' ? [{ name: 'Spin', localStartMinute: 720, minutes: 45 }] : [],
+          timeOff: day.localDate === '2026-10-09' ? [{ id: 'off-1', fromMinute: null, toMinute: null }] : [],
+        })),
+      }),
+    });
+    open();
+    const day = await friday();
+    expect(day.getByTestId('pt-coaching').textContent).toContain('In their time off. Whoever runs the timetable can give this class another coach.');
+    expect(day.queryByRole('link')).toBeNull();
   });
 
   it('sees their own hours and week, the free times as plain times with why, and no Book; their own session can be cancelled', async () => {
@@ -547,7 +732,11 @@ describe("a trainer's time off", () => {
     expect(box.getByText('Spin')).toBeTruthy();
     expect(box.getByText('Fri 9 Oct · 10:30 – 11:15')).toBeTruthy();
     expect(box.getByText(/This session stays booked: nobody is cancelled and nothing comes off or goes back on a pack\./)).toBeTruthy();
-    expect(box.getByText(/This class stays on the calendar with Sam Reed as coach\./)).toBeTruthy();
+    expect(box.getByText(/This class stays on the calendar with Sam Reed as coach\. To change the coach, open the class on the Calendar\./)).toBeTruthy();
+    // The Calendar opens on that class's week, beside this box: the time off being added is kept.
+    const calendar = box.getByRole('link', { name: /^Open the Calendar/ });
+    expect(calendar.getAttribute('href')).toBe('/console/iron-house/classes?view=week&week=2026-10-09');
+    expect(calendar.getAttribute('target')).toBe('_blank');
     expect(box.getByText("The app doesn't tell them yet. Let them know yourself.")).toBeTruthy();
     // The plain Add is gone while the box asks.
     expect(panel().queryByRole('button', { name: 'Add time off' })).toBeNull();
@@ -677,6 +866,9 @@ describe("a trainer's time off", () => {
     expect(day.getByTestId('pt-day-off').textContent).toBe('Time off · all day');
     expect(day.getByTestId('pt-session').textContent).toContain('This is in their time off. Cancel it and book another time, or remove the time off.');
     expect(day.getByTestId('pt-coaching').textContent).toContain('In their time off. Give this class another coach on the Calendar.');
+    expect(within(day.getByTestId('pt-coaching')).getByRole('link', { name: 'Open the Calendar' }).getAttribute('href')).toBe(
+      '/console/iron-house/classes?view=week&week=2026-10-09',
+    );
     // A day with nothing else on it says it is off, not only that nothing is free.
     const days = screen.getAllByTestId('pt-day');
     expect(days[3].textContent).toBe('Sat 10 OctTime off · all day');

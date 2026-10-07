@@ -4,6 +4,9 @@ import { Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
+import { viewerPrivileges } from '../../pages/console/consoleView';
+import { placeFor } from '../../pages/console/consolePlaces';
+import PlaceLink from './PlaceLink';
 import {
   leadEmailsBody,
   leadEmailsChanged,
@@ -26,7 +29,8 @@ const inputStyle = {
   color: '#fff',
 };
 
-export default function LeadEmailsPanel({ org, readOnly }) {
+// `startOpen`: the page was opened by a link to this section.
+export default function LeadEmailsPanel({ org, readOnly, startOpen = false }) {
   const gymId = org.id;
   const { user } = useAuth();
   const [settings, setSettings] = useState(null);
@@ -97,6 +101,7 @@ export default function LeadEmailsPanel({ org, readOnly }) {
       title="Follow-up emails to leads"
       summary={settings === null ? 'Who sends a new lead their 3 follow-up emails' : settings.sendForMe ? 'Sent for you' : 'You send them from your own email'}
       forceOpen={loadError !== null}
+      defaultOpen={startOpen}
     >
       {/* Above the boxes, and before they load, as its neighbours say it. */}
       {readOnly ? (
@@ -145,6 +150,10 @@ export default function LeadEmailsPanel({ org, readOnly }) {
               </span>
             </span>
           </label>
+          {/* Outside the label, so pressing it opens Leads and ticks nothing. */}
+          <PlaceLink to={placeFor(org.slug, viewerPrivileges(org), 'leads')} className="text-sm self-start" style={{ color: '#FF8A1F' }}>
+            Open Leads
+          </PlaceLink>
 
           <label className="block">
             <span className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>

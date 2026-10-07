@@ -8,7 +8,7 @@ import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
-import { SETTINGS_SECTION } from './startHereView';
+import { DETAILS_SECTIONS, SETTINGS_SECTION } from './consolePlaces';
 import { canManageSchedule } from './classesView';
 import { canManageOrg } from './gymDetailsView';
 import { consoleIsReadOnly } from './billingView';
@@ -123,12 +123,16 @@ export default function Settings() {
           that guarantee always depended on. Kd ruled PATCH on the fourth
           firing. */}
       {canEditGym ? (
-        <GymDetailsPanel
-          key={`gym-${org.id}`}
-          org={org}
-          privileges={privileges}
-          readOnly={readOnly}
-        />
+        // `id`: a button on another page opens Settings here, at the box it names (23d).
+        <div id={SETTINGS_SECTION.details} style={{ scrollMarginTop: 16 }}>
+          <GymDetailsPanel
+            key={`gym-${org.id}`}
+            org={org}
+            privileges={privileges}
+            readOnly={readOnly}
+            startOpen={DETAILS_SECTIONS.includes(section)}
+          />
+        </div>
       ) : null}
 
       {/* WHEN WE'RE OPEN — Kd's opening-hours rulings (:26624, :26684, :26736),
@@ -182,7 +186,16 @@ export default function Settings() {
       {/* FOLLOW-UP EMAILS TO LEADS (20c-v): the owner's "Send them for me", on the
           privilege the server gates it with. Keyed per gym for the panels' reason above:
           it holds a draft. */}
-      {canEditGym ? <LeadEmailsPanel key={`lead-emails-${org.id}`} org={org} readOnly={readOnly} /> : null}
+      {canEditGym ? (
+        <div id={SETTINGS_SECTION.leadEmails} style={{ scrollMarginTop: 16 }}>
+          <LeadEmailsPanel
+            key={`lead-emails-${org.id}`}
+            org={org}
+            readOnly={readOnly}
+            startOpen={section === SETTINGS_SECTION.leadEmails}
+          />
+        </div>
+      ) : null}
 
       {/* Staff are not here: they are invited and managed on Members → Staff (23c-ii). */}
 

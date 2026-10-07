@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Loader2, Plus, Search, X } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Circle, Loader2, Plus, Search, X } from 'lucide-react';
+import { orgWords } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import PlaceLink from '../../components/console/PlaceLink';
 import TimePick from '../../components/console/TimePick';
 import { DateField, Tick } from './ClassFields';
 import { useConsoleOrg } from './useConsoleOrg';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import { viewerPrivileges } from './consoleView';
 import { canManageStaff } from './staffView';
+import { calendarTo, canOpenPlace, placeFor } from './consolePlaces';
 import { WEEKDAYS, addDays, gymToday } from './hoursView';
 import {
   HOURS_REPEAT,
@@ -40,16 +43,18 @@ import {
   hoursFormProblem,
   hoursLines,
   hoursRequest,
-  howItWorks,
   noTimesNote,
   peopleHeading,
   personRow,
   pickTrainer,
+  pickerIsEmpty,
   removeRange,
   sessionClash,
   sessionRow,
   sessionsAWeek,
   setRange,
+  setupCount,
+  setupSteps,
   timeOffAsked,
   timeOffBoxLines,
   timeOffBoxRow,
@@ -248,7 +253,7 @@ function InTimeOffList({ label, found, kind, clockFormat, today }) {
 
 /** One trainer's time off: what is coming, each with Remove, and a form that adds one.
  *  Sessions and classes already in a new one are named before it is added. */
-function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, canBook, onChanged, onStale, onClose }) {
+function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, canBook, calendarFor, onChanged, onStale, onClose }) {
   const [draft, setDraft] = useState(timeOffDraft);
   const [asked, setAsked] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -442,11 +447,18 @@ function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, canBook, onC
               <p className="c-s15 c-w6 c-t1 m-0">{timeOffBoxTitle(asked, trainer)}</p>
               <InTimeOffList key={`s:${asked.mark}`} label="Sessions booked" found={asked.sessions} kind="session" clockFormat={clockFormat} today={today} />
               <InTimeOffList key={`c:${asked.mark}`} label="Classes they coach" found={asked.classes} kind="class" clockFormat={clockFormat} today={today} />
-              {timeOffBoxLines(asked, trainer, draft, canBook).map((line) => (
+              {timeOffBoxLines(asked, trainer, draft, canBook, calendarFor(null) !== null).map((line) => (
                 <p key={line} className="c-s14 c-t2 m-0">
                   {line}
                 </p>
               ))}
+              {/* Beside this box, so the time off being added is kept. It opens on the
+                  week of the first class named here. */}
+              {asked.classes.count > 0 ? (
+                <PlaceLink to={calendarFor(asked.classes.shown[0]?.localDate ?? draft.fromDate)} beside>
+                  Open the Calendar
+                </PlaceLink>
+              ) : null}
               {asked.sessions.count > 0 ? <p className="c-s14 c-t2 m-0">{NOT_TOLD}</p> : null}
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" onClick={() => void add(asked.mark)} disabled={busy} className="c-btn c-btn-sm c-btn-danger">
@@ -484,7 +496,7 @@ function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, canBook, onC
 
 /** The box that books one free time: pick the person from the list, see who and when,
  *  press Book. The list is there without typing; typing narrows it. */
-function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose }) {
+function BookBox({ gymId, trainer, slot, minutes, clockFormat, orgType, membersTo, onBooked, onClose }) {
   const [typed, setTyped] = useState('');
   const [found, setFound] = useState(null);
   const [person, setPerson] = useState(null);
@@ -568,7 +580,8 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, onBooked, onClose
           {results !== null && results.failed !== null ? <p className="c-s14 c-t2 m-0">{results.failed}</p> : null}
           {results !== null && results.data !== null ? (
             <>
-              <span className="c-s13 c-w6 c-t3">{peopleHeading(results.data, typed)}</span>
+              <span className="c-s13 c-w6 c-t3">{peopleHeading(results.data, typed, orgType)}</span>
+              {pickerIsEmpty(results.data, typed) ? <PlaceLink to={membersTo}>{`Open ${orgWords(orgType).peopleCap}`}</PlaceLink> : null}
               {results.data.people.length > 0 ? (
                 <ul className="m-0 p-0 list-none flex flex-col" style={{ maxHeight: 300, overflowY: 'auto' }}>
                   {results.data.people.map((entry, index) => {
@@ -808,6 +821,17 @@ export default function PersonalTraining() {
   const clockFormat = org.clockFormat;
   const shownWeek = week !== null && week.key === weekOf ? week : null;
   const groups = trainerGroups(list?.trainers);
+  const privileges = viewerPrivileges(org);
+  // Every step to a first session, ticked as each is done (23d).
+  const steps = setupSteps(list, { orgSlug, privileges, orgType: org.orgType });
+  // The Calendar on a day's week, for whoever runs the timetable; null for anybody else.
+  const calendarFor = (day) => (canOpenPlace(privileges, 'calendar') ? calendarTo(orgSlug, day) : null);
+  // A session booked or cancelled: the week is read again, and the steps with it while
+  // they are on screen, so "Book a session" ticks without a reload.
+  const sessionsChanged = () => {
+    readWeekAgain();
+    if (steps.show) setListKey((n) => n + 1);
+  };
   const editingTrainer = list?.trainers.find((t) => t.userId === editing) ?? null;
   // While somebody else is being picked or set up, the page is about them: the week of
   // the trainer shown before is put away, so nothing of theirs reads as the new person's.
@@ -846,6 +870,7 @@ export default function PersonalTraining() {
         today={today}
         locked={consoleIsReadOnly(org)}
         canBook={list.canBook}
+        calendarFor={calendarFor}
         onChanged={(data) => {
           setList(data);
           readWeekAgain();
@@ -882,7 +907,7 @@ export default function PersonalTraining() {
     setCancelError(null);
     try {
       await orgService.cancelPt(gymId, appointment.id, { lateOk: choice.lateOk, giveBack: choice.giveBack });
-      readWeekAgain();
+      sessionsChanged();
     } catch (err) {
       // The free time ran out while the box was open: read the week again, so the box
       // asks the late question.
@@ -940,6 +965,58 @@ export default function PersonalTraining() {
       {list === null && listFailed === null ? <ConsoleLoading label="Loading your trainers…" newLook /> : null}
       {listFailed !== null ? <ConsoleFailed message={listFailed} onRetry={() => setListKey((n) => n + 1)} newLook /> : null}
 
+      {steps.show ? (
+        <section className="c-card p-5 md:p-6 flex flex-col gap-3" aria-label="How to set up personal training" data-testid="pt-setup">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="c-h2">How to set up personal training</h2>
+            <span className="c-s14 c-t2 c-num" data-testid="pt-setup-count">
+              {setupCount(steps)}
+            </span>
+          </div>
+          <p className="c-s14 c-t2 m-0">Each step is ticked by itself once it&apos;s done.</p>
+          <ol className="m-0 p-0 list-none flex flex-col">
+            {steps.rows.map((row, index) => (
+              <li
+                key={row.key}
+                data-step={row.key}
+                data-done={row.done ? 'true' : 'false'}
+                className="py-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between min-w-0"
+                style={index === 0 ? undefined : { borderTop: '1px solid var(--line)' }}
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  {row.done ? (
+                    <CheckCircle2 aria-hidden="true" className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: 'var(--good)' }} />
+                  ) : (
+                    <Circle aria-hidden="true" className="w-5 h-5 flex-shrink-0 mt-0.5 c-t3" />
+                  )}
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className={`c-s15 c-w6 ${row.done ? 'c-t2' : 'c-t1'}`}>
+                      {`${String(index + 1)}. ${row.title}`}
+                      <span className="c-w5" style={{ color: row.done ? 'var(--good)' : 'var(--t3)' }}>
+                        {row.done ? ' · Done' : ' · Not done yet'}
+                      </span>
+                    </span>
+                    <span className="c-s14 c-t2">{row.line}</span>
+                  </div>
+                </div>
+                {row.action === null ? null : row.action.changes && readOnly ? (
+                  <button type="button" disabled className="c-btn c-btn-s c-btn-sm ml-8 md:ml-0 self-start flex-shrink-0">
+                    {row.action.label}
+                  </button>
+                ) : (
+                  <PlaceLink
+                    to={row.action.to}
+                    className={`c-btn ${row.next ? 'c-btn-p' : 'c-btn-s'} c-btn-sm ml-8 md:ml-0 self-start flex-shrink-0`}
+                  >
+                    {row.action.label}
+                  </PlaceLink>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
       {list !== null && list.canManage ? (
         <section className="c-card p-5 md:p-6 flex flex-col gap-4" aria-label="Trainers">
           <div className="flex flex-col gap-1">
@@ -947,14 +1024,9 @@ export default function PersonalTraining() {
             {groups.setUp.length > 0 ? <p className="c-s14 c-t2 m-0">{HOURS_REPEAT}</p> : null}
           </div>
           {groups.setUp.length === 0 ? (
-            <div className="flex flex-col gap-2" data-testid="pt-how">
-              <p className="c-s15 c-t1 c-w6 m-0">No trainers yet. This is how it works:</p>
-              <ol className="m-0 pl-5 flex flex-col gap-1 c-s15 c-t2" style={{ listStyle: 'decimal' }}>
-                {howItWorks(list.gymHasTypes).map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ol>
-            </div>
+            <p className="c-s15 c-t1 c-w6 m-0" data-testid="pt-no-trainers">
+              No trainers yet.
+            </p>
           ) : (
             <ul className="m-0 p-0 list-none flex flex-col">
               {groups.setUp.map((t, index) => {
@@ -1023,12 +1095,12 @@ export default function PersonalTraining() {
                 </button>
               </div>
               {/* Inviting staff is the owner's, on Members → Staff: nobody else is sent there. */}
-              {canManageStaff(viewerPrivileges(org)) ? (
+              {canManageStaff(privileges) ? (
                 <span className="c-s13 c-t3">
                   Only people on your staff are listed.{' '}
-                  <Link to={`/console/${orgSlug}/members?view=staff&open=invite`} className="c-lk c-w6">
+                  <PlaceLink to={placeFor(orgSlug, privileges, 'inviteStaff')} className="c-lk c-w6">
                     Invite staff
-                  </Link>
+                  </PlaceLink>
                 </span>
               ) : (
                 <span className="c-s13 c-t3">Only people on your staff are listed. The owner can invite somebody new.</span>
@@ -1209,9 +1281,14 @@ export default function PersonalTraining() {
                               <li key={`${String(coached.localStartMinute)}:${coached.name}`} className="flex flex-col">
                                 <span className="c-s15 c-t2 c-num">{coachedClassRow(coached, clockFormat)}</span>
                                 {classInTimeOff(coached, dayOff) === null ? null : (
-                                  <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
-                                    {classInTimeOff(coached, dayOff)}
-                                  </span>
+                                  <>
+                                    <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+                                      {classInTimeOff(coached, dayOff, calendarFor(null) !== null)}
+                                    </span>
+                                    <PlaceLink to={calendarFor(day.localDate)} className="c-btn c-btn-s c-btn-sm self-start mt-1">
+                                      Open the Calendar
+                                    </PlaceLink>
+                                  </>
                                 )}
                               </li>
                             ))}
@@ -1260,7 +1337,9 @@ export default function PersonalTraining() {
                           slot={openSlot}
                           minutes={minutes}
                           clockFormat={clockFormat}
-                          onBooked={readWeekAgain}
+                          orgType={org.orgType}
+                          membersTo={placeFor(orgSlug, privileges, 'members')}
+                          onBooked={sessionsChanged}
                           onClose={() => setBooking(null)}
                         />
                       ) : null}

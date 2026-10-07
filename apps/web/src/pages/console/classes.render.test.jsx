@@ -1150,6 +1150,11 @@ describe("a class saved over its coach's personal training sessions", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fri' }));
     fireEvent.click(add);
     expect(await screen.findByText('Priya Sharma has 5 personal training sessions at these times')).toBeTruthy();
+    // The page it sends staff to has a button, in a new tab so the form here is kept (23d).
+    expect(screen.getByText(/cancel it on the Personal training page and book another time\./)).toBeTruthy();
+    const training = screen.getByRole('link', { name: /^Open Personal training/ });
+    expect(training.getAttribute('href')).toBe('/console/iron-house/personal-training');
+    expect(training.getAttribute('target')).toBe('_blank');
     expect(screen.getByTestId('over-sessions').children).toHaveLength(3);
     expect(screen.getByText(/and 2 more/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'See all' }));

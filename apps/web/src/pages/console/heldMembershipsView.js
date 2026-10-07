@@ -91,6 +91,8 @@ export function listedRow(listed, name, managesTypes = true) {
       note: managesTypes
         ? `This membership has no price here yet. Set it up in Memberships, and ${name} gets it.`
         : `This membership has no price here yet. Once the owner sets it up, ${name} gets it.`,
+      // The note names the Memberships page: the screen puts a button to it underneath.
+      toMemberships: managesTypes,
     };
   }
   return {
@@ -100,6 +102,7 @@ export function listedRow(listed, name, managesTypes = true) {
     note: managesTypes
       ? `${who} doesn't have it here yet. Add it with Add membership, or go to Memberships to give it to everyone on your list who is missing it.`
       : `${who} doesn't have it here yet. Add it with Add membership.`,
+    toMemberships: managesTypes,
   };
 }
 

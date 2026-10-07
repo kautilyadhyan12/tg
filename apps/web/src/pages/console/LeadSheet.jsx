@@ -4,6 +4,9 @@ import { Check, Loader2, Mail, UserCheck, X } from 'lucide-react';
 import { LEAD_JOIN_CHOOSE_ERROR, LEAD_JOIN_STALE_ERROR, LEAD_MAX_NOTES_CHARS } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
+import PlaceLink from '../../components/console/PlaceLink';
+import { viewerPrivileges } from './consoleView';
+import { placeFor } from './consolePlaces';
 import {
   SOURCE_CHOICES,
   STATUS_CHOICES,
@@ -180,6 +183,12 @@ function FollowUpBox({ lead, gym, readOnly, busy, working, onMark }) {
         {state.sentLine !== null ? <p className="c-s14 c-t2">{state.sentLine}</p> : null}
         {state.note ? <p className="c-s14 c-t2">{state.note}</p> : null}
       </div>
+      {/* Beside this panel, so nothing typed on the lead is lost. */}
+      {state.notePlace ? (
+        <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), state.notePlace)} beside>
+          Change reply address
+        </PlaceLink>
+      ) : null}
       {email !== null ? (
         <>
           <div className="flex flex-wrap gap-2">

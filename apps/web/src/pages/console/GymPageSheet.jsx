@@ -4,6 +4,9 @@ import { GYM_PAGE_MAX_ABOUT_CHARS, GYM_PAGE_MAX_OWN_FACILITY_CHARS, GYM_PAGE_MAX
 import { orgService, errorStatus, errorText, gymPhotoUrl } from '../../api/orgsApi';
 import PhotoViewer from '../../components/common/PhotoViewer';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
+import PlaceLink from '../../components/console/PlaceLink';
+import { viewerPrivileges } from './consoleView';
+import { placeFor } from './consolePlaces';
 import { embedCode, gymPageUrl } from '../gymPublicView';
 import { pickProblem, preparePagePhoto } from './gymPagePhotos';
 import {
@@ -426,7 +429,13 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
                 ) : null}
               </div>
 
-              <p className="c-s14 c-t2">Your page also shows your opening hours from Settings, and on a day you close, that day's closure note.</p>
+              <div className="flex flex-col gap-2">
+                <p className="c-s14 c-t2">Your page also shows your opening hours, and on a day you close, that day's closure note.</p>
+                {/* Beside this panel, so changes to the page that are not saved yet are kept. */}
+                <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), 'openingHours')} beside>
+                  Change opening hours
+                </PlaceLink>
+              </div>
 
               <div className="c-field pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
                 <span className="c-label">Show the form on your own website</span>

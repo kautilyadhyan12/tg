@@ -11,6 +11,8 @@ import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/con
 import { codesRetired, orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from './useConsoleOrg';
+import { useSectionLink } from './useSectionLink';
+import { PLAN_SECTION } from './consolePlaces';
 import { consoleIsReadOnly } from './billingView';
 import { startHereView } from './startHereView';
 import {
@@ -94,6 +96,8 @@ export default function Overview() {
   const { orgSlug } = useParams();
   const { user } = useAuth();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
+  // The banner's Open Plan button opens this page at the plan ("#plan").
+  useSectionLink(!orgLoading && orgError === null && !notFound);
 
   // T3 L-3: TWO INDEPENDENTLY-AUTHORISED READS, TWO OUTCOMES.
   //
@@ -418,7 +422,9 @@ export default function Overview() {
           the shell wraps every screen in a keyed Fragment as well (:22029, Kd's
           redesign ruling). Left alone rather than deleted, on the same reasoning
           that left the other per-panel keys standing. */}
-      <TrialCard key={org.id} org={org} />
+      <div id={PLAN_SECTION} style={{ scrollMarginTop: 16 }}>
+        <TrialCard key={org.id} org={org} />
+      </div>
 
       {/* ── The numbers, on their own outcome ──────────────────────────── */}
       {/* NO SPINNER OF ITS OWN, deliberately. All four reads are issued in one

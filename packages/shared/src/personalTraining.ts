@@ -365,6 +365,23 @@ export const ptTrainerSchema = z
   .strict();
 export type PtTrainer = z.infer<typeof ptTrainerSchema>;
 
+/** What the gym has done towards its first session, each a fact about this gym alone
+ *  (ROADMAP 23d): the page's list of steps ticks from these. A fact holds while its thing
+ *  is there: an archived type, a cancelled membership and a cancelled session do not count. */
+export const ptSetupSchema = z
+  .object({
+    /** A membership type or pack on the price list includes personal training. */
+    typeIncludesPt: z.boolean(),
+    /** Somebody on the member list holds one of those, in use. */
+    somebodyHoldsIt: z.boolean(),
+    /** The member list has somebody on it. */
+    listHasPeople: z.boolean(),
+    /** A session is booked, or one took place. */
+    sessionBooked: z.boolean(),
+  })
+  .strict();
+export type PtSetup = z.infer<typeof ptSetupSchema>;
+
 /** The gym's staff and their hours. `canManage`: the reader runs the timetable
  *  (`schedule.manage`) and sees and changes everybody; anybody else on staff has their own
  *  row alone. `canBook`: they may read the member list (`members.confirm`), so they can
@@ -378,6 +395,8 @@ export const ptTrainersResponseSchema = z
     freeCancelMinutes: z.number().int(),
     /** The gym sells memberships, so a session needs one that includes personal training. */
     gymHasTypes: z.boolean(),
+    /** For whoever runs the timetable; null for anybody else, who sets nothing up. */
+    setup: ptSetupSchema.nullable(),
     trainers: z.array(ptTrainerSchema),
   })
   .strict();

@@ -1105,7 +1105,28 @@ describe('a link to one section of Settings', () => {
   });
 
   // 23b: Overview's Start here list opens these two the same way.
+  // 23d: a button on another page opens the gym's details, or a box inside them, at that box.
   it.each([
+    ['postal-address', 'Postal address'],
+    ['country', 'Country'],
+  ])('"#%s" opens Gym details with that box itself in view, and no other section', async (id, label) => {
+    drawAt(`/console/iron-house/settings#${id}`);
+    const heading = await screen.findByRole('button', { name: /^Gym details/ });
+    expect(heading.getAttribute('aria-expanded')).toBe('true');
+    const details = document.getElementById('gym-details');
+    const box = document.getElementById(id);
+    expect(details.contains(heading)).toBe(true);
+    expect(details.contains(box)).toBe(true);
+    expect(box.textContent).toContain(label);
+    await waitFor(() => expect(into).toHaveBeenCalled());
+    expect(into.mock.instances.every((el) => el === box)).toBe(true);
+    const open = screen.getAllByRole('button', { expanded: true }).filter((button) => !details.contains(button));
+    expect(open).toEqual([]);
+  });
+
+  it.each([
+    ['gym-details', /^Gym details/],
+    ['follow-up-emails', /^Follow-up emails to leads/],
     ['opening-hours', /^When we're open/],
     ['check-in-devices', /^Check-in devices/],
   ])('"#%s" opens the page with that section open and in view, and no other', async (id, name) => {

@@ -564,14 +564,37 @@ describe('bannerFor', () => {
     expect(b?.text).not.toMatch(/ended|expired/i);
   });
 
-  it('never offers a button, because there is nowhere for one to go', () => {
-    // The CTAs §4.2 pairs with each state all open a Billing screen that does
-    // not exist. If a later card adds one it should add it deliberately, not by
-    // this test quietly going green over a `cta` field nobody noticed.
-    for (const org of [trialing(27), trialing(2), trialing(20, { seatsUsed: 290 })]) {
+  it('carries one button only, to Plan on the Overview, and only where its sentence sends the reader there', () => {
+    // The CTAs §4.2 pairs with each state open a Billing screen that does not exist, so
+    // none is offered. A sentence that names Plan on the Overview carries `place: 'plan'`
+    // (23d), where that card is; any other new field has to be added here on purpose.
+    const trainer = { staffRole: 'trainer', privileges: ['members.read'] };
+    const lateBy = (over = {}) => gym({ subscription: { status: 'past_due', trialEndsAt: inDays(-10), seatCap: 100 }, ...over });
+    const fullPaid = (over = {}) =>
+      gym({
+        subscription: { status: 'active', trialEndsAt: null, seatCap: 100, subscribed: true, priceLabel: '$79', currentPeriodEnd: inDays(20) },
+        seatsUsed: 95,
+        ...over,
+      });
+    const cases = [
+      ['a trial with weeks left', trialing(27), false],
+      ['a trial two days from its end, read by whoever pays', trialing(2), true],
+      ['the same trial, read by a trainer', trialing(2, trainer), false],
+      ['a trial past its end date', trialing(-1), false],
+      ['a full trial', trialing(20, { seatsUsed: 290 }), false],
+      ['a failed payment, read by whoever pays', lateBy(), true],
+      ['a failed payment, read by a trainer', lateBy(trainer), false],
+      ['a full paying gym, read by whoever pays', fullPaid(), true],
+      ['a full paying gym, read by a trainer', fullPaid(trainer), false],
+      ['a gym with no plan', gym({ consoleReadOnly: true }), false],
+    ];
+    for (const [what, org, sent] of cases) {
       const b = bannerFor(org, NOW);
-      expect(b).not.toBeNull();
-      expect(Object.keys(b)).toEqual(['key', 'tone', 'text', 'dismissible']);
+      expect(b, what).not.toBeNull();
+      // The button and the words that name its place go together, both ways.
+      expect(b.text.includes('under Plan on the Overview'), what).toBe(sent);
+      expect(Object.keys(b).sort(), what).toEqual(['dismissible', 'key', 'text', 'tone', ...(sent ? ['place'] : [])].sort());
+      expect(b.place, what).toBe(sent ? 'plan' : undefined);
     }
   });
 

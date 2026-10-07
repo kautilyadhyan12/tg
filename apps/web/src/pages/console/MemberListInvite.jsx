@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronRight, Loader2, Mail, X } from 'lucide-react';
 import { MEMBER_INVITE_PERMISSION_WORDS } from '@app/shared';
 import { orgService, errorText, inviteChangedPreview, selectionChanged } from '../../api/orgsApi';
 import MemberListPerson from './MemberListPerson';
 import { ShareInvite } from './ShareInvite';
+import PlaceLink from '../../components/console/PlaceLink';
+import { viewerPrivileges } from './consoleView';
+import { placeFor } from './consolePlaces';
 import {
   gymToday,
   inviteBlockedWords,
@@ -243,7 +245,18 @@ export default function MemberListInvite({
     onListChanged();
   };
 
-  const blocked = preview === null ? null : inviteBlockedWords(preview.blocked, words);
+  // The gym's postal address is set in Settings, by whoever may change the gym's details.
+  const addressTo = placeFor(gym?.slug, viewerPrivileges(gym), 'postalAddress');
+  const blocked = preview === null ? null : inviteBlockedWords(preview.blocked, words, addressTo !== null);
+  // Its button opens Settings beside this page, so the people ticked here are kept; the
+  // count is read again when staff come back, and Send is there once the address is.
+  const needsAddress = preview?.blocked === 'no_postal_address';
+  useEffect(() => {
+    if (!needsAddress) return undefined;
+    const again = () => setCountTick((t) => t + 1);
+    window.addEventListener('focus', again);
+    return () => window.removeEventListener('focus', again);
+  }, [needsAddress]);
   const reach = preview?.reach ?? 0;
   const ignores = selection === null ? inviteIgnores(filters) : null;
   const chosen = selection === null ? inviteWho(filters) : null;
@@ -339,10 +352,10 @@ export default function MemberListInvite({
               <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--warn)' }} />
               {blocked}
             </p>
-            {preview.blocked === 'no_postal_address' ? (
-              <Link to={`/console/${gym.slug}/settings`} className="c-btn c-btn-s self-start">
-                Open Settings
-              </Link>
+            {needsAddress ? (
+              <PlaceLink to={addressTo} beside className="c-btn c-btn-s self-start">
+                Add postal address
+              </PlaceLink>
             ) : null}
           </div>
         ) : null}

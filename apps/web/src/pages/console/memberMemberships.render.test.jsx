@@ -284,7 +284,41 @@ describe('what the box draws', () => {
     expect(b.queryByText('No membership yet.')).toBeNull();
     // It is not a membership held here: nothing to mark paid, freeze or cancel.
     expect(row.queryByRole('button')).toBeNull();
+    // Drawn with no address for Memberships, there is no button to it.
+    expect(row.queryByRole('link')).toBeNull();
     expect(b.getByRole('button', { name: 'Add membership' })).toBeTruthy();
+  });
+
+  it('a sentence that names the Memberships page has a button that opens it beside the person, and the box reads again when staff come back (23d)', async () => {
+    const listed = { word: 'Gold Plus', endsOn: '2026-10-13', endsOnKind: 'renews', type: null, ownName: false, held: false };
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { listed }));
+    render(draw(ADA, 'Leo Grant', { membershipsTo: '/console/iron-house/memberships' }));
+    const row = within((await boxSoon()).getByTestId('held-listed'));
+    const link = row.getByRole('link', { name: /^Open Memberships/ });
+    expect(link.getAttribute('href')).toBe('/console/iron-house/memberships');
+    // A new tab: the person's page, and anything typed on it, stays.
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(1);
+
+    // Back from Memberships with Gold Plus set up and given: read again, the row is theirs.
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)], false, { listed: null }));
+    fireEvent(window, new Event('focus'));
+    await waitFor(() => expect(screen.queryByTestId('held-listed')).toBeNull());
+    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2);
+    // Nothing on the box sends staff there now, so coming back reads nothing more.
+    fireEvent(window, new Event('focus'));
+    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2);
+  });
+
+  it('staff who cannot open Memberships are told who can, with no button and nothing read again', async () => {
+    const listed = { word: 'Gold Plus', endsOn: '2026-10-13', endsOnKind: 'renews', type: null, ownName: false, held: false };
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { listed }));
+    render(draw(ADA, 'Leo Grant', { managesTypes: false, membershipsTo: null }));
+    const row = within((await boxSoon()).getByTestId('held-listed'));
+    expect(row.getByText('This membership has no price here yet. Once the owner sets it up, Leo Grant gets it.')).toBeTruthy();
+    expect(row.queryByRole('link')).toBeNull();
+    fireEvent(window, new Event('focus'));
+    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(1);
   });
 
   it("a name that is one of the gym's types, never given to this person, is said under the type's own name", async () => {
@@ -430,6 +464,16 @@ describe('adding a membership', () => {
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
     expect(screen.getByText('You have no membership types yet. Add them in Memberships.')).toBeTruthy();
     expect(within(screen.getByTestId('held-add')).queryByRole('button', { name: 'Add membership' })).toBeNull();
+    expect(within(screen.getByTestId('held-add')).queryByRole('link')).toBeNull();
+  });
+
+  it('and gives whoever sets the prices a button to Memberships there (23d)', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)], false, { types: [] }));
+    render(draw(ADA, 'Ada Lovelace', { membershipsTo: '/console/iron-house/memberships' }));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const link = within(screen.getByTestId('held-add')).getByRole('link', { name: /^Open Memberships/ });
+    expect(link.getAttribute('href')).toBe('/console/iron-house/memberships');
+    expect(link.getAttribute('target')).toBe('_blank');
   });
 });
 
