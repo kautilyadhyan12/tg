@@ -30,8 +30,10 @@ export const checkinScanRequestSchema = z
   .strict();
 export type CheckinScanRequest = z.infer<typeof checkinScanRequestSchema>;
 
-/** The gym's own words on the person's record, shown beside a green tick and never
- *  blocking it; `onList` false is an app member the gym's list no longer holds. */
+/** A person's status and payment words, shown beside a green tick and never blocking it:
+ *  what they hold at the gym, as the Members list reads it (`heldOnList`), or the words on
+ *  their record where the app holds nothing for them (23a-ii). `onList` false is an app
+ *  member the gym's list no longer holds. */
 export const checkinNoticeSchema = z
   .object({
     status: z.string().nullable(),
@@ -221,8 +223,8 @@ export const checkinLogVisitSchema = z
     /** The desk's name for a pass or key tag, the staff member's for staff; null for the
      *  member's own tap. */
     by: z.string().nullable(),
-    /** The gym's own status and payment words on the person's record, as the desk showed
-     *  them: sent only to staff who can check people in (`attendance.mark`). */
+    /** The person's status and payment words, as the desk shows them (`checkinNoticeSchema`):
+     *  sent only to staff who can check people in (`attendance.mark`). */
     status: z.string().nullable(),
     payment: z.string().nullable(),
   })

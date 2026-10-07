@@ -28,6 +28,7 @@ import {
   checkinPeopleResponseSchema,
   checkinScanResponseSchema,
   claimCheckinDeviceResponseSchema,
+  heldListWords,
   removeVisitResponseSchema,
   staffCheckinResponseSchema,
   type AddVisitRequest,
@@ -51,12 +52,14 @@ import {
 import type { RedisLike } from "../../../redis.js";
 import { streakHasDay } from "../../gamification/repo.js";
 import { onAttendanceMarked } from "../../gamification/service.js";
+import { dayInTz } from "../../gamification/streak.js";
 import { getUserSyncContext } from "../../users/service.js";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
-import { membersAgainstList } from "../memberList/repo.js";
+import { gymTimeZone, membersAgainstList } from "../memberList/repo.js";
 import { sameName } from "../memberList/samePerson.js";
 import { currentRecordOf } from "../memberList/whose.js";
+import { heldOnListOf } from "../memberships/onList.js";
 import { looksLikePass, makePass, passWindow, readPass, windowEndsAt } from "./pass.js";
 import * as repo from "./repo.js";
 import { decideScan, type ScanPerson, type ScanRead } from "./scanRule.js";
@@ -321,14 +324,66 @@ async function keyTagRead(deps: CheckinDeps, device: repo.DeskDevice, missed: bo
   await deps.redis.decrIfPositive(tagReadsKey(device.deviceId));
 }
 
+// ── WHAT A PERSON HOLDS (23a-ii; spec Part 3 §12.4, §13.2) ──
+// The worst thing this could do to a real person: the desk at the door shows the old
+// file's "Overdue" under somebody who has paid for the membership they hold here. So a
+// status and a payment word reach a screen through `noticeOf` and `heldWords` alone:
+// what the person holds, by the Members list's own rule on the gym's own day, and their
+// record's words only where the app holds nothing for them.
+
+type Words = Pick<CheckinNotice, "status" | "payment">;
+
 interface Named {
   person: ScanPerson;
   who: repo.Who | null;
   name: string;
-  notice: CheckinNotice;
+  /** Their record's own two words, from the gym's list. Never shown as they stand. */
+  listed: Words;
+  onList: boolean;
 }
 
-const NOBODY: Named = { person: { kind: "not_a_member" }, who: null, name: "", notice: { status: null, payment: null, onList: false } };
+const NO_WORDS: Words = { status: null, payment: null };
+const NOBODY: Named = { person: { kind: "not_a_member" }, who: null, name: "", listed: NO_WORDS, onList: false };
+
+/** The two words of each record named that the app answers for (`heldOnList`). */
+async function heldWords(
+  deps: Pick<CheckinDeps, "sql" | "now">,
+  gymId: string,
+  entryIds: readonly string[],
+  timezone?: string,
+): Promise<Map<string, Words>> {
+  const words = new Map<string, Words>();
+  if (entryIds.length === 0) return words;
+  const today = dayInTz(deps.now(), timezone ?? (await gymTimeZone(deps.sql, gymId)));
+  for (const [entryId, { shown }] of await heldOnListOf(deps.sql, gymId, today, entryIds)) {
+    const { status, payment } = heldListWords(shown);
+    words.set(entryId, { status, payment });
+  }
+  return words;
+}
+
+/** The words beside a green tick. The visit is saved before they are read, so a read that
+ *  fails takes the words away and never the tick; the record's own words are not shown in
+ *  their place. */
+async function noticeOf(
+  deps: Pick<CheckinDeps, "sql" | "now" | "log">,
+  gymId: string,
+  timezone: string,
+  named: Named,
+): Promise<CheckinNotice> {
+  const entryId = named.who?.entryId ?? null;
+  if (entryId === null) return { ...named.listed, onList: named.onList };
+  try {
+    const held = (await heldWords(deps, gymId, [entryId], timezone)).get(entryId);
+    return { ...(held ?? named.listed), onList: named.onList };
+  } catch (err: unknown) {
+    deps.log.warn(
+      { event: "checkin.held_words_unread", gymId, errName: err instanceof Error ? err.name : typeof err },
+      "what a checked-in person holds could not be read",
+    );
+    return { ...NO_WORDS, onList: named.onList };
+  }
+}
 const AMBIGUOUS: Named = { ...NOBODY, person: { kind: "ambiguous" } };
 
 /** Who an app account is at this gym: a live member (with the record the list says is
@@ -347,7 +402,8 @@ async function namedByAccount(sql: Sql, gymId: string, userId: string): Promise<
       person: { kind: "member" },
       who: { userId, entryId: words?.id ?? null },
       name: words?.fullName.trim() || account.displayName,
-      notice: { status: words?.status ?? null, payment: words?.payment ?? null, onList: member.onList },
+      listed: { status: words?.status ?? null, payment: words?.payment ?? null },
+      onList: member.onList,
     };
   }
   const records = account.records;
@@ -359,7 +415,8 @@ async function namedByAccount(sql: Sql, gymId: string, userId: string): Promise<
     person: { kind: "member" },
     who: { userId, entryId: own.id },
     name: own.fullName.trim() || account.displayName,
-    notice: { status: own.status, payment: own.payment, onList: true },
+    listed: { status: own.status, payment: own.payment },
+    onList: true,
   };
 }
 
@@ -396,7 +453,8 @@ async function namedRecord(
     person: { kind: "member" },
     who: { userId, entryId: record.id },
     name: record.fullName.trim() || (owner?.fullName ?? ""),
-    notice: { status: record.status, payment: record.payment, onList: true },
+    listed: { status: record.status, payment: record.payment },
+    onList: true,
   };
 }
 
@@ -471,25 +529,26 @@ export async function scan(deps: CheckinDeps, device: repo.DeskDevice, code: str
     return checkinScanResponseSchema.parse({ result: visit.result, gymName });
   }
   const person = { name: visit.named.name };
+  const notice = await noticeOf(deps, gymId, visit.timezone, visit.named);
   if (visit.result === "already") {
     return checkinScanResponseSchema.parse({
       result: "already",
       gymName,
       person,
-      notice: visit.named.notice,
+      notice,
       firstAt: visit.firstAt.toISOString(),
       timezone: device.timezone,
       clockFormat: device.clockFormat,
     });
   }
-  return checkinScanResponseSchema.parse({ result: "checked_in", gymName, person, notice: visit.named.notice });
+  return checkinScanResponseSchema.parse({ result: "checked_in", gymName, person, notice });
 }
 
 type Visit =
   | { result: "fresh_pass_needed" }
   | { result: "not_a_member" }
   | { result: "see_staff" }
-  | { result: "checked_in"; named: Named }
+  | { result: "checked_in"; named: Named; timezone: string }
   | { result: "already"; named: Named; firstAt: Date; timezone: string; clockFormat: GymClockFormat };
 
 type Made = { deviceId: string; markedBy: null } | { deviceId: null; markedBy: string };
@@ -580,7 +639,7 @@ async function writeNamedVisit(deps: CheckinDeps, gymId: string, read: ScanRead,
   });
   if (written === null) return null;
   if (who.userId !== null) await keepStreak(deps, gymId, who.userId, ctx.day, written.inserted || written.joined > 0);
-  return written.inserted ? { result: "checked_in", named } : already(written.firstAt);
+  return written.inserted ? { result: "checked_in", named, timezone: ctx.timezone } : already(written.firstAt);
 }
 
 // ── STAFF, IN THE CONSOLE (16b-ii; spec Part 3 §12.5) ──
@@ -595,6 +654,19 @@ const foundRecord = (record: repo.FoundRecord): CheckinPersonFound => ({
   email: record.email,
   notice: { status: record.status, payment: record.payment, onList: true },
 });
+
+/** The people found, each record saying what its person holds. */
+async function withHeld(deps: CheckinDeps, gymId: string, people: CheckinPersonFound[]): Promise<CheckinPersonFound[]> {
+  const held = await heldWords(
+    deps,
+    gymId,
+    people.flatMap((person) => ("entryId" in person.pick ? [person.pick.entryId] : [])),
+  );
+  return people.map((person) => {
+    const words = "entryId" in person.pick ? held.get(person.pick.entryId) : undefined;
+    return words === undefined ? person : { ...person, notice: { ...words, onList: person.notice.onList } };
+  });
+}
 
 /** Whom staff can check in: the gym's current records, and its members in the app who
  *  have none. A member whose record is current is found as that record, once. */
@@ -643,7 +715,7 @@ export async function findPeople(
     });
   }
   found.sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
-  return checkinPeopleResponseSchema.parse({ people: found.slice(0, CHECKIN_SEARCH_LIMIT) });
+  return checkinPeopleResponseSchema.parse({ people: await withHeld(deps, gymId, found.slice(0, CHECKIN_SEARCH_LIMIT)) });
 }
 
 /** Staff check a person in: the desk's rule, never refused for the hour or a payment
@@ -661,13 +733,14 @@ export async function staffCheckIn(
     "entryId" in pick ? namedByRecord(deps.sql, gymId, pick.entryId) : namedByAccount(deps.sql, gymId, pick.userId);
   const visit = await writeVisit(deps, gymId, { kind: "staff" }, await name(), name, { deviceId: null, markedBy: userId });
   if (visit.result === "checked_in") {
-    return staffCheckinResponseSchema.parse({ result: "checked_in", person: { name: visit.named.name }, notice: visit.named.notice });
+    const notice = await noticeOf(deps, gymId, visit.timezone, visit.named);
+    return staffCheckinResponseSchema.parse({ result: "checked_in", person: { name: visit.named.name }, notice });
   }
   if (visit.result === "already") {
     return staffCheckinResponseSchema.parse({
       result: "already",
       person: { name: visit.named.name },
-      notice: visit.named.notice,
+      notice: await noticeOf(deps, gymId, visit.timezone, visit.named),
       firstAt: visit.firstAt.toISOString(),
       timezone: visit.timezone,
       clockFormat: visit.clockFormat,
@@ -787,21 +860,23 @@ export async function readLog(
 ): Promise<CheckinLogResponse | null> {
   const { privileges } = await requirePrivilege(deps, gymId, userId, "attendance.read");
   if (!(await limit())) return null;
-  // The gym's status and payment words, as the desk shows them, for staff who check people in.
+  // The status and payment words, as the desk shows them, for staff who check people in.
   const withWords = privileges.includes("attendance.mark");
   const log = await repo.logVisits(deps.sql, gymId, since === undefined ? null : new Date(since), CHECKIN_LOG_LIMIT);
   if (log === null) throw new OrgsError(404, "org_not_found", "We couldn't find that organisation.");
+  const records = withWords ? [...new Set(log.visits.flatMap((visit) => (visit.entryId === null ? [] : [visit.entryId])))] : [];
+  const held = await heldWords(deps, gymId, records, log.timezone);
   return checkinLogResponseSchema.parse({
     log: {
       day: log.day,
       timezone: log.timezone,
       clockFormat: log.clockFormat,
-      visits: log.visits.map((visit) => ({
-        ...visit,
-        markedAt: visit.markedAt.toISOString(),
-        status: withWords ? visit.status : null,
-        payment: withWords ? visit.payment : null,
-      })),
+      visits: log.visits.map(({ entryId, ...visit }) => {
+        // What they hold stands whole: a membership that is over has no payment word, and
+        // their record's is not put in its place.
+        const words: Words = !withWords ? NO_WORDS : ((entryId === null ? undefined : held.get(entryId)) ?? visit);
+        return { ...visit, markedAt: visit.markedAt.toISOString(), status: words.status, payment: words.payment };
+      }),
     },
   });
 }

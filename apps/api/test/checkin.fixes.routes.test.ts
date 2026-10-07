@@ -550,7 +550,14 @@ d("check-in, the two extra passes' fixes (real Postgres)", () => {
           },
           get(fn, prop, receiver) {
             if (prop === "begin") {
-              return (run: (tx: TransactionSql) => Promise<unknown>) => (fn as Sql).begin((tx) => run(wrap(tx)));
+              // Both of postgres's forms: begin(body), and begin(options, body) for a read-only snapshot.
+              type Body = (tx: TransactionSql) => Promise<unknown>;
+              return (...given: [Body] | [string, Body]) => {
+                const [first, second] = given;
+                if (typeof first !== "string") return (fn as Sql).begin((tx) => first(wrap(tx)));
+                if (second === undefined) throw new Error("begin was given no body");
+                return (fn as Sql).begin(first, (tx) => second(wrap(tx)));
+              };
             }
             return Reflect.get(fn, prop, receiver) as unknown;
           },
