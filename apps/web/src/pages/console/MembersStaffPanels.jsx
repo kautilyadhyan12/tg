@@ -3,17 +3,16 @@ import { STAFF_ROLE_NAME_MAX } from '@app/shared';
 import { Check, Loader2, Plus, X } from 'lucide-react';
 import { ConfirmInline, ConsoleFailed } from '../../components/console/ConsoleStates';
 import { readOnlyNote } from './billingView';
-import { formatJoinedAt, roleLabel, staffRoleText } from './consoleView';
+import { formatJoinedAt, staffRoleText } from './consoleView';
 import {
   carriedNote,
   carriedPrivileges,
   effectivePrivileges,
   heldPrivileges,
   inviteTicks,
-  otherStaffRole,
   privilegeChoices,
   privilegesDiffer,
-  roleChangeWarning,
+  roleTargets,
   roleTicks,
   staffRoleChoices,
 } from './staffView';
@@ -123,6 +122,13 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
   // Making a role: its name; the boxes below are its ticks.
   const [newRole, setNewRole] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  // A role just saved is chosen in the row of roles, which may be scrolled out of the
+  // panel by then: counted, so the row is brought back into view each time.
+  const [rolesSaved, setRolesSaved] = useState(0);
+  const rolesRow = useRef(null);
+  useEffect(() => {
+    if (rolesSaved > 0) rolesRow.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [rolesSaved]);
 
   const builtIn = staffRoleChoices(orgType);
   const own = roles.find((r) => r.id === role) ?? null;
@@ -151,6 +157,7 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
       setNewRole(null);
       setRole(answer.role.id);
       setTicks([...answer.role.privileges]);
+      setRolesSaved((n) => n + 1);
     } else {
       setNewRole({ name, error: answer.error });
     }
@@ -237,7 +244,7 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
         />
       </div>
 
-      <div className="c-field">
+      <div ref={rolesRow} className="c-field">
         <span id="staff-role-label" className="c-label">
           Role
         </span>
@@ -350,41 +357,46 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
   );
 }
 
-/** A person's role, and the one other role they can be given. The change asks first,
- *  because it resets their ticks to the new role's usual ones: the sentence is
- *  `roleChangeWarning`'s. */
-function RoleSection({ person, orgType, words, off, error, onRetry, onChange }) {
-  const [asking, setAsking] = useState(false);
-  const question = useInView(asking);
-  const next = otherStaffRole(person.role);
-  if (next === null) return null;
-  const make = `Make ${roleLabel(next, orgType).toLowerCase()}`;
+/** A person's role, and a button for each other role they can be given: manager, trainer
+ *  and the gym's own roles (`roleTargets`). A change asks first, because it replaces their
+ *  ticks with the new role's: the question is the target's own. */
+function RoleSection({ person, roles, orgType, words, off, error, onRetry, onChange }) {
+  const [asking, setAsking] = useState(null);
+  const targets = roleTargets(person, roles, orgType);
+  // A role that went from the list while its question was open has no question any more.
+  const target = asking === null ? null : (targets.find((t) => t.key === asking) ?? null);
+  const question = useInView(target !== null);
+  if (person.role === 'owner') return null;
   return (
     <section className="flex flex-col gap-3 pt-5 border-t" style={LINE} data-testid="staff-role">
       <h3 className="c-h3">Role</h3>
-      {!asking ? (
+      {target === null ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="c-s15 c-t1">{staffRoleText(person.role, person.roleName ?? null, words)}</span>
-          <button type="button" onClick={() => setAsking(true)} disabled={off} className="c-btn c-btn-s c-btn-sm">
-            {make}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {targets.map((t) => (
+              <button key={t.key} type="button" onClick={() => setAsking(t.key)} disabled={off} className="c-btn c-btn-s c-btn-sm">
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
       ) : (
         <div ref={question} className="flex flex-col gap-3">
-          <p className="c-s14 c-t1 m-0">{roleChangeWarning(person, next, orgType)}</p>
+          <p className="c-s14 c-t1 m-0">{target.question}</p>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => {
-                setAsking(false);
-                onChange();
+                setAsking(null);
+                onChange(target);
               }}
               disabled={off}
               className="c-btn c-btn-sm c-btn-p"
             >
-              {make}
+              {target.label}
             </button>
-            <button type="button" onClick={() => setAsking(false)} className="c-btn c-btn-sm c-btn-s">
+            <button type="button" onClick={() => setAsking(null)} className="c-btn c-btn-sm c-btn-s">
               Cancel
             </button>
           </div>
@@ -544,7 +556,7 @@ function RemoveSection({ person, words, off, error, onRemove }) {
 /** One person who runs the gym, opened: who they are, their role, what they can do, and
  *  Remove from staff. A change that is refused is said in its own part of the panel,
  *  under the button that was pressed (`error.at`). */
-export function StaffPersonPanel({ person, orgType, words, readOnly, busy, error, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove }) {
+export function StaffPersonPanel({ person, roles, orgType, words, readOnly, busy, error, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove }) {
   const off = busy || readOnly;
   return (
     <Panel label={person.displayName} title={person.displayName} sub={person.email ? <span className="c-s14 c-t2 break-words">{person.email}</span> : null} onClose={onClose}>
@@ -562,7 +574,7 @@ export function StaffPersonPanel({ person, orgType, words, readOnly, busy, error
         {/* The panel covers the page, so it says itself why its controls are grey. */}
         {readOnly ? <p className="c-s14 c-t2 m-0">{readOnlyNote(orgType)}</p> : null}
       </div>
-      <RoleSection person={person} orgType={orgType} words={words} off={off} error={error?.at === 'role' ? error : null} onRetry={onRetry} onChange={onChangeRole} />
+      <RoleSection person={person} roles={roles} orgType={orgType} words={words} off={off} error={error?.at === 'role' ? error : null} onRetry={onRetry} onChange={onChangeRole} />
       <PermissionsSection person={person} orgType={orgType} busy={busy} readOnly={readOnly} error={error?.at === 'ticks' ? error : null} onSave={onSavePrivileges} />
       <RemoveSection person={person} words={words} off={off} error={error?.at === 'remove' ? error : null} onRemove={onRemove} />
     </Panel>

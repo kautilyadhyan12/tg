@@ -16,7 +16,7 @@ import {
   isOwnerOnlyPrivilege,
   isRetiredPrivilege,
   abilityLabels,
-  otherStaffRole,
+  roleTargets,
   privilegeChoices,
   privilegesDiffer,
   roleChangeWarning,
@@ -158,19 +158,59 @@ describe('the roles this screen hands out', () => {
   });
 });
 
-describe('switching somebody between the two roles', () => {
-  it('offers the other one', () => {
-    expect(otherStaffRole('manager')).toBe('trainer');
-    expect(otherStaffRole('trainer')).toBe('manager');
+describe('the roles somebody can be given from their own panel', () => {
+  const FRONT_DESK = { id: 'r-desk', name: 'Front desk', privileges: ['attendance.read'] };
+  const OFFICE = { id: 'r-office', name: 'Office manager', privileges: ['members.read'] };
+  const rita = (more) => ({ displayName: 'Rita Sen', role: 'manager', ...more });
+  const offered = (person, roles, type = 'gym') => roleTargets(person, roles, type).map((t) => [t.label, t.body]);
+
+  it('with no roles of the gym\'s own: the other of manager and trainer, as it always was', () => {
+    expect(offered(rita(), [])).toEqual([['Make trainer', { role: 'trainer' }]]);
+    expect(offered(rita({ role: 'trainer' }), [])).toEqual([['Make manager', { role: 'manager' }]]);
+    expect(offered(rita(), undefined)).toEqual([['Make trainer', { role: 'trainer' }]]);
   });
 
-  it('offers NOTHING for the owner — `updateStaffRole` answers 409 on that row', () => {
-    expect(otherStaffRole('owner')).toBeNull();
+  /** Kd, at 23c-ii's click-through: "i made a new role but ... the new role is not shown
+   *  in the Role". */
+  it('with roles of the gym\'s own: each of them too, sent by its id', () => {
+    expect(offered(rita(), [FRONT_DESK, OFFICE])).toEqual([
+      ['Make trainer', { role: 'trainer' }],
+      ['Make Front desk', { roleId: 'r-desk' }],
+      ['Make Office manager', { roleId: 'r-office' }],
+    ]);
   });
 
-  it('offers nothing for a role it does not know', () => {
-    expect(otherStaffRole('front_desk')).toBeNull();
-    expect(otherStaffRole(null)).toBeNull();
+  it('somebody ON one of them is offered manager, plain trainer and the others, never the one they hold', () => {
+    expect(offered(rita({ role: 'trainer', roleName: 'Front desk' }), [FRONT_DESK, OFFICE])).toEqual([
+      ['Make manager', { role: 'manager' }],
+      ['Make trainer', { role: 'trainer' }],
+      ['Make Office manager', { roleId: 'r-office' }],
+    ]);
+  });
+
+  it('somebody whose own role has since been deleted is offered every role there is', () => {
+    expect(offered(rita({ role: 'trainer', roleName: 'Cleaner' }), [FRONT_DESK])).toEqual([
+      ['Make manager', { role: 'manager' }],
+      ['Make trainer', { role: 'trainer' }],
+      ['Make Front desk', { roleId: 'r-desk' }],
+    ]);
+  });
+
+  it('offers NOTHING for the owner — the server answers 409 on that row — or for a role it does not know', () => {
+    expect(roleTargets(rita({ role: 'owner' }), [FRONT_DESK], 'gym')).toEqual([]);
+    expect(roleTargets(rita({ role: 'front_desk' }), [FRONT_DESK], 'gym')).toEqual([]);
+    expect(roleTargets(null, [FRONT_DESK], 'gym')).toEqual([]);
+  });
+
+  it('asks first in words that say what happens to their permissions, with "an" before a vowel', () => {
+    const [toTrainer, toDesk, toOffice] = roleTargets(rita(), [FRONT_DESK, OFFICE], 'gym');
+    expect(toTrainer.question).toBe('Make Rita Sen a trainer? Their permissions become the defaults for the new role.');
+    expect(toDesk.question).toBe('Make Rita Sen a Front desk? Their permissions become the ones saved for that role.');
+    expect(toOffice.question).toBe('Make Rita Sen an Office manager? Their permissions become the ones saved for that role.');
+  });
+
+  it('calls the third role Coach at a studio', () => {
+    expect(offered(rita(), [], 'studio')).toEqual([['Make coach', { role: 'trainer' }]]);
   });
 });
 

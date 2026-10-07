@@ -9,9 +9,11 @@ import {
   ORG_TYPES_PHRASE,
   PLAN_CANCEL_DECIDE_HOURS,
   SMALLER_SIZE_DECIDE_HOURS,
+  STAFF_INVITE_WORDS,
   currencyForCountry,
   normaliseIndianMobile,
   normaliseJoinCode,
+  orgPrivilegeSchema,
   orgWords,
 } from "@app/shared";
 import * as billingRepo from "../billing/repo.js";
@@ -28,6 +30,7 @@ import { currentRecordOf, pastRecordOf } from "./memberList/whose.js";
 import type { InviteSettings } from "./invites/settings.js";
 import * as listRepo from "./memberList/repo.js";
 import * as repo from "./repo.js";
+import { roleById } from "./staffInvites/repo.js";
 import {
   ORG_PRIVILEGES,
   OWNER_ONLY_PRIVILEGES,
@@ -2075,10 +2078,32 @@ export async function updateOrgStaffRole(
 ): Promise<OrgStaffMutationResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
 
+  // One of the gym's own roles (RULINGS 2026-10-07): read with ITS gym, so another gym's
+  // role is not found. It is a trainer's underneath and shown by its name, and the ticks
+  // saved with it become the person's, as an invitation made with it gives them.
+  const ownRole = "roleId" in input ? await roleById(deps.sql, gymId, input.roleId) : null;
+  if ("roleId" in input && ownRole === null) throw new OrgsError(404, "role_not_found", STAFF_INVITE_WORDS.role_not_found);
+  const role = "roleId" in input ? "trainer" : input.role;
+  const privileges =
+    ownRole === null
+      ? defaultPrivilegesFor(role)
+      : canonicalPrivileges(
+          ownRole.privileges.flatMap((p) => {
+            const known = orgPrivilegeSchema.safeParse(p);
+            return known.success ? [known.data] : [];
+          }),
+        );
+  // A role cannot be saved holding one (`createStaffRole`); refused here too, so no door
+  // puts an owner's tick on a row that is not the owner's.
+  if (privileges.some((privilege) => OWNER_ONLY_PRIVILEGES.includes(privilege))) {
+    throw new OrgsError(409, "owner_only_privilege", STAFF_INVITE_WORDS.owner_only_privilege);
+  }
+
   const outcome = await repo.updateStaffRole(deps.sql, {
     gymId,
     userId: targetUserId,
-    role: input.role,
+    role,
+    roleName: ownRole?.name ?? null,
     // CHANGING THE ROLE RESETS THE TICKS to the new role's defaults, and this is
     // the load-bearing half of the decision rather than a convenience: without
     // it, demoting a manager to trainer would leave every manager tick standing,
@@ -2092,7 +2117,7 @@ export async function updateOrgStaffRole(
     // (an owner tapped it), but the Staff screen's warning must say **"their
     // permissions become the defaults for the new role"** and NOT "your changes
     // will be lost", which describes only the narrowing half.
-    privileges: defaultPrivilegesFor(input.role),
+    privileges,
     actorUserId: userId,
   });
 

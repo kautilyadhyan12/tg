@@ -1,4 +1,4 @@
-import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, STAFF_INVITE_EMAIL_REASON_WORDS, STAFF_INVITE_RESENDS_MAX, orgWords } from '@app/shared';
+import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, STAFF_INVITE_EMAIL_REASON_WORDS, STAFF_INVITE_RESENDS_MAX, orgWords, withArticle } from '@app/shared';
 import { formatJoinedAt, roleLabel } from './consoleView';
 
 // Pure view helpers for Members → Staff (it was Settings' Staff box until 23c-ii) — Part 3 §4.7 ("list,
@@ -99,15 +99,34 @@ export function staffRoleChoices(orgType) {
   ];
 }
 
-/** The role the "switch to…" button offers, or null when there is nothing to
- *  offer. There are exactly two assignable roles, so a change is a single tap
- *  rather than a picker — and an OWNER gets null, because `updateStaffRole`
- *  refuses the owner's row with a 409 and a button that fails is worse than no
- *  button at all. */
-export function otherStaffRole(role) {
-  if (role === 'manager') return 'trainer';
-  if (role === 'trainer') return 'manager';
-  return null;
+/** THE ROLES THIS PERSON CAN BE GIVEN from their own panel: manager and trainer, and the
+ *  gym's own roles (RULINGS 2026-10-07), less the one they hold. Each carries what the
+ *  server is sent (`body`), the button's words and the question asked first. The owner
+ *  gets none: the server refuses their row (`owner_role_locked`).
+ *
+ *  A role of the gym's own is a trainer's underneath, so somebody on one is offered plain
+ *  trainer as well; and one whose own role has since been deleted keeps its name and is
+ *  offered every role there is. */
+export function roleTargets(person, roles, orgType) {
+  if (!canChangeStaff(person)) return [];
+  const ownName = typeof person.roleName === 'string' && person.roleName !== '' ? person.roleName : null;
+  const builtIn = ['manager', 'trainer']
+    .filter((role) => ownName !== null || role !== person.role)
+    .map((role) => ({
+      key: role,
+      body: { role },
+      label: `Make ${roleLabel(role, orgType).toLowerCase()}`,
+      question: roleChangeWarning(person, role, orgType),
+    }));
+  const own = (Array.isArray(roles) ? roles : [])
+    .filter((r) => r.name !== ownName)
+    .map((r) => ({
+      key: r.id,
+      body: { roleId: r.id },
+      label: `Make ${r.name}`,
+      question: `Make ${person.displayName ?? 'them'} ${withArticle(r.name)}? Their permissions become the ones saved for that role.`,
+    }));
+  return [...builtIn, ...own];
 }
 
 /** Does this row get controls?

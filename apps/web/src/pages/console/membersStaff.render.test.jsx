@@ -529,6 +529,79 @@ describe('changing somebody\'s role', () => {
   });
 });
 
+/** Kd, at the click-through: "i made a new role but when i clciked staff in memebrs and go
+ *  to a profile the new role is not shown in the Role". */
+describe("a profile's Role offers the gym's own roles", () => {
+  const FRONT_DESK = { id: '1f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b', name: 'Front desk', privileges: ['attendance.read', 'attendance.mark'] };
+  const OFFICE = { id: '2f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b', name: 'Office manager', privileges: ['members.read'] };
+  const buttons = (panel) =>
+    within(panel.getByTestId('staff-role'))
+      .getAllByRole('button')
+      .map((b) => b.textContent);
+
+  it('a manager is offered trainer and each role of the gym\'s own; with none made, only trainer', async () => {
+    orgService.getStaffRoles.mockResolvedValue({ data: { roles: [FRONT_DESK, OFFICE] } });
+    const panel = await drawPerson();
+    expect(buttons(panel)).toEqual(['Make trainer', 'Make Front desk', 'Make Office manager']);
+    cleanup();
+    orgService.getStaffRoles.mockResolvedValue({ data: { roles: [] } });
+    expect(buttons(await drawPerson())).toEqual(['Make trainer']);
+  });
+
+  it('Make Front desk asks first, then sends that role\'s id, and the panel shows the role and its permissions', async () => {
+    orgService.getStaffRoles.mockResolvedValue({ data: { roles: [FRONT_DESK] } });
+    orgService.getStaff.mockResolvedValueOnce({ data: { staff: [OWNER, MANAGER] } });
+    const panel = await drawPerson();
+    fireEvent.click(panel.getByLabelText(/^Remove members/));
+    orgService.getStaff.mockResolvedValue({
+      data: { staff: [OWNER, { ...MANAGER, role: 'trainer', roleName: 'Front desk', privileges: [...FRONT_DESK.privileges] }] },
+    });
+    fireEvent.click(panel.getByRole('button', { name: 'Make Front desk' }));
+    expect(panel.getByText('Make Rita Sen a Front desk? Their permissions become the ones saved for that role.')).toBeTruthy();
+    expect(orgService.updateStaffRole).not.toHaveBeenCalled();
+    fireEvent.click(panel.getByRole('button', { name: 'Make Front desk' }));
+    await waitFor(() => expect(orgService.updateStaffRole).toHaveBeenCalledTimes(1));
+    expect(orgService.updateStaffRole).toHaveBeenCalledWith(ORG.id, 'u2', { roleId: FRONT_DESK.id });
+    // Read back: the role by its name, the boxes that role holds, and no edit left over.
+    await waitFor(() => expect(buttons(panel)).toEqual(['Make manager', 'Make trainer']));
+    expect(within(panel.getByTestId('staff-role')).getByText('Front desk')).toBeTruthy();
+    expect(panel.getByLabelText(/^Check people in/).checked).toBe(true);
+    expect(panel.getByLabelText(/^Keep the member list and invite/).checked).toBe(false);
+    expect(panel.getByRole('button', { name: 'Save permissions' }).disabled).toBe(true);
+    expect(orgService.updateStaffPrivileges).not.toHaveBeenCalled();
+  });
+
+  it('somebody on one of them is offered manager, plain trainer and the others, and plain trainer sends the role itself', async () => {
+    orgService.getStaffRoles.mockResolvedValue({ data: { roles: [FRONT_DESK, OFFICE] } });
+    orgService.getStaff.mockResolvedValue({
+      data: { staff: [OWNER, { ...MANAGER, role: 'trainer', roleName: 'Front desk', privileges: [...FRONT_DESK.privileges] }] },
+    });
+    const panel = await drawPerson();
+    expect(buttons(panel)).toEqual(['Make manager', 'Make trainer', 'Make Office manager']);
+    fireEvent.click(panel.getByRole('button', { name: 'Make trainer' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Make trainer' }));
+    await waitFor(() => expect(orgService.updateStaffRole).toHaveBeenCalledWith(ORG.id, 'u2', { role: 'trainer' }));
+  });
+
+  it('a role somebody deleted meanwhile: the server\'s sentence under the buttons, and its button goes', async () => {
+    orgService.getStaffRoles.mockResolvedValueOnce({ data: { roles: [FRONT_DESK] } });
+    orgService.getStaffRoles.mockResolvedValue({ data: { roles: [] } });
+    orgService.updateStaffRole.mockRejectedValue(apiError(404, 'role_not_found', "That role isn't one of yours any more."));
+    const panel = await drawPerson();
+    fireEvent.click(panel.getByRole('button', { name: 'Make Front desk' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Make Front desk' }));
+    expect(await within(panel.getByTestId('staff-role')).findByText("That role isn't one of yours any more.")).toBeTruthy();
+    await waitFor(() => expect(buttons(panel)).toEqual(['Make trainer']));
+  });
+
+  it('a gym with no live plan: every one of them is greyed', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, subscription: null, consoleReadOnly: true }] } });
+    orgService.getStaffRoles.mockResolvedValue({ data: { roles: [FRONT_DESK] } });
+    const panel = await drawPerson();
+    for (const button of within(panel.getByTestId('staff-role')).getAllByRole('button')) expect(button.disabled).toBe(true);
+  });
+});
+
 // ── Remove from staff ───────────────────────────────────────────────────────
 
 describe('Remove from staff', () => {

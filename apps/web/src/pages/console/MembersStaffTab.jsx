@@ -5,7 +5,7 @@ import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { staffRoleText } from './consoleView';
 import { StaffInvitePanel, StaffPersonPanel } from './MembersStaffPanels';
-import { otherStaffRole, privilegesDiffer, sentAgainNotice, staffCountLabel, staffInviteView, staffSeatsNote } from './staffView';
+import { privilegesDiffer, sentAgainNotice, staffCountLabel, staffInviteView, staffSeatsNote } from './staffView';
 
 // The Members screen's Staff tab (spec Part 3 §10.3, §18; ROADMAP 4a-ii, 23c-ii): everyone
 // who runs the gym, the owner first, and the invitations still out. Invite staff opens the
@@ -175,15 +175,19 @@ export default function MembersStaffTab({ gymId, orgType, words, readOnly = fals
     void read();
   };
 
-  const changeRole = async (person) => {
-    const next = otherStaffRole(person.role);
-    if (next === null) return;
+  // `target`: one of `roleTargets`: manager or trainer (`{ role }`), or one of the gym's
+  // own roles (`{ roleId }`).
+  const changeRole = async (person, target) => {
     setBusyId(person.userId);
     setPanelError(null);
     try {
-      await orgService.updateStaffRole(gymId, person.userId, { role: next });
+      await orgService.updateStaffRole(gymId, person.userId, target.body);
     } catch (err) {
-      setPanelError({ at: 'role', message: errorText(err, "We couldn't change their role. Please try again."), retryable: isRetryable(err) });
+      // A role somebody deleted meanwhile: the roles are read again here, so its button
+      // goes, and there is nothing left for Try again to do.
+      const roleGone = errorCode(err) === 'role_not_found';
+      setPanelError({ at: 'role', message: errorText(err, "We couldn't change their role. Please try again."), retryable: !roleGone && isRetryable(err) });
+      if (roleGone) await read();
       setBusyId(null);
       return;
     }
@@ -409,6 +413,7 @@ export default function MembersStaffTab({ gymId, orgType, words, readOnly = fals
         <StaffPersonPanel
           key={open.userId}
           person={open}
+          roles={roles}
           orgType={orgType}
           words={words}
           readOnly={readOnly}
@@ -419,7 +424,7 @@ export default function MembersStaffTab({ gymId, orgType, words, readOnly = fals
             setPanelError(null);
             setOpenId(null);
           }}
-          onChangeRole={() => changeRole(open)}
+          onChangeRole={(target) => changeRole(open, target)}
           onSavePrivileges={(privileges) => savePrivileges(open, privileges)}
           onRemove={(options) => remove(open, options)}
         />
