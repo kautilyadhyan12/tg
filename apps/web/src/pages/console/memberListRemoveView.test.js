@@ -50,7 +50,7 @@ describe('who changes, and the button', () => {
       [
         'keepConsole',
         '1 of them keeps their staff access',
-        'They can still open the console. To remove someone from staff too, use Settings, Staff, or Remove on their own panel.',
+        'They can still open the console. To remove someone from staff too, use the Staff tab, or Remove on their own panel.',
       ],
     ]);
   });

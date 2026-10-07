@@ -4,24 +4,23 @@
 // server refuses — a role it will not assign, a button on a row it will not
 // change, a count nobody can act on — or say something that is not true.
 import { describe, expect, it } from 'vitest';
-import { ROLE_PRIVILEGES } from '@app/shared';
+import { ORG_PRIVILEGES, ROLE_PRIVILEGES } from '@app/shared';
 import {
   staffRoleChoices,
   staffSeatsNote,
   canChangeStaff,
   canManageStaff,
+  carriedNote,
+  carriedPrivileges,
   effectivePrivileges,
   isOwnerOnlyPrivilege,
   isRetiredPrivilege,
-  retiredPrivileges,
   abilityLabels,
   otherStaffRole,
   privilegeChoices,
   privilegesDiffer,
   roleChangeWarning,
   staffCountLabel,
-  unknownPrivileges,
-  unknownPrivilegesNote,
 } from './staffView';
 
 /** RE-EXPRESSED, NOT DELETED (T3 round 1's re-review, L-1): this gate used to
@@ -196,13 +195,13 @@ describe('which rows get controls', () => {
 
 describe('how many people run the gym', () => {
   it('counts the whole list, because the endpoint has no cursor and no limit', () => {
-    expect(staffCountLabel([{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }])).toBe(
-      '3 people run this gym',
+    expect(staffCountLabel([{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }], 'gym')).toBe(
+      '3 people run your gym',
     );
   });
 
   it('says it in the singular for one', () => {
-    expect(staffCountLabel([{ userId: 'a' }])).toBe('1 person runs this gym');
+    expect(staffCountLabel([{ userId: 'a' }], 'studio')).toBe('1 person runs your studio');
   });
 
   it('says NOTHING when the list could not be read, rather than claiming nobody runs it', () => {
@@ -341,8 +340,8 @@ describe('what a row shows as ticked', () => {
    *  when the api minted `attendance.read` (:28107), which is precisely the
    *  web-older-than-api window the fallback exists for. `effectivePrivileges`
    *  deliberately draws only what `PRIVILEGE_COPY` can NAME; anything else is
-   *  carried untouched by `unknownPrivileges` and announced by
-   *  `unknownPrivilegesNote`. So the old assertion was true only while the two
+   *  carried untouched by `carriedPrivileges` and announced by
+   *  `carriedNote`. So the old assertion was true only while the two
    *  sides were in step — which is the one condition under which this guarantee
    *  is not needed.
    *
@@ -390,31 +389,50 @@ describe('what a row shows as ticked', () => {
     expect(drawable).not.toContain(NEVER_MINTED);
 
     const person = { role: 'trainer', privileges: [...ROLE_PRIVILEGES.trainer, NEVER_MINTED] };
-    expect(unknownPrivileges(person)).toEqual([NEVER_MINTED]);
-    expect(unknownPrivilegesNote(person)).not.toBeNull();
+    expect(carriedPrivileges(person, 'gym')).toContain(NEVER_MINTED);
+    expect(carriedNote(person, 'gym')).not.toBeNull();
   });
 
-  it('draws a tick box for every privilege the api grants a trainer — nothing is silently unnameable', () => {
-    // THE POSITIVE CONTROL, and it is what stops the case above going vacuous.
-    // A synthetic token proves the CARRY path works; it says nothing about
-    // whether a REAL privilege has been left without words. This asserts the
-    // other half: everything the api actually grants a trainer can be drawn and
-    // is therefore NOT reported as unknown.
-    //
-    // **It goes red if somebody deletes a tick box** — including the
-    // `attendance.read` one Kd's ruling 18 requires, without which "the owner
-    // can change it" is a sentence with no control behind it (:28107).
-    const drawable = privilegeChoices('trainer').map((c) => c.value);
-    for (const granted of ROLE_PRIVILEGES.trainer.filter((p) => !isRetiredPrivilege(p))) {
+  /** The positive control for the case above: a synthetic token proves the carry works,
+   *  and says nothing about whether a REAL permission has been left without a box.
+   *  `schedule.manage` was: a manager has held it since 17b-i and had no box until
+   *  23c-ii, so every manager's panel said they held a permission the screen could not
+   *  show. This goes red the day a role is given something its own row cannot draw. */
+  it.each(['owner', 'manager', 'trainer'])('draws a tick box for every permission the api grants a %s', (role) => {
+    const drawable = privilegeChoices(role, 'gym').map((c) => c.value);
+    for (const granted of ROLE_PRIVILEGES[role].filter((p) => !isRetiredPrivilege(p))) {
       expect(drawable).toContain(granted);
     }
-    const person = { role: 'trainer', privileges: [...ROLE_PRIVILEGES.trainer] };
-    expect(unknownPrivileges(person)).toEqual([]);
-    expect(unknownPrivilegesNote(person)).toBeNull();
+    const person = { role, privileges: [...ROLE_PRIVILEGES[role]] };
+    expect(carriedPrivileges(person, 'gym').filter((p) => !isRetiredPrivilege(p))).toEqual([]);
+    expect(carriedNote(person, 'gym')).toBeNull();
+  });
+
+  /** And the same for the whole vocabulary: a permission added to the server with no words
+   *  here turns this red, rather than turning up as "a permission this screen has no box
+   *  for" on the owner's own row. */
+  it('has words, on the owner\'s row, for every permission the server knows', () => {
+    const drawable = privilegeChoices('owner', 'gym').map((c) => c.value);
+    expect([...drawable, 'codes.invite', 'codes.manage'].sort()).toEqual([...ORG_PRIVILEGES].sort());
+  });
+
+  /** The two the owner holds by default are drawn on the owner's row and offered to nobody
+   *  else from this screen. */
+  it('offers the gym-details and billing ticks to nobody but the owner', () => {
+    for (const role of ['manager', 'trainer']) {
+      const drawable = privilegeChoices(role, 'gym').map((c) => c.value);
+      expect(drawable).not.toContain('org.manage');
+      expect(drawable).not.toContain('billing.manage');
+      expect(drawable).toContain('schedule.manage');
+    }
+    const owner = Object.fromEntries(privilegeChoices('owner', 'studio').map((c) => [c.value, c.label]));
+    expect(owner['org.manage']).toBe('Change studio details');
+    expect(owner['billing.manage']).toBe('Manage the plan and billing');
+    expect(owner['schedule.manage']).toBe('Run classes and personal training');
   });
 
   // Join codes are switched off (ROADMAP 3c): their two ticks get no box, are not
-  // "permissions this screen is too old to show", and a save keeps them.
+  // counted as "permissions this screen has no box for", and a save keeps them.
   it('draws no box for the join code ticks, and keeps them on the person', () => {
     for (const role of ['owner', 'manager', 'trainer']) {
       const drawable = privilegeChoices(role).map((c) => c.value);
@@ -422,9 +440,8 @@ describe('what a row shows as ticked', () => {
       expect(drawable).not.toContain('codes.manage');
     }
     const person = { role: 'trainer', privileges: ['members.read', 'codes.invite', 'codes.manage', 'attendance.read'] };
-    expect(retiredPrivileges(person)).toEqual(['codes.invite', 'codes.manage']);
-    expect(unknownPrivileges(person)).toEqual([]);
-    expect(unknownPrivilegesNote(person)).toBeNull();
+    expect(carriedPrivileges(person, 'gym')).toEqual(['codes.invite', 'codes.manage']);
+    expect(carriedNote(person, 'gym')).toBeNull();
     expect(abilityLabels(ROLE_PRIVILEGES.manager, 'gym').join(' · ')).not.toMatch(/code/i);
   });
 
@@ -458,34 +475,58 @@ describe('what a row shows as ticked', () => {
   });
 });
 
-/** A NEWER SERVER CAN SEND A TICK THIS BUILD HAS NO WORDS FOR, and the save is
- *  the WHOLE set — so without this the box an owner never saw would be stripped
- *  from that person by a save they thought only changed one thing. `OWED.md`
- *  already schedules a BILLING tick, so this is a near case, not a hypothetical. */
-describe('a permission this screen is too old to know', () => {
-  it('is picked out rather than silently dropped', () => {
-    expect(
-      unknownPrivileges({ role: 'manager', privileges: ['members.read', 'billing.manage'] }),
-    ).toEqual(['billing.manage']);
+/** THE SAVE IS THE WHOLE SET, so a tick held with no box on the row would be stripped from
+ *  that person by a save their owner thought changed one thing. Every such tick is carried. */
+describe('the ticks a save carries through', () => {
+  it('carries a tick that has no box on this row: one the owner holds by default, and one this build has no words for', () => {
+    expect(carriedPrivileges({ role: 'manager', privileges: ['members.read', 'billing.manage'] }, 'gym')).toEqual(['billing.manage']);
+    expect(carriedPrivileges({ role: 'trainer', privileges: ['org.manage', 'tv_token', 'members.read'] }, 'gym')).toEqual(['org.manage', 'tv_token']);
   });
 
-  it('is not something the tick list pretends to show', () => {
-    const shown = effectivePrivileges({ role: 'manager', privileges: ['billing.manage'] });
-    expect(shown).toEqual([]);
+  it('carries nothing that HAS a box: those are sent as the boxes stand', () => {
+    expect(carriedPrivileges({ role: 'manager', privileges: ['members.read', 'schedule.manage', 'members.remove'] }, 'gym')).toEqual([]);
   });
 
-  it('is SAID, in the singular and the plural', () => {
-    expect(unknownPrivilegesNote({ role: 'manager', privileges: ['billing.manage'] })).toMatch(
-      /1 permission/,
+  /** The server refuses "Manage staff" on a row that is not the owner's, so carrying it
+   *  would make every save of that row fail. */
+  it('drops "Manage staff" from a row that is not the owner\'s, and keeps it on the owner\'s', () => {
+    expect(carriedPrivileges({ role: 'manager', privileges: ['members.read', 'staff.manage'] }, 'gym')).toEqual([]);
+    expect(carriedPrivileges({ role: 'owner', privileges: [...ROLE_PRIVILEGES.owner] }, 'gym')).toEqual(['codes.invite', 'codes.manage']);
+  });
+
+  /** A server that sends no set: the person holds what their role gives, and a save must
+   *  send all of it. It lost the timetable tick before 23c-ii. */
+  it.each(['manager', 'trainer'])('a %s the server sent no set for keeps everything the role gives across a save', (role) => {
+    const person = { role };
+    const offered = privilegeChoices(role, 'gym').map((c) => c.value);
+    const boxes = effectivePrivileges(person).filter((p) => offered.includes(p));
+    expect([...boxes, ...carriedPrivileges(person, 'gym')].sort()).toEqual([...ROLE_PRIVILEGES[role]].sort());
+  });
+
+  it('a non-array set carries nothing odd, and a row with no role carries nothing', () => {
+    expect(carriedPrivileges({ role: 'manager', privileges: [null, 7, 'tv_token'] }, 'gym')).toEqual(['tv_token']);
+    expect(carriedPrivileges(null, 'gym')).toEqual([]);
+  });
+
+  it('is SAID, in the singular and the plural, and that a save leaves it alone', () => {
+    expect(carriedNote({ role: 'manager', privileges: ['billing.manage'] }, 'gym')).toBe(
+      'They also have 1 permission this screen has no box for. Saving leaves it alone.',
     );
-    expect(
-      unknownPrivilegesNote({ role: 'manager', privileges: ['billing.manage', 'tv_token'] }),
-    ).toMatch(/2 permissions/);
+    expect(carriedNote({ role: 'manager', privileges: ['billing.manage', 'tv_token'] }, 'gym')).toBe(
+      'They also have 2 permissions this screen has no box for. Saving leaves them alone.',
+    );
+  });
+
+  it('on the owner\'s row, which is never saved, says only that there are more, and "You" to the owner themselves', () => {
+    const owner = { role: 'owner', privileges: [...ROLE_PRIVILEGES.owner, 'tv_token'] };
+    expect(carriedNote(owner, 'gym')).toBe('They also have 1 permission this screen has no box for.');
+    expect(carriedNote({ ...owner, isYou: true }, 'gym')).toBe('You also have 1 permission this screen has no box for.');
   });
 
   it('says nothing at all when there is nothing to say', () => {
-    expect(unknownPrivilegesNote({ role: 'manager', privileges: ['members.read'] })).toBeNull();
-    expect(unknownPrivilegesNote({ role: 'manager' })).toBeNull();
+    expect(carriedNote({ role: 'manager', privileges: ['members.read'] }, 'gym')).toBeNull();
+    expect(carriedNote({ role: 'manager' }, 'gym')).toBeNull();
+    expect(carriedNote({ role: 'owner', privileges: [...ROLE_PRIVILEGES.owner] }, 'gym')).toBeNull();
   });
 });
 

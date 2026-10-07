@@ -38,9 +38,10 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getStartHere: vi.fn(),
       getAttendanceDay: vi.fn(),
       getStaff: vi.fn(),
-      // Settings → Staff reads its invitations (4a-i); the console's front page, the person's own.
+      // Members → Staff reads its invitations (4a-i); the console's front page, the person's own.
       getStaffInvites: vi.fn(() => Promise.resolve({ data: { invites: [] } })),
       getStaffRoles: vi.fn(() => Promise.resolve({ data: { roles: [] } })),
+      updateStaffPrivileges: vi.fn(),
       getMyStaffInvitations: vi.fn(() => Promise.resolve({ data: { address: 'a@example.com', addressProved: true, invitations: [] } })),
       getPlans: vi.fn(),
       startTrial: vi.fn(),
@@ -115,8 +116,8 @@ const MEMBER_ID = '22222222-2222-2222-2222-222222222222';
  *  `ROLE_PRIVILEGES.manager` is `members.read`, `codes.invite`, `codes.manage`,
  *  `members.confirm`, `members.remove` — and stops there.
  *
- *  **`staff.manage` and `org.manage` are here to MOUNT the two Settings panels**,
- *  which `Settings.jsx` does not draw without them — and neither is a tick a
+ *  **`staff.manage` and `org.manage` are here to MOUNT the Staff tab on Members and
+ *  the Settings panels**, which are not drawn without them — and neither is a tick a
  *  real manager can carry. `staff.manage` is in `OWNER_ONLY_PRIVILEGES`, so the
  *  server answers 409 `owner_only_privilege` on a non-owner row. `org.manage`
  *  is grantable in principle (:11429 rule 3) but **has no tick box on the Staff
@@ -735,85 +736,78 @@ describe('the gym’s details', () => {
   });
 });
 
+// Members → Staff since 23c-ii; it was a box in Settings.
+const drawStaffTab = () => renderConsole(Members, '/console/iron-house/members?view=staff');
+/** Press a person's row: their panel. */
+async function openStaffPerson(id, name) {
+  (await screen.findByTestId(`staff-tab-${id}`)).click();
+  return within(await screen.findByRole('dialog', { name }));
+}
+
 describe('the staff list', () => {
   it('is still readable, and every way of changing it is greyed', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
-    renderConsole(Settings, '/console/iron-house/settings');
+    drawStaffTab();
 
-    await openSection('staff');
     expect(await screen.findByText('Dev Roy')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /invite staff/i }).disabled).toBe(true);
-    // The trainer's row carries both: a role change and a removal.
-    expect(screen.getByRole('button', { name: /make manager/i }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: /^remove$/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Invite staff' }).disabled).toBe(true);
     expect(screen.getAllByText(READ_ONLY_NOTE).length).toBeGreaterThan(0);
+    // The trainer's panel carries both: a role change and a removal. It covers the page,
+    // so the reason is said inside it too.
+    const panel = await openStaffPerson('u-trainer', 'Dev Roy');
+    expect(panel.getByRole('button', { name: 'Make manager' }).disabled).toBe(true);
+    expect(panel.getByRole('button', { name: 'Remove from staff' }).disabled).toBe(true);
+    expect(panel.getByText(READ_ONLY_NOTE)).toBeTruthy();
   });
 
   it('greys the tick boxes as well, since saving them is refused too', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
-    renderConsole(Settings, '/console/iron-house/settings');
+    drawStaffTab();
 
-    await openSection('staff');
-    await screen.findByText('Dev Roy');
-    // **THE TRAINER'S ROW, NEVER THE FIRST ONE ON SCREEN.** The first row is the
-    // OWNER's, whose ticks are permanently read-only for an unrelated reason — a
-    // gym has to keep somebody who can hand out the keys. A draft of this test
-    // took `[0]` and PASSED against code with the read-only prop deleted, which
-    // is a green liar of my own making (:5348 rule 4) and the reason both
-    // tick-box cases below are scoped to a row that has no other lock on it.
-    const trainerRow = screen.getByTestId('staff-u-trainer');
-    within(trainerRow).getByRole('button', { name: /what they can do/i }).click();
-
-    const boxes = within(await screen.findByTestId('privileges-u-trainer')).getAllByRole('checkbox');
+    // **THE TRAINER, NEVER THE OWNER.** The owner's ticks are permanently read-only for
+    // an unrelated reason — a gym has to keep somebody who can manage its staff. A draft
+    // of this test took the first person and PASSED against code with the read-only prop
+    // deleted, which is why both tick-box cases here open somebody with no other lock.
+    const panel = await openStaffPerson('u-trainer', 'Dev Roy');
+    const ticks = within(panel.getByTestId('privileges-u-trainer'));
+    const boxes = ticks.getAllByRole('checkbox');
     expect(boxes.length).toBeGreaterThan(0);
     for (const box of boxes) expect(box.disabled).toBe(true);
     // And the way to save them is gone too, not merely the boxes.
-    expect(
-      within(screen.getByTestId('privileges-u-trainer')).getByRole('button', {
-        name: /save permissions/i,
-      }).disabled,
-    ).toBe(true);
+    expect(ticks.getByRole('button', { name: 'Save permissions' }).disabled).toBe(true);
   });
 
   it('leaves all of it live on a paying gym — the positive control', async () => {
     orgService.getMine.mockResolvedValue(mineIs(PAYING));
-    renderConsole(Settings, '/console/iron-house/settings');
+    drawStaffTab();
 
-    await openSection('staff');
-    await screen.findByText('Dev Roy');
-    expect(screen.getByRole('button', { name: /invite staff/i }).disabled).toBe(false);
-    expect(screen.getByRole('button', { name: /make manager/i }).disabled).toBe(false);
-    expect(screen.getByRole('button', { name: /^remove$/i }).disabled).toBe(false);
+    expect(await screen.findByText('Dev Roy')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Invite staff' }).disabled).toBe(false);
+    const panel = await openStaffPerson('u-trainer', 'Dev Roy');
+    expect(panel.getByRole('button', { name: 'Make manager' }).disabled).toBe(false);
+    expect(panel.getByRole('button', { name: 'Remove from staff' }).disabled).toBe(false);
     expect(screen.queryByText(READ_ONLY_NOTE)).toBeNull();
 
-    // The TRAINER's row again, for the reason spelled out in the lapsed case.
-    within(screen.getByTestId('staff-u-trainer'))
-      .getByRole('button', { name: /what they can do/i })
-      .click();
-    const boxes = within(await screen.findByTestId('privileges-u-trainer')).getAllByRole('checkbox');
+    const boxes = within(panel.getByTestId('privileges-u-trainer')).getAllByRole('checkbox');
     expect(boxes.length).toBeGreaterThan(0);
     for (const box of boxes) expect(box.disabled).toBe(false);
   });
 
   it('keeps the OWNER’s ticks read-only on a PAYING gym, which is a different lock', async () => {
-    // Two locks now live in one component and they must not be confused: the
-    // owner's row can never be edited (a gym has to keep somebody who can hand
-    // out the keys), and that is true whatever the gym's plan is doing. If the
-    // rename of the local `readOnly` had gone wrong, this is what would catch it.
+    // Two locks live in one panel and they must not be confused: the owner's row can
+    // never be edited (a gym has to keep somebody who can manage its staff), and that is
+    // true whatever the gym's plan is doing.
     orgService.getMine.mockResolvedValue(mineIs(PAYING));
-    renderConsole(Settings, '/console/iron-house/settings');
+    drawStaffTab();
 
-    await openSection('staff');
-    await screen.findByText('Aisha Khan');
-    const ownerRow = screen.getByTestId('staff-u-owner');
-    within(ownerRow).getByRole('button', { name: /what they can do/i }).click();
-
-    const ownerTicks = await screen.findByTestId('privileges-u-owner');
-    for (const box of within(ownerTicks).getAllByRole('checkbox')) {
+    const panel = await openStaffPerson('u-owner', 'Aisha Khan');
+    const ownerTicks = within(panel.getByTestId('privileges-u-owner'));
+    for (const box of ownerTicks.getAllByRole('checkbox')) {
       expect(box.disabled).toBe(true);
     }
-    expect(within(ownerTicks).getByText(/hand out the keys/i)).toBeTruthy();
-    expect(within(ownerTicks).queryByRole('button', { name: /save permissions/i })).toBeNull();
+    expect(ownerTicks.getByText(/can't be changed here/i)).toBeTruthy();
+    expect(ownerTicks.queryByRole('button', { name: 'Save permissions' })).toBeNull();
+    expect(panel.queryByText(READ_ONLY_NOTE)).toBeNull();
   });
 });
 
@@ -931,28 +925,45 @@ describe('a step already open when the gym lapses', () => {
   });
 
   it('greys the invite form Send invitation, its email box and its role buttons', async () => {
-    // **NOBODY CAN REACH THIS IN A BROWSER TODAY** — the Staff section is gated
-    // on `staff.manage`, which only an owner's row may carry, and an owner of a
-    // lapsed gym meets `PlanModal` instead of Settings. It is fixed and pinned
+    // **NOBODY CAN REACH THIS IN A BROWSER TODAY** — the Staff tab is gated on
+    // `staff.manage`, which only an owner's row may carry, and an owner of a
+    // lapsed gym meets `PlanModal` instead of the page. It is fixed and pinned
     // anyway: the guard costs one expression, and the two things that would make
     // it reachable (a second owner, delegated staff management) both have live
     // `OWED.md` lines. This case is the record that it was never observed.
     orgService.getMine.mockResolvedValue(mineIs(PAYING));
-    renderConsole(Settings, '/console/iron-house/settings');
+    drawStaffTab();
 
-    await openSection('staff');
     await screen.findByText('Dev Roy');
-    screen.getByRole('button', { name: /invite staff/i }).click();
-
-    const add = await screen.findByRole('button', { name: /^send invitation$/i });
-    expect(add.disabled).toBe(false);
+    screen.getByRole('button', { name: 'Invite staff' }).click();
+    const form = within(await screen.findByRole('dialog', { name: 'Invite staff' }));
+    expect(form.getByRole('button', { name: 'Send invitation' }).disabled).toBe(false);
 
     await theGymLapsesUnderTheScreen();
 
-    expect(screen.getByRole('button', { name: /^send invitation$/i }).disabled).toBe(true);
-    expect(screen.getByLabelText(/their email address/i).disabled).toBe(true);
-    expect(screen.getByRole('radio', { name: /trainer/i }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: /^cancel$/i }).disabled).toBe(false);
+    expect(form.getByRole('button', { name: 'Send invitation' }).disabled).toBe(true);
+    expect(form.getByLabelText(/their email address/i).disabled).toBe(true);
+    expect(form.getByRole('radio', { name: 'Trainer' }).disabled).toBe(true);
+    expect(form.getByRole('button', { name: 'Cancel' }).disabled).toBe(false);
+    expect(form.getByText(READ_ONLY_NOTE)).toBeTruthy();
+  });
+
+  it('greys Save permissions under an edit already made, and the boxes above it', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(PAYING));
+    drawStaffTab();
+
+    const panel = await openStaffPerson('u-trainer', 'Dev Roy');
+    const ticks = within(panel.getByTestId('privileges-u-trainer'));
+    ticks.getByLabelText(/^Check people in/).click();
+    await waitFor(() => expect(ticks.getByRole('button', { name: 'Save permissions' }).disabled).toBe(false));
+
+    await theGymLapsesUnderTheScreen();
+
+    expect(ticks.getByRole('button', { name: 'Save permissions' }).disabled).toBe(true);
+    for (const box of ticks.getAllByRole('checkbox')) expect(box.disabled).toBe(true);
+    expect(panel.getByRole('button', { name: 'Remove from staff' }).disabled).toBe(true);
+    expect(panel.getByText(READ_ONLY_NOTE)).toBeTruthy();
+    expect(orgService.updateStaffPrivileges).not.toHaveBeenCalled();
   });
 });
 
@@ -1001,9 +1012,10 @@ describe('a step already open when the gym lapses', () => {
  *  It asserts BOTH directions per panel, because a component that printed the
  *  sentence unconditionally would satisfy the lapsed half alone (:7104's PG1). */
 describe('every Settings panel that greys a control explains itself, in its own section', () => {
-  const GREYING_SECTIONS = ['gym details', "when we're open", 'check-in devices', 'follow-up emails to leads', 'staff'];
+  // Staff left Settings for Members → Staff (23c-ii); its own cases are "the staff list" above.
+  const GREYING_SECTIONS = ['gym details', "when we're open", 'check-in devices', 'follow-up emails to leads'];
 
-  it('draws exactly these five sections and no sixth one nobody is checking', async () => {
+  it('draws exactly these four sections and no fifth one nobody is checking', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
     renderConsole(Settings, '/console/iron-house/settings');
     await screen.findByTestId('console-banner');

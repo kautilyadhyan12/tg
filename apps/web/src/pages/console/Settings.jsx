@@ -5,34 +5,22 @@ import GymDetailsPanel from '../../components/console/GymDetailsPanel';
 import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
 import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
-import StaffPanel from '../../components/console/StaffPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
 import { SETTINGS_SECTION } from './startHereView';
-import { canManageStaff } from './staffView';
 import { canManageSchedule } from './classesView';
 import { canManageOrg } from './gymDetailsView';
 import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
 
-// SETTINGS — Part 3 §3.1's sixth nav item, and §4.7 is what belongs on it:
-// Profile · Codes · Privacy · Notifications · Staff.
+// SETTINGS — Part 3 §3.1's sixth nav item: the gym's own details, when it is open, class
+// bookings, the front desk's devices and the follow-up emails to leads. What the gym
+// sells is the Memberships page (23c-i) and its staff are on Members → Staff (23c-ii).
 //
-// IT NOW CARRIES TWO OF THEM: the gym's own details (§4.7's "Profile") and
-// Staff. Profile arrived on 2026-08-26 with `PATCH /v1/orgs/:gymId` — until that
-// morning the gym row was insert-only and the comment here said so.
-// Notifications still has no server side whatsoever, and Privacy's §2.4 sheet is
-// built for the MEMBER's side of the door rather than the console's. Each has
-// its own owed line. A greyed heading for an unbuilt section is a promise on
-// screen, which is the same call `ConsoleLayout` makes about the four nav items
-// it does not draw.
-//
-// THE TWO SECTIONS ARE GATED SEPARATELY, on the two privileges the server gates
-// them with. Both are the owner's by default, and an owner may tick either
-// across to a manager (:11429 rule 3) — so a person holding one and not the
-// other sees exactly the section they can use, rather than a screen that decides
-// on a job title. Hiding is not the enforcement (R3.3): the server refuses every
+// EACH SECTION IS GATED ON THE PRIVILEGE THE SERVER GATES IT WITH, so a person holding
+// one and not another sees exactly the sections they can use, rather than a screen that
+// decides on a job title. Hiding is not the enforcement (R3.3): the server refuses every
 // request either way.
 //
 // CODES ARE THE ONE EXCEPTION AND THEY ARE NOT MOVED. §4.7 lists them here;
@@ -45,7 +33,7 @@ import { viewerPrivileges } from './consoleView';
 export default function Settings() {
   const { orgSlug } = useParams();
   const { loading, error, org, notFound, reload } = useConsoleOrg(orgSlug);
-  // A link that names a section ("#staff") opens the page there, with it open.
+  // A link that names a section ("#opening-hours") opens the page there, with it open.
   const section = useSectionLink(!loading && error === null && !notFound);
 
   if (loading) {
@@ -81,7 +69,6 @@ export default function Settings() {
 
   const privileges = viewerPrivileges(org);
   const canEditGym = canManageOrg(privileges);
-  const canEditStaff = canManageStaff(privileges);
   const canEditSchedule = canManageSchedule(privileges);
   // Part 3 §4.2's read-only console. **It gates neither section**, and that
   // distinction is the whole design: a lapsed gym's staff still SEE everything
@@ -197,45 +184,13 @@ export default function Settings() {
           it holds a draft. */}
       {canEditGym ? <LeadEmailsPanel key={`lead-emails-${org.id}`} org={org} readOnly={readOnly} /> : null}
 
-      {/* KEYED FOR THE SAME REASON, AND IT IS THE CLASS HALF OF THE FIX ABOVE.
-          Found by probing for the sibling rather than by the review, which named
-          only `GymDetailsPanel` — :1239's rule is that fixing the instance and
-          leaving the class is the recorded defect, and this repo has recorded it
-          at least five times.
+      {/* Staff are not here: they are invited and managed on Members → Staff (23c-ii). */}
 
-          MEASURED, not assumed: with gym B's staff read still in flight, gym A's
-          staff rows were on screen under gym B's name. It is worse than a stale
-          list, because the row's controls act on the CURRENT `gymId` with the OLD
-          person's id — so a Remove aimed at somebody visible would be sent
-          against a gym they do not staff.
-
-          The effect already re-reads on `gymId`, which is why the wrong list is
-          temporary; the key is what stops it ever being shown.
-
-          PREFIXED for round 4's reason above. It was the SURVIVOR of the
-          duplicate pair purely because it is written second — nothing recorded
-          that dependency, and reordering these two blocks would have silently
-          handed the defect to this panel instead. The prefix removes the
-          ordering dependency along with the duplicate. */}
-      {canEditStaff ? (
-        <div id={SETTINGS_SECTION.staff} style={{ scrollMarginTop: 16 }}>
-          <StaffPanel
-            key={`staff-${org.id}`}
-            gymId={org.id}
-            privileges={privileges}
-            orgType={org.orgType}
-            readOnly={readOnly}
-            startOpen={section === SETTINGS_SECTION.staff}
-          />
-        </div>
-      ) : null}
-
-      {!canEditGym && !canEditStaff && !canEditSchedule ? (
+      {!canEditGym && !canEditSchedule ? (
         /* REACHABLE BY TYPING THE ADDRESS, and that is the only way here — the
            nav does not draw this tab for somebody holding neither power, because
            every section on it would answer them with a refusal. Somebody who
-           arrives anyway is TOLD, rather than shown an empty screen that reads as
-           a gym with no staff and no name. */
+           arrives anyway is TOLD, rather than shown an empty screen. */
         <ConsoleCard>
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
             Only the {words.it}&apos;s owner can change these settings.

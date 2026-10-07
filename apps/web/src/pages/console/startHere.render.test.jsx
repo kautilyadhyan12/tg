@@ -114,7 +114,7 @@ describe('a gym made today', () => {
       ['Set up memberships', '/console/iron-house/memberships'],
       ['Import members', '/console/iron-house/members?open=import'],
       ['Add member', '/console/iron-house/members?open=add'],
-      ['Invite staff', '/console/iron-house/settings#staff'],
+      ['Invite staff', '/console/iron-house/members?view=staff&open=invite'],
       ['Set up classes', '/console/iron-house/classes'],
       ['Set opening hours', '/console/iron-house/settings#opening-hours'],
       ['Set up check-in', '/console/iron-house/settings#check-in-devices'],
@@ -313,7 +313,7 @@ describe('when the list cannot be read, or the gym has no plan', () => {
     expect(screen.queryByTestId('start-here')).toBeNull();
   });
 
-  it('a gym with no live plan: the list still shows, Import, Add and Hide are greyed, and the other pages still open', async () => {
+  it('a gym with no live plan: the list still shows, Import, Add, Invite staff and Hide are greyed, and the other pages still open', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, consoleReadOnly: true }] } });
     draw();
     const card = await box();
@@ -321,6 +321,9 @@ describe('when the list cannot be read, or the gym has no plan', () => {
     expect(within(members).queryAllByRole('link')).toHaveLength(0);
     expect(within(members).getByRole('button', { name: 'Import members' }).disabled).toBe(true);
     expect(within(members).getByRole('button', { name: 'Add member' }).disabled).toBe(true);
+    // Its form would be greyed too (23c-ii).
+    expect(within(rowOf(card, 'staff')).queryAllByRole('link')).toHaveLength(0);
+    expect(within(rowOf(card, 'staff')).getByRole('button', { name: 'Invite staff' }).disabled).toBe(true);
     expect(within(card).getByRole('button', { name: 'Hide this list' }).disabled).toBe(true);
     // And the box says why.
     expect(within(card).getByTestId('start-here-read-only').textContent).toMatch(/needs a plan/);

@@ -6,7 +6,6 @@ import { orgWords } from '@app/shared';
 
 /** The Settings sections the list's buttons open: the `id` each has on that page. */
 export const SETTINGS_SECTION = {
-  staff: 'staff',
   hours: 'opening-hours',
   frontDesk: 'check-in-devices',
 };
@@ -37,7 +36,9 @@ function stepWords(step, orgSlug, orgType) {
       return {
         title: 'Invite your staff',
         line: 'Front desk, managers and trainers each sign in as themselves, and you choose what each of them can do.',
-        actions: [{ label: 'Invite staff', to: `${base}/settings#${SETTINGS_SECTION.staff}` }],
+        // Members → Staff, with the form open (23c-ii). A gym with no live plan gets it
+        // greyed, as the form itself would be.
+        actions: [{ label: 'Invite staff', to: `${base}/members?view=staff&open=invite`, changes: true }],
       };
     case 'classes':
       return {

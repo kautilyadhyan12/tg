@@ -42,11 +42,19 @@ describe('where each page sits on a phone', () => {
     expect(moreIsCurrent(menu, '/console/iron-house/members')).toBe(false);
   });
 
-  it('a manager without the price list, the timetable, staff or the gym details: no Settings', () => {
+  it('a manager without the price list, the timetable or the gym details: no Settings', () => {
     const none = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage' && p !== 'schedule.manage');
     const menu = consoleMenu('iron-house', none, 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance']);
     expect(keys(menu.more)).toEqual(['leads', 'training', 'updates', 'events', 'leaderboard', 'challenges']);
+  });
+
+  // Staff are on Members → Staff since 23c-ii: that tick alone opens nothing in Settings.
+  it('somebody whose only tick there was staff: no Settings, and Members as everybody has it', () => {
+    const none = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage' && p !== 'schedule.manage');
+    const menu = consoleMenu('iron-house', [...none, 'staff.manage'], 'gym');
+    expect(keys(menu.more)).not.toContain('settings');
+    expect(keys(menu.tabs)).toContain('members');
   });
 
   it('a manager who sets the timetable and nothing else in Settings still has it, for Class bookings', () => {

@@ -5,6 +5,8 @@
 // R1 (ConsoleLayout at fa8e38a): Overview and Members always, Leads with
 // `members.confirm`, Attendance with `attendance.read`, Classes with `schedule.manage`,
 // Settings with `staff.manage` or `org.manage`, and Updates with `posts.manage` (19b-i).
+// `staff.manage` brought Settings until 23c-ii, while staff were a box there; they are on
+// Members → Staff now, a tab of a page everybody has, so that tick brings no page of its own.
 // `memberships.manage` brought Settings from 17a-i to 23c-i, while the price list was a box
 // there; it now brings Memberships, a page of its own, and Settings holds nothing for it. Every mix of them is drawn, and the computer menu and
 // the phone's tabs plus More must each hold exactly those pages.
@@ -47,7 +49,7 @@ function openableToday(privileges) {
     ...(has('posts.manage') ? [`${BASE}/updates`, `${BASE}/events`] : []),
     ...(has('leaderboard.manage') ? [`${BASE}/leaderboard`, `${BASE}/challenges`] : []),
     // Settings also holds Class bookings since 17c-ii-a, on `schedule.manage`.
-    ...(has('staff.manage') || has('org.manage') || has('schedule.manage') ? [`${BASE}/settings`] : []),
+    ...(has('org.manage') || has('schedule.manage') ? [`${BASE}/settings`] : []),
   ].sort();
 }
 

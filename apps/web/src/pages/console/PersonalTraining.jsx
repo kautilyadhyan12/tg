@@ -7,6 +7,8 @@ import TimePick from '../../components/console/TimePick';
 import { DateField, Tick } from './ClassFields';
 import { useConsoleOrg } from './useConsoleOrg';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
+import { viewerPrivileges } from './consoleView';
+import { canManageStaff } from './staffView';
 import { WEEKDAYS, addDays, gymToday } from './hoursView';
 import {
   HOURS_REPEAT,
@@ -1020,7 +1022,17 @@ export default function PersonalTraining() {
                   Set their hours
                 </button>
               </div>
-              <span className="c-s13 c-t3">Only people on your staff are listed. Invite somebody new in Settings, under Staff.</span>
+              {/* Inviting staff is the owner's, on Members → Staff: nobody else is sent there. */}
+              {canManageStaff(viewerPrivileges(org)) ? (
+                <span className="c-s13 c-t3">
+                  Only people on your staff are listed.{' '}
+                  <Link to={`/console/${orgSlug}/members?view=staff&open=invite`} className="c-lk c-w6">
+                    Invite staff
+                  </Link>
+                </span>
+              ) : (
+                <span className="c-s13 c-t3">Only people on your staff are listed. The owner can invite somebody new.</span>
+              )}
             </div>
           ) : null}
 

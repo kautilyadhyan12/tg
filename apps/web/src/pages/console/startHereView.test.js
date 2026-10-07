@@ -11,7 +11,7 @@ const answer = ({ done = [], steps = ALL, hidden = false, canHide = true } = {})
 const view = (startHere, orgType = 'gym') => startHereView(startHere, 'iron-house', orgType);
 
 describe('where each button goes', () => {
-  it('every step opens the page where it is done, Memberships its own page, and the Settings ones name their section', () => {
+  it('every step opens the page where it is done: Memberships its own page, staff on Members → Staff with the form open, and the Settings ones name their section', () => {
     const rows = view(answer()).rows;
     expect(rows.map((r) => [r.step, r.actions.map((a) => [a.label, a.to])])).toEqual([
       ['memberships', [['Set up memberships', '/console/iron-house/memberships']]],
@@ -22,18 +22,18 @@ describe('where each button goes', () => {
           ['Add member', '/console/iron-house/members?open=add'],
         ],
       ],
-      ['staff', [['Invite staff', '/console/iron-house/settings#staff']]],
+      ['staff', [['Invite staff', '/console/iron-house/members?view=staff&open=invite']]],
       ['classes', [['Set up classes', '/console/iron-house/classes']]],
       ['hours', [['Set opening hours', '/console/iron-house/settings#opening-hours']]],
       ['frontDesk', [['Set up check-in', '/console/iron-house/settings#check-in-devices']]],
     ]);
-    expect(SETTINGS_SECTION).toEqual({ staff: 'staff', hours: 'opening-hours', frontDesk: 'check-in-devices' });
+    expect(SETTINGS_SECTION).toEqual({ hours: 'opening-hours', frontDesk: 'check-in-devices' });
   });
 
-  it('only the two that change the member list are marked as changes', () => {
+  it('only the three that open a form are marked as changes: the two for the member list, and Invite staff', () => {
     const rows = view(answer()).rows;
     const changing = rows.flatMap((r) => r.actions.filter((a) => a.changes === true).map((a) => a.label));
-    expect(changing).toEqual(['Import members', 'Add member']);
+    expect(changing).toEqual(['Import members', 'Add member', 'Invite staff']);
   });
 
   it("a studio's and a trainer's own words", () => {

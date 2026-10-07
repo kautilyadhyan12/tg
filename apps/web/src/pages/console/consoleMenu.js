@@ -1,5 +1,4 @@
 import { orgWords } from '@app/shared';
-import { canManageStaff } from './staffView';
 import { canManageOrg } from './gymDetailsView';
 import { canReadAttendance } from './attendanceView';
 import { canManageSchedule } from './classesView';
@@ -8,11 +7,12 @@ import { canManageChallenges } from './challengesView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManagePosts } from '../../components/gym/postsView';
 
-/** Settings holds sections gated on three permissions (Staff: `staff.manage`; the gym's
- *  details: `org.manage`; Class bookings: `schedule.manage`), so its page is drawn for
- *  whoever holds any of them. What the gym sells left it for a page of its own (23c-i). */
+/** Settings holds sections gated on two permissions (the gym's details: `org.manage`;
+ *  Class bookings: `schedule.manage`), so its page is drawn for whoever holds either.
+ *  What the gym sells left it for a page of its own (23c-i), and staff for Members → Staff
+ *  (23c-ii). */
 function settingsIsReachable(privileges) {
-  return canManageStaff(privileges) || canManageOrg(privileges) || canManageSchedule(privileges);
+  return canManageOrg(privileges) || canManageSchedule(privileges);
 }
 
 /** THE CONSOLE'S PAGES THIS PERSON MAY OPEN, in the menu's order (spec Part 3 §17.5).

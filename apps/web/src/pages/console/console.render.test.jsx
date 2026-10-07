@@ -42,6 +42,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       rejectApplication: vi.fn(),
       removeMember: vi.fn(),
       getStaff: vi.fn(),
+      // The Staff tab reads its invitations and the gym's own roles too (23c-ii): none.
+      getStaffInvites: vi.fn(() => Promise.resolve({ data: { invites: [] } })),
+      getStaffRoles: vi.fn(() => Promise.resolve({ data: { roles: [] } })),
       removeStaff: vi.fn(),
       getNotMe: vi.fn(),
       putMemberOnList: vi.fn(),
@@ -2042,12 +2045,36 @@ describe('Removing a member', () => {
     expect(screen.queryByText('Complimentary')).toBeNull();
     // Their place counts like anyone's, and the panel says so (no "free" any more).
     await openInApp('Bhaskar Das');
-    expect(screen.getByText(/Also works here\. Their place in the app counts in your plan, like any member's\. Manage staff in Settings\./)).toBeTruthy();
+    expect(screen.getByText(/Also works here\. Their place in the app counts in your plan, like any member's\. Their role and what they can do are on the Staff tab\./)).toBeTruthy();
+    // Nobody is sent to Settings for staff (23c-ii).
+    expect(document.body.textContent).not.toMatch(/in Settings/);
+    expect(screen.getByRole('button', { name: 'Open the Staff tab' })).toBeTruthy();
     expect(screen.queryByText(/isn't counted in your plan/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     // The control: Rita pays, so her panel offers Remove and her row no badge.
     await openInApp('Rita Sen');
     expect(removeButton()).toBeTruthy();
+  });
+
+  it('"Open the Staff tab" on the panel of somebody on staff closes it and shows the Staff tab; a manager, who has no such tab, is not offered it', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, staffMemberSeat]));
+    orgService.getStaff.mockResolvedValue({ data: { staff: [] } });
+    drawMembers();
+    await openInApp('Bhaskar Das');
+    fireEvent.click(screen.getByRole('button', { name: 'Open the Staff tab' }));
+    expect(screen.getByRole('tab', { name: 'Staff' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    cleanup();
+    resetConsoleOrgs();
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: ['members.read', 'members.confirm', 'members.remove'] }] },
+    });
+    drawMembers();
+    await openInApp('Bhaskar Das');
+    expect(screen.getByText(/Also works here. Their place in the app counts in your plan, like any member's.$/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open the Staff tab' })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Staff tab|in Settings/);
   });
 
   /** 4a-ii, THE WORST THING on this screen: the owner removes somebody who is also staff
@@ -2106,7 +2133,9 @@ describe('Removing a member', () => {
     expect(row('u4').getByText('Uses the app')).toBeTruthy();
     expect(row('u9').getByText('Manager')).toBeTruthy();
     expect(row('u9').queryByText('Uses the app')).toBeNull();
-    expect(screen.getByRole('link', { name: 'Invite or manage staff in Settings' }).getAttribute('href')).toBe('/console/iron-house/settings');
+    // Inviting and managing are here now, not behind a link to Settings (23c-ii).
+    expect(screen.queryByRole('link', { name: /Settings/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Invite staff' })).toBeTruthy();
   });
 
   const STAFF_LIST = {
@@ -2173,7 +2202,8 @@ describe('Removing a member', () => {
       return screen.findByRole('dialog', { name: 'Ana Ruiz' });
     })());
     fireEvent.click(ana.getByRole('button', { name: 'Remove from staff' }));
-    expect(ana.queryByRole('checkbox')).toBeNull();
+    // The panel's other tick boxes are what they can do; the removal offers none.
+    expect(within(ana.getByTestId('staff-remove')).queryByRole('checkbox')).toBeNull();
   });
 
   it('a manager has no Staff tab: the staff list is the owner\'s', async () => {

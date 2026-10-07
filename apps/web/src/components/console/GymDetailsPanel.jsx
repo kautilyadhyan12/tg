@@ -250,8 +250,8 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
        oversight: this panel fetches NOTHING — every value comes from the org row
        the console already holds — so it has no failure that can arrive while
        nobody is looking. Its two error states are both consequences of a SAVE,
-       which can only happen with the section open. `StaffPanel` is the opposite
-       case and passes the flag. */
+       which can only happen with the section open. `OpeningHoursPanel` is the
+       opposite case and passes the flag. */
     <ConsoleSection
       title={`${words.itCap} details`}
       summary={`Your ${words.it}'s name, where it is, the time zone its day ends on, and the postal address your invitations show.`}

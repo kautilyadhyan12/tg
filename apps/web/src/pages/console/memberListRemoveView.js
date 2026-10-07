@@ -67,7 +67,7 @@ export function removeChangeGroups(preview, words, gymName) {
     groups.push({
       key: 'keepConsole',
       heading: `${count(staffKeep.length)} of them ${staffKeep.length === 1 ? 'keeps' : 'keep'} their staff access`,
-      line: 'They can still open the console. To remove someone from staff too, use Settings, Staff, or Remove on their own panel.',
+      line: 'They can still open the console. To remove someone from staff too, use the Staff tab, or Remove on their own panel.',
       people: staffKeep,
     });
   }

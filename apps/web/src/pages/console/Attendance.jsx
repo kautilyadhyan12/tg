@@ -52,8 +52,7 @@ import { CheckedInToday, CheckSomeoneIn } from './AttendanceCheckIn';
 //
 // HIDING IS NOT THE ENFORCEMENT (R3.3, :11429 rule 4). The nav draws this tab
 // only for somebody holding `attendance.read`, but the route 403s on its own and
-// this screen prints the server's sentence if one arrives — exactly as
-// `StaffPanel` does.
+// this screen prints the server's sentence if one arrives.
 
 /** ONE PERSON'S ROW: their name, then their times as chips.
  *
