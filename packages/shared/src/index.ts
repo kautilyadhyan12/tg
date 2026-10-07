@@ -48,3 +48,4 @@ export * from "./leaderboard.js";
 export * from "./posts.js";
 export * from "./gymEvents.js";
 export * from "./gymChallenges.js";
+export * from "./startHere.js";

@@ -147,7 +147,8 @@ function DeviceRow({ device, clock, readOnly, busy, onNewLink, onSwitchOff }) {
   );
 }
 
-export default function CheckinDevicesPanel({ org, readOnly }) {
+// `startOpen`: the page was opened by a link to this section (Overview's Start here list).
+export default function CheckinDevicesPanel({ org, readOnly, startOpen = false }) {
   const gymId = org.id;
   const clock = { timezone: org.timezone, clockFormat: org.clockFormat };
   const [devices, setDevices] = useState(null);
@@ -229,7 +230,12 @@ export default function CheckinDevicesPanel({ org, readOnly }) {
   const problem = nameTouched ? deviceNameProblem(name) : null;
 
   return (
-    <ConsoleSection title="Check-in devices" summary={devices === null ? undefined : devicesSummary(devices)} forceOpen={loadError !== null}>
+    <ConsoleSection
+      title="Check-in devices"
+      summary={devices === null ? undefined : devicesSummary(devices)}
+      forceOpen={loadError !== null}
+      defaultOpen={startOpen}
+    >
       {readOnly ? (
         <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
           {readOnlyNote(org.orgType)}

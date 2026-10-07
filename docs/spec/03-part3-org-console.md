@@ -457,6 +457,31 @@ activation-by-day-7 will be your single best predictor of trial→paid
 conversion — instrument it (`org_activated{days_since_signup}`) and steer
 onboarding copy/pilot playbooks by it.
 
+*(23b's notes, 2026-10-07; RULINGS that day. The five boxes above were never built: the
+logo, the poster and the report do not exist, and join codes are off.)* **What is built is
+a "Start here" list, first on Overview**, of what a new gym sets up, each line a button
+that opens the page where it is done:
+
+| Step | Its button opens | Ticked while the gym has | Shown to staff holding |
+|---|---|---|---|
+| What you sell | Settings, Memberships open | a membership type that is not archived | `memberships.manage` |
+| Bring your members in | Members, with Import or Add open | a person on its list | `members.confirm` |
+| Invite your staff | Settings, Staff open | somebody on the staff besides the owner, or an invitation still waiting | `staff.manage` |
+| Add your classes | Classes | a class with a time slot, neither cancelled, past its last day nor archived | `schedule.manage` |
+| Opening hours | Settings, When we're open, open | its hours said (a week, always open, or closed every day) | `org.manage` |
+| Front desk check-in | Settings, Check-in devices open | a device that opened its link and is not switched off | `org.manage` |
+
+- **The server works every tick out from the gym's own rows** each time Overview opens
+  (`GET /v1/orgs/:gymId/start-here`); nobody ticks anything, and a tick goes when its
+  thing goes. The ticks are the gym's, the same for everybody; a member of staff is sent
+  only the steps their own ticks let them do, and the count is out of those.
+- **Hide this list** is for whoever holds `org.manage`, for the whole gym, on a gym with a
+  live plan (`PUT`, `gyms.activation.startHereHidden`); **Show the Start here list** at the
+  foot of Overview brings it back. With every step done the box says so until it is hidden;
+  staff who cannot hide it stop seeing it once their own steps are done.
+- While the list shows "Bring your members in", the card of that name is not drawn a second
+  time under it; hidden, unreadable, or for somebody with no step, Overview is as it was.
+
 ### 5.2 Console analytics (server-side PostHog, per v1 §16)
 
 `console_login` (per staff) · `overview_viewed` · `at_risk_nudged` ·

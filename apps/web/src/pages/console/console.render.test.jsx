@@ -34,6 +34,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       removeCode: vi.fn(),
       getApplications: vi.fn(),
       getOverview: vi.fn(),
+      // Overview's Start here list (23b) has its own tests in `startHere.render.test.jsx`;
+      // here it answers nothing, so the page is the one these tests were written against.
+      getStartHere: vi.fn(),
       getAttendanceDay: vi.fn(),
       confirmApplication: vi.fn(),
       rejectApplication: vi.fn(),

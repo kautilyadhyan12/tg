@@ -18,6 +18,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getCodes: vi.fn(),
       getApplications: vi.fn(),
       getOverview: vi.fn(),
+      getStartHere: vi.fn(),
       getAttendanceDay: vi.fn(),
       getPlans: vi.fn(),
       startCheckout: vi.fn(),

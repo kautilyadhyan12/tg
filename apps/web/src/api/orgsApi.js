@@ -122,6 +122,7 @@ import {
   ptTrainersResponseSchema,
   ptWeekResponseSchema,
   sendGymCheerResponseSchema,
+  startHereResponseSchema,
   startOrgTrialResponseSchema,
   updateOrgResponseSchema,
 } from '@app/shared';
@@ -500,6 +501,15 @@ export const orgService = {
       "your gym's numbers",
       authApi.get(`/v1/orgs/${gymId}/overview`),
     ),
+
+  /** Overview's "Start here" list (ROADMAP 23b): the steps this member of staff can do,
+   *  each done or not, and whether the gym has hidden the list. Read once when Overview
+   *  opens; 300 an hour a person. */
+  getStartHere: (gymId) =>
+    readThrough(startHereResponseSchema, 'your Start here list', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/start-here`)),
+  /** Hide the list for the whole gym, or show it again (`org.manage`). */
+  setStartHereHidden: (gymId, hidden) =>
+    readThrough(startHereResponseSchema, 'your Start here list', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/start-here`, { hidden })),
 
   /** GET /v1/orgs/:gymId/members — Part 3 §2.4's roster and nothing else:
    *  display name, join date, the label of the code they came in through, and

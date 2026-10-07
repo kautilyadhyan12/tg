@@ -5,12 +5,14 @@ import JoinCodeCard from '../../components/console/JoinCodeCard';
 import JoinCodesPanel from '../../components/console/JoinCodesPanel';
 import BringMembersInCard from '../../components/console/BringMembersInCard';
 import OverviewNumbers from '../../components/console/OverviewNumbers';
+import StartHereCard from '../../components/console/StartHereCard';
 import TrialCard from '../../components/console/TrialCard';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { codesRetired, orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from './useConsoleOrg';
 import { consoleIsReadOnly } from './billingView';
+import { startHereView } from './startHereView';
 import {
   codeToShow,
   joinedCount,
@@ -157,6 +159,11 @@ export default function Overview() {
   // refresh on focus or run on a timer**, and if this panel ever wants live
   // updates the limiter is what has to change first.
   const [day, setDay] = useState(null);
+  // THE "START HERE" LIST (ROADMAP 23b): the steps this person can do, each done or not.
+  // A failed read is silent, as the waiting count's is: the list is a guide, and without
+  // it the page is the one a gym had before, "Bring your members in" included.
+  const [startHere, setStartHere] = useState(null);
+  const [hiding, setHiding] = useState({ busy: false, error: null });
   const [attempt, setAttempt] = useState(0);
   const gymId = org?.id ?? null;
   // THE WORDS THIS SCREEN SPEAKS (roadmap 2b). Read off the org row the
@@ -184,8 +191,10 @@ export default function Overview() {
       // The query schema is `.strict()` and takes no `limit`, so the page size
       // is the server's; `previewPeople` decides how many reach the screen.
       orgService.getAttendanceDay(gymId, {}),
-    ]).then(([codesOutcome, membersOutcome, waitingOutcome, overviewOutcome, dayOutcome]) => {
+      orgService.getStartHere(gymId),
+    ]).then(([codesOutcome, membersOutcome, waitingOutcome, overviewOutcome, dayOutcome, startHereOutcome]) => {
       if (cancelled) return;
+      setStartHere(startHereOutcome.status === 'fulfilled' ? (startHereOutcome.value?.data?.startHere ?? null) : null);
       setCodes(
         codesOutcome.status === 'fulfilled'
           ? { loading: false, error: null, retryable: true, list: codesOutcome.value.data?.codes ?? [], retired: false }
@@ -246,7 +255,25 @@ export default function Overview() {
     setWaiting(null);
     setOverview({ loading: true, error: null, retryable: true, data: null });
     setDay(null);
+    setStartHere(null);
+    setHiding({ busy: false, error: null });
     setAttempt((n) => n + 1);
+  };
+
+  /** Hide the Start here list for the whole gym, or show it again. The server's answer
+   *  is what is drawn, so a press that failed leaves the list as it was, with why. */
+  const setListHidden = async (hidden) => {
+    setHiding({ busy: true, error: null });
+    try {
+      const res = await orgService.setStartHereHidden(gymId, hidden);
+      setStartHere(res.data?.startHere ?? null);
+      setHiding({ busy: false, error: null });
+    } catch (err) {
+      setHiding({
+        busy: false,
+        error: errorText(err, hidden ? "We couldn't hide the list. Please try again." : "We couldn't show the list. Please try again."),
+      });
+    }
   };
 
   /** Re-read the CODES ONLY, after the panel below changes one.
@@ -340,6 +367,8 @@ export default function Overview() {
   // who is reading, and this screen will one day be reachable by a manager.
   const countLine = memberCountLine(members.page, user?.id ?? null, org.orgType);
   const shownCode = codeToShow(codes.list);
+  const list = startHereView(startHere, orgSlug, org.orgType);
+  const readOnly = consoleIsReadOnly(org);
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
@@ -352,6 +381,18 @@ export default function Overview() {
           {orgTypeLabel(org.orgType)}
         </p>
       </div>
+
+      {/* START HERE, first on the page (ROADMAP 23b): what to set up and where. */}
+      {list.show === 'list' ? (
+        <StartHereCard
+          view={list}
+          orgType={org.orgType}
+          readOnly={readOnly}
+          onHide={() => void setListHidden(true)}
+          busy={hiding.busy}
+          error={hiding.error}
+        />
+      ) : null}
 
       {/* THE PLAN, ABOVE THE JOIN CODE AND BELOW THE GYM'S NAME — what the gym
           is on, and how many places are used. A code handed out by a gym on no
@@ -435,8 +476,10 @@ export default function Overview() {
       {!codes.loading && codes.error !== null ? (
         <ConsoleFailed message={codes.error} onRetry={codes.retryable ? retry : undefined} />
       ) : null}
-      {codes.retired && viewerPrivileges(org).includes('members.confirm') ? (
-        <BringMembersInCard orgSlug={orgSlug} orgType={org.orgType} readOnly={consoleIsReadOnly(org)} />
+      {/* While the Start here list shows its own "Bring your members in" step, with these
+          same two buttons, the card is not drawn a second time under it. */}
+      {codes.retired && viewerPrivileges(org).includes('members.confirm') && !list.hasMembers ? (
+        <BringMembersInCard orgSlug={orgSlug} orgType={org.orgType} readOnly={readOnly} />
       ) : null}
       {!codes.loading && codes.error === null && !codes.retired ? (
         shownCode !== null ? (
@@ -533,6 +576,31 @@ export default function Overview() {
         <Fact label="Timezone" value={org.timezone} />
         <Fact label="Your role" value={roleLabel(org.staffRole, org.orgType)} />
       </ConsoleCard>
+
+      {/* The hidden Start here list, brought back by whoever may hide it. */}
+      {list.show === 'hidden' ? (
+        <div data-testid="start-here-hidden" className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              The Start here list is hidden.
+            </span>
+            <button
+              type="button"
+              onClick={() => void setListHidden(false)}
+              disabled={hiding.busy || readOnly}
+              className="rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}
+            >
+              Show the Start here list
+            </button>
+          </div>
+          {hiding.error !== null ? (
+            <p role="alert" className="text-sm" style={{ color: '#ef4444' }}>
+              {hiding.error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

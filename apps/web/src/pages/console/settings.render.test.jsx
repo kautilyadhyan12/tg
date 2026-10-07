@@ -2375,6 +2375,26 @@ describe('a link to one section of Settings', () => {
     expect(screen.queryByText(INTRO)).toBeNull();
   });
 
+  // 23b: Overview's Start here list opens these three the same way.
+  it.each([
+    ['opening-hours', /^When we're open/],
+    ['check-in-devices', /^Check-in devices/],
+    ['staff', /^Staff/],
+  ])('"#%s" opens the page with that section open and in view, and no other', async (id, name) => {
+    drawAt(`/console/iron-house/settings#${id}`);
+    const heading = await screen.findByRole('button', { name });
+    const section = document.getElementById(id);
+    expect(section.contains(heading)).toBe(true);
+    expect(heading.getAttribute('aria-expanded')).toBe('true');
+    await waitFor(() => expect(into).toHaveBeenCalled());
+    expect(into.mock.instances.every((el) => el === section)).toBe(true);
+    const open = screen.getAllByRole('button', { expanded: true }).filter((button) => !section.contains(button));
+    expect(open).toEqual([]);
+    // It still folds shut.
+    fireEvent.click(heading);
+    expect(heading.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('with no section named, every section starts closed and nothing is moved', async () => {
     drawAt('/console/iron-house/settings');
     expect(await screen.findByRole('button', { name: /^Memberships/ })).toBeTruthy();

@@ -300,3 +300,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 19d-i. [ ] **A gym runs a challenge, members see its board**: a console Challenges page and a members' Challenges tab; Gym days or Workout days over its dates, for everyone or the people who join, won by the most or by reaching a number.
 
      - 23a-ii. [x] **Add member asks for the membership first**: straight after name, email and phone; the typed Status, Payment status and End date boxes only where the gym sells no memberships here, with a button to set them up; a person's Details and Edit agree with their Memberships box; the front desk and the live log say what a person holds, not their record's old word. *Merged 2026-10-07 (PR #188).*
+
+   - 23b. [x] **A "Start here" list on Overview**: what you sell · members · staff · classes · opening hours · the front desk, each a button to its exact place, ticked by itself when done, hideable (PushPress, Gymdesk and TeamUp each have one). A new gym's first page says only "Bring your members in". *Merged 2026-10-07 (PR #189).*

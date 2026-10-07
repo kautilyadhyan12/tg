@@ -881,6 +881,23 @@ export async function requirePrivilege(
   userId: string,
   privilege: OrgPrivilege,
 ): Promise<{ org: repo.OrgRow; role: OrgRole; privileges: readonly OrgPrivilege[] }> {
+  const { org, role, privileges } = await requireStaff(deps, gymId, userId);
+  if (!privileges.includes(privilege)) {
+    // The message says ROLE because that is what a person understands, and it
+    // stays true of a ticked-down manager: what their account is allowed to do
+    // here does not cover this.
+    throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
+  }
+  return { org, role, privileges };
+}
+
+/** `requirePrivilege`'s first half, for a read every member of staff may make: who they
+ *  are here and the ticks they hold, or the same 404 for anybody who is not staff. */
+export async function requireStaff(
+  deps: Pick<OrgsDeps, "sql">,
+  gymId: string,
+  userId: string,
+): Promise<{ org: repo.OrgRow; role: OrgRole; privileges: readonly OrgPrivilege[] }> {
   const [org, authority] = await Promise.all([
     repo.getOrgById(deps.sql, gymId),
     repo.getStaffAuthority(deps.sql, gymId, userId),
@@ -888,14 +905,7 @@ export async function requirePrivilege(
   if (org === null || authority === null) {
     throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
   }
-  const privileges = privilegesFor(authority.role, authority.privileges);
-  if (!privileges.includes(privilege)) {
-    // The message says ROLE because that is what a person understands, and it
-    // stays true of a ticked-down manager: what their account is allowed to do
-    // here does not cover this.
-    throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
-  }
-  return { org, role: authority.role, privileges };
+  return { org, role: authority.role, privileges: privilegesFor(authority.role, authority.privileges) };
 }
 
 /** Whether this person holds this privilege on this gym: `requirePrivilege`'s answer
@@ -1010,7 +1020,7 @@ export async function requireWritablePrivilege(
   gymId: string,
   userId: string,
   privilege: OrgPrivilege,
-): Promise<{ org: repo.OrgRow; role: OrgRole }> {
+): Promise<{ org: repo.OrgRow; role: OrgRole; privileges: readonly OrgPrivilege[] }> {
   const authorised = await requirePrivilege(deps, gymId, userId, privilege);
   if (!(await repo.gymHasLivePlan(deps.sql, gymId))) {
     throw new OrgsError(409, "gym_not_on_plan", notOnPlanMessage(authorised.org.orgType));
