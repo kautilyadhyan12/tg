@@ -2870,7 +2870,7 @@ trainers carries `setup`, four facts about this gym alone, read in one statement
 |---|---|---|---|
 | Add a trainer and set their hours | Members → Staff, the Invite staff form open | a member of staff has hours saved | `staff.manage` (greyed with no live plan) |
 | Sell a membership or pack that includes personal training | Memberships | a type that is not archived has `includes_pt` | `memberships.manage` |
-| Give it to a member | Members | somebody on the list holds one in use (running or frozen; a pack with a session left, inside its days on the gym's own day) | all staff |
+| Give it to a member | Members | somebody on the list holds one in use (running or frozen; a pack with a session left, inside its days on the gym's own day), or a session booked on one still holds its time: a pack of one session is used up by the first booking, and the gym did give it | all staff |
 | Book a session | (on this page) | a session is booked, or took place; a cancelled one does not count | — |
 
 A gym with no membership types has three: the two in the middle are one, "Put your members
@@ -3905,10 +3905,11 @@ are kept. A box that sends staff to Memberships reads again when they come back 
 | Memberships: the country is not set | Set your country | Settings, Gym details open, at the country |
 | Leads → Your gym page: its opening hours | Change opening hours (asks first while the page has changes not saved) | Settings, When we're open, open |
 | A lead's follow-up: where replies go | Change reply address (asks first while the lead has typing not saved) | Settings, Follow-up emails to leads, open |
-| Settings → Follow-up emails: the rest wait on Leads | Open Leads | Leads |
+| Settings → Follow-up emails: the rest wait on Leads | Open Leads (asks first while a change there is not saved) | Leads |
 | A person's Memberships box (a name with no price here; a type not given; no types to pick) | Open Memberships | Memberships |
 | Add member, in a gym with nothing to sell (23a-ii) | Set up memberships (asks first once something is typed) | Memberships |
-| The Remove box: staff who keep their staff access | Open the Staff tab | Members → Staff |
+| The Remove box: staff who keep their staff access | Open the Staff tab (somebody who cannot open it reads "The owner can remove someone from staff.") | Members → Staff |
+| Leaderboard → a person → Add a visit: "For today, use Check in on Attendance" | Open Attendance (asks first once a day is picked) | Attendance |
 | Personal training: an empty member list in the picker | Open Members | Members |
 | Personal training: a class in a trainer's time off (their week; the time-off box, which asks first) | Open the Calendar | Classes → Calendar, on that class's week (`&week=`) |
 | Classes: sessions a class would go over | Open Personal training (asks first) | Personal training |

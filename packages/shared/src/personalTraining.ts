@@ -372,7 +372,8 @@ export const ptSetupSchema = z
   .object({
     /** A membership type or pack on the price list includes personal training. */
     typeIncludesPt: z.boolean(),
-    /** Somebody on the member list holds one of those, in use. */
+    /** Somebody on the member list holds one of those, in use, or a session booked on one
+     *  still holds its time. */
     somebodyHoldsIt: z.boolean(),
     /** The member list has somebody on it. */
     listHasPeople: z.boolean(),

@@ -96,8 +96,10 @@ export default function MemberMemberships({
   // What their list says their membership is, where they do not hold it here.
   const listed = shown === null ? null : listedRow(shown.listed, name, managesTypes);
   // A box that sends staff to Memberships reads again when they come back to this tab, so
-  // a type set up in another one is here to pick.
-  useCameBack(membershipsTo !== null && shown !== null && (listed !== null || shown.types.length === 0), () => setAttempt((n) => n + 1));
+  // a type set up in another one is here to pick: while its button is on screen, on the
+  // list's own row or in the Add membership form of a gym with no types.
+  const sendsToMemberships = listed?.toMemberships === true || (open?.what === 'add' && shown !== null && shown.types.length === 0);
+  useCameBack(membershipsTo !== null && sendsToMemberships, () => setAttempt((n) => n + 1));
 
   if (loadError !== null && shown === null) {
     return (

@@ -560,6 +560,8 @@ describe('the steps to a first session, with a tick on each one done', () => {
     // Each tick follows its own fact: a later step done does not tick an earlier one.
     ['a session, and no trainer now', { sessionBooked: true }, [notSetUp()], { trainer: false, type: false, held: false, book: true }, 'trainer', '1 of 4 done'],
     ['held, its type archived since', { somebodyHoldsIt: true }, [trainer()], { trainer: true, type: false, held: true, book: false }, 'type', '2 of 4 done'],
+    // Sessions from before the gym sold memberships: booked, and nobody holds one yet.
+    ['a session, a type, and nobody holding it', { typeIncludesPt: true, sessionBooked: true }, [trainer()], { trainer: true, type: true, held: false, book: true }, 'held', '3 of 4 done'],
     // People on the list tick nothing for a gym that sells memberships.
     ['people on the list', { listHasPeople: true }, [notSetUp()], { trainer: false, type: false, held: false, book: false }, 'trainer', '0 of 4 done'],
   ])('a gym that sells memberships, %s', (_what, setup, trainers, expected, next, count) => {

@@ -3,6 +3,7 @@ import { canManageOrg } from './gymDetailsView';
 import { canManageSchedule } from './classesView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManageBilling } from './billingView';
+import { canReadAttendance } from './attendanceView';
 
 // WHERE EACH PLACE IN THE CONSOLE IS, AND WHO MAY OPEN IT (ROADMAP 23d). A sentence that
 // sends somebody to another page carries a button that opens that exact place, with its
@@ -47,6 +48,7 @@ const PLACES = {
   classes: { path: '/classes', may: canManageSchedule },
   calendar: { path: '/classes?view=week', may: canManageSchedule },
   personalTraining: { path: '/personal-training', may: onStaff },
+  attendance: { path: '/attendance', may: canReadAttendance },
   leads: { path: '/leads', may: (privileges) => has(privileges, 'members.confirm') },
   plan: { path: `#${PLAN_SECTION}`, may: canManageBilling },
 };

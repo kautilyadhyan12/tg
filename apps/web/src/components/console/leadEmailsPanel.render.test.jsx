@@ -56,6 +56,14 @@ describe('Follow-up emails to leads', () => {
     // Outside the tick's own label, so it cannot switch "Send them for me".
     expect(link.closest('label')).toBeNull();
     expect(box.checked).toBe(false);
+    // With a change here not saved, the press asks before it leaves; Stay here keeps the change.
+    fireEvent.click(box);
+    expect(screen.queryByRole('link', { name: 'Open Leads' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Open Leads' }));
+    expect(screen.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/leads');
+    fireEvent.click(screen.getByRole('button', { name: 'Stay here' }));
+    expect(box.checked).toBe(true);
+    expect(orgService.updateLeadEmailSettings).not.toHaveBeenCalled();
     cleanup();
     // Somebody who changes the gym's details and cannot open Leads is not sent there.
     drawFor(['org.manage']);

@@ -330,7 +330,11 @@ export async function peopleFor(sql: SqlOrTx, gymId: string, query: string, day:
 /** What this gym has done towards its first session (ROADMAP 23d), or null when there is
  *  no such gym. Each fact holds while its thing is there: a type that is archived, a
  *  person who is off the list and a session that was cancelled do not count. The day is
- *  the gym's own. */
+ *  the gym's own.
+ *
+ *  Somebody "holds it" while they hold one in use, or while a session booked on one still
+ *  holds its time: a pack of one session is used up by the gym's first booking, and the gym
+ *  did give it. A session booked before the gym sold memberships was booked on none. */
 export async function setupOf(sql: SqlOrTx, gymId: string, now: Date): Promise<PtSetup | null> {
   const rows = await sql<{ type_includes_pt: boolean; somebody_holds_it: boolean; list_has_people: boolean; session_booked: boolean }[]>`
     SELECT
@@ -338,10 +342,16 @@ export async function setupOf(sql: SqlOrTx, gymId: string, now: Date): Promise<P
         SELECT 1 FROM gym_membership_types mt
         WHERE mt.gym_id = g.id AND mt.archived_at IS NULL AND mt.includes_pt
       ) AS type_includes_pt,
-      EXISTS (
-        SELECT 1 FROM gym_member_list_entries e
-        WHERE e.gym_id = g.id AND e.former_at IS NULL
-          AND ${holdsPt(sql, sql`(${now}::timestamptz AT TIME ZONE g.timezone)::date`)}
+      (
+        EXISTS (
+          SELECT 1 FROM gym_member_list_entries e
+          WHERE e.gym_id = g.id AND e.former_at IS NULL
+            AND ${holdsPt(sql, sql`(${now}::timestamptz AT TIME ZONE g.timezone)::date`)}
+        )
+        OR EXISTS (
+          SELECT 1 FROM gym_pt_appointments a
+          WHERE a.gym_id = g.id AND a.status = ANY(${[...PT_HOLDS_TIME]}::text[]) AND a.held_membership_id IS NOT NULL
+        )
       ) AS somebody_holds_it,
       EXISTS (
         SELECT 1 FROM gym_member_list_entries e

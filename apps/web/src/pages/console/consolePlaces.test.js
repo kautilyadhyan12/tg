@@ -31,6 +31,7 @@ const PLACES = {
   classes: '/console/iron-house/classes',
   calendar: '/console/iron-house/classes?view=week',
   personalTraining: '/console/iron-house/personal-training',
+  attendance: '/console/iron-house/attendance',
   leads: '/console/iron-house/leads',
   plan: '/console/iron-house#plan',
 };
@@ -52,11 +53,12 @@ const NEEDS = {
   classes: 'schedule.manage',
   calendar: 'schedule.manage',
   personalTraining: null,
+  attendance: 'attendance.read',
   leads: 'members.confirm',
   plan: 'billing.manage',
 };
 
-const EVERY = ['org.manage', 'staff.manage', 'memberships.manage', 'schedule.manage', 'members.read', 'members.confirm', 'billing.manage'];
+const EVERY = ['org.manage', 'staff.manage', 'memberships.manage', 'schedule.manage', 'members.read', 'members.confirm', 'billing.manage', 'attendance.read'];
 
 describe('where each place is', () => {
   it('every place has one address in the gym on screen', () => {
@@ -139,9 +141,10 @@ describe('who may open each place', () => {
       classes: 'classes',
       calendar: 'classes',
       personalTraining: 'training',
+      attendance: 'attendance',
       leads: 'leads',
     };
-    const ticks = ['org.manage', 'staff.manage', 'memberships.manage', 'schedule.manage', 'members.confirm', 'billing.manage'];
+    const ticks = ['org.manage', 'staff.manage', 'memberships.manage', 'schedule.manage', 'members.confirm', 'billing.manage', 'attendance.read'];
     for (let mix = 0; mix < 2 ** ticks.length; mix++) {
       const held = ticks.filter((_, bit) => (mix >> bit) % 2 === 1);
       const keys = consoleMenu('iron-house', held, 'gym').pages.map((p) => p.key);

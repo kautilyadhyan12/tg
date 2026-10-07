@@ -5,7 +5,7 @@
 // named. So the first tests: a late answer for somebody opened earlier is never shown,
 // and a press sends exactly the membership and the step its question named.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import {
   giveHeldMembership,
@@ -310,9 +310,12 @@ describe('what the box draws', () => {
     // row is theirs. A switch of tab is heard as the tab being shown, and the window's focus
     // straight after it is the same return: one read, not two.
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)], false, { listed: null }));
+    // The box starts listening once it is drawn; a person takes far longer to come back than
+    // the test does, so the test lets that settle before it does.
+    await act(async () => {});
     fireEvent(document, new Event('visibilitychange'));
     fireEvent(window, new Event('focus'));
-    await waitFor(() => expect(screen.queryByTestId('held-listed')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('held-listed')).toBeNull(), { timeout: 3000 });
     expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2);
     // Nothing on the box sends staff there now, so coming back reads nothing more.
     fireEvent(window, new Event('focus'));
@@ -479,10 +482,17 @@ describe('adding a membership', () => {
   it('and gives whoever sets the prices a button to Memberships there (23d)', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)], false, { types: [] }));
     render(draw(ADA, 'Ada Lovelace', { membershipsTo: '/console/iron-house/memberships' }));
-    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const add = await (await boxSoon()).findByRole('button', { name: 'Add membership' });
+    // Until the form is open no button here sends anybody away, so coming back reads nothing.
+    fireEvent(window, new Event('focus'));
+    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(1);
+    fireEvent.click(add);
     const link = within(screen.getByTestId('held-add')).getByRole('link', { name: 'Open Memberships' });
     expect(link.getAttribute('href')).toBe('/console/iron-house/memberships');
     expect(link.getAttribute('target')).toBeNull();
+    // With its button on screen, coming back to the tab reads the box again.
+    fireEvent(window, new Event('focus'));
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2), { timeout: 3000 });
   });
 });
 

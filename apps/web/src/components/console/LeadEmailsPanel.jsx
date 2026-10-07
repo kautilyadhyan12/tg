@@ -150,8 +150,9 @@ export default function LeadEmailsPanel({ org, readOnly, startOpen = false }) {
               </span>
             </span>
           </label>
-          {/* Outside the label, so pressing it opens Leads and ticks nothing. */}
-          <PlaceLink to={placeFor(org.slug, viewerPrivileges(org), 'leads')} className="text-sm self-start" style={{ color: '#FF8A1F' }}>
+          {/* Outside the label, so pressing it opens Leads and ticks nothing. It leaves this
+              form, so it asks first while a change here is not saved. */}
+          <PlaceLink to={placeFor(org.slug, viewerPrivileges(org), 'leads')} guard={changed} className="c-lk text-sm self-start">
             Open Leads
           </PlaceLink>
 

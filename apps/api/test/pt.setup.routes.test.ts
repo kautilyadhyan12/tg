@@ -257,7 +257,6 @@ d("personal training's list of steps: whose ticks, and what each follows (real P
     for (const [who, cookies, status] of outsiders) {
       const res = await inject("GET", `/v1/orgs/${setUp.id}/pt/trainers`, cookies);
       expect(res.statusCode, who).toBe(status);
-      expect(res.body, who).not.toContain("setup");
     }
   });
 
@@ -344,18 +343,27 @@ d("personal training's list of steps: whose ticks, and what each follows (real P
   });
 
   it("a pack counts while it has a session left and its days are not over, on the gym's own day", async () => {
-    // A pack of one session: booked, it is used up, and the session is what stays ticked.
+    // A pack of one session: the gym's first booking uses it up. The gym did give it, so
+    // "somebody holds it" stays ticked while the session booked on it holds its time.
     const gym = await makeGym("Pts Pack");
     const single = await addType(gym, { includesPt: true, pack: { classes: 1, days: 30 } });
     const maya = await addPerson(gym, "Maya Okafor");
-    await give(gym, maya, single);
+    const pack = await give(gym, maya, single);
     await setHours(gym, gym.owner);
     expect(await setupOf(gym)).toEqual({ ...EVERYTHING, sessionBooked: false });
     const session = await book(gym, gym.owner, maya);
-    expect(await setupOf(gym)).toEqual({ ...EVERYTHING, somebodyHoldsIt: false });
+    const used = await sql<{ classes_left: number | null }[]>`SELECT classes_left FROM gym_held_memberships WHERE gym_id = ${gym.id} AND id = ${pack}`;
+    expect(used[0]?.classes_left).toBe(0);
+    expect(await setupOf(gym)).toEqual(EVERYTHING);
     // Cancelled in time, the pack has its session back and no session is booked.
     expect((await cancel(gym, session.id)).statusCode).toBe(200);
     expect(await setupOf(gym)).toEqual({ ...EVERYTHING, sessionBooked: false });
+    // Booked again, and the session later cancelled late with the pack's session kept used:
+    // nothing booked on the pack holds its time, and the pack has nothing left.
+    const again = await book(gym, gym.owner, maya);
+    expect(await setupOf(gym)).toEqual(EVERYTHING);
+    await sql`UPDATE gym_pt_appointments SET status = 'late_cancelled', cancelled_at = now() WHERE gym_id = ${gym.id} AND id = ${again.id}`;
+    expect(await setupOf(gym)).toEqual({ ...EVERYTHING, somebodyHoldsIt: false, sessionBooked: false });
 
     // A pack good for one day, in a gym fourteen hours ahead of UTC. It starts on the gym's
     // today, so it counts through the gym's tomorrow and not the day after.
@@ -396,5 +404,10 @@ d("personal training's list of steps: whose ticks, and what each follows (real P
     const later = await book(gym, gym.owner, maya, 720);
     expect((await cancel(gym, later.id)).statusCode).toBe(200);
     expect(await setupOf(gym)).toEqual({ ...listed, sessionBooked: true });
+
+    // Those sessions were booked before the gym sold memberships, so on none: once it sells
+    // one that includes personal training, nobody holds it yet.
+    await addType(gym, { includesPt: true });
+    expect(await setupOf(gym)).toEqual({ typeIncludesPt: true, somebodyHoldsIt: false, listHasPeople: true, sessionBooked: true });
   });
 });

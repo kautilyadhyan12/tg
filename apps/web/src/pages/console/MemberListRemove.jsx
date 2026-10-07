@@ -4,7 +4,7 @@ import { MEMBER_LIST_SELECTION_CHANGED_WORDS } from '@app/shared';
 import { errorText, removeRefused, selectionChanged } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import { viewerPrivileges } from './consoleView';
-import { placeFor } from './consolePlaces';
+import { canOpenPlace, placeFor } from './consolePlaces';
 import {
   REMOVE_NAMES_PAGE,
   REMOVE_NAMES_SHOWN,
@@ -171,7 +171,7 @@ export default function MemberListRemove({ door, gym, words, load, press, onSele
       </button>
     );
   } else {
-    const changes = removeChangeGroups(preview, words, gym.name);
+    const changes = removeChangeGroups(preview, words, gym.name, canOpenPlace(viewerPrivileges(gym), 'staff'));
     const kept = removeKept(preview, words, door);
     const tick = removeLargeWords(preview, words);
     const button = removeButton(preview, door, words);
