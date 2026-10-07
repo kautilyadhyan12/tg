@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
-// A LINK TO ONE SECTION OF A LONG PAGE (ROADMAP 23a-ii): "/settings#memberships" opens
-// Settings with the Memberships section in view. The sections above it load after the page
+// A LINK TO ONE SECTION OF A LONG PAGE (ROADMAP 23a-ii, 23b): "/settings#staff" opens
+// Settings with the Staff section in view. The sections above it load after the page
 // draws and push it down, so it is brought into view again as they settle, and never once
 // the person has scrolled, pressed a key or touched the page themselves.
 //
@@ -12,7 +12,7 @@ import { useLocation } from 'react-router-dom';
 const AGAIN_MS = [0, 400, 1200];
 const THEIR_OWN = ['wheel', 'touchstart', 'pointerdown', 'keydown'];
 
-/** The section an address names: "#memberships" is "memberships". */
+/** The section an address names: "#staff" is "staff". */
 export function sectionOf(hash) {
   if (typeof hash !== 'string' || hash.length < 2 || !hash.startsWith('#')) return null;
   try {

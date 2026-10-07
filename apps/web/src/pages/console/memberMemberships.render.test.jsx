@@ -280,7 +280,7 @@ describe('what the box draws', () => {
     expect(row.getByText('Gold Plus')).toBeTruthy();
     expect(row.getByText('Not set up')).toBeTruthy();
     expect(row.getByText('From your member list · Renews 13 October 2026')).toBeTruthy();
-    expect(row.getByText('This membership has no price here yet. Set it up in Settings, under Memberships, and Leo Grant gets it.')).toBeTruthy();
+    expect(row.getByText('This membership has no price here yet. Set it up in Memberships, and Leo Grant gets it.')).toBeTruthy();
     expect(b.queryByText('No membership yet.')).toBeNull();
     // It is not a membership held here: nothing to mark paid, freeze or cancel.
     expect(row.queryByRole('button')).toBeNull();
@@ -297,7 +297,7 @@ describe('what the box draws', () => {
     expect(row.getByText(GOLD.name)).toBeTruthy();
     expect(row.getByText('Not added')).toBeTruthy();
     expect(row.getByText('Your member list says “Gold” · Renews 14 September 2026')).toBeTruthy();
-    expect(row.getByText("Zara Ali doesn't have it here yet. Add it with Add membership, or give it to everyone on your list who is missing it in Settings, under Memberships.")).toBeTruthy();
+    expect(row.getByText("Zara Ali doesn't have it here yet. Add it with Add membership, or go to Memberships to give it to everyone on your list who is missing it.")).toBeTruthy();
     expect(b.queryByText('No membership yet.')).toBeNull();
   });
 
@@ -428,7 +428,7 @@ describe('adding a membership', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)], false, { types: [] }));
     render(draw(ADA, 'Ada Lovelace'));
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
-    expect(screen.getByText('You have no membership types yet. Add them in Settings, under Memberships.')).toBeTruthy();
+    expect(screen.getByText('You have no membership types yet. Add them in Memberships.')).toBeTruthy();
     expect(within(screen.getByTestId('held-add')).queryByRole('button', { name: 'Add membership' })).toBeNull();
   });
 });
@@ -692,7 +692,7 @@ describe('Add member gives a membership in the same form', () => {
       "You haven't set up the memberships you sell yet. Once you have, you pick one here. Until then, type this member's status and payment yourself.",
     );
     const link = within(callout).getByRole('link', { name: /^Set up memberships/ });
-    expect(link.getAttribute('href')).toBe('/console/iron-temple/settings#memberships');
+    expect(link.getAttribute('href')).toBe('/console/iron-temple/memberships');
     // It opens beside the form, so nothing typed here is lost.
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.textContent).toContain('(opens in a new tab)');

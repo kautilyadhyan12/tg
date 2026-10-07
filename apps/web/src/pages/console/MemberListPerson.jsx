@@ -1112,7 +1112,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 : `Your ${words.it ?? 'gym'} hasn't set up the memberships it sells yet. Until the owner does, type this ${words.person}'s status and payment yourself.`}
             </p>
             {mayManage && typeof gym?.slug === 'string' ? (
-              <a href={`/console/${gym.slug}/settings#memberships`} target="_blank" rel="noreferrer" className="c-btn c-btn-s c-btn-sm">
+              <a href={`/console/${gym.slug}/memberships`} target="_blank" rel="noreferrer" className="c-btn c-btn-s c-btn-sm">
                 Set up memberships
                 <ExternalLink aria-hidden="true" className="w-4 h-4" />
                 <span className="sr-only">(opens in a new tab)</span>
@@ -1298,6 +1298,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           clockFormat={gym?.clockFormat}
           onChanged={membershipsChanged}
           nothingNow={nothingNow}
+          managesTypes={canManageMemberships(viewerPrivileges(gym))}
         />
         {membership.length > 0 ? (
           // What the gym's own list says about them, in its words; the box above is what

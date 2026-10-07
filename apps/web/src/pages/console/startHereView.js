@@ -6,7 +6,6 @@ import { orgWords } from '@app/shared';
 
 /** The Settings sections the list's buttons open: the `id` each has on that page. */
 export const SETTINGS_SECTION = {
-  memberships: 'memberships',
   staff: 'staff',
   hours: 'opening-hours',
   frontDesk: 'check-in-devices',
@@ -21,7 +20,7 @@ function stepWords(step, orgSlug, orgType) {
       return {
         title: 'What you sell',
         line: `The memberships and class packs people buy from you, with their prices. You pick one of them when you add a ${words.person}.`,
-        actions: [{ label: 'Set up memberships', to: `${base}/settings#${SETTINGS_SECTION.memberships}` }],
+        actions: [{ label: 'Set up memberships', to: `${base}/memberships` }],
       };
     case 'members':
       return {

@@ -22,8 +22,8 @@ import {
 } from '../../pages/console/membershipWordsView';
 import { ConfirmInline } from './ConsoleStates';
 
-// THE MEMBER LIST'S MEMBERSHIPS, inside Settings → Memberships (spec Part 3 §13.2;
-// ROADMAP 17a-iii). A gym's member list says which membership each person has ("Gold").
+// THE MEMBER LIST'S MEMBERSHIPS, on the Memberships page (spec Part 3 §13.2; ROADMAP
+// 17a-iii). A gym's member list says which membership each person has ("Gold").
 // Such a name is a membership like any the gym adds by hand, so it is drawn in the
 // gym's ONE list of memberships, never as a second list beside it:
 //   - a name that is no type yet sits under "On your member list, not set up yet", and
@@ -33,12 +33,12 @@ import { ConfirmInline } from './ConsoleStates';
 // Either way a box then names who gets the membership and who does not, and nothing is
 // given before its button is pressed. All of it needs `members.confirm`, as the server
 // asks: without it the list of memberships is drawn as it always was.
+//
+// Drawn from `console.css` (spec Part 3 §17).
 
-const inputStyle = { background: '#0A0908', border: '1px solid rgba(255,255,255,0.10)', color: '#fff' };
-const quietButton = { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' };
-const mainButton = { background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', color: '#0A0908' };
-const hintStyle = { color: 'rgba(255,255,255,0.55)' };
-const plainStyle = { color: 'rgba(255,255,255,0.75)' };
+const TICK = { accentColor: 'var(--accent)' };
+const BAD = { color: 'var(--bad)' };
+const LINE = { borderTop: '1px solid var(--line)' };
 
 /** One group's people as a list, a row each with the day they will read: the first few,
  *  "and N more · See all", then a page at a time. The list sits in a frame of its own;
@@ -48,41 +48,39 @@ function Names({ preview, group }) {
   const { rows, more, waiting } = groupNames(preview, group, shown);
   if (rows.length === 0) return null;
   const opened = shown > NAMES_SHOWN;
-  const linkStyle = { color: 'rgba(255,255,255,0.85)' };
   return (
     <div className="flex flex-col gap-1">
       <ul
         data-testid={`give-names-${group}`}
-        className="flex flex-col rounded-lg"
-        style={{ border: '1px solid rgba(255,255,255,0.10)', ...(opened ? { maxHeight: '18rem', overflowY: 'auto' } : {}) }}
+        className="flex flex-col rounded-[10px] m-0 p-0 list-none"
+        style={{ border: '1px solid var(--line)', ...(opened ? { maxHeight: '18rem', overflowY: 'auto' } : {}) }}
       >
         {rows.map((row, i) => (
           <li
             key={row.id}
-            className="flex flex-wrap items-baseline justify-between gap-x-4 px-3 py-1.5 text-sm"
-            style={i > 0 ? { borderTop: '1px solid rgba(255,255,255,0.06)' } : undefined}
+            className="flex flex-wrap items-baseline justify-between gap-x-4 px-3 py-2 c-s14"
+            style={i > 0 ? LINE : undefined}
           >
-            <span style={{ color: '#fff' }}>{row.name}</span>
-            {row.note !== '' ? <span style={hintStyle}>{row.note}</span> : null}
+            <span className="c-t1">{row.name}</span>
+            {row.note !== '' ? <span className="c-t2">{row.note}</span> : null}
           </li>
         ))}
       </ul>
       {more > 0 || opened ? (
-        <p className="text-sm flex flex-wrap items-center gap-x-2" style={hintStyle}>
+        <p className="c-s14 c-t2 m-0 flex flex-wrap items-center gap-x-3">
           {more > 0 ? <span>{`and ${more.toLocaleString('en')} more`}</span> : null}
           {waiting > 0 ? (
             <button
               type="button"
               onClick={() => setShown((n) => (n <= NAMES_SHOWN ? NAMES_PAGE : n + NAMES_PAGE))}
-              className="underline min-h-11"
-              style={linkStyle}
+              className="c-btn c-btn-link"
             >
               {opened ? 'Show more' : 'See all'}
             </button>
           ) : null}
           {more > 0 && waiting === 0 ? <span>To see everyone, filter Members by this membership.</span> : null}
           {opened ? (
-            <button type="button" onClick={() => setShown(NAMES_SHOWN)} className="underline min-h-11" style={linkStyle}>
+            <button type="button" onClick={() => setShown(NAMES_SHOWN)} className="c-btn c-btn-link">
               Show fewer
             </button>
           ) : null}
@@ -118,49 +116,45 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
       ref={boxRef}
       role="group"
       aria-label={words.heading}
-      className="rounded-xl p-4 flex flex-col gap-4"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,138,31,0.45)' }}
+      className="c-card p-5 md:p-6 flex flex-col gap-5"
+      style={{ borderColor: 'var(--accent)' }}
     >
-      <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-        {words.heading}
-      </p>
+      <h2 className="c-h2">{words.heading}</h2>
 
       {groups.length > 0 ? (
         <div className="flex flex-col gap-3">
-          <p className="text-xs font-semibold uppercase tracking-wide" style={hintStyle}>
-            Who gets it
-          </p>
+          <p className="c-th m-0">Who gets it</p>
           {groups.map((g) => (
             <div key={g.key} className="flex flex-col gap-1">
-              <label className="flex items-start gap-3 min-h-11 text-sm" style={{ color: '#fff' }}>
+              <label className="flex items-start gap-3 min-h-11 c-s15 c-t1">
                 <input
                   type="checkbox"
-                  className="w-5 h-5 mt-0.5"
+                  className="w-[18px] h-[18px] mt-0.5 flex-shrink-0"
+                  style={TICK}
                   checked={ticks[g.key]}
                   onChange={() => setTicks((t) => ({ ...t, [g.key]: !t[g.key] }))}
                 />
                 <span className="flex flex-col">
-                  <span className="font-semibold">{g.title}</span>
-                  <span style={plainStyle}>{g.detail}</span>
+                  <span className="c-w6">{g.title}</span>
+                  <span className="c-s14 c-t2">{g.detail}</span>
                 </span>
               </label>
-              <div className="pl-8">
+              <div className="pl-[30px]">
                 <Names preview={preview} group={g.key} />
               </div>
               {g.key === 'ask' && asksPaid(preview, ticks) ? (
-                <div role="radiogroup" aria-label={question.question} className="pl-8 flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: '#fff' }}>
-                    {question.question}
-                  </span>
+                <div role="radiogroup" aria-label={question.question} className="pl-[30px] flex flex-col gap-1">
+                  <span className="c-label">{question.question}</span>
                   {[
                     { value: true, label: question.yes },
                     { value: false, label: question.no },
                   ].map((choice) => (
-                    <label key={String(choice.value)} className="flex items-center gap-3 min-h-11 text-sm" style={{ color: '#fff' }}>
+                    <label key={String(choice.value)} className="flex items-center gap-3 min-h-11 c-s15 c-t1">
                       <input
                         type="radio"
                         name={id('paid')}
-                        className="w-5 h-5"
+                        className="w-[18px] h-[18px] flex-shrink-0"
+                        style={TICK}
                         checked={paid === choice.value}
                         onChange={() => setPaid(choice.value)}
                       />
@@ -168,7 +162,7 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
                     </label>
                   ))}
                   {pressed && problem !== null ? (
-                    <p className="text-sm" style={{ color: '#ef4444' }} role="alert">
+                    <p className="c-s14 m-0" style={BAD} role="alert">
                       {problem}
                     </p>
                   ) : null}
@@ -176,24 +170,16 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
               ) : null}
             </div>
           ))}
-          {pack !== null ? (
-            <p className="text-sm" style={plainStyle}>
-              {pack}
-            </p>
-          ) : null}
+          {pack !== null ? <p className="c-s14 c-t2 m-0">{pack}</p> : null}
         </div>
       ) : null}
 
       {out.length > 0 ? (
         <div className="flex flex-col gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wide" style={hintStyle}>
-            Who doesn&apos;t
-          </p>
+          <p className="c-th m-0">Who doesn&apos;t</p>
           {out.map((line) => (
             <div key={line.key} className="flex flex-col gap-1">
-              <p className="text-sm" style={plainStyle}>
-                {line.text}
-              </p>
+              <p className="c-s14 c-t2 m-0">{line.text}</p>
               {line.key === 'past' ? null : <Names preview={preview} group={line.key} />}
             </div>
           ))}
@@ -201,17 +187,15 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
       ) : null}
 
       {words.nobody !== null ? (
-        <p className="text-sm" style={plainStyle}>
-          {words.nobody}
-        </p>
+        <p className="c-s14 c-t2 m-0">{words.nobody}</p>
       ) : (
-        <p className="text-sm" style={hintStyle}>
+        <p className="c-s14 c-t3 m-0">
           No money is taken and nobody is emailed. You can change or cancel a membership on each person&apos;s page.
         </p>
       )}
 
       {error !== null ? (
-        <p className="text-sm" style={{ color: '#ef4444' }} role="alert">
+        <p className="c-s14 m-0" style={BAD} role="alert">
           {error}
         </p>
       ) : null}
@@ -225,14 +209,13 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
               setPressed(true);
               if (problem === null) onGive(linkBody(preview, ticks, paid));
             }}
-            className="rounded-xl px-5 py-3 text-sm font-semibold flex items-center justify-center gap-2 min-h-11 disabled:opacity-40"
-            style={mainButton}
+            className="c-btn c-btn-p"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
             {words.button}
           </button>
         ) : null}
-        <button type="button" disabled={busy} onClick={onCancel} className="rounded-xl px-4 py-3 text-sm min-h-11 disabled:opacity-40" style={quietButton}>
+        <button type="button" disabled={busy} onClick={onCancel} className="c-btn c-btn-s">
           {words.button === null ? 'Close' : 'Cancel'}
         </button>
       </div>
@@ -252,9 +235,7 @@ export function TypeTies({ type, ties, off, busy, onGive, onUndo }) {
         const open = tieButton(type, tie);
         return (
           <div key={tie.word.word} className="flex flex-col gap-2">
-            <p className="text-sm" style={plainStyle}>
-              {tie.text}
-            </p>
+            <p className="c-s14 c-t2 m-0">{tie.text}</p>
             {asking === tie.word.word ? (
               <ConfirmInline
                 question={undo.question}
@@ -266,6 +247,7 @@ export function TypeTies({ type, ties, off, busy, onGive, onUndo }) {
                   onUndo(tie.word);
                 }}
                 onCancel={() => setAsking(null)}
+                newLook
               />
             ) : tie.give || tie.undo ? (
               <div className="flex flex-wrap gap-2">
@@ -275,8 +257,7 @@ export function TypeTies({ type, ties, off, busy, onGive, onUndo }) {
                     disabled={off}
                     onClick={() => onGive(tie.word, type)}
                     aria-label={open.aria}
-                    className={`rounded-xl px-4 py-2 text-sm min-h-11 disabled:opacity-40 ${open.main ? 'font-semibold' : ''}`}
-                    style={open.main ? mainButton : quietButton}
+                    className={open.main ? 'c-btn c-btn-soft c-btn-sm' : 'c-btn c-btn-s c-btn-sm'}
                   >
                     {open.label}
                   </button>
@@ -286,8 +267,7 @@ export function TypeTies({ type, ties, off, busy, onGive, onUndo }) {
                     type="button"
                     disabled={off}
                     onClick={() => setAsking(tie.word.word)}
-                    className="rounded-xl px-4 py-2 text-sm min-h-11 disabled:opacity-40"
-                    style={quietButton}
+                    className="c-btn c-btn-s c-btn-sm"
                   >
                     {undo.button}
                   </button>
@@ -313,24 +293,21 @@ function SetUpChooser({ word, types, canCreate, busy, onExisting, onNew, onCance
     <div
       role="group"
       aria-label={text.question}
-      className="rounded-xl p-4 flex flex-col gap-2"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+      className="rounded-[14px] p-4 md:p-5 flex flex-col gap-2"
+      style={{ background: 'var(--raise)' }}
     >
-      <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-        {text.question}
-      </p>
-      <label className="flex items-center gap-3 min-h-11 text-sm" style={{ color: '#fff' }}>
-        <input type="radio" name={radio} className="w-5 h-5" checked={choice === 'existing'} onChange={() => setChoice('existing')} />
+      <p className="c-s15 c-w6 c-t1 m-0">{text.question}</p>
+      <label className="flex items-center gap-3 min-h-11 c-s15 c-t1">
+        <input type="radio" name={radio} className="w-[18px] h-[18px] flex-shrink-0" style={TICK} checked={choice === 'existing'} onChange={() => setChoice('existing')} />
         {text.existing}
       </label>
       {choice === 'existing' ? (
-        <div className="pl-8" style={{ maxWidth: '24rem' }}>
+        <div className="pl-[30px]" style={{ maxWidth: '24rem' }}>
           <select
             aria-label={`Which membership ${word.word} is`}
             value={typeId}
             onChange={(event) => setTypeId(event.target.value)}
-            className="w-full rounded-xl px-4 py-3 text-base sm:text-sm"
-            style={inputStyle}
+            className="c-input"
           >
             <option value="">{text.pick}</option>
             {types.map((t) => (
@@ -341,8 +318,8 @@ function SetUpChooser({ word, types, canCreate, busy, onExisting, onNew, onCance
           </select>
         </div>
       ) : null}
-      <label className="flex items-center gap-3 min-h-11 text-sm" style={{ color: '#fff', opacity: canCreate ? 1 : 0.45 }}>
-        <input type="radio" name={radio} className="w-5 h-5" checked={choice === 'new'} disabled={!canCreate} onChange={() => setChoice('new')} />
+      <label className="flex items-center gap-3 min-h-11 c-s15 c-t1" style={{ opacity: canCreate ? 1 : 0.5 }}>
+        <input type="radio" name={radio} className="w-[18px] h-[18px] flex-shrink-0" style={TICK} checked={choice === 'new'} disabled={!canCreate} onChange={() => setChoice('new')} />
         {text.fresh}
       </label>
       <div className="flex flex-wrap gap-2 pt-1">
@@ -350,12 +327,11 @@ function SetUpChooser({ word, types, canCreate, busy, onExisting, onNew, onCance
           type="button"
           disabled={busy || !ready}
           onClick={() => (choice === 'new' ? onNew() : onExisting(typeId))}
-          className="rounded-xl px-5 py-3 text-sm font-semibold min-h-11 disabled:opacity-40"
-          style={mainButton}
+          className="c-btn c-btn-p"
         >
           Continue
         </button>
-        <button type="button" disabled={busy} onClick={onCancel} className="rounded-xl px-4 py-3 text-sm min-h-11 disabled:opacity-40" style={quietButton}>
+        <button type="button" disabled={busy} onClick={onCancel} className="c-btn c-btn-s">
           Cancel
         </button>
       </div>
@@ -364,52 +340,42 @@ function SetUpChooser({ word, types, canCreate, busy, onExisting, onNew, onCance
 }
 
 /** The list's names that are no type yet, each with Set up. `rows` come from
- *  `notSetUp`; `choosing` is the name whose question is open. */
-export function NotSetUp({ rows, types, canCreate, off, busy, choosing, onChoose, onExisting, onNew, onUndo }) {
+ *  `notSetUp`; `choosing` is the name whose question is open; `formFor` is the name being
+ *  added as a new type, and `form` its form, drawn in that name's row. */
+export function NotSetUp({ rows, types, canCreate, off, busy, choosing, formFor = null, form = null, onChoose, onExisting, onNew, onUndo }) {
   const [asking, setAsking] = useState(null);
   if (rows.length === 0) return null;
   return (
-    <section
-      aria-label="On your member list, not set up yet"
-      className="flex flex-col gap-2 pt-4"
-      style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
-    >
-      <p className="text-xs font-semibold uppercase tracking-wide" style={hintStyle}>
-        On your member list, not set up yet
-      </p>
-      <p className="text-sm" style={hintStyle}>
-        Your member list says people have these memberships, but they have no price here yet. Set each one up once, and
-        the people who have it get it, with the renewal or end date from your list.
-      </p>
-      <ul className="flex flex-col">
+    <section aria-label="On your member list, not set up yet" className="c-card overflow-hidden">
+      <div className="flex flex-col gap-1 px-5 pt-5 pb-4 md:px-6">
+        <h2 className="c-h2">On your member list, not set up yet</h2>
+        <p className="c-s14 c-t2 m-0" style={{ maxWidth: 640 }}>
+          Your member list says people have these memberships, but they have no price here yet. Set each one up once,
+          and the people who have it get it, with the renewal or end date from your list.
+        </p>
+      </div>
+      <ul className="flex flex-col m-0 p-0 list-none">
         {rows.map((word) => {
           const archived = archivedLine(word);
           const again = againWords(word);
           return (
-            <li key={word.word} className="py-3 flex flex-col gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <li key={word.word} className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>
               <div className="flex flex-wrap items-center gap-3">
-                <span className="text-sm font-semibold flex-grow min-w-0" style={{ color: '#fff' }}>
-                  {nameLine(word)}
-                </span>
-                {choosing === word.word || asking === word.word ? null : (
+                <span className="c-s15 c-w6 c-t1 flex-grow min-w-0 break-words">{nameLine(word)}</span>
+                {choosing === word.word || asking === word.word || formFor === word.word ? null : (
                   <button
                     type="button"
                     // With nothing for sale and no way to add (no country set, the list full), there is nothing to set it up as.
                     disabled={off || (archived === null && types.length === 0 && !canCreate)}
                     onClick={() => (archived === null ? onChoose(word) : setAsking(word.word))}
                     aria-label={archived === null ? `Set up ${word.word}` : `Set up ${word.word} again`}
-                    className="rounded-xl px-5 py-2 text-sm font-semibold min-h-11 disabled:opacity-40"
-                    style={mainButton}
+                    className="c-btn c-btn-soft c-btn-sm"
                   >
                     {archived === null ? 'Set up' : 'Set up again'}
                   </button>
                 )}
               </div>
-              {archived !== null ? (
-                <p className="text-sm" style={plainStyle}>
-                  {archived}
-                </p>
-              ) : null}
+              {archived !== null ? <p className="c-s14 c-t2 m-0">{archived}</p> : null}
               {asking === word.word ? (
                 <ConfirmInline
                   question={again.question}
@@ -421,6 +387,7 @@ export function NotSetUp({ rows, types, canCreate, off, busy, choosing, onChoose
                     onUndo(word);
                   }}
                   onCancel={() => setAsking(null)}
+                  newLook
                 />
               ) : null}
               {choosing === word.word ? (
@@ -434,6 +401,7 @@ export function NotSetUp({ rows, types, canCreate, off, busy, choosing, onChoose
                   onCancel={() => onChoose(null)}
                 />
               ) : null}
+              {formFor === word.word ? form : null}
             </li>
           );
         })}

@@ -4,8 +4,9 @@
 // The pages each person may open are written out HERE, from the menu as it was before
 // R1 (ConsoleLayout at fa8e38a): Overview and Members always, Leads with
 // `members.confirm`, Attendance with `attendance.read`, Classes with `schedule.manage`,
-// Settings with `staff.manage` or `org.manage`, and since 17a-i with `memberships.manage`
-// too (its Memberships box), and Updates with `posts.manage` (19b-i). Every mix of them is drawn, and the computer menu and
+// Settings with `staff.manage` or `org.manage`, and Updates with `posts.manage` (19b-i).
+// `memberships.manage` brought Settings from 17a-i to 23c-i, while the price list was a box
+// there; it now brings Memberships, a page of its own, and Settings holds nothing for it. Every mix of them is drawn, and the computer menu and
 // the phone's tabs plus More must each hold exactly those pages.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, cleanup } from '@testing-library/react';
@@ -36,6 +37,8 @@ function openableToday(privileges) {
   return [
     BASE,
     `${BASE}/members`,
+    // Memberships (23c-i): its own page, for whoever may change the price list.
+    ...(has('memberships.manage') ? [`${BASE}/memberships`] : []),
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
     ...(has('schedule.manage') ? [`${BASE}/classes`] : []),
@@ -44,7 +47,7 @@ function openableToday(privileges) {
     ...(has('posts.manage') ? [`${BASE}/updates`, `${BASE}/events`] : []),
     ...(has('leaderboard.manage') ? [`${BASE}/leaderboard`, `${BASE}/challenges`] : []),
     // Settings also holds Class bookings since 17c-ii-a, on `schedule.manage`.
-    ...(has('staff.manage') || has('org.manage') || has('memberships.manage') || has('schedule.manage') ? [`${BASE}/settings`] : []),
+    ...(has('staff.manage') || has('org.manage') || has('schedule.manage') ? [`${BASE}/settings`] : []),
   ].sort();
 }
 

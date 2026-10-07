@@ -6,13 +6,11 @@ import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
 import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import StaffPanel from '../../components/console/StaffPanel';
-import MembershipTypesPanel from '../../components/console/MembershipTypesPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
 import { SETTINGS_SECTION } from './startHereView';
 import { canManageStaff } from './staffView';
-import { canManageMemberships } from './membershipTypesView';
 import { canManageSchedule } from './classesView';
 import { canManageOrg } from './gymDetailsView';
 import { consoleIsReadOnly } from './billingView';
@@ -47,7 +45,7 @@ import { viewerPrivileges } from './consoleView';
 export default function Settings() {
   const { orgSlug } = useParams();
   const { loading, error, org, notFound, reload } = useConsoleOrg(orgSlug);
-  // A link that names a section ("#memberships") opens the page there, with it open.
+  // A link that names a section ("#staff") opens the page there, with it open.
   const section = useSectionLink(!loading && error === null && !notFound);
 
   if (loading) {
@@ -84,7 +82,6 @@ export default function Settings() {
   const privileges = viewerPrivileges(org);
   const canEditGym = canManageOrg(privileges);
   const canEditStaff = canManageStaff(privileges);
-  const canEditMemberships = canManageMemberships(privileges);
   const canEditSchedule = canManageSchedule(privileges);
   // Part 3 §4.2's read-only console. **It gates neither section**, and that
   // distinction is the whole design: a lapsed gym's staff still SEE everything
@@ -162,7 +159,7 @@ export default function Settings() {
           one fiber without scheduling its deletion, which was worse than the
           defect it replaced. */}
       {canEditGym ? (
-        // `id`: Overview's Start here list opens the page here (23b), as Memberships below.
+        // `id`: Overview's Start here list opens the page here (23b).
         <div id={SETTINGS_SECTION.hours} style={{ scrollMarginTop: 16 }}>
           <OpeningHoursPanel
             key={`hours-${org.id}`}
@@ -174,19 +171,8 @@ export default function Settings() {
         </div>
       ) : null}
 
-      {/* MEMBERSHIPS (17a-i): what the gym sells, on `memberships.manage` as the server
-          gates its changes. Keyed per gym for the panels' reason above: it holds a form. */}
-      {canEditMemberships ? (
-        // `id`: Add member's "Set up memberships" opens the page here (23a-ii).
-        <div id={SETTINGS_SECTION.memberships} style={{ scrollMarginTop: 16 }}>
-          <MembershipTypesPanel
-            key={`memberships-${org.id}`}
-            org={org}
-            readOnly={readOnly}
-            startOpen={section === SETTINGS_SECTION.memberships}
-          />
-        </div>
-      ) : null}
+      {/* What the gym sells is not here: Memberships is a page of its own, in the menu
+          (23c-i; Kd at its click-through: Settings needs nothing about it). */}
 
       {/* CLASS BOOKINGS (17c-ii-a): the four booking settings, on `schedule.manage` as the
           server gates them. Keyed per gym for the panels' reason above: it holds a form. */}
@@ -244,7 +230,7 @@ export default function Settings() {
         </div>
       ) : null}
 
-      {!canEditGym && !canEditStaff && !canEditMemberships && !canEditSchedule ? (
+      {!canEditGym && !canEditStaff && !canEditSchedule ? (
         /* REACHABLE BY TYPING THE ADDRESS, and that is the only way here — the
            nav does not draw this tab for somebody holding neither power, because
            every section on it would answer them with a refusal. Somebody who

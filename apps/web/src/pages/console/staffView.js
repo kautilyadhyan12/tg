@@ -231,7 +231,7 @@ function privilegeCopy(orgType) {
       // for anyone on staff.
       value: 'memberships.manage',
       label: 'Change membership types and prices',
-      hint: `What your ${words.it} sells and what each costs, in Settings.`,
+      hint: `What your ${words.it} sells and what each costs, in Memberships.`,
     },
     {
       value: 'staff.manage',

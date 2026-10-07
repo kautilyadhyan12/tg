@@ -3,7 +3,7 @@ import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { againWords, doneWords, undoWords } from '../../pages/console/membershipWordsView';
 
 // The member list's membership names, read and acted on (spec Part 3 §13.2; ROADMAP
-// 17a-iii): what Settings → Memberships draws them from. All four calls need
+// 17a-iii): what the Memberships page draws them from. All four calls need
 // `members.confirm`; somebody without it gets no names, and the price list alone.
 
 /** The list's membership names and what the gym does with them. `types` is the price

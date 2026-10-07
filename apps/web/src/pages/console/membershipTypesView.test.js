@@ -1,4 +1,4 @@
-// Settings → Memberships: its words and its form's rules (spec Part 3 §13.1; ROADMAP 17a-i).
+// The Memberships page: its words and its form's rules (spec Part 3 §13.1; ROADMAP 17a-i).
 import { describe, expect, it } from 'vitest';
 import { saveGymMembershipTypeRequestSchema } from '@app/shared';
 import {

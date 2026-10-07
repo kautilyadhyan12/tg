@@ -43,6 +43,7 @@ import ConsoleHome     from './pages/console/ConsoleHome';
 import NewGym          from './pages/console/NewGym';
 import ConsoleOverview from './pages/console/Overview';
 import ConsoleMembers  from './pages/console/Members';
+import ConsoleMemberships from './pages/console/Memberships';
 import ConsoleMembersReview from './pages/console/MembersReview';
 import ConsoleMembersDuplicates from './pages/console/MembersDuplicates';
 import ConsoleAttendance from './pages/console/Attendance';
@@ -254,6 +255,13 @@ export default function App() {
             <Route path="/console/:orgSlug/members/duplicates" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleMembersDuplicates /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* WHAT THE GYM SELLS (Part 3 §13.1; ROADMAP 23c-i): a page of its own. The nav
+                draws it for `memberships.manage`; the server is the enforcement. */}
+            <Route path="/console/:orgSlug/memberships" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleMemberships /></ConsoleLayout>
               </ProtectedRoute>
             } />
             {/* WHO CAME IN — Kd's ruling 2026-09-01 (:28107): its own section,

@@ -46,7 +46,9 @@ const DANGER = 'c-btn c-btn-danger';
 // `nothingNow`: for somebody with nothing in use, what their row on the list says of the
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
 // folded away, so without it the page would say nothing where the list says "Cancelled".
-export default function MemberMemberships({ gymId, entryId, name, readOnly, clockFormat, onChanged, nothingNow = null }) {
+// `managesTypes`: whether this member of staff may open the Memberships page; a sentence
+// names it only for somebody who can.
+export default function MemberMemberships({ gymId, entryId, name, readOnly, clockFormat, onChanged, nothingNow = null, managesTypes = true }) {
   /** The answer on screen, and the record it is about: never shown under another. */
   const [held, setHeld] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -110,7 +112,7 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
   const over = shown.memberships.filter((m) => !isLive(m));
   const canAct = !readOnly && !shown.past;
   // What their list says their membership is, where they do not hold it here.
-  const listed = listedRow(shown.listed, name);
+  const listed = listedRow(shown.listed, name, managesTypes);
 
   /** A write: its answer is kept for the person it was asked about. */
   const run = async (what, m, work) => {
@@ -329,7 +331,9 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
       >
         <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
         {types.length === 0 ? (
-          <p className="c-s14 c-t2 m-0">You have no membership types yet. Add them in Settings, under Memberships.</p>
+          <p className="c-s14 c-t2 m-0">
+            {managesTypes ? 'You have no membership types yet. Add them in Memberships.' : 'There are no membership types yet. Ask the owner to add them.'}
+          </p>
         ) : (
           <MembershipChoice types={types} today={today} value={form} onChange={(next) => setForm((f) => ({ ...f, ...next }))} />
         )}

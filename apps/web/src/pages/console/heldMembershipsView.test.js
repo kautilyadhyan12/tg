@@ -115,12 +115,12 @@ describe("what the member list says their membership is, where they do not hold 
       title: 'Gold Plus',
       tag: 'Not set up',
       from: 'From your member list · Renews 13 October 2026',
-      note: 'This membership has no price here yet. Set it up in Settings, under Memberships, and Leo Grant gets it.',
+      note: 'This membership has no price here yet. Set it up in Memberships, and Leo Grant gets it.',
     });
     expect(listedRow(listed({ endsOnKind: 'ends', endsOn: '2026-12-31' }), 'Leo Grant').from).toBe('From your member list · Ends 31 December 2026');
     expect(listedRow(listed({ endsOnKind: null, endsOn: null }), 'this person')).toMatchObject({
       from: 'From your member list',
-      note: 'This membership has no price here yet. Set it up in Settings, under Memberships, and this person gets it.',
+      note: 'This membership has no price here yet. Set it up in Memberships, and this person gets it.',
     });
   });
 
@@ -129,7 +129,7 @@ describe("what the member list says their membership is, where they do not hold 
       title: 'Gold Monthly',
       tag: 'Not added',
       from: 'Your member list says “Gold” · Renews 13 October 2026',
-      note: "Zara Ali doesn't have it here yet. Add it with Add membership, or give it to everyone on your list who is missing it in Settings, under Memberships.",
+      note: "Zara Ali doesn't have it here yet. Add it with Add membership, or go to Memberships to give it to everyone on your list who is missing it.",
     });
     // The type's own name on the list (the server says so) is not quoted back at them.
     expect(listedRow(listed({ word: 'GOLD MONTHLY', type: TYPE, ownName: true, endsOn: null, endsOnKind: null }), 'this person')).toMatchObject({
@@ -139,6 +139,9 @@ describe("what the member list says their membership is, where they do not hold 
   });
 
   it('says nothing where the list says nothing, or they have, or have had, that type', () => {
+    // Somebody who may not open Memberships is not sent there.
+    expect(listedRow(listed(), 'Leo Grant', false).note).toBe('This membership has no price here yet. Once the owner sets it up, Leo Grant gets it.');
+    expect(listedRow(listed({ word: 'Gold', type: TYPE }), 'Zara Ali', false).note).toBe("Zara Ali doesn't have it here yet. Add it with Add membership.");
     expect(listedRow(null, 'Leo Grant')).toBeNull();
     expect(listedRow(undefined, 'Leo Grant')).toBeNull();
     expect(listedRow(listed({ word: 'Gold', type: TYPE, held: true }), 'Leo Grant')).toBeNull();
