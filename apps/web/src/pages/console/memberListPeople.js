@@ -585,6 +585,17 @@ export const DAY_FIELDS = [
 ];
 const STANDARD = [...TEXT_FIELDS, ...WORD_FIELDS, ...DAY_FIELDS].map((f) => f.key);
 
+/** What a membership held in the app answers on the list (23a-i): status, membership, the
+ *  renewal or end date, and payment. A page that shows the membership itself leaves the
+ *  gym's own words for these out, so it never gives two answers (23a-ii): a person's
+ *  Details and Edit where the app answers for them, and Add member where the gym has a
+ *  price list to pick from. */
+export const HELD_ANSWERS = ['status', 'membershipType', 'endsOn', 'paymentStatus'];
+/** The app answers for this person: their row reads the memberships they hold here. */
+export const appAnswers = (entry) => (entry?.held ?? null) !== null;
+/** Add member asks who the person is first: name, email and phone, then their membership. */
+export const WHO_FIELDS = ['fullName', 'email', 'phone'];
+
 /** The form's starting values: the person's, or blank for "Add person". */
 export function formFrom(entry, fields) {
   const form = { endsOnKind: entry?.endsOnKind ?? 'ends', extra: {} };
@@ -595,10 +606,12 @@ export function formFrom(entry, fields) {
 
 const tidy = (value) => (typeof value === 'string' ? value.trim() : '');
 
-/** "Add person": every box staff filled in. */
-export function inputFrom(form) {
+/** "Add person": every box staff filled in. `without`: the boxes the form does not show,
+ *  which send nothing whatever they hold. */
+export function inputFrom(form, without = []) {
   const input = {};
   for (const key of STANDARD) {
+    if (without.includes(key)) continue;
     const value = tidy(form[key]);
     if (value !== '') input[key] = value;
   }
@@ -610,17 +623,21 @@ export function inputFrom(form) {
 }
 
 /** "Change": only the boxes staff changed, an emptied box as null, so a field
- *  nobody touched is never sent and never marked as edited by hand. */
-export function patchFrom(form, entry, fields) {
+ *  nobody touched is never sent and never marked as edited by hand. `without`: the boxes
+ *  the form does not show, which change nothing. */
+export function patchFrom(form, entry, fields, without = []) {
   const patch = {};
   for (const key of STANDARD) {
+    if (without.includes(key)) continue;
     const now = tidy(form[key]);
     const was = entry[key] ?? '';
     if (now === was) continue;
     patch[key] = now === '' && key !== 'fullName' ? null : now;
   }
   const endsOn = tidy(form.endsOn);
-  if (endsOn === '') {
+  if (without.includes('endsOn')) {
+    // The date box is not shown, so neither it nor its kind is sent.
+  } else if (endsOn === '') {
     if (entry.endsOnKind !== null && patch.endsOn !== undefined) patch.endsOnKind = null;
   } else if (form.endsOnKind !== entry.endsOnKind) {
     patch.endsOnKind = form.endsOnKind;
@@ -653,7 +670,7 @@ export function handEditedWords(entry, fields, labels) {
  *  sides was "really confusing"): `first` is the record the page is open on. */
 export function compareRecords(first, second, fields, person = 'member') {
   const rows = [
-    ...DETAILS(person),
+    ...DETAILS(person).map(([key, label, read]) => [key, label, heldCell(key, read)]),
     ['app', 'In the app', (r) => (r.inApp ? 'Yes' : 'No')],
     ...fields.map((f) => [`extra:${f.key}`, f.label, (r) => extraOf(r, f.key)]),
   ];
@@ -667,6 +684,10 @@ export function compareRecords(first, second, fields, person = 'member') {
 }
 
 const extraOf = (r, key) => r.extra?.find((x) => x.key === key)?.value || null;
+/** A record the app answers for is compared by what its person holds, as its row and its
+ *  own page say it, never by the old file's four words (23a-ii). */
+const HELD_CELLS = { status: 'status', membershipType: 'membership', endsOn: 'ends', paymentStatus: 'payment' };
+const heldCell = (key, read) => (r) => (HELD_CELLS[key] !== undefined && appAnswers(r) ? rowCells(r)[HELD_CELLS[key]] : read(r));
 const DETAILS = (person) => [
   ['fullName', 'Name', (r) => r.fullName || null],
   ['email', 'Email', (r) => r.email],
@@ -724,7 +745,12 @@ export function mergePreview(keep, remove, fields, person = 'member') {
     if (own !== null && other !== null && other !== own) lost.push({ key, label: f.label, value: other, why: `The kept record keeps its own ${f.label}.` });
   }
   rows.push({ key: 'list', label: 'On the list', value: keep.formerAt === null || remove.formerAt === null ? 'On the list' : `Past ${person}`, fromOther: false });
-  return { rows, lost };
+  // Where the app answers for either person, the old file's four words are not said here
+  // either (23a-ii): the comparison above says what each holds, and a merge moves
+  // memberships with their records.
+  if (!appAnswers(keep) && !appAnswers(remove)) return { rows, lost, memberships: false };
+  const said = (row) => !HELD_ANSWERS.includes(row.key);
+  return { rows: rows.filter(said), lost: lost.filter(said), memberships: true };
 }
 
 /** What a write did, in a line for the top of the person's page. */

@@ -2202,7 +2202,8 @@ a trainer) — logged with who did it. The page refreshes itself every 5 seconds
 (`GET …/attendance?since=`; plain polling, no socket): name, time, how, which device or
 which member of staff, and under the name the gym's own status and payment words in
 orange, as the desk showed them (RULINGS 2026-10-03; sent only to staff who hold
-`attendance.mark`).
+`attendance.mark`). *(23a-ii: for somebody who holds a membership in the app the words,
+here and at the desk, are what they hold, as the Members list reads it: §13.2.)*
 
 **Fixing a visit, as built (19a-iv).** The same tick, `attendance.mark`, adds a visit
 somebody made on an earlier day and removes a wrong one; a lapsed gym changes nothing.
@@ -2379,6 +2380,8 @@ just show (§11).
   the page says the membership was not (RULINGS 2026-10-04). Where the gym has a price
   list the form does not also ask the list's own Membership word (§11): it takes the
   name of the type once that membership is given, and never otherwise. Edit, and a gym with no price list, keep that box.
+  *(23a-ii: the choice comes straight after name, email and phone, and with a price list
+  none of the list's own four words is asked; the notes at the end of this section.)*
 - Not here: bills and money (18a), a pack's classes used by a booking (17c), who a desk
   lets in (16d).
 
@@ -2523,8 +2526,39 @@ back as `expectedDigest`, and for other people, or with none, it is 409 `invite_
 with the new preview and nobody is invited.
 The membership rule itself was split so a list reads a membership's state, dates and what
 is owed without what staff can do to it (`heldMembershipFacts`; `heldMembershipView` is
-that and the buttons). Not done: Add member, a person's Details and Edit, and the front
-desk still read the list's own words (23a-ii).
+that and the buttons).
+
+*(23a-ii's notes, 2026-10-07.)* **Every other screen gives the same one answer.**
+- **Add member asks who the person is, then their membership**: Name, Email, Phone; then a
+  **Membership** box picked from the price list ("No membership" until staff pick one);
+  then Member number, Join date, Date of birth and the gym's own columns. A gym with a
+  price list is not asked the typed Status, Membership, Payment status or End or renewal
+  date, and a box the form does not show sends nothing. **A gym that has set up nothing to
+  sell** types those four in the membership's place, under a line saying so, with **Set up
+  memberships** for staff who hold `memberships.manage` (others are told the owner can). It
+  opens Settings beside the form with the Memberships section open
+  (`/settings#memberships`, `useSectionLink`), and the form reads the price list again when
+  staff come back to its window. Nothing is asked about a membership until the price list
+  is read; where it cannot be read the four are typed and nothing says the gym has none.
+- **A person's Details and Edit** leave those four out for somebody the app answers for
+  (`held` on their page, the same answer as their row), so the page says them once, in the
+  Memberships box; Edit says where they are changed, with **Go to Memberships**. A
+  membership changed in the box reads the page again. The "Changed by hand" line leaves
+  those four out too. With nothing in use the box, which folds what is over away, says
+  what the row says: "No membership now. Gold Monthly · Cancelled 6 Oct". Somebody the app
+  holds nothing for keeps every word and every box, in the order Edit had. The words stay
+  on the record, and an import still writes them.
+- **The front desk, staff's search, staff's check-in and the live log** (§12.4, §12.5) say
+  the status and payment word of what the person holds, by this rule on the gym's own day,
+  and their record's two words only where the app holds nothing for them
+  (`checkin/service.ts`: `noticeOf`, `heldWords`). What a person holds stands whole: one
+  that is over has no payment word, and the record's is not put in its place. The visit is
+  saved before the words are read, so a read that fails takes the words away and never the
+  tick, the search or the log (`checkin.held_words_unread`). A past member's visit in
+  today's log has no words. The log's screen asks for new visits every 5 seconds and for
+  the whole day once a minute, so a row follows a payment marked elsewhere. The desk prints
+  a payment word that says "payment" itself without the label: "Status: Active · Payment
+  due". Merge duplicate's side-by-side view reads the same four from what the person holds.
 
 **The membership row carries its record.** Since 2026-09-21 a person joins only by
 accepting an invitation (§10.2), and the invitation knows which record it was for; so
@@ -4280,7 +4314,11 @@ Name, App word (and its line), then the buttons by state:
 Sections: Contact · Membership · Custom fields · App ("In the app since", Visits "14 · last 25
 Sep", the invitation's line). "Changed by hand" under a field and the "An import asks before
 it writes over these." line stay. The Add member and Edit forms keep every field, hint, date
-picker and both buttons (Add member · Add and invite), drawn in the new look.
+picker and both buttons (Add member · Add and invite), drawn in the new look. *(23a-ii,
+2026-10-07: Add member asks for the membership straight after name, email and phone; the
+typed Status, Membership, Payment status and End or renewal date are asked only where the
+gym has no price list, and shown under Details and in Edit only for somebody the app holds
+no membership for: §13.2.)*
 
 ### 18.8 Import: who has left, person by person (5b-iii-b)
 

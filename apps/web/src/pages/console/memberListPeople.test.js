@@ -11,7 +11,9 @@ import {
 } from '@app/shared';
 import {
   EMPTY_FILTERS,
+  HELD_ANSWERS,
   activeFilters,
+  appAnswers,
   appView,
   compareRecords,
   mergePreview,
@@ -283,6 +285,26 @@ describe('what the form sends', () => {
   it('names the fields changed by hand, the gym columns under their own heading', () => {
     expect(handEditedWords(entry({ handEdited: ['phone', 'extra:locker'] }), FIELDS, FIELD_LABELS)).toEqual(['Phone', 'Locker']);
   });
+
+  // 23a-ii: where a membership is picked or held, the list's own words for it are not asked.
+  it('a box the form does not show sends nothing, whatever it holds', () => {
+    const typed = { ...formFrom(null, FIELDS), fullName: 'Bea', status: 'Active', membershipType: 'Gold', paymentStatus: 'Paid', endsOn: '2027-01-01', endsOnKind: 'renews', joinedOn: '2026-01-05' };
+    expect(inputFrom(typed, HELD_ANSWERS)).toEqual({ fullName: 'Bea', joinedOn: '2026-01-05' });
+    const e = entry();
+    const changed = { ...formFrom(e, FIELDS), phone: '+447700900999', status: 'Frozen', membershipType: 'Silver', paymentStatus: 'Overdue', endsOn: '', endsOnKind: 'ends' };
+    expect(patchFrom(changed, e, FIELDS, HELD_ANSWERS)).toEqual({ phone: '+447700900999' });
+    // Shown, every one of them is sent, as before.
+    expect(Object.keys(patchFrom(changed, e, FIELDS)).sort()).toEqual(['endsOn', 'endsOnKind', 'membershipType', 'paymentStatus', 'phone', 'status']);
+  });
+
+  it('the app answers for a person exactly where their row reads what they hold', () => {
+    expect(appAnswers(entry())).toBe(false);
+    expect(appAnswers(entry({ held: null }))).toBe(false);
+    expect(appAnswers(null)).toBe(false);
+    expect(appAnswers(entry({ held: { status: 'cancelled', memberships: ['Gold Monthly'], day: null, payment: null } }))).toBe(true);
+    // The four things a row reads from a membership, and no others.
+    expect([...HELD_ANSWERS].sort()).toEqual(['endsOn', 'membershipType', 'paymentStatus', 'status']);
+  });
 });
 
 describe('the "Showing:" line', () => {
@@ -313,6 +335,40 @@ describe('the "Showing:" line', () => {
 });
 
 describe("Merge duplicate's side-by-side view", () => {
+  it("After the merge leaves the old file's four words out where either person holds a membership here, and says their memberships stay", () => {
+    const holds = { status: 'active', memberships: ['Gold Monthly'], day: { what: 'renews', on: '2026-11-03' }, payment: { state: 'paid' } };
+    const old = { status: 'Expired', membershipType: 'Gold 2019', paymentStatus: 'Unpaid', endsOn: '2026-09-01', endsOnKind: 'ends' };
+    const other = entry({ entryId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'Lapsed', membershipType: 'Bronze', paymentStatus: 'Overdue', joinedOn: '2024-01-05' });
+    for (const [keep, gone] of [
+      [entry({ ...old, held: holds }), other],
+      [other, entry({ ...old, held: holds })],
+    ]) {
+      const shown = mergePreview(keep, gone, FIELDS);
+      expect(shown.memberships).toBe(true);
+      expect(JSON.stringify(shown)).not.toMatch(/Expired|Gold 2019|Unpaid|Lapsed|Bronze|Overdue/);
+      expect(shown.rows.map((r) => r.key)).toContain('joinedOn');
+    }
+    // Nobody holds anything here: every word, as before.
+    const plain = mergePreview(entry(old), other, FIELDS);
+    expect(plain.memberships).toBe(false);
+    expect(plain.rows.map((r) => r.key)).toEqual(expect.arrayContaining(['status', 'membershipType', 'endsOn', 'paymentStatus']));
+  });
+
+  // 23a-ii: the page says what a person holds once; the comparison says the same.
+  it("compares a record the app answers for by what its person holds, never by the old file's four words", () => {
+    const holds = { status: 'active', memberships: ['Gold Monthly', 'PT 10'], day: { what: 'renews', on: '2026-11-03' }, payment: { state: 'due', since: '2026-10-03' } };
+    const a = entry({ status: 'Expired', membershipType: 'Gold 2019', paymentStatus: 'Unpaid', endsOn: '2026-09-01', endsOnKind: 'ends', held: holds });
+    const b = entry({ entryId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'Lapsed', membershipType: 'Bronze', paymentStatus: 'Overdue', endsOn: '2026-08-01', endsOnKind: 'ends' });
+    const rows = compareRecords(a, b, FIELDS);
+    const row = (key) => rows.find((r) => r.key === key);
+    expect(row('status')).toMatchObject({ first: 'Active', second: 'Lapsed', differs: true });
+    expect(row('membershipType')).toMatchObject({ first: 'Gold Monthly +1', second: 'Bronze' });
+    expect(row('endsOn').first).toMatch(/^Renews 3 Nov/);
+    expect(row('endsOn').second).toMatch(/^Ends 1 Aug/);
+    expect(row('paymentStatus')).toMatchObject({ first: 'Payment due', second: 'Overdue' });
+    expect(JSON.stringify(rows)).not.toMatch(/Expired|Gold 2019|Unpaid/);
+  });
+
   it('lists every field of both records in one order, "—" for none, marks what differs, and leaves out what neither holds', () => {
     const a = entry({ memberNumber: 'M-1', dateOfBirth: '1990-03-12', inApp: true });
     const b = entry({ entryId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', email: 'ada.old@members.example', phone: null, dateOfBirth: '1990-03-12', formerAt: '2026-08-01T10:00:00.000Z', extra: [] });

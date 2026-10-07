@@ -2336,3 +2336,58 @@ describe('attendance on Settings', () => {
     expect(orgService.updateStaffPrivileges.mock.calls[0][2].privileges).toContain('attendance.read');
   });
 });
+
+// 23a-ii: Add member's "Set up memberships" opens Settings at its Memberships section.
+describe('a link to one section of Settings', () => {
+  const drawAt = (path) =>
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/console/:orgSlug/settings" element={<Settings />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  const INTRO = /Your own list of what you sell/;
+  let into;
+  let had;
+
+  beforeEach(() => {
+    // jsdom draws nothing, so it has no scrollIntoView of its own.
+    had = Element.prototype.scrollIntoView;
+    into = vi.fn();
+    Element.prototype.scrollIntoView = into;
+  });
+  afterEach(() => {
+    Element.prototype.scrollIntoView = had;
+  });
+
+  it('"#memberships" opens the page with Memberships open and in view, and it still folds shut', async () => {
+    drawAt('/console/iron-house/settings#memberships');
+    expect(await screen.findByText(INTRO)).toBeTruthy();
+    const section = document.getElementById('memberships');
+    const heading = within(section).getByRole('button', { name: /^Memberships/ });
+    expect(heading.getAttribute('aria-expanded')).toBe('true');
+    await waitFor(() => expect(into).toHaveBeenCalled());
+    expect(into.mock.instances.every((el) => el === section)).toBe(true);
+    // No other section was opened for them.
+    expect(screen.getAllByRole('button', { expanded: true })).toEqual([heading]);
+    fireEvent.click(heading);
+    expect(screen.queryByText(INTRO)).toBeNull();
+  });
+
+  it('with no section named, every section starts closed and nothing is moved', async () => {
+    drawAt('/console/iron-house/settings');
+    expect(await screen.findByRole('button', { name: /^Memberships/ })).toBeTruthy();
+    expect(screen.queryByText(INTRO)).toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(into).not.toHaveBeenCalled();
+  });
+
+  it('a section the page does not have moves nothing, and opens nothing', async () => {
+    drawAt('/console/iron-house/settings#nowhere');
+    expect(await screen.findByRole('button', { name: /^Memberships/ })).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(into).not.toHaveBeenCalled();
+    expect(screen.queryByText(INTRO)).toBeNull();
+  });
+});

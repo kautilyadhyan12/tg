@@ -429,7 +429,9 @@ function TypeRow({ type, readOnly, busy, formOpen, ties, onEdit, onArchive, onGi
   );
 }
 
-export default function MembershipTypesPanel({ org, readOnly }) {
+// `startOpen`: the page was opened by a link to this section (Add member's "Set up
+// memberships", 23a-ii), so it is drawn open.
+export default function MembershipTypesPanel({ org, readOnly, startOpen = false }) {
   const gymId = org.id;
   const [list, setList] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -541,7 +543,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
   };
 
   return (
-    <ConsoleSection title="Memberships" summary={withSetUpCount(typesSummary(list), fromList.words)} forceOpen={loadError !== null}>
+    <ConsoleSection title="Memberships" summary={withSetUpCount(typesSummary(list), fromList.words)} defaultOpen={startOpen} forceOpen={loadError !== null}>
       {readOnly ? (
         <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
           {readOnlyNote(org.orgType)}

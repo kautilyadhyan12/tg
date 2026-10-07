@@ -394,6 +394,63 @@ describe('checked in today', () => {
     expect(names).toEqual(['New Person', 'Ravi Noapp', 'Asha App']);
   });
 
+  // 23a-ii: a row's words are what the person holds, which staff change during the day.
+  it('reads the whole of today about once a minute, so a row follows a payment marked on another screen', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const row = (payment) => logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Maya Patel', { method: 'key_tag', status: 'Active', payment })]);
+    api.getCheckinLog.mockResolvedValue(logAnswer([]));
+    api.getCheckinLog.mockResolvedValueOnce(row('Payment due'));
+    drawScreen();
+    expect(await screen.findByText('Active · Payment due')).toBeTruthy();
+    // Eleven polls ask only for what is new, and are told nothing.
+    for (let n = 0; n < 11; n++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+    }
+    expect(api.getCheckinLog.mock.calls.slice(1).every(([, since]) => since === '2026-10-03T06:02:00.000Z')).toBe(true);
+    expect(screen.getByText('Active · Payment due')).toBeTruthy();
+    // The twelfth asks for the whole day, and the row says what the server says now.
+    api.getCheckinLog.mockResolvedValueOnce(row('Paid'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(api.getCheckinLog).toHaveBeenLastCalledWith('g1', null);
+    expect(await screen.findByText('Active · Paid')).toBeTruthy();
+    expect(screen.queryByText('Active · Payment due')).toBeNull();
+  });
+
+  it('a whole read that meets a read still on its way is made on the next poll, not a minute later', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const row = (payment) => logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Maya Patel', { method: 'key_tag', status: 'Active', payment })]);
+    api.getCheckinLog.mockResolvedValue(logAnswer([]));
+    api.getCheckinLog.mockResolvedValueOnce(row('Payment due'));
+    drawScreen();
+    await screen.findByText('Active · Payment due');
+    for (let n = 0; n < 10; n++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+    }
+    // The eleventh poll's answer is slow: it is still on its way at the twelfth.
+    let finish;
+    api.getCheckinLog.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    const asked = api.getCheckinLog.mock.calls.length;
+    await act(async () => {
+      finish(logAnswer([]));
+    });
+    api.getCheckinLog.mockResolvedValueOnce(row('Paid'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(api.getCheckinLog).toHaveBeenCalledTimes(asked + 1);
+    expect(api.getCheckinLog).toHaveBeenLastCalledWith('g1', null);
+    expect(await screen.findByText('Active · Paid')).toBeTruthy();
+  });
+
   it("shows the gym's status and payment words under a person who has them, and nothing under one who has none", async () => {
     api.getCheckinLog.mockResolvedValueOnce(
       logAnswer([

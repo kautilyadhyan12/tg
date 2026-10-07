@@ -5,6 +5,7 @@ import {
   ArrowLeftRight,
   Check,
   Copy,
+  ExternalLink,
   Loader2,
   Mail,
   MoreHorizontal,
@@ -28,12 +29,17 @@ import DatePick from '../../components/console/DatePick';
 import MemberMemberships from './MemberMemberships';
 import MembershipChoice from './MembershipChoice';
 import { giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
+import { canManageMemberships } from './membershipTypesView';
+import { viewerPrivileges } from './consoleView';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
 import {
   DAY_FIELDS,
+  HELD_ANSWERS,
   TEXT_FIELDS,
+  WHO_FIELDS,
   WORD_FIELDS,
+  appAnswers,
   contactWords,
   endsWords,
   entriesQueryString,
@@ -52,6 +58,7 @@ import {
   personInviteAction,
   pastWords,
   patchFrom,
+  rowCells,
   compareRecords,
   mergePreview,
   underAgeWhen,
@@ -363,7 +370,7 @@ function CompareRecords({ first, second, fields, person, keepId, onChoose, disab
 /** What the merge leaves, before Merge is pressed: the one record, each detail marked when it
  *  comes from the other record, and what the removed record holds that is not kept, with why. */
 function MergePreview({ keep, remove, fields, person }) {
-  const { rows, lost } = mergePreview(keep, remove, fields, person);
+  const { rows, lost, memberships } = mergePreview(keep, remove, fields, person);
   return (
     <section className="c-card p-3 flex flex-col gap-3" data-testid="merge-preview">
       <h3 className="c-s15 c-w6 c-t1 m-0">After the merge</h3>
@@ -382,6 +389,11 @@ function MergePreview({ keep, remove, fields, person }) {
           </div>
         ))}
       </dl>
+      {memberships ? (
+        <p className="c-s13 c-t2 m-0" data-testid="merge-memberships">
+          Their memberships stay as they are.
+        </p>
+      ) : null}
       {lost.length > 0 ? (
         <div className="flex flex-col gap-1.5" data-testid="merge-lost">
           <h4 className="c-s14 c-w6 m-0" style={{ color: 'var(--bad)' }}>
@@ -414,6 +426,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [id, setId] = useState(entryId);
   /** Which record the panel has open at this moment, for answers that arrive late. */
   const wanted = useRef(entryId);
+  /** The newest re-read of the page asked for after a membership changed. */
+  const reread = useRef(0);
   const [entry, setEntry] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -429,9 +443,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [maybe, setMaybe] = useState(null);
   /** The details typed for somebody new, kept while staff Open a record the warning named. */
   const [draft, setDraft] = useState(null);
-  /** Add member's membership (17a-ii): the gym's price list once it is read (null where it
-   *  has none or it cannot be read), and the choice, "No membership" until staff pick one. */
-  const [giveTypes, setGiveTypes] = useState(null);
+  /** Add member's membership (17a-ii, 23a-ii): the gym's price list. `undefined` until it
+   *  is read and null where it cannot be read; else its types, none where the gym has set
+   *  up nothing to sell. The choice is "No membership" until staff pick one. */
+  const [priceList, setPriceList] = useState(undefined);
+  const [priceAsk, setPriceAsk] = useState(0);
+  const giveTypes = Array.isArray(priceList) && priceList.length > 0 ? priceList : null;
   const [giving, setGiving] = useState(() => ({ requestKey: newRequestKey(), typeId: '', startsOn: gymToday(gym?.timezone), paid: false }));
   /** Where a refusal or the warning shows: at the top, above a form whose buttons are at its foot. */
   const alertRef = useRef(null);
@@ -457,23 +474,36 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   const ranges = dayRanges();
 
-  // The price list, for somebody being added: nothing is offered until it is read.
+  // The price list, for somebody being added: nothing is asked about a membership until it
+  // is read. Where it cannot be read the person is added with the gym's own words, as a gym
+  // with no price list adds them.
   const adding = id === null;
+  const sells = giveTypes !== null;
   useEffect(() => {
     if (!adding) return undefined;
     let live = true;
     Promise.resolve()
       .then(() => orgService.getMembershipTypes(gymId))
-      .then((res) => {
-        if (live && res.data.types.length > 0) setGiveTypes(res.data.types);
-      })
-      .catch(() => {
-        // No price list to offer: the person is added without a membership, as before.
-      });
+      .then(
+        (res) => {
+          if (live) setPriceList(res.data.types);
+        },
+        () => {
+          if (live) setPriceList((had) => had ?? null);
+        },
+      );
     return () => {
       live = false;
     };
-  }, [gymId, adding]);
+  }, [gymId, adding, priceAsk]);
+  // Set up memberships opens beside this form, so a form with nothing to pick from reads
+  // the price list again when staff come back to it.
+  useEffect(() => {
+    if (!adding || sells) return undefined;
+    const again = () => setPriceAsk((n) => n + 1);
+    window.addEventListener('focus', again);
+    return () => window.removeEventListener('focus', again);
+  }, [adding, sells]);
 
   useEffect(() => {
     const before = document.body.style.overflow;
@@ -624,6 +654,23 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     onChanged();
   };
 
+  /** A membership changed in the box: the list behind reads again, and so does this page,
+   *  whose Details and Edit leave out what the person's memberships answer. A read that
+   *  fails leaves the page as it was. */
+  const membershipsChanged = () => {
+    onChanged();
+    const asked = id;
+    if (asked === null) return;
+    // Only the newest read asked is drawn: two quick changes can answer out of order.
+    const turn = ++reread.current;
+    orgService.getMemberListEntry(gymId, asked).then(
+      (res) => {
+        if (reread.current === turn && wanted.current === asked && res.data.entry.entryId === asked) setEntry(res.data.entry);
+      },
+      () => {},
+    );
+  };
+
   const refused = (err, fallback, extra = {}) => {
     const code = errorCode(err);
     const other = err?.response?.data?.entryId;
@@ -711,11 +758,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   /** Save the form. Adding, `invite` is "Add and invite": both happen, or neither. */
   const save = async (invite = false) => {
     if (shown === null) {
-      await addPerson(invite ? { ...inputFrom(form), invite: true } : inputFrom(form));
+      // With a price list the membership is picked, and the list's own words for it are
+      // not asked: a box the form does not show sends nothing.
+      const typed = inputFrom(form, sells ? HELD_ANSWERS : []);
+      await addPerson(invite ? { ...typed, invite: true } : typed);
       return;
     }
     const asked = shown.entryId;
-    const patch = patchFrom(form, shown, fields);
+    const patch = patchFrom(form, shown, fields, appAnswers(shown) ? HELD_ANSWERS : []);
     if (Object.keys(patch).length === 0) {
       setMode('view');
       setNotice(outcomeWords('unchanged', words));
@@ -932,90 +982,107 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   // ── What the panel draws ──
 
-  const renderForm = () => (
-    <form
-      noValidate
-      className="flex flex-col gap-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void save();
-      }}
-    >
-      {TEXT_FIELDS.map((f) => (
-        <label key={f.key} className="c-field">
+  const textBox = (f) => (
+    <label key={f.key} className="c-field">
+      <span className="c-label">{f.label}</span>
+      <input type={f.type} autoComplete={f.autoComplete} value={form[f.key]} onChange={(e) => setField(f.key, e.target.value)} className="c-input" />
+    </label>
+  );
+
+  const wordBox = (f) => {
+    const listId = `${titleId}-${f.key}`;
+    const known = (list?.[f.from] ?? []).map((w) => w.label).filter((w) => w !== '');
+    // The box takes any word; the suggestions are the gym's own, so a word is not
+    // spelled two ways. The hint says so, since a browser draws it like a dropdown.
+    return (
+      <div key={f.key} className="c-field">
+        <label className="c-field">
           <span className="c-label">{f.label}</span>
-          <input type={f.type} autoComplete={f.autoComplete} value={form[f.key]} onChange={(e) => setField(f.key, e.target.value)} className="c-input" />
-        </label>
-      ))}
-      <p className="c-hint -mt-2 m-0">An email address or a phone number is needed to tell people apart.</p>
-      {/* Adding somebody at a gym with a price list asks about their membership once, in
-          "Give a membership" below (Kd, 2026-10-04): the list's own Membership word is not
-          asked beside it, and takes the name of the type once it is given. */}
-      {WORD_FIELDS.filter((f) => !(id === null && giveTypes !== null && f.key === 'membershipType')).map((f) => {
-        const listId = `${titleId}-${f.key}`;
-        const known = (list?.[f.from] ?? []).map((w) => w.label).filter((w) => w !== '');
-        // The box takes any word; the suggestions are the gym's own, so a word is not
-        // spelled two ways. The hint says so, since a browser draws it like a dropdown.
-        return (
-          <div key={f.key} className="c-field">
-            <label className="c-field">
-              <span className="c-label">{f.label}</span>
-              <input
-                type="text"
-                list={known.length > 0 ? listId : undefined}
-                aria-describedby={known.length > 0 ? `${listId}-hint` : undefined}
-                value={form[f.key]}
-                onChange={(e) => setField(f.key, e.target.value)}
-                className="c-input"
-              />
-            </label>
-            {known.length > 0 ? (
-              <>
-                <span id={`${listId}-hint`} className="c-hint">
-                  Pick one of your words, or type a new one.
-                </span>
-                <datalist id={listId}>
-                  {known.map((w) => (
-                    <option key={w} value={w} />
-                  ))}
-                </datalist>
-              </>
-            ) : null}
-          </div>
-        );
-      })}
-      {DAY_FIELDS.map((f) => (
-        <div key={f.key} className="c-field">
-          <span className="c-label">{f.label}</span>
-          <DatePick
-            newLook
-            label={f.label}
+          <input
+            type="text"
+            list={known.length > 0 ? listId : undefined}
+            aria-describedby={known.length > 0 ? `${listId}-hint` : undefined}
             value={form[f.key]}
-            min={ranges[f.key].min}
-            max={ranges[f.key].max}
-            today={ranges.today}
-            yearSelect
-            onChange={(day) => setField(f.key, day)}
-            onClear={() => setField(f.key, '')}
-            emptyText="Not set"
+            onChange={(e) => setField(f.key, e.target.value)}
+            className="c-input"
           />
-          {f.key === 'endsOn' && form.endsOn !== '' ? (
-            <select aria-label="Ends or renews" value={form.endsOnKind} onChange={(e) => setField('endsOnKind', e.target.value)} className="c-sel">
-              <option value="ends">Membership ends on this date</option>
-              <option value="renews">Membership renews on this date</option>
-            </select>
-          ) : null}
-        </div>
-      ))}
-      {fields.map((f) => (
-        <label key={f.key} className="c-field">
-          <span className="c-label">{f.label}</span>
-          <input type="text" value={form.extra[f.key] ?? ''} onChange={(e) => setExtra(f.key, e.target.value)} className="c-input" />
         </label>
-      ))}
-      {id === null && giveTypes !== null ? (
+        {known.length > 0 ? (
+          <>
+            <span id={`${listId}-hint`} className="c-hint">
+              Pick one of your words, or type a new one.
+            </span>
+            <datalist id={listId}>
+              {known.map((w) => (
+                <option key={w} value={w} />
+              ))}
+            </datalist>
+          </>
+        ) : null}
+      </div>
+    );
+  };
+
+  const dayBox = (f) => (
+    <div key={f.key} className="c-field">
+      <span className="c-label">{f.label}</span>
+      <DatePick
+        newLook
+        label={f.label}
+        value={form[f.key]}
+        min={ranges[f.key].min}
+        max={ranges[f.key].max}
+        today={ranges.today}
+        yearSelect
+        onChange={(day) => setField(f.key, day)}
+        onClear={() => setField(f.key, '')}
+        emptyText="Not set"
+      />
+      {f.key === 'endsOn' && form.endsOn !== '' ? (
+        <select aria-label="Ends or renews" value={form.endsOnKind} onChange={(e) => setField('endsOnKind', e.target.value)} className="c-sel">
+          <option value="ends">Membership ends on this date</option>
+          <option value="renews">Membership renews on this date</option>
+        </select>
+      ) : null}
+    </div>
+  );
+
+  /** The gym's own words for a membership, typed: status, membership, payment and the date. */
+  const typedWords = () => (
+    <>
+      {WORD_FIELDS.map(wordBox)}
+      {DAY_FIELDS.filter((f) => f.key === 'endsOn').map(dayBox)}
+    </>
+  );
+
+  /** What the form asks about a membership (23a-ii). ONE answer, never two: with a price
+   *  list the membership is picked from it; a person the app answers for has theirs under
+   *  Memberships; only otherwise are the gym's own words typed. */
+  const membershipPart = () => {
+    if (id !== null) {
+      if (!appAnswers(shown)) return WORD_FIELDS.map(wordBox);
+      return (
+        <div className="c-card p-3 flex flex-col gap-2 items-start" data-testid="edit-held-note">
+          <p className="c-s14 c-t2 m-0">
+            {`${shown?.fullName || 'This person'}'s status, payment and dates come from their memberships. Change them under Memberships.`}
+          </p>
+          <button type="button" onClick={() => backTo('view')} className="c-btn c-btn-s c-btn-sm">
+            Go to Memberships
+          </button>
+        </div>
+      );
+    }
+    if (priceList === undefined) {
+      return (
+        <p className="c-hint m-0" role="status">
+          Checking the memberships you sell…
+        </p>
+      );
+    }
+    if (giveTypes !== null) {
+      return (
         <div className="c-card p-3 flex flex-col gap-3" data-testid="add-membership">
-          <span className="c-s15 c-w6 c-t1">Give a membership</span>
+          <span className="c-s15 c-w6 c-t1">Membership</span>
           <MembershipChoice
             allowNone
             types={giveTypes}
@@ -1026,8 +1093,64 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               setGiving(next);
             }}
           />
+          {HELD_ANSWERS.some((key) => (form[key] ?? '').trim() !== '') ? (
+            <p className="c-hint m-0" data-testid="typed-not-saved">
+              You can now pick a membership. The status and payment you typed won&apos;t be saved.
+            </p>
+          ) : null}
         </div>
-      ) : null}
+      );
+    }
+    const mayManage = canManageMemberships(viewerPrivileges(gym));
+    return (
+      <>
+        {priceList !== null ? (
+          <div className="c-card p-3 flex flex-col gap-2 items-start" data-testid="set-up-memberships">
+            <p className="c-s14 c-t2 m-0">
+              {mayManage
+                ? `You haven't set up the memberships you sell yet. Once you have, you pick one here. Until then, type this ${words.person}'s status and payment yourself.`
+                : `Your ${words.it ?? 'gym'} hasn't set up the memberships it sells yet. Until the owner does, type this ${words.person}'s status and payment yourself.`}
+            </p>
+            {mayManage && typeof gym?.slug === 'string' ? (
+              <a href={`/console/${gym.slug}/settings#memberships`} target="_blank" rel="noreferrer" className="c-btn c-btn-s c-btn-sm">
+                Set up memberships
+                <ExternalLink aria-hidden="true" className="w-4 h-4" />
+                <span className="sr-only">(opens in a new tab)</span>
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+        {typedWords()}
+      </>
+    );
+  };
+
+  // Add member asks who the person is, then their membership, then the rest (23a-ii). Edit
+  // keeps the order it had, less the boxes a person's memberships answer.
+  const who = id === null ? TEXT_FIELDS.filter((f) => WHO_FIELDS.includes(f.key)) : TEXT_FIELDS;
+  const rest = id === null ? TEXT_FIELDS.filter((f) => !WHO_FIELDS.includes(f.key)) : [];
+  const days = id === null || appAnswers(shown) ? DAY_FIELDS.filter((f) => f.key !== 'endsOn') : DAY_FIELDS;
+
+  const renderForm = () => (
+    <form
+      noValidate
+      className="flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      {who.map(textBox)}
+      <p className="c-hint -mt-2 m-0">An email address or a phone number is needed to tell people apart.</p>
+      {membershipPart()}
+      {rest.map(textBox)}
+      {days.map(dayBox)}
+      {fields.map((f) => (
+        <label key={f.key} className="c-field">
+          <span className="c-label">{f.label}</span>
+          <input type="text" value={form.extra[f.key] ?? ''} onChange={(e) => setExtra(f.key, e.target.value)} className="c-input" />
+        </label>
+      ))}
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={busy || readOnly} className={MAIN}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
@@ -1114,6 +1237,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       ['phone', p.phone],
       ['memberNumber', p.memberNumber],
     ].filter(([, v]) => v !== null);
+    // Where the app answers for them, the Memberships box says their status, membership,
+    // dates and payment, and the gym's own words for those are not said beside it (23a-ii).
+    const answered = appAnswers(p) ? HELD_ANSWERS : [];
     const membership = [
       ['status', p.status],
       ['membershipType', p.membershipType],
@@ -1121,9 +1247,15 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       ['endsOn', endsWords(p)],
       ['paymentStatus', p.paymentStatus],
       ['dateOfBirth', p.dateOfBirth === null ? null : dayWords(p.dateOfBirth)],
-    ].filter(([, v]) => v !== null && v !== '');
+    ].filter(([k, v]) => v !== null && v !== '' && !answered.includes(k));
+    // With nothing in use the box folds what is over away, so it is given the row's own
+    // words for the one that finished last: the page says "Cancelled" where the list does.
+    const lastOver = appAnswers(p) && (p.held.status === 'cancelled' || p.held.status === 'ended') ? rowCells(p, today) : null;
+    const nothingNow = lastOver === null ? null : [lastOver.membership, lastOver.ends ?? lastOver.status].filter((w) => w !== null && w !== '').join(' · ');
     const extra = p.extra.filter((x) => x.value !== '');
-    const byHand = handEditedWords(p, fields, FIELD_LABELS);
+    // Nor is a note that one of those words was changed by hand: picking a membership in
+    // Add member writes the type's name as the list's Membership word.
+    const byHand = handEditedWords({ ...p, handEdited: p.handEdited.filter((k) => !answered.includes(k)) }, fields, FIELD_LABELS);
     return (
       <div className="flex flex-col gap-5">
         {action === 'under_age' ? (
@@ -1164,7 +1296,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           name={p.fullName || 'this person'}
           readOnly={readOnly}
           clockFormat={gym?.clockFormat}
-          onChanged={onChanged}
+          onChanged={membershipsChanged}
+          nothingNow={nothingNow}
         />
         {membership.length > 0 ? (
           // What the gym's own list says about them, in its words; the box above is what
@@ -1607,7 +1740,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                   busy={busy}
                   readOnly={readOnly}
                   onOpen={openMatch}
-                  onAnyway={() => addPerson({ ...maybe.input, acknowledgedDuplicates: maybe.people.map((m) => m.entryId) })}
+                  onAnyway={() => {
+                    // The details warned about, less any box the form no longer shows: a
+                    // price list set up since the warning means the membership is picked.
+                    const warned = sells ? Object.fromEntries(Object.entries(maybe.input).filter(([k]) => !HELD_ANSWERS.includes(k) && k !== 'endsOnKind')) : maybe.input;
+                    return addPerson({ ...warned, acknowledgedDuplicates: maybe.people.map((m) => m.entryId) });
+                  }}
                   onBack={() => setMaybe(null)}
                 />
               ) : null}

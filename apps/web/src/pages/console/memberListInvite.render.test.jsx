@@ -434,7 +434,8 @@ describe('Add and invite', () => {
   it('Status takes a word the list has never used, and says so under the box', async () => {
     addBox();
     fill();
-    const status = page().getByLabelText('Status');
+    // The typed words are asked once the form knows the gym has no price list to pick from (23a-ii).
+    const status = await page().findByLabelText('Status');
     const hint = document.getElementById(status.getAttribute('aria-describedby'));
     expect(hint.textContent).toBe('Pick one of your words, or type a new one.');
     fireEvent.change(status, { target: { value: 'Paused' } });

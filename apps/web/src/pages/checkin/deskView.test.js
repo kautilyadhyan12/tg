@@ -1,6 +1,6 @@
 // The desk's words and rules, every case (spec Part 3 §12.3; ROADMAP 16b-i).
 import { describe, expect, it } from 'vitest';
-import { CHECKIN_WORDS, checkinScanResponseSchema } from '@app/shared';
+import { CHECKIN_WORDS, HELD_PAYMENT_WORDS, checkinScanResponseSchema } from '@app/shared';
 import {
   DESK_NAMES_KEY,
   DESK_SOUNDS,
@@ -74,8 +74,22 @@ describe('noticeLine', () => {
     [{ status: null, payment: null, onList: false }, "Not on the gym's list"],
     [{ status: 'Cancelled', payment: 'Overdue', onList: false }, "Status: Cancelled · Payment: Overdue · Not on the gym's list"],
     [null, null],
+    // 23a-ii: what the person holds in the app, in the Members list's own words.
+    [{ status: 'Active', payment: 'Payment due', onList: true }, 'Status: Active · Payment due'],
+    [{ status: 'Not started', payment: 'Not due yet', onList: true }, 'Status: Not started · Payment: Not due yet'],
+    [{ status: 'Active', payment: 'Free', onList: true }, 'Status: Active · Payment: Free'],
+    [{ status: 'Cancelled', payment: null, onList: true }, 'Status: Cancelled'],
+    [{ status: 'Active', payment: 'payment overdue', onList: true }, 'Status: Active · payment overdue'],
   ])('%j', (notice, expected) => {
     expect(noticeLine(notice)).toBe(expected);
+  });
+
+  it('never says "Payment" twice, whichever payment word a held membership has', () => {
+    for (const payment of Object.values(HELD_PAYMENT_WORDS)) {
+      const line = noticeLine({ status: 'Active', payment, onList: true });
+      expect(line, payment).toContain(payment);
+      expect(line.match(/payment/gi), payment).toHaveLength(1);
+    }
   });
 });
 

@@ -58,13 +58,18 @@ export function isLetIn(answer) {
   return answer?.result === 'checked_in' || answer?.result === 'already';
 }
 
-/** The gym's own words on the person's record, for the orange line under a green tick.
- *  Never a reason to refuse: it is for staff to see. */
+/** The orange line under a green tick: what the person holds at the gym, or the gym's own
+ *  words for somebody who holds nothing in the app (23a-ii). Never a reason to refuse: it
+ *  is for staff to see. A payment word that says "payment" itself ("Payment due") is not
+ *  given the label a second time. */
 export function noticeLine(notice) {
   if (notice === null || typeof notice !== 'object') return null;
   const parts = [];
   if (typeof notice.status === 'string' && notice.status.trim() !== '') parts.push(`Status: ${notice.status.trim()}`);
-  if (typeof notice.payment === 'string' && notice.payment.trim() !== '') parts.push(`Payment: ${notice.payment.trim()}`);
+  if (typeof notice.payment === 'string' && notice.payment.trim() !== '') {
+    const word = notice.payment.trim();
+    parts.push(/payment/i.test(word) ? word : `Payment: ${word}`);
+  }
   if (notice.onList === false) parts.push("Not on the gym's list");
   return parts.length === 0 ? null : parts.join(' · ');
 }
