@@ -27,7 +27,7 @@ describe('where each button goes', () => {
       ['hours', [['Set opening hours', '/console/iron-house/settings#opening-hours']]],
       ['frontDesk', [['Set up check-in', '/console/iron-house/settings#check-in-devices']]],
     ]);
-    expect(SETTINGS_SECTION).toEqual({ memberships: 'memberships', staff: 'staff', hours: 'opening-hours', frontDesk: 'check-in-devices' });
+    expect(SETTINGS_SECTION).toEqual({ staff: 'staff', hours: 'opening-hours', frontDesk: 'check-in-devices' });
   });
 
   it('only the two that change the member list are marked as changes', () => {

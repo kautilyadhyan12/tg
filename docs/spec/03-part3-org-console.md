@@ -2359,8 +2359,10 @@ list being set up, open their form in their own row; a refused save is said in t
 beside its button, and any other answer is brought into view. Every button, field and
 message the box had is kept. Somebody without the tick who types the address is told
 their role doesn't allow it, and neither the price list nor the member list's names are
-read for them. Settings keeps one line where the box was, with **Open Memberships**; an
-older link to `/settings#memberships` lands on that line.
+read for them. **Settings holds nothing about it** (Kd at the click-through: the line
+first kept there "is not needed anymore"), so the price-list tick alone no longer puts
+Settings in a person's menu. The form says while a type is being ADDED, too, that how it
+is paid can't be changed once it is saved: that is when there is still a choice to make.
 
 ### 13.2 A person's membership
 
@@ -3843,7 +3845,7 @@ there are no tabs.
 | Leads | `members.confirm` | More |
 | Attendance | `attendance.read` | tab |
 | Classes | `schedule.manage` | tab |
-| Settings | `staff.manage`, `org.manage`, `memberships.manage` or `schedule.manage` | More |
+| Settings | `staff.manage`, `org.manage` or `schedule.manage` | More |
 
 Pages added since R1, each in `consoleMenu.js` with its own tick: Personal training (every
 member of staff), Updates and Events (`posts.manage`), Leaderboard and Challenges

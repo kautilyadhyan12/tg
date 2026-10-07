@@ -182,11 +182,12 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
               </label>
             );
           })}
-          {editing ? (
-            <p className="c-s14 c-t2 m-0">
-              How it is paid can&apos;t be changed once it is saved. To sell it another way, archive this one and add a new one.
-            </p>
-          ) : null}
+          {/* Said while adding too, when there is still a choice to make (Kd's click-through). */}
+          <p className="c-s14 c-t2 m-0">
+            {editing
+              ? "How it is paid can't be changed once it is saved. To sell it another way, archive this one and add a new one."
+              : "How it is paid can't be changed once it is saved. To sell it another way later, archive this one and add a new one."}
+          </p>
         </div>
 
         <Field id={id('price')} label={`Price (${currency})`} problem={problems?.price}>

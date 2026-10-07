@@ -11,7 +11,6 @@ import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
 import { SETTINGS_SECTION } from './startHereView';
 import { canManageStaff } from './staffView';
-import { canManageMemberships } from './membershipTypesView';
 import { canManageSchedule } from './classesView';
 import { canManageOrg } from './gymDetailsView';
 import { consoleIsReadOnly } from './billingView';
@@ -83,7 +82,6 @@ export default function Settings() {
   const privileges = viewerPrivileges(org);
   const canEditGym = canManageOrg(privileges);
   const canEditStaff = canManageStaff(privileges);
-  const canEditMemberships = canManageMemberships(privileges);
   const canEditSchedule = canManageSchedule(privileges);
   // Part 3 §4.2's read-only console. **It gates neither section**, and that
   // distinction is the whole design: a lapsed gym's staff still SEE everything
@@ -173,32 +171,8 @@ export default function Settings() {
         </div>
       ) : null}
 
-      {/* MEMBERSHIPS has a page of its own, in the menu (23c-i). This line stays where its
-          box was, for whoever learned it here, and an older link to "#memberships" lands
-          on it. */}
-      {canEditMemberships ? (
-        <div id={SETTINGS_SECTION.memberships} style={{ scrollMarginTop: 16 }}>
-          <ConsoleCard>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  Memberships
-                </div>
-                <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                  What your {words.it} sells and what each costs. It has its own page now.
-                </p>
-              </div>
-              <Link
-                to={`/console/${org.slug}/memberships`}
-                className="rounded-xl px-4 py-2 text-sm font-medium min-h-11 inline-flex items-center"
-                style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-              >
-                Open Memberships
-              </Link>
-            </div>
-          </ConsoleCard>
-        </div>
-      ) : null}
+      {/* What the gym sells is not here: Memberships is a page of its own, in the menu
+          (23c-i; Kd at its click-through: Settings needs nothing about it). */}
 
       {/* CLASS BOOKINGS (17c-ii-a): the four booking settings, on `schedule.manage` as the
           server gates them. Keyed per gym for the panels' reason above: it holds a form. */}
@@ -256,7 +230,7 @@ export default function Settings() {
         </div>
       ) : null}
 
-      {!canEditGym && !canEditStaff && !canEditMemberships && !canEditSchedule ? (
+      {!canEditGym && !canEditStaff && !canEditSchedule ? (
         /* REACHABLE BY TYPING THE ADDRESS, and that is the only way here — the
            nav does not draw this tab for somebody holding neither power, because
            every section on it would answer them with a refusal. Somebody who

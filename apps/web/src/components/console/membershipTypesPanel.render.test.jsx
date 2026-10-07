@@ -356,6 +356,10 @@ describe('where the form opens', () => {
     open(listOf({ types: [type()] }));
     fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
     const form = screen.getByRole('form', { name: 'Add a membership type' });
+    // While there is still a choice to make, the form says it is made once.
+    expect(
+      within(form).getByText("How it is paid can't be changed once it is saved. To sell it another way later, archive this one and add a new one."),
+    ).toBeTruthy();
     const list = screen.getByRole('region', { name: 'What you sell' });
     expect(list.contains(form)).toBe(false);
     expect(form.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

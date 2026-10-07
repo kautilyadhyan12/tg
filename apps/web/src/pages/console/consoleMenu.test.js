@@ -23,9 +23,16 @@ describe('where each page sits on a phone', () => {
 
   it('Memberships goes with its tick, not the job title: a trainer given it has the page, a manager without it does not', () => {
     const trainer = consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'memberships.manage'], 'gym');
-    expect(keys(trainer.more)).toEqual(['memberships', 'training', 'settings']);
+    expect(keys(trainer.more)).toEqual(['memberships', 'training']);
     const manager = consoleMenu('iron-house', ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage'), 'gym');
     expect(keys(manager.pages)).not.toContain('memberships');
+  });
+
+  // Settings holds nothing about what the gym sells since 23c-i.
+  it('the price list alone does not bring Settings: Memberships is where it is', () => {
+    const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.manager.filter((p) => p !== 'schedule.manage'), 'gym');
+    expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance']);
+    expect(keys(menu.more)).toEqual(['memberships', 'leads', 'training', 'updates', 'events', 'leaderboard', 'challenges']);
   });
 
   it('Members is not lit on the Memberships page, though its address starts the same', () => {

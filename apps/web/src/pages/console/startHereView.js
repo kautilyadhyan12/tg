@@ -4,10 +4,8 @@ import { orgWords } from '@app/shared';
 // goes. The server sends the steps this person can do and whether each is done; nothing
 // here decides either.
 
-/** The Settings sections the list's buttons open: the `id` each has on that page.
- *  `memberships` is the line that opens the Memberships page (23c-i). */
+/** The Settings sections the list's buttons open: the `id` each has on that page. */
 export const SETTINGS_SECTION = {
-  memberships: 'memberships',
   staff: 'staff',
   hours: 'opening-hours',
   frontDesk: 'check-in-devices',

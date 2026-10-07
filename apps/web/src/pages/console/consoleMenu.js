@@ -8,13 +8,11 @@ import { canManageChallenges } from './challengesView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManagePosts } from '../../components/gym/postsView';
 
-/** Settings holds sections gated on four permissions (Staff: `staff.manage`; the gym's
- *  details: `org.manage`; the line that opens Memberships: `memberships.manage`; Class
- *  bookings: `schedule.manage`), so its page is drawn for whoever holds any of them. */
+/** Settings holds sections gated on three permissions (Staff: `staff.manage`; the gym's
+ *  details: `org.manage`; Class bookings: `schedule.manage`), so its page is drawn for
+ *  whoever holds any of them. What the gym sells left it for a page of its own (23c-i). */
 function settingsIsReachable(privileges) {
-  return (
-    canManageStaff(privileges) || canManageOrg(privileges) || canManageMemberships(privileges) || canManageSchedule(privileges)
-  );
+  return canManageStaff(privileges) || canManageOrg(privileges) || canManageSchedule(privileges);
 }
 
 /** THE CONSOLE'S PAGES THIS PERSON MAY OPEN, in the menu's order (spec Part 3 §17.5).
