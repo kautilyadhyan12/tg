@@ -345,26 +345,35 @@ interface Named {
 const NO_WORDS: Words = { status: null, payment: null };
 const NOBODY: Named = { person: { kind: "not_a_member" }, who: null, name: "", listed: NO_WORDS, onList: false };
 
-/** The two words of each record named that the app answers for (`heldOnList`). */
+/** The two words of each record named that the app answers for (`heldOnList`); null when
+ *  they cannot be read. A read that fails is logged and takes the words away, never the
+ *  tick, the search or the log: the caller shows those records with no words, and never
+ *  their own in place of what could not be read. */
 async function heldWords(
-  deps: Pick<CheckinDeps, "sql" | "now">,
+  deps: Pick<CheckinDeps, "sql" | "now" | "log">,
   gymId: string,
   entryIds: readonly string[],
   timezone?: string,
-): Promise<Map<string, Words>> {
+): Promise<Map<string, Words> | null> {
   const words = new Map<string, Words>();
   if (entryIds.length === 0) return words;
-  const today = dayInTz(deps.now(), timezone ?? (await gymTimeZone(deps.sql, gymId)));
-  for (const [entryId, { shown }] of await heldOnListOf(deps.sql, gymId, today, entryIds)) {
-    const { status, payment } = heldListWords(shown);
-    words.set(entryId, { status, payment });
+  try {
+    const today = dayInTz(deps.now(), timezone ?? (await gymTimeZone(deps.sql, gymId)));
+    for (const [entryId, { shown }] of await heldOnListOf(deps.sql, gymId, today, entryIds)) {
+      const { status, payment } = heldListWords(shown);
+      words.set(entryId, { status, payment });
+    }
+    return words;
+  } catch (err: unknown) {
+    deps.log.warn(
+      { event: "checkin.held_words_unread", gymId, errName: err instanceof Error ? err.name : typeof err },
+      "what people hold could not be read for a check-in screen",
+    );
+    return null;
   }
-  return words;
 }
 
-/** The words beside a green tick. The visit is saved before they are read, so a read that
- *  fails takes the words away and never the tick; the record's own words are not shown in
- *  their place. */
+/** The words beside a green tick. The visit is saved before they are read. */
 async function noticeOf(
   deps: Pick<CheckinDeps, "sql" | "now" | "log">,
   gymId: string,
@@ -373,16 +382,9 @@ async function noticeOf(
 ): Promise<CheckinNotice> {
   const entryId = named.who?.entryId ?? null;
   if (entryId === null) return { ...named.listed, onList: named.onList };
-  try {
-    const held = (await heldWords(deps, gymId, [entryId], timezone)).get(entryId);
-    return { ...(held ?? named.listed), onList: named.onList };
-  } catch (err: unknown) {
-    deps.log.warn(
-      { event: "checkin.held_words_unread", gymId, errName: err instanceof Error ? err.name : typeof err },
-      "what a checked-in person holds could not be read",
-    );
-    return { ...NO_WORDS, onList: named.onList };
-  }
+  const held = await heldWords(deps, gymId, [entryId], timezone);
+  if (held === null) return { ...NO_WORDS, onList: named.onList };
+  return { ...(held.get(entryId) ?? named.listed), onList: named.onList };
 }
 const AMBIGUOUS: Named = { ...NOBODY, person: { kind: "ambiguous" } };
 
@@ -663,7 +665,8 @@ async function withHeld(deps: CheckinDeps, gymId: string, people: CheckinPersonF
     people.flatMap((person) => ("entryId" in person.pick ? [person.pick.entryId] : [])),
   );
   return people.map((person) => {
-    const words = "entryId" in person.pick ? held.get(person.pick.entryId) : undefined;
+    if (!("entryId" in person.pick)) return person;
+    const words = held === null ? NO_WORDS : held.get(person.pick.entryId);
     return words === undefined ? person : { ...person, notice: { ...words, onList: person.notice.onList } };
   });
 }
@@ -871,10 +874,12 @@ export async function readLog(
       day: log.day,
       timezone: log.timezone,
       clockFormat: log.clockFormat,
-      visits: log.visits.map(({ entryId, ...visit }) => {
+      visits: log.visits.map(({ entryId, former, ...visit }) => {
         // What they hold stands whole: a membership that is over has no payment word, and
-        // their record's is not put in its place.
-        const words: Words = !withWords ? NO_WORDS : ((entryId === null ? undefined : held.get(entryId)) ?? visit);
+        // their record's is not put in its place. A past member's memberships are not in
+        // use, and their record's words are the old file's: no words for them.
+        const read = entryId === null ? undefined : held === null ? NO_WORDS : held.get(entryId);
+        const words: Words = !withWords || former ? NO_WORDS : (read ?? visit);
         return { ...visit, markedAt: visit.markedAt.toISOString(), status: words.status, payment: words.payment };
       }),
     },

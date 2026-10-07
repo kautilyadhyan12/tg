@@ -503,8 +503,9 @@ export interface LogVisit {
   name: string;
   method: GymAttendanceMethod;
   by: string | null;
-  /** The visit's record, while the gym still has it. */
+  /** The visit's record, while the gym still has it, and whether it is a past member's. */
   entryId: string | null;
+  former: boolean;
   status: string | null;
   payment: string | null;
 }
@@ -533,11 +534,13 @@ export async function logVisits(
       name: string;
       by: string | null;
       entry_id: string | null;
+      former: boolean;
       status: string | null;
       payment_status: string | null;
     }[]
   >`
-    SELECT a.id, a.marked_at, a.method, e.id AS entry_id, e.status, e.payment_status,
+    SELECT a.id, a.marked_at, a.method, e.id AS entry_id, (e.former_at IS NOT NULL) AS former,
+           e.status, e.payment_status,
            coalesce(nullif(btrim(e.full_name), ''), u.display_name, '') AS name,
            CASE WHEN a.device_id IS NOT NULL THEN d.name
                 WHEN a.method = 'staff' THEN coalesce(s.display_name, '')
@@ -563,6 +566,7 @@ export async function logVisits(
       method: gymAttendanceMethodSchema.parse(row.method),
       by: row.by,
       entryId: row.entry_id,
+      former: row.former,
       status: row.status,
       payment: row.payment_status,
     })),

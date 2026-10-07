@@ -27,6 +27,7 @@ import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import * as checkinService from "../src/modules/orgs/checkin/service.js";
 import * as heldService from "../src/modules/orgs/memberships/heldService.js";
+import { heldOnListOf } from "../src/modules/orgs/memberships/onList.js";
 import { proveAddress } from "./proveAddress.js";
 
 const url = process.env["DATABASE_URL"];
@@ -364,6 +365,10 @@ d("a check-in says what the person holds (real Postgres)", () => {
       const picked = await post(`/v1/orgs/${corner}/attendance/check-in`, { entryId: there.entryId }, first.cookies);
       expect(picked.statusCode).toBe(404);
       expect(picked.body).not.toContain("Payment due");
+      // The read of what people hold is tied to the gym itself: asked for Studio 9's record
+      // as Corner Gym, it answers nobody; asked as Studio 9, it answers.
+      expect((await heldOnListOf(sql, corner, today, [there.entryId])).size).toBe(0);
+      expect([...(await heldOnListOf(sql, studio9, today, [there.entryId])).keys()]).toEqual([there.entryId]);
     },
     TEST_TIMEOUT_MS,
   );
@@ -473,6 +478,25 @@ d("a check-in says what the person holds (real Postgres)", () => {
   );
 
   it(
+    "somebody moved to past members after checking in has no words in the log, never the old file's",
+    async () => {
+      const gymOwner = await makeUser("past-owner", "Past Owner");
+      const gymId = await makeGym(gymOwner, "Past Gym");
+      const typeId = await addType(gymId, gymOwner, monthly());
+      const pat = await addPerson(gymId, gymOwner, "Pat Past", { status: "Expired", paymentStatus: "Overdue" });
+      await give(gymId, pat.entryId, gymOwner, { typeId, startsOn: today, paid: true });
+      await checkIn(gymId, { entryId: pat.entryId }, gymOwner);
+      expect((await logOf(gymId, gymOwner)).visits.map((v) => [v.name, v.status, v.payment])).toEqual([["Pat Past", "Active", "Paid"]]);
+      const gone = await api().inject({ method: "DELETE", url: `${listUrl(gymId)}/entries/${pat.entryId}`, remoteAddress: nextIp(), cookies: gymOwner.cookies });
+      expect(gone.statusCode, gone.body).toBe(200);
+      const after = await logOf(gymId, gymOwner);
+      expect(after.visits.map((v) => [v.name, v.status, v.payment])).toEqual([["Pat Past", null, null]]);
+      for (const word of ["Overdue", "Expired"]) expect(after.body, word).not.toContain(word);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "when what they hold cannot be read, the tick stands with no words, never the record's old ones",
     async () => {
       const gymOwner = await makeUser("blip-owner", "Blip Owner");
@@ -500,9 +524,22 @@ d("a check-in says what the person holds (real Postgres)", () => {
         webOrigin: baseEnv.WEB_ORIGIN,
         log: { warn: (fields: object) => warned.push(fields) },
       };
-      const answer = await checkinService.staffCheckIn(deps, gymOwner.userId, gymId, { entryId: zoe.entryId }, () => Promise.resolve(true));
-      expect(answer).toEqual({ result: "checked_in", person: { name: "Zoe Blip" }, notice: { status: null, payment: null, onList: true } });
+      const yes = () => Promise.resolve(true);
+      const none = { status: null, payment: null, onList: true };
+      const answer = await checkinService.staffCheckIn(deps, gymOwner.userId, gymId, { entryId: zoe.entryId }, yes);
+      expect(answer).toEqual({ result: "checked_in", person: { name: "Zoe Blip" }, notice: none });
       expect(warned).toEqual([{ event: "checkin.held_words_unread", gymId, errName: "Error" }]);
+      // The same for every other answer: staff's second press, the desk's tag, the search
+      // and the log all still answer, with no words.
+      expect(await checkinService.staffCheckIn(deps, gymOwner.userId, gymId, { entryId: zoe.entryId }, yes)).toMatchObject({ result: "already", notice: none });
+      const made = await makeDesk(gymId, gymOwner);
+      const device = { deviceId: made.deviceId, gymId, gymName: "Blip Gym", timezone: "Asia/Kolkata", clockFormat: "24h" as const };
+      expect(await checkinService.scan(deps, device, zoe.tag)).toMatchObject({ result: "already", notice: none });
+      expect((await checkinService.findPeople(deps, gymOwner.userId, gymId, "Zoe", yes))?.people.map((p) => [p.name, p.notice])).toEqual([["Zoe Blip", none]]);
+      expect((await checkinService.readLog(deps, gymOwner.userId, gymId, undefined, yes))?.log.visits.map((v) => [v.name, v.status, v.payment])).toEqual([
+        ["Zoe Blip", null, null],
+      ]);
+      expect(warned).toHaveLength(5);
       // The visit was saved, and the next read says what she holds.
       expect((await checkIn(gymId, { entryId: zoe.entryId }, gymOwner)).answer).toMatchObject({
         result: "already",
@@ -536,6 +573,12 @@ d("a check-in says what the person holds (real Postgres)", () => {
       expect(people.map((p) => [p.name, p.notice.status, p.notice.payment])).toEqual([["Kai Tong", "Active", "Payment due"]]);
       const answer = await checkinService.staffCheckIn(deps, gymOwner.userId, gymId, { entryId: kai.entryId }, yes);
       expect(answer?.notice).toEqual({ status: "Active", payment: "Payment due", onList: true });
+      // The desk and the log read the same day.
+      const made = await makeDesk(gymId, gymOwner);
+      const device = { deviceId: made.deviceId, gymId, gymName: "Far Gym", timezone: "Pacific/Kiritimati", clockFormat: "24h" as const };
+      expect(await checkinService.scan(deps, device, kai.tag)).toMatchObject({ notice: { status: "Active", payment: "Payment due" } });
+      const log = await checkinService.readLog(deps, gymOwner.userId, gymId, undefined, yes);
+      expect(log?.log.visits.map((v) => [v.name, v.status, v.payment])).toEqual([["Kai Tong", "Active", "Payment due"]]);
     },
     TEST_TIMEOUT_MS,
   );
