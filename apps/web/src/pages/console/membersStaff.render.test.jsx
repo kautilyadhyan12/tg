@@ -1133,6 +1133,21 @@ describe('what one person is allowed to do', () => {
 // ── Who gets the tab, and a gym with no plan ────────────────────────────────
 
 describe('who gets the Staff tab', () => {
+  /** Kd, RULINGS 2026-10-07: the page holds the staff, so its name says so, for whoever
+   *  has the tab. A manager's page holds none, and is not called what it is not. */
+  it('the page is titled "Members & staff" for the owner, and "Members" for a manager, who has no Staff tab', async () => {
+    drawStaff();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Members & staff' })).toBeTruthy();
+    cleanup();
+    resetConsoleOrgs();
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: ROLE_PRIVILEGES.manager.filter((p) => p !== 'staff.manage') }] },
+    });
+    drawStaff();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Members' })).toBeTruthy();
+    expect(screen.queryByText(/& staff/)).toBeNull();
+  });
+
   it('a manager who types its address gets the list they may see, and the server is asked nothing about staff', async () => {
     orgService.getMine.mockResolvedValue({
       data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: ROLE_PRIVILEGES.manager.filter((p) => p !== 'staff.manage') }] },

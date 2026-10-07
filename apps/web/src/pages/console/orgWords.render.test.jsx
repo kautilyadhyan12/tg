@@ -243,15 +243,16 @@ describe('the roster', () => {
   it('is headed Clients for a studio, and says clients when it is empty', async () => {
     orgService.getMembers.mockResolvedValue({ data: { items: [], nextCursor: null } });
     membersAs('studio');
-    expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
+    // The owner's page holds the staff too, and its title says so (23c-ii).
+    expect(await screen.findByRole('heading', { name: 'Clients & staff' })).toBeTruthy();
     expect(await screen.findByText(/Invite clients from Your list\. They appear here once they join\./i)).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Members' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /Members/ })).toBeNull();
   });
 
   it('is headed Members for a gym — the control', async () => {
     orgService.getMembers.mockResolvedValue({ data: { items: [], nextCursor: null } });
     membersAs('gym');
-    expect(await screen.findByRole('heading', { name: 'Members' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Members & staff' })).toBeTruthy();
     expect(await screen.findByText(/Invite members from Your list\. They appear here once they join\./i)).toBeTruthy();
   });
 });

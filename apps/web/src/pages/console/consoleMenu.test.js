@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_PRIVILEGES } from '@app/shared';
-import { consoleLook, consoleMenu, moreIsCurrent } from './consoleMenu';
+import { consoleLook, consoleMenu, moreIsCurrent, membersPageName } from './consoleMenu';
 
 const keys = (list) => list.map((p) => p.key);
 
@@ -100,9 +100,26 @@ describe('the words follow the organisation', () => {
     ['studio', 'Clients'],
     ['personal_trainer', 'Clients'],
   ])('a %s calls its people %s', (orgType, word) => {
-    const menu = consoleMenu('flow', ROLE_PRIVILEGES.owner, orgType);
+    const menu = consoleMenu('flow', ROLE_PRIVILEGES.manager, orgType);
     expect(menu.pages.find((p) => p.key === 'members').label).toBe(word);
     expect(menu.pages[0].label).toBe('Overview');
+  });
+
+  /** Kd, RULINGS 2026-10-07: staff are on this page, so its name says so, for whoever has
+   *  the Staff tab. Nobody else is promised staff, and the phone's bar has room for one word. */
+  it.each([
+    ['gym', 'Members'],
+    ['studio', 'Clients'],
+    ['personal_trainer', 'Clients'],
+  ])('at a %s the owner\'s line reads "%s & staff"; a manager\'s and a trainer\'s keeps the one word, as the phone\'s bar does for everybody', (orgType, word) => {
+    const line = (privileges) => consoleMenu('flow', privileges, orgType).pages.find((p) => p.key === 'members');
+    expect([line(ROLE_PRIVILEGES.owner).label, line(ROLE_PRIVILEGES.owner).tabLabel]).toEqual([`${word} & staff`, word]);
+    for (const role of ['manager', 'trainer']) {
+      expect([line(ROLE_PRIVILEGES[role]).label, line(ROLE_PRIVILEGES[role]).tabLabel]).toEqual([word, word]);
+    }
+    expect(membersPageName(ROLE_PRIVILEGES.owner, orgType)).toBe(`${word} & staff`);
+    expect(membersPageName(null, orgType)).toBe(word);
+    expect(membersPageName(['members.read', 'members.confirm'], orgType)).toBe(word);
   });
 });
 

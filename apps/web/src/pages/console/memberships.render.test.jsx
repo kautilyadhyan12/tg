@@ -138,7 +138,10 @@ describe('staff who may', () => {
     draw([gym({ staffRole, privileges })]);
     expect(await screen.findByRole('heading', { level: 1, name: 'Memberships' })).toBeTruthy();
     const rail = railLinks();
-    expect(rail.indexOf('Memberships')).toBe(rail.indexOf('Members') + 1);
+    // The line above it is the Members page's: "Members & staff" for the owner (23c-ii).
+    const members = rail.findIndex((label) => label === 'Members' || label === 'Members & staff');
+    expect(members).toBeGreaterThanOrEqual(0);
+    expect(rail.indexOf('Memberships')).toBe(members + 1);
     // Nothing to press first: the list, its price and the main button are there.
     expect(await screen.findByText('Gold Monthly')).toBeTruthy();
     expect(screen.getByText('$49.99 every month')).toBeTruthy();

@@ -10,6 +10,7 @@ import MemberListPanel, { Tick } from './MemberListPanel';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
 import MembersStaffTab from './MembersStaffTab';
+import { membersPageName } from './consoleMenu';
 import { MEMBER_REMOVE_TICKED_MAX, orgWords } from '@app/shared';
 import {
   canRemoveMembers,
@@ -578,7 +579,7 @@ export default function Members() {
     <div className="c-page">
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
         <div className="flex flex-col gap-1.5 min-w-0">
-          <h1 className="c-h1">{words.peopleCap}</h1>
+          <h1 className="c-h1">{membersPageName(viewerPrivileges(org), org?.orgType)}</h1>
           <p className="c-sub">
             <span className={meterText === null ? '' : 'hidden md:inline'}>{org.name}</span>
             {meterText !== null ? (

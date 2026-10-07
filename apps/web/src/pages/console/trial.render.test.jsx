@@ -448,7 +448,7 @@ describe('the seat meter', () => {
     // The HEADING, not the text: "Members" is also the shell's nav tab, twice
     // over (rail and phone bar), so a bare text query is ambiguous and fails for
     // a reason that has nothing to do with the meter.
-    await screen.findByRole('heading', { name: 'Members' });
+    await screen.findByRole('heading', { name: /^Members/ });
     expect(screen.queryByTestId('seat-meter')).toBeNull();
   });
 
