@@ -47,8 +47,9 @@ export function howLine(visit) {
   }
 }
 
-/** The gym's own status and payment words for a person, as the list has them: "Active ·
- *  Overdue". Empty when the gym keeps neither, or the reader is not sent them. */
+/** A person's status and payment words, as the Members list has them: what they hold in
+ *  the app ("Active · Payment due"), or the gym's own words for somebody who holds
+ *  nothing there. Empty when there is neither, or the reader is not sent them. */
 export function wordsLine(words) {
   return [words?.status, words?.payment]
     .filter((word) => typeof word === 'string' && word.trim() !== '')
