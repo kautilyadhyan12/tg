@@ -2543,9 +2543,11 @@ that and the buttons).
 - **A person's Details and Edit** leave those four out for somebody the app answers for
   (`held` on their page, the same answer as their row), so the page says them once, in the
   Memberships box; Edit says where they are changed, with **Go to Memberships**. A
-  membership changed in the box reads the page again. Somebody the app holds nothing for
-  keeps every word and every box, in the order Edit had. The words stay on the record, and
-  an import still writes them.
+  membership changed in the box reads the page again. The "Changed by hand" line leaves
+  those four out too. With nothing in use the box, which folds what is over away, says
+  what the row says: "No membership now. Gold Monthly · Cancelled 6 Oct". Somebody the app
+  holds nothing for keeps every word and every box, in the order Edit had. The words stay
+  on the record, and an import still writes them.
 - **The front desk, staff's search, staff's check-in and the live log** (§12.4, §12.5) say
   the status and payment word of what the person holds, by this rule on the gym's own day,
   and their record's two words only where the app holds nothing for them
