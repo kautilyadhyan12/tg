@@ -9,6 +9,7 @@ import StaffPanel from '../../components/console/StaffPanel';
 import MembershipTypesPanel from '../../components/console/MembershipTypesPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
+import { useSectionLink } from './useSectionLink';
 import { canManageStaff } from './staffView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManageSchedule } from './classesView';
@@ -45,6 +46,8 @@ import { viewerPrivileges } from './consoleView';
 export default function Settings() {
   const { orgSlug } = useParams();
   const { loading, error, org, notFound, reload } = useConsoleOrg(orgSlug);
+  // A link that names a section ("#memberships") opens the page there, with it open.
+  const section = useSectionLink(!loading && error === null && !notFound);
 
   if (loading) {
     return (
@@ -168,7 +171,12 @@ export default function Settings() {
 
       {/* MEMBERSHIPS (17a-i): what the gym sells, on `memberships.manage` as the server
           gates its changes. Keyed per gym for the panels' reason above: it holds a form. */}
-      {canEditMemberships ? <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={readOnly} /> : null}
+      {canEditMemberships ? (
+        // `id`: Add member's "Set up memberships" opens the page here (23a-ii).
+        <div id="memberships" style={{ scrollMarginTop: 16 }}>
+          <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={readOnly} startOpen={section === 'memberships'} />
+        </div>
+      ) : null}
 
       {/* CLASS BOOKINGS (17c-ii-a): the four booking settings, on `schedule.manage` as the
           server gates them. Keyed per gym for the panels' reason above: it holds a form. */}
