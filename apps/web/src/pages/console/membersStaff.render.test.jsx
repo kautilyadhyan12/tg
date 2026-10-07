@@ -636,6 +636,13 @@ describe('what was found by the review', () => {
     fireEvent.click(panel.getByRole('button', { name: 'Make trainer' }));
     await waitFor(() => expect(panel.getByRole('button', { name: 'Make manager' })).toBeTruthy());
     expect(panel.queryByText('Permissions saved.')).toBeNull();
+    // Nor does it come back when a later change lands on the saved set again.
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, { ...MANAGER_TICKED, privileges: ['members.read', 'codes.invite', 'members.remove'] }] } });
+    fireEvent.click(panel.getByRole('button', { name: 'Make manager' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Make manager' }));
+    await waitFor(() => expect(panel.getByRole('button', { name: 'Make trainer' })).toBeTruthy());
+    expect(panel.getByLabelText(/^Remove members/).checked).toBe(true);
+    expect(panel.queryByText('Permissions saved.')).toBeNull();
   });
 
   /** L4: nothing to check the save against, so nothing is claimed. */

@@ -122,12 +122,23 @@ export function roleTargets(person, roles, orgType) {
     }));
   const own = (Array.isArray(roles) ? roles : [])
     .filter((r) => r.name !== ownName || privilegesDiffer(heldPrivileges(person), r.privileges))
-    .map((r) => ({
-      key: r.id,
-      body: { roleId: r.id },
-      label: `Make ${r.name}`,
-      question: `Make ${person.displayName ?? 'them'} ${withArticle(r.name)}? Their permissions become the ones saved for that role.`,
-    }));
+    .map((r) =>
+      // The role they already hold by name, offered because their ticks are not its: the
+      // button says what it does, and does not offer them a role their tag says they have.
+      r.name === ownName
+        ? {
+            key: r.id,
+            body: { roleId: r.id },
+            label: `Reset to ${r.name}'s permissions`,
+            question: `Give ${person.displayName ?? 'them'} the permissions saved for ${r.name}? This replaces what is ticked now.`,
+          }
+        : {
+            key: r.id,
+            body: { roleId: r.id },
+            label: `Make ${r.name}`,
+            question: `Make ${person.displayName ?? 'them'} ${withArticle(r.name)}? Their permissions become the ones saved for that role.`,
+          },
+    );
   return [...builtIn, ...own];
 }
 

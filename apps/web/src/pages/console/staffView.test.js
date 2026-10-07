@@ -195,8 +195,11 @@ describe('the roles somebody can be given from their own panel', () => {
     expect(offered(rita({ role: 'trainer', roleName: 'Front desk', privileges: ['attendance.read'] }), [remade])).toEqual([
       ['Make manager', { role: 'manager' }],
       ['Make trainer', { role: 'trainer' }],
-      ['Make Front desk', { roleId: 'r-desk-2' }],
+      ["Reset to Front desk's permissions", { roleId: 'r-desk-2' }],
     ]);
+    // It does not offer them a role their tag says they already have.
+    const reset = roleTargets(rita({ role: 'trainer', roleName: 'Front desk', privileges: ['attendance.read'] }), [remade], 'gym')[2];
+    expect(reset.question).toBe('Give Rita Sen the permissions saved for Front desk? This replaces what is ticked now.');
   });
 
   it('somebody whose own role has since been deleted is offered every role there is', () => {

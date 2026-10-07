@@ -434,6 +434,9 @@ function PermissionsSection({ person, orgType, busy, readOnly, error, onSave }) 
   if (over !== held) {
     setOver(held);
     setDraft(null);
+    // Said of another set: gone for good, so it cannot come back when a later change
+    // happens to land on that set again. A save's own read-back is the set it names.
+    if (lastSave !== null && lastSave.held !== held) setLastSave(null);
   }
 
   const ownerRow = person.role === 'owner';
