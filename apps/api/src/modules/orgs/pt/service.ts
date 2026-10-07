@@ -144,10 +144,13 @@ export async function getTrainers(deps: PtDeps, staffId: string, gymId: string, 
   const standing = await standingOf(deps, gymId, staffId);
   if (!(await limit())) return null;
   const only = standing.manages ? null : staffId;
-  const [clock, rows, timeOff] = await Promise.all([
+  const now = deps.now();
+  const [clock, rows, timeOff, setup] = await Promise.all([
     repo.gymClock(deps.sql, gymId),
     repo.staffTrainers(deps.sql, gymId, only),
-    repo.timeOffComing(deps.sql, gymId, only, deps.now()),
+    repo.timeOffComing(deps.sql, gymId, only, now),
+    // The steps are set up by whoever runs the timetable; nobody else is sent them.
+    standing.manages ? repo.setupOf(deps.sql, gymId, now) : null,
   ]);
   if (clock === null) throw notFound();
   return ptTrainersResponseSchema.parse({
@@ -156,6 +159,7 @@ export async function getTrainers(deps: PtDeps, staffId: string, gymId: string, 
     canBook: standing.confirms,
     freeCancelMinutes: clock.freeCancelMinutes,
     gymHasTypes: clock.hasTypes,
+    setup,
     trainers: rows.map((r) => ({
       userId: r.userId,
       ...staffName(r),

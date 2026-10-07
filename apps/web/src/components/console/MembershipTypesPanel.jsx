@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, orgWords } from '@app/shared';
-import { Link } from 'react-router-dom';
 import { Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import { viewerPrivileges } from '../../pages/console/consoleView';
-import { canManageOrg } from '../../pages/console/gymDetailsView';
+import { placeFor } from '../../pages/console/consolePlaces';
 import {
   ACCESS_CHOICES,
   KIND_CHOICES,
@@ -32,6 +31,7 @@ import {
 } from '../../pages/console/membershipTypesView';
 import { formWordsFor, notSetUp, typeTies, withSetUpCount } from '../../pages/console/membershipWordsView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from './ConsoleStates';
+import PlaceLink from './PlaceLink';
 import { GiveBox, NotSetUp, TypeTies } from './MembershipFromList';
 import { useListMemberships } from './useListMemberships';
 
@@ -592,8 +592,10 @@ export default function MembershipTypesPanel({ org, readOnly }) {
     </div>
   );
   const summary = withSetUpCount(typesSummary(list), fromList.words);
-  const canSetCountry = canManageOrg(viewerPrivileges(org));
-  // Settings' own name for that section: "Gym details", "Studio details".
+  // The country is a box in Settings' details section ("Gym details", "Studio details"),
+  // for whoever may change them: its button opens Settings there, at that box.
+  const countryTo = placeFor(org.slug, viewerPrivileges(org), 'country');
+  const canSetCountry = countryTo !== null;
   const details = `${orgWords(org.orgType).itCap} details`;
 
   return (
@@ -641,11 +643,9 @@ export default function MembershipTypesPanel({ org, readOnly }) {
                   ? `Set your country in ${details} before adding a membership type. Prices are in your country's own money.`
                   : `Your country isn't set yet, so a membership type can't be added. Ask the owner to set it in ${details}. Prices are in your country's own money.`}
               </p>
-              {canSetCountry && typeof org.slug === 'string' ? (
-                <Link to={`/console/${org.slug}/settings`} className="c-btn c-btn-s">
-                  Open Settings
-                </Link>
-              ) : null}
+              <PlaceLink to={countryTo} className="c-btn c-btn-s">
+                Set your country
+              </PlaceLink>
             </div>
           ) : canAddType(list) ? null : (
             <p className="c-s15 c-t2 m-0">{TOO_MANY_TYPES}</p>

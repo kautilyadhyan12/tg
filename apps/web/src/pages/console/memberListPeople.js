@@ -491,11 +491,15 @@ export function invitePeopleQuery(filters, group, cursor = null) {
   return params.toString();
 }
 
-/** Why the gym cannot send at all yet, in words. */
-export function inviteBlockedWords(blocked, words) {
+/** Why the gym cannot send at all yet, in words. `canSetAddress`: this member of staff
+ *  may change the gym's details, so the screen puts a button under the sentence; anybody
+ *  else is told who can. */
+export function inviteBlockedWords(blocked, words, canSetAddress = true) {
   switch (blocked) {
     case 'no_postal_address':
-      return `Add your ${words.it}'s postal address in Settings. The law requires it in every invitation email.`;
+      return canSetAddress
+        ? `Add your ${words.it}'s postal address before you invite anyone. The law requires it in every invitation email.`
+        : `Your ${words.it} has no postal address yet, so invitations can't be sent. Ask the owner to add it. The law requires it in every invitation email.`;
     case 'gym_not_on_plan':
       return `Your ${words.it} needs an active plan to send invitations.`;
     case 'gym_archived':

@@ -11,6 +11,7 @@ import { sessionsAsked } from './trainerSessionsView';
 import { RunFields, StartTimePick } from './ClassFields';
 import MemberListPerson from './MemberListPerson';
 import { canRemoveMembers, viewerPrivileges } from './consoleView';
+import { placeTo } from './consolePlaces';
 import { addDays } from './hoursView';
 import {
   canGoForward,
@@ -124,7 +125,7 @@ function DayForm({
 /** One date, opened. Its actions follow what the server says it is: a started
  *  class has none, a cancelled one can be un-cancelled, any other can be edited
  *  or cancelled. */
-function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVersion, onOpenPerson, onClose, onChange, onCancel, onRestore }) {
+function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVersion, trainingTo, onOpenPerson, onClose, onChange, onCancel, onRestore }) {
   const [mode, setMode] = useState(null);
   const [draft, setDraft] = useState(() => dayDraft(session));
   const [scope, setScope] = useState('this');
@@ -168,6 +169,7 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
         clockFormat={clockFormat}
         kind={over.body === null ? 'uncancel' : 'save'}
         busy={busy}
+        trainingTo={trainingTo}
         onCancel={() => setOver(null)}
         onConfirm={async () => {
           if (over.body === null) await restore(over.sessions.mark);
@@ -333,8 +335,9 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
   );
 }
 
-export default function ClassWeek({ gymId, org, readOnly, staff, locked }) {
-  const [wanted, setWanted] = useState(null);
+// `startDay`: the day whose week is shown first ('YYYY-MM-DD'); this week without one.
+export default function ClassWeek({ gymId, org, readOnly, staff, locked, startDay = null }) {
+  const [wanted, setWanted] = useState(startDay);
   const [week, setWeek] = useState(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(null);
@@ -589,6 +592,7 @@ export default function ClassWeek({ gymId, org, readOnly, staff, locked }) {
                   gymId={gymId}
                   session={open}
                   clockFormat={lists.clockFormat}
+                  trainingTo={placeTo(org?.slug, 'personalTraining')}
                   staff={staff}
                   locked={locked}
                   busy={busy}

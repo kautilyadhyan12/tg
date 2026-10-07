@@ -1105,7 +1105,28 @@ describe('a link to one section of Settings', () => {
   });
 
   // 23b: Overview's Start here list opens these two the same way.
+  // 23d: a button on another page opens the gym's details, or a box inside them, at that box.
   it.each([
+    ['postal-address', 'Postal address'],
+    ['country', 'Country'],
+  ])('"#%s" opens Gym details with that box itself in view, and no other section', async (id, label) => {
+    drawAt(`/console/iron-house/settings#${id}`);
+    const heading = await screen.findByRole('button', { name: /^Gym details/ });
+    expect(heading.getAttribute('aria-expanded')).toBe('true');
+    const details = document.getElementById('gym-details');
+    const box = document.getElementById(id);
+    expect(details.contains(heading)).toBe(true);
+    expect(details.contains(box)).toBe(true);
+    expect(box.textContent).toContain(label);
+    await waitFor(() => expect(into).toHaveBeenCalled());
+    expect(into.mock.instances.every((el) => el === box)).toBe(true);
+    const open = screen.getAllByRole('button', { expanded: true }).filter((button) => !details.contains(button));
+    expect(open).toEqual([]);
+  });
+
+  it.each([
+    ['gym-details', /^Gym details/],
+    ['follow-up-emails', /^Follow-up emails to leads/],
     ['opening-hours', /^When we're open/],
     ['check-in-devices', /^Check-in devices/],
   ])('"#%s" opens the page with that section open and in view, and no other', async (id, name) => {
@@ -1121,6 +1142,30 @@ describe('a link to one section of Settings', () => {
     // It still folds shut.
     fireEvent.click(heading);
     expect(heading.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('a link to another section, followed while Settings is already open, opens that section too (23d)', async () => {
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/settings#opening-hours']}>
+        <Link to="/console/iron-house/settings#follow-up-emails">elsewhere</Link>
+        <Routes>
+          <Route path="/console/:orgSlug/settings" element={<Settings />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const hours = await screen.findByRole('button', { name: /^When we're open/ });
+    const emails = screen.getByRole('button', { name: /^Follow-up emails to leads/ });
+    expect(hours.getAttribute('aria-expanded')).toBe('true');
+    expect(emails.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('link', { name: 'elsewhere' }));
+    await waitFor(() => expect(emails.getAttribute('aria-expanded')).toBe('true'));
+    // The one opened first is left as it was, and the new one still folds shut and stays shut.
+    expect(hours.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(emails);
+    expect(emails.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(hours);
+    expect(hours.getAttribute('aria-expanded')).toBe('false');
+    expect(emails.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('with no section named, every section starts closed and nothing is moved', async () => {

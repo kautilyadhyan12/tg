@@ -172,16 +172,17 @@ describe('staff who may', () => {
     expect(screen.getByRole('button', { name: 'Archive Gold Monthly' }).disabled).toBe(true);
   });
 
-  it('a gym with no country: the owner gets a button to Settings, and somebody who cannot change the details is told to ask', async () => {
+  it('a gym with no country: the owner gets a button to the country box in Settings, and somebody who cannot change the details is told to ask', async () => {
     orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ currency: null }) });
     draw([gym({ staffRole: 'owner', privileges: [...ROLE_PRIVILEGES.owner] })]);
     expect(await screen.findByText("Set your country in Gym details before adding a membership type. Prices are in your country's own money.")).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open Settings' }).getAttribute('href')).toBe('/console/iron-house/settings');
+    // Settings with Gym details open, at the country box (23d): not Settings with every box closed.
+    expect(screen.getByRole('link', { name: 'Set your country' }).getAttribute('href')).toBe('/console/iron-house/settings#country');
     cleanup();
     resetConsoleOrgs();
     draw([gym()]);
     expect(await screen.findByText(/Ask the owner to set it in Gym details./)).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'Open Settings' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Set your country' })).toBeNull();
     // A studio's section has the studio's name, as Settings writes it.
     cleanup();
     resetConsoleOrgs();

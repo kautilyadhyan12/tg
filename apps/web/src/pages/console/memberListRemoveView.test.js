@@ -55,6 +55,19 @@ describe('who changes, and the button', () => {
     ]);
   });
 
+  it('somebody who cannot open the Staff tab is told who can, and is not sent there (23d)', () => {
+    const groups = (managesStaff) => removeChangeGroups(preview({ endApp: [oliviaApp], keepConsole: [oliviaApp] }), GYM, 'Iron House Gym', managesStaff);
+    expect(groups(true).find((g) => g.key === 'keepConsole')).toMatchObject({
+      line: 'They can still open the console. To remove someone from staff too, use the Staff tab, or Remove on their own panel.',
+      place: 'staff',
+    });
+    const told = groups(false).find((g) => g.key === 'keepConsole');
+    expect(told.line).toBe('They can still open the console. The owner can remove someone from staff.');
+    expect(told.place).toBeUndefined();
+    // No other group names a place.
+    for (const g of [...groups(true), ...groups(false)]) if (g.key !== 'keepConsole') expect(g.place).toBeUndefined();
+  });
+
   it('one in the app and one not: says why only one loses access', () => {
     expect(lines({ move: [olivia, ava], endApp: [oliviaApp], movingNotInApp: 1 })).toEqual([
       ['move', '2 will move to past members', MOVE],

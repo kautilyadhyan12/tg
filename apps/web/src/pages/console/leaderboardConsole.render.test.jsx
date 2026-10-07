@@ -496,6 +496,24 @@ describe('fixing a visit from a person’s panel', () => {
     expect(box.getByTestId('visit-box')).toBeTruthy();
   });
 
+  it("Add a visit: today's is added on Attendance, with a button to it for whoever can open that page (23d)", async () => {
+    const box = await openCounted({ ...FIXER, privileges: [...FIXER.privileges, 'attendance.read'] });
+    fireEvent.click(box.getByTestId('add-visit-open'));
+    const asked = within(await box.findByTestId('visit-box'));
+    expect(asked.getByText(/For today, use Check in on Attendance\./)).toBeTruthy();
+    const link = asked.getByRole('link', { name: 'Open Attendance' });
+    expect(link.getAttribute('href')).toBe('/console/iron-house/attendance');
+    // Outside the day's own label, so a press opens Attendance and not the calendar.
+    expect(link.closest('label')).toBeNull();
+    // With a day picked, the press asks before it leaves the box.
+    fireEvent.change(box.getByTestId('add-visit-day'), { target: { value: '2026-10-07' } });
+    expect(asked.queryByRole('link', { name: 'Open Attendance' })).toBeNull();
+    fireEvent.click(asked.getByRole('button', { name: 'Open Attendance' }));
+    expect(asked.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/attendance');
+    fireEvent.click(asked.getByRole('button', { name: 'Stay here' }));
+    expect(box.getByTestId('add-visit-day').value).toBe('2026-10-07');
+  });
+
   it('Add a visit: nothing is sent until a day is picked; the press sends that person and that day', async () => {
     orgApi.addVisit.mockResolvedValue({ data: { result: 'added', person: { name: 'Chen Wu' }, day: '2026-10-07' } });
     const box = await openCounted(FIXER);
@@ -503,6 +521,10 @@ describe('fixing a visit from a person’s panel', () => {
     const asked = await box.findByTestId('visit-box');
     expect(asked.textContent).toContain('Pick the day they came.');
     expect(box.getByTestId('visit-press').disabled).toBe(true);
+    // This reader cannot open Attendance: told who adds today's, and sent nowhere (23d).
+    expect(asked.textContent).toContain('For today, ask somebody who checks people in.');
+    expect(within(asked).queryByRole('link')).toBeNull();
+    expect(within(asked).queryByRole('button', { name: 'Open Attendance' })).toBeNull();
     // A press on the box opens the calendar: the day is picked, not typed.
     const dayBox = box.getByTestId('add-visit-day');
     dayBox.showPicker = vi.fn();

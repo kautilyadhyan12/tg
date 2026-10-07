@@ -15,6 +15,9 @@ import {
   workoutCountText,
 } from '../../components/gym/leaderboardView';
 import { gymToday } from './hoursView';
+import PlaceLink from '../../components/console/PlaceLink';
+import { viewerPrivileges } from './consoleView';
+import { placeFor } from './consolePlaces';
 import {
   HIDDEN_TAG,
   addVisitBox,
@@ -203,6 +206,8 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
         : addVisitBox(nameOf(person), fixDay, fix.counted);
   const box = fixBox ?? (asking === null || profile === null ? null : takeOffBox(profile, asking, gym.name, words));
   const addWindow = addVisitWindow(gymToday(gym.timezone));
+  // Today's visit is added by Check in on Attendance, for whoever may open that page (23d).
+  const attendanceTo = placeFor(orgSlug, viewerPrivileges(gym), 'attendance');
 
   const closeBox = () => {
     setAsking(null);
@@ -278,8 +283,19 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
               onClick={openCalendar}
               data-testid="add-visit-day"
             />
-            <span className="c-s13 c-t2">Press the box to pick from a calendar: an earlier day, up to 62 days back. For today, use Check in on Attendance.</span>
+            <span className="c-s13 c-t2">
+              {attendanceTo === null
+                ? 'Press the box to pick from a calendar: an earlier day, up to 62 days back. For today, ask somebody who checks people in.'
+                : 'Press the box to pick from a calendar: an earlier day, up to 62 days back. For today, use Check in on Attendance.'}
+            </span>
           </label>
+        ) : null}
+        {/* Outside the label, so pressing it opens Attendance and not the calendar. It leaves
+            this box, so it asks first once a day is picked. */}
+        {fix?.kind === 'add' ? (
+          <PlaceLink to={attendanceTo} guard={fixDay !== ''}>
+            Open Attendance
+          </PlaceLink>
         ) : null}
         <section className="flex flex-col gap-1.5">
           <h3 className="c-s16 c-w6 c-t1">What changes</h3>

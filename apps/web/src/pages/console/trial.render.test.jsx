@@ -19,7 +19,7 @@
 // HAS one, it says nothing at all for a gym that does not, and it is drawn only
 // for somebody who may manage billing.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { attendanceDay, overview } from './__fixtures__/overview';
 
@@ -394,6 +394,42 @@ describe('the banner above every console screen', () => {
     renderConsole(Overview);
 
     expect((await screen.findByTestId('console-banner')).textContent).toMatch(/Trial ends/);
+  });
+
+  it('where it sends whoever pays to Plan on the Overview, it has a button that opens that card (23d)', async () => {
+    orgService.getMine.mockResolvedValue(
+      mineIs(onTrial({ subscription: { status: 'trialing', trialEndsAt: daysFromNow(2), seatCap: 300 } })),
+    );
+    renderConsole(Members, '/console/iron-house/members');
+    const banner = within(await screen.findByTestId('console-banner'));
+    expect(banner.getByText(/choose a plan under Plan on the Overview/)).toBeTruthy();
+    expect(banner.getByRole('link', { name: 'Open Plan' }).getAttribute('href')).toBe('/console/iron-house#plan');
+    cleanup();
+    // The plan's card is what that address names on the Overview.
+    renderConsole(Overview);
+    await screen.findByTestId('console-banner');
+    const plan = document.getElementById('plan');
+    expect(plan).not.toBeNull();
+    expect(plan.textContent).toMatch(/trial/i);
+    // Pressed on the Overview itself, already at that address: the press brings the plan
+    // into view, since an address that does not change moves nothing.
+    const had = Element.prototype.scrollIntoView;
+    const into = vi.fn();
+    Element.prototype.scrollIntoView = into;
+    try {
+      fireEvent.click(within(screen.getByTestId('console-banner')).getByRole('link', { name: 'Open Plan' }));
+      fireEvent.click(within(screen.getByTestId('console-banner')).getByRole('link', { name: 'Open Plan' }));
+      expect(into.mock.instances.filter((el) => el === plan).length).toBeGreaterThanOrEqual(2);
+    } finally {
+      Element.prototype.scrollIntoView = had;
+    }
+  });
+
+  it('a banner that sends nobody anywhere has no button', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(onTrial()));
+    renderConsole(Overview);
+    const banner = within(await screen.findByTestId('console-banner'));
+    expect(banner.queryByRole('link')).toBeNull();
   });
 
   it('appears on the MEMBERS screen too, not only on the gym screen', async () => {

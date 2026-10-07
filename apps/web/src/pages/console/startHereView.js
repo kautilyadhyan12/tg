@@ -1,25 +1,20 @@
 import { orgWords } from '@app/shared';
+import { placeTo } from './consolePlaces';
 
 // OVERVIEW'S "START HERE" LIST (ROADMAP 23b): what the box says and where each button
 // goes. The server sends the steps this person can do and whether each is done; nothing
 // here decides either.
 
-/** The Settings sections the list's buttons open: the `id` each has on that page. */
-export const SETTINGS_SECTION = {
-  hours: 'opening-hours',
-  frontDesk: 'check-in-devices',
-};
-
 /** One step's words and buttons. Each button opens the page where the step is done. */
 function stepWords(step, orgSlug, orgType) {
   const words = orgWords(orgType);
-  const base = `/console/${orgSlug}`;
+  const to = (place) => placeTo(orgSlug, place);
   switch (step) {
     case 'memberships':
       return {
         title: 'What you sell',
         line: `The memberships and class packs people buy from you, with their prices. You pick one of them when you add a ${words.person}.`,
-        actions: [{ label: 'Set up memberships', to: `${base}/memberships` }],
+        actions: [{ label: 'Set up memberships', to: to('memberships') }],
       };
     case 'members':
       return {
@@ -28,8 +23,8 @@ function stepWords(step, orgSlug, orgType) {
         // Both are changes to the list, so a gym with no live plan gets them greyed, as
         // the "Bring your members in" card this step stands in for does.
         actions: [
-          { label: `Import ${words.people}`, to: `${base}/members?open=import`, changes: true },
-          { label: `Add ${words.person}`, to: `${base}/members?open=add`, changes: true },
+          { label: `Import ${words.people}`, to: to('importMembers'), changes: true },
+          { label: `Add ${words.person}`, to: to('addMember'), changes: true },
         ],
       };
     case 'staff':
@@ -38,25 +33,25 @@ function stepWords(step, orgSlug, orgType) {
         line: 'Front desk, managers and trainers each sign in as themselves, and you choose what each of them can do.',
         // Members → Staff, with the form open (23c-ii). A gym with no live plan gets it
         // greyed, as the form itself would be.
-        actions: [{ label: 'Invite staff', to: `${base}/members?view=staff&open=invite`, changes: true }],
+        actions: [{ label: 'Invite staff', to: to('inviteStaff'), changes: true }],
       };
     case 'classes':
       return {
         title: 'Add your classes',
         line: `Add each class you run, then its time slots: the days and times it runs. It is then on your calendar for ${words.people} to book.`,
-        actions: [{ label: 'Set up classes', to: `${base}/classes` }],
+        actions: [{ label: 'Set up classes', to: to('classes') }],
       };
     case 'hours':
       return {
         title: 'Opening hours',
         line: `Say when you're open, so your ${words.people} see it in the app.`,
-        actions: [{ label: 'Set opening hours', to: `${base}/settings#${SETTINGS_SECTION.hours}` }],
+        actions: [{ label: 'Set opening hours', to: to('openingHours') }],
       };
     case 'frontDesk':
       return {
         title: 'Front desk check-in',
         line: 'Add a tablet or computer at your front desk and open its link on it. People then scan their pass from the app, or their key tag, as they walk in.',
-        actions: [{ label: 'Set up check-in', to: `${base}/settings#${SETTINGS_SECTION.frontDesk}` }],
+        actions: [{ label: 'Set up check-in', to: to('frontDesk') }],
       };
     default:
       return null;

@@ -1,6 +1,6 @@
 // Overview's "Start here" list (ROADMAP 23b): what is drawn from the server's answer.
 import { describe, expect, it } from 'vitest';
-import { SETTINGS_SECTION, startHereCount, startHereView } from './startHereView';
+import { startHereCount, startHereView } from './startHereView';
 
 const ALL = ['memberships', 'members', 'staff', 'classes', 'hours', 'frontDesk'];
 const answer = ({ done = [], steps = ALL, hidden = false, canHide = true } = {}) => ({
@@ -27,7 +27,6 @@ describe('where each button goes', () => {
       ['hours', [['Set opening hours', '/console/iron-house/settings#opening-hours']]],
       ['frontDesk', [['Set up check-in', '/console/iron-house/settings#check-in-devices']]],
     ]);
-    expect(SETTINGS_SECTION).toEqual({ hours: 'opening-hours', frontDesk: 'check-in-devices' });
   });
 
   it('only the three that open a form are marked as changes: the two for the member list, and Invite staff', () => {

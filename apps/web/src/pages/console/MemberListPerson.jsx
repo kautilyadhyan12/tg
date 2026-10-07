@@ -5,7 +5,6 @@ import {
   ArrowLeftRight,
   Check,
   Copy,
-  ExternalLink,
   Loader2,
   Mail,
   MoreHorizontal,
@@ -31,6 +30,10 @@ import MembershipChoice from './MembershipChoice';
 import { giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
 import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
+import { canOpenPlace, placeFor } from './consolePlaces';
+import { useCameBack } from './useCameBack';
+import PlaceLink from '../../components/console/PlaceLink';
+import PostalAddressBox from '../../components/console/PostalAddressBox';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
 import {
@@ -63,6 +66,7 @@ import {
   mergePreview,
   underAgeWhen,
   whenWords,
+  inviteBlockedWords,
 } from './memberListPeople';
 
 // One person on the gym's own list (ROADMAP 5b-i, 5b-v-c; spec Part 3 §18.7): everything
@@ -496,14 +500,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       live = false;
     };
   }, [gymId, adding, priceAsk]);
-  // Set up memberships opens beside this form, so a form with nothing to pick from reads
-  // the price list again when staff come back to it.
-  useEffect(() => {
-    if (!adding || sells) return undefined;
-    const again = () => setPriceAsk((n) => n + 1);
-    window.addEventListener('focus', again);
-    return () => window.removeEventListener('focus', again);
-  }, [adding, sells]);
+  // Somebody who set memberships up in another tab finds them here on coming back: a form
+  // with nothing to pick from reads the price list again.
+  useCameBack(adding && !sells, () => setPriceAsk((n) => n + 1));
 
   useEffect(() => {
     const before = document.body.style.overflow;
@@ -674,8 +673,13 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const refused = (err, fallback, extra = {}) => {
     const code = errorCode(err);
     const other = err?.response?.data?.entryId;
+    // A gym with no postal address cannot invite: said as the Invite page says it, with
+    // the box to type it in for whoever may, and who can for anybody else (23d).
+    const noAddress = code === 'no_postal_address';
+    const canSetAddress = noAddress && canOpenPlace(viewerPrivileges(gym), 'postalAddress');
     setRefusal({
-      message: errorText(err, fallback),
+      message: noAddress ? inviteBlockedWords(code, words, canSetAddress) : errorText(err, fallback),
+      canSetAddress,
       openId: (code === 'already_on_list' || code === 'former_record') && typeof other === 'string' ? other : null,
       ack: code === 'leaves_list' ? extra.ack ?? null : null,
     });
@@ -1111,13 +1115,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 ? `You haven't set up the memberships you sell yet. Once you have, you pick one here. Until then, type this ${words.person}'s status and payment yourself.`
                 : `Your ${words.it ?? 'gym'} hasn't set up the memberships it sells yet. Until the owner does, type this ${words.person}'s status and payment yourself.`}
             </p>
-            {mayManage && typeof gym?.slug === 'string' ? (
-              <a href={`/console/${gym.slug}/memberships`} target="_blank" rel="noreferrer" className="c-btn c-btn-s c-btn-sm">
-                Set up memberships
-                <ExternalLink aria-hidden="true" className="w-4 h-4" />
-                <span className="sr-only">(opens in a new tab)</span>
-              </a>
-            ) : null}
+            {/* It leaves this form, so it asks first once something has been typed. */}
+            <PlaceLink
+              to={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
+              guard={JSON.stringify(form) !== JSON.stringify(formFrom(null, fields))}
+              className="c-btn c-btn-s c-btn-sm"
+            >
+              Set up memberships
+            </PlaceLink>
           </div>
         ) : null}
         {typedWords()}
@@ -1299,6 +1304,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           onChanged={membershipsChanged}
           nothingNow={nothingNow}
           managesTypes={canManageMemberships(viewerPrivileges(gym))}
+          membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
         />
         {membership.length > 0 ? (
           // What the gym's own list says about them, in its words; the box above is what
@@ -1732,6 +1738,16 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                       </button>
                     ) : null}
                   </div>
+                  {/* Typed here, so the person stays open to invite straight afterwards. */}
+                  {refusal.canSetAddress ? (
+                    <PostalAddressBox
+                      gymId={gymId}
+                      onSaved={() => {
+                        setRefusal(null);
+                        setNotice('Postal address saved. You can invite them now.');
+                      }}
+                    />
+                  ) : null}
                 </div>
               ) : null}
               {maybe !== null && id === null ? (

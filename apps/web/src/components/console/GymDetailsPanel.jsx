@@ -14,6 +14,7 @@ import {
 } from '../../pages/console/gymDetailsView';
 import { canManageBilling, readOnlyNote } from '../../pages/console/billingView';
 import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
+import { SETTINGS_SECTION } from '../../pages/console/consolePlaces';
 import { orgService, errorText } from '../../api/orgsApi';
 
 // A GYM CAN FINALLY FIX ITS OWN DETAILS — the web half of `PATCH /v1/orgs/:gymId`.
@@ -42,9 +43,10 @@ const inputStyle = {
   color: '#fff',
 };
 
-function Field({ label, hint, children }) {
+function Field({ label, hint, id, children }) {
   return (
-    <label className="block">
+    // `id`: a button on another page opens Settings at this box (23d).
+    <label className="block" id={id} style={id === undefined ? undefined : { scrollMarginTop: 16 }}>
       <span className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
         {label}
       </span>
@@ -58,7 +60,8 @@ function Field({ label, hint, children }) {
   );
 }
 
-export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
+// `startOpen`: the page was opened by a link to this section, or to a box inside it.
+export default function GymDetailsPanel({ org, privileges, readOnly = false, startOpen = false }) {
   const allowed = canManageOrg(privileges);
   // The words this panel speaks (roadmap 2b) — a studio owner edits a
   // studio's details, not a gym's.
@@ -255,6 +258,7 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
     <ConsoleSection
       title={`${words.itCap} details`}
       summary={`Your ${words.it}'s name, where it is, the time zone its day ends on, and the postal address your invitations show.`}
+      defaultOpen={startOpen}
     >
       <form onSubmit={save} className="flex flex-col gap-5">
         {/* ABOVE THE BOXES, NOT BESIDE THE BUTTON, so it is read BEFORE somebody
@@ -300,7 +304,7 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
           />
         </Field>
 
-        <Field label="Country" hint={`This decides the currency your ${words.it} is billed in.`}>
+        <Field label="Country" id={SETTINGS_SECTION.country} hint={`This decides the currency your ${words.it} is billed in.`}>
           <Select
             value={draft.country}
             onChange={(value) => edit('country', value)}
@@ -364,7 +368,7 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
           )}
         </Field>
 
-        <Field label="Postal address" hint={`Printed at the foot of every invitation email, as the law asks. You can't invite ${words.people} until it's here.`}>
+        <Field label="Postal address" id={SETTINGS_SECTION.postalAddress} hint={`Printed at the foot of every invitation email, as the law asks. You can't invite ${words.people} until it's here.`}>
           <textarea
             value={draft.postalAddress}
             onChange={(e) => edit('postalAddress', e.target.value)}

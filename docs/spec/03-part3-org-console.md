@@ -2860,6 +2860,28 @@ only where no other time off of that trainer covers them, and otherwise that the
 stays; a request the server answers `request_reused` gets a new key and the list is read
 again; somebody who cannot book is told to ask a manager, in the box and on a session. Not done: the Classes page does not ask before it gives a
 trainer a class inside their time off (their week marks it); nobody is told (the inbox, 20a).)*
+*(23d, 2026-10-07: **every step to a first session, with ticks.** Whoever runs the timetable
+(`schedule.manage`) reads a list above the trainers until every step is done; it is then
+gone, and is back if a step comes undone. Nobody else is sent it. The page's read of its
+trainers carries `setup`, four facts about this gym alone, read in one statement
+(`setupOf`), each true while its thing is there:
+
+| Step | Its button opens | Ticked while | Button for |
+|---|---|---|---|
+| Add a trainer and set their hours | Members → Staff, the Invite staff form open | a member of staff has hours saved | `staff.manage` (greyed with no live plan) |
+| Sell a membership or pack that includes personal training | Memberships | a type that is not archived has `includes_pt` | `memberships.manage` |
+| Give it to a member | Members | somebody on the list holds one in use (running or frozen; a pack with a session left, inside its days on the gym's own day), or a session booked on one still holds its time: a pack of one session is used up by the first booking, and the gym did give it | all staff |
+| Book a session | (on this page) | a session is booked, or took place; a cancelled one does not count | — |
+
+A gym with no membership types has three: the two in the middle are one, "Put your members
+on your list" (somebody on the list). The step to do next has the orange button. A step
+whose place the reader cannot open has no button and says who can. "Somebody holds it" is
+the rule the picker orders its people by (`holdsPt`), so the tick and "people with personal
+training first" agree; what one person can be booked on is still `pickPtCover`'s to say.
+A booking or a cancel reads the steps again while they are on screen. **From Kd's
+click-through:** a time that can be booked is an "available time" on every line of the page
+(it was "free time"), a trainer is "available", and a trainer's name in the Trainers list
+opens their week as See week does, with the week brought into view.)*
 
 ### 13.6 The calendar, the desk and the messages
 
@@ -3861,6 +3883,43 @@ there are no tabs.
 Pages added since R1, each in `consoleMenu.js` with its own tick: Personal training (every
 member of staff), Updates and Events (`posts.manage`), Leaderboard and Challenges
 (`leaderboard.manage`), all under More on a phone.
+
+**Buttons, not words (23d, 2026-10-07; RULINGS that day, "the console is made easy to find
+one's way in").** A sentence that sends staff to another place has a button that opens that
+exact place, with its box open and in view. `consolePlaces.js` is the one list of those
+places, each with its address and the rule that opens it, the menu's own; `PlaceLink` is the
+button. Somebody who cannot open a place gets no button, and the sentence says who can.
+**Every button opens its place in this same tab** (Kd at the click-through, RULINGS
+2026-10-07: new tabs "become a pile of tabs"; a link inside an app opens where it is, and a
+new tab is for an outside site). A button that sits in a form or a box holding something
+typed **asks first**, in place: "You'll leave this page, and what you typed here won't be
+saved." with Leave this page and Stay here. **The gym's postal address, which stops an
+invitation, is typed where it is asked for** (`PostalAddressBox`: Invite, and a person's
+page), saved by the route Settings uses, so nobody leaves that page and the people ticked
+are kept. A box that sends staff to Memberships reads again when they come back to its tab
+(`useCameBack`, which hears a switch of tab as well as of window).
+
+| Sentence, on | Button | Opens |
+|---|---|---|
+| Invite, and a person's page: the gym has no postal address | none: **Postal address** and **Save address**, there | nothing; the count is read again |
+| Memberships: the country is not set | Set your country | Settings, Gym details open, at the country |
+| Leads → Your gym page: its opening hours | Change opening hours (asks first while the page has changes not saved) | Settings, When we're open, open |
+| A lead's follow-up: where replies go | Change reply address (asks first while the lead has typing not saved) | Settings, Follow-up emails to leads, open |
+| Settings → Follow-up emails: the rest wait on Leads | Open Leads (asks first while a change there is not saved) | Leads |
+| A person's Memberships box (a name with no price here; a type not given; no types to pick) | Open Memberships | Memberships |
+| Add member, in a gym with nothing to sell (23a-ii) | Set up memberships (asks first once something is typed) | Memberships |
+| The Remove box: staff who keep their staff access | Open the Staff tab (somebody who cannot open it reads "The owner can remove someone from staff.") | Members → Staff |
+| Leaderboard → a person → Add a visit: "For today, use Check in on Attendance" | Open Attendance (asks first once a day is picked) | Attendance |
+| Personal training: an empty member list in the picker | Open Members | Members |
+| Personal training: a class in a trainer's time off (their week; the time-off box, which asks first) | Open the Calendar | Classes → Calendar, on that class's week (`&week=`) |
+| Classes: sessions a class would go over | Open Personal training (asks first) | Personal training |
+| The banner: pay, choose a plan or change size "under Plan on the Overview" | Open Plan | Overview, at the plan (`#plan`) |
+
+Settings' sections take a link by their `id` (`gym-details`, `opening-hours`,
+`check-in-devices`, `follow-up-emails`), and `postal-address` and `country` are boxes inside
+the details. Not a button: "You can add yourself later from Members", said while a gym is
+being created, when there is no gym to open; and a person's own page, named in sentences
+about several people at once.
 
 Every page appears for exactly the people it appeared for before R1; drawing a page is not
 the permission — every route refuses on its own. The More tab is lit on More and on a page

@@ -541,10 +541,32 @@ describe('the follow-up emails (20c-ii): the gym sends them, the app reminds', (
     expect(screen.getByRole('button', { name: 'Mark email 1 as sent' }).disabled).toBe(true);
   });
 
+  it('where replies go has a button to that box in Settings, for whoever may change it (23d)', async () => {
+    const sentForYou = { ...dueTom, followUp: { ...dueTom.followUp, by: 'app', notSent: null, optedOutAt: null } };
+    await open(sentForYou, { gym: { ...GYM_INFO, slug: 'iron-house', privileges: ['org.manage', 'members.confirm'] } });
+    expect(screen.getByText('Sent for you from 8 in the morning, by your clock. Replies go to your reply address.')).toBeTruthy();
+    const link = screen.getByRole('link', { name: 'Change reply address' });
+    expect(link.getAttribute('href')).toBe('/console/iron-house/settings#follow-up-emails');
+    expect(link.getAttribute('target')).toBeNull();
+    // With something typed on the lead and not saved, the press asks before it leaves.
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Call back on Friday' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Change reply address' }));
+    expect(screen.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/settings#follow-up-emails');
+    fireEvent.click(screen.getByRole('button', { name: 'Stay here' }));
+    expect(screen.getByLabelText('Notes').value).toBe('Call back on Friday');
+    cleanup();
+    // Staff who work the leads and cannot change the gym's details get the words alone.
+    await open(sentForYou, { gym: { ...GYM_INFO, slug: 'iron-house', privileges: ['members.confirm', 'members.manage'] } });
+    expect(screen.getByText(SENT_FOR_YOU_NOTE)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /^Change reply address/ })).toBeNull();
+  });
+
   it('with "Send them for me" on, the panel says the app sends it and offers nothing to email or mark (20c-v)', async () => {
     await open({ ...dueTom, followUp: { ...dueTom.followUp, by: 'app', notSent: null, optedOutAt: null } });
     expect(screen.getByText('Email 1 of 3 will be sent for you today')).toBeTruthy();
     expect(screen.getByText(SENT_FOR_YOU_NOTE)).toBeTruthy();
+    // No gym on this sheet says who the reader is: nobody is sent to Settings on a guess.
+    expect(screen.queryByRole('link', { name: /^Change reply address/ })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Email Tom' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Email Tom' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Mark email/ })).toBeNull();

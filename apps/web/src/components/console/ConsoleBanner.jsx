@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { bannerFor, bannerIsDismissed, dismissBanner } from '../../pages/console/billingView';
+import { viewerPrivileges } from '../../pages/console/consoleView';
+import { PLAN_SECTION, placeFor } from '../../pages/console/consolePlaces';
+import PlaceLink from './PlaceLink';
 
 // Part 3 §4.2's "persistent trial/renewal banner slot [that] sits above all
 // screens" (`03-part3-org-console.md:159`). It lives in `ConsoleLayout` for that
@@ -59,7 +62,25 @@ export default function ConsoleBanner({ org }) {
       data-testid="console-banner"
       className={`flex items-center gap-3 px-4 md:px-8 py-2.5 text-sm ${tone}`}
     >
-      <span className="flex-1">{banner.text}</span>
+      <span className="flex-1">
+        {banner.text}
+        {/* A sentence that sends the reader to Plan has a button that opens it (23d). */}
+        {banner.place ? (
+          <>
+            {' '}
+            <PlaceLink
+              to={placeFor(org?.slug, viewerPrivileges(org), banner.place)}
+              className="c-btn-link c-w6 underline"
+              style={{ color: 'inherit', display: 'inline' }}
+              // Already on the Overview, at this address: the address does not change, so
+              // nothing would move. The plan is brought into view by the press itself.
+              onClick={() => document.getElementById(PLAN_SECTION)?.scrollIntoView?.({ block: 'start' })}
+            >
+              Open Plan
+            </PlaceLink>
+          </>
+        ) : null}
+      </span>
       {banner.dismissible && gymId !== null ? (
         <button
           type="button"

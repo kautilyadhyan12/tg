@@ -9,33 +9,107 @@ import {
   PT_TIME_OFF_DAYS_MAX,
   PT_TIME_OFF_MAX,
   PT_TIME_OFF_OVER_ERROR,
+  orgWords,
   ptHoursProblem,
   ptTimeOffOverSchema,
   ptTimeOffProblem,
 } from '@app/shared';
 import { WEEKDAYS, addDays, clockLabel, clockToMinutes, minutesToClock } from './hoursView';
 import { dayLabel } from '../../components/gym/leaderboardView';
+import { placeFor } from './consolePlaces';
 
 export const PT_TITLE = 'Personal training';
 
 /** What the page is for, in one line under its name. */
-export const PT_INTRO_MANAGER = 'One-to-one sessions with a trainer. Set when each trainer is free, then book members into their free times.';
-export const PT_INTRO_OWN = 'One-to-one sessions. Set when you are free; the sessions booked with you appear below.';
+export const PT_INTRO_MANAGER = 'One-to-one sessions with a trainer. Set when each trainer is available, then book members into their available times.';
+export const PT_INTRO_OWN = 'One-to-one sessions. Set when you are available; the sessions booked with you appear below.';
 
 /** Said once beside the hours: they are set once, and the timetable is already counted. */
-export const HOURS_REPEAT = 'These hours repeat every week. A class a trainer coaches is taken off their free times by itself.';
-export const HOURS_REPEAT_OWN = 'These hours repeat every week. A class you coach is taken off your free times by itself.';
+export const HOURS_REPEAT = 'These hours repeat every week. A class a trainer coaches is taken off their available times by itself.';
+export const HOURS_REPEAT_OWN = 'These hours repeat every week. A class you coach is taken off your available times by itself.';
 
-/** The steps a gym that has never used the page reads, in order. The middle one is only
- *  for a gym that sells memberships in the app: with none, anybody on its list is booked. */
-export function howItWorks(gymHasTypes) {
-  return [
-    'Add a trainer and set the hours they are free.',
-    ...(gymHasTypes
-      ? ['Tick "Includes personal training" on a membership or pack (in Memberships) and give it to the member on their page.']
-      : []),
-    "Press one of the trainer's free times and pick the member.",
+/** EVERY STEP TO A FIRST SESSION, each with a tick once it is done and a button that opens
+ *  the place it is done in (ROADMAP 23d). For whoever runs the timetable.
+ *
+ *  A gym that sells memberships in the app needs one that includes personal training and
+ *  somebody holding it; a gym that sells none books anybody on its list. The server says
+ *  which steps are done (`list.setup`), each from this gym's own rows; a trainer who is
+ *  taking sessions and has hours is read from the list on screen, since nobody can be
+ *  booked with one who is not. A button is offered only to somebody who can open its
+ *  place: anybody else reads who can.
+ *
+ *  `show` is false once every step is done, for anybody who does not run the timetable,
+ *  and where the server sent no steps. */
+export function setupSteps(list, { orgSlug, privileges, orgType } = {}) {
+  const none = { show: false, rows: [], doneCount: 0, total: 0 };
+  const setup = list?.setup;
+  if (list?.canManage !== true || setup === null || typeof setup !== 'object') return none;
+  const words = orgWords(orgType);
+  const to = (place) => placeFor(orgSlug, privileges, place);
+  const inviteTo = to('inviteStaff');
+  const membershipsTo = to('memberships');
+  const membersTo = to('members');
+  const openMembers = membersTo === null ? null : { label: `Open ${words.peopleCap}`, to: membersTo };
+
+  const steps = [
+    {
+      key: 'trainer',
+      done: trainerGroups(list.trainers).setUp.some((t) => t.offers === true && Array.isArray(t.hours) && t.hours.length > 0),
+      title: 'Add a trainer and set their hours',
+      line:
+        inviteTo === null
+          ? 'Pick somebody on your staff under Add a trainer, and set the hours they are available. The owner can invite somebody who is not on your staff yet.'
+          : 'Pick somebody on your staff under Add a trainer, and set the hours they are available. Invite anybody who is not on your staff yet.',
+      // Inviting changes the gym, so a gym with no live plan gets it greyed.
+      action: inviteTo === null ? null : { label: 'Invite staff', to: inviteTo, changes: true },
+    },
+    ...(list.gymHasTypes === true
+      ? [
+          {
+            key: 'type',
+            done: setup.typeIncludesPt === true,
+            title: 'Sell a membership or pack that includes personal training',
+            line:
+              membershipsTo === null
+                ? 'Ask the owner to tick "Includes personal training" on a membership or pack you sell. A session is booked on it.'
+                : 'On Memberships, tick "Includes personal training" on a membership or pack you sell. A session is booked on it.',
+            action: membershipsTo === null ? null : { label: 'Open Memberships', to: membershipsTo },
+          },
+          {
+            key: 'held',
+            done: setup.somebodyHoldsIt === true,
+            title: `Give it to a ${words.person}`,
+            line: `Open the person on ${words.peopleCap} and press Add membership. They can then be booked.`,
+            action: openMembers,
+          },
+        ]
+      : [
+          {
+            key: 'people',
+            done: setup.listHasPeople === true,
+            title: `Put your ${words.people} on your list`,
+            line: `Anybody on your ${words.person} list can be booked. Import your list, or add people one at a time.`,
+            action: openMembers,
+          },
+        ]),
+    {
+      key: 'book',
+      done: setup.sessionBooked === true,
+      title: 'Book a session',
+      line: "Press one of a trainer's available times below, and pick the person.",
+      action: null,
+    },
   ];
+  const doneCount = steps.filter((s) => s.done).length;
+  if (doneCount === steps.length) return none;
+  // The step to do next: the first one not done.
+  const next = steps.find((s) => !s.done)?.key ?? null;
+  return { show: true, rows: steps.map((s) => ({ ...s, next: s.key === next })), doneCount, total: steps.length };
+}
+
+/** "2 of 4 done". */
+export function setupCount(view) {
+  return `${String(view.doneCount)} of ${String(view.total)} done`;
 }
 
 /** The two ways along the weeks. */
@@ -230,11 +304,13 @@ function inTimeOff(from, to, timeOff) {
   return (Array.isArray(timeOff) ? timeOff : []).some((o) => o.fromMinute === null || o.toMinute === null || (o.fromMinute < to && from < o.toMinute));
 }
 
-/** A class the trainer coaches inside their time off says so; null otherwise. */
-export function classInTimeOff(coached, timeOff) {
-  return inTimeOff(coached.localStartMinute, coached.localStartMinute + coached.minutes, timeOff)
+/** A class the trainer coaches inside their time off says so; null otherwise. Somebody who
+ *  runs the timetable gets a button to the Calendar under it; anybody else reads who can. */
+export function classInTimeOff(coached, timeOff, opensCalendar = true) {
+  if (!inTimeOff(coached.localStartMinute, coached.localStartMinute + coached.minutes, timeOff)) return null;
+  return opensCalendar
     ? 'In their time off. Give this class another coach on the Calendar.'
-    : null;
+    : 'In their time off. Whoever runs the timetable can give this class another coach.';
 }
 
 /** Time off on one day of the week: "Time off · all day", "Time off · 09:00 – 12:00". */
@@ -372,8 +448,9 @@ export function timeOffBoxRow(row, clockFormat, today, kind) {
   };
 }
 
-/** What adding it does, and who does not change. */
-export function timeOffBoxLines(over, trainer, draft, canBook = true) {
+/** What adding it does, and who does not change. `opensCalendar`: the reader runs the
+ *  timetable, so the box puts a button to the Calendar under these lines. */
+export function timeOffBoxLines(over, trainer, draft, canBook = true, opensCalendar = true) {
   const who = trainerName(trainer);
   const lines = [`If you add this time off, no new session can be booked with ${who} in it.`];
   if (over.sessions.count > 0) {
@@ -383,7 +460,9 @@ export function timeOffBoxLines(over, trainer, draft, canBook = true) {
   }
   if (over.classes.count > 0) {
     lines.push(
-      `${over.classes.count === 1 ? 'This class stays' : 'These classes stay'} on the calendar with ${who} as coach. To change the coach, open the class on the Calendar.`,
+      `${over.classes.count === 1 ? 'This class stays' : 'These classes stay'} on the calendar with ${who} as coach. ${
+        opensCalendar ? 'To change the coach, open the class on the Calendar.' : 'Whoever runs the timetable can change the coach.'
+      }`,
     );
   }
   const last = draft.kind === 'days' ? draft.toDate : draft.fromDate;
@@ -487,9 +566,16 @@ export function personRow(person, gymHasTypes) {
   return { name: person.name, detail: `${person.pt.membership}${sessions}`, pickable: true };
 }
 
-/** What the picker says above its list. */
-export function peopleHeading(people, typed) {
+/** What the picker says above its list. An empty list names the page people are added on,
+ *  by the name this kind of organisation's menu gives it; the box puts a button to it under
+ *  the line (`pickerIsEmpty`). */
+export function peopleHeading(people, typed, orgType) {
   if (typed.trim() !== '') return people.people.length === 0 ? 'Nobody on your member list matches.' : 'Matching people';
-  if (people.people.length === 0) return 'Your member list is empty. Add people on Members first.';
+  if (people.people.length === 0) return `Your member list is empty. Add people on ${orgWords(orgType).peopleCap} first.`;
   return people.gymHasTypes ? 'Your members, people with personal training first' : 'Your members';
+}
+
+/** The picker has nobody to list at all, with nothing typed. */
+export function pickerIsEmpty(people, typed) {
+  return typed.trim() === '' && Array.isArray(people?.people) && people.people.length === 0;
 }

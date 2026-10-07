@@ -233,8 +233,9 @@ function lastSentWords(iso, now) {
   return `, the last ${day === 'Today' || day === 'Yesterday' ? day.toLowerCase() : `on ${day}`}`;
 }
 
-/** Under a follow-up the app will send: when, and where replies go. */
-export const SENT_FOR_YOU_NOTE = 'Sent for you from 8 in the morning, by your clock. Replies go to the address in Settings.';
+/** Under a follow-up the app will send: when, and where replies go. The screen puts a
+ *  button to that box in Settings under it (`notePlace`), for whoever may open it. */
+export const SENT_FOR_YOU_NOTE = 'Sent for you from 8 in the morning, by your clock. Replies go to your reply address.';
 
 /** Under one the app is waiting to send. */
 export const WAITING_FOR_YOU_NOTE = "We'll keep trying. If it can't go within a week, it comes back to you here.";
@@ -278,7 +279,7 @@ function followUpStory(lead, now) {
         : f.appWhen === 'tomorrow'
           ? `${of} will be sent for you tomorrow morning`
           : `${of} will be sent for you today`;
-      return { next: null, headline, due: false, sentLine, note: SENT_FOR_YOU_NOTE };
+      return { next: null, headline, due: false, sentLine, note: SENT_FOR_YOU_NOTE, notePlace: 'leadEmails' };
     }
     const headline = f.overdue ? `${of} was due ${dueDayWords(f.dueOn)}` : f.dueNow ? `${of} is due today` : `${of} is due ${dueDayWords(f.dueOn)}`;
     const note = f.notSent

@@ -354,6 +354,16 @@ describe('the Calendar tab', () => {
     expect(lastSearch).toBe('?view=week');
   });
 
+  it('a button on another page opens it on the week of the day it names; anything that is not a real day is this week (23d)', async () => {
+    draw('/console/iron-house/classes?view=week&week=2026-10-09');
+    await waitFor(() => expect(api.getClassWeek).toHaveBeenCalledWith('g1', '2026-10-09'));
+    cleanup();
+    api.getClassWeek.mockClear();
+    draw('/console/iron-house/classes?view=week&week=2026-02-30');
+    await waitFor(() => expect(api.getClassWeek).toHaveBeenCalledWith('g1', null));
+    expect(api.getClassWeek).not.toHaveBeenCalledWith('g1', '2026-02-30');
+  });
+
   it('draws each day with its classes, in the gym s own words', async () => {
     draw();
     await screen.findByText('21 – 27 Sep 2026');

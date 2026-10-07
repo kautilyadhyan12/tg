@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import PlaceLink from './PlaceLink';
 import {
   OVER_SESSIONS_FIRST,
   overChangeLine,
@@ -17,9 +18,10 @@ import {
 //
 // `sessions` is the server's answer (409 `class_over_pt_sessions`), which carries the
 // sessions themselves, so See all reads nothing more. `kind` is 'save' for a form's Save
-// and 'uncancel' for a cancelled class put back.
+// and 'uncancel' for a cancelled class put back. `trainingTo`: the Personal training page,
+// where a session is moved; its button leaves the form being saved, so it asks first.
 
-export default function TrainerSessionsBox({ sessions, clockFormat, kind = 'save', busy = false, onConfirm, onCancel }) {
+export default function TrainerSessionsBox({ sessions, clockFormat, kind = 'save', busy = false, trainingTo = null, onConfirm, onCancel }) {
   const [all, setAll] = useState(false);
   const list = all ? sessions.shown : sessions.shown.slice(0, OVER_SESSIONS_FIRST);
   const more = overMore(sessions, list.length);
@@ -62,6 +64,9 @@ export default function TrainerSessionsBox({ sessions, clockFormat, kind = 'save
         </p>
       ) : null}
       <p className="c-s14 c-t2">{overChangeLine(sessions, kind)}</p>
+      <PlaceLink to={trainingTo} guard>
+        Open Personal training
+      </PlaceLink>
       <p className="c-s14 c-t2">{overKeptLine(kind)}</p>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={onConfirm} disabled={busy} className="c-btn c-btn-sm c-btn-danger">

@@ -33,6 +33,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       resendMemberListInvite: vi.fn(),
       getMemberListEntry: vi.fn(),
       addMemberListEntry: vi.fn(),
+      // The postal address typed in place (23d): the save, and the console's own re-read.
+      updateOrg: vi.fn(),
+      getMine: vi.fn(),
     },
   };
 });
@@ -136,14 +139,14 @@ const ARJUN = invitee('Arjun Shah');
 const AVA = invitee('Ava Thompson');
 
 /** Invite's page over these words; each list answers with its own people. */
-function openInvite(p, filters = FILTERS, { reach = [AVA, ARJUN], leftOut = [] } = {}) {
+function openInvite(p, filters = FILTERS, { reach = [AVA, ARJUN], leftOut = [] } = {}, gym = IRON) {
   orgService.getInvitePreview.mockResolvedValue(previewAnswer(p));
   orgService.getInvitePeople.mockImplementation((_gym, query) =>
     Promise.resolve(new URLSearchParams(query).get('group') === 'left_out' ? peopleAnswer(leftOut) : peopleAnswer(reach)),
   );
   return render(
     <MemoryRouter>
-      <MemberListInvite gymId={GYM} gym={IRON} list={LIST} filters={filters} words={WORDS} readOnly={false} preview={null} onSent={onSent} onClose={onClose} />
+      <MemberListInvite gymId={GYM} gym={gym} list={LIST} filters={filters} words={WORDS} readOnly={false} preview={null} onSent={onSent} onClose={onClose} />
     </MemoryRouter>,
   );
 }
@@ -261,11 +264,56 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
 });
 
 describe("Invite's page", () => {
-  it('a gym with no postal address is sent to Settings and cannot send', async () => {
-    openInvite(preview({ blocked: 'no_postal_address' }));
-    expect(await box().findByText(/Add your gym's postal address in Settings/)).toBeTruthy();
-    expect(box().getByRole('link', { name: 'Open Settings' }).getAttribute('href')).toBe('/console/iron-house/settings');
+  it('a gym with no postal address cannot send; whoever may change its details types it right here, and Send is there once it is saved', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
+    orgService.updateOrg.mockResolvedValue({ data: { org: {}, postalAddress: '12 High Street\nLeeds LS1 1AA' } });
+    openInvite(preview({ blocked: 'no_postal_address' }), FILTERS, {}, { ...IRON, privileges: ['members.manage', 'org.manage'] });
+    expect(await box().findByText("Add your gym's postal address before you invite anyone. The law requires it in every invitation email.")).toBeTruthy();
+    // Typed on this page: nothing sends staff away, in this tab or another.
+    expect(box().queryByRole('link')).toBeNull();
+    const save = box().getByRole('button', { name: 'Save address' });
+    expect(save.disabled).toBe(true);
     expect(box().getByRole('button', { name: 'Send 2 invitations' }).disabled).toBe(true);
+    fireEvent.change(box().getByLabelText('Postal address'), { target: { value: '  12 High Street\nLeeds LS1 1AA ' } });
+    expect(orgService.updateOrg).not.toHaveBeenCalled();
+
+    // Saved: the count is read again, the page stops asking, and the people chosen are kept.
+    const before = orgService.getInvitePreview.mock.calls.length;
+    orgService.getInvitePreview.mockResolvedValue(previewAnswer(preview()));
+    fireEvent.click(save);
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledWith(GYM, { postalAddress: '12 High Street\nLeeds LS1 1AA' }));
+    await waitFor(() => expect(box().queryByLabelText('Postal address')).toBeNull());
+    expect(orgService.updateOrg).toHaveBeenCalledTimes(1);
+    expect(orgService.getInvitePreview.mock.calls.length).toBe(before + 1);
+    expect(box().queryByText(/postal address/)).toBeNull();
+    tick();
+    expect(box().getByRole('button', { name: 'Send 2 invitations' }).disabled).toBe(false);
+  });
+
+  it('an address the server will not take is said under the box, and the page still asks for it', async () => {
+    orgService.updateOrg.mockRejectedValue(refusal(409, { error: 'gym_not_on_plan', message: 'Your gym needs an active plan to change this.' }));
+    openInvite(preview({ blocked: 'no_postal_address' }), FILTERS, {}, { ...IRON, privileges: ['members.manage', 'org.manage'] });
+    fireEvent.change(await box().findByLabelText('Postal address'), { target: { value: '1 Mill Road' } });
+    fireEvent.click(box().getByRole('button', { name: 'Save address' }));
+    expect(await box().findByText('Your gym needs an active plan to change this.')).toBeTruthy();
+    // What was typed stays, nothing is counted again, and Send stays off.
+    expect(box().getByLabelText('Postal address').value).toBe('1 Mill Road');
+    expect(orgService.getInvitePreview).toHaveBeenCalledTimes(1);
+    expect(box().getByRole('button', { name: 'Send 2 invitations' }).disabled).toBe(true);
+  });
+
+  it("somebody who cannot change the gym's details is told who can add the address, and has no box to type it in", async () => {
+    for (const gym of [IRON, { ...IRON, staffRole: 'trainer' }, { ...IRON, privileges: ['members.manage', 'staff.manage', 'memberships.manage'] }]) {
+      openInvite(preview({ blocked: 'no_postal_address' }), FILTERS, {}, gym);
+      expect(
+        await box().findByText("Your gym has no postal address yet, so invitations can't be sent. Ask the owner to add it. The law requires it in every invitation email."),
+      ).toBeTruthy();
+      expect(box().queryByRole('link')).toBeNull();
+      expect(box().queryByLabelText('Postal address')).toBeNull();
+      expect(box().queryByRole('button', { name: 'Save address' })).toBeNull();
+      expect(box().getByRole('button', { name: 'Send 2 invitations' }).disabled).toBe(true);
+      cleanup();
+    }
   });
 
   it('says when the search or the app filter does not choose who is invited', async () => {
@@ -314,15 +362,59 @@ describe("Invite's page", () => {
   });
 });
 
-function openPerson(p) {
+function openPerson(p, gym = IRON) {
   orgService.getMemberListEntry.mockResolvedValue({ data: { entry: p } });
   return render(
-    <MemberListPerson gymId={GYM} gym={IRON} entryId={p.entryId} list={LIST} words={WORDS} readOnly={false} onClose={onClose} onChanged={onChanged} />,
+    <MemberListPerson gymId={GYM} gym={gym} entryId={p.entryId} list={LIST} words={WORDS} readOnly={false} onClose={onClose} onChanged={onChanged} />,
   );
 }
 const page = () => within(screen.getAllByRole('dialog')[0]);
 
 describe("a person's page", () => {
+  it('a gym with no postal address: one person cannot be invited either, and the address is typed there, with the person left open (23d)', async () => {
+    const noAddress = refusal(409, { error: 'no_postal_address', message: 'Add your postal address in Settings. The law requires it in every invitation email.' });
+    orgService.inviteMemberListEntry.mockRejectedValue(noAddress);
+    orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
+    orgService.updateOrg.mockResolvedValue({ data: { org: {}, postalAddress: '12 High Street' } });
+    openPerson(person(), { ...IRON, privileges: ['members.manage', 'org.manage'] });
+    fireEvent.click(await page().findByRole('button', { name: 'Invite to app' }));
+    fireEvent.click(within(page().getByTestId('confirm-invite')).getByRole('button', { name: 'Send invitation' }));
+    const alert = within(await page().findByRole('alert'));
+    // The sentence Invite's own page says, and the same box to type it in: nobody is sent away.
+    expect(alert.getByText("Add your gym's postal address before you invite anyone. The law requires it in every invitation email.")).toBeTruthy();
+    expect(alert.queryByRole('link')).toBeNull();
+    fireEvent.change(alert.getByLabelText('Postal address'), { target: { value: '12 High Street' } });
+    fireEvent.click(alert.getByRole('button', { name: 'Save address' }));
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledWith(GYM, { postalAddress: '12 High Street' }));
+    // Saved: the refusal goes, the page says so, and the person is still open to invite.
+    expect(await page().findByText('Postal address saved. You can invite them now.')).toBeTruthy();
+    expect(page().queryByRole('alert')).toBeNull();
+    expect(page().queryByLabelText('Postal address')).toBeNull();
+    expect(orgService.inviteMemberListEntry).toHaveBeenCalledTimes(1);
+    cleanup();
+
+    // Staff who cannot change the gym's details are told who can, and are sent nowhere.
+    orgService.inviteMemberListEntry.mockRejectedValue(noAddress);
+    openPerson(person(), { ...IRON, privileges: ['members.manage'] });
+    fireEvent.click(await page().findByRole('button', { name: 'Invite to app' }));
+    fireEvent.click(within(page().getByTestId('confirm-invite')).getByRole('button', { name: 'Send invitation' }));
+    const told = within(await page().findByRole('alert'));
+    expect(told.getByText("Your gym has no postal address yet, so invitations can't be sent. Ask the owner to add it. The law requires it in every invitation email.")).toBeTruthy();
+    expect(told.queryByRole('link')).toBeNull();
+    expect(told.queryByLabelText('Postal address')).toBeNull();
+  });
+
+  it('any other refusal is said in the server’s words, with no address box', async () => {
+    orgService.inviteMemberListEntry.mockRejectedValue(refusal(409, { error: 'sending_stopped', message: 'Your invitations are paused.' }));
+    openPerson(person(), { ...IRON, privileges: ['members.manage', 'org.manage'] });
+    fireEvent.click(await page().findByRole('button', { name: 'Invite to app' }));
+    fireEvent.click(within(page().getByTestId('confirm-invite')).getByRole('button', { name: 'Send invitation' }));
+    const alert = within(await page().findByRole('alert'));
+    expect(alert.getByText('Your invitations are paused.')).toBeTruthy();
+    expect(alert.queryByRole('link')).toBeNull();
+    expect(alert.queryByLabelText('Postal address')).toBeNull();
+  });
+
   it('invites somebody never invited, and shows the invitation the server wrote', async () => {
     openPerson(person());
     orgService.inviteMemberListEntry.mockResolvedValue({

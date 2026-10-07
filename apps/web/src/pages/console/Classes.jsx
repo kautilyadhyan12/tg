@@ -24,6 +24,7 @@ import {
 import ClassWeek from './ClassWeek';
 import { useConsoleOrg } from './useConsoleOrg';
 import { viewerPrivileges } from './consoleView';
+import { dayOrNull, placeTo } from './consolePlaces';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import { addDays, clockLabel, gymToday } from './hoursView';
 import {
@@ -449,6 +450,8 @@ export default function Classes() {
   // Which tab, in the address so a reload or a shared link keeps it.
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get('view') === 'week' ? 'week' : 'list';
+  // A button on another page opens the Calendar on the week of one day (`&week=`).
+  const startDay = dayOrNull(searchParams.get('week'));
 
   // The loading flag is set by the click, never inside the effect; Try again
   // bumps the key, which re-runs it.
@@ -616,6 +619,7 @@ export default function Classes() {
         sessions={sessionAsk.sessions}
         clockFormat={lists.clockFormat}
         busy={busy !== null}
+        trainingTo={placeTo(orgSlug, 'personalTraining')}
         onCancel={() => setSessionAsk(null)}
         onConfirm={() => void resend({ ...sessionAsk.body, confirmTrainerSessions: sessionAsk.sessions.mark })}
       />
@@ -774,7 +778,7 @@ export default function Classes() {
         </div>
       ) : null}
 
-      {weekShown ? <ClassWeek gymId={gymId} org={org} readOnly={readOnly} staff={staff} locked={locked} /> : null}
+      {weekShown ? <ClassWeek gymId={gymId} org={org} readOnly={readOnly} staff={staff} locked={locked} startDay={startDay} /> : null}
 
       {!weekShown && actionError !== null ? <ConsoleFailed message={actionError} newLook /> : null}
 

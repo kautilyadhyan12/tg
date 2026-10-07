@@ -30,7 +30,7 @@ export function removeSelectedLine(preview, door, words) {
 }
 
 /** The two groups that change, each a heading and the line under it. */
-export function removeChangeGroups(preview, words, gymName) {
+export function removeChangeGroups(preview, words, gymName, managesStaff = true) {
   const groups = [];
   if (preview.move.length > 0) {
     groups.push({
@@ -67,7 +67,12 @@ export function removeChangeGroups(preview, words, gymName) {
     groups.push({
       key: 'keepConsole',
       heading: `${count(staffKeep.length)} of them ${staffKeep.length === 1 ? 'keeps' : 'keep'} their staff access`,
-      line: 'They can still open the console. To remove someone from staff too, use the Staff tab, or Remove on their own panel.',
+      // The line names the Staff tab for somebody who can open it, and the box puts a
+      // button to it underneath; anybody else reads who can.
+      line: managesStaff
+        ? 'They can still open the console. To remove someone from staff too, use the Staff tab, or Remove on their own panel.'
+        : 'They can still open the console. The owner can remove someone from staff.',
+      ...(managesStaff ? { place: 'staff' } : {}),
       people: staffKeep,
     });
   }

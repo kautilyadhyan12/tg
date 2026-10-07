@@ -203,7 +203,10 @@ describe('the follow-up emails (20c-ii)', () => {
       due: false,
       sentLine: null,
       note: SENT_FOR_YOU_NOTE,
+      // The note says where replies go; the screen puts a button to that box under it.
+      notePlace: 'leadEmails',
     });
+    expect(SENT_FOR_YOU_NOTE).toBe('Sent for you from 8 in the morning, by your clock. Replies go to your reply address.');
     // After 8 in the evening by the gym's clock, it goes in the morning (round one, H3).
     expect(followUpState(due({ by: 'app', appWhen: 'tomorrow' }), now).headline).toBe('Email 1 of 3 will be sent for you tomorrow morning');
     // Held for another try, or its day gone by in the sending hours: waiting, never "today".
@@ -225,7 +228,10 @@ describe('the follow-up emails (20c-ii)', () => {
       due: false,
       sentLine: '1 of 3 sent, the last today.',
       note: SENT_FOR_YOU_NOTE,
+      notePlace: 'leadEmails',
     });
+    // One that is waiting names no place, so it has no button.
+    expect(followUpState(due({ by: 'app', appWhen: 'waiting' }), now).notePlace).toBeUndefined();
   });
 
   it('when the app could not send one, staff get it back with the reason', () => {
