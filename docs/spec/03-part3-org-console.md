@@ -2554,8 +2554,11 @@ that and the buttons).
   (`checkin/service.ts`: `noticeOf`, `heldWords`). What a person holds stands whole: one
   that is over has no payment word, and the record's is not put in its place. The visit is
   saved before the words are read, so a read that fails takes the words away and never the
-  tick (`checkin.held_words_unread`). The desk prints a payment word that says "payment"
-  itself without the label: "Status: Active · Payment due".
+  tick, the search or the log (`checkin.held_words_unread`). A past member's visit in
+  today's log has no words. The log's screen asks for new visits every 5 seconds and for
+  the whole day once a minute, so a row follows a payment marked elsewhere. The desk prints
+  a payment word that says "payment" itself without the label: "Status: Active · Payment
+  due". Merge duplicate's side-by-side view reads the same four from what the person holds.
 
 **The membership row carries its record.** Since 2026-09-21 a person joins only by
 accepting an invitation (§10.2), and the invitation knows which record it was for; so
