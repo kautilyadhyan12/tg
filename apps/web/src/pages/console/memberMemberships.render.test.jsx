@@ -550,6 +550,7 @@ describe('Add member gives a membership in the same form', () => {
     for (const label of ['Membership', 'Status', 'Payment status']) expect(screen.queryByLabelText(label), label).toBeNull();
     expect(screen.queryByRole('button', { name: /End or renewal date/ })).toBeNull();
     expect(screen.queryByTestId('set-up-memberships')).toBeNull();
+    expect(screen.queryByTestId('typed-not-saved')).toBeNull();
     typeName('Name', 'Bea Hart');
     typeName('Email', 'bea@members.example');
     fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
@@ -711,6 +712,28 @@ describe('Add member gives a membership in the same form', () => {
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example', status: 'Active', paymentStatus: 'Paid' });
   });
 
+  it('Add anyway, after the form has turned over, sends none of the words typed before it did', async () => {
+    orgService.getMembershipTypes.mockResolvedValueOnce({ data: { types: [] } }).mockResolvedValue({ data: { types: [GOLD] } });
+    const alike = { entryId: ADA, fullName: 'Bea Hart', email: 'bea@members.example', phone: null, memberNumber: null, formerAt: null, why: ['name'] };
+    orgService.addMemberListEntry.mockRejectedValueOnce(
+      refusal(409, { error: 'may_be_on_list', message: 'This person may already be on your list. Open a record to check, or add them anyway.', people: [alike] }),
+    );
+    openAddAs(OWNER);
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea2@members.example');
+    fireEvent.change(await screen.findByLabelText('Status'), { target: { value: 'Active' } });
+    typeName('Payment status', 'Paid');
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    const box = within(await screen.findByTestId('maybe-box'));
+    // The warning was for the details as typed, the status and the payment among them.
+    expect(Object.keys(orgService.addMemberListEntry.mock.calls[0][1]).sort()).toEqual(['email', 'fullName', 'paymentStatus', 'status']);
+    fireEvent(window, new Event('focus'));
+    await screen.findByTestId('add-membership');
+    fireEvent.click(box.getByRole('button', { name: 'Add anyway' }));
+    await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(2));
+    expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea2@members.example', acknowledgedDuplicates: [ADA] });
+  });
+
   it('staff who cannot change the price list are told who can, with no button to a page they cannot use', async () => {
     orgService.getMembershipTypes.mockResolvedValue({ data: { types: [] } });
     openAddAs({ ...IRON, privileges: ['members.confirm'] });
@@ -741,6 +764,8 @@ describe('Add member gives a membership in the same form', () => {
     expect(choice.getAllByRole('option').map((o) => o.textContent)).toEqual(['No membership', 'Gold Monthly · £49.99 every month']);
     expect(screen.queryByTestId('set-up-memberships')).toBeNull();
     for (const label of ['Membership', 'Status', 'Payment status']) expect(screen.queryByLabelText(label), label).toBeNull();
+    // What was typed in them is not kept, and the form says so.
+    expect(screen.getByTestId('typed-not-saved').textContent).toBe("You can now pick a membership. The status and payment you typed won't be saved.");
     expect(screen.getByLabelText('Name').value).toBe('Bea Hart');
     fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
     await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
@@ -906,6 +931,61 @@ describe("on the person's page", () => {
     // The page was read for the same person, and what the box does not say stays.
     expect(orgService.getMemberListEntry).toHaveBeenLastCalledWith(GYM, ADA);
     expect(screen.getByText('Join date')).toBeTruthy();
+  });
+
+  it('two changes in the box: an older read of the page answering last is not drawn over the newer one', async () => {
+    const base = {
+      entryId: ADA,
+      fullName: 'Ada Lovelace',
+      email: 'ada@members.example',
+      phone: null,
+      memberNumber: null,
+      status: 'Expired',
+      membershipType: null,
+      joinedOn: null,
+      endsOn: null,
+      endsOnKind: null,
+      paymentStatus: null,
+      dateOfBirth: null,
+      formerAt: null,
+      source: 'upload',
+      inApp: false,
+      invitation: null,
+      app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
+      extra: [],
+      handEdited: [],
+      members: [],
+    };
+    const holding = memberListEntryDetailSchema.parse({
+      ...base,
+      held: { status: 'active', memberships: ['Gold Monthly'], day: { what: 'renews', on: '2026-11-04' }, payment: { state: 'paid' } },
+    });
+    // The newer answer: the app no longer answers for her, so her list's own word shows.
+    const newer = memberListEntryDetailSchema.parse(base);
+    const slow = later();
+    orgService.getMemberListEntry
+      .mockResolvedValueOnce({ data: { entry: holding } })
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValue({ data: { entry: newer } });
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', false)]));
+    render(<MemberListPerson gymId={GYM} gym={IRON} entryId={ADA} list={{ fields: [] }} words={WORDS} readOnly={false} onClose={() => {}} onChanged={() => {}} />);
+    await (await boxSoon()).findByText('Gold Monthly');
+    expect(screen.queryByText('Expired')).toBeNull();
+
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([held(1, GOLD, '2026-10-04', true)]));
+    fireEvent.click(box().getByRole('button', { name: 'Mark paid' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-paid')).getByRole('button', { name: 'Mark paid' }));
+    await box().findByText('Gold Monthly marked paid.');
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([held(1, GOLD, '2026-10-04', false)]));
+    fireEvent.click(box().getByRole('button', { name: 'Freeze' }));
+    const asks = box().getAllByRole('button', { name: /^Freeze/ });
+    fireEvent.click(asks[asks.length - 1]);
+    await waitFor(() => expect(orgService.getMemberListEntry).toHaveBeenCalledTimes(3));
+    expect(await screen.findByText('Expired')).toBeTruthy();
+    // The first change's read answers now, with the older page: it is not drawn.
+    slow.resolve({ data: { entry: holding } });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText('Expired')).toBeTruthy();
   });
 
   it("somebody whose membership here is over reads the list's own answer on their page, never their old file's", async () => {

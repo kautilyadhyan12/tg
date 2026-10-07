@@ -22,6 +22,8 @@ import { gymToday } from './hoursView';
 import { addVisitWindow } from './leaderboardStaffView';
 
 const SEARCH_WAIT_MS = 250;
+/** One poll in this many reads the whole of today: about a minute apart. */
+const WHOLE_READ_EVERY = 12;
 
 const muted = { color: 'rgba(255,255,255,0.55)' };
 const ORANGE = '#FFB347';
@@ -375,8 +377,13 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
 
   useEffect(() => {
     read(true);
+    // Every poll asks for the visits since the newest. Once a minute the whole of today is
+    // read instead, so a row's words follow a payment marked on another screen.
+    let polls = 0;
     const timer = setInterval(() => {
-      if (pageVisible() && held.current.status !== 'failed') read(false);
+      if (!pageVisible() || held.current.status === 'failed') return;
+      polls += 1;
+      read(polls % WHOLE_READ_EVERY === 0);
     }, CHECKIN_LOG_POLL_MS);
     // Back in view after a while: the whole of today again, not a gap.
     const onVisible = () => {

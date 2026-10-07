@@ -335,6 +335,21 @@ describe('the "Showing:" line', () => {
 });
 
 describe("Merge duplicate's side-by-side view", () => {
+  // 23a-ii: the page says what a person holds once; the comparison says the same.
+  it("compares a record the app answers for by what its person holds, never by the old file's four words", () => {
+    const holds = { status: 'active', memberships: ['Gold Monthly', 'PT 10'], day: { what: 'renews', on: '2026-11-03' }, payment: { state: 'due', since: '2026-10-03' } };
+    const a = entry({ status: 'Expired', membershipType: 'Gold 2019', paymentStatus: 'Unpaid', endsOn: '2026-09-01', endsOnKind: 'ends', held: holds });
+    const b = entry({ entryId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'Lapsed', membershipType: 'Bronze', paymentStatus: 'Overdue', endsOn: '2026-08-01', endsOnKind: 'ends' });
+    const rows = compareRecords(a, b, FIELDS);
+    const row = (key) => rows.find((r) => r.key === key);
+    expect(row('status')).toMatchObject({ first: 'Active', second: 'Lapsed', differs: true });
+    expect(row('membershipType')).toMatchObject({ first: 'Gold Monthly +1', second: 'Bronze' });
+    expect(row('endsOn').first).toMatch(/^Renews 3 Nov/);
+    expect(row('endsOn').second).toMatch(/^Ends 1 Aug/);
+    expect(row('paymentStatus')).toMatchObject({ first: 'Payment due', second: 'Overdue' });
+    expect(JSON.stringify(rows)).not.toMatch(/Expired|Gold 2019|Unpaid/);
+  });
+
   it('lists every field of both records in one order, "—" for none, marks what differs, and leaves out what neither holds', () => {
     const a = entry({ memberNumber: 'M-1', dateOfBirth: '1990-03-12', inApp: true });
     const b = entry({ entryId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', email: 'ada.old@members.example', phone: null, dateOfBirth: '1990-03-12', formerAt: '2026-08-01T10:00:00.000Z', extra: [] });

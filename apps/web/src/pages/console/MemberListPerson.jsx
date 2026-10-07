@@ -421,6 +421,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [id, setId] = useState(entryId);
   /** Which record the panel has open at this moment, for answers that arrive late. */
   const wanted = useRef(entryId);
+  /** The newest re-read of the page asked for after a membership changed. */
+  const reread = useRef(0);
   const [entry, setEntry] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -654,9 +656,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     onChanged();
     const asked = id;
     if (asked === null) return;
+    // Only the newest read asked is drawn: two quick changes can answer out of order.
+    const turn = ++reread.current;
     orgService.getMemberListEntry(gymId, asked).then(
       (res) => {
-        if (wanted.current === asked && res.data.entry.entryId === asked) setEntry(res.data.entry);
+        if (reread.current === turn && wanted.current === asked && res.data.entry.entryId === asked) setEntry(res.data.entry);
       },
       () => {},
     );
@@ -1084,6 +1088,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               setGiving(next);
             }}
           />
+          {HELD_ANSWERS.some((key) => (form[key] ?? '').trim() !== '') ? (
+            <p className="c-hint m-0" data-testid="typed-not-saved">
+              You can now pick a membership. The status and payment you typed won&apos;t be saved.
+            </p>
+          ) : null}
         </div>
       );
     }
@@ -1726,7 +1735,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                   busy={busy}
                   readOnly={readOnly}
                   onOpen={openMatch}
-                  onAnyway={() => addPerson({ ...maybe.input, acknowledgedDuplicates: maybe.people.map((m) => m.entryId) })}
+                  onAnyway={() => {
+                    // The details warned about, less any box the form no longer shows: a
+                    // price list set up since the warning means the membership is picked.
+                    const warned = sells ? Object.fromEntries(Object.entries(maybe.input).filter(([k]) => !HELD_ANSWERS.includes(k) && k !== 'endsOnKind')) : maybe.input;
+                    return addPerson({ ...warned, acknowledgedDuplicates: maybe.people.map((m) => m.entryId) });
+                  }}
                   onBack={() => setMaybe(null)}
                 />
               ) : null}

@@ -912,10 +912,13 @@ describe('23a-ii: Details and Edit agree with the Memberships box', () => {
 
   it('a membership that is over is said once too: her old file\'s "Paid" is not put beside "Cancelled"', async () => {
     const over = { status: 'cancelled', memberships: ['Gold Monthly'], day: { what: 'cancelled', on: '2026-10-01' }, payment: null };
-    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(person(ADA, 'Cara Cancelled', { ...fromFile, status: 'Active', paymentStatus: 'Paid', held: over })));
+    // Her list's own word names the membership she had here, as it does once one is given.
+    orgService.getMemberListEntry.mockResolvedValue(
+      entryAnswer(person(ADA, 'Cara Cancelled', { ...fromFile, status: 'Active', membershipType: 'Gold Monthly', paymentStatus: 'Paid', held: over })),
+    );
     openBox(ADA);
     await dialog().findByRole('heading', { name: 'Cara Cancelled' });
-    for (const word of ['Active', 'Paid', 'Gold 2019']) expect(dialog().queryByText(word), word).toBeNull();
+    for (const word of ['Active', 'Paid', 'Gold Monthly', 'Ends 1 Sep 2026']) expect(dialog().queryByText(word), word).toBeNull();
   });
 });
 

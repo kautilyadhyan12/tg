@@ -670,7 +670,7 @@ export function handEditedWords(entry, fields, labels) {
  *  sides was "really confusing"): `first` is the record the page is open on. */
 export function compareRecords(first, second, fields, person = 'member') {
   const rows = [
-    ...DETAILS(person),
+    ...DETAILS(person).map(([key, label, read]) => [key, label, heldCell(key, read)]),
     ['app', 'In the app', (r) => (r.inApp ? 'Yes' : 'No')],
     ...fields.map((f) => [`extra:${f.key}`, f.label, (r) => extraOf(r, f.key)]),
   ];
@@ -684,6 +684,10 @@ export function compareRecords(first, second, fields, person = 'member') {
 }
 
 const extraOf = (r, key) => r.extra?.find((x) => x.key === key)?.value || null;
+/** A record the app answers for is compared by what its person holds, as its row and its
+ *  own page say it, never by the old file's four words (23a-ii). */
+const HELD_CELLS = { status: 'status', membershipType: 'membership', endsOn: 'ends', paymentStatus: 'payment' };
+const heldCell = (key, read) => (r) => (HELD_CELLS[key] !== undefined && appAnswers(r) ? rowCells(r)[HELD_CELLS[key]] : read(r));
 const DETAILS = (person) => [
   ['fullName', 'Name', (r) => r.fullName || null],
   ['email', 'Email', (r) => r.email],
