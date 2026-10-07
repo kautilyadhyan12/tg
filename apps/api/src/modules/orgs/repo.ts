@@ -3535,8 +3535,8 @@ export async function updateStaffRole(
   },
 ): Promise<UpdateStaffOutcome> {
   return await sql.begin(async (tx) => {
-    const rows = await tx<{ role: string; role_name: string | null }[]>`
-      SELECT role, role_name FROM gym_staff
+    const rows = await tx<{ role: string; role_name: string | null; privileges: string[] | null }[]>`
+      SELECT role, role_name, privileges FROM gym_staff
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
       FOR UPDATE`;
     const before = rows[0];
@@ -3545,8 +3545,13 @@ export async function updateStaffRole(
     if (previous === "owner") return { kind: "is_owner" };
 
     // The same role under the same name. A gym's own role is a trainer's underneath, so
-    // the name is part of the question: "Front desk" to plain trainer is a change.
-    if (previous === input.role && before.role_name === input.roleName) {
+    // the name is part of the question: "Front desk" to plain trainer is a change. And a
+    // role of the gym's own is changed by deleting it and making it again under its name,
+    // so for one of those the ticks are part of the question too. Manager and trainer are
+    // left as they were: the same role again never resets ticks an owner set by hand.
+    const held = [...(before.privileges ?? [])].sort().join(",");
+    const sameTicks = input.roleName === null || held === [...input.privileges].sort().join(",");
+    if (previous === input.role && before.role_name === input.roleName && sameTicks) {
       const staff = await readStaffRow(tx, input.gymId, input.userId);
       if (staff === null) throw new Error("gym_staff row vanished under FOR UPDATE");
       return { kind: "unchanged", staff };

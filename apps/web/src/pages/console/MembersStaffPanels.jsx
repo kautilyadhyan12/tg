@@ -420,11 +420,17 @@ function RoleSection({ person, roles, orgType, words, off, error, onRetry, onCha
  *  server's again. The owner's row is drawn and cannot be changed. */
 function PermissionsSection({ person, orgType, busy, readOnly, error, onSave }) {
   const current = effectivePrivileges(person);
-  const held = `${person.role}|${Array.isArray(person.privileges) ? [...person.privileges].sort().join(',') : 'role'}`;
+  // Who they are to the gym and what they hold, as one word: an edit, and what was said of
+  // the last save, each belong to one of these.
+  const heldAs = (privileges) => `${person.role}|${person.roleName ?? ''}|${Array.isArray(privileges) ? [...privileges].sort().join(',') : 'role'}`;
+  const held = heldAs(person.privileges);
   const [draft, setDraft] = useState(null);
   const [over, setOver] = useState(held);
-  const [outcome, setOutcome] = useState(null);
-  const said = useInView(outcome === 'saved' || outcome === 'differs');
+  // What the last save came to, with the set it was said of: drawn only while that is the
+  // set they hold, so a role change takes "Permissions saved." down with the set.
+  const [lastSave, setLastSave] = useState(null);
+  const outcome = lastSave !== null && lastSave.held === held ? lastSave.kind : null;
+  const said = useInView(outcome !== null);
   if (over !== held) {
     setOver(held);
     setDraft(null);
@@ -442,7 +448,7 @@ function PermissionsSection({ person, orgType, busy, readOnly, error, onSave }) 
 
   const toggle = (value) => {
     if (ownerRow) return;
-    setOutcome(null);
+    setLastSave(null);
     setDraft((prev) => {
       const from = prev ?? current;
       return from.includes(value) ? from.filter((v) => v !== value) : [...from, value];
@@ -451,9 +457,9 @@ function PermissionsSection({ person, orgType, busy, readOnly, error, onSave }) 
 
   const save = async () => {
     const answer = await onSave(whole);
-    if (answer === 'refused') return;
+    if (answer.kind === 'refused') return;
     setDraft(null);
-    setOutcome(answer);
+    setLastSave(answer.kind === 'unread' ? null : { kind: answer.kind, held: heldAs(answer.privileges) });
   };
 
   return (

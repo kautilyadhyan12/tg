@@ -181,10 +181,21 @@ describe('the roles somebody can be given from their own panel', () => {
   });
 
   it('somebody ON one of them is offered manager, plain trainer and the others, never the one they hold', () => {
-    expect(offered(rita({ role: 'trainer', roleName: 'Front desk' }), [FRONT_DESK, OFFICE])).toEqual([
+    expect(offered(rita({ role: 'trainer', roleName: 'Front desk', privileges: ['attendance.read'] }), [FRONT_DESK, OFFICE])).toEqual([
       ['Make manager', { role: 'manager' }],
       ['Make trainer', { role: 'trainer' }],
       ['Make Office manager', { roleId: 'r-office' }],
+    ]);
+  });
+
+  /** A role cannot be edited: a gym changes one by deleting it and making it again under
+   *  its name. Somebody on the old one must be able to be given the new one. */
+  it('the role they hold by name IS offered once its ticks are not the ones they hold', () => {
+    const remade = { id: 'r-desk-2', name: 'Front desk', privileges: ['members.read', 'members.confirm'] };
+    expect(offered(rita({ role: 'trainer', roleName: 'Front desk', privileges: ['attendance.read'] }), [remade])).toEqual([
+      ['Make manager', { role: 'manager' }],
+      ['Make trainer', { role: 'trainer' }],
+      ['Make Front desk', { roleId: 'r-desk-2' }],
     ]);
   });
 
@@ -548,12 +559,18 @@ describe('the ticks a save carries through', () => {
     expect(carriedPrivileges(null, 'gym')).toEqual([]);
   });
 
-  it('is SAID, in the singular and the plural, and that a save leaves it alone', () => {
+  it('is SAID: by name where this screen has the words, counted where it has none, and that a save leaves it alone', () => {
     expect(carriedNote({ role: 'manager', privileges: ['billing.manage'] }, 'gym')).toBe(
+      'They can also: Manage the plan and billing. Saving leaves it alone.',
+    );
+    expect(carriedNote({ role: 'trainer', privileges: ['org.manage', 'billing.manage'] }, 'studio')).toBe(
+      'They can also: Change studio details, Manage the plan and billing. Saving leaves these alone.',
+    );
+    expect(carriedNote({ role: 'manager', privileges: ['tv_token'] }, 'gym')).toBe(
       'They also have 1 permission this screen has no box for. Saving leaves it alone.',
     );
-    expect(carriedNote({ role: 'manager', privileges: ['billing.manage', 'tv_token'] }, 'gym')).toBe(
-      'They also have 2 permissions this screen has no box for. Saving leaves them alone.',
+    expect(carriedNote({ role: 'manager', privileges: ['billing.manage', 'tv_token', 'tv_two'] }, 'gym')).toBe(
+      'They can also: Manage the plan and billing. They also have 2 permissions this screen has no box for. Saving leaves these alone.',
     );
   });
 

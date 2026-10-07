@@ -602,6 +602,95 @@ describe("a profile's Role offers the gym's own roles", () => {
   });
 });
 
+// Round one of 23c-ii's review.
+describe('what was found by the review', () => {
+  const SAME = ['members.read', 'attendance.read'];
+  const FRONT_DESK = { id: '1f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b', name: 'Front desk', privileges: SAME };
+
+  /** T1, L3: the same underlying role and the same ticks, under another name. Nothing but
+   *  the name tells the edit that the set under it has changed hands. */
+  it('an unsaved edit is dropped by a role change even when the new role holds the same ticks', async () => {
+    orgService.getStaffRoles.mockResolvedValue({ data: { roles: [FRONT_DESK] } });
+    orgService.getStaff.mockResolvedValueOnce({ data: { staff: [OWNER, { ...MANAGER, role: 'trainer', privileges: [...SAME] }] } });
+    const panel = await drawPerson();
+    fireEvent.click(panel.getByLabelText(/^Check people in/));
+    expect(panel.getByRole('button', { name: 'Save permissions' }).disabled).toBe(false);
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, { ...MANAGER, role: 'trainer', roleName: 'Front desk', privileges: [...SAME] }] } });
+    fireEvent.click(panel.getByRole('button', { name: 'Make Front desk' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Make Front desk' }));
+    await waitFor(() => expect(within(panel.getByTestId('staff-role')).getByText('Front desk')).toBeTruthy());
+    expect(panel.getByLabelText(/^Check people in/).checked).toBe(false);
+    expect(panel.getByRole('button', { name: 'Save permissions' }).disabled).toBe(true);
+  });
+
+  /** L2: the line is about the set that was saved, and a role change replaces that set. */
+  it('"Permissions saved." goes when their role is changed after the save', async () => {
+    orgService.getStaff.mockResolvedValueOnce({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const panel = await drawPerson();
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, { ...MANAGER_TICKED, privileges: ['members.read', 'codes.invite', 'members.remove'] }] } });
+    fireEvent.click(panel.getByLabelText(/^Remove members/));
+    fireEvent.click(panel.getByRole('button', { name: 'Save permissions' }));
+    expect(await panel.findByText('Permissions saved.')).toBeTruthy();
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, { ...MANAGER_TICKED, role: 'trainer', privileges: [...ROLE_PRIVILEGES.trainer] }] } });
+    fireEvent.click(panel.getByRole('button', { name: 'Make trainer' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Make trainer' }));
+    await waitFor(() => expect(panel.getByRole('button', { name: 'Make manager' })).toBeTruthy());
+    expect(panel.queryByText('Permissions saved.')).toBeNull();
+  });
+
+  /** L4: nothing to check the save against, so nothing is claimed. */
+  it('says nothing of a save when the list comes back without their permissions', async () => {
+    orgService.getStaff.mockResolvedValueOnce({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const panel = await drawPerson();
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
+    fireEvent.click(panel.getByLabelText(/^Remove members/));
+    fireEvent.click(panel.getByRole('button', { name: 'Save permissions' }));
+    await waitFor(() => expect(orgService.getStaff).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(panel.getByRole('button', { name: 'Save permissions' }).disabled).toBe(true));
+    expect(panel.queryByText('Permissions saved.')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  /** L5: a panel closed while its save is on its way. */
+  it("one person's refusal is never drawn in the next person's panel, whose controls wait for it", async () => {
+    orgService.getStaff.mockResolvedValue({
+      data: { staff: [OWNER, MANAGER_TICKED, { ...TRAINER, privileges: ['members.read'] }] },
+    });
+    let refuse;
+    orgService.updateStaffPrivileges.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        refuse = () => reject(apiError(409, 'owner_only_privilege', 'ZZ-MARKER refused for Rita.'));
+      }),
+    );
+    const rita = await drawPerson();
+    fireEvent.click(rita.getByLabelText(/^Remove members/));
+    fireEvent.click(rita.getByRole('button', { name: 'Save permissions' }));
+    fireEvent.click(rita.getByRole('button', { name: 'Close' }));
+    const anil = await openPerson('u3', 'Anil Bora');
+    // Her save is still on its way: nothing of his can be pressed over it.
+    expect(anil.getByLabelText(/^See who came in/).disabled).toBe(true);
+    expect(anil.getByRole('button', { name: 'Make manager' }).disabled).toBe(true);
+    refuse();
+    await waitFor(() => expect(anil.getByLabelText(/^See who came in/).disabled).toBe(false));
+    expect(screen.queryByText(/ZZ-MARKER/)).toBeNull();
+    // It is not lost either: opened again, her own panel says it, under Save permissions.
+    fireEvent.click(anil.getByRole('button', { name: 'Close' }));
+    const again = await openPerson('u2', 'Rita Sen');
+    expect(within(again.getByTestId('privileges-u2')).getByText('ZZ-MARKER refused for Rita.')).toBeTruthy();
+  });
+
+  /** L7: the form belongs to the Staff tab. */
+  it('"?open=invite" with no Staff tab in the address opens nothing, then or later', async () => {
+    drawStaff('/console/iron-house/members?open=invite');
+    const tab = await screen.findByRole('tab', { name: 'Staff' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(tab);
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
 // ── Remove from staff ───────────────────────────────────────────────────────
 
 describe('Remove from staff', () => {
@@ -1097,7 +1186,7 @@ describe('what one person is allowed to do', () => {
   it('a permission held that has no box here is mentioned, so Save is not a silent half-truth', async () => {
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, { ...MANAGER, privileges: ['members.read', 'billing.manage'] }] } });
     const panel = await drawPerson();
-    expect(panel.getByText('They also have 1 permission this screen has no box for. Saving leaves it alone.')).toBeTruthy();
+    expect(panel.getByText('They can also: Manage the plan and billing. Saving leaves it alone.')).toBeTruthy();
     expect(panel.queryByLabelText(/^Manage the plan and billing/)).toBeNull();
   });
 

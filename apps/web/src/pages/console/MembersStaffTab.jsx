@@ -186,7 +186,7 @@ export default function MembersStaffTab({ gymId, orgType, words, readOnly = fals
       // A role somebody deleted meanwhile: the roles are read again here, so its button
       // goes, and there is nothing left for Try again to do.
       const roleGone = errorCode(err) === 'role_not_found';
-      setPanelError({ at: 'role', message: errorText(err, "We couldn't change their role. Please try again."), retryable: !roleGone && isRetryable(err) });
+      setPanelError({ at: 'role', who: person.userId, message: errorText(err, "We couldn't change their role. Please try again."), retryable: !roleGone && isRetryable(err) });
       if (roleGone) await read();
       setBusyId(null);
       return;
@@ -196,26 +196,27 @@ export default function MembersStaffTab({ gymId, orgType, words, readOnly = fals
     onChanged?.();
   };
 
-  /** Save one person's ticks: the whole set. Answers 'refused' (the server's sentence is
+  /** Save one person's ticks: the whole set. Answers by `kind`: 'refused' (the server's sentence is
    *  shown and the edit kept), or, once the list has been read back, 'saved' when the
    *  server holds exactly what was sent, 'differs' when it holds something else, and
-   *  'unread' when the list could not be read. No Try again: reading the list again cannot
-   *  save anything. */
+   *  'unread' when the list could not be read or came back without their set. With
+   *  'saved' and 'differs' comes the set the server now holds. No Try again: reading the
+   *  list again cannot save anything. */
   const savePrivileges = async (person, privileges) => {
     setBusyId(person.userId);
     setPanelError(null);
     try {
       await orgService.updateStaffPrivileges(gymId, person.userId, { privileges });
     } catch (err) {
-      setPanelError({ at: 'ticks', message: errorText(err, "We couldn't save those permissions. Please try again."), retryable: false });
+      setPanelError({ at: 'ticks', who: person.userId, message: errorText(err, "We couldn't save those permissions. Please try again."), retryable: false });
       setBusyId(null);
-      return 'refused';
+      return { kind: 'refused' };
     }
     const list = await read();
     setBusyId(null);
     const now = list?.find((p) => p.userId === person.userId);
-    if (!now) return 'unread';
-    return Array.isArray(now.privileges) && privilegesDiffer(now.privileges, privileges) ? 'differs' : 'saved';
+    if (!now || !Array.isArray(now.privileges)) return { kind: 'unread' };
+    return { kind: privilegesDiffer(now.privileges, privileges) ? 'differs' : 'saved', privileges: now.privileges };
   };
 
   // Ticked: one step on the server takes both their place in the app and their staff
@@ -228,7 +229,7 @@ export default function MembersStaffTab({ gymId, orgType, words, readOnly = fals
       if (alsoApp) await orgService.removeMember(gymId, person.userId, { alsoStaff: true });
       else await orgService.removeStaff(gymId, person.userId);
     } catch (err) {
-      setPanelError({ at: 'remove', message: errorText(err, "We couldn't remove them. Please try again."), retryable: false });
+      setPanelError({ at: 'remove', who: person.userId, message: errorText(err, "We couldn't remove them. Please try again."), retryable: false });
       setBusyId(null);
       return;
     }
@@ -380,7 +381,9 @@ export default function MembersStaffTab({ gymId, orgType, words, readOnly = fals
                     type="button"
                     data-testid={`staff-tab-${person.userId}`}
                     onClick={() => {
-                      setPanelError(null);
+                      // A refusal that came back for this person while their panel was
+                      // shut is still theirs to read.
+                      setPanelError((was) => (was !== null && was.who === person.userId ? was : null));
                       onInviting(false);
                       setOpenId(person.userId);
                     }}
@@ -417,11 +420,14 @@ export default function MembersStaffTab({ gymId, orgType, words, readOnly = fals
           orgType={orgType}
           words={words}
           readOnly={readOnly}
-          busy={busyId === open.userId}
-          error={panelError}
+          // Busy while ANY change is on its way, and a refusal only in the panel of the
+          // person it was about: one closed mid-save says nothing in the next one opened.
+          busy={busyId !== null}
+          error={panelError !== null && panelError.who === open.userId ? panelError : null}
           onRetry={retry}
           onClose={() => {
-            setPanelError(null);
+            // Read, so it goes; a refusal about somebody else waits for their own panel.
+            setPanelError((was) => (was !== null && was.who === open.userId ? null : was));
             setOpenId(null);
           }}
           onChangeRole={(target) => changeRole(open, target)}
@@ -435,8 +441,8 @@ export default function MembersStaffTab({ gymId, orgType, words, readOnly = fals
           words={words}
           roles={roles}
           readOnly={readOnly}
-          busy={busyId === 'invite'}
-          error={panelError}
+          busy={busyId !== null}
+          error={panelError !== null && panelError.at === 'form' ? panelError : null}
           onSend={(body) => void sendInvite(body)}
           onMakeRole={makeRole}
           onDeleteRole={deleteRole}

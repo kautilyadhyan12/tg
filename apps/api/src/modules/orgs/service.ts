@@ -2093,11 +2093,8 @@ export async function updateOrgStaffRole(
             return known.success ? [known.data] : [];
           }),
         );
-  // A role cannot be saved holding one (`createStaffRole`); refused here too, so no door
-  // puts an owner's tick on a row that is not the owner's.
-  if (privileges.some((privilege) => OWNER_ONLY_PRIVILEGES.includes(privilege))) {
-    throw new OrgsError(409, "owner_only_privilege", STAFF_INVITE_WORDS.owner_only_privilege);
-  }
+  // No role holds an owner's tick: `createStaffRole` refuses one and so does the table's
+  // own CHECK, so there is none to refuse here.
 
   const outcome = await repo.updateStaffRole(deps.sql, {
     gymId,

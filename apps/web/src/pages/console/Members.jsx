@@ -483,9 +483,9 @@ export default function Members() {
       { replace: true },
     );
     if ((opening === 'import' || opening === 'add') && canSeeList && !readOnly) setAction(opening);
-    if (opening === 'invite' && managesStaff && !readOnly) setStaffInviteFor(org.id);
+    if (opening === 'invite' && view === 'staff' && managesStaff && !readOnly) setStaffInviteFor(org.id);
     return undefined;
-  }, [opening, org, canSeeList, managesStaff, readOnly, setSearchParams]);
+  }, [opening, view, org, canSeeList, managesStaff, readOnly, setSearchParams]);
 
   if (orgLoading) {
     return (

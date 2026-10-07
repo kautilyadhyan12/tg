@@ -866,6 +866,68 @@ d("staff invited by email (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  // 23c-ii round one (L1, T3, T5).
+  it(
+    "a role made again under its name with other ticks is a change; two gives at once end as one of them; a gym with no plan gives no role",
+    async () => {
+      const gym = await makeGym("Same Name Gym");
+      const rolesUrl = `/v1/orgs/${gym.id}/staff/roles`;
+      const makeRole = async (name: string, privileges: string[]) => {
+        const res = await post(rolesUrl, { name, privileges }, gym.owner.cookies);
+        expect(res.statusCode, res.body).toBe(201);
+        return (JSON.parse(res.body) as { role: { id: string } }).role.id;
+      };
+      const pending = await invited(gym, addr("sn-1"), "trainer");
+      const person = await signIn(addr("sn-1"));
+      expect((await accept(person, pending.id)).statusCode).toBe(200);
+      const staffUrl = `/v1/orgs/${gym.id}/staff/${person.userId}`;
+      const row = async () => {
+        const rows = await sql<{ role: string; role_name: string | null; privileges: string[] }[]>`
+          SELECT role, role_name, privileges FROM gym_staff WHERE gym_id = ${gym.id} AND user_id = ${person.userId}`;
+        const found = rows[0];
+        if (found === undefined) throw new Error("the staff row is gone");
+        return { roleName: found.role_name, privileges: [...found.privileges].sort() };
+      };
+      const changes = async () =>
+        (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.staff_role_changed'`)[0]?.n;
+
+      // The old Front desk, given; then deleted and made again with other ticks.
+      const old = await makeRole("Front desk", ["attendance.read", "attendance.mark"]);
+      expect((await send("PATCH", staffUrl, gym.owner.cookies, { roleId: old })).statusCode).toBe(200);
+      expect((await del(`${rolesUrl}/${old}`, gym.owner.cookies)).statusCode).toBe(200);
+      const made = await makeRole("Front desk", ["members.read", "members.confirm"]);
+      expect(await row()).toEqual({ roleName: "Front desk", privileges: ["attendance.mark", "attendance.read"] });
+      expect(await changes()).toBe(1);
+      // The same name is not "no change": they get the role as it now stands.
+      expect((await send("PATCH", staffUrl, gym.owner.cookies, { roleId: made })).statusCode).toBe(200);
+      expect(await row()).toEqual({ roleName: "Front desk", privileges: ["members.confirm", "members.read"] });
+      expect(await changes()).toBe(2);
+      // And that one again IS no change.
+      expect((await send("PATCH", staffUrl, gym.owner.cookies, { roleId: made })).statusCode).toBe(200);
+      expect(await changes()).toBe(2);
+
+      // Two at once, to two roles: both answered, and the row is wholly one of them.
+      const other = await makeRole("Cleaner", ["attendance.read"]);
+      const both = await Promise.all([
+        send("PATCH", staffUrl, gym.owner.cookies, { roleId: other }),
+        send("PATCH", staffUrl, gym.owner.cookies, { role: "manager" }),
+      ]);
+      expect(both.map((r) => r.statusCode)).toEqual([200, 200]);
+      const after = await row();
+      expect([
+        JSON.stringify({ roleName: "Cleaner", privileges: ["attendance.read"] }),
+        JSON.stringify({ roleName: null, privileges: [...ROLE_PRIVILEGES.manager].sort() }),
+      ]).toContain(JSON.stringify(after));
+
+      // No live plan: nothing is given.
+      await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      const lapsed = await send("PATCH", staffUrl, gym.owner.cookies, { roleId: made });
+      expect(lapsed.statusCode).toBe(409);
+      expect(await row()).toEqual(after);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "Accept by somebody made staff another way meanwhile keeps the permissions they have",
     async () => {

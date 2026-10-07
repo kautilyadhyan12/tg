@@ -106,7 +106,9 @@ export function staffRoleChoices(orgType) {
  *
  *  A role of the gym's own is a trainer's underneath, so somebody on one is offered plain
  *  trainer as well; and one whose own role has since been deleted keeps its name and is
- *  offered every role there is. */
+ *  offered every role there is. The role they hold is left out only while they hold its
+ *  ticks too: a role made again under the same name, or ticks changed by hand since, and
+ *  it is offered, to give them the role as it now stands. */
 export function roleTargets(person, roles, orgType) {
   if (!canChangeStaff(person)) return [];
   const ownName = typeof person.roleName === 'string' && person.roleName !== '' ? person.roleName : null;
@@ -119,7 +121,7 @@ export function roleTargets(person, roles, orgType) {
       question: roleChangeWarning(person, role, orgType),
     }));
   const own = (Array.isArray(roles) ? roles : [])
-    .filter((r) => r.name !== ownName)
+    .filter((r) => r.name !== ownName || privilegesDiffer(heldPrivileges(person), r.privileges))
     .map((r) => ({
       key: r.id,
       body: { roleId: r.id },
@@ -383,13 +385,23 @@ export function carriedPrivileges(person, orgType) {
  *  are none (the retired ticks do nothing, so they are not counted). Said rather than
  *  omitted: an owner pressing Save is entitled to know the boxes are not the whole story. */
 export function carriedNote(person, orgType) {
-  const n = carriedPrivileges(person, orgType).filter((value) => !isRetiredPrivilege(value)).length;
-  if (n === 0) return null;
-  const who = person?.isYou === true ? 'You also have' : 'They also have';
-  const what = n === 1 ? '1 permission this screen has no box for.' : `${n} permissions this screen has no box for.`;
+  const carried = carriedPrivileges(person, orgType).filter((value) => !isRetiredPrivilege(value));
+  if (carried.length === 0) return null;
+  const you = person?.isYou === true;
+  // Named where this screen has the words (the two drawn only on the owner's row), counted
+  // where it has none.
+  const copy = privilegeCopy(orgType);
+  const named = copy.filter((choice) => carried.includes(choice.value)).map((choice) => choice.label);
+  const unnamed = carried.length - named.length;
+  const parts = [];
+  if (named.length > 0) parts.push(`${you ? 'You' : 'They'} can also: ${named.join(', ')}.`);
+  if (unnamed > 0) {
+    const also = you ? 'You also have' : 'They also have';
+    parts.push(unnamed === 1 ? `${also} 1 permission this screen has no box for.` : `${also} ${unnamed} permissions this screen has no box for.`);
+  }
   // The owner's row is never saved.
-  const saving = person?.role === 'owner' ? '' : n === 1 ? ' Saving leaves it alone.' : ' Saving leaves them alone.';
-  return `${who} ${what}${saving}`;
+  if (person?.role !== 'owner') parts.push(carried.length === 1 ? 'Saving leaves it alone.' : 'Saving leaves these alone.');
+  return parts.join(' ');
 }
 
 /** Has the owner actually moved anything? Compared as SETS, because the order a
