@@ -32,7 +32,7 @@ export function howItWorks(gymHasTypes) {
   return [
     'Add a trainer and set the hours they are free.',
     ...(gymHasTypes
-      ? ['Tick "Includes personal training" on a membership or pack (Settings, then Memberships) and give it to the member on their page.']
+      ? ['Tick "Includes personal training" on a membership or pack (in Memberships) and give it to the member on their page.']
       : []),
     "Press one of the trainer's free times and pick the member.",
   ];

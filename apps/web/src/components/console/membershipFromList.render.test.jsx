@@ -1,4 +1,4 @@
-// Settings → Memberships, with a member list that names memberships (spec Part 3 §13.2;
+// The Memberships page, with a member list that names memberships (spec Part 3 §13.2;
 // ROADMAP 17a-iii). The list's names are part of the gym's ONE list of memberships: one
 // that is no type yet is set up there, and a type's own row says who should hold it. A
 // box names who gets a membership before anybody is given it.
@@ -98,7 +98,6 @@ async function open(types, words, { readOnly = false, currency = 'GBP' } = {}) {
   if (words === null) orgService.getMembershipWords.mockRejectedValue({ response: { status: 403, data: { error: 'forbidden' } } });
   else orgService.getMembershipWords.mockResolvedValue(wordsOf(words));
   render(<MembershipTypesPanel org={ORG} readOnly={readOnly} />);
-  fireEvent.click(screen.getByRole('button', { name: /memberships/i }));
   await waitFor(() => expect(orgService.getMembershipWords).toHaveBeenCalledWith(GYM));
 }
 
@@ -123,7 +122,7 @@ afterEach(() => {
 });
 
 describe("the member list's names sit in the gym's one list of memberships", () => {
-  it('the closed section says how many of them wait to be set up', async () => {
+  it('the list says how many of them wait to be set up', async () => {
     orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [GOLD] }) });
     orgService.getMembershipWords.mockResolvedValue(wordsOf([name(), name({ word: 'Silver', people: 2 }), own(0)]));
     render(<MembershipTypesPanel org={ORG} readOnly={false} />);
@@ -318,6 +317,28 @@ describe('Set up, in a gym that already has membership types', () => {
     expect(screen.getByRole('button', { name: 'Add a membership type' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Change Gold Monthly' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Archive Gold Monthly' }).disabled).toBe(true);
+  });
+});
+
+// 23c-i: a name being added as a new type opens its form in its own row.
+describe('where the form for a name opens', () => {
+  it("in that name's row, under the price list, and its Set up button makes way for it", async () => {
+    await open([GOLD], [name(), name({ word: 'Silver', people: 2 })]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Set up Silver' }));
+    fireEvent.click(screen.getByLabelText("A new membership. I'll add its price now."));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    const form = screen.getByRole('form', { name: 'Add “Silver” as a membership type' });
+    const region = await block();
+    expect(region.contains(form)).toBe(true);
+    const row = form.closest('li');
+    expect(within(row).getByText(/“Silver”/, { selector: 'span' })).toBeTruthy();
+    expect(within(row).queryByText(/“Gold”/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Set up Silver' })).toBeNull();
+    // The other name waits, as everything does while a form is open.
+    expect(screen.getByRole('button', { name: 'Set up Gold' }).disabled).toBe(true);
+    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Set up Silver' }).disabled).toBe(false);
+    expect(orgService.createMembershipType).not.toHaveBeenCalled();
   });
 });
 

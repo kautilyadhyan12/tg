@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX } from '@app/shared';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import {
@@ -28,35 +28,31 @@ import {
   withChoice,
 } from '../../pages/console/membershipTypesView';
 import { formWordsFor, notSetUp, typeTies, withSetUpCount } from '../../pages/console/membershipWordsView';
-import { ConfirmInline, ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
+import { ConfirmInline, ConsoleFailed, ConsoleLoading } from './ConsoleStates';
 import { GiveBox, NotSetUp, TypeTies } from './MembershipFromList';
 import { useListMemberships } from './useListMemberships';
 
-// SETTINGS → MEMBERSHIPS (spec Part 3 §13.1; ROADMAP 17a-i), on `memberships.manage` as
-// the server gates the changes. What the gym sells: a name, a kind, a price in the gym's
-// own money, how long it lasts or how many classes it holds, and what it includes.
-// Nothing is deleted: a type is archived and can be put back. The form saves with its
-// own button and nothing in it is saved before that.
+// THE MEMBERSHIPS PAGE (spec Part 3 §13.1; ROADMAP 17a-i, a page of its own since 23c-i),
+// on `memberships.manage` as the server gates the changes. What the gym sells: a name, a
+// kind, a price in the gym's own money, how long it lasts or how many classes it holds,
+// and what it includes. Nothing is deleted: a type is archived and can be put back. The
+// form saves with its own button and nothing in it is saved before that.
 //
 // The memberships a gym's member list names are part of this one list (17a-iii;
 // `MembershipFromList.jsx`): a name that is no type yet is set up here, with this same
 // form, and a type the list's people should hold says so on its own row.
+//
+// Drawn from `console.css` (spec Part 3 §17). A new type's form opens under the title;
+// a type being changed, and a list's name being set up, open their form where they are.
 
-const inputStyle = {
-  background: '#0A0908',
-  border: '1px solid rgba(255,255,255,0.10)',
-  color: '#fff',
-};
-const quietButton = { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' };
-const mainButton = { background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', color: '#0A0908' };
-const labelStyle = { color: 'rgba(255,255,255,0.75)' };
-const hintStyle = { color: 'rgba(255,255,255,0.55)' };
-const inputClass = 'w-full rounded-xl px-4 py-3 text-base sm:text-sm';
+const TICK = { accentColor: 'var(--accent)' };
+const BAD = { color: 'var(--bad)' };
+const LINE = { borderTop: '1px solid var(--line)' };
 
 function Problem({ text }) {
   if (!text) return null;
   return (
-    <p className="text-sm" style={{ color: '#ef4444' }}>
+    <p className="c-s14 m-0" style={BAD}>
       {text}
     </p>
   );
@@ -64,8 +60,8 @@ function Problem({ text }) {
 
 function Field({ id, label, children, problem }) {
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium" style={labelStyle}>
+    <div className="c-field">
+      <label htmlFor={id} className="c-label">
         {label}
       </label>
       {children}
@@ -77,16 +73,16 @@ function Field({ id, label, children, problem }) {
 /** One part of the form, under its own small heading. */
 function Part({ title, children }) {
   return (
-    <fieldset className="flex flex-col gap-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-      <legend className="text-xs font-semibold uppercase tracking-wide pr-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-        {title}
-      </legend>
+    <fieldset className="flex flex-col gap-4 pt-4" style={LINE}>
+      <legend className="c-s14 c-w6 c-t2 pr-2">{title}</legend>
       {children}
     </fieldset>
   );
 }
 
-function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused, busy, forWord, onSave, onCancel }) {
+/** `inRow`: the form is inside a row of a list, under that list's own heading.
+ *  `error`: why the server refused the last save, said beside the button that sent it. */
+function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
   const editing = draft.id !== null;
   const title = editing ? 'Change membership type' : (forWord?.heading ?? 'Add a membership type');
   const id = (name) => `membership-${name}-${gymId}`;
@@ -99,6 +95,7 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
     set({ classIds: draft.classIds.includes(classId) ? draft.classIds.filter((c) => c !== classId) : [...draft.classIds, classId] });
   const first = firstProblem(problems);
   const formRef = useRef(null);
+  const Heading = inRow ? 'h3' : 'h2';
 
   // A refused save shows its first wrong box: the button is at the bottom of a long form,
   // and a sentence under a box that has scrolled away is a sentence nobody reads. Once a
@@ -119,15 +116,12 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
         event.preventDefault();
         onSave();
       }}
-      className="rounded-xl p-4 flex flex-col gap-4"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+      className="flex flex-col gap-5"
       aria-label={title}
     >
-      <div>
-        <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-          {title}
-        </p>
-        <p className="text-sm mt-1" style={hintStyle}>
+      <div className="flex flex-col gap-1">
+        <Heading className={inRow ? 'c-h3' : 'c-h2'}>{title}</Heading>
+        <p className="c-s14 c-t2 m-0">
           {forWord?.hint ?? 'Make it your own: give it your name and price, then say how it is paid and what it includes.'}
         </p>
       </div>
@@ -140,8 +134,7 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
           maxLength={MEMBERSHIP_NAME_MAX}
           onChange={text('name')}
           placeholder="For example: Gold Monthly"
-          className={inputClass}
-          style={inputStyle}
+          className="c-input"
         />
       </Field>
 
@@ -153,47 +146,44 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
           maxLength={MEMBERSHIP_DESCRIPTION_MAX}
           onChange={text('description')}
           placeholder="For example: All classes and open gym"
-          className={inputClass}
-          style={inputStyle}
+          className="c-input"
         />
       </Field>
 
       <Part title="Price and payment">
-        <div role="radiogroup" aria-label="How is it paid?" className="flex flex-col gap-1">
-          <span className="text-sm font-medium" style={labelStyle}>
-            How is it paid?
-          </span>
-          {KIND_CHOICES.map((k) => (
-            <label
-              key={k.value}
-              className="flex items-start gap-3 rounded-xl px-3 py-2 min-h-11"
-              style={{
-                background: choice === k.value ? 'rgba(255,138,31,0.10)' : 'transparent',
-                border: `1px solid ${choice === k.value ? 'rgba(255,138,31,0.45)' : 'rgba(255,255,255,0.08)'}`,
-                opacity: editing && choice !== k.value ? 0.45 : 1,
-              }}
-            >
-              <input
-                type="radio"
-                name={id('kind')}
-                className="w-5 h-5 mt-0.5"
-                value={k.value}
-                checked={choice === k.value}
-                disabled={editing}
-                onChange={() => setDraft((d) => withChoice(d, k.value))}
-              />
-              <span className="flex flex-col">
-                <span className="text-sm font-semibold" style={{ color: '#fff' }}>
-                  {k.label}
+        <div role="radiogroup" aria-label="How is it paid?" className="flex flex-col gap-2">
+          <span className="c-label">How is it paid?</span>
+          {KIND_CHOICES.map((k) => {
+            const picked = choice === k.value;
+            return (
+              <label
+                key={k.value}
+                className="flex items-start gap-3 rounded-[10px] px-3 py-2.5 min-h-11"
+                style={{
+                  background: picked ? 'var(--soft)' : 'transparent',
+                  border: `1px solid ${picked ? 'var(--accent)' : 'var(--ctl-line)'}`,
+                  opacity: editing && !picked ? 0.5 : 1,
+                }}
+              >
+                <input
+                  type="radio"
+                  name={id('kind')}
+                  className="w-[18px] h-[18px] mt-0.5 flex-shrink-0"
+                  style={TICK}
+                  value={k.value}
+                  checked={picked}
+                  disabled={editing}
+                  onChange={() => setDraft((d) => withChoice(d, k.value))}
+                />
+                <span className="flex flex-col">
+                  <span className="c-s15 c-w6 c-t1">{k.label}</span>
+                  <span className="c-s14 c-t2">{k.hint}</span>
                 </span>
-                <span className="text-sm" style={hintStyle}>
-                  {k.hint}
-                </span>
-              </span>
-            </label>
-          ))}
+              </label>
+            );
+          })}
           {editing ? (
-            <p className="text-sm" style={hintStyle}>
+            <p className="c-s14 c-t2 m-0">
               How it is paid can&apos;t be changed once it is saved. To sell it another way, archive this one and add a new one.
             </p>
           ) : null}
@@ -207,8 +197,8 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
             inputMode="decimal"
             onChange={text('price')}
             placeholder={`For example: ${priceExample(currency)}`}
-            className={inputClass}
-            style={inputStyle}
+            className="c-input"
+            style={{ maxWidth: 240 }}
           />
         </Field>
 
@@ -218,22 +208,21 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
             label={choice === 'recurring' ? 'Charged every' : 'How long it lasts'}
             problem={problems?.termCount}
           >
-            <div className="flex gap-2">
+            <div className="flex gap-2" style={{ maxWidth: 360 }}>
               <input
                 id={id('term-count')}
                 aria-invalid={problems?.termCount ? 'true' : undefined}
                 value={draft.termCount}
                 inputMode="numeric"
                 onChange={text('termCount')}
-                className={inputClass}
-                style={inputStyle}
+                className="c-input"
+                style={{ width: 104, flexShrink: 0 }}
               />
               <select
                 aria-label={choice === 'recurring' ? 'Charged every: weeks, months or years' : 'How long it lasts: days, weeks, months or years'}
                 value={draft.termUnit}
                 onChange={text('termUnit')}
-                className={inputClass}
-                style={inputStyle}
+                className="c-input"
               >
                 {termUnitOptions(choice).map((u) => (
                   <option key={u.value} value={u.value}>
@@ -246,12 +235,12 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
         ) : null}
 
         {choice === 'pack' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ maxWidth: 480 }}>
             <Field id={id('pack-classes')} label="Classes in the pack" problem={problems?.packClasses}>
-              <input id={id('pack-classes')} aria-invalid={problems?.packClasses ? 'true' : undefined} value={draft.packClasses} inputMode="numeric" onChange={text('packClasses')} className={inputClass} style={inputStyle} />
+              <input id={id('pack-classes')} aria-invalid={problems?.packClasses ? 'true' : undefined} value={draft.packClasses} inputMode="numeric" onChange={text('packClasses')} className="c-input" />
             </Field>
             <Field id={id('pack-days')} label="Days to use them in" problem={problems?.packDays}>
-              <input id={id('pack-days')} aria-invalid={problems?.packDays ? 'true' : undefined} value={draft.packDays} inputMode="numeric" onChange={text('packDays')} className={inputClass} style={inputStyle} />
+              <input id={id('pack-days')} aria-invalid={problems?.packDays ? 'true' : undefined} value={draft.packDays} inputMode="numeric" onChange={text('packDays')} className="c-input" />
             </Field>
           </div>
         ) : null}
@@ -261,7 +250,7 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
         <Part title="What it includes">
           {hasTerm ? (
             <Field id={id('access')} label="Classes">
-              <select id={id('access')} value={draft.access} onChange={text('access')} className={inputClass} style={inputStyle}>
+              <select id={id('access')} value={draft.access} onChange={text('access')} className="c-input">
                 {ACCESS_CHOICES.map((a) => (
                   <option key={a.value} value={a.value}>
                     {a.label}
@@ -273,17 +262,17 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
 
           {hasTerm && draft.access === 'limited' ? (
             <Field id={id('limit')} label="How many classes" problem={problems?.bookingsLimit}>
-              <div className="flex gap-2">
+              <div className="flex gap-2" style={{ maxWidth: 360 }}>
                 <input
                   id={id('limit')}
                   aria-invalid={problems?.bookingsLimit ? 'true' : undefined}
                   value={draft.bookingsLimit}
                   inputMode="numeric"
                   onChange={text('bookingsLimit')}
-                  className={inputClass}
-                  style={inputStyle}
+                  className="c-input"
+                  style={{ width: 104, flexShrink: 0 }}
                 />
-                <select aria-label="How many classes: a week or a month" value={draft.bookingsPeriod} onChange={text('bookingsPeriod')} className={inputClass} style={inputStyle}>
+                <select aria-label="How many classes: a week or a month" value={draft.bookingsPeriod} onChange={text('bookingsPeriod')} className="c-input">
                   {LIMIT_PERIOD_CHOICES.map((p) => (
                     <option key={p.value} value={p.value}>
                       {p.label}
@@ -296,7 +285,7 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
 
           {picksClasses ? (
             <Field id={id('scope')} label="Which classes" problem={problems?.classes}>
-              <select id={id('scope')} aria-invalid={problems?.classes ? 'true' : undefined} value={draft.classScope} onChange={text('classScope')} className={inputClass} style={inputStyle}>
+              <select id={id('scope')} aria-invalid={problems?.classes ? 'true' : undefined} value={draft.classScope} onChange={text('classScope')} className="c-input">
                 <option value="all">Every class</option>
                 <option value="some">Only the classes I tick</option>
                 {choice === 'pack' ? <option value="none">No classes: personal training only</option> : null}
@@ -304,10 +293,11 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
               {draft.classScope === 'some' ? (
                 <div className="flex flex-col mt-1">
                   {options.map((option) => (
-                    <label key={option.id} className="flex items-center gap-3 min-h-11 text-sm" style={{ color: '#fff' }}>
+                    <label key={option.id} className="flex items-center gap-3 min-h-11 c-s15 c-t1">
                       <input
                         type="checkbox"
-                        className="w-5 h-5"
+                        className="w-[18px] h-[18px] flex-shrink-0"
+                        style={TICK}
                         checked={draft.classIds.includes(option.id)}
                         onChange={() => toggleClass(option.id)}
                       />
@@ -320,17 +310,18 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
           ) : null}
 
           {choice !== 'day_pass' ? (
-            <label className="flex items-start gap-3 min-h-11 text-sm" style={{ color: '#fff' }}>
+            <label className="flex items-start gap-3 min-h-11 c-s15 c-t1">
               <input
                 type="checkbox"
-                className="w-5 h-5 mt-0.5 flex-shrink-0"
+                className="w-[18px] h-[18px] mt-0.5 flex-shrink-0"
+                style={TICK}
                 checked={draftIncludesPt(draft)}
                 disabled={packForPtOnly(draft)}
                 onChange={(event) => set({ includesPt: event.target.checked })}
               />
               <span className="flex flex-col gap-0.5">
                 <span>Includes personal training</span>
-                <span style={{ color: 'rgba(255,255,255,0.6)' }}>
+                <span className="c-s14 c-t2">
                   {choice === 'pack'
                     ? 'Each session booked with a trainer uses one from the pack.'
                     : 'Sessions with a trainer can be booked on this membership, with no limit.'}
@@ -341,23 +332,23 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
         </Part>
       ) : null}
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
         {first !== null ? (
-          <p className="text-sm font-semibold" style={{ color: '#ef4444' }} role="alert">
+          <p className="c-s14 c-w6 m-0" style={BAD} role="alert">
             {NOT_SAVED}
           </p>
         ) : null}
+        {error ? (
+          <p className="c-s14 m-0" style={BAD} role="alert">
+            {error}
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-xl px-5 py-3 text-sm font-semibold flex items-center justify-center gap-2 min-h-11 disabled:opacity-40"
-            style={mainButton}
-          >
+          <button type="submit" disabled={busy} className="c-btn c-btn-p">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
             {editing ? 'Save changes' : 'Add membership type'}
           </button>
-          <button type="button" disabled={busy} onClick={onCancel} className="rounded-xl px-4 py-3 text-sm min-h-11 disabled:opacity-40" style={quietButton}>
+          <button type="button" disabled={busy} onClick={onCancel} className="c-btn c-btn-s">
             Cancel
           </button>
         </div>
@@ -366,29 +357,44 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
   );
 }
 
-function TypeRow({ type, readOnly, busy, formOpen, ties, onEdit, onArchive, onGive, onUndo }) {
+/** `form`: this type's own form while it is being changed, or null. */
+function TypeRow({ type, readOnly, busy, formOpen, ties, form, onEdit, onArchive, onGive, onUndo }) {
   const [asking, setAsking] = useState(false);
   return (
-    <li className="py-3 flex flex-col gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold" style={{ color: '#fff' }}>
-          {type.name}
-        </span>
-        <span className="text-xs rounded-full px-2 py-0.5 font-semibold" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)' }}>
-          {kindTag(type)}
-        </span>
+    <li className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
+        <div className="flex flex-col gap-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="c-s15 c-w6 c-t1 break-words min-w-0">{type.name}</span>
+            <span className="c-tag c-tag-plain">{kindTag(type)}</span>
+          </div>
+          {type.description ? <p className="c-s14 c-t2 m-0 break-words">{type.description}</p> : null}
+          <p className="c-s14 c-t1 m-0">{termLine(type)}</p>
+          <p className="c-s14 c-t2 m-0">{includesLine(type)}</p>
+        </div>
+        {asking ? null : (
+          <div className="flex flex-wrap gap-2 flex-shrink-0">
+            <button
+              type="button"
+              disabled={readOnly || busy || formOpen}
+              onClick={() => onEdit(type)}
+              aria-label={`Change ${type.name}`}
+              className="c-btn c-btn-s c-btn-sm"
+            >
+              Change
+            </button>
+            <button
+              type="button"
+              disabled={readOnly || busy || formOpen}
+              onClick={() => setAsking(true)}
+              aria-label={`Archive ${type.name}`}
+              className="c-btn c-btn-s c-btn-sm"
+            >
+              Archive
+            </button>
+          </div>
+        )}
       </div>
-      {type.description ? (
-        <p className="text-sm" style={hintStyle}>
-          {type.description}
-        </p>
-      ) : null}
-      <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-        {termLine(type)}
-      </p>
-      <p className="text-sm" style={hintStyle}>
-        {includesLine(type)}
-      </p>
       <TypeTies type={type} ties={ties} off={readOnly || busy || formOpen} busy={busy} onGive={onGive} onUndo={onUndo} />
       {asking ? (
         <ConfirmInline
@@ -400,38 +406,46 @@ function TypeRow({ type, readOnly, busy, formOpen, ties, onEdit, onArchive, onGi
             onArchive(type);
           }}
           onCancel={() => setAsking(false)}
+          newLook
         />
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={readOnly || busy || formOpen}
-            onClick={() => onEdit(type)}
-            aria-label={`Change ${type.name}`}
-            className="rounded-xl px-4 py-2 text-sm min-h-11 disabled:opacity-40"
-            style={quietButton}
-          >
-            Change
-          </button>
-          <button
-            type="button"
-            disabled={readOnly || busy || formOpen}
-            onClick={() => setAsking(true)}
-            aria-label={`Archive ${type.name}`}
-            className="rounded-xl px-4 py-2 text-sm min-h-11 disabled:opacity-40"
-            style={quietButton}
-          >
-            Archive
-          </button>
-        </div>
-      )}
+      ) : null}
+      {form}
     </li>
   );
 }
 
-// `startOpen`: the page was opened by a link to this section (Add member's "Set up
-// memberships", 23a-ii), so it is drawn open.
-export default function MembershipTypesPanel({ org, readOnly, startOpen = false }) {
+/** What the last press did, or why it failed, brought into view: the row that was pressed
+ *  may be a long way up the page. */
+function Notes({ error, listError, done }) {
+  const ref = useRef(null);
+  const shown = error ?? listError ?? done;
+  useEffect(() => {
+    const box = ref.current;
+    if (shown && box && typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'nearest' });
+  }, [shown]);
+  if (!shown) return null;
+  return (
+    <div ref={ref} className="flex flex-col gap-2">
+      {error ? (
+        <p className="c-s15 m-0" style={BAD} role="alert">
+          {error}
+        </p>
+      ) : null}
+      {listError ? (
+        <p className="c-s15 m-0" style={BAD} role="alert">
+          {listError}
+        </p>
+      ) : null}
+      {done ? (
+        <p className="c-s15 m-0" style={{ color: 'var(--good)' }} role="status">
+          {done}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export default function MembershipTypesPanel({ org, readOnly }) {
   const gymId = org.id;
   const [list, setList] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -502,6 +516,7 @@ export default function MembershipTypesPanel({ org, readOnly, startOpen = false 
     setDraftWord(null);
     setShowProblems(false);
     setRefused(0);
+    setActionError(null);
   };
 
   const fromList = useListMemberships(gymId, list?.types);
@@ -542,55 +557,118 @@ export default function MembershipTypesPanel({ org, readOnly, startOpen = false 
     setDraft(next);
   };
 
+  const formOpen = draft !== null && draftCurrency !== null;
+  // Where the open form is drawn: under the title for a new type, in its own row for a
+  // type being changed, in the name's row for a name from the member list.
+  const formAt = !formOpen ? null : draft.id !== null ? 'row' : draftWord !== null ? 'word' : 'top';
+  const form = formOpen ? (
+    <TypeForm
+      gymId={gymId}
+      currency={draftCurrency}
+      options={classOptions(list, editing)}
+      draft={draft}
+      setDraft={setDraft}
+      problems={showProblems ? problems : null}
+      refused={refused}
+      busy={busy}
+      forWord={draftWord === null ? null : formWordsFor(draftWord)}
+      error={actionError}
+      inRow={formAt !== 'top'}
+      onSave={() => void save()}
+      onCancel={closeForm}
+    />
+  ) : null;
+  const inRow = (node) => (
+    <div className="rounded-[14px] p-4 md:p-5" style={{ background: 'var(--raise)' }}>
+      {node}
+    </div>
+  );
+  const summary = withSetUpCount(typesSummary(list), fromList.words);
+
   return (
-    <ConsoleSection title="Memberships" summary={withSetUpCount(typesSummary(list), fromList.words)} defaultOpen={startOpen} forceOpen={loadError !== null}>
+    <div className="c-page">
+      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <h1 className="c-h1">Memberships</h1>
+          {org.name ? <p className="c-sub">{org.name}</p> : null}
+          <p className="c-s15 c-t2 m-0" style={{ maxWidth: 640 }}>
+            Your own list of what you sell. You name each one, set its price, and choose how it is paid and what it
+            includes.
+            {list?.currency ? ` New prices are in ${list.currency}.` : ''}
+          </p>
+        </div>
+        {list !== null && loadError === null && !formOpen && list.currency !== null && canAddType(list) ? (
+          <button
+            type="button"
+            disabled={readOnly || anyBusy || locked}
+            onClick={() => startDraft(emptyDraft())}
+            className="c-btn c-btn-p w-full md:w-auto flex-shrink-0"
+          >
+            <Plus aria-hidden="true" className="w-4 h-4" />
+            Add a membership type
+          </button>
+        ) : null}
+      </header>
+
+      {/* A gym with no live plan sees everything and changes nothing (§4.2). */}
       {readOnly ? (
-        <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {readOnlyNote(org.orgType)}
-        </p>
+        <section className="c-card p-5 md:p-6">
+          <p className="c-s15 c-t2 m-0">{readOnlyNote(org.orgType)}</p>
+        </section>
       ) : null}
-      <p className="text-sm" style={hintStyle}>
-        Your own list of what you sell. You name each one, set its price, and choose how it is paid and what it
-        includes.
-        {list?.currency ? ` New prices are in ${list.currency}.` : ''}
-      </p>
 
       {loadError !== null ? (
-        <div className="mt-3">
-          <ConsoleFailed message={loadError} onRetry={() => void load()} />
-        </div>
+        <ConsoleFailed message={loadError} onRetry={() => void load()} newLook />
       ) : list === null ? (
-        <div className="mt-3">
-          <ConsoleLoading label="Loading your membership types…" />
-        </div>
+        <ConsoleLoading label="Loading your membership types…" newLook />
       ) : (
-        <div className="flex flex-col gap-4 mt-4">
-          {list.types.length > 0 ? (
-            <ul className="flex flex-col">
-              {list.types.map((type) => (
-                <TypeRow
-                  key={type.id}
-                  type={type}
-                  readOnly={readOnly}
-                  busy={anyBusy}
-                  formOpen={locked}
-                  ties={typeTies(type, fromList.words)}
-                  onGive={(word, t) => void fromList.open(word.word, t.id)}
-                  onUndo={(word) => void fromList.undo(word)}
-                  onEdit={(t) => startDraft(draftFromType(t))}
-                  onArchive={(t) => {
-                    if (draft?.id === t.id) closeForm();
-                    void run(() => orgService.archiveMembershipType(gymId, t.id), "We couldn't archive that. Please try again.");
-                  }}
-                />
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              You haven&apos;t added anything yet. Add each thing you sell, with your own name and price: a monthly
-              membership, a 10-class pack, a day pass, a free trial week.
-            </p>
+        <>
+          {formOpen ? null : list.currency === null ? (
+            <div className="c-callout">
+              <p className="c-s15 m-0">
+                Set your country in your details, at the top of Settings, before adding a membership type. Prices are in
+                your country&apos;s own money.
+              </p>
+            </div>
+          ) : canAddType(list) ? null : (
+            <p className="c-s15 c-t2 m-0">{TOO_MANY_TYPES}</p>
           )}
+
+          {formAt === 'top' ? <section className="c-card c-narrow p-5 md:p-6">{form}</section> : null}
+
+          <section className="c-card overflow-hidden" aria-label="What you sell">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pt-5 pb-4 md:px-6">
+              <h2 className="c-h2">What you sell</h2>
+              {summary ? <span className="c-s14 c-t3">{summary}</span> : null}
+            </div>
+            {list.types.length > 0 ? (
+              <ul className="flex flex-col m-0 p-0 list-none">
+                {list.types.map((type) => (
+                  <TypeRow
+                    key={type.id}
+                    type={type}
+                    readOnly={readOnly}
+                    busy={anyBusy}
+                    formOpen={locked}
+                    ties={typeTies(type, fromList.words)}
+                    form={formAt === 'row' && draft.id === type.id ? inRow(form) : null}
+                    onGive={(word, t) => void fromList.open(word.word, t.id)}
+                    onUndo={(word) => void fromList.undo(word)}
+                    onEdit={(t) => startDraft(draftFromType(t))}
+                    onArchive={(t) => {
+                      if (draft?.id === t.id) closeForm();
+                      void run(() => orgService.archiveMembershipType(gymId, t.id), "We couldn't archive that. Please try again.");
+                    }}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <p className="c-s15 c-t2 m-0 px-5 pb-5 md:px-6 md:pb-6" style={{ maxWidth: 640 }}>
+                You haven&apos;t added anything yet. Add each thing you sell, with your own name and price: a monthly
+                membership, a 10-class pack, a day pass, a free trial week.
+              </p>
+            )}
+          </section>
 
           <NotSetUp
             rows={notSetUp(fromList.words)}
@@ -599,6 +677,8 @@ export default function MembershipTypesPanel({ org, readOnly, startOpen = false 
             off={readOnly || anyBusy || locked}
             busy={anyBusy}
             choosing={choosing}
+            formFor={formAt === 'word' ? draftWord.word : null}
+            form={formAt === 'word' ? inRow(form) : null}
             // With nothing for sale yet there is nothing to choose between: straight to the form.
             onChoose={(word) => (word !== null && list.types.length === 0 ? setUpAsNew(word) : setChoosing(word === null ? null : word.word))}
             onExisting={(word, typeId) => {
@@ -621,106 +701,55 @@ export default function MembershipTypesPanel({ org, readOnly, startOpen = false 
             />
           ) : null}
 
-          {draft !== null && draftCurrency !== null ? (
-            <TypeForm
-              gymId={gymId}
-              currency={draftCurrency}
-              options={classOptions(list, editing)}
-              draft={draft}
-              setDraft={setDraft}
-              problems={showProblems ? problems : null}
-              refused={refused}
-              busy={busy}
-              forWord={draftWord === null ? null : formWordsFor(draftWord)}
-              onSave={() => void save()}
-              onCancel={closeForm}
-            />
-          ) : list.currency === null ? (
-            <p className="text-sm" style={{ color: '#F2C35B' }}>
-              Set your country in your details, at the top of Settings, before adding a membership type. Prices are in
-              your country&apos;s own money.
-            </p>
-          ) : canAddType(list) ? (
-            <button
-              type="button"
-              disabled={readOnly || anyBusy || locked}
-              onClick={() => startDraft(emptyDraft())}
-              className="self-start rounded-xl px-5 py-3 text-sm font-semibold min-h-11 disabled:opacity-40"
-              style={mainButton}
-            >
-              Add a membership type
-            </button>
-          ) : (
-            <p className="text-sm" style={hintStyle}>
-              {TOO_MANY_TYPES}
-            </p>
-          )}
-
-          {actionError !== null ? (
-            <p className="text-sm" style={{ color: '#ef4444' }} role="alert">
-              {actionError}
-            </p>
-          ) : null}
-          {fromList.preview === null && fromList.error !== null ? (
-            <p className="text-sm" style={{ color: '#ef4444' }} role="alert">
-              {fromList.error}
-            </p>
-          ) : null}
-          {fromList.done !== null ? (
-            <p className="text-sm" style={{ color: '#34d399' }} role="status">
-              {fromList.done}
-            </p>
-          ) : null}
+          {/* A refused save is said in the form, beside its button. */}
+          <Notes
+            error={formOpen ? null : actionError}
+            listError={fromList.preview === null ? fromList.error : null}
+            done={fromList.done}
+          />
 
           {list.archivedTotal > 0 ? (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               <button
                 type="button"
                 onClick={() => setShowArchived((v) => !v)}
                 aria-expanded={showArchived}
-                className="self-start rounded-xl px-4 py-2 text-sm min-h-11"
-                style={quietButton}
+                className="c-btn c-btn-s self-start"
               >
                 {showArchived ? 'Hide archived' : `Show archived (${String(list.archivedTotal)})`}
               </button>
               {showArchived ? (
                 <>
-                  <ul className="flex flex-col">
-                    {list.archived.map((type) => (
-                      <li key={type.id} className="py-3 flex flex-wrap items-center gap-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                        <div className="flex flex-col flex-grow min-w-0">
-                          <span className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                            {type.name}
-                          </span>
-                          <span className="text-sm" style={hintStyle}>
-                            {kindTag(type)} · {termLine(type)}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          disabled={readOnly || busy}
-                          onClick={() => void run(() => orgService.restoreMembershipType(gymId, type.id), "We couldn't put that back. Please try again.")}
-                          aria-label={`Put back ${type.name}`}
-                          className="rounded-xl px-4 py-2 text-sm min-h-11 disabled:opacity-40"
-                          style={quietButton}
-                        >
-                          Put back
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  {archivedNote(list) !== null ? (
-                    <p className="text-sm" style={hintStyle}>
-                      {archivedNote(list)}
-                    </p>
-                  ) : null}
+                  <section className="c-card overflow-hidden" aria-label="Archived">
+                    <ul className="flex flex-col m-0 p-0 list-none">
+                      {list.archived.map((type, i) => (
+                        <li key={type.id} className="px-5 py-3 md:px-6 flex flex-wrap items-center gap-3" style={i > 0 ? LINE : undefined}>
+                          <div className="flex flex-col flex-grow min-w-0">
+                            <span className="c-s15 c-w6 c-t2 break-words">{type.name}</span>
+                            <span className="c-s14 c-t3">
+                              {kindTag(type)} · {termLine(type)}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={readOnly || busy}
+                            onClick={() => void run(() => orgService.restoreMembershipType(gymId, type.id), "We couldn't put that back. Please try again.")}
+                            aria-label={`Put back ${type.name}`}
+                            className="c-btn c-btn-s c-btn-sm"
+                          >
+                            Put back
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                  {archivedNote(list) !== null ? <p className="c-s14 c-t2 m-0">{archivedNote(list)}</p> : null}
                 </>
               ) : null}
             </div>
           ) : null}
-
-        </div>
+        </>
       )}
-    </ConsoleSection>
+    </div>
   );
 }

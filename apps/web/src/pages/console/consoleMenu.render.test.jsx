@@ -5,7 +5,8 @@
 // R1 (ConsoleLayout at fa8e38a): Overview and Members always, Leads with
 // `members.confirm`, Attendance with `attendance.read`, Classes with `schedule.manage`,
 // Settings with `staff.manage` or `org.manage`, and since 17a-i with `memberships.manage`
-// too (its Memberships box), and Updates with `posts.manage` (19b-i). Every mix of them is drawn, and the computer menu and
+// too (the line that opens Memberships, a page of its own since 23c-i, in the menu for that
+// same tick), and Updates with `posts.manage` (19b-i). Every mix of them is drawn, and the computer menu and
 // the phone's tabs plus More must each hold exactly those pages.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, cleanup } from '@testing-library/react';
@@ -36,6 +37,8 @@ function openableToday(privileges) {
   return [
     BASE,
     `${BASE}/members`,
+    // Memberships (23c-i): its own page, for whoever may change the price list.
+    ...(has('memberships.manage') ? [`${BASE}/memberships`] : []),
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
     ...(has('schedule.manage') ? [`${BASE}/classes`] : []),

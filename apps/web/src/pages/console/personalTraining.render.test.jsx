@@ -110,7 +110,7 @@ describe('the page for whoever runs the timetable', () => {
     expect(await screen.findByText('No trainers yet. This is how it works:')).toBeTruthy();
     expect([...screen.getByTestId('pt-how').querySelectorAll('li')].map((li) => li.textContent)).toEqual([
       'Add a trainer and set the hours they are free.',
-      'Tick "Includes personal training" on a membership or pack (Settings, then Memberships) and give it to the member on their page.',
+      'Tick "Includes personal training" on a membership or pack (in Memberships) and give it to the member on their page.',
       "Press one of the trainer's free times and pick the member.",
     ]);
     expect(screen.getByRole('button', { name: 'Set their hours' }).disabled).toBe(true);

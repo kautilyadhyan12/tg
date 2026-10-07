@@ -6,7 +6,6 @@ import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
 import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import StaffPanel from '../../components/console/StaffPanel';
-import MembershipTypesPanel from '../../components/console/MembershipTypesPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
@@ -47,7 +46,7 @@ import { viewerPrivileges } from './consoleView';
 export default function Settings() {
   const { orgSlug } = useParams();
   const { loading, error, org, notFound, reload } = useConsoleOrg(orgSlug);
-  // A link that names a section ("#memberships") opens the page there, with it open.
+  // A link that names a section ("#staff") opens the page there, with it open.
   const section = useSectionLink(!loading && error === null && !notFound);
 
   if (loading) {
@@ -162,7 +161,7 @@ export default function Settings() {
           one fiber without scheduling its deletion, which was worse than the
           defect it replaced. */}
       {canEditGym ? (
-        // `id`: Overview's Start here list opens the page here (23b), as Memberships below.
+        // `id`: Overview's Start here list opens the page here (23b).
         <div id={SETTINGS_SECTION.hours} style={{ scrollMarginTop: 16 }}>
           <OpeningHoursPanel
             key={`hours-${org.id}`}
@@ -174,17 +173,30 @@ export default function Settings() {
         </div>
       ) : null}
 
-      {/* MEMBERSHIPS (17a-i): what the gym sells, on `memberships.manage` as the server
-          gates its changes. Keyed per gym for the panels' reason above: it holds a form. */}
+      {/* MEMBERSHIPS has a page of its own, in the menu (23c-i). This line stays where its
+          box was, for whoever learned it here, and an older link to "#memberships" lands
+          on it. */}
       {canEditMemberships ? (
-        // `id`: Add member's "Set up memberships" opens the page here (23a-ii).
         <div id={SETTINGS_SECTION.memberships} style={{ scrollMarginTop: 16 }}>
-          <MembershipTypesPanel
-            key={`memberships-${org.id}`}
-            org={org}
-            readOnly={readOnly}
-            startOpen={section === SETTINGS_SECTION.memberships}
-          />
+          <ConsoleCard>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  Memberships
+                </div>
+                <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  What your {words.it} sells and what each costs. It has its own page now.
+                </p>
+              </div>
+              <Link
+                to={`/console/${org.slug}/memberships`}
+                className="rounded-xl px-4 py-2 text-sm font-medium min-h-11 inline-flex items-center"
+                style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+              >
+                Open Memberships
+              </Link>
+            </div>
+          </ConsoleCard>
         </div>
       ) : null}
 

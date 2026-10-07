@@ -464,7 +464,7 @@ that opens the page where it is done:
 
 | Step | Its button opens | Ticked while the gym has | Shown to staff holding |
 |---|---|---|---|
-| What you sell | Settings, Memberships open | a membership type that is not archived | `memberships.manage` |
+| What you sell | Memberships (its own page since 23c-i) | a membership type that is not archived | `memberships.manage` |
 | Bring your members in | Members, with Import or Add open | a person on its list | `members.confirm` |
 | Invite your staff | Settings, Staff open | somebody on the staff besides the owner, or an invitation still waiting | `staff.manage` |
 | Add your classes | Classes | a class with a time slot, neither cancelled, past its last day nor archived | `schedule.manage` |
@@ -2349,6 +2349,19 @@ asks "How is it paid?" in the industry’s words: Recurring · One-time payment 
 · Day pass · Trial. Built in three jobs: 17a-i the price list, 17a-ii a person's membership,
 17a-iii a file's word linked to a type.
 
+*(23c-i's notes, 2026-10-07; RULINGS that day, "the console is made easy to find one's way
+in".)* **The price list is a page of its own, Memberships, in the menu straight after
+Members** (`/console/:orgSlug/memberships`; on a phone under More), for whoever holds
+`memberships.manage`. It was a closed box in Settings. The page opens with the list
+already open and **Add a membership type** top right, in the console's new look (§17). A
+new type's form opens under the title; a type being changed, and a name from the member
+list being set up, open their form in their own row; a refused save is said in the form
+beside its button, and any other answer is brought into view. Every button, field and
+message the box had is kept. Somebody without the tick who types the address is told
+their role doesn't allow it, and neither the price list nor the member list's names are
+read for them. Settings keeps one line where the box was, with **Open Memberships**; an
+older link to `/settings#memberships` lands on that line.
+
 ### 13.2 A person's membership
 
 Held by the member's RECORD (§11), so a person without the app can hold one:
@@ -3826,10 +3839,15 @@ there are no tabs.
 |---|---|---|
 | Overview (was "Gym") | everyone | tab |
 | Members (Clients for a studio or trainer) | everyone | tab |
+| Memberships (23c-i) | `memberships.manage` | More |
 | Leads | `members.confirm` | More |
 | Attendance | `attendance.read` | tab |
 | Classes | `schedule.manage` | tab |
-| Settings | `staff.manage` or `org.manage` | More |
+| Settings | `staff.manage`, `org.manage`, `memberships.manage` or `schedule.manage` | More |
+
+Pages added since R1, each in `consoleMenu.js` with its own tick: Personal training (every
+member of staff), Updates and Events (`posts.manage`), Leaderboard and Challenges
+(`leaderboard.manage`), all under More on a phone.
 
 Every page appears for exactly the people it appeared for before R1; drawing a page is not
 the permission — every route refuses on its own. The More tab is lit on More and on a page

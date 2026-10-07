@@ -11,10 +11,10 @@ const answer = ({ done = [], steps = ALL, hidden = false, canHide = true } = {})
 const view = (startHere, orgType = 'gym') => startHereView(startHere, 'iron-house', orgType);
 
 describe('where each button goes', () => {
-  it('every step opens the page where it is done, and the Settings ones name their section', () => {
+  it('every step opens the page where it is done, Memberships its own page, and the Settings ones name their section', () => {
     const rows = view(answer()).rows;
     expect(rows.map((r) => [r.step, r.actions.map((a) => [a.label, a.to])])).toEqual([
-      ['memberships', [['Set up memberships', '/console/iron-house/settings#memberships']]],
+      ['memberships', [['Set up memberships', '/console/iron-house/memberships']]],
       [
         'members',
         [

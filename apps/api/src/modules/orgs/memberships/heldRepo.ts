@@ -179,7 +179,7 @@ export interface HeldList {
 /** What the list says this record's membership is, and how that name stands with the
  *  price list: the live type staff said it is (`gym_membership_word_links`), else the
  *  live type of that very name, matched as the list's chips fold a word (`lower`). A
- *  name tied to an archived type is not set up, as Settings says of it. */
+ *  name tied to an archived type is not set up, as the Memberships page says of it. */
 async function listedMembership(
   tx: TransactionSql,
   gymId: string,

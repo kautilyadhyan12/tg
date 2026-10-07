@@ -1,5 +1,5 @@
-// Settings → Memberships, as somebody who may change it sees it (spec Part 3 §13.1;
-// ROADMAP 17a-i).
+// The Memberships page, as somebody who may change it sees it (spec Part 3 §13.1;
+// ROADMAP 17a-i; a page of its own, drawn open, since 23c-i).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
@@ -52,7 +52,6 @@ const listOf = (over = {}) => ({ currency: 'GBP', types: [], archived: [], archi
 function open(list, { readOnly = false } = {}) {
   orgService.getMembershipTypes.mockResolvedValue({ data: list });
   render(<MembershipTypesPanel org={ORG} readOnly={readOnly} />);
-  fireEvent.click(screen.getByRole('button', { name: /memberships/i }));
 }
 
 const type_ = (label, value) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -62,7 +61,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('the closed box says what is there', () => {
+describe('the list says what is there', () => {
   it('nothing yet, then how many', async () => {
     orgService.getMembershipTypes.mockResolvedValue({ data: listOf() });
     render(<MembershipTypesPanel org={ORG} readOnly={false} />);
@@ -73,7 +72,7 @@ describe('the closed box says what is there', () => {
     expect(await screen.findByText('2 membership types')).toBeTruthy();
   });
 
-  it('a failed read opens the box and says so, never an empty list, and Try again reads again', async () => {
+  it('a failed read says so, never an empty list, and Try again reads again', async () => {
     orgService.getMembershipTypes
       .mockRejectedValueOnce({ response: { status: 500, data: {} } })
       .mockResolvedValueOnce({ data: listOf() });
@@ -99,7 +98,7 @@ describe('the list', () => {
     );
     expect(await screen.findByText('New prices are in GBP.', { exact: false })).toBeTruthy();
     const rows = screen.getAllByRole('listitem');
-    expect(within(rows[0]).getByText('Day pass', { selector: 'span.font-semibold.text-sm' })).toBeTruthy();
+    expect(within(rows[0]).getByText('Day pass', { selector: 'span.c-w6' })).toBeTruthy();
     expect(within(rows[0]).getByText('£15.00 · 1 visit, on the day')).toBeTruthy();
     expect(within(rows[1]).getByText('Recurring')).toBeTruthy();
     expect(within(rows[1]).getByText('£49.99 every month')).toBeTruthy();
@@ -346,6 +345,66 @@ describe('changing, archiving and putting back', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Put back Gold Monthly' }));
     await waitFor(() => expect(orgService.restoreMembershipType).toHaveBeenCalledWith(ORG.id, gold.id));
     expect(await screen.findByRole('button', { name: 'Change Gold Monthly' })).toBeTruthy();
+  });
+});
+
+// 23c-i: the page is open from top to bottom, so a form opens where it was asked for.
+describe('where the form opens', () => {
+  const rowOf = (name) => screen.getByRole('button', { name: `Change ${name}` }).closest('li');
+
+  it('a new type: under the title, above the list, and the Add button makes way for it', async () => {
+    open(listOf({ types: [type()] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    const form = screen.getByRole('form', { name: 'Add a membership type' });
+    const list = screen.getByRole('region', { name: 'What you sell' });
+    expect(list.contains(form)).toBe(false);
+    expect(form.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add a membership type' })).toBeNull();
+    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Add a membership type' }).disabled).toBe(false);
+  });
+
+  it("a type being changed: in its own row, never another type's", async () => {
+    open(listOf({ types: [type(), type({ name: 'Silver' })] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change Silver' }));
+    const form = screen.getByRole('form', { name: 'Change membership type' });
+    expect(rowOf('Silver').contains(form)).toBe(true);
+    expect(rowOf('Gold Monthly').contains(form)).toBe(false);
+    expect(within(form).getByLabelText('Name').value).toBe('Silver');
+  });
+
+  it('a refused save is said inside the form, beside its button, and goes with the form on Cancel', async () => {
+    orgService.updateMembershipType.mockRejectedValue({
+      response: { status: 409, data: { error: 'membership_type_name_taken', message: 'You already have a membership type with this name. Pick another name.' } },
+    });
+    open(listOf({ types: [type(), type({ name: 'Silver' })] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change Silver' }));
+    type_('Name', 'Gold Monthly');
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    const said = await screen.findByRole('alert');
+    expect(said.textContent).toBe('You already have a membership type with this name. Pick another name.');
+    expect(screen.getByRole('form', { name: 'Change membership type' }).contains(said)).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('form')).toBeNull();
+  });
+
+  it('an archive the server refuses is said on the page and brought into view', async () => {
+    const had = Element.prototype.scrollIntoView;
+    const into = vi.fn();
+    Element.prototype.scrollIntoView = into;
+    try {
+      orgService.archiveMembershipType.mockRejectedValue({ response: { status: 500, data: {} } });
+      open(listOf({ types: [type()] }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Archive Gold Monthly' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+      const said = await screen.findByRole('alert');
+      expect(said.textContent).toBe("We couldn't archive that. Please try again.");
+      await waitFor(() => expect(into.mock.instances.some((el) => el.contains(said))).toBe(true));
+      expect(screen.getByText('Gold Monthly')).toBeTruthy();
+    } finally {
+      Element.prototype.scrollIntoView = had;
+    }
   });
 });
 

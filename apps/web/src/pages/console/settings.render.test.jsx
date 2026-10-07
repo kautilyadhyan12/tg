@@ -62,7 +62,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       updateBookingSettings: vi.fn(),
       /** Settings' check-in devices box (16b-i) reads on mount too: a gym with none. */
       getCheckinDevices: vi.fn(() => Promise.resolve({ data: { devices: [] } })),
-      /** Settings' memberships box (17a-i) reads on mount too: a gym selling nothing yet. */
+      /** Memberships left Settings for a page of its own (23c-i): these two are here so a
+       *  test can show that Settings no longer reads them. */
       getMembershipWords: vi.fn(() => Promise.resolve({ data: { words: [], types: [] } })),
       getMembershipTypes: vi.fn(() =>
         Promise.resolve({ data: { currency: 'USD', types: [], archived: [], archivedTotal: 0, classChoices: [] } }),
@@ -1012,11 +1013,12 @@ describe('a manager or trainer at this address', () => {
   });
 
   /** 17a-i: a manager's usual permissions include the price list, so Settings is theirs
-   *  to open, holding that one box and nothing they cannot use. */
-  it('with the usual permissions sees Memberships and no other section', async () => {
+   *  to open. Since 23c-i it holds the line that opens Memberships, and nothing they
+   *  cannot use. */
+  it('with the usual permissions sees the line that opens Memberships and no section they cannot use', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
     drawSettings();
-    expect(await screen.findByRole('button', { name: /^Memberships/ })).toBeTruthy();
+    expect((await screen.findByRole('link', { name: 'Open Memberships' })).getAttribute('href')).toBe('/console/iron-house/memberships');
     expect(screen.queryByText(/Only the gym's owner can change these settings/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /^Gym details/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Staff/ })).toBeNull();
@@ -1024,14 +1026,36 @@ describe('a manager or trainer at this address', () => {
     expect(orgService.getStaff).not.toHaveBeenCalled();
   });
 
-  /** The tick, not the job title: a trainer the owner gave it to has the box too. */
-  it('a trainer given "Change membership types and prices" sees Memberships', async () => {
+  /** The tick, not the job title: a trainer the owner gave it to has the line too. */
+  it('a trainer given "Change membership types and prices" sees the line that opens Memberships', async () => {
     orgService.getMine.mockResolvedValue({
       data: { orgs: [{ ...ORG, staffRole: 'trainer', privileges: [...ROLE_PRIVILEGES.trainer, 'memberships.manage'] }] },
     });
     drawSettings();
-    expect(await screen.findByRole('button', { name: /^Memberships/ })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'Open Memberships' })).toBeTruthy();
     expect(orgService.getStaff).not.toHaveBeenCalled();
+  });
+
+  /** 23c-i: the price list is on its own page. Settings keeps one line with a button, for
+   *  whoever learned it here, and reads none of it. */
+  it('the owner: Memberships is one line with a button to its page, not a box, and Settings reads no price list', async () => {
+    drawSettings();
+    const link = await screen.findByRole('link', { name: 'Open Memberships' });
+    expect(link.getAttribute('href')).toBe('/console/iron-house/memberships');
+    expect(screen.getByText('What your gym sells and what each costs. It has its own page now.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Memberships/ })).toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(orgService.getMembershipTypes).not.toHaveBeenCalled();
+    expect(orgService.getMembershipWords).not.toHaveBeenCalled();
+  });
+
+  it('somebody without that tick is shown no line about Memberships', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage') }] },
+    });
+    drawSettings();
+    expect(await screen.findByRole('button', { name: /^Class bookings/ })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Open Memberships' })).toBeNull();
   });
 
   it('is never shown an empty staff list, which would read as a gym nobody runs', async () => {
@@ -2337,7 +2361,8 @@ describe('attendance on Settings', () => {
   });
 });
 
-// 23a-ii: Add member's "Set up memberships" opens Settings at its Memberships section.
+// 23b: Overview's Start here list opens Settings at one section. (23a-ii's link to
+// Memberships now opens that page; its old address still lands on the line that opens it.)
 describe('a link to one section of Settings', () => {
   const drawAt = (path) =>
     render(
@@ -2347,7 +2372,6 @@ describe('a link to one section of Settings', () => {
         </Routes>
       </MemoryRouter>,
     );
-  const INTRO = /Your own list of what you sell/;
   let into;
   let had;
 
@@ -2361,18 +2385,15 @@ describe('a link to one section of Settings', () => {
     Element.prototype.scrollIntoView = had;
   });
 
-  it('"#memberships" opens the page with Memberships open and in view, and it still folds shut', async () => {
+  it('"#memberships", the older address, brings the line that opens Memberships into view, and opens no section', async () => {
     drawAt('/console/iron-house/settings#memberships');
-    expect(await screen.findByText(INTRO)).toBeTruthy();
+    const link = await screen.findByRole('link', { name: 'Open Memberships' });
     const section = document.getElementById('memberships');
-    const heading = within(section).getByRole('button', { name: /^Memberships/ });
-    expect(heading.getAttribute('aria-expanded')).toBe('true');
+    expect(section.contains(link)).toBe(true);
+    expect(link.getAttribute('href')).toBe('/console/iron-house/memberships');
     await waitFor(() => expect(into).toHaveBeenCalled());
     expect(into.mock.instances.every((el) => el === section)).toBe(true);
-    // No other section was opened for them.
-    expect(screen.getAllByRole('button', { expanded: true })).toEqual([heading]);
-    fireEvent.click(heading);
-    expect(screen.queryByText(INTRO)).toBeNull();
+    expect(screen.queryAllByRole('button', { expanded: true })).toEqual([]);
   });
 
   // 23b: Overview's Start here list opens these three the same way.
@@ -2397,17 +2418,17 @@ describe('a link to one section of Settings', () => {
 
   it('with no section named, every section starts closed and nothing is moved', async () => {
     drawAt('/console/iron-house/settings');
-    expect(await screen.findByRole('button', { name: /^Memberships/ })).toBeTruthy();
-    expect(screen.queryByText(INTRO)).toBeNull();
+    expect(await screen.findByRole('button', { name: /^Staff/ })).toBeTruthy();
+    expect(screen.queryAllByRole('button', { expanded: true })).toEqual([]);
     await new Promise((r) => setTimeout(r, 20));
     expect(into).not.toHaveBeenCalled();
   });
 
   it('a section the page does not have moves nothing, and opens nothing', async () => {
     drawAt('/console/iron-house/settings#nowhere');
-    expect(await screen.findByRole('button', { name: /^Memberships/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /^Staff/ })).toBeTruthy();
     await new Promise((r) => setTimeout(r, 20));
     expect(into).not.toHaveBeenCalled();
-    expect(screen.queryByText(INTRO)).toBeNull();
+    expect(screen.queryAllByRole('button', { expanded: true })).toEqual([]);
   });
 });

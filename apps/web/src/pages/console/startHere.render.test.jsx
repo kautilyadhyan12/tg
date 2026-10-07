@@ -111,7 +111,7 @@ describe('a gym made today', () => {
       .getAllByRole('link')
       .map((a) => [a.textContent, a.getAttribute('href')]);
     expect(links).toEqual([
-      ['Set up memberships', '/console/iron-house/settings#memberships'],
+      ['Set up memberships', '/console/iron-house/memberships'],
       ['Import members', '/console/iron-house/members?open=import'],
       ['Add member', '/console/iron-house/members?open=add'],
       ['Invite staff', '/console/iron-house/settings#staff'],
@@ -150,7 +150,7 @@ describe('ticks', () => {
     expect(rowOf(card, 'memberships').textContent).toMatch(/What you sell · Done/);
     expect(rowOf(card, 'members').textContent).toMatch(/Not done yet/);
     expect(within(rowOf(card, 'memberships')).getByRole('link', { name: 'Set up memberships' }).getAttribute('href')).toBe(
-      '/console/iron-house/settings#memberships',
+      '/console/iron-house/memberships',
     );
   });
 

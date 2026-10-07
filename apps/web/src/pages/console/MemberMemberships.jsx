@@ -329,7 +329,7 @@ export default function MemberMemberships({ gymId, entryId, name, readOnly, cloc
       >
         <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
         {types.length === 0 ? (
-          <p className="c-s14 c-t2 m-0">You have no membership types yet. Add them in Settings, under Memberships.</p>
+          <p className="c-s14 c-t2 m-0">You have no membership types yet. Add them in Memberships.</p>
         ) : (
           <MembershipChoice types={types} today={today} value={form} onChange={(next) => setForm((f) => ({ ...f, ...next }))} />
         )}

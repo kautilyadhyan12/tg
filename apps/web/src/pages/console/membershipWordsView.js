@@ -2,8 +2,8 @@
 // so the tests read every state without a browser.
 //
 // A gym's member list says which membership each person has ("Gold"). Such a name IS a
-// membership, so it is shown in the gym's one list of memberships (Settings →
-// Memberships): as a type's own line where it is that type, and under "not set up yet"
+// membership, so it is shown in the gym's one list of memberships (the
+// Memberships page): as a type's own line where it is that type, and under "not set up yet"
 // where it is no type so far. The server decides who gets a membership and works out
 // each date (`linkHeldMembership` in `@app/shared`); this file only puts them into words.
 import { formatMinor } from '@app/shared';

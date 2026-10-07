@@ -88,14 +88,14 @@ export function listedRow(listed, name) {
       title: listed.word,
       tag: 'Not set up',
       from: withDay('From your member list'),
-      note: `This membership has no price here yet. Set it up in Settings, under Memberships, and ${name} gets it.`,
+      note: `This membership has no price here yet. Set it up in Memberships, and ${name} gets it.`,
     };
   }
   return {
     title: listed.type.name,
     tag: 'Not added',
     from: withDay(listed.ownName ? 'From your member list' : `Your member list says “${listed.word}”`),
-    note: `${who} doesn't have it here yet. Add it with Add membership, or give it to everyone on your list who is missing it in Settings, under Memberships.`,
+    note: `${who} doesn't have it here yet. Add it with Add membership, or go to Memberships to give it to everyone on your list who is missing it.`,
   };
 }
 

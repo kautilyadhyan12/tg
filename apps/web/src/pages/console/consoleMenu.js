@@ -9,8 +9,8 @@ import { canManageMemberships } from './membershipTypesView';
 import { canManagePosts } from '../../components/gym/postsView';
 
 /** Settings holds sections gated on four permissions (Staff: `staff.manage`; the gym's
- *  details: `org.manage`; Memberships: `memberships.manage`; Class bookings:
- *  `schedule.manage`), so its page is drawn for whoever holds any of them. */
+ *  details: `org.manage`; the line that opens Memberships: `memberships.manage`; Class
+ *  bookings: `schedule.manage`), so its page is drawn for whoever holds any of them. */
 function settingsIsReachable(privileges) {
   return (
     canManageStaff(privileges) || canManageOrg(privileges) || canManageMemberships(privileges) || canManageSchedule(privileges)
@@ -28,6 +28,8 @@ export function consoleMenu(orgSlug, privileges, orgType) {
   const pages = [
     { key: 'overview', to: base, end: true, label: 'Overview', phone: 'tab' },
     { key: 'members', to: `${base}/members`, end: false, label: orgWords(orgType).peopleCap, phone: 'tab' },
+    // What the gym sells (23c-i): its own line, straight after the people who hold it.
+    canManageMemberships(privileges) && { key: 'memberships', to: `${base}/memberships`, end: false, label: 'Memberships', phone: 'more' },
     has('members.confirm') && { key: 'leads', to: `${base}/leads`, end: false, label: 'Leads', phone: 'more' },
     canReadAttendance(privileges) && {
       key: 'attendance',
