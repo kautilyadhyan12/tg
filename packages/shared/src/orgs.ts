@@ -5,6 +5,7 @@
 // Part 4 §3.2 (DDL), §4.2 (seat-safe join).
 import { z } from "zod";
 import { GYM_POSTAL_ADDRESS_MAX_CHARS } from "./memberInvites.js";
+import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { instantSchema } from "./time.js";
 
 /** The DB vocabulary (Part 4 §3.2's CHECK, widened by migration `0024`), used
@@ -1597,9 +1598,13 @@ export type RemoveMemberResponse = z.infer<typeof removeMemberResponseSchema>;
  *  access in the same step; left out, they keep it and stop being a member only. A query
  *  rather than a body: a body on a DELETE is dropped by some browsers and proxies. */
 export const removeMemberQuerySchema = z
-  .object({ alsoStaff: z.enum(["true", "false"]).optional() })
+  .object({
+    alsoStaff: z.enum(["true", "false"]).optional(),
+    /** The `mark` of the personal training sessions the screen was told would end (17e-iv-a). */
+    confirmPtSessions: confirmPtSessionsField.optional(),
+  })
   .strict()
-  .transform((query) => ({ alsoStaff: query.alsoStaff === "true" }));
+  .transform((query) => ({ alsoStaff: query.alsoStaff === "true", confirmPtSessions: query.confirmPtSessions ?? null }));
 
 /** Cursor pagination per R7.3. Cursor = `<joinedAt ISO>|<membership uuid>`
  *  from the previous page (keyset on the same pair the ordering uses). */

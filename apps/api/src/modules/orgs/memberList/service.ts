@@ -99,6 +99,7 @@ import * as repo from "./repo.js";
 import { currentRecordOf, inAppRecordIds, pastRecordOf } from "./whose.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
 import { bustAfterRemoval } from "./byHandService.js";
+import { sessionsAuditMeta } from "../pt/changes.js";
 import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type RemovalPlan } from "./removeSelected.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { heldChips, heldOnListOf, heldPassing, mergeChips, type WordCount } from "../memberships/onList.js";
@@ -1000,13 +1001,14 @@ async function leaversFor(
   uploadId: string,
   reconciled: Reconciled,
   marks: MemberListMarks | null,
+  now: Date,
 ): Promise<Leaving> {
   if (reconciled.missing.length === 0) return { kind: "ok", plan: null };
   if (marks === null) return { kind: "marks_needed" };
   const ids = reconciled.missing.map((person) => person.entryId ?? raise("a missing person has no record"));
   if (marks.missingDigest !== missingDigest(gymId, uploadId, ids)) return { kind: "moved" };
   if (!marksCover(marks, reconciled.missing)) return { kind: "marks_needed" };
-  return { kind: "ok", plan: await importLeaversPlanOn(sql, gymId, marks.left, reconciled.written) };
+  return { kind: "ok", plan: await importLeaversPlanOn(sql, gymId, marks.left, reconciled.written, now) };
 }
 
 const leaversOf = (plan: RemovalPlan, reconciled: Reconciled): MemberListLeavers => ({
@@ -1079,7 +1081,7 @@ export async function previewLeavers(
   if (file === null) throw expired();
   const catalogue = growFields(await repo.listFields(deps.sql, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS).catalogue;
   const { reconciled } = await measure(deps.sql, gymId, file.understanding, upload.mode, state, catalogue, new Set(marks.stay));
-  const leaving = await leaversFor(deps.sql, gymId, uploadId, reconciled, marks);
+  const leaving = await leaversFor(deps.sql, gymId, uploadId, reconciled, marks, deps.now());
   if (leaving.kind === "moved") throw new OrgsError(409, "list_changed", MEMBER_LIST_CONFIRM_REFUSAL_WORDS.list_changed);
   if (leaving.kind === "marks_needed") throw new OrgsError(409, "marks_needed", MEMBER_LIST_CONFIRM_REFUSAL_WORDS.marks_needed);
   // Nobody is missing: the file this box was asked about is not the one the list now gives.
@@ -1174,7 +1176,7 @@ export async function confirmUpload(
     // WHO THE FILE LEAVES OUT, EACH MARKED BY STAFF (§18.8; RULINGS 2026-09-28). Nothing is
     // marked for them: every missing person is Left or Still a member, the set is the one
     // they were shown, and the box of who loses the app is the one they read.
-    const leaving = await leaversFor(tx, gymId, uploadId, reconciled, input.marks);
+    const leaving = await leaversFor(tx, gymId, uploadId, reconciled, input.marks, at);
     if (leaving.kind === "marks_needed") return leaving;
     if (leaving.kind === "moved") return { kind: "list_changed", baseVersion: upload.baseVersion, version };
     const leavers = leaving.plan;
@@ -1271,6 +1273,14 @@ export async function confirmUpload(
       });
     }
     closedUsers.push(...closed.map((row) => row.userId));
+    // The leavers' personal training sessions ended with them (17e-iv-a): how many, on the record.
+    if (leavers?.preview.ptSessions !== undefined) {
+      await repo.insertAuditRows(tx, {
+        actorUserId: userId,
+        gymId,
+        rows: [{ action: "org.pt_sessions_ended", targetType: "member_list", targetId: gymId, meta: { via: "import", ...sessionsAuditMeta(leavers.preview.ptSessions) } }],
+      });
+    }
 
     // "THIS GYM HAS YOU ON ITS LIST, AS OF NOW" — on everybody the old list held or
     // the new one does, so what the preview called "no longer listed" still reads

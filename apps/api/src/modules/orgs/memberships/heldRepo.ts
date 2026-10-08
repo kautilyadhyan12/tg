@@ -39,7 +39,7 @@ import {
 } from "@app/shared";
 import { insertAudit } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
-import type { HasBookings } from "../classes/bookingChanges.js";
+import type { HasBookings, MembershipEndConfirmed } from "../classes/bookingChanges.js";
 import type { MembershipScope } from "../classes/bookingsRepo.js";
 
 export interface HeldRow {
@@ -359,8 +359,13 @@ const AUDIT_ACTION: Record<HeldMembershipEvent["type"], string> = {
  *  are read here): `ask` answers the question to put first, or null to go ahead; `end`
  *  ends them. Both run in the cancel's transaction, under the gym's lock. */
 export interface CancelBookings {
-  ask: (tx: TransactionSql, gymId: string, scope: MembershipScope, confirmed: number | null) => Promise<HasBookings | null>;
-  end: (tx: TransactionSql, gymId: string, scope: MembershipScope, now: Date) => Promise<{ booked: number; packClasses: number }>;
+  ask: (tx: TransactionSql, gymId: string, scope: MembershipScope, confirmed: MembershipEndConfirmed) => Promise<HasBookings | null>;
+  end: (
+    tx: TransactionSql,
+    gymId: string,
+    scope: MembershipScope,
+    now: Date,
+  ) => Promise<{ booked: number; packClasses: number; ptSessions?: number; ptPackSessions?: number }>;
 }
 
 /** One change to a held membership, decided by the rule on the row as it is under its
@@ -378,6 +383,8 @@ export async function moveHeld(
     today: string;
     /** A cancel: the number of bookings the screen was told it would end. */
     confirmBookings: number | null;
+    /** A cancel: the mark of the personal training sessions it was told it would end. */
+    confirmPtSessions?: string | null;
     actorUserId: string;
     now: Date;
   },
@@ -409,7 +416,7 @@ export async function moveHeld(
       if (m.status === "cancelled" || last !== null) ends = { membership: before.id, now: input.now, afterDay: last };
     }
     if (ends !== null) {
-      const ask = await bookings.ask(tx, input.gymId, ends, input.confirmBookings);
+      const ask = await bookings.ask(tx, input.gymId, ends, { bookings: input.confirmBookings, ptSessions: input.confirmPtSessions ?? null });
       if (ask !== null) return ask;
     }
 
@@ -436,7 +443,14 @@ export async function moveHeld(
         paidBefore: String(before.membership.paidPeriods),
         paidAfter: String(m.paidPeriods),
         renews: String(m.renews),
-        ...(ended === null ? {} : { bookingsEnded: String(ended.booked), packClassesBack: String(ended.packClasses) }),
+        ...(ended === null
+          ? {}
+          : {
+              bookingsEnded: String(ended.booked),
+              packClassesBack: String(ended.packClasses),
+              ptSessionsEnded: String(ended.ptSessions ?? 0),
+              ptPackSessionsBack: String(ended.ptPackSessions ?? 0),
+            }),
       },
     });
     return { kind: "ok" };

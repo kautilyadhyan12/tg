@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
+import PtSessionsEnding from '../../components/console/PtSessionsEnding';
 import MembershipChoice from './MembershipChoice';
 import { useCameBack } from './useCameBack';
 import { ENDING_NOT_TOLD } from './bookingsEndView';
@@ -9,6 +10,7 @@ import { termLine } from './membershipTypesView';
 import {
   ENDING_CLASSES_SHOWN,
   ENDING_MOVED,
+  ENDING_MOVED_WITH_SESSIONS,
   askWords,
   classesLine,
   datesLine,
@@ -17,6 +19,7 @@ import {
   giveBody,
   isLive,
   listedRow,
+  endingConfirm,
   membershipBookingsAsked,
   membershipChoice,
   newRequestKey,
@@ -194,7 +197,9 @@ export default function MemberMemberships({
     const words = endingWords(ending.ending, m, name, ending.later, clockFormat);
     const rows = ending.all ? words.rows : words.rows.slice(0, ENDING_CLASSES_SHOWN);
     const hidden = words.rows.length - rows.length;
-    const body = { when: ending.later ? 'period_end' : 'today', confirmBookings: ending.ending.booked };
+    const body = { when: ending.later ? 'period_end' : 'today', ...endingConfirm(ending.ending) };
+    const classes = ending.ending.booked > 0;
+    const sessions = ending.ending.ptSessions ?? null;
     return (
       <div
         role="group"
@@ -205,32 +210,48 @@ export default function MemberMemberships({
       >
         {ending.moved ? (
           <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }} role="status">
-            {ENDING_MOVED}
+            {sessions !== null ? ENDING_MOVED_WITH_SESSIONS : ENDING_MOVED}
           </p>
         ) : null}
-        <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
-        <p className="c-s14 c-t2 m-0">{words.change}</p>
-        <ul className="m-0 p-0 list-none flex flex-col gap-1" style={ending.all ? { maxHeight: 220, overflowY: 'auto' } : undefined}>
-          {rows.map((row) => (
-            <li key={row.id} className="c-s15 c-t1 c-ell">
-              {row.line}
-            </li>
-          ))}
-        </ul>
-        {hidden > 0 ? (
-          <p className="c-s14 c-t2 m-0">
-            {`and ${(hidden + words.unlisted).toLocaleString('en')} more · `}
-            <button type="button" className="c-btn-link c-w6" onClick={() => setEnding({ ...ending, all: true })}>
-              See all
-            </button>
-          </p>
-        ) : words.unlisted > 0 ? (
-          <p className="c-s14 c-t2 m-0">{`and ${words.unlisted.toLocaleString('en')} more`}</p>
+        {classes ? (
+          <>
+            <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+            <p className="c-s14 c-t2 m-0">{words.change}</p>
+            <ul className="m-0 p-0 list-none flex flex-col gap-1" style={ending.all ? { maxHeight: 220, overflowY: 'auto' } : undefined}>
+              {rows.map((row) => (
+                <li key={row.id} className="c-s15 c-t1 c-ell">
+                  {row.line}
+                </li>
+              ))}
+            </ul>
+            {hidden > 0 ? (
+              <p className="c-s14 c-t2 m-0">
+                {`and ${(hidden + words.unlisted).toLocaleString('en')} more · `}
+                <button type="button" className="c-btn-link c-w6" onClick={() => setEnding({ ...ending, all: true })}>
+                  See all
+                </button>
+              </p>
+            ) : words.unlisted > 0 ? (
+              <p className="c-s14 c-t2 m-0">{`and ${words.unlisted.toLocaleString('en')} more`}</p>
+            ) : null}
+            <p className="c-s14 c-t2 m-0">{words.kept}</p>
+            {/* Said once: with sessions, their own line below says it for both. */}
+            {sessions === null ? (
+              <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
+                {ENDING_NOT_TOLD}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="c-s15 c-w6 c-t1 m-0">{words.ptTitle}</p>
+        )}
+        {/* The personal training sessions booked on it end too (17e-iv-a). */}
+        {sessions !== null ? (
+          <>
+            <PtSessionsEnding ending={sessions} clockFormat={clockFormat} onePerson />
+            <p className="c-s14 c-t2 m-0">{words.ptKept}</p>
+          </>
         ) : null}
-        <p className="c-s14 c-t2 m-0">{words.kept}</p>
-        <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
-          {ENDING_NOT_TOLD}
-        </p>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={DANGER} disabled={busy} onClick={() => void change(ending.later ? 'cancelLater' : 'cancel', m, 'cancel', body)}>
             {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}

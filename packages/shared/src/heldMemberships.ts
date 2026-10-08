@@ -29,6 +29,7 @@ import {
   type MembershipKind,
   type MembershipTermUnit,
 } from "./memberships.js";
+import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 
 export const HELD_MEMBERSHIP_STATUSES = ["active", "frozen", "ended", "cancelled"] as const;
 export const heldMembershipStatusSchema = z.enum(HELD_MEMBERSHIP_STATUSES);
@@ -669,9 +670,14 @@ export const giveHeldMembershipRequestSchema = z
 export type GiveHeldMembershipRequest = z.infer<typeof giveHeldMembershipRequestSchema>;
 
 /** `confirmBookings`: the number of bookings the screen was told the cancel would end
- *  (409 `membership_has_bookings`), counted again under the gym's lock. */
+ *  (409 `membership_has_bookings`), counted again under the gym's lock.
+ *  `confirmPtSessions`: the `mark` of the personal training sessions it was told would end. */
 export const cancelHeldMembershipRequestSchema = z
-  .object({ when: z.enum(["today", "period_end"]), confirmBookings: z.number().int().min(1).max(1_000_000).optional() })
+  .object({
+    when: z.enum(["today", "period_end"]),
+    confirmBookings: z.number().int().min(1).max(1_000_000).optional(),
+    confirmPtSessions: confirmPtSessionsField.optional(),
+  })
   .strict();
 export type CancelHeldMembershipRequest = z.infer<typeof cancelHeldMembershipRequestSchema>;
 

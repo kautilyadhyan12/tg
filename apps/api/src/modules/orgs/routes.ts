@@ -56,6 +56,8 @@ import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
 import { registerStartHereRoutes } from "./startHere/routes.js";
 import * as service from "./service.js";
+import { PT_SESSIONS_ENDING_ERROR } from "@app/shared";
+import { PtSessionsEndAsk } from "./pt/changes.js";
 
 /** Zod-parse a request part; 400 with issue paths/codes only (R3.10 — never
  *  the offending value, which can be user data). Generic over the schema so
@@ -119,12 +121,13 @@ export function registerOrgRoutes(
     // alternative is the empty catch that rule forbids).
     log: app.log,
     onlinePayments: deps.onlinePayments,
+    ...(overrides.now === undefined ? {} : { now: overrides.now }),
   };
 
   // THE MEMBER LIST (Part 3 §9.9), registered here rather than in `app.ts`: it is
   // the same console behind the same two gates, on the same deps, and a second
   // registration point would be a second place to forget one of them.
-  registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
+  registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
 
   // THE GYM'S TIMETABLE (Part 3 §13.3), registered here for the same reason the
   // member list is: the same console, the same gates, the same deps.
@@ -137,7 +140,7 @@ export function registerOrgRoutes(
   registerPtRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // What the gym sells: its membership types (Part 3 §13.1).
-  registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis });
+  registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
 
   // A gym's leads (Part 3 §16.3), and its own page whose form makes them (20c-iv-a).
   registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
@@ -925,14 +928,14 @@ export function registerOrgRoutes(
       if (params === null) return;
       const query = parseOr400(removeMemberQuerySchema, req.query ?? {}, req, reply);
       if (query === null) return;
-      const result = await service.removeOrgMember(
-        orgDeps,
-        requireUserId(req),
-        params.gymId,
-        params.userId,
-        query,
-      );
-      return reply.status(200).send(result);
+      try {
+        const result = await service.removeOrgMember(orgDeps, requireUserId(req), params.gymId, params.userId, query);
+        return await reply.status(200).send(result);
+      } catch (err) {
+        // Their personal training sessions are named first (17e-iv-a); nothing was done.
+        if (!(err instanceof PtSessionsEndAsk)) throw err;
+        return reply.status(409).send({ error: PT_SESSIONS_ENDING_ERROR, message: err.message, sessions: err.sessions, requestId: req.id });
+      }
     },
   );
 

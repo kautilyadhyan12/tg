@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { leaversChanged } from '../../api/orgsApi';
+import PtSessionsEnding from '../../components/console/PtSessionsEnding';
 import { Names, Tick } from './MemberListRemove';
 import { removeChangeGroups, removeKept, removeLargeWords } from './memberListRemoveView';
 import { guardNumber, typedMatches } from './memberListView';
@@ -91,6 +92,7 @@ export default function MemberListImportLeavers({ gym, words, answer = null, loa
             <p className="c-s14 c-t2">{group.line}</p>
           </section>
         ))}
+        {leavers.preview.ptSessions ? <PtSessionsEnding ending={leavers.preview.ptSessions} clockFormat={gym?.clockFormat} /> : null}
         {leavers.stay > 0 ? (
           <p className="c-s15 c-t1" data-testid="leavers-stay">
             {`${count(leavers.stay)} ${leavers.stay === 1 ? 'stays' : 'stay'} on your list: ${STAY_WHY[answer ?? 'none']}.`}

@@ -1324,3 +1324,53 @@ describe("an invitation whose email did not go because of the gym's name", () =>
     expect(document.body.textContent).not.toMatch(/in Settings/);
   });
 });
+
+// REMOVE FROM STAFF AND APP, WITH PERSONAL TRAINING BOOKED FOR THEM (17e-iv-a).
+describe('Remove from staff and app names the personal training sessions it cancels', () => {
+  const MARK = 'c'.repeat(64);
+  const sessions = {
+    count: 1,
+    packSessions: 1,
+    mark: MARK,
+    sessions: [{ id: '66666666-6666-4666-8666-000000000001', personName: 'Rita Sen', trainerName: 'Sam Trainer', localDate: '2026-10-09', localStartMinute: 600, minutes: 60, packSession: true }],
+  };
+  const asks = () => Object.assign(new Error('refused'), { response: { status: 409, data: { error: 'pt_sessions_ending', message: 'This person has personal training sessions booked.', sessions } } });
+
+  it('nobody is removed until the box that names the session is confirmed, and the mark goes back', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, { ...MANAGER, isMember: true }] } });
+    orgService.removeMember.mockRejectedValueOnce(asks()).mockResolvedValueOnce({ data: { status: 'removed' } });
+    const panel = await drawPerson();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    fireEvent.click(panel.getByRole('checkbox', { name: 'Also remove Rita Sen from the app' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff and app' }));
+    const box = within(await screen.findByTestId('pt-sessions-end-box'));
+    expect(orgService.removeMember).toHaveBeenLastCalledWith(ORG.id, 'u2', { alsoStaff: true });
+    expect(box.getByRole('heading', { name: 'Remove Rita Sen?' })).toBeTruthy();
+    expect(box.getByText("Rita Sen hasn't been removed yet: they have personal training booked.")).toBeTruthy();
+    expect(box.getByRole('heading', { name: '1 personal training session will be cancelled' })).toBeTruthy();
+    // One person's box: the line leads with when, and her name is in the title alone.
+    expect(within(box.getByTestId('pt-sessions-ending')).getByRole('listitem').textContent).toMatch(/^Fri 9 Oct · .*with Sam Trainer$/);
+    expect(box.getByText("The time is free again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
+    expect(orgService.removeMember).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(box.getByRole('button', { name: 'Remove and cancel 1 session' }));
+    await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledTimes(2));
+    expect(orgService.removeMember).toHaveBeenLastCalledWith(ORG.id, 'u2', { alsoStaff: true, confirmPtSessions: MARK });
+    await waitFor(() => expect(screen.queryByTestId('pt-sessions-end-box')).toBeNull());
+    expect(await screen.findByText('Rita Sen was removed from staff and from the app.')).toBeTruthy();
+  });
+
+  it("Don't remove closes the box with nothing more sent", async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, { ...MANAGER, isMember: true }] } });
+    orgService.removeMember.mockRejectedValue(asks());
+    const panel = await drawPerson();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    fireEvent.click(panel.getByRole('checkbox', { name: 'Also remove Rita Sen from the app' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff and app' }));
+    const box = within(await screen.findByTestId('pt-sessions-end-box'));
+    fireEvent.click(box.getByRole('button', { name: "Don't remove" }));
+    expect(screen.queryByTestId('pt-sessions-end-box')).toBeNull();
+    expect(orgService.removeMember).toHaveBeenCalledTimes(1);
+    expect(orgService.removeStaff).not.toHaveBeenCalled();
+  });
+});

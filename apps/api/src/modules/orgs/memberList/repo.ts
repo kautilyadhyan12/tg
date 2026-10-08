@@ -52,6 +52,7 @@ import {
   type MemberListUploadSummary,
 } from "@app/shared";
 import { endLeaversBookings } from "../classes/bookingChanges.js";
+import { endLeaversSessions } from "../pt/changes.js";
 import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 import type { ReviewState } from "./review.js";
@@ -1412,6 +1413,8 @@ export async function markEntriesFormer(
     SET former_at = ${at}
     WHERE gym_id = ${gymId} AND identity_key = ANY(${identityKeys}::text[]) AND former_at IS NULL
     RETURNING id`;
+  // Their coming personal training sessions end with them (17e-iv-a).
+  await endLeaversSessions(tx, gymId, rows.map((row) => row.id), at);
   return rows.length;
 }
 
@@ -2204,6 +2207,9 @@ export async function setEntryFormer(tx: TransactionSql, gymId: string, entryId:
       AND ((${at}::timestamptz IS NULL AND former_at IS NOT NULL)
            OR (${at}::timestamptz IS NOT NULL AND former_at IS NULL))
     RETURNING id`;
+  // Taken off: their coming personal training sessions end with them (17e-iv-a). Put back
+  // brings none of them back.
+  if (at !== null) await endLeaversSessions(tx, gymId, rows.map((row) => row.id), at);
   return rows.length === 1;
 }
 
@@ -2580,6 +2586,7 @@ export async function setEntriesFormer(tx: TransactionSql, gymId: string, ids: r
     SET former_at = ${at}
     WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[]) AND former_at IS NULL
     RETURNING id`;
+  await endLeaversSessions(tx, gymId, rows.map((row) => row.id), at);
   return rows.map((row) => row.id);
 }
 

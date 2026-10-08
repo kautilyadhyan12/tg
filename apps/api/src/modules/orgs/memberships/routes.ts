@@ -82,7 +82,12 @@ function sendHeld(reply: FastifyReply, req: FastifyRequest, answer: Awaited<Retu
   if (answer.kind === "ok") return reply.status(200).send(answer.body);
   return reply.status(409).send({
     error: MEMBERSHIP_HAS_BOOKINGS_ERROR,
-    message: "They have classes booked on this membership. Those bookings will end if you go ahead.",
+    message:
+      answer.ending.ptSessions === undefined
+        ? "They have classes booked on this membership. Those bookings will end if you go ahead."
+        : answer.ending.booked === 0
+          ? "They have personal training sessions booked on this membership. Those sessions will be cancelled if you go ahead."
+          : "They have classes and personal training sessions booked on this membership. Those will end if you go ahead.",
     ending: answer.ending,
     requestId: req.id,
   });
@@ -91,10 +96,14 @@ function sendHeld(reply: FastifyReply, req: FastifyRequest, answer: Awaited<Retu
 export interface MembershipRouteDeps {
   sql: Sql;
   redis: RedisLike;
+  /** Tests move the clock; production uses the real one. A cancel decides which sessions
+   *  and classes are still to come by it, so it is the clock a booking reads. */
+  now?: () => Date;
 }
 
 export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipRouteDeps): void {
-  const membershipDeps: service.MembershipsDeps = { sql: deps.sql, now: () => new Date() };
+  const now = deps.now ?? (() => new Date());
+  const membershipDeps: service.MembershipsDeps = { sql: deps.sql, now };
 
   /** Keyed on the person; the address ceiling is three times theirs, so three
    *  staff at one front desk never throttle each other. */
@@ -165,7 +174,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
 
   // ── A person's memberships ──
 
-  const heldDeps: held.HeldDeps = { sql: deps.sql, now: () => new Date() };
+  const heldDeps: held.HeldDeps = { sql: deps.sql, now };
   /** The changes' own allowance, so a busy desk never uses up the price list's: a gym
    *  moving in gives its 200 members a membership each. The read sits under the app-wide
    *  limit alone, as the person's page it is drawn on does. */
@@ -237,6 +246,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       params.membershipId,
       { type: "cancel", when: body.when },
       body.confirmBookings ?? null,
+      body.confirmPtSessions ?? null,
     );
     return sendHeld(reply, req, answer);
   });

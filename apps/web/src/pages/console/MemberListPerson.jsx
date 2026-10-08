@@ -25,6 +25,8 @@ import {
 } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
+import PtSessionsEnding from '../../components/console/PtSessionsEnding';
+import { ptEndingAction, ptSessionsAsked } from './ptSessionsEndView';
 import MemberMemberships from './MemberMemberships';
 import MemberNotes from './MemberNotes';
 import MembershipChoice from './MembershipChoice';
@@ -445,6 +447,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [notice, setNotice] = useState(null);
   /** A refusal: its sentence, and what can be done about it. */
   const [refusal, setRefusal] = useState(null);
+  // The personal training sessions a Remove would cancel, once the server has named them
+  // (17e-iv-a): `{ entryId, sessions, moved }`. Nobody is removed until its own button.
+  const [ptEnding, setPtEnding] = useState(null);
   /** Add member's warning: the records alike, and exactly the details it was about. */
   const [maybe, setMaybe] = useState(null);
   /** The details typed for somebody new, kept while staff Open a record the warning named. */
@@ -791,9 +796,26 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       { ack: () => sendChange(asked, patch, true) },
     );
 
-  const takeOff = () => {
+  /** Remove. With personal training booked the server removes nobody and names the
+   *  sessions (17e-iv-a); the box shows them, and its button sends their `mark` back. */
+  const takeOff = async () => {
     const asked = shown.entryId;
-    return run(asked, () => orgService.takeOffMemberListEntry(gymId, asked), "We couldn't remove this person.");
+    const named = ptEnding !== null && ptEnding.entryId === asked ? ptEnding.sessions : null;
+    setBusy(true);
+    setNotice(null);
+    setRefusal(null);
+    try {
+      const res = await (named === null ? orgService.takeOffMemberListEntry(gymId, asked) : orgService.takeOffMemberListEntry(gymId, asked, named.mark));
+      setPtEnding(null);
+      written(asked, res);
+    } catch (err) {
+      if (wanted.current !== asked) return;
+      const sessions = ptSessionsAsked(err);
+      if (sessions !== null) setPtEnding({ entryId: asked, sessions, moved: named !== null });
+      else refused(err, "We couldn't remove this person.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   /** "Not this person" (§18.4): somebody uses the app with this record's email who is not
@@ -982,6 +1004,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   /** Open a question: a notice about an earlier step goes, so only the question shows. */
   const ask = (next) => {
     setNotice(null);
+    setPtEnding(null);
     backTo(next);
   };
 
@@ -1464,6 +1487,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     if (mode === 'takeOff') {
       const pending = p.invitation?.state === 'pending';
       const past = p.formerAt !== null;
+      const sessions = ptEnding !== null && ptEnding.entryId === p.entryId ? ptEnding.sessions : null;
       // Named, before anything happens (CLAUDE.md §4): whose app access ends, and who on
       // an email a family shares keeps theirs, and why.
       const endsFor = p.removeEndsAppFor ?? [];
@@ -1494,11 +1518,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 .join(' ')}
             </p>
           )}
+          {sessions !== null ? <PtSessionsEnding ending={sessions} clockFormat={gym?.clockFormat} moved={ptEnding.moved} onePerson /> : null}
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={DANGER}>
-              {past ? 'Remove access' : 'Remove'}
+            <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={DANGER} data-testid="take-off-press">
+              {past ? 'Remove access' : sessions !== null ? `Remove and ${ptEndingAction(sessions)}` : 'Remove'}
             </button>
-            {cancel()}
+            {cancel(sessions !== null ? "Don't remove" : 'Cancel')}
           </div>
         </Ask>
       );

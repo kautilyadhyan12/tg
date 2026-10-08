@@ -18,6 +18,7 @@
 import type { TransactionSql } from "postgres";
 import { withdrawForAccounts, withdrawForAddress } from "../invites/join.js";
 import type { InviteSettings } from "../invites/settings.js";
+import { requireSessionsConfirmed, sessionsAuditMeta } from "../pt/changes.js";
 import { insertAudit } from "../repo.js";
 import * as repo from "./repo.js";
 import { currentRecordOf, pastRecordOf } from "./whose.js";
@@ -27,6 +28,8 @@ export interface RemoveFacts {
   actorUserId: string;
   at: Date;
   settings: InviteSettings | null;
+  /** The mark of the personal training sessions the screen was told this ends (17e-iv-a). */
+  confirmPtSessions?: string | null;
 }
 
 export type RemoveRecordOutcome =
@@ -75,6 +78,8 @@ export async function removeRecordIn(
     if (people.length === 0) return { kind: "already_removed", version };
     return { kind: "removed_from_app", version, closed: await endApp(tx, facts, people, entry.id) };
   }
+  // Their coming personal training sessions end with the record: named first (it throws).
+  const sessions = await requireSessionsConfirmed(tx, gymId, { entryIds: [entry.id] }, at, facts.confirmPtSessions ?? null);
   const moved = await repo.setEntryFormer(tx, gymId, entry.id, at);
   if (!moved) return { kind: "already_removed", version: (await repo.listState(tx, gymId))?.version ?? 0 };
   // The members this record reached were on the list, so they have been listed.
@@ -89,7 +94,7 @@ export async function removeRecordIn(
     action: "org.member_list_entry_taken_off",
     targetType: "member_list_entry",
     targetId: entry.id,
-    meta: { removedFromApp: String(closed.length) },
+    meta: { removedFromApp: String(closed.length), ...sessionsAuditMeta(sessions) },
   });
   return { kind: "removed", version, closed };
 }
