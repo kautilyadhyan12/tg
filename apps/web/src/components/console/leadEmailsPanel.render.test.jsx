@@ -171,7 +171,7 @@ describe('what stops "Send them for me" has the button to its box', () => {
     fireEvent.click(await open());
     fireEvent.change(screen.getByLabelText('Replies go to'), { target: { value: 'desk@ironhouse.example' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    expect(await screen.findByText("Your gym's name can't be shown in an email as it is. Change the name first.")).toBeTruthy();
+    expect(await screen.findByText("Your gym's name is only a web link or @ signs, and an email can't show those. Change it to the name in words first.")).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Open Gym details' }).getAttribute('href')).toBe('/console/iron-house/settings#gym-details');
 
     vi.mocked(orgService.updateLeadEmailSettings).mockRejectedValueOnce(refused('rate_limited', 'Too many changes. Try again shortly.'));

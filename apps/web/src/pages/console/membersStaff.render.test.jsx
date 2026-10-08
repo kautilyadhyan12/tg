@@ -1317,7 +1317,7 @@ describe("an invitation whose email did not go because of the gym's name", () =>
     });
     drawStaff();
     const named = within(await screen.findByTestId(`staff-invite-${id(3)}`));
-    expect(named.getByText("Email not sent: your business name can't be used in an email. Change the name, then send it again.")).toBeTruthy();
+    expect(named.getByText("Email not sent: your business name is only a web link or @ signs, and an email can't show those. Change it to the name in words, then send it again.")).toBeTruthy();
     expect(named.getByRole('link', { name: 'Open Gym details' }).getAttribute('href')).toBe('/console/iron-house/settings#gym-details');
     expect(within(screen.getByTestId(`staff-invite-${id(4)}`)).queryByRole('link')).toBeNull();
     expect(within(screen.getByTestId(`staff-invite-${id(5)}`)).queryByRole('link')).toBeNull();

@@ -1153,7 +1153,7 @@ describe("the server's sentences that name another place", () => {
   it("an invitation not sent for the gym's name: the owner gets the button to the gym details", async () => {
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer(named));
     inRouter(ADA, OWNER_GYM);
-    expect(await dialog().findByText("Invitation not sent: your business name can't be used in an email. Change the name, then invite them again.")).toBeTruthy();
+    expect(await dialog().findByText("Invitation not sent: your business name is only a web link or @ signs, and an email can't show those. Change it to the name in words, then invite them again.")).toBeTruthy();
     expect(dialog().getByRole('link', { name: 'Open Gym details' }).getAttribute('href')).toBe('/console/iron-house/settings#gym-details');
   });
 

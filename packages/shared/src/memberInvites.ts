@@ -84,7 +84,7 @@ export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmail
   invitation_withdrawn: "Invitation not sent: this person was removed from your list or from the app.",
   gym_not_active: "Invitation not sent: you didn't have an active plan.",
   no_postal_address: "Invitation not sent: you hadn't added a postal address.",
-  gym_name: "Invitation not sent: your business name can't be used in an email. Change the name, then invite them again.",
+  gym_name: "Invitation not sent: your business name is only a web link or @ signs, and an email can't show those. Change it to the name in words, then invite them again.",
   send_unknown: "We couldn't confirm this invitation was delivered. Resend it only if they didn't receive it.",
   provider_refused: "Invitation not sent: our email provider declined it for a week. Invite them again.",
   provider_unavailable: "Invitation not sent: our email provider was unavailable for a week. Invite them again.",

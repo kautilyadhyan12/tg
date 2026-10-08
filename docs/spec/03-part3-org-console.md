@@ -3919,7 +3919,7 @@ are kept. A box that sends staff to Memberships reads again when they come back 
 | A person's page: "Not them?" refused, they are staff or have a complimentary place (23d-ii) | Open the Staff tab (anybody else reads "The owner can change their access.") | Members → Staff |
 | Settings → Follow-up emails: no postal address; the name can't be shown in an email (23d-ii) | Add your postal address · Open Gym details | that box, higher up the same page |
 
-The server's own sentences name no place in words since 23d-ii ("Change the name, then
+The server's own sentences name no place in words since 23d-ii ("Change it to the name in words, then
 invite them again."); the screen adds the button or who can (`sentencePlace` in
 `consolePlaces.js`, drawn by `SentencePlace`).
 
