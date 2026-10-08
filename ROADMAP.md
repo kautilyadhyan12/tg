@@ -279,7 +279,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 23c-i. [x] **Memberships, its own line in the menu** — merged 2026-10-07 (PR #190).
      - 23c-ii. [x] **Staff invited and managed on Members → Staff** — merged 2026-10-07 (PR #191).
    - 23d. [x] **Buttons, not words** — merged 2026-10-08 (PR #192).
-   - 23d-ii. [ ] **Buttons for the server's own sentences** (found by 23d; spec §17.5): an email's reason "Update it in Settings" (a member's invitation and a staff one), the two import warnings "Set the gym's country in Settings" (members, leads) and "their access is managed under Staff" each get the button to that place from `consolePlaces.js`, and say who can for staff who cannot open it. Screen or wording.
+   - 23d-ii. [x] **Buttons for the server's own sentences** — merged 2026-10-08 (PR #193).
 
 ## Stage 3 — Money
 

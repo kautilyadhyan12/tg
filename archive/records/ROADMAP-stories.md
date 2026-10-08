@@ -304,3 +304,5 @@ stage. History, never a rule: RULINGS wins where they differ.
    - 23b. [x] **A "Start here" list on Overview**: what you sell · members · staff · classes · opening hours · the front desk, each a button to its exact place, ticked by itself when done, hideable (PushPress, Gymdesk and TeamUp each have one). A new gym's first page says only "Bring your members in". *Merged 2026-10-07 (PR #189).*
 
    - 23d. [x] **Buttons, not words**: every "in Settings, under …" (at least 12, two of them buttons, 2026-10-07) opens that exact place; Personal training lists all its steps, with ticks. *Merged 2026-10-08 (PR #192).*
+
+- 23d-ii. [ ] **Buttons for the server's own sentences** (found by 23d; spec §17.5): an email's reason "Update it in Settings" (a member's invitation and a staff one), the two import warnings "Set the gym's country in Settings" (members, leads) and "their access is managed under Staff" each get the button to that place from `consolePlaces.js`, and say who can for staff who cannot open it. Screen or wording.
