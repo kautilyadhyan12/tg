@@ -624,7 +624,7 @@ export const PT_NOT_ON_LIST_WORDS = "Your gym hasn't added you to its member lis
  *  not one person's: neither account reads, books or cancels a session on it in the app. */
 export const PT_RECORD_SHARED_ERROR = "record_shared";
 export const PT_RECORD_SHARED_WORDS =
-  "Two app accounts share your record at this gym, so sessions can't be booked in the app. Ask at the front desk.";
+  "Two app accounts share your record at this gym, so sessions can't be booked or shown in the app. Any session already booked is still on. Ask at the front desk.";
 
 /** Whose record the reader's sessions hang on: their `own`, `none` on the gym's list, or one
  *  `shared` with another app account. */

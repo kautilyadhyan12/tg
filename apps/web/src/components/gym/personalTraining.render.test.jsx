@@ -187,7 +187,7 @@ describe('a member’s personal training', () => {
     serve(view({ record: 'shared', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
-    expect(screen.getByText("Two app accounts share your record at this gym, so sessions can't be booked in the app. Ask at the front desk.")).toBeTruthy();
+    expect(screen.getByText("Two app accounts share your record at this gym, so sessions can't be booked or shown in the app. Any session already booked is still on. Ask at the front desk.")).toBeTruthy();
     expect(screen.queryAllByRole('button', { name: /^Book/ })).toHaveLength(0);
     expect(screen.queryByRole('list', { name: 'Your sessions' })).toBeNull();
   });
