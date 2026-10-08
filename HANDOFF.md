@@ -4,6 +4,19 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+
+## 2026-10-08 · 17e-ii (Folder A): a member books and cancels their own personal training (branch `member-books-pt`)
+
+- **Built:** three member routes (`member-pt`: the read, book, cancel) on the staff side's own rule (`bookUnderLock`, `cancelUnderLock`), and the **Personal training** tab on My Gyms: pick a day, press a time, Your sessions with Cancel session. Risky; Kd: *"go"*. No migration, no package. Spec §13.5 has the note.
+- **Worst thing, first test:** a member reading, cancelling or paying with another member's. `pt.member.routes.test.ts`, 14 tests on real Postgres and two servers: 14 of 14. Three breaks of that rule by hand, each RED, files restored sha256-identical.
+- **Verified:** shared tsc 0, lint 0, 877 of 877; api tsc 0, eslint 0; the five personal training and class booking route files 81 of 81, two more class booking files 15 of 15; web whole suite 5,008 of 5,009 before the day row (one timeout under load in `challengesConsole.render`, 18 of 18 alone), then the tab's own file 15 of 15 and eslint 0. **The whole api suite was not run locally** (the laptop's database refused the connections); GitHub's stands for it.
+- **Cost at full size** (`tools/measure-pt-member-cost.ts`, 20 gyms of 200, mains, 2,592 MHz): one member's read 23 ms, the thread busy 12 ms; 200 members at once 2.9 s in all, longest stall 46 ms; book then cancel 239 ms, busy 17 ms; 120 members pressing one time 0.9 s (10 s before a taken time was answered ahead of the lock); 80 pressing different times 14.8 s for 160 writes.
+- **Real run in headless Edge** (a gym made that day through the real routes; `apps/api/.cost/look-17e-ii.mjs`, pictures in `D:\Projects\ai-home-gym-look\2026-10-08-17e-ii`): booked, the pack 10 to 9, the trainer's week names her, a free cancel and a late one, somebody with no pack has no button. The first run showed a week as a wall of 164 buttons; the tab now shows one day.
+- **Built at Opus 5.5 high**, though the plan asked for xhigh (the terminal's record). Its review is the check.
+- **Found on the way, older than this job (in ROADMAP's known defects):** the member web keeps its side menu on a phone, so every member page is squeezed there; a `challengesConsole.render` test timed out once in a full run.
+- **Not done:** nobody is told of a booking (the inbox, 20a); sessions ended when people leave (17e-iv).
+- **Open:** Kd's click-through, the review round, the merge. **Next in Folder A:** 17e-iv.
+
 ## 2026-10-08 · The same planning terminal, later (Folder A): the new look last, nine jobs to Folder B (branch `plan-2026-10-08-b`)
 
 - **Why:** shown the 41 jobs left on the gym's web part, Kd asked for the console's new look to wait until every web feature is built, and for some of Folder A's work to go to Folder B without the two clashing. **Records only: no code.** It touches nobody.
