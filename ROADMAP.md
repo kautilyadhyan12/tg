@@ -162,7 +162,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 5b-iv-b. [x] **The warning when adding** — merged 2026-09-30 (PR #141).
      - 5b-vi. [ ] **Member photos** (Kd, RULINGS 2026-09-28): the photo a member adds in the app, small and round on each Members row and on their page, initials when there is none; only their own gym's staff see it, and not after they leave. Needs Stage 4 item 4 (photo storage); the check-in screen (16a) shows it once both are built.
    - 5c. [x] **Which software is your list in?** — merged 2026-10-01 (PR #143).
-   - 5d. [ ] **Staff notes and tags** (Kd, RULINGS 2026-10-08): on a person's page staff write dated notes (who wrote each) and add the gym's own tags ("VIP", "Beginner"); tags are a filter on Members and pick people for 20f. Staff only, never shown to a member or sent out, deleted with the person. Its plan says how a note about somebody's health is kept safe; a file's medical notes are still never kept (RULINGS 2026-09-21).
+   - 5d. **Staff notes and tags** (Kd, RULINGS 2026-10-08; spec §18.13), split 2026-10-08 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+     - 5d-i. [ ] **Notes and tags on a person's page**: staff write dated notes (who wrote each, delete but no edit) and put the gym's own tags on a person; staff only, never shown to a member or sent out, deleted with the person. Risky.
+     - 5d-ii. [ ] **Tags on the Members list**: a tag is a filter on Members; tag or untag everybody ticked from the action bar; rename or delete one of the gym's tags. What picks people for 20f. After 5d-i.
 6. [ ] Gym profile page for members; ~~gym announcements feed~~ (**item 19b since 2026-09-22**); gym greeting and branding on the member home.
 7. [ ] Member-to-coach / gym messaging. **2026-09-22: no private chat now** (RULINGS that day: reactions, no comments, no private chat — it needs far more safety work); a gym talks to its members on the shared page (item 19) and by the messages of Part 7.
 8. ~~Classes, schedules and booking (the largest gym item).~~ **Planned 2026-09-21 as item 17 (17b–17f).**
