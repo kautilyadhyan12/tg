@@ -76,7 +76,9 @@ export function notAddedRow(entry) {
 /** Rows not added that the file does not name one by one (past the listed ones). */
 export const unlistedNotAdded = (preview) => Math.max(0, preview.counts.notAdded - preview.notAdded.length);
 
-export const warningLines = (preview) => preview.warnings.map((w) => leadFileWarningWords(w));
+/** Each warning's sentence, and the place it needs something done in, if any (`sentencePlace`). */
+export const warningLines = (preview) =>
+  preview.warnings.map((w) => ({ text: leadFileWarningWords(w), place: w.code === 'phones_need_country' ? 'country' : null }));
 
 /** Why a column is never kept. */
 export const NEVER_KEPT_WORDS = {

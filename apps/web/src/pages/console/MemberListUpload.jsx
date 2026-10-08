@@ -66,6 +66,7 @@ import {
   withDateOrder,
 } from './memberListView';
 import { goneWords, gymToday } from './memberListPeople';
+import SentencePlace from '../../components/console/SentencePlace';
 import MemberListImportLeavers from './MemberListImportLeavers';
 import MemberListMissing from './MemberListMissing';
 
@@ -160,14 +161,21 @@ function Line({ icon, tone, title, sub, action, onAction, actionDisabled = false
   );
 }
 
+/** The place a warning needs something done in. It leaves the file being reviewed, so it
+ *  asks first. */
+function WarningPlace({ warning, gym }) {
+  return <SentencePlace kind={warning.code === 'phones_need_country' ? 'country' : null} gym={gym} guard />;
+}
+
 /** A warning opened: what to do about it, then its rows as the file has them. */
-function WarningRows({ warning }) {
+function WarningRows({ warning, gym }) {
   const [all, setAll] = useState(false);
   const shown = all ? warning.where : warning.where.slice(0, 20);
   const unlisted = warning.rows - warning.where.length;
   return (
     <div className="flex flex-col gap-2">
       <p>{memberListWarningWords(warning)}</p>
+      <WarningPlace warning={warning} gym={gym} />
       <ul className="flex flex-col gap-1 c-t1" data-testid="warning-rows">
         {shown.map((w, i) => (
           <li key={`${String(w.row)}-${String(i)}`}>{warningRowLine(warning.code, w)}</li>
@@ -1309,7 +1317,16 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                   title={warningTitle(w)}
                   action={why === w.code ? 'Hide' : listed ? 'See which' : 'Why?'}
                   onAction={() => setWhy((open) => (open === w.code ? null : w.code))}
-                  detail={why === w.code ? listed ? <WarningRows warning={w} /> : memberListWarningWords(w) : null}
+                  detail={
+                    why !== w.code ? null : listed ? (
+                      <WarningRows warning={w} gym={gym} />
+                    ) : (
+                      <span className="flex flex-col gap-2">
+                        {memberListWarningWords(w)}
+                        <WarningPlace warning={w} gym={gym} />
+                      </span>
+                    )
+                  }
                   testId={`warning-${w.code}`}
                 />
               );

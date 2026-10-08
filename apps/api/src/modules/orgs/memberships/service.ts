@@ -88,7 +88,7 @@ function throwOnFailure(outcome: repo.MembershipWriteOutcome): void {
       throw new OrgsError(
         409,
         "no_member_currency",
-        "Set your country in Settings before adding a membership type.",
+        "Set your country before adding a membership type.",
       );
     default: {
       const never: never = outcome;

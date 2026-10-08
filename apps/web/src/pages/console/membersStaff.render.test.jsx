@@ -1300,3 +1300,27 @@ describe('a gym with no live plan', () => {
     expect(panel.getByRole('button', { name: 'Save permissions' }).disabled).toBe(true);
   });
 });
+
+// 23d-ii: the email reason that needs the gym's name changed has the button to that box.
+describe("an invitation whose email did not go because of the gym's name", () => {
+  const id = (n) => `${n}f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b`;
+
+  it('has the button to the gym details, on that invitation alone', async () => {
+    orgService.getStaffInvites.mockResolvedValue({
+      data: {
+        invites: [
+          { ...INVITE, id: id(3), email: 'name@example.com', emailStatus: 'not_sent', emailReason: 'gym_name' },
+          { ...INVITE, id: id(4), email: 'bounce@example.com', emailStatus: 'not_sent', emailReason: 'bounced' },
+          { ...INVITE, id: id(5), email: 'ended@example.com', state: 'ended', emailStatus: 'not_sent', emailReason: 'gym_name' },
+        ],
+      },
+    });
+    drawStaff();
+    const named = within(await screen.findByTestId(`staff-invite-${id(3)}`));
+    expect(named.getByText("Email not sent: an email couldn't show your business name as it was written. Change it to the name in words, then send it again.")).toBeTruthy();
+    expect(named.getByRole('link', { name: 'Open Gym details' }).getAttribute('href')).toBe('/console/iron-house/settings#gym-details');
+    expect(within(screen.getByTestId(`staff-invite-${id(4)}`)).queryByRole('link')).toBeNull();
+    expect(within(screen.getByTestId(`staff-invite-${id(5)}`)).queryByRole('link')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/in Settings/);
+  });
+});

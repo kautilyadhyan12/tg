@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LEAD_EMAIL_SETTINGS_WORDS } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import { viewerPrivileges } from '../../pages/console/consoleView';
 import { placeFor } from '../../pages/console/consolePlaces';
 import PlaceLink from './PlaceLink';
+import SentencePlace from './SentencePlace';
 import {
   leadEmailsBody,
   leadEmailsChanged,
@@ -64,6 +65,28 @@ export default function LeadEmailsPanel({ org, readOnly, startOpen = false }) {
     };
   }, [fetchSettings]);
 
+  // THE GYM'S DETAILS ARE SAVED HIGHER UP THIS PAGE, and two of them stop this box (the
+  // postal address, the name). A save there brings a fresh copy of the gym, so the facts
+  // are read again then, and what is typed here is kept.
+  const seenOrg = useRef(org);
+  useEffect(() => {
+    if (seenOrg.current === org) return undefined;
+    seenOrg.current = org;
+    let cancelled = false;
+    orgService
+      .getLeadEmailSettings(gymId)
+      .then((res) => {
+        if (cancelled) return;
+        setSettings(res.data.settings);
+        setDraft((typed) => typed ?? leadEmailsDraft(res.data.settings));
+        setSaveError(null);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [org, gymId]);
+
   const retry = () => {
     setLoadError(null);
     void fetchSettings();
@@ -90,7 +113,11 @@ export default function LeadEmailsPanel({ org, readOnly, startOpen = false }) {
       setDraft(leadEmailsDraft(res.data.settings));
       setSaved(true);
     } catch (err) {
-      setSaveError(errorText(err, "We couldn't save that. Please try again."));
+      const code = errorCode(err);
+      setSaveError({
+        message: errorText(err, "We couldn't save that. Please try again."),
+        place: code === 'gym_name' ? 'gymName' : code === 'needs_postal_address' ? 'postalAddress' : null,
+      });
     } finally {
       setSaving(false);
     }
@@ -184,7 +211,12 @@ export default function LeadEmailsPanel({ org, readOnly, startOpen = false }) {
               {problem}
             </p>
           ) : null}
-          {saveError !== null ? <ConsoleFailed message={saveError} /> : null}
+          {/* The box is higher up this same page, so nothing typed here is lost. */}
+          {problem !== null && (changed || settings.sendForMe) ? (
+            <SentencePlace kind={problem === LEAD_EMAIL_SETTINGS_WORDS.needs_postal_address ? 'postalAddress' : null} gym={org} className="c-lk text-sm self-start" />
+          ) : null}
+          {saveError !== null ? <ConsoleFailed message={saveError.message} /> : null}
+          {saveError !== null ? <SentencePlace kind={saveError.place} gym={org} className="c-lk text-sm self-start" /> : null}
 
           <div className="flex items-center gap-3">
             <button

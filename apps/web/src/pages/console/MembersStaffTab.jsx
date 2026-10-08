@@ -3,6 +3,7 @@ import { withArticle } from '@app/shared';
 import { Check, ChevronRight, UserPlus } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import SentencePlace from '../../components/console/SentencePlace';
 import { staffRoleText } from './consoleView';
 import { StaffInvitePanel, StaffPersonPanel } from './MembersStaffPanels';
 import { privilegesDiffer, sentAgainNotice, staffCountLabel, staffInviteView, staffSeatsNote } from './staffView';
@@ -42,7 +43,7 @@ function RowNote({ note, onRetry }) {
 /** The invitations waiting, ended or declined: each address, its role, where it stands and
  *  whether its email went, with Send again and Cancel invitation (Remove, for one that
  *  ended or was declined). Both of those ask first. Nothing is drawn when there are none. */
-function InvitedList({ invites, orgType, busyId, readOnly, note, onRetry, onCancel, onResend }) {
+function InvitedList({ invites, gym, orgType, busyId, readOnly, note, onRetry, onCancel, onResend }) {
   const [asking, setAsking] = useState(null);
   if (invites.loading) return null;
   if (invites.error !== null) return <ConsoleFailed message={invites.error} newLook />;
@@ -70,6 +71,7 @@ function InvitedList({ invites, orgType, busyId, readOnly, note, onRetry, onCanc
                       {view.email}
                     </span>
                   ) : null}
+                  <SentencePlace kind={view.emailPlace} gym={gym} />
                   {view.sendAgainNote !== null ? <span className="c-s13 c-t2">{view.sendAgainNote}</span> : null}
                 </div>
                 {asking === invite.id ? (
@@ -114,7 +116,7 @@ function InvitedList({ invites, orgType, busyId, readOnly, note, onRetry, onCanc
 
 // `inviting`: whether the Invite staff form is open. The Members page keeps it, because
 // an address can ask for the form (Overview's Start here list); `onInviting` sets it.
-export default function MembersStaffTab({ gymId, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged }) {
+export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged }) {
   const [staff, setStaff] = useState({ loading: true, error: null, list: [] });
   // Their own read and failure: invitations that cannot be read must not hide who already
   // runs the gym.
@@ -408,7 +410,7 @@ export default function MembersStaffTab({ gymId, orgType, words, readOnly = fals
               ))}
             </ul>
           </section>
-          <InvitedList invites={invites} orgType={orgType} busyId={busyId} readOnly={readOnly} note={rowNote} onRetry={retry} onCancel={cancelInvite} onResend={resendInvite} />
+          <InvitedList invites={invites} gym={gym} orgType={orgType} busyId={busyId} readOnly={readOnly} note={rowNote} onRetry={retry} onCancel={cancelInvite} onResend={resendInvite} />
         </>
       ) : null}
 

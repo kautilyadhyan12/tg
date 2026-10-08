@@ -10,6 +10,7 @@ import { resolve } from 'node:path';
 import { cwd } from 'node:process';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { memberListConfirmedSchema, memberListLeaversSchema, memberListMissingSchema, memberListPreviewSchema, memberListRowsPageSchema } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -1235,5 +1236,54 @@ describe('Import and its refusals', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Read the file again' }));
     await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(2));
     expect(orgService.uploadMemberList.mock.calls[1][1].contentBase64).toBe(sent);
+  });
+});
+
+// 23d-ii: the warning that asks for the gym's country has the button to that box.
+describe('phone numbers left out because the gym has no country', () => {
+  const where = [{ row: 6, name: 'Di Park', column: 'Phone', cell: '07911 123457', sameAsRow: null }];
+  const OWNER_GYM = { name: 'Iron House Gym', slug: 'iron-house', orgType: 'gym', staffRole: 'owner' };
+  const reviewAs = async (gym, warning) => {
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ warnings: [warning] }) } });
+    render(
+      <MemoryRouter>
+        <MemberListUpload gymId={GYM} gym={gym} words={WORDS} readOnly={false} onClose={vi.fn()} onImported={vi.fn()} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste rows' }));
+    fireEvent.change(screen.getByLabelText('Paste your rows'), { target: { value: 'Name\tEmail\nAda\tada@members.example' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await screen.findByRole('heading', { name: 'Review' });
+    return within(screen.getByTestId(`warning-${warning.code}`));
+  };
+
+  it.each([
+    ['Why?', { code: 'phones_need_country', rows: 3 }],
+    ['See which', { code: 'phones_need_country', rows: 1, where }],
+  ])('behind "%s": the owner gets Set your country, which asks before leaving the review', async (opens, warning) => {
+    const box = await reviewAs(OWNER_GYM, warning);
+    expect(box.queryByRole('button', { name: 'Set your country' })).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: opens }));
+    expect(box.getByText(/left out because this gym has no country set\. Set the gym's country, or write the numbers/)).toBeTruthy();
+    fireEvent.click(box.getByRole('button', { name: 'Set your country' }));
+    expect(box.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/settings#country');
+    fireEvent.click(box.getByRole('button', { name: 'Stay here' }));
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeTruthy();
+  });
+
+  it('staff who cannot change the details get no button and read who can', async () => {
+    const manager = { ...OWNER_GYM, staffRole: 'manager', privileges: ['members.read', 'members.confirm'] };
+    const box = await reviewAs(manager, { code: 'phones_need_country', rows: 3 });
+    fireEvent.click(box.getByRole('button', { name: 'Why?' }));
+    expect(box.getByText('The owner can set the country in Gym details.')).toBeTruthy();
+    expect(box.queryByRole('button', { name: 'Set your country' })).toBeNull();
+  });
+
+  it('another warning has neither', async () => {
+    const box = await reviewAs(OWNER_GYM, { code: 'phones_unusual', rows: 30 });
+    fireEvent.click(box.getByRole('button', { name: 'Why?' }));
+    expect(box.getByText(/look like a normal number for their country/)).toBeTruthy();
+    expect(box.queryByRole('button', { name: 'Set your country' })).toBeNull();
+    expect(box.queryByText(/The owner can/)).toBeNull();
   });
 });

@@ -288,7 +288,13 @@ export function appView(app, today = null) {
 export function invitationView(entry, today = null) {
   const view = appView(entry.app, today);
   const tone = { green: 'green', amber: 'orange', red: 'red', grey: 'plain' }[entry.app.tone];
-  return { tag: view.text, tone, detail: view.note, line: view.plain };
+  // The one reason that needs something done in another place (`sentencePlace`): the
+  // invitation is waiting and its newest email did not go because of the gym's name.
+  const email = entry.invitation?.state === 'pending' ? entry.invitation.email : null;
+  // Somebody waiting for a place reads the full plan's line instead ("Invited"): no button there.
+  const waiting = entry.app.word !== 'not_in_app' || (entry.invitation?.waitingSince ?? null) !== null;
+  const named = !waiting && view.note !== null && email !== null && email.reason === 'gym_name' && (email.state === 'skipped' || email.state === 'failed');
+  return { tag: view.text, tone, detail: view.note, line: view.plain, place: named ? 'gymName' : null };
 }
 
 // ── Invite (5b-ii; §9.12, §11.5) ─────────────────────────────────────────────

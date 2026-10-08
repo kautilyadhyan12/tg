@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LEAD_FILE_WORDS } from '@app/shared';
-import { addButton, addedTitle, columnLines, exampleLine, heardLine, mappingProblem, notAddedRow, roleOf, unlistedNotAdded, withRole } from './leadFileView';
+import { addButton, addedTitle, columnLines, exampleLine, heardLine, mappingProblem, notAddedRow, roleOf, unlistedNotAdded, warningLines, withRole } from './leadFileView';
 
 const MAPPING = { sheet: 0, headerRow: 0, fullName: 0, firstName: null, lastName: null, email: [1], phone: [2], source: 3, notes: null };
 const person = (row, fullName) => ({ row, fullName, email: `${row}@example.com`, phone: null, source: 'other', sourceWord: null });
@@ -104,5 +104,19 @@ describe('the Add button', () => {
     const none = preview({ add: [], counts: { ...p.counts, add: 0 } });
     expect(addButton({ preview: none, mapping: MAPPING, ticked: true, readOnly: false }).enabled).toBe(false);
     expect(addButton({ preview: preview({ counts: { ...p.counts, add: 1 } }), mapping: MAPPING, ticked: true, readOnly: false }).label).toBe('Add 1 lead');
+  });
+});
+
+// 23d-ii: the one warning that needs the gym's country names that place.
+describe('the notes over a file of leads', () => {
+  it("each warning's sentence, and the country's place on the one that asks for it", () => {
+    const lines = warningLines({ warnings: [{ code: 'phones_need_country', rows: 2 }, { code: 'phones_unusual', rows: 1 }] });
+    expect(lines).toEqual([
+      {
+        text: "2 phone numbers were left out because this gym has no country set. Set the gym's country, or write the numbers with their country code, and check again.",
+        place: 'country',
+      },
+      { text: '1 phone number looks mistyped. It was kept as written.', place: null },
+    ]);
   });
 });
