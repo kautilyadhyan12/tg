@@ -518,10 +518,25 @@ export function bookSentence({ person, trainer, localDate, startMinute, minutes,
   return `${person.name} will be booked with ${trainerName(trainer)} on ${dayLabel(localDate)}, ${timeRange(startMinute, startMinute + minutes, clockFormat)}.`;
 }
 
+/** "3 of 4 sessions left that week": what is left of a membership's limit in the week or
+ *  the month of the session being booked, before this booking. */
+export function limitLeft(limit) {
+  if (limit.left === 0) return `no sessions left that ${limit.period}`;
+  return `${String(limit.left)} of ${String(limit.limit)} ${limit.limit === 1 ? 'session' : 'sessions'} left that ${limit.period}`;
+}
+
 /** What booking this person costs them, said before the button. */
 export function bookCost(person) {
   if (person?.pt === null || person?.pt === undefined) return '';
-  return person.pt.sessionsLeft === null ? `It is booked on ${person.pt.membership}.` : `One session is used from ${person.pt.membership}.`;
+  const limit = person.limit ?? null;
+  // A pack pays because the membership's own sessions for that week or month are used.
+  if (person.pt.sessionsLeft !== null) {
+    const why = limit === null ? '' : ` ${limit.membership}'s sessions for that ${limit.period} are used.`;
+    return `One session is used from ${person.pt.membership}.${why}`;
+  }
+  return limit === null
+    ? `It is booked on ${person.pt.membership}.`
+    : `It is booked on ${person.pt.membership}, which includes ${String(limit.limit)} a ${limit.period}: ${limitLeft(limit)}, before this one.`;
 }
 
 /** The box before a cancel: what it costs the person, and the buttons that say so. */
@@ -532,11 +547,24 @@ export function cancelBox(appointment, { freeCancelMinutes, clockFormat }) {
     return {
       question: appointment.packCharged
         ? `Cancel ${what}? It's free to cancel, and their pack gets the session back.`
-        : `Cancel ${what}? It's free to cancel.`,
+        : appointment.usesLimit === true
+          ? `Cancel ${what}? It's free to cancel, and it no longer counts as one of the sessions their membership includes.`
+          : `Cancel ${what}? It's free to cancel.`,
       choices: [{ key: 'free', label: 'Cancel session', lateOk: false, giveBack: false }],
     };
   }
   const inside = freeCancelMinutes > 0 ? `It starts in less than ${durationWords(freeCancelMinutes)}, so it's too late to cancel for free.` : "It's too late to cancel for free.";
+  // A session that counts against a membership's limit is staff's to keep used or give
+  // back, as a pack's is: the gym may be the one calling it off.
+  if (!appointment.packCharged && appointment.usesLimit === true) {
+    return {
+      question: `Cancel ${what}? ${inside} Choose whether it still counts as one of the sessions their membership includes.`,
+      choices: [
+        { key: 'late', label: 'Late cancel: the session stays used', lateOk: true, giveBack: false },
+        { key: 'back', label: 'Cancel and give the session back', lateOk: true, giveBack: true },
+      ],
+    };
+  }
   if (!appointment.packCharged) {
     return {
       question: `Cancel ${what}? ${inside} It will be recorded as a late cancel.`,
@@ -554,15 +582,20 @@ export function cancelBox(appointment, { freeCancelMinutes, clockFormat }) {
 
 /** One person in the picker: their name, what they hold that pays for a session, and
  *  whether they can be picked. Where the gym sells memberships, somebody holding nothing
- *  that includes personal training cannot be booked, and the row says so. */
+ *  that includes personal training cannot be booked, and the row says so; so does somebody
+ *  whose membership's sessions for that week or month are used. */
 export function personRow(person, gymHasTypes) {
+  const limit = person.limit ?? null;
+  if (person.pt === null && limit !== null) {
+    return { name: person.name, detail: `${limit.membership} · ${limitLeft(limit)}`, pickable: false };
+  }
   if (person.pt === null) {
     return gymHasTypes
       ? { name: person.name, detail: 'No membership that includes personal training', pickable: false }
       : { name: person.name, detail: '', pickable: true };
   }
   const left = person.pt.sessionsLeft;
-  const sessions = left === null ? '' : left === 1 ? ' · 1 session left' : ` · ${String(left)} sessions left`;
+  const sessions = left === null ? (limit === null ? '' : ` · ${limitLeft(limit)}`) : left === 1 ? ' · 1 session left' : ` · ${String(left)} sessions left`;
   return { name: person.name, detail: `${person.pt.membership}${sessions}`, pickable: true };
 }
 

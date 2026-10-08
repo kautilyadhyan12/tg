@@ -312,3 +312,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 5d-i. [ ] **Notes and tags on a person's page**: staff write dated notes (who wrote each, delete but no edit) and put the gym's own tags on a person; staff only, never shown to a member or sent out, deleted with the person. Risky. *Merged 2026-10-08 (PR #196).*
 
 - 17e-ii. [ ] **The member books and cancels their own** in the app (the member web until the phone app), by 17e-i's rule; booking opens as the gym's class bookings do. After 17e-iii. *Merged 2026-10-08 (PR #197).*
+
+- 17e-v. [x] **A limit on personal training sessions on a membership** (Kd, RULINGS 2026-10-08, at 17e-ii's click-through; straight after 17e-ii): a membership type that includes personal training says how many sessions a week or a month, or no limit as today; a booking past it is refused in a sentence, and the member's tab and the staff picker say what is left. Its plan reads Mindbody's, PushPress's and TeamUp's first. Risky: it changes what pays for a booking. *Merged 2026-10-08 (PR #198).*

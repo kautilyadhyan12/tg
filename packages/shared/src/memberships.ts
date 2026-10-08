@@ -44,6 +44,8 @@ export const MEMBERSHIP_LIMIT_PERIODS = ["week", "month"] as const;
 export const membershipLimitPeriodSchema = z.enum(MEMBERSHIP_LIMIT_PERIODS);
 export type MembershipLimitPeriod = z.infer<typeof membershipLimitPeriodSchema>;
 export const MEMBERSHIP_BOOKINGS_LIMIT_MAX = 200;
+/** The most personal training sessions a week or a month a type can allow. */
+export const MEMBERSHIP_PT_LIMIT_MAX = 200;
 export const MEMBERSHIP_DESCRIPTION_MAX = 300;
 /** A gym's live class types are capped at 60 (`CLASS_TYPES_MAX`); a type edited
  *  later may still cover archived ones. */
@@ -75,13 +77,15 @@ const termCountSchema = z.number().int().min(1).max(MEMBERSHIP_TERM_COUNT_MAX);
 const packClassesSchema = z.number().int().min(1).max(MEMBERSHIP_PACK_CLASSES_MAX);
 const packDaysSchema = z.number().int().min(1).max(MEMBERSHIP_PACK_DAYS_MAX);
 const bookingsLimitSchema = z.number().int().min(1).max(MEMBERSHIP_BOOKINGS_LIMIT_MAX);
+const ptLimitSchema = z.number().int().min(1).max(MEMBERSHIP_PT_LIMIT_MAX);
 
 /** One line of the price list, as the console reads it.
  *
  *  `termCount` and `termUnit` are the billing period of a repeating type and the
  *  length of a one-time type or a trial; a pack has `packClasses` and `packDays`
  *  instead. `bookingsLimit` a `bookingsPeriod` is the class limit where `access` is
- *  `limited`. `classTypes` null means every class; a list means only those. */
+ *  `limited`. `classTypes` null means every class; a list means only those. `ptLimit` a
+ *  `ptPeriod` is how many personal training sessions it allows; both null is no limit. */
 export const gymMembershipTypeSchema = z
   .object({
     id: z.string().uuid(),
@@ -102,6 +106,8 @@ export const gymMembershipTypeSchema = z
       .nullable(),
     /** It includes personal training (17e-i). "Every class" does not by itself. */
     includesPt: z.boolean(),
+    ptLimit: ptLimitSchema.nullable(),
+    ptPeriod: membershipLimitPeriodSchema.nullable(),
     archivedAt: z.string().datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
@@ -151,6 +157,9 @@ const membershipTypeFields = {
   classTypeIds: z.array(z.string().uuid()).max(MEMBERSHIP_CLASS_TYPES_MAX).nullable(),
   /** Left out of a NEW type is "no"; a change must say it (below). */
   includesPt: z.boolean().default(false),
+  /** Left out of a NEW type is "no limit"; a change must say both (below). */
+  ptLimit: ptLimitSchema.nullable().default(null),
+  ptPeriod: membershipLimitPeriodSchema.nullable().default(null),
 };
 const membershipTypeObject = z.object(membershipTypeFields);
 
@@ -178,6 +187,9 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
   if (value.access === "gym_only" && value.classTypeIds !== null) wrong("classTypeIds");
   // No class at all is a membership for personal training alone.
   if (value.classTypeIds !== null && value.classTypeIds.length === 0 && !value.includesPt) wrong("classTypeIds");
+  if ((value.ptLimit === null) !== (value.ptPeriod === null)) wrong("ptPeriod");
+  // A limit is on personal training the type includes; a pack's own count is its limit.
+  if (value.ptLimit !== null && (!value.includesPt || value.kind === "pack")) wrong("ptLimit");
   if (value.classTypeIds !== null && new Set(value.classTypeIds).size !== value.classTypeIds.length) {
     wrong("classTypeIds");
   }
@@ -192,8 +204,13 @@ export type SaveGymMembershipTypeRequest = z.infer<typeof saveGymMembershipTypeR
 /** A change: the same fields, and the `updatedAt` the list gave for the type. */
 export const updateGymMembershipTypeRequestSchema = membershipTypeObject
   // A change states the tick outright, as it states every other field: a default here
-  // would take personal training off everybody who holds the type.
-  .extend({ updatedAt: z.string().datetime({ offset: true }), includesPt: z.boolean() })
+  // would take personal training off everybody who holds the type, or its limit.
+  .extend({
+    updatedAt: z.string().datetime({ offset: true }),
+    includesPt: z.boolean(),
+    ptLimit: ptLimitSchema.nullable(),
+    ptPeriod: membershipLimitPeriodSchema.nullable(),
+  })
   .strict()
   .superRefine(refineMembershipType);
 export type UpdateGymMembershipTypeRequest = z.infer<typeof updateGymMembershipTypeRequestSchema>;

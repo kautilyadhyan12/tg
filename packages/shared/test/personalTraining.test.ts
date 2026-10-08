@@ -44,7 +44,7 @@ function given(type: HeldMembershipTerms, startsOn: string): HeldMembership {
   if (!made.ok) throw new Error(`not given: ${made.reason}`);
   return made.membership;
 }
-const held = (id: string, membership: HeldMembership, includesPt: boolean): PtHeld => ({ id, membership, includesPt });
+const held = (id: string, membership: HeldMembership, includesPt: boolean): PtHeld => ({ id, membership, includesPt, ptLimit: null, ptPeriod: null, used: 0 });
 const cover = (list: PtHeld[], gymHasTypes = true): PtCover => pickPtCover({ gymHasTypes, day: DAY, held: list });
 
 const covered: PtCover = { ok: true, membershipId: "m", chargePack: true };

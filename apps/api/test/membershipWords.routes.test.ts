@@ -71,6 +71,8 @@ const monthly = (over: Record<string, unknown> = {}) => ({
   bookingsPeriod: null,
   classTypeIds: null,
   includesPt: false,
+  ptLimit: null,
+  ptPeriod: null,
   ...over,
 });
 const oneMonth = (over: Record<string, unknown> = {}) => monthly({ name: "One month", kind: "one_time", ...over });

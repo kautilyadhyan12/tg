@@ -1,4 +1,4 @@
-import { PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS, PT_RECORD_SHARED_WORDS } from '@app/shared';
+import { PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS, PT_RECORD_SHARED_WORDS, addDays, bookingPeriod } from '@app/shared';
 import { clockText, dayHeading, instantText } from './classesView';
 import { dayLabel } from './leaderboardView';
 
@@ -14,18 +14,53 @@ export function sessionSpan(startMinute, minutes) {
 /** "Sam Trainer", or "a trainer" for one who has typed no name. */
 export const trainerText = (name) => name ?? 'a trainer';
 
+/** "this week" where the day is in the week or the month today is in, else "that week". */
+function periodWords(period, day, today) {
+  const within = bookingPeriod(day, period);
+  return `${today >= within.from && today <= within.to ? 'this' : 'that'} ${period}`;
+}
+
+/** A membership's sessions for a week or a month are used: how many it includes, and the
+ *  day the next week or month starts (which may be full, or not open yet, itself). */
+function limitUsedText(limit, day, today) {
+  const again = addDays(bookingPeriod(day, limit.period).to, 1);
+  const all = limit.limit === 1 ? 'the 1 personal training session' : `all ${String(limit.limit)} personal training sessions`;
+  return `You've used ${all} ${limit.membership} includes ${periodWords(limit.period, day, today)}. A new ${limit.period} starts on ${dayLabel(again)}.`;
+}
+
 /** What a booking on a day would use, or why it cannot be made; null where the gym sells
  *  no memberships and there is nothing to say. */
 export function payText(view, day) {
   if (view.record === 'shared') return { text: PT_RECORD_SHARED_WORDS, can: false };
   if (view.record !== 'own') return { text: PT_NOT_ON_LIST_WORDS, can: false };
+  const limit = day.limit ?? null;
+  if ((day.why === 'limit_week' || day.why === 'limit_month') && limit !== null) {
+    return { text: limitUsedText(limit, day.localDate, view.today), can: false };
+  }
   if (day.why !== null) return { text: PT_MEMBER_WORDS[day.why], can: false };
   const pays = day.pays;
   if (pays === null) return { text: PT_MEMBER_WORDS.no_membership, can: false };
   if (pays.membership === null) return null;
+  if (pays.sessionsLeft === null && limit !== null) {
+    const of = `${String(limit.left)} of ${String(limit.limit)} ${limit.limit === 1 ? 'session' : 'sessions'}`;
+    return { text: `You have ${pays.membership}: ${of} left ${periodWords(limit.period, day.localDate, view.today)}.`, can: true };
+  }
   if (pays.sessionsLeft === null) return { text: `Personal training is included in your membership: ${pays.membership}.`, can: true };
   const left = pays.sessionsLeft === 1 ? '1 session left' : `${pays.sessionsLeft} sessions left`;
-  return { text: `You have ${pays.membership}: ${left}. Each booking uses 1 session.`, can: true };
+  // The pack pays because the membership's own sessions for that week or month are used.
+  const why = limit === null ? '' : ` ${limit.membership}'s sessions for ${periodWords(limit.period, day.localDate, view.today)} are used, so a booking uses your pack.`;
+  return { text: `You have ${pays.membership}: ${left}. Each booking uses 1 session.${why}`, can: true };
+}
+
+/** The box before a booking: a pressed time books nothing until the member says so. It
+ *  names the session and what it uses. */
+export function ptBookAsk({ trainerName, dayLabel, timeText, pay }) {
+  return {
+    title: 'Book this session?',
+    lines: [`${dayLabel} · ${timeText} · with ${trainerText(trainerName)}`, ...(pay === null ? [] : [pay.text])],
+    yes: 'Book session',
+    no: 'Not now',
+  };
 }
 
 /** The seven days as the row of days to pick from, and which one opens first: the first
@@ -78,7 +113,14 @@ export function ptCancelAsk(s, timezone, gymName) {
     const passed = `${gymName}'s time to cancel for free has passed. Cancelling now counts as a late cancel`;
     return {
       title: 'Cancel late?',
-      lines: [what, s.packCharged ? `${passed}, and the session stays used on your pack.` : `${passed}.`],
+      lines: [
+        what,
+        s.packCharged
+          ? `${passed}, and the session stays used on your pack.`
+          : s.usesLimit === true
+            ? `${passed}, and it still counts as one of the sessions your membership includes.`
+            : `${passed}.`,
+      ],
       yes: 'Cancel session',
       no: 'Keep it',
     };
@@ -86,7 +128,7 @@ export function ptCancelAsk(s, timezone, gymName) {
   const until = `${gymName} lets you cancel for free until ${instantText(s.freeCancelUntil, timezone)}.`;
   return {
     title: 'Cancel your session?',
-    lines: [what, s.packCharged ? `${until} Your pack gets the session back.` : until],
+    lines: [what, s.packCharged ? `${until} Your pack gets the session back.` : s.usesLimit === true ? `${until} It then no longer counts as one of the sessions your membership includes.` : until],
     yes: 'Cancel session',
     no: 'Keep it',
   };
@@ -98,11 +140,11 @@ export function historyText(s) {
     case 'cancelled':
       return 'Cancelled';
     case 'late_cancelled':
-      return s.packCharged ? 'Cancelled late · the session stays used on your pack' : 'Cancelled late';
+      return s.packCharged ? 'Cancelled late · the session stays used on your pack' : s.usesLimit === true ? 'Cancelled late · it still counts as one of your sessions' : 'Cancelled late';
     case 'attended':
       return 'You came';
     case 'no_show':
-      return s.packCharged ? 'You missed this session · it stays used on your pack' : 'You missed this session';
+      return s.packCharged ? 'You missed this session · it stays used on your pack' : s.usesLimit === true ? 'You missed this session · it still counts as one of your sessions' : 'You missed this session';
     default:
       return 'Past';
   }
@@ -110,7 +152,10 @@ export function historyText(s) {
 
 /** What is said once a cancel has gone through, from the session as the server now has it. */
 export function ptCancelledText(s) {
-  if (s.status === 'late_cancelled') return s.packCharged ? 'Cancelled late. The session stays used on your pack.' : 'Cancelled late.';
+  if (s.status === 'late_cancelled') {
+    if (s.packCharged) return 'Cancelled late. The session stays used on your pack.';
+    return s.usesLimit === true ? 'Cancelled late. It still counts as one of the sessions your membership includes.' : 'Cancelled late.';
+  }
   return 'Cancelled.';
 }
 

@@ -10,12 +10,14 @@ import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import {
   CLASS_MINUTES_MAX,
+  PT_COUNTED,
   PT_HOLDS_TIME,
   PT_SESSION_MINUTES_MAX,
   ptAppointmentStatusSchema,
   ptHoursRangeSchema,
   ptSessionMinutesSchema,
   type PtAppointmentStatus,
+  type PtCountedDay,
   type PtHoursRange,
   type PtSessionMinutes,
   type PtSetup,
@@ -154,6 +156,27 @@ export async function takenBy(
   return rows.map((r) => ({ fromMs: r.starts_at.getTime(), toMs: r.ends_at.getTime() }));
 }
 
+/** The sessions a limit counts (`PT_COUNTED`) that were booked on these memberships, by
+ *  membership and the gym's own day, between two of its days. A membership is one record's,
+ *  so nobody else's session is in it. */
+export async function countedSessions(
+  sql: SqlOrTx,
+  gymId: string,
+  membershipIds: readonly string[],
+  fromDay: string,
+  toDay: string,
+): Promise<PtCountedDay[]> {
+  if (membershipIds.length === 0) return [];
+  const rows = await sql<{ id: string; day: string; n: number }[]>`
+    SELECT a.held_membership_id AS id, a.local_date::text AS day, count(*)::int AS n
+    FROM gym_pt_appointments a
+    WHERE a.gym_id = ${gymId} AND a.held_membership_id = ANY(${[...membershipIds]}::uuid[])
+      AND a.status = ANY(${[...PT_COUNTED]}::text[])
+      AND a.local_date BETWEEN ${fromDay}::date AND ${toDay}::date
+    GROUP BY a.held_membership_id, a.local_date`;
+  return rows.map((r) => ({ membershipId: r.id, day: r.day, n: r.n }));
+}
+
 export interface AppointmentRow {
   id: string;
   trainerId: string | null;
@@ -167,6 +190,8 @@ export interface AppointmentRow {
   packCharged: boolean;
   personName: string | null;
   membership: string | null;
+  /** Its membership's type has a limit on sessions. */
+  usesLimit: boolean;
 }
 
 const rawAppointment = z.object({
@@ -182,6 +207,7 @@ const rawAppointment = z.object({
   pack_charged: z.boolean(),
   person_name: z.string().nullable(),
   membership: z.string().nullable(),
+  uses_limit: z.boolean(),
 });
 
 function toAppointment(row: unknown): AppointmentRow {
@@ -199,15 +225,23 @@ function toAppointment(row: unknown): AppointmentRow {
     packCharged: r.pack_charged,
     personName: r.person_name,
     membership: r.membership,
+    usesLimit: r.uses_limit,
   };
 }
+
+/** Whether the session `a` was booked on a membership whose type has a limit on sessions. */
+const USES_LIMIT = (sql: SqlOrTx) => sql`
+  EXISTS (SELECT 1 FROM gym_held_memberships h
+          JOIN gym_membership_types mt ON mt.gym_id = h.gym_id AND mt.id = h.membership_type_id
+          WHERE h.gym_id = a.gym_id AND h.id = a.held_membership_id AND mt.pt_limit IS NOT NULL)`;
 
 const APPOINTMENT = (sql: SqlOrTx) => sql`
   a.id, a.trainer_user_id, a.entry_id, a.held_membership_id, a.local_date::text AS local_date, a.local_start_minute,
   a.minutes, a.starts_at, a.status, a.pack_charged, e.full_name AS person_name,
   (SELECT mt.name FROM gym_held_memberships h
    JOIN gym_membership_types mt ON mt.gym_id = h.gym_id AND mt.id = h.membership_type_id
-   WHERE h.gym_id = a.gym_id AND h.id = a.held_membership_id) AS membership`;
+   WHERE h.gym_id = a.gym_id AND h.id = a.held_membership_id) AS membership,
+  ${USES_LIMIT(sql)} AS uses_limit`;
 
 const FROM = (sql: SqlOrTx) => sql`
   FROM gym_pt_appointments a
@@ -708,6 +742,7 @@ export interface OwnSessionRow {
   startsAt: Date;
   status: PtAppointmentStatus;
   packCharged: boolean;
+  usesLimit: boolean;
 }
 
 const rawOwnSession = z.object({
@@ -720,6 +755,7 @@ const rawOwnSession = z.object({
   starts_at: z.date(),
   status: ptAppointmentStatusSchema,
   pack_charged: z.boolean(),
+  uses_limit: z.boolean(),
 });
 
 function toOwnSession(row: unknown): OwnSessionRow {
@@ -734,12 +770,13 @@ function toOwnSession(row: unknown): OwnSessionRow {
     startsAt: r.starts_at,
     status: r.status,
     packCharged: r.pack_charged,
+    usesLimit: r.uses_limit,
   };
 }
 
 const OWN_SESSION = (sql: SqlOrTx) => sql`
   a.id, u.display_name AS trainer_name, u.email AS trainer_email, a.local_date::text AS local_date, a.local_start_minute,
-  a.minutes, a.starts_at, a.status, a.pack_charged
+  a.minutes, a.starts_at, a.status, a.pack_charged, ${USES_LIMIT(sql)} AS uses_limit
   FROM gym_pt_appointments a
   LEFT JOIN users u ON u.id = a.trainer_user_id`;
 

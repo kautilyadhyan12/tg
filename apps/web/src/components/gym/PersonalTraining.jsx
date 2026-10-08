@@ -5,10 +5,10 @@ import { memberPtService } from '../../api/memberPtApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
 import { weekText } from './classesView';
-import { emptyText, historyText, ptCancelAsk, ptCancelledText, ptDay, ptDays, ptZoneNote, sessionText } from './personalTrainingView';
+import { emptyText, historyText, ptBookAsk, ptCancelAsk, ptCancelledText, ptDay, ptDays, ptZoneNote, sessionText } from './personalTrainingView';
 
 // A GYM'S PERSONAL TRAINING FOR ITS MEMBER (spec Part 3 §13.5; ROADMAP 17e-ii): the
-// trainers' available times on the day picked, each a button that books it, and the
+// trainers' available times on the day picked, each a button that asks first and then books it, and the
 // member's own sessions with Cancel; one that is over or cancelled stays in that list,
 // saying what happened. The server decides every one, and sends nobody else's session. The member
 // web's screen until the phone app has its own.
@@ -33,6 +33,8 @@ export default function PersonalTraining({ gym }) {
   const [busy, setBusy] = useState(null);
   const [said, setSaid] = useState(null);
   const [asking, setAsking] = useState(null);
+  // The time pressed, waiting for the member's yes: nothing is booked by one press.
+  const [choosing, setChoosing] = useState(null);
   // The day whose times are shown; null until one is pressed, and then the first with a time.
   const [picked, setPicked] = useState(null);
   // One key a time pressed: kept while its answer is unknown, so a retry cannot book twice.
@@ -63,6 +65,7 @@ export default function PersonalTraining({ gym }) {
 
   const go = (to) => {
     setState((s) => ({ ...s, loading: true }));
+    setChoosing(null);
     setPicked(null);
     setWeek(to);
   };
@@ -98,6 +101,7 @@ export default function PersonalTraining({ gym }) {
       if (err?.response !== undefined) load();
     } finally {
       setBusy(null);
+      setChoosing(null);
     }
   };
 
@@ -133,6 +137,7 @@ export default function PersonalTraining({ gym }) {
   const empty = view === null ? null : emptyText(view, gym.name);
   const note = view === null ? null : ptZoneNote(view.timezone, gym.name, deviceZone(), new Date());
   const ask = asking === null || view === null ? null : ptCancelAsk(asking, view.timezone, gym.name);
+  const bookAsk = choosing === null ? null : ptBookAsk({ trainerName: choosing.trainer.name, dayLabel: choosing.label, timeText: choosing.time.text, pay: choosing.pay });
 
   return (
     <section aria-label={`${gym.name}'s personal training`} className="flex flex-col gap-3 mt-3">
@@ -251,7 +256,7 @@ export default function PersonalTraining({ gym }) {
                               <button
                                 type="button"
                                 disabled={busy !== null}
-                                onClick={() => book(t, shown, time)}
+                                onClick={() => setChoosing({ trainer: t, localDate: shown, time, label: shownLabel, pay: day.pay })}
                                 aria-label={`Book ${time.text} with ${t.name}, ${shownLabel}`}
                                 className="px-3.5 py-2 rounded-xl text-sm font-semibold min-h-11 flex items-center gap-1.5 disabled:opacity-50"
                                 style={{ background: ORANGE, color: '#161412' }}
@@ -274,6 +279,37 @@ export default function PersonalTraining({ gym }) {
             </>
           )}
         </>
+      )}
+
+      {bookAsk !== null && (
+        <Sheet title={bookAsk.title} onClose={() => busy === null && setChoosing(null)}>
+          <div className="flex flex-col gap-2">
+            {bookAsk.lines.map((line) => (
+              <p key={line} className="text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>{line}</p>
+            ))}
+            <div className="flex flex-wrap gap-2 mt-2">
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => book(choosing.trainer, choosing.localDate, choosing.time)}
+                className="px-3.5 py-2 rounded-xl text-sm font-semibold min-h-11 flex items-center gap-1.5 disabled:opacity-50"
+                style={{ background: ORANGE, color: '#161412' }}
+              >
+                {busy !== null ? <Loader2 aria-label="Working" className="w-4 h-4 animate-spin" /> : null}
+                {bookAsk.yes}
+              </button>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => setChoosing(null)}
+                className="px-3.5 py-2 rounded-xl text-sm font-semibold min-h-11 disabled:opacity-50"
+                style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}
+              >
+                {bookAsk.no}
+              </button>
+            </div>
+          </div>
+        </Sheet>
       )}
 
       {ask !== null && (
