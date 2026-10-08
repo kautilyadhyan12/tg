@@ -17,14 +17,18 @@ export function ptSessionsAsked(err) {
   return parsed.success ? parsed.data : null;
 }
 
-/** One session: the person, then when it is and with whom. */
-export function ptEndingRow(session, clockFormat) {
-  const parts = [dayHeading(session?.localDate ?? ''), timeRange(session?.localStartMinute, session?.minutes, clockFormat)];
-  if (typeof session?.trainerName === 'string' && session.trainerName !== '') parts.push(`with ${session.trainerName}`);
+/** One session: the person, then when it is and with whom. `onePerson`: the box is about
+ *  one person it has already named, so the line leads with when, then with whom. */
+export function ptEndingRow(session, clockFormat, onePerson = false) {
+  const when = [dayHeading(session?.localDate ?? ''), timeRange(session?.localStartMinute, session?.minutes, clockFormat)].filter(
+    (part) => typeof part === 'string' && part !== '',
+  );
+  const trainer = typeof session?.trainerName === 'string' && session.trainerName !== '' ? `with ${session.trainerName}` : null;
+  if (onePerson) return { id: session.id, name: when.join(' · '), detail: trainer ?? '' };
   return {
     id: session.id,
     name: typeof session?.personName === 'string' && session.personName !== '' ? session.personName : 'No name',
-    detail: parts.filter((part) => typeof part === 'string' && part !== '').join(' · '),
+    detail: [...when, ...(trainer === null ? [] : [trainer])].join(' · '),
   };
 }
 
@@ -36,9 +40,9 @@ export const PT_ENDING_NOT_TOLD = "The app doesn't tell them or the trainer yet.
 export const PT_ENDING_MOVED = 'The sessions changed while this was open. Check them and press again.';
 
 /** The box's words: what ends, what happens, what stays. */
-export function ptEndingWords(ending, clockFormat) {
+export function ptEndingWords(ending, clockFormat, onePerson = false) {
   const words = ptSessionsEndingWords(ending);
-  const rows = (Array.isArray(ending?.sessions) ? ending.sessions : []).map((session) => ptEndingRow(session, clockFormat));
+  const rows = (Array.isArray(ending?.sessions) ? ending.sessions : []).map((session) => ptEndingRow(session, clockFormat, onePerson));
   return {
     title: words.title,
     rows,

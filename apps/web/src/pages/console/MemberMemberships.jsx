@@ -245,7 +245,7 @@ export default function MemberMemberships({
         {/* The personal training sessions booked on it end too (17e-iv-a). */}
         {sessions !== null ? (
           <>
-            <PtSessionsEnding ending={sessions} clockFormat={clockFormat} />
+            <PtSessionsEnding ending={sessions} clockFormat={clockFormat} onePerson />
             <p className="c-s14 c-t2 m-0">{words.ptKept}</p>
           </>
         ) : null}

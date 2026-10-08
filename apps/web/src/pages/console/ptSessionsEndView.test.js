@@ -38,6 +38,12 @@ describe('one session’s line', () => {
   ])('%s', (clock, row, name, detail) => {
     expect(ptEndingRow(row, clock)).toEqual({ id: row.id, name, detail });
   });
+
+  it('in a box about one person it leads with when, then with whom, and never repeats their name', () => {
+    expect(ptEndingRow(session(1), '12h', true)).toEqual({ id: session(1).id, name: 'Fri 9 Oct · 10:00 AM–11:00 AM', detail: 'with Sam Trainer' });
+    expect(ptEndingRow(session(1, { trainerName: null }), '24h', true)).toEqual({ id: session(1).id, name: 'Fri 9 Oct · 10:00–11:00', detail: '' });
+    expect(ptEndingWords({ count: 1, packSessions: 0, mark: MARK, sessions: [session(1)] }, '12h', true).rows[0].name).toBe('Fri 9 Oct · 10:00 AM–11:00 AM');
+  });
 });
 
 describe('the box’s words', () => {

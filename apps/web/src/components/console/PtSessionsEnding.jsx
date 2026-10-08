@@ -5,11 +5,12 @@ import { PT_ENDING_FIRST, PT_ENDING_MOVED, PT_ENDING_NOT_TOLD, ptEndingAction, p
 // PERSONAL TRAINING SESSIONS THAT WILL BE CANCELLED (ROADMAP 17e-iv-a; CLAUDE.md §4's screen
 // rule): the part of a Remove box, or of a membership's cancel, that names the sessions
 // before anything happens: the first few, "and N more", See all, what happens to them and
-// what stays. `ending` is the server's own answer, which carries the sessions.
+// what stays. `ending` is the server's own answer, which carries the sessions. `onePerson`:
+// the box is about one person it has already named, so each line leads with when.
 
-export default function PtSessionsEnding({ ending, clockFormat, moved = false }) {
+export default function PtSessionsEnding({ ending, clockFormat, moved = false, onePerson = false }) {
   const [all, setAll] = useState(false);
-  const words = ptEndingWords(ending, clockFormat);
+  const words = ptEndingWords(ending, clockFormat, onePerson);
   const rows = all ? words.rows : words.rows.slice(0, PT_ENDING_FIRST);
   const hidden = words.rows.length - rows.length;
   return (
@@ -24,7 +25,7 @@ export default function PtSessionsEnding({ ending, clockFormat, moved = false })
         {rows.map((row) => (
           <li key={row.id} className="min-w-0">
             <div className="c-s15 c-t1 c-ell">{row.name}</div>
-            <div className="c-s13 c-t3 c-ell">{row.detail}</div>
+            {row.detail === '' ? null : <div className="c-s13 c-t3 c-ell">{row.detail}</div>}
           </li>
         ))}
       </ul>
@@ -70,7 +71,7 @@ export function PtSessionsEndDialog({ name, ending, clockFormat, moved = false, 
         </div>
         <div className="px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0 flex flex-col gap-4">
           <p className="c-s15 c-t2 m-0">{`${name} hasn't been removed yet: they have personal training booked.`}</p>
-          <PtSessionsEnding ending={ending} clockFormat={clockFormat} moved={moved} />
+          <PtSessionsEnding ending={ending} clockFormat={clockFormat} moved={moved} onePerson />
           {error !== null ? (
             <p className="c-s14 c-t1 m-0" role="alert">
               {error}

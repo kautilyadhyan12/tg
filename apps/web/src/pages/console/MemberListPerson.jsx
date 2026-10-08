@@ -1518,7 +1518,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 .join(' ')}
             </p>
           )}
-          {sessions !== null ? <PtSessionsEnding ending={sessions} clockFormat={gym?.clockFormat} moved={ptEnding.moved} /> : null}
+          {sessions !== null ? <PtSessionsEnding ending={sessions} clockFormat={gym?.clockFormat} moved={ptEnding.moved} onePerson /> : null}
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={DANGER} data-testid="take-off-press">
               {past ? 'Remove access' : sessions !== null ? `Remove and ${ptEndingAction(sessions)}` : 'Remove'}

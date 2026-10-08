@@ -1127,8 +1127,8 @@ describe('cancelling a membership that personal training is booked with', () => 
     expect(ending.getByText('Ada Lovelace has personal training booked with Gold Monthly')).toBeTruthy();
     expect(ending.getByRole('heading', { name: '2 personal training sessions will be cancelled' })).toBeTruthy();
     expect(ending.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'Ada LovelaceWed 21 Oct · 10:00 AM–11:00 AM · with Sam Trainer',
-      'Ada LovelaceFri 23 Oct · 9:00 AM–10:00 AM · with Sam Trainer',
+      'Wed 21 Oct · 10:00 AM–11:00 AMwith Sam Trainer',
+      'Fri 23 Oct · 9:00 AM–10:00 AMwith Sam Trainer',
     ]);
     expect(ending.getByText('Sessions booked with another membership or a pack stay booked.')).toBeTruthy();
     expect(ending.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
