@@ -10,7 +10,7 @@ import {
 } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { newRequestKey } from './heldMembershipsView';
-import { whenWords } from './memberListPeople';
+import { noteDay } from './memberListPeople';
 
 // A PERSON'S TAGS AND STAFF NOTES, on their page (spec Part 3 §18.13; ROADMAP 5d).
 // Staff only: nothing here is shown to the member or sent anywhere.
@@ -23,7 +23,7 @@ const SMALL = 'c-btn c-btn-s c-btn-sm';
 /** How close to the limit a note is before the box says how many characters are left. */
 const NEAR_LIMIT = 200;
 
-export default function MemberNotes({ gymId, entryId, name, readOnly }) {
+export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone = null }) {
   const [state, setState] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -34,6 +34,8 @@ export default function MemberNotes({ gymId, entryId, name, readOnly }) {
   /** The key of the note being typed: the same press sent twice is one note. */
   const [requestKey, setRequestKey] = useState(newRequestKey);
   const [deleting, setDeleting] = useState(null);
+  /** The tag whose question is open: taking one off asks first. */
+  const [takingOff, setTakingOff] = useState(null);
   const [adding, setAdding] = useState(false);
   const [newTag, setNewTag] = useState('');
 
@@ -104,6 +106,9 @@ export default function MemberNotes({ gymId, entryId, name, readOnly }) {
   const deleteNote = async (noteId) => {
     if (await run('notes', () => orgService.deleteMemberNote(gymId, entryId, noteId))) setDeleting(null);
   };
+  const takeTagOff = async (tagId) => {
+    if (await run('tags', () => orgService.removeMemberTag(gymId, entryId, tagId))) setTakingOff(null);
+  };
   const addTag = async (tagName) => {
     if (await run('tags', () => orgService.addMemberTag(gymId, entryId, tagName))) {
       setNewTag('');
@@ -134,7 +139,10 @@ export default function MemberNotes({ gymId, entryId, name, readOnly }) {
                     className="c-chip"
                     aria-label={`Take the tag ${tag.name} off ${who}`}
                     disabled={busy}
-                    onClick={() => void run('tags', () => orgService.removeMemberTag(gymId, entryId, tag.id))}
+                    onClick={() => {
+                      setRefusal(null);
+                      setTakingOff(tag);
+                    }}
                   >
                     {tag.name}
                     <X aria-hidden="true" className="w-3.5 h-3.5" />
@@ -146,6 +154,21 @@ export default function MemberNotes({ gymId, entryId, name, readOnly }) {
         ) : (
           <p className="c-s14 c-t2 m-0">No tags yet.</p>
         )}
+        {takingOff !== null && held.has(takingOff.id) && !readOnly ? (
+          <div className="flex flex-col gap-2" data-testid="member-tag-off" ref={(el) => el?.scrollIntoView?.({ block: 'nearest' })}>
+            <p className="c-s14 c-w6 c-t1 m-0">
+              Take the tag {takingOff.name} off {who}? It stays one of your tags.
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              <button type="button" className="c-btn c-btn-p" disabled={busy} onClick={() => void takeTagOff(takingOff.id)}>
+                Take it off
+              </button>
+              <button type="button" className="c-btn c-btn-s" disabled={busy} onClick={() => setTakingOff(null)}>
+                Keep it
+              </button>
+            </div>
+          </div>
+        ) : null}
         {readOnly ? null : adding ? (
           <div className="flex flex-col gap-3" data-testid="member-tag-add">
             {others.length > 0 ? (
@@ -236,7 +259,11 @@ export default function MemberNotes({ gymId, entryId, name, readOnly }) {
               rows={3}
               value={draft}
               maxLength={MEMBER_NOTE_MAX_CHARS}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                // Other words are another note: only the very same words sent again are one press.
+                setRequestKey(newRequestKey());
+              }}
               disabled={busy}
               aria-describedby="member-note-hint"
             />
@@ -265,7 +292,7 @@ export default function MemberNotes({ gymId, entryId, name, readOnly }) {
                 <p className="c-s14 c-t1 m-0 whitespace-pre-wrap break-words">{note.body}</p>
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="c-s13 c-t3">
-                    {note.authorName ?? MEMBER_NOTE_NO_AUTHOR_WORDS} · {whenWords(note.createdAt)}
+                    {note.authorName ?? MEMBER_NOTE_NO_AUTHOR_WORDS} · {noteDay(note.createdAt, timeZone)}
                   </span>
                   {readOnly || deleting === note.id ? null : (
                     <button type="button" className="c-btn c-btn-quiet c-btn-sm" disabled={busy} onClick={() => setDeleting(note.id)}>

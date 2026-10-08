@@ -17,6 +17,8 @@ import {
   type MemberNotesAndTags,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
+import { deleteListForGym } from "../src/modules/orgs/memberList/repo.js";
+import { MEMBER_NOTES_WRITES_PER_HOUR } from "../src/modules/orgs/memberList/routes.js";
 import { loadConfig } from "../src/config.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -108,9 +110,9 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
       INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
       VALUES ('gym', ${gymId}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'trialing', 'pilot')`;
   };
-  const onStaff = async (gym: Gym, name: string, role: "manager" | "trainer"): Promise<Person> => {
+  const onStaff = async (gym: Gym, name: string, role: "manager" | "trainer", privileges: string[] | null = null): Promise<Person> => {
     const person = await signedIn(name);
-    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${person.userId}, ${role}, ${null})`;
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${person.userId}, ${role}, ${privileges})`;
     return person;
   };
 
@@ -183,7 +185,16 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
     // member of the gym (Maya's own account), a trainer, a manager of the other gym, a
     // stranger, and nobody.
     const mayaAccount = await signedIn("Maya Okafor");
-    await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${iron.id}, ${mayaAccount.userId})`;
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${iron.id}, ${mayaAccount.userId}, ${maya})`;
+    for (const path of ["/v1/orgs/mine", "/v1/users/me", "/v1/users/me/export", "/v1/users/me/checkin-pass"]) {
+      const own = await inject("GET", path, mayaAccount.cookies);
+      expect(own.statusCode, `${path}: ${own.body.slice(0, 200)}`).toBeLessThan(500);
+      expect(own.body.toLowerCase(), path).not.toContain("knee");
+    }
+    // By the tick, not the role: a manager with the tick taken away, a trainer given it.
+    const tickless = await onStaff(iron, "Iron Tickless", "manager", ["members.read", "members.remove", "attendance.read"]);
+    const ticked = await onStaff(iron, "Iron Ticked", "trainer", ["members.read", "members.confirm"]);
+    expect(bodies(await read(iron, maya, ticked))).toEqual([SECRET]);
     const trainer = await onStaff(iron, "Iron Trainer", "trainer");
     const oakManager = await onStaff(oak, "Oak Manager", "manager");
     const stranger = await signedIn("A Stranger");
@@ -192,6 +203,7 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
       ["the other gym's manager", oakManager, [403, 404]],
       ["the member the note is about", mayaAccount, [403, 404]],
       ["a trainer of the gym", trainer, [403]],
+      ["a manager without the tick", tickless, [403]],
       ["a stranger", stranger, [403, 404]],
       ["nobody", { userId: "", cookies: {} }, [401]],
     ];
@@ -463,4 +475,177 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
     expect(await noteRows(gym)).toEqual(["Kept while the plan ran"]);
     expect(names((await read(gym, maya)).tags)).toEqual(["VIP"]);
   });
+
+  // =========================================================================
+  // ROUND ONE
+  // =========================================================================
+
+  // Published test numbers (Stripe's testing page), in the ways a number gets typed or
+  // pasted; and things that are not cards.
+  const CARDS: [string, string][] = [
+    ["Visa unbroken", "4242424242424242"],
+    ["Visa spaced", "4242 4242 4242 4242"],
+    ["Visa dashed", "4242-4242-4242-4242"],
+    ["Visa, a group a line", "Card:\n4242\n4242\n4242\n4242"],
+    ["Visa, no-break spaces", "4242\u00A04242\u00A04242\u00A04242"],
+    ["Visa, tabs", "4242\t4242\t4242\t4242"],
+    ["Visa, full-width digits", "\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12"],
+    ["Visa, underscores", "4242_4242_4242_4242"],
+    ["Mastercard", "5555 5555 5555 4444"],
+    ["Mastercard 2-series", "2223003122003222"],
+    ["Amex 4-6-5", "3782 822463 10005"],
+    ["Discover", "6011111111111117"],
+    ["Diners 14", "3056 9300 0902 04"],
+    ["JCB", "3566002020360505"],
+  ];
+  const NOT_CARDS = ["Call +44 7911 123456 before 9", "Mobile 4915123456789", "Weights 82.5 81.9 81.2 80.8", "Locker 204, key tag 100234", "Back on 12/11/2026 at 18:30"];
+
+  it("a card number is kept in no note and no tag, however it is typed or pasted; a phone, a weight log and a date are kept", async () => {
+    const gym = await makeGym("Mnt Cards");
+    const maya = await addPerson(gym, "Maya Okafor");
+    for (const [what, number] of CARDS) {
+      const asNote = await inject("POST", `${entryUrl(gym, maya)}/notes`, gym.owner.cookies, { body: `Pays with ${number} each month`, requestKey: randomUUID() });
+      expect(asNote.statusCode, `note: ${what}`).toBe(400);
+      expect(errorOf(asNote), `note: ${what}`).toBe("note_holds_card");
+      if (number.length <= 30) {
+        const asTag = await inject("POST", `${entryUrl(gym, maya)}/tags`, gym.owner.cookies, { name: number });
+        expect(asTag.statusCode, `tag: ${what}`).toBe(400);
+        expect(errorOf(asTag), `tag: ${what}`).toBe("tag_holds_card");
+      }
+    }
+    expect(await noteRows(gym)).toEqual([]);
+    expect(await tagRows(gym)).toEqual([]);
+    for (const words of NOT_CARDS) await note(gym, maya, words);
+    expect((await noteRows(gym)).sort()).toEqual([...NOT_CARDS].sort());
+    await tag(gym, maya, "Since 2019");
+    // The audit log holds which tag, never its name.
+    const audit = await sql<{ meta: unknown }[]>`SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_tag_added'`;
+    expect(audit).toHaveLength(1);
+    expect(JSON.stringify(audit)).not.toContain("Since 2019");
+  });
+
+  it("characters nobody can see: a NUL is dropped from a note and a tag, and a zero-width space makes no second tag", async () => {
+    const gym = await makeGym("Mnt Unseen");
+    const maya = await addPerson(gym, "Maya Okafor");
+    expect(bodies(await note(gym, maya, "Likes\u0000 early\tclasses\nand rowing"))).toEqual(["Likes early\tclasses\nand rowing"]);
+    await tag(gym, maya, "VIP");
+    await tag(gym, maya, "VIP\u200B");
+    await tag(gym, maya, "V\u0000IP\uFEFF");
+    expect(await tagRows(gym)).toEqual(["VIP"]);
+  });
+
+  it("the same press ten times at the same instant is one note; its key on another person saves nothing and says so", async () => {
+    const gym = await makeGym("Mnt Once");
+    const manager = await onStaff(gym, "Nora Manager", "manager");
+    const maya = await addPerson(gym, "Maya Okafor");
+    const omar = await addPerson(gym, "Omar Haddad");
+    const key = randomUUID();
+    const presses = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        inject("POST", `${entryUrl(gym, maya)}/notes`, (i % 2 === 0 ? gym.owner : manager).cookies, { body: "The same press", requestKey: key }),
+      ),
+    );
+    expect(presses.map((res) => res.statusCode)).toEqual(Array.from({ length: 10 }, () => 200));
+    expect(await noteRows(gym)).toEqual(["The same press"]);
+
+    const other = await inject("POST", `${entryUrl(gym, omar)}/notes`, gym.owner.cookies, { body: "About Omar", requestKey: key });
+    expect(other.statusCode).toBe(409);
+    expect(errorOf(other)).toBe("note_not_saved");
+    expect(bodies(await read(gym, omar))).toEqual([]);
+    // The same key in another gym is that gym's own note.
+    const oak = await makeGym("Mnt Once Oak");
+    const ola = await addPerson(oak, "Ola Berg");
+    expect(bodies(await note(oak, ola, "Another gym", oak.owner, key))).toEqual(["Another gym"]);
+  });
+
+  it("joining two full records keeps everything, and the kept one then takes no more; a past member can still be written about", async () => {
+    const gym = await makeGym("Mnt Full Join");
+    const maya = await addPerson(gym, "Maya Okafor");
+    const mayaAgain = await addPerson(gym, "Maya O.");
+    await sql`
+      INSERT INTO gym_member_tags (gym_id, name)
+      SELECT ${gym.id}, 'Tag ' || lpad(n::text, 3, '0') FROM generate_series(1, ${MEMBER_TAGS_MAX_PER_PERSON * 2}) AS n`;
+    for (const [entryId, offset] of [[maya, 0], [mayaAgain, MEMBER_TAGS_MAX_PER_PERSON]] as const) {
+      await sql`
+        INSERT INTO gym_member_notes (gym_id, entry_id, body, author_user_id, request_key)
+        SELECT ${gym.id}, ${entryId}, 'Note ' || n, ${gym.owner.userId}, gen_random_uuid() FROM generate_series(1, ${MEMBER_NOTES_MAX_PER_PERSON}) AS n`;
+      await sql`
+        INSERT INTO gym_member_entry_tags (gym_id, entry_id, tag_id)
+        SELECT gym_id, ${entryId}, id FROM gym_member_tags WHERE gym_id = ${gym.id} ORDER BY name LIMIT ${MEMBER_TAGS_MAX_PER_PERSON} OFFSET ${offset}`;
+    }
+    const merged = await inject("POST", `${entryUrl(gym, mayaAgain)}/merge`, gym.owner.cookies, { keepEntryId: maya, acknowledgeLeavesList: true });
+    expect(merged.statusCode, merged.body).toBe(200);
+    const kept = await read(gym, maya);
+    expect(kept.notes).toHaveLength(MEMBER_NOTES_MAX_PER_PERSON * 2);
+    expect(kept.tags).toHaveLength(MEMBER_TAGS_MAX_PER_PERSON * 2);
+
+    const moreNote = await inject("POST", `${entryUrl(gym, maya)}/notes`, gym.owner.cookies, { body: "One more", requestKey: randomUUID() });
+    expect([moreNote.statusCode, errorOf(moreNote)]).toEqual([409, "too_many_notes"]);
+    expect(moreNote.body).toContain(`${String(MEMBER_NOTES_MAX_PER_PERSON)} notes or more`);
+    await sql`INSERT INTO gym_member_tags (gym_id, name) VALUES (${gym.id}, 'Spare')`;
+    const moreTag = await inject("POST", `${entryUrl(gym, maya)}/tags`, gym.owner.cookies, { name: "Spare" });
+    expect([moreTag.statusCode, errorOf(moreTag)]).toEqual([409, "too_many_tags_person"]);
+    expect(moreTag.body).toContain(`${String(MEMBER_TAGS_MAX_PER_PERSON)} tags or more`);
+
+    // A past member: read, written about and tagged as before.
+    const omar = await addPerson(gym, "Omar Haddad");
+    expect((await inject("DELETE", entryUrl(gym, omar), gym.owner.cookies)).statusCode).toBe(200);
+    expect(bodies(await note(gym, omar, "Left to move city"))).toEqual(["Left to move city"]);
+    expect(names((await tag(gym, omar, "Spare")).tags)).toEqual(["Spare"]);
+  });
+
+  it("a gym's list deleted takes its tags too, and no other gym's", async () => {
+    const gym = await makeGym("Mnt Closing");
+    const beside = await makeGym("Mnt Staying");
+    const maya = await addPerson(gym, "Maya Okafor");
+    const omar = await addPerson(beside, "Omar Haddad");
+    await tag(gym, maya, "VIP").then(() => note(gym, maya, "Goes with the list"));
+    await tag(beside, omar, "VIP").then(() => note(beside, omar, "Stays"));
+    await sql.begin((tx) => deleteListForGym(tx, gym.id));
+    expect(await tagRows(gym)).toEqual([]);
+    expect(await noteRows(gym)).toEqual([]);
+    expect(await tagRows(beside)).toEqual(["VIP"]);
+    expect(await noteRows(beside)).toEqual(["Stays"]);
+  });
+
+  it(
+    `notes and tags have their own allowance: ${String(MEMBER_NOTES_WRITES_PER_HOUR)} writes an hour a person, then told to slow down on all four; adding a member and a colleague at that address are not held up`,
+    async () => {
+      const gym = await makeGym("Mnt Limit");
+      const manager = await onStaff(gym, "Nora Manager", "manager");
+      const maya = await addPerson(gym, "Maya Okafor");
+      const DESK = "10.83.250.9";
+      const press = () => inject("DELETE", `${entryUrl(gym, maya)}/tags/${randomUUID()}`, gym.owner.cookies, undefined, DESK);
+      let done = 0;
+      let refused: { statusCode: number; body: string } | null = null;
+      while (refused === null && done <= MEMBER_NOTES_WRITES_PER_HOUR + 5) {
+        const res = await press();
+        if (res.statusCode === 200) {
+          done += 1;
+          continue;
+        }
+        expect(res.statusCode, res.body).toBe(429);
+        // The app-wide limit (600 a minute a person) says how long to wait; this one does not.
+        const wait = (JSON.parse(res.body) as { retryAfterSeconds?: number }).retryAfterSeconds;
+        if (res.body.includes("Too many requests") && wait !== undefined) await new Promise((resolve) => setTimeout(resolve, (wait + 1) * 1000));
+        else refused = res;
+      }
+      expect(done).toBe(MEMBER_NOTES_WRITES_PER_HOUR);
+      const blocked = [
+        await inject("POST", `${entryUrl(gym, maya)}/notes`, gym.owner.cookies, { body: "Too fast", requestKey: randomUUID() }, DESK),
+        await inject("DELETE", `${entryUrl(gym, maya)}/notes/${randomUUID()}`, gym.owner.cookies, undefined, DESK),
+        await inject("POST", `${entryUrl(gym, maya)}/tags`, gym.owner.cookies, { name: "Too fast" }, DESK),
+        await press(),
+      ];
+      expect(blocked.map((res) => res.statusCode)).toEqual([429, 429, 429, 429]);
+      expect(await noteRows(gym)).toEqual([]);
+      // Their other work, and a colleague at the same desk, go on.
+      const added = await inject("POST", `/v1/orgs/${gym.id}/member-list/entries`, gym.owner.cookies, { fullName: "Omar Haddad", email: `mnt-l-${uniq()}@example.com` }, DESK);
+      expect(added.statusCode, added.body).toBe(201);
+      expect((await inject("GET", `${entryUrl(gym, maya)}/notes`, gym.owner.cookies, undefined, DESK)).statusCode).toBe(200);
+      const colleague = await inject("POST", `${entryUrl(gym, maya)}/notes`, manager.cookies, { body: "From a colleague", requestKey: randomUUID() }, DESK);
+      expect(colleague.statusCode, colleague.body).toBe(200);
+    },
+    600_000,
+  );
 });

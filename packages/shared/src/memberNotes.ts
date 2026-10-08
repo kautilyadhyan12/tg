@@ -4,21 +4,35 @@
 import { z } from "zod";
 
 export const MEMBER_NOTE_MAX_CHARS = 2000;
-/** Notes one person's page holds; the oldest is deleted by staff before another is added. */
+/** Notes staff can add to one person; staff delete one before another is added. A join of
+ *  two records can leave a person with more. */
 export const MEMBER_NOTES_MAX_PER_PERSON = 200;
 export const MEMBER_TAG_MAX_CHARS = 30;
 export const MEMBER_TAGS_MAX_PER_GYM = 100;
 export const MEMBER_TAGS_MAX_PER_PERSON = 20;
 
+/** Characters Postgres refuses or a screen cannot show: controls other than a new line and a tab. */
+const CONTROLS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu;
+/** Characters nobody can see, which would make two tags that look the same. */
+const ZERO_WIDTH = /[\u200B-\u200D\u2060\uFEFF]/gu;
+
 /** A tag as the gym typed it, with the spaces around and inside it tidied. */
-export const tidyMemberTagName = (raw: string): string => raw.normalize("NFC").replace(/\s+/gu, " ").trim();
+export const tidyMemberTagName = (raw: string): string => raw.normalize("NFC").replace(CONTROLS, "").replace(ZERO_WIDTH, "").replace(/\s+/gu, " ").trim();
+
+/** A note as staff typed it: its line breaks kept, its ends trimmed. */
+export const tidyMemberNoteBody = (raw: string): string => raw.normalize("NFC").replace(/\r\n?/gu, "\n").replace(CONTROLS, "").trim();
+
+/** What the card rule reads: a note or tag with every look-alike digit made plain and
+ *  every break between groups (a new line, a tab, a no-break space, an underscore) made
+ *  one space. Never kept; the words are kept as typed. */
+export const foldForCardCheck = (text: string): string => text.normalize("NFKC").replace(/[\s_]+/gu, " ").trim();
 
 export const memberNoteAddRequestSchema = z
   .object({
     body: z
       .string()
       .max(MEMBER_NOTE_MAX_CHARS * 2)
-      .transform((raw) => raw.normalize("NFC").replace(/\r\n?/gu, "\n").trim())
+      .transform(tidyMemberNoteBody)
       .pipe(z.string().min(1).max(MEMBER_NOTE_MAX_CHARS)),
     /** The press that made it: the same press again adds nothing. */
     requestKey: z.string().uuid(),
@@ -65,8 +79,11 @@ export const MEMBER_NOTES_WORDS = {
   note_not_found: "That note isn't there any more.",
   note_holds_card:
     "This note looks like it holds a payment card number. We never store card details. Take the number out, then save it again.",
-  too_many_notes: `This person already has ${String(MEMBER_NOTES_MAX_PER_PERSON)} notes, which is as many as we keep. Delete one you no longer need, then add this one.`,
-  too_many_tags_person: `This person already has ${String(MEMBER_TAGS_MAX_PER_PERSON)} tags, which is as many as one person can have. Take one off, then add this one.`,
+  tag_holds_card:
+    "This tag looks like it holds a payment card number. We never store card details. Take the number out, then add it again.",
+  note_not_saved: "We couldn't save that note. Please press Save note again.",
+  too_many_notes: `This person already has ${String(MEMBER_NOTES_MAX_PER_PERSON)} notes or more, which is as many as we keep. Delete one you no longer need, then add this one.`,
+  too_many_tags_person: `This person already has ${String(MEMBER_TAGS_MAX_PER_PERSON)} tags or more, which is as many as one person can have. Take one off, then add this one.`,
   too_many_tags_gym: `Your gym already has ${String(MEMBER_TAGS_MAX_PER_GYM)} tags, which is as many as we keep. Pick one of them instead.`,
 } as const;
 

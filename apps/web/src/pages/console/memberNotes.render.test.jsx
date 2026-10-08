@@ -23,6 +23,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
 
 const { orgService } = await import('../../api/orgsApi');
 const MemberNotes = (await import('./MemberNotes')).default;
+const { noteDay } = await import('./memberListPeople');
 
 const GYM = '11111111-1111-4111-8111-111111111111';
 const ADA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -119,6 +120,34 @@ describe("a person's notes and tags", () => {
     expect(orgService.addMemberNote.mock.calls[2][2].requestKey).not.toBe(first[2].requestKey);
   });
 
+  it('words changed after a save that failed are a new press, so the server never answers with the old words', async () => {
+    orgService.getMemberNotes.mockResolvedValue(answer());
+    orgService.addMemberNote.mockRejectedValueOnce(new Error('the answer was lost')).mockResolvedValue(answer({ notes: [noteOf(1, 'Prefers evenings')] }));
+    draw();
+    const box = await screen.findByLabelText('Add a note about Ada Lovelace');
+    fireEvent.change(box, { target: { value: 'Prefers mornings' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
+    await screen.findByRole('alert');
+    fireEvent.change(box, { target: { value: 'Prefers evenings' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
+    await screen.findByTestId('member-note');
+    const [first, second] = orgService.addMemberNote.mock.calls;
+    expect(second[2].body).toBe('Prefers evenings');
+    expect(second[2].requestKey).not.toBe(first[2].requestKey);
+  });
+
+  it("a note's day is the gym's day, whatever the computer's", async () => {
+    // 03:30 in London on the 8th is still the 7th in Chicago, and already the 8th in Kolkata.
+    expect(noteDay('2026-10-08T02:30:00.000Z', 'America/Chicago')).toBe('7 October 2026');
+    expect(noteDay('2026-10-08T02:30:00.000Z', 'Asia/Kolkata')).toBe('8 October 2026');
+    expect(noteDay('2026-10-07T20:30:00.000Z', 'Asia/Kolkata')).toBe('8 October 2026');
+    expect(noteDay('2026-10-08T02:30:00.000Z', 'Not/AZone')).not.toBe('');
+    expect(noteDay('not a date', 'Asia/Kolkata')).toBe('');
+    orgService.getMemberNotes.mockResolvedValue(answer({ notes: [noteOf(1, 'Late note', { createdAt: '2026-10-08T02:30:00.000Z' })] }));
+    draw({ timeZone: 'America/Chicago' });
+    expect(await screen.findByText('Nora Manager · 7 October 2026')).toBeTruthy();
+  });
+
   it('Delete asks first: Keep it sends nothing, Delete note deletes that note only', async () => {
     orgService.getMemberNotes.mockResolvedValue(answer({ notes: [noteOf(1, 'Keep me'), noteOf(2, 'Delete me')] }));
     orgService.deleteMemberNote.mockResolvedValue(answer({ notes: [noteOf(1, 'Keep me')] }));
@@ -173,8 +202,16 @@ describe("a person's notes and tags", () => {
       [GYM, ADA, 'Early bird'],
     ]);
 
+    // Taking one off asks first: Keep it sends nothing.
     fireEvent.click(screen.getByRole('button', { name: 'Take the tag VIP off Ada Lovelace' }));
+    expect(within(screen.getByTestId('member-tag-off')).getByText('Take the tag VIP off Ada Lovelace? It stays one of your tags.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByTestId('member-tag-off')).toBeNull();
+    expect(orgService.removeMemberTag).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Take the tag VIP off Ada Lovelace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Take it off' }));
     await waitFor(() => expect(screen.getAllByTestId('member-tag').map((li) => li.textContent)).toEqual(['Beginner', 'Early bird']));
+    expect(screen.queryByTestId('member-tag-off')).toBeNull();
     expect(orgService.removeMemberTag.mock.calls).toEqual([[GYM, ADA, id(3)]]);
   });
 

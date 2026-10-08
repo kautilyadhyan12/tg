@@ -110,6 +110,9 @@ function requireUserId(req: FastifyRequest): string {
   return userId;
 }
 
+/** Notes and tags one member of staff may write in an hour: 200 people, a few presses each. */
+export const MEMBER_NOTES_WRITES_PER_HOUR = 1200;
+
 export interface MemberListRouteDeps {
   sql: Sql;
   redis: RedisLike;
@@ -406,6 +409,20 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     }),
   );
 
+  /** Notes and tags (5d-i): one press a tag a person, so a gym tagging its 200 people must
+   *  not spend the allowance for adding and changing members; several staff at one desk
+   *  share an address. */
+  const notesGate = gate(
+    createDualRateLimit({
+      name: "memberlist_notes",
+      max: MEMBER_NOTES_WRITES_PER_HOUR,
+      ipMax: MEMBER_NOTES_WRITES_PER_HOUR * 4,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
   /** Different people (5b-iv-a): one press a pair, and a gym's first look can hold hundreds,
    *  so its own allowance like It's correct; several staff at one desk share an address. */
   const differentGate = gate(
@@ -596,7 +613,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     if (params === null) return;
     const body = parseOr400(memberNoteAddRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const state = await notes.addNote(listDeps, requireUserId(req), params.gymId, params.entryId, body, editGate(req, reply));
+    const state = await notes.addNote(listDeps, requireUserId(req), params.gymId, params.entryId, body, notesGate(req, reply));
     if (state === null) return;
     return reply.status(200).send(state);
   });
@@ -604,7 +621,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
   app.delete("/v1/orgs/:gymId/member-list/entries/:entryId/notes/:noteId", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(memberNoteParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const state = await notes.deleteNote(listDeps, requireUserId(req), params.gymId, params.entryId, params.noteId, editGate(req, reply));
+    const state = await notes.deleteNote(listDeps, requireUserId(req), params.gymId, params.entryId, params.noteId, notesGate(req, reply));
     if (state === null) return;
     return reply.status(200).send(state);
   });
@@ -614,7 +631,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     if (params === null) return;
     const body = parseOr400(memberTagAddRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const state = await notes.addTag(listDeps, requireUserId(req), params.gymId, params.entryId, body.name, editGate(req, reply));
+    const state = await notes.addTag(listDeps, requireUserId(req), params.gymId, params.entryId, body.name, notesGate(req, reply));
     if (state === null) return;
     return reply.status(200).send(state);
   });
@@ -622,7 +639,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
   app.delete("/v1/orgs/:gymId/member-list/entries/:entryId/tags/:tagId", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(memberTagParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const state = await notes.removeTag(listDeps, requireUserId(req), params.gymId, params.entryId, params.tagId, editGate(req, reply));
+    const state = await notes.removeTag(listDeps, requireUserId(req), params.gymId, params.entryId, params.tagId, notesGate(req, reply));
     if (state === null) return;
     return reply.status(200).send(state);
   });

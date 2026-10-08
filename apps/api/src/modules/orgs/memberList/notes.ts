@@ -7,6 +7,7 @@
 // Gates in CLAUDE.md §4's order: privilege (and a live plan, for a write), then the rate
 // limit, then the handler.
 import {
+  foldForCardCheck,
   MEMBER_LIST_BY_HAND_WORDS,
   MEMBER_NOTES_MAX_PER_PERSON,
   MEMBER_NOTES_WORDS,
@@ -56,7 +57,7 @@ export async function addNote(
 ): Promise<MemberNotesAndTags | null> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  if (holdsCard(input.body)) throw new OrgsError(400, "note_holds_card", MEMBER_NOTES_WORDS.note_holds_card);
+  if (holdsCard(foldForCardCheck(input.body))) throw new OrgsError(400, "note_holds_card", MEMBER_NOTES_WORDS.note_holds_card);
   const at = deps.now();
   await deps.sql.begin(async (tx) => {
     // Holds the record: a second note for it waits here, so the count below is true.
@@ -67,7 +68,8 @@ export async function addNote(
       throw new OrgsError(409, "too_many_notes", MEMBER_NOTES_WORDS.too_many_notes);
     }
     const noteId = await notesRepo.insertNote(tx, { gymId, entryId, body: input.body, authorUserId: userId, requestKey: input.requestKey, at });
-    if (noteId === null) return;
+    // The key is already used on another person of this gym: nothing was saved.
+    if (noteId === null) throw new OrgsError(409, "note_not_saved", MEMBER_NOTES_WORDS.note_not_saved);
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,
@@ -91,6 +93,8 @@ export async function deleteNote(
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   await deps.sql.begin(async (tx) => {
+    // Holds the record, as a join of two does: the answer is about where the note is now.
+    await repo.lockEntries(tx, gymId, [entryId]);
     if (!(await notesRepo.deleteNote(tx, gymId, entryId, noteId))) {
       throw new OrgsError(404, "note_not_found", MEMBER_NOTES_WORDS.note_not_found);
     }
@@ -117,6 +121,7 @@ export async function addTag(
 ): Promise<MemberNotesAndTags | null> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
+  if (holdsCard(foldForCardCheck(name))) throw new OrgsError(400, "tag_holds_card", MEMBER_NOTES_WORDS.tag_holds_card);
   await deps.sql.begin(async (tx) => {
     // The gym's row: two staff typing the same new tag make one, and both counts hold.
     await repo.lockGym(tx, gymId);
@@ -140,7 +145,7 @@ export async function addTag(
       action: "org.member_tag_added",
       targetType: "member_list_entry",
       targetId: entryId,
-      meta: { tagId: tag.id, tag: tag.name },
+      meta: { tagId: tag.id },
     });
   });
   return await stateOf(deps, gymId, entryId);
@@ -158,6 +163,8 @@ export async function removeTag(
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   await deps.sql.begin(async (tx) => {
+    // Holds the record: a join that is moving its tags finishes first, and it is then gone.
+    await repo.lockEntries(tx, gymId, [entryId]);
     if ((await repo.entryFor(tx, gymId, entryId)) === null) throw entryNotFound();
     // Already off: the same press twice ends the same way.
     if (!(await notesRepo.takeTagOff(tx, gymId, entryId, tagId))) return;
