@@ -2904,7 +2904,13 @@ lock, in the server's line of members' writes. The audit rows are `member.pt_boo
 a row of the seven days picks one (the first with a time opens), and each of that day's
 available times is a button reading its whole session that books at one press; with
 nothing that pays the times show as plain text under who to ask; Your sessions has Cancel
-session, which asks first and says what a late cancel costs. Nobody is told (the inbox, 20a):
+session, which asks first and says what a late cancel costs. **From Kd's click-through:**
+the read also answers `history`, the reader's own sessions that are over or were cancelled
+(the newest 20 of the last 60 days), and they stay in the one Your sessions list under the
+coming ones, greyed, each saying what happened (Cancelled · Cancelled late · You came · You
+missed this session · Past); the box before a cancel names the gym, whose setting the time
+to cancel for free is; what a booking uses reads "You have PT 10 pack: 10 sessions left.
+Each booking uses 1 session." Nobody is told (the inbox, 20a):
 the session is on the trainer's week. Not done: sessions ended when a person or a trainer
 leaves, came and no-show (17e-iv).)*
 

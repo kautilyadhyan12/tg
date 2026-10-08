@@ -11,6 +11,8 @@
 // member's routes answer the 404 of a gym that does not exist to anybody who is not a live
 // app member of a gym on a live plan.
 import {
+  MEMBER_PT_HISTORY_DAYS,
+  MEMBER_PT_HISTORY_MAX,
   MEMBER_PT_SESSIONS_MAX,
   PT_HORIZON_DAYS,
   PT_MEMBER_WORDS,
@@ -68,7 +70,7 @@ function ownView(row: repo.OwnSessionRow, now: Date, freeCancelMinutes: number):
 }
 
 /** Seven of the gym's days: the trainers taking sessions with the times this member can
- *  book, what would pay on each day, and their own coming sessions. */
+ *  book, what would pay on each day, and their own sessions, coming and past. */
 export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, query: MemberPtQuery, limit: Limit): Promise<MemberPtResponse | null> {
   await requireMember(deps, gymId, userId);
   if (!(await limit())) return null;
@@ -100,10 +102,13 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
   const distinct = [...new Map(offered.flat().map((t) => [keyOf(t), t])).values()];
 
   const entryId = me.entryId;
-  const [instants, held, sessions] = await Promise.all([
+  const [instants, held, sessions, history] = await Promise.all([
     repo.instantsOf(deps.sql, clock.timezone, distinct),
     entryId !== null && clock.hasTypes ? heldForPtOf(deps.sql, gymId, [entryId]) : [],
     entryId === null ? [] : repo.sessionsOfEntry(deps.sql, gymId, entryId, now, MEMBER_PT_SESSIONS_MAX),
+    entryId === null
+      ? []
+      : repo.pastSessionsOfEntry(deps.sql, gymId, entryId, now, new Date(now.getTime() - MEMBER_PT_HISTORY_DAYS * DAY_MS), MEMBER_PT_HISTORY_MAX),
   ]);
   const startOf = new Map(instants.map((i) => [keyOf(i), i.startsAtMs]));
   const first = instants[0]?.startsAtMs;
@@ -158,6 +163,7 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
       };
     }),
     sessions: sessions.map((s) => ownView(s, now, clock.freeCancelMinutes)),
+    history: history.map((s) => ownView(s, now, clock.freeCancelMinutes)),
   });
 }
 

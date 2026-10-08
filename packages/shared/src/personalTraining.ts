@@ -616,11 +616,6 @@ export const PT_MEMBER_WORDS: Record<PtBookRefusal, string> = {
   pack_used: "Your pack has no sessions left. Ask at the front desk for another.",
 };
 
-/** What the box says before a member's late cancel: free time has run out. */
-export const PT_MEMBER_LATE_CANCEL = "It's too late to cancel for free. Cancelling now counts as a late cancel.";
-export const PT_MEMBER_LATE_CANCEL_PACK =
-  "It's too late to cancel for free. Cancelling now counts as a late cancel, and the session stays used on your pack.";
-
 /** A member of the app with no record on the gym's list: a session hangs on the record. */
 export const PT_NOT_ON_LIST_ERROR = "not_on_list";
 export const PT_NOT_ON_LIST_WORDS = "Your gym hasn't added you to its member list yet. Ask at the front desk.";
@@ -629,6 +624,9 @@ export const PT_NOT_ON_LIST_WORDS = "Your gym hasn't added you to its member lis
 export const MEMBER_PT_WEEKS = 8;
 /** How many of their own coming sessions one read answers. */
 export const MEMBER_PT_SESSIONS_MAX = 100;
+/** Their sessions that are over or cancelled: the newest of the last so many days. */
+export const MEMBER_PT_HISTORY_MAX = 20;
+export const MEMBER_PT_HISTORY_DAYS = 60;
 
 /** `week`: 0 for the gym's next seven days from today, 1 for the seven after, and so on. */
 export const memberPtQuerySchema = z
@@ -664,8 +662,8 @@ export const memberPtSessionSchema = z
 export type MemberPtSession = z.infer<typeof memberPtSessionSchema>;
 
 /** Seven of the gym's days as a member reads them: the trainers taking sessions with the
- *  times that member can book, what would pay on each day, and their own coming sessions
- *  (all of them, whatever the week). A time is a minute from midnight on the gym's clock. */
+ *  times that member can book, what would pay on each day, their own coming sessions
+ *  (all of them, whatever the week) and the ones that are over or cancelled. A time is a minute from midnight on the gym's clock. */
 export const memberPtResponseSchema = z
   .object({
     timezone: z.string(),
@@ -700,6 +698,9 @@ export const memberPtResponseSchema = z
         .strict(),
     ),
     sessions: z.array(memberPtSessionSchema).max(MEMBER_PT_SESSIONS_MAX),
+    /** Their own sessions that are over or were cancelled, the newest first, whatever the
+     *  week: a cancelled session stays where they can read what happened to it. */
+    history: z.array(memberPtSessionSchema).max(MEMBER_PT_HISTORY_MAX),
   })
   .strict();
 export type MemberPtResponse = z.infer<typeof memberPtResponseSchema>;

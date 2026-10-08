@@ -1,4 +1,4 @@
-import { PT_MEMBER_LATE_CANCEL, PT_MEMBER_LATE_CANCEL_PACK, PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS } from '@app/shared';
+import { PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS } from '@app/shared';
 import { clockText, dayHeading, instantText } from './classesView';
 import { dayLabel } from './leaderboardView';
 
@@ -22,9 +22,9 @@ export function payText(view, day) {
   const pays = day.pays;
   if (pays === null) return { text: PT_MEMBER_WORDS.no_membership, can: false };
   if (pays.membership === null) return null;
-  if (pays.sessionsLeft === null) return { text: `Included in your membership: ${pays.membership}.`, can: true };
+  if (pays.sessionsLeft === null) return { text: `Personal training is included in your membership: ${pays.membership}.`, can: true };
   const left = pays.sessionsLeft === 1 ? '1 session left' : `${pays.sessionsLeft} sessions left`;
-  return { text: `A booking uses 1 session from your pack: ${pays.membership} · ${left}.`, can: true };
+  return { text: `You have ${pays.membership}: ${left}. Each booking uses 1 session.`, can: true };
 }
 
 /** The seven days as the row of days to pick from, and which one opens first: the first
@@ -69,19 +69,42 @@ export function sessionText(s) {
   return `${dayLabel(s.localDate)} · ${sessionSpan(s.localStartMinute, s.minutes)} · with ${trainerText(s.trainerName)}`;
 }
 
-/** What the box asks before a session is cancelled. */
-export function ptCancelAsk(s, timezone) {
+/** What the box asks before a session is cancelled. The time to cancel for free is the
+ *  gym's own setting, so the box says whose it is. */
+export function ptCancelAsk(s, timezone, gymName) {
   const what = sessionText(s);
   if (s.cancel === 'late') {
-    return { title: 'Cancel late?', lines: [what, s.packCharged ? PT_MEMBER_LATE_CANCEL_PACK : PT_MEMBER_LATE_CANCEL], yes: 'Cancel session', no: 'Keep it' };
+    const passed = `${gymName}'s time to cancel for free has passed. Cancelling now counts as a late cancel`;
+    return {
+      title: 'Cancel late?',
+      lines: [what, s.packCharged ? `${passed}, and the session stays used on your pack.` : `${passed}.`],
+      yes: 'Cancel session',
+      no: 'Keep it',
+    };
   }
-  const until = `Free to cancel until ${instantText(s.freeCancelUntil, timezone)}.`;
+  const until = `${gymName} lets you cancel for free until ${instantText(s.freeCancelUntil, timezone)}.`;
   return {
     title: 'Cancel your session?',
     lines: [what, s.packCharged ? `${until} Your pack gets the session back.` : until],
     yes: 'Cancel session',
     no: 'Keep it',
   };
+}
+
+/** What happened to a session that is over or was cancelled: the line under it in the list. */
+export function historyText(s) {
+  switch (s.status) {
+    case 'cancelled':
+      return 'Cancelled';
+    case 'late_cancelled':
+      return s.packCharged ? 'Cancelled late · the session stays used on your pack' : 'Cancelled late';
+    case 'attended':
+      return 'You came';
+    case 'no_show':
+      return s.packCharged ? 'You missed this session · it stays used on your pack' : 'You missed this session';
+    default:
+      return 'Past';
+  }
 }
 
 /** What is said once a cancel has gone through, from the session as the server now has it. */

@@ -15,7 +15,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Built at Opus 5.5 high**, though the plan asked for xhigh (the terminal's record). Its review is the check.
 - **Found on the way, older than this job (in ROADMAP's known defects):** the member web keeps its side menu on a phone, so every member page is squeezed there; a `challengesConsole.render` test timed out once in a full run.
 - **Not done:** nobody is told of a booking (the inbox, 20a); sessions ended when people leave (17e-iv).
-- **Open:** Kd's click-through, the review round, the merge. **Next in Folder A:** 17e-iv.
+- **Kd's click-through passed**, with three things built at once (the RULINGS line has his words): the pack line reworded; the cancel box names the gym, whose rule it is; over and cancelled sessions stay in Your sessions (`history`, the newest 20 of 60 days). After it: `pt.member.routes` 14 of 14, the tab's file and `myGyms.render` 72 of 72, eslint 0, shared tsc and lint 0, the walk again in Edge with no fault.
+- **Open:** the review round, the merge. **Next in Folder A:** 17e-iv.
 
 ## 2026-10-08 · The same planning terminal, later (Folder A): the new look last, nine jobs to Folder B (branch `plan-2026-10-08-b`)
 

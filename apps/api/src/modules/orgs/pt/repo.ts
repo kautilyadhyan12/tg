@@ -746,6 +746,19 @@ export async function sessionsOfEntry(sql: SqlOrTx, gymId: string, entryId: stri
   return rows.map(toOwnSession);
 }
 
+/** The same record's sessions that are over or were cancelled, since `since`, the newest
+ *  first, and of two at one time the one last changed: everything `sessionsOfEntry` does
+ *  not list. */
+export async function pastSessionsOfEntry(sql: SqlOrTx, gymId: string, entryId: string, now: Date, since: Date, limit: number): Promise<OwnSessionRow[]> {
+  const rows = await sql`
+    SELECT ${OWN_SESSION(sql)}
+    WHERE a.gym_id = ${gymId} AND a.entry_id = ${entryId} AND NOT (a.status = 'booked' AND a.ends_at > ${now})
+      AND a.starts_at > ${since}
+    ORDER BY a.starts_at DESC, COALESCE(a.cancelled_at, a.created_at) DESC, a.id
+    LIMIT ${limit}`;
+  return rows.map(toOwnSession);
+}
+
 /** One session of this gym's, only where it is this record's. */
 export async function sessionOfEntry(sql: SqlOrTx, gymId: string, entryId: string, id: string): Promise<OwnSessionRow | null> {
   const rows = await sql`

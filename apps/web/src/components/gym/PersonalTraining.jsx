@@ -5,11 +5,12 @@ import { memberPtService } from '../../api/memberPtApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
 import { weekText } from './classesView';
-import { emptyText, ptCancelAsk, ptCancelledText, ptDay, ptDays, ptZoneNote, sessionText } from './personalTrainingView';
+import { emptyText, historyText, ptCancelAsk, ptCancelledText, ptDay, ptDays, ptZoneNote, sessionText } from './personalTrainingView';
 
 // A GYM'S PERSONAL TRAINING FOR ITS MEMBER (spec Part 3 §13.5; ROADMAP 17e-ii): the
 // trainers' available times on the day picked, each a button that books it, and the
-// member's own sessions with Cancel. The server decides every one, and sends nobody else's session. The member
+// member's own sessions with Cancel; one that is over or cancelled stays in that list,
+// saying what happened. The server decides every one, and sends nobody else's session. The member
 // web's screen until the phone app has its own.
 
 const ORANGE = '#FF8A1F';
@@ -129,7 +130,7 @@ export default function PersonalTraining({ gym }) {
   const shownLabel = row?.days.find((d) => d.localDate === shown)?.label ?? '';
   const empty = view === null ? null : emptyText(view, gym.name);
   const note = view === null ? null : ptZoneNote(view.timezone, gym.name, deviceZone(), new Date());
-  const ask = asking === null || view === null ? null : ptCancelAsk(asking, view.timezone);
+  const ask = asking === null || view === null ? null : ptCancelAsk(asking, view.timezone, gym.name);
 
   return (
     <section aria-label={`${gym.name}'s personal training`} className="flex flex-col gap-3 mt-3">
@@ -150,7 +151,7 @@ export default function PersonalTraining({ gym }) {
             <p role="status" className="text-sm" style={{ color: said.bad ? RED : GREEN }}>{said.text}</p>
           )}
 
-          {view.sessions.length > 0 && (
+          {view.sessions.length + view.history.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: MUTED }}>Your sessions</h3>
               <ul className="flex flex-col gap-2" aria-label="Your sessions">
@@ -172,6 +173,12 @@ export default function PersonalTraining({ gym }) {
                         Cancel session
                       </button>
                     )}
+                  </li>
+                ))}
+                {view.history.map((s) => (
+                  <li key={s.id} className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                    <p className="text-sm break-words" style={{ color: MUTED }}>{sessionText(s)}</p>
+                    <p className="text-xs mt-0.5" style={{ color: MUTED }}>{historyText(s)}</p>
                   </li>
                 ))}
               </ul>

@@ -52,6 +52,7 @@ const view = (over = {}) => {
     days: DAYS.map((localDate) => ({ localDate, pays: PACK, why: null })),
     trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540, 600] }), trainer(ANN, 'Ann Coach', { '2026-10-08': [840] }, 45)],
     sessions: [],
+    history: [],
     ...over,
   };
   // The fixture is what the server may send, or the test proves nothing.
@@ -86,7 +87,7 @@ describe('a member’s personal training', () => {
     const ann = await screen.findByRole('group', { name: 'Ann Coach' });
     expect(svc.view).toHaveBeenCalledWith('g1', 0);
     expect(screen.getByText('Next 7 days · Wed 7 Oct – Tue 13 Oct')).toBeTruthy();
-    expect(screen.getByText('A booking uses 1 session from your pack: PT 10 · 9 sessions left.')).toBeTruthy();
+    expect(screen.getByText('You have PT 10: 9 sessions left. Each booking uses 1 session.')).toBeTruthy();
     expect(screen.getByText('Available times. Press one to book it.')).toBeTruthy();
     // Seven days to pick from; today has no time, so tomorrow is the one open.
     const days = within(screen.getByRole('group', { name: 'Pick a day' })).getAllByRole('button');
@@ -128,7 +129,7 @@ describe('a member’s personal training', () => {
     const mine = await screen.findByRole('list', { name: 'Your sessions' });
     expect(mine.textContent).toContain('Fri 9 Oct · 10:00 am – 11:00 am · with Sam Trainer');
     expect(mine.textContent).toContain('1 session used from your pack');
-    expect(screen.getByText('A booking uses 1 session from your pack: PT 10 · 8 sessions left.')).toBeTruthy();
+    expect(screen.getByText('You have PT 10: 8 sessions left. Each booking uses 1 session.')).toBeTruthy();
     // The day she picked is still the one open, with one time fewer.
     expect(within(screen.getByRole('group', { name: 'Sam Trainer' })).getAllByRole('button')).toHaveLength(1);
     expect(svc.view).toHaveBeenCalledTimes(2);
@@ -188,11 +189,11 @@ describe('a member’s personal training', () => {
     render(<PersonalTraining gym={GYM} />);
     // Thursday is still inside the pack.
     const ann = await screen.findByRole('group', { name: 'Ann Coach' });
-    expect(screen.getByText('A booking uses 1 session from your pack: PT 10 · 9 sessions left.')).toBeTruthy();
+    expect(screen.getByText('You have PT 10: 9 sessions left. Each booking uses 1 session.')).toBeTruthy();
     expect(within(ann).getAllByRole('button')).toHaveLength(1);
     pickDay(FRI);
     expect(screen.getByText('You have no membership in use on that day. Ask at the front desk.')).toBeTruthy();
-    expect(screen.queryByText(/A booking uses/)).toBeNull();
+    expect(screen.queryByText(/Each booking uses/)).toBeNull();
     const sam = screen.getByRole('group', { name: 'Sam Trainer' });
     expect(sam.textContent).toContain('9:00 am – 10:00 am');
     expect(within(sam).queryAllByRole('button')).toHaveLength(0);
@@ -213,7 +214,8 @@ describe('a member’s personal training', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Cancel session: Fri 9 Oct/ }));
     const box = screen.getByRole('dialog', { name: 'Cancel your session?' });
     expect(box.textContent).toContain('Fri 9 Oct · 10:00 am – 11:00 am · with Sam Trainer');
-    expect(box.textContent).toContain('Free to cancel until Fri 9 Oct, 8:00 am. Your pack gets the session back.');
+    // Whose rule it is, is said: the gym sets the time to cancel for free.
+    expect(box.textContent).toContain('Iron House lets you cancel for free until Fri 9 Oct, 8:00 am. Your pack gets the session back.');
     expect(svc.cancel).not.toHaveBeenCalled();
     // Keep it changes nothing.
     fireEvent.click(within(box).getByRole('button', { name: 'Keep it' }));
@@ -222,13 +224,17 @@ describe('a member’s personal training', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Cancel session: Fri 9 Oct/ }));
     svc.cancel.mockImplementationOnce(() => {
-      server = view();
+      server = view({ history: [session(S1, { status: 'cancelled', packCharged: false, cancel: null })] });
       return Promise.resolve(session(S1, { status: 'cancelled', packCharged: false, cancel: null }));
     });
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel session' }));
     expect(svc.cancel).toHaveBeenCalledWith('g1', S1, false);
     expect((await screen.findByRole('status')).textContent).toBe('Cancelled.');
-    await waitFor(() => expect(screen.queryByRole('list', { name: 'Your sessions' })).toBeNull());
+    // It stays in the list, saying what happened, with nothing to press.
+    await waitFor(() => expect(within(screen.getByRole('list', { name: 'Your sessions' })).queryByRole('button')).toBeNull());
+    const mine = screen.getByRole('list', { name: 'Your sessions' });
+    expect(mine.textContent).toContain('Fri 9 Oct · 10:00 am – 11:00 am · with Sam Trainer');
+    expect(mine.textContent).toContain('Cancelled');
   });
 
   it('a late cancel says what it costs BEFORE it is sent, and then that the session stays used', async () => {
@@ -236,7 +242,7 @@ describe('a member’s personal training', () => {
     render(<PersonalTraining gym={GYM} />);
     fireEvent.click(await screen.findByRole('button', { name: /^Cancel session/ }));
     const box = screen.getByRole('dialog', { name: 'Cancel late?' });
-    expect(box.textContent).toContain("It's too late to cancel for free. Cancelling now counts as a late cancel, and the session stays used on your pack.");
+    expect(box.textContent).toContain("Iron House's time to cancel for free has passed. Cancelling now counts as a late cancel, and the session stays used on your pack.");
     svc.cancel.mockResolvedValueOnce(session(S1, { status: 'late_cancelled', cancel: null }));
     fireEvent.click(within(box).getByRole('button', { name: 'Cancel session' }));
     expect(svc.cancel).toHaveBeenCalledWith('g1', S1, true);
@@ -254,6 +260,36 @@ describe('a member’s personal training', () => {
     expect(svc.cancel.mock.calls).toEqual([['g1', S1, false]]);
     fireEvent.click(within(late).getByRole('button', { name: 'Keep it' }));
     expect(svc.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('sessions that are over or cancelled stay in the one list under the coming ones, each saying what happened', async () => {
+    const S = (n) => `44444444-4444-4444-8444-44444444444${n}`;
+    serve(
+      view({
+        sessions: [session(S1)],
+        history: [
+          session(S(1), { status: 'cancelled', packCharged: false, cancel: null, localDate: '2026-10-06' }),
+          session(S(2), { status: 'late_cancelled', cancel: null, localDate: '2026-10-05' }),
+          session(S(3), { status: 'late_cancelled', packCharged: false, cancel: null, localDate: '2026-10-04' }),
+          session(S(4), { status: 'no_show', cancel: null, localDate: '2026-10-03' }),
+          session(S(5), { status: 'attended', cancel: null, localDate: '2026-10-02' }),
+          session(S(6), { status: 'booked', cancel: null, localDate: '2026-10-01' }),
+        ],
+      }),
+    );
+    render(<PersonalTraining gym={GYM} />);
+    const rows = within(await screen.findByRole('list', { name: 'Your sessions' })).getAllByRole('listitem');
+    expect(rows.map((li) => li.textContent.replace(/^.*with Sam Trainer/, ''))).toEqual([
+      '1 session used from your packCancel session',
+      'Cancelled',
+      'Cancelled late · the session stays used on your pack',
+      'Cancelled late',
+      'You missed this session · it stays used on your pack',
+      'You came',
+      'Past',
+    ]);
+    // Only the coming one can be cancelled.
+    expect(screen.getAllByRole('button', { name: /^Cancel session/ })).toHaveLength(1);
   });
 
   it('a session that has started has no Cancel; a trainer with no name reads "a trainer"', async () => {

@@ -303,6 +303,10 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
       const wendy = (JSON.parse(walkIn.body) as { entry: { entryId: string } }).entry.entryId;
       await hold(gym, wendy, pack, { pack: 10 });
       const wendys = await staffBook(gym, sam, wendy, 720);
+      // Noor also has a session staff cancelled: her history, and nobody else's.
+      const noorsOld = await staffBook(gym, sam, noor.entryId, 540, "2026-10-12");
+      const called = await inject("POST", `/v1/orgs/${gym.id}/pt/appointments/${noorsOld}/cancel`, gym.owner.cookies, { lateOk: false, giveBack: false });
+      expect(called.statusCode, called.body).toBe(200);
       expect(await left(noorPack)).toBe(9);
 
       // 1. What Maya READS: Sam's one time left, and nobody.
@@ -310,12 +314,13 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
       expect(res.statusCode, res.body).toBe(200);
       const view = JSON.parse(res.body) as MemberPtResponse;
       expect(freeOf(view, sam, FRIDAY)).toEqual([540]);
-      expect(view.sessions).toEqual([]);
-      for (const secret of ["Noor", "Zzyzx", "Wendy", "Vvk", "Secret Spin", "Qqx", noor.entryId, noor.userId, wendy, noors, wendys, noorPack, "@example.com"]) {
+      expect([view.sessions, view.history]).toEqual([[], []]);
+      for (const secret of ["Noor", "Zzyzx", "Wendy", "Vvk", "Secret Spin", "Qqx", noor.entryId, noor.userId, wendy, noors, wendys, noorsOld, noorPack, "@example.com"]) {
         expect(res.body.includes(secret), `the read holds "${secret}"`).toBe(false);
       }
-      // Noor reads her own session, and only hers.
-      expect((await read(gym, noor)).sessions.map((s) => s.id)).toEqual([noors]);
+      // Noor reads her own session and her own history, and only hers.
+      const hersAlone = await read(gym, noor);
+      expect([hersAlone.sessions.map((s) => s.id), hersAlone.history.map((s) => [s.id, s.status])]).toEqual([[noors], [[noorsOld, "cancelled"]]]);
 
       // 2. Maya cannot CANCEL Noor's session, or the walk-in's, free or late.
       for (const id of [noors, wendys]) {
@@ -326,16 +331,16 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
           expect((await rowOf(gym, id)).status).toBe("booked");
         }
       }
-      expect((await rows(gym)).map((r) => r.status)).toEqual(["booked", "booked"]);
+      expect((await rows(gym)).map((r) => r.status)).toEqual(["booked", "booked", "cancelled"]);
       expect(await left(noorPack)).toBe(9);
 
       // 3. Maya cannot BOOK as Noor: the body takes no person at all.
       for (const extra of [{ entryId: noor.entryId }, { userId: noor.userId }, { heldMembershipId: noorPack }]) {
         const no = await book(gym, maya, sam, { minute: 540, extra });
         expect([no.statusCode, errorOf(no)]).toEqual([400, "validation_error"]);
-        expect(await rows(gym)).toHaveLength(2);
+        expect(await rows(gym)).toHaveLength(3);
       }
-      expect(await rows(gym)).toHaveLength(2);
+      expect(await rows(gym)).toHaveLength(3);
 
       // 4. Maya's own booking is hers, and charges her pack alone.
       const hers = made(await book(gym, maya, sam, { minute: 540 }));
@@ -376,6 +381,7 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
         ["booked", maya.entryId],
         ["booked", noor.entryId],
         ["booked", wendy],
+        ["cancelled", noor.entryId],
       ]);
       expect([await left(mayaPack), await left(noorPack)]).toEqual([9, 9]);
     },
@@ -608,7 +614,15 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
       expect([plain.statusCode, errorOf(plain)]).toEqual([409, "kept_used"]);
       expect(await left(held)).toBe(9);
       // The trainer's time is free again for somebody else.
-      expect(freeOf(await read(gym, maya), sam, FRIDAY)).toEqual([600, 660, 720]);
+      const afterLate = await read(gym, maya);
+      expect(freeOf(afterLate, sam, FRIDAY)).toEqual([600, 660, 720]);
+      // What happened to each stays readable, the newest first; nothing in it can be cancelled.
+      expect(afterLate.sessions).toEqual([]);
+      expect(afterLate.history.map((s) => [s.localStartMinute, s.status, s.packCharged, s.cancel])).toEqual([
+        [660, "cancelled", false, null],
+        [600, "late_cancelled", true, null],
+        [600, "cancelled", false, null],
+      ]);
 
       // A session that has started cannot be cancelled.
       const three = made(await book(gym, maya, sam, { minute: 660 }));
@@ -616,6 +630,13 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
       const started = await cancel(gym, maya, three.id, true);
       expect([started.statusCode, errorOf(started)]).toEqual([409, "started"]);
       expect([(await rowOf(gym, three.id)).status, await left(held)]).toEqual(["booked", 8]);
+      // A session that is over moves from the coming list to the history.
+      clock = new Date("2026-10-09T11:05:00Z").getTime();
+      const over = await read(gym, maya);
+      expect([over.sessions, over.history[0]?.id, over.history[0]?.status]).toEqual([[], three.id, "booked"]);
+      // Older than the history's days, it is not listed.
+      clock = new Date("2026-12-20T10:00:00Z").getTime();
+      expect((await read(gym, maya)).history).toEqual([]);
     } finally {
       clock = NOW.getTime();
     }
@@ -625,7 +646,7 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
     const tom = await trainerWith(open, "Tom NoRecord");
     const loose = await appOnly(open, "Loose Member");
     const view = await read(open, loose);
-    expect([view.onList, view.sessions, view.days.map((x) => [x.pays, x.why])]).toEqual([false, [], Array.from({ length: 7 }, () => [null, null])]);
+    expect([view.onList, view.sessions, view.history, view.days.map((x) => [x.pays, x.why])]).toEqual([false, [], [], Array.from({ length: 7 }, () => [null, null])]);
     expect(freeOf(view, tom, FRIDAY)).toEqual(MORNING);
     const no = await book(open, loose, tom);
     expect([no.statusCode, errorOf(no)]).toEqual([409, "not_on_list"]);
