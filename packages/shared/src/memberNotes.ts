@@ -23,9 +23,10 @@ export const tidyMemberTagName = (raw: string): string => raw.normalize("NFC").r
 export const tidyMemberNoteBody = (raw: string): string => raw.normalize("NFC").replace(/\r\n?/gu, "\n").replace(CONTROLS, "").trim();
 
 /** What the card rule reads: a note or tag with every look-alike digit made plain and
- *  every break between groups (a new line, a tab, a no-break space, an underscore) made
+ *  every break between groups (a new line, a tab, a no-break space, an underscore, a
+ *  character nobody can see) made
  *  one space. Never kept; the words are kept as typed. */
-export const foldForCardCheck = (text: string): string => text.normalize("NFKC").replace(/[\s_]+/gu, " ").trim();
+export const foldForCardCheck = (text: string): string => text.normalize("NFKC").replace(ZERO_WIDTH, " ").replace(/[\s_]+/gu, " ").trim();
 
 export const memberNoteAddRequestSchema = z
   .object({

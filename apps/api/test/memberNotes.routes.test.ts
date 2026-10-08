@@ -491,6 +491,7 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
     ["Visa, tabs", "4242\t4242\t4242\t4242"],
     ["Visa, full-width digits", "\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12\uFF14\uFF12"],
     ["Visa, underscores", "4242_4242_4242_4242"],
+    ["Visa, zero-width spaces", "4242\u200B4242\u200B4242\u200B4242"],
     ["Mastercard", "5555 5555 5555 4444"],
     ["Mastercard 2-series", "2223003122003222"],
     ["Amex 4-6-5", "3782 822463 10005"],
