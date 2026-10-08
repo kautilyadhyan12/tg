@@ -2901,7 +2901,8 @@ offered themself; somebody in the app with no record on the list reads so and bo
 (409 `not_on_list`). A time somebody already holds is refused from a plain read before the
 lock, in the server's line of members' writes. The audit rows are `member.pt_booked` and
 `member.pt_cancelled`. The member web's **Personal training** tab on My Gyms, beside Classes:
-each available time is a button reading its whole session and books at one press; with
+a row of the seven days picks one (the first with a time opens), and each of that day's
+available times is a button reading its whole session that books at one press; with
 nothing that pays the times show as plain text under who to ask; Your sessions has Cancel
 session, which asks first and says what a late cancel costs. Nobody is told (the inbox, 20a):
 the session is on the trainer's week. Not done: sessions ended when a person or a trainer

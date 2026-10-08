@@ -5,11 +5,11 @@ import { memberPtService } from '../../api/memberPtApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
 import { weekText } from './classesView';
-import { emptyText, ptCancelAsk, ptCancelledText, ptPage, ptZoneNote, sessionText } from './personalTrainingView';
+import { emptyText, ptCancelAsk, ptCancelledText, ptDay, ptDays, ptZoneNote, sessionText } from './personalTrainingView';
 
 // A GYM'S PERSONAL TRAINING FOR ITS MEMBER (spec Part 3 §13.5; ROADMAP 17e-ii): the
-// trainers' available times, each a button that books it, and the member's own sessions
-// with Cancel. The server decides every one, and sends nobody else's session. The member
+// trainers' available times on the day picked, each a button that books it, and the
+// member's own sessions with Cancel. The server decides every one, and sends nobody else's session. The member
 // web's screen until the phone app has its own.
 
 const ORANGE = '#FF8A1F';
@@ -32,6 +32,8 @@ export default function PersonalTraining({ gym }) {
   const [busy, setBusy] = useState(null);
   const [said, setSaid] = useState(null);
   const [asking, setAsking] = useState(null);
+  // The day whose times are shown; null until one is pressed, and then the first with a time.
+  const [picked, setPicked] = useState(null);
   // One key a time pressed: kept while its answer is unknown, so a retry cannot book twice.
   const keys = useRef(new Map());
   const asked = useRef(0);
@@ -60,6 +62,7 @@ export default function PersonalTraining({ gym }) {
 
   const go = (to) => {
     setState((s) => ({ ...s, loading: true }));
+    setPicked(null);
     setWeek(to);
   };
   const tryAgain = () => {
@@ -67,9 +70,9 @@ export default function PersonalTraining({ gym }) {
     load();
   };
 
-  const book = async (trainer, day, time) => {
+  const book = async (trainer, localDate, time) => {
     if (busy !== null) return;
-    const id = `${trainer.trainerId}|${day.localDate}|${time.minute}`;
+    const id = `${trainer.trainerId}|${localDate}|${time.minute}`;
     const key = keys.current.get(id) ?? crypto.randomUUID();
     keys.current.set(id, key);
     setBusy(id);
@@ -77,7 +80,7 @@ export default function PersonalTraining({ gym }) {
     try {
       const session = await memberPtService.book(gym.id, key, {
         trainerId: trainer.trainerId,
-        localDate: day.localDate,
+        localDate,
         startMinute: time.minute,
         minutes: trainer.sessionMinutes,
       });
@@ -120,7 +123,10 @@ export default function PersonalTraining({ gym }) {
   };
 
   const view = state.view;
-  const page = view === null ? null : ptPage(view);
+  const row = view === null ? null : ptDays(view);
+  const shown = row === null ? null : row.days.some((d) => d.localDate === picked) ? picked : row.first;
+  const day = view === null || shown === null ? null : ptDay(view, shown);
+  const shownLabel = row?.days.find((d) => d.localDate === shown)?.label ?? '';
   const empty = view === null ? null : emptyText(view, gym.name);
   const note = view === null ? null : ptZoneNote(view.timezone, gym.name, deviceZone(), new Date());
   const ask = asking === null || view === null ? null : ptCancelAsk(asking, view.timezone);
@@ -194,55 +200,65 @@ export default function PersonalTraining({ gym }) {
             </button>
           </div>
 
-          {empty !== null ? (
+          {empty !== null || day === null ? (
             <p className="text-sm" style={{ color: MUTED }}>{empty}</p>
           ) : (
             <>
-              {page.top !== null && <p className="text-sm" style={{ color: page.top.can ? 'rgba(255,255,255,0.8)' : ORANGE }}>{page.top.text}</p>}
-              <p className="text-xs" style={{ color: MUTED }}>
-                {page.top === null || page.top.can ? 'Available times. Press one to book it.' : 'Available times.'}
-              </p>
+              <div role="group" aria-label="Pick a day" className="flex flex-wrap gap-2">
+                {row.days.map((d) => (
+                  <button
+                    key={d.localDate}
+                    type="button"
+                    aria-pressed={d.localDate === shown}
+                    onClick={() => setPicked(d.localDate)}
+                    className="px-3 py-2 rounded-xl text-sm font-semibold min-h-11"
+                    style={
+                      d.localDate === shown
+                        ? { background: 'rgba(255,138,31,0.18)', color: ORANGE }
+                        : { background: 'rgba(255,255,255,0.05)', color: d.hasTimes ? 'rgba(255,255,255,0.8)' : MUTED }
+                    }
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              {day.pay !== null && <p className="text-sm" style={{ color: day.pay.can ? 'rgba(255,255,255,0.8)' : ORANGE }}>{day.pay.text}</p>}
+              <p className="text-xs" style={{ color: MUTED }}>{day.can ? 'Available times. Press one to book it.' : 'Available times.'}</p>
               {note !== null && <p className="text-xs" style={{ color: ORANGE }}>{note}</p>}
-              {page.trainers.map((t) => (
+              {day.trainers.map((t) => (
                 <div key={t.trainerId} role="group" aria-label={t.name} className="rounded-xl p-3 flex flex-col gap-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
                   <p className="text-sm font-semibold text-white break-words">
                     {t.name} <span className="font-normal text-xs" style={{ color: MUTED }}>· {t.lengthText}</span>
                   </p>
-                  {t.days.length === 0 ? (
-                    <p className="text-xs" style={{ color: MUTED }}>No available times in these 7 days.</p>
+                  {t.times.length === 0 ? (
+                    <p className="text-xs" style={{ color: MUTED }}>No available times on this day.</p>
                   ) : (
-                    t.days.map((d) => (
-                      <div key={d.localDate}>
-                        <h4 className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: MUTED }}>{d.heading}</h4>
-                        {d.note !== null && <p className="text-xs mb-1.5" style={{ color: d.can ? MUTED : ORANGE }}>{d.note}</p>}
-                        <ul className="flex flex-wrap gap-2" aria-label={`${t.name}, ${d.heading}`}>
-                          {d.times.map((time) => {
-                            const id = `${t.trainerId}|${d.localDate}|${time.minute}`;
-                            return (
-                              <li key={time.minute}>
-                                {d.can ? (
-                                  <button
-                                    type="button"
-                                    disabled={busy !== null}
-                                    onClick={() => book(t, d, time)}
-                                    aria-label={`Book ${time.text} with ${t.name}, ${d.heading}`}
-                                    className="px-3.5 py-2 rounded-xl text-sm font-semibold min-h-11 flex items-center gap-1.5 disabled:opacity-50"
-                                    style={{ background: ORANGE, color: '#161412' }}
-                                  >
-                                    {busy === id ? <Loader2 aria-label="Working" className="w-4 h-4 animate-spin" /> : <span aria-hidden="true">+</span>}
-                                    {time.text}
-                                  </button>
-                                ) : (
-                                  <span className="px-3 py-2 rounded-xl text-sm inline-block" style={{ border: '1px solid rgba(255,255,255,0.12)', color: MUTED }}>
-                                    {time.text}
-                                  </span>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    ))
+                    <ul className="flex flex-wrap gap-2" aria-label={`${t.name}, ${shownLabel}`}>
+                      {t.times.map((time) => {
+                        const id = `${t.trainerId}|${shown}|${time.minute}`;
+                        return (
+                          <li key={time.minute}>
+                            {day.can ? (
+                              <button
+                                type="button"
+                                disabled={busy !== null}
+                                onClick={() => book(t, shown, time)}
+                                aria-label={`Book ${time.text} with ${t.name}, ${shownLabel}`}
+                                className="px-3.5 py-2 rounded-xl text-sm font-semibold min-h-11 flex items-center gap-1.5 disabled:opacity-50"
+                                style={{ background: ORANGE, color: '#161412' }}
+                              >
+                                {busy === id ? <Loader2 aria-label="Working" className="w-4 h-4 animate-spin" /> : <span aria-hidden="true">+</span>}
+                                {time.text}
+                              </button>
+                            ) : (
+                              <span className="px-3 py-2 rounded-xl text-sm inline-block" style={{ border: '1px solid rgba(255,255,255,0.12)', color: MUTED }}>
+                                {time.text}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   )}
                 </div>
               ))}

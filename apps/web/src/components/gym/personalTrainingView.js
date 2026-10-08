@@ -27,35 +27,32 @@ export function payText(view, day) {
   return { text: `A booking uses 1 session from your pack: ${pays.membership} · ${left}.`, can: true };
 }
 
-const samePay = (a, b) => (a === null || b === null ? a === b : a.text === b.text);
+/** The seven days as the row of days to pick from, and which one opens first: the first
+ *  with a time anybody offers, else the first. */
+export function ptDays(view) {
+  const withTimes = new Set(view.trainers.flatMap((t) => t.days.filter((d) => d.free.length > 0).map((d) => d.localDate)));
+  const days = view.days.map((d) => ({
+    localDate: d.localDate,
+    label: dayHeading(d.localDate, view.from === view.today ? view.today : null),
+    hasTimes: withTimes.has(d.localDate),
+  }));
+  return { days, first: (days.find((d) => d.hasTimes) ?? days[0])?.localDate ?? null };
+}
 
-/** Each trainer with the days they have times on, and the page's lines about paying: one
- *  at the top (the first day's), and one under any day that differs from it. */
-export function ptPage(view) {
-  const dayPay = new Map(view.days.map((d) => [d.localDate, payText(view, d)]));
-  const first = view.days[0];
-  const top = first === undefined ? null : dayPay.get(first.localDate);
-  const heading = (day) => dayHeading(day, view.from === view.today ? view.today : null);
+/** One day of the page: what a booking on it would use, and each trainer's times on it. */
+export function ptDay(view, localDate) {
+  const day = view.days.find((d) => d.localDate === localDate);
+  const pay = day === undefined ? null : payText(view, day);
   return {
-    top,
+    pay,
+    // A day nothing pays for shows its times, and none of them is a button.
+    can: pay === null || pay.can,
     trainers: view.trainers.map((t) => ({
       trainerId: t.trainerId,
       name: trainerText(t.name),
       lengthText: `${t.sessionMinutes} min sessions`,
       sessionMinutes: t.sessionMinutes,
-      days: t.days
-        .filter((d) => d.free.length > 0)
-        .map((d) => {
-          const pay = dayPay.get(d.localDate) ?? null;
-          return {
-            localDate: d.localDate,
-            heading: heading(d.localDate),
-            // A day nothing pays for shows its times, and none of them is a button.
-            can: pay === null || pay.can,
-            note: samePay(pay, top) ? null : (pay?.text ?? null),
-            times: d.free.map((minute) => ({ minute, text: sessionSpan(minute, t.sessionMinutes) })),
-          };
-        }),
+      times: (t.days.find((d) => d.localDate === localDate)?.free ?? []).map((minute) => ({ minute, text: sessionSpan(minute, t.sessionMinutes) })),
     })),
   };
 }

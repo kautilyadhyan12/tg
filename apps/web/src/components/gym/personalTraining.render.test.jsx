@@ -59,6 +59,10 @@ const view = (over = {}) => {
 };
 const refused = (status, error, message, extra = {}) => Object.assign(new Error(error), { response: { status, data: { error, message, ...extra } } });
 
+/** Press a day in the row of days. */
+const pickDay = (name) => fireEvent.click(within(screen.getByRole('group', { name: 'Pick a day' })).getByRole('button', { name }));
+const FRI = 'Fri 9 Oct';
+
 let server;
 const serve = (v) => {
   server = v;
@@ -76,19 +80,34 @@ afterEach(() => {
 });
 
 describe('a member’s personal training', () => {
-  it('lists each trainer’s available times as buttons that read the whole session, and what a booking uses', async () => {
+  it('opens on the first day with a time, lists that day’s times as buttons that read the whole session, and says what a booking uses', async () => {
     serve(view());
     render(<PersonalTraining gym={GYM} />);
-    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
+    const ann = await screen.findByRole('group', { name: 'Ann Coach' });
     expect(svc.view).toHaveBeenCalledWith('g1', 0);
     expect(screen.getByText('Next 7 days · Wed 7 Oct – Tue 13 Oct')).toBeTruthy();
     expect(screen.getByText('A booking uses 1 session from your pack: PT 10 · 9 sessions left.')).toBeTruthy();
     expect(screen.getByText('Available times. Press one to book it.')).toBeTruthy();
-    expect(sam.textContent).toContain('60 min sessions');
+    // Seven days to pick from; today has no time, so tomorrow is the one open.
+    const days = within(screen.getByRole('group', { name: 'Pick a day' })).getAllByRole('button');
+    expect(days.map((b) => `${b.textContent}${b.getAttribute('aria-pressed') === 'true' ? ' (open)' : ''}`)).toEqual([
+      'Today · Wed 7 Oct',
+      'Tomorrow · Thu 8 Oct (open)',
+      'Fri 9 Oct',
+      'Sat 10 Oct',
+      'Sun 11 Oct',
+      'Mon 12 Oct',
+      'Tue 13 Oct',
+    ]);
+    expect(ann.textContent).toContain('45 min sessions');
+    expect(within(ann).getByRole('button', { name: 'Book 2:00 pm – 2:45 pm with Ann Coach, Tomorrow · Thu 8 Oct' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Sam Trainer' }).textContent).toContain('No available times on this day.');
+
+    pickDay(FRI);
+    const sam = screen.getByRole('group', { name: 'Sam Trainer' });
     expect(within(sam).getAllByRole('button').map((b) => b.textContent)).toEqual(['+9:00 am – 10:00 am', '+10:00 am – 11:00 am']);
     expect(within(sam).getByRole('list', { name: 'Sam Trainer, Fri 9 Oct' })).toBeTruthy();
-    const ann = screen.getByRole('group', { name: 'Ann Coach' });
-    expect(within(ann).getByRole('button', { name: 'Book 2:00 pm – 2:45 pm with Ann Coach, Tomorrow · Thu 8 Oct' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Ann Coach' }).textContent).toContain('No available times on this day.');
     // Nobody else is on the page: no session list with none of their own.
     expect(screen.queryByRole('list', { name: 'Your sessions' })).toBeNull();
   });
@@ -96,7 +115,9 @@ describe('a member’s personal training', () => {
   it('one press books that time with its own key, says so, and reads the times again', async () => {
     serve(view());
     render(<PersonalTraining gym={GYM} />);
-    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    pickDay(FRI);
+    const sam = screen.getByRole('group', { name: 'Sam Trainer' });
     svc.book.mockImplementationOnce(() => {
       server = view({ trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540] })], sessions: [session(S1)], days: DAYS.map((localDate) => ({ localDate, pays: { ...PACK, sessionsLeft: 8 }, why: null })) });
       return Promise.resolve(session(S1));
@@ -108,6 +129,7 @@ describe('a member’s personal training', () => {
     expect(mine.textContent).toContain('Fri 9 Oct · 10:00 am – 11:00 am · with Sam Trainer');
     expect(mine.textContent).toContain('1 session used from your pack');
     expect(screen.getByText('A booking uses 1 session from your pack: PT 10 · 8 sessions left.')).toBeTruthy();
+    // The day she picked is still the one open, with one time fewer.
     expect(within(screen.getByRole('group', { name: 'Sam Trainer' })).getAllByRole('button')).toHaveLength(1);
     expect(svc.view).toHaveBeenCalledTimes(2);
   });
@@ -115,6 +137,8 @@ describe('a member’s personal training', () => {
   it('a time somebody else took first says so in the server’s words and reads the times again; no answer keeps the key for the retry', async () => {
     serve(view());
     render(<PersonalTraining gym={GYM} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    pickDay(FRI);
     const press = async () => fireEvent.click(within(await screen.findByRole('group', { name: 'Sam Trainer' })).getByRole('button', { name: /^Book 10:00 am/ }));
     // The network drops: nothing is known, so the same key goes again.
     svc.book.mockRejectedValueOnce(new Error('network'));
@@ -140,7 +164,9 @@ describe('a member’s personal training', () => {
   ])('with nothing that pays (%s) the times still show, none of them a button, with who to ask', async (why, words) => {
     serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: null, why })) }));
     render(<PersonalTraining gym={GYM} />);
-    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    pickDay(FRI);
+    const sam = screen.getByRole('group', { name: 'Sam Trainer' });
     expect(screen.getByText(words)).toBeTruthy();
     expect(sam.textContent).toContain('9:00 am – 10:00 am');
     expect(within(sam).queryAllByRole('button')).toHaveLength(0);
@@ -156,24 +182,28 @@ describe('a member’s personal training', () => {
     expect(screen.queryAllByRole('button', { name: /^Book/ })).toHaveLength(0);
   });
 
-  it('a day whose answer differs from the first day’s says its own: a pack that ends mid-week', async () => {
+  it('what pays is said for the day picked: a pack that ends mid-week has buttons before it ends and none after', async () => {
     const days = DAYS.map((localDate) => (localDate >= '2026-10-09' ? { localDate, pays: null, why: 'no_membership' } : { localDate, pays: PACK, why: null }));
     serve(view({ days }));
     render(<PersonalTraining gym={GYM} />);
-    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
-    expect(sam.textContent).toContain('You have no membership in use on that day. Ask at the front desk.');
-    expect(within(sam).queryAllByRole('button')).toHaveLength(0);
-    // Thursday is still inside the pack: no note of its own, and a button.
-    const ann = screen.getByRole('group', { name: 'Ann Coach' });
-    expect(ann.textContent).not.toContain('no membership');
+    // Thursday is still inside the pack.
+    const ann = await screen.findByRole('group', { name: 'Ann Coach' });
+    expect(screen.getByText('A booking uses 1 session from your pack: PT 10 · 9 sessions left.')).toBeTruthy();
     expect(within(ann).getAllByRole('button')).toHaveLength(1);
+    pickDay(FRI);
+    expect(screen.getByText('You have no membership in use on that day. Ask at the front desk.')).toBeTruthy();
+    expect(screen.queryByText(/A booking uses/)).toBeNull();
+    const sam = screen.getByRole('group', { name: 'Sam Trainer' });
+    expect(sam.textContent).toContain('9:00 am – 10:00 am');
+    expect(within(sam).queryAllByRole('button')).toHaveLength(0);
   });
 
   it('a gym that sells no memberships says nothing about paying, and every time is a button', async () => {
     serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: { membership: null, sessionsLeft: null }, why: null })) }));
     render(<PersonalTraining gym={GYM} />);
-    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
-    expect(within(sam).getAllByRole('button')).toHaveLength(2);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    pickDay(FRI);
+    expect(within(screen.getByRole('group', { name: 'Sam Trainer' })).getAllByRole('button')).toHaveLength(2);
     expect(screen.queryByText(/pack|membership/i)).toBeNull();
   });
 
@@ -244,7 +274,7 @@ describe('a member’s personal training', () => {
     fireEvent.click(screen.getByRole('button', { name: /Later/ }));
     await waitFor(() => expect(svc.view).toHaveBeenLastCalledWith('g1', 1));
     expect(await screen.findByText('Wed 14 Oct – Tue 20 Oct')).toBeTruthy();
-    expect(screen.getByText('No available times in these 7 days.')).toBeTruthy();
+    expect(screen.getByText('No available times on this day.')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Later/ }).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: /Earlier/ }));
     await waitFor(() => expect(svc.view).toHaveBeenLastCalledWith('g1', 0));
