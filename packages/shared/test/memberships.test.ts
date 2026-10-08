@@ -260,15 +260,15 @@ describe("what a gym may save as a membership type", () => {
 
   it("a change carries the stamp the list gave, and is refused without it", () => {
     const change = (value: unknown) => updateGymMembershipTypeRequestSchema.safeParse(value).success;
-    const stamped = { ...monthly, includesPt: false, updatedAt: "2026-10-04T10:00:00.000Z" };
+    const stamped = { ...monthly, includesPt: false, ptLimit: null, ptPeriod: null, updatedAt: "2026-10-04T10:00:00.000Z" };
     expect(change(stamped)).toBe(true);
-    expect(change({ ...monthly, includesPt: false })).toBe(false);
+    expect(change({ ...monthly, includesPt: false, ptLimit: null, ptPeriod: null })).toBe(false);
     expect(change({ ...stamped, updatedAt: "yesterday" })).toBe(false);
     // The rules between the fields hold on a change too.
     expect(change({ ...stamped, termUnit: "day" })).toBe(false);
     // A change states the personal-training tick outright: left out, it would be taken
     // off everybody who holds the type. A new type may leave it out, and has it off.
-    expect(change({ ...monthly, updatedAt: "2026-10-04T10:00:00.000Z" })).toBe(false);
+    expect(change({ ...monthly, ptLimit: null, ptPeriod: null, updatedAt: "2026-10-04T10:00:00.000Z" })).toBe(false);
     expect(change({ ...stamped, includesPt: true })).toBe(true);
     expect(ok(monthly)).toBe(true);
     // And a new type does not take a stamp.

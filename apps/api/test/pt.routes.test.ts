@@ -556,7 +556,7 @@ d("personal training (real Postgres, two api instances)", { timeout: T }, () => 
     expect(await left(held)).toBe(9);
 
     // The tick taken off: the same pack, for every class now, no longer pays for a session.
-    const changed = await inject("PUT", `${types}/${type.id}`, gym.owner.cookies, { ...pack, classTypeIds: null, includesPt: false, updatedAt: type.updatedAt });
+    const changed = await inject("PUT", `${types}/${type.id}`, gym.owner.cookies, { ...pack, classTypeIds: null, includesPt: false, ptLimit: null, ptPeriod: null, updatedAt: type.updatedAt });
     expect(changed.statusCode, changed.body).toBe(200);
     expect((JSON.parse(changed.body) as { types: Listed[] }).types[0]?.includesPt).toBe(false);
     const refused = await book(gym, sam, maya, { minute: 660 });

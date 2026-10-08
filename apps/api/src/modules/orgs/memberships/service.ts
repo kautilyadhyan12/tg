@@ -114,6 +114,8 @@ function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput 
     bookingsPeriod: req.bookingsPeriod,
     classTypeIds: req.classTypeIds,
     includesPt: req.includesPt,
+    ptLimit: req.ptLimit,
+    ptPeriod: req.ptPeriod,
   };
 }
 

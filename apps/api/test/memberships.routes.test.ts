@@ -63,6 +63,8 @@ const monthly = (over: Record<string, unknown> = {}) => ({
   bookingsPeriod: null,
   classTypeIds: null,
   includesPt: false,
+  ptLimit: null,
+  ptPeriod: null,
   ...over,
 });
 

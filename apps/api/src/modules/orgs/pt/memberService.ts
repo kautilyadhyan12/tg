@@ -28,6 +28,7 @@ import {
   memberPtResponseSchema,
   memberPtSessionSchema,
   pickPtCover,
+  ptAllowanceOf,
   ptFreeTimes,
   ptOfferedTimes,
   ptTime,
@@ -42,10 +43,9 @@ import { lockOrgRow } from "../repo.js";
 import { OrgsError } from "../service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
-import { heldForPtOf } from "../memberships/heldRepo.js";
 import { requireMember, type Line } from "../classes/bookingsService.js";
 import * as repo from "./repo.js";
-import { PtLateCancel, bookUnderLock, cancelUnderLock, type Limit, type PtDeps } from "./service.js";
+import { PtLateCancel, bookUnderLock, cancelUnderLock, heldWithUsed, type Limit, type PtDeps } from "./service.js";
 
 export interface MemberPtDeps extends PtDeps {
   /** This server's line of members' session writes (`createLine`). */
@@ -68,6 +68,7 @@ function ownView(row: repo.OwnSessionRow, now: Date, freeCancelMinutes: number):
     freeCancelUntil: new Date(row.startsAt.getTime() - freeCancelMinutes * 60_000).toISOString(),
     status: row.status,
     packCharged: row.packCharged,
+    usesLimit: row.usesLimit,
     cancel: row.status !== "booked" || time.started ? null : time.freeCancel ? "free" : "late",
   });
 }
@@ -106,9 +107,9 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
   const distinct = [...new Map(offered.flat().map((t) => [keyOf(t), t])).values()];
 
   const entryId = me.entryId;
-  const [instants, held, sessions, history] = await Promise.all([
+  const [instants, heldOn, sessions, history] = await Promise.all([
     repo.instantsOf(deps.sql, clock.timezone, distinct),
-    entryId !== null && clock.hasTypes ? heldForPtOf(deps.sql, gymId, [entryId]) : [],
+    entryId !== null && clock.hasTypes ? heldWithUsed(deps.sql, gymId, [entryId], days) : null,
     entryId === null ? [] : repo.sessionsOfEntry(deps.sql, gymId, entryId, now, MEMBER_PT_SESSIONS_MAX),
     entryId === null
       ? []
@@ -139,9 +140,12 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
     freeCancelMinutes: clock.freeCancelMinutes,
     record: entryId !== null ? "own" : me.shared ? "shared" : "none",
     days: days.map((localDate) => {
-      if (entryId === null) return { localDate, pays: null, why: null };
+      if (entryId === null) return { localDate, pays: null, why: null, limit: null };
+      // The booking's own rule, with the sessions counted in this day's own week and month.
+      const held = heldOn === null ? [] : heldOn(localDate, entryId);
       const cover = pickPtCover({ gymHasTypes: clock.hasTypes, day: localDate, held });
-      if (!cover.ok) return { localDate, pays: null, why: cover.reason };
+      const limit = ptAllowanceOf(cover, held);
+      if (!cover.ok) return { localDate, pays: null, why: cover.reason, limit };
       const paying = held.find((h) => h.id === cover.membershipId);
       return {
         localDate,
@@ -150,6 +154,7 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
           sessionsLeft: paying !== undefined && paying.membership.kind === "pack" ? paying.membership.classesLeft : null,
         },
         why: null,
+        limit,
       };
     }),
     trainers: trainers.map((t, n) => {

@@ -1,13 +1,15 @@
 // The Memberships page: its words and its form's rules (spec Part 3 §13.1; ROADMAP 17a-i).
 import { describe, expect, it } from 'vitest';
-import { saveGymMembershipTypeRequestSchema } from '@app/shared';
+import { saveGymMembershipTypeRequestSchema, updateGymMembershipTypeRequestSchema } from '@app/shared';
 import {
   archivedNote,
   canAddType,
+  canLimitPt,
   canManageMemberships,
   classOptions,
   draftBody,
   draftFromType,
+  draftLimitsPt,
   draftProblems,
   emptyDraft,
   firstProblem,
@@ -170,6 +172,8 @@ describe('the form', () => {
       bookingsPeriod: null,
       classTypeIds: null,
       includesPt: false,
+      ptLimit: null,
+      ptPeriod: null,
     });
     expect(draftBody(named({ description: '  All classes and open gym  ' }), 'USD').description).toBe('All classes and open gym');
     expect(draftBody(named({ choice: 'pack' }), 'USD')).toMatchObject({ kind: 'pack', packClasses: 10, packDays: 60, termCount: null, termUnit: null, access: 'all_classes' });
@@ -255,6 +259,8 @@ describe('the form', () => {
       bookingsPeriod: 'week',
       classTypeIds: [YOGA.id],
       includesPt: false,
+      ptLimit: null,
+      ptPeriod: null,
       // A change carries the stamp the list gave; a new type has none.
       updatedAt: '2026-10-04T09:00:00.000Z',
     });
@@ -289,6 +295,51 @@ describe('the form', () => {
     expect(includesLine(type({ access: 'gym_only', includesPt: true }))).toBe('No classes, gym only · Personal training');
     expect(includesLine(type({ includesPt: false }))).toBe('Unlimited classes');
     expect(includesLine(packType({ includesPt: true }))).toBe('Any class · Personal training');
+  });
+
+  it('a limit on personal training sessions: sent with its period, only for a membership that includes it, and read back in a gym’s words', () => {
+    const gold = named({ includesPt: true, ptAccess: 'limited', ptLimit: '4', ptPeriod: 'month' });
+    expect(draftBody(gold, 'USD')).toMatchObject({ includesPt: true, ptLimit: 4, ptPeriod: 'month' });
+    expect(valid(draftBody(gold, 'USD'))).toBe(true);
+    expect(draftBody({ ...gold, ptLimit: '1', ptPeriod: 'week' }, 'USD')).toMatchObject({ ptLimit: 1, ptPeriod: 'week' });
+    // No limit is said outright, on a new type and on a change: both fields, both null.
+    expect(draftBody(named({ includesPt: true }), 'USD')).toMatchObject({ ptLimit: null, ptPeriod: null });
+    expect(draftBody(named(), 'USD')).toMatchObject({ includesPt: false, ptLimit: null, ptPeriod: null });
+    // Unticked, the limit typed before goes with the tick.
+    expect(canLimitPt({ ...gold, includesPt: false })).toBe(false);
+    expect(draftBody({ ...gold, includesPt: false }, 'USD')).toMatchObject({ includesPt: false, ptLimit: null, ptPeriod: null });
+    expect(draftProblems({ ...gold, includesPt: false, ptLimit: 'lots' }, 'USD')).toBeNull();
+    // A pack's own count is its limit, and a day pass has no personal training.
+    for (const choice of ['pack', 'day_pass']) {
+      expect(draftLimitsPt({ ...gold, choice }), choice).toBe(false);
+      expect(draftBody({ ...gold, choice }, 'USD')).toMatchObject({ ptLimit: null, ptPeriod: null });
+      expect(valid(draftBody({ ...gold, choice }, 'USD')), choice).toBe(true);
+    }
+    for (const choice of ['recurring', 'one_time', 'trial']) expect(draftLimitsPt({ ...gold, choice }), choice).toBe(true);
+
+    // What is not a number of sessions is never sent, and its box says how to type one.
+    for (const typed of ['', '0', '201', '2.5', 'four', '-1', '4 a week']) {
+      const problems = draftProblems({ ...gold, ptLimit: typed }, 'USD');
+      expect(problems, typed).toEqual({ ptLimit: 'Type how many sessions, from 1 to 200.' });
+      expect(firstProblem(problems)).toBe('ptLimit');
+    }
+    expect(draftProblems({ ...gold, ptLimit: '200' }, 'USD')).toBeNull();
+
+    // A saved one opens as it was saved, and a change sends it whole.
+    const saved = type({ includesPt: true, ptLimit: 4, ptPeriod: 'week' });
+    expect(draftFromType(saved)).toMatchObject({ includesPt: true, ptAccess: 'limited', ptLimit: '4', ptPeriod: 'week' });
+    expect(draftFromType(type({ includesPt: true, ptLimit: null, ptPeriod: null }))).toMatchObject({ ptAccess: 'none', ptLimit: '4', ptPeriod: 'month' });
+    const change = draftBody(draftFromType(saved), 'USD');
+    expect(change).toMatchObject({ ptLimit: 4, ptPeriod: 'week', updatedAt: saved.updatedAt });
+    expect(updateGymMembershipTypeRequestSchema.safeParse(change).success).toBe(true);
+    expect(updateGymMembershipTypeRequestSchema.safeParse(draftBody(draftFromType(type({ includesPt: false })), 'USD')).success).toBe(true);
+
+    expect(includesLine(saved)).toBe('Unlimited classes · 4 personal training sessions a week');
+    expect(includesLine(type({ includesPt: true, ptLimit: 1, ptPeriod: 'month' }))).toBe('Unlimited classes · 1 personal training session a month');
+    expect(includesLine(type({ access: 'gym_only', includesPt: true, ptLimit: 8, ptPeriod: 'month' }))).toBe('No classes, gym only · 8 personal training sessions a month');
+    expect(includesLine(type({ classTypes: [], includesPt: true, ptLimit: 2, ptPeriod: 'week' }))).toBe('Personal training only · 2 sessions a week');
+    // A type read before the limit existed has no such fields, and reads as no limit.
+    expect(includesLine(type({ includesPt: true }))).toBe('Unlimited classes · Personal training');
   });
 
   it('offers the live classes, and keeps one the type already covers', () => {

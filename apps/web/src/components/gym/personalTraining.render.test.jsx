@@ -36,6 +36,7 @@ const session = (id, over = {}) => ({
   freeCancelUntil: '2026-10-09T07:00:00.000Z',
   status: 'booked',
   packCharged: true,
+  usesLimit: false,
   cancel: 'free',
   ...over,
 });
@@ -49,7 +50,7 @@ const view = (over = {}) => {
     lastDay: '2026-10-14',
     freeCancelMinutes: 120,
     record: 'own',
-    days: DAYS.map((localDate) => ({ localDate, pays: PACK, why: null })),
+    days: DAYS.map((localDate) => ({ localDate, pays: PACK, why: null, limit: null })),
     trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540, 600] }), trainer(ANN, 'Ann Coach', { '2026-10-08': [840] }, 45)],
     sessions: [],
     history: [],
@@ -63,6 +64,8 @@ const refused = (status, error, message, extra = {}) => Object.assign(new Error(
 /** Press a day in the row of days. */
 const pickDay = (name) => fireEvent.click(within(screen.getByRole('group', { name: 'Pick a day' })).getByRole('button', { name }));
 const FRI = 'Fri 9 Oct';
+/** Say yes in the box a pressed time opens. */
+const sayBook = () => fireEvent.click(within(screen.getByRole('dialog', { name: 'Book this session?' })).getByRole('button', { name: 'Book session' }));
 
 let server;
 const serve = (v) => {
@@ -113,17 +116,35 @@ describe('a member’s personal training', () => {
     expect(screen.queryByRole('list', { name: 'Your sessions' })).toBeNull();
   });
 
-  it('one press books that time with its own key, says so, and reads the times again', async () => {
+  it('a pressed time books nothing until the box is answered: it names the session and what it uses, and Not now sends nothing', async () => {
+    serve(view());
+    render(<PersonalTraining gym={GYM} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    pickDay(FRI);
+    fireEvent.click(within(screen.getByRole('group', { name: 'Sam Trainer' })).getByRole('button', { name: /^Book 10:00 am/ }));
+    const box = screen.getByRole('dialog', { name: 'Book this session?' });
+    expect(box.textContent).toContain('Fri 9 Oct · 10:00 am – 11:00 am · with Sam Trainer');
+    expect(box.textContent).toContain('You have PT 10: 9 sessions left. Each booking uses 1 session.');
+    expect(svc.book).not.toHaveBeenCalled();
+    fireEvent.click(within(box).getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(svc.book).not.toHaveBeenCalled();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('Book session books that time with its own key, says so, and reads the times again', async () => {
     serve(view());
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     pickDay(FRI);
     const sam = screen.getByRole('group', { name: 'Sam Trainer' });
     svc.book.mockImplementationOnce(() => {
-      server = view({ trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540] })], sessions: [session(S1)], days: DAYS.map((localDate) => ({ localDate, pays: { ...PACK, sessionsLeft: 8 }, why: null })) });
+      server = view({ trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540] })], sessions: [session(S1)], days: DAYS.map((localDate) => ({ localDate, pays: { ...PACK, sessionsLeft: 8 }, why: null, limit: null })) });
       return Promise.resolve(session(S1));
     });
     fireEvent.click(within(sam).getByRole('button', { name: /^Book 10:00 am – 11:00 am with Sam Trainer/ }));
+    expect(svc.book).not.toHaveBeenCalled();
+    sayBook();
     expect(svc.book).toHaveBeenCalledWith('g1', 'key-1', { trainerId: SAM, localDate: '2026-10-09', startMinute: 600, minutes: 60 });
     expect((await screen.findByRole('status')).textContent).toBe('Booked: Fri 9 Oct · 10:00 am – 11:00 am · with Sam Trainer.');
     const mine = await screen.findByRole('list', { name: 'Your sessions' });
@@ -140,7 +161,10 @@ describe('a member’s personal training', () => {
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     pickDay(FRI);
-    const press = async () => fireEvent.click(within(await screen.findByRole('group', { name: 'Sam Trainer' })).getByRole('button', { name: /^Book 10:00 am/ }));
+    const press = async () => {
+      fireEvent.click(within(await screen.findByRole('group', { name: 'Sam Trainer' })).getByRole('button', { name: /^Book 10:00 am/ }));
+      sayBook();
+    };
     // The network drops: nothing is known, so the same key goes again.
     svc.book.mockRejectedValueOnce(new Error('network'));
     await press();
@@ -163,7 +187,7 @@ describe('a member’s personal training', () => {
     ['no_membership', 'You have no membership in use on that day. Ask at the front desk.'],
     ['pack_used', 'Your pack has no sessions left. Ask at the front desk for another.'],
   ])('with nothing that pays (%s) the times still show, none of them a button, with who to ask', async (why, words) => {
-    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: null, why })) }));
+    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: null, why, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     pickDay(FRI);
@@ -176,7 +200,7 @@ describe('a member’s personal training', () => {
   });
 
   it('somebody with no record on the gym’s list is told so, and has no button', async () => {
-    serve(view({ record: 'none', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null })) }));
+    serve(view({ record: 'none', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     expect(screen.getByText("Your gym hasn't added you to its member list yet. Ask at the front desk.")).toBeTruthy();
@@ -184,7 +208,7 @@ describe('a member’s personal training', () => {
   });
 
   it('two app accounts on one record: told so, no button, and no session of the record is drawn', async () => {
-    serve(view({ record: 'shared', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null })) }));
+    serve(view({ record: 'shared', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     expect(screen.getByText("Two app accounts share your record at this gym, so sessions can't be booked or shown in the app. Any session already booked is still on. Ask at the front desk.")).toBeTruthy();
@@ -199,13 +223,14 @@ describe('a member’s personal training', () => {
     pickDay(FRI);
     svc.book.mockResolvedValueOnce(session(S1, { status: 'cancelled', packCharged: false, cancel: null }));
     fireEvent.click(within(screen.getByRole('group', { name: 'Sam Trainer' })).getByRole('button', { name: /^Book 10:00 am/ }));
+    sayBook();
     expect((await screen.findByRole('status')).textContent).toBe('That session was cancelled since. It is not booked.');
     expect(screen.queryByText(/^Booked:/)).toBeNull();
     await waitFor(() => expect(svc.view).toHaveBeenCalledTimes(2));
   });
 
   it('what pays is said for the day picked: a pack that ends mid-week has buttons before it ends and none after', async () => {
-    const days = DAYS.map((localDate) => (localDate >= '2026-10-09' ? { localDate, pays: null, why: 'no_membership' } : { localDate, pays: PACK, why: null }));
+    const days = DAYS.map((localDate) => (localDate >= '2026-10-09' ? { localDate, pays: null, why: 'no_membership', limit: null } : { localDate, pays: PACK, why: null, limit: null }));
     serve(view({ days }));
     render(<PersonalTraining gym={GYM} />);
     // Thursday is still inside the pack.
@@ -220,8 +245,82 @@ describe('a member’s personal training', () => {
     expect(within(sam).queryAllByRole('button')).toHaveLength(0);
   });
 
+  it('a membership with a limit says how many sessions are left in the picked day’s own week', async () => {
+    const GOLD = { membership: 'Gold', sessionsLeft: null };
+    const left = (n) => ({ membership: 'Gold', limit: 4, period: 'week', left: n });
+    // Wednesday to Sunday are this week, with 1 left; Monday starts another, with all 4.
+    const days = DAYS.map((localDate) => ({ localDate, pays: GOLD, why: null, limit: localDate >= '2026-10-12' ? left(4) : left(1) }));
+    serve(view({ days, trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540], '2026-10-12': [540] })] }));
+    render(<PersonalTraining gym={GYM} />);
+    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
+    expect(screen.getByText('You have Gold: 1 of 4 sessions left this week.')).toBeTruthy();
+    expect(within(sam).getAllByRole('button')).toHaveLength(1);
+    pickDay('Mon 12 Oct');
+    expect(screen.getByText('You have Gold: 4 of 4 sessions left that week.')).toBeTruthy();
+    expect(screen.queryByText(/Each booking uses/)).toBeNull();
+  });
+
+  it('a limit that is used has no button on that week’s days, says how many it was and the first day that can be booked', async () => {
+    const used = { membership: 'Gold', limit: 4, period: 'week', left: 0 };
+    const days = DAYS.map((localDate) =>
+      localDate >= '2026-10-12'
+        ? { localDate, pays: { membership: 'Gold', sessionsLeft: null }, why: null, limit: { ...used, left: 4 } }
+        : { localDate, pays: null, why: 'limit_week', limit: used },
+    );
+    serve(view({ days, trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540, 600], '2026-10-12': [540] })] }));
+    render(<PersonalTraining gym={GYM} />);
+    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
+    // What is said is true whatever next week holds: when it starts, never that it can be booked.
+    expect(screen.getByText("You've used all 4 personal training sessions Gold includes this week. A new week starts on Mon 12 Oct.")).toBeTruthy();
+    expect(screen.queryByText(/You can book for/)).toBeNull();
+    // The times still show, as plain text: nothing to press.
+    expect(sam.textContent).toContain('9:00 am – 10:00 am');
+    expect(within(sam).queryAllByRole('button')).toHaveLength(0);
+    // Monday is another week, and its time is a button.
+    pickDay('Mon 12 Oct');
+    expect(within(screen.getByRole('group', { name: 'Sam Trainer' })).getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('a month’s limit that is used names the first of the next month; a limit of one reads as one', async () => {
+    const used = { membership: 'Silver', limit: 1, period: 'month', left: 0 };
+    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: null, why: 'limit_month', limit: used })), trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540] })] }));
+    render(<PersonalTraining gym={GYM} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    expect(screen.getByText("You've used the 1 personal training session Silver includes this month. A new month starts on Sun 1 Nov.")).toBeTruthy();
+  });
+
+  it('a pack that pays because the membership’s sessions are used says so, so a charged pack session is no surprise', async () => {
+    const used = { membership: 'Gold', limit: 2, period: 'week', left: 0 };
+    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: PACK, why: null, limit: used })), trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540] })] }));
+    render(<PersonalTraining gym={GYM} />);
+    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
+    expect(screen.getByText("You have PT 10: 9 sessions left. Each booking uses 1 session. Gold's sessions for this week are used, so a booking uses your pack.")).toBeTruthy();
+    fireEvent.click(within(sam).getByRole('button', { name: /^Book 9:00 am/ }));
+    expect(screen.getByRole('dialog', { name: 'Book this session?' }).textContent).toContain("Gold's sessions for this week are used, so a booking uses your pack.");
+  });
+
+  it('a session that counts against a limit: the cancel boxes and the list say whether it still counts', async () => {
+    const mine = session(S1, { packCharged: false, usesLimit: true });
+    serve(view({ sessions: [mine], history: [session('44444444-4444-4444-8444-444444444444', { packCharged: false, usesLimit: true, status: 'late_cancelled', cancel: null, localDate: '2026-10-06' })] }));
+    render(<PersonalTraining gym={GYM} />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Cancel session: Fri 9 Oct/ }));
+    expect(screen.getByRole('dialog', { name: 'Cancel your session?' }).textContent).toContain('It then no longer counts as one of the sessions your membership includes.');
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Keep it' }));
+    expect(screen.getByRole('list', { name: 'Your sessions' }).textContent).toContain('Cancelled late · it still counts as one of your sessions');
+
+    cleanup();
+    serve(view({ sessions: [{ ...mine, cancel: 'late' }] }));
+    render(<PersonalTraining gym={GYM} />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Cancel session: Fri 9 Oct/ }));
+    const late = screen.getByRole('dialog', { name: 'Cancel late?' });
+    expect(late.textContent).toContain('Cancelling now counts as a late cancel, and it still counts as one of the sessions your membership includes.');
+    svc.cancel.mockResolvedValue({ ...mine, status: 'late_cancelled', cancel: null });
+    fireEvent.click(within(late).getByRole('button', { name: 'Cancel session' }));
+    expect((await screen.findByRole('status')).textContent).toBe('Cancelled late. It still counts as one of the sessions your membership includes.');
+  });
+
   it('a gym that sells no memberships says nothing about paying, and every time is a button', async () => {
-    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: { membership: null, sessionsLeft: null }, why: null })) }));
+    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: { membership: null, sessionsLeft: null }, why: null, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     pickDay(FRI);
@@ -327,7 +426,7 @@ describe('a member’s personal training', () => {
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     expect(screen.getByRole('button', { name: /Earlier/ }).disabled).toBe(true);
-    server = view({ from: '2026-10-14', to: '2026-10-20', trainers: [trainer(SAM, 'Sam Trainer')].map((t) => ({ ...t, days: t.days.map((d, n) => ({ ...d, localDate: `2026-10-${14 + n}` })) })), days: DAYS.map((_, n) => ({ localDate: `2026-10-${14 + n}`, pays: PACK, why: null })) });
+    server = view({ from: '2026-10-14', to: '2026-10-20', trainers: [trainer(SAM, 'Sam Trainer')].map((t) => ({ ...t, days: t.days.map((d, n) => ({ ...d, localDate: `2026-10-${14 + n}` })) })), days: DAYS.map((_, n) => ({ localDate: `2026-10-${14 + n}`, pays: PACK, why: null, limit: null })) });
     fireEvent.click(screen.getByRole('button', { name: /Later/ }));
     await waitFor(() => expect(svc.view).toHaveBeenLastCalledWith('g1', 1));
     expect(await screen.findByText('Wed 14 Oct – Tue 20 Oct')).toBeTruthy();

@@ -2916,7 +2916,7 @@ ahead and cancel for free until 2 hours before it starts.") with **Change bookin
 which opens the box in Settings (`#booking-rules`, the place `bookingRules`, on
 `schedule.manage`); staff who may not change them read the cancel rule and "A manager can
 change the booking rules." The box is named **Booking rules** (it was "Class bookings"):
-one rule set covers classes and personal training (its own for personal training is 17e-v).
+one rule set covers classes and personal training (its own for personal training is 17e-vi).
 **From the review (2026-10-08):** a record that two live app accounts hold (two records
 joined on the console leave both accounts on the kept one) is nobody's in the app: the read
 answers `record: "shared"` with no session and no history, a booking is refused 409
@@ -2927,6 +2927,39 @@ for a closed gym; a member's cancel is refused in a member's words
 as booked. Nobody is told (the inbox, 20a):
 the session is on the trainer's week. Not done: sessions ended when a person or a trainer
 leaves, came and no-show (17e-iv).)*
+*(17e-v, 2026-10-08: **a limit on sessions.** A membership type that includes personal
+training has `pt_limit` and `pt_period` (migration `0084`): so many sessions a week or a
+month, both NULL for no limit, which is what every type had. A pack has none (its own count
+is its limit), and the table's CHECK refuses one on a pack or on a type without personal
+training. **What is used is never stored.** It is counted from `gym_pt_appointments` by the
+membership the session was booked on, over the session's own week (Monday to Sunday) or
+calendar month on the gym's days, the periods a class limit uses (`bookingPeriod`); a late
+cancel and a missed session are counted (`PT_COUNTED`), a free cancel and a session staff
+give back are not; nothing is carried over. **What pays** (`pickPtCover`): a membership with
+no limit, then one with sessions left in that week or month, then a pack with a session
+left, which is charged; with none of those the booking is refused 409 `limit_week` or
+`limit_month`, for staff as for a member, and nothing is written. The count is read under
+the gym's lock in the booking's own transaction (`heldWithUsed`), so two presses at one
+instant cannot both take the last session. A limit changed on the price list holds from the
+next booking; sessions already booked past a lowered limit stay. The count belongs to ONE
+held membership: two memberships of one limited type on a record each have their own
+sessions, and a membership cancelled and given again starts with none used. A session
+carries `usesLimit`, so the console's late-cancel box offers "Late cancel: the session
+stays used" and "Cancel and give the session back" as it does for a pack, and a member's
+boxes say whether it still counts. Where a pack pays because the membership's sessions are
+used, `limit` names that membership with none left and both screens say so. A change to a type must
+say `ptLimit` and `ptPeriod` outright, as it says `includesPt`. The picker's rows and a
+member's days carry `limit` (the membership, its number, its period and what is left) where
+the paying membership has one, or where nothing pays because one is used. On the screens:
+the membership form has **Personal training sessions** (No limit · A limit on sessions) with
+the number and "a week / a month"; the price list's line reads "4 personal training sessions
+a month"; the picker reads "Gold · 3 of 4 sessions left that week" and somebody with none
+left cannot be picked; a member's tab reads "You have Gold: 3 of 4 sessions left this
+week." and, once used, "You've used all 4 personal training sessions Gold includes this
+week. You can book for Mon 12 Oct or later." with the times as plain text. **From Kd's
+click-through:** a member's pressed time opens **Book this session?** (the day, the time,
+the trainer, what it uses; Book session · Not now), so nothing is booked by one press. Not done:
+personal training's own booking rules (17e-vi).)*
 
 ### 13.6 The calendar, the desk and the messages
 

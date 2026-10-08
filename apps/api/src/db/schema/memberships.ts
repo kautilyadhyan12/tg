@@ -48,6 +48,8 @@ export const gymMembershipTypes = pgTable(
     bookingsPeriod: text("bookings_period"),
     coversAllClasses: boolean("covers_all_classes").notNull().default(true),
     includesPt: boolean("includes_pt").notNull().default(false),
+    ptLimit: integer("pt_limit"),
+    ptPeriod: text("pt_period"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -65,6 +67,10 @@ export const gymMembershipTypes = pgTable(
     check(
       "gym_membership_types_limit_check",
       sql`(${t.access} = 'limited') = (${t.bookingsLimit} IS NOT NULL) AND (${t.access} = 'limited') = (${t.bookingsPeriod} IS NOT NULL) AND (${t.bookingsLimit} IS NULL OR ${t.bookingsLimit} BETWEEN 1 AND 200) AND (${t.bookingsPeriod} IS NULL OR ${t.bookingsPeriod} IN ('week','month'))`,
+    ),
+    check(
+      "gym_membership_types_pt_limit_check",
+      sql`(${t.ptLimit} IS NULL) = (${t.ptPeriod} IS NULL) AND (${t.ptLimit} IS NULL OR (${t.includesPt} AND ${t.kind} <> 'pack' AND ${t.ptLimit} BETWEEN 1 AND 200 AND ${t.ptPeriod} IN ('week','month')))`,
     ),
     check(
       "gym_membership_types_shape_check",
