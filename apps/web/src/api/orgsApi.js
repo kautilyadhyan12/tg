@@ -85,7 +85,10 @@ import {
   gymClassWeekResponseSchema,
   gymMembershipTypesResponseSchema,
   heldMembershipsResponseSchema,
+  memberGymTagsResponseSchema,
   memberNotesAndTagsSchema,
+  memberTagsDoneResponseSchema,
+  memberTagsPreviewResponseSchema,
   membershipLinkPreviewResponseSchema,
   membershipLinkResponseSchema,
   membershipWordsResponseSchema,
@@ -153,6 +156,7 @@ function contractError(what) {
 
 export const CHECKIN_PASS_TIMEOUT_MS = 10_000;
 
+const tagsUrl = (gymId) => `/v1/orgs/${encodeURIComponent(gymId)}/member-list`;
 const notesUrl = (gymId, entryId) => `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}`;
 
 async function readThrough(schema, what, request) {
@@ -1457,6 +1461,18 @@ export const orgService = {
    *  call answers with all of that person's memberships, each date worked out by the
    *  server on the gym's own day. `what` is freeze, unfreeze, cancel or paid. Nothing
    *  here retries: a request that arrives twice changes things once. */
+  // Tags on the Members list (5d-ii). The gym's tags with how many people hold each; a
+  // tag for the people selected (`body` is { action, selection, tag } or { action,
+  // selection, tagId }), first as the box and then as the press; a tag renamed or deleted.
+  getGymTags: (gymId) => readThrough(memberGymTagsResponseSchema, "your gym's tags", authApi.get(`${tagsUrl(gymId)}/tags`)),
+  previewTagSelected: (gymId, body) =>
+    readThrough(memberTagsPreviewResponseSchema, 'who would change', authApi.post(`${tagsUrl(gymId)}/selected/tags-preview`, body)),
+  tagSelected: (gymId, body) => readThrough(memberTagsDoneResponseSchema, 'that tag', authApi.post(`${tagsUrl(gymId)}/selected/tags`, body)),
+  renameGymTag: (gymId, tagId, name) =>
+    readThrough(memberGymTagsResponseSchema, "your gym's tags", authApi.patch(`${tagsUrl(gymId)}/tags/${encodeURIComponent(tagId)}`, { name })),
+  deleteGymTag: (gymId, tagId) =>
+    readThrough(memberGymTagsResponseSchema, "your gym's tags", authApi.delete(`${tagsUrl(gymId)}/tags/${encodeURIComponent(tagId)}`)),
+
   // Staff notes and tags on a person's page (5d): every answer is both, as they now stand.
   getMemberNotes: (gymId, entryId) => readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.get(`${notesUrl(gymId, entryId)}/notes`)),
   addMemberNote: (gymId, entryId, body) =>

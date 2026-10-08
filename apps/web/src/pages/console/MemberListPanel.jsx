@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronRight, Download, Loader2, Mail, Minus, Search, SlidersHorizontal, Upload, UserMinus, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Download, Loader2, Mail, Minus, Search, SlidersHorizontal, Tag, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -8,6 +8,7 @@ import ScrollJump from '../../components/console/ScrollJump';
 import MemberListInvite from './MemberListInvite';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
+import { MemberTagsManage, MemberTagsSelected } from './MemberListTags';
 import MemberListUpload from './MemberListUpload';
 import { staffTag } from './consoleView';
 import {
@@ -19,6 +20,7 @@ import {
   contactWords,
   entriesQueryString,
   filtersAreEmpty,
+  filtersWithTags,
   gymToday,
   inviteQueryString,
   isTicked,
@@ -32,7 +34,9 @@ import {
   selectedWords,
   selectionFilter,
   selectionOf,
+  tagChips,
   toggleApp,
+  toggleTag,
   toggleWord,
   untickFromAll,
 } from './memberListPeople';
@@ -74,8 +78,9 @@ function Chip({ pressed, onClick, children, role }) {
 /** The Filter box (`MembersFilter`): in the middle on a computer, from the bottom on a
  *  phone. Show, then the App words, then the gym's own three kinds of word, each with
  *  the server's counts. A tap applies at once; "Show N members" closes the box on it. */
-function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) {
+function FilterBox({ list, gymTags, filters, words, total, onChange, onClear, onClose, onManageTags }) {
   const past = filters.records === 'former';
+  const tags = tagChips(gymTags, filters);
   const former = list?.counts.former ?? 0;
   const group = (title, children, radio = false) => (
     <div className="flex flex-col gap-2.5">
@@ -145,6 +150,25 @@ function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) 
                 );
               })
             : null}
+          {gymTags.length > 0 ? (
+            <div className="flex flex-col gap-2.5" data-testid="filter-tags">
+              <span className="c-s14 c-w6 c-t2">Tag</span>
+              {tags.length > 0 ? (
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Tag">
+                  {tags.map((tag) => (
+                    <Chip key={tag.id} pressed={filters.tag?.id === tag.id} onClick={() => onChange(toggleTag(filters, tag))}>
+                      {tag.name} <span className="c-n">{count(tag.count)}</span>
+                    </Chip>
+                  ))}
+                </div>
+              ) : (
+                <p className="c-s14 c-t2">{past ? `No past ${words.person} has a tag.` : `No ${words.person} has a tag yet.`}</p>
+              )}
+              <button type="button" onClick={onManageTags} data-testid="manage-tags" className="c-btn-link c-w6 c-s14 self-start min-h-11">
+                Manage tags
+              </button>
+            </div>
+          ) : null}
           {past ? <p className="c-s14 c-t2">Past {words.people} are shown on their own.</p> : null}
         </div>
         <div
@@ -313,6 +337,12 @@ export default function MemberListPanel({
   /** The people the Remove box was opened for: it keeps them after the list behind clears
    *  its selection, so the box can say what was done. */
   const [removeFor, setRemoveFor] = useState(null);
+  /** The gym's tags with their counts (5d-ii); none until they are read. */
+  const [gymTags, setGymTags] = useState([]);
+  const [tagsTick, setTagsTick] = useState(0);
+  /** The selection the Tags box is open for, as Remove keeps its own. */
+  const [taggingFor, setTaggingFor] = useState(null);
+  const [managingTags, setManagingTags] = useState(false);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
   /** How many names were loaded when a change asked for the list again, so the re-read
@@ -346,6 +376,31 @@ export default function MemberListPanel({
       live = false;
     };
   }, [gymId, refreshKey, tick]);
+
+  /** The gym's tags as they now stand: a deleted tag stops being the filter, a renamed one
+   *  shows its new name. */
+  const tagsChanged = useCallback((tags) => {
+    setGymTags(tags);
+    setFilters((f) => filtersWithTags(f, tags));
+  }, []);
+  // The gym's tags, read again after anything that can change who holds one.
+  useEffect(() => {
+    if (gymId === null) return undefined;
+    let live = true;
+    Promise.resolve()
+      .then(() => orgService.getGymTags(gymId))
+      .then((res) => res.data.tags)
+      .then(
+        (tags) => {
+          if (live) tagsChanged(tags);
+        },
+        // The Filter then shows no tags, and the Tags box still takes a new one.
+        () => undefined,
+      );
+    return () => {
+      live = false;
+    };
+  }, [gymId, refreshKey, tick, tagsTick, tagsChanged]);
 
   // The search goes to the server once typing pauses.
   useEffect(() => {
@@ -632,6 +687,12 @@ export default function MemberListPanel({
           {current ? 'Remove' : 'Remove from app'}
         </button>
       ) : null}
+      {!readOnly ? (
+        <button type="button" onClick={() => setTaggingFor(selection)} data-testid="bar-tags" className="c-btn c-btn-s c-btn-sm">
+          <Tag aria-hidden="true" className="w-4 h-4" />
+          Tags
+        </button>
+      ) : null}
       <button type="button" onClick={() => void download(selection)} disabled={downloading} data-testid="bar-download" className="c-btn c-btn-s c-btn-sm">
         {downloading ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Download aria-hidden="true" className="w-4 h-4" />}
         Download CSV
@@ -806,6 +867,33 @@ export default function MemberListPanel({
         />
       ) : null}
 
+      {taggingFor !== null ? (
+        <MemberTagsSelected
+          gymId={gymId}
+          selection={taggingFor}
+          picked={picked}
+          gymTags={gymTags}
+          onSelectionChanged={(fresh) => {
+            selectionMoved(fresh);
+            setTaggingFor((was) => (was !== null && was.kind === 'all' ? { ...was, count: fresh.count, digest: fresh.digest } : was));
+          }}
+          onDone={(answer) => {
+            tagsChanged(answer.tags);
+            // A list shown by a tag has other people on it now.
+            if (filters.tag !== null) {
+              setSel({ for: filters, ticked: NOBODY, all: null });
+              keepLoaded.current = page.entries.length;
+              setTick((n) => n + 1);
+            }
+          }}
+          onClose={() => setTaggingFor(null)}
+        />
+      ) : null}
+
+      {managingTags ? (
+        <MemberTagsManage gymId={gymId} gymTags={gymTags} words={words} readOnly={readOnly} onChanged={tagsChanged} onClose={() => setManagingTags(false)} />
+      ) : null}
+
       {inviting ? (
         <MemberListInvite
           gymId={gymId}
@@ -832,12 +920,17 @@ export default function MemberListPanel({
       {filtering ? (
         <FilterBox
           list={list}
+          gymTags={gymTags}
           filters={filters}
           words={words}
           total={page.loading ? null : page.total}
           onChange={change}
           onClear={clearAll}
           onClose={() => setFiltering(false)}
+          onManageTags={() => {
+            setFiltering(false);
+            setManagingTags(true);
+          }}
         />
       ) : null}
 
@@ -985,7 +1078,15 @@ export default function MemberListPanel({
           list={list}
           words={words}
           readOnly={readOnly}
-          onClose={() => setOpenId(undefined)}
+          onClose={() => {
+            setOpenId(undefined);
+            // Their page can add a tag or take one off: the counts, and a list shown by a tag.
+            setTagsTick((n) => n + 1);
+            if (filters.tag !== null) {
+              keepLoaded.current = page.entries.length;
+              setTick((n) => n + 1);
+            }
+          }}
           onChanged={() => {
             keepLoaded.current = page.entries.length;
             setTick((n) => n + 1);
