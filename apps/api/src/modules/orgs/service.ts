@@ -1916,7 +1916,7 @@ export async function removeOrgMember(
   userId: string,
   gymId: string,
   targetUserId: string,
-  options: { alsoStaff: boolean } = { alsoStaff: false },
+  options: { alsoStaff: boolean; confirmPtSessions?: string | null } = { alsoStaff: false },
 ): Promise<RemoveMemberResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.remove");
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.remove");
@@ -1939,7 +1939,10 @@ export async function removeOrgMember(
       if (!privileges.includes("members.confirm")) throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.remove_needs_list);
       const entry = await listRepo.entryFor(tx, gymId, records.current);
       if (entry === null) return null;
-      await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites }, entry, { endApp: false, mayEndApp: true });
+      await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites, confirmPtSessions: options.confirmPtSessions ?? null }, entry, {
+        endApp: false,
+        mayEndApp: true,
+      });
       return records.current;
     },
     afterClose: (tx) => withdrawForAccounts(tx, deps.invites, { gymId, userIds: [targetUserId], at }),

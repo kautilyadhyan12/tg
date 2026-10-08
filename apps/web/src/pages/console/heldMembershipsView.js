@@ -191,12 +191,25 @@ export function membershipBookingsAsked(err) {
   const data = err?.response?.data;
   if (data?.error !== MEMBERSHIP_HAS_BOOKINGS_ERROR) return null;
   const parsed = classBookingsEndingSchema.safeParse(data?.ending);
-  return parsed.success && parsed.data.booked > 0 ? parsed.data : null;
+  // Classes booked on it, personal training sessions booked on it (17e-iv-a), or both.
+  return parsed.success && (parsed.data.booked > 0 || parsed.data.ptSessions !== undefined) ? parsed.data : null;
+}
+
+/** What a cancel sends back once its box has been read: the classes' number and the
+ *  sessions' mark, each only where the box named some. */
+export function endingConfirm(ending) {
+  return {
+    ...((ending?.booked ?? 0) > 0 ? { confirmBookings: ending.booked } : {}),
+    ...(ending?.ptSessions ? { confirmPtSessions: ending.ptSessions.mark } : {}),
+  };
 }
 
 /** Said in the box when the classes are not the ones it listed a moment ago: the person
  *  booked or cancelled one between the box and its button, and the press ended nothing. */
 export const ENDING_MOVED = 'The classes changed while this was open. Check them and press again.';
+
+/** The same, for a box that also names personal training sessions (17e-iv-a). */
+export const ENDING_MOVED_WITH_SESSIONS = 'What is booked changed while this was open. Check it and press again.';
 
 /** How many of the classes the box lists before "See all". */
 export const ENDING_CLASSES_SHOWN = 3;
@@ -228,8 +241,24 @@ export function endingWords(ending, m, name, later, clockFormat) {
       last === null
         ? `Classes booked with ${m.kind === 'pack' ? 'another pack or a membership' : 'another membership or a pack'} stay booked. So does a class that has already started.`
         : `Classes up to ${dayWords(last)} stay booked. So do classes booked with another membership or a pack.`,
-    button: `${last === null ? 'Cancel today' : `Cancel on ${dayWords(last)}`} and end ${bookings}`,
+    button: `${last === null ? 'Cancel today' : `Cancel on ${dayWords(last)}`} and end ${endingThings(n, bookings, ending?.ptSessions?.count ?? 0)}`,
+    /** The sessions' own lines, for a membership with no class booked on it. */
+    ptTitle:
+      last === null
+        ? `${name} has personal training booked with ${m.typeName}`
+        : `${name} has personal training booked with ${m.typeName} after ${dayWords(last)}`,
+    ptKept:
+      last === null
+        ? `Sessions booked with ${m.kind === 'pack' ? 'another pack or a membership' : 'another membership or a pack'} stay booked.`
+        : `Sessions up to ${dayWords(last)} stay booked. So do sessions booked with another membership or a pack.`,
   };
+}
+
+/** "2 bookings", "3 sessions", "2 bookings and 3 sessions". */
+function endingThings(n, bookings, sessions) {
+  const pt = sessions === 1 ? '1 session' : `${sessions.toLocaleString('en')} sessions`;
+  if (sessions === 0) return bookings;
+  return n === 0 ? pt : `${bookings} and ${pt}`;
 }
 
 /** What each press did, said back in one line. */

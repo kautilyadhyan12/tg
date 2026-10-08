@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ChevronRight, Loader2, Search, Upload, UserMinus, UserPlus, X } from 'lucide-react';
+import { PtSessionsEndDialog } from '../../components/console/PtSessionsEnding';
+import { ptSessionsAsked } from './ptSessionsEndView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import ScrollJump from '../../components/console/ScrollJump';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
@@ -285,6 +287,8 @@ export default function Members() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [removingId, setRemovingId] = useState(null);
   const [removeError, setRemoveError] = useState(null);
+  // The personal training sessions a Remove would cancel, named by the server (17e-iv-a).
+  const [ptEnding, setPtEnding] = useState(null);
   /** The person in the app whose panel is open, by id. */
   const [openUserId, setOpenUserId] = useState(null);
   /** The search over the people in the app, as typed and as asked (after a pause). */
@@ -420,17 +424,26 @@ export default function Members() {
     }
   };
 
-  const removeMember = async (member, { alsoStaff = false } = {}) => {
+  const removeMember = async (member, { alsoStaff = false } = {}, named = null) => {
     if (gymId === null) return;
     setRemovingId(member.userId);
     setRemoveError(null);
     try {
-      await orgService.removeMember(gymId, member.userId, { alsoStaff });
+      await orgService.removeMember(gymId, member.userId, { alsoStaff, ...(named === null ? {} : { confirmPtSessions: named.mark }) });
+      setPtEnding(null);
       setOpenUserId(null);
       setListKey((n) => n + 1);
       reloadRoster();
     } catch (err) {
+      // Personal training is booked for them (17e-iv-a): nobody was removed, and the box
+      // names the sessions and waits for its own button.
+      const sessions = ptSessionsAsked(err);
+      if (sessions !== null) {
+        setPtEnding({ member, alsoStaff, sessions, moved: named !== null });
+        return;
+      }
       // The server's own sentence; the list is left as it was, because nothing changed.
+      setPtEnding(null);
       setOpenUserId(null);
       setRemoveError(errorText(err, "We couldn't remove them. Please try again."));
     } finally {
@@ -782,6 +795,18 @@ export default function Members() {
           onSelectionChanged={NOTHING}
           onRemoved={rosterRemoved}
           onClose={() => setRosterRemoveFor(null)}
+        />
+      ) : null}
+
+      {tab === 'app' && ptEnding !== null ? (
+        <PtSessionsEndDialog
+          name={ptEnding.member.displayName}
+          ending={ptEnding.sessions}
+          clockFormat={org?.clockFormat}
+          moved={ptEnding.moved}
+          busy={removingId === ptEnding.member.userId}
+          onConfirm={() => void removeMember(ptEnding.member, { alsoStaff: ptEnding.alsoStaff }, ptEnding.sessions)}
+          onClose={() => setPtEnding(null)}
         />
       ) : null}
 

@@ -5,6 +5,7 @@
 // the server reads them under the gym's lock.
 import { z } from "zod";
 import { classDaySchema } from "./classes.js";
+import { ptSessionsEndingSchema } from "./ptSessionsEnding.js";
 import { addDays, heldMembershipView, type HeldMembership } from "./heldMemberships.js";
 import type { MembershipAccess, MembershipLimitPeriod } from "./memberships.js";
 
@@ -366,6 +367,9 @@ export const classBookingsEndingSchema = z
     waiting: z.number().int(),
     /** One row a booking, in the order they were made. */
     people: z.array(endingPersonSchema),
+    /** A membership's cancel only: the personal training sessions booked on it, which end
+     *  too (17e-iv-a). The request then also sends `confirmPtSessions` equal to its `mark`. */
+    ptSessions: ptSessionsEndingSchema.optional(),
   })
   .strict();
 export type ClassBookingsEnding = z.infer<typeof classBookingsEndingSchema>;

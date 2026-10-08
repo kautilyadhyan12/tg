@@ -82,7 +82,12 @@ function sendHeld(reply: FastifyReply, req: FastifyRequest, answer: Awaited<Retu
   if (answer.kind === "ok") return reply.status(200).send(answer.body);
   return reply.status(409).send({
     error: MEMBERSHIP_HAS_BOOKINGS_ERROR,
-    message: "They have classes booked on this membership. Those bookings will end if you go ahead.",
+    message:
+      answer.ending.ptSessions === undefined
+        ? "They have classes booked on this membership. Those bookings will end if you go ahead."
+        : answer.ending.booked === 0
+          ? "They have personal training sessions booked on this membership. Those sessions will be cancelled if you go ahead."
+          : "They have classes and personal training sessions booked on this membership. Those will end if you go ahead.",
     ending: answer.ending,
     requestId: req.id,
   });
@@ -237,6 +242,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       params.membershipId,
       { type: "cancel", when: body.when },
       body.confirmBookings ?? null,
+      body.confirmPtSessions ?? null,
     );
     return sendHeld(reply, req, answer);
   });

@@ -7,9 +7,10 @@
 // booking that stops being charged for it, and a booking already ended is not found again,
 // so each class comes back once however often a change arrives.
 import type { Sql, TransactionSql } from "postgres";
-import { MEMBERSHIP_BOOKINGS_ENDING_SHOWN, bookingTime, handsOverNow, pickCover, type Cover, type HeldCover } from "@app/shared";
+import { MEMBERSHIP_BOOKINGS_ENDING_SHOWN, type PtSessionsEnding, bookingTime, handsOverNow, pickCover, type Cover, type HeldCover } from "@app/shared";
 import { chargePack, givePackClassesBack } from "../memberships/heldRepo.js";
 import { endLeaversPlaces } from "../events/places.js";
+import { endSessionsOf, sessionsEndingFor } from "../pt/changes.js";
 import * as repo from "./bookingsRepo.js";
 
 export const pick = (ctx: Pick<repo.ClassContext, "session" | "gymHasTypes">, held: readonly HeldCover[]): Cover =>
@@ -137,6 +138,10 @@ export interface BookingsEnded {
   waiting: number;
   /** Classes given back to packs. */
   packClasses: number;
+  /** A membership's cancel: the personal training sessions ended with it, and how many of
+   *  them went back to a pack. */
+  ptSessions?: number;
+  ptPackSessions?: number;
 }
 
 /** THESE CLASSES WILL NOT RUN: staff cancelled them (`remove` false, the bookings stay
@@ -183,32 +188,49 @@ export async function endLeaversBookings(tx: TransactionSql, gymId: string, user
 /** The bookings a change would end, as the 409 that asks first carries them. */
 export interface HasBookings {
   kind: "has_bookings";
-  ending: repo.EndingCounts & { people: repo.EndingPersonRow[] };
+  ending: repo.EndingCounts & { people: repo.EndingPersonRow[]; ptSessions?: PtSessionsEnding };
 }
 
-/** The question a membership's cancel must have answered first: null when no place is
- *  booked on it, or when `confirmed` is their number as counted here, under the gym's
- *  lock. Asked before the cancel's first write. */
+/** What the screen was told a membership's cancel would end: the number of class bookings,
+ *  and the mark of the personal training sessions. */
+export interface MembershipEndConfirmed {
+  bookings: number | null;
+  ptSessions: string | null;
+}
+
+/** The question a membership's cancel must have answered first: null when no class place
+ *  and no personal training session is booked on it, or when `confirmed` is the classes'
+ *  number and the sessions' mark as worked out here, under the gym's lock. Asked before
+ *  the cancel's first write. */
 export async function membershipBookingsAsk(
   tx: TransactionSql,
   gymId: string,
   scope: repo.MembershipScope,
-  confirmed: number | null,
+  confirmed: MembershipEndConfirmed,
 ): Promise<HasBookings | null> {
   const counts = await repo.endingCounts(tx, gymId, scope);
-  if (counts.booked === 0 || counts.booked === confirmed) return null;
+  const sessions = await sessionsEndingFor(tx, gymId, { membership: scope.membership, afterDay: scope.afterDay }, scope.now);
+  const classesAnswered = counts.booked === 0 || counts.booked === confirmed.bookings;
+  const sessionsAnswered = sessions === null || sessions.mark === confirmed.ptSessions;
+  if (classesAnswered && sessionsAnswered) return null;
   return {
     kind: "has_bookings",
-    ending: { ...counts, people: await repo.endingPeople(tx, gymId, scope, null, MEMBERSHIP_BOOKINGS_ENDING_SHOWN) },
+    ending: {
+      ...counts,
+      people: counts.booked === 0 ? [] : await repo.endingPeople(tx, gymId, scope, null, MEMBERSHIP_BOOKINGS_ENDING_SHOWN),
+      ...(sessions === null ? {} : { ptSessions: sessions }),
+    },
   };
 }
 
 /** STAFF CANCELLED THIS MEMBERSHIP: the places booked on it end, a pack has those classes
  *  back, and each place goes to the class's waitlist by the usual rule. A place the person
- *  booked on another membership is not on this one and stays. */
+ *  booked on another membership is not on this one and stays. The personal training
+ *  sessions booked on it end the same way (17e-iv-a). */
 export async function endMembershipBookings(tx: TransactionSql, gymId: string, scope: repo.MembershipScope, now: Date): Promise<BookingsEnded> {
   const ended = await repo.endBookings(tx, gymId, scope, now);
   const packClasses = await giveBack(tx, gymId, ended, now);
   await handOverClasses(tx, gymId, [...new Set(ended.map((b) => b.sessionId))], now);
-  return { booked: ended.length, waiting: 0, packClasses };
+  const pt = await endSessionsOf(tx, gymId, { membership: scope.membership, afterDay: scope.afterDay }, scope.now);
+  return { booked: ended.length, waiting: 0, packClasses, ptSessions: pt.sessions, ptPackSessions: pt.packSessions };
 }

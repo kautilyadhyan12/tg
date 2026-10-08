@@ -336,3 +336,97 @@ describe('Remove on In the app', () => {
     expect(screen.queryByRole('checkbox', { name: 'Select Sam Roy' })).toBeNull();
   });
 });
+
+// THE SESSIONS A REMOVE CANCELS (17e-iv-a). The worst this box could do: cancel somebody's
+// paid sessions on a press that never named them.
+describe('Remove names the personal training sessions it cancels', () => {
+  const MARK = 'c'.repeat(64);
+  const session = (n, personName, localDate, localStartMinute, packSession = false) => ({
+    id: `66666666-6666-4666-8666-00000000000${String(n)}`,
+    personName,
+    trainerName: 'Sam Trainer',
+    localDate,
+    localStartMinute,
+    minutes: 60,
+    packSession,
+  });
+  const FOUR = [
+    session(1, 'Ben Carter', '2026-10-09', 600, true),
+    session(2, 'Ben Carter', '2026-10-12', 540),
+    session(3, 'Cara Diaz', '2026-10-13', 1020),
+    session(4, 'Cara Diaz', '2026-10-14', 1020),
+  ];
+
+  it('they are in the box before the press: who, when, with whom, what happens to packs, and that nobody is told', async () => {
+    draw({ gym: { ...GYM_ROW, clockFormat: '12h' } });
+    await screen.findByText('Ben Carter');
+    fireEvent.click(tickOf('Ben Carter'));
+    fireEvent.click(tickOf('Cara Diaz'));
+    orgService.previewRemoveSelected.mockResolvedValue(
+      box({
+        selected: 2,
+        movingNotInApp: 2,
+        move: [who('Ben Carter', ben.entryId), who('Cara Diaz', cara.entryId)],
+        ptSessions: { count: 4, packSessions: 1, mark: MARK, sessions: FOUR },
+      }),
+    );
+    orgService.removeSelected.mockResolvedValue({ data: { removed: { moved: 2, endedApp: 0, alreadyRemoved: false } } });
+    fireEvent.click(bar().getByTestId('bar-remove'));
+
+    const dialog = within(await screen.findByTestId('remove-box'));
+    const part = within(await dialog.findByTestId('pt-sessions-ending'));
+    expect(part.getByRole('heading', { name: '4 personal training sessions will be cancelled' })).toBeTruthy();
+    expect(part.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Ben CarterFri 9 Oct · 10:00 AM–11:00 AM · with Sam Trainer',
+      'Ben CarterMon 12 Oct · 9:00 AM–10:00 AM · with Sam Trainer',
+      'Cara DiazTue 13 Oct · 5:00 PM–6:00 PM · with Sam Trainer',
+    ]);
+    expect(part.getByText(/and 1 more/)).toBeTruthy();
+    fireEvent.click(part.getByRole('button', { name: 'See all' }));
+    expect(part.getAllByRole('listitem')).toHaveLength(4);
+    expect(part.getByText("Each trainer's time can be booked again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
+    expect(part.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
+    // Nobody not ticked is named, and nothing has been pressed.
+    expect(part.queryByText(/Ada Lovelace/)).toBeNull();
+    expect(orgService.removeSelected).not.toHaveBeenCalled();
+
+    fireEvent.click(dialog.getByRole('button', { name: 'Remove 2 members' }));
+    await waitFor(() => expect(orgService.removeSelected).toHaveBeenCalledTimes(1));
+    expect(orgService.removeSelected).toHaveBeenCalledWith(GYM, { kind: 'ticked', entryIds: [ben.entryId, cara.entryId] }, DIGEST, false);
+  });
+
+  it('a session booked while the box is open: nobody is removed, and the new box names it', async () => {
+    draw({ gym: { ...GYM_ROW, clockFormat: '12h' } });
+    await screen.findByText('Ben Carter');
+    fireEvent.click(tickOf('Ben Carter'));
+    const one = { count: 1, packSessions: 0, mark: MARK, sessions: [FOUR[1]] };
+    const two = { count: 2, packSessions: 1, mark: 'd'.repeat(64), sessions: [FOUR[0], FOUR[1]] };
+    orgService.previewRemoveSelected.mockResolvedValue(box({ move: [who('Ben Carter', ben.entryId)], ptSessions: one }));
+    fireEvent.click(bar().getByTestId('bar-remove'));
+    const dialog = within(await screen.findByTestId('remove-box'));
+    expect(await dialog.findByRole('heading', { name: '1 personal training session will be cancelled' })).toBeTruthy();
+    expect(dialog.getByText("The trainer's time can be booked again. A session that has already started stays as it is.")).toBeTruthy();
+
+    const fresh = memberRemovePreviewSchema.parse({ ...box({ move: [who('Ben Carter', ben.entryId)], ptSessions: two }).data.preview, digest: DIGEST2 });
+    orgService.removeSelected.mockRejectedValueOnce(refusedWith('remove_changed', fresh)).mockResolvedValueOnce({ data: { removed: { moved: 1, endedApp: 0, alreadyRemoved: false } } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Remove 1 member' }));
+    expect(await dialog.findByRole('heading', { name: '2 personal training sessions will be cancelled' })).toBeTruthy();
+    expect(dialog.getByTestId('remove-note').textContent).toBe(MEMBER_REMOVE_CHANGED_WORDS);
+    expect(screen.queryByTestId('remove-done')).toBeNull();
+    fireEvent.click(dialog.getByRole('button', { name: 'Remove 1 member' }));
+    await waitFor(() => expect(orgService.removeSelected).toHaveBeenCalledTimes(2));
+    expect(orgService.removeSelected).toHaveBeenLastCalledWith(GYM, { kind: 'ticked', entryIds: [ben.entryId] }, DIGEST2, false);
+  });
+
+  it('with no session booked the box says nothing about personal training', async () => {
+    draw();
+    await screen.findByText('Ben Carter');
+    fireEvent.click(tickOf('Ben Carter'));
+    orgService.previewRemoveSelected.mockResolvedValue(box({ move: [who('Ben Carter', ben.entryId)] }));
+    fireEvent.click(bar().getByTestId('bar-remove'));
+    const dialog = within(await screen.findByTestId('remove-box'));
+    await dialog.findByTestId('remove-move');
+    expect(dialog.queryByTestId('pt-sessions-ending')).toBeNull();
+    expect(dialog.queryByText(/personal training/i)).toBeNull();
+  });
+});

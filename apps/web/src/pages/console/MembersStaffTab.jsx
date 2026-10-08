@@ -3,7 +3,9 @@ import { withArticle } from '@app/shared';
 import { Check, ChevronRight, UserPlus } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { PtSessionsEndDialog } from '../../components/console/PtSessionsEnding';
 import SentencePlace from '../../components/console/SentencePlace';
+import { ptSessionsAsked } from './ptSessionsEndView';
 import { staffRoleText } from './consoleView';
 import { StaffInvitePanel, StaffPersonPanel } from './MembersStaffPanels';
 import { privilegesDiffer, sentAgainNotice, staffCountLabel, staffInviteView, staffSeatsNote } from './staffView';
@@ -130,6 +132,8 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
   const [notice, setNotice] = useState(null);
   const [rowNote, setRowNote] = useState(null);
   const [panelError, setPanelError] = useState(null);
+  // The personal training sessions a Remove from the app would cancel (17e-iv-a).
+  const [ptEnding, setPtEnding] = useState(null);
   // Only the newest read is drawn; one still on its way when the tab goes is dropped.
   const reads = useRef(0);
 
@@ -223,14 +227,24 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
 
   // Ticked: one step on the server takes both their place in the app and their staff
   // access (`removeMember` with `alsoStaff`). Unticked: their staff access only.
-  const remove = async (person, { alsoApp }) => {
+  const remove = async (person, { alsoApp }, named = null) => {
     setBusyId(person.userId);
     setPanelError(null);
     setNotice(null);
     try {
-      if (alsoApp) await orgService.removeMember(gymId, person.userId, { alsoStaff: true });
+      if (alsoApp) await orgService.removeMember(gymId, person.userId, { alsoStaff: true, ...(named === null ? {} : { confirmPtSessions: named.mark }) });
       else await orgService.removeStaff(gymId, person.userId);
+      setPtEnding(null);
     } catch (err) {
+      // Personal training is booked for them (17e-iv-a): nobody was removed, and the box
+      // names the sessions and waits for its own button.
+      const sessions = alsoApp ? ptSessionsAsked(err) : null;
+      if (sessions !== null) {
+        setPtEnding({ person, sessions, moved: named !== null });
+        setBusyId(null);
+        return;
+      }
+      setPtEnding(null);
       setPanelError({ at: 'remove', who: person.userId, message: errorText(err, "We couldn't remove them. Please try again."), retryable: false });
       setBusyId(null);
       return;
@@ -412,6 +426,18 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
           </section>
           <InvitedList invites={invites} gym={gym} orgType={orgType} busyId={busyId} readOnly={readOnly} note={rowNote} onRetry={retry} onCancel={cancelInvite} onResend={resendInvite} />
         </>
+      ) : null}
+
+      {ptEnding !== null ? (
+        <PtSessionsEndDialog
+          name={ptEnding.person.displayName}
+          ending={ptEnding.sessions}
+          clockFormat={gym?.clockFormat}
+          moved={ptEnding.moved}
+          busy={busyId !== null}
+          onConfirm={() => void remove(ptEnding.person, { alsoApp: true }, ptEnding.sessions)}
+          onClose={() => setPtEnding(null)}
+        />
       ) : null}
 
       {ready && open !== null && !inviting ? (

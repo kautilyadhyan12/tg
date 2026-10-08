@@ -15,6 +15,7 @@ import {
   memberListInvitationSchema,
 } from "./memberInvites.js";
 import { heldOnListSchema } from "./heldOnList.js";
+import { ptSessionsEndingSchema } from "./ptSessionsEnding.js";
 
 // ---------------------------------------------------------------------------
 // Limits (§9.9)
@@ -1950,6 +1951,9 @@ export const memberRemovePreviewSchema = z
      *  theirs, and no family's shared email in the app is on them. */
     movingNotInApp: z.number().int().min(0),
     large: memberRemoveLargeSchema.nullable(),
+    /** The coming personal training sessions of the records moving, which end with them
+     *  (17e-iv-a); left out where there are none. They are part of `digest`. */
+    ptSessions: ptSessionsEndingSchema.optional(),
     digest: sha256Schema,
   })
   .strict();

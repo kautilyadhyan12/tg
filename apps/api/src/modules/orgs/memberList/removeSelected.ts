@@ -28,6 +28,7 @@ import {
 } from "@app/shared";
 import type { TransactionSql } from "postgres";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
+import { sessionsEndingFor } from "../pt/changes.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { bustAfterRemoval } from "./byHandService.js";
 import * as repo from "./repo.js";
@@ -358,19 +359,39 @@ async function recordInputsOn(
   return { records, members, scale };
 }
 
+/** The box's digest once it names personal training sessions: the plan's own, and theirs. */
+export const digestWithSessions = (digest: string, mark: string): string =>
+  createHash("sha256").update(`${digest}\npt_sessions:${mark}`, "utf8").digest("hex");
+
+/** THE PLAN WITH THE PERSONAL TRAINING SESSIONS IT ENDS (17e-iv-a): the coming sessions of
+ *  the records moving, named in the box and part of its digest, so a session booked or
+ *  cancelled while the box is open shows the box again and nobody is removed. Every reader
+ *  of a plan goes through here. */
+export async function withPtSessions(sql: repo.SqlOrTx, gymId: string, plan: RemovalPlan, now: Date): Promise<RemovalPlan> {
+  const ending = await sessionsEndingFor(sql, gymId, { entryIds: plan.moveIds }, now);
+  if (ending === null) return plan;
+  return { ...plan, preview: { ...plan.preview, ptSessions: ending, digest: digestWithSessions(plan.preview.digest, ending.mark) } };
+}
+
 /** The plan for these records, read on `sql` (the pool, or the press's transaction). */
-async function recordPlanOn(sql: repo.SqlOrTx, gymId: string, ids: readonly string[]): Promise<RemovalPlan> {
+async function recordPlanOn(sql: repo.SqlOrTx, gymId: string, ids: readonly string[], now: Date): Promise<RemovalPlan> {
   const { records, members, scale } = await recordInputsOn(sql, gymId, ids);
-  return recordRemovalPlan({ gymId, selectedIds: ids, records, members, scale });
+  return await withPtSessions(sql, gymId, recordRemovalPlan({ gymId, selectedIds: ids, records, members, scale }), now);
 }
 
 /** An import's leavers box, read on `sql` before the file is applied. */
-export async function importLeaversPlanOn(sql: repo.SqlOrTx, gymId: string, leftIds: readonly string[], written: FileWrites): Promise<RemovalPlan> {
+export async function importLeaversPlanOn(
+  sql: repo.SqlOrTx,
+  gymId: string,
+  leftIds: readonly string[],
+  written: FileWrites,
+  now: Date,
+): Promise<RemovalPlan> {
   const { records, members, scale } = await recordInputsOn(sql, gymId, leftIds);
-  return importLeaversPlan({ gymId, leftIds, records, members, written, scale });
+  return await withPtSessions(sql, gymId, importLeaversPlan({ gymId, leftIds, records, members, written, scale }), now);
 }
 
-async function rosterPlanOn(sql: repo.SqlOrTx, gymId: string, userIds: readonly string[], managesStaff: boolean): Promise<RemovalPlan> {
+async function rosterPlanOn(sql: repo.SqlOrTx, gymId: string, userIds: readonly string[], managesStaff: boolean, now: Date): Promise<RemovalPlan> {
   const [members, scale] = await Promise.all([
     repo.membersAgainstList(sql, gymId, { email: null, phone: null, userIds }),
     repo.removalScale(sql, gymId),
@@ -388,7 +409,7 @@ async function rosterPlanOn(sql: repo.SqlOrTx, gymId: string, userIds: readonly 
           phones: records.flatMap((record) => (record.phone === null ? [] : [record.phone])),
           entryIds: owns,
         });
-  return rosterRemovalPlan({ gymId, userIds, members, reached, scale, managesStaff });
+  return await withPtSessions(sql, gymId, rosterRemovalPlan({ gymId, userIds, members, reached, scale, managesStaff }), now);
 }
 
 /** A record door that would end somebody's app needs `members.remove` as well; the
@@ -422,7 +443,7 @@ async function press(
   actorUserId: string,
   gymId: string,
   input: { digest: string; acknowledgeLargeChange?: boolean | undefined },
-  planOn: (tx: TransactionSql) => Promise<RemovalPlan>,
+  planOn: (tx: TransactionSql, at: Date) => Promise<RemovalPlan>,
   privileges: readonly string[],
 ): Promise<RemoveSelectedAnswer> {
   const at = deps.now();
@@ -430,7 +451,7 @@ async function press(
   const closedUsers: string[] = [];
   const answer = await onceMoreIfMoved(() => deps.sql.begin(async (tx): Promise<RemoveSelectedAnswer> => {
     await repo.lockGym(tx, gymId);
-    const plan = await planOn(tx);
+    const plan = await planOn(tx, at);
     if (plan.preview.digest !== input.digest) {
       // The same press again (a retry, or a colleague's): the box is gone because that
       // press did it, so say so rather than showing an empty box.
@@ -510,7 +531,7 @@ export async function previewRemoveSelected(
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const ids = await selectedIds(deps, gymId, request.selection);
-  const plan = await recordPlanOn(deps.sql, gymId, ids);
+  const plan = await recordPlanOn(deps.sql, gymId, ids, deps.now());
   requireForPlan(plan, privileges);
   return plan.preview;
 }
@@ -528,7 +549,7 @@ export async function removeSelected(
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return { kind: "rate_limited" };
   const ids = await selectedIds(deps, gymId, input.selection);
-  return await press(deps, userId, gymId, input, (tx) => recordPlanOn(tx, gymId, ids), privileges);
+  return await press(deps, userId, gymId, input, (tx, at) => recordPlanOn(tx, gymId, ids, at), privileges);
 }
 
 // ── "In the app" ──
@@ -543,7 +564,7 @@ export async function previewRemoveRoster(
 ): Promise<MemberRemovePreview | null> {
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.remove");
   if (!(await limit())) return null;
-  const plan = await rosterPlanOn(deps.sql, gymId, request.userIds, privileges.includes("staff.manage"));
+  const plan = await rosterPlanOn(deps.sql, gymId, request.userIds, privileges.includes("staff.manage"), deps.now());
   requireForPlan(plan, privileges);
   return plan.preview;
 }
@@ -559,5 +580,5 @@ export async function removeRoster(
   await requireWritablePrivilege(deps, gymId, userId, "members.remove");
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.remove");
   if (!(await limit())) return { kind: "rate_limited" };
-  return await press(deps, userId, gymId, input, (tx) => rosterPlanOn(tx, gymId, input.userIds, privileges.includes("staff.manage")), privileges);
+  return await press(deps, userId, gymId, input, (tx, at) => rosterPlanOn(tx, gymId, input.userIds, privileges.includes("staff.manage"), at), privileges);
 }

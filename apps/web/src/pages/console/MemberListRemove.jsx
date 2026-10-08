@@ -3,6 +3,7 @@ import { AlertTriangle, Check, Loader2, X } from 'lucide-react';
 import { MEMBER_LIST_SELECTION_CHANGED_WORDS } from '@app/shared';
 import { errorText, removeRefused, selectionChanged } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
+import PtSessionsEnding from '../../components/console/PtSessionsEnding';
 import { viewerPrivileges } from './consoleView';
 import { canOpenPlace, placeFor } from './consolePlaces';
 import {
@@ -196,6 +197,8 @@ export default function MemberListRemove({ door, gym, words, load, press, onSele
             {group.place ? <PlaceLink to={placeFor(gym?.slug, viewerPrivileges(gym), group.place)}>Open the Staff tab</PlaceLink> : null}
           </section>
         ))}
+        {/* Their coming personal training sessions end with them (17e-iv-a). */}
+        {preview.ptSessions ? <PtSessionsEnding ending={preview.ptSessions} clockFormat={gym?.clockFormat} /> : null}
         {button === null ? <p className="c-s15 c-t1">{`Nobody you selected can be removed.`}</p> : null}
         {kept.heading !== null ? (
           <section className="flex flex-col gap-3" data-testid="remove-kept">

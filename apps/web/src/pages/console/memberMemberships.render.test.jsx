@@ -1097,3 +1097,75 @@ describe("on the person's page", () => {
     expect(screen.queryByRole('heading', { name: 'Details' })).toBeNull();
   });
 });
+
+// A CANCEL THAT WOULD END PERSONAL TRAINING SESSIONS (17e-iv-a). The worst this box could
+// do: cancel paid sessions on one press with nobody told which.
+describe('cancelling a membership that personal training is booked with', () => {
+  const MARK = 'c'.repeat(64);
+  const session = (n, localDate, localStartMinute, packSession = false) => ({
+    id: `66666666-6666-4666-8666-00000000000${String(n)}`,
+    personName: 'Ada Lovelace',
+    trainerName: 'Sam Trainer',
+    localDate,
+    localStartMinute,
+    minutes: 60,
+    packSession,
+  });
+  const TWO = { count: 2, packSessions: 0, mark: MARK, sessions: [session(1, '2026-10-21', 600), session(2, '2026-10-23', 540)] };
+  const asks = (ending) => refusal(409, { error: 'membership_has_bookings', message: 'They have things booked.', ending });
+
+  it('sessions alone: named first, nothing ends until its own button, and the mark the server gave goes back with no class number', async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    const cancelled = held(1, GOLD, '2026-10-04', true, [[{ type: 'cancel', when: 'today' }, TODAY]]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockRejectedValueOnce(asks({ classes: 0, booked: 0, waiting: 0, people: [], ptSessions: TWO }));
+    render(draw(ADA, 'Ada Lovelace', { clockFormat: '12h' }));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    const ending = within(await b.findByTestId('held-ending'));
+    expect(ending.getByText('Ada Lovelace has personal training booked with Gold Monthly')).toBeTruthy();
+    expect(ending.getByRole('heading', { name: '2 personal training sessions will be cancelled' })).toBeTruthy();
+    expect(ending.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Ada LovelaceWed 21 Oct · 10:00 AM–11:00 AM · with Sam Trainer',
+      'Ada LovelaceFri 23 Oct · 9:00 AM–10:00 AM · with Sam Trainer',
+    ]);
+    expect(ending.getByText('Sessions booked with another membership or a pack stay booked.')).toBeTruthy();
+    expect(ending.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
+    // Nothing about classes: none is booked on it.
+    expect(ending.queryByText(/classes booked|waitlist/)).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1);
+
+    orgService.changeHeldMembership.mockResolvedValueOnce(answer([cancelled]));
+    fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 2 sessions' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', confirmPtSessions: MARK });
+    expect(await b.findByText('Gold Monthly is cancelled.')).toBeTruthy();
+  });
+
+  it('classes and sessions: both are named and both answers go back; Keep it sends nothing', async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    const people = [{ id: '55555555-5555-4555-8555-000000000001', name: 'Ada Lovelace', initials: 'AL', waiting: false, className: 'Yoga', localDate: '2026-10-21', localStartMinute: 420 }];
+    const one = { count: 1, packSessions: 1, mark: MARK, sessions: [session(1, '2026-10-21', 600, true)] };
+    orgService.changeHeldMembership.mockRejectedValue(asks({ classes: 1, booked: 1, waiting: 0, people, ptSessions: one }));
+    render(draw(ADA, 'Ada Lovelace', { clockFormat: '12h' }));
+    const b = await boxSoon();
+    fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
+    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    const ending = within(await b.findByTestId('held-ending'));
+    expect(ending.getByText('Ada Lovelace has 1 class booked with Gold Monthly')).toBeTruthy();
+    expect(ending.getByRole('heading', { name: '1 personal training session will be cancelled' })).toBeTruthy();
+    expect(ending.getByText("The trainer's time can be booked again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
+    fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 1 booking and 1 session' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2));
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', confirmBookings: 1, confirmPtSessions: MARK });
+    // Asked again (the mock refuses every time): the box says what is booked changed.
+    const again = within(await b.findByTestId('held-ending'));
+    expect(await again.findByText('What is booked changed while this was open. Check it and press again.')).toBeTruthy();
+    fireEvent.click(again.getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByTestId('held-ending')).toBeNull();
+    expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2);
+  });
+});

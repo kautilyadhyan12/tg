@@ -829,3 +829,77 @@ export async function trainerHolds(sql: SqlOrTx, gymId: string, trainerId: strin
     ) AS held`;
   return rows[0]?.held ?? false;
 }
+
+// ── SESSIONS WHEN A PERSON LEAVES (17e-iv-a) ──
+
+/** Whose coming sessions end: those booked for these records (they are leaving the gym's
+ *  list), or those booked on one held membership staff cancel (all of them, or those on a
+ *  day after `afterDay`, its last day). */
+export type EndingSessionsOf = { entryIds: readonly string[] } | { membership: string; afterDay: string | null };
+
+const endingOf = (sql: SqlOrTx, of: EndingSessionsOf) =>
+  "entryIds" in of
+    ? sql`a.entry_id = ANY(${[...of.entryIds]}::uuid[])`
+    : sql`a.held_membership_id = ${of.membership} AND (${of.afterDay}::date IS NULL OR a.local_date > ${of.afterDay}::date)`;
+
+const nobody = (of: EndingSessionsOf): boolean => "entryIds" in of && of.entryIds.length === 0;
+
+export interface EndingSessionRow {
+  id: string;
+  personName: string | null;
+  trainerName: string | null;
+  localDate: string;
+  localStartMinute: number;
+  minutes: number;
+  packCharged: boolean;
+}
+
+/** The sessions that would end: booked and not started at `now`, the earliest first. A
+ *  session that has started, took place or was already cancelled is history and stays. */
+export async function sessionsEnding(sql: SqlOrTx, gymId: string, of: EndingSessionsOf, now: Date): Promise<EndingSessionRow[]> {
+  if (nobody(of)) return [];
+  const rows = await sql<
+    { id: string; person_name: string | null; trainer_name: string | null; local_date: string; local_start_minute: number; minutes: number; pack_charged: boolean }[]
+  >`
+    SELECT a.id, e.full_name AS person_name, nullif(btrim(u.display_name), '') AS trainer_name,
+           a.local_date::text AS local_date, a.local_start_minute, a.minutes, a.pack_charged
+    FROM gym_pt_appointments a
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = a.gym_id AND e.id = a.entry_id
+    LEFT JOIN users u ON u.id = a.trainer_user_id
+    WHERE a.gym_id = ${gymId} AND a.status = 'booked' AND a.starts_at > ${now} AND ${endingOf(sql, of)}
+    ORDER BY a.starts_at, a.id`;
+  return rows.map((r) => ({
+    id: r.id,
+    personName: r.person_name,
+    trainerName: r.trainer_name,
+    localDate: r.local_date,
+    localStartMinute: r.local_start_minute,
+    minutes: r.minutes,
+    packCharged: r.pack_charged,
+  }));
+}
+
+/** Those sessions ended, in one statement: each becomes `cancelled` and stops being charged
+ *  to its pack; the caller gives the sessions back (`packMembershipId`) in the same
+ *  transaction, under the gym's lock. Run again it finds nothing left to end. */
+export async function endSessions(
+  tx: TransactionSql,
+  gymId: string,
+  of: EndingSessionsOf,
+  now: Date,
+): Promise<{ id: string; packMembershipId: string | null }[]> {
+  if (nobody(of)) return [];
+  const rows = await tx<{ id: string; charged: boolean; held_membership_id: string | null }[]>`
+    WITH old AS (
+      SELECT a.id, a.pack_charged, a.held_membership_id
+      FROM gym_pt_appointments a
+      WHERE a.gym_id = ${gymId} AND a.status = 'booked' AND a.starts_at > ${now} AND ${endingOf(tx, of)}
+      FOR UPDATE
+    )
+    UPDATE gym_pt_appointments a
+    SET status = 'cancelled', cancelled_at = ${now}, pack_charged = false
+    FROM old
+    WHERE a.id = old.id
+    RETURNING a.id, old.pack_charged AS charged, old.held_membership_id`;
+  return rows.map((r) => ({ id: r.id, packMembershipId: r.charged ? r.held_membership_id : null }));
+}

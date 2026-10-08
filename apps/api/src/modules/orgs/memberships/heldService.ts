@@ -169,13 +169,25 @@ export async function moveHeldMembership(
   membershipId: string,
   event: HeldMembershipEvent,
   confirmBookings: number | null = null,
+  confirmPtSessions: string | null = null,
 ): Promise<BookingsAnswer<HeldMembershipsResponse>> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
-  const outcome = await repo.moveHeld(deps.sql, CANCEL_BOOKINGS, { gymId, entryId, membershipId, event, today, confirmBookings, actorUserId: userId, now });
+  const outcome = await repo.moveHeld(deps.sql, CANCEL_BOOKINGS, {
+    gymId,
+    entryId,
+    membershipId,
+    event,
+    today,
+    confirmBookings,
+    confirmPtSessions,
+    actorUserId: userId,
+    now,
+  });
   if (outcome.kind === "has_bookings") {
     const ending: ClassBookingsEnding = { ...outcome.ending, people: outcome.ending.people.map(endingPerson) };
+    // `ptSessions` rides along as it is: the sessions booked on this membership.
     return { kind: "bookings", ending };
   }
   throwOnFailure(outcome);

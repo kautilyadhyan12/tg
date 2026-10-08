@@ -56,6 +56,8 @@ import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
 import { registerStartHereRoutes } from "./startHere/routes.js";
 import * as service from "./service.js";
+import { PT_SESSIONS_ENDING_ERROR } from "@app/shared";
+import { PtSessionsEndAsk } from "./pt/changes.js";
 
 /** Zod-parse a request part; 400 with issue paths/codes only (R3.10 — never
  *  the offending value, which can be user data). Generic over the schema so
@@ -925,14 +927,14 @@ export function registerOrgRoutes(
       if (params === null) return;
       const query = parseOr400(removeMemberQuerySchema, req.query ?? {}, req, reply);
       if (query === null) return;
-      const result = await service.removeOrgMember(
-        orgDeps,
-        requireUserId(req),
-        params.gymId,
-        params.userId,
-        query,
-      );
-      return reply.status(200).send(result);
+      try {
+        const result = await service.removeOrgMember(orgDeps, requireUserId(req), params.gymId, params.userId, query);
+        return await reply.status(200).send(result);
+      } catch (err) {
+        // Their personal training sessions are named first (17e-iv-a); nothing was done.
+        if (!(err instanceof PtSessionsEndAsk)) throw err;
+        return reply.status(409).send({ error: PT_SESSIONS_ENDING_ERROR, message: err.message, sessions: err.sessions, requestId: req.id });
+      }
     },
   );
 

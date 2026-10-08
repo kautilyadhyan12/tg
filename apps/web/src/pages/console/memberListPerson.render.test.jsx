@@ -1257,3 +1257,61 @@ describe("the server's sentences that name another place", () => {
     });
   });
 });
+
+// REMOVE, WITH PERSONAL TRAINING BOOKED (17e-iv-a). The worst this box could do: cancel a
+// person's paid sessions on a press that never named them.
+describe('Remove names the personal training sessions it cancels', () => {
+  const MARK = 'c'.repeat(64);
+  const session = (n, localDate, localStartMinute, packSession) => ({
+    id: `66666666-6666-4666-8666-00000000000${String(n)}`,
+    personName: 'Ada Lovelace',
+    trainerName: 'Sam Trainer',
+    localDate,
+    localStartMinute,
+    minutes: 60,
+    packSession,
+  });
+  const asks = (sessions) => refusal(409, { error: 'pt_sessions_ending', message: 'This person has personal training sessions booked.', sessions });
+  const TWO = { count: 2, packSessions: 2, mark: MARK, sessions: [session(1, '2026-10-09', 600, true), session(2, '2026-10-12', 540, true)] };
+
+  it('the first press removes nobody and names the sessions; its own button sends their mark back', async () => {
+    orgService.takeOffMemberListEntry.mockRejectedValueOnce(asks(TWO)).mockResolvedValueOnce(written('taken_off', { ...ada, formerAt: '2026-09-25T10:00:00.000Z' }));
+    openBox(ADA);
+    await pickMore('Remove');
+    const box = within(screen.getByTestId('confirm-take-off'));
+    expect(box.queryByTestId('pt-sessions-ending')).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Remove' }));
+    const part = within(await box.findByTestId('pt-sessions-ending'));
+    expect(orgService.takeOffMemberListEntry).toHaveBeenLastCalledWith(GYM, ADA);
+    expect(part.getByRole('heading', { name: '2 personal training sessions will be cancelled' })).toBeTruthy();
+    expect(part.getAllByRole('listitem')).toHaveLength(2);
+    expect(part.getByText(/with Sam Trainer/, { selector: 'li:first-child div' })).toBeTruthy();
+    expect(part.getByText("Each trainer's time can be booked again. 2 sessions go back to their packs. A session that has already started stays as it is.")).toBeTruthy();
+    expect(part.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
+    // It is a question, not a failure, and she is still on the list.
+    expect(dialog().queryByText('This person has personal training sessions booked.')).toBeNull();
+    expect(orgService.takeOffMemberListEntry).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(box.getByRole('button', { name: 'Remove and cancel 2 sessions' }));
+    await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledTimes(2));
+    expect(orgService.takeOffMemberListEntry).toHaveBeenLastCalledWith(GYM, ADA, MARK);
+    await waitFor(() => expect(screen.queryByTestId('confirm-take-off')).toBeNull());
+  });
+
+  it("Don't remove sends nothing more, and opening Remove again starts with no mark", async () => {
+    orgService.takeOffMemberListEntry.mockRejectedValue(asks(TWO));
+    openBox(ADA);
+    await pickMore('Remove');
+    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove' }));
+    await within(screen.getByTestId('confirm-take-off')).findByTestId('pt-sessions-ending');
+    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: "Don't remove" }));
+    expect(screen.queryByTestId('confirm-take-off')).toBeNull();
+    expect(orgService.takeOffMemberListEntry).toHaveBeenCalledTimes(1);
+    await pickMore('Remove');
+    const box = within(screen.getByTestId('confirm-take-off'));
+    expect(box.queryByTestId('pt-sessions-ending')).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledTimes(2));
+    expect(orgService.takeOffMemberListEntry).toHaveBeenLastCalledWith(GYM, ADA);
+  });
+});

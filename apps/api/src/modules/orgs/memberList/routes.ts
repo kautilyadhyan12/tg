@@ -47,7 +47,10 @@ import {
   memberRosterRemoveRequestSchema,
   MEMBER_REMOVE_CHANGED_WORDS,
   MEMBER_REMOVE_LARGE_WORDS,
+  PT_SESSIONS_ENDING_ERROR,
+  confirmPtSessionsQuerySchema,
 } from "@app/shared";
+import { PtSessionsEndAsk } from "../pt/changes.js";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import {
@@ -512,7 +515,17 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
   app.delete("/v1/orgs/:gymId/member-list/entries/:entryId", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
-    return sendWrite(req, reply, await byHand.takeOff(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply)));
+    const query = parseOr400(confirmPtSessionsQuerySchema, req.query ?? {}, req, reply);
+    if (query === null) return;
+    try {
+      const answer = await byHand.takeOff(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply), query.confirmPtSessions ?? null);
+      sendWrite(req, reply, answer);
+      return;
+    } catch (err) {
+      // Their personal training sessions are named first (17e-iv-a); nothing was done.
+      if (!(err instanceof PtSessionsEndAsk)) throw err;
+      return reply.status(409).send({ error: PT_SESSIONS_ENDING_ERROR, message: err.message, sessions: err.sessions, requestId: req.id });
+    }
   });
 
   app.post("/v1/orgs/:gymId/member-list/entries/:entryId/restore", { preHandler: [app.authenticate] }, async (req, reply) => {

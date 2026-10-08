@@ -552,6 +552,7 @@ export async function takeOff(
   gymId: string,
   entryId: string,
   limit: () => Promise<boolean>,
+  confirmPtSessions: string | null = null,
 ): Promise<WriteAnswer> {
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
@@ -564,7 +565,7 @@ export async function takeOff(
     await repo.lockGym(tx, gymId);
     const stored = await repo.entryFor(tx, gymId, entryId);
     if (stored === null) throw notFound();
-    const removed = await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites ?? null }, stored, {
+    const removed = await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites ?? null, confirmPtSessions }, stored, {
       endApp: true,
       mayEndApp: privileges.includes("members.remove"),
     });

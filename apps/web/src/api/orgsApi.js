@@ -828,11 +828,15 @@ export const orgService = {
 
   /** DELETE …/member-list/entries/:entryId — take one person off; their record is kept
    *  as a past member. */
-  takeOffMemberListEntry: (gymId, entryId) =>
+  takeOffMemberListEntry: (gymId, entryId, confirmPtSessions = null) =>
     readThrough(
       memberListEntryWrittenSchema,
       'this person',
-      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}`),
+      // 17e-iv-a: with personal training booked the server answers 409 `pt_sessions_ending`
+      // and removes nobody until the box's `mark` comes back.
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}`, {
+        params: confirmPtSessions === null ? {} : { confirmPtSessions },
+      }),
     ),
 
   /** POST …/entries/:entryId/restore — put a past member back on the list. */
@@ -1266,13 +1270,16 @@ export const orgService = {
    *  Built because Kd asked what happens when a gym confirms the wrong person:
    *  before this, nothing could end a membership. The member keeps every
    *  workout; what ends is the gym's access and the gym's perks. */
-  removeMember: (gymId, userId, { alsoStaff = false } = {}) =>
+  removeMember: (gymId, userId, { alsoStaff = false, confirmPtSessions = null } = {}) =>
     readThrough(
       removeMemberResponseSchema,
       'that removal',
       // 4a-ii: somebody who is also staff keeps the console unless `alsoStaff` takes it in
-      // the same step (owner only).
-      authApi.delete(`/v1/orgs/${gymId}/members/${userId}${alsoStaff ? '?alsoStaff=true' : ''}`),
+      // the same step (owner only). 17e-iv-a: `confirmPtSessions` is the `mark` of the
+      // personal training sessions the box named (409 `pt_sessions_ending`).
+      authApi.delete(`/v1/orgs/${gymId}/members/${userId}`, {
+        params: { ...(alsoStaff ? { alsoStaff: 'true' } : {}), ...(confirmPtSessions === null ? {} : { confirmPtSessions }) },
+      }),
     ),
 
   /** GET /v1/orgs/:gymId/staff — Part 3 §4.7's list, owner-only.
