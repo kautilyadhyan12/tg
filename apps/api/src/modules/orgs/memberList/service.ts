@@ -94,6 +94,7 @@ import {
   type ReconciledPerson,
 } from "./reconcile.js";
 import { importReviews } from "./review.js";
+import { entryIdsWithTag } from "./notesRepo.js";
 import * as repo from "./repo.js";
 import { currentRecordOf, inAppRecordIds, pastRecordOf } from "./whose.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
@@ -1540,6 +1541,8 @@ export async function entriesFilter(
       invitation:
         query.invitation === undefined ? null : await invites.entriesByInvitation(deps.sql, settings, gymId, query.invitation),
       appIds,
+      // The tag is read with this gym: another gym's tag is on nobody here.
+      tagIds: query.tag === undefined ? null : await entryIdsWithTag(deps.sql, gymId, query.tag),
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
     },
   };

@@ -314,3 +314,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 17e-ii. [ ] **The member books and cancels their own** in the app (the member web until the phone app), by 17e-i's rule; booking opens as the gym's class bookings do. After 17e-iii. *Merged 2026-10-08 (PR #197).*
 
 - 17e-v. [x] **A limit on personal training sessions on a membership** (Kd, RULINGS 2026-10-08, at 17e-ii's click-through; straight after 17e-ii): a membership type that includes personal training says how many sessions a week or a month, or no limit as today; a booking past it is refused in a sentence, and the member's tab and the staff picker say what is left. Its plan reads Mindbody's, PushPress's and TeamUp's first. Risky: it changes what pays for a booking. *Merged 2026-10-08 (PR #198).*
+
+- 5d-ii. **Tags on the Members list** (the line as it stood; merged 2026-10-09, PR #199): a tag is a filter on Members; tag or untag everybody ticked from the action bar; rename or delete one of the gym's tags. What picks people for 20f. After 5d-i.

@@ -1,9 +1,9 @@
 // STAFF NOTES AND TAGS — the statements (ROADMAP Stage 2 item 5d; spec Part 3 §18.13).
 // Every one carries the gym in its WHERE: a note or tag of another gym is not there.
-import type { MemberNote, MemberTag } from "@app/shared";
+import type { MemberGymTag, MemberNote, MemberTag } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 
-type SqlOrTx = Sql | TransactionSql;
+export type SqlOrTx = Sql | TransactionSql;
 
 interface NoteRow {
   id: string;
@@ -82,7 +82,7 @@ export async function gymTags(sql: SqlOrTx, gymId: string): Promise<MemberTag[]>
     SELECT id, name FROM gym_member_tags WHERE gym_id = ${gymId} ORDER BY lower(name)`;
 }
 
-export async function tagByName(tx: TransactionSql, gymId: string, name: string): Promise<MemberTag | null> {
+export async function tagByName(tx: SqlOrTx, gymId: string, name: string): Promise<MemberTag | null> {
   const rows = await tx<MemberTag[]>`
     SELECT id, name FROM gym_member_tags WHERE gym_id = ${gymId} AND lower(name) = lower(${name})`;
   return rows[0] ?? null;
@@ -128,4 +128,105 @@ export async function moveNotesAndTags(tx: TransactionSql, gymId: string, fromEn
     FROM gym_member_entry_tags
     WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
     ON CONFLICT (entry_id, tag_id) DO NOTHING`;
+}
+
+// ── Tags on the Members list (5d-ii) ──
+
+/** Every tag the gym has made, by name, with how many members and past members hold it.
+ *  A tag's rows are found by the gym and the tag, and each record by its id alone, so the
+ *  statement has one plan whatever Postgres believes the tables hold: on a list of 10,000
+ *  just tagged, a record looked up by its gym was a minute. The record's gym is checked in
+ *  the count. */
+export async function gymTagsCounted(sql: SqlOrTx, gymId: string): Promise<MemberGymTag[]> {
+  return await sql<MemberGymTag[]>`
+    SELECT t.id, t.name,
+           (count(*) FILTER (WHERE e.gym_id = t.gym_id AND e.former_at IS NULL))::int AS people,
+           (count(*) FILTER (WHERE e.gym_id = t.gym_id AND e.former_at IS NOT NULL))::int AS "pastPeople"
+    FROM gym_member_tags t
+    LEFT JOIN gym_member_entry_tags et ON et.gym_id = t.gym_id AND et.tag_id = t.id
+    LEFT JOIN gym_member_list_entries e ON e.id = et.entry_id
+    WHERE t.gym_id = ${gymId}
+    GROUP BY t.id, t.name
+    ORDER BY lower(t.name)`;
+}
+
+export async function tagById(sql: SqlOrTx, gymId: string, tagId: string): Promise<MemberTag | null> {
+  const rows = await sql<MemberTag[]>`
+    SELECT id, name FROM gym_member_tags WHERE gym_id = ${gymId} AND id = ${tagId}`;
+  return rows[0] ?? null;
+}
+
+/** One selected record as a tag press reads it. */
+export interface TagStateRow {
+  entryId: string;
+  name: string;
+  /** How many tags the record holds. */
+  held: number;
+  /** Whether it holds the tag asked about. */
+  has: boolean;
+}
+
+/** These records of this gym, in the list's order; `tagId` null is a tag not made yet.
+ *  Two reads of one table each, put together here: joined in one statement, a list of
+ *  10,000 just tagged took most of a minute while Postgres's counts were out of date. */
+export async function tagStateOf(sql: SqlOrTx, gymId: string, entryIds: readonly string[], tagId: string | null): Promise<TagStateRow[]> {
+  const ids = [...entryIds];
+  const [records, tags] = await Promise.all([
+    sql<{ id: string; name: string }[]>`
+      SELECT id, full_name AS name
+      FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND id = ANY (${ids}::uuid[])
+      ORDER BY full_name, id`,
+    sql<{ entry_id: string; held: number; has: boolean }[]>`
+      SELECT entry_id, count(*)::int AS held, coalesce(bool_or(tag_id = ${tagId}::uuid), false) AS has
+      FROM gym_member_entry_tags
+      WHERE gym_id = ${gymId} AND entry_id = ANY (${ids}::uuid[])
+      GROUP BY entry_id`,
+  ]);
+  const byRecord = new Map(tags.map((row) => [row.entry_id, row]));
+  return records.map((record) => ({ entryId: record.id, name: record.name, held: byRecord.get(record.id)?.held ?? 0, has: byRecord.get(record.id)?.has ?? false }));
+}
+
+/** The records of this gym that hold this one of its tags: the list's tag filter. */
+export async function entryIdsWithTag(sql: SqlOrTx, gymId: string, tagId: string): Promise<string[]> {
+  const rows = await sql<{ entry_id: string }[]>`
+    SELECT entry_id FROM gym_member_entry_tags WHERE gym_id = ${gymId} AND tag_id = ${tagId}`;
+  return rows.map((row) => row.entry_id);
+}
+
+/** Puts one of the gym's tags on these records; how many got it. The caller has read the
+ *  records and the tag as this gym's in the same transaction, and the table's two foreign
+ *  keys refuse a record or a tag of any other gym. */
+export async function putTagOnMany(tx: TransactionSql, gymId: string, entryIds: readonly string[], tagId: string, userId: string): Promise<number> {
+  const rows = await tx<{ entry_id: string }[]>`
+    INSERT INTO gym_member_entry_tags (gym_id, entry_id, tag_id, created_by)
+    SELECT ${gymId}, picked.id, ${tagId}, ${userId}
+    FROM unnest(${[...entryIds]}::uuid[]) AS picked (id)
+    ON CONFLICT (entry_id, tag_id) DO NOTHING
+    RETURNING entry_id`;
+  return rows.length;
+}
+
+export async function takeTagOffMany(tx: TransactionSql, gymId: string, entryIds: readonly string[], tagId: string): Promise<number> {
+  const rows = await tx<{ entry_id: string }[]>`
+    DELETE FROM gym_member_entry_tags
+    WHERE gym_id = ${gymId} AND tag_id = ${tagId} AND entry_id = ANY (${[...entryIds]}::uuid[])
+    RETURNING entry_id`;
+  return rows.length;
+}
+
+export async function renameTag(tx: TransactionSql, gymId: string, tagId: string, name: string): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_member_tags SET name = ${name} WHERE gym_id = ${gymId} AND id = ${tagId} RETURNING id`;
+  return rows.length === 1;
+}
+
+/** Deletes one of the gym's tags, and with it the tag on every record that held it; how
+ *  many records that was, or null when the gym has no such tag. */
+export async function deleteTag(tx: TransactionSql, gymId: string, tagId: string): Promise<number | null> {
+  const held = await tx<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_member_entry_tags WHERE gym_id = ${gymId} AND tag_id = ${tagId}`;
+  const rows = await tx<{ id: string }[]>`
+    DELETE FROM gym_member_tags WHERE gym_id = ${gymId} AND id = ${tagId} RETURNING id`;
+  return rows.length === 1 ? (held[0]?.n ?? 0) : null;
 }

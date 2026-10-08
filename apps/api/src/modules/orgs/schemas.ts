@@ -180,6 +180,8 @@ export const memberNoteParamsSchema = z
 export const memberTagParamsSchema = z
   .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), tagId: z.string().uuid() })
   .strict();
+/** A gym and one of its own tags (5d-ii). */
+export const gymTagParamsSchema = z.object({ gymId: z.string().uuid(), tagId: z.string().uuid() }).strict();
 
 /** WHO CAME, ON WHICH DAY, FILTERED HOW.
  *

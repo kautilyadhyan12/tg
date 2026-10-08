@@ -125,7 +125,8 @@ const asList = <T>(asked: T | T[] | undefined): T[] => (asked === undefined ? []
  *  people ticked one by one. `people` is the organisation's word. */
 export function exportFileName(filter: MemberListFilter | null, people: string, day: string): string {
   let name: string;
-  if (filter === null) {
+  // A tag's word is in no file, its name included (§18.13): people shown by a tag are "Selected".
+  if (filter === null || filter.tag !== undefined) {
     name = `Selected ${people}`;
   } else if ((filter.records ?? "current") === "former") {
     name = `Past ${people}`;
@@ -142,7 +143,7 @@ export function exportFileName(filter: MemberListFilter | null, people: string, 
     if (filter.filter === "not_in_app") name += " not in the app";
   }
   const typed = (filter?.query ?? "").trim();
-  if (typed !== "") name += ` matching ${typed}`;
+  if (typed !== "" && filter?.tag === undefined) name += ` matching ${typed}`;
   // Nothing a computer refuses in a file name, and not too long to read.
   const clean = name
     .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, " ")
