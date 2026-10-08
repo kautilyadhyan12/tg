@@ -9,6 +9,8 @@ import { memberListEntriesPageSchema, memberListViewSchema, MEMBER_INVITE_EMAIL_
 
 // The person's Memberships box (17a-ii) has its own tests in `memberMemberships.render.test.jsx`.
 vi.mock('./MemberMemberships', () => ({ default: () => null }));
+// Their tags and staff notes (5d) have their own tests in `memberNotes.render.test.jsx`.
+vi.mock('./MemberNotes', () => ({ default: () => null }));
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();

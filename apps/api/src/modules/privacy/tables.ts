@@ -444,6 +444,14 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_staff_roles.created_by — who made one of the gym's own staff roles (`0059`), on
   // the same footing.
   "gym_staff_roles",
+  // gym_member_notes.author_user_id — which member of staff wrote a note on a person's
+  // record (`0083`), on gym_leads' footing: the gym's record; `ON DELETE set null`. The
+  // note goes with the record it is about.
+  "gym_member_notes",
+  // gym_member_tags.created_by and gym_member_entry_tags.created_by — who made one of the
+  // gym's tags and who put it on a record (`0083`), on the same footing.
+  "gym_member_tags",
+  "gym_member_entry_tags",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

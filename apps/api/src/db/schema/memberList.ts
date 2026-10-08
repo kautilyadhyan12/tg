@@ -38,7 +38,7 @@
 // and send nothing.
 import { sql } from "drizzle-orm";
 import { bigserial, boolean, date, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
-import { check } from "drizzle-orm/pg-core";
+import { check, uniqueIndex } from "drizzle-orm/pg-core";
 import { citext, createdAt } from "./common.js";
 import { gyms } from "./tenancy.js";
 import { users } from "./identity.js";
@@ -431,4 +431,71 @@ export const gymMemberListPairs = pgTable(
     sameNumber: boolean("same_number").notNull(),
   },
   (t) => [primaryKey({ name: "gym_member_list_pairs_pk", columns: [t.gymId, t.firstName, t.firstEntryId, t.secondEntryId] })],
+);
+
+// Staff notes and tags on a record (5d). Mirrors `0083_member_notes_tags.sql`.
+export const gymMemberNotes = pgTable(
+  "gym_member_notes",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id").notNull(),
+    entryId: uuid("entry_id").notNull(),
+    body: text("body").notNull(),
+    authorUserId: uuid("author_user_id").references(() => users.id, { onDelete: "set null" }),
+    requestKey: uuid("request_key").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: "gym_member_notes_entry_fk",
+      columns: [t.gymId, t.entryId],
+      foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id],
+    }).onDelete("cascade"),
+    unique("gym_member_notes_request_uq").on(t.gymId, t.requestKey),
+    check("gym_member_notes_body_check", sql`char_length(${t.body}) BETWEEN 1 AND 2000`),
+    index("gym_member_notes_entry_idx").on(t.gymId, t.entryId, t.createdAt),
+  ],
+);
+
+export const gymMemberTags = pgTable(
+  "gym_member_tags",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("gym_member_tags_gym_id_uq").on(t.gymId, t.id),
+    check("gym_member_tags_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 30`),
+    uniqueIndex("gym_member_tags_name_uq").on(t.gymId, sql`lower(${t.name})`),
+  ],
+);
+
+export const gymMemberEntryTags = pgTable(
+  "gym_member_entry_tags",
+  {
+    gymId: uuid("gym_id").notNull(),
+    entryId: uuid("entry_id").notNull(),
+    tagId: uuid("tag_id").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_member_entry_tags_pk", columns: [t.entryId, t.tagId] }),
+    foreignKey({
+      name: "gym_member_entry_tags_entry_fk",
+      columns: [t.gymId, t.entryId],
+      foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "gym_member_entry_tags_tag_fk",
+      columns: [t.gymId, t.tagId],
+      foreignColumns: [gymMemberTags.gymId, gymMemberTags.id],
+    }).onDelete("cascade"),
+    index("gym_member_entry_tags_tag_idx").on(t.gymId, t.tagId),
+  ],
 );

@@ -1132,12 +1132,18 @@ d("member list: keeping it by hand (real Postgres)", () => {
       "gym_held_memberships.gym_id",
       "gym_leads.entry_id",
       "gym_leads.gym_id",
+      // A tag on the record and a staff note (0083): the join moves both to the kept record
+      // and a record deleted for good takes them with it (`memberNotes.routes.test.ts`).
+      "gym_member_entry_tags.entry_id",
+      "gym_member_entry_tags.gym_id",
       // A pair staff marked Different people (0056): goes with either record, never moved,
       // since the kept record was never checked against the third one
       // (`memberList.duplicates.routes.test.ts`).
       "gym_member_list_not_duplicates.first_entry_id",
       "gym_member_list_not_duplicates.gym_id",
       "gym_member_list_not_duplicates.second_entry_id",
+      "gym_member_notes.entry_id",
+      "gym_member_notes.gym_id",
       "gym_members.entry_id",
       "gym_members.gym_id",
       // The record a membership was removed with (0048): moved by a merge with the rest.

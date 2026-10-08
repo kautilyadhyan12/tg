@@ -39,6 +39,8 @@ import {
   memberListSelectAllRequestSchema,
   memberListUnlistedQuerySchema,
   memberListUploadRequestSchema,
+  memberNoteAddRequestSchema,
+  memberTagAddRequestSchema,
   memberRosterRemovePreviewRequestSchema,
   memberRosterRemoveRequestSchema,
   MEMBER_REMOVE_CHANGED_WORDS,
@@ -46,13 +48,21 @@ import {
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { memberListEntryParamsSchema, memberListParamsSchema, memberParamsSchema, orgParamsSchema } from "../schemas.js";
+import {
+  memberListEntryParamsSchema,
+  memberListParamsSchema,
+  memberNoteParamsSchema,
+  memberParamsSchema,
+  memberTagParamsSchema,
+  orgParamsSchema,
+} from "../schemas.js";
 import { invitePeople } from "../invites/people.js";
 import * as invites from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import * as byHand from "./byHandService.js";
 import * as duplicates from "./duplicates.js";
 import * as exporter from "./exportCsv.js";
+import * as notes from "./notes.js";
 import * as removal from "./removeSelected.js";
 import { SelectionChanged, selectAll } from "./selection.js";
 import * as service from "./service.js";
@@ -570,6 +580,52 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
       return sendWrite(req, reply, answer);
     },
   );
+
+  // Staff notes and tags on a person's page (5d). Every answer is that person's notes and
+  // tags as they now stand.
+  app.get("/v1/orgs/:gymId/member-list/entries/:entryId/notes", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const state = await notes.readNotesAndTags(listDeps, requireUserId(req), params.gymId, params.entryId, readGate(req, reply));
+    if (state === null) return;
+    return reply.status(200).send(state);
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/entries/:entryId/notes", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberNoteAddRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const state = await notes.addNote(listDeps, requireUserId(req), params.gymId, params.entryId, body, editGate(req, reply));
+    if (state === null) return;
+    return reply.status(200).send(state);
+  });
+
+  app.delete("/v1/orgs/:gymId/member-list/entries/:entryId/notes/:noteId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberNoteParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const state = await notes.deleteNote(listDeps, requireUserId(req), params.gymId, params.entryId, params.noteId, editGate(req, reply));
+    if (state === null) return;
+    return reply.status(200).send(state);
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/entries/:entryId/tags", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberTagAddRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const state = await notes.addTag(listDeps, requireUserId(req), params.gymId, params.entryId, body.name, editGate(req, reply));
+    if (state === null) return;
+    return reply.status(200).send(state);
+  });
+
+  app.delete("/v1/orgs/:gymId/member-list/entries/:entryId/tags/:tagId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberTagParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const state = await notes.removeTag(listDeps, requireUserId(req), params.gymId, params.entryId, params.tagId, editGate(req, reply));
+    if (state === null) return;
+    return reply.status(200).send(state);
+  });
 
   app.delete("/v1/orgs/:gymId/member-list/former/:entryId", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
