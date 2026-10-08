@@ -24,6 +24,7 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   PT_HORIZON_DAYS,
   PT_KEPT_USED_ERROR,
+  PT_MEMBER_CANCEL_WORDS,
   PT_MEMBER_WORDS,
   PT_NOT_KEPT_ERROR,
   PT_PEOPLE_SHOWN,
@@ -496,9 +497,10 @@ export async function cancelUnderLock(
   if (decision.kind === "already") return null;
   if (decision.kind === "refuse") {
     if (decision.reason === "late_cancel") return new PtLateCancel(row.packCharged);
-    if (decision.reason === "kept_used") return new OrgsError(409, PT_KEPT_USED_ERROR, PT_WORDS.kept_used);
-    if (decision.reason === "not_kept") return new OrgsError(409, PT_NOT_KEPT_ERROR, PT_WORDS.not_kept);
-    return new OrgsError(409, "started", PT_WORDS.started);
+    const words = by.member ? PT_MEMBER_CANCEL_WORDS : PT_WORDS;
+    if (decision.reason === "kept_used") return new OrgsError(409, PT_KEPT_USED_ERROR, words.kept_used);
+    if (decision.reason === "not_kept") return new OrgsError(409, PT_NOT_KEPT_ERROR, words.not_kept);
+    return new OrgsError(409, "started", words.started);
   }
   await repo.markCancelled(tx, { gymId, id: row.id, status: decision.status, packCharged: row.packCharged && !decision.refundPack, now });
   if (decision.refundPack && row.heldMembershipId !== null) await givePackClassBack(tx, gymId, row.heldMembershipId, now);

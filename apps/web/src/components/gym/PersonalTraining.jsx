@@ -86,7 +86,9 @@ export default function PersonalTraining({ gym }) {
         minutes: trainer.sessionMinutes,
       });
       keys.current.delete(id);
-      setSaid({ text: `Booked: ${sessionText(session)}.`, bad: false });
+      // The same press answered again can find a session that was cancelled since: it is
+      // said as it is, never as booked.
+      setSaid(session.status === 'booked' ? { text: `Booked: ${sessionText(session)}.`, bad: false } : { text: 'That session was cancelled since. It is not booked.', bad: true });
       load();
     } catch (err) {
       // An answer from the server ends this press; no answer keeps its key for the retry.

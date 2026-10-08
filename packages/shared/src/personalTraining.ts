@@ -620,6 +620,23 @@ export const PT_MEMBER_WORDS: Record<PtBookRefusal, string> = {
 export const PT_NOT_ON_LIST_ERROR = "not_on_list";
 export const PT_NOT_ON_LIST_WORDS = "Your gym hasn't added you to its member list yet. Ask at the front desk.";
 
+/** A record that two live app accounts hold (two records joined on the console, say) is
+ *  not one person's: neither account reads, books or cancels a session on it in the app. */
+export const PT_RECORD_SHARED_ERROR = "record_shared";
+export const PT_RECORD_SHARED_WORDS =
+  "Two app accounts share your record at this gym, so sessions can't be booked in the app. Ask at the front desk.";
+
+/** Whose record the reader's sessions hang on: their `own`, `none` on the gym's list, or one
+ *  `shared` with another app account. */
+export const MEMBER_PT_RECORDS = ["own", "none", "shared"] as const;
+
+/** What a member reads when their own cancel is refused. */
+export const PT_MEMBER_CANCEL_WORDS = {
+  started: "This session has already started, so it can't be cancelled.",
+  kept_used: "This session was already cancelled late, and it stays used.",
+  not_kept: "This session was already cancelled, and nothing was used.",
+} as const;
+
 /** How many pages of seven days a member can turn to: the eight weeks sessions run. */
 export const MEMBER_PT_WEEKS = 8;
 /** How many of their own coming sessions one read answers. */
@@ -673,8 +690,8 @@ export const memberPtResponseSchema = z
     /** The last of the gym's days whose times a member can book now. */
     lastDay: classDaySchema,
     freeCancelMinutes: z.number().int(),
-    /** False: the reader has no record on the gym's list, and can book nothing. */
-    onList: z.boolean(),
+    /** Anything but `own`: the reader can book nothing, and is sent no session. */
+    record: z.enum(MEMBER_PT_RECORDS),
     days: z.array(
       z
         .object({
@@ -682,7 +699,7 @@ export const memberPtResponseSchema = z
           /** What a booking on this day would be made on, by the booking's own rule
            *  (`membership` null where the gym sells none); null where nothing pays. */
           pays: z.object({ membership: z.string().nullable(), sessionsLeft: z.number().int().nullable() }).strict().nullable(),
-          /** Why nothing pays; null where something does, or the reader is not on the list. */
+          /** Why nothing pays; null where something does, or the reader has no record of their own. */
           why: z.enum(["no_membership", "not_covered", "pack_used"]).nullable(),
         })
         .strict(),

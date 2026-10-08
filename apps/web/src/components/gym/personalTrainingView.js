@@ -1,4 +1,4 @@
-import { PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS } from '@app/shared';
+import { PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS, PT_RECORD_SHARED_WORDS } from '@app/shared';
 import { clockText, dayHeading, instantText } from './classesView';
 import { dayLabel } from './leaderboardView';
 
@@ -17,7 +17,8 @@ export const trainerText = (name) => name ?? 'a trainer';
 /** What a booking on a day would use, or why it cannot be made; null where the gym sells
  *  no memberships and there is nothing to say. */
 export function payText(view, day) {
-  if (!view.onList) return { text: PT_NOT_ON_LIST_WORDS, can: false };
+  if (view.record === 'shared') return { text: PT_RECORD_SHARED_WORDS, can: false };
+  if (view.record !== 'own') return { text: PT_NOT_ON_LIST_WORDS, can: false };
   if (day.why !== null) return { text: PT_MEMBER_WORDS[day.why], can: false };
   const pays = day.pays;
   if (pays === null) return { text: PT_MEMBER_WORDS.no_membership, can: false };

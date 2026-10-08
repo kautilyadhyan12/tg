@@ -644,17 +644,25 @@ export async function classesInSpan(sql: SqlOrTx, gymId: string, trainerId: stri
 
 /** The reader as a member of this gym's app: null for anybody who is not one now. Their
  *  record on the gym's list is what a session hangs on; `entryId` null where they have
- *  none, or it is a past member's. */
-export async function memberRecord(sql: SqlOrTx, gymId: string, userId: string): Promise<{ entryId: string | null } | null> {
-  const rows = await sql<{ entry_id: string | null }[]>`
-    SELECT e.id AS entry_id
+ *  none, it is a past member's, or it is not theirs alone. `shared`: another live app
+ *  member holds the same record (two records joined on the console leave two accounts on
+ *  one), so the record's sessions are nobody's to read or change in the app: the rule
+ *  `soloHolders` keeps for visits (`leaderboard/visits.ts`). */
+export async function memberRecord(sql: SqlOrTx, gymId: string, userId: string): Promise<{ entryId: string | null; shared: boolean } | null> {
+  const rows = await sql<{ entry_id: string | null; shared: boolean }[]>`
+    SELECT e.id AS entry_id,
+           e.id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM gym_members o
+             JOIN users ou ON ou.id = o.user_id AND ou.status = 'active'
+             WHERE o.gym_id = m.gym_id AND o.entry_id = m.entry_id AND o.user_id <> m.user_id AND o.removed_at IS NULL
+           ) AS shared
     FROM gym_members m
     JOIN users u ON u.id = m.user_id AND u.status = 'active'
     LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
     WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL
     LIMIT 1`;
   const r = rows[0];
-  return r === undefined ? null : { entryId: r.entry_id };
+  return r === undefined ? null : { entryId: r.shared ? null : r.entry_id, shared: r.shared };
 }
 
 /** Everything that takes these trainers' time between two instants, as spans alone: the

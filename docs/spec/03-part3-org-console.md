@@ -2916,7 +2916,15 @@ ahead and cancel for free until 2 hours before it starts.") with **Change bookin
 which opens the box in Settings (`#booking-rules`, the place `bookingRules`, on
 `schedule.manage`); staff who may not change them read the cancel rule and "A manager can
 change the booking rules." The box is named **Booking rules** (it was "Class bookings"):
-one rule set covers classes and personal training. Nobody is told (the inbox, 20a):
+one rule set covers classes and personal training (its own for personal training is 17e-v).
+**From the review (2026-10-08):** a record that two live app accounts hold (two records
+joined on the console leave both accounts on the kept one) is nobody's in the app: the read
+answers `record: "shared"` with no session and no history, a booking is refused 409
+`record_shared`, a cancel finds nothing, and staff go on running its sessions from the
+console; `record` is `own`, `none` or `shared` (it was `onList`). The read also answers 404
+for a closed gym; a member's cancel is refused in a member's words
+(`PT_MEMBER_CANCEL_WORDS`); a press answered with a session cancelled since is never said
+as booked. Nobody is told (the inbox, 20a):
 the session is on the trainer's week. Not done: sessions ended when a person or a trainer
 leaves, came and no-show (17e-iv).)*
 

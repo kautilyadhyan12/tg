@@ -3,7 +3,8 @@
 // The worst thing this could do to a real person: show a member somebody else's name or
 // session, or let them cancel, or pay with, another member's. So nothing here takes a
 // person from the request: whose session it is comes from the reader's own membership of
-// the gym, read under the gym's lock; a session is found only where it is that record's;
+// the gym, read under the gym's lock; a record two app accounts hold is nobody's; a
+// session is found only where it is that record's;
 // and what takes a trainer's time is read as spans alone, with no name and no reason.
 //
 // The booking and the cancel are the staff side's own (`bookUnderLock`, `cancelUnderLock`),
@@ -18,6 +19,8 @@ import {
   PT_MEMBER_WORDS,
   PT_NOT_ON_LIST_ERROR,
   PT_NOT_ON_LIST_WORDS,
+  PT_RECORD_SHARED_ERROR,
+  PT_RECORD_SHARED_WORDS,
   PT_SESSION_MINUTES_MAX,
   PT_WEEK_DAYS,
   PT_WORDS,
@@ -72,7 +75,8 @@ function ownView(row: repo.OwnSessionRow, now: Date, freeCancelMinutes: number):
 /** Seven of the gym's days: the trainers taking sessions with the times this member can
  *  book, what would pay on each day, and their own sessions, coming and past. */
 export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, query: MemberPtQuery, limit: Limit): Promise<MemberPtResponse | null> {
-  await requireMember(deps, gymId, userId);
+  const org = await requireMember(deps, gymId, userId);
+  if (org.status !== "active") throw notFound();
   if (!(await limit())) return null;
   const now = deps.now();
   const [clock, me, staff] = await Promise.all([
@@ -133,7 +137,7 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
     to: addDays(from, PT_WEEK_DAYS - 1),
     lastDay,
     freeCancelMinutes: clock.freeCancelMinutes,
-    onList: entryId !== null,
+    record: entryId !== null ? "own" : me.shared ? "shared" : "none",
     days: days.map((localDate) => {
       if (entryId === null) return { localDate, pays: null, why: null };
       const cover = pickPtCover({ gymHasTypes: clock.hasTypes, day: localDate, held });
@@ -188,7 +192,8 @@ export async function memberBook(
     // A "no" needs no lock: a time somebody already holds is answered from a plain read, so a
     // rush for one popular time does not make the gym's other bookings wait behind it. It is
     // read in this server's line, after the press before it has finished. The same request
-    // again is let through to find the session it made.
+    // again is let through to find the session it made. This answer can stand in front of
+    // another refusal the rule would have given first (a day not open yet, nothing that pays).
     const [sent, held] = await Promise.all([
       repo.byKey(deps.sql, gymId, req.requestKey),
       repo.trainerHolds(deps.sql, gymId, req.trainerId, req.localDate, req.startMinute, req.minutes),
@@ -199,6 +204,7 @@ export async function memberBook(
       // Who they are is read under the lock: a member taken off the list a moment ago books nothing.
       const me = await repo.memberRecord(tx, gymId, userId);
       if (me === null) return notFound();
+      if (me.shared) return new OrgsError(409, PT_RECORD_SHARED_ERROR, PT_RECORD_SHARED_WORDS);
       if (me.entryId === null) return new OrgsError(409, PT_NOT_ON_LIST_ERROR, PT_NOT_ON_LIST_WORDS);
       if (req.trainerId === userId) return new OrgsError(409, "not_a_time", PT_MEMBER_WORDS.not_a_time);
       const id = await bookUnderLock(tx, deps.now(), gymId, { ...req, entryId: me.entryId }, { userId, member: true });

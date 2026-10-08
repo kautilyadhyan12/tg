@@ -48,7 +48,7 @@ const view = (over = {}) => {
     to: '2026-10-13',
     lastDay: '2026-10-14',
     freeCancelMinutes: 120,
-    onList: true,
+    record: 'own',
     days: DAYS.map((localDate) => ({ localDate, pays: PACK, why: null })),
     trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540, 600] }), trainer(ANN, 'Ann Coach', { '2026-10-08': [840] }, 45)],
     sessions: [],
@@ -176,11 +176,32 @@ describe('a member’s personal training', () => {
   });
 
   it('somebody with no record on the gym’s list is told so, and has no button', async () => {
-    serve(view({ onList: false, days: DAYS.map((localDate) => ({ localDate, pays: null, why: null })) }));
+    serve(view({ record: 'none', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     expect(screen.getByText("Your gym hasn't added you to its member list yet. Ask at the front desk.")).toBeTruthy();
     expect(screen.queryAllByRole('button', { name: /^Book/ })).toHaveLength(0);
+  });
+
+  it('two app accounts on one record: told so, no button, and no session of the record is drawn', async () => {
+    serve(view({ record: 'shared', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null })) }));
+    render(<PersonalTraining gym={GYM} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    expect(screen.getByText("Two app accounts share your record at this gym, so sessions can't be booked in the app. Ask at the front desk.")).toBeTruthy();
+    expect(screen.queryAllByRole('button', { name: /^Book/ })).toHaveLength(0);
+    expect(screen.queryByRole('list', { name: 'Your sessions' })).toBeNull();
+  });
+
+  it('a press answered with a session cancelled since is never said as booked', async () => {
+    serve(view());
+    render(<PersonalTraining gym={GYM} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    pickDay(FRI);
+    svc.book.mockResolvedValueOnce(session(S1, { status: 'cancelled', packCharged: false, cancel: null }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Sam Trainer' })).getByRole('button', { name: /^Book 10:00 am/ }));
+    expect((await screen.findByRole('status')).textContent).toBe('That session was cancelled since. It is not booked.');
+    expect(screen.queryByText(/^Booked:/)).toBeNull();
+    await waitFor(() => expect(svc.view).toHaveBeenCalledTimes(2));
   });
 
   it('what pays is said for the day picked: a pack that ends mid-week has buttons before it ends and none after', async () => {

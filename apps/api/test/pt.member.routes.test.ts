@@ -7,7 +7,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { PT_MEMBER_WORDS, type MemberPtResponse, type MemberPtSession, type PtWeekResponse } from "@app/shared";
+import { PT_MEMBER_CANCEL_WORDS, PT_MEMBER_WORDS, PT_RECORD_SHARED_WORDS, type MemberPtResponse, type MemberPtSession, type PtWeekResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -314,7 +314,7 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
       expect(res.statusCode, res.body).toBe(200);
       const view = JSON.parse(res.body) as MemberPtResponse;
       expect(freeOf(view, sam, FRIDAY)).toEqual([540]);
-      expect([view.sessions, view.history]).toEqual([[], []]);
+      expect([view.record, view.sessions, view.history]).toEqual(["own", [], []]);
       for (const secret of ["Noor", "Zzyzx", "Wendy", "Vvk", "Secret Spin", "Qqx", noor.entryId, noor.userId, wendy, noors, wendys, noorsOld, noorPack, "@example.com"]) {
         expect(res.body.includes(secret), `the read holds "${secret}"`).toBe(false);
       }
@@ -384,6 +384,65 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
         ["cancelled", noor.entryId],
       ]);
       expect([await left(mayaPack), await left(noorPack)]).toEqual([9, 9]);
+    },
+    T,
+  );
+
+  it(
+    "THE WORST THING, where one record is not one person: two app members left on ONE record read, cancel and pay with nothing of each other's",
+    async () => {
+      const gym = await makeGym("Shared Record Gym");
+      const pack = await typeOf(gym, { kind: "pack", includesPt: true });
+      const sam = await trainerWith(gym, "Sam Shared");
+      const asha = await member(gym, "Asha Shared");
+      const bela = await member(gym, "Bela Shared");
+      const ashaPack = await hold(gym, asha.entryId, pack, { pack: 10 });
+      const belaPack = await hold(gym, bela.entryId, pack, { pack: 10 });
+      const ashas = made(await book(gym, asha, sam, { minute: 600 }));
+      const belas = made(await book(gym, bela, sam, { minute: 660 }));
+      expect((await read(gym, bela)).sessions.map((x) => x.id)).toEqual([belas.id]);
+
+      // The owner joins Bela's record into Asha's on the console, through the real route:
+      // two live app accounts now hold one record.
+      const joined = await inject("POST", `/v1/orgs/${gym.id}/member-list/entries/${bela.entryId}/merge`, gym.owner.cookies, {
+        keepEntryId: asha.entryId,
+        acknowledgeLeavesList: true,
+      });
+      expect(joined.statusCode, joined.body).toBe(200);
+      const holders = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_members WHERE gym_id = ${gym.id} AND entry_id = ${asha.entryId} AND removed_at IS NULL`;
+      expect(holders[0]?.n, "the join left two accounts on one record").toBe(2);
+      const before = [await left(ashaPack), await left(belaPack)];
+
+      for (const who of [asha, bela]) {
+        // Neither reads a session: the record's sessions are no longer one person's.
+        const res = await inject("GET", `/v1/orgs/${gym.id}/member-pt`, who.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        const view = JSON.parse(res.body) as MemberPtResponse;
+        expect([view.record, view.sessions, view.history], who.name).toEqual(["shared", [], []]);
+        expect(view.days.map((x) => [x.pays, x.why]), who.name).toEqual(Array.from({ length: 7 }, () => [null, null]));
+        for (const secret of [ashas.id, belas.id]) expect(res.body.includes(secret), who.name).toBe(false);
+        // Neither cancels one, their own old one included, free or late.
+        for (const id of [ashas.id, belas.id]) {
+          for (const lateOk of [false, true]) {
+            const no = await cancel(gym, who, id, lateOk);
+            expect([no.statusCode, errorOf(no)], who.name).toEqual([404, "appointment_not_found"]);
+            expect((await rowOf(gym, id)).status, who.name).toBe("booked");
+          }
+        }
+        // Neither books on the shared record, so neither pays with the other's pack.
+        const no = await book(gym, who, sam, { minute: 540 });
+        expect(said(no), who.name).toEqual([409, "record_shared", PT_RECORD_SHARED_WORDS]);
+      }
+      // Staff still run both sessions from the console, by the record.
+      const byStaff = await inject("POST", `/v1/orgs/${gym.id}/pt/appointments/${belas.id}/cancel`, gym.owner.cookies, { lateOk: false, giveBack: false });
+      expect(byStaff.statusCode, byStaff.body).toBe(200);
+      // One of the two leaves the gym: the record is one person's again, and hers to read.
+      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${bela.userId}`;
+      const alone = await read(gym, asha);
+      expect([alone.record, alone.sessions.map((x) => x.id)]).toEqual(["own", [ashas.id]]);
+      expect((await rows(gym)).map((r) => r.status)).toEqual(["booked", "cancelled"]);
+      expect(await left(ashaPack)).toBe(before[0]);
     },
     T,
   );
@@ -611,7 +670,9 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
       // Again: the same answer. As a plain cancel: told the session stays used, never "cancelled".
       expect(made(await cancel(gym, maya, two.id, true)).status).toBe("late_cancelled");
       const plain = await cancel(gym, maya, two.id);
-      expect([plain.statusCode, errorOf(plain)]).toEqual([409, "kept_used"]);
+      expect(said(plain)).toEqual([409, "kept_used", PT_MEMBER_CANCEL_WORDS.kept_used]);
+      // The other way round: cancelled free, and asked again as a late cancel.
+      expect(said(await cancel(gym, maya, one.id, true))).toEqual([409, "not_kept", PT_MEMBER_CANCEL_WORDS.not_kept]);
       expect(await left(held)).toBe(9);
       // The trainer's time is free again for somebody else.
       const afterLate = await read(gym, maya);
@@ -628,7 +689,7 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
       const three = made(await book(gym, maya, sam, { minute: 660 }));
       clock = new Date("2026-10-09T10:05:00Z").getTime();
       const started = await cancel(gym, maya, three.id, true);
-      expect([started.statusCode, errorOf(started)]).toEqual([409, "started"]);
+      expect(said(started)).toEqual([409, "started", PT_MEMBER_CANCEL_WORDS.started]);
       expect([(await rowOf(gym, three.id)).status, await left(held)]).toEqual(["booked", 8]);
       // A session that is over moves from the coming list to the history.
       clock = new Date("2026-10-09T11:05:00Z").getTime();
@@ -646,14 +707,14 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
     const tom = await trainerWith(open, "Tom NoRecord");
     const loose = await appOnly(open, "Loose Member");
     const view = await read(open, loose);
-    expect([view.onList, view.sessions, view.history, view.days.map((x) => [x.pays, x.why])]).toEqual([false, [], [], Array.from({ length: 7 }, () => [null, null])]);
+    expect([view.record, view.sessions, view.history, view.days.map((x) => [x.pays, x.why])]).toEqual(["none", [], [], Array.from({ length: 7 }, () => [null, null])]);
     expect(freeOf(view, tom, FRIDAY)).toEqual(MORNING);
     const no = await book(open, loose, tom);
     expect([no.statusCode, errorOf(no)]).toEqual([409, "not_on_list"]);
     // A record that is a past member's is no record.
     const past = await member(open, "Past Record");
     await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE id = ${past.entryId}`;
-    expect((await read(open, past)).onList).toBe(false);
+    expect((await read(open, past)).record).toBe("none");
     expect(errorOf(await book(open, past, tom, { minute: 660 }))).toBe("not_on_list");
     expect((await rows(open)).filter((r) => r.entry_id === past.entryId)).toHaveLength(0);
   });
@@ -713,8 +774,8 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
       const session = made(await book(gym, maya, sam));
       if (end === "lapsed") await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
       else await sql`UPDATE gyms SET status = 'archived' WHERE id = ${gym.id}`;
-      const answers = [await book(gym, maya, sam, { minute: 660 }), await cancel(gym, maya, session.id)];
-      expect(answers.map((r) => `${String(r.statusCode)} ${errorOf(r)}`), end).toEqual(["404 org_not_found", "404 org_not_found"]);
+      const answers = [await inject("GET", `/v1/orgs/${gym.id}/member-pt`, maya.cookies), await book(gym, maya, sam, { minute: 660 }), await cancel(gym, maya, session.id)];
+      expect(answers.map((r) => `${String(r.statusCode)} ${errorOf(r)}`), end).toEqual(Array.from({ length: 3 }, () => "404 org_not_found"));
       expect((await rows(gym)).map((r) => r.status), end).toEqual(["booked"]);
     }
   });
@@ -732,6 +793,37 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
       ["member.pt_cancelled", maya.userId],
     ]);
   });
+
+  it("more sessions than one read answers: the newest 20 of the past and the first 100 to come, never a failed read", async () => {
+    const gym = await makeGym("Caps Gym");
+    const sam = await trainerWith(gym, "Sam Caps");
+    const maya = await member(gym, "Maya Caps");
+    // 25 cancelled sessions on past days and 105 booked on coming ones, an hour each.
+    await sql`
+      INSERT INTO gym_pt_appointments
+        (gym_id, trainer_user_id, entry_id, local_date, local_start_minute, starts_at, ends_at, minutes, status, cancelled_at, pack_charged, request_key, booked_by, created_at)
+      SELECT ${gym.id}, ${sam.userId}, ${maya.entryId}, d.day, 600,
+             (d.day + interval '10 hours') AT TIME ZONE 'Europe/London', (d.day + interval '11 hours') AT TIME ZONE 'Europe/London',
+             60, CASE WHEN d.n < 0 THEN 'cancelled' ELSE 'booked' END, CASE WHEN d.n < 0 THEN ${NOW}::timestamptz END, false, gen_random_uuid(), ${gym.owner.userId}, ${NOW}
+      FROM (SELECT ${TODAY}::date + n AS day, n FROM generate_series(-25, 105) AS n WHERE n <> 0) d`;
+    const view = await read(gym, maya);
+    expect([view.sessions.length, view.history.length]).toEqual([100, 20]);
+    expect([view.sessions[0]?.localDate, view.history[0]?.localDate, view.history[19]?.localDate]).toEqual(["2026-10-08", "2026-10-06", "2026-09-17"]);
+  });
+
+  it("one member's reads are limited too: the 1,201st in an hour is told to slow down", async () => {
+    const gym = await makeGym("Read Limit Gym");
+    const maya = await member(gym, "Maya Reads");
+    const wifi = `10.81.${String(randomInt(250))}.${String(randomInt(1, 251))}`;
+    const statuses: number[] = [];
+    for (let done = 0; done < 1205; done += 50) {
+      const chunk = await Promise.all(
+        Array.from({ length: Math.min(50, 1205 - done) }, (_, n) => inject("GET", `/v1/orgs/${gym.id}/member-pt`, maya.cookies, undefined, wifi, either(n))),
+      );
+      statuses.push(...chunk.map((r) => r.statusCode));
+    }
+    expect([statuses.filter((x) => x === 200).length, statuses.filter((x) => x === 429).length]).toEqual([1200, 5]);
+  }, T);
 
   it("one member's writes are limited: the 121st in an hour is told to slow down, and their reads still answer", async () => {
     const gym = await makeGym("Limit Gym");
