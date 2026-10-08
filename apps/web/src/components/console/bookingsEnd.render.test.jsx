@@ -125,12 +125,12 @@ describe('the box that asks before bookings end', () => {
   });
 });
 
-describe('Settings → Class bookings', () => {
+describe('Settings → Booking rules', () => {
   const ORG = { id: 'g1', orgType: 'gym' };
   const START = { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 };
   const open = async (props = {}) => {
     render(<BookingSettingsPanel org={ORG} readOnly={false} {...props} />);
-    fireEvent.click(await screen.findByRole('button', { name: /Class bookings/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Booking rules/ }));
     await screen.findByLabelText('Days before a class that booking opens');
   };
 
@@ -141,7 +141,7 @@ describe('Settings → Class bookings', () => {
   it('shows the gym’s four settings, summed up while closed, and Save waits for a change', async () => {
     render(<BookingSettingsPanel org={ORG} readOnly={false} />);
     expect(await screen.findByText('Opens 7 days before · free to cancel until 2 hours before · waitlist of 20')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Class bookings/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Booking rules/ }));
     expect(screen.getByLabelText('Days before a class that booking opens').value).toBe('7');
     expect(screen.getByLabelText('How long before a class cancelling is free').value).toBe('2');
     expect(screen.getByLabelText('Free cancelling, in').value).toBe('hours');

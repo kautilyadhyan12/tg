@@ -57,7 +57,7 @@ describe('where each page sits on a phone', () => {
     expect(keys(menu.tabs)).toContain('members');
   });
 
-  it('a manager who sets the timetable and nothing else in Settings still has it, for Class bookings', () => {
+  it('a manager who sets the timetable and nothing else in Settings still has it, for Booking rules', () => {
     const timetable = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage');
     const menu = consoleMenu('iron-house', timetable, 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);

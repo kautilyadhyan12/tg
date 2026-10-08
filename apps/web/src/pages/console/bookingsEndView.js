@@ -196,6 +196,22 @@ export function bookingSettingsSummary(settings) {
   return `${opens} · ${free} · ${waitlist}`;
 }
 
+const freeUntil = (minutes) => (minutes === 0 ? 'until it starts' : `until ${span(minutes)} before it starts`);
+
+/** The rules in one sentence, on the pages they apply to. One rule set covers classes and
+ *  personal training. */
+export function bookingRulesLine(settings) {
+  const ahead = `${settings.opensDays} ${settings.opensDays === 1 ? 'day' : 'days'} ahead`;
+  return `Members can book up to ${ahead} and cancel for free ${freeUntil(settings.freeCancelMinutes)}.`;
+}
+
+/** The same for staff who may not change the rules, from the one they are sent; null
+ *  where they are sent none. */
+export function bookingRulesOwnLine(freeCancelMinutes) {
+  if (!Number.isInteger(freeCancelMinutes)) return null;
+  return `Members can cancel for free ${freeUntil(freeCancelMinutes)}. A manager can change the booking rules.`;
+}
+
 /** What a save says once it is done: a shorter waitlist time can book waiting people. */
 export function bookingSettingsSavedLine(movedIn) {
   if (!Number.isInteger(movedIn) || movedIn <= 0) return 'Saved.';

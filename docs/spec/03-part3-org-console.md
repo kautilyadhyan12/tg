@@ -2736,7 +2736,7 @@ their bookings of classes that have not started, their pack has those classes ba
 each place goes to the waitlist; a class that has started keeps its row. One function
 for every way of leaving (`endLeaversBookings`, called where the membership is closed).
 **The four settings** are read and changed at `…/booking-settings` on
-`schedule.manage` (Settings → Class bookings); they hold from the next booking on and
+`schedule.manage` (Settings → Booking rules); they hold from the next booking on and
 change none already made; a shorter hand-over time hands over at once the free places
 it makes the waitlist's, and the save answers how many (`movedIn`). Nobody is emailed
 yet: the box that asks says so until 17c-ii-b. `booked` and `waiting` count BOOKINGS:
@@ -2894,7 +2894,7 @@ only where it is that record's. What takes a trainer's time is read as spans alo
 is refused in one sentence whatever took it (`PT_MEMBER_WORDS`). The booking and the cancel
 are the staff side's own rule (`bookUnderLock`, `cancelUnderLock`). **What differs for a
 member:** a time can be booked once the gym's class bookings would be open for it (Settings →
-Class bookings, 7 days to start with; 409 `not_open_yet`), never past the eight weeks; a late
+Booking rules, 7 days to start with; 409 `not_open_yet`), never past the eight weeks; a late
 cancel keeps the session used and a member cannot give one back (`{ lateOk }` alone); their
 own session takes their own time with every trainer; a trainer who is also a member is not
 offered themself; somebody in the app with no record on the list reads so and books nothing
@@ -2910,7 +2910,13 @@ the read also answers `history`, the reader's own sessions that are over or were
 coming ones, greyed, each saying what happened (Cancelled · Cancelled late · You came · You
 missed this session · Past); the box before a cancel names the gym, whose setting the time
 to cancel for free is; what a booking uses reads "You have PT 10 pack: 10 sessions left.
-Each booking uses 1 session." Nobody is told (the inbox, 20a):
+Each booking uses 1 session." **The gym's booking rules are said where they apply:** the
+console's Classes and Personal training pages carry one line ("Members can book up to 7 days
+ahead and cancel for free until 2 hours before it starts.") with **Change booking rules**,
+which opens the box in Settings (`#booking-rules`, the place `bookingRules`, on
+`schedule.manage`); staff who may not change them read the cancel rule and "A manager can
+change the booking rules." The box is named **Booking rules** (it was "Class bookings"):
+one rule set covers classes and personal training. Nobody is told (the inbox, 20a):
 the session is on the trainer's week. Not done: sessions ended when a person or a trainer
 leaves, came and no-show (17e-iv).)*
 

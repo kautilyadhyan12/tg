@@ -48,7 +48,7 @@ function openableToday(privileges) {
     `${BASE}/personal-training`,
     ...(has('posts.manage') ? [`${BASE}/updates`, `${BASE}/events`] : []),
     ...(has('leaderboard.manage') ? [`${BASE}/leaderboard`, `${BASE}/challenges`] : []),
-    // Settings also holds Class bookings since 17c-ii-a, on `schedule.manage`.
+    // Settings also holds Booking rules since 17c-ii-a, on `schedule.manage`.
     ...(has('org.manage') || has('schedule.manage') ? [`${BASE}/settings`] : []),
   ].sort();
 }

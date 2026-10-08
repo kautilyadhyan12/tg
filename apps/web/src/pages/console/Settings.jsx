@@ -169,9 +169,19 @@ export default function Settings() {
       {/* What the gym sells is not here: Memberships is a page of its own, in the menu
           (23c-i; Kd at its click-through: Settings needs nothing about it). */}
 
-      {/* CLASS BOOKINGS (17c-ii-a): the four booking settings, on `schedule.manage` as the
+      {/* BOOKING RULES (17c-ii-a): the four booking settings, on `schedule.manage` as the
           server gates them. Keyed per gym for the panels' reason above: it holds a form. */}
-      {canEditSchedule ? <BookingSettingsPanel key={`bookings-${org.id}`} org={org} readOnly={readOnly} /> : null}
+      {canEditSchedule ? (
+        // `id`: the Classes and Personal training pages open Settings here (17e-ii).
+        <div id={SETTINGS_SECTION.bookingRules} style={{ scrollMarginTop: 16 }}>
+          <BookingSettingsPanel
+            key={`bookings-${org.id}`}
+            org={org}
+            readOnly={readOnly}
+            startOpen={linked(section === SETTINGS_SECTION.bookingRules)}
+          />
+        </div>
+      ) : null}
 
       {/* CHECK-IN DEVICES (16b-i): the front desk's tablets, on `org.manage` as the server
           gates them. Keyed per gym for the panels' reason above: it holds a typed name and
