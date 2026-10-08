@@ -26,6 +26,7 @@ const LOOK_ALIKE: [string, string][] = [
   ["bidi isolate", `${cp(0x2066)}VIP${cp(0x2069)}`],
   ["bidi override", `${cp(0x202e)}VIP`],
   ["zero-width space", `V${cp(0x200b)}IP`],
+  ["Khmer inherent vowel", `VIP${cp(0x17b5)}`],
   ["zero-width joiner", `V${cp(0x200d)}IP`],
   ["word joiner", `VIP${cp(0x2060)}`],
   ["byte order mark", `${cp(0xfeff)}VIP`],
@@ -45,9 +46,22 @@ describe("a tag's name", () => {
     ["only a braille blank", cp(0x2800)],
     ["only a soft hyphen and spaces", ` ${cp(0xad)} `],
     ["only variation selectors", cp(0xfe0f, 0xfe0e)],
+    ["only a Khmer vowel drawn as nothing", cp(0x17b4)],
   ])("a tag that is %s is no tag", (_what, typed) => {
     expect(tidyMemberTagName(typed)).toBe("");
     expect(memberTagAddRequestSchema.safeParse({ name: typed }).success).toBe(false);
+  });
+
+  it.each([
+    ["only a combining accent", cp(0x301)],
+    ["only two accents and a space", `${cp(0x301)} ${cp(0x308)}`],
+  ])("a tag that is %s is refused", (_what, typed) => {
+    expect(memberTagAddRequestSchema.safeParse({ name: typed }).success).toBe(false);
+  });
+
+  it("a tag of a symbol or an emoji alone is a tag", () => {
+    expect(memberTagAddRequestSchema.parse({ name: cp(0x1f525) })).toEqual({ name: cp(0x1f525) });
+    expect(memberTagAddRequestSchema.parse({ name: "#1" })).toEqual({ name: "#1" });
   });
 
   it.each([
@@ -139,11 +153,14 @@ describe("what the card rule reads", () => {
     ["full-width digits", cp(0xff14, 0xff11, 0xff11, 0xff11), ["4111"]],
     ["a soft hyphen between groups", `4111${cp(0xad)}1111`, ["41111111", "4111 1111"]],
     ["a left-to-right mark inside a group", `41${cp(0x200e)}11 1111`, ["4111 1111", "41 11 1111"]],
+    ["plus signs", "4111+1111+1111+1111", ["4111 1111 1111 1111"]],
+    ["spaced plus signs", "4111 + 1111 + 1111 + 1111", ["4111 1111 1111 1111"]],
   ])("%s", (_what, typed, readings) => {
     expect(cardCheckReadings(typed)).toEqual(readings);
   });
 
   it("a plus sign is kept, so a phone number is still read as one", () => {
     expect(cardCheckReadings("Call 12 +44 7911 123456")).toEqual(["Call 12 +44 7911 123456"]);
+    expect(cardCheckReadings("+91 98765 43210")).toEqual(["+91 98765 43210"]);
   });
 });

@@ -74,11 +74,12 @@ import * as removal from "./removeSelected.js";
 import { SelectionChanged, selectAll } from "./selection.js";
 import * as service from "./service.js";
 
-/** The gym a request's address names, for an allowance counted a gym at a time. */
+/** The gym a request's address names, for an allowance counted a gym at a time. One gym
+ *  is one count however its id is typed: capitals reach the same gym. */
 function gymInPath(req: FastifyRequest): string | null {
   const params: unknown = req.params;
   if (typeof params !== "object" || params === null || !("gymId" in params)) return null;
-  return typeof params.gymId === "string" ? params.gymId : null;
+  return typeof params.gymId === "string" ? params.gymId.toLowerCase() : null;
 }
 
 /** A "Select all" whose filter now matches other people: nothing was done (§18.5). */

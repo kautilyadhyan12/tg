@@ -515,6 +515,9 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
     ["Visa, Devanagari digits", [cp(0x96a, 0x967, 0x967, 0x967), cp(0x967, 0x967, 0x967, 0x967), cp(0x967, 0x967, 0x967, 0x967), cp(0x967, 0x967, 0x967, 0x967)].join(" ")],
     ["Visa, two spaces", "4111  1111  1111  1111"],
     ["Visa, mixed space and dash", "4111 1111-1111 1111"],
+    // From the re-check of that pass.
+    ["Visa, plus signs", "4111+1111+1111+1111"],
+    ["Visa, spaced plus signs", "4111 + 1111 + 1111 + 1111"],
   ];
   const NOT_CARDS = [
     "Call +44 7911 123456 before 9",
@@ -699,6 +702,11 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
       expect((await inject("POST", `${entryUrl(gym, maya)}/notes`, gym.owner.cookies, { body: unseen, requestKey: randomUUID() })).statusCode).toBe(400);
     }
     expect((await inject("POST", `${entryUrl(gym, maya)}/notes`, gym.owner.cookies, { body: cp(0x200e, 0x200f, 0x202e), requestKey: randomUUID() })).statusCode).toBe(400);
+    // From the re-check: a Khmer vowel drawn as nothing, and a tag that is only an accent.
+    expect(names((await tag(gym, maya, `VIP${cp(0x17b5)}`)).tags)).toEqual(["VIP"]);
+    for (const unseen of [cp(0x301), cp(0x17b4)]) {
+      expect((await inject("POST", `${entryUrl(gym, maya)}/tags`, gym.owner.cookies, { name: unseen })).statusCode).toBe(400);
+    }
     expect(await tagRows(gym)).toEqual(["VIP"]);
     expect(await noteRows(gym)).toEqual([]);
     // A Hindi note keeps the joiner its conjunct is written with.
@@ -747,6 +755,11 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
       expect(other.statusCode, other.body).toBe(200);
       expect(await noteRows(oak)).toEqual(["From the shared address"]);
       expect((await write(iron, maya, staff[1] ?? iron.owner)).statusCode).toBe(429);
+      // The gym's id typed in capitals is the same gym, and the same count.
+      for (const typed of [iron.id.toUpperCase(), iron.id.replace(/[a-f]/u, (letter) => letter.toUpperCase())]) {
+        const capitals = await write({ ...iron, id: typed }, maya, staff[2] ?? iron.owner);
+        expect(capitals.statusCode, capitals.body).toBe(429);
+      }
     } finally {
       await desk.close();
     }

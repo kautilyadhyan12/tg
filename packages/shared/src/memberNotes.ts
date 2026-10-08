@@ -19,12 +19,16 @@ const CONTROLS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu;
 /** Characters nobody can see, which would make two tags that look the same: the format
  *  characters (joiners, direction marks, the soft hyphen, tag characters), the variation
  *  selectors, the combining grapheme joiner, and the letters and the braille cell that are
- *  drawn as a blank. */
-const UNSEEN = /[\p{Cf}\u034F\u115F\u1160\u180B-\u180F\u2800\u3164\uFE00-\uFE0F\uFFA0\u{E0100}-\u{E01EF}]/gu;
+ *  drawn as a blank (the Hangul fillers, two Khmer vowels). */
+const UNSEEN = /[\p{Cf}\u034F\u115F\u1160\u17B4\u17B5\u180B-\u180F\u2800\u3164\uFE00-\uFE0F\uFFA0\u{E0100}-\u{E01EF}]/gu;
 
 /** A tag as the gym typed it: look-alike forms made plain (full-width letters), what
  *  nobody can see dropped, the spaces around and inside it tidied. */
 export const tidyMemberTagName = (raw: string): string => raw.normalize("NFKC").replace(CONTROLS, "").replace(UNSEEN, "").replace(/\s+/gu, " ").trim();
+
+/** Whether a tag's name has anything in it a person can read: a letter, a number or a
+ *  mark of its own, and not only an accent that sits on another letter. */
+export const memberTagIsSeen = (name: string): boolean => /[\p{L}\p{N}\p{S}\p{P}]/u.test(name);
 
 /** A note as staff typed it: its line breaks kept, its ends trimmed. Joiners inside words
  *  are kept (Hindi and Persian words are written with them). */
@@ -44,7 +48,8 @@ function plainDigit(digit: string): string {
 
 /** What the card rule reads: a note or tag with every script's digits made plain, every
  *  run of spaces and marks between two digits made one space ("4111 - 1111", "4111:1111",
- *  a new line; never a "+", which starts a phone number), and digits typed one at a time
+ *  a new line; a "+" too, except the one that starts a phone number: a space or nothing
+ *  before it and a digit straight after), and digits typed one at a time
  *  put together. Read twice, because a character nobody can see may sit inside a group of
  *  digits or stand between two groups: once with those dropped, once with each a space.
  *  Never kept; the words are kept as typed. */
@@ -53,6 +58,7 @@ export function cardCheckReadings(text: string): string[] {
   const read = (unseenAs: string): string =>
     plain
       .replace(UNSEEN, unseenAs)
+      .replace(/(?<=\d)\+|\+(?!\d)/gu, " ")
       .replace(/(?<=\d)[^\p{L}\p{N}+]+(?=\d)/gu, " ")
       .replace(/(?<!\d)\d(?: \d(?!\d))+/gu, (digits) => digits.replace(/ /gu, ""))
       .replace(/\s+/gu, " ")
@@ -79,7 +85,7 @@ const tagNameSchema = z
   .string()
   .max(MEMBER_TAG_MAX_CHARS * 4)
   .transform(tidyMemberTagName)
-  .pipe(z.string().min(1).max(MEMBER_TAG_MAX_CHARS));
+  .pipe(z.string().min(1).max(MEMBER_TAG_MAX_CHARS).refine(memberTagIsSeen, { message: "a tag needs a name" }));
 
 /** One of the gym's tags, picked; or a name typed, which is that tag if the gym has it and
  *  a new one if not. */

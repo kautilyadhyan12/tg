@@ -4699,7 +4699,7 @@ renaming or deleting one of the gym's tags.
   Staff add up to 200 to a person. A note that looks like it holds a payment card number
   is refused in a sentence (§11's never-keep list), read with every script's digits as
   plain ones, every run of spaces and marks between two digits as one space (a new line,
-  " - ", ":", "|", "*"; never "+", which starts a phone number), digits typed one at a
+  " - ", ":", "|", "*", and "+" unless it starts a phone number), digits typed one at a
   time put together, and characters nobody can see both dropped and as a space; the note
   of a writer whose account is gone reads "Someone no longer here". Its day is the gym's
   own day. A note with nothing in it a person can see is refused as empty; the joiners
@@ -4716,7 +4716,8 @@ renaming or deleting one of the gym's tags.
   that two tags never look the same, a name is kept in its plain form (full-width letters
   become ordinary ones) with everything nobody can see dropped: joiners and direction
   marks, the soft hyphen, variation selectors, and the letters and the braille cell drawn
-  as a blank; a name with nothing left is refused. A tag PICKED on a person's page is sent
+  as a blank; a name with nothing left, or only an accent, is refused. (A Hindi tag typed
+  with a joiner is kept without it, and a family emoji as its separate faces.) A tag PICKED on a person's page is sent
   by its id, so one a colleague has renamed is still that tag and one a colleague has
   deleted is "not there any more", never made again; only a typed name can make a tag.
 - **Who.** Read by the gym's staff who may open the person's page (`members.confirm`);
@@ -4732,7 +4733,8 @@ renaming or deleting one of the gym's tags.
 - **Their own allowance.** Notes and tags are 1,200 writes an hour a person (4,800 an
   address), apart from the allowance for adding and changing members, so a gym tagging its
   200 people is not stopped and does not stop its other work. The address is counted a gym
-  at a time, so one gym's staff never use up another gym's at a shared address.
+  at a time (whatever capitals its id is typed in), so one gym's staff never use up another
+  gym's at a shared address.
 - **With the record.** Joining two records moves both people's notes and tags to the kept
   one (a tag both had is one tag), so a joined record can hold more than 200 notes and 20
   tags; it then takes no more until some are removed, and the sentence says "200 notes or
