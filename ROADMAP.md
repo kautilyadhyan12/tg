@@ -217,7 +217,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 17e-v. [x] **A limit on personal training sessions on a membership** — merged 2026-10-08 (PR #198).
      - 17e-vi. [x] **Personal training's own booking rules** — merged 2026-10-09 (PR #200).
      - 17e-iv. **Sessions when people change**, split 2026-10-09 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
-       - 17e-iv-a. [ ] **Sessions when a person leaves**: a person removed or taken off the list, and a membership cancelled, end the coming sessions and give packs their sessions back, each naming the sessions first.
+       - 17e-iv-a. [x] **Sessions when a person leaves** — merged 2026-10-09 (PR #202).
        - 17e-iv-b. [ ] **A trainer leaves the staff, and came or no-show**: a trainer removed from staff ends their coming sessions after naming the people; staff mark a session came or no-show (with a route test that a session marked came or missed still counts against a membership's limit, 17e-v).
    - 17f. [ ] **Check-in meets bookings**: a desk scan near a booked class marks it "came"; a worker marks the rest no-shows at the end, safe to run twice. Needs 16a.
    - 17g. [ ] **Online classes** (Kd, RULINGS 2026-10-08): a time slot marked Online carries the gym's own video link (Zoom or any other; we host no video); only people booked on it see the link, from shortly before it starts; places, the waitlist and cancelling work as for any class. Its plan reads how Mindbody, Momence and TeamUp do it first. Before the passes over 17.
