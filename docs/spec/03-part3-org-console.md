@@ -4714,7 +4714,7 @@ renaming or deleting one of the gym's tags.
     anybody, and only people who were selected; the answer says how many changed. A record
     of another gym among the ids is "no longer on the list". A "Select all" that has moved
     changes nobody (`selection_changed`). The box carries the first 100 names of each group
-    and counts the rest ("and 9,900 more"). A new tag is made only when somebody gets it:
+    and counts the rest in one line ("and 9,995 more" under the five shown). A new tag is made only when somebody gets it:
     with nobody to give it to, the press is refused in a sentence (`tag_for_nobody`).
   - *Manage tags*, from the Filter box: each tag with who holds it ("On 12 members and 2
     past members"), **Rename** (everybody who holds it keeps it; a name another tag has, in
@@ -4745,9 +4745,11 @@ renaming or deleting one of the gym's tags.
     a minute old, and a statement that joined the tags to the list then took about a
     minute on 10,000 people (measured: the counts 62 s, the people selected 38 s). So each
     read here asks one table, the list's tag filter is given the records' ids as its other
-    filters are, and a press that tags 1,000 people or more has Postgres count the list
-    again first (measured in that state on 10,000: the counts 0.1 to 0.2 s, the people
-    selected 0.1 to 0.2 s, the write 1.4 to 2.1 s where it was 11 s).
+    filters are, and a press that tags 1,000 people or more first has Postgres count the
+    list again if it has moved, before the gym is held (`analyseEntriesIfMoved`, the
+    worker's own step). Measured in that state on 10,000: the counts 0.1 to 0.2 s, the
+    people selected 0.1 to 0.2 s, the count and the write together 1.3 and 4.0 s where the
+    write alone was 11 s.
 - **Read first** (2026-10-08, the vendors' own help pages): PushPress, "Staff App: Member
   Notes" (each note shows the staff member and the date; editing is not possible; Delete
   from the three dots). Gymdesk, "Tag management" (tags are "visible only to managers and

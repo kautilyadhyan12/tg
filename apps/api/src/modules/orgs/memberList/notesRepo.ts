@@ -207,16 +207,6 @@ export async function putTagOnMany(tx: TransactionSql, gymId: string, entryIds: 
   return rows.length;
 }
 
-/** How many records one press tags before Postgres is asked to count the list again. */
-export const TAG_MANY_RECOUNT_FROM = 1000;
-
-/** Counts the list's table again. Each tag row written is checked against its record, and
- *  on a list uploaded in the last minute that check read the gym's whole list for every
- *  row: 11 s for 10,000 people with the gym held, 2 s after this. */
-export async function recountList(tx: TransactionSql): Promise<void> {
-  await tx`ANALYZE gym_member_list_entries`;
-}
-
 export async function takeTagOffMany(tx: TransactionSql, gymId: string, entryIds: readonly string[], tagId: string): Promise<number> {
   const rows = await tx<{ entry_id: string }[]>`
     DELETE FROM gym_member_entry_tags

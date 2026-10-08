@@ -903,11 +903,6 @@ export function tagBoxWords(preview) {
   };
 }
 
-/** "and 9,900 more": the people a group counts beyond the names the box carries, or null. */
-export function tagMoreLine(count, named) {
-  return count > named && named > 0 ? `and ${n(count - named)} more` : null;
-}
-
 /** What a press did: "“VIP” added to 12 people. 2 didn't change." */
 export function tagDoneLine(done) {
   const kept = done.kept.reduce((sum, group) => sum + group.count, 0);

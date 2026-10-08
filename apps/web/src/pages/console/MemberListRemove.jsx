@@ -25,10 +25,12 @@ import {
 // middle on a computer, from the bottom on a phone. `load` reads the box, `press(digest,
 // tick)` removes; the parent gives both for its own door ('list', 'past' or 'app').
 
-/** One group's names: the first few, "and N more · See all", then 100 at a time. */
-export function Names({ people, testId }) {
+/** One group's names: the first few, "and N more · See all", then 100 at a time. `total`
+ *  is how many the group holds when that is more than the names sent: N counts them all. */
+export function Names({ people, testId, total = people.length }) {
   const [shown, setShown] = useState(REMOVE_NAMES_SHOWN);
   const { list, more } = namesShown(people, shown);
+  const hidden = Math.max(total, people.length) - list.length;
   if (people.length === 0) return null;
   return (
     <div className="flex flex-col gap-1.5">
@@ -39,16 +41,21 @@ export function Names({ people, testId }) {
           </li>
         ))}
       </ul>
-      {more > 0 ? (
+      {hidden > 0 ? (
         <p className="c-s14 c-t2">
-          {`and ${more.toLocaleString('en')} more · `}
-          <button
-            type="button"
-            onClick={() => setShown((n) => (n <= REMOVE_NAMES_SHOWN ? REMOVE_NAMES_PAGE : n + REMOVE_NAMES_PAGE))}
-            className="c-btn-link c-w6"
-          >
-            {shown <= REMOVE_NAMES_SHOWN ? 'See all' : 'Show more'}
-          </button>
+          {`and ${hidden.toLocaleString('en')} more`}
+          {more > 0 ? (
+            <>
+              {' · '}
+              <button
+                type="button"
+                onClick={() => setShown((n) => (n <= REMOVE_NAMES_SHOWN ? REMOVE_NAMES_PAGE : n + REMOVE_NAMES_PAGE))}
+                className="c-btn-link c-w6"
+              >
+                {shown <= REMOVE_NAMES_SHOWN && hidden === more ? 'See all' : 'Show more'}
+              </button>
+            </>
+          ) : null}
         </p>
       ) : null}
     </div>

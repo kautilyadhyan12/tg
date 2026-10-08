@@ -666,6 +666,33 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
     for (const row of log) expect(row.line).not.toMatch(/founding|vip/iu);
   });
 
+  it("the tags and the box are reads, limited as the list's other reads are; a colleague at that address still reads", async () => {
+    const gym = await makeGym("Mtg Reads");
+    const manager = await onStaff(gym, "Nora Manager", "manager");
+    const ada = await addPerson(gym, "Ada Mensah");
+    const DESK = "10.84.250.9";
+    const READS_AN_HOUR = 600;
+    const readTags = (by: Person) => inject("GET", `${base(gym)}/tags`, by.cookies, undefined, DESK);
+    let done = 0;
+    let refused: { statusCode: number; body: string } | null = null;
+    while (refused === null && done <= READS_AN_HOUR + 5) {
+      const res = await readTags(gym.owner);
+      if (res.statusCode === 200) {
+        done += 1;
+        continue;
+      }
+      expect(res.statusCode, res.body).toBe(429);
+      // The app-wide limit (600 a minute a person) says how long to wait; this one does not.
+      const wait = (JSON.parse(res.body) as { retryAfterSeconds?: number }).retryAfterSeconds;
+      if (res.body.includes("Too many requests") && wait !== undefined) await new Promise((resolve) => setTimeout(resolve, (wait + 1) * 1000));
+      else refused = res;
+    }
+    expect(done).toBe(READS_AN_HOUR);
+    const box = await inject("POST", `${base(gym)}/selected/tags-preview`, gym.owner.cookies, { action: "add", selection: ticked([ada]), tag: { name: "Too many reads" } }, DESK);
+    expect(box.statusCode, box.body).toBe(429);
+    expect((await readTags(manager)).statusCode).toBe(200);
+  }, 600_000);
+
   it("a gym with no plan reads its tags and filters by them, and changes none", async () => {
     const gym = await makeGym("Mtg Lapsed");
     const ada = await addPerson(gym, "Ada Mensah");

@@ -2021,7 +2021,11 @@ export async function exportRows(sql: SqlOrTx, gymId: string, ids: readonly stri
  *  one-row confirm on a table of 40,808. The worker runs this every five minutes on its
  *  own connection and analyses only when at least `MEMBER_LIST_ANALYSE_AFTER` rows have
  *  changed since the last ANALYZE (Postgres's own count); ANALYZE takes no lock that
- *  holds a read or a write. */
+ *  holds a read or a write.
+ *
+ *  One request does call it (5d-ii): a press that tags 1,000 people or more, before its
+ *  transaction and on its own connection of the api's ten (`tags.ts`, `tagSelected`),
+ *  because the worker can be five minutes behind an upload. */
 export const MEMBER_LIST_ANALYSE_AFTER = 1000;
 
 export async function analyseEntriesIfMoved(sql: Sql): Promise<{ changed: number; analysed: boolean }> {

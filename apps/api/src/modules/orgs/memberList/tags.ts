@@ -31,6 +31,9 @@ import type { MemberListDeps } from "./service.js";
 
 const tagNotFound = (): OrgsError => new OrgsError(404, "tag_not_found", MEMBER_TAGS_WORDS.tag_not_found);
 
+/** How many people one press tags before the list's table is counted again first. */
+const TAG_MANY_RECOUNT_FROM = 1000;
+
 export interface TagPlan {
   change: MemberTagPerson[];
   kept: { reason: MemberTagKeptReason; people: MemberTagPerson[]; count: number }[];
@@ -129,6 +132,11 @@ export async function tagSelected(
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const ids = await selectedIds(deps, gymId, request.selection);
+  // Each tag row written is checked against its record, and on a list uploaded in the last
+  // few minutes that check read the gym's whole list for every row: 11 s for 10,000 people
+  // with the gym held. So a big press first has Postgres count the list again if it has
+  // moved, before the gym is held.
+  if (request.action === "add" && ids.length >= TAG_MANY_RECOUNT_FROM) await repo.analyseEntriesIfMoved(deps.sql);
   const done = await deps.sql.begin(async (tx): Promise<MemberTagsDone> => {
     // The gym's row, as one person's tag takes it: a join or a removal of a record waits,
     // and two staff making the same new tag make one.
@@ -142,7 +150,6 @@ export async function tagSelected(
     const tag = asked.id === null ? await notesRepo.insertTag(tx, gymId, asked.name, userId) : { id: asked.id, name: asked.name };
     let changed = 0;
     if (changeIds.length > 0 && request.action === "add") {
-      if (changeIds.length >= notesRepo.TAG_MANY_RECOUNT_FROM) await notesRepo.recountList(tx);
       changed = await notesRepo.putTagOnMany(tx, gymId, changeIds, tag.id, userId);
     } else if (changeIds.length > 0) {
       changed = await notesRepo.takeTagOffMany(tx, gymId, changeIds, tag.id);

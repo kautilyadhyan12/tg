@@ -161,12 +161,20 @@ describe('the Tags box for the people selected', () => {
     expect(box.getByTestId('tags-press').textContent).toBe('Add tag to 1 person');
     // A big group: the heading and the button count everybody, the names are the first sent.
     fireEvent.click(box.getByRole('button', { name: 'Back' }));
+    // The server sends a group's first hundred names; the screen shows five of them.
+    const hundred = Array.from({ length: 100 }, (_, at) => ({ entryId: `cccccccc-cccc-4ccc-8ccc-${String(at).padStart(12, '0')}`, name: `Crowd ${String(at).padStart(3, '0')}` }));
     orgService.previewTagSelected.mockResolvedValue(
-      boxOf({ action: 'add', tag: { id: null, name: 'Morning class' }, selected: 300, changeCount: 250, change: [person(cara)], kept: [{ reason: 'has_it', count: 50, people: [person(ada)] }] }),
+      boxOf({ action: 'add', tag: { id: null, name: 'Morning class' }, selected: 300, changeCount: 250, change: hundred, kept: [{ reason: 'has_it', count: 50, people: [person(ada)] }] }),
     );
     fireEvent.click(box.getByTestId('tags-new-use'));
-    expect((await box.findByTestId('tags-change')).textContent).toContain('250 people will get the tag');
-    expect(within(box.getByTestId('tags-change')).getByText('and 249 more')).toBeTruthy();
+    const change = within(await box.findByTestId('tags-change'));
+    expect(box.getByTestId('tags-change').textContent).toContain('250 people will get the tag');
+    // ONE line, and its number is everybody not on screen: 250 less the five shown.
+    expect(change.getAllByText(/^and .* more/u).map((line) => line.textContent)).toEqual(['and 245 more · Show more']);
+    fireEvent.click(change.getByRole('button', { name: 'Show more' }));
+    expect(change.getByText('Crowd 099')).toBeTruthy();
+    // Every name sent is shown; the rest are counted, with nothing more to press.
+    expect(change.getAllByText(/^and .* more/u).map((line) => line.textContent)).toEqual(['and 150 more']);
     expect(within(box.getByTestId('tags-kept-has_it')).getByText('and 49 more')).toBeTruthy();
     expect(box.getByTestId('tags-press').textContent).toBe('Add tag to 250 people');
     fireEvent.click(box.getByRole('button', { name: 'Back' }));
