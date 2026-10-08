@@ -1145,15 +1145,18 @@ describe("the server's sentences that name another place", () => {
         <MemberListPerson gymId={GYM} gym={gym} entryId={entryId} list={LIST} words={WORDS} readOnly={false} canRemove onClose={onClose} onChanged={onChanged} />
       </MemoryRouter>,
     );
-  const named = {
+  // A waiting invitation whose newest email did not go, for `reason`.
+  const notSent = (reason) => ({
     ...person(ADA, 'Ada Lovelace'),
-    app: { word: 'not_in_app', tone: 'grey', at: null, line: MEMBER_INVITE_EMAIL_REASON_WORDS.gym_name, lineTone: 'amber' },
-  };
+    invitation: { state: 'pending', invitedAt: '2026-10-01T09:00:00.000Z', email: { state: 'skipped', reason, at: '2026-10-01T09:00:05.000Z', result: null }, sentAgain: 0 },
+    app: { word: 'not_in_app', tone: 'grey', at: null, line: MEMBER_INVITE_EMAIL_REASON_WORDS[reason], lineTone: 'amber' },
+  });
+  const named = notSent('gym_name');
 
   it("an invitation not sent for the gym's name: the owner gets the button to the gym details", async () => {
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer(named));
     inRouter(ADA, OWNER_GYM);
-    expect(await dialog().findByText("Invitation not sent: your business name is only a web link or @ signs, and an email can't show those. Change it to the name in words, then invite them again.")).toBeTruthy();
+    expect(await dialog().findByText("Invitation not sent: an email couldn't show your business name as it was written. Change it to the name in words, then invite them again.")).toBeTruthy();
     expect(dialog().getByRole('link', { name: 'Open Gym details' }).getAttribute('href')).toBe('/console/iron-house/settings#gym-details');
   });
 
@@ -1166,12 +1169,39 @@ describe("the server's sentences that name another place", () => {
 
   it('any other line that asks staff to check something has neither', async () => {
     orgService.getMemberListEntry.mockResolvedValue(
-      entryAnswer({ ...named, app: { ...named.app, line: MEMBER_INVITE_EMAIL_REASON_WORDS.no_mail_domain } }),
+      entryAnswer(notSent('no_mail_domain')),
     );
     inRouter(ADA, OWNER_GYM);
     await dialog().findByText(MEMBER_INVITE_EMAIL_REASON_WORDS.no_mail_domain);
     expect(dialog().queryByRole('link', { name: /details/ })).toBeNull();
     expect(dialog().queryByText(/The owner can/)).toBeNull();
+  });
+
+  it('the reason is read from the email itself: the same sentence with no such email has no button', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...named, invitation: null }));
+    inRouter(ADA, OWNER_GYM);
+    await dialog().findByText(MEMBER_INVITE_EMAIL_REASON_WORDS.gym_name);
+    expect(dialog().queryByRole('link', { name: /details/ })).toBeNull();
+  });
+
+  it('with the form open the button asks first, and Stay here keeps the form', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(named));
+    inRouter(ADA, OWNER_GYM);
+    fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
+    expect(dialog().queryByRole('link', { name: 'Open Gym details' })).toBeNull();
+    fireEvent.click(dialog().getByRole('button', { name: 'Open Gym details' }));
+    expect(dialog().getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/settings#gym-details');
+    fireEvent.click(dialog().getByRole('button', { name: 'Stay here' }));
+    expect(dialog().getByRole('button', { name: 'Open Gym details' })).toBeTruthy();
+  });
+
+  it('a past member still in the app, whose page moves that line into its own box, has no button', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...named, formerAt: '2026-08-01T10:00:00.000Z', removeEndsApp: true }));
+    inRouter(ADA, OWNER_GYM);
+    await dialog().findByRole('heading', { name: 'Ada Lovelace' });
+    // Their page says its line in the box that offers to remove them from the app.
+    expect(dialog().queryByRole('link', { name: 'Open Gym details' })).toBeNull();
+    expect(dialog().queryByRole('button', { name: 'Open Gym details' })).toBeNull();
   });
 
   describe('Not this person, refused because they are staff', () => {
@@ -1194,7 +1224,7 @@ describe("the server's sentences that name another place", () => {
 
     it('the owner gets the button to the Staff tab', async () => {
       const alert = await refuse(OWNER_GYM, 'not_them_staff');
-      expect(alert.getByText('This person is staff or has a complimentary place, so their access is managed on the Staff tab.')).toBeTruthy();
+      expect(alert.getByText("This person is staff or has a complimentary place, so their access isn't changed here.")).toBeTruthy();
       expect(alert.getByRole('link', { name: 'Open the Staff tab' }).getAttribute('href')).toBe('/console/iron-house/members?view=staff');
     });
 

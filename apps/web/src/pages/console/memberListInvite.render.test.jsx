@@ -372,7 +372,7 @@ const page = () => within(screen.getAllByRole('dialog')[0]);
 
 describe("a person's page", () => {
   it('a gym with no postal address: one person cannot be invited either, and the address is typed there, with the person left open (23d)', async () => {
-    const noAddress = refusal(409, { error: 'no_postal_address', message: 'Add your postal address in Settings. The law requires it in every invitation email.' });
+    const noAddress = refusal(409, { error: 'no_postal_address', message: 'Add your postal address first. The law requires it in every invitation email.' });
     orgService.inviteMemberListEntry.mockRejectedValue(noAddress);
     orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
     orgService.updateOrg.mockResolvedValue({ data: { org: {}, postalAddress: '12 High Street' } });

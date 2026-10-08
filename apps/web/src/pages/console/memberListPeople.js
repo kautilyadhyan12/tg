@@ -4,7 +4,6 @@ import {
   MEMBER_APP_FILTER_ORDER,
   MEMBER_APP_FILTER_WORDS,
   MEMBER_APP_WORDS,
-  MEMBER_INVITE_EMAIL_REASON_WORDS,
   MEMBER_INVITE_WORDS,
   MEMBER_LIST_MERGE_FILLS,
   MEMBER_LIST_MERGE_KEEPS_OWN,
@@ -282,8 +281,6 @@ export function appView(app, today = null) {
     plain: app.lineTone === 'plain' ? line : null,
     note: app.lineTone === 'plain' ? null : line,
     noteTone: app.lineTone,
-    // The one line that needs something done in another place (`sentencePlace`).
-    place: app.line === MEMBER_INVITE_EMAIL_REASON_WORDS.gym_name ? 'gymName' : null,
   };
 }
 
@@ -291,7 +288,11 @@ export function appView(app, today = null) {
 export function invitationView(entry, today = null) {
   const view = appView(entry.app, today);
   const tone = { green: 'green', amber: 'orange', red: 'red', grey: 'plain' }[entry.app.tone];
-  return { tag: view.text, tone, detail: view.note, line: view.plain, place: view.place };
+  // The one reason that needs something done in another place (`sentencePlace`): the
+  // invitation is waiting and its newest email did not go because of the gym's name.
+  const email = entry.invitation?.state === 'pending' ? entry.invitation.email : null;
+  const named = view.note !== null && email !== null && email.reason === 'gym_name' && (email.state === 'skipped' || email.state === 'failed');
+  return { tag: view.text, tone, detail: view.note, line: view.plain, place: named ? 'gymName' : null };
 }
 
 // ── Invite (5b-ii; §9.12, §11.5) ─────────────────────────────────────────────

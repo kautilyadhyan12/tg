@@ -23,7 +23,9 @@ export function sectionOf(hash) {
 }
 
 export function useSectionLink(ready) {
-  const id = sectionOf(useLocation().hash);
+  // `key` is new on every press of a link, also one to the address already open.
+  const { hash, key } = useLocation();
+  const id = sectionOf(hash);
   useEffect(() => {
     if (!ready || id === null) return undefined;
     let theirs = false;
@@ -40,6 +42,6 @@ export function useSectionLink(ready) {
       for (const timer of timers) clearTimeout(timer);
       for (const event of THEIR_OWN) window.removeEventListener(event, stop);
     };
-  }, [ready, id]);
+  }, [ready, id, key]);
   return id;
 }

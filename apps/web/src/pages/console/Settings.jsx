@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { orgWords } from '@app/shared';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import GymDetailsPanel from '../../components/console/GymDetailsPanel';
@@ -35,6 +35,10 @@ export default function Settings() {
   const { loading, error, org, notFound, reload } = useConsoleOrg(orgSlug);
   // A link that names a section ("#opening-hours") opens the page there, with it open.
   const section = useSectionLink(!loading && error === null && !notFound);
+  // Each press of a link to a section opens it again, also one the owner has since closed:
+  // the section is told which press, not only that it is named.
+  const { key: press } = useLocation();
+  const linked = (named) => (named ? press : false);
 
   if (loading) {
     return (
@@ -130,7 +134,7 @@ export default function Settings() {
             org={org}
             privileges={privileges}
             readOnly={readOnly}
-            startOpen={DETAILS_SECTIONS.includes(section)}
+            startOpen={linked(DETAILS_SECTIONS.includes(section))}
           />
         </div>
       ) : null}
@@ -157,7 +161,7 @@ export default function Settings() {
             org={org}
             privileges={privileges}
             readOnly={readOnly}
-            startOpen={section === SETTINGS_SECTION.hours}
+            startOpen={linked(section === SETTINGS_SECTION.hours)}
           />
         </div>
       ) : null}
@@ -178,7 +182,7 @@ export default function Settings() {
             key={`checkin-devices-${org.id}`}
             org={org}
             readOnly={readOnly}
-            startOpen={section === SETTINGS_SECTION.frontDesk}
+            startOpen={linked(section === SETTINGS_SECTION.frontDesk)}
           />
         </div>
       ) : null}
@@ -192,7 +196,7 @@ export default function Settings() {
             key={`lead-emails-${org.id}`}
             org={org}
             readOnly={readOnly}
-            startOpen={section === SETTINGS_SECTION.leadEmails}
+            startOpen={linked(section === SETTINGS_SECTION.leadEmails)}
           />
         </div>
       ) : null}

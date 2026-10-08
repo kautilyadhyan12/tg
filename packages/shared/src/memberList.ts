@@ -2515,7 +2515,7 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   remove_needs_list: "Removing this person also takes them off your list, which your role can't do. Ask the owner.",
   not_them_gone: "This person no longer uses the app with these details. Close and reopen the page.",
   not_them_needs_remove: "Your role can't remove app access. Ask the owner.",
-  not_them_staff: "This person is staff or has a complimentary place, so their access is managed on the Staff tab.",
+  not_them_staff: "This person is staff or has a complimentary place, so their access isn't changed here.",
 } as const;
 
 /** "Not this person": which account in the app it is about (§18.4). */

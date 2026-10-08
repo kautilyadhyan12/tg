@@ -163,6 +163,40 @@ describe('what stops "Send them for me" has the button to its box', () => {
     expect(screen.getByRole('link', { name: 'Add your postal address' }).getAttribute('href')).toBe('/console/iron-house/settings#postal-address');
   });
 
+  it('once the address is saved higher up the page, the sentence goes and Save comes on, with the tick and the typed address kept', async () => {
+    vi.mocked(orgService.getLeadEmailSettings).mockReturnValueOnce(answer({ ...OFF, hasPostalAddress: false }));
+    const draw = (org) => (
+      <MemoryRouter>
+        <LeadEmailsPanel org={org} readOnly={false} />
+      </MemoryRouter>
+    );
+    const { rerender } = render(draw(OWNER_ORG));
+    const box = await open();
+    fireEvent.click(box);
+    fireEvent.change(screen.getByLabelText('Replies go to'), { target: { value: 'desk@ironhouse.example' } });
+    expect(screen.getByRole('link', { name: 'Add your postal address' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
+    // Gym details saves: the console's fresh copy of the gym arrives.
+    vi.mocked(orgService.getLeadEmailSettings).mockReturnValueOnce(answer({ ...OFF, hasPostalAddress: true }));
+    rerender(draw({ ...OWNER_ORG }));
+    await waitFor(() => expect(screen.queryByText(/Add your postal address first/)).toBeNull());
+    expect(screen.queryByRole('link', { name: 'Add your postal address' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(false);
+    expect(box.checked).toBe(true);
+    expect(screen.getByLabelText('Replies go to').value).toBe('desk@ironhouse.example');
+    expect(orgService.getLeadEmailSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it('a reply address that is missing is a reason of its own: no button to another box', async () => {
+    vi.mocked(orgService.getLeadEmailSettings).mockReturnValue(answer(OFF));
+    drawOwner();
+    fireEvent.click(await open());
+    fireEvent.change(screen.getByLabelText('Replies go to'), { target: { value: '' } });
+    expect(screen.getByText('Add the email address replies should go to.')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Add your postal address' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open Gym details' })).toBeNull();
+  });
+
   it("a save refused for the gym's name: Open Gym details; another refusal has no button", async () => {
     vi.mocked(orgService.getLeadEmailSettings).mockReturnValue(answer(OFF));
     const refused = (error, message) => Object.assign(new Error('refused'), { response: { status: 409, data: { error, message } } });
@@ -171,7 +205,7 @@ describe('what stops "Send them for me" has the button to its box', () => {
     fireEvent.click(await open());
     fireEvent.change(screen.getByLabelText('Replies go to'), { target: { value: 'desk@ironhouse.example' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    expect(await screen.findByText("Your gym's name is only a web link or @ signs, and an email can't show those. Change it to the name in words first.")).toBeTruthy();
+    expect(await screen.findByText("An email can't show your gym's name as it is written. Change it to the name in words first.")).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Open Gym details' }).getAttribute('href')).toBe('/console/iron-house/settings#gym-details');
 
     vi.mocked(orgService.updateLeadEmailSettings).mockRejectedValueOnce(refused('rate_limited', 'Too many changes. Try again shortly.'));

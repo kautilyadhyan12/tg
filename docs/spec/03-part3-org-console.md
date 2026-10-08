@@ -3916,10 +3916,10 @@ are kept. A box that sends staff to Memberships reads again when they come back 
 | The banner: pay, choose a plan or change size "under Plan on the Overview" | Open Plan | Overview, at the plan (`#plan`) |
 | An invitation not sent because the business name can't be used in an email (a person's page; Members → Staff → Invited) (23d-ii) | Open Gym details (on a person's page it asks first while a form is open; anybody else reads "The owner can change the name in Gym details.") | Settings, Gym details, open |
 | Import members and Import leads: phone numbers left out, no country set (23d-ii) | Set your country (asks first; anybody else reads "The owner can set the country in Gym details.") | Settings, Gym details open, at the country |
-| A person's page: "Not them?" refused, they are staff or have a complimentary place (23d-ii) | Open the Staff tab (anybody else reads "The owner can change their access.") | Members → Staff |
-| Settings → Follow-up emails: no postal address; the name can't be shown in an email (23d-ii) | Add your postal address · Open Gym details | that box, higher up the same page |
+| A person's page: "Not them?" refused, they are staff or have a complimentary place (23d-ii) | Open the Staff tab (anybody else reads "The owner can change their access."); the sentence ends "so their access isn't changed here." | Members → Staff |
+| Settings → Follow-up emails: no postal address; the name can't be shown in an email (23d-ii) | Add your postal address · Open Gym details | that box, higher up the same page; the box reads its facts again when Gym details saves, keeping what is typed |
 
-The server's own sentences name no place in words since 23d-ii ("Change it to the name in words, then
+The server's own sentences name no place in words since 23d-ii, and a link to a section counts each press, also one to the section already named ("Change it to the name in words, then
 invite them again."); the screen adds the button or who can (`sentencePlace` in
 `consolePlaces.js`, drawn by `SentencePlace`).
 

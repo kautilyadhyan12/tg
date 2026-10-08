@@ -1168,6 +1168,33 @@ describe('a link to one section of Settings', () => {
     expect(emails.getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('a link to a section pressed a second time opens it and brings it into view again (23d-ii)', async () => {
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/settings#follow-up-emails']}>
+        <Link to="/console/iron-house/settings#gym-details">details</Link>
+        <Routes>
+          <Route path="/console/:orgSlug/settings" element={<Settings />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const details = await screen.findByRole('button', { name: /^Gym details/ });
+    expect(details.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('link', { name: 'details' }));
+    await waitFor(() => expect(details.getAttribute('aria-expanded')).toBe('true'));
+    const section = document.getElementById('gym-details');
+    await waitFor(() => expect(into.mock.instances.includes(section)).toBe(true));
+    // The owner folds it shut, and presses the same link again: the address has not changed.
+    fireEvent.click(details);
+    expect(details.getAttribute('aria-expanded')).toBe('false');
+    into.mockClear();
+    fireEvent.click(screen.getByRole('link', { name: 'details' }));
+    await waitFor(() => expect(details.getAttribute('aria-expanded')).toBe('true'));
+    await waitFor(() => expect(into.mock.instances.includes(section)).toBe(true));
+    // It still folds shut afterwards.
+    fireEvent.click(details);
+    expect(details.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('with no section named, every section starts closed and nothing is moved', async () => {
     drawAt('/console/iron-house/settings');
     expect(await screen.findByRole('button', { name: /^Gym details/ })).toBeTruthy();

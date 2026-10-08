@@ -212,7 +212,9 @@ export function ConsoleSection({
   defaultOpen = false,
   newLook = false,
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  // `defaultOpen` may be the press that named this section (Settings), so any value but
+  // false starts it open, and a new value opens it again.
+  const [open, setOpen] = useState(defaultOpen !== false);
   const bodyId = useId();
   const isOpen = open || forceOpen;
 
@@ -236,7 +238,7 @@ export function ConsoleSection({
   const [wasDefaultOpen, setWasDefaultOpen] = useState(defaultOpen);
   if (defaultOpen !== wasDefaultOpen) {
     setWasDefaultOpen(defaultOpen);
-    if (defaultOpen) setOpen(true);
+    if (defaultOpen !== false) setOpen(true);
   }
 
   if (newLook) {

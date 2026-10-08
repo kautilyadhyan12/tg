@@ -192,13 +192,25 @@ describe("how a row shows the server's App word (spec Part 3 §18.4)", () => {
   });
 
   it("the line about the gym's name carries the place to change it, and no other line does (23d-ii)", () => {
-    const named = app({ word: 'not_in_app', tone: 'grey', line: MEMBER_INVITE_EMAIL_REASON_WORDS.gym_name, lineTone: 'amber' });
-    expect(appView(named, TODAY).place).toBe('gymName');
-    expect(invitationView(entry({ app: named }), TODAY).place).toBe('gymName');
-    for (const [reason, line] of Object.entries(MEMBER_INVITE_EMAIL_REASON_WORDS)) {
-      if (reason !== 'gym_name') expect(appView(app({ word: 'not_in_app', tone: 'grey', line, lineTone: 'amber' }), TODAY).place, reason).toBeNull();
+    // Read from the email's own reason, never from the sentence: every reason keeps one
+    // sentence here, so only the reason can tell them apart.
+    const line = 'One sentence for every reason.';
+    const waiting = (email, state = 'pending') => ({ state, invitedAt: '2026-10-01T09:00:00.000Z', email, sentAgain: 0 });
+    const sent = (reason, state = 'skipped') => ({ state, reason, at: '2026-10-01T09:00:05.000Z', result: null });
+    const amber = app({ word: 'not_in_app', tone: 'grey', line, lineTone: 'amber' });
+    const place = (over) => invitationView(entry({ app: amber, ...over }), TODAY).place;
+    expect(place({ invitation: waiting(sent('gym_name')) })).toBe('gymName');
+    expect(place({ invitation: waiting(sent('gym_name', 'failed')) })).toBe('gymName');
+    for (const reason of Object.keys(MEMBER_INVITE_EMAIL_REASON_WORDS)) {
+      if (reason !== 'gym_name') expect(place({ invitation: waiting(sent(reason)) }), reason).toBeNull();
     }
-    expect(appView(app({ word: 'in_app', tone: 'green', line: null }), TODAY).place).toBeNull();
+    // No email, one that went or is on its way, an invitation no longer waiting, no invitation.
+    expect(place({ invitation: waiting(null) })).toBeNull();
+    expect(place({ invitation: waiting({ state: 'sent', reason: null, at: '2026-10-01T09:00:05.000Z', result: null }) })).toBeNull();
+    expect(place({ invitation: waiting({ state: 'queued', reason: null, at: '2026-10-01T09:00:05.000Z', result: null }) })).toBeNull();
+    expect(place({ invitation: null })).toBeNull();
+    // A line that only explains is not shown as a warning, so it has no button.
+    expect(place({ app: app({ word: 'not_in_app', tone: 'grey', line, lineTone: 'plain' }), invitation: waiting(sent('gym_name')) })).toBeNull();
   });
 
   it("names the gym's own words on the row, and since when a past member is one", () => {

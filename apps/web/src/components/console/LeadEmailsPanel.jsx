@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LEAD_EMAIL_SETTINGS_WORDS } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -64,6 +64,28 @@ export default function LeadEmailsPanel({ org, readOnly, startOpen = false }) {
       cancelled = true;
     };
   }, [fetchSettings]);
+
+  // THE GYM'S DETAILS ARE SAVED HIGHER UP THIS PAGE, and two of them stop this box (the
+  // postal address, the name). A save there brings a fresh copy of the gym, so the facts
+  // are read again then, and what is typed here is kept.
+  const seenOrg = useRef(org);
+  useEffect(() => {
+    if (seenOrg.current === org) return undefined;
+    seenOrg.current = org;
+    let cancelled = false;
+    orgService
+      .getLeadEmailSettings(gymId)
+      .then((res) => {
+        if (cancelled) return;
+        setSettings(res.data.settings);
+        setDraft((typed) => typed ?? leadEmailsDraft(res.data.settings));
+        setSaveError(null);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [org, gymId]);
 
   const retry = () => {
     setLoadError(null);
