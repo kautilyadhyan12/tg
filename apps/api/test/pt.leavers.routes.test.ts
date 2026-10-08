@@ -466,6 +466,23 @@ d("personal training sessions when a person leaves (real Postgres, two api insta
       expect(gone.statusCode, gone.body).toBe(200);
       expect([await former(gym, eve.entryId), await stateOf(gym, [eves]), await left(evePack)]).toEqual([true, [["cancelled", false]], 10]);
 
+      // Staff who may remove people from the app but may not read the list are answered no
+      // box at all, with a digest of their own making or without: no name, no session.
+      const desk = await signedIn("Desk Nolist");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${desk.userId}, 'manager', ${["members.remove"]})`;
+      for (const [path, body] of [
+        ["remove-preview", { userIds: [fay.userId] }],
+        ["remove", { userIds: [fay.userId], digest: "0".repeat(64) }],
+      ] as const) {
+        const refused = await inject("POST", `/v1/orgs/${gym.id}/members/selected/${path}`, desk.cookies, body);
+        expect(refused.statusCode, refused.body).toBe(403);
+        for (const secret of [fays, "Fay Roster", "Sam Trainer", fay.entryId]) expect(refused.body.includes(secret), `${path} answers "${secret}"`).toBe(false);
+      }
+      const lone = await inject("DELETE", `/v1/orgs/${gym.id}/members/${fay.userId}`, desk.cookies);
+      expect(lone.statusCode, lone.body).toBe(403);
+      expect(lone.body.includes(fays)).toBe(false);
+      expect(await stateOf(gym, [fays])).toEqual([["booked", true]]);
+
       // Several, ticked on In the app.
       const preview = await inject("POST", `/v1/orgs/${gym.id}/members/selected/remove-preview`, gym.owner.cookies, { userIds: [fay.userId] });
       expect(preview.statusCode, preview.body).toBe(200);

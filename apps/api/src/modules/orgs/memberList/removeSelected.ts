@@ -452,6 +452,8 @@ async function press(
   const answer = await onceMoreIfMoved(() => deps.sql.begin(async (tx): Promise<RemoveSelectedAnswer> => {
     await repo.lockGym(tx, gymId);
     const plan = await planOn(tx, at);
+    // Refused before any box is answered: a box names people's records and their sessions.
+    requireForPlan(plan, privileges);
     if (plan.preview.digest !== input.digest) {
       // The same press again (a retry, or a colleague's): the box is gone because that
       // press did it, so say so rather than showing an empty box.
@@ -462,7 +464,6 @@ async function press(
       if (earlier !== null) return { kind: "removed", removed: { ...earlier, alreadyRemoved: true } };
       return { kind: "changed", preview: plan.preview };
     }
-    requireForPlan(plan, privileges);
     if (plan.preview.large !== null && input.acknowledgeLargeChange !== true) return { kind: "large_change", preview: plan.preview };
 
     const moved = await repo.setEntriesFormer(tx, gymId, plan.moveIds, at);
