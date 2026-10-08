@@ -69,7 +69,7 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const inject = (method: "GET" | "POST" | "DELETE", path: string, cookies: Cookies, payload?: unknown, ip = nextIp()) =>
+  const inject = (method: "GET" | "POST" | "PATCH" | "DELETE", path: string, cookies: Cookies, payload?: unknown, ip = nextIp()) =>
     api().inject({
       method,
       url: path,
@@ -640,6 +640,24 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
       ];
       expect(blocked.map((res) => res.statusCode)).toEqual([429, 429, 429, 429]);
       expect(await noteRows(gym)).toEqual([]);
+      // The Members list's tag writes (5d-ii) spend the same allowance; its reads do not.
+      const list = `/v1/orgs/${gym.id}/member-list`;
+      const ticked = { kind: "ticked", entryIds: [maya] };
+      const listBlocked = [
+        await inject("POST", `${list}/selected/tags`, gym.owner.cookies, { action: "add", selection: ticked, tag: { name: "Too fast" } }, DESK),
+        await inject("POST", `${list}/selected/tags`, gym.owner.cookies, { action: "remove", selection: ticked, tagId: randomUUID() }, DESK),
+        await inject("PATCH", `${list}/tags/${randomUUID()}`, gym.owner.cookies, { name: "Too fast" }, DESK),
+        await inject("DELETE", `${list}/tags/${randomUUID()}`, gym.owner.cookies, undefined, DESK),
+      ];
+      expect(listBlocked.map((res) => res.statusCode)).toEqual([429, 429, 429, 429]);
+      expect(await tagRows(gym)).toEqual([]);
+      const listRead = [
+        await inject("GET", `${list}/tags`, gym.owner.cookies, undefined, DESK),
+        await inject("POST", `${list}/selected/tags-preview`, gym.owner.cookies, { action: "add", selection: ticked, tag: { name: "Read only" } }, DESK),
+      ];
+      expect(listRead.map((res) => res.statusCode)).toEqual([200, 200]);
+      const colleagueTag = await inject("POST", `${list}/selected/tags`, manager.cookies, { action: "add", selection: ticked, tag: { name: "From a colleague" } }, DESK);
+      expect(colleagueTag.statusCode, colleagueTag.body).toBe(200);
       // Their other work, and a colleague at the same desk, go on.
       const added = await inject("POST", `/v1/orgs/${gym.id}/member-list/entries`, gym.owner.cookies, { fullName: "Omar Haddad", email: `mnt-l-${uniq()}@example.com` }, DESK);
       expect(added.statusCode, added.body).toBe(201);

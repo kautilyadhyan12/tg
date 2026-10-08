@@ -1801,6 +1801,8 @@ export const memberListEntriesQuerySchema = z
     invitation: memberListInvitationFilterSchema.optional(),
     /** The App words to show (§18.4), given once each; current members only. */
     app: z.union([memberAppFilterSchema, z.array(memberAppFilterSchema).max(MEMBER_APP_FILTER_ORDER.length)]).optional(),
+    /** Only the people who hold this one of the gym's tags (5d-ii; §18.13). */
+    tag: z.string().uuid().optional(),
     query: z.string().max(MEMBER_LIST_QUERY_MAX_CHARS).optional(),
     cursor: z.string().max(512).optional(),
   })

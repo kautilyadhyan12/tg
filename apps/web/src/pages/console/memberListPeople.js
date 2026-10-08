@@ -8,6 +8,7 @@ import {
   MEMBER_LIST_MERGE_FILLS,
   MEMBER_LIST_MERGE_KEEPS_OWN,
   MEMBER_LIST_TICKED_MAX,
+  MEMBER_TAGS_MAX_PER_PERSON,
   heldNamesLine,
   turns18On,
   underAgeOn,
@@ -33,6 +34,8 @@ export const EMPTY_FILTERS = {
   status: [],
   membershipType: [],
   paymentStatus: [],
+  /** One of the gym's tags, { id, name }, or null (5d-ii): members or past members. */
+  tag: null,
   query: '',
 };
 
@@ -63,6 +66,7 @@ export function entriesQueryString(filters, cursor) {
     for (const word of filters.app) params.append('app', word);
     for (const { kind } of CHIP_KINDS) for (const word of filters[kind]) params.append(kind, word);
   }
+  if (filters.tag !== null) params.append('tag', filters.tag.id);
   const query = filters.query.trim();
   if (query !== '') params.append('query', query);
   if (cursor) params.append('cursor', cursor);
@@ -72,8 +76,9 @@ export function entriesQueryString(filters, cursor) {
 /** What is ticked, one pill each for the "Showing:" line, each with the filters as
  *  they would be without it. The search is not here: it has its own box. */
 export function activeFilters(filters, words) {
+  const tag = filters.tag === null ? [] : [{ key: `tag:${filters.tag.id}`, text: `Tag: ${filters.tag.name}`, without: { ...filters, tag: null } }];
   if (filters.records === 'former') {
-    return [{ key: 'records', text: `Past ${words.people}`, without: { ...filters, records: 'current' } }];
+    return [{ key: 'records', text: `Past ${words.people}`, without: { ...filters, records: 'current' } }, ...tag];
   }
   const out = [];
   for (const { kind, none } of CHIP_KINDS) {
@@ -86,11 +91,12 @@ export function activeFilters(filters, words) {
       out.push({ key: `app:${word}`, text: MEMBER_APP_FILTER_WORDS[word], without: toggleApp(filters, word) });
     }
   }
-  return out;
+  return [...out, ...tag];
 }
 
 export function filtersAreEmpty(filters) {
   return (
+    filters.tag === null &&
     filters.app.length === 0 &&
     filters.query.trim() === '' &&
     CHIP_KINDS.every(({ kind }) => filters[kind].length === 0)
@@ -346,6 +352,7 @@ export function selectionFilter(filters) {
     if (filters.app.length > 0) out.app = [...filters.app];
     for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) out[kind] = [...filters[kind]];
   }
+  if (filters.tag !== null) out.tag = filters.tag.id;
   const query = filters.query.trim();
   if (query !== '') out.query = query;
   return out;
@@ -836,4 +843,69 @@ export function pairWhyWords(pair) {
   if (what.length === 0) return '';
   const last = what.pop();
   return `Same ${what.length === 0 ? last : `${what.join(', ')} and ${last}`}`;
+}
+
+// ── Tags on the list (5d-ii; spec Part 3 §18.13) ──
+
+/** The tag chips the Filter shows: the gym's tags somebody in this view holds, each with
+ *  that count, and the one ticked even when nobody holds it now. */
+export function tagChips(gymTags, filters) {
+  const past = filters.records === 'former';
+  return gymTags
+    .map((tag) => ({ id: tag.id, name: tag.name, count: past ? tag.pastPeople : tag.people }))
+    .filter((tag) => tag.count > 0 || filters.tag?.id === tag.id);
+}
+
+/** Tick a tag, or untick the one ticked: one tag at a time. */
+export function toggleTag(filters, tag) {
+  return { ...filters, tag: filters.tag?.id === tag.id ? null : { id: tag.id, name: tag.name } };
+}
+
+/** The filters after the gym's tags changed: a deleted tag is no longer a filter, and a
+ *  renamed one shows its new name. The same object when nothing changed. */
+export function filtersWithTags(filters, gymTags) {
+  if (filters.tag === null) return filters;
+  const now = gymTags.find((tag) => tag.id === filters.tag.id);
+  if (now === undefined) return { ...filters, tag: null };
+  return now.name === filters.tag.name ? filters : { ...filters, tag: { id: now.id, name: now.name } };
+}
+
+/** "12 members", "1 member and 2 past members", "nobody": who holds one of the gym's tags. */
+export function tagHolders(tag, words) {
+  const parts = [];
+  if (tag.people > 0) parts.push(`${n(tag.people)} ${tag.people === 1 ? words.person : words.people}`);
+  if (tag.pastPeople > 0) parts.push(`${n(tag.pastPeople)} past ${tag.pastPeople === 1 ? words.person : words.people}`);
+  return parts.length === 0 ? 'nobody' : parts.join(' and ');
+}
+
+const people = (k) => (k === 1 ? '1 person' : `${n(k)} people`);
+
+/** The box before a tag is added or taken off: its heading for who changes, its button,
+ *  and one line for each group that won't change. */
+export function tagBoxWords(preview) {
+  const k = preview.changeCount;
+  const add = preview.action === 'add';
+  const name = preview.tag.name;
+  const lines = {
+    has_it: 'Already have this tag.',
+    not_on_them: "Don't have this tag.",
+    full: `Already have ${String(MEMBER_TAGS_MAX_PER_PERSON)} tags or more, the most one person can have. Take a tag off them first.`,
+    gone: 'No longer on your list.',
+  };
+  const kept = preview.kept.reduce((sum, group) => sum + group.count, 0);
+  return {
+    heading: k === 0 ? null : add ? `${people(k)} will get the tag “${name}”` : `${people(k)} will lose the tag “${name}”`,
+    nobody: add ? `Nobody you selected can get the tag “${name}”.` : `Nobody you selected has the tag “${name}”.`,
+    button: k === 0 ? null : add ? `Add tag to ${people(k)}` : `Take tag off ${people(k)}`,
+    keptHeading: kept === 0 ? null : `${n(kept)} won't change`,
+    kept: preview.kept.map((group) => ({ key: group.reason, count: group.count, people: group.people, line: lines[group.reason] })),
+    newTag: add && preview.tag.id === null ? `“${name}” is a new tag for your gym.` : null,
+  };
+}
+
+/** What a press did: "“VIP” added to 12 people. 2 didn't change." */
+export function tagDoneLine(done) {
+  const kept = done.kept.reduce((sum, group) => sum + group.count, 0);
+  const did = done.action === 'add' ? `“${done.tag.name}” added to ${people(done.changed)}.` : `“${done.tag.name}” taken off ${people(done.changed)}.`;
+  return kept === 0 ? did : `${did} ${n(kept)} didn't change.`;
 }

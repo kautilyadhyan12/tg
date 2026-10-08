@@ -1741,6 +1741,8 @@ export interface EntriesPageInput {
   invitation: { ids: readonly string[]; include: boolean } | null;
   /** Only these records (the App words asked for, §18.4), or null for no filter. */
   appIds: readonly string[] | null;
+  /** Only these records (the ones holding the tag asked for, 5d-ii), or null for no filter. */
+  tagIds: readonly string[] | null;
   /** The people whose three kinds of word the app answers (23a-i: they hold a membership
    *  here), and which of them pass the word filters asked, by the app's own words. Null
    *  where no word filter is asked. */
@@ -1763,6 +1765,7 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
   const invitedIds = input.invitation === null ? null : [...input.invitation.ids];
   const invitedInclude = input.invitation?.include ?? true;
   const appIds = input.appIds === null ? null : [...input.appIds];
+  const tagIds = input.tagIds === null ? null : [...input.tagIds];
   const heldIds = [...(input.held?.ids ?? [])];
   const heldPassing = [...(input.held?.passing ?? [])];
   return sql`
@@ -1798,7 +1801,8 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
         AND (${invitedIds}::uuid[] IS NULL
              OR (${invitedInclude}::boolean AND e.id = ANY(${invitedIds}::uuid[]))
              OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
-        AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))`;
+        AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))
+        AND (${tagIds}::uuid[] IS NULL OR e.id = ANY(${tagIds}::uuid[]))`;
 }
 
 /** Every record the filter chooses, in the list's order: who "Select all" selects. */
@@ -2017,7 +2021,11 @@ export async function exportRows(sql: SqlOrTx, gymId: string, ids: readonly stri
  *  one-row confirm on a table of 40,808. The worker runs this every five minutes on its
  *  own connection and analyses only when at least `MEMBER_LIST_ANALYSE_AFTER` rows have
  *  changed since the last ANALYZE (Postgres's own count); ANALYZE takes no lock that
- *  holds a read or a write. */
+ *  holds a read or a write.
+ *
+ *  One request does call it (5d-ii): a press that tags 1,000 people or more, before its
+ *  transaction and on its own connection of the api's ten (`tags.ts`, `tagSelected`),
+ *  because the worker can be five minutes behind an upload. */
 export const MEMBER_LIST_ANALYSE_AFTER = 1000;
 
 export async function analyseEntriesIfMoved(sql: Sql): Promise<{ changed: number; analysed: boolean }> {
