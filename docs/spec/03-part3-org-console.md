@@ -2755,7 +2755,7 @@ out, never stored: the hours minus what is booked. An appointment is a row with 
 trainer and its time range, and **the database itself refuses two that overlap** for
 one trainer (an exclusion constraint on the range) — the structural rule, before any
 check in code. A member picks a free time, is booked at once, and the trainer is told;
-the same free-cancel time applies; PT packs are a pack type that covers personal
+personal training's own free-cancel time applies (17e-vi); PT packs are a pack type that covers personal
 training. A trainer keeps their own hours.
 *(17e-i, 2026-10-06: **the staff side.** `gym_trainers` (offers, session length),
 `gym_trainer_hours` (ISO weekday, minutes from midnight on the gym's clock, three ranges a
@@ -2987,7 +2987,14 @@ days before · free to cancel until 2 hours before · waitlist of 20. Personal t
 Personal training page says personal training's two and the one on Classes the classes'
 (`BookingRulesLine`, `of`). On a member's tab a day past the last one open reads "Booking for
 this day isn't open yet. You can book up to Sat 10 Oct." and shows no times: with a gym's
-number as low as one day, such days are on the first page.)*
+number as low as one day, such days are on the first page. **From the review (2026-10-09):**
+on the last open day a time opens `opensDays` before it starts, so the later ones are not
+open yet; the member's read answers `opensDays` and each trainer's day `opensLater`, and the
+tab says under the trainer "Times on this day aren't open yet: each one opens 1 day before it
+starts." (or "More times on this day open later: …" under the ones that can be pressed),
+never "No available times on this day." for them; a time pressed too soon is refused as
+"Booking for that time isn't open yet."; the trainer's week answers `freeCancelMinutes`,
+so the console's late-cancel box names the length the same read decided "late" by.)*
 
 ### 13.6 The calendar, the desk and the messages
 

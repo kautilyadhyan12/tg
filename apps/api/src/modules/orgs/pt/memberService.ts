@@ -137,6 +137,7 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
     from,
     to: addDays(from, PT_WEEK_DAYS - 1),
     lastDay,
+    opensDays: clock.opensDays,
     freeCancelMinutes: clock.freeCancelMinutes,
     record: entryId !== null ? "own" : me.shared ? "shared" : "none",
     days: days.map((localDate) => {
@@ -163,12 +164,20 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
         return startsAtMs === undefined ? [] : [{ ...time, startsAtMs }];
       });
       const taken = [...busy.filter((b) => b.trainerId === t.userId), ...own];
-      const free = ptFreeTimes(slots, { minutes: t.sessionMinutes, taken, nowMs: now.getTime() }).filter((s) => s.startsAtMs <= opensUntilMs);
+      const unheld = ptFreeTimes(slots, { minutes: t.sessionMinutes, taken, nowMs: now.getTime() });
+      const free = unheld.filter((s) => s.startsAtMs <= opensUntilMs);
+      // On the last open day the later times open as the hours go by: the day says so,
+      // never that it has none.
+      const later = new Set(unheld.filter((s) => s.startsAtMs > opensUntilMs).map((s) => s.localDate));
       return {
         trainerId: t.userId,
         name: fullName({ displayName: t.displayName, email: t.email, recordName: null }).name,
         sessionMinutes: t.sessionMinutes,
-        days: days.map((localDate) => ({ localDate, free: free.filter((s) => s.localDate === localDate).map((s) => s.startMinute) })),
+        days: days.map((localDate) => ({
+          localDate,
+          free: free.filter((s) => s.localDate === localDate).map((s) => s.startMinute),
+          opensLater: later.has(localDate),
+        })),
       };
     }),
     sessions: sessions.map((s) => ownView(s, now, clock.freeCancelMinutes)),

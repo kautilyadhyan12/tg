@@ -1274,7 +1274,7 @@ export default function PersonalTraining() {
                                 canBook={list.canBook}
                                 first={index === 0}
                                 clockFormat={clockFormat}
-                                freeCancelMinutes={list.freeCancelMinutes}
+                                freeCancelMinutes={shownWeek.data.freeCancelMinutes ?? list.freeCancelMinutes}
                                 locked={readOnly}
                                 asking={cancelling === appointment.id}
                                 settled={cancelling === appointment.id && cancelSettled}

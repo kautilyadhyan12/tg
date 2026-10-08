@@ -24,7 +24,7 @@ const trainer = (trainerId, name, free = {}, sessionMinutes = 60) => ({
   trainerId,
   name,
   sessionMinutes,
-  days: DAYS.map((localDate) => ({ localDate, free: free[localDate] ?? [] })),
+  days: DAYS.map((localDate) => ({ localDate, free: free[localDate] ?? [], opensLater: false })),
 });
 const session = (id, over = {}) => ({
   id,
@@ -48,6 +48,7 @@ const view = (over = {}) => {
     from: '2026-10-07',
     to: '2026-10-13',
     lastDay: '2026-10-14',
+    opensDays: 7,
     freeCancelMinutes: 120,
     record: 'own',
     days: DAYS.map((localDate) => ({ localDate, pays: PACK, why: null, limit: null })),
@@ -433,12 +434,51 @@ describe('a member’s personal training', () => {
     expect(screen.queryByText('No available times on this day.')).toBeNull();
     expect(screen.queryByText(/Available times/)).toBeNull();
     expect(screen.queryByRole('group', { name: 'Sam Trainer' })).toBeNull();
-    // The last open day is as it was: a day with no time says so.
-    fireEvent.click(days[3]);
-    expect(screen.queryByText(/isn't open yet/)).toBeNull();
+    // An open day with no time at all says so.
+    fireEvent.click(days[1]);
+    expect(screen.queryByText(/open yet|open later/)).toBeNull();
     expect(screen.getByText('No available times on this day.')).toBeTruthy();
     fireEvent.click(days[2]);
     expect(screen.getAllByRole('button', { name: /^Book / })).toHaveLength(2);
+  });
+
+  it('the last open day: times that are not open yet are said as that, never as "No available times" (the review, H1)', async () => {
+    // The gym opens sessions one day ahead. Sam has times tomorrow and none of them is open
+    // yet; Ann has one open and more to come; Bea has none at all tomorrow.
+    const late = (t, free) => ({ ...t, days: t.days.map((d) => (d.localDate === '2026-10-08' ? { ...d, free, opensLater: true } : d)) });
+    serve(
+      view({
+        lastDay: '2026-10-08',
+        opensDays: 1,
+        trainers: [late(trainer(SAM, 'Sam Trainer', { '2026-10-07': [540] }), []), late(trainer(ANN, 'Ann Coach'), [420]), trainer('33333333-3333-4333-8333-333333333333', 'Bea None')],
+      }),
+    );
+    render(<PersonalTraining gym={GYM} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    const days = within(screen.getByRole('group', { name: 'Pick a day' })).getAllByRole('button');
+    fireEvent.click(days[1]);
+    const sam = within(screen.getByRole('group', { name: 'Sam Trainer' }));
+    expect(sam.getByText("Times on this day aren't open yet: each one opens 1 day before it starts.")).toBeTruthy();
+    expect(sam.queryByText('No available times on this day.')).toBeNull();
+    expect(sam.queryByRole('button', { name: /^Book / })).toBeNull();
+    const ann = within(screen.getByRole('group', { name: 'Ann Coach' }));
+    expect(ann.getAllByRole('button', { name: /^Book / })).toHaveLength(1);
+    expect(ann.getByText('More times on this day open later: each one opens 1 day before it starts.')).toBeTruthy();
+    // Somebody with no time at all that day still reads that.
+    const bea = within(screen.getByRole('group', { name: 'Bea None' }));
+    expect(bea.getByText('No available times on this day.')).toBeTruthy();
+    // Today is wholly open: nothing about later.
+    fireEvent.click(days[0]);
+    expect(screen.queryByText(/open yet|open later/)).toBeNull();
+  });
+
+  it.each([
+    [7, false, "Times on this day aren't open yet: each one opens 7 days before it starts."],
+    [3, true, 'More times on this day open later: each one opens 3 days before it starts.'],
+    [1, true, 'More times on this day open later: each one opens 1 day before it starts.'],
+  ])('the not-open-yet line with booking open %i days ahead', async (opensDays, some, words) => {
+    const { opensLaterText } = await import('./personalTrainingView');
+    expect(opensLaterText(opensDays, some)).toBe(words);
   });
 
   it('Later turns the page and stops at the last day that can be booked; Earlier comes back', async () => {

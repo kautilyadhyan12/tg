@@ -75,6 +75,12 @@ export function ptDays(view) {
   return { days, first: (days.find((d) => d.hasTimes) ?? days[0])?.localDate ?? null };
 }
 
+/** Under a trainer whose later times on the day are not open to members yet. */
+export function opensLaterText(opensDays, some) {
+  const when = Number.isInteger(opensDays) ? `${opensDays} ${opensDays === 1 ? 'day' : 'days'} before it starts` : 'closer to the day';
+  return some ? `More times on this day open later: each one opens ${when}.` : `Times on this day aren't open yet: each one opens ${when}.`;
+}
+
 /** One day of the page: what a booking on it would use, and each trainer's times on it. */
 export function ptDay(view, localDate) {
   const day = view.days.find((d) => d.localDate === localDate);
@@ -86,13 +92,18 @@ export function ptDay(view, localDate) {
     notOpen: localDate > view.lastDay ? `Booking for this day isn't open yet. You can book up to ${dayLabel(view.lastDay)}.` : null,
     // A day nothing pays for shows its times, and none of them is a button.
     can: pay === null || pay.can,
-    trainers: view.trainers.map((t) => ({
-      trainerId: t.trainerId,
-      name: trainerText(t.name),
-      lengthText: `${t.sessionMinutes} min sessions`,
-      sessionMinutes: t.sessionMinutes,
-      times: (t.days.find((d) => d.localDate === localDate)?.free ?? []).map((minute) => ({ minute, text: sessionSpan(minute, t.sessionMinutes) })),
-    })),
+    trainers: view.trainers.map((t) => {
+      const on = t.days.find((d) => d.localDate === localDate);
+      return {
+        trainerId: t.trainerId,
+        name: trainerText(t.name),
+        lengthText: `${t.sessionMinutes} min sessions`,
+        sessionMinutes: t.sessionMinutes,
+        times: (on?.free ?? []).map((minute) => ({ minute, text: sessionSpan(minute, t.sessionMinutes) })),
+        // The last open day: its later times are not open yet, which is not "none".
+        later: on?.opensLater === true ? opensLaterText(view.opensDays, (on.free ?? []).length > 0) : null,
+      };
+    }),
   };
 }
 

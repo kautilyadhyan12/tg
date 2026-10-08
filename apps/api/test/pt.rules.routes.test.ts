@@ -7,8 +7,10 @@
 // then charged, because the class number was read where the personal training one should
 // be. That is the first test, with the two numbers set apart in both directions.
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { PT_MEMBER_WORDS } from "@app/shared";
 import type { ClassBookingSettings, ClassBookingView, MemberPtResponse, MemberPtSession, PtAppointment, PtBookingSettings, PtTrainersResponse, PtWeekResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -604,12 +606,12 @@ d("personal training's own booking rules (real Postgres, two api instances)", { 
   );
 
   it(
-    "a changed rule holds for a session already booked, and a change and a cancel sent at one instant to two servers never leave a late cancel refunded or a free one charged",
+    "a changed rule holds for a session already booked; and of a save and a cancel that wait for the gym together, the one that was first is the one the other sees",
     async () => {
       const gym = await makeGym("Change And Cancel");
       const pack = await typeOf(gym, { kind: "pack", includesPt: true, name: "PT 20" });
-      const sam = await trainerWith(gym, "Sam Race");
-      const maya = await member(gym, "Maya Race");
+      const sam = await trainerWith(gym, "Sam Order");
+      const maya = await member(gym, "Maya Order");
       const held = await hold(gym, maya.entryId, pack, { pack: 10 });
 
       // Booked under two hours; the gym then makes it a day, and the same session is late.
@@ -622,30 +624,167 @@ d("personal training's own booking rules (real Postgres, two api instances)", { 
       await setRules(gym, {}, { freeCancelMinutes: 60 });
       expect((await mine(gym, maya, first.id)).cancel).toBe("free");
 
-      // Six sessions, each cancelled at the instant the rule is changed, on two servers.
-      const outcomes: string[] = [];
-      for (let round = 0; round < 6; round++) {
+      // The order is made certain, not raced: the test holds the gym's row, sends one
+      // request and waits until the database says it is waiting, sends the other and
+      // waits again, then lets go. Whichever was first is first. A save or a cancel that
+      // did not take the gym's lock would not wait, and the wait below would never end.
+      const lockWaits = async (): Promise<number> => {
+        const [row] = await sql<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`;
+        return row?.n ?? 0;
+      };
+      const waitsReach = async (n: number): Promise<void> => {
+        for (let tries = 0; (await lockWaits()) < n; tries++) {
+          if (tries === 200) throw new Error(`only ${String(await lockWaits())} of ${String(n)} requests are waiting for the gym's lock`);
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      };
+      const inOrder = async (firstIs: "save" | "cancel", minute: number) => {
         clock = NOW.getTime();
         await setRules(gym, {}, { freeCancelMinutes: 60 });
-        const id = await staffBook(gym, sam, maya.entryId, 660 + round * 60);
+        const id = await staffBook(gym, sam, maya.entryId, minute);
         const had = await left(held);
         clock = (await startOf(id)) - 3 * HOUR;
-        const [, res] = await Promise.all([
-          setRules(gym, {}, { freeCancelMinutes: 1440 }, round % 2 === 0 ? other() : api()),
-          cancel(gym, maya, id, false, round % 2 === 0 ? api() : other()),
-        ]);
-        const [status, now] = [await statusOf(id), await left(held)];
-        if (res.statusCode === 200) {
-          // It was free: cancelled, and the pack has the session back.
-          expect([status, now], `round ${String(round)}`).toEqual(["cancelled", (had ?? 0) + 1]);
-          outcomes.push("free");
-        } else {
-          // The new rule was first: refused, still booked, the pack as it was.
-          expect([res.statusCode, errorOf(res), status, now], `round ${String(round)}`).toEqual([409, "late_cancel", "booked", had]);
-          outcomes.push("late");
+        const base = await lockWaits();
+        let letGo: () => void = () => undefined;
+        let taken: () => void = () => undefined;
+        const isTaken = new Promise<void>((resolve) => (taken = resolve));
+        const holding = sql.begin(async (tx) => {
+          await tx`SELECT 1 FROM gyms WHERE id = ${gym.id} FOR UPDATE`;
+          taken();
+          await new Promise<void>((resolve) => (letGo = resolve));
+        });
+        await isTaken;
+        const save = () => setRules(gym, {}, { freeCancelMinutes: 1440 }, other());
+        const cut = () => cancel(gym, maya, id, false, api());
+        let res: Awaited<ReturnType<typeof cut>>;
+        try {
+          if (firstIs === "save") {
+            const saving = save();
+            await waitsReach(base + 1);
+            const cutting = cut();
+            await waitsReach(base + 2);
+            letGo();
+            [, res] = await Promise.all([saving, cutting]);
+          } else {
+            const cutting = cut();
+            await waitsReach(base + 1);
+            const saving = save();
+            await waitsReach(base + 2);
+            letGo();
+            [res] = await Promise.all([cutting, saving]);
+          }
+        } finally {
+          letGo();
+          await holding;
         }
-      }
-      expect(outcomes).toHaveLength(6);
+        return { res, status: await statusOf(id), now: await left(held), had };
+      };
+
+      // The save was first: the cancel is decided by the new day, so it is late and refused.
+      const saveFirst = await inOrder("save", 660);
+      expect([saveFirst.res.statusCode, errorOf(saveFirst.res), saveFirst.status, saveFirst.now]).toEqual([409, "late_cancel", "booked", saveFirst.had]);
+      // The cancel was first: it is decided by the hour, so it is free and the pack has it back.
+      const cancelFirst = await inOrder("cancel", 720);
+      expect([cancelFirst.res.statusCode, cancelFirst.status, cancelFirst.now]).toEqual([200, "cancelled", (cancelFirst.had ?? 0) + 1]);
+      expect((await stored(gym)).pt).toEqual([7, 1440]);
+    },
+    T,
+  );
+
+  it(
+    "the last open day: a time opens that many days before it starts, so its later times are said to open later and the first one opens as the clock reaches it",
+    async () => {
+      const gym = await makeGym("Last Open Day");
+      // 09:00 to 17:00 every day, an hour each. Now is 07:30 on Wednesday the 7th.
+      const sam = await trainerWith(gym, "Sam Later", [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ weekday, fromMinute: 540, toMinute: 1020 })));
+      const maya = await member(gym, "Maya Later");
+      await setRules(gym, { opensDays: 14 }, { opensDays: 1 });
+      const dayOf = (view: MemberPtResponse, day: string) => {
+        const found = view.trainers.find((t) => t.trainerId === sam.userId)?.days.find((x) => x.localDate === day);
+        if (found === undefined) throw new Error(`no ${day}`);
+        return found;
+      };
+      const early = await read(gym, maya);
+      expect([early.opensDays, early.lastDay]).toEqual([1, "2026-10-08"]);
+      // Today is wholly open; tomorrow's eight times are all still to open; Friday is past the last day.
+      expect(dayOf(early, "2026-10-07")).toEqual({ localDate: "2026-10-07", free: [540, 600, 660, 720, 780, 840, 900, 960], opensLater: false });
+      expect(dayOf(early, "2026-10-08")).toEqual({ localDate: "2026-10-08", free: [], opensLater: true });
+      expect(dayOf(early, "2026-10-09")).toEqual({ localDate: "2026-10-09", free: [], opensLater: false });
+      const tooSoon = await book(gym, maya, sam, { day: "2026-10-08", minute: 540 });
+      expect([tooSoon.statusCode, errorOf(tooSoon), (JSON.parse(tooSoon.body) as { message: string }).message]).toEqual([409, "not_open_yet", PT_MEMBER_WORDS.not_open_yet]);
+      expect(PT_MEMBER_WORDS.not_open_yet).toBe("Booking for that time isn't open yet.");
+      // At 09:00 tomorrow's 09:00 opens, and the rest are still to come.
+      clock = NOW.getTime() + 90 * MINUTE;
+      const later = await read(gym, maya);
+      expect(dayOf(later, "2026-10-08")).toEqual({ localDate: "2026-10-08", free: [540], opensLater: true });
+      made(await book(gym, maya, sam, { day: "2026-10-08", minute: 540 }));
+      // A day whose only time she holds has nothing later to say.
+      await setRules(gym, { opensDays: 14 }, { opensDays: 7 });
+      expect(dayOf(await read(gym, maya), "2026-10-08").opensLater).toBe(false);
+      // Staff read the free-cancel time on the week itself, the one its sessions were decided by.
+      await setRules(gym, {}, { freeCancelMinutes: 45 });
+      const week = await inject("GET", `/v1/orgs/${gym.id}/pt/week?trainer=${sam.userId}`, gym.owner.cookies);
+      expect((JSON.parse(week.body) as PtWeekResponse).freeCancelMinutes).toBe(45);
+    },
+    T,
+  );
+
+  it(
+    "migration 0085 starts every gym's two at ITS class numbers, on a copy of the table with numbers that are not the starting ones",
+    async () => {
+      const file = readFileSync(new URL("../drizzle/0085_pt_booking_rules.sql", import.meta.url), "utf8");
+      const statements = file
+        .split("--> statement-breakpoint")
+        .map((chunk) => chunk.split(/\r?\n/).filter((line) => !line.trimStart().startsWith("--")).join("\n").trim())
+        .filter((chunk) => chunk !== "");
+      expect(statements).toHaveLength(4);
+      const rows: [string, number, number][] = [
+        ["least", 1, 0],
+        ["most", 56, 10080],
+        ["own", 14, 45],
+        ["other", 3, 1440],
+        ["start", 7, 120],
+      ];
+      // A temporary table named `gyms` is found before the real one, so the file's own
+      // statements run on the copy; the real table is never altered, and it is all undone.
+      const undone = new Error("undo");
+      const seen: unknown[] = [];
+      await sql
+        .begin(async (tx) => {
+          await tx`CREATE TEMP TABLE gyms (LIKE public.gyms INCLUDING DEFAULTS) ON COMMIT DROP`;
+          await tx`ALTER TABLE gyms DROP COLUMN pt_opens_days, DROP COLUMN pt_free_cancel_minutes`;
+          for (const [name, opens, free] of rows) {
+            await tx`
+              INSERT INTO gyms (slug, name, timezone, owner_user_id, booking_opens_days, booking_free_cancel_minutes)
+              VALUES (${`zz-0085-${name}`}, ${name}, 'Europe/London', gen_random_uuid(), ${opens}, ${free})`;
+          }
+          for (const statement of statements) await tx.unsafe(statement);
+          seen.push(...(await tx`SELECT name, pt_opens_days AS opens, pt_free_cancel_minutes AS free FROM gyms ORDER BY booking_opens_days`));
+          // A gym made after it starts at 7 days and 2 hours, and the CHECK is on the copy.
+          const [made] = await tx<{ opens: number; free: number }[]>`
+            INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES ('zz-0085-new', 'new', 'Europe/London', gen_random_uuid())
+            RETURNING pt_opens_days AS opens, pt_free_cancel_minutes AS free`;
+          seen.push(made);
+          const refused = await tx
+            .savepoint((sp) => sp`UPDATE gyms SET pt_opens_days = 0`)
+            .then(() => "accepted", (err: unknown) => (err instanceof postgres.PostgresError ? (err.constraint_name ?? "") : String(err)));
+          seen.push(refused);
+          throw undone;
+        })
+        .catch((err: unknown) => {
+          if (err !== undone) throw err;
+        });
+      expect(seen).toEqual([
+        { name: "least", opens: 1, free: 0 },
+        { name: "other", opens: 3, free: 1440 },
+        { name: "start", opens: 7, free: 120 },
+        { name: "own", opens: 14, free: 45 },
+        { name: "most", opens: 56, free: 10080 },
+        { opens: 7, free: 120 },
+        "gyms_pt_booking_settings_check",
+      ]);
     },
     T,
   );

@@ -385,7 +385,7 @@ export const PT_WORDS = {
   not_a_time: "That isn't one of this trainer's times. Pick a time from the list.",
   time_passed: "That time has already passed.",
   too_far: "Sessions can be booked up to 8 weeks ahead.",
-  not_open_yet: "Booking for that day isn't open yet.",
+  not_open_yet: "Booking for that time isn't open yet.",
   time_taken: "This trainer already has a session at that time.",
   trainer_in_class: "This trainer is coaching a class at that time.",
   trainer_off: "This trainer has time off at that time.",
@@ -552,6 +552,9 @@ export const ptWeekResponseSchema = z
     to: classDaySchema,
     /** The last day a session can be booked on. */
     lastDay: classDaySchema,
+    /** Personal training's free-cancel time as this read found it: what a session's
+     *  `cancel` on it was decided by. */
+    freeCancelMinutes: z.number().int(),
     sessionMinutes: ptSessionMinutesSchema.nullable(),
     offers: z.boolean(),
     days: z.array(
@@ -691,7 +694,7 @@ export const PT_MEMBER_WORDS: Record<PtBookRefusal, string> = {
   not_a_time: "That time is no longer available. Pick another time.",
   time_passed: "That time has already passed.",
   too_far: "Booking for that day isn't open yet.",
-  not_open_yet: "Booking for that day isn't open yet.",
+  not_open_yet: "Booking for that time isn't open yet.",
   time_taken: "That time has just been booked. Pick another time.",
   trainer_in_class: "That time is no longer available. Pick another time.",
   trainer_off: "That time is no longer available. Pick another time.",
@@ -778,6 +781,8 @@ export const memberPtResponseSchema = z
     to: classDaySchema,
     /** The last of the gym's days whose times a member can book now. */
     lastDay: classDaySchema,
+    /** How many days before a session a member's own booking of it opens. */
+    opensDays: z.number().int(),
     freeCancelMinutes: z.number().int(),
     /** Anything but `own`: the reader can book nothing, and is sent no session. */
     record: z.enum(MEMBER_PT_RECORDS),
@@ -802,7 +807,17 @@ export const memberPtResponseSchema = z
           trainerId: z.string().uuid(),
           name: z.string().nullable(),
           sessionMinutes: ptSessionMinutesSchema,
-          days: z.array(z.object({ localDate: classDaySchema, free: z.array(z.number().int()) }).strict()),
+          days: z.array(
+            z
+              .object({
+                localDate: classDaySchema,
+                free: z.array(z.number().int()),
+                /** The trainer has times on this day that nobody holds and that are not
+                 *  open to members yet: each opens `opensDays` before it starts. */
+                opensLater: z.boolean(),
+              })
+              .strict(),
+          ),
         })
         .strict(),
     ),

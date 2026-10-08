@@ -249,7 +249,7 @@ export default function PersonalTraining({ gym }) {
                     {t.name} <span className="font-normal text-xs" style={{ color: MUTED }}>· {t.lengthText}</span>
                   </p>
                   {t.times.length === 0 ? (
-                    <p className="text-xs" style={{ color: MUTED }}>No available times on this day.</p>
+                    <p className="text-xs" style={{ color: MUTED }}>{t.later ?? 'No available times on this day.'}</p>
                   ) : (
                     <ul className="flex flex-wrap gap-2" aria-label={`${t.name}, ${shownLabel}`}>
                       {t.times.map((time) => {
@@ -278,6 +278,7 @@ export default function PersonalTraining({ gym }) {
                       })}
                     </ul>
                   )}
+                  {t.times.length > 0 && t.later !== null && <p className="text-xs" style={{ color: MUTED }}>{t.later}</p>}
                 </div>
               ))}
             </>

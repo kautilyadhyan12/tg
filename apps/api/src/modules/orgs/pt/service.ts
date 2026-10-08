@@ -283,6 +283,7 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
     from,
     to,
     lastDay,
+    freeCancelMinutes: clock.freeCancelMinutes,
     sessionMinutes: trainer.sessionMinutes,
     offers: trainer.offers,
     days: days.map((localDate) => ({

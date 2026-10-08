@@ -101,6 +101,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the page for whoever runs the timetable', () => {
+  it('the late-cancel box names the free-cancel time its own week read answered, not the one the page opened with (the review, L1)', async () => {
+    // The page opened under 2 hours; a manager made it 1 day before this week was read.
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ freeCancelMinutes: 120 }) });
+    api.getPtWeek.mockResolvedValue({ data: week([mayaSession({ cancel: 'late' })], { freeCancelMinutes: 1440 }) });
+    open();
+    const day = await friday();
+    fireEvent.click(day.getByRole('button', { name: "Cancel Maya Lopez's session" }));
+    expect(await screen.findByText(/It starts in less than 1 day, so it's too late to cancel for free\./)).toBeTruthy();
+    expect(screen.queryByText(/less than 2 hours/)).toBeNull();
+  });
+
   it('says personal training’s own booking rules, never the classes’ (17e-vi)', async () => {
     api.getBookingSettings.mockResolvedValue({
       data: { settings: { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 }, pt: { opensDays: 3, freeCancelMinutes: 1440 } },
