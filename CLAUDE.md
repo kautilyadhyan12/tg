@@ -186,6 +186,19 @@ who opened a gym last week and has never seen this app.
   beginner and asked for it to be ours): check them against this rule and against what
   standard gym software shows before building, and fix whatever his click-through finds.
 
+**No maze between pages (Kd, RULINGS 2026-10-07 and 2026-10-08).** A page that reads clearly
+alone is not enough: the console took seven jobs to put right (ROADMAP item 23) because the
+fault was between pages. Every job that adds or changes a screen follows all four.
+- What one page sets, every other page shows. The Members list, a person's page, Add member
+  and the front desk give ONE answer about the same thing, read from one place.
+- A missing thing is a button that opens the exact place to set it up, for whoever may, and
+  a plain line saying who can for whoever may not; never a sentence like "in Settings,
+  under …".
+- What a gym uses every week has its own line in the menu; Settings holds what is set once.
+  A new thing a gym must set up before it works adds its line to "Start here".
+- Before the job is called done the terminal walks it in the real browser as a gym made that
+  day, from Overview to the new thing and back, pressing every button it added.
+
 **The console's look (Kd, RULINGS 2026-09-26).** Every console page follows spec Part 3
 §17: colours by name from `apps/web/src/components/console/console.css`, never written
 into a page; its `c-` building blocks; Archivo; both looks. A new console page, or a new
