@@ -63,6 +63,8 @@ const refused = (status, error, message, extra = {}) => Object.assign(new Error(
 /** Press a day in the row of days. */
 const pickDay = (name) => fireEvent.click(within(screen.getByRole('group', { name: 'Pick a day' })).getByRole('button', { name }));
 const FRI = 'Fri 9 Oct';
+/** Say yes in the box a pressed time opens. */
+const sayBook = () => fireEvent.click(within(screen.getByRole('dialog', { name: 'Book this session?' })).getByRole('button', { name: 'Book session' }));
 
 let server;
 const serve = (v) => {
@@ -113,7 +115,23 @@ describe('a member’s personal training', () => {
     expect(screen.queryByRole('list', { name: 'Your sessions' })).toBeNull();
   });
 
-  it('one press books that time with its own key, says so, and reads the times again', async () => {
+  it('a pressed time books nothing until the box is answered: it names the session and what it uses, and Not now sends nothing', async () => {
+    serve(view());
+    render(<PersonalTraining gym={GYM} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    pickDay(FRI);
+    fireEvent.click(within(screen.getByRole('group', { name: 'Sam Trainer' })).getByRole('button', { name: /^Book 10:00 am/ }));
+    const box = screen.getByRole('dialog', { name: 'Book this session?' });
+    expect(box.textContent).toContain('Fri 9 Oct · 10:00 am – 11:00 am · with Sam Trainer');
+    expect(box.textContent).toContain('You have PT 10: 9 sessions left. Each booking uses 1 session.');
+    expect(svc.book).not.toHaveBeenCalled();
+    fireEvent.click(within(box).getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(svc.book).not.toHaveBeenCalled();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('Book session books that time with its own key, says so, and reads the times again', async () => {
     serve(view());
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
@@ -124,6 +142,8 @@ describe('a member’s personal training', () => {
       return Promise.resolve(session(S1));
     });
     fireEvent.click(within(sam).getByRole('button', { name: /^Book 10:00 am – 11:00 am with Sam Trainer/ }));
+    expect(svc.book).not.toHaveBeenCalled();
+    sayBook();
     expect(svc.book).toHaveBeenCalledWith('g1', 'key-1', { trainerId: SAM, localDate: '2026-10-09', startMinute: 600, minutes: 60 });
     expect((await screen.findByRole('status')).textContent).toBe('Booked: Fri 9 Oct · 10:00 am – 11:00 am · with Sam Trainer.');
     const mine = await screen.findByRole('list', { name: 'Your sessions' });
@@ -140,7 +160,10 @@ describe('a member’s personal training', () => {
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     pickDay(FRI);
-    const press = async () => fireEvent.click(within(await screen.findByRole('group', { name: 'Sam Trainer' })).getByRole('button', { name: /^Book 10:00 am/ }));
+    const press = async () => {
+      fireEvent.click(within(await screen.findByRole('group', { name: 'Sam Trainer' })).getByRole('button', { name: /^Book 10:00 am/ }));
+      sayBook();
+    };
     // The network drops: nothing is known, so the same key goes again.
     svc.book.mockRejectedValueOnce(new Error('network'));
     await press();
@@ -199,6 +222,7 @@ describe('a member’s personal training', () => {
     pickDay(FRI);
     svc.book.mockResolvedValueOnce(session(S1, { status: 'cancelled', packCharged: false, cancel: null }));
     fireEvent.click(within(screen.getByRole('group', { name: 'Sam Trainer' })).getByRole('button', { name: /^Book 10:00 am/ }));
+    sayBook();
     expect((await screen.findByRole('status')).textContent).toBe('That session was cancelled since. It is not booked.');
     expect(screen.queryByText(/^Booked:/)).toBeNull();
     await waitFor(() => expect(svc.view).toHaveBeenCalledTimes(2));

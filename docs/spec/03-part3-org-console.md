@@ -2950,7 +2950,9 @@ the number and "a week / a month"; the price list's line reads "4 personal train
 a month"; the picker reads "Gold · 3 of 4 sessions left that week" and somebody with none
 left cannot be picked; a member's tab reads "You have Gold: 3 of 4 sessions left this
 week." and, once used, "You've used all 4 personal training sessions Gold includes this
-week. You can book for Mon 12 Oct or later." with the times as plain text. Not done:
+week. You can book for Mon 12 Oct or later." with the times as plain text. **From Kd's
+click-through:** a member's pressed time opens **Book this session?** (the day, the time,
+the trainer, what it uses; Book session · Not now), so nothing is booked by one press. Not done:
 personal training's own booking rules (17e-vi).)*
 
 ### 13.6 The calendar, the desk and the messages

@@ -50,6 +50,17 @@ export function payText(view, day) {
   return { text: `You have ${pays.membership}: ${left}. Each booking uses 1 session.`, can: true };
 }
 
+/** The box before a booking: a pressed time books nothing until the member says so. It
+ *  names the session and what it uses. */
+export function ptBookAsk({ trainerName, dayLabel, timeText, pay }) {
+  return {
+    title: 'Book this session?',
+    lines: [`${dayLabel} · ${timeText} · with ${trainerText(trainerName)}`, ...(pay === null ? [] : [pay.text])],
+    yes: 'Book session',
+    no: 'Not now',
+  };
+}
+
 /** The seven days as the row of days to pick from, and which one opens first: the first
  *  with a time anybody offers, else the first. */
 export function ptDays(view) {

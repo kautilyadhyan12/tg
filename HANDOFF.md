@@ -17,6 +17,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Read first:** PushPress's limited plans page. Mindbody's and TeamUp's own pages did not come up and were not read.
 - **Built at Opus 5.5 high**, though the plan asked for xhigh (the terminal's record, said before his go).
 - **Not done:** a person's page does not say what is left of a limit (the picker does); nobody is told of a booking (20a).
+- **Kd's click-through passed**, with one thing built at once: a member's pressed time asks first (**Book this session?**, Book session · Not now). After it: the tab's file 22 of 22, eslint 0, the walk again in Edge with every sentence found. He asked what money a gym's prices are in: its own country's (answered, no change).
 ## 2026-10-08 · 17e-ii (Folder A): a member books and cancels their own personal training (branch `member-books-pt`)
 
 - **Built:** three member routes (`member-pt`: the read, book, cancel) on the staff side's own rule (`bookUnderLock`, `cancelUnderLock`), and the **Personal training** tab on My Gyms: pick a day, press a time, Your sessions with Cancel session. Risky; Kd: *"go"*. No migration, no package. Spec §13.5 has the note.
