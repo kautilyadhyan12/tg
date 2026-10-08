@@ -1,6 +1,6 @@
 // STAFF NOTES AND TAGS — the statements (ROADMAP Stage 2 item 5d; spec Part 3 §18.13).
 // Every one carries the gym in its WHERE: a note or tag of another gym is not there.
-import type { MemberGymTag, MemberNote, MemberTag } from "@app/shared";
+import { MEMBER_NOTES_PAGE, type MemberGymTag, type MemberNote, type MemberTag } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 
 export type SqlOrTx = Sql | TransactionSql;
@@ -19,7 +19,8 @@ const toNote = (row: NoteRow): MemberNote => ({
   createdAt: row.created_at.toISOString(),
 });
 
-/** One record's notes, newest first. A deleted account's name is not shown. */
+/** One record's newest notes, newest first: one page, however many a join has left it.
+ *  A deleted account's name is not shown. */
 export async function notesOf(sql: SqlOrTx, gymId: string, entryId: string): Promise<MemberNote[]> {
   const rows = await sql<NoteRow[]>`
     SELECT n.id, n.body, n.created_at,
@@ -27,12 +28,40 @@ export async function notesOf(sql: SqlOrTx, gymId: string, entryId: string): Pro
     FROM gym_member_notes n
     LEFT JOIN users u ON u.id = n.author_user_id
     WHERE n.gym_id = ${gymId} AND n.entry_id = ${entryId}
-    ORDER BY n.created_at DESC, n.id DESC`;
+    ORDER BY n.created_at DESC, n.id DESC
+    LIMIT ${MEMBER_NOTES_PAGE}`;
   return rows.map(toNote);
 }
 
-export async function countNotes(tx: TransactionSql, gymId: string, entryId: string): Promise<number> {
-  const rows = await tx<{ n: number }[]>`
+/** The page of one record's notes older than its note `beforeNoteId`, and whether there
+ *  are older still; null when the record has no such note. */
+export async function notesOlderThan(
+  sql: SqlOrTx,
+  gymId: string,
+  entryId: string,
+  beforeNoteId: string,
+): Promise<{ notes: MemberNote[]; more: boolean } | null> {
+  const from = await sql<{ id: string }[]>`
+    SELECT id FROM gym_member_notes
+    WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND id = ${beforeNoteId}`;
+  if (from[0] === undefined) return null;
+  // The two times are compared inside Postgres, which keeps a finer time than a Date carries.
+  const rows = await sql<NoteRow[]>`
+    SELECT n.id, n.body, n.created_at,
+           CASE WHEN u.deleted_at IS NULL THEN u.display_name END AS author_name
+    FROM gym_member_notes n
+    LEFT JOIN users u ON u.id = n.author_user_id
+    WHERE n.gym_id = ${gymId} AND n.entry_id = ${entryId}
+      AND (n.created_at, n.id) < (
+        SELECT c.created_at, c.id FROM gym_member_notes c
+        WHERE c.gym_id = ${gymId} AND c.entry_id = ${entryId} AND c.id = ${beforeNoteId})
+    ORDER BY n.created_at DESC, n.id DESC
+    LIMIT ${MEMBER_NOTES_PAGE + 1}`;
+  return { notes: rows.slice(0, MEMBER_NOTES_PAGE).map(toNote), more: rows.length > MEMBER_NOTES_PAGE };
+}
+
+export async function countNotes(sql: SqlOrTx, gymId: string, entryId: string): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM gym_member_notes WHERE gym_id = ${gymId} AND entry_id = ${entryId}`;
   return rows[0]?.n ?? 0;
 }
@@ -221,12 +250,17 @@ export async function renameTag(tx: TransactionSql, gymId: string, tagId: string
   return rows.length === 1;
 }
 
-/** Deletes one of the gym's tags, and with it the tag on every record that held it; how
- *  many records that was, or null when the gym has no such tag. */
-export async function deleteTag(tx: TransactionSql, gymId: string, tagId: string): Promise<number | null> {
+/** How many records hold one of the gym's tags: members and past members together. */
+export async function countTagHolders(tx: TransactionSql, gymId: string, tagId: string): Promise<number> {
   const held = await tx<{ n: number }[]>`
     SELECT count(*)::int AS n FROM gym_member_entry_tags WHERE gym_id = ${gymId} AND tag_id = ${tagId}`;
+  return held[0]?.n ?? 0;
+}
+
+/** Deletes one of the gym's tags, and with it the tag on every record that held it; false
+ *  when the gym has no such tag. */
+export async function deleteTag(tx: TransactionSql, gymId: string, tagId: string): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
     DELETE FROM gym_member_tags WHERE gym_id = ${gymId} AND id = ${tagId} RETURNING id`;
-  return rows.length === 1 ? (held[0]?.n ?? 0) : null;
+  return rows.length === 1;
 }

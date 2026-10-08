@@ -6,6 +6,10 @@
 // Two numbers each: how long it takes, and how long the server's one thread is busy and
 // answers nobody. Then a hundred staff reading at the same moment.
 //
+// And one person left with 10,000 notes of 2,000 characters by joins of full records (the
+// 5d security pass's High): their page is the newest 200 whatever the pile, so it is read
+// alone, by twenty staff at once, and one page further back.
+//
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_b'
 //   corepack pnpm --filter api exec tsx tools/measure-member-notes-cost.ts
 //
@@ -14,8 +18,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
-import { MEMBER_NOTE_MAX_CHARS, MEMBER_NOTES_MAX_PER_PERSON, MEMBER_TAGS_MAX_PER_GYM, MEMBER_TAGS_MAX_PER_PERSON } from "@app/shared";
-import { addNote, addTag, deleteNote, readNotesAndTags, removeTag } from "../src/modules/orgs/memberList/notes.js";
+import { MEMBER_NOTE_MAX_CHARS, MEMBER_NOTES_MAX_PER_PERSON, MEMBER_NOTES_PAGE, MEMBER_TAGS_MAX_PER_GYM, MEMBER_TAGS_MAX_PER_PERSON } from "@app/shared";
+import { addNote, addTag, deleteNote, readNotesAndTags, readOlderNotes, removeTag } from "../src/modules/orgs/memberList/notes.js";
 import { createMemoryRedis } from "../src/redis.js";
 import type { MemberListDeps } from "../src/modules/orgs/memberList/service.js";
 
@@ -30,6 +34,9 @@ const GYMS = 20;
 const PEOPLE = 200;
 const RUNS = 20;
 const BURST = 100;
+/** The notes joins of full records leave on one person, and how many staff read them at once. */
+const JOINED_NOTES = 10_000;
+const JOINED_BURST = 20;
 const PREFIX = "notes-cost-";
 const PLAN = "zz_notes_cost";
 
@@ -54,7 +61,7 @@ try {
   const owner = randomUUID();
   await sql`INSERT INTO users (id, email, display_name) VALUES (${owner}, ${`${PREFIX}${owner}@example.com`}, 'Cost Owner')`;
 
-  let busiest = { gymId: "", entryId: "", plainEntryId: "" };
+  let busiest = { gymId: "", entryId: "", plainEntryId: "", joinedEntryId: "" };
   for (let g = 0; g < GYMS; g++) {
     const gymId = randomUUID();
     await sql`INSERT INTO gyms (id, slug, name, timezone, country, owner_user_id) VALUES (${gymId}, ${PREFIX + gymId}, 'Cost Gym', 'Europe/London', 'GB', ${owner})`;
@@ -87,10 +94,14 @@ try {
       FROM gym_member_list_entries e
       CROSS JOIN LATERAL (SELECT id FROM gym_member_tags WHERE gym_id = e.gym_id ORDER BY name LIMIT 3) t
       WHERE e.gym_id = ${gymId}`;
-    busiest = { gymId, entryId: entries[0]?.id ?? "", plainEntryId: entries[1]?.id ?? "" };
+    busiest = { gymId, entryId: entries[0]?.id ?? "", plainEntryId: entries[1]?.id ?? "", joinedEntryId: entries[2]?.id ?? "" };
   }
   // One person with as much as the app allows, less one note and one tag so a write fits.
-  const { gymId, entryId, plainEntryId } = busiest;
+  const { gymId, entryId, plainEntryId, joinedEntryId } = busiest;
+  await sql`
+    INSERT INTO gym_member_notes (gym_id, entry_id, body, author_user_id, request_key, created_at)
+    SELECT ${gymId}, ${joinedEntryId}, repeat('x', ${MEMBER_NOTE_MAX_CHARS}), ${owner}, gen_random_uuid(), now() - n * interval '1 minute'
+    FROM generate_series(1, ${JOINED_NOTES}) AS n`;
   await sql`
     INSERT INTO gym_member_notes (gym_id, entry_id, body, author_user_id, request_key)
     SELECT ${gymId}, ${entryId}, repeat('x', ${MEMBER_NOTE_MAX_CHARS}), ${owner}, gen_random_uuid()
@@ -109,6 +120,21 @@ try {
       throw new Error(`expected ${String(notes)} notes and ${String(tags)} tags, read ${String(state?.notes.length)} and ${String(state?.tags.length)}`);
     }
   };
+  /** The joined person's page as it is sent: read, and written out as the reply is. */
+  const readJoined = async (): Promise<string> => {
+    const state = await readNotesAndTags(deps, owner, gymId, joinedEntryId, yes);
+    if (state === null || state.notes.length !== MEMBER_NOTES_PAGE || state.notesTotal !== JOINED_NOTES + 5) {
+      throw new Error(`the joined page read ${String(state?.notes.length)} of ${String(state?.notesTotal)}`);
+    }
+    return JSON.stringify(state);
+  };
+  const joinedPage = await readNotesAndTags(deps, owner, gymId, joinedEntryId, yes);
+  const lastShown = joinedPage?.notes[MEMBER_NOTES_PAGE - 1]?.id ?? "";
+  const readOlder = async (): Promise<string> => {
+    const older = await readOlderNotes(deps, owner, gymId, joinedEntryId, lastShown, yes);
+    if (older === null || older.notes.length !== MEMBER_NOTES_PAGE || !older.more) throw new Error("the older page was not a full one");
+    return JSON.stringify(older);
+  };
   const FULL_NOTES = MEMBER_NOTES_MAX_PER_PERSON - 1;
   const FULL_TAGS = MEMBER_TAGS_MAX_PER_PERSON - 1;
   /** Save a note of the longest size, then delete it: two writes. */
@@ -120,7 +146,7 @@ try {
   };
   /** Put a tag of the gym's on, then take it off: two writes, the first holding the gym's row. */
   const tagAndBack = async (): Promise<void> => {
-    const state = await addTag(deps, owner, gymId, entryId, "Tag 099", yes);
+    const state = await addTag(deps, owner, gymId, entryId, { name: "Tag 099" }, yes);
     const made = state?.tags.find((tag) => tag.name === "Tag 099")?.id;
     if (made === undefined) throw new Error("no tag came back");
     await removeTag(deps, owner, gymId, entryId, made, yes);
@@ -152,6 +178,7 @@ try {
     );
   };
 
+  const usualWaits: number[] = [];
   const cpu = os.cpus()[0];
   console.log(
     `measure-member-notes-cost: ${String(GYMS)} gyms of ${String(PEOPLE)} · ${cpu?.model ?? "?"} at ${String(cpu?.speed ?? 0)} MHz · ${String(RUNS)} runs each`,
@@ -162,6 +189,20 @@ try {
   await measure(`${String(BURST)} staff reading that at the same moment`, () => Promise.all(Array.from({ length: BURST }, () => read(entryId, FULL_NOTES, FULL_TAGS))));
   await measure("save the longest note on the fullest page, then delete it", noteAndBack);
   await measure("put a tag on the fullest page, then take it off", tagAndBack);
+  const joined = JOINED_NOTES.toLocaleString("en");
+  console.log(`  a person left with ${joined} notes of 2,000 by joins: the page sent is ${String(Math.round((await readJoined()).length / 1000))} kB`);
+  await measure(`their page (the newest ${String(MEMBER_NOTES_PAGE)} of ${joined})`, readJoined);
+  await measure(`${String(JOINED_BURST)} staff reading that at the same moment`, () => Promise.all(Array.from({ length: JOINED_BURST }, readJoined)));
+  await measure("the next page back (Show older notes)", readOlder);
+  await measure("a usual person's page while ten read the joined page", async () => {
+    const big = Promise.all(Array.from({ length: 10 }, readJoined));
+    const start = performance.now();
+    await read(plainEntryId, 5, 3);
+    const waited = performance.now() - start;
+    await big;
+    usualWaits.push(waited);
+  });
+  console.log(`  the usual page's own wait in those runs: median ${fmt(median(usualWaits.slice(1)))}, worst ${fmt(Math.max(...usualWaits.slice(1)))}`);
 } finally {
   await cleanup();
   await sql.end({ timeout: 5 });

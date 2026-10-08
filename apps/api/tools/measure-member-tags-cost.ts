@@ -169,7 +169,7 @@ try {
     const makeAndDelete = async (): Promise<void> => {
       const made = await tagSelected(deps, owner, gymId, { action: "add", selection: await everybody(), tag: { name: "Made for cost" } }, yes);
       if (made?.done.changed !== people) throw new Error("not everybody got the new tag");
-      await deleteTag(deps, owner, gymId, made.done.tag.id, yes);
+      await deleteTag(deps, owner, gymId, made.done.tag.id, people, yes);
     };
 
     const n = people.toLocaleString("en");

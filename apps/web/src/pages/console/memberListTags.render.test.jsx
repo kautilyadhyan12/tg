@@ -3,7 +3,7 @@
 // on somebody who was not selected, or anybody changing before the box has named them.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { memberListEntriesPageSchema, memberListViewSchema, memberTagsDoneResponseSchema, memberTagsPreviewSchema } from '@app/shared';
+import { MEMBER_TAGS_WORDS, memberListEntriesPageSchema, memberListViewSchema, memberTagsDoneResponseSchema, memberTagsPreviewSchema } from '@app/shared';
 
 vi.mock('./MemberMemberships', () => ({ default: () => null }));
 vi.mock('./MemberNotes', () => ({ default: () => null }));
@@ -280,11 +280,59 @@ describe('a tag as a filter', () => {
     await again.findByText('Ada Lovelace');
     orgService.deleteGymTag.mockResolvedValue({ data: { tags: [KNEE] } });
     fireEvent.click(again.getByTestId('tags-delete-press'));
-    await waitFor(() => expect(orgService.deleteGymTag).toHaveBeenCalledWith(GYM, VIP.id));
+    // The press says how many people the box named.
+    await waitFor(() => expect(orgService.deleteGymTag).toHaveBeenCalledWith(GYM, VIP.id, 3));
     await waitFor(() => expect(box.getAllByTestId('tags-row').length).toBe(1));
     // The deleted tag is no longer the list's filter.
     await waitFor(() => expect(screen.queryByTestId('showing')).toBeNull());
     expect(lastQuery()).toBe('');
+  });
+
+  it('the worst thing: a tag a colleague has put on more people is not deleted until the box has named them too', async () => {
+    draw();
+    await screen.findByText('Ben Carter');
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    fireEvent.click(await screen.findByTestId('manage-tags'));
+    const box = within(await screen.findByTestId('tags-manage'));
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ada, ben, cara]));
+    fireEvent.click(box.getByRole('button', { name: 'Delete VIP' }));
+    const ask = () => within(box.getByTestId('tags-delete-ask'));
+    await ask().findByText('Cara Diaz');
+
+    // A colleague tags Dev meanwhile: the server deletes nothing and sends the tags as they stand.
+    const dev = entry('Dev Patel');
+    const now = { ...VIP, people: 3 };
+    orgService.deleteGymTag.mockRejectedValueOnce({
+      response: { status: 409, data: { error: 'tag_people_changed', message: MEMBER_TAGS_WORDS.tag_people_changed, tags: [KNEE, now] } },
+    });
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ada, ben, cara, dev]));
+    fireEvent.click(ask().getByTestId('tags-delete-press'));
+    expect((await box.findByRole('alert')).textContent).toContain(MEMBER_TAGS_WORDS.tag_people_changed);
+    expect(orgService.deleteGymTag.mock.calls).toEqual([[GYM, VIP.id, 3]]);
+    // The box is still open, and names the people again, Dev among them.
+    expect(await ask().findByText('Dev Patel')).toBeTruthy();
+    expect(ask().getByText('Delete “VIP”? It comes off 3 members and 1 past member. They stay on your list.')).toBeTruthy();
+    expect(box.getAllByTestId('tags-row').length).toBe(2);
+
+    orgService.deleteGymTag.mockResolvedValue({ data: { tags: [KNEE] } });
+    fireEvent.click(ask().getByTestId('tags-delete-press'));
+    await waitFor(() => expect(orgService.deleteGymTag.mock.calls[1]).toEqual([GYM, VIP.id, 4]));
+    await waitFor(() => expect(box.getAllByTestId('tags-row').length).toBe(1));
+  });
+
+  it("a Delete box whose names are not the number on the tag's line reads the gym's tags again", async () => {
+    draw();
+    await screen.findByText('Ben Carter');
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    fireEvent.click(await screen.findByTestId('manage-tags'));
+    const box = within(await screen.findByTestId('tags-manage'));
+    const dev = entry('Dev Patel');
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ada, ben, cara, dev]));
+    orgService.getGymTags.mockResolvedValue({ data: { tags: [KNEE, { ...VIP, people: 3 }] } });
+    fireEvent.click(box.getByRole('button', { name: 'Delete VIP' }));
+    const ask = within(await box.findByTestId('tags-delete-ask'));
+    expect(await ask.findByText('Delete “VIP”? It comes off 3 members and 1 past member. They stay on your list.')).toBeTruthy();
+    expect(ask.getByText('Dev Patel')).toBeTruthy();
   });
 
   it('a refused rename says why and keeps the box open', async () => {

@@ -39,8 +39,11 @@ import {
   memberListSelectAllRequestSchema,
   memberListUnlistedQuerySchema,
   memberListUploadRequestSchema,
+  MEMBER_TAGS_WORDS,
   memberNoteAddRequestSchema,
+  memberNotesOlderQuerySchema,
   memberTagAddRequestSchema,
+  memberTagDeleteQuerySchema,
   memberTagRenameRequestSchema,
   memberTagsSelectedRequestSchema,
   memberRosterRemovePreviewRequestSchema,
@@ -70,6 +73,13 @@ import * as tags from "./tags.js";
 import * as removal from "./removeSelected.js";
 import { SelectionChanged, selectAll } from "./selection.js";
 import * as service from "./service.js";
+
+/** The gym a request's address names, for an allowance counted a gym at a time. */
+function gymInPath(req: FastifyRequest): string | null {
+  const params: unknown = req.params;
+  if (typeof params !== "object" || params === null || !("gymId" in params)) return null;
+  return typeof params.gymId === "string" ? params.gymId : null;
+}
 
 /** A "Select all" whose filter now matches other people: nothing was done (§18.5). */
 function sendSelectionChanged(err: SelectionChanged, req: FastifyRequest, reply: FastifyReply): FastifyReply {
@@ -415,12 +425,14 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
 
   /** Notes and tags (5d-i): one press a tag a person, so a gym tagging its 200 people must
    *  not spend the allowance for adding and changing members; several staff at one desk
-   *  share an address. */
+   *  share an address, and the address is counted a gym at a time, so one gym's staff
+   *  never use up another gym's at a shared address. */
   const notesGate = gate(
     createDualRateLimit({
       name: "memberlist_notes",
       max: MEMBER_NOTES_WRITES_PER_HOUR,
       ipMax: MEMBER_NOTES_WRITES_PER_HOUR * 4,
+      ipScope: gymInPath,
       windowMs: 60 * 60 * 1000,
       identifier: (req) => req.authUser?.id ?? null,
       redis: deps.redis,
@@ -612,6 +624,16 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     return reply.status(200).send(state);
   });
 
+  app.get("/v1/orgs/:gymId/member-list/entries/:entryId/notes/older", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberNotesOlderQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const older = await notes.readOlderNotes(listDeps, requireUserId(req), params.gymId, params.entryId, query.before, readGate(req, reply));
+    if (older === null) return;
+    return reply.status(200).send(older);
+  });
+
   app.post("/v1/orgs/:gymId/member-list/entries/:entryId/notes", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
@@ -635,7 +657,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     if (params === null) return;
     const body = parseOr400(memberTagAddRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const state = await notes.addTag(listDeps, requireUserId(req), params.gymId, params.entryId, body.name, notesGate(req, reply));
+    const state = await notes.addTag(listDeps, requireUserId(req), params.gymId, params.entryId, body, notesGate(req, reply));
     if (state === null) return;
     return reply.status(200).send(state);
   });
@@ -701,9 +723,19 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
   app.delete("/v1/orgs/:gymId/member-list/tags/:tagId", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(gymTagParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const list = await tags.deleteTag(listDeps, requireUserId(req), params.gymId, params.tagId, notesGate(req, reply));
-    if (list === null) return;
-    return reply.status(200).send({ tags: list });
+    const query = parseOr400(memberTagDeleteQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const userId = requireUserId(req);
+    try {
+      const list = await tags.deleteTag(listDeps, userId, params.gymId, params.tagId, query.people, notesGate(req, reply));
+      if (list === null) return;
+      return await reply.status(200).send({ tags: list });
+    } catch (err) {
+      if (!(err instanceof tags.TagPeopleChanged)) throw err;
+      // The gym's tags as they now stand, so the box can name the people again.
+      const now = await tags.readGymTags(listDeps, userId, params.gymId, () => Promise.resolve(true));
+      return await reply.status(409).send({ error: "tag_people_changed", message: MEMBER_TAGS_WORDS.tag_people_changed, tags: now ?? [], requestId: req.id });
+    }
   });
 
   app.delete("/v1/orgs/:gymId/member-list/former/:entryId", { preHandler: [app.authenticate] }, async (req, reply) => {
