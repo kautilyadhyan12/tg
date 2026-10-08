@@ -128,6 +128,10 @@ export const gyms = pgTable(
     bookingFreeCancelMinutes: integer("booking_free_cancel_minutes").notNull().default(120),
     waitlistHandoverMinutes: integer("waitlist_handover_minutes").notNull().default(1440),
     waitlistMax: integer("waitlist_max").notNull().default(20),
+    /** Personal training's own two (0085; spec Part 3 §13.5), under
+     *  `gyms_pt_booking_settings_check`: a session reads these, never the class ones. */
+    ptOpensDays: integer("pt_opens_days").notNull().default(7),
+    ptFreeCancelMinutes: integer("pt_free_cancel_minutes").notNull().default(120),
     createdAt: createdAt(),
   },
   (t) => [

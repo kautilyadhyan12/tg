@@ -128,6 +128,11 @@ describe('the box that asks before bookings end', () => {
 describe('Settings → Booking rules', () => {
   const ORG = { id: 'g1', orgType: 'gym' };
   const START = { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 };
+  // Personal training's own two (17e-vi), set apart from the classes'.
+  const PT = { opensDays: 3, freeCancelMinutes: 1440 };
+  const PT_OPENS = 'Days before a personal training session that booking opens';
+  const PT_FREE = 'How long before a personal training session cancelling is free';
+  const PT_FREE_UNIT = 'Free cancelling for personal training, in';
   const open = async (props = {}) => {
     render(<BookingSettingsPanel org={ORG} readOnly={false} {...props} />);
     fireEvent.click(await screen.findByRole('button', { name: /Booking rules/ }));
@@ -135,12 +140,14 @@ describe('Settings → Booking rules', () => {
   };
 
   beforeEach(() => {
-    api.getBookingSettings.mockResolvedValue({ data: { settings: START } });
+    api.getBookingSettings.mockResolvedValue({ data: { settings: START, pt: PT } });
   });
 
-  it('shows the gym’s four settings, summed up while closed, and Save waits for a change', async () => {
+  it('shows the gym’s four settings and personal training’s two, summed up while closed, and Save waits for a change', async () => {
     render(<BookingSettingsPanel org={ORG} readOnly={false} />);
-    expect(await screen.findByText('Opens 7 days before · free to cancel until 2 hours before · waitlist of 20')).toBeTruthy();
+    expect(
+      await screen.findByText('Classes: opens 7 days before · free to cancel until 2 hours before · waitlist of 20. Personal training: opens 3 days before · free to cancel until 1 day before.'),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Booking rules/ }));
     expect(screen.getByLabelText('Days before a class that booking opens').value).toBe('7');
     expect(screen.getByLabelText('How long before a class cancelling is free').value).toBe('2');
@@ -148,12 +155,45 @@ describe('Settings → Booking rules', () => {
     expect(screen.getByLabelText('How long before a class a free place goes to the waitlist automatically').value).toBe('1');
     expect(screen.getByLabelText('The waitlist time, in').value).toBe('days');
     expect(screen.getByLabelText('How many people a waitlist holds').value).toBe('20');
+    // Each part has its heading, and personal training's boxes hold its own numbers.
+    expect(screen.getByRole('group', { name: 'Classes' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Personal training' })).toBeTruthy();
+    expect(screen.getByLabelText(PT_OPENS).value).toBe('3');
+    expect(screen.getByLabelText(PT_FREE).value).toBe('1');
+    expect(screen.getByLabelText(PT_FREE_UNIT).value).toBe('days');
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
+  });
+
+  it('personal training’s two are typed in their own boxes and saved as their own, the classes’ four as they were', async () => {
+    const next = { opensDays: 14, freeCancelMinutes: 45 };
+    api.updateBookingSettings.mockResolvedValue({ data: { settings: START, pt: next, movedIn: 0 } });
+    await open();
+    fireEvent.change(screen.getByLabelText(PT_OPENS), { target: { value: '14' } });
+    fireEvent.change(screen.getByLabelText(PT_FREE), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText(PT_FREE_UNIT), { target: { value: 'minutes' } });
+    expect(api.updateBookingSettings).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...START, pt: next }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    expect(
+      screen.getByText('Classes: opens 7 days before · free to cancel until 2 hours before · waitlist of 20. Personal training: opens 14 days before · free to cancel until 45 minutes before.'),
+    ).toBeTruthy();
+    expect(screen.getByLabelText('Days before a class that booking opens').value).toBe('7');
+    expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
+  });
+
+  it('a personal training number outside its range is said as personal training’s, and cannot be saved', async () => {
+    await open();
+    fireEvent.change(screen.getByLabelText(PT_OPENS), { target: { value: '90' } });
+    expect(screen.getByText('Personal training, when booking opens: pick 1 to 56 days.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
+    fireEvent.submit(screen.getByRole('button', { name: 'Save changes' }).closest('form'));
+    expect(api.updateBookingSettings).not.toHaveBeenCalled();
   });
 
   it('nothing is saved until Save, which sends all four in minutes and shows what the server kept', async () => {
     const next = { opensDays: 14, freeCancelMinutes: 90, handoverMinutes: 180, waitlistMax: 5 };
-    api.updateBookingSettings.mockResolvedValue({ data: { settings: next } });
+    api.updateBookingSettings.mockResolvedValue({ data: { settings: next, pt: PT } });
     await open();
     fireEvent.change(screen.getByLabelText('Days before a class that booking opens'), { target: { value: '14' } });
     fireEvent.change(screen.getByLabelText('How long before a class cancelling is free'), { target: { value: '90' } });
@@ -163,15 +203,17 @@ describe('Settings → Booking rules', () => {
     fireEvent.change(screen.getByLabelText('How many people a waitlist holds'), { target: { value: '5' } });
     expect(api.updateBookingSettings).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', next));
+    await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...next, pt: PT }));
     expect(await screen.findByText('Saved.')).toBeTruthy();
     expect(screen.getByText(/Saving a shorter time gives places that are free now to people already on a waitlist, straight away/)).toBeTruthy();
-    expect(screen.getByText('Opens 14 days before · free to cancel until 90 minutes before · waitlist of 5')).toBeTruthy();
+    expect(
+      screen.getByText('Classes: opens 14 days before · free to cancel until 90 minutes before · waitlist of 5. Personal training: opens 3 days before · free to cancel until 1 day before.'),
+    ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
   });
 
   it('a save that moved waiting people in says how many', async () => {
-    api.updateBookingSettings.mockResolvedValue({ data: { settings: { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 60, waitlistMax: 20 }, movedIn: 4 } });
+    api.updateBookingSettings.mockResolvedValue({ data: { settings: { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 60, waitlistMax: 20 }, pt: PT, movedIn: 4 } });
     await open();
     fireEvent.change(screen.getByLabelText('The waitlist time, in'), { target: { value: 'hours' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -184,7 +226,7 @@ describe('Settings → Booking rules', () => {
   it('a number outside its range is said in words and cannot be saved', async () => {
     await open();
     fireEvent.change(screen.getByLabelText('Days before a class that booking opens'), { target: { value: '90' } });
-    expect(screen.getByText('When booking opens: pick 1 to 56 days.')).toBeTruthy();
+    expect(screen.getByText('Classes, when booking opens: pick 1 to 56 days.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
     fireEvent.submit(screen.getByRole('button', { name: 'Save changes' }).closest('form'));
     expect(api.updateBookingSettings).not.toHaveBeenCalled();
@@ -204,6 +246,7 @@ describe('Settings → Booking rules', () => {
     await open({ readOnly: true });
     expect(screen.getByLabelText('Days before a class that booking opens').disabled).toBe(true);
     expect(screen.getByLabelText('Free cancelling, in').disabled).toBe(true);
+    expect([screen.getByLabelText(PT_OPENS).disabled, screen.getByLabelText(PT_FREE).disabled, screen.getByLabelText(PT_FREE_UNIT).disabled]).toEqual([true, true, true]);
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
   });
 

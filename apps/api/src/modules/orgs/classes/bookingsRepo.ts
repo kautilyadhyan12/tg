@@ -14,6 +14,7 @@ import {
   bookingPeriod,
   classBookingStatusSchema,
   type ClassBookingSettings,
+  type PtBookingSettings,
   type ClassBookingStatus,
   type HeldCover,
 } from "@app/shared";
@@ -738,20 +739,32 @@ export async function endingPeople(sql: SqlOrTx, gymId: string, where: EndingWhe
   }));
 }
 
-/** The gym's four booking settings; null where there is no such gym. */
-export async function readSettings(sql: SqlOrTx, gymId: string): Promise<ClassBookingSettings | null> {
-  const rows = await sql<{ opens: number; free: number; handover: number; waitlist: number }[]>`
-    SELECT booking_opens_days AS opens, booking_free_cancel_minutes AS free,
-           waitlist_handover_minutes AS handover, waitlist_max AS waitlist
-    FROM gyms WHERE id = ${gymId}`;
-  const r = rows[0];
-  return r === undefined ? null : { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist };
+export interface BookingRules {
+  settings: ClassBookingSettings;
+  pt: PtBookingSettings;
 }
 
-export async function writeSettings(tx: TransactionSql, gymId: string, s: ClassBookingSettings): Promise<void> {
+/** The gym's four booking settings and personal training's two; null where there is no
+ *  such gym. */
+export async function readSettings(sql: SqlOrTx, gymId: string): Promise<BookingRules | null> {
+  const rows = await sql<{ opens: number; free: number; handover: number; waitlist: number; pt_opens: number; pt_free: number }[]>`
+    SELECT booking_opens_days AS opens, booking_free_cancel_minutes AS free,
+           waitlist_handover_minutes AS handover, waitlist_max AS waitlist,
+           pt_opens_days AS pt_opens, pt_free_cancel_minutes AS pt_free
+    FROM gyms WHERE id = ${gymId}`;
+  const r = rows[0];
+  if (r === undefined) return null;
+  return {
+    settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist },
+    pt: { opensDays: r.pt_opens, freeCancelMinutes: r.pt_free },
+  };
+}
+
+export async function writeSettings(tx: TransactionSql, gymId: string, { settings: s, pt }: BookingRules): Promise<void> {
   await tx`
     UPDATE gyms
     SET booking_opens_days = ${s.opensDays}, booking_free_cancel_minutes = ${s.freeCancelMinutes},
-        waitlist_handover_minutes = ${s.handoverMinutes}, waitlist_max = ${s.waitlistMax}
+        waitlist_handover_minutes = ${s.handoverMinutes}, waitlist_max = ${s.waitlistMax},
+        pt_opens_days = ${pt.opensDays}, pt_free_cancel_minutes = ${pt.freeCancelMinutes}
     WHERE id = ${gymId}`;
 }

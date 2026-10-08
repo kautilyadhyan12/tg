@@ -966,7 +966,7 @@ export default function PersonalTraining() {
           {list?.timezone ? ` · ${list.timezone} time` : ''}
         </p>
         {list !== null ? <p className="c-s15 c-t2 m-0">{list.canManage ? PT_INTRO_MANAGER : PT_INTRO_OWN}</p> : null}
-        {list !== null ? <BookingRulesLine org={org} orgSlug={orgSlug} privileges={privileges} freeCancelMinutes={list.freeCancelMinutes} /> : null}
+        {list !== null ? <BookingRulesLine org={org} orgSlug={orgSlug} privileges={privileges} of="pt" freeCancelMinutes={list.freeCancelMinutes} /> : null}
       </header>
 
       {readOnly ? (
@@ -1274,7 +1274,7 @@ export default function PersonalTraining() {
                                 canBook={list.canBook}
                                 first={index === 0}
                                 clockFormat={clockFormat}
-                                freeCancelMinutes={list.freeCancelMinutes}
+                                freeCancelMinutes={shownWeek.data.freeCancelMinutes ?? list.freeCancelMinutes}
                                 locked={readOnly}
                                 asking={cancelling === appointment.id}
                                 settled={cancelling === appointment.id && cancelSettled}

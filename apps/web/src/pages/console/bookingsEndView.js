@@ -10,7 +10,8 @@ import { clockLabel } from './hoursView';
 // class, cancelling a time slot, archiving a class or moving a time slot ends the bookings
 // of the classes that go. The server answers 409 `class_has_bookings` with who they are
 // until the request sends their number back; these are the words of the box that asks.
-// And the gym's four booking settings, as Settings shows and saves them.
+// And the gym's four booking settings, with personal training's own two (17e-vi), as
+// Settings shows and saves them.
 
 const people = (n) => (n === 1 ? '1 person' : `${n.toLocaleString('en')} people`);
 
@@ -100,7 +101,7 @@ export function endingMore(ending, shown) {
   return Math.max(0, endingTotal(ending) - shown);
 }
 
-// ── THE FOUR SETTINGS ──
+// ── THE FOUR SETTINGS, AND PERSONAL TRAINING'S TWO ──
 
 const UNITS = [
   ['minutes', 1],
@@ -122,9 +123,11 @@ export function minutesAsUnit(minutes) {
 const unitSize = (unit) => UNITS.find(([name]) => name === unit)?.[1] ?? 1;
 const whole = (text) => (/^\d{1,6}$/.test(String(text ?? '').trim()) ? Number(String(text).trim()) : null);
 
-export function bookingSettingsDraft(settings) {
+/** `pt`: personal training's own two, which a session reads and a class never does. */
+export function bookingSettingsDraft(settings, pt) {
   const free = minutesAsUnit(settings?.freeCancelMinutes);
   const handover = minutesAsUnit(settings?.handoverMinutes);
+  const ptFree = minutesAsUnit(pt?.freeCancelMinutes);
   return {
     opensDays: String(settings?.opensDays ?? ''),
     freeAmount: free.amount,
@@ -132,6 +135,9 @@ export function bookingSettingsDraft(settings) {
     handoverAmount: handover.amount,
     handoverUnit: handover.unit,
     waitlistMax: String(settings?.waitlistMax ?? ''),
+    ptOpensDays: String(pt?.opensDays ?? ''),
+    ptFreeAmount: ptFree.amount,
+    ptFreeUnit: ptFree.unit,
   };
 }
 
@@ -141,20 +147,29 @@ export function bookingSettingsBody(draft) {
   const free = whole(draft?.freeAmount);
   const handover = whole(draft?.handoverAmount);
   const waitlistMax = whole(draft?.waitlistMax);
-  if (opensDays === null || free === null || handover === null || waitlistMax === null) return null;
+  const ptOpensDays = whole(draft?.ptOpensDays);
+  const ptFree = whole(draft?.ptFreeAmount);
+  if (opensDays === null || free === null || handover === null || waitlistMax === null || ptOpensDays === null || ptFree === null) return null;
   return {
     opensDays,
     freeCancelMinutes: free * unitSize(draft.freeUnit),
     handoverMinutes: handover * unitSize(draft.handoverUnit),
     waitlistMax,
+    pt: { opensDays: ptOpensDays, freeCancelMinutes: ptFree * unitSize(draft.ptFreeUnit) },
   };
 }
 
+// Two boxes are named "When booking opens" and two "Free cancelling", so what stops a
+// save says whose it is.
 const LABELS = {
-  opensDays: 'When booking opens',
-  freeCancelMinutes: 'Free cancelling',
+  opensDays: 'Classes, when booking opens',
+  freeCancelMinutes: 'Classes, free cancelling',
   handoverMinutes: 'The waitlist time',
   waitlistMax: 'The waitlist size',
+};
+const PT_LABELS = {
+  opensDays: 'Personal training, when booking opens',
+  freeCancelMinutes: 'Personal training, free cancelling',
 };
 
 const span = (minutes) => {
@@ -166,40 +181,51 @@ const span = (minutes) => {
 export function bookingSettingsProblem(draft) {
   const body = bookingSettingsBody(draft);
   if (body === null) return 'Type a whole number in each box.';
-  for (const key of Object.keys(LABELS)) {
-    const [min, max] = CLASS_BOOKING_LIMITS[key];
-    if (body[key] < min || body[key] > max) {
-      const range =
-        key === 'opensDays'
-          ? `${min} to ${max} days`
-          : key === 'waitlistMax'
-            ? `${min} to ${max} people`
-            : `${min === 0 ? '0' : span(min)} to ${span(max)}`;
-      return `${LABELS[key]}: pick ${range}.`;
+  // Personal training's two have the limits the classes' same two have.
+  for (const [labels, values] of [
+    [LABELS, body],
+    [PT_LABELS, body.pt],
+  ]) {
+    for (const key of Object.keys(labels)) {
+      const [min, max] = CLASS_BOOKING_LIMITS[key];
+      if (values[key] < min || values[key] > max) {
+        const range =
+          key === 'opensDays'
+            ? `${min} to ${max} days`
+            : key === 'waitlistMax'
+              ? `${min} to ${max} people`
+              : `${min === 0 ? '0' : span(min)} to ${span(max)}`;
+        return `${labels[key]}: pick ${range}.`;
+      }
     }
   }
   return null;
 }
 
-export function bookingSettingsChanged(draft, settings) {
+export function bookingSettingsChanged(draft, settings, pt) {
   const body = bookingSettingsBody(draft);
   if (body === null) return true;
-  return Object.keys(LABELS).some((key) => body[key] !== settings?.[key]);
+  return Object.keys(LABELS).some((key) => body[key] !== settings?.[key]) || Object.keys(PT_LABELS).some((key) => body.pt[key] !== pt?.[key]);
 }
 
-/** The closed section's one line: the settings as they stand. */
-export function bookingSettingsSummary(settings) {
+const opensAndFree = (rules) => {
+  const opens = `opens ${rules.opensDays} ${rules.opensDays === 1 ? 'day' : 'days'} before`;
+  const free = rules.freeCancelMinutes === 0 ? 'free to cancel until the start' : `free to cancel until ${span(rules.freeCancelMinutes)} before`;
+  return `${opens} · ${free}`;
+};
+
+/** The closed section's one line: the settings as they stand, classes then personal training. */
+export function bookingSettingsSummary(settings, pt) {
   if (settings === null || settings === undefined) return 'When members can book and cancel, and how the waitlist works';
-  const opens = `Opens ${settings.opensDays} ${settings.opensDays === 1 ? 'day' : 'days'} before`;
-  const free = settings.freeCancelMinutes === 0 ? 'free to cancel until the start' : `free to cancel until ${span(settings.freeCancelMinutes)} before`;
   const waitlist = settings.waitlistMax === 0 ? 'no waitlist' : `waitlist of ${settings.waitlistMax}`;
-  return `${opens} · ${free} · ${waitlist}`;
+  const classes = `Classes: ${opensAndFree(settings)} · ${waitlist}`;
+  return pt === null || pt === undefined ? classes : `${classes}. Personal training: ${opensAndFree(pt)}.`;
 }
 
 const freeUntil = (minutes) => (minutes === 0 ? 'until it starts' : `until ${span(minutes)} before it starts`);
 
-/** The rules in one sentence, on the pages they apply to. One rule set covers classes and
- *  personal training. */
+/** The rules in one sentence, on the page they apply to: the classes' on Classes, personal
+ *  training's own two on Personal training. */
 export function bookingRulesLine(settings) {
   const ahead = `${settings.opensDays} ${settings.opensDays === 1 ? 'day' : 'days'} ahead`;
   return `Members can book up to ${ahead} and cancel for free ${freeUntil(settings.freeCancelMinutes)}.`;

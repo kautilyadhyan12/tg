@@ -11,7 +11,9 @@ import { describe, expect, it } from "vitest";
 import {
   CLASS_BOOKING_DEFAULTS,
   bookingPeriod,
+  bookingSettingsBodySchema,
   bookingTime,
+  classBookingSettingsResponseSchema,
   decideBook,
   decideCancel,
   giveHeldMembership,
@@ -322,5 +324,37 @@ describe("cancel", () => {
 
   it("a booking with no pack behind it gives nothing back", () => {
     expect(decideCancel({ time: at("open"), cancelled: false, mine: "booked", packCharged: false, lateOk: false })).toEqual({ kind: "cancel", status: "cancelled", refundPack: false, freesPlace: true });
+  });
+});
+
+// Personal training's own two beside the classes' four (17e-vi; spec Part 3 §13.5).
+describe("the booking settings a save sends", () => {
+  const classes = { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 };
+  const pt = { opensDays: 3, freeCancelMinutes: 1440 };
+
+  it("takes the four and personal training's two, and keeps each as its own", () => {
+    expect(bookingSettingsBodySchema.parse({ ...classes, pt })).toEqual({ ...classes, pt });
+    expect(classBookingSettingsResponseSchema.parse({ settings: classes, pt })).toEqual({ settings: classes, pt });
+  });
+
+  it.each([
+    ["no personal training part", classes],
+    ["an empty one", { ...classes, pt: {} }],
+    ["one of the two missing", { ...classes, pt: { opensDays: 3 } }],
+    ["0 days", { ...classes, pt: { ...pt, opensDays: 0 } }],
+    ["57 days", { ...classes, pt: { ...pt, opensDays: 57 } }],
+    ["part of a day", { ...classes, pt: { ...pt, opensDays: 2.5 } }],
+    ["a minute under none", { ...classes, pt: { ...pt, freeCancelMinutes: -1 } }],
+    ["a minute over 7 days", { ...classes, pt: { ...pt, freeCancelMinutes: 10081 } }],
+    ["a class setting inside it", { ...classes, pt: { ...pt, waitlistMax: 5 } }],
+    ["the two alone", { pt }],
+  ])("refuses %s", (_name, body) => {
+    expect(bookingSettingsBodySchema.safeParse(body).success).toBe(false);
+  });
+
+  it("allows each end of each range, and a reply without the two is not a reply", () => {
+    expect(bookingSettingsBodySchema.safeParse({ ...classes, pt: { opensDays: 1, freeCancelMinutes: 0 } }).success).toBe(true);
+    expect(bookingSettingsBodySchema.safeParse({ ...classes, pt: { opensDays: 56, freeCancelMinutes: 10080 } }).success).toBe(true);
+    expect(classBookingSettingsResponseSchema.safeParse({ settings: classes }).success).toBe(false);
   });
 });

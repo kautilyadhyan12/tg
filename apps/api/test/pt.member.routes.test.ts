@@ -578,11 +578,11 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
     expect((await read(gym, maya)).sessions.map((s) => s.localDate)).toEqual([NEXT_WED, "2026-11-20"]);
 
     // The gym opens bookings 14 days ahead: the same time is now hers to book.
-    await sql`UPDATE gyms SET booking_opens_days = 14 WHERE id = ${gym.id}`;
+    await sql`UPDATE gyms SET pt_opens_days = 14 WHERE id = ${gym.id}`;
     expect((await read(gym, maya)).lastDay).toBe("2026-10-21");
     made(await book(gym, maya, sam, { day: NEXT_WED, minute: 480 }));
     // Never past the days sessions run, whatever the setting.
-    await sql`UPDATE gyms SET booking_opens_days = 56 WHERE id = ${gym.id}`;
+    await sql`UPDATE gyms SET pt_opens_days = 56 WHERE id = ${gym.id}`;
     expect((await read(gym, maya, 7)).lastDay).toBe("2026-12-01");
     expect(said(await book(gym, maya, sam, { day: "2026-12-02", minute: 480 }))[1]).toBe("too_far");
   });

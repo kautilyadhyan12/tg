@@ -29,7 +29,7 @@ import {
   memberClassesResponseSchema,
   type BookClassRequest,
   type ClassBookRefusal,
-  type ClassBookingSettings,
+  type BookingSettingsBody,
   type ClassBookingSettingsResponse,
   type ClassBookingView,
   type ClassBookingsEndingQuery,
@@ -541,7 +541,8 @@ export async function getEndingBookings(
   });
 }
 
-/** The gym's four booking settings, for staff holding `schedule.manage`. */
+/** The gym's four booking settings and personal training's two, for staff holding
+ *  `schedule.manage`. */
 export async function getBookingSettings(
   deps: Pick<BookingsDeps, "sql">,
   staffId: string,
@@ -550,48 +551,55 @@ export async function getBookingSettings(
 ): Promise<ClassBookingSettingsResponse | null> {
   await requirePrivilege(deps, gymId, staffId, "schedule.manage");
   if (!(await limit())) return null;
-  const settings = await repo.readSettings(deps.sql, gymId);
-  if (settings === null) throw notFound();
-  return classBookingSettingsResponseSchema.parse({ settings });
+  const rules = await repo.readSettings(deps.sql, gymId);
+  if (rules === null) throw notFound();
+  return classBookingSettingsResponseSchema.parse(rules);
 }
 
 /** The settings changed. They are read at each booking, so they hold for every class
  *  from now; no booking already made is touched, and a waitlist longer than a new, lower
  *  limit keeps everybody on it. A hand-over time made shorter can make free places the
- *  waitlist's at once, so those are handed over here. */
+ *  waitlist's at once, so those are handed over here. Personal training's two are read at
+ *  each booking and each cancel of a session, under this same lock. */
 export async function setBookingSettings(
   deps: Pick<BookingsDeps, "sql" | "now">,
   staffId: string,
   gymId: string,
-  settings: ClassBookingSettings,
+  body: BookingSettingsBody,
   limit: Limit,
 ): Promise<(ClassBookingSettingsResponse & { movedIn: number }) | null> {
   await requireWritablePrivilege(deps, gymId, staffId, "schedule.manage");
   if (!(await limit())) return null;
+  const { pt, ...settings } = body;
   let movedIn = 0;
   const saved = await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
     const before = await repo.readSettings(tx, gymId);
     if (before === null) return null;
     const keys = ["opensDays", "freeCancelMinutes", "handoverMinutes", "waitlistMax"] as const;
-    const changed = keys.filter((k) => before[k] !== settings[k]);
-    if (changed.length === 0) return before;
-    await repo.writeSettings(tx, gymId, settings);
+    const ptKeys = ["opensDays", "freeCancelMinutes"] as const;
+    const changed = keys.filter((k) => before.settings[k] !== settings[k]);
+    const ptChanged = ptKeys.filter((k) => before.pt[k] !== pt[k]);
+    if (changed.length === 0 && ptChanged.length === 0) return before;
+    await repo.writeSettings(tx, gymId, { settings, pt });
     await insertAudit(tx, {
       actorUserId: staffId,
       gymId,
       action: "org.booking_settings_changed",
       targetType: "gym",
       targetId: gymId,
-      meta: Object.fromEntries(changed.map((k) => [k, `${String(before[k])} -> ${String(settings[k])}`])),
+      meta: Object.fromEntries<string>([
+        ...changed.map((k): [string, string] => [k, `${String(before.settings[k])} -> ${String(settings[k])}`]),
+        ...ptChanged.map((k): [string, string] => [`pt.${k}`, `${String(before.pt[k])} -> ${String(pt[k])}`]),
+      ]),
     });
-    if (settings.handoverMinutes < before.handoverMinutes) {
+    if (settings.handoverMinutes < before.settings.handoverMinutes) {
       movedIn = await handOverComing(tx, gymId, deps.now());
       // An event's waitlist is handed over by the same setting (19c-ii).
       movedIn += await handOverComingEvents(tx, gymId, deps.now());
     }
-    return settings;
+    return { settings, pt };
   });
   if (saved === null) throw notFound();
-  return { ...classBookingSettingsResponseSchema.parse({ settings: saved }), movedIn };
+  return { ...classBookingSettingsResponseSchema.parse(saved), movedIn };
 }

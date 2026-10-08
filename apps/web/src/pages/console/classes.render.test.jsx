@@ -20,6 +20,7 @@ const api = {
   stopClassRepeat: vi.fn(),
   restoreClass: vi.fn(),
   getStaff: vi.fn(),
+  getBookingSettings: vi.fn(),
 };
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -191,6 +192,16 @@ describe('closing and backing out never change the timetable', () => {
       expect(call).not.toHaveBeenCalled();
     }
   };
+
+  it('says the classes’ own booking rules, never personal training’s (17e-vi)', async () => {
+    api.getBookingSettings.mockReset().mockResolvedValue({
+      data: { settings: { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 }, pt: { opensDays: 3, freeCancelMinutes: 1440 } },
+    });
+    drawScreen();
+    expect(await screen.findByText('Members can book up to 7 days ahead and cancel for free until 2 hours before it starts.')).toBeTruthy();
+    expect(screen.queryByText(/3 days ahead/)).toBeNull();
+    api.getBookingSettings.mockReset();
+  });
 
   it('every form closes with Close, sends nothing, and never offers a button named Cancel', async () => {
     drawScreen();

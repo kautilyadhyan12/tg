@@ -554,7 +554,7 @@ d("\"I'm coming\" on a gym's event (real Postgres, two apis)", () => {
       eventOf(await cantCome(gym, far.id, ann));
       expect(await stored(far.id)).toEqual({ waitlisted: 1, cancelled: 1 });
       // The owner makes the hand-over time shorter: the free place is Bea's at once.
-      const saved = await inject("PUT", `/v1/orgs/${gym.id}/booking-settings`, gym.owner.cookies, { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 60, waitlistMax: 1 });
+      const saved = await inject("PUT", `/v1/orgs/${gym.id}/booking-settings`, gym.owner.cookies, { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 60, waitlistMax: 1, pt: { opensDays: 7, freeCancelMinutes: 120 } });
       expect(saved.statusCode, saved.body).toBe(200);
       expect(await stored(far.id)).toEqual({ coming: 1, cancelled: 1 });
       // The settings screen is told somebody moved in.
