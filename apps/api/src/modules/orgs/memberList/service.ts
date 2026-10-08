@@ -1540,6 +1540,7 @@ export async function entriesFilter(
       invitation:
         query.invitation === undefined ? null : await invites.entriesByInvitation(deps.sql, settings, gymId, query.invitation),
       appIds,
+      tagId: query.tag ?? null,
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
     },
   };

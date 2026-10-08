@@ -1741,6 +1741,8 @@ export interface EntriesPageInput {
   invitation: { ids: readonly string[]; include: boolean } | null;
   /** Only these records (the App words asked for, §18.4), or null for no filter. */
   appIds: readonly string[] | null;
+  /** Only the records holding this one of the gym's tags (5d-ii), or null for no filter. */
+  tagId: string | null;
   /** The people whose three kinds of word the app answers (23a-i: they hold a membership
    *  here), and which of them pass the word filters asked, by the app's own words. Null
    *  where no word filter is asked. */
@@ -1798,7 +1800,11 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
         AND (${invitedIds}::uuid[] IS NULL
              OR (${invitedInclude}::boolean AND e.id = ANY(${invitedIds}::uuid[]))
              OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
-        AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))`;
+        AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))
+        -- The tag is read with the record's own gym: another gym's tag is on nobody here.
+        AND (${input.tagId}::uuid IS NULL
+             OR EXISTS (SELECT 1 FROM gym_member_entry_tags et
+                        WHERE et.gym_id = e.gym_id AND et.entry_id = e.id AND et.tag_id = ${input.tagId}::uuid))`;
 }
 
 /** Every record the filter chooses, in the list's order: who "Select all" selects. */

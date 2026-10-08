@@ -2,6 +2,7 @@
 //
 // Staff only: nothing here is sent to the member's app, an email or the CSV download.
 import { z } from "zod";
+import { memberListSelectionSchema } from "./memberList.js";
 
 export const MEMBER_NOTE_MAX_CHARS = 2000;
 /** Notes staff can add to one person; staff delete one before another is added. A join of
@@ -41,15 +42,13 @@ export const memberNoteAddRequestSchema = z
   .strict();
 export type MemberNoteAddRequest = z.infer<typeof memberNoteAddRequestSchema>;
 
-export const memberTagAddRequestSchema = z
-  .object({
-    name: z
-      .string()
-      .max(MEMBER_TAG_MAX_CHARS * 4)
-      .transform(tidyMemberTagName)
-      .pipe(z.string().min(1).max(MEMBER_TAG_MAX_CHARS)),
-  })
-  .strict();
+const tagNameSchema = z
+  .string()
+  .max(MEMBER_TAG_MAX_CHARS * 4)
+  .transform(tidyMemberTagName)
+  .pipe(z.string().min(1).max(MEMBER_TAG_MAX_CHARS));
+
+export const memberTagAddRequestSchema = z.object({ name: tagNameSchema }).strict();
 export type MemberTagAddRequest = z.infer<typeof memberTagAddRequestSchema>;
 
 export const memberNoteSchema = z
@@ -94,3 +93,78 @@ export const MEMBER_NOTES_STAFF_ONLY_WORDS = "Only your staff see notes. Keep he
 export const MEMBER_TAGS_STAFF_ONLY_WORDS = "Only your staff see tags.";
 /** A note whose writer's account is gone. */
 export const MEMBER_NOTE_NO_AUTHOR_WORDS = "Someone no longer here";
+
+// ── Tags on the Members list (5d-ii; spec §18.13) ──────────────────────────
+//
+// A tag is a filter on the list; the people selected are tagged or untagged together; a
+// gym renames or deletes its own tags. Staff only, as above.
+
+/** One of the gym's tags with how many records hold it: members, and past members. */
+export const memberGymTagSchema = z
+  .object({ id: z.string().uuid(), name: z.string(), people: z.number().int().min(0), pastPeople: z.number().int().min(0) })
+  .strict();
+export type MemberGymTag = z.infer<typeof memberGymTagSchema>;
+
+export const memberGymTagsResponseSchema = z.object({ tags: z.array(memberGymTagSchema) }).strict();
+
+export const memberTagRenameRequestSchema = z.object({ name: tagNameSchema }).strict();
+export type MemberTagRenameRequest = z.infer<typeof memberTagRenameRequestSchema>;
+
+/** Add a tag to the people selected (one of the gym's, or a new one), or take one off them. */
+export const memberTagsSelectedRequestSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("add"),
+      selection: memberListSelectionSchema,
+      tag: z.union([z.object({ id: z.string().uuid() }).strict(), z.object({ name: tagNameSchema }).strict()]),
+    })
+    .strict(),
+  z.object({ action: z.literal("remove"), selection: memberListSelectionSchema, tagId: z.string().uuid() }).strict(),
+]);
+export type MemberTagsSelectedRequest = z.infer<typeof memberTagsSelectedRequestSchema>;
+
+export const memberTagPersonSchema = z.object({ entryId: z.string().uuid(), name: z.string() }).strict();
+export type MemberTagPerson = z.infer<typeof memberTagPersonSchema>;
+
+/** Why someone selected does not change:
+ *  - `has_it`: already has the tag being added;
+ *  - `not_on_them`: does not have the tag being taken off;
+ *  - `full`: already holds as many tags as one person can;
+ *  - `gone`: no longer on the list since the page was read (counted, never named). */
+export const memberTagKeptReasonSchema = z.enum(["has_it", "not_on_them", "full", "gone"]);
+export type MemberTagKeptReason = z.infer<typeof memberTagKeptReasonSchema>;
+
+/** The box before the press: who gets the tag (or loses it), and who doesn't change and why. */
+export const memberTagsPreviewSchema = z
+  .object({
+    action: z.enum(["add", "remove"]),
+    /** `id` is null for a tag the gym does not have yet. */
+    tag: z.object({ id: z.string().uuid().nullable(), name: z.string() }).strict(),
+    selected: z.number().int().min(0),
+    change: z.array(memberTagPersonSchema),
+    kept: z.array(
+      z.object({ reason: memberTagKeptReasonSchema, count: z.number().int().min(1), people: z.array(memberTagPersonSchema) }).strict(),
+    ),
+  })
+  .strict();
+export type MemberTagsPreview = z.infer<typeof memberTagsPreviewSchema>;
+
+export const memberTagsPreviewResponseSchema = z.object({ preview: memberTagsPreviewSchema }).strict();
+
+/** What a press did, and the gym's tags as they now stand. */
+export const memberTagsDoneSchema = z
+  .object({
+    action: z.enum(["add", "remove"]),
+    tag: memberTagSchema,
+    changed: z.number().int().min(0),
+    kept: z.array(z.object({ reason: memberTagKeptReasonSchema, count: z.number().int().min(1) }).strict()),
+  })
+  .strict();
+export type MemberTagsDone = z.infer<typeof memberTagsDoneSchema>;
+
+export const memberTagsDoneResponseSchema = z.object({ done: memberTagsDoneSchema, tags: z.array(memberGymTagSchema) }).strict();
+
+export const MEMBER_TAGS_WORDS = {
+  tag_not_found: "That tag isn't there any more.",
+  tag_name_taken: "Your gym already has a tag with that name. Pick another name.",
+} as const;

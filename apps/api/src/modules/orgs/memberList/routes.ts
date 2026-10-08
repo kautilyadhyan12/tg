@@ -41,6 +41,8 @@ import {
   memberListUploadRequestSchema,
   memberNoteAddRequestSchema,
   memberTagAddRequestSchema,
+  memberTagRenameRequestSchema,
+  memberTagsSelectedRequestSchema,
   memberRosterRemovePreviewRequestSchema,
   memberRosterRemoveRequestSchema,
   MEMBER_REMOVE_CHANGED_WORDS,
@@ -49,6 +51,7 @@ import {
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import {
+  gymTagParamsSchema,
   memberListEntryParamsSchema,
   memberListParamsSchema,
   memberNoteParamsSchema,
@@ -63,6 +66,7 @@ import * as byHand from "./byHandService.js";
 import * as duplicates from "./duplicates.js";
 import * as exporter from "./exportCsv.js";
 import * as notes from "./notes.js";
+import * as tags from "./tags.js";
 import * as removal from "./removeSelected.js";
 import { SelectionChanged, selectAll } from "./selection.js";
 import * as service from "./service.js";
@@ -642,6 +646,64 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     const state = await notes.removeTag(listDeps, requireUserId(req), params.gymId, params.entryId, params.tagId, notesGate(req, reply));
     if (state === null) return;
     return reply.status(200).send(state);
+  });
+
+  // Tags on the Members list (5d-ii): the gym's tags with their counts, a tag for the
+  // people selected, and a tag renamed or deleted.
+  app.get("/v1/orgs/:gymId/member-list/tags", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await tags.readGymTags(listDeps, requireUserId(req), params.gymId, readGate(req, reply));
+    if (list === null) return;
+    return reply.status(200).send({ tags: list });
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/selected/tags-preview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberTagsSelectedRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const preview = await tags.previewTagSelected(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+      if (preview === null) return;
+      return await reply.status(200).send({ preview });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/selected/tags", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberTagsSelectedRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const answer = await tags.tagSelected(listDeps, requireUserId(req), params.gymId, body, notesGate(req, reply));
+      if (answer === null) return;
+      return await reply.status(200).send(answer);
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  app.patch("/v1/orgs/:gymId/member-list/tags/:tagId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(gymTagParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberTagRenameRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await tags.renameTag(listDeps, requireUserId(req), params.gymId, params.tagId, body.name, notesGate(req, reply));
+    if (list === null) return;
+    return reply.status(200).send({ tags: list });
+  });
+
+  app.delete("/v1/orgs/:gymId/member-list/tags/:tagId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(gymTagParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await tags.deleteTag(listDeps, requireUserId(req), params.gymId, params.tagId, notesGate(req, reply));
+    if (list === null) return;
+    return reply.status(200).send({ tags: list });
   });
 
   app.delete("/v1/orgs/:gymId/member-list/former/:entryId", { preHandler: [app.authenticate] }, async (req, reply) => {
