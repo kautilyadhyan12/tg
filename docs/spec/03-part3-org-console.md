@@ -2995,6 +2995,42 @@ starts." (or "More times on this day open later: …" under the ones that can be
 never "No available times on this day." for them; a time pressed too soon is refused as
 "Booking for that time isn't open yet."; the trainer's week answers `freeCancelMinutes`,
 so the console's late-cancel box names the length the same read decided "late" by.)*
+*(17e-iv-a, 2026-10-09: **sessions when a person leaves.** A record taken off the gym's list
+ends the coming sessions booked for it, and a membership staff cancel ends the coming
+sessions booked on it: each becomes `cancelled`, the trainer's time can be booked again, and
+a pack has each session back (a limit has it back too, since a cancelled session is not
+counted). "Coming" is `booked` and not started; a session that has started, took place, was
+missed, was cancelled, or was cancelled late with the session kept used, stays exactly as it
+is. Nobody else's session or pack is read or written. **One rule, called where the record
+goes** (`pt/changes.ts`): `endLeaversSessions` is called inside the three statements that
+make a record a past member (`setEntryFormer`, `setEntriesFormer`, `markEntriesFormer` in
+`memberList/repo.ts`), so every door ends them: Remove on a person's page, Remove on the
+people ticked (both tabs), Remove on a person in the app, Remove from staff and app, and an
+import's They've left. A membership's cancel ends them beside its class bookings
+(`endMembershipBookings`); cancelled at the end of what is paid, only the sessions after its
+last day. All of it runs in the removal's own transaction under the gym's lock, the lock a
+booking takes, so of a removal and a booking sent together one sees the other, and a pack
+session comes back once however often the request arrives. **Each names them first.** The
+sessions are `PtSessionsEnding` (`ptSessionsEnding.ts`): their whole `count`, how many go
+back to a pack, the first 100 (person, trainer, day, time) and a `mark` that is one value
+for exactly those sessions. The Remove box and the import's leavers box carry it as
+`preview.ptSessions`, and it is part of the box's `digest`, so a session booked or
+cancelled while the box is open answers `remove_changed` or `leavers_changed` with the new
+box and removes nobody. Removing ONE person (`DELETE …/member-list/entries/:entryId`,
+`DELETE …/members/:userId`) answers 409 `pt_sessions_ending` with `sessions` and does
+nothing until the request sends `confirmPtSessions` equal to the mark, worked out again
+under the lock. A membership's cancel answers its 409 `membership_has_bookings` with
+`ending.ptSessions` beside the classes (either may be none) and needs `confirmPtSessions`
+as well as `confirmBookings`. **What does not end them:** somebody removed from the app
+whose record stays on the list (a shared email the list cannot place, "Not this person"),
+and an account its owner deletes: a session is held by the record, staff book and run
+sessions for people with no app, and the record is still on the list. Put back brings no
+session back. Two records joined keep their sessions on the kept one, as before. On the
+screens one part (`PtSessionsEnding.jsx`) is in every box: "2 personal training sessions
+will be cancelled", each session's person, day, time and trainer (three, "and N more", See
+all), what happens to packs, that a started session stays, and that the app tells nobody
+yet. Not done: a trainer leaving the staff, came and no-show (17e-iv-b, built next); nobody
+is told (the inbox, 20a).)*
 
 ### 13.6 The calendar, the desk and the messages
 

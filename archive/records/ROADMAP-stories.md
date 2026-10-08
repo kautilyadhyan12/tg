@@ -318,3 +318,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 5d-ii. **Tags on the Members list** (the line as it stood; merged 2026-10-09, PR #199): a tag is a filter on Members; tag or untag everybody ticked from the action bar; rename or delete one of the gym's tags. What picks people for 20f. After 5d-i.
 
 - 17e-vi. [x] **Personal training's own booking rules** (Kd, RULINGS 2026-10-08; split from 17e-v, straight after it): a Personal training part of Settings' Booking rules with its own "opens N days before" and "free to cancel until", both starting at the gym's present values; the console's Personal training page, a member's tab and a cancel read them. Risky: it decides when a cancel is free. *Merged 2026-10-09 (PR #200).*
+
+- 17e-iv. **Sessions when people change** (the line as first written; split 2026-10-09 into 17e-iv-a and 17e-iv-b): a person removed or taken off the list, a membership cancelled and a trainer leaving the staff end the coming sessions and give packs their sessions back, each naming the people first; came and no-show (with a route test that a session marked came or missed still counts against a membership's limit, 17e-v).
