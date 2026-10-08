@@ -33,6 +33,7 @@ import { viewerPrivileges } from './consoleView';
 import { canOpenPlace, placeFor } from './consolePlaces';
 import { useCameBack } from './useCameBack';
 import PlaceLink from '../../components/console/PlaceLink';
+import SentencePlace from '../../components/console/SentencePlace';
 import PostalAddressBox from '../../components/console/PostalAddressBox';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
@@ -680,6 +681,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     setRefusal({
       message: noAddress ? inviteBlockedWords(code, words, canSetAddress) : errorText(err, fallback),
       canSetAddress,
+      place: code === 'not_them_staff' ? 'staff' : null,
       openId: (code === 'already_on_list' || code === 'former_record') && typeof other === 'string' ? other : null,
       ack: code === 'leaves_list' ? extra.ack ?? null : null,
     });
@@ -1703,6 +1705,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 {inv.detail}
               </p>
             ) : null}
+            {/* It leaves this page, so it asks first while a form is open on it. */}
+            {inv?.detail && !(mode === 'view' && pastInApp(shown)) ? <SentencePlace kind={inv.place} gym={gym} guard={mode !== 'view'} /> : null}
           </div>
           <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn flex-shrink-0">
             <X aria-hidden="true" className="w-5 h-5" />
@@ -1738,6 +1742,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                       </button>
                     ) : null}
                   </div>
+                  <SentencePlace kind={refusal.place} gym={gym} />
                   {/* Typed here, so the person stays open to invite straight afterwards. */}
                   {refusal.canSetAddress ? (
                     <PostalAddressBox

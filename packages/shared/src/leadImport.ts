@@ -359,7 +359,7 @@ export function leadFileWarningWords(warning: LeadFileWarning): string {
     case "shortened_by_excel":
       return `${count(warning.rows, "row has", "rows have")} a number the spreadsheet shortened, such as 9.19877E+11, so its last digits are gone. We never guess them back: set that column to Text in your spreadsheet and export again.`;
     case "phones_need_country":
-      return `${count(warning.rows, "phone number was", "phone numbers were")} left out because this gym has no country set. Set the gym's country in Settings, or write the numbers with their country code, and check again.`;
+      return `${count(warning.rows, "phone number was", "phone numbers were")} left out because this gym has no country set. Set the gym's country, or write the numbers with their country code, and check again.`;
     case "phones_unusual":
       return `${count(warning.rows, "phone number looks", "phone numbers look")} mistyped. ${warning.rows === 1 ? "It was" : "They were"} kept as written.`;
     case "card_cells_dropped":

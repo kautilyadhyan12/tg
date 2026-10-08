@@ -5,6 +5,7 @@
 // what was said.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { LEAD_FILE_CHANGED_ERROR, LEAD_FILE_WORDS, leadFilePreviewSchema } from '@app/shared';
 
 const api = { checkLeadFile: vi.fn(), addLeadFile: vi.fn() };
@@ -166,5 +167,36 @@ describe('Import leads', () => {
   it('a gym with no live plan can open the panel and choose nothing', () => {
     open(true);
     expect(screen.getByRole('button', { name: 'Choose a file' }).disabled).toBe(true);
+  });
+});
+
+// 23d-ii: the note that asks for the gym's country has the button to that box.
+describe('phone numbers left out because the gym has no country', () => {
+  const withNote = { ...PREVIEW, warnings: [{ code: 'phones_need_country', rows: 2 }, { code: 'phones_unusual', rows: 1 }] };
+  const openAs = async (gym) => {
+    api.checkLeadFile.mockResolvedValue({ data: { preview: withNote } });
+    render(
+      <MemoryRouter>
+        <LeadFileImport gymId="g1" gym={gym} readOnly={false} onClose={onClose} onAdded={onAdded} />
+      </MemoryRouter>,
+    );
+    await pick();
+    return within(screen.getByTestId('lead-file-notes'));
+  };
+
+  it('the owner gets Set your country under that note alone, and it asks before leaving the file', async () => {
+    const notes = await openAs({ ...GYM, slug: 'iron-house', orgType: 'gym', staffRole: 'owner' });
+    expect(notes.getByText(/left out because this gym has no country set\. Set the gym's country, or write the numbers/)).toBeTruthy();
+    expect(notes.getAllByRole('button')).toHaveLength(1);
+    fireEvent.click(notes.getByRole('button', { name: 'Set your country' }));
+    expect(notes.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/settings#country');
+    fireEvent.click(notes.getByRole('button', { name: 'Stay here' }));
+    expect(screen.getByTestId('lead-file-added')).toBeTruthy();
+  });
+
+  it('staff who cannot change the details get no button and read who can', async () => {
+    const notes = await openAs({ ...GYM, slug: 'iron-house', orgType: 'gym', staffRole: 'manager', privileges: ['members.read', 'members.confirm'] });
+    expect(notes.getByText('The owner can set the country in Gym details.')).toBeTruthy();
+    expect(notes.queryByRole('button')).toBeNull();
   });
 });

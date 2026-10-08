@@ -1,3 +1,4 @@
+import { orgWords } from '@app/shared';
 import { canManageStaff } from './staffView';
 import { canManageOrg } from './gymDetailsView';
 import { canManageSchedule } from './classesView';
@@ -93,4 +94,25 @@ export function trainerWeekTo(orgSlug, trainerId) {
  *  sentence then says who can, and has no button. */
 export function placeFor(orgSlug, privileges, place) {
   return canOpenPlace(privileges, place) ? placeTo(orgSlug, place) : null;
+}
+
+/** The sentences the server writes that need something done in another place (ROADMAP
+ *  23d-ii): the place, its button, and who can for somebody who cannot open it. */
+const SENTENCE_PLACES = {
+  gymName: { place: 'gymDetails', button: (details) => `Open ${details}`, ask: (details) => `The owner can change the name in ${details}.` },
+  postalAddress: { place: 'postalAddress', button: () => 'Add your postal address', ask: (details) => `The owner can add it in ${details}.` },
+  country: { place: 'country', button: () => 'Set your country', ask: (details) => `The owner can set the country in ${details}.` },
+  staff: { place: 'staff', button: () => 'Open the Staff tab', ask: () => 'The owner can change their access.' },
+};
+
+/** What goes under such a sentence: `to` and the button's words for whoever can open the
+ *  place, or `to: null` and `ask`, the line that says who can. Null for a sentence that
+ *  names no place. */
+export function sentencePlace(kind, orgSlug, privileges, orgType) {
+  const found = typeof kind === 'string' && Object.hasOwn(SENTENCE_PLACES, kind) ? SENTENCE_PLACES[kind] : null;
+  if (found === null) return null;
+  const details = `${orgWords(orgType).itCap} details`;
+  if (!canOpenPlace(privileges, found.place)) return { to: null, button: null, ask: found.ask(details) };
+  const to = placeTo(orgSlug, found.place);
+  return to === null ? null : { to, button: found.button(details), ask: null };
 }

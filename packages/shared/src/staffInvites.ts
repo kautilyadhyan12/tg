@@ -63,7 +63,7 @@ export type StaffInviteEmailReason = z.infer<typeof staffInviteEmailReasonSchema
 export const STAFF_INVITE_EMAIL_REASON_WORDS: Readonly<Record<StaffInviteEmailReason, string>> = {
   invitation_closed: "Email not sent: the invitation was cancelled or answered before it went.",
   gym_not_active: "Email not sent: you didn't have an active plan.",
-  gym_name: "Email not sent: your business name can't be used in an email. Update it in Settings.",
+  gym_name: "Email not sent: your business name can't be used in an email. Change the name, then send it again.",
   sending_stopped: "Email not sent: your emails are paused because too many bounced or were marked as spam.",
   unsubscribed: "Email not sent: this person unsubscribed from your emails.",
   complained: "Email not sent: this person marked an earlier email from you as spam.",

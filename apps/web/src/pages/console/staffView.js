@@ -499,6 +499,8 @@ export function staffInviteView(invite, orgType, now = Date.now()) {
     meta: `${role} · ${status}`,
     email,
     emailProblem: invite.state === 'waiting' && invite.emailStatus === 'not_sent',
+    // The one reason that needs something done in another place (`sentencePlace`).
+    emailPlace: invite.state === 'waiting' && invite.emailStatus === 'not_sent' && invite.emailReason === 'gym_name' ? 'gymName' : null,
     action: invite.state === 'waiting' ? 'Cancel invitation' : 'Remove',
     canSendAgain: left > 0 && invite.emailStatus !== 'sending' && !blocked && !waitWeek,
     // Said, never hidden, once the button is gone for having been used up or for the week.

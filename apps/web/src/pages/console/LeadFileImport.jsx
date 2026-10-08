@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Check, FileSpreadsheet, Loader2, X } from 'lucide-react';
 import { LEAD_FILE_CHANGED_ERROR, LEAD_FILE_PERMISSION_WORDS, LEAD_FILE_WORDS, MEMBER_FILE_MAX_BYTES, leadFileRefusalWords } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
+import SentencePlace from '../../components/console/SentencePlace';
 import { bytesToBase64 } from './memberListView';
 import {
   COLUMN_ROLES,
@@ -281,8 +282,10 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
               {preview.warnings.length > 0 ? (
                 <ul className="flex flex-col gap-1.5" data-testid="lead-file-notes">
                   {warningLines(preview).map((line) => (
-                    <li key={line} className="c-s14 c-t2">
-                      {line}
+                    <li key={line.text} className="c-s14 c-t2 flex flex-col gap-1.5">
+                      {line.text}
+                      {/* It leaves the file being checked, so it asks first. */}
+                      <SentencePlace kind={line.place} gym={gym} guard />
                     </li>
                   ))}
                 </ul>

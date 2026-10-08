@@ -671,6 +671,7 @@ export default function Members() {
         <MembersStaffTab
           key={`staff-${gymId}`}
           gymId={gymId}
+          gym={org}
           orgType={org.orgType}
           words={words}
           readOnly={readOnly}

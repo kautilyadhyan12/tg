@@ -927,7 +927,7 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "shortened_by_excel":
       return `${numberWords(warning.rows, "row has", "rows have")} a number the spreadsheet shortened, such as 9.19877E+11, so its last digits are gone. We never guess them back: set that column to Text in your spreadsheet and export again, or type the whole number in the app after you import.`;
     case "phones_need_country":
-      return `${numberWords(warning.rows, "phone number was", "phone numbers were")} left out because this gym has no country set. Set the gym's country in Settings, or write the numbers with their country code, and upload again — or add them in the app after you import.`;
+      return `${numberWords(warning.rows, "phone number was", "phone numbers were")} left out because this gym has no country set. Set the gym's country, or write the numbers with their country code, and upload again — or add them in the app after you import.`;
     case "phones_unusual":
       return `${numberWords(warning.rows, "phone number doesn't", "phone numbers don't")} look like a normal number for their country. They have been kept — check them before you invite anyone. Correct any that are wrong in your file and upload it again, or in the app after you import.`;
     case "shared_emails":
@@ -2515,7 +2515,7 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   remove_needs_list: "Removing this person also takes them off your list, which your role can't do. Ask the owner.",
   not_them_gone: "This person no longer uses the app with these details. Close and reopen the page.",
   not_them_needs_remove: "Your role can't remove app access. Ask the owner.",
-  not_them_staff: "This person is staff or has a complimentary place, so their access is managed under Staff.",
+  not_them_staff: "This person is staff or has a complimentary place, so their access is managed on the Staff tab.",
 } as const;
 
 /** "Not this person": which account in the app it is about (§18.4). */

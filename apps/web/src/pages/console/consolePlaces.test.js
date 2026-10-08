@@ -11,6 +11,7 @@ import {
   dayOrNull,
   placeFor,
   placeTo,
+  sentencePlace,
   trainerWeekTo,
 } from './consolePlaces';
 import { consoleMenu } from './consoleMenu';
@@ -156,5 +157,36 @@ describe('who may open each place', () => {
       expect(settings).toBe(held.includes('org.manage'));
       if (settings) expect(keys).toContain('settings');
     }
+  });
+});
+
+// 23d-ii. THE WORST THING: a sentence's button sends somebody to a page their role cannot
+// open. Each kind is checked against the one permission its place needs.
+describe("a server sentence's place", () => {
+  const KINDS = {
+    gymName: { needs: 'org.manage', to: '/console/iron-house/settings#gym-details', button: 'Open Gym details', ask: 'The owner can change the name in Gym details.' },
+    postalAddress: { needs: 'org.manage', to: '/console/iron-house/settings#postal-address', button: 'Add your postal address', ask: 'The owner can add it in Gym details.' },
+    country: { needs: 'org.manage', to: '/console/iron-house/settings#country', button: 'Set your country', ask: 'The owner can set the country in Gym details.' },
+    staff: { needs: 'staff.manage', to: '/console/iron-house/members?view=staff', button: 'Open the Staff tab', ask: 'The owner can change their access.' },
+  };
+
+  it.each(Object.entries(KINDS))('%s: a button for whoever can open the place, and who can for everybody else', (kind, want) => {
+    expect(sentencePlace(kind, 'iron-house', [want.needs], 'gym')).toEqual({ to: want.to, button: want.button, ask: null });
+    expect(sentencePlace(kind, 'iron-house', EVERY, 'gym')).toEqual({ to: want.to, button: want.button, ask: null });
+    const others = EVERY.filter((p) => p !== want.needs);
+    for (const privileges of [others, ['members.read'], [], null, undefined]) {
+      expect(sentencePlace(kind, 'iron-house', privileges, 'gym'), JSON.stringify(privileges)).toEqual({ to: null, button: null, ask: want.ask });
+    }
+    // No gym on screen yet: no button to nowhere.
+    expect(sentencePlace(kind, '', [want.needs], 'gym')).toBeNull();
+  });
+
+  it("names the details section as Settings does for each kind of business", () => {
+    expect(sentencePlace('gymName', 'flow', ['org.manage'], 'studio').button).toBe('Open Studio details');
+    expect(sentencePlace('country', 'flow', [], 'studio').ask).toBe('The owner can set the country in Studio details.');
+  });
+
+  it('a sentence that names no place gets nothing', () => {
+    for (const kind of [null, undefined, '', 'members', 'toString', '__proto__', 7]) expect(sentencePlace(kind, 'iron-house', EVERY, 'gym'), String(kind)).toBeNull();
   });
 });

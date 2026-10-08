@@ -9,6 +9,8 @@
 // refused; and Join removes exactly the record shown under "Remove".
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { MEMBER_INVITE_EMAIL_REASON_WORDS, MEMBER_LIST_BY_HAND_WORDS } from '@app/shared';
 import {
   MEMBER_LIST_QUERY_MAX_CHARS,
   memberListEntryDetailSchema,
@@ -1129,5 +1131,84 @@ describe('Add member: may already be on your list', () => {
     expect(dialog().getByLabelText('Locker').value).toBe('12');
     expect(dialog().queryByTestId('back-to-adding')).toBeNull();
     expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 23d-ii: two of the server's sentences name another place; each has its button for
+// whoever can open it, and says who can for anybody else.
+describe("the server's sentences that name another place", () => {
+  const OWNER_GYM = { slug: 'iron-house', orgType: 'gym', staffRole: 'owner' };
+  const MANAGER_GYM = { slug: 'iron-house', orgType: 'gym', staffRole: 'manager', privileges: ['members.read', 'members.confirm', 'members.remove'] };
+  const inRouter = (entryId, gym) =>
+    render(
+      <MemoryRouter>
+        <MemberListPerson gymId={GYM} gym={gym} entryId={entryId} list={LIST} words={WORDS} readOnly={false} canRemove onClose={onClose} onChanged={onChanged} />
+      </MemoryRouter>,
+    );
+  const named = {
+    ...person(ADA, 'Ada Lovelace'),
+    app: { word: 'not_in_app', tone: 'grey', at: null, line: MEMBER_INVITE_EMAIL_REASON_WORDS.gym_name, lineTone: 'amber' },
+  };
+
+  it("an invitation not sent for the gym's name: the owner gets the button to the gym details", async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(named));
+    inRouter(ADA, OWNER_GYM);
+    expect(await dialog().findByText("Invitation not sent: your business name can't be used in an email. Change the name, then invite them again.")).toBeTruthy();
+    expect(dialog().getByRole('link', { name: 'Open Gym details' }).getAttribute('href')).toBe('/console/iron-house/settings#gym-details');
+  });
+
+  it('a manager who cannot change the details gets no button and reads who can', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(named));
+    inRouter(ADA, MANAGER_GYM);
+    expect(await dialog().findByText('The owner can change the name in Gym details.')).toBeTruthy();
+    expect(dialog().queryByRole('link', { name: /details/ })).toBeNull();
+  });
+
+  it('any other line that asks staff to check something has neither', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(
+      entryAnswer({ ...named, app: { ...named.app, line: MEMBER_INVITE_EMAIL_REASON_WORDS.no_mail_domain } }),
+    );
+    inRouter(ADA, OWNER_GYM);
+    await dialog().findByText(MEMBER_INVITE_EMAIL_REASON_WORDS.no_mail_domain);
+    expect(dialog().queryByRole('link', { name: /details/ })).toBeNull();
+    expect(dialog().queryByText(/The owner can/)).toBeNull();
+  });
+
+  describe('Not this person, refused because they are staff', () => {
+    const DAN = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const daniel = {
+      ...person(ADA, 'Daniel Wu'),
+      inApp: true,
+      removeEndsApp: true,
+      app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' },
+      members: [{ userId: DAN, displayName: 'du', joinedAt: '2026-09-07T10:00:00.000Z', visits: 0, lastVisitOn: null }],
+    };
+    const refuse = async (gym, error) => {
+      orgService.getMemberListEntry.mockResolvedValue(entryAnswer(daniel));
+      orgService.notThem.mockRejectedValue(refusal(409, { error, message: MEMBER_LIST_BY_HAND_WORDS[error] }));
+      inRouter(ADA, gym);
+      fireEvent.click(within(await screen.findByTestId('in-app-person')).getByRole('button', { name: 'Not Daniel Wu?' }));
+      fireEvent.click(within(screen.getByTestId('confirm-not-them')).getByRole('button', { name: 'Remove access' }));
+      return within(await screen.findByRole('alert'));
+    };
+
+    it('the owner gets the button to the Staff tab', async () => {
+      const alert = await refuse(OWNER_GYM, 'not_them_staff');
+      expect(alert.getByText('This person is staff or has a complimentary place, so their access is managed on the Staff tab.')).toBeTruthy();
+      expect(alert.getByRole('link', { name: 'Open the Staff tab' }).getAttribute('href')).toBe('/console/iron-house/members?view=staff');
+    });
+
+    it('a manager who cannot manage staff gets no button and reads who can', async () => {
+      const alert = await refuse(MANAGER_GYM, 'not_them_staff');
+      expect(alert.getByText('The owner can change their access.')).toBeTruthy();
+      expect(alert.queryByRole('link')).toBeNull();
+    });
+
+    it('another refusal has neither', async () => {
+      const alert = await refuse(OWNER_GYM, 'not_them_gone');
+      expect(alert.getByText(MEMBER_LIST_BY_HAND_WORDS.not_them_gone)).toBeTruthy();
+      expect(alert.queryByRole('link')).toBeNull();
+      expect(alert.queryByText(/The owner can/)).toBeNull();
+    });
   });
 });

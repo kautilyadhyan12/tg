@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MEMBER_APP_WORDS,
+  MEMBER_INVITE_EMAIL_REASON_WORDS,
   memberInvitePreviewQuerySchema,
   memberInviteRequestSchema,
   memberListEntryDetailSchema,
@@ -187,7 +188,17 @@ describe("how a row shows the server's App word (spec Part 3 §18.4)", () => {
 
   it("a person's page reads the same word", () => {
     const view = invitationView(entry({ app: app({ word: 'not_in_app', tone: 'grey', line: 'Check the address.', lineTone: 'red' }) }), TODAY);
-    expect(view).toEqual({ tag: 'Not in the app', tone: 'plain', detail: 'Check the address.', line: null });
+    expect(view).toEqual({ tag: 'Not in the app', tone: 'plain', detail: 'Check the address.', line: null, place: null });
+  });
+
+  it("the line about the gym's name carries the place to change it, and no other line does (23d-ii)", () => {
+    const named = app({ word: 'not_in_app', tone: 'grey', line: MEMBER_INVITE_EMAIL_REASON_WORDS.gym_name, lineTone: 'amber' });
+    expect(appView(named, TODAY).place).toBe('gymName');
+    expect(invitationView(entry({ app: named }), TODAY).place).toBe('gymName');
+    for (const [reason, line] of Object.entries(MEMBER_INVITE_EMAIL_REASON_WORDS)) {
+      if (reason !== 'gym_name') expect(appView(app({ word: 'not_in_app', tone: 'grey', line, lineTone: 'amber' }), TODAY).place, reason).toBeNull();
+    }
+    expect(appView(app({ word: 'in_app', tone: 'green', line: null }), TODAY).place).toBeNull();
   });
 
   it("names the gym's own words on the row, and since when a past member is one", () => {

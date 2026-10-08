@@ -148,8 +148,8 @@ export const updateLeadEmailSettingsRequestSchema = z
 export type UpdateLeadEmailSettingsRequest = z.infer<typeof updateLeadEmailSettingsRequestSchema>;
 
 export const LEAD_EMAIL_SETTINGS_WORDS = {
-  needs_postal_address: "Add your postal address under your gym's details first. The law asks for it at the foot of these emails.",
-  gym_name: "Your gym's name can't be shown in an email as it is. Change it under your gym's details first.",
+  needs_postal_address: "Add your postal address first. The law asks for it at the foot of these emails.",
+  gym_name: "Your gym's name can't be shown in an email as it is. Change the name first.",
   sending_stopped:
     "Emails from your gym through AI Home Gym are stopped, because too many bounced or one was marked as spam. Send follow-ups yourself from each lead's panel.",
   paused: "Emails through AI Home Gym are paused just now. Until they start again, your leads' follow-ups wait for you on the Leads page.",
