@@ -555,6 +555,8 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
         return (JSON.parse(res.body) as { settings: ClassBookingSettings }).settings;
       };
       const start: ClassBookingSettings = { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 };
+      // Personal training's two ride on every save (17e-vi); its own file is `pt.rules.routes.test.ts`.
+      const pt = { opensDays: 7, freeCancelMinutes: 120 };
       expect(await read()).toEqual(start);
 
       // A class 12 hours away is inside the 1-day hand-over time: the place a cancel frees
@@ -589,14 +591,14 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
         { ...start, gymId: sells.id },
       ];
       for (const body of bad) {
-        const res = await inject("PUT", settingsUrl(open), open.owner.cookies, body);
+        const res = await inject("PUT", settingsUrl(open), open.owner.cookies, { ...(body as object), pt });
         expect([res.statusCode, errorOf(res)], JSON.stringify(body)).toEqual([400, "validation_error"]);
       }
       expect(await read()).toEqual(start);
 
       // The hand-over time cut to an hour: the free place is the waiting person's now.
       const next: ClassBookingSettings = { opensDays: 14, freeCancelMinutes: 60, handoverMinutes: 60, waitlistMax: 0 };
-      const saved = await inject("PUT", settingsUrl(open), open.owner.cookies, next);
+      const saved = await inject("PUT", settingsUrl(open), open.owner.cookies, { ...next, pt });
       expect(saved.statusCode, saved.body).toBe(200);
       // The save says how many waiting people it moved in.
       expect((JSON.parse(saved.body) as { movedIn: number }).movedIn).toBe(1);
@@ -618,10 +620,10 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
         SELECT meta FROM audit_log WHERE gym_id = ${open.id} AND action = 'org.booking_settings_changed'`;
       expect(audit?.meta).toEqual({ opensDays: "7 -> 14", freeCancelMinutes: "120 -> 60", handoverMinutes: "1440 -> 60", waitlistMax: "20 -> 0" });
       // The same four again write nothing more.
-      expect((await inject("PUT", settingsUrl(open), open.owner.cookies, next)).statusCode).toBe(200);
+      expect((await inject("PUT", settingsUrl(open), open.owner.cookies, { ...next, pt })).statusCode).toBe(200);
       const [lines] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${open.id} AND action = 'org.booking_settings_changed'`;
       expect(lines?.n).toBe(1);
-      expect((await inject("PUT", settingsUrl(open), open.owner.cookies, start)).statusCode).toBe(200);
+      expect((await inject("PUT", settingsUrl(open), open.owner.cookies, { ...start, pt })).statusCode).toBe(200);
     },
     T,
   );
@@ -641,7 +643,7 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       if (slot === undefined) throw new Error("no time slot");
       await sql`UPDATE gym_class_sessions SET schedule_id = ${slot.id} WHERE id = ${spin.id}`;
       expect(await booked(open, insider, spin.id)).toBe("booked");
-      const body: ClassBookingSettings = { opensDays: 3, freeCancelMinutes: 30, handoverMinutes: 30, waitlistMax: 5 };
+      const body = { opensDays: 3, freeCancelMinutes: 30, handoverMinutes: 30, waitlistMax: 5, pt: { opensDays: 3, freeCancelMinutes: 30 } };
       const endingUrl = `/v1/orgs/${open.id}/class-bookings/ending?by=session&id=${spin.id}`;
       const cancelUrl = `/v1/orgs/${open.id}/class-sessions/${spin.id}/cancel`;
 

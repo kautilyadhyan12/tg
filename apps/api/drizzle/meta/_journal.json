@@ -589,6 +589,13 @@
       "when": 1788566400068,
       "tag": "0084_pt_session_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1788652800069,
+      "tag": "0085_pt_booking_rules",
+      "breakpoints": true
     }
   ]
 }

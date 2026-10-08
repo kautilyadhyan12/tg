@@ -214,7 +214,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 17e-iii-a. [x] **The Classes page asks first** — merged 2026-10-06 (PR #184).
        - 17e-iii-b. [x] **A trainer's time off** — merged 2026-10-06 (PR #185).
      - 17e-v. [x] **A limit on personal training sessions on a membership** — merged 2026-10-08 (PR #198).
-     - 17e-vi. [ ] **Personal training's own booking rules** (Kd, RULINGS 2026-10-08; split from 17e-v, straight after it): a Personal training part of Settings' Booking rules with its own "opens N days before" and "free to cancel until", both starting at the gym's present values; the console's Personal training page, a member's tab and a cancel read them. Risky: it decides when a cancel is free.
+     - 17e-vi. [x] **Personal training's own booking rules** — merged 2026-10-09 (PR #200).
      - 17e-iv. [ ] **Sessions when people change**: a person removed or taken off the list, a membership cancelled and a trainer leaving the staff end the coming sessions and give packs their sessions back, each naming the people first; came and no-show (with a route test that a session marked came or missed still counts against a membership's limit, 17e-v).
    - 17f. [ ] **Check-in meets bookings**: a desk scan near a booked class marks it "came"; a worker marks the rest no-shows at the end, safe to run twice. Needs 16a.
    - 17g. [ ] **Online classes** (Kd, RULINGS 2026-10-08): a time slot marked Online carries the gym's own video link (Zoom or any other; we host no video); only people booked on it see the link, from shortly before it starts; places, the waitlist and cancelling work as for any class. Its plan reads how Mindbody, Momence and TeamUp do it first. Before the passes over 17.

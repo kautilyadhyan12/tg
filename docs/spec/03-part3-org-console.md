@@ -2735,7 +2735,8 @@ who leaves** (removed by staff, taken off the list, or their account deleted) lo
 their bookings of classes that have not started, their pack has those classes back, and
 each place goes to the waitlist; a class that has started keeps its row. One function
 for every way of leaving (`endLeaversBookings`, called where the membership is closed).
-**The four settings** are read and changed at `…/booking-settings` on
+**The four settings** (and, since 17e-vi, personal training's own two beside them, §13.5)
+are read and changed at `…/booking-settings` on
 `schedule.manage` (Settings → Booking rules); they hold from the next booking on and
 change none already made; a shorter hand-over time hands over at once the free places
 it makes the waitlist's, and the save answers how many (`movedIn`). Nobody is emailed
@@ -2754,7 +2755,7 @@ out, never stored: the hours minus what is booked. An appointment is a row with 
 trainer and its time range, and **the database itself refuses two that overlap** for
 one trainer (an exclusion constraint on the range) — the structural rule, before any
 check in code. A member picks a free time, is booked at once, and the trainer is told;
-the same free-cancel time applies; PT packs are a pack type that covers personal
+personal training's own free-cancel time applies (17e-vi); PT packs are a pack type that covers personal
 training. A trainer keeps their own hours.
 *(17e-i, 2026-10-06: **the staff side.** `gym_trainers` (offers, session length),
 `gym_trainer_hours` (ISO weekday, minutes from midnight on the gym's clock, three ranges a
@@ -2960,6 +2961,40 @@ week. You can book for Mon 12 Oct or later." with the times as plain text. **Fro
 click-through:** a member's pressed time opens **Book this session?** (the day, the time,
 the trainer, what it uses; Book session · Not now), so nothing is booked by one press. Not done:
 personal training's own booking rules (17e-vi).)*
+*(17e-vi, 2026-10-09: **personal training's own booking rules.** A gym has `pt_opens_days` and
+`pt_free_cancel_minutes` (migration `0085`, CHECK `gyms_pt_booking_settings_check`: 1 to 56
+days, 0 to 10,080 minutes, the limits the classes' same two have). The migration starts each
+gym's two at its class numbers of that day, so nothing changed for a gym until it changed
+one; a new gym's start at 7 days and 2 hours. **A session reads these two and never the
+classes'; a class never reads these.** There is one place a session gets them, `gymClock`
+in `pt/repo.ts`, which the week, the member's read, a booking and a cancel all call; a
+cancel reads it in its own transaction under the gym's lock, the lock a save takes, so of a
+save and a cancel sent together one sees the other. `opensDays` holds a MEMBER's own
+booking (409 `not_open_yet`); staff book further ahead, as before. `freeCancelMinutes`
+decides free or late for a member and for staff, and is the `freeCancelMinutes` and
+`freeCancelUntil` the personal training reads answer. **A changed number holds from that
+moment for every session, the ones already booked too** (it is read at the cancel, never
+stored on the session), and cancels nothing. `GET` and `PUT …/booking-settings`
+(`schedule.manage`) answer `settings` (the classes' four) and `pt` (these two); a save
+sends all six every time (`bookingSettingsBodySchema`: the four, and `pt`), and the audit
+row names a changed one `pt.opensDays` or `pt.freeCancelMinutes`. On the screens: Settings →
+Booking rules has two headed parts, **Classes** (the four) and **Personal training** (When
+booking opens: N days before the session · Free cancelling: until N minutes, hours or days
+before the session), saved by the box's one Save; its closed line reads "Classes: opens 7
+days before · free to cancel until 2 hours before · waitlist of 20. Personal training: opens
+3 days before · free to cancel until 1 day before."; a number outside its range is said as
+"Personal training, when booking opens: pick 1 to 56 days." The rules line on the console's
+Personal training page says personal training's two and the one on Classes the classes'
+(`BookingRulesLine`, `of`). On a member's tab a day past the last one open reads "Booking for
+this day isn't open yet. You can book up to Sat 10 Oct." and shows no times: with a gym's
+number as low as one day, such days are on the first page. **From the review (2026-10-09):**
+on the last open day a time opens `opensDays` before it starts, so the later ones are not
+open yet; the member's read answers `opensDays` and each trainer's day `opensLater`, and the
+tab says under the trainer "Times on this day aren't open yet: each one opens 1 day before it
+starts." (or "More times on this day open later: …" under the ones that can be pressed),
+never "No available times on this day." for them; a time pressed too soon is refused as
+"Booking for that time isn't open yet."; the trainer's week answers `freeCancelMinutes`,
+so the console's late-cancel box names the length the same read decided "late" by.)*
 
 ### 13.6 The calendar, the desk and the messages
 
