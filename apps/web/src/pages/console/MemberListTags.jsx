@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Loader2, X } from 'lucide-react';
-import { MEMBER_LIST_SELECTION_CHANGED_WORDS, MEMBER_TAG_MAX_CHARS, MEMBER_TAGS_STAFF_ONLY_WORDS, tidyMemberTagName } from '@app/shared';
-import { orgService, errorText, selectionChanged } from '../../api/orgsApi';
+import { MEMBER_LIST_SELECTION_CHANGED_WORDS, MEMBER_TAG_MAX_CHARS, MEMBER_TAGS_STAFF_ONLY_WORDS, memberGymTagsResponseSchema, tidyMemberTagName } from '@app/shared';
+import { orgService, errorCode, errorText, selectionChanged } from '../../api/orgsApi';
 import { Names } from './MemberListRemove';
 import { selectedWords, tagBoxWords, tagDoneLine, tagHolders } from './memberListPeople';
 
@@ -284,16 +284,53 @@ export function MemberTagsManage({ gymId, gymTags, words, readOnly, onChanged, o
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
+  /** Who a tag comes off, read for its Delete box. A count that is not the one on the
+   *  tag's own line means the gym's tags have moved: they are read again, so the box's
+   *  sentence and its names say the same people. */
+  const loadHolders = (tag) => {
+    setHolders(null);
+    orgService.getMemberListEntries(gymId, `tag=${encodeURIComponent(tag.id)}&records=all`).then(
+      (res) => {
+        const total = res.data.page.total;
+        setHolders({ id: tag.id, people: res.data.page.entries.map((entry) => ({ entryId: entry.entryId, name: entry.fullName })), total });
+        if (total !== tag.people + tag.pastPeople) {
+          orgService.getGymTags(gymId).then(
+            (fresh) => onChanged(fresh.data.tags),
+            () => {},
+          );
+        }
+      },
+      (err) => setError(errorText(err, "We couldn't load who has this tag. Please try again.")),
+    );
+  };
   const start = (tag, what) => {
     setOpen({ id: tag.id, what });
     setName(tag.name);
     setHolders(null);
     setError(null);
-    if (what !== 'delete') return;
-    orgService.getMemberListEntries(gymId, `tag=${encodeURIComponent(tag.id)}&records=all`).then(
-      (res) => setHolders({ id: tag.id, people: res.data.page.entries.map((entry) => ({ entryId: entry.entryId, name: entry.fullName })), total: res.data.page.total }),
-      (err) => setError(errorText(err, "We couldn't load who has this tag. Please try again.")),
-    );
+    if (what === 'delete') loadHolders(tag);
+  };
+  /** Delete says how many people the box named; if the tag is on other people now, nothing
+   *  is deleted, and the box names them again before another press. */
+  const remove = async (tag, named) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await orgService.deleteGymTag(gymId, tag.id, named);
+      onChanged(res.data.tags);
+      setOpen(null);
+    } catch (err) {
+      setError(errorText(err, "We couldn't delete that tag. Please try again."));
+      const now = memberGymTagsResponseSchema.safeParse({ tags: err?.response?.data?.tags });
+      if (errorCode(err) === 'tag_people_changed' && now.success) {
+        onChanged(now.data.tags);
+        const mine = now.data.tags.find((one) => one.id === tag.id);
+        if (mine !== undefined) loadHolders(mine);
+      }
+    } finally {
+      setBusy(false);
+    }
   };
   const close = () => {
     setOpen(null);
@@ -394,7 +431,7 @@ export function MemberTagsManage({ gymId, gymTags, words, readOnly, onChanged, o
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => void change(() => orgService.deleteGymTag(gymId, tag.id), "We couldn't delete that tag. Please try again.")}
+                      onClick={() => void remove(tag, shown === null ? 0 : shown.total)}
                       disabled={busy || (shown === null && tag.people + tag.pastPeople > 0)}
                       data-testid="tags-delete-press"
                       className="c-btn c-btn-danger c-btn-sm"

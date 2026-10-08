@@ -13,6 +13,7 @@ import {
   MEMBER_TAG_BOX_NAMES_MAX,
   MEMBER_TAGS_MAX_PER_GYM,
   MEMBER_TAGS_MAX_PER_PERSON,
+  MEMBER_TAGS_WORDS,
   memberGymTagsResponseSchema,
   memberListEntriesResponseSchema,
   memberTagsDoneResponseSchema,
@@ -308,7 +309,7 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
         await inject("POST", `${base(iron)}/selected/tags`, person.cookies, { action: "add", selection: ticked([noor]), tag: { id: knee } }),
         await inject("POST", `${base(iron)}/selected/tags`, person.cookies, { action: "add", selection: ticked([noor]), tag: { name: "Outsider" } }),
         await inject("PATCH", `${base(iron)}/tags/${knee}`, person.cookies, { name: "Renamed by an outsider" }),
-        await inject("DELETE", `${base(iron)}/tags/${knee}`, person.cookies),
+        await inject("DELETE", `${base(iron)}/tags/${knee}?people=2`, person.cookies),
       ];
       for (const res of tries) expect(allowed, `${who}: ${res.body}`).toContain(res.statusCode);
     }
@@ -321,7 +322,7 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
       await inject("POST", `${base(oak)}/selected/tags`, oak.owner.cookies, { action: "add", selection: ticked([omar, zara]), tag: { id: knee } }),
       await inject("POST", `${base(oak)}/selected/tags`, oak.owner.cookies, { action: "remove", selection: ticked([maya, liam]), tagId: knee }),
       await inject("PATCH", `${base(oak)}/tags/${knee}`, oak.owner.cookies, { name: "Across gyms" }),
-      await inject("DELETE", `${base(oak)}/tags/${knee}`, oak.owner.cookies),
+      await inject("DELETE", `${base(oak)}/tags/${knee}?people=2`, oak.owner.cookies),
     ];
     for (const res of through) {
       expect(res.statusCode, res.body).toBe(404);
@@ -648,13 +649,13 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
     expect((await rename("00000000-0000-4000-8000-000000000000", "Nothing")).statusCode).toBe(404);
     expect((await gymTags(gym)).map((tag) => tag.name)).toEqual(["FOUNDING member", "PT client"]);
 
-    const deleted = await inject("DELETE", `${base(gym)}/tags/${vip}`, manager.cookies);
+    const deleted = await inject("DELETE", `${base(gym)}/tags/${vip}?people=2`, manager.cookies);
     expect(deleted.statusCode, deleted.body).toBe(200);
     expect(memberGymTagsResponseSchema.parse(JSON.parse(deleted.body)).tags).toEqual([{ id: pt, name: "PT client", people: 1, pastPeople: 0 }]);
     expect(await held(gym)).toEqual(["Ben Osei: PT client"]);
     expect((await listed(gym, `?tag=${vip}`)).total).toBe(0);
     // The same press again: it is not there any more, and nothing else goes.
-    const twice = await inject("DELETE", `${base(gym)}/tags/${vip}`, manager.cookies);
+    const twice = await inject("DELETE", `${base(gym)}/tags/${vip}?people=2`, manager.cookies);
     expect(twice.statusCode).toBe(404);
     expect(errorOf(twice)).toBe("tag_not_found");
     expect(await held(gym)).toEqual(["Ben Osei: PT client"]);
@@ -664,6 +665,97 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
       SELECT action, row_to_json(a)::text AS line FROM audit_log a WHERE gym_id = ${gym.id} AND action IN ('org.member_tag_renamed', 'org.member_tag_deleted') ORDER BY at, id`;
     expect(log.map((row) => row.action)).toEqual(["org.member_tag_renamed", "org.member_tag_renamed", "org.member_tag_deleted"]);
     for (const row of log) expect(row.line).not.toMatch(/founding|vip/iu);
+  });
+
+  // =========================================================================
+  // THE TWO EXTRA PASSES (5d-iii)
+  // =========================================================================
+
+  it("Delete tag takes a tag off exactly the people its box named: put on more people, or fewer, since, it deletes nothing and sends the tags as they stand", async () => {
+    const gym = await makeGym("Mtg Delete Named");
+    const manager = await onStaff(gym, "Nora Manager", "manager");
+    const ada = await addPerson(gym, "Ada Mensah");
+    const ben = await addPerson(gym, "Ben Osei");
+    const cara = await addPerson(gym, "Cara Diaz");
+    const dev = await addPerson(gym, "Dev Patel");
+    const vip = (await addNew(gym, [ada, ben, dev], "VIP")).done.tag.id;
+    const other = (await addNew(gym, [ada], "PT client")).done.tag.id;
+    // Dev becomes a past member and keeps the tag: the box names past members too.
+    expect((await inject("DELETE", `${base(gym)}/entries/${dev}`, gym.owner.cookies)).statusCode).toBeLessThan(300);
+    const remove = (people: unknown, by: Person = gym.owner) => inject("DELETE", `${base(gym)}/tags/${vip}?people=${String(people)}`, by.cookies);
+    const deletions = async (): Promise<string[]> =>
+      (await sql<{ people: string }[]>`SELECT meta->>'people' AS people FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_tag_deleted'`).map((row) => row.people);
+
+    // What the Delete box reads: everybody who holds it, past members among them.
+    const named = await listed(gym, `?tag=${vip}&records=all`);
+    expect(named).toEqual({ total: 3, names: ["Ada Mensah", "Ben Osei", "Dev Patel"] });
+    const before = await held(gym);
+
+    // A colleague tags Cara while the box is open.
+    await press(gym, { action: "add", selection: ticked([cara]), tag: { id: vip } }, manager);
+    const refusedMore = await remove(named.total);
+    expect(refusedMore.statusCode, refusedMore.body).toBe(409);
+    expect(errorOf(refusedMore)).toBe("tag_people_changed");
+    const sent = JSON.parse(refusedMore.body) as { message: string; tags: unknown };
+    expect(sent.message).toBe(MEMBER_TAGS_WORDS.tag_people_changed);
+    expect(memberGymTagsResponseSchema.parse({ tags: sent.tags }).tags).toEqual([
+      { id: other, name: "PT client", people: 1, pastPeople: 0 },
+      { id: vip, name: "VIP", people: 3, pastPeople: 1 },
+    ]);
+    expect(await held(gym)).toEqual([...before, "Cara Diaz: VIP"].sort());
+    expect(await deletions()).toEqual([]);
+
+    // Fewer than the box named is refused the same way; and a press that names no number, or not a number.
+    await press(gym, { action: "remove", selection: ticked([ben, cara]), tagId: vip }, manager);
+    const refusedFewer = await remove(named.total);
+    expect(refusedFewer.statusCode).toBe(409);
+    expect(errorOf(refusedFewer)).toBe("tag_people_changed");
+    for (const bad of ["", "-1", "2.5", "two", "1e3x"]) expect((await remove(bad)).statusCode, bad).toBe(400);
+    expect((await inject("DELETE", `${base(gym)}/tags/${vip}`, gym.owner.cookies)).statusCode).toBe(400);
+    expect((await gymTags(gym)).map((tag) => tag.name)).toEqual(["PT client", "VIP"]);
+    expect(await deletions()).toEqual([]);
+
+    // The number the box now names: it goes, off those two and nobody else's other tag.
+    const again = await listed(gym, `?tag=${vip}&records=all`);
+    expect(again.total).toBe(2);
+    const gone = await remove(again.total);
+    expect(gone.statusCode, gone.body).toBe(200);
+    expect(await held(gym)).toEqual(["Ada Mensah: PT client"]);
+    expect(await deletions()).toEqual(["2"]);
+  });
+
+  it("Delete tag and a colleague's tag press at the same instant: either the tag is still there for everybody, or it went off exactly the people named", async () => {
+    const gym = await makeGym("Mtg Delete Race");
+    const manager = await onStaff(gym, "Nora Manager", "manager");
+    const ada = await addPerson(gym, "Ada Mensah");
+    const ben = await addPerson(gym, "Ben Osei");
+    const cara = await addPerson(gym, "Cara Diaz");
+    let deleted = 0;
+    let keptWhole = 0;
+    for (let run = 0; run < 10; run++) {
+      const name = `Race ${String(run)}`;
+      const tagId = (await addNew(gym, [ada, ben], name)).done.tag.id;
+      const [remove, add] = await Promise.all([
+        inject("DELETE", `${base(gym)}/tags/${tagId}?people=2`, gym.owner.cookies),
+        inject("POST", `${base(gym)}/selected/tags`, manager.cookies, { action: "add", selection: ticked([cara]), tag: { id: tagId } }),
+      ]);
+      const holders = (await held(gym)).filter((line) => line.endsWith(`: ${name}`));
+      if (remove.statusCode === 200) {
+        // It went off the two named; the colleague's press found no tag and tagged nobody.
+        expect(add.statusCode, add.body).toBe(404);
+        expect(holders).toEqual([]);
+        deleted += 1;
+      } else {
+        expect(remove.statusCode, remove.body).toBe(409);
+        expect(errorOf(remove)).toBe("tag_people_changed");
+        expect(add.statusCode, add.body).toBe(200);
+        expect(holders).toEqual([`Ada Mensah: ${name}`, `Ben Osei: ${name}`, `Cara Diaz: ${name}`]);
+        keptWhole += 1;
+      }
+    }
+    expect(deleted + keptWhole).toBe(10);
+    const audited = await sql<{ people: string }[]>`SELECT meta->>'people' AS people FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_tag_deleted'`;
+    expect(audited.map((row) => row.people)).toEqual(Array.from({ length: deleted }, () => "2"));
   });
 
   it("the tags and the box are reads, limited as the list's other reads are; a colleague at that address still reads", async () => {
@@ -706,7 +798,7 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
       await inject("POST", `${base(gym)}/selected/tags`, gym.owner.cookies, { action: "remove", selection: ticked([ada]), tagId: vip }),
       await inject("POST", `${base(gym)}/selected/tags`, gym.owner.cookies, { action: "add", selection: ticked([ada]), tag: { name: "New" } }),
       await inject("PATCH", `${base(gym)}/tags/${vip}`, gym.owner.cookies, { name: "Renamed" }),
-      await inject("DELETE", `${base(gym)}/tags/${vip}`, gym.owner.cookies),
+      await inject("DELETE", `${base(gym)}/tags/${vip}?people=1`, gym.owner.cookies),
     ];
     for (const res of writes) {
       expect(res.statusCode, res.body).toBe(409);
