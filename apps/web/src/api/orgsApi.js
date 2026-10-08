@@ -87,6 +87,7 @@ import {
   heldMembershipsResponseSchema,
   memberGymTagsResponseSchema,
   memberNotesAndTagsSchema,
+  memberNotesOlderResponseSchema,
   memberTagsDoneResponseSchema,
   memberTagsPreviewResponseSchema,
   membershipLinkPreviewResponseSchema,
@@ -1477,8 +1478,13 @@ export const orgService = {
   tagSelected: (gymId, body) => readThrough(memberTagsDoneResponseSchema, 'that tag', authApi.post(`${tagsUrl(gymId)}/selected/tags`, body)),
   renameGymTag: (gymId, tagId, name) =>
     readThrough(memberGymTagsResponseSchema, "your gym's tags", authApi.patch(`${tagsUrl(gymId)}/tags/${encodeURIComponent(tagId)}`, { name })),
-  deleteGymTag: (gymId, tagId) =>
-    readThrough(memberGymTagsResponseSchema, "your gym's tags", authApi.delete(`${tagsUrl(gymId)}/tags/${encodeURIComponent(tagId)}`)),
+  // `people` is how many people the Delete box named: a tag now on more or fewer is not deleted.
+  deleteGymTag: (gymId, tagId, people) =>
+    readThrough(
+      memberGymTagsResponseSchema,
+      "your gym's tags",
+      authApi.delete(`${tagsUrl(gymId)}/tags/${encodeURIComponent(tagId)}?people=${encodeURIComponent(String(people))}`),
+    ),
 
   // Staff notes and tags on a person's page (5d): every answer is both, as they now stand.
   getMemberNotes: (gymId, entryId) => readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.get(`${notesUrl(gymId, entryId)}/notes`)),
@@ -1486,8 +1492,15 @@ export const orgService = {
     readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.post(`${notesUrl(gymId, entryId)}/notes`, body)),
   deleteMemberNote: (gymId, entryId, noteId) =>
     readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.delete(`${notesUrl(gymId, entryId)}/notes/${encodeURIComponent(noteId)}`)),
-  addMemberTag: (gymId, entryId, name) =>
-    readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.post(`${notesUrl(gymId, entryId)}/tags`, { name })),
+  getOlderMemberNotes: (gymId, entryId, beforeNoteId) =>
+    readThrough(
+      memberNotesOlderResponseSchema,
+      "this person's older notes",
+      authApi.get(`${notesUrl(gymId, entryId)}/notes/older?before=${encodeURIComponent(beforeNoteId)}`),
+    ),
+  // `tag` is { id } for one of the gym's tags picked, or { name } for a name typed.
+  addMemberTag: (gymId, entryId, tag) =>
+    readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.post(`${notesUrl(gymId, entryId)}/tags`, tag)),
   removeMemberTag: (gymId, entryId, tagId) =>
     readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.delete(`${notesUrl(gymId, entryId)}/tags/${encodeURIComponent(tagId)}`)),
   getHeldMemberships: (gymId, entryId) =>

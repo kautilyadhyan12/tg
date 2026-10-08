@@ -4742,15 +4742,29 @@ renaming or deleting one of the gym's tags.
 - **A note** is up to 2,000 characters, kept with who wrote it and when, shown newest
   first. It is deleted (the box asks first), never edited, as PushPress's staff notes are.
   Staff add up to 200 to a person. A note that looks like it holds a payment card number
-  is refused in a sentence (§11's never-keep list), read with every break between its
-  groups (a new line, a tab, a no-break space, an underscore) as a space and full-width
-  digits as plain ones; the note of a writer whose account is gone reads "Someone no
-  longer here". Its day is the gym's own day.
+  is refused in a sentence (§11's never-keep list), read with every script's digits as
+  plain ones, every run of spaces and marks between two digits as one space (a new line,
+  " - ", ":", "|", "*", and "+" unless it starts a phone number), digits typed one at a
+  time put together, and characters nobody can see both dropped and as a space; the note
+  of a writer whose account is gone reads "Someone no longer here". Its day is the gym's
+  own day. A note with nothing in it a person can see is refused as empty; the joiners
+  Hindi and Persian words are written with are kept.
+- **A page of notes.** A reply carries the newest 200 notes and `notesTotal`, every note
+  the person has. When there are more, the box says "Showing the newest 200 of 400 notes."
+  with **Show older notes**, which brings the next 200
+  (`GET …/entries/:entryId/notes/older?before=` the oldest note shown; `more` says whether
+  older ones are left). So no reply grows with what joins leave on a person.
 - **A tag** is the gym's own word, up to 30 characters, one name once in a gym whatever its
   capitals. Add tag offers the gym's other tags to pick, then a box for a new one. A person
   is given 20 at most and a gym has 100. Taking a tag off a person asks first and leaves
-  it among the gym's. A tag that looks like a card number is refused as a note is, and
-  characters nobody can see are dropped, so two tags never look the same.
+  it among the gym's. A tag that looks like a card number is refused as a note is. So
+  that two tags never look the same, a name is kept in its plain form (full-width letters
+  become ordinary ones) with everything nobody can see dropped: joiners and direction
+  marks, the soft hyphen, variation selectors, and the letters and the braille cell drawn
+  as a blank; a name with nothing left, or only an accent, is refused. (A Hindi tag typed
+  with a joiner is kept without it, and a family emoji as its separate faces.) A tag PICKED on a person's page is sent
+  by its id, so one a colleague has renamed is still that tag and one a colleague has
+  deleted is "not there any more", never made again; only a typed name can make a tag.
 - **Who.** Read by the gym's staff who may open the person's page (`members.confirm`);
   written by the same staff while the gym has a plan. A trainer without that tick, a
   member, another gym and nobody signed in get nothing. A past member's notes and tags are
@@ -4763,14 +4777,24 @@ renaming or deleting one of the gym's tags.
   still never kept (§11).
 - **Their own allowance.** Notes and tags are 1,200 writes an hour a person (4,800 an
   address), apart from the allowance for adding and changing members, so a gym tagging its
-  200 people is not stopped and does not stop its other work.
+  200 people is not stopped and does not stop its other work. The address is counted a gym
+  at a time (whatever capitals its id is typed in), so one gym's staff never use up another
+  gym's at a shared address.
 - **With the record.** Joining two records moves both people's notes and tags to the kept
   one (a tag both had is one tag), so a joined record can hold more than 200 notes and 20
   tags; it then takes no more until some are removed, and the sentence says "200 notes or
   more". A record deleted for good takes its notes and its tags
-  with it; the gym's tags stay. A gym's deletion removes them all.
+  with it; the gym's tags stay. A gym's deletion removes them all. A press's key guards
+  that press until its note is deleted: the same request arriving again after the delete
+  saves the note again.
 - **Tables** (`0083`): `gym_member_notes`, `gym_member_tags`, `gym_member_entry_tags`,
   each with its gym.
+- **A person left with 10,000 notes by joins**, measured (the same tool, 2026-10-09, 20
+  runs; the machine was slower that hour, a usual page 13 ms): the page sent is 421 kB;
+  one read 29 ms, the thread busy 11 ms; twenty staff reading it at the same moment 180 ms
+  in all, longest stall 18 ms; the next page back 31 ms; another person's usual page asked
+  for while ten read that page waited 96 ms (worst 161 ms). Before the page had a size, the
+  security pass measured that wait at 4.3 s.
 - **Cost at full size**, measured (`tools/measure-member-notes-cost.ts`, 20 gyms of 200,
   on mains at 2,592 MHz, 20 runs): a usual page (5 notes, 3 tags) 6 ms, the thread busy
   2 ms; the fullest page staff can fill without a join (199 notes of 2,000 characters, 19 tags) 9 ms, the
@@ -4799,8 +4823,11 @@ renaming or deleting one of the gym's tags.
   - *Manage tags*, from the Filter box: each tag with who holds it ("On 12 members and 2
     past members"), **Rename** (everybody who holds it keeps it; a name another tag has, in
     any capitals, is refused) and **Delete**, which first names the people it comes off and
-    says they stay on the list. A deleted tag stops being the list's filter; a renamed one
-    keeps filtering under its new name.
+    says they stay on the list. The press says how many people the box named
+    (`DELETE …/tags/:tagId?people=`); with the gym held, a tag that is now on more or fewer
+    is not deleted (409 `tag_people_changed`, with the gym's tags as they stand), and the
+    box names the people again before another press. A deleted tag stops being the list's
+    filter; a renamed one keeps filtering under its new name.
   - *Routes*: `GET …/member-list/tags` · `GET …/member-list/entries?tag=` ·
     `POST …/member-list/selected/tags-preview` and `…/selected/tags` · `PATCH` and
     `DELETE …/member-list/tags/:tagId`. Writes need a plan and count against the notes

@@ -8,7 +8,7 @@ import {
   MEMBER_TAGS_STAFF_ONLY_WORDS,
   tidyMemberTagName,
 } from '@app/shared';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { newRequestKey } from './heldMembershipsView';
 import { noteDay } from './memberListPeople';
 
@@ -38,6 +38,8 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
   const [takingOff, setTakingOff] = useState(null);
   const [adding, setAdding] = useState(false);
   const [newTag, setNewTag] = useState('');
+  /** The older notes asked for so far, and whether there are older still: { entryId, notes, more }. */
+  const [older, setOlder] = useState(null);
 
   useEffect(() => {
     let live = true;
@@ -89,6 +91,14 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
       return true;
     } catch (err) {
       setRefusal({ box, text: errorText(err, "We couldn't save that. Please try again.") });
+      const code = errorCode(err);
+      // That key can never save: the next press is a new one.
+      if (code === 'note_not_saved') setRequestKey(newRequestKey());
+      // A colleague has changed the gym's tags or this person's notes: read them again.
+      if (code === 'tag_not_found' || code === 'note_not_found') {
+        setOlder(null);
+        setAttempt((n) => n + 1);
+      }
       return false;
     } finally {
       setBusy(false);
@@ -101,16 +111,38 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
     if (await run('notes', () => orgService.addMemberNote(gymId, entryId, { body, requestKey }))) {
       setDraft('');
       setRequestKey(newRequestKey());
+      // The newest page has moved down by one: the older notes are asked for again.
+      setOlder(null);
     }
   };
   const deleteNote = async (noteId) => {
-    if (await run('notes', () => orgService.deleteMemberNote(gymId, entryId, noteId))) setDeleting(null);
+    if (await run('notes', () => orgService.deleteMemberNote(gymId, entryId, noteId))) {
+      setDeleting(null);
+      setOlder((was) => (was === null ? null : { ...was, notes: was.notes.filter((note) => note.id !== noteId) }));
+    }
+  };
+  const showOlder = async (beforeNoteId) => {
+    const asked = entryId;
+    setBusy(true);
+    setRefusal(null);
+    try {
+      const res = await orgService.getOlderMemberNotes(gymId, asked, beforeNoteId);
+      setOlder((was) => ({ entryId: asked, notes: [...(was !== null && was.entryId === asked ? was.notes : []), ...res.data.notes], more: res.data.more }));
+    } catch (err) {
+      setRefusal({ box: 'notes', text: errorText(err, "We couldn't load the older notes. Please try again.") });
+      if (errorCode(err) === 'note_not_found') {
+        setOlder(null);
+        setAttempt((n) => n + 1);
+      }
+    } finally {
+      setBusy(false);
+    }
   };
   const takeTagOff = async (tagId) => {
     if (await run('tags', () => orgService.removeMemberTag(gymId, entryId, tagId))) setTakingOff(null);
   };
-  const addTag = async (tagName) => {
-    if (await run('tags', () => orgService.addMemberTag(gymId, entryId, tagName))) {
+  const addTag = async (tag) => {
+    if (await run('tags', () => orgService.addMemberTag(gymId, entryId, tag))) {
       setNewTag('');
       setAdding(false);
     }
@@ -121,6 +153,12 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
   const typed = tidyMemberTagName(newTag);
   const left = MEMBER_NOTE_MAX_CHARS - draft.trim().length;
   const who = name || 'this person';
+  // A note that has moved into the newest page since is drawn once.
+  const newest = new Set(shown.notes.map((note) => note.id));
+  const olderMine = older !== null && older.entryId === entryId ? older : null;
+  const notes = [...shown.notes, ...(olderMine === null ? [] : olderMine.notes.filter((note) => !newest.has(note.id)))];
+  const moreNotes = olderMine === null ? shown.notesTotal > shown.notes.length : olderMine.more;
+  const oldestShown = notes[notes.length - 1];
 
   return (
     <>
@@ -176,7 +214,7 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
                 <span className="c-label">Pick one of your tags</span>
                 <div className="flex flex-wrap gap-2">
                   {others.map((tag) => (
-                    <button key={tag.id} type="button" className="c-chip" disabled={busy} onClick={() => void addTag(tag.name)}>
+                    <button key={tag.id} type="button" className="c-chip" disabled={busy} onClick={() => void addTag({ id: tag.id })}>
                       <Plus aria-hidden="true" className="w-3.5 h-3.5" />
                       {tag.name}
                     </button>
@@ -188,7 +226,7 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
               className="c-field"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (typed !== '') void addTag(typed);
+                if (typed !== '') void addTag({ name: typed });
               }}
             >
               <label className="c-label" htmlFor="member-tag-new">
@@ -283,11 +321,11 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
             {refusal.text}
           </p>
         ) : null}
-        {shown.notes.length === 0 ? (
+        {notes.length === 0 ? (
           <p className="c-s14 c-t2 m-0">No notes yet.</p>
         ) : (
           <ul className="flex flex-col m-0 p-0 list-none">
-            {shown.notes.map((note) => (
+            {notes.map((note) => (
               <li key={note.id} className="py-3 flex flex-col gap-1" style={{ borderTop: '1px solid var(--line)' }} data-testid="member-note">
                 <p className="c-s14 c-t1 m-0 whitespace-pre-wrap break-words">{note.body}</p>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -318,6 +356,16 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
             ))}
           </ul>
         )}
+        {moreNotes && oldestShown !== undefined ? (
+          <div className="flex items-center gap-3 flex-wrap" data-testid="member-notes-older">
+            <span className="c-s14 c-t2">
+              Showing the newest {notes.length.toLocaleString('en')} of {Math.max(shown.notesTotal, notes.length + 1).toLocaleString('en')} notes.
+            </span>
+            <button type="button" className={SMALL} disabled={busy} onClick={() => void showOlder(oldestShown.id)}>
+              Show older notes
+            </button>
+          </div>
+        ) : null}
       </section>
     </>
   );

@@ -8,7 +8,6 @@
 // Gates in CLAUDE.md §4's order: privilege (and a live plan, for a write), then the rate
 // limit, then the handler.
 import {
-  foldForCardCheck,
   MEMBER_NOTES_WORDS,
   MEMBER_TAG_BOX_NAMES_MAX,
   MEMBER_TAGS_MAX_PER_GYM,
@@ -23,7 +22,7 @@ import {
 } from "@app/shared";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
-import { holdsCard } from "./byHand.js";
+import { wordsHoldCard } from "./notes.js";
 import * as notesRepo from "./notesRepo.js";
 import * as repo from "./repo.js";
 import { selectedIds } from "./selection.js";
@@ -86,7 +85,7 @@ async function tagAsked(sql: notesRepo.SqlOrTx, gymId: string, request: MemberTa
     return tag;
   }
   const { name } = picked;
-  if (holdsCard(foldForCardCheck(name))) throw new OrgsError(400, "tag_holds_card", MEMBER_NOTES_WORDS.tag_holds_card);
+  if (wordsHoldCard(name)) throw new OrgsError(400, "tag_holds_card", MEMBER_NOTES_WORDS.tag_holds_card);
   const mine = await notesRepo.tagByName(sql, gymId, name);
   if (mine !== null) return mine;
   if ((await notesRepo.gymTags(sql, gymId)).length >= MEMBER_TAGS_MAX_PER_GYM) {
@@ -180,7 +179,7 @@ export async function renameTag(
 ): Promise<MemberGymTag[] | null> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  if (holdsCard(foldForCardCheck(name))) throw new OrgsError(400, "tag_holds_card", MEMBER_NOTES_WORDS.tag_holds_card);
+  if (wordsHoldCard(name)) throw new OrgsError(400, "tag_holds_card", MEMBER_NOTES_WORDS.tag_holds_card);
   await deps.sql.begin(async (tx) => {
     await repo.lockGym(tx, gymId);
     const tag = await notesRepo.tagById(tx, gymId, tagId);
@@ -195,20 +194,28 @@ export async function renameTag(
   return await notesRepo.gymTagsCounted(deps.sql, gymId);
 }
 
-/** Delete one of the gym's tags: it comes off everybody who held it. */
+/** The people who hold a tag are not the number its Delete box named: nothing was deleted. */
+export class TagPeopleChanged extends Error {}
+
+/** Delete one of the gym's tags: it comes off everybody who held it. `peopleNamed` is how
+ *  many people the box named; with the gym held, a tag that is now on more or fewer is not
+ *  deleted (`TagPeopleChanged`), so it never comes off somebody the box did not show. */
 export async function deleteTag(
   deps: MemberListDeps,
   userId: string,
   gymId: string,
   tagId: string,
+  peopleNamed: number,
   limit: () => Promise<boolean>,
 ): Promise<MemberGymTag[] | null> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   await deps.sql.begin(async (tx) => {
     await repo.lockGym(tx, gymId);
-    const people = await notesRepo.deleteTag(tx, gymId, tagId);
-    if (people === null) throw tagNotFound();
+    if ((await notesRepo.tagById(tx, gymId, tagId)) === null) throw tagNotFound();
+    const people = await notesRepo.countTagHolders(tx, gymId, tagId);
+    if (people !== peopleNamed) throw new TagPeopleChanged();
+    await notesRepo.deleteTag(tx, gymId, tagId);
     await insertAudit(tx, { actorUserId: userId, gymId, action: "org.member_tag_deleted", targetType: "member_tag", targetId: tagId, meta: { people: String(people) } });
   });
   return await notesRepo.gymTagsCounted(deps.sql, gymId);

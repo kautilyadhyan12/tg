@@ -5,7 +5,14 @@
 // earlier is never drawn.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { MEMBER_NOTE_NO_AUTHOR_WORDS, MEMBER_NOTES_STAFF_ONLY_WORDS, MEMBER_NOTES_WORDS, memberNotesAndTagsSchema } from '@app/shared';
+import {
+  MEMBER_NOTE_NO_AUTHOR_WORDS,
+  MEMBER_NOTES_STAFF_ONLY_WORDS,
+  MEMBER_NOTES_WORDS,
+  MEMBER_TAGS_WORDS,
+  memberNotesAndTagsSchema,
+  memberNotesOlderResponseSchema,
+} from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -13,6 +20,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
     ...actual,
     orgService: {
       getMemberNotes: vi.fn(),
+      getOlderMemberNotes: vi.fn(),
       addMemberNote: vi.fn(),
       deleteMemberNote: vi.fn(),
       addMemberTag: vi.fn(),
@@ -33,7 +41,10 @@ const id = (n) => `33333333-3333-4333-8333-00000000000${String(n)}`;
 const noteOf = (n, body, over = {}) => ({ id: id(n), body, authorName: 'Nora Manager', createdAt: '2026-10-08T09:30:00.000Z', ...over });
 const tagOf = (n, name) => ({ id: id(n), name });
 /** An answer as the server sends it, held to the shared shape. */
-const answer = (over = {}) => ({ data: memberNotesAndTagsSchema.parse({ notes: [], tags: [], gymTags: [], ...over }) });
+const answer = (over = {}) => ({
+  data: memberNotesAndTagsSchema.parse({ notes: [], notesTotal: (over.notes ?? []).length, tags: [], gymTags: [], ...over }),
+});
+const olderAnswer = (notes, more) => ({ data: memberNotesOlderResponseSchema.parse({ notes, more }) });
 const refused = (error, message) => Object.assign(new Error(error), { response: { status: 409, data: { error, message } } });
 
 const draw = (props = {}) => render(<MemberNotes gymId={GYM} entryId={ADA} name="Ada Lovelace" readOnly={false} {...props} />);
@@ -198,8 +209,8 @@ describe("a person's notes and tags", () => {
     fireEvent.click(submit);
     await waitFor(() => expect(screen.getAllByTestId('member-tag')).toHaveLength(3));
     expect(orgService.addMemberTag.mock.calls).toEqual([
-      [GYM, ADA, 'Beginner'],
-      [GYM, ADA, 'Early bird'],
+      [GYM, ADA, { id: beginner.id }],
+      [GYM, ADA, { name: 'Early bird' }],
     ]);
 
     // Taking one off asks first: Keep it sends nothing.
@@ -235,6 +246,72 @@ describe("a person's notes and tags", () => {
     expect(screen.queryAllByRole('button')).toEqual([]);
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.getByText(MEMBER_NOTES_STAFF_ONLY_WORDS)).toBeTruthy();
+  });
+
+  it('a person with more notes than one page shows the newest, and Show older notes brings the rest a page at a time', async () => {
+    orgService.getMemberNotes.mockResolvedValue(answer({ notes: [noteOf(1, 'Newest'), noteOf(2, 'Second')], notesTotal: 5 }));
+    orgService.getOlderMemberNotes
+      .mockResolvedValueOnce(olderAnswer([noteOf(3, 'Third'), noteOf(4, 'Fourth')], true))
+      .mockResolvedValueOnce(olderAnswer([noteOf(5, 'Oldest')], false));
+    draw();
+    await screen.findByText('Newest');
+    const more = () => within(screen.getByTestId('member-notes-older'));
+    expect(more().getByText('Showing the newest 2 of 5 notes.')).toBeTruthy();
+
+    fireEvent.click(more().getByRole('button', { name: 'Show older notes' }));
+    await screen.findByText('Fourth');
+    expect(orgService.getOlderMemberNotes.mock.calls).toEqual([[GYM, ADA, id(2)]]);
+    expect(more().getByText('Showing the newest 4 of 5 notes.')).toBeTruthy();
+
+    // Deleting an older note keeps the older notes already shown.
+    orgService.deleteMemberNote.mockResolvedValue(answer({ notes: [noteOf(1, 'Newest'), noteOf(2, 'Second')], notesTotal: 4 }));
+    fireEvent.click(within(screen.getAllByTestId('member-note')[2]).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete note' }));
+    await waitFor(() => expect(screen.queryByText('Third')).toBeNull());
+    expect(screen.getAllByTestId('member-note').map((li) => li.querySelector('p').textContent)).toEqual(['Newest', 'Second', 'Fourth']);
+
+    fireEvent.click(more().getByRole('button', { name: 'Show older notes' }));
+    await screen.findByText('Oldest');
+    expect(orgService.getOlderMemberNotes.mock.calls[1]).toEqual([GYM, ADA, id(4)]);
+    expect(screen.queryByTestId('member-notes-older')).toBeNull();
+  });
+
+  it('a person whose notes all fit one page has no Show older notes', async () => {
+    orgService.getMemberNotes.mockResolvedValue(answer({ notes: [noteOf(1, 'Only note')] }));
+    draw();
+    await screen.findByText('Only note');
+    expect(screen.queryByTestId('member-notes-older')).toBeNull();
+  });
+
+  it('a press the server says can never save is sent again as a new press', async () => {
+    orgService.getMemberNotes.mockResolvedValue(answer());
+    orgService.addMemberNote
+      .mockRejectedValueOnce(refused('note_not_saved', MEMBER_NOTES_WORDS.note_not_saved))
+      .mockResolvedValue(answer({ notes: [noteOf(1, 'Prefers mornings')] }));
+    draw();
+    fireEvent.change(await screen.findByLabelText('Add a note about Ada Lovelace'), { target: { value: 'Prefers mornings' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
+    expect((await screen.findByRole('alert')).textContent).toBe(MEMBER_NOTES_WORDS.note_not_saved);
+    fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
+    await screen.findByTestId('member-note');
+    const [first, second] = orgService.addMemberNote.mock.calls;
+    expect(second[2].body).toBe('Prefers mornings');
+    expect(second[2].requestKey).not.toBe(first[2].requestKey);
+  });
+
+  it("a picked tag a colleague has deleted says so, and the gym's tags are read again", async () => {
+    const beginner = tagOf(4, 'Beginner');
+    const starter = tagOf(6, 'Starter');
+    orgService.getMemberNotes.mockResolvedValueOnce(answer({ gymTags: [beginner] })).mockResolvedValue(answer({ gymTags: [starter] }));
+    orgService.addMemberTag.mockRejectedValue(refused('tag_not_found', MEMBER_TAGS_WORDS.tag_not_found));
+    draw();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add tag' }));
+    fireEvent.click(within(screen.getByTestId('member-tag-add')).getByRole('button', { name: 'Beginner' }));
+    expect((await screen.findByRole('alert')).textContent).toBe(MEMBER_TAGS_WORDS.tag_not_found);
+    const picker = within(screen.getByTestId('member-tag-add'));
+    expect(await picker.findByRole('button', { name: 'Starter' })).toBeTruthy();
+    expect(picker.queryByRole('button', { name: 'Beginner' })).toBeNull();
+    expect(orgService.addMemberTag.mock.calls).toEqual([[GYM, ADA, { id: beginner.id }]]);
   });
 
   it('says so when they cannot be read, and Try again reads them again', async () => {

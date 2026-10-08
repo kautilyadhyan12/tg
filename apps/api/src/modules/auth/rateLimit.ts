@@ -29,6 +29,10 @@ export interface DualRateLimitOptions {
    *  shared address could otherwise use up everybody's allowance (sign-in's code check
    *  counts the address apart, only for wrong guesses at live codes). */
   ipMax?: number | null;
+  /** Counts the address apart for each value this returns (a gym's id), so one gym's staff
+   *  never use up another gym's allowance at a shared address. Left out, or null: the
+   *  address has one count for everybody. */
+  ipScope?: (req: FastifyRequest) => string | null;
   windowMs: number;
   /** Extracts the identifier (normalized email) from the request; return null
    *  to count only the IP dimension. */
@@ -71,7 +75,8 @@ export function createDualRateLimit(
   return async (req, reply) => {
     const id = opts.identifier(req);
     const idOk = id === null ? true : await hit(req, "id", id);
-    const ipOk = idOk && ipMax !== null ? await hit(req, "ip", req.ip) : true;
+    const scope = opts.ipScope?.(req) ?? null;
+    const ipOk = idOk && ipMax !== null ? await hit(req, "ip", scope === null ? req.ip : `${scope}:${req.ip}`) : true;
     if (idOk && !ipOk && id !== null) await opts.redis.decrIfPositive(`rl:${opts.name}:id:${id}`);
     if (!ipOk || !idOk) {
       // Same client-facing shape as the global limiter's 429 (R8.1).
