@@ -411,10 +411,25 @@ export const classBookingSettingsSchema = z
   })
   .strict();
 
+/** Personal training's own two (17e-vi): how many days ahead a member can book a session,
+ *  and until how many minutes before it a cancel is free. A session reads these and a
+ *  class never does. */
+export const ptBookingSettingsSchema = z
+  .object({
+    opensDays: setting("opensDays"),
+    freeCancelMinutes: setting("freeCancelMinutes"),
+  })
+  .strict();
+export type PtBookingSettings = z.infer<typeof ptBookingSettingsSchema>;
+
+/** What a save sends: the four for classes and personal training's two, every one every time. */
+export const bookingSettingsBodySchema = classBookingSettingsSchema.extend({ pt: ptBookingSettingsSchema }).strict();
+export type BookingSettingsBody = z.infer<typeof bookingSettingsBodySchema>;
+
 /** `movedIn`, on a save only: how many waiting people a shorter hand-over time gave a
  *  free place to at once. */
 export const classBookingSettingsResponseSchema = z
-  .object({ settings: classBookingSettingsSchema, movedIn: z.number().int().optional() })
+  .object({ settings: classBookingSettingsSchema, pt: ptBookingSettingsSchema, movedIn: z.number().int().optional() })
   .strict();
 export type ClassBookingSettingsResponse = z.infer<typeof classBookingSettingsResponseSchema>;
 

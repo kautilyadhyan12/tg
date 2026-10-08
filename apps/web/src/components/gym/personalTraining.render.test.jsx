@@ -421,6 +421,26 @@ describe('a member’s personal training', () => {
     expect(within(mine).queryByRole('button')).toBeNull();
   });
 
+  it('a day the gym has not opened yet says so and up to which day, never "No available times" (17e-vi)', async () => {
+    // The gym opens sessions three days ahead: the week's last days are past it.
+    serve(view({ lastDay: '2026-10-10', trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540, 600] })] }));
+    render(<PersonalTraining gym={GYM} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    const days = within(screen.getByRole('group', { name: 'Pick a day' })).getAllByRole('button');
+    fireEvent.click(days[5]);
+    expect(days[5].getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText("Booking for this day isn't open yet. You can book up to Sat 10 Oct.")).toBeTruthy();
+    expect(screen.queryByText('No available times on this day.')).toBeNull();
+    expect(screen.queryByText(/Available times/)).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Sam Trainer' })).toBeNull();
+    // The last open day is as it was: a day with no time says so.
+    fireEvent.click(days[3]);
+    expect(screen.queryByText(/isn't open yet/)).toBeNull();
+    expect(screen.getByText('No available times on this day.')).toBeTruthy();
+    fireEvent.click(days[2]);
+    expect(screen.getAllByRole('button', { name: /^Book / })).toHaveLength(2);
+  });
+
   it('Later turns the page and stops at the last day that can be booked; Earlier comes back', async () => {
     serve(view());
     render(<PersonalTraining gym={GYM} />);

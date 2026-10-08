@@ -303,7 +303,7 @@ await measure(
     return sessions;
   },
   async () => {
-    const saved = await setBookingSettings(deps, owner, gymId, { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 60, waitlistMax: 20 }, () => Promise.resolve(true));
+    const saved = await setBookingSettings(deps, owner, gymId, { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 60, waitlistMax: 20, pt: { opensDays: 7, freeCancelMinutes: 120 } }, () => Promise.resolve(true));
     if (saved?.movedIn !== Math.min(200, PEOPLE)) throw new Error(`${String(saved?.movedIn)} moved in`);
   },
 );

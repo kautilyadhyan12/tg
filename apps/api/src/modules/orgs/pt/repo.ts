@@ -40,8 +40,9 @@ const holdsPt = (sql: SqlOrTx, day: PendingQuery<Row[]>) => sql`
 
 export interface GymClock {
   timezone: string;
+  /** Personal training's own free-cancel time, never the classes'. */
   freeCancelMinutes: number;
-  /** How many days before a class or a session a member's own booking opens. */
+  /** How many days before a session a member's own booking opens. */
   opensDays: number;
   /** Whether the gym has any membership type on its price list. */
   hasTypes: boolean;
@@ -49,7 +50,7 @@ export interface GymClock {
 
 export async function gymClock(sql: SqlOrTx, gymId: string): Promise<GymClock | null> {
   const rows = await sql<{ timezone: string; free: number; opens: number; has_types: boolean }[]>`
-    SELECT g.timezone, g.booking_free_cancel_minutes AS free, g.booking_opens_days AS opens,
+    SELECT g.timezone, g.pt_free_cancel_minutes AS free, g.pt_opens_days AS opens,
            EXISTS (SELECT 1 FROM gym_membership_types mt WHERE mt.gym_id = g.id AND mt.archived_at IS NULL) AS has_types
     FROM gyms g WHERE g.id = ${gymId}`;
   const r = rows[0];

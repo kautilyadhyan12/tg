@@ -236,10 +236,14 @@ export default function PersonalTraining({ gym }) {
                   </button>
                 ))}
               </div>
-              {day.pay !== null && <p className="text-sm" style={{ color: day.pay.can ? 'rgba(255,255,255,0.8)' : ORANGE }}>{day.pay.text}</p>}
-              <p className="text-xs" style={{ color: MUTED }}>{day.can ? 'Available times. Press one to book it.' : 'Available times.'}</p>
+              {day.notOpen === null && day.pay !== null && <p className="text-sm" style={{ color: day.pay.can ? 'rgba(255,255,255,0.8)' : ORANGE }}>{day.pay.text}</p>}
+              {day.notOpen !== null ? (
+                <p className="text-sm" style={{ color: MUTED }}>{day.notOpen}</p>
+              ) : (
+                <p className="text-xs" style={{ color: MUTED }}>{day.can ? 'Available times. Press one to book it.' : 'Available times.'}</p>
+              )}
               {note !== null && <p className="text-xs" style={{ color: ORANGE }}>{note}</p>}
-              {day.trainers.map((t) => (
+              {(day.notOpen === null ? day.trainers : []).map((t) => (
                 <div key={t.trainerId} role="group" aria-label={t.name} className="rounded-xl p-3 flex flex-col gap-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
                   <p className="text-sm font-semibold text-white break-words">
                     {t.name} <span className="font-normal text-xs" style={{ color: MUTED }}>· {t.lengthText}</span>

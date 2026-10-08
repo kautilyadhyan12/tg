@@ -13,7 +13,9 @@ const { canOpenPlace, placeTo } = await import('../../pages/console/consolePlace
 const ORG = { id: 'g1', name: 'Iron House' };
 const MANAGER = ['members.read', 'schedule.manage'];
 const TRAINER = ['members.read', 'attendance.read'];
-const settings = (over = {}) => ({ data: { settings: { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20, ...over } } });
+// Personal training's own two are set apart from the classes', so a page reading the wrong ones shows.
+const PT = { opensDays: 3, freeCancelMinutes: 1440 };
+const settings = (over = {}, pt = PT) => ({ data: { settings: { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20, ...over }, pt } });
 const draw = (props) =>
   render(
     <MemoryRouter>
@@ -44,6 +46,30 @@ describe('the booking rules line', () => {
   ])('reads the numbers the gym set: %o', async (over, words) => {
     api.getBookingSettings.mockResolvedValue(settings(over));
     draw({ privileges: MANAGER });
+    expect(await screen.findByText(words)).toBeTruthy();
+  });
+
+  it('the Personal training page says personal training’s own two, never the classes’', async () => {
+    api.getBookingSettings.mockResolvedValue(settings());
+    draw({ privileges: MANAGER, of: 'pt' });
+    expect(await screen.findByText('Members can book up to 3 days ahead and cancel for free until 1 day before it starts.')).toBeTruthy();
+    expect(screen.queryByText(/7 days ahead/)).toBeNull();
+    expect(screen.getByRole('link', { name: 'Change booking rules' }).getAttribute('href')).toBe('/console/iron-house/settings#booking-rules');
+  });
+
+  it('the Classes page says the classes’ own, never personal training’s', async () => {
+    api.getBookingSettings.mockResolvedValue(settings());
+    draw({ privileges: MANAGER, of: 'classes' });
+    expect(await screen.findByText('Members can book up to 7 days ahead and cancel for free until 2 hours before it starts.')).toBeTruthy();
+    expect(screen.queryByText(/3 days ahead/)).toBeNull();
+  });
+
+  it.each([
+    [{ opensDays: 1, freeCancelMinutes: 0 }, 'Members can book up to 1 day ahead and cancel for free until it starts.'],
+    [{ opensDays: 56, freeCancelMinutes: 10080 }, 'Members can book up to 56 days ahead and cancel for free until 7 days before it starts.'],
+  ])('personal training’s numbers as the gym set them: %o', async (pt, words) => {
+    api.getBookingSettings.mockResolvedValue(settings({}, pt));
+    draw({ privileges: MANAGER, of: 'pt' });
     expect(await screen.findByText(words)).toBeTruthy();
   });
 

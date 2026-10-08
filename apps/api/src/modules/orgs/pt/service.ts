@@ -417,7 +417,7 @@ export async function bookUnderLock(tx: TransactionSql, now: Date, gymId: string
     offered: startsAt !== null,
     started: startsAt !== null && ptTime(now.getTime(), startsAt.getTime(), clock.freeCancelMinutes).started,
     tooFar: req.localDate > addDays(today, PT_HORIZON_DAYS - 1),
-    // A member's own booking opens when the gym's class bookings do.
+    // A member's own booking opens by personal training's own number of days.
     notOpenYet: by.member && startsAt !== null && startsAt.getTime() - now.getTime() > clock.opensDays * DAY_MS,
     trainerBusy: busy(trainerTaken),
     trainerInClass: busy(coached),

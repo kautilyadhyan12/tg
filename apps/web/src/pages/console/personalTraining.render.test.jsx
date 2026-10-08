@@ -13,6 +13,7 @@ const api = {
   cancelPt: vi.fn(),
   addPtTimeOff: vi.fn(),
   removePtTimeOff: vi.fn(),
+  getBookingSettings: vi.fn(),
 };
 vi.mock('../../api/orgsApi', async (importOriginal) => ({ ...(await importOriginal()), orgService: api }));
 let ORG;
@@ -100,6 +101,16 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the page for whoever runs the timetable', () => {
+  it('says personal training’s own booking rules, never the classes’ (17e-vi)', async () => {
+    api.getBookingSettings.mockResolvedValue({
+      data: { settings: { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 }, pt: { opensDays: 3, freeCancelMinutes: 1440 } },
+    });
+    open();
+    expect(await screen.findByText('Members can book up to 3 days ahead and cancel for free until 1 day before it starts.')).toBeTruthy();
+    expect(screen.queryByText(/7 days ahead/)).toBeNull();
+    expect(screen.getByRole('link', { name: 'Change booking rules' }).getAttribute('href')).toBe('/console/iron-house/settings#booking-rules');
+  });
+
   it('lists the trainers who are set up, says what the page is for, and shows the first one’s week: never the reader as a trainer', async () => {
     open();
     expect(await screen.findByText('One-to-one sessions with a trainer. Set when each trainer is available, then book members into their available times.')).toBeTruthy();

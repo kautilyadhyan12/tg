@@ -88,7 +88,7 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
   if (clock === null || me === null) throw notFound();
 
   const today = dayInTz(now, clock.timezone);
-  // A member's booking opens when the gym's class bookings do, and never past the days
+  // A member's booking opens by personal training's own number of days, and never past the days
   // sessions run.
   const opensUntilMs = now.getTime() + clock.opensDays * DAY_MS;
   const opensDay = dayInTz(new Date(opensUntilMs), clock.timezone);

@@ -110,35 +110,68 @@ describe('the four booking settings', () => {
     expect(minutesAsUnit(minutes)).toEqual(shown);
   });
 
+  // Personal training's own two (17e-vi), set apart from the classes' so a mix-up shows.
+  const PT = { opensDays: 3, freeCancelMinutes: 1440 };
+
   it('opens with what is saved, and saves back the same minutes', () => {
-    const draft = bookingSettingsDraft(START);
-    expect(draft).toEqual({ opensDays: '7', freeAmount: '2', freeUnit: 'hours', handoverAmount: '1', handoverUnit: 'days', waitlistMax: '20' });
-    expect(bookingSettingsBody(draft)).toEqual(START);
-    expect(bookingSettingsChanged(draft, START)).toBe(false);
+    const draft = bookingSettingsDraft(START, PT);
+    expect(draft).toEqual({
+      opensDays: '7',
+      freeAmount: '2',
+      freeUnit: 'hours',
+      handoverAmount: '1',
+      handoverUnit: 'days',
+      waitlistMax: '20',
+      ptOpensDays: '3',
+      ptFreeAmount: '1',
+      ptFreeUnit: 'days',
+    });
+    expect(bookingSettingsBody(draft)).toEqual({ ...START, pt: PT });
+    expect(bookingSettingsChanged(draft, START, PT)).toBe(false);
     expect(bookingSettingsProblem(draft)).toBeNull();
   });
 
   it('turns the unit into minutes', () => {
-    const draft = { ...bookingSettingsDraft(START), freeAmount: '90', freeUnit: 'minutes', handoverAmount: '3', handoverUnit: 'hours' };
-    expect(bookingSettingsBody(draft)).toEqual({ ...START, freeCancelMinutes: 90, handoverMinutes: 180 });
-    expect(bookingSettingsChanged(draft, START)).toBe(true);
+    const draft = { ...bookingSettingsDraft(START, PT), freeAmount: '90', freeUnit: 'minutes', handoverAmount: '3', handoverUnit: 'hours' };
+    expect(bookingSettingsBody(draft)).toEqual({ ...START, freeCancelMinutes: 90, handoverMinutes: 180, pt: PT });
+    expect(bookingSettingsChanged(draft, START, PT)).toBe(true);
+  });
+
+  it('personal training’s two are their own: changing one leaves the classes’ four, and the other way round', () => {
+    const ptOnly = { ...bookingSettingsDraft(START, PT), ptOpensDays: '14', ptFreeAmount: '45', ptFreeUnit: 'minutes' };
+    expect(bookingSettingsBody(ptOnly)).toEqual({ ...START, pt: { opensDays: 14, freeCancelMinutes: 45 } });
+    expect(bookingSettingsChanged(ptOnly, START, PT)).toBe(true);
+    const classesOnly = { ...bookingSettingsDraft(START, PT), opensDays: '14', freeAmount: '45', freeUnit: 'minutes' };
+    expect(bookingSettingsBody(classesOnly)).toEqual({ ...START, opensDays: 14, freeCancelMinutes: 45, pt: PT });
+    // What was saved for one is never read as the other's.
+    expect(bookingSettingsChanged(bookingSettingsDraft(START, PT), START, { opensDays: 7, freeCancelMinutes: 120 })).toBe(true);
+    expect(bookingSettingsChanged(bookingSettingsDraft(START, PT), { ...START, opensDays: 3, freeCancelMinutes: 1440 }, PT)).toBe(true);
   });
 
   it.each([
     [{ opensDays: '' }, 'Type a whole number in each box.'],
     [{ waitlistMax: '1.5' }, 'Type a whole number in each box.'],
-    [{ opensDays: '0' }, 'When booking opens: pick 1 to 56 days.'],
-    [{ opensDays: '57' }, 'When booking opens: pick 1 to 56 days.'],
-    [{ freeAmount: '8', freeUnit: 'days' }, 'Free cancelling: pick 0 to 7 days.'],
+    [{ ptOpensDays: '' }, 'Type a whole number in each box.'],
+    [{ ptFreeAmount: '' }, 'Type a whole number in each box.'],
+    [{ opensDays: '0' }, 'Classes, when booking opens: pick 1 to 56 days.'],
+    [{ opensDays: '57' }, 'Classes, when booking opens: pick 1 to 56 days.'],
+    [{ freeAmount: '8', freeUnit: 'days' }, 'Classes, free cancelling: pick 0 to 7 days.'],
+    [{ ptOpensDays: '0' }, 'Personal training, when booking opens: pick 1 to 56 days.'],
+    [{ ptOpensDays: '57' }, 'Personal training, when booking opens: pick 1 to 56 days.'],
+    [{ ptFreeAmount: '8', ptFreeUnit: 'days' }, 'Personal training, free cancelling: pick 0 to 7 days.'],
+    [{ ptFreeAmount: '169', ptFreeUnit: 'hours' }, 'Personal training, free cancelling: pick 0 to 7 days.'],
     [{ handoverAmount: '169', handoverUnit: 'hours' }, 'The waitlist time: pick 0 to 7 days.'],
     [{ waitlistMax: '101' }, 'The waitlist size: pick 0 to 100 people.'],
   ])('%j is refused: %s', (patch, words) => {
-    expect(bookingSettingsProblem({ ...bookingSettingsDraft(START), ...patch })).toBe(words);
+    expect(bookingSettingsProblem({ ...bookingSettingsDraft(START, PT), ...patch })).toBe(words);
   });
 
   it('allows each end of each range', () => {
-    expect(bookingSettingsProblem({ opensDays: '1', freeAmount: '0', freeUnit: 'minutes', handoverAmount: '0', handoverUnit: 'days', waitlistMax: '0' })).toBeNull();
-    expect(bookingSettingsProblem({ opensDays: '56', freeAmount: '7', freeUnit: 'days', handoverAmount: '168', handoverUnit: 'hours', waitlistMax: '100' })).toBeNull();
+    const least = { opensDays: '1', freeAmount: '0', freeUnit: 'minutes', handoverAmount: '0', handoverUnit: 'days', waitlistMax: '0', ptOpensDays: '1', ptFreeAmount: '0', ptFreeUnit: 'minutes' };
+    const most = { opensDays: '56', freeAmount: '7', freeUnit: 'days', handoverAmount: '168', handoverUnit: 'hours', waitlistMax: '100', ptOpensDays: '56', ptFreeAmount: '168', ptFreeUnit: 'hours' };
+    expect(bookingSettingsProblem(least)).toBeNull();
+    expect(bookingSettingsProblem(most)).toBeNull();
+    expect(bookingSettingsBody(most).pt).toEqual({ opensDays: 56, freeCancelMinutes: 10080 });
   });
 
   it('says what a save did: a shorter waitlist time can book people who were waiting', () => {
@@ -150,9 +183,13 @@ describe('the four booking settings', () => {
 
   it('sums the settings up in the closed section', () => {
     expect(bookingSettingsSummary(null)).toBe('When members can book and cancel, and how the waitlist works');
-    expect(bookingSettingsSummary(START)).toBe('Opens 7 days before · free to cancel until 2 hours before · waitlist of 20');
-    expect(bookingSettingsSummary({ opensDays: 1, freeCancelMinutes: 0, handoverMinutes: 0, waitlistMax: 0 })).toBe(
-      'Opens 1 day before · free to cancel until the start · no waitlist',
+    expect(bookingSettingsSummary(START, PT)).toBe(
+      'Classes: opens 7 days before · free to cancel until 2 hours before · waitlist of 20. Personal training: opens 3 days before · free to cancel until 1 day before.',
     );
+    expect(bookingSettingsSummary({ opensDays: 1, freeCancelMinutes: 0, handoverMinutes: 0, waitlistMax: 0 }, { opensDays: 1, freeCancelMinutes: 0 })).toBe(
+      'Classes: opens 1 day before · free to cancel until the start · no waitlist. Personal training: opens 1 day before · free to cancel until the start.',
+    );
+    // With personal training's two not read, they are left out, never made up.
+    expect(bookingSettingsSummary(START)).toBe('Classes: opens 7 days before · free to cancel until 2 hours before · waitlist of 20');
   });
 });

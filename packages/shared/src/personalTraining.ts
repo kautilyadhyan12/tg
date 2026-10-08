@@ -477,7 +477,7 @@ export const ptTrainersResponseSchema = z
     timezone: z.string(),
     canManage: z.boolean(),
     canBook: z.boolean(),
-    /** The gym's own free-cancel time, the one classes use. */
+    /** The gym's free-cancel time for personal training (its own since 17e-vi). */
     freeCancelMinutes: z.number().int(),
     /** The gym sells memberships, so a session needs one that includes personal training. */
     gymHasTypes: z.boolean(),

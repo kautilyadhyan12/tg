@@ -7,7 +7,7 @@ import {
   CLASS_LATE_CANCEL_ERROR,
   bookClassRequestSchema,
   cancelClassBookingRequestSchema,
-  classBookingSettingsSchema,
+  bookingSettingsBodySchema,
   classBookingsEndingQuerySchema,
   memberClassesQuerySchema,
 } from "@app/shared";
@@ -153,11 +153,11 @@ export function registerClassBookingRoutes(app: FastifyInstance, deps: { sql: Sq
     return reply.status(200).send(settings);
   });
 
-  // PUT: all four every time.
+  // PUT: all four, and personal training's two, every time.
   app.put("/v1/orgs/:gymId/booking-settings", staff, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const body = parseOr400(classBookingSettingsSchema, req.body, req, reply);
+    const body = parseOr400(bookingSettingsBodySchema, req.body, req, reply);
     if (body === null) return;
     const saved = await service.setBookingSettings(bookingDeps, requireUserId(req), params.gymId, body, gate(staffLimit)(req, reply));
     if (saved === null) return;

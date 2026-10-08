@@ -7,11 +7,13 @@ import PlaceLink from './PlaceLink';
 // THE GYM'S BOOKING RULES, SAID WHERE THEY APPLY (ROADMAP 17e-ii, Kd's click-through: "Class
 // bookings rules are hidden in settings how will a business see them ?"). The Classes and
 // Personal training pages say when members can book and cancel, with a button that opens
-// the box in Settings for whoever may change them. Anybody else reads who can.
+// the box in Settings for whoever may change them. Anybody else reads who can. Each page
+// says its own: personal training has had its own two numbers since 17e-vi.
 
-/** `freeCancelMinutes`: the one rule a page already holds for staff who may not read the
- *  rest (Personal training); null where it holds none. */
-export default function BookingRulesLine({ org, orgSlug, privileges, freeCancelMinutes = null }) {
+/** `of`: whose rules the page shows, `classes` or `pt`. `freeCancelMinutes`: the one rule
+ *  a page already holds for staff who may not read the rest (Personal training); null
+ *  where it holds none. */
+export default function BookingRulesLine({ org, orgSlug, privileges, of = 'classes', freeCancelMinutes = null }) {
   const may = canOpenPlace(privileges, 'bookingRules');
   const [settings, setSettings] = useState(null);
 
@@ -22,13 +24,13 @@ export default function BookingRulesLine({ org, orgSlug, privileges, freeCancelM
     Promise.resolve()
       .then(() => orgService.getBookingSettings(org.id))
       .then((res) => {
-        if (live) setSettings(res?.data?.settings ?? null);
+        if (live) setSettings((of === 'pt' ? res?.data?.pt : res?.data?.settings) ?? null);
       })
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, [may, org.id]);
+  }, [may, org.id, of]);
 
   if (!may) {
     const own = bookingRulesOwnLine(freeCancelMinutes);

@@ -81,6 +81,9 @@ export function ptDay(view, localDate) {
   const pay = day === undefined ? null : payText(view, day);
   return {
     pay,
+    // A day past the last one the gym has opened: it has no time to press, and says why
+    // (the gym's own number of days can be as few as one, 17e-vi).
+    notOpen: localDate > view.lastDay ? `Booking for this day isn't open yet. You can book up to ${dayLabel(view.lastDay)}.` : null,
     // A day nothing pays for shows its times, and none of them is a button.
     can: pay === null || pay.can,
     trainers: view.trainers.map((t) => ({
