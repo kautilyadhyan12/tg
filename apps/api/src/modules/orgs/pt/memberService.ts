@@ -68,6 +68,7 @@ function ownView(row: repo.OwnSessionRow, now: Date, freeCancelMinutes: number):
     freeCancelUntil: new Date(row.startsAt.getTime() - freeCancelMinutes * 60_000).toISOString(),
     status: row.status,
     packCharged: row.packCharged,
+    usesLimit: row.usesLimit,
     cancel: row.status !== "booked" || time.started ? null : time.freeCancel ? "free" : "late",
   });
 }

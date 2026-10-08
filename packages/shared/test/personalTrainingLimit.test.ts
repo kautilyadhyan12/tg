@@ -11,6 +11,7 @@ import {
   pickPtCover,
   ptAllowanceOf,
   ptCountedSpan,
+  ptLimitUsedWords,
   ptUsedOn,
   saveGymMembershipTypeRequestSchema,
   updateGymMembershipTypeRequestSchema,
@@ -118,7 +119,10 @@ describe("pickPtCover with a limit: what pays, and what is refused", () => {
     expect(cover([limited("a", 1, "month", 1)]).ok).toBe(false);
   });
   it("past the limit a pack with a session left pays, and is charged", () => {
-    expect(cover([limited("a", 4, "week", 4), open("p", pack(2))])).toEqual({ ok: true, membershipId: "p", chargePack: true });
+    // And the answer says whose sessions being used made the pack pay.
+    expect(cover([limited("a", 4, "week", 4), open("p", pack(2))])).toEqual({ ok: true, membershipId: "p", chargePack: true, fullId: "a" });
+    // A pack that pays with no membership beside it names none.
+    expect("fullId" in cover([open("p", pack(2))])).toBe(false);
   });
   it("with sessions left on the membership the pack is kept", () => {
     expect(cover([open("p", pack(2)), limited("a", 4, "week", 3)])).toEqual({ ok: true, membershipId: "a", chargePack: false });
@@ -168,9 +172,19 @@ describe("what is left, as a screen reads it", () => {
     const held = [named(limited("a", 4, "month", 6), "Gold")];
     expect(ptAllowanceOf(cover(held), held)).toEqual({ membership: "Gold", limit: 4, period: "month", left: 0 });
   });
-  it("a pack that pays past the limit is not a limit, and neither is a membership without one", () => {
+  it("a pack that pays because the membership's sessions are used names that membership, with none left", () => {
     const withPack = [named(limited("a", 4, "week", 4), "Gold"), named(open("p", pack(2)), "PT 10")];
-    expect(ptAllowanceOf(cover(withPack), withPack)).toBeNull();
+    expect(ptAllowanceOf(cover(withPack), withPack)).toEqual({ membership: "Gold", limit: 4, period: "week", left: 0 });
+    const packOnly = [named(open("p", pack(2)), "PT 10")];
+    expect(ptAllowanceOf(cover(packOnly), packOnly)).toBeNull();
+  });
+  it("the refusal names the membership and its number, for a member and for staff", () => {
+    const gold = { membership: "Gold", limit: 4, period: "week" as const, left: 0 };
+    expect(ptLimitUsedWords(gold, true)).toBe("You've used all 4 personal training sessions Gold includes for that week.");
+    expect(ptLimitUsedWords(gold, false)).toBe("This person has used all 4 personal training sessions Gold includes for that week.");
+    expect(ptLimitUsedWords({ ...gold, limit: 1, period: "month" }, false)).toBe("This person has used the 1 personal training session Gold includes for that month.");
+  });
+  it("a membership without a limit is not a limit", () => {
     const plain = [named(open("b"), "Platinum")];
     expect(ptAllowanceOf(cover(plain), plain)).toBeNull();
     expect(ptAllowanceOf({ ok: false, reason: "not_covered" }, plain)).toBeNull();

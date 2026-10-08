@@ -2941,7 +2941,13 @@ left, which is charged; with none of those the booking is refused 409 `limit_wee
 `limit_month`, for staff as for a member, and nothing is written. The count is read under
 the gym's lock in the booking's own transaction (`heldWithUsed`), so two presses at one
 instant cannot both take the last session. A limit changed on the price list holds from the
-next booking; sessions already booked past a lowered limit stay. A change to a type must
+next booking; sessions already booked past a lowered limit stay. The count belongs to ONE
+held membership: two memberships of one limited type on a record each have their own
+sessions, and a membership cancelled and given again starts with none used. A session
+carries `usesLimit`, so the console's late-cancel box offers "Late cancel: the session
+stays used" and "Cancel and give the session back" as it does for a pack, and a member's
+boxes say whether it still counts. Where a pack pays because the membership's sessions are
+used, `limit` names that membership with none left and both screens say so. A change to a type must
 say `ptLimit` and `ptPeriod` outright, as it says `includesPt`. The picker's rows and a
 member's days carry `limit` (the membership, its number, its period and what is left) where
 the paying membership has one, or where nothing pays because one is used. On the screens:

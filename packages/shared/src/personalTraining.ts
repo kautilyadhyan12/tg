@@ -124,8 +124,9 @@ export interface PtHeld {
 }
 
 export type PtCover =
-  /** `membershipId` null: the gym has no membership types, so anybody on its list may be booked. */
-  | { ok: true; membershipId: string | null; chargePack: boolean }
+  /** `membershipId` null: the gym has no membership types, so anybody on its list may be booked.
+   *  `fullId`: a pack pays because this membership's sessions for that week or month are used. */
+  | { ok: true; membershipId: string | null; chargePack: boolean; fullId?: string }
   | { ok: false; reason: "no_membership" | "not_covered" | "pack_used" }
   /** `membershipId`: the membership whose sessions for that week or month are used. */
   | { ok: false; reason: "limit_week" | "limit_month"; membershipId: string };
@@ -183,9 +184,9 @@ export function pickPtCover(input: { gymHasTypes: boolean; day: string; held: re
   const pack = covering
     .filter(({ h }) => (h.membership.classesLeft ?? 0) > 0)
     .sort((a, b) => ((a.view.endsOn ?? "") < (b.view.endsOn ?? "") ? -1 : (a.view.endsOn ?? "") > (b.view.endsOn ?? "") ? 1 : 0))[0];
-  if (pack !== undefined) return { ok: true, membershipId: pack.h.id, chargePack: true };
-  // Every membership that is not a pack has its sessions used, and no pack has one left.
+  // Every membership that is not a pack has its sessions used.
   const full = plain[0];
+  if (pack !== undefined) return { ok: true, membershipId: pack.h.id, chargePack: true, ...(full === undefined ? {} : { fullId: full.h.id }) };
   if (full !== undefined) return { ok: false, reason: full.h.ptPeriod === "month" ? "limit_month" : "limit_week", membershipId: full.h.id };
   return { ok: false, reason: "pack_used" };
 }
@@ -203,12 +204,19 @@ export const ptAllowanceSchema = z
 export type PtAllowance = z.infer<typeof ptAllowanceSchema>;
 
 /** The limit that decided `cover`: the paying membership's where it has one, or the one
- *  whose sessions are used where nothing pays for that reason. Null for anything else. */
+ *  whose sessions are used, where nothing pays for that reason or a pack pays because of
+ *  it. Null for anything else. */
 export function ptAllowanceOf(cover: PtCover, held: readonly (PtHeld & { typeName: string })[]): PtAllowance | null {
-  const id = cover.ok ? (cover.chargePack ? null : cover.membershipId) : "membershipId" in cover ? cover.membershipId : null;
+  const id = cover.ok ? (cover.chargePack ? (cover.fullId ?? null) : cover.membershipId) : "membershipId" in cover ? cover.membershipId : null;
   const h = held.find((x) => x.id === id);
   if (h === undefined || h.ptLimit === null || h.ptPeriod === null) return null;
   return { membership: h.typeName, limit: h.ptLimit, period: h.ptPeriod, left: Math.max(0, h.ptLimit - h.used) };
+}
+
+/** The refusal of a booking past a limit, naming the membership and its number. */
+export function ptLimitUsedWords(a: PtAllowance, member: boolean): string {
+  const all = a.limit === 1 ? "the 1 personal training session" : `all ${String(a.limit)} personal training sessions`;
+  return `${member ? "You've" : "This person has"} used ${all} ${a.membership} includes for that ${a.period}.`;
 }
 
 export const PT_BOOK_REFUSALS = [
@@ -513,6 +521,9 @@ export const ptAppointmentSchema = z
      *  for a reader who may not open a person's page. */
     membership: z.string().nullable(),
     packCharged: z.boolean(),
+    /** It was booked on a membership that has a limit on sessions, so it counts against
+     *  that limit unless it is cancelled for free or given back. */
+    usesLimit: z.boolean(),
     /** What a cancel now would be; null once it has started or is cancelled. */
     cancel: z.enum(["free", "late"]).nullable(),
   })
@@ -586,8 +597,8 @@ export type PtPeopleQuery = z.infer<typeof ptPeopleQuerySchema>;
  *  that pays for a session on that day first, then by name. `pt` is what a booking on
  *  that day would be made on, by the booking's own rule (`pickPtCover`): the membership's
  *  name and, for a pack, the sessions left; null where nothing they hold pays for it.
- *  `limit`: the paying membership's limit on sessions, or, where nothing pays because a
- *  limit is used, that one's; null otherwise. */
+ *  `limit`: the paying membership's limit on sessions, or, where nothing pays or a pack
+ *  pays because a limit is used, that one's; null otherwise. */
 export const ptPeopleResponseSchema = z
   .object({
     /** The gym sells memberships: somebody with `pt` null cannot be booked. */
@@ -748,6 +759,8 @@ export const memberPtSessionSchema = z
     status: ptAppointmentStatusSchema,
     /** A session of a pack is used for it. */
     packCharged: z.boolean(),
+    /** It counts as one of the sessions their membership includes a week or a month. */
+    usesLimit: z.boolean(),
     /** What a cancel now would be; null once it has started or is cancelled. */
     cancel: z.enum(["free", "late"]).nullable(),
   })
@@ -778,7 +791,7 @@ export const memberPtResponseSchema = z
           /** Why nothing pays; null where something does, or the reader has no record of their own. */
           why: z.enum(["no_membership", "not_covered", "pack_used", "limit_week", "limit_month"]).nullable(),
           /** The paying membership's limit on sessions, or the one that is used where
-           *  `why` is a limit; null otherwise. */
+           *  `why` is a limit or a pack pays because of it; null otherwise. */
           limit: ptAllowanceSchema.nullable(),
         })
         .strict(),

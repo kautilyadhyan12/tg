@@ -36,6 +36,7 @@ const session = (id, over = {}) => ({
   freeCancelUntil: '2026-10-09T07:00:00.000Z',
   status: 'booked',
   packCharged: true,
+  usesLimit: false,
   cancel: 'free',
   ...over,
 });
@@ -269,7 +270,9 @@ describe('a member’s personal training', () => {
     serve(view({ days, trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540, 600], '2026-10-12': [540] })] }));
     render(<PersonalTraining gym={GYM} />);
     const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
-    expect(screen.getByText("You've used all 4 personal training sessions Gold includes this week. You can book for Mon 12 Oct or later.")).toBeTruthy();
+    // What is said is true whatever next week holds: when it starts, never that it can be booked.
+    expect(screen.getByText("You've used all 4 personal training sessions Gold includes this week. A new week starts on Mon 12 Oct.")).toBeTruthy();
+    expect(screen.queryByText(/You can book for/)).toBeNull();
     // The times still show, as plain text: nothing to press.
     expect(sam.textContent).toContain('9:00 am – 10:00 am');
     expect(within(sam).queryAllByRole('button')).toHaveLength(0);
@@ -283,7 +286,37 @@ describe('a member’s personal training', () => {
     serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: null, why: 'limit_month', limit: used })), trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540] })] }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
-    expect(screen.getByText("You've used the 1 personal training session Silver includes this month. You can book for Sun 1 Nov or later.")).toBeTruthy();
+    expect(screen.getByText("You've used the 1 personal training session Silver includes this month. A new month starts on Sun 1 Nov.")).toBeTruthy();
+  });
+
+  it('a pack that pays because the membership’s sessions are used says so, so a charged pack session is no surprise', async () => {
+    const used = { membership: 'Gold', limit: 2, period: 'week', left: 0 };
+    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: PACK, why: null, limit: used })), trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540] })] }));
+    render(<PersonalTraining gym={GYM} />);
+    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
+    expect(screen.getByText("You have PT 10: 9 sessions left. Each booking uses 1 session. Gold's sessions for this week are used, so a booking uses your pack.")).toBeTruthy();
+    fireEvent.click(within(sam).getByRole('button', { name: /^Book 9:00 am/ }));
+    expect(screen.getByRole('dialog', { name: 'Book this session?' }).textContent).toContain("Gold's sessions for this week are used, so a booking uses your pack.");
+  });
+
+  it('a session that counts against a limit: the cancel boxes and the list say whether it still counts', async () => {
+    const mine = session(S1, { packCharged: false, usesLimit: true });
+    serve(view({ sessions: [mine], history: [session('44444444-4444-4444-8444-444444444444', { packCharged: false, usesLimit: true, status: 'late_cancelled', cancel: null, localDate: '2026-10-06' })] }));
+    render(<PersonalTraining gym={GYM} />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Cancel session: Fri 9 Oct/ }));
+    expect(screen.getByRole('dialog', { name: 'Cancel your session?' }).textContent).toContain('It then no longer counts as one of the sessions your membership includes.');
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Keep it' }));
+    expect(screen.getByRole('list', { name: 'Your sessions' }).textContent).toContain('Cancelled late · it still counts as one of your sessions');
+
+    cleanup();
+    serve(view({ sessions: [{ ...mine, cancel: 'late' }] }));
+    render(<PersonalTraining gym={GYM} />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Cancel session: Fri 9 Oct/ }));
+    const late = screen.getByRole('dialog', { name: 'Cancel late?' });
+    expect(late.textContent).toContain('Cancelling now counts as a late cancel, and it still counts as one of the sessions your membership includes.');
+    svc.cancel.mockResolvedValue({ ...mine, status: 'late_cancelled', cancel: null });
+    fireEvent.click(within(late).getByRole('button', { name: 'Cancel session' }));
+    expect((await screen.findByRole('status')).textContent).toBe('Cancelled late. It still counts as one of the sessions your membership includes.');
   });
 
   it('a gym that sells no memberships says nothing about paying, and every time is a button', async () => {

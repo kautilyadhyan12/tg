@@ -82,6 +82,7 @@ const session = (over = {}) => ({
   entryId: null,
   membership: 'PT 10',
   packCharged: true,
+  usesLimit: false,
   cancel: 'free',
   ...over,
 });
@@ -290,6 +291,26 @@ describe('picking the person', () => {
     expect(personRow({ ...onGold, pt: { membership: 'PT 10', sessionsLeft: 9 }, limit: null }, true).detail).toBe('PT 10 · 9 sessions left');
     expect(bookCost(onGold)).toBe('It is booked on Gold, which includes 4 a week: 3 of 4 sessions left that week, before this one.');
     expect(bookCost({ ...onGold, limit: null })).toBe('It is booked on Gold.');
+    // A pack that pays because Gold's sessions are used says so.
+    expect(bookCost({ ...onGold, pt: { membership: 'PT 10', sessionsLeft: 9 }, limit: { ...gold, left: 0 } })).toBe("One session is used from PT 10. Gold's sessions for that week are used.");
+  });
+  it('cancelling a session that counts against a limit: free says it no longer counts; late gives staff both choices, as a pack does', () => {
+    const view = { freeCancelMinutes: 120, clockFormat: '24h' };
+    const counted = session({ membership: 'Gold', packCharged: false, usesLimit: true });
+    expect(cancelBox(counted, view).question).toBe(
+      "Cancel Maya Lopez's session on Fri 9 Oct, 10:00 – 11:00? It's free to cancel, and it no longer counts as one of the sessions their membership includes.",
+    );
+    const late = cancelBox({ ...counted, cancel: 'late' }, view);
+    expect(late.question).toContain('Choose whether it still counts as one of the sessions their membership includes.');
+    expect(late.choices).toEqual([
+      { key: 'late', label: 'Late cancel: the session stays used', lateOk: true, giveBack: false },
+      { key: 'back', label: 'Cancel and give the session back', lateOk: true, giveBack: true },
+    ]);
+    // A membership with no limit has nothing to keep used: one choice, as before.
+    const open = cancelBox({ ...counted, usesLimit: false, cancel: 'late' }, view);
+    expect(open.choices).toEqual([{ key: 'late', label: 'Cancel session', lateOk: true, giveBack: false }]);
+    // A pack's own two choices are as they were.
+    expect(cancelBox(session({ cancel: 'late' }), view).choices.map((c) => c.key)).toEqual(['late', 'back']);
   });
   it('the list says what it is showing', () => {
     expect(peopleHeading({ gymHasTypes: true, people: [maya] }, '')).toBe('Your members, people with personal training first');

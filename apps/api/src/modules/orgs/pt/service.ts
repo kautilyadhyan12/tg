@@ -41,6 +41,7 @@ import {
   ptBusy,
   ptCountedSpan,
   ptFreeTimes,
+  ptLimitUsedWords,
   ptOfferedTimes,
   ptPeopleResponseSchema,
   ptTime,
@@ -160,6 +161,7 @@ function shown(row: repo.AppointmentRow, view: { now: Date; freeCancelMinutes: n
     // What a person pays with is for staff who may open their page, not for a trainer's list.
     membership: view.opens ? row.membership : null,
     packCharged: row.packCharged,
+    usesLimit: row.usesLimit,
     cancel: row.status !== "booked" || time.started ? null : time.freeCancel ? "free" : "late",
   });
 }
@@ -408,6 +410,7 @@ export async function bookUnderLock(tx: TransactionSql, now: Date, gymId: string
     clock.hasTypes ? heldWithUsed(tx, gymId, [req.entryId], [req.localDate]) : null,
   ]);
   const held = heldOn === null ? [] : heldOn(req.localDate, req.entryId);
+  const cover = pickPtCover({ gymHasTypes: clock.hasTypes, day: req.localDate, held });
   const busy = (taken: Awaited<ReturnType<typeof repo.takenBy>>) => startsAt !== null && minutes !== null && ptBusy(startsAt.getTime(), minutes, taken);
   const decision = decidePtBook({
     offers,
@@ -420,9 +423,13 @@ export async function bookUnderLock(tx: TransactionSql, now: Date, gymId: string
     trainerInClass: busy(coached),
     trainerOff: busy(timeOff),
     personBusy: busy(personTaken),
-    cover: pickPtCover({ gymHasTypes: clock.hasTypes, day: req.localDate, held }),
+    cover,
   });
-  if (decision.kind === "refuse") return new OrgsError(STATUS[decision.reason], decision.reason, words[decision.reason]);
+  if (decision.kind === "refuse") {
+    // A limit that is used is said with the membership's name and its number.
+    const used = decision.reason === "limit_week" || decision.reason === "limit_month" ? ptAllowanceOf(cover, held) : null;
+    return new OrgsError(STATUS[decision.reason], decision.reason, used === null ? words[decision.reason] : ptLimitUsedWords(used, by.member));
+  }
   if (startsAt === null || minutes === null) throw new Error("a session was decided with no time");
 
   const id = await repo.insertAppointment(tx, {

@@ -528,8 +528,12 @@ export function limitLeft(limit) {
 /** What booking this person costs them, said before the button. */
 export function bookCost(person) {
   if (person?.pt === null || person?.pt === undefined) return '';
-  if (person.pt.sessionsLeft !== null) return `One session is used from ${person.pt.membership}.`;
   const limit = person.limit ?? null;
+  // A pack pays because the membership's own sessions for that week or month are used.
+  if (person.pt.sessionsLeft !== null) {
+    const why = limit === null ? '' : ` ${limit.membership}'s sessions for that ${limit.period} are used.`;
+    return `One session is used from ${person.pt.membership}.${why}`;
+  }
   return limit === null
     ? `It is booked on ${person.pt.membership}.`
     : `It is booked on ${person.pt.membership}, which includes ${String(limit.limit)} a ${limit.period}: ${limitLeft(limit)}, before this one.`;
@@ -543,11 +547,24 @@ export function cancelBox(appointment, { freeCancelMinutes, clockFormat }) {
     return {
       question: appointment.packCharged
         ? `Cancel ${what}? It's free to cancel, and their pack gets the session back.`
-        : `Cancel ${what}? It's free to cancel.`,
+        : appointment.usesLimit === true
+          ? `Cancel ${what}? It's free to cancel, and it no longer counts as one of the sessions their membership includes.`
+          : `Cancel ${what}? It's free to cancel.`,
       choices: [{ key: 'free', label: 'Cancel session', lateOk: false, giveBack: false }],
     };
   }
   const inside = freeCancelMinutes > 0 ? `It starts in less than ${durationWords(freeCancelMinutes)}, so it's too late to cancel for free.` : "It's too late to cancel for free.";
+  // A session that counts against a membership's limit is staff's to keep used or give
+  // back, as a pack's is: the gym may be the one calling it off.
+  if (!appointment.packCharged && appointment.usesLimit === true) {
+    return {
+      question: `Cancel ${what}? ${inside} Choose whether it still counts as one of the sessions their membership includes.`,
+      choices: [
+        { key: 'late', label: 'Late cancel: the session stays used', lateOk: true, giveBack: false },
+        { key: 'back', label: 'Cancel and give the session back', lateOk: true, giveBack: true },
+      ],
+    };
+  }
   if (!appointment.packCharged) {
     return {
       question: `Cancel ${what}? ${inside} It will be recorded as a late cancel.`,

@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { PT_MEMBER_WORDS, PT_WORDS, type GymMembershipType, type MemberPtResponse, type MemberPtSession, type PtPeopleResponse } from "@app/shared";
+import { ptLimitUsedWords, type GymMembershipType, type MemberPtResponse, type MemberPtSession, type PtPeopleResponse, type PtWeekResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -105,9 +105,9 @@ d("a limit on personal training sessions (real Postgres, two api instances)", { 
     id: string;
     owner: Person;
   }
-  const makeGym = async (name: string): Promise<Gym> => {
+  const makeGym = async (name: string, timezone = "Europe/London"): Promise<Gym> => {
     const owner = await signedIn(`${name} Owner`);
-    const res = await inject("POST", "/v1/orgs", owner.cookies, { trainsHere: false, name, city: "Leeds", country: "GB", timezone: "Europe/London" });
+    const res = await inject("POST", "/v1/orgs", owner.cookies, { trainsHere: false, name, city: "Leeds", country: "GB", timezone });
     expect(res.statusCode, res.body).toBe(201);
     const id = (JSON.parse(res.body) as { org: { id: string } }).org.id;
     await sql`
@@ -127,12 +127,19 @@ d("a limit on personal training sessions (real Postgres, two api instances)", { 
     return { ...person, entryId };
   };
 
+  /** Somebody on the gym's list with no app: their record's id. */
+  const listedOnly = async (gym: Gym, name: string): Promise<string> => {
+    const res = await inject("POST", `/v1/orgs/${gym.id}/member-list/entries`, gym.owner.cookies, { fullName: name, email: `ptl-l-${uniq()}@example.com` });
+    expect(res.statusCode, res.body).toBe(201);
+    return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
+  };
+
   /** 09:00 to 13:00 every day, in sessions of an hour: 09:00, 10:00, 11:00 and 12:00. */
   const EVERY_MORNING = [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ weekday, fromMinute: 540, toMinute: 780 }));
-  const trainerWith = async (gym: Gym, name: string): Promise<Person> => {
+  const trainerWith = async (gym: Gym, name: string, hours: object[] = EVERY_MORNING): Promise<Person> => {
     const person = await signedIn(name);
     await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${person.userId}, 'trainer', ${null})`;
-    const res = await inject("PUT", `/v1/orgs/${gym.id}/pt/trainers/${person.userId}`, gym.owner.cookies, { offers: true, sessionMinutes: 60, hours: EVERY_MORNING });
+    const res = await inject("PUT", `/v1/orgs/${gym.id}/pt/trainers/${person.userId}`, gym.owner.cookies, { offers: true, sessionMinutes: 60, hours });
     expect(res.statusCode, res.body).toBe(200);
     return person;
   };
@@ -235,15 +242,22 @@ d("a limit on personal training sessions (real Postgres, two api instances)", { 
   };
 
   // ── Staff ──
-  const staffBook = (gym: Gym, trainer: Person, entryId: string, day: string, minute: number) =>
-    inject("POST", `/v1/orgs/${gym.id}/pt/appointments`, gym.owner.cookies, {
-      requestKey: randomUUID(),
-      trainerId: trainer.userId,
-      entryId,
-      localDate: day,
-      startMinute: minute,
-      minutes: 60,
-    });
+  const staffBook = (gym: Gym, trainer: Person, entryId: string, day: string, minute: number, target = api()) =>
+    inject(
+      "POST",
+      `/v1/orgs/${gym.id}/pt/appointments`,
+      gym.owner.cookies,
+      { requestKey: randomUUID(), trainerId: trainer.userId, entryId, localDate: day, startMinute: minute, minutes: 60 },
+      target,
+    );
+  /** One session as the console's week draws it. */
+  const onWeek = async (gym: Gym, trainer: Person, day: string, id: string) => {
+    const res = await inject("GET", `/v1/orgs/${gym.id}/pt/week?trainer=${trainer.userId}&from=${day}`, gym.owner.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    const found = (JSON.parse(res.body) as PtWeekResponse).days.flatMap((d) => d.appointments).find((a) => a.id === id);
+    if (found === undefined) throw new Error("the session is not on the week");
+    return found;
+  };
   const staffMade = (res: { statusCode: number; body: string }): string => {
     expect(res.statusCode, res.body).toBe(200);
     return (JSON.parse(res.body) as { appointment: { id: string } }).appointment.id;
@@ -322,8 +336,9 @@ d("a limit on personal training sessions (real Postgres, two api instances)", { 
         expect(await dayOf(gym, maya, SAT)).toMatchObject({ pays: null, why: "limit_week", limit: { ...full, left: 0 } });
 
         // Past the limit nothing is booked: not by her, and not by staff for her.
-        expect(said(await book(gym, maya, sam, SAT, 540))).toEqual([409, "limit_week", PT_MEMBER_WORDS.limit_week]);
-        expect(said(await staffBook(gym, sam, maya.entryId, SUN, 540))).toEqual([409, "limit_week", PT_WORDS.limit_week]);
+        // The refusal names the membership and its number.
+        expect(said(await book(gym, maya, sam, SAT, 540))).toEqual([409, "limit_week", "You've used all 2 personal training sessions Gold 2 a week includes for that week."]);
+        expect(said(await staffBook(gym, sam, maya.entryId, SUN, 540))).toEqual([409, "limit_week", ptLimitUsedWords({ ...full, period: "week", left: 0 }, false)]);
         expect(await statuses(gym, maya.entryId)).toEqual([`${THU} booked`, `${FRI} booked`]);
         expect((await picker(gym, "Maya Member", SAT)).pt).toBeNull();
         expect((await picker(gym, "Maya Member", SAT)).limit).toEqual({ ...full, left: 0 });
@@ -380,8 +395,12 @@ d("a limit on personal training sessions (real Postgres, two api instances)", { 
     expect(first.packCharged).toBe(false);
     expect(await packLeft(packHeld)).toBe(10);
     // The membership's one session is used: the pack is what pays now, and the page says so.
-    expect(await dayOf(gym, maya, FRI)).toMatchObject({ pays: { membership: "PT 10", sessionsLeft: 10 }, why: null, limit: null });
-    expect(await picker(gym, "Maya Member", FRI)).toMatchObject({ pt: { membership: "PT 10", sessionsLeft: 10 }, limit: null });
+    // ... and why: the membership's sessions for the week are used.
+    const usedUp = { membership: "Gold 1 a week", limit: 1, period: "week", left: 0 };
+    expect(await dayOf(gym, maya, FRI)).toMatchObject({ pays: { membership: "PT 10", sessionsLeft: 10 }, why: null, limit: usedUp });
+    expect(await picker(gym, "Maya Member", FRI)).toMatchObject({ pt: { membership: "PT 10", sessionsLeft: 10 }, limit: usedUp });
+    // Next week the membership pays again, and nothing is said of a pack.
+    expect(await dayOf(gym, maya, NEXT_MON)).toMatchObject({ pays: { membership: "Gold 1 a week" }, limit: { ...usedUp, left: 1 } });
     const second = made(await book(gym, maya, sam, FRI, 540));
     expect(second.packCharged).toBe(true);
     expect(await packLeft(packHeld)).toBe(9);
@@ -406,7 +425,11 @@ d("a limit on personal training sessions (real Postgres, two api instances)", { 
     // Saturday 31 October and Sunday 1 November 2026 are one week and two months.
     staffMade(await staffBook(gym, sam, maya.entryId, "2026-10-30", 540));
     staffMade(await staffBook(gym, sam, maya.entryId, "2026-10-31", 540));
-    expect(said(await staffBook(gym, sam, maya.entryId, "2026-10-29", 540))).toEqual([409, "limit_month", PT_WORDS.limit_month]);
+    expect(said(await staffBook(gym, sam, maya.entryId, "2026-10-29", 540))).toEqual([
+      409,
+      "limit_month",
+      "This person has used all 2 personal training sessions Two a month includes for that month.",
+    ]);
     expect((await picker(gym, "Maya Month", "2026-10-29")).limit).toEqual({ membership: "Two a month", limit: 2, period: "month", left: 0 });
     expect((await picker(gym, "Maya Month", "2026-11-01")).limit).toEqual({ membership: "Two a month", limit: 2, period: "month", left: 2 });
     staffMade(await staffBook(gym, sam, maya.entryId, "2026-11-01", 540));
@@ -416,6 +439,85 @@ d("a limit on personal training sessions (real Postgres, two api instances)", { 
     expect(said(await staffBook(gym, sam, walt.entryId, "2026-10-26", 600))[1]).toBe("limit_week");
     staffMade(await staffBook(gym, sam, walt.entryId, "2026-11-02", 600));
     staffMade(await staffBook(gym, sam, walt.entryId, "2026-10-25", 600));
+  });
+
+  it(
+    "a late cancel by staff: the console is told the session counts against a limit, and staff choose whether it stays used or is given back",
+    async () => {
+      const gym = await makeGym("Late Cancel Gym");
+      const gold = await sell(gym, "Gold 1 a week", { ptLimit: 1, ptPeriod: "week" });
+      const plain = await sell(gym, "Platinum", NO_LIMIT);
+      const sam = await trainerWith(gym, "Sam Trainer");
+      const maya = await member(gym, "Maya Member");
+      const noor = await member(gym, "Noor Other");
+      const pat = await member(gym, "Pat Plain");
+      await hold(gym, maya.entryId, gold);
+      await hold(gym, noor.entryId, gold);
+      await hold(gym, pat.entryId, plain);
+      try {
+        const mayas = staffMade(await staffBook(gym, sam, maya.entryId, THU, 540));
+        const noors = staffMade(await staffBook(gym, sam, noor.entryId, THU, 600));
+        const pats = staffMade(await staffBook(gym, sam, pat.entryId, THU, 660));
+        // Thursday 08:30: the 09:00 and the 10:00 are inside the two hours.
+        clock = new Date("2026-10-08T07:30:00Z").getTime();
+        expect(await onWeek(gym, sam, THU, mayas)).toMatchObject({ cancel: "late", packCharged: false, usesLimit: true });
+        expect(await onWeek(gym, sam, THU, noors)).toMatchObject({ cancel: "late", packCharged: false, usesLimit: true });
+        // A membership with no limit has nothing to keep used.
+        expect(await onWeek(gym, sam, THU, pats)).toMatchObject({ packCharged: false, usesLimit: false });
+        // The member's own read says the same of hers.
+        expect((await read(gym, maya)).sessions[0]).toMatchObject({ id: mayas, cancel: "late", usesLimit: true });
+
+        // "Late cancel: the session stays used": it still counts, and no more is booked that week.
+        expect((await staffCancel(gym, mayas, { lateOk: true, giveBack: false })).statusCode).toBe(200);
+        expect((await picker(gym, "Maya Member", FRI)).limit).toMatchObject({ left: 0 });
+        expect(said(await staffBook(gym, sam, maya.entryId, FRI, 540))[1]).toBe("limit_week");
+        // "Cancel and give the session back": the gym called it off, and the week has it again.
+        expect((await staffCancel(gym, noors, { lateOk: true, giveBack: true })).statusCode).toBe(200);
+        expect((await picker(gym, "Noor Other", FRI)).limit).toMatchObject({ left: 1 });
+        staffMade(await staffBook(gym, sam, noor.entryId, FRI, 600));
+      } finally {
+        clock = NOW.getTime();
+      }
+    },
+    T,
+  );
+
+  it("the week and the month are the GYM'S days: a Sunday afternoon in Honolulu is Monday in UTC, and still that Sunday's week", async () => {
+    // 07 Oct 06:30 UTC is Tuesday 6 October, 20:30 in Honolulu (ten hours behind, no summer time).
+    const gym = await makeGym("Honolulu Gym", "Pacific/Honolulu");
+    const gold = await sell(gym, "Gold 1 a week", { ptLimit: 1, ptPeriod: "week" });
+    const afternoons = [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({ weekday, fromMinute: 900, toMinute: 1020 }));
+    const sam = await trainerWith(gym, "Sam Trainer", afternoons);
+    const kai = await listedOnly(gym, "Kai Member");
+    await hold(gym, kai, gold);
+
+    // Sunday 11 October 15:00 there is Monday 12 October 01:00 UTC.
+    const sunday = staffMade(await staffBook(gym, sam, kai, SUN, 900));
+    const [row] = await sql<{ starts_at: Date; day: string }[]>`SELECT starts_at, local_date::text AS day FROM gym_pt_appointments WHERE id = ${sunday}`;
+    expect([row?.starts_at.toISOString(), row?.day]).toEqual(["2026-10-12T01:00:00.000Z", SUN]);
+    // It is counted in the week of the gym's Sunday: Saturday is refused, Monday is another week.
+    expect(said(await staffBook(gym, sam, kai, SAT, 900))[1]).toBe("limit_week");
+    expect((await picker(gym, "Kai Member", SAT)).limit).toMatchObject({ left: 0 });
+    expect((await picker(gym, "Kai Member", NEXT_MON)).limit).toMatchObject({ left: 1 });
+    staffMade(await staffBook(gym, sam, kai, NEXT_MON, 900));
+  });
+
+  it("staff and the member pressing at one instant on two servers, for a limit of one: exactly one session in the week", async () => {
+    const gym = await makeGym("Staff And Member");
+    const gold = await sell(gym, "Gold 1 a week", { ptLimit: 1, ptPeriod: "week" });
+    const sam = await trainerWith(gym, "Sam Trainer");
+    for (let round = 0; round < 3; round++) {
+      const who = await member(gym, `Rae Round ${String(round)}`);
+      await hold(gym, who.entryId, gold);
+      const answers = await Promise.all([
+        book(gym, who, sam, FRI, 540 + round * 60, { target: second ?? api() }),
+        staffBook(gym, sam, who.entryId, SAT, 540 + round * 60),
+        book(gym, who, sam, SUN, 540 + round * 60),
+        staffBook(gym, sam, who.entryId, THU, 540 + round * 60, second ?? api()),
+      ]);
+      expect(answers.map((r) => r.statusCode).sort(), `round ${String(round)}`).toEqual([200, 409, 409, 409]);
+      expect((await sessionsOf(gym, who.entryId)).map((r) => r.status)).toEqual(["booked"]);
+    }
   });
 
   it("six presses at one instant on two servers book exactly the two the limit allows, and the same press twice is one session", async () => {
