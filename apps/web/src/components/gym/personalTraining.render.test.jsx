@@ -49,7 +49,7 @@ const view = (over = {}) => {
     lastDay: '2026-10-14',
     freeCancelMinutes: 120,
     record: 'own',
-    days: DAYS.map((localDate) => ({ localDate, pays: PACK, why: null })),
+    days: DAYS.map((localDate) => ({ localDate, pays: PACK, why: null, limit: null })),
     trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540, 600] }), trainer(ANN, 'Ann Coach', { '2026-10-08': [840] }, 45)],
     sessions: [],
     history: [],
@@ -120,7 +120,7 @@ describe('a member’s personal training', () => {
     pickDay(FRI);
     const sam = screen.getByRole('group', { name: 'Sam Trainer' });
     svc.book.mockImplementationOnce(() => {
-      server = view({ trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540] })], sessions: [session(S1)], days: DAYS.map((localDate) => ({ localDate, pays: { ...PACK, sessionsLeft: 8 }, why: null })) });
+      server = view({ trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540] })], sessions: [session(S1)], days: DAYS.map((localDate) => ({ localDate, pays: { ...PACK, sessionsLeft: 8 }, why: null, limit: null })) });
       return Promise.resolve(session(S1));
     });
     fireEvent.click(within(sam).getByRole('button', { name: /^Book 10:00 am – 11:00 am with Sam Trainer/ }));
@@ -163,7 +163,7 @@ describe('a member’s personal training', () => {
     ['no_membership', 'You have no membership in use on that day. Ask at the front desk.'],
     ['pack_used', 'Your pack has no sessions left. Ask at the front desk for another.'],
   ])('with nothing that pays (%s) the times still show, none of them a button, with who to ask', async (why, words) => {
-    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: null, why })) }));
+    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: null, why, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     pickDay(FRI);
@@ -176,7 +176,7 @@ describe('a member’s personal training', () => {
   });
 
   it('somebody with no record on the gym’s list is told so, and has no button', async () => {
-    serve(view({ record: 'none', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null })) }));
+    serve(view({ record: 'none', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     expect(screen.getByText("Your gym hasn't added you to its member list yet. Ask at the front desk.")).toBeTruthy();
@@ -184,7 +184,7 @@ describe('a member’s personal training', () => {
   });
 
   it('two app accounts on one record: told so, no button, and no session of the record is drawn', async () => {
-    serve(view({ record: 'shared', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null })) }));
+    serve(view({ record: 'shared', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     expect(screen.getByText("Two app accounts share your record at this gym, so sessions can't be booked or shown in the app. Any session already booked is still on. Ask at the front desk.")).toBeTruthy();
@@ -205,7 +205,7 @@ describe('a member’s personal training', () => {
   });
 
   it('what pays is said for the day picked: a pack that ends mid-week has buttons before it ends and none after', async () => {
-    const days = DAYS.map((localDate) => (localDate >= '2026-10-09' ? { localDate, pays: null, why: 'no_membership' } : { localDate, pays: PACK, why: null }));
+    const days = DAYS.map((localDate) => (localDate >= '2026-10-09' ? { localDate, pays: null, why: 'no_membership', limit: null } : { localDate, pays: PACK, why: null, limit: null }));
     serve(view({ days }));
     render(<PersonalTraining gym={GYM} />);
     // Thursday is still inside the pack.
@@ -220,8 +220,50 @@ describe('a member’s personal training', () => {
     expect(within(sam).queryAllByRole('button')).toHaveLength(0);
   });
 
+  it('a membership with a limit says how many sessions are left in the picked day’s own week', async () => {
+    const GOLD = { membership: 'Gold', sessionsLeft: null };
+    const left = (n) => ({ membership: 'Gold', limit: 4, period: 'week', left: n });
+    // Wednesday to Sunday are this week, with 1 left; Monday starts another, with all 4.
+    const days = DAYS.map((localDate) => ({ localDate, pays: GOLD, why: null, limit: localDate >= '2026-10-12' ? left(4) : left(1) }));
+    serve(view({ days, trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540], '2026-10-12': [540] })] }));
+    render(<PersonalTraining gym={GYM} />);
+    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
+    expect(screen.getByText('You have Gold: 1 of 4 sessions left this week.')).toBeTruthy();
+    expect(within(sam).getAllByRole('button')).toHaveLength(1);
+    pickDay('Mon 12 Oct');
+    expect(screen.getByText('You have Gold: 4 of 4 sessions left that week.')).toBeTruthy();
+    expect(screen.queryByText(/Each booking uses/)).toBeNull();
+  });
+
+  it('a limit that is used has no button on that week’s days, says how many it was and the first day that can be booked', async () => {
+    const used = { membership: 'Gold', limit: 4, period: 'week', left: 0 };
+    const days = DAYS.map((localDate) =>
+      localDate >= '2026-10-12'
+        ? { localDate, pays: { membership: 'Gold', sessionsLeft: null }, why: null, limit: { ...used, left: 4 } }
+        : { localDate, pays: null, why: 'limit_week', limit: used },
+    );
+    serve(view({ days, trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540, 600], '2026-10-12': [540] })] }));
+    render(<PersonalTraining gym={GYM} />);
+    const sam = await screen.findByRole('group', { name: 'Sam Trainer' });
+    expect(screen.getByText("You've used all 4 personal training sessions Gold includes this week. You can book for Mon 12 Oct or later.")).toBeTruthy();
+    // The times still show, as plain text: nothing to press.
+    expect(sam.textContent).toContain('9:00 am – 10:00 am');
+    expect(within(sam).queryAllByRole('button')).toHaveLength(0);
+    // Monday is another week, and its time is a button.
+    pickDay('Mon 12 Oct');
+    expect(within(screen.getByRole('group', { name: 'Sam Trainer' })).getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('a month’s limit that is used names the first of the next month; a limit of one reads as one', async () => {
+    const used = { membership: 'Silver', limit: 1, period: 'month', left: 0 };
+    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: null, why: 'limit_month', limit: used })), trainers: [trainer(SAM, 'Sam Trainer', { '2026-10-09': [540] })] }));
+    render(<PersonalTraining gym={GYM} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    expect(screen.getByText("You've used the 1 personal training session Silver includes this month. You can book for Sun 1 Nov or later.")).toBeTruthy();
+  });
+
   it('a gym that sells no memberships says nothing about paying, and every time is a button', async () => {
-    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: { membership: null, sessionsLeft: null }, why: null })) }));
+    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: { membership: null, sessionsLeft: null }, why: null, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     pickDay(FRI);
@@ -327,7 +369,7 @@ describe('a member’s personal training', () => {
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
     expect(screen.getByRole('button', { name: /Earlier/ }).disabled).toBe(true);
-    server = view({ from: '2026-10-14', to: '2026-10-20', trainers: [trainer(SAM, 'Sam Trainer')].map((t) => ({ ...t, days: t.days.map((d, n) => ({ ...d, localDate: `2026-10-${14 + n}` })) })), days: DAYS.map((_, n) => ({ localDate: `2026-10-${14 + n}`, pays: PACK, why: null })) });
+    server = view({ from: '2026-10-14', to: '2026-10-20', trainers: [trainer(SAM, 'Sam Trainer')].map((t) => ({ ...t, days: t.days.map((d, n) => ({ ...d, localDate: `2026-10-${14 + n}` })) })), days: DAYS.map((_, n) => ({ localDate: `2026-10-${14 + n}`, pays: PACK, why: null, limit: null })) });
     fireEvent.click(screen.getByRole('button', { name: /Later/ }));
     await waitFor(() => expect(svc.view).toHaveBeenLastCalledWith('g1', 1));
     expect(await screen.findByText('Wed 14 Oct – Tue 20 Oct')).toBeTruthy();

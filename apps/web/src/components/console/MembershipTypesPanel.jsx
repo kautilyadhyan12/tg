@@ -9,6 +9,9 @@ import {
   ACCESS_CHOICES,
   KIND_CHOICES,
   LIMIT_PERIOD_CHOICES,
+  PT_LIMIT_CHOICES,
+  canLimitPt,
+  draftLimitsPt,
   NOT_SAVED,
   TOO_MANY_TYPES,
   archivedNote,
@@ -328,10 +331,48 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
                 <span className="c-s14 c-t2">
                   {choice === 'pack'
                     ? 'Each session booked with a trainer uses one from the pack.'
-                    : 'Sessions with a trainer can be booked on this membership, with no limit.'}
+                    : 'Sessions with a trainer can be booked on this membership.'}
                 </span>
               </span>
             </label>
+          ) : null}
+
+          {canLimitPt(draft) ? (
+            <Field id={id('pt-access')} label="Personal training sessions">
+              <select id={id('pt-access')} value={draft.ptAccess} onChange={text('ptAccess')} className="c-input">
+                {PT_LIMIT_CHOICES.map((a) => (
+                  <option key={a.value} value={a.value}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+
+          {draftLimitsPt(draft) ? (
+            <Field id={id('pt-limit')} label="How many sessions" problem={problems?.ptLimit}>
+              <div className="flex gap-2" style={{ maxWidth: 360 }}>
+                <input
+                  id={id('pt-limit')}
+                  aria-invalid={problems?.ptLimit ? 'true' : undefined}
+                  value={draft.ptLimit}
+                  inputMode="numeric"
+                  onChange={text('ptLimit')}
+                  className="c-input"
+                  style={{ width: 104, flexShrink: 0 }}
+                />
+                <select aria-label="How many sessions: a week or a month" value={draft.ptPeriod} onChange={text('ptPeriod')} className="c-input">
+                  {LIMIT_PERIOD_CHOICES.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <span className="c-s14 c-t2">
+                A week is Monday to Sunday; a month is the calendar month. Sessions not used are not carried over. Past the limit, a pack pays if the person has one.
+              </span>
+            </Field>
           ) : null}
         </Part>
       ) : null}

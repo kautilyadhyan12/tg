@@ -518,10 +518,21 @@ export function bookSentence({ person, trainer, localDate, startMinute, minutes,
   return `${person.name} will be booked with ${trainerName(trainer)} on ${dayLabel(localDate)}, ${timeRange(startMinute, startMinute + minutes, clockFormat)}.`;
 }
 
+/** "3 of 4 sessions left that week": what is left of a membership's limit in the week or
+ *  the month of the session being booked, before this booking. */
+export function limitLeft(limit) {
+  if (limit.left === 0) return `no sessions left that ${limit.period}`;
+  return `${String(limit.left)} of ${String(limit.limit)} ${limit.limit === 1 ? 'session' : 'sessions'} left that ${limit.period}`;
+}
+
 /** What booking this person costs them, said before the button. */
 export function bookCost(person) {
   if (person?.pt === null || person?.pt === undefined) return '';
-  return person.pt.sessionsLeft === null ? `It is booked on ${person.pt.membership}.` : `One session is used from ${person.pt.membership}.`;
+  if (person.pt.sessionsLeft !== null) return `One session is used from ${person.pt.membership}.`;
+  const limit = person.limit ?? null;
+  return limit === null
+    ? `It is booked on ${person.pt.membership}.`
+    : `It is booked on ${person.pt.membership}, which includes ${String(limit.limit)} a ${limit.period}: ${limitLeft(limit)}, before this one.`;
 }
 
 /** The box before a cancel: what it costs the person, and the buttons that say so. */
@@ -554,15 +565,20 @@ export function cancelBox(appointment, { freeCancelMinutes, clockFormat }) {
 
 /** One person in the picker: their name, what they hold that pays for a session, and
  *  whether they can be picked. Where the gym sells memberships, somebody holding nothing
- *  that includes personal training cannot be booked, and the row says so. */
+ *  that includes personal training cannot be booked, and the row says so; so does somebody
+ *  whose membership's sessions for that week or month are used. */
 export function personRow(person, gymHasTypes) {
+  const limit = person.limit ?? null;
+  if (person.pt === null && limit !== null) {
+    return { name: person.name, detail: `${limit.membership} · ${limitLeft(limit)}`, pickable: false };
+  }
   if (person.pt === null) {
     return gymHasTypes
       ? { name: person.name, detail: 'No membership that includes personal training', pickable: false }
       : { name: person.name, detail: '', pickable: true };
   }
   const left = person.pt.sessionsLeft;
-  const sessions = left === null ? '' : left === 1 ? ' · 1 session left' : ` · ${String(left)} sessions left`;
+  const sessions = left === null ? (limit === null ? '' : ` · ${limitLeft(limit)}`) : left === 1 ? ' · 1 session left' : ` · ${String(left)} sessions left`;
   return { name: person.name, detail: `${person.pt.membership}${sessions}`, pickable: true };
 }
 

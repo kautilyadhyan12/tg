@@ -26,6 +26,8 @@ export interface MembershipTypeRow {
   /** null: every class. */
   classTypes: { id: string; name: string }[] | null;
   includesPt: boolean;
+  ptLimit: number | null;
+  ptPeriod: string | null;
   archivedAt: Date | null;
   updatedAt: Date;
 }
@@ -54,6 +56,8 @@ interface RawType {
   bookings_period: string | null;
   covers_all_classes: boolean;
   includes_pt: boolean;
+  pt_limit: number | null;
+  pt_period: string | null;
   archived_at: Date | null;
   updated_at: Date;
 }
@@ -65,7 +69,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
   const readTypes = (archived: boolean, limit: number) => sql<RawType[]>`
     SELECT id, name, description, kind, price_minor, currency, term_count, term_unit,
            pack_classes, pack_days, access, bookings_limit, bookings_period,
-           covers_all_classes, includes_pt, archived_at, updated_at
+           covers_all_classes, includes_pt, pt_limit, pt_period, archived_at, updated_at
     FROM gym_membership_types
     WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
     ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
@@ -114,6 +118,8 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     bookingsPeriod: r.bookings_period,
     classTypes: r.covers_all_classes ? null : (coveredByType.get(r.id) ?? []),
     includesPt: r.includes_pt,
+    ptLimit: r.pt_limit,
+    ptPeriod: r.pt_period,
     archivedAt: r.archived_at,
     updatedAt: r.updated_at,
   });
@@ -141,6 +147,9 @@ export interface MembershipTypeInput {
   /** null: every class. */
   classTypeIds: string[] | null;
   includesPt: boolean;
+  /** How many personal training sessions a week or a month; both null: no limit. */
+  ptLimit: number | null;
+  ptPeriod: string | null;
 }
 
 export type MembershipWriteOutcome =
@@ -228,11 +237,12 @@ export async function createMembershipType(
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_membership_types
         (gym_id, name, description, kind, price_minor, currency, term_count, term_unit,
-         pack_classes, pack_days, access, bookings_limit, bookings_period, covers_all_classes, includes_pt)
+         pack_classes, pack_days, access, bookings_limit, bookings_period, covers_all_classes, includes_pt,
+         pt_limit, pt_period)
       VALUES (${input.gymId}, ${input.name}, ${input.description}, ${input.kind}, ${input.priceMinor},
               ${currency}, ${input.termCount}, ${input.termUnit}, ${input.packClasses},
               ${input.packDays}, ${input.access}, ${input.bookingsLimit}, ${input.bookingsPeriod},
-              ${input.classTypeIds === null}, ${input.includesPt})
+              ${input.classTypeIds === null}, ${input.includesPt}, ${input.ptLimit}, ${input.ptPeriod})
       RETURNING id`;
     if (created === undefined) throw new Error("membership type insert returned no row");
     await writeCoveredClasses(tx, input.gymId, created.id, input.classTypeIds);
@@ -290,6 +300,7 @@ export async function updateMembershipType(
           access = ${input.access}, bookings_limit = ${input.bookingsLimit},
           bookings_period = ${input.bookingsPeriod},
           covers_all_classes = ${input.classTypeIds === null}, includes_pt = ${input.includesPt},
+          pt_limit = ${input.ptLimit}, pt_period = ${input.ptPeriod},
           updated_at = ${input.now}
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId}`;
     await writeCoveredClasses(tx, input.gymId, input.typeId, input.classTypeIds);

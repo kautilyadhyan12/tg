@@ -6,6 +6,7 @@ import { addPtTimeOffRequestSchema, savePtTrainerRequestSchema } from '@app/shar
 import {
   addRange,
   bookCost,
+  limitLeft,
   bookSentence,
   bookableUntil,
   canAddRange,
@@ -272,6 +273,23 @@ describe('picking the person', () => {
     });
     // A gym with no memberships books anybody on its list.
     expect(personRow({ entryId: 'e2', name: 'Leo Grant', pt: null }, false)).toEqual({ name: 'Leo Grant', detail: '', pickable: true });
+  });
+  it('a membership with a limit reads what is left that week or month; with none left the person cannot be picked, and the row says why', () => {
+    const gold = { membership: 'Gold', limit: 4, period: 'week', left: 3 };
+    const onGold = { entryId: 'e3', name: 'Noor Khan', pt: { membership: 'Gold', sessionsLeft: null }, limit: gold };
+    expect(limitLeft(gold)).toBe('3 of 4 sessions left that week');
+    expect(limitLeft({ ...gold, limit: 1, left: 1, period: 'month' })).toBe('1 of 1 session left that month');
+    expect(limitLeft({ ...gold, left: 0 })).toBe('no sessions left that week');
+    expect(personRow(onGold, true)).toEqual({ name: 'Noor Khan', detail: 'Gold · 3 of 4 sessions left that week', pickable: true });
+    expect(personRow({ ...onGold, pt: null, limit: { ...gold, left: 0 } }, true)).toEqual({
+      name: 'Noor Khan',
+      detail: 'Gold · no sessions left that week',
+      pickable: false,
+    });
+    // Past the limit a pack pays: the row is the pack's, and says nothing of the limit.
+    expect(personRow({ ...onGold, pt: { membership: 'PT 10', sessionsLeft: 9 }, limit: null }, true).detail).toBe('PT 10 · 9 sessions left');
+    expect(bookCost(onGold)).toBe('It is booked on Gold, which includes 4 a week: 3 of 4 sessions left that week, before this one.');
+    expect(bookCost({ ...onGold, limit: null })).toBe('It is booked on Gold.');
   });
   it('the list says what it is showing', () => {
     expect(peopleHeading({ gymHasTypes: true, people: [maya] }, '')).toBe('Your members, people with personal training first');

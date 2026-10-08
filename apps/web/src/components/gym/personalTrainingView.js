@@ -1,4 +1,4 @@
-import { PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS, PT_RECORD_SHARED_WORDS } from '@app/shared';
+import { PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS, PT_RECORD_SHARED_WORDS, addDays, bookingPeriod } from '@app/shared';
 import { clockText, dayHeading, instantText } from './classesView';
 import { dayLabel } from './leaderboardView';
 
@@ -14,15 +14,37 @@ export function sessionSpan(startMinute, minutes) {
 /** "Sam Trainer", or "a trainer" for one who has typed no name. */
 export const trainerText = (name) => name ?? 'a trainer';
 
+/** "this week" where the day is in the week or the month today is in, else "that week". */
+function periodWords(period, day, today) {
+  const within = bookingPeriod(day, period);
+  return `${today >= within.from && today <= within.to ? 'this' : 'that'} ${period}`;
+}
+
+/** A membership's sessions for a week or a month are used: how many it includes, and the
+ *  first day a session can be booked for again. */
+function limitUsedText(limit, day, today) {
+  const again = addDays(bookingPeriod(day, limit.period).to, 1);
+  const all = limit.limit === 1 ? 'the 1 personal training session' : `all ${String(limit.limit)} personal training sessions`;
+  return `You've used ${all} ${limit.membership} includes ${periodWords(limit.period, day, today)}. You can book for ${dayLabel(again)} or later.`;
+}
+
 /** What a booking on a day would use, or why it cannot be made; null where the gym sells
  *  no memberships and there is nothing to say. */
 export function payText(view, day) {
   if (view.record === 'shared') return { text: PT_RECORD_SHARED_WORDS, can: false };
   if (view.record !== 'own') return { text: PT_NOT_ON_LIST_WORDS, can: false };
+  const limit = day.limit ?? null;
+  if ((day.why === 'limit_week' || day.why === 'limit_month') && limit !== null) {
+    return { text: limitUsedText(limit, day.localDate, view.today), can: false };
+  }
   if (day.why !== null) return { text: PT_MEMBER_WORDS[day.why], can: false };
   const pays = day.pays;
   if (pays === null) return { text: PT_MEMBER_WORDS.no_membership, can: false };
   if (pays.membership === null) return null;
+  if (pays.sessionsLeft === null && limit !== null) {
+    const of = `${String(limit.left)} of ${String(limit.limit)} ${limit.limit === 1 ? 'session' : 'sessions'}`;
+    return { text: `You have ${pays.membership}: ${of} left ${periodWords(limit.period, day.localDate, view.today)}.`, can: true };
+  }
   if (pays.sessionsLeft === null) return { text: `Personal training is included in your membership: ${pays.membership}.`, can: true };
   const left = pays.sessionsLeft === 1 ? '1 session left' : `${pays.sessionsLeft} sessions left`;
   return { text: `You have ${pays.membership}: ${left}. Each booking uses 1 session.`, can: true };

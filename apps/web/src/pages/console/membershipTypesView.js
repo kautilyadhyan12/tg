@@ -7,6 +7,7 @@ import {
   MEMBERSHIP_NAME_MAX,
   MEMBERSHIP_PACK_CLASSES_MAX,
   MEMBERSHIP_PACK_DAYS_MAX,
+  MEMBERSHIP_PT_LIMIT_MAX,
   MEMBERSHIP_TERM_COUNT_MAX,
   MEMBERSHIP_TYPES_MAX,
   currencyDecimals,
@@ -44,6 +45,12 @@ export const ACCESS_CHOICES = [
 export const LIMIT_PERIOD_CHOICES = [
   { value: 'week', label: 'a week' },
   { value: 'month', label: 'a month' },
+];
+
+/** How many personal training sessions a membership includes. */
+export const PT_LIMIT_CHOICES = [
+  { value: 'none', label: 'No limit' },
+  { value: 'limited', label: 'A limit on sessions' },
 ];
 
 /** Which of the five a saved type is. */
@@ -98,12 +105,20 @@ function ptOnly(type) {
 
 const PT_WORDS = 'Personal training';
 
+/** Whether the type holds personal training to so many sessions a week or a month. */
+function hasPtLimit(type) {
+  return type.includesPt === true && Number.isInteger(type.ptLimit) && (type.ptPeriod === 'week' || type.ptPeriod === 'month');
+}
+
 /** What it includes: "Unlimited classes", "8 classes a month · only Yoga", "No classes, gym
- *  only", each with "· Personal training" where the type includes it. */
+ *  only", each with "· Personal training" where the type includes it, or with its limit:
+ *  "· 4 personal training sessions a month". */
 export function includesLine(type) {
-  if (ptOnly(type)) return `${PT_WORDS} only`;
+  const limit = hasPtLimit(type) ? `${plural(type.ptLimit, 'session', 'sessions')} a ${type.ptPeriod}` : null;
+  if (ptOnly(type)) return limit === null ? `${PT_WORDS} only` : `${PT_WORDS} only · ${limit}`;
   const classes = classesLine(type);
-  return type.includesPt === true ? `${classes} · ${PT_WORDS}` : classes;
+  if (type.includesPt !== true) return classes;
+  return limit === null ? `${classes} · ${PT_WORDS}` : `${classes} · ${plural(type.ptLimit, 'personal training session', 'personal training sessions')} a ${type.ptPeriod}`;
 }
 
 function classesLine(type) {
@@ -162,6 +177,9 @@ export function emptyDraft() {
     classScope: 'all',
     classIds: [],
     includesPt: false,
+    ptAccess: 'none',
+    ptLimit: '4',
+    ptPeriod: 'month',
   };
 }
 
@@ -187,6 +205,9 @@ export function draftFromType(type) {
     classScope: type.classTypes === null ? 'all' : ptOnly(type) && choice === 'pack' ? 'none' : 'some',
     classIds: type.classTypes === null ? [] : type.classTypes.map((c) => c.id),
     includesPt: type.includesPt === true,
+    ptAccess: hasPtLimit(type) ? 'limited' : 'none',
+    ptLimit: hasPtLimit(type) ? String(type.ptLimit) : base.ptLimit,
+    ptPeriod: hasPtLimit(type) ? type.ptPeriod : base.ptPeriod,
   };
 }
 
@@ -220,7 +241,7 @@ const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || 
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'termCount', 'packClasses', 'packDays', 'bookingsLimit', 'classes'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'termCount', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -277,6 +298,9 @@ export function draftProblems(draft, currency) {
   if (coversSomeClasses(draft) && draft.classIds.length === 0) {
     problems.classes = 'Tick at least one class, or choose Every class.';
   }
+  if (draftLimitsPt(draft) && wholeNumber(draft.ptLimit, 1, MEMBERSHIP_PT_LIMIT_MAX) === null) {
+    problems.ptLimit = `Type how many sessions, from 1 to ${String(MEMBERSHIP_PT_LIMIT_MAX)}.`;
+  }
   return Object.keys(problems).length === 0 ? null : problems;
 }
 
@@ -295,6 +319,17 @@ export function packForPtOnly(draft) {
  *  day pass is one visit and never does. */
 export function draftIncludesPt(draft) {
   return draft.choice !== 'day_pass' && (draft.includesPt === true || packForPtOnly(draft));
+}
+
+/** Whether the form can hold personal training to a number of sessions: a membership that
+ *  includes it. A pack's own count is its limit. */
+export function canLimitPt(draft) {
+  return usesTerm(draft.choice) && draftIncludesPt(draft);
+}
+
+/** Whether the form sets a limit on personal training sessions. */
+export function draftLimitsPt(draft) {
+  return canLimitPt(draft) && draft.ptAccess === 'limited';
 }
 
 /** The request the form sends: every field every time. Call only when `draftProblems`
@@ -316,6 +351,8 @@ export function draftBody(draft, currency) {
     bookingsPeriod: access === 'limited' ? draft.bookingsPeriod : null,
     classTypeIds: packForPtOnly(draft) ? [] : coversSomeClasses(draft) ? [...draft.classIds] : null,
     includesPt: draftIncludesPt(draft),
+    ptLimit: draftLimitsPt(draft) ? wholeNumber(draft.ptLimit, 1, MEMBERSHIP_PT_LIMIT_MAX) : null,
+    ptPeriod: draftLimitsPt(draft) ? draft.ptPeriod : null,
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
   };

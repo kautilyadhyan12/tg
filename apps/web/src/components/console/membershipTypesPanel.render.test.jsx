@@ -133,6 +133,8 @@ describe('adding a type', () => {
       bookingsPeriod: null,
       classTypeIds: null,
       includesPt: false,
+      ptLimit: null,
+      ptPeriod: null,
     });
     expect(await screen.findByText('£49.99 every month')).toBeTruthy();
     // The form closes on a save.
@@ -253,6 +255,46 @@ describe('the gym\x27s own options', () => {
   it('an empty list says how a gym starts, in its own words', async () => {
     open(listOf());
     expect(await screen.findByText(/Add each thing you sell, with your own name and price/)).toBeTruthy();
+  });
+});
+
+describe('a limit on personal training sessions', () => {
+  it('is offered once the type includes personal training, and is sent as typed', async () => {
+    open(listOf());
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    type_('Name', 'Gold');
+    type_('Price (GBP)', '99');
+    // Nothing about a limit until the type includes personal training.
+    expect(screen.queryByLabelText('Personal training sessions')).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Includes personal training/ }));
+    expect(screen.getByLabelText('Personal training sessions').value).toBe('none');
+    expect(screen.queryByLabelText('How many sessions')).toBeNull();
+    type_('Personal training sessions', 'limited');
+    expect(screen.getByLabelText('How many sessions').value).toBe('4');
+    expect(screen.getByText(/A week is Monday to Sunday; a month is the calendar month\./)).toBeTruthy();
+
+    // Not a number: nothing is sent, and the box says how.
+    type_('How many sessions', 'four');
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    expect(await screen.findByText('Type how many sessions, from 1 to 200.')).toBeTruthy();
+    expect(orgService.createMembershipType).not.toHaveBeenCalled();
+
+    type_('How many sessions', '2');
+    fireEvent.change(screen.getByLabelText('How many sessions: a week or a month'), { target: { value: 'week' } });
+    orgService.createMembershipType.mockResolvedValue({ data: listOf({ types: [type({ name: 'Gold', includesPt: true, ptLimit: 2, ptPeriod: 'week' })] }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.createMembershipType.mock.calls[0][1]).toMatchObject({ includesPt: true, ptLimit: 2, ptPeriod: 'week' });
+    // The list that comes back says the limit on the type's own line.
+    expect(await screen.findByText(/2 personal training sessions a week/)).toBeTruthy();
+  });
+
+  it('a pack is offered no limit: each session uses one from the pack', async () => {
+    open(listOf());
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    fireEvent.click(screen.getByRole('radio', { name: /^Class pack/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Includes personal training/ }));
+    expect(screen.queryByLabelText('Personal training sessions')).toBeNull();
   });
 });
 

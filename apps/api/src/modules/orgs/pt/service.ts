@@ -36,8 +36,10 @@ import {
   decidePtBook,
   decidePtCancel,
   pickPtCover,
+  ptAllowanceOf,
   ptAppointmentSchema,
   ptBusy,
+  ptCountedSpan,
   ptFreeTimes,
   ptOfferedTimes,
   ptPeopleResponseSchema,
@@ -46,12 +48,14 @@ import {
   ptTimeOffOverSchema,
   ptTimeOffRefusal,
   ptTrainersResponseSchema,
+  ptUsedOn,
   ptWeekResponseSchema,
   type AddPtTimeOffRequest,
   type BookPtRequest,
   type CancelPtRequest,
   type PtAppointment,
   type PtBookRefusal,
+  type PtHeld,
   type PtPeopleQuery,
   type PtPeopleResponse,
   type PtTimeOffOver,
@@ -64,7 +68,7 @@ import { getOrgById, getStaffAuthority, insertAudit, lockOrgRow, type OrgRow } f
 import { OrgsError, holdsPrivilege, requireWritableGym } from "../service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
-import { chargePack, givePackClassBack, heldForPt, heldForPtOf } from "../memberships/heldRepo.js";
+import { chargePack, givePackClassBack, heldForPtOf } from "../memberships/heldRepo.js";
 import { fillClassSessions } from "../classes/fill.js";
 import * as repo from "./repo.js";
 
@@ -112,7 +116,26 @@ const STATUS: Record<PtBookRefusal, number> = {
   no_membership: 409,
   not_covered: 409,
   pack_used: 409,
+  limit_week: 409,
+  limit_month: 409,
 };
+
+/** These records' memberships in use, read once, with the sessions a limit counts over
+ *  every week and month of `days`. The answer gives one record's on one of those days, as
+ *  the booking rule needs them: the booking, the list of people to book and a member's own
+ *  page all count the same way. */
+export async function heldWithUsed(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  entryIds: readonly string[],
+  days: readonly string[],
+): Promise<(day: string, entryId: string) => (PtHeld & { typeName: string })[]> {
+  const rows = await heldForPtOf(sql, gymId, entryIds);
+  const span = ptCountedSpan(days);
+  const limited = rows.filter((h) => h.ptPeriod !== null).map((h) => h.id);
+  const counted = span === null ? [] : await repo.countedSessions(sql, gymId, limited, span.from, span.to);
+  return (day, entryId) => rows.filter((h) => h.entryId === entryId).map((h) => ({ ...h, used: ptUsedOn(h, day, counted) }));
+}
 
 /** A member of staff's name as colleagues read it: the one they gave, else their address. */
 function staffName(row: Pick<repo.TrainerRow, "displayName" | "email">): { name: string | null; initials: string } {
@@ -287,15 +310,16 @@ export async function getPeople(deps: PtDeps, staffId: string, gymId: string, qu
   const day = query.day ?? dayInTz(deps.now(), clock.timezone);
   const rows = await repo.peopleFor(deps.sql, gymId, query.query ?? "", day, PT_PEOPLE_SHOWN + 1);
   const page = rows.slice(0, PT_PEOPLE_SHOWN);
-  const held = clock.hasTypes ? await heldForPtOf(deps.sql, gymId, page.map((r) => r.entryId)) : [];
+  const heldOn = clock.hasTypes ? await heldWithUsed(deps.sql, gymId, page.map((r) => r.entryId), [day]) : null;
   const people = page.map((r) => {
-    const theirs = held.filter((h) => h.entryId === r.entryId);
+    const theirs = heldOn === null ? [] : heldOn(day, r.entryId);
     const cover = pickPtCover({ gymHasTypes: clock.hasTypes, day, held: theirs });
     const paying = cover.ok ? theirs.find((h) => h.id === cover.membershipId) : undefined;
     return {
       entryId: r.entryId,
       name: r.fullName,
       pt: paying === undefined ? null : { membership: paying.typeName, sessionsLeft: paying.membership.kind === "pack" ? paying.membership.classesLeft : null },
+      limit: ptAllowanceOf(cover, theirs),
     };
   });
   // The people a session can be booked for first, then by name; the statement's order
@@ -372,15 +396,18 @@ export async function bookUnderLock(tx: TransactionSql, now: Date, gymId: string
     const scheduleIds = await repo.coachedSlotIds(tx, gymId, trainer.userId);
     if (scheduleIds.length > 0) await fillClassSessions(tx, { gymIds: [gymId], scheduleIds, now });
   }
-  const [trainerTaken, personTaken, coached, timeOff, held] = await Promise.all([
+  const [trainerTaken, personTaken, coached, timeOff, heldOn] = await Promise.all([
     span === null ? [] : repo.takenBy(tx, gymId, { trainerId: trainer.userId }, span.from, span.to),
     span === null ? [] : repo.takenBy(tx, gymId, { entryId: req.entryId }, span.from, span.to),
     // The timetable is written under this same lock, so the classes read here stand.
     span === null ? [] : repo.classesCoached(tx, gymId, trainer.userId, clock.timezone, req.localDate, req.localDate),
     // Time off is written under this same lock too.
     span === null ? [] : repo.timeOffOn(tx, gymId, trainer.userId, req.localDate, req.localDate),
-    clock.hasTypes ? heldForPt(tx, gymId, req.entryId) : [],
+    // What they hold, and the sessions already counted in this session's week and month:
+    // every booking and cancel is written under this same lock, so the count stands.
+    clock.hasTypes ? heldWithUsed(tx, gymId, [req.entryId], [req.localDate]) : null,
   ]);
+  const held = heldOn === null ? [] : heldOn(req.localDate, req.entryId);
   const busy = (taken: Awaited<ReturnType<typeof repo.takenBy>>) => startsAt !== null && minutes !== null && ptBusy(startsAt.getTime(), minutes, taken);
   const decision = decidePtBook({
     offers,

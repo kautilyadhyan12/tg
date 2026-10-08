@@ -10,12 +10,14 @@ import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import {
   CLASS_MINUTES_MAX,
+  PT_COUNTED,
   PT_HOLDS_TIME,
   PT_SESSION_MINUTES_MAX,
   ptAppointmentStatusSchema,
   ptHoursRangeSchema,
   ptSessionMinutesSchema,
   type PtAppointmentStatus,
+  type PtCountedDay,
   type PtHoursRange,
   type PtSessionMinutes,
   type PtSetup,
@@ -152,6 +154,27 @@ export async function takenBy(
       AND status = ANY(${[...PT_HOLDS_TIME]}::text[])
       AND starts_at < ${to} AND ends_at > ${from}`;
   return rows.map((r) => ({ fromMs: r.starts_at.getTime(), toMs: r.ends_at.getTime() }));
+}
+
+/** The sessions a limit counts (`PT_COUNTED`) that were booked on these memberships, by
+ *  membership and the gym's own day, between two of its days. A membership is one record's,
+ *  so nobody else's session is in it. */
+export async function countedSessions(
+  sql: SqlOrTx,
+  gymId: string,
+  membershipIds: readonly string[],
+  fromDay: string,
+  toDay: string,
+): Promise<PtCountedDay[]> {
+  if (membershipIds.length === 0) return [];
+  const rows = await sql<{ id: string; day: string; n: number }[]>`
+    SELECT a.held_membership_id AS id, a.local_date::text AS day, count(*)::int AS n
+    FROM gym_pt_appointments a
+    WHERE a.gym_id = ${gymId} AND a.held_membership_id = ANY(${[...membershipIds]}::uuid[])
+      AND a.status = ANY(${[...PT_COUNTED]}::text[])
+      AND a.local_date BETWEEN ${fromDay}::date AND ${toDay}::date
+    GROUP BY a.held_membership_id, a.local_date`;
+  return rows.map((r) => ({ membershipId: r.id, day: r.day, n: r.n }));
 }
 
 export interface AppointmentRow {
