@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-08 · The same planning terminal, later (Folder A): the new look last, nine jobs to Folder B (branch `plan-2026-10-08-b`)
+
+- **Why:** shown the 41 jobs left on the gym's web part, Kd asked for the console's new look to wait until every web feature is built, and for some of Folder A's work to go to Folder B without the two clashing. **Records only: no code.** It touches nobody.
+- **Decided (RULINGS 2026-10-08, "The new look is built last"):** R4–R7, R9 and 19d-iv are built last · work is split by area, each whole in one folder: Folder A keeps personal training and classes, money, 3e, 4e, 5b-vi and Stage 4 item 15 (19 jobs); Folder B takes 5d, 20a, 20b, 20e, 20f, 20d, 21a, 21b and 4d beside its own (22 jobs), 5d first.
+- **Written:** ROADMAP (both folders' lines in Stage 2's header, item 22's header, 4d's line) · RULINGS · this entry. Each folder's own `FOLDER.md` (not in git) carries its new list. Made in a third, temporary checkout, so neither folder's files were touched.
+- **Verified, with commands:** 104 pull requests merged since 2026-09-22 and 38 times a job first took the other folder's work in · the two lists counted from ROADMAP after the change: Folder A 19, Folder B 22 · gitleaks on the staged files.
+- **Left by the two terminals Kd stopped and closed that day, NOT touched:** Folder A is on branch `member-books-pt` (17e-ii), no commit yet, with unsaved work in `apps/api/src/modules/orgs/pt/repo.ts`, `packages/shared/src/personalTraining.ts` and `packages/shared/test/personalTraining.test.ts` (252 lines added): the next Folder A terminal continues 17e-ii there, and reads that work before trusting it. Folder B is on branch `overview-new-look` (R4), which has no commit and no change; R4 is last now, so the next Folder B terminal starts 5d on a fresh branch from `master`, and that empty branch can go.
+- **Next:** Folder A continues 17e-ii on `member-books-pt` · Folder B 5d.
+
 ## 2026-10-08 · A planning terminal (Folder A): Kd's two documents, fourteen jobs added, no maze between pages (branch `plan-2026-10-08`)
 
 - **Why:** before the next job Kd asked whether the app does what `information.pdf` lists (how studio software works, ten steps) and what follows from `discussion.pdf` (his talk with another AI about Square and the stores); both are in his Desktop `gympic` folder. **Records only: no code, no migration, no package.** It touches nobody.
