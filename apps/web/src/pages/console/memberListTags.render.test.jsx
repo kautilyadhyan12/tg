@@ -72,7 +72,7 @@ const entry = (fullName) => {
 };
 const pageOf = (entries, total = entries.length) => ({ data: { page: memberListEntriesPageSchema.parse({ total, entries, cursor: null }) } });
 const person = (one) => ({ entryId: one.entryId, name: one.fullName });
-const boxOf = (over) => ({ data: { preview: memberTagsPreviewSchema.parse(over) } });
+const boxOf = (over) => ({ data: { preview: memberTagsPreviewSchema.parse({ changeCount: over.change.length, ...over }) } });
 const doneOf = (done, tags) => ({ data: memberTagsDoneResponseSchema.parse({ done, tags }) });
 
 let ada;
@@ -159,6 +159,16 @@ describe('the Tags box for the people selected', () => {
       tag: { name: 'Morning class' },
     });
     expect(box.getByTestId('tags-press').textContent).toBe('Add tag to 1 person');
+    // A big group: the heading and the button count everybody, the names are the first sent.
+    fireEvent.click(box.getByRole('button', { name: 'Back' }));
+    orgService.previewTagSelected.mockResolvedValue(
+      boxOf({ action: 'add', tag: { id: null, name: 'Morning class' }, selected: 300, changeCount: 250, change: [person(cara)], kept: [{ reason: 'has_it', count: 50, people: [person(ada)] }] }),
+    );
+    fireEvent.click(box.getByTestId('tags-new-use'));
+    expect((await box.findByTestId('tags-change')).textContent).toContain('250 people will get the tag');
+    expect(within(box.getByTestId('tags-change')).getByText('and 249 more')).toBeTruthy();
+    expect(within(box.getByTestId('tags-kept-has_it')).getByText('and 49 more')).toBeTruthy();
+    expect(box.getByTestId('tags-press').textContent).toBe('Add tag to 250 people');
     fireEvent.click(box.getByRole('button', { name: 'Back' }));
     expect(box.getByTestId('tags-pick')).toBeTruthy();
     expect(orgService.tagSelected).not.toHaveBeenCalled();

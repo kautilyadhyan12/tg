@@ -883,7 +883,7 @@ const people = (k) => (k === 1 ? '1 person' : `${n(k)} people`);
 /** The box before a tag is added or taken off: its heading for who changes, its button,
  *  and one line for each group that won't change. */
 export function tagBoxWords(preview) {
-  const k = preview.change.length;
+  const k = preview.changeCount;
   const add = preview.action === 'add';
   const name = preview.tag.name;
   const lines = {
@@ -901,6 +901,11 @@ export function tagBoxWords(preview) {
     kept: preview.kept.map((group) => ({ key: group.reason, count: group.count, people: group.people, line: lines[group.reason] })),
     newTag: add && preview.tag.id === null ? `“${name}” is a new tag for your gym.` : null,
   };
+}
+
+/** "and 9,900 more": the people a group counts beyond the names the box carries, or null. */
+export function tagMoreLine(count, named) {
+  return count > named && named > 0 ? `and ${n(count - named)} more` : null;
 }
 
 /** What a press did: "“VIP” added to 12 people. 2 didn't change." */

@@ -4669,14 +4669,20 @@ renaming or deleting one of the gym's tags.
   - *A filter.* The Filter box has a **Tag** group: the gym's tags somebody in the view
     holds, each with its count (members, or past members when those are shown); one tag at
     a time, together with the other filters and the search. "Showing:" has a pill, "Tag:
-    VIP". A list row, the CSV download and Invite still carry no tag.
+    VIP". A list row, the CSV download and Invite still carry no tag: a CSV of the people a
+    tag shows is named "Selected members", never "All members" and never the tag's word. The
+    toolbar's Invite, with nobody ticked, still reaches everyone the gym's own words choose
+    (§18.5): it does not follow the tag, as it does not follow the search or the App words;
+    the bar's Invite, after ticking, reaches the people ticked.
   - *The people selected.* The action bar has **Tags**. Its box asks "Add a tag" or "Take a
     tag off", then which (one of the gym's, or a new name), and then names who will get it
     or lose it and who won't change, with the reason: already have it · don't have it ·
     already hold 20 · no longer on the list (counted, never named). Only its button changes
     anybody, and only people who were selected; the answer says how many changed. A record
     of another gym among the ids is "no longer on the list". A "Select all" that has moved
-    changes nobody (`selection_changed`).
+    changes nobody (`selection_changed`). The box carries the first 100 names of each group
+    and counts the rest ("and 9,900 more"). A new tag is made only when somebody gets it:
+    with nobody to give it to, the press is refused in a sentence (`tag_for_nobody`).
   - *Manage tags*, from the Filter box: each tag with who holds it ("On 12 members and 2
     past members"), **Rename** (everybody who holds it keeps it; a name another tag has, in
     any capitals, is refused) and **Delete**, which first names the people it comes off and
@@ -4687,14 +4693,28 @@ renaming or deleting one of the gym's tags.
     `DELETE …/member-list/tags/:tagId`. Writes need a plan and count against the notes
     and tags allowance, one a press. The audit log keeps a tag's id and how many people,
     never its name.
-  - *Cost at full size*, measured (`tools/measure-member-tags-cost.ts`, 20 gyms of 200,
-    99 tags a gym, on mains at 2,592 MHz, 20 runs): the gym's tags with their counts 18 ms,
-    the thread busy 4 ms (a hundred staff at the same moment 332 ms in all, longest stall
-    24 ms); a page of the list shown by a tag 53 ms, the thread busy 12 ms, the same as a
-    page with no tag asked (52 ms, 12 ms); the box for all 200 ticked 20 ms, the thread
-    busy 3 ms; a tag on all 200 then off all 200, 223 ms for the two, the thread busy
-    21 ms; a rename there and back 181 ms, the thread busy 21 ms; a new tag made on all 200
-    then deleted 214 ms for the two, the thread busy 21 ms.
+  - *Cost at full size*, measured (`tools/measure-member-tags-cost.ts`, on mains at
+    2,592 MHz). **20 gyms of 200**, 99 tags a gym, 20 runs: the gym's tags with their counts
+    23 ms, the thread busy 5 ms (a hundred staff at the same moment 160 ms in all, longest
+    stall 13 ms); a page of the list shown by a tag 61 ms, the thread busy 13 ms (with no
+    tag asked 52 ms, 12 ms); Select all 200 and the box 78 ms, the thread busy 13 ms; a tag
+    on all 200 then off all 200, 356 ms for the two, the thread busy 41 ms; a rename there
+    and back 170 ms, the thread busy 14 ms; a new tag made on all 200 then deleted 371 ms
+    for the two, the thread busy 31 ms. **One gym of 10,000**, the most a list can hold, 5
+    runs: the tags with their counts 117 ms, the thread busy 2 ms; a page of the list shown
+    by a tag all 10,000 hold 186 ms, the thread busy 47 ms (with no tag asked 88 ms, 11 ms),
+    and a hundred staff of that one gym reading it at the same moment keep the thread busy
+    3.5 s in all, longest stall 193 ms; Select all 10,000 and the box 495 ms, the thread
+    busy 147 ms; a tag on all 10,000 then off, 2.9 s for the two with the gym's row held,
+    the thread busy 290 ms; a new tag made on all 10,000 then deleted 1.2 s, the thread
+    busy 100 ms.
+  - *Just after a big upload or a big press* Postgres's own counts of the tables are up to
+    a minute old, and a statement that joined the tags to the list then took about a
+    minute on 10,000 people (measured: the counts 62 s, the people selected 38 s). So each
+    read here asks one table, the list's tag filter is given the records' ids as its other
+    filters are, and a press that tags 1,000 people or more has Postgres count the list
+    again first (measured in that state on 10,000: the counts 0.1 to 0.2 s, the people
+    selected 0.1 to 0.2 s, the write 1.4 to 2.1 s where it was 11 s).
 - **Read first** (2026-10-08, the vendors' own help pages): PushPress, "Staff App: Member
   Notes" (each note shows the staff member and the date; editing is not possible; Delete
   from the three dots). Gymdesk, "Tag management" (tags are "visible only to managers and

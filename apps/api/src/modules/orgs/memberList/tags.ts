@@ -10,6 +10,7 @@
 import {
   foldForCardCheck,
   MEMBER_NOTES_WORDS,
+  MEMBER_TAG_BOX_NAMES_MAX,
   MEMBER_TAGS_MAX_PER_GYM,
   MEMBER_TAGS_MAX_PER_PERSON,
   MEMBER_TAGS_WORDS,
@@ -103,8 +104,16 @@ export async function previewTagSelected(
   if (!(await limit())) return null;
   const ids = await selectedIds(deps, gymId, request.selection);
   const tag = await tagAsked(deps.sql, gymId, request);
-  const rows = await notesRepo.tagStateOf(deps.sql, gymId, ids, tag.id);
-  return { action: request.action, tag, selected: ids.length, ...tagPlan(request.action, rows, ids.length) };
+  const plan = tagPlan(request.action, await notesRepo.tagStateOf(deps.sql, gymId, ids, tag.id), ids.length);
+  // The box names the first people of each group and counts the rest.
+  return {
+    action: request.action,
+    tag,
+    selected: ids.length,
+    changeCount: plan.change.length,
+    change: plan.change.slice(0, MEMBER_TAG_BOX_NAMES_MAX),
+    kept: plan.kept.map((group) => ({ ...group, people: group.people.slice(0, MEMBER_TAG_BOX_NAMES_MAX) })),
+  };
 }
 
 /** Put a tag on the people selected, or take it off them. A "Select all" is resolved
@@ -125,17 +134,20 @@ export async function tagSelected(
     // and two staff making the same new tag make one.
     await repo.lockGym(tx, gymId);
     const asked = await tagAsked(tx, gymId, request);
-    const tag = asked.id === null ? await notesRepo.insertTag(tx, gymId, asked.name, userId) : { id: asked.id, name: asked.name };
-    const plan = tagPlan(request.action, await notesRepo.tagStateOf(tx, gymId, ids, tag.id), ids.length);
+    const plan = tagPlan(request.action, await notesRepo.tagStateOf(tx, gymId, ids, asked.id), ids.length);
     const changeIds = plan.change.map((person) => person.entryId);
+    // A new tag is made only for somebody: nobody to give it to, and the gym keeps no tag
+    // it did not choose to make.
+    if (asked.id === null && changeIds.length === 0) throw new OrgsError(409, "tag_for_nobody", MEMBER_TAGS_WORDS.tag_for_nobody);
+    const tag = asked.id === null ? await notesRepo.insertTag(tx, gymId, asked.name, userId) : { id: asked.id, name: asked.name };
     let changed = 0;
-    if (changeIds.length > 0) {
-      changed =
-        request.action === "add"
-          ? await notesRepo.putTagOnMany(tx, gymId, changeIds, tag.id, userId)
-          : await notesRepo.takeTagOffMany(tx, gymId, changeIds, tag.id);
+    if (changeIds.length > 0 && request.action === "add") {
+      if (changeIds.length >= notesRepo.TAG_MANY_RECOUNT_FROM) await notesRepo.recountList(tx);
+      changed = await notesRepo.putTagOnMany(tx, gymId, changeIds, tag.id, userId);
+    } else if (changeIds.length > 0) {
+      changed = await notesRepo.takeTagOffMany(tx, gymId, changeIds, tag.id);
     }
-    if (changed > 0 || asked.id === null) {
+    if (changed > 0) {
       await insertAudit(tx, {
         actorUserId: userId,
         gymId,

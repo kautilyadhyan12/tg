@@ -3,7 +3,7 @@ import { AlertTriangle, Check, Loader2, X } from 'lucide-react';
 import { MEMBER_LIST_SELECTION_CHANGED_WORDS, MEMBER_TAG_MAX_CHARS, MEMBER_TAGS_STAFF_ONLY_WORDS, tidyMemberTagName } from '@app/shared';
 import { orgService, errorText, selectionChanged } from '../../api/orgsApi';
 import { Names } from './MemberListRemove';
-import { selectedWords, tagBoxWords, tagDoneLine, tagHolders } from './memberListPeople';
+import { selectedWords, tagBoxWords, tagDoneLine, tagHolders, tagMoreLine } from './memberListPeople';
 
 // TAGS ON THE MEMBERS LIST (spec Part 3 §18.13; ROADMAP 5d-ii). Two boxes, each in the
 // middle on a computer and from the bottom on a phone:
@@ -71,6 +71,12 @@ function Refusal({ children }) {
       {children}
     </p>
   );
+}
+
+/** The people a group counts beyond the names the box was sent. */
+function More({ count, named }) {
+  const line = tagMoreLine(count, named);
+  return line === null ? null : <p className="c-s14 c-t2">{line}</p>;
 }
 
 /** The press a box sends: one of the gym's tags by its id, or a new one by its name. */
@@ -232,6 +238,7 @@ export function MemberTagsSelected({ gymId, selection, picked, gymTags, onSelect
           <section className="flex flex-col gap-2" data-testid="tags-change">
             <h3 className="c-s16 c-w6 c-t1">{words.heading}</h3>
             <Names people={preview.change} testId="tags-names-change" />
+            <More count={preview.changeCount} named={preview.change.length} />
             {words.newTag !== null ? <p className="c-s14 c-t2">{words.newTag}</p> : null}
           </section>
         ) : (
@@ -246,6 +253,7 @@ export function MemberTagsSelected({ gymId, selection, picked, gymTags, onSelect
               <div key={group.key} className="flex flex-col gap-1.5" data-testid={`tags-kept-${group.key}`}>
                 <p className="c-s14 c-t2">{`${group.count.toLocaleString('en')} · ${group.line}`}</p>
                 <Names people={group.people} testId={`tags-names-${group.key}`} />
+                <More count={group.count} named={group.people.length} />
               </div>
             ))}
           </section>

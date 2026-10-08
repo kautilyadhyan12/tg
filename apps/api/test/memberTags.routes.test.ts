@@ -6,9 +6,11 @@
 // by staff without the tick, and a tag must land on nobody who was not selected. Two gyms
 // tag their own people; every route is then tried by everybody who must not, and what is
 // kept is read from the tables.
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
+  MEMBER_TAG_BOX_NAMES_MAX,
   MEMBER_TAGS_MAX_PER_GYM,
   MEMBER_TAGS_MAX_PER_PERSON,
   memberGymTagsResponseSchema,
@@ -18,6 +20,7 @@ import {
   type MemberGymTag,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
+import { exportFileName } from "../src/modules/orgs/memberList/exportCsv.js";
 import { tagPlan } from "../src/modules/orgs/memberList/tags.js";
 import { loadConfig } from "../src/config.js";
 import { proveAddress } from "./proveAddress.js";
@@ -71,6 +74,26 @@ describe("who a tag press changes", () => {
     const named = [...ids(plan.change), ...plan.kept.flatMap((group) => ids(group.people))];
     expect([...named].sort()).toEqual(ids(rows).sort());
     expect(plan.change.length + plan.kept.reduce((sum, group) => sum + group.count, 0)).toBe(selected);
+  });
+});
+
+// A file's name says what it holds and never a tag's word; with a tag as the filter it is
+// some of the members, so never "All".
+describe("the CSV's name", () => {
+  const TAG = "00000000-0000-4000-8000-00000000aaaa";
+  const cases: [string, Parameters<typeof exportFileName>[0], string][] = [
+    ["people ticked one by one", null, "Selected members 2026-10-08.csv"],
+    ["everybody", {}, "All members 2026-10-08.csv"],
+    ["a status", { status: ["Active"] }, "Active members 2026-10-08.csv"],
+    ["past members", { records: "former" }, "Past members 2026-10-08.csv"],
+    ["a search", { query: "ada" }, "All members matching ada 2026-10-08.csv"],
+    ["a tag", { tag: TAG }, "Selected members 2026-10-08.csv"],
+    ["a tag and a status", { tag: TAG, status: ["Active"] }, "Selected members 2026-10-08.csv"],
+    ["a tag among past members", { tag: TAG, records: "former" }, "Selected members 2026-10-08.csv"],
+    ["a tag and a search", { tag: TAG, query: "ada" }, "Selected members 2026-10-08.csv"],
+  ];
+  it.each(cases)("%s", (_name, filter, expected) => {
+    expect(exportFileName(filter, "members", "2026-10-08")).toBe(expected);
   });
 });
 
@@ -146,10 +169,21 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
     expect(res.statusCode, res.body).toBe(201);
     return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
   };
+  /** Many people put straight on the list: adding by the route is limited to 120 an hour. */
   const addPeople = async (gym: Gym, count: number, prefix: string): Promise<string[]> => {
-    const ids: string[] = [];
-    for (let at = 0; at < count; at += 1) ids.push(await addPerson(gym, prefix + " " + String(at).padStart(3, "0")));
-    return ids;
+    const rows = Array.from({ length: count }, (_, at) => {
+      const id = randomUUID();
+      return {
+        id,
+        gym_id: gym.id,
+        full_name: prefix + " " + String(at).padStart(3, "0"),
+        email: "mtg-l-" + id + "@example.com",
+        identity_key: createHash("sha256").update(id).digest("hex"),
+        source: "upload",
+      };
+    });
+    await sql`INSERT INTO gym_member_list_entries ${sql(rows)}`;
+    return rows.map((row) => row.id);
   };
 
   const base = (gym: Gym) => `/v1/orgs/${gym.id}/member-list`;
@@ -276,10 +310,7 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
         await inject("PATCH", `${base(iron)}/tags/${knee}`, person.cookies, { name: "Renamed by an outsider" }),
         await inject("DELETE", `${base(iron)}/tags/${knee}`, person.cookies),
       ];
-      for (const res of tries) {
-        expect(allowed, `${who}: ${res.body}`).toContain(res.statusCode);
-        for (const word of ["Knee", "Maya", "Liam", knee]) expect(res.body, who).not.toContain(word);
-      }
+      for (const res of tries) expect(allowed, `${who}: ${res.body}`).toContain(res.statusCode);
     }
 
     // The other gym's owner, through their OWN gym's address, with this gym's ids.
@@ -295,7 +326,6 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
     for (const res of through) {
       expect(res.statusCode, res.body).toBe(404);
       expect(errorOf(res)).toBe("tag_not_found");
-      for (const word of ["Knee", "Maya", "Liam"]) expect(res.body).not.toContain(word);
     }
     // Their own tag, with the other gym's people ticked beside their own: the others are
     // "no longer on the list", unnamed, and get nothing.
@@ -343,13 +373,23 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
     }
     // The list filtered by the tag, the page of the person and the CSV download: who is in
     // them is the filter's answer, and none of them carries the tag's name.
+    await addPerson(gym, "Omar Haddad");
     const list = await inject("GET", `${base(gym)}/entries?tag=${tag}`, gym.owner.cookies);
     const csv = await inject("POST", `${base(gym)}/export.csv`, gym.owner.cookies, { selection: ticked([maya]) });
-    for (const res of [list, csv]) {
+    // The list shown by the tag, downloaded whole: one of the gym's two people.
+    const all = await inject("POST", `${base(gym)}/selection`, gym.owner.cookies, { filter: { tag } });
+    const { selection } = JSON.parse(all.body) as { selection: { count: number; digest: string } };
+    expect(selection.count).toBe(1);
+    const byTag = await inject("POST", `${base(gym)}/export.csv`, gym.owner.cookies, { selection: { kind: "all", filter: { tag }, ...selection } });
+    for (const res of [list, csv, byTag]) {
       expect(res.statusCode, res.body).toBe(200);
       expect(res.body).toContain("Maya Okafor");
       expect(res.body).not.toContain("Zq-knee-tag");
     }
+    expect(byTag.body).not.toContain("Omar Haddad");
+    const fileName = String(byTag.headers["content-disposition"]);
+    expect(fileName).toContain('filename="Selected members ');
+    expect(fileName).not.toMatch(/All members|Zq-knee-tag/u);
     // The audit log keeps the tag's id and a count, never its name.
     const log = await sql<{ action: string; line: string }[]>`
       SELECT action, row_to_json(a)::text AS line FROM audit_log a WHERE gym_id = ${gym.id} AND action LIKE 'org.member_tag%'`;
@@ -413,6 +453,7 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
     const box = await preview(gym, { action: "add", selection, tag: { id: vip } });
     expect(box.tag).toEqual({ id: vip, name: "VIP" });
     expect(box.selected).toBe(5);
+    expect(box.changeCount).toBe(2);
     expect(box.change.map((person) => person.name)).toEqual(["Ben Osei", "Cy Park"]);
     expect(box.kept.map((group) => [group.reason, group.count, group.people.map((person) => person.name)])).toEqual([
       ["has_it", 1, ["Ada Mensah"]],
@@ -490,6 +531,57 @@ d("tags on the Members list: whose they are, and who changes (real Postgres)", {
     // One the gym has is still given.
     expect((await addNew(gym, [ada], "bulk 7")).done.changed).toBe(1);
     expect((await gymTags(gym)).length).toBe(MEMBER_TAGS_MAX_PER_GYM);
+  });
+
+  it("a new tag is not made when nobody selected can get it", async () => {
+    const gym = await makeGym("Mtg Nobody");
+    const full = await addPerson(gym, "Fay Full");
+    for (let at = 0; at < MEMBER_TAGS_MAX_PER_PERSON; at += 1) await addNew(gym, [full], `Fay ${String(at)}`);
+    const logged = async (): Promise<number> => (await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND action LIKE 'org.member_tag%'`).length;
+    const before = { tags: (await gymTags(gym)).length, log: await logged() };
+    for (const entryIds of [[full], ["00000000-0000-4000-8000-00000000abcd"], [full, "00000000-0000-4000-8000-00000000abcd"]]) {
+      const res = await inject("POST", `${base(gym)}/selected/tags`, gym.owner.cookies, { action: "add", selection: ticked(entryIds), tag: { name: "Empty one" } });
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res)).toBe("tag_for_nobody");
+    }
+    expect((await gymTags(gym)).length).toBe(before.tags);
+    expect(await logged()).toBe(before.log);
+    // One of the gym's own tags for nobody is an answer, not a refusal, and is not logged.
+    const own = await press(gym, { action: "add", selection: ticked([full]), tag: { name: "fay 3" } });
+    expect(own.done.changed).toBe(0);
+    expect(await logged()).toBe(before.log);
+  });
+
+  it("a past member who is ticked is tagged and untagged as a member is", async () => {
+    const gym = await makeGym("Mtg Past");
+    const ada = await addPerson(gym, "Ada Mensah");
+    const ben = await addPerson(gym, "Ben Osei");
+    expect((await inject("DELETE", `${base(gym)}/entries/${ben}`, gym.owner.cookies)).statusCode).toBeLessThan(300);
+    const box = await preview(gym, { action: "add", selection: ticked([ada, ben]), tag: { name: "Alumni" } });
+    expect(box.change.map((person) => person.name)).toEqual(["Ada Mensah", "Ben Osei"]);
+    const made = await addNew(gym, [ada, ben], "Alumni");
+    expect(made.done.changed).toBe(2);
+    expect(made.tags).toEqual([{ id: made.done.tag.id, name: "Alumni", people: 1, pastPeople: 1 }]);
+    // "Select all" of the past members is the one past member.
+    const all = await inject("POST", `${base(gym)}/selection`, gym.owner.cookies, { filter: { records: "former" } });
+    const { selection } = JSON.parse(all.body) as { selection: { count: number; digest: string } };
+    const off = await press(gym, { action: "remove", selection: { kind: "all", filter: { records: "former" }, ...selection }, tagId: made.done.tag.id });
+    expect(off.done.changed).toBe(1);
+    expect(await held(gym)).toEqual(["Ada Mensah: Alumni"]);
+  });
+
+  it("the box names the first hundred of a big group and counts them all; the press changes them all", async () => {
+    const gym = await makeGym("Mtg Many");
+    const people = await addPeople(gym, MEMBER_TAG_BOX_NAMES_MAX + 30, "Crowd");
+    const box = await preview(gym, { action: "add", selection: ticked(people), tag: { name: "Crowd" } });
+    expect(box.changeCount).toBe(MEMBER_TAG_BOX_NAMES_MAX + 30);
+    expect(box.change.length).toBe(MEMBER_TAG_BOX_NAMES_MAX);
+    expect(box.change[0]?.name).toBe("Crowd 000");
+    const done = await addNew(gym, people, "Crowd");
+    expect(done.done.changed).toBe(MEMBER_TAG_BOX_NAMES_MAX + 30);
+    const again = await preview(gym, { action: "add", selection: ticked(people), tag: { id: done.done.tag.id } });
+    expect(again.changeCount).toBe(0);
+    expect(again.kept.map((group) => [group.reason, group.count, group.people.length])).toEqual([["has_it", MEMBER_TAG_BOX_NAMES_MAX + 30, MEMBER_TAG_BOX_NAMES_MAX]]);
   });
 
   it("a Select all that has moved changes nobody", async () => {

@@ -134,6 +134,9 @@ export type MemberTagPerson = z.infer<typeof memberTagPersonSchema>;
 export const memberTagKeptReasonSchema = z.enum(["has_it", "not_on_them", "full", "gone"]);
 export type MemberTagKeptReason = z.infer<typeof memberTagKeptReasonSchema>;
 
+/** The most names the box carries for one group; the rest are counted. */
+export const MEMBER_TAG_BOX_NAMES_MAX = 100;
+
 /** The box before the press: who gets the tag (or loses it), and who doesn't change and why. */
 export const memberTagsPreviewSchema = z
   .object({
@@ -141,9 +144,13 @@ export const memberTagsPreviewSchema = z
     /** `id` is null for a tag the gym does not have yet. */
     tag: z.object({ id: z.string().uuid().nullable(), name: z.string() }).strict(),
     selected: z.number().int().min(0),
-    change: z.array(memberTagPersonSchema),
+    /** How many change; `change` names the first of them. */
+    changeCount: z.number().int().min(0),
+    change: z.array(memberTagPersonSchema).max(MEMBER_TAG_BOX_NAMES_MAX),
     kept: z.array(
-      z.object({ reason: memberTagKeptReasonSchema, count: z.number().int().min(1), people: z.array(memberTagPersonSchema) }).strict(),
+      z
+        .object({ reason: memberTagKeptReasonSchema, count: z.number().int().min(1), people: z.array(memberTagPersonSchema).max(MEMBER_TAG_BOX_NAMES_MAX) })
+        .strict(),
     ),
   })
   .strict();
@@ -167,4 +174,5 @@ export const memberTagsDoneResponseSchema = z.object({ done: memberTagsDoneSchem
 export const MEMBER_TAGS_WORDS = {
   tag_not_found: "That tag isn't there any more.",
   tag_name_taken: "Your gym already has a tag with that name. Pick another name.",
+  tag_for_nobody: "Nobody you selected can get that tag any more, so it wasn't made. Check who is selected and try again.",
 } as const;

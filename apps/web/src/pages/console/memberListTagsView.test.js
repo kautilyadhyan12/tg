@@ -13,6 +13,7 @@ import {
   tagChips,
   tagDoneLine,
   tagHolders,
+  tagMoreLine,
   toggleTag,
 } from './memberListPeople';
 
@@ -90,6 +91,7 @@ describe('the words of the Tags box', () => {
       action: 'add',
       tag: { id: null, name: 'VIP' },
       selected: 6,
+      changeCount: 2,
       change: [person('1'), person('2')],
       kept: [
         { reason: 'has_it', count: 1, people: [person('3')] },
@@ -107,16 +109,26 @@ describe('the words of the Tags box', () => {
       [2, 'No longer on your list.'],
     ]);
 
-    const off = tagBoxWords({ action: 'remove', tag: { id: VIP.id, name: 'VIP' }, selected: 1, change: [person('1')], kept: [] });
+    const off = tagBoxWords({ action: 'remove', tag: { id: VIP.id, name: 'VIP' }, selected: 1, changeCount: 1, change: [person('1')], kept: [] });
     expect(off.heading).toBe('1 person will lose the tag “VIP”');
     expect(off.button).toBe('Take tag off 1 person');
     expect(off.keptHeading).toBeNull();
     expect(off.newTag).toBeNull();
 
-    const nobody = tagBoxWords({ action: 'add', tag: { id: VIP.id, name: 'VIP' }, selected: 1, change: [], kept: [{ reason: 'has_it', count: 1, people: [person('1')] }] });
+    const nobody = tagBoxWords({ action: 'add', tag: { id: VIP.id, name: 'VIP' }, selected: 1, changeCount: 0, change: [], kept: [{ reason: 'has_it', count: 1, people: [person('1')] }] });
     expect(nobody.heading).toBeNull();
     expect(nobody.button).toBeNull();
     expect(nobody.nobody).toBe('Nobody you selected can get the tag “VIP”.');
+  });
+
+  it('counts the people beyond the names it was sent', () => {
+    const big = tagBoxWords({ action: 'add', tag: { id: VIP.id, name: 'VIP' }, selected: 10000, changeCount: 9900, change: [person('1')], kept: [{ reason: 'has_it', count: 100, people: [person('2')] }] });
+    expect(big.heading).toBe('9,900 people will get the tag “VIP”');
+    expect(big.button).toBe('Add tag to 9,900 people');
+    expect(tagMoreLine(9900, 100)).toBe('and 9,800 more');
+    expect(tagMoreLine(100, 100)).toBeNull();
+    // Nobody named (people no longer on the list): the group's own line has the count.
+    expect(tagMoreLine(3, 0)).toBeNull();
   });
 
   it('says what a press did', () => {
