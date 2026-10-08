@@ -4665,6 +4665,36 @@ renaming or deleting one of the gym's tags.
   all, longest stall 19 ms; saving then deleting the longest note there 116 ms for the two,
   the thread busy 13 ms; a tag put on and taken off 126 ms for the two, the thread busy
   14 ms.
+- **On the Members list (5d-ii).** Read and changed by the same staff as above.
+  - *A filter.* The Filter box has a **Tag** group: the gym's tags somebody in the view
+    holds, each with its count (members, or past members when those are shown); one tag at
+    a time, together with the other filters and the search. "Showing:" has a pill, "Tag:
+    VIP". A list row, the CSV download and Invite still carry no tag.
+  - *The people selected.* The action bar has **Tags**. Its box asks "Add a tag" or "Take a
+    tag off", then which (one of the gym's, or a new name), and then names who will get it
+    or lose it and who won't change, with the reason: already have it · don't have it ·
+    already hold 20 · no longer on the list (counted, never named). Only its button changes
+    anybody, and only people who were selected; the answer says how many changed. A record
+    of another gym among the ids is "no longer on the list". A "Select all" that has moved
+    changes nobody (`selection_changed`).
+  - *Manage tags*, from the Filter box: each tag with who holds it ("On 12 members and 2
+    past members"), **Rename** (everybody who holds it keeps it; a name another tag has, in
+    any capitals, is refused) and **Delete**, which first names the people it comes off and
+    says they stay on the list. A deleted tag stops being the list's filter; a renamed one
+    keeps filtering under its new name.
+  - *Routes*: `GET …/member-list/tags` · `GET …/member-list/entries?tag=` ·
+    `POST …/member-list/selected/tags-preview` and `…/selected/tags` · `PATCH` and
+    `DELETE …/member-list/tags/:tagId`. Writes need a plan and count against the notes
+    and tags allowance, one a press. The audit log keeps a tag's id and how many people,
+    never its name.
+  - *Cost at full size*, measured (`tools/measure-member-tags-cost.ts`, 20 gyms of 200,
+    99 tags a gym, on mains at 2,592 MHz, 20 runs): the gym's tags with their counts 18 ms,
+    the thread busy 4 ms (a hundred staff at the same moment 332 ms in all, longest stall
+    24 ms); a page of the list shown by a tag 53 ms, the thread busy 12 ms, the same as a
+    page with no tag asked (52 ms, 12 ms); the box for all 200 ticked 20 ms, the thread
+    busy 3 ms; a tag on all 200 then off all 200, 223 ms for the two, the thread busy
+    21 ms; a rename there and back 181 ms, the thread busy 21 ms; a new tag made on all 200
+    then deleted 214 ms for the two, the thread busy 21 ms.
 - **Read first** (2026-10-08, the vendors' own help pages): PushPress, "Staff App: Member
   Notes" (each note shows the staff member and the date; editing is not possible; Delete
   from the three dots). Gymdesk, "Tag management" (tags are "visible only to managers and

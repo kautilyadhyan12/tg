@@ -164,7 +164,7 @@ function FilterBox({ list, gymTags, filters, words, total, onChange, onClear, on
               ) : (
                 <p className="c-s14 c-t2">{past ? `No past ${words.person} has a tag.` : `No ${words.person} has a tag yet.`}</p>
               )}
-              <button type="button" onClick={onManageTags} data-testid="manage-tags" className="c-btn-link c-w6 c-s14 self-start min-h-11">
+              <button type="button" onClick={onManageTags} data-testid="manage-tags" className="c-btn c-btn-s c-btn-sm self-start">
                 Manage tags
               </button>
             </div>
@@ -729,7 +729,7 @@ export default function MemberListPanel({
   }
 
   return (
-    <div className={`flex flex-col gap-5 md:gap-6 ${picked > 0 ? 'pb-20 md:pb-0' : ''}`} data-testid="member-list-panel">
+    <div className={`flex flex-col gap-5 md:gap-6 ${picked > 0 ? 'pb-32 md:pb-0' : ''}`} data-testid="member-list-panel">
       {(list?.review?.count ?? 0) > 0 ? <ReviewSign review={list.review} words={words} /> : null}
       {(list?.duplicates?.count ?? 0) > 0 ? <DuplicatesSign duplicates={list.duplicates} /> : null}
       {/* The toolbar stays at the top of the screen on a computer while the list scrolls, and
@@ -1046,11 +1046,11 @@ export default function MemberListPanel({
         </section>
       ) : null}
 
-      <ScrollJump raised={picked > 0} />
+      <ScrollJump raised={picked > 0 ? 'rows' : false} />
 
       {/* The bar on a phone, just above the tab bar (§18.5). */}
       {picked > 0 ? (
-        <div className="c-selbar c-selbar-phone" data-testid="sel-bar-phone">
+        <div className="c-selbar c-selbar-phone c-selbar-rows" data-testid="sel-bar-phone">
           <Tick state={headState} label={pageTicked ? 'Clear the selection' : `Select every ${words.person} on this page`} onClick={tickPage} />
           <span className="c-s14 c-w6 c-t1 flex-grow">{selectedWords(picked)}</span>
           {barButtons}

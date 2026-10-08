@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp } from 'lucide-react';
 
 // Two small round buttons at the bottom right of a long page (Kd, 2026-09-28): Back to top,
 // once staff have scrolled down; Go to the bottom, while there is more below. Each shows
-// only when it would move the page. `raised` lifts them over the phone's selection bar.
+// only when it would move the page. `raised` lifts them over the phone's selection bar ('rows' for a bar of two rows).
 
 /** How far from either end before its button shows, in pixels. */
 const EDGE = 400;
@@ -36,7 +36,7 @@ export default function ScrollJump({ raised = false }) {
   }, []);
   if (!at.up && !at.down) return null;
   return (
-    <div className={`c-jump ${raised ? 'c-jump-raised' : ''}`} data-testid="scroll-jump">
+    <div className={`c-jump ${raised === 'rows' ? 'c-jump-raised-rows' : raised ? 'c-jump-raised' : ''}`} data-testid="scroll-jump">
       {at.up ? (
         <button type="button" aria-label="Back to top" title="Back to top" onClick={() => jump(0)} className="c-jump-btn">
           <ArrowUp aria-hidden="true" className="w-5 h-5" />
