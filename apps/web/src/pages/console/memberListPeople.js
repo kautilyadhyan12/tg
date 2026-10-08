@@ -291,7 +291,9 @@ export function invitationView(entry, today = null) {
   // The one reason that needs something done in another place (`sentencePlace`): the
   // invitation is waiting and its newest email did not go because of the gym's name.
   const email = entry.invitation?.state === 'pending' ? entry.invitation.email : null;
-  const named = view.note !== null && email !== null && email.reason === 'gym_name' && (email.state === 'skipped' || email.state === 'failed');
+  // Somebody waiting for a place reads the full plan's line instead ("Invited"): no button there.
+  const waiting = entry.app.word !== 'not_in_app' || (entry.invitation?.waitingSince ?? null) !== null;
+  const named = !waiting && view.note !== null && email !== null && email.reason === 'gym_name' && (email.state === 'skipped' || email.state === 'failed');
   return { tag: view.text, tone, detail: view.note, line: view.plain, place: named ? 'gymName' : null };
 }
 

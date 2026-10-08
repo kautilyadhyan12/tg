@@ -209,6 +209,9 @@ describe("how a row shows the server's App word (spec Part 3 §18.4)", () => {
     expect(place({ invitation: waiting({ state: 'sent', reason: null, at: '2026-10-01T09:00:05.000Z', result: null }) })).toBeNull();
     expect(place({ invitation: waiting({ state: 'queued', reason: null, at: '2026-10-01T09:00:05.000Z', result: null }) })).toBeNull();
     expect(place({ invitation: null })).toBeNull();
+    // Waiting for a place: the warning is the full plan's, so the button is not under it.
+    expect(place({ app: app({ word: 'invited', tone: 'amber', line, lineTone: 'amber' }), invitation: waiting(sent('gym_name')) })).toBeNull();
+    expect(place({ invitation: { ...waiting(sent('gym_name')), waitingSince: '2026-10-02T09:00:00.000Z' } })).toBeNull();
     // A line that only explains is not shown as a warning, so it has no button.
     expect(place({ app: app({ word: 'not_in_app', tone: 'grey', line, lineTone: 'plain' }), invitation: waiting(sent('gym_name')) })).toBeNull();
   });
