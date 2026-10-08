@@ -174,6 +174,13 @@ export const memberListEntryParamsSchema = z
   .strict();
 export type MemberListEntryParams = z.infer<typeof memberListEntryParamsSchema>;
 
+export const memberNoteParamsSchema = z
+  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), noteId: z.string().uuid() })
+  .strict();
+export const memberTagParamsSchema = z
+  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), tagId: z.string().uuid() })
+  .strict();
+
 /** WHO CAME, ON WHICH DAY, FILTERED HOW.
  *
  *  **Every value here is a STRING on the wire and is parsed into one, never

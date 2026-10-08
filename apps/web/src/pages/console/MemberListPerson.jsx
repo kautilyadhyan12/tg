@@ -26,6 +26,7 @@ import {
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
 import MemberMemberships from './MemberMemberships';
+import MemberNotes from './MemberNotes';
 import MembershipChoice from './MembershipChoice';
 import { giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
 import { canManageMemberships } from './membershipTypesView';
@@ -1308,6 +1309,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           managesTypes={canManageMemberships(viewerPrivileges(gym))}
           membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
         />
+        <MemberNotes key={`notes-${p.entryId}`} gymId={gymId} entryId={p.entryId} name={p.fullName} readOnly={readOnly} timeZone={gym?.timezone ?? null} />
         {membership.length > 0 ? (
           // What the gym's own list says about them, in its words; the box above is what
           // they hold from the price list (17a-ii).

@@ -26,6 +26,7 @@ export * from "./health.js";
 export * from "./onboarding.js";
 export * from "./memberList.js";
 export * from "./memberListSoftware.js";
+export * from "./memberNotes.js";
 export * from "./memberInvites.js";
 export * from "./invitations.js";
 export * from "./resendWebhook.js";

@@ -115,6 +115,18 @@ export function whenWords(iso) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+/** The day a note was written, on the gym's own calendar: "8 October 2026". */
+export function noteDay(iso, timeZone) {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  const options = { day: 'numeric', month: 'long', year: 'numeric' };
+  try {
+    return at.toLocaleDateString('en-GB', timeZone ? { ...options, timeZone } : options);
+  } catch {
+    return at.toLocaleDateString('en-GB', options);
+  }
+}
+
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "2026-10-03" → "3 Oct", with the year when it is not `today`'s ("3 Oct 2027"). */

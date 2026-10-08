@@ -4575,6 +4575,57 @@ send". Zen Planner: "Alumni". None of these confirmation boxes lists names; this
 because CLAUDE.md §4 asks it to. None offers "who has left" on an import; this app does,
 because RULINGS 2026-09-17 and 2026-09-26 ask it to.
 
+### 18.13 Staff notes and tags (5d; RULINGS 2026-10-08)
+
+On a person's page, under Memberships: **Tags**, then **Notes**. Built in two jobs: 5d-i is
+the person's page; 5d-ii is tags as a filter on Members, tagging everybody ticked, and
+renaming or deleting one of the gym's tags.
+
+- **A note** is up to 2,000 characters, kept with who wrote it and when, shown newest
+  first. It is deleted (the box asks first), never edited, as PushPress's staff notes are.
+  Staff add up to 200 to a person. A note that looks like it holds a payment card number
+  is refused in a sentence (§11's never-keep list), read with every break between its
+  groups (a new line, a tab, a no-break space, an underscore) as a space and full-width
+  digits as plain ones; the note of a writer whose account is gone reads "Someone no
+  longer here". Its day is the gym's own day.
+- **A tag** is the gym's own word, up to 30 characters, one name once in a gym whatever its
+  capitals. Add tag offers the gym's other tags to pick, then a box for a new one. A person
+  is given 20 at most and a gym has 100. Taking a tag off a person asks first and leaves
+  it among the gym's. A tag that looks like a card number is refused as a note is, and
+  characters nobody can see are dropped, so two tags never look the same.
+- **Who.** Read by the gym's staff who may open the person's page (`members.confirm`);
+  written by the same staff while the gym has a plan. A trainer without that tick, a
+  member, another gym and nobody signed in get nothing. A past member's notes and tags are
+  kept and can still be added to.
+- **Never sent out.** Notes and tags are in no reply but their own
+  (`GET …/member-list/entries/:entryId/notes`), so not in the person's page read, the
+  list, the CSV download, an email, or the member's app; the audit log keeps that a note
+  was added or deleted and by whom, never its words. Under the Notes box: "Only your staff
+  see notes. Keep health details to what staff need to know." A file's medical notes are
+  still never kept (§11).
+- **Their own allowance.** Notes and tags are 1,200 writes an hour a person (4,800 an
+  address), apart from the allowance for adding and changing members, so a gym tagging its
+  200 people is not stopped and does not stop its other work.
+- **With the record.** Joining two records moves both people's notes and tags to the kept
+  one (a tag both had is one tag), so a joined record can hold more than 200 notes and 20
+  tags; it then takes no more until some are removed, and the sentence says "200 notes or
+  more". A record deleted for good takes its notes and its tags
+  with it; the gym's tags stay. A gym's deletion removes them all.
+- **Tables** (`0083`): `gym_member_notes`, `gym_member_tags`, `gym_member_entry_tags`,
+  each with its gym.
+- **Cost at full size**, measured (`tools/measure-member-notes-cost.ts`, 20 gyms of 200,
+  on mains at 2,592 MHz, 20 runs): a usual page (5 notes, 3 tags) 6 ms, the thread busy
+  2 ms; the fullest page staff can fill without a join (199 notes of 2,000 characters, 19 tags) 9 ms, the
+  thread busy 3 ms; a hundred staff reading the fullest page at the same moment 598 ms in
+  all, longest stall 19 ms; saving then deleting the longest note there 116 ms for the two,
+  the thread busy 13 ms; a tag put on and taken off 126 ms for the two, the thread busy
+  14 ms.
+- **Read first** (2026-10-08, the vendors' own help pages): PushPress, "Staff App: Member
+  Notes" (each note shows the staff member and the date; editing is not possible; Delete
+  from the three dots). Gymdesk, "Tag management" (tags are "visible only to managers and
+  staff"; added on a profile by picking one or making a new one; managed on one screen that
+  counts each tag's people).
+
 
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's
 `calc_version`/dishware/corrections tables, Part 2's definition tables,

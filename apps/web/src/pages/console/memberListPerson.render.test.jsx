@@ -21,6 +21,14 @@ import {
 
 // The person's Memberships box (17a-ii) has its own tests in `memberMemberships.render.test.jsx`.
 vi.mock('./MemberMemberships', () => ({ default: () => null }));
+// Their tags and staff notes (5d) have their own tests in `memberNotes.render.test.jsx`.
+const notesDrawn = vi.fn();
+vi.mock('./MemberNotes', () => ({
+  default: (props) => {
+    notesDrawn(props);
+    return null;
+  },
+}));
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -456,6 +464,13 @@ describe('a person on the list', () => {
     expect(within(compare).queryByTestId('join-first-endsOn')).toBeNull();
     // The name is the same, so it is not marked.
     expect(within(compare).getByTestId('join-first-fullName').textContent).toBe('Liam Hughes');
+  });
+  it("draws that person's tags and notes: their own record, the gym's day, and no buttons where the page has none", async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(person(ADA, 'Ada Lovelace')));
+    notesDrawn.mockClear();
+    openBox(ADA, { readOnly: true, gym: { timezone: 'America/Chicago' } });
+    await dialog().findByRole('heading', { name: 'Contact' });
+    expect(notesDrawn).toHaveBeenLastCalledWith({ gymId: GYM, entryId: ADA, name: 'Ada Lovelace', readOnly: true, timeZone: 'America/Chicago' });
   });
   it("shows every kept field, the gym's own columns and who uses the app", async () => {
     orgService.getMemberListEntry.mockResolvedValue(
