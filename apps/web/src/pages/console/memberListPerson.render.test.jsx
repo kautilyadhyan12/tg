@@ -1286,7 +1286,7 @@ describe('Remove names the personal training sessions it cancels', () => {
     expect(part.getByRole('heading', { name: '2 personal training sessions will be cancelled' })).toBeTruthy();
     expect(part.getAllByRole('listitem')).toHaveLength(2);
     expect(part.getAllByRole('listitem').map((li) => li.textContent.replace(/\d{1,2}:\d{2}[^w]*/, 'TIME'))).toEqual(['Fri 9 Oct · TIMEwith Sam Trainer', 'Mon 12 Oct · TIMEwith Sam Trainer']);
-    expect(part.getByText("Each trainer's time can be booked again. 2 sessions go back to their packs. A session that has already started stays as it is.")).toBeTruthy();
+    expect(part.getByText("Those times are free again. 2 sessions go back to their packs. A session that has already started stays as it is.")).toBeTruthy();
     expect(part.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
     // It is a question, not a failure, and she is still on the list.
     expect(dialog().queryByText('This person has personal training sessions booked.')).toBeNull();

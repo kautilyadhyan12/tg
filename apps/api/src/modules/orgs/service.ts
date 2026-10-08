@@ -152,6 +152,8 @@ export interface OrgsDeps {
   /** The invitations' key, so removing a member can withdraw their invitation; null
    *  when invitations are switched off. */
   invites: InviteSettings | null;
+  /** The clock a removal reads; tests move it. Production leaves it out. */
+  now?: () => Date;
   /** REQUIRED, and the one caller that needs it is the attendance hook.
    *
    *  A streak that fails to recompute must not lose the attendance (the row IS
@@ -1920,7 +1922,8 @@ export async function removeOrgMember(
 ): Promise<RemoveMemberResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.remove");
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.remove");
-  const at = new Date();
+  // The same clock the other removals read: which sessions are still to come is decided by it.
+  const at = deps.now?.() ?? new Date();
 
   const outcome = await repo.removeMember(deps.sql, {
     gymId,

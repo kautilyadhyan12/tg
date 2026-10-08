@@ -121,12 +121,13 @@ export function registerOrgRoutes(
     // alternative is the empty catch that rule forbids).
     log: app.log,
     onlinePayments: deps.onlinePayments,
+    ...(overrides.now === undefined ? {} : { now: overrides.now }),
   };
 
   // THE MEMBER LIST (Part 3 §9.9), registered here rather than in `app.ts`: it is
   // the same console behind the same two gates, on the same deps, and a second
   // registration point would be a second place to forget one of them.
-  registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
+  registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
 
   // THE GYM'S TIMETABLE (Part 3 §13.3), registered here for the same reason the
   // member list is: the same console, the same gates, the same deps.
@@ -139,7 +140,7 @@ export function registerOrgRoutes(
   registerPtRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // What the gym sells: its membership types (Part 3 §13.1).
-  registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis });
+  registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
 
   // A gym's leads (Part 3 §16.3), and its own page whose form makes them (20c-iv-a).
   registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });

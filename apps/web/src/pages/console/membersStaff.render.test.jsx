@@ -1350,7 +1350,7 @@ describe('Remove from staff and app names the personal training sessions it canc
     expect(box.getByRole('heading', { name: '1 personal training session will be cancelled' })).toBeTruthy();
     // One person's box: the line leads with when, and her name is in the title alone.
     expect(within(box.getByTestId('pt-sessions-ending')).getByRole('listitem').textContent).toMatch(/^Fri 9 Oct · .*with Sam Trainer$/);
-    expect(box.getByText("The trainer's time can be booked again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
+    expect(box.getByText("The time is free again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
     expect(orgService.removeMember).toHaveBeenCalledTimes(1);
 
     fireEvent.click(box.getByRole('button', { name: 'Remove and cancel 1 session' }));

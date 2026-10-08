@@ -347,6 +347,10 @@ d("personal training sessions when a person leaves (real Postgres, two api insta
       const done = await takeOff(gym, maya.entryId, box.mark);
       expect(done.statusCode, done.body).toBe(200);
       expect(await former(gym, maya.entryId)).toBe(true);
+      const [audit] = await sql<{ meta: Record<string, string> }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_list_entry_taken_off' AND target_id = ${maya.entryId}`;
+      expect([audit?.meta["ptSessionsEnded"], audit?.meta["ptPackSessionsBack"]]).toEqual(["2", "2"]);
+      expect(JSON.stringify(audit?.meta).includes("Maya")).toBe(false);
       expect(await stateOf(gym, everybody)).toEqual([
         ["cancelled", false], // coming: ended, given back
         ["cancelled", false], // coming later: ended, given back
@@ -429,6 +433,9 @@ d("personal training sessions when a person leaves (real Postgres, two api insta
         ["booked", true],
       ]);
       expect([await left(annPack), await left(beaPack), await left(cyPack)]).toEqual([10, 10, 9]);
+      const [summary] = await sql<{ meta: Record<string, string> }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_list_selected_removed'`;
+      expect([summary?.meta["moved"], summary?.meta["ptSessionsEnded"], summary?.meta["ptPackSessionsBack"]]).toEqual(["2", "3", "3"]);
       // The same press again: done already, nothing more.
       const again = await removeTicked(gym, ticked, moved.preview.digest);
       expect(again.statusCode, again.body).toBe(200);
@@ -547,6 +554,8 @@ d("personal training sessions when a person leaves (real Postgres, two api insta
       expect(done.statusCode, done.body).toBe(200);
       expect([await former(gym, leo), await former(gym, ivy), await former(gym, ken)]).toEqual([true, false, false]);
       expect((await stateOf(gym, [leos, late, ivys, kens])).map(([s]) => s)).toEqual(["cancelled", "cancelled", "booked", "booked"]);
+      const [imported] = await sql<{ meta: Record<string, string> }[]>`SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.pt_sessions_ended'`;
+      expect(imported?.meta).toEqual({ via: "import", ptSessionsEnded: "2", ptPackSessionsBack: "0" });
     },
     T,
   );
@@ -694,7 +703,6 @@ d("personal training sessions when a person leaves (real Postgres, two api insta
       const gym = await makeGym("Race PT");
       const pack = await typeOf(gym, { kind: "pack", name: "PT 10" });
       const sam = await trainerWith(gym, "Sam Trainer");
-      const outcomes = new Set<string>();
       for (let round = 0; round < 6; round++) {
         const zed = await onList(gym, `Zed Race ${String(round)}`);
         const zedPack = await hold(gym, zed, pack, { pack: 10 });
@@ -711,7 +719,6 @@ d("personal training sessions when a person leaves (real Postgres, two api insta
         const [live] = await sql<{ n: number }[]>`
           SELECT count(*)::int AS n FROM gym_pt_appointments WHERE gym_id = ${gym.id} AND entry_id = ${zed} AND status = 'booked'`;
         const packLeft = await left(zedPack);
-        outcomes.add(`${String(isFormer)}:${String(booked.statusCode)}`);
         if (isFormer) {
           // Removed: nothing of theirs is still booked, and the pack is whole again, once.
           expect([live?.n, packLeft, booked.statusCode], `round ${String(round)}`).toEqual([0, 10, 404]);
@@ -722,7 +729,172 @@ d("personal training sessions when a person leaves (real Postgres, two api insta
         }
         expect((await stateOf(gym, [held]))[0]?.[0]).toBe(isFormer ? "cancelled" : "booked");
       }
-      expect(outcomes.size).toBeGreaterThan(0);
+    },
+    T,
+  );
+  it(
+    "a session that starts at this very instant has started and stays; a millisecond earlier it is still to come and ends",
+    async () => {
+      const gym = await makeGym("Edge PT");
+      const pack = await typeOf(gym, { kind: "pack", name: "PT 10" });
+      const sam = await trainerWith(gym, "Sam Trainer");
+      // Friday 10:00 in London is 09:00 UTC.
+      const START = new Date("2026-10-09T09:00:00.000Z").getTime();
+      clock = NOW.getTime();
+      const now = await onList(gym, "Nell Now");
+      const before = await onList(gym, "Bea Before");
+      const nowPack = await hold(gym, now, pack, { pack: 10 });
+      const beforePack = await hold(gym, before, pack, { pack: 10 });
+      const atStart = await book(gym, sam, now, 600);
+      // A charged session whose pack row has gone has no pack to go back to.
+      const orphan = await book(gym, sam, before, 660);
+      const kept = await book(gym, sam, before, 720);
+      const [gone] = await sql<{ id: string }[]>`
+        UPDATE gym_pt_appointments SET held_membership_id = NULL WHERE id = ${orphan} RETURNING id`;
+      expect(gone?.id).toBe(orphan);
+
+      // Exactly at its start: nothing is still to come, so nothing is asked and it stays.
+      clock = START;
+      const straight = await takeOff(gym, now, null);
+      expect(straight.statusCode, straight.body).toBe(200);
+      expect([await former(gym, now), await stateOf(gym, [atStart]), await left(nowPack)]).toEqual([true, [["booked", true]], 9]);
+
+      // One millisecond before 11:00: both of Bea's are still to come. Only one goes back to a pack.
+      clock = START + 60 * 60_000 - 1;
+      const box = asked(await takeOff(gym, before, null));
+      expect([box.count, box.packSessions, box.sessions.map((s) => [s.id, s.packSession])]).toEqual([
+        2,
+        1,
+        [
+          [orphan, false],
+          [kept, true],
+        ],
+      ]);
+      // At 11:00 exactly the first has started: the box staff read is no longer the truth.
+      clock = START + 60 * 60_000;
+      const moved = asked(await takeOff(gym, before, box.mark));
+      expect([moved.count, moved.sessions.map((s) => s.id)]).toEqual([1, [kept]]);
+      expect(await former(gym, before)).toBe(false);
+      const done = await takeOff(gym, before, moved.mark);
+      expect(done.statusCode, done.body).toBe(200);
+      expect([await stateOf(gym, [orphan, kept]), await left(beforePack)]).toEqual([
+        [
+          ["booked", true],
+          ["cancelled", false],
+        ],
+        9,
+      ]);
+    },
+    T,
+  );
+
+  it(
+    "Remove from staff and app: somebody on the staff who trains here is asked about, and removed, the same way",
+    async () => {
+      clock = NOW.getTime();
+      const gym = await makeGym("Staff PT");
+      const pack = await typeOf(gym, { kind: "pack", name: "PT 10" });
+      const sam = await trainerWith(gym, "Sam Trainer");
+      const rae = await member(gym, "Rae Coach");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${rae.userId}, 'trainer', ${null})`;
+      const raePack = await hold(gym, rae.entryId, pack, { pack: 10 });
+      const raes = await book(gym, sam, rae.entryId, 600);
+      const staffRows = async () => (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_staff WHERE gym_id = ${gym.id} AND user_id = ${rae.userId}`)[0]?.n;
+      const both = (mark: string | null) =>
+        inject("DELETE", `/v1/orgs/${gym.id}/members/${rae.userId}?alsoStaff=true${mark === null ? "" : `&confirmPtSessions=${mark}`}`, gym.owner.cookies);
+
+      const box = asked(await both(null));
+      expect([box.count, box.sessions.map((s) => [s.id, s.personName])]).toEqual([1, [[raes, "Rae Coach"]]]);
+      // Nothing was half done: still staff, still on the list, still booked.
+      expect([await staffRows(), await former(gym, rae.entryId), await stateOf(gym, [raes]), await left(raePack)]).toEqual([1, false, [["booked", true]], 9]);
+      const done = await both(box.mark);
+      expect(done.statusCode, done.body).toBe(200);
+      expect([await staffRows(), await former(gym, rae.entryId), await stateOf(gym, [raes]), await left(raePack)]).toEqual([0, true, [["cancelled", false]], 10]);
+    },
+    T,
+  );
+
+  it(
+    "a membership's cancel: a session booked on it while the box is open is asked about again, and a cancel and a booking at one instant leave nothing booked on a cancelled membership",
+    async () => {
+      clock = NOW.getTime();
+      const gym = await makeGym("Stale PT");
+      const monthly = await typeOf(gym, { name: "Gold with PT" });
+      const sam = await trainerWith(gym, "Sam Trainer");
+      const vic = await onList(gym, "Vic Stale");
+      const gold = await hold(gym, vic, monthly, { paidPeriods: 1 });
+      const first = await book(gym, sam, vic, 540);
+      const boxOf = (res: { statusCode: number; body: string }): PtSessionsEnding => {
+        expect(res.statusCode, res.body).toBe(409);
+        const sessions = (JSON.parse(res.body) as { ending: { ptSessions?: PtSessionsEnding } }).ending.ptSessions;
+        if (sessions === undefined) throw new Error("the cancel named no sessions");
+        return sessions;
+      };
+      const box = boxOf(await cancelMembership(gym, vic, gold, { when: "today" }));
+      // Booked while the box is open: the mark staff hold is for one session, and there are two.
+      const second = await book(gym, sam, vic, 600);
+      const stale = boxOf(await cancelMembership(gym, vic, gold, { when: "today", confirmPtSessions: box.mark }));
+      expect([stale.count, stale.sessions.map((s) => s.id), stale.mark === box.mark]).toEqual([2, [first, second], false]);
+      expect((await stateOf(gym, [first, second])).map(([s]) => s)).toEqual(["booked", "booked"]);
+
+      // The cancel that read the new box, and a third booking, at one instant on two servers.
+      const [cancelled, booked] = await Promise.all([
+        inject("POST", `/v1/orgs/${gym.id}/member-list/entries/${vic}/memberships/${gold}/cancel`, gym.owner.cookies, { when: "today", confirmPtSessions: stale.mark }, other()),
+        bookRaw(gym, sam, vic, 660),
+      ]);
+      const [live] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_pt_appointments WHERE gym_id = ${gym.id} AND held_membership_id = ${gold} AND status = 'booked'`;
+      const [membership] = await sql<{ status: string }[]>`SELECT status FROM gym_held_memberships WHERE id = ${gold}`;
+      if (membership?.status === "cancelled") {
+        // The cancel was first: nothing is booked on it, and the booking found nothing to pay.
+        expect([cancelled.statusCode, live?.n, booked.statusCode === 200]).toEqual([200, 0, false]);
+      } else {
+        // The booking was first: the box had moved, so the membership was not cancelled.
+        expect([cancelled.statusCode, booked.statusCode, live?.n, membership?.status]).toEqual([409, 200, 3, "active"]);
+      }
+    },
+    T,
+  );
+
+  it(
+    "a removal and a booking, each order on purpose: a booking first moves the box and removes nobody; a removal first leaves nobody to book",
+    async () => {
+      clock = NOW.getTime();
+      const gym = await makeGym("Order PT");
+      const pack = await typeOf(gym, { kind: "pack", name: "PT 10" });
+      const sam = await trainerWith(gym, "Sam Trainer");
+
+      // The booking first.
+      const ada = await onList(gym, "Ada Order");
+      const adaPack = await hold(gym, ada, pack, { pack: 10 });
+      const held = await book(gym, sam, ada, 540);
+      const box = asked(await takeOff(gym, ada, null));
+      const later = await book(gym, sam, ada, 600);
+      const moved = asked(await takeOff(gym, ada, box.mark, gym.owner, other()));
+      expect([moved.sessions.map((s) => s.id), await former(gym, ada), await stateOf(gym, [held, later]), await left(adaPack)]).toEqual([
+        [held, later],
+        false,
+        [
+          ["booked", true],
+          ["booked", true],
+        ],
+        8,
+      ]);
+
+      // The removal first.
+      const done = await takeOff(gym, ada, moved.mark);
+      expect(done.statusCode, done.body).toBe(200);
+      const refused = await bookRaw(gym, sam, ada, 660, FRIDAY, other());
+      expect([refused.statusCode, (JSON.parse(refused.body) as { error: string }).error]).toEqual([404, "person_not_found"]);
+      expect([await stateOf(gym, [held, later]), await left(adaPack)]).toEqual([
+        [
+          ["cancelled", false],
+          ["cancelled", false],
+        ],
+        10,
+      ]);
+      const [live] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_pt_appointments WHERE gym_id = ${gym.id} AND entry_id = ${ada} AND status = 'booked'`;
+      expect(live?.n).toBe(0);
     },
     T,
   );

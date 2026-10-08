@@ -49,7 +49,7 @@ export function ptEndingWords(ending, clockFormat, onePerson = false) {
     /** The server names a hundred at most; the count is whole. */
     unlisted: Math.max(0, ending.count - rows.length),
     change: [
-      ending.count === 1 ? "The trainer's time can be booked again." : "Each trainer's time can be booked again.",
+      ending.count === 1 ? 'The time is free again.' : 'Those times are free again.',
       words.packs,
       'A session that has already started stays as it is.',
     ]

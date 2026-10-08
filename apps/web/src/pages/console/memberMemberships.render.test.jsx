@@ -1157,7 +1157,10 @@ describe('cancelling a membership that personal training is booked with', () => 
     const ending = within(await b.findByTestId('held-ending'));
     expect(ending.getByText('Ada Lovelace has 1 class booked with Gold Monthly')).toBeTruthy();
     expect(ending.getByRole('heading', { name: '1 personal training session will be cancelled' })).toBeTruthy();
-    expect(ending.getByText("The trainer's time can be booked again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
+    expect(ending.getByText("The time is free again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
+    // Said once, in the words that cover both.
+    expect(ending.getAllByText(/The app doesn't tell them/)).toHaveLength(1);
+    expect(ending.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
     fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 1 booking and 1 session' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2));
     expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', confirmBookings: 1, confirmPtSessions: MARK });

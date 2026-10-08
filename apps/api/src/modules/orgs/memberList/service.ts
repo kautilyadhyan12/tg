@@ -99,6 +99,7 @@ import * as repo from "./repo.js";
 import { currentRecordOf, inAppRecordIds, pastRecordOf } from "./whose.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
 import { bustAfterRemoval } from "./byHandService.js";
+import { sessionsAuditMeta } from "../pt/changes.js";
 import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type RemovalPlan } from "./removeSelected.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { heldChips, heldOnListOf, heldPassing, mergeChips, type WordCount } from "../memberships/onList.js";
@@ -1272,6 +1273,14 @@ export async function confirmUpload(
       });
     }
     closedUsers.push(...closed.map((row) => row.userId));
+    // The leavers' personal training sessions ended with them (17e-iv-a): how many, on the record.
+    if (leavers?.preview.ptSessions !== undefined) {
+      await repo.insertAuditRows(tx, {
+        actorUserId: userId,
+        gymId,
+        rows: [{ action: "org.pt_sessions_ended", targetType: "member_list", targetId: gymId, meta: { via: "import", ...sessionsAuditMeta(leavers.preview.ptSessions) } }],
+      });
+    }
 
     // "THIS GYM HAS YOU ON ITS LIST, AS OF NOW" — on everybody the old list held or
     // the new one does, so what the preview called "no longer listed" still reads

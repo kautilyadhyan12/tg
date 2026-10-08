@@ -96,10 +96,14 @@ function sendHeld(reply: FastifyReply, req: FastifyRequest, answer: Awaited<Retu
 export interface MembershipRouteDeps {
   sql: Sql;
   redis: RedisLike;
+  /** Tests move the clock; production uses the real one. A cancel decides which sessions
+   *  and classes are still to come by it, so it is the clock a booking reads. */
+  now?: () => Date;
 }
 
 export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipRouteDeps): void {
-  const membershipDeps: service.MembershipsDeps = { sql: deps.sql, now: () => new Date() };
+  const now = deps.now ?? (() => new Date());
+  const membershipDeps: service.MembershipsDeps = { sql: deps.sql, now };
 
   /** Keyed on the person; the address ceiling is three times theirs, so three
    *  staff at one front desk never throttle each other. */
@@ -170,7 +174,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
 
   // ── A person's memberships ──
 
-  const heldDeps: held.HeldDeps = { sql: deps.sql, now: () => new Date() };
+  const heldDeps: held.HeldDeps = { sql: deps.sql, now };
   /** The changes' own allowance, so a busy desk never uses up the price list's: a gym
    *  moving in gives its 200 members a membership each. The read sits under the app-wide
    *  limit alone, as the person's page it is drawn on does. */

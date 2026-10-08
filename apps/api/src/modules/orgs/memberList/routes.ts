@@ -125,6 +125,9 @@ export interface MemberListRouteDeps {
   redis: RedisLike;
   /** Invitations (3b-i-a), or null while they are switched off. */
   invites: InviteSettings | null;
+  /** Tests move the clock; production uses the real one. A removal decides which personal
+   *  training sessions are still to come by it, so it is the clock a booking reads. */
+  now?: () => Date;
 }
 
 export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListRouteDeps): void {
@@ -132,7 +135,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     sql: deps.sql,
     redis: deps.redis,
     log: app.log,
-    now: () => new Date(),
+    now: deps.now ?? (() => new Date()),
     invites: deps.invites,
   };
 

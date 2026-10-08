@@ -235,9 +235,12 @@ export default function MemberMemberships({
               <p className="c-s14 c-t2 m-0">{`and ${words.unlisted.toLocaleString('en')} more`}</p>
             ) : null}
             <p className="c-s14 c-t2 m-0">{words.kept}</p>
-            <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
-              {ENDING_NOT_TOLD}
-            </p>
+            {/* Said once: with sessions, their own line below says it for both. */}
+            {sessions === null ? (
+              <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
+                {ENDING_NOT_TOLD}
+              </p>
+            ) : null}
           </>
         ) : (
           <p className="c-s15 c-w6 c-t1 m-0">{words.ptTitle}</p>

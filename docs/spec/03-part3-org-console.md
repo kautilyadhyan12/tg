@@ -3029,8 +3029,17 @@ session back. Two records joined keep their sessions on the kept one, as before.
 screens one part (`PtSessionsEnding.jsx`) is in every box: "2 personal training sessions
 will be cancelled", each session's person, day, time and trainer (three, "and N more", See
 all), what happens to packs, that a started session stays, and that the app tells nobody
-yet. Not done: a trainer leaving the staff, came and no-show (17e-iv-b, built next); nobody
-is told (the inbox, 20a).)*
+yet. **From the review (2026-10-09):** every removal and a membership's cancel read ONE
+clock, the one a booking reads (`now` on the member list's, the memberships' and the orgs'
+routes; they each read the real clock before, which is the same in production and was not
+in a test); a session that starts at that very instant has started and stays; a session is
+said to go back to a pack only where the pack is still there to take it; a removal's audit
+row counts the sessions it ended and the pack sessions it gave back (`ptSessionsEnded`,
+`ptPackSessionsBack`, and `org.pt_sessions_ended` for an import), never a name; the box says
+"The time is free again." and names no trainer, since a session may have none left; a
+membership's box with classes and sessions says once that the app tells nobody. Not done:
+a trainer leaving the staff, came and no-show (17e-iv-b, built next); nobody is told (the
+inbox, 20a).)*
 
 ### 13.6 The calendar, the desk and the messages
 

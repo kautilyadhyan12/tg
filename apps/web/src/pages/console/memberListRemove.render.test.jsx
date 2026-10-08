@@ -384,7 +384,7 @@ describe('Remove names the personal training sessions it cancels', () => {
     expect(part.getByText(/and 1 more/)).toBeTruthy();
     fireEvent.click(part.getByRole('button', { name: 'See all' }));
     expect(part.getAllByRole('listitem')).toHaveLength(4);
-    expect(part.getByText("Each trainer's time can be booked again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
+    expect(part.getByText("Those times are free again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
     expect(part.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
     // Nobody not ticked is named, and nothing has been pressed.
     expect(part.queryByText(/Ada Lovelace/)).toBeNull();
@@ -405,7 +405,7 @@ describe('Remove names the personal training sessions it cancels', () => {
     fireEvent.click(bar().getByTestId('bar-remove'));
     const dialog = within(await screen.findByTestId('remove-box'));
     expect(await dialog.findByRole('heading', { name: '1 personal training session will be cancelled' })).toBeTruthy();
-    expect(dialog.getByText("The trainer's time can be booked again. A session that has already started stays as it is.")).toBeTruthy();
+    expect(dialog.getByText("The time is free again. A session that has already started stays as it is.")).toBeTruthy();
 
     const fresh = memberRemovePreviewSchema.parse({ ...box({ move: [who('Ben Carter', ben.entryId)], ptSessions: two }).data.preview, digest: DIGEST2 });
     orgService.removeSelected.mockRejectedValueOnce(refusedWith('remove_changed', fresh)).mockResolvedValueOnce({ data: { removed: { moved: 1, endedApp: 0, alreadyRemoved: false } } });

@@ -55,17 +55,22 @@ export class PtSessionsEndAsk extends Error {
 }
 
 /** Ask first: throws unless nothing would end, or `confirmed` is the mark of exactly what
- *  would, worked out here under the gym's lock. */
+ *  would, worked out here under the gym's lock. Answers what the write that follows ends. */
 export async function requireSessionsConfirmed(
   tx: TransactionSql,
   gymId: string,
   of: repo.EndingSessionsOf,
   now: Date,
   confirmed: string | null,
-): Promise<void> {
+): Promise<PtSessionsEnding | null> {
   const ending = await sessionsEndingFor(tx, gymId, of, now);
   if (ending !== null && ending.mark !== confirmed) throw new PtSessionsEndAsk(ending);
+  return ending;
 }
+
+/** What a removal's audit row says of the sessions it ended: counts, never a name. */
+export const sessionsAuditMeta = (ending: Pick<PtSessionsEnding, "count" | "packSessions"> | null | undefined): Record<string, string> =>
+  ending === null || ending === undefined ? {} : { ptSessionsEnded: String(ending.count), ptPackSessionsBack: String(ending.packSessions) };
 
 export interface SessionsEnded {
   sessions: number;

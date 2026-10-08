@@ -28,7 +28,7 @@ import {
 } from "@app/shared";
 import type { TransactionSql } from "postgres";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
-import { sessionsEndingFor } from "../pt/changes.js";
+import { sessionsAuditMeta, sessionsEndingFor } from "../pt/changes.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { bustAfterRemoval } from "./byHandService.js";
 import * as repo from "./repo.js";
@@ -507,7 +507,7 @@ async function press(
           targetType: "member_list",
           targetId: gymId,
           // The digest names the box, which is how the same press sent again is recognised.
-          meta: { moved: String(moved.length), endedApp: String(closed.length), digest: input.digest },
+          meta: { moved: String(moved.length), endedApp: String(closed.length), digest: input.digest, ...sessionsAuditMeta(plan.preview.ptSessions) },
         },
       ],
     });

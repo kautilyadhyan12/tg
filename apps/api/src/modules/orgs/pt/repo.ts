@@ -851,6 +851,7 @@ export interface EndingSessionRow {
   localDate: string;
   localStartMinute: number;
   minutes: number;
+  /** Charged to a pack that is still there to have the session back. */
   packCharged: boolean;
 }
 
@@ -862,7 +863,8 @@ export async function sessionsEnding(sql: SqlOrTx, gymId: string, of: EndingSess
     { id: string; person_name: string | null; trainer_name: string | null; local_date: string; local_start_minute: number; minutes: number; pack_charged: boolean }[]
   >`
     SELECT a.id, e.full_name AS person_name, nullif(btrim(u.display_name), '') AS trainer_name,
-           a.local_date::text AS local_date, a.local_start_minute, a.minutes, a.pack_charged
+           a.local_date::text AS local_date, a.local_start_minute, a.minutes,
+           (a.pack_charged AND a.held_membership_id IS NOT NULL) AS pack_charged
     FROM gym_pt_appointments a
     LEFT JOIN gym_member_list_entries e ON e.gym_id = a.gym_id AND e.id = a.entry_id
     LEFT JOIN users u ON u.id = a.trainer_user_id

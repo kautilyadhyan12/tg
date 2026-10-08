@@ -39,6 +39,12 @@ describe('one session’s line', () => {
     expect(ptEndingRow(row, clock)).toEqual({ id: row.id, name, detail });
   });
 
+  it('what happens next names no trainer: a session may have none left', () => {
+    const box = ending(1, 0, [session(1, { trainerName: null })]);
+    expect(ptEndingWords(box, '12h').change).toBe('The time is free again. A session that has already started stays as it is.');
+    expect(ptEndingWords(box, '12h').change).not.toMatch(/trainer/i);
+  });
+
   it('in a box about one person it leads with when, then with whom, and never repeats their name', () => {
     expect(ptEndingRow(session(1), '12h', true)).toEqual({ id: session(1).id, name: 'Fri 9 Oct · 10:00 AM–11:00 AM', detail: 'with Sam Trainer' });
     expect(ptEndingRow(session(1, { trainerName: null }), '24h', true)).toEqual({ id: session(1).id, name: 'Fri 9 Oct · 10:00–11:00', detail: '' });
@@ -48,10 +54,10 @@ describe('one session’s line', () => {
 
 describe('the box’s words', () => {
   it.each([
-    [1, 0, '1 personal training session will be cancelled', "The trainer's time can be booked again. A session that has already started stays as it is.", 'cancel 1 session'],
-    [1, 1, '1 personal training session will be cancelled', "The trainer's time can be booked again. 1 session goes back to its pack. A session that has already started stays as it is.", 'cancel 1 session'],
-    [3, 1, '3 personal training sessions will be cancelled', "Each trainer's time can be booked again. 1 session goes back to its pack. A session that has already started stays as it is.", 'cancel 3 sessions'],
-    [1200, 2, '1200 personal training sessions will be cancelled', "Each trainer's time can be booked again. 2 sessions go back to their packs. A session that has already started stays as it is.", 'cancel 1,200 sessions'],
+    [1, 0, '1 personal training session will be cancelled', "The time is free again. A session that has already started stays as it is.", 'cancel 1 session'],
+    [1, 1, '1 personal training session will be cancelled', "The time is free again. 1 session goes back to its pack. A session that has already started stays as it is.", 'cancel 1 session'],
+    [3, 1, '3 personal training sessions will be cancelled', "Those times are free again. 1 session goes back to its pack. A session that has already started stays as it is.", 'cancel 3 sessions'],
+    [1200, 2, '1200 personal training sessions will be cancelled', "Those times are free again. 2 sessions go back to their packs. A session that has already started stays as it is.", 'cancel 1,200 sessions'],
   ])('%i sessions, %i from packs', (count, packs, title, change, action) => {
     const box = ending(count, packs, [session(1)]);
     const words = ptEndingWords(box, '12h');
