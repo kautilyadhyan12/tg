@@ -4,6 +4,7 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Circle, Loader2, Plus, Search,
 import { orgWords } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import BookingRulesLine from '../../components/console/BookingRulesLine';
 import PlaceLink from '../../components/console/PlaceLink';
 import TimePick from '../../components/console/TimePick';
 import { DateField, Tick } from './ClassFields';
@@ -965,6 +966,7 @@ export default function PersonalTraining() {
           {list?.timezone ? ` · ${list.timezone} time` : ''}
         </p>
         {list !== null ? <p className="c-s15 c-t2 m-0">{list.canManage ? PT_INTRO_MANAGER : PT_INTRO_OWN}</p> : null}
+        {list !== null ? <BookingRulesLine org={org} orgSlug={orgSlug} privileges={privileges} freeCancelMinutes={list.freeCancelMinutes} /> : null}
       </header>
 
       {readOnly ? (

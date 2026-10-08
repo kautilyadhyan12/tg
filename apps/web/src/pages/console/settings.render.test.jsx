@@ -96,7 +96,7 @@ const ORG = {
 };
 
 /** A manager holding none of the powers Settings has a section for: `schedule.manage`
- *  opens Class bookings since 17c-ii-a. (`memberships.manage` opened a section from 17a-i
+ *  opens Booking rules since 17c-ii-a. (`memberships.manage` opened a section from 17a-i
  *  to 23c-i; it is left out here too, so this stays "no power at all".) */
 const NO_SETTINGS_POWER = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage' && p !== 'schedule.manage');
 
@@ -176,11 +176,11 @@ describe('a manager or trainer at this address', () => {
   });
 
   /** A manager's usual permissions set the timetable, so Settings is theirs to open,
-   *  holding Class bookings and nothing they cannot use. */
-  it('with the usual permissions sees Class bookings and no section they cannot use', async () => {
+   *  holding Booking rules and nothing they cannot use. */
+  it('with the usual permissions sees Booking rules and no section they cannot use', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
     drawSettings();
-    expect(await screen.findByRole('button', { name: /^Class bookings/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /^Booking rules/ })).toBeTruthy();
     expect(screen.queryByText(/Only the gym's owner can change these settings/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /^Gym details/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Staff/ })).toBeNull();
@@ -249,7 +249,7 @@ describe('the Settings tab', () => {
     expect(screen.queryByText('Settings')).toBeNull();
   });
 
-  it('is drawn for a manager with the usual permissions: Class bookings is theirs (17c-ii-a)', async () => {
+  it('is drawn for a manager with the usual permissions: Booking rules is theirs (17c-ii-a)', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
     drawShell();
     await waitFor(() => expect(screen.getAllByText('Settings').length).toBeGreaterThan(0));

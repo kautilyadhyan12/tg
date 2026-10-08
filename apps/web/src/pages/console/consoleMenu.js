@@ -9,7 +9,7 @@ import { canManageMemberships } from './membershipTypesView';
 import { canManagePosts } from '../../components/gym/postsView';
 
 /** Settings holds sections gated on two permissions (the gym's details: `org.manage`;
- *  Class bookings: `schedule.manage`), so its page is drawn for whoever holds either.
+ *  Booking rules: `schedule.manage`), so its page is drawn for whoever holds either.
  *  What the gym sells left it for a page of its own (23c-i), and staff for Members → Staff
  *  (23c-ii). */
 function settingsIsReachable(privileges) {

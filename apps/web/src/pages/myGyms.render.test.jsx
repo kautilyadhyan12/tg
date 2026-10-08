@@ -37,6 +37,9 @@ vi.mock('../api/postsApi', () => ({ postsService: posts, postPhotoUrl: () => '' 
 // And its classes (classes.render.test.jsx).
 const classes = { list: vi.fn(() => new Promise(() => {})) };
 vi.mock('../api/classesApi', () => ({ classesService: classes }));
+// And its personal training (personalTraining.render.test.jsx).
+const memberPt = { view: vi.fn(() => new Promise(() => {})) };
+vi.mock('../api/memberPtApi', () => ({ memberPtService: memberPt }));
 // And its events (events.render.test.jsx).
 const events = { list: vi.fn(() => new Promise(() => {})) };
 vi.mock('../api/eventsApi', () => ({ eventsService: events, eventPosterUrl: () => '' }));
@@ -301,6 +304,13 @@ describe('the screen', () => {
     expect(screen.getByRole('tab', { name: 'Classes' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('region', { name: `${GYM.name}'s classes` })).toBeTruthy();
     await waitFor(() => expect(classes.list).toHaveBeenCalledWith('g1', 0));
+    expect(events.list).not.toHaveBeenCalled();
+
+    // Its personal training (17e-ii): read only when its tab is opened.
+    expect(memberPt.view).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('tab', { name: 'Personal training' }));
+    expect(screen.getByRole('region', { name: `${GYM.name}'s personal training` })).toBeTruthy();
+    await waitFor(() => expect(memberPt.view).toHaveBeenCalledWith('g1', 0));
     expect(events.list).not.toHaveBeenCalled();
 
     // Its events (19c-i): read only when their tab is opened.

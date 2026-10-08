@@ -8,6 +8,7 @@ import AttendancePanel from '../components/gym/AttendancePanel';
 import { cheerNote, myOrgsWords } from '../components/gym/gymMembershipView';
 import Challenges from '../components/gym/Challenges';
 import Classes from '../components/gym/Classes';
+import PersonalTraining from '../components/gym/PersonalTraining';
 import Events from '../components/gym/Events';
 import Leaderboard from '../components/gym/Leaderboard';
 import Updates from '../components/gym/Updates';
@@ -64,6 +65,7 @@ const PAGE_TABS = [
   { id: 'leaderboard', label: 'Leaderboard' },
   { id: 'challenges', label: 'Challenges' },
   { id: 'classes', label: 'Classes' },
+  { id: 'pt', label: 'Personal training' },
 ];
 
 export default function MyGyms() {
@@ -257,6 +259,8 @@ export default function MyGyms() {
               <Challenges key={`challenges-${gym.id}`} gym={gym} />
             ) : tab === 'classes' ? (
               <Classes key={`classes-${gym.id}`} gym={gym} />
+            ) : tab === 'pt' ? (
+              <PersonalTraining key={`pt-${gym.id}`} gym={gym} />
             ) : (
               <Leaderboard key={`board-${gym.id}`} gym={gym} />
             )}

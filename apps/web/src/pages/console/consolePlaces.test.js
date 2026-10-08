@@ -21,6 +21,7 @@ const PLACES = {
   postalAddress: '/console/iron-house/settings#postal-address',
   country: '/console/iron-house/settings#country',
   openingHours: '/console/iron-house/settings#opening-hours',
+  bookingRules: '/console/iron-house/settings#booking-rules',
   frontDesk: '/console/iron-house/settings#check-in-devices',
   leadEmails: '/console/iron-house/settings#follow-up-emails',
   memberships: '/console/iron-house/memberships',
@@ -43,6 +44,7 @@ const NEEDS = {
   postalAddress: 'org.manage',
   country: 'org.manage',
   openingHours: 'org.manage',
+  bookingRules: 'schedule.manage',
   frontDesk: 'org.manage',
   leadEmails: 'org.manage',
   memberships: 'memberships.manage',
@@ -81,6 +83,7 @@ describe('where each place is', () => {
       postalAddress: 'postal-address',
       country: 'country',
       hours: 'opening-hours',
+      bookingRules: 'booking-rules',
       frontDesk: 'check-in-devices',
       leadEmails: 'follow-up-emails',
     });

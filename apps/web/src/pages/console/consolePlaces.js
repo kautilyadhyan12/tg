@@ -18,6 +18,7 @@ export const SETTINGS_SECTION = {
   postalAddress: 'postal-address',
   country: 'country',
   hours: 'opening-hours',
+  bookingRules: 'booking-rules',
   frontDesk: 'check-in-devices',
   leadEmails: 'follow-up-emails',
 };
@@ -38,6 +39,7 @@ const PLACES = {
   postalAddress: { path: `/settings#${SETTINGS_SECTION.postalAddress}`, may: canManageOrg },
   country: { path: `/settings#${SETTINGS_SECTION.country}`, may: canManageOrg },
   openingHours: { path: `/settings#${SETTINGS_SECTION.hours}`, may: canManageOrg },
+  bookingRules: { path: `/settings#${SETTINGS_SECTION.bookingRules}`, may: canManageSchedule },
   frontDesk: { path: `/settings#${SETTINGS_SECTION.frontDesk}`, may: canManageOrg },
   leadEmails: { path: `/settings#${SETTINGS_SECTION.leadEmails}`, may: canManageOrg },
   memberships: { path: '/memberships', may: canManageMemberships },

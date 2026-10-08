@@ -8,6 +8,7 @@ import {
   ConsoleLoading,
   ConsoleSection,
 } from '../../components/console/ConsoleStates';
+import BookingRulesLine from '../../components/console/BookingRulesLine';
 import BookingsEndBox from '../../components/console/BookingsEndBox';
 import TrainerSessionsBox from '../../components/console/TrainerSessionsBox';
 import {
@@ -736,6 +737,7 @@ export default function Classes() {
             {org.name}
             {timezone ? ` · ${timezone} time` : ''}
           </p>
+          {allowed ? <BookingRulesLine org={org} orgSlug={orgSlug} privileges={privileges} /> : null}
         </div>
         {showAdd ? (
           <button type="button" onClick={openAdd} className="c-btn c-btn-p w-full md:w-auto">

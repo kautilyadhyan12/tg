@@ -13,7 +13,8 @@ import {
 } from '../../pages/console/bookingsEndView';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 
-// CLASS BOOKINGS (ROADMAP 17c-ii-a; spec Part 3 §13.4): the gym's four booking settings,
+// BOOKING RULES (ROADMAP 17c-ii-a; spec Part 3 §13.4): the gym's four booking settings,
+// for classes and personal training alike (the box was "Class bookings" until 17e-ii),
 // each a starting value it can change (RULINGS 2026-09-21). All four wait for Save
 // together, as the gym's details do above; they hold for every class from then on and
 // change no booking already made.
@@ -78,7 +79,8 @@ function Row({ title, hint, children }) {
   );
 }
 
-export default function BookingSettingsPanel({ org, readOnly }) {
+// `startOpen`: the page was opened by a link to this box (the Classes and Personal training pages).
+export default function BookingSettingsPanel({ org, readOnly, startOpen = false }) {
   const gymId = org.id;
   const [settings, setSettings] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -148,7 +150,7 @@ export default function BookingSettingsPanel({ org, readOnly }) {
   };
 
   return (
-    <ConsoleSection title="Class bookings" summary={bookingSettingsSummary(settings)} forceOpen={loadError !== null}>
+    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings)} forceOpen={loadError !== null} defaultOpen={startOpen}>
       {readOnly ? (
         <p className="text-xs mb-3" style={hintStyle}>
           {readOnlyNote(org.orgType)}

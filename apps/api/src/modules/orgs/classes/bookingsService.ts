@@ -41,7 +41,7 @@ import {
   type MemberClassesResponse,
   type StaffClassBooking,
 } from "@app/shared";
-import { getOrgById, getStaffAuthority, gymHasLivePlan, insertAudit, isLiveMember, lockOrgRow } from "../repo.js";
+import { getOrgById, getStaffAuthority, gymHasLivePlan, insertAudit, isLiveMember, lockOrgRow, type OrgRow } from "../repo.js";
 import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
@@ -65,7 +65,7 @@ const notFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisat
 const classNotFound = (): OrgsError => new OrgsError(404, "class_not_found", CLASS_BOOKING_WORDS.class_not_found);
 
 /** A live app member of a gym on a live plan; 404 for everybody else. */
-async function requireMember(deps: Pick<BookingsDeps, "sql">, gymId: string, userId: string): Promise<{ timezone: string }> {
+export async function requireMember(deps: Pick<BookingsDeps, "sql">, gymId: string, userId: string): Promise<OrgRow> {
   const [org, member, live] = await Promise.all([
     getOrgById(deps.sql, gymId),
     isLiveMember(deps.sql, gymId, userId),
