@@ -628,15 +628,28 @@ d("personal training's own booking rules (real Postgres, two api instances)", { 
       // request and waits until the database says it is waiting, sends the other and
       // waits again, then lets go. Whichever was first is first. A save or a cancel that
       // did not take the gym's lock would not wait, and the wait below would never end.
-      const lockWaits = async (): Promise<number> => {
-        const [row] = await sql<{ n: number }[]>`
-          SELECT count(*)::int AS n FROM pg_stat_activity
-          WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`;
-        return row?.n ?? 0;
+      // Only the requests held up behind THIS test's own transaction are counted (other
+      // test files wait for locks in the same database): those the holder blocks, and
+      // those blocked by one of them, since the second in line waits for the first.
+      const lockWaits = async (holder: number): Promise<number> => {
+        const rows = await sql<{ pid: number; behind: number[] }[]>`
+          SELECT pid, pg_blocking_pids(pid) AS behind FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+        const queued = new Set<number>([holder]);
+        for (let grew = true; grew; ) {
+          grew = false;
+          for (const row of rows) {
+            if (!queued.has(row.pid) && row.behind.some((pid) => queued.has(pid))) {
+              queued.add(row.pid);
+              grew = true;
+            }
+          }
+        }
+        return queued.size - 1;
       };
-      const waitsReach = async (n: number): Promise<void> => {
-        for (let tries = 0; (await lockWaits()) < n; tries++) {
-          if (tries === 200) throw new Error(`only ${String(await lockWaits())} of ${String(n)} requests are waiting for the gym's lock`);
+      const waitsReach = async (holder: number, n: number): Promise<void> => {
+        for (let tries = 0; (await lockWaits(holder)) < n; tries++) {
+          if (tries === 200) throw new Error(`only ${String(await lockWaits(holder))} of ${String(n)} requests are waiting for the gym's lock`);
           await new Promise((resolve) => setTimeout(resolve, 25));
         }
       };
@@ -646,32 +659,32 @@ d("personal training's own booking rules (real Postgres, two api instances)", { 
         const id = await staffBook(gym, sam, maya.entryId, minute);
         const had = await left(held);
         clock = (await startOf(id)) - 3 * HOUR;
-        const base = await lockWaits();
         let letGo: () => void = () => undefined;
-        let taken: () => void = () => undefined;
-        const isTaken = new Promise<void>((resolve) => (taken = resolve));
+        let taken: (pid: number) => void = () => undefined;
+        const isTaken = new Promise<number>((resolve) => (taken = resolve));
         const holding = sql.begin(async (tx) => {
-          await tx`SELECT 1 FROM gyms WHERE id = ${gym.id} FOR UPDATE`;
-          taken();
+          const [row] = await tx<{ pid: number }[]>`SELECT pg_backend_pid() AS pid FROM gyms WHERE id = ${gym.id} FOR UPDATE`;
+          if (row === undefined) throw new Error("no gym to hold");
+          taken(row.pid);
           await new Promise<void>((resolve) => (letGo = resolve));
         });
-        await isTaken;
+        const holder = await isTaken;
         const save = () => setRules(gym, {}, { freeCancelMinutes: 1440 }, other());
         const cut = () => cancel(gym, maya, id, false, api());
         let res: Awaited<ReturnType<typeof cut>>;
         try {
           if (firstIs === "save") {
             const saving = save();
-            await waitsReach(base + 1);
+            await waitsReach(holder, 1);
             const cutting = cut();
-            await waitsReach(base + 2);
+            await waitsReach(holder, 2);
             letGo();
             [, res] = await Promise.all([saving, cutting]);
           } else {
             const cutting = cut();
-            await waitsReach(base + 1);
+            await waitsReach(holder, 1);
             const saving = save();
-            await waitsReach(base + 2);
+            await waitsReach(holder, 2);
             letGo();
             [res] = await Promise.all([cutting, saving]);
           }
