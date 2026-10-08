@@ -310,3 +310,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 5d. [ ] **Staff notes and tags** (Kd, RULINGS 2026-10-08): on a person's page staff write dated notes (who wrote each) and add the gym's own tags ("VIP", "Beginner"); tags are a filter on Members and pick people for 20f. Staff only, never shown to a member or sent out, deleted with the person. Its plan says how a note about somebody's health is kept safe; a file's medical notes are still never kept (RULINGS 2026-09-21).
 
 - 5d-i. [ ] **Notes and tags on a person's page**: staff write dated notes (who wrote each, delete but no edit) and put the gym's own tags on a person; staff only, never shown to a member or sent out, deleted with the person. Risky. *Merged 2026-10-08 (PR #196).*
+
+- 17e-ii. [ ] **The member books and cancels their own** in the app (the member web until the phone app), by 17e-i's rule; booking opens as the gym's class bookings do. After 17e-iii. *Merged 2026-10-08 (PR #197).*

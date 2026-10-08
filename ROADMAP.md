@@ -209,7 +209,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 17d. [x] **The member's side** — merged 2026-10-05 (PR #177).
    - 17e. **Personal training** (§13.5), split 2026-10-06 in four (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`). **Built in this order, the staff side first (Kd, RULINGS 2026-10-06): 17e-i → 17e-iii (a, then b) → 17e-ii → 17e-iv.**
      - 17e-i. [x] **Trainers' hours, and staff book a session** — merged 2026-10-06 (PR #181).
-     - 17e-ii. [ ] **The member books and cancels their own** in the app (the member web until the phone app), by 17e-i's rule; booking opens as the gym's class bookings do. After 17e-iii.
+     - 17e-ii. [x] **The member books and cancels their own** — merged 2026-10-08 (PR #197).
      - 17e-iii. **Classes and sessions agree both ways, and a trainer's time off** (Kd, RULINGS 2026-10-06; straight after 17e-i), split 2026-10-06 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
        - 17e-iii-a. [x] **The Classes page asks first** — merged 2026-10-06 (PR #184).
        - 17e-iii-b. [x] **A trainer's time off** — merged 2026-10-06 (PR #185).
