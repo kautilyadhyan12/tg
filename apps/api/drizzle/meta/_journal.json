@@ -575,6 +575,13 @@
       "when": 1788393600066,
       "tag": "0082_gym_challenges",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1788480000067,
+      "tag": "0083_member_notes_tags",
+      "breakpoints": true
     }
   ]
 }

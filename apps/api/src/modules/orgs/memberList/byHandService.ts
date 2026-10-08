@@ -56,6 +56,7 @@ import { cut, identityKey } from "./fields.js";
 import { withoutCardNumbers } from "./neverKeep.js";
 import { nameKey } from "./samePerson.js";
 import { readCountry } from "./phone.js";
+import { moveNotesAndTags } from "./notesRepo.js";
 import * as repo from "./repo.js";
 import { reviewAfterChecked, reviewAfterEdit, reviewAfterMerge, sameReview } from "./review.js";
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
@@ -817,6 +818,7 @@ export async function mergeEntries(
     await repo.moveVisitLinks(tx, gymId, goneId, keepId);
     await repo.moveBookingLinks(tx, gymId, goneId, keepId);
     await repo.movePtLinks(tx, gymId, goneId, keepId);
+    await moveNotesAndTags(tx, gymId, goneId, keepId);
     await repo.deleteEntry(tx, gymId, goneId);
     const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");

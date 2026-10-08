@@ -85,6 +85,7 @@ import {
   gymClassWeekResponseSchema,
   gymMembershipTypesResponseSchema,
   heldMembershipsResponseSchema,
+  memberNotesAndTagsSchema,
   membershipLinkPreviewResponseSchema,
   membershipLinkResponseSchema,
   membershipWordsResponseSchema,
@@ -151,6 +152,8 @@ function contractError(what) {
 }
 
 export const CHECKIN_PASS_TIMEOUT_MS = 10_000;
+
+const notesUrl = (gymId, entryId) => `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}`;
 
 async function readThrough(schema, what, request) {
   const res = await request;
@@ -1454,6 +1457,16 @@ export const orgService = {
    *  call answers with all of that person's memberships, each date worked out by the
    *  server on the gym's own day. `what` is freeze, unfreeze, cancel or paid. Nothing
    *  here retries: a request that arrives twice changes things once. */
+  // Staff notes and tags on a person's page (5d): every answer is both, as they now stand.
+  getMemberNotes: (gymId, entryId) => readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.get(`${notesUrl(gymId, entryId)}/notes`)),
+  addMemberNote: (gymId, entryId, body) =>
+    readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.post(`${notesUrl(gymId, entryId)}/notes`, body)),
+  deleteMemberNote: (gymId, entryId, noteId) =>
+    readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.delete(`${notesUrl(gymId, entryId)}/notes/${encodeURIComponent(noteId)}`)),
+  addMemberTag: (gymId, entryId, name) =>
+    readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.post(`${notesUrl(gymId, entryId)}/tags`, { name })),
+  removeMemberTag: (gymId, entryId, tagId) =>
+    readThrough(memberNotesAndTagsSchema, "this person's notes and tags", authApi.delete(`${notesUrl(gymId, entryId)}/tags/${encodeURIComponent(tagId)}`)),
   getHeldMemberships: (gymId, entryId) =>
     readThrough(
       heldMembershipsResponseSchema,

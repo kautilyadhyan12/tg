@@ -306,3 +306,7 @@ stage. History, never a rule: RULINGS wins where they differ.
    - 23d. [x] **Buttons, not words**: every "in Settings, under …" (at least 12, two of them buttons, 2026-10-07) opens that exact place; Personal training lists all its steps, with ticks. *Merged 2026-10-08 (PR #192).*
 
 - 23d-ii. [ ] **Buttons for the server's own sentences** (found by 23d; spec §17.5): an email's reason "Update it in Settings" (a member's invitation and a staff one), the two import warnings "Set the gym's country in Settings" (members, leads) and "their access is managed under Staff" each get the button to that place from `consolePlaces.js`, and say who can for staff who cannot open it. Screen or wording.
+
+- 5d. [ ] **Staff notes and tags** (Kd, RULINGS 2026-10-08): on a person's page staff write dated notes (who wrote each) and add the gym's own tags ("VIP", "Beginner"); tags are a filter on Members and pick people for 20f. Staff only, never shown to a member or sent out, deleted with the person. Its plan says how a note about somebody's health is kept safe; a file's medical notes are still never kept (RULINGS 2026-09-21).
+
+- 5d-i. [ ] **Notes and tags on a person's page**: staff write dated notes (who wrote each, delete but no edit) and put the gym's own tags on a person; staff only, never shown to a member or sent out, deleted with the person. Risky. *Merged 2026-10-08 (PR #196).*

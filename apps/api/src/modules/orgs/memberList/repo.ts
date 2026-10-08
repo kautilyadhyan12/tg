@@ -1149,6 +1149,8 @@ export async function deleteListForGym(tx: TransactionSql, gymId: string): Promi
   // are gone, and a catalogue outliving the gym it belongs to would be the one row of
   // this feature the archive sweep left behind.
   await tx`DELETE FROM gym_member_list_fields WHERE gym_id = ${gymId}`;
+  // The gym's tags (5d): what was on a record went with it, above.
+  await tx`DELETE FROM gym_member_tags WHERE gym_id = ${gymId}`;
   await tx`DELETE FROM gym_member_lists WHERE gym_id = ${gymId}`;
 }
 

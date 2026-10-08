@@ -20,6 +20,9 @@ const api = {
   cancelClassDay: vi.fn(),
   restoreClassDay: vi.fn(),
 };
+// Their tags and staff notes (5d) have their own tests in `memberNotes.render.test.jsx`.
+vi.mock('./MemberNotes', () => ({ default: () => null }));
+
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   // The real `errorText`: the server's own sentence must reach the screen.

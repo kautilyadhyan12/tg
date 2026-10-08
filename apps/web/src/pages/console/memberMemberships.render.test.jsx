@@ -15,6 +15,9 @@ import {
   moveHeldMembership,
 } from '@app/shared';
 
+// Their tags and staff notes (5d) have their own tests in `memberNotes.render.test.jsx`.
+vi.mock('./MemberNotes', () => ({ default: () => null }));
+
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return {
