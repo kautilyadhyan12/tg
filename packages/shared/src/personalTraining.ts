@@ -149,6 +149,7 @@ export const PT_BOOK_REFUSALS = [
   "not_a_time",
   "time_passed",
   "too_far",
+  "not_open_yet",
   "time_taken",
   "trainer_in_class",
   "trainer_off",
@@ -169,6 +170,9 @@ export interface PtBookInput {
   started: boolean;
   /** It is further ahead than sessions are booked. */
   tooFar: boolean;
+  /** A member booking for themself: the gym's bookings have not opened for it yet. Never
+   *  true for staff, who book as far ahead as sessions go. */
+  notOpenYet: boolean;
   /** The trainer has a session that runs into it. */
   trainerBusy: boolean;
   /** The trainer coaches a class that runs into it. */
@@ -188,6 +192,7 @@ export function decidePtBook(i: PtBookInput): PtBookDecision {
   if (!i.offered) return { kind: "refuse", reason: "not_a_time" };
   if (i.started) return { kind: "refuse", reason: "time_passed" };
   if (i.tooFar) return { kind: "refuse", reason: "too_far" };
+  if (i.notOpenYet) return { kind: "refuse", reason: "not_open_yet" };
   if (i.trainerBusy) return { kind: "refuse", reason: "time_taken" };
   if (i.trainerInClass) return { kind: "refuse", reason: "trainer_in_class" };
   if (i.trainerOff) return { kind: "refuse", reason: "trainer_off" };
@@ -303,6 +308,7 @@ export const PT_WORDS = {
   not_a_time: "That isn't one of this trainer's times. Pick a time from the list.",
   time_passed: "That time has already passed.",
   too_far: "Sessions can be booked up to 8 weeks ahead.",
+  not_open_yet: "Booking for that day isn't open yet.",
   time_taken: "This trainer already has a session at that time.",
   trainer_in_class: "This trainer is coaching a class at that time.",
   trainer_off: "This trainer has time off at that time.",
@@ -590,3 +596,131 @@ export const addPtTimeOffRequestSchema = z
     if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["toDate"], message: problem });
   });
 export type AddPtTimeOffRequest = z.infer<typeof addPtTimeOffRequestSchema>;
+
+// ── A MEMBER BOOKS AND CANCELS THEIR OWN (17e-ii) ──
+
+/** What a member reads when the server says no to their own booking. Why a trainer's time
+ *  has gone (a class, time off, somebody else's session) is the gym's to know, not theirs. */
+export const PT_MEMBER_WORDS: Record<PtBookRefusal, string> = {
+  trainer_not_offering: "This trainer isn't taking personal training sessions right now.",
+  not_a_time: "That time is no longer available. Pick another time.",
+  time_passed: "That time has already passed.",
+  too_far: "Booking for that day isn't open yet.",
+  not_open_yet: "Booking for that day isn't open yet.",
+  time_taken: "That time has just been booked. Pick another time.",
+  trainer_in_class: "That time is no longer available. Pick another time.",
+  trainer_off: "That time is no longer available. Pick another time.",
+  person_busy: "You already have a personal training session at that time.",
+  no_membership: "You have no membership in use on that day. Ask at the front desk.",
+  not_covered: "Your membership doesn't include personal training. Ask at the front desk.",
+  pack_used: "Your pack has no sessions left. Ask at the front desk for another.",
+};
+
+/** What the box says before a member's late cancel: free time has run out. */
+export const PT_MEMBER_LATE_CANCEL = "It's too late to cancel for free. Cancelling now counts as a late cancel.";
+export const PT_MEMBER_LATE_CANCEL_PACK =
+  "It's too late to cancel for free. Cancelling now counts as a late cancel, and the session stays used on your pack.";
+
+/** A member of the app with no record on the gym's list: a session hangs on the record. */
+export const PT_NOT_ON_LIST_ERROR = "not_on_list";
+export const PT_NOT_ON_LIST_WORDS = "Your gym hasn't added you to its member list yet. Ask at the front desk.";
+
+/** How many pages of seven days a member can turn to: the eight weeks sessions run. */
+export const MEMBER_PT_WEEKS = 8;
+/** How many of their own coming sessions one read answers. */
+export const MEMBER_PT_SESSIONS_MAX = 100;
+
+/** `week`: 0 for the gym's next seven days from today, 1 for the seven after, and so on. */
+export const memberPtQuerySchema = z
+  .object({
+    week: z
+      .string()
+      .regex(new RegExp(`^[0-${String(MEMBER_PT_WEEKS - 1)}]$`))
+      .default("0")
+      .transform(Number),
+  })
+  .strict();
+export type MemberPtQuery = z.infer<typeof memberPtQuerySchema>;
+
+/** A session of the reader's own. Nobody else's is ever sent to a member. */
+export const memberPtSessionSchema = z
+  .object({
+    id: z.string().uuid(),
+    /** Null: the trainer has typed no name, or their account is gone. */
+    trainerName: z.string().nullable(),
+    localDate: classDaySchema,
+    localStartMinute: z.number().int(),
+    minutes: z.number().int(),
+    startsAt: z.string().datetime(),
+    /** Cancelling is free until this instant. */
+    freeCancelUntil: z.string().datetime(),
+    status: ptAppointmentStatusSchema,
+    /** A session of a pack is used for it. */
+    packCharged: z.boolean(),
+    /** What a cancel now would be; null once it has started or is cancelled. */
+    cancel: z.enum(["free", "late"]).nullable(),
+  })
+  .strict();
+export type MemberPtSession = z.infer<typeof memberPtSessionSchema>;
+
+/** Seven of the gym's days as a member reads them: the trainers taking sessions with the
+ *  times that member can book, what would pay on each day, and their own coming sessions
+ *  (all of them, whatever the week). A time is a minute from midnight on the gym's clock. */
+export const memberPtResponseSchema = z
+  .object({
+    timezone: z.string(),
+    today: classDaySchema,
+    from: classDaySchema,
+    to: classDaySchema,
+    /** The last of the gym's days whose times a member can book now. */
+    lastDay: classDaySchema,
+    freeCancelMinutes: z.number().int(),
+    /** False: the reader has no record on the gym's list, and can book nothing. */
+    onList: z.boolean(),
+    days: z.array(
+      z
+        .object({
+          localDate: classDaySchema,
+          /** What a booking on this day would be made on, by the booking's own rule
+           *  (`membership` null where the gym sells none); null where nothing pays. */
+          pays: z.object({ membership: z.string().nullable(), sessionsLeft: z.number().int().nullable() }).strict().nullable(),
+          /** Why nothing pays; null where something does, or the reader is not on the list. */
+          why: z.enum(["no_membership", "not_covered", "pack_used"]).nullable(),
+        })
+        .strict(),
+    ),
+    trainers: z.array(
+      z
+        .object({
+          trainerId: z.string().uuid(),
+          name: z.string().nullable(),
+          sessionMinutes: ptSessionMinutesSchema,
+          days: z.array(z.object({ localDate: classDaySchema, free: z.array(z.number().int()) }).strict()),
+        })
+        .strict(),
+    ),
+    sessions: z.array(memberPtSessionSchema).max(MEMBER_PT_SESSIONS_MAX),
+  })
+  .strict();
+export type MemberPtResponse = z.infer<typeof memberPtResponseSchema>;
+
+/** A member's own booking: no person is named, the session is the reader's. */
+export const memberBookPtRequestSchema = z
+  .object({
+    requestKey: z.string().uuid(),
+    trainerId: z.string().uuid(),
+    localDate: classDaySchema,
+    startMinute: minuteOfDay(1435),
+    /** The session's length as the screen showed it. */
+    minutes: ptSessionMinutesSchema,
+  })
+  .strict();
+export type MemberBookPtRequest = z.infer<typeof memberBookPtRequestSchema>;
+
+/** `lateOk`: the member has read that it is a late cancel and the session stays used. A
+ *  member never gives a late session back; that is staff's to do. */
+export const memberCancelPtRequestSchema = z.object({ lateOk: z.boolean() }).strict();
+export type MemberCancelPtRequest = z.infer<typeof memberCancelPtRequestSchema>;
+
+export const memberPtSessionResponseSchema = z.object({ session: memberPtSessionSchema }).strict();
+export type MemberPtSessionResponse = z.infer<typeof memberPtSessionResponseSchema>;

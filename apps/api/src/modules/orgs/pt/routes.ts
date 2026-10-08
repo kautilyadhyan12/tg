@@ -10,6 +10,9 @@ import {
   addPtTimeOffRequestSchema,
   bookPtRequestSchema,
   cancelPtRequestSchema,
+  memberBookPtRequestSchema,
+  memberCancelPtRequestSchema,
+  memberPtQuerySchema,
   ptPeopleQuerySchema,
   ptWeekQuerySchema,
   savePtTrainerRequestSchema,
@@ -17,6 +20,8 @@ import {
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
+import { createLine } from "../classes/bookingsService.js";
+import * as memberService from "./memberService.js";
 import * as service from "./service.js";
 
 const trainerParamsSchema = z.object({ gymId: z.string().uuid(), userId: z.string().uuid() }).strict();
@@ -159,6 +164,52 @@ export function registerPtRoutes(app: FastifyInstance, deps: { sql: Sql; redis: 
       return await reply.status(200).send({ appointment });
     } catch (err) {
       if (!(err instanceof service.PtLateCancel)) throw err;
+      return reply.status(409).send({ error: PT_LATE_CANCEL_ERROR, message: err.message, packCharged: err.packCharged, requestId: req.id });
+    }
+  });
+
+  // ── MEMBERS: THEIR OWN SESSIONS (17e-ii) ──
+
+  const memberDeps: memberService.MemberPtDeps = { ...ptDeps, inLine: createLine() };
+  // A gym's members share its wi-fi's address, hence each explicit `ipMax`.
+  const memberReadLimit = limiter("orgs_pt_member_read", 1200, 60_000);
+  const memberWriteLimit = limiter("orgs_pt_member_write", 120, 12_000);
+  const member = { preHandler: app.authenticate };
+
+  // Seven days of the gym's trainers' available times, with the reader's own sessions.
+  app.get("/v1/orgs/:gymId/member-pt", member, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberPtQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const view = await memberService.getMemberPt(ptDeps, requireUserId(req), params.gymId, query, gate(memberReadLimit)(req, reply));
+    if (view === null) return;
+    return reply.status(200).send(view);
+  });
+
+  // The body names no person: the session is the reader's own.
+  app.post("/v1/orgs/:gymId/member-pt/sessions", member, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberBookPtRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const session = await memberService.memberBook(memberDeps, requireUserId(req), params.gymId, body, gate(memberWriteLimit)(req, reply));
+    if (session === null) return;
+    return reply.status(200).send({ session });
+  });
+
+  app.post("/v1/orgs/:gymId/member-pt/sessions/:appointmentId/cancel", member, async (req, reply) => {
+    const params = parseOr400(appointmentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberCancelPtRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const session = await memberService.memberCancel(memberDeps, requireUserId(req), params.gymId, params.appointmentId, body, gate(memberWriteLimit)(req, reply));
+      if (session === null) return;
+      return await reply.status(200).send({ session });
+    } catch (err) {
+      if (!(err instanceof service.PtLateCancel)) throw err;
+      // A member's late cancel keeps the session used; the box says so before they confirm.
       return reply.status(409).send({ error: PT_LATE_CANCEL_ERROR, message: err.message, packCharged: err.packCharged, requestId: req.id });
     }
   });

@@ -39,17 +39,19 @@ const holdsPt = (sql: SqlOrTx, day: PendingQuery<Row[]>) => sql`
 export interface GymClock {
   timezone: string;
   freeCancelMinutes: number;
+  /** How many days before a class or a session a member's own booking opens. */
+  opensDays: number;
   /** Whether the gym has any membership type on its price list. */
   hasTypes: boolean;
 }
 
 export async function gymClock(sql: SqlOrTx, gymId: string): Promise<GymClock | null> {
-  const rows = await sql<{ timezone: string; free: number; has_types: boolean }[]>`
-    SELECT g.timezone, g.booking_free_cancel_minutes AS free,
+  const rows = await sql<{ timezone: string; free: number; opens: number; has_types: boolean }[]>`
+    SELECT g.timezone, g.booking_free_cancel_minutes AS free, g.booking_opens_days AS opens,
            EXISTS (SELECT 1 FROM gym_membership_types mt WHERE mt.gym_id = g.id AND mt.archived_at IS NULL) AS has_types
     FROM gyms g WHERE g.id = ${gymId}`;
   const r = rows[0];
-  return r === undefined ? null : { timezone: r.timezone, freeCancelMinutes: r.free, hasTypes: r.has_types };
+  return r === undefined ? null : { timezone: r.timezone, freeCancelMinutes: r.free, opensDays: r.opens, hasTypes: r.has_types };
 }
 
 export interface TrainerRow {
@@ -636,4 +638,135 @@ export async function classesInSpan(sql: SqlOrTx, gymId: string, trainerId: stri
       AND s.starts_at + make_interval(mins => s.minutes) > GREATEST(${from}::timestamptz, ${now}::timestamptz)
     ORDER BY s.starts_at, s.id`;
   return rows.map((r) => ({ id: r.id, name: r.name, localDate: r.local_date, localStartMinute: r.local_start_minute, minutes: r.minutes }));
+}
+
+// ── A MEMBER'S OWN SESSIONS (17e-ii) ──
+
+/** The reader as a member of this gym's app: null for anybody who is not one now. Their
+ *  record on the gym's list is what a session hangs on; `entryId` null where they have
+ *  none, or it is a past member's. */
+export async function memberRecord(sql: SqlOrTx, gymId: string, userId: string): Promise<{ entryId: string | null } | null> {
+  const rows = await sql<{ entry_id: string | null }[]>`
+    SELECT e.id AS entry_id
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id AND u.status = 'active'
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
+    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL
+    LIMIT 1`;
+  const r = rows[0];
+  return r === undefined ? null : { entryId: r.entry_id };
+}
+
+/** Everything that takes these trainers' time between two instants, as spans alone: the
+ *  sessions booked with them, the taught classes they coach and their time off. No name
+ *  and no reason leaves the database, so a member's read cannot show one. */
+export async function busyOfTrainers(
+  sql: SqlOrTx,
+  gymId: string,
+  trainerIds: readonly string[],
+  from: Date,
+  to: Date,
+): Promise<(PtSpan & { trainerId: string })[]> {
+  if (trainerIds.length === 0) return [];
+  const ids = [...trainerIds];
+  const rows = await sql<{ trainer_id: string; starts_at: Date; ends_at: Date }[]>`
+    SELECT a.trainer_user_id AS trainer_id, a.starts_at, a.ends_at
+    FROM gym_pt_appointments a
+    WHERE a.gym_id = ${gymId} AND a.trainer_user_id = ANY(${ids}::uuid[])
+      AND a.status = ANY(${[...PT_HOLDS_TIME]}::text[])
+      AND a.starts_at < ${to} AND a.ends_at > ${from}
+    UNION ALL
+    SELECT s.coach_user_id, s.starts_at, s.starts_at + make_interval(mins => s.minutes)
+    FROM gym_class_sessions s
+    JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
+    WHERE s.gym_id = ${gymId} AND s.coach_user_id = ANY(${ids}::uuid[]) AND s.status = 'scheduled' AND NOT t.open_gym
+      AND s.starts_at < ${to}
+      AND s.starts_at > ${from}::timestamptz - make_interval(mins => ${CLASS_MINUTES_MAX}::int)
+      AND s.starts_at + make_interval(mins => s.minutes) > ${from}
+    UNION ALL
+    SELECT o.user_id, o.starts_at, o.ends_at
+    FROM gym_trainer_time_off o
+    WHERE o.gym_id = ${gymId} AND o.user_id = ANY(${ids}::uuid[]) AND o.starts_at < ${to} AND o.ends_at > ${from}`;
+  return rows.map((r) => ({ trainerId: r.trainer_id, fromMs: r.starts_at.getTime(), toMs: r.ends_at.getTime() }));
+}
+
+export interface OwnSessionRow {
+  id: string;
+  trainerName: string | null;
+  trainerEmail: string | null;
+  localDate: string;
+  localStartMinute: number;
+  minutes: number;
+  startsAt: Date;
+  status: PtAppointmentStatus;
+  packCharged: boolean;
+}
+
+const rawOwnSession = z.object({
+  id: z.string(),
+  trainer_name: z.string().nullable(),
+  trainer_email: z.string().nullable(),
+  local_date: z.string(),
+  local_start_minute: z.number().int(),
+  minutes: z.number().int(),
+  starts_at: z.date(),
+  status: ptAppointmentStatusSchema,
+  pack_charged: z.boolean(),
+});
+
+function toOwnSession(row: unknown): OwnSessionRow {
+  const r = rawOwnSession.parse(row);
+  return {
+    id: r.id,
+    trainerName: r.trainer_name,
+    trainerEmail: r.trainer_email,
+    localDate: r.local_date,
+    localStartMinute: r.local_start_minute,
+    minutes: r.minutes,
+    startsAt: r.starts_at,
+    status: r.status,
+    packCharged: r.pack_charged,
+  };
+}
+
+const OWN_SESSION = (sql: SqlOrTx) => sql`
+  a.id, u.display_name AS trainer_name, u.email AS trainer_email, a.local_date::text AS local_date, a.local_start_minute,
+  a.minutes, a.starts_at, a.status, a.pack_charged
+  FROM gym_pt_appointments a
+  LEFT JOIN users u ON u.id = a.trainer_user_id`;
+
+/** The sessions booked for one record of this gym's list that are not over at `now`, the
+ *  earliest first: the record's own, whoever booked them. */
+export async function sessionsOfEntry(sql: SqlOrTx, gymId: string, entryId: string, now: Date, limit: number): Promise<OwnSessionRow[]> {
+  const rows = await sql`
+    SELECT ${OWN_SESSION(sql)}
+    WHERE a.gym_id = ${gymId} AND a.entry_id = ${entryId} AND a.status = 'booked' AND a.ends_at > ${now}
+    ORDER BY a.starts_at, a.id
+    LIMIT ${limit}`;
+  return rows.map(toOwnSession);
+}
+
+/** One session of this gym's, only where it is this record's. */
+export async function sessionOfEntry(sql: SqlOrTx, gymId: string, entryId: string, id: string): Promise<OwnSessionRow | null> {
+  const rows = await sql`
+    SELECT ${OWN_SESSION(sql)}
+    WHERE a.gym_id = ${gymId} AND a.entry_id = ${entryId} AND a.id = ${id}`;
+  const row = rows[0];
+  return row === undefined ? null : toOwnSession(row);
+}
+
+/** Whether a session already holds any of this trainer's time on a clock time of the gym's
+ *  day. A plain read: the answer to a member's press on a time that has gone, before any
+ *  lock is taken. */
+export async function trainerHolds(sql: SqlOrTx, gymId: string, trainerId: string, day: string, startMinute: number, minutes: number): Promise<boolean> {
+  const rows = await sql<{ held: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM gym_pt_appointments a
+      JOIN gyms g ON g.id = a.gym_id
+      WHERE a.gym_id = ${gymId} AND a.trainer_user_id = ${trainerId}
+        AND a.status = ANY(${[...PT_HOLDS_TIME]}::text[])
+        AND a.starts_at < ((${day}::date + make_interval(mins => ${startMinute + minutes}::int)) AT TIME ZONE g.timezone)
+        AND a.ends_at > ((${day}::date + make_interval(mins => ${startMinute}::int)) AT TIME ZONE g.timezone)
+    ) AS held`;
+  return rows[0]?.held ?? false;
 }

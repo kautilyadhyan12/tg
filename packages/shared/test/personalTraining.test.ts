@@ -48,7 +48,7 @@ const held = (id: string, membership: HeldMembership, includesPt: boolean): PtHe
 const cover = (list: PtHeld[], gymHasTypes = true): PtCover => pickPtCover({ gymHasTypes, day: DAY, held: list });
 
 const covered: PtCover = { ok: true, membershipId: "m", chargePack: true };
-const fine: PtBookInput = { offers: true, offered: true, started: false, tooFar: false, trainerBusy: false, trainerInClass: false, trainerOff: false, personBusy: false, cover: covered };
+const fine: PtBookInput = { offers: true, offered: true, started: false, tooFar: false, notOpenYet: false, trainerBusy: false, trainerInClass: false, trainerOff: false, personBusy: false, cover: covered };
 
 describe("the worst thing: two people with one trainer at one time, or a pack charged for nothing", () => {
   it("a time the trainer already has a session in is refused, whoever asks and whatever they hold", () => {
@@ -86,6 +86,7 @@ describe("the worst thing: two people with one trainer at one time, or a pack ch
       { offered: false },
       { started: true },
       { tooFar: true },
+      { notOpenYet: true },
       { trainerBusy: true },
       { trainerInClass: true },
       { personBusy: true },
@@ -126,6 +127,7 @@ describe("decidePtBook: the first thing wrong is the one said", () => {
     ["not one of their times", { offered: false, started: true, tooFar: true }, "not_a_time"],
     ["a time that has passed", { started: true, trainerBusy: true }, "time_passed"],
     ["more than eight weeks ahead", { tooFar: true, trainerBusy: true }, "too_far"],
+    ["a member, before the gym's bookings open", { notOpenYet: true, trainerBusy: true, personBusy: true }, "not_open_yet"],
     ["the trainer is busy", { trainerBusy: true, trainerInClass: true, personBusy: true }, "time_taken"],
     ["the trainer is coaching a class", { trainerInClass: true, personBusy: true }, "trainer_in_class"],
     ["the person is busy", { personBusy: true, cover: { ok: false, reason: "not_covered" } }, "person_busy"],

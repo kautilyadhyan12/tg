@@ -2882,6 +2882,30 @@ A booking or a cancel reads the steps again while they are on screen. **From Kd'
 click-through:** a time that can be booked is an "available time" on every line of the page
 (it was "free time"), a trainer is "available", and a trainer's name in the Trainers list
 opens their week as See week does, with the week brought into view.)*
+*(17e-ii, 2026-10-08: **the member books and cancels their own.** Three routes for a live app
+member of a gym on a live plan, 404 for anybody else: `GET …/member-pt?week=0..7` (seven of
+the gym's days: the trainers taking sessions, each day's times that member can book, what
+would pay on each day by the booking's own rule, and the reader's own coming sessions,
+whoever booked them), `POST …/member-pt/sessions` and `POST …/member-pt/sessions/:id/cancel`.
+**Nothing takes a person from the request:** the session is for the reader's own record on
+the gym's list, read under the gym's lock; a body that names one is a 400; a session is found
+only where it is that record's. What takes a trainer's time is read as spans alone
+(`busyOfTrainers`), so no name, class or time off reaches a member, and a time that has gone
+is refused in one sentence whatever took it (`PT_MEMBER_WORDS`). The booking and the cancel
+are the staff side's own rule (`bookUnderLock`, `cancelUnderLock`). **What differs for a
+member:** a time can be booked once the gym's class bookings would be open for it (Settings →
+Class bookings, 7 days to start with; 409 `not_open_yet`), never past the eight weeks; a late
+cancel keeps the session used and a member cannot give one back (`{ lateOk }` alone); their
+own session takes their own time with every trainer; a trainer who is also a member is not
+offered themself; somebody in the app with no record on the list reads so and books nothing
+(409 `not_on_list`). A time somebody already holds is refused from a plain read before the
+lock, in the server's line of members' writes. The audit rows are `member.pt_booked` and
+`member.pt_cancelled`. The member web's **Personal training** tab on My Gyms, beside Classes:
+each available time is a button reading its whole session and books at one press; with
+nothing that pays the times show as plain text under who to ask; Your sessions has Cancel
+session, which asks first and says what a late cancel costs. Nobody is told (the inbox, 20a):
+the session is on the trainer's week. Not done: sessions ended when a person or a trainer
+leaves, came and no-show (17e-iv).)*
 
 ### 13.6 The calendar, the desk and the messages
 

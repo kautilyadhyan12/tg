@@ -20,10 +20,11 @@
 // of them always sees the other; a time off over a session or a class already there names
 // them and writes nothing until the request confirms exactly those.
 import { createHash } from "node:crypto";
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import {
   PT_HORIZON_DAYS,
   PT_KEPT_USED_ERROR,
+  PT_MEMBER_WORDS,
   PT_NOT_KEPT_ERROR,
   PT_PEOPLE_SHOWN,
   PT_TIME_OFF_OVER_MESSAGE,
@@ -102,6 +103,7 @@ const STATUS: Record<PtBookRefusal, number> = {
   not_a_time: 409,
   time_passed: 409,
   too_far: 409,
+  not_open_yet: 409,
   time_taken: 409,
   trainer_in_class: 409,
   trainer_off: 409,
@@ -301,6 +303,14 @@ export async function getPeople(deps: PtDeps, staffId: string, gymId: string, qu
   people.sort((a, b) => Number(a.pt === null) - Number(b.pt === null) || byName(a.name, b.name) || (a.entryId < b.entryId ? -1 : 1));
   return ptPeopleResponseSchema.parse({ gymHasTypes: clock.hasTypes, people, more: rows.length > PT_PEOPLE_SHOWN });
 }
+const DAY_MS = 24 * 60 * 60_000;
+
+/** Who is booking or cancelling: staff, or a member of the app doing their own (17e-ii). */
+export interface PtActor {
+  userId: string;
+  member: boolean;
+}
+
 /** Book a session for a person on the member list. */
 export async function book(deps: PtDeps, staffId: string, gymId: string, req: BookPtRequest, limit: Limit): Promise<PtAppointment | null> {
   const standing = await standingOf(deps, gymId, staffId);
@@ -310,103 +320,113 @@ export async function book(deps: PtDeps, staffId: string, gymId: string, req: Bo
 
   const outcome = await deps.sql.begin(async (tx): Promise<OrgsError | string> => {
     await lockOrgRow(tx, gymId);
-    // The same request again: the session it made stands, and nothing is added.
-    const again = await repo.byKey(tx, gymId, req.requestKey);
-    if (again !== null) {
-      const same =
-        again.trainerId === req.trainerId &&
-        again.entryId === req.entryId &&
-        again.localDate === req.localDate &&
-        again.localStartMinute === req.startMinute &&
-        again.minutes === req.minutes;
-      return same ? again.id : new OrgsError(409, "request_reused", PT_WORDS.request_reused);
-    }
-    const [clock, trainers, entry] = await Promise.all([
-      repo.gymClock(tx, gymId),
-      repo.staffTrainers(tx, gymId, req.trainerId),
-      repo.currentEntry(tx, gymId, req.entryId),
-    ]);
-    const trainer = trainers[0];
-    if (clock === null) return notFound();
-    if (trainer === undefined) return new OrgsError(404, "trainer_not_found", PT_WORDS.trainer_not_found);
-    if (entry === null) return new OrgsError(404, "person_not_found", PT_WORDS.person_not_found);
-
-    const now = deps.now();
-    const today = dayInTz(now, clock.timezone);
-    const minutes = trainer.sessionMinutes;
-    const offers = trainer.offers && minutes !== null;
-    // The length the screen showed is the one booked: a trainer whose length has changed
-    // since offers different times, and this one is no longer theirs.
-    const isOffered =
-      offers && minutes === req.minutes && ptOfferedTimes(trainer.hours, minutes, [req.localDate]).some((t) => t.startMinute === req.startMinute);
-    // The time as an instant; none where the gym's clock skips it on that day.
-    const [slot] = isOffered ? await repo.instantsOf(tx, clock.timezone, [{ localDate: req.localDate, startMinute: req.startMinute }]) : [];
-    const startsAt = slot === undefined ? null : new Date(slot.startsAtMs);
-    const span = startsAt === null || minutes === null ? null : { from: startsAt, to: new Date(startsAt.getTime() + minutes * 60_000) };
-    // The calendar's far edge is written by the nightly job. Should it have missed a night,
-    // the classes this trainer coaches are written here first for a day in the last week
-    // of the window, so no session is booked on a day whose classes are not on the calendar yet.
-    if (span !== null && req.localDate > addDays(today, PT_HORIZON_DAYS - 8)) {
-      const scheduleIds = await repo.coachedSlotIds(tx, gymId, trainer.userId);
-      if (scheduleIds.length > 0) await fillClassSessions(tx, { gymIds: [gymId], scheduleIds, now });
-    }
-    const [trainerTaken, personTaken, coached, timeOff, held] = await Promise.all([
-      span === null ? [] : repo.takenBy(tx, gymId, { trainerId: trainer.userId }, span.from, span.to),
-      span === null ? [] : repo.takenBy(tx, gymId, { entryId: req.entryId }, span.from, span.to),
-      // The timetable is written under this same lock, so the classes read here stand.
-      span === null ? [] : repo.classesCoached(tx, gymId, trainer.userId, clock.timezone, req.localDate, req.localDate),
-      // Time off is written under this same lock too.
-      span === null ? [] : repo.timeOffOn(tx, gymId, trainer.userId, req.localDate, req.localDate),
-      clock.hasTypes ? heldForPt(tx, gymId, req.entryId) : [],
-    ]);
-    const busy = (taken: Awaited<ReturnType<typeof repo.takenBy>>) => startsAt !== null && minutes !== null && ptBusy(startsAt.getTime(), minutes, taken);
-    const decision = decidePtBook({
-      offers,
-      offered: startsAt !== null,
-      started: startsAt !== null && ptTime(now.getTime(), startsAt.getTime(), clock.freeCancelMinutes).started,
-      tooFar: req.localDate > addDays(today, PT_HORIZON_DAYS - 1),
-      trainerBusy: busy(trainerTaken),
-      trainerInClass: busy(coached),
-      trainerOff: busy(timeOff),
-      personBusy: busy(personTaken),
-      cover: pickPtCover({ gymHasTypes: clock.hasTypes, day: req.localDate, held }),
-    });
-    if (decision.kind === "refuse") return new OrgsError(STATUS[decision.reason], decision.reason, PT_WORDS[decision.reason]);
-    if (startsAt === null || minutes === null) throw new Error("a session was decided with no time");
-
-    const id = await repo.insertAppointment(tx, {
-      gymId,
-      trainerId: trainer.userId,
-      entryId: req.entryId,
-      heldMembershipId: decision.membershipId,
-      localDate: req.localDate,
-      startMinute: req.startMinute,
-      startsAt,
-      minutes,
-      packCharged: decision.chargePack,
-      requestKey: req.requestKey,
-      bookedBy: staffId,
-      now,
-    });
-    // The table's own refusal: the rule above read the same rows under the same lock, so
-    // this is the backstop, answered in the rule's words.
-    if (id === null) return new OrgsError(409, "time_taken", PT_WORDS.time_taken);
-    // The pack is charged after the session exists, in the same transaction.
-    if (decision.chargePack && decision.membershipId !== null && !(await chargePack(tx, gymId, decision.membershipId, now))) {
-      throw new Error("a pack the rule chose had no session left");
-    }
-    await insertAudit(tx, {
-      actorUserId: staffId,
-      gymId,
-      action: "org.pt_booked",
-      targetType: "gym_pt_appointment",
-      targetId: id,
-      meta: { trainerId: trainer.userId, entryId: req.entryId, on: req.localDate, at: String(req.startMinute), packCharged: String(decision.chargePack) },
-    });
-    return id;
+    return await bookUnderLock(tx, deps.now(), gymId, req, { userId: staffId, member: false });
   });
   if (typeof outcome !== "string") throw outcome;
   return await appointmentView(deps, standing, gymId, outcome);
+}
+
+/** The booking itself, for staff and for a member's own: the caller's transaction holds the
+ *  gym's lock, and has settled who `req.entryId` is. One rule for both; a member's is also
+ *  held to the days the gym's bookings are open, and is answered in a member's words. The
+ *  session's id, or the refusal. */
+export async function bookUnderLock(tx: TransactionSql, now: Date, gymId: string, req: BookPtRequest, by: PtActor): Promise<OrgsError | string> {
+  const words = by.member ? PT_MEMBER_WORDS : PT_WORDS;
+  // The same request again: the session it made stands, and nothing is added.
+  const again = await repo.byKey(tx, gymId, req.requestKey);
+  if (again !== null) {
+    const same =
+      again.trainerId === req.trainerId &&
+      again.entryId === req.entryId &&
+      again.localDate === req.localDate &&
+      again.localStartMinute === req.startMinute &&
+      again.minutes === req.minutes;
+    return same ? again.id : new OrgsError(409, "request_reused", PT_WORDS.request_reused);
+  }
+  const [clock, trainers, entry] = await Promise.all([
+    repo.gymClock(tx, gymId),
+    repo.staffTrainers(tx, gymId, req.trainerId),
+    repo.currentEntry(tx, gymId, req.entryId),
+  ]);
+  const trainer = trainers[0];
+  if (clock === null) return notFound();
+  if (trainer === undefined) return new OrgsError(404, "trainer_not_found", by.member ? words.trainer_not_offering : PT_WORDS.trainer_not_found);
+  if (entry === null) return new OrgsError(404, "person_not_found", PT_WORDS.person_not_found);
+
+  const today = dayInTz(now, clock.timezone);
+  const minutes = trainer.sessionMinutes;
+  const offers = trainer.offers && minutes !== null;
+  // The length the screen showed is the one booked: a trainer whose length has changed
+  // since offers different times, and this one is no longer theirs.
+  const isOffered =
+    offers && minutes === req.minutes && ptOfferedTimes(trainer.hours, minutes, [req.localDate]).some((t) => t.startMinute === req.startMinute);
+  // The time as an instant; none where the gym's clock skips it on that day.
+  const [slot] = isOffered ? await repo.instantsOf(tx, clock.timezone, [{ localDate: req.localDate, startMinute: req.startMinute }]) : [];
+  const startsAt = slot === undefined ? null : new Date(slot.startsAtMs);
+  const span = startsAt === null || minutes === null ? null : { from: startsAt, to: new Date(startsAt.getTime() + minutes * 60_000) };
+  // The calendar's far edge is written by the nightly job. Should it have missed a night,
+  // the classes this trainer coaches are written here first for a day in the last week
+  // of the window, so no session is booked on a day whose classes are not on the calendar yet.
+  if (span !== null && req.localDate > addDays(today, PT_HORIZON_DAYS - 8)) {
+    const scheduleIds = await repo.coachedSlotIds(tx, gymId, trainer.userId);
+    if (scheduleIds.length > 0) await fillClassSessions(tx, { gymIds: [gymId], scheduleIds, now });
+  }
+  const [trainerTaken, personTaken, coached, timeOff, held] = await Promise.all([
+    span === null ? [] : repo.takenBy(tx, gymId, { trainerId: trainer.userId }, span.from, span.to),
+    span === null ? [] : repo.takenBy(tx, gymId, { entryId: req.entryId }, span.from, span.to),
+    // The timetable is written under this same lock, so the classes read here stand.
+    span === null ? [] : repo.classesCoached(tx, gymId, trainer.userId, clock.timezone, req.localDate, req.localDate),
+    // Time off is written under this same lock too.
+    span === null ? [] : repo.timeOffOn(tx, gymId, trainer.userId, req.localDate, req.localDate),
+    clock.hasTypes ? heldForPt(tx, gymId, req.entryId) : [],
+  ]);
+  const busy = (taken: Awaited<ReturnType<typeof repo.takenBy>>) => startsAt !== null && minutes !== null && ptBusy(startsAt.getTime(), minutes, taken);
+  const decision = decidePtBook({
+    offers,
+    offered: startsAt !== null,
+    started: startsAt !== null && ptTime(now.getTime(), startsAt.getTime(), clock.freeCancelMinutes).started,
+    tooFar: req.localDate > addDays(today, PT_HORIZON_DAYS - 1),
+    // A member's own booking opens when the gym's class bookings do.
+    notOpenYet: by.member && startsAt !== null && startsAt.getTime() - now.getTime() > clock.opensDays * DAY_MS,
+    trainerBusy: busy(trainerTaken),
+    trainerInClass: busy(coached),
+    trainerOff: busy(timeOff),
+    personBusy: busy(personTaken),
+    cover: pickPtCover({ gymHasTypes: clock.hasTypes, day: req.localDate, held }),
+  });
+  if (decision.kind === "refuse") return new OrgsError(STATUS[decision.reason], decision.reason, words[decision.reason]);
+  if (startsAt === null || minutes === null) throw new Error("a session was decided with no time");
+
+  const id = await repo.insertAppointment(tx, {
+    gymId,
+    trainerId: trainer.userId,
+    entryId: req.entryId,
+    heldMembershipId: decision.membershipId,
+    localDate: req.localDate,
+    startMinute: req.startMinute,
+    startsAt,
+    minutes,
+    packCharged: decision.chargePack,
+    requestKey: req.requestKey,
+    bookedBy: by.userId,
+    now,
+  });
+  // The table's own refusal: the rule above read the same rows under the same lock, so
+  // this is the backstop, answered in the rule's words.
+  if (id === null) return new OrgsError(409, "time_taken", words.time_taken);
+  // The pack is charged after the session exists, in the same transaction.
+  if (decision.chargePack && decision.membershipId !== null && !(await chargePack(tx, gymId, decision.membershipId, now))) {
+    throw new Error("a pack the rule chose had no session left");
+  }
+  await insertAudit(tx, {
+    actorUserId: by.userId,
+    gymId,
+    action: by.member ? "member.pt_booked" : "org.pt_booked",
+    targetType: "gym_pt_appointment",
+    targetId: id,
+    meta: { trainerId: trainer.userId, entryId: req.entryId, on: req.localDate, at: String(req.startMinute), packCharged: String(decision.chargePack) },
+  });
+  return id;
 }
 
 async function appointmentView(deps: PtDeps, standing: Standing, gymId: string, id: string): Promise<PtAppointment> {
@@ -445,37 +465,52 @@ export async function cancel(
 
   const refused = await deps.sql.begin(async (tx): Promise<OrgsError | PtLateCancel | null> => {
     await lockOrgRow(tx, gymId);
-    const [row, clock] = await Promise.all([repo.appointmentById(tx, gymId, appointmentId, true), repo.gymClock(tx, gymId)]);
-    if (row === null || clock === null) return appointmentNotFound();
-    const now = deps.now();
-    const decision = decidePtCancel({
-      status: row.status,
-      ...ptTime(now.getTime(), row.startsAt.getTime(), clock.freeCancelMinutes),
-      packCharged: row.packCharged,
-      lateOk: req.lateOk,
-      giveBack: req.giveBack,
-    });
-    if (decision.kind === "already") return null;
-    if (decision.kind === "refuse") {
-      if (decision.reason === "late_cancel") return new PtLateCancel(row.packCharged);
-      if (decision.reason === "kept_used") return new OrgsError(409, PT_KEPT_USED_ERROR, PT_WORDS.kept_used);
-      if (decision.reason === "not_kept") return new OrgsError(409, PT_NOT_KEPT_ERROR, PT_WORDS.not_kept);
-      return new OrgsError(409, "started", PT_WORDS.started);
-    }
-    await repo.markCancelled(tx, { gymId, id: row.id, status: decision.status, packCharged: row.packCharged && !decision.refundPack, now });
-    if (decision.refundPack && row.heldMembershipId !== null) await givePackClassBack(tx, gymId, row.heldMembershipId, now);
-    await insertAudit(tx, {
-      actorUserId: staffId,
-      gymId,
-      action: "org.pt_cancelled",
-      targetType: "gym_pt_appointment",
-      targetId: row.id,
-      meta: { status: decision.status, packSessionBack: String(decision.refundPack) },
-    });
-    return null;
+    return await cancelUnderLock(tx, deps.now(), gymId, appointmentId, req, { userId: staffId, member: false }, null);
   });
   if (refused !== null) throw refused;
   return await appointmentView(deps, standing, gymId, appointmentId);
+}
+
+/** The cancel itself, for staff and for a member's own: the caller's transaction holds the
+ *  gym's lock. `onlyEntryId`: the one record whose session this may be (a member's own);
+ *  anybody else's is not found. Null where it went through or was already done. */
+export async function cancelUnderLock(
+  tx: TransactionSql,
+  now: Date,
+  gymId: string,
+  appointmentId: string,
+  req: CancelPtRequest,
+  by: PtActor,
+  onlyEntryId: string | null,
+): Promise<OrgsError | PtLateCancel | null> {
+  const [row, clock] = await Promise.all([repo.appointmentById(tx, gymId, appointmentId, true), repo.gymClock(tx, gymId)]);
+  if (row === null || clock === null) return appointmentNotFound();
+  if (by.member && (onlyEntryId === null || row.entryId !== onlyEntryId)) return appointmentNotFound();
+  const decision = decidePtCancel({
+    status: row.status,
+    ...ptTime(now.getTime(), row.startsAt.getTime(), clock.freeCancelMinutes),
+    packCharged: row.packCharged,
+    lateOk: req.lateOk,
+    giveBack: req.giveBack,
+  });
+  if (decision.kind === "already") return null;
+  if (decision.kind === "refuse") {
+    if (decision.reason === "late_cancel") return new PtLateCancel(row.packCharged);
+    if (decision.reason === "kept_used") return new OrgsError(409, PT_KEPT_USED_ERROR, PT_WORDS.kept_used);
+    if (decision.reason === "not_kept") return new OrgsError(409, PT_NOT_KEPT_ERROR, PT_WORDS.not_kept);
+    return new OrgsError(409, "started", PT_WORDS.started);
+  }
+  await repo.markCancelled(tx, { gymId, id: row.id, status: decision.status, packCharged: row.packCharged && !decision.refundPack, now });
+  if (decision.refundPack && row.heldMembershipId !== null) await givePackClassBack(tx, gymId, row.heldMembershipId, now);
+  await insertAudit(tx, {
+    actorUserId: by.userId,
+    gymId,
+    action: by.member ? "member.pt_cancelled" : "org.pt_cancelled",
+    targetType: "gym_pt_appointment",
+    targetId: row.id,
+    meta: { status: decision.status, packSessionBack: String(decision.refundPack) },
+  });
+  return null;
 }
 
 // ── A TRAINER'S TIME OFF (17e-iii-b) ──
