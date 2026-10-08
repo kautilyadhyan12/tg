@@ -3058,6 +3058,11 @@ link · **18d** the first Connect button, once its developer account exists · *
 **18f** the others. 18a needs 17a. ONE feature for CLAUDE.md §6; the extra passes run
 over 18a–18c before a gym uses them, and again over each Connect button — reviewed by
 RUNNING the company's real sandbox, never a mock alone.
+*(2026-10-08, RULINGS that day: six more cards, each a line in ROADMAP — **18g** receipts ·
+**18h** a fee for a late cancel or a no-show · **18i** family plans, one person paying for
+several · **18j** My membership, the member's own view · **18k** a member buys and pays in
+the app · **18l** a member stops their own repeating membership. 18k and 18l need a Connect
+button; tax on what a gym sells is settled in 18b's plan.)*
 
 ### 14.7 Where the facts came from (read 2026-09-21 and 2026-09-22)
 
@@ -3069,6 +3074,27 @@ are invite-only in India" · GoCardless docs: "For Partner Integrators", "Going 
 with your integration" · GoCardless's own guides (82 % of UK gym payments by Direct
 Debit; in the US since 2018) · Razorpay docs: "Technology Partners", "Integrate with
 Razorpay OAuth" · Paddle: pricing, identity verification.
+
+*(Read again 2026-10-08, with Kd's talk about Square and the stores; RULINGS that day.)*
+Square, "International Development": "Square APIs can be used by developers worldwide,
+with payment processing supported in select countries", and "The Square Sandbox is only
+available in regions where payment processing is supported" — so whether an account made
+from India is given a test area is still proved only by trying · "OAuth and Testing":
+"When developing an integration for other Square sellers, you must implement the Square
+OAuth flow using the OAuth API"; application fees need "a Square account in the seller's
+country" · "Test in Unsupported Regions": "Square hardware only works in Square-supported
+countries" · its Cards API and Subscriptions API pages (found by search, not read page by
+page): only credit and debit cards are saved; a payment made with Apple Pay, Google Pay or
+Cash App Pay cannot be used to save a card; a subscription takes no bank debit; the buyer
+is asked before a card is saved · Apple's App Review Guidelines 3.1.3(e): "If your app
+enables people to purchase physical goods or services that will be consumed outside of
+the app, you must use purchase methods other than in-app purchase to collect those
+payments, such as Apple Pay or traditional credit card entry" · Google Play's Payments
+policy: §3 names "gym memberships" among the physical services for which Play's billing
+"must not be used", and §4's rule that "apps may not lead users to a payment method other
+than Google Play's billing system" opens "Other than the conditions described in Section
+3, Section 8, and Section 9". When a gym's bank is paid is Square's payout setting for
+that gym; nothing here moves it.
 
 ---
 
