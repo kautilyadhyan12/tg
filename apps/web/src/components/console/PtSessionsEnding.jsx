@@ -80,7 +80,7 @@ export function PtSessionsEndDialog({ name, ending, clockFormat, from = 'app', m
           ) : null}
         </div>
         <div
-          className="grid grid-cols-[1fr_auto] md:flex md:justify-end gap-2 md:gap-3 px-4 pt-3 pb-5 md:px-7 md:py-4 border-t"
+          className="grid grid-cols-1 md:flex md:justify-end gap-2 md:gap-3 px-4 pt-3 pb-5 md:px-7 md:py-4 border-t"
           style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
         >
           <button type="button" onClick={onConfirm} disabled={busy} data-testid="pt-sessions-end-confirm" className="c-btn c-btn-danger c-btn-lg md:order-2">
