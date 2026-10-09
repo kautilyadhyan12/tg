@@ -5,7 +5,7 @@
 // the BODY sent, not only that a call happened — a wrong body puts a number on
 // a calendar that nobody typed.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 const api = {
@@ -21,6 +21,8 @@ const api = {
   restoreClass: vi.fn(),
   getStaff: vi.fn(),
   getBookingSettings: vi.fn(),
+  setClassRepeatOnline: vi.fn(),
+  getClassRepeatOnline: vi.fn(),
 };
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -103,6 +105,8 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
   api.addClassRepeat.mockReset().mockResolvedValue(timetable());
+  api.setClassRepeatOnline.mockReset().mockResolvedValue(timetable());
+  api.getClassRepeatOnline.mockReset().mockResolvedValue({ data: { classes: 16, booked: 31 } });
   api.updateClassRepeat.mockReset().mockResolvedValue(timetable());
   api.bulkEditClass.mockReset().mockResolvedValue(timetable());
   api.stopClassRepeat.mockReset().mockResolvedValue(timetable({ entries: [{ type: YOGA, schedules: [] }] }));
@@ -1226,5 +1230,88 @@ describe("a class saved over its coach's personal training sessions", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save anyway' }));
     await waitFor(() => expect(api.bulkEditClass).toHaveBeenCalledTimes(2));
     expect(api.bulkEditClass.mock.calls[1][2]).toEqual({ ...api.bulkEditClass.mock.calls[0][2], confirmTrainerSessions: OVER_MARK });
+  });
+});
+
+// ONLINE CLASSES (17g): the tick and the gym's own video link, on a new time slot and
+// on one already running.
+describe('an online time slot', () => {
+  const LINK = 'https://us02web.zoom.us/j/81234567890?pwd=abc';
+  const openSlotForm = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Add time slot' }));
+    return screen.findByRole('button', { name: 'Add time slot' });
+  };
+
+  it('a new time slot ticked Online sends the tick and the link; a bad link is said and nothing is sent', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    const save = await openSlotForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Tue' }));
+    // Nothing about a link until the box is ticked.
+    expect(screen.queryByLabelText('Video link')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Online class'));
+    expect(screen.getByText('People who are booked see the link in the app from 30 minutes before the class until it ends. No other member sees it.')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Video link'), { target: { value: 'zoom.us/j/81234567890' } });
+    expect(screen.getByText('Paste the whole link, starting with https://')).toBeTruthy();
+    expect(save.disabled).toBe(true);
+    fireEvent.click(save);
+    expect(api.addClassRepeat).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Video link'), { target: { value: LINK } });
+    expect(screen.queryByText('Paste the whole link, starting with https://')).toBeNull();
+    fireEvent.click(save);
+    await waitFor(() => expect(api.addClassRepeat).toHaveBeenCalledTimes(1));
+    expect(api.addClassRepeat.mock.calls[0][2]).toMatchObject({ weekdays: [2], online: true, onlineLink: LINK });
+  });
+
+  it('a time slot at the gym offers Make it online; Close sends nothing, Save sends the tick and the link', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.queryByText(/Online class ·/)).toBeNull();
+    const open = () => fireEvent.click(screen.getByRole('button', { name: /^Make it online: the / }));
+    open();
+    const box = within(screen.getByRole('group', { name: 'Online class' }));
+    expect(box.getByText('This changes every coming class of this time slot, except a class you gave a link of its own.')).toBeTruthy();
+    expect(box.getByText("The app doesn't tell people who are already booked yet. Tell them yourself if this changes for them.")).toBeTruthy();
+    // How many it reaches, read from the server as the box opens.
+    expect((await box.findByTestId('online-affected')).textContent).toBe('31 bookings are held on the 16 coming classes this changes.');
+    expect(api.getClassRepeatOnline).toHaveBeenCalledWith('g1', 's1');
+    // Nothing changed yet, so there is nothing to save.
+    expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+    fireEvent.click(box.getByLabelText('Online class'));
+    fireEvent.click(box.getByRole('button', { name: 'Close' }));
+    expect(api.setClassRepeatOnline).not.toHaveBeenCalled();
+
+    api.setClassRepeatOnline.mockResolvedValue(withSlot({ online: true, onlineLink: LINK }));
+    open();
+    const again = within(screen.getByRole('group', { name: 'Online class' }));
+    fireEvent.click(again.getByLabelText('Online class'));
+    fireEvent.change(again.getByLabelText('Video link'), { target: { value: LINK } });
+    fireEvent.click(again.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.setClassRepeatOnline).toHaveBeenCalledWith('g1', 's1', { online: true, onlineLink: LINK }));
+    // The row now says so, from the server's answer, and its button changes the link.
+    expect(await screen.findByText('Online class · link added')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Change link: the / })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Online class' })).toBeNull();
+  });
+
+  it('an online time slot with no link says so, and its button adds it; switching it off sends no link', async () => {
+    api.getClasses.mockResolvedValue(withSlot({ online: true, onlineLink: null }));
+    drawScreen();
+    expect(await screen.findByText('Online class · no link yet')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^Add the link: the / }));
+    const box = within(screen.getByRole('group', { name: 'Online class' }));
+    fireEvent.click(box.getByLabelText('Online class'));
+    fireEvent.click(box.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.setClassRepeatOnline).toHaveBeenCalledWith('g1', 's1', { online: false, onlineLink: null }));
+  });
+
+  it('a lapsed gym reads the line and has no button', async () => {
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, consoleReadOnly: true, subscription: null }], formerOrgs: [] } });
+    api.getClasses.mockResolvedValue(withSlot({ online: true, onlineLink: LINK }));
+    drawScreen();
+    expect(await screen.findByText('Online class · link added')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Change link/ })).toBeNull();
   });
 });

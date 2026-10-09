@@ -166,7 +166,7 @@ export async function fillClassSessions(
   const written = await sql`
     INSERT INTO gym_class_sessions
       (gym_id, class_type_id, schedule_id, local_date, local_start_minute,
-       starts_at, minutes, places, coach_user_id)
+       starts_at, minutes, places, coach_user_id, online, online_link)
     SELECT s.gym_id,
            s.class_type_id,
            s.id,
@@ -182,7 +182,9 @@ export async function fillClassSessions(
            -- dates however live its repeats look.
            s.minutes,
            s.places,
-           s.coach_user_id
+           s.coach_user_id,
+           s.online,
+           s.online_link
     FROM gym_class_schedules s
     JOIN gyms g ON g.id = s.gym_id
     JOIN gym_class_types t ON t.id = s.class_type_id

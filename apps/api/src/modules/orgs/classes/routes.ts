@@ -28,6 +28,7 @@ import {
   CLASS_SLOT_REPLACES_ERROR,
   confirmBookingsBodySchema,
   confirmBookingsQuerySchema,
+  setClassOnlineRequestSchema,
   confirmTrainerSessionsBodySchema,
   type ClassBookingsEnding,
   type ClassOverSessions,
@@ -329,6 +330,38 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     if (answer.kind === "bookings") return sendBookings(reply, req, answer.ending);
     if (answer.kind === "sessions") return sendSessions(reply, req, answer.sessions);
     return reply.status(200).send(answer.body);
+  });
+
+  /** Who a change to a class's, or a time slot's, online answer would reach. */
+  app.get("/v1/orgs/:gymId/class-sessions/:sessionId/online", guarded, async (req, reply) => {
+    const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.getOnlineAffected(classDeps, requireUserId(req), params.gymId, { sessionId: params.sessionId }));
+  });
+  app.get("/v1/orgs/:gymId/class-repeats/:scheduleId/online", guarded, async (req, reply) => {
+    const params = parseOr400(classScheduleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.getOnlineAffected(classDeps, requireUserId(req), params.gymId, { scheduleId: params.scheduleId }));
+  });
+
+  /** PUT: whether one class is online, and its link, both every time (17g). */
+  app.put("/v1/orgs/:gymId/class-sessions/:sessionId/online", guarded, async (req, reply) => {
+    const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(setClassOnlineRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const week = await service.setSessionOnline(classDeps, requireUserId(req), params.gymId, params.sessionId, body);
+    return reply.status(200).send(week);
+  });
+
+  /** PUT: whether a time slot is online, and its link, both every time (17g). */
+  app.put("/v1/orgs/:gymId/class-repeats/:scheduleId/online", guarded, async (req, reply) => {
+    const params = parseOr400(classScheduleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(setClassOnlineRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const timetable = await service.setScheduleOnline(classDeps, requireUserId(req), params.gymId, params.scheduleId, body);
+    return reply.status(200).send(timetable);
   });
 
   /** Cancelling a cancelled day, or putting back a running one, answers 200 and

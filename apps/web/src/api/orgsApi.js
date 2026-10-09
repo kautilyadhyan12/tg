@@ -80,6 +80,7 @@ import {
   classBookingSettingsResponseSchema,
   classBookingsEndingResponseSchema,
   classSessionBookingsResponseSchema,
+  classOnlineAffectedSchema,
   gymClassesResponseSchema,
   gymClassMutationResponseSchema,
   gymClassWeekResponseSchema,
@@ -1724,6 +1725,49 @@ export const orgService = {
         `/v1/orgs/${encodeURIComponent(gymId)}/class-sessions/${encodeURIComponent(sessionId)}/bookings/${encodeURIComponent(bookingId)}/mark`,
         { status },
       ),
+    ),
+
+  /** POST …/class-sessions/:sessionId/bookings/:bookingId/remove — staff take one person
+   *  off a class before it starts (17g). Answers the class's list as it now is. */
+  removeClassBooking: (gymId, sessionId, bookingId) =>
+    readThrough(
+      classSessionBookingsResponseSchema,
+      'who is booked',
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/class-sessions/${encodeURIComponent(sessionId)}/bookings/${encodeURIComponent(bookingId)}/remove`,
+      ),
+    ),
+
+  /** PUT …/class-repeats/:scheduleId/online — whether a time slot is online, and its
+   *  link: `{ online, onlineLink }`, both every time (17g). Answers the whole timetable. */
+  setClassRepeatOnline: (gymId, scheduleId, body) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'that time slot',
+      authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/class-repeats/${encodeURIComponent(scheduleId)}/online`, body),
+    ),
+
+  /** GET …/class-repeats/:scheduleId/online and …/class-sessions/:sessionId/online — who a
+   *  change there would reach: `{ classes, booked }`. */
+  getClassRepeatOnline: (gymId, scheduleId) =>
+    readThrough(
+      classOnlineAffectedSchema,
+      'who is booked',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/class-repeats/${encodeURIComponent(scheduleId)}/online`),
+    ),
+  getClassDayOnline: (gymId, sessionId) =>
+    readThrough(
+      classOnlineAffectedSchema,
+      'who is booked',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/class-sessions/${encodeURIComponent(sessionId)}/online`),
+    ),
+
+  /** PUT …/class-sessions/:sessionId/online — the same for one class. Answers its week. */
+  setClassDayOnline: (gymId, sessionId, body) =>
+    readThrough(
+      gymClassWeekResponseSchema,
+      'that day',
+      authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/class-sessions/${encodeURIComponent(sessionId)}/online`, body),
     ),
 
   /** GET …/class-bookings/ending — everybody whose booking a change to the timetable

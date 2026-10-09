@@ -81,6 +81,8 @@ export interface ClassScheduleRow {
   datesComplete: boolean;
   finished: boolean;
   startedToday: boolean;
+  online: boolean;
+  onlineLink: string | null;
 }
 
 export interface TimetableRow {
@@ -196,11 +198,13 @@ export async function readTimetable(
       dates_complete: boolean;
       finished: boolean;
       started_today: boolean;
+      online: boolean;
+      online_link: string | null;
     }[]
   >`
     SELECT s.id, s.class_type_id, s.weekdays, s.local_start_minute,
            s.starts_on::text AS starts_on, s.ends_on::text AS ends_on,
-           s.minutes, s.places, s.coach_user_id,
+           s.minutes, s.places, s.coach_user_id, s.online, s.online_link,
            -- THE COACH'S NAME, ANSWERED ONLY WHILE THEY ARE STILL THIS GYM'S
            -- STAFF — the class type read's join, word for word and for the same
            -- reason: a timetable must not print a name the gym cannot vouch for,
@@ -320,6 +324,8 @@ export async function readTimetable(
       datesComplete: r.dates_complete,
       finished: r.finished,
       startedToday: r.started_today,
+      online: r.online,
+      onlineLink: r.online_link,
     })),
   };
 }
@@ -739,6 +745,9 @@ export async function createSchedule(
     ClassScheduleFields & {
       gymId: string;
       classTypeId: string;
+      /** Left out: not an online class. */
+      online?: boolean;
+      onlineLink?: string | null;
       confirmTrainerSessions: string | null;
       actorUserId: string;
       now: Date;
@@ -813,7 +822,7 @@ export async function createSchedule(
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_class_schedules
         (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on,
-         minutes, places, coach_user_id)
+         minutes, places, coach_user_id, online, online_link)
       -- ::int[] IS NOT DECORATION. postgres.js sends a JS array as text[], and
       -- Postgres refuses it against an integer[] column outright - measured, not
       -- assumed: without this cast every save answers
@@ -826,7 +835,8 @@ export async function createSchedule(
       -- would be a second.
       VALUES (${input.gymId}, ${input.classTypeId}, ${tx.array([...input.weekdays])}::int[],
               ${input.startMinute}, ${input.startsOn}::date, ${input.endsOn}::date,
-              ${input.minutes}, ${input.places}, ${input.coachUserId})
+              ${input.minutes}, ${input.places}, ${input.coachUserId},
+              ${input.online === true}, ${input.online === true ? (input.onlineLink ?? null) : null})
       RETURNING id`;
     if (created === undefined) throw new Error("class schedule insert returned no row");
 
@@ -853,6 +863,7 @@ export async function createSchedule(
         startMinute: String(input.startMinute),
         minutes: String(input.minutes),
         places: input.places === null ? "none" : String(input.places),
+        online: String(input.online === true),
         sessions: String(filled.sessions),
       },
     });
@@ -908,11 +919,13 @@ async function comingClasses(
       AND local_date >= ${w.today}::date`;
 }
 
-/** A time slot's second half: it starts on `from` and keeps the old end. */
+/** A time slot's second half: it starts on `from` and keeps the old end, and whether
+ *  `scheduleId`, the one it carries on from, is online, with its link. */
 async function insertSlotFrom(
   tx: TransactionSql,
   w: ClassScheduleFields & {
     gymId: string;
+    scheduleId: string;
     classTypeId: string;
     weekdays: readonly number[];
     startMinute: number;
@@ -923,10 +936,12 @@ async function insertSlotFrom(
   const [created] = await tx<{ id: string }[]>`
     INSERT INTO gym_class_schedules
       (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on,
-       minutes, places, coach_user_id)
-    VALUES (${w.gymId}, ${w.classTypeId}, ${tx.array([...w.weekdays])}::int[],
-            ${w.startMinute}, ${w.from}::date, ${w.endsOn}::date,
-            ${w.minutes}, ${w.places}, ${w.coachUserId})
+       minutes, places, coach_user_id, online, online_link)
+    SELECT ${w.gymId}, ${w.classTypeId}, ${tx.array([...w.weekdays])}::int[],
+           ${w.startMinute}::int, ${w.from}::date, ${w.endsOn}::date,
+           ${w.minutes}::int, ${w.places}::int, ${w.coachUserId}::uuid, o.online, o.online_link
+    FROM gym_class_schedules o
+    WHERE o.id = ${w.scheduleId} AND o.gym_id = ${w.gymId}
     RETURNING id`;
   if (created === undefined) throw new Error("class schedule insert returned no row");
   return created.id;
@@ -1291,6 +1306,14 @@ export async function changeSlotFrom(
     };
     if (change === "move") {
       const ended = await endClassBookings(tx, input.gymId, replace, input.now, { remove: true });
+      // A class staff gave a link of its own keeps it on the class written for its date.
+      const ownLinks =
+        replace.length === 0
+          ? []
+          : await tx<{ local_date: string; online: boolean; online_link: string | null }[]>`
+              SELECT local_date::text AS local_date, online, online_link FROM gym_class_sessions
+              WHERE gym_id = ${input.gymId} AND schedule_id = ${scheduleId}
+                AND id = ANY(${tx.array(replace)}::uuid[]) AND online_alone`;
       const removed =
         replace.length === 0
           ? 0
@@ -1303,6 +1326,7 @@ export async function changeSlotFrom(
       await endOld();
       const newId = await insertSlotFrom(tx, {
         gymId: input.gymId,
+        scheduleId,
         classTypeId: slot.class_type_id,
         weekdays,
         startMinute: input.startMinute,
@@ -1317,6 +1341,11 @@ export async function changeSlotFrom(
         scheduleIds: [newId],
         now: input.now,
       });
+      for (const own of ownLinks) {
+        await tx`
+          UPDATE gym_class_sessions SET online = ${own.online}, online_link = ${own.online_link}, online_alone = true
+          WHERE gym_id = ${input.gymId} AND schedule_id = ${newId} AND local_date = ${own.local_date}::date`;
+      }
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,
@@ -1653,6 +1682,10 @@ export interface ClassSessionRow {
   status: string;
   changedAlone: boolean;
   started: boolean;
+  online: boolean;
+  onlineLink: string | null;
+  onlineAlone: boolean;
+  ended: boolean;
 }
 
 export interface ClassWeekRow {
@@ -1721,6 +1754,10 @@ export async function readWeek(
       status: string;
       changed_alone: boolean;
       started: boolean;
+      online: boolean;
+      online_link: string | null;
+      online_alone: boolean;
+      ended: boolean;
     }[]
   >`
     SELECT x.id, x.class_type_id, x.schedule_id, t.name, t.colour, t.open_gym,
@@ -1729,7 +1766,9 @@ export async function readWeek(
            -- Named only while still this gym's active staff, as on the timetable.
            cu.display_name AS coach_name,
            x.status, x.changed_alone,
-           x.starts_at <= ${opts.now} AS started
+           x.starts_at <= ${opts.now} AS started,
+           x.online, x.online_link, x.online_alone,
+           x.starts_at + make_interval(mins => x.minutes) <= ${opts.now} AS ended
     FROM gym_class_sessions x
     JOIN gym_class_types t ON t.id = x.class_type_id AND t.gym_id = x.gym_id
     LEFT JOIN gym_staff cs ON cs.gym_id = x.gym_id AND cs.user_id = x.coach_user_id
@@ -1765,6 +1804,10 @@ export async function readWeek(
       status: r.status,
       changedAlone: r.changed_alone,
       started: r.started,
+      online: r.online,
+      onlineLink: r.online_link,
+      onlineAlone: r.online_alone,
+      ended: r.ended,
     })),
   };
 }

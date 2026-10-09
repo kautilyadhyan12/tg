@@ -1,4 +1,4 @@
-import { CLASS_BOOKING_WORDS } from '@app/shared';
+import { CLASS_BOOKING_WORDS, CLASS_ONLINE_WORDS } from '@app/shared';
 import { dayLabel, ordinal, timeText } from './leaderboardView';
 
 // A MEMBER'S CLASSES, IN WORDS (spec Part 3 §13.6; ROADMAP 17d). Pure. A class's day and
@@ -26,6 +26,52 @@ export function dayHeading(day, today) {
   if (day === today) return `Today · ${dayLabel(day)}`;
   if (day === nextDay(today)) return `Tomorrow · ${dayLabel(day)}`;
   return dayLabel(day);
+}
+
+/** An online class as this member meets it (17g); null for a class at the gym. The line
+ *  they read, and the link once it is theirs: the server sends it only to somebody who
+ *  holds a place, from 30 minutes before the class until it ends. */
+export function onlineText(c) {
+  const online = c?.online ?? null;
+  if (online === null || c.cancelled === true) return null;
+  const line = CLASS_ONLINE_WORDS[online.state] ?? CLASS_ONLINE_WORDS.closed;
+  const link = online.state === 'open' && typeof online.link === 'string' && online.link.startsWith('https://') ? online.link : null;
+  return { line, link, ready: link !== null };
+}
+
+/** How often the list is read again while a link is due and not here, by this device's clock. */
+export const LINK_READ_AGAIN_MS = 20_000;
+/** Once a link has been due for this long here and the server still says early, the
+ *  device's clock is plainly wrong: the list is read once a minute from then. */
+export const LINK_READ_SLOWER_AFTER_MS = 10 * 60_000;
+export const LINK_READ_SLOWER_MS = 60_000;
+
+/** When the list should be read again by itself, for the online classes they hold a place
+ *  in; null where nothing is waited for. The server decides the moments, and this device's
+ *  clock may be fast or slow, so: a link still to show is read for a second after its
+ *  moment, and every 20 seconds once that moment has passed here and the server still says
+ *  early (once a minute after ten minutes of that); a link the gym has not added yet is read for every 20 seconds; a link showing is
+ *  read again a second after the class ends, and every 20 seconds until the server says so. */
+export function nextReadAt(classes, now = Date.now()) {
+  let soonest = null;
+  const want = (at) => {
+    if (soonest === null || at < soonest) soonest = at;
+  };
+  for (const c of Array.isArray(classes) ? classes : []) {
+    const state = c?.online?.state;
+    if (state === 'early') {
+      const at = Date.parse(c.online.opensAt);
+      if (Number.isNaN(at) || at - now > 86_400_000) continue;
+      want(at > now ? at + 1000 : now + (now - at > LINK_READ_SLOWER_AFTER_MS ? LINK_READ_SLOWER_MS : LINK_READ_AGAIN_MS));
+    } else if (state === 'no_link') {
+      want(now + LINK_READ_AGAIN_MS);
+    } else if (state === 'open') {
+      const end = Date.parse(c.startsAt) + c.minutes * 60_000;
+      if (Number.isNaN(end)) continue;
+      want(end > now ? end + 1000 : now + LINK_READ_AGAIN_MS);
+    }
+  }
+  return soonest;
 }
 
 /** The classes under their days, in the order they arrived. */

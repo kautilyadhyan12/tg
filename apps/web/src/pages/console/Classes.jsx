@@ -23,6 +23,8 @@ import {
   Tick,
 } from './ClassFields';
 import ClassWeek from './ClassWeek';
+import { OnlineBox, OnlineFields } from './ClassOnline';
+import { onlineButton, onlineLine, onlineNeedsLink, onlineProblem } from './classOnlineView';
 import { useConsoleOrg } from './useConsoleOrg';
 import { viewerPrivileges } from './consoleView';
 import { dayOrNull, placeTo } from './consolePlaces';
@@ -217,8 +219,10 @@ function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, savi
       </div>
 
       <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass={false} />
+      <OnlineFields draft={draft} set={set} disabled={disabled} />
 
-      <Problem text={problem} />
+      {/* A bad link is said under its own box. */}
+      <Problem text={problem === onlineProblem(draft) ? null : problem} />
       {ask ?? (
         <FormButtons
           saveLabel="Add time slot"
@@ -433,6 +437,8 @@ export default function Classes() {
   const [repeatDraftState, setRepeatDraftState] = useState(() => repeatDraft(null, ''));
   // Which time slot is open for editing — an id, for the same reason.
   const [editingRepeat, setEditingRepeat] = useState(null);
+  // The time slot whose "Online class" form is open.
+  const [onlineFor, setOnlineFor] = useState(null);
   const [repeatEditState, setRepeatEditState] = useState(() => repeatEditDraft(null));
   // A move the server asked about: how many classes it would replace, from
   // which date. Any change to the form puts Save back.
@@ -971,6 +977,8 @@ export default function Classes() {
                         const stopEnds = endAsk?.key === stopKey ? endAsk.ending : null;
                         const askingThis = confirming === stopKey || stopEnds !== null;
                         const moveEnds = endAsk?.key === `move:${schedule.id}` ? endAsk : null;
+                        const onlineThis = onlineFor === schedule.id;
+                        const online = onlineLine(schedule);
                         return (
                           <div
                             key={schedule.id}
@@ -993,18 +1001,33 @@ export default function Classes() {
                                     </span>
                                   </div>
                                   <div className="c-s14 c-t2">{peopleLine(schedule)}</div>
+                                  {online === '' ? null : (
+                                    <div className="c-s14 c-w5" style={{ color: onlineNeedsLink(schedule) ? 'var(--warn)' : 'var(--t2)' }}>
+                                      {online}
+                                    </div>
+                                  )}
                                   {editingThis ? null : (
                                     <div className="c-s13 c-t3">{repeatDatesLine(schedule)}</div>
                                   )}
                                 </div>
                               </div>
-                              {locked || editingThis || askingThis ? null : (
-                                <div className="flex items-center gap-5 md:gap-3.5 flex-shrink-0 pl-7 md:pl-0">
+                              {locked || editingThis || askingThis || onlineThis ? null : (
+                                <div className="flex flex-wrap items-center gap-5 md:gap-3.5 flex-shrink-0 pl-7 md:pl-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setOnlineFor(schedule.id)}
+                                    disabled={busy !== null}
+                                    aria-label={`${onlineButton(schedule)}: the ${days} ${startsAt} time slot of ${type.name}`}
+                                    className="c-btn c-btn-link"
+                                  >
+                                    {onlineButton(schedule)}
+                                  </button>
                                   {/* No date is left to change an ended time slot from. */}
                                   {slotEditable(schedule, editBounds(schedule)) ? (
                                     <button
                                       type="button"
                                       onClick={() => {
+                                        setOnlineFor(null);
                                         setEditingRepeat(schedule.id);
                                         setReplaceAsk(null);
                                         setRepeatEditState(repeatEditDraft(schedule, editBounds(schedule)));
@@ -1027,6 +1050,18 @@ export default function Classes() {
                                 </div>
                               )}
                             </div>
+
+                            {onlineThis ? (
+                              <OnlineBox
+                                key={`online:${schedule.id}`}
+                                holder={schedule}
+                                kind="slot"
+                                busy={busy === `online:${schedule.id}`}
+                                onSave={(body) => run(`online:${schedule.id}`, () => orgService.setClassRepeatOnline(gymId, schedule.id, body))}
+                                onClose={() => setOnlineFor(null)}
+                                readAffected={() => orgService.getClassRepeatOnline(gymId, schedule.id)}
+                              />
+                            ) : null}
 
                             {editingThis ? (
                               <RepeatEditForm

@@ -2670,6 +2670,26 @@ finished on the same date, whatever weekdays each runs), and at most 24 listed (
 listed twice until the date, and the Classes screen reads 24 a class.)*
 An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a
 trainer sees the lists of their own classes.
+*(17g, 2026-10-09: **online classes.** A time slot is marked Online and carries the gym's
+own video link (`gym_class_schedules.online`, `online_link`; `0089`); each class on the
+calendar has its own copy, stamped when it is written, and a time slot that carries on
+from another (a split or a move from a date) takes its answer; a class given a link of
+its own keeps it on the class a move writes for its date. The link is an `https://`
+address of a named site, at most 500 characters, with no sign-in written into it and no
+character that cannot be seen ("Https://" is kept as "https://"); it may be added later. It is changed at `PUT …/class-repeats/:id/online` (the time slot and each
+of its classes that has not ended, except one set on its own) and
+`PUT …/class-sessions/:id/online` (one class, until it ends, which then keeps its own:
+`online_alone`), both on `schedule.manage`, both keys every time. We host no video. **Who
+is sent the link** is one rule, `classOnlineView` in `packages/shared/src/classOnline.ts`:
+somebody who holds a place (booked, or marked came or no-show), from 30 minutes before the
+class starts until it ends, in a class that runs; nobody waiting, nobody who cancelled or
+was taken off, nobody else. A member's list keeps an online class under way that they hold
+a place in, one that runs past the gym's midnight too, so Join class stays until it ends;
+the screen reads the list again when a link is due and when the class ends, and every 20
+seconds while a link is due and not there. Staff who run the timetable, and the class's
+own coach, read the link with the class. The link is never written to the audit log. A
+check-in at the gym never marks an online class, and the run after a class ends leaves it:
+staff mark it. Places, the waitlist and cancelling are as for any class.)*
 
 ### 13.4 Booking and the waitlist — ONE rule, table-tested and raced
 
@@ -2746,6 +2766,16 @@ three classes is three). `confirmBookings` is that count and not the list, so a 
 made and another cancelled between the box and its button leave it equal: the change
 then ends a booking the box did not name, by at most what moved in that moment. The
 list pages by a booking's id; its `seq`, one counter for every gym, is never sent.)*
+*(17g, 2026-10-09: **staff take one person off a class**
+(`POST …/class-sessions/:sessionId/bookings/:bookingId/remove`; `decideStaffRemove`):
+whoever runs the timetable, and the class's own coach, before the class starts. A place
+held is cancelled and is never a late cancel, so a pack always has its class back, and
+the freed place goes to the waitlist by the usual rule; somebody waiting leaves the
+waitlist and nobody else moves. A place a check-in marked came before the start is
+removed as the booked place it was. The same removal again changes nothing. Once the class
+has started staff mark the place instead (409 `class_started`). The screen asks first, in
+a box under that person that names them and the class and says nobody else is changed;
+nothing is sent until its Yes. Nobody is told until the inbox (20a).)*
 
 ### 13.5 Personal training
 

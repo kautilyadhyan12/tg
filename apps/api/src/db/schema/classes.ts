@@ -134,9 +134,16 @@ export const gymClassSchedules = pgTable(
      *  link at all". The FK walk in `privacy.purge.test.ts` refuses a table
      *  that does not. */
     coachUserId: uuid("coach_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** An online class, and the gym's own video link for it (17g, `0089`). */
+    online: boolean("online").notNull().default(false),
+    onlineLink: text("online_link"),
     createdAt: createdAt(),
   },
   (t) => [
+    check(
+      "gym_class_schedules_online_link_check",
+      sql`${t.onlineLink} IS NULL OR (${t.online} AND char_length(${t.onlineLink}) <= 500 AND ${t.onlineLink} LIKE 'https://%')`,
+    ),
     check(
       "gym_class_schedules_weekdays_check",
       sql`array_length(${t.weekdays}, 1) BETWEEN 1 AND 7
@@ -208,9 +215,18 @@ export const gymClassSessions = pgTable(
     coachUserId: uuid("coach_user_id").references(() => users.id, { onDelete: "set null" }),
     status: text("status").notNull().default("scheduled"),
     changedAlone: boolean("changed_alone").notNull().default(false),
+    /** Stamped from the time slot when the class is written. `onlineAlone`: staff set
+     *  this class's own, so a later change to its time slot's leaves it. */
+    online: boolean("online").notNull().default(false),
+    onlineLink: text("online_link"),
+    onlineAlone: boolean("online_alone").notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [
+    check(
+      "gym_class_sessions_online_link_check",
+      sql`${t.onlineLink} IS NULL OR (${t.online} AND char_length(${t.onlineLink}) <= 500 AND ${t.onlineLink} LIKE 'https://%')`,
+    ),
     check(
       "gym_class_sessions_start_minute_check",
       sql`${t.localStartMinute} BETWEEN 0 AND 1439`,
