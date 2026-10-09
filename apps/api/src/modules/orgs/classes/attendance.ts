@@ -3,8 +3,9 @@
 // The worst thing this could do to a real person: mark a member who came as a no-show,
 // or let one person's check-in mark somebody else's booking as came. So a check-in marks
 // only the bookings of the ACCOUNT it named, never a record's or a name's; a place is
-// called a no-show only where the gym was checking people in during that class's window
-// and nothing in it could be this person; and everything else is left for staff.
+// called a no-show only where the gym was checking people in during that class's window,
+// nothing in it could be this person, and they have no visit at all that day; and
+// everything else is left for staff.
 // What happens is decided by the rules in `@app/shared` (`checkinMarksBooking`,
 // `decideClassSweep`) on rows read under the gym's lock, the lock a booking and a cancel
 // take, so a mark and a cancel sent together each see the other.
@@ -36,6 +37,13 @@ export async function markCameAtCheckin(sql: Sql, gymId: string, userId: string,
     const mine = (await repo.bookingsNear(tx, gymId, userId, now, true)).filter(marks);
     return await repo.markAs(tx, gymId, mine.map((b) => b.id), "attended", ["booked"]);
   });
+}
+
+/** Staff removed a visit of this account: their places a check-in marked came, in classes
+ *  still to start, are booked again where no visit of theirs is left that day. In the
+ *  caller's transaction, under the gym's lock. */
+export async function unmarkAfterVisitRemoved(tx: TransactionSql, gymId: string, userId: string, now: Date): Promise<number> {
+  return await repo.putBackToBooked(tx, gymId, { visitOf: userId }, now);
 }
 
 export interface NoShowRun {
@@ -74,6 +82,7 @@ export async function markEndedClasses(
         startsAtMs: b.startsAt.getTime(),
         minutes: b.minutes,
         visit: b.visit,
+        hereThatDay: b.hereThatDay,
         gymCheckedIn: b.gymCheckedIn,
       });
       if (decision === "attended") decided.came.push(b.id);

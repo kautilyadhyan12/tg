@@ -8,10 +8,11 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import type { ClassBookingView, ClassSessionBookingsResponse } from "@app/shared";
+import { CLASS_LATE_CANCEL_ERROR, type ClassBookingView, type ClassBookingsEnding, type ClassSessionBookingsResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { markEndedClasses } from "../src/modules/orgs/classes/attendance.js";
+import { endLeaversBookings } from "../src/modules/orgs/classes/bookingChanges.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -40,6 +41,17 @@ const HOUR = 60 * MIN;
 const T0 = Date.now();
 /** Every class here is 45 minutes long. */
 const LENGTH = 45 * MIN;
+
+/** The minute of the day in the gyms' zone. */
+const londonMinute = (ms: number): number => {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(ms)).map((p) => [p.type, p.value]),
+  );
+  return Number(parts["hour"]) * 60 + Number(parts["minute"]);
+};
+/** A class half an hour from now can be moved 100 minutes later and still be today: not
+ *  in the two hours before midnight in London, when the test that moves one is skipped. */
+const ROOM_TO_MOVE = londonMinute(T0 + 30 * MIN) + 100 < 1440;
 
 let ipCounter = 0;
 const nextIp = () => `10.91.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
@@ -81,7 +93,7 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const inject = (method: "GET" | "POST", path: string, cookies: Cookies, payload?: unknown, opts: { ip?: string; target?: App } = {}) =>
+  const inject = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, cookies: Cookies, payload?: unknown, opts: { ip?: string; target?: App } = {}) =>
     (opts.target ?? api()).inject({
       method,
       url: path,
@@ -193,6 +205,30 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     return row.id;
   };
 
+  /** A 10-class pack on the gym's price list. */
+  const packType = async (gym: Gym): Promise<string> => {
+    const [type] = await sql<{ id: string }[]>`
+      INSERT INTO gym_membership_types
+        (gym_id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, access, covers_all_classes)
+      VALUES (${gym.id}, '10 classes', 'pack', 9000, 'GBP', NULL, NULL, 10, 60, 'all_classes', true)
+      RETURNING id`;
+    if (type === undefined) throw new Error("no type");
+    return type.id;
+  };
+  const holdPackOf = async (gym: Gym, typeId: string, who: Member): Promise<string> => {
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO gym_held_memberships
+        (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days,
+         classes_left, starts_on, status, renews)
+      VALUES (${gym.id}, ${who.entryId}, ${typeId}, gen_random_uuid(), 'pack', 9000, 'GBP', NULL, NULL, 10, 60, 10,
+              (now() AT TIME ZONE 'Europe/London')::date - 1, 'active', false)
+      RETURNING id`;
+    if (row === undefined) throw new Error("no pack");
+    return row.id;
+  };
+  const classesLeft = async (heldId: string): Promise<number | null> =>
+    (await sql<{ classes_left: number | null }[]>`SELECT classes_left FROM gym_held_memberships WHERE id = ${heldId}`)[0]?.classes_left ?? null;
+
   // ── CHECKING IN ──
 
   interface Desk {
@@ -235,6 +271,16 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
       VALUES (${gym.id}, ${who.userId}, ${who.entryId}, ${method === "staff" ? gym.owner.userId : who.userId},
               (${new Date(at)}::timestamptz AT TIME ZONE 'Europe/London')::date, ${method}, 'hours_unset', 'hours_unset', ${new Date(at)})`;
   };
+
+  /** The id of this person's one check-in at the gym that staff or a desk made. */
+  const checkInOf = async (gym: Gym, who: Person): Promise<string> => {
+    const rows = await sql<{ id: string }[]>`
+      SELECT id FROM gym_attendance WHERE gym_id = ${gym.id} AND user_id = ${who.userId} AND slot_key <> 'added_later'`;
+    const row = rows[0];
+    if (row === undefined || rows.length !== 1) throw new Error(`${who.name} has ${String(rows.length)} check-ins`);
+    return row.id;
+  };
+  const removeVisit = (gym: Gym, visitId: string) => inject("DELETE", `/v1/orgs/${gym.id}/attendance/visits/${visitId}`, gym.owner.cookies);
 
   const warned: object[] = [];
   /** The run that marks ended classes, as the worker calls it, for these gyms alone: the
@@ -352,7 +398,57 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     expect(await run(end + 2 * HOUR, gyms)).toEqual({ gyms: 3, attended: 0, noShows: 0, left: 4 });
     expect(await statusOf(spin, bina)).toBe("no_show");
     expect(await statusOf(spin, asha)).toBe("attended");
+
+    // After the class Dev shows his own pass. It is written onto the earlier tag visit,
+    // which still cannot say which of the two was at the class: neither is marked came.
+    clock = end + 20 * MIN;
+    expect(await scan(desk, await passOf(dev))).toBe("already");
+    clock = T0;
+    expect((await sql`SELECT 1 FROM gym_attendance WHERE gym_id = ${iron.id} AND user_id = ${dev.userId} AND method = 'key_tag'`).length).toBe(1);
+    expect(await run(end + 3 * HOUR, gyms)).toEqual({ gyms: 3, attended: 0, noShows: 0, left: 4 });
+    expect(await statusOf(spin, dev)).toBe("booked");
+    expect(await statusOf(spin, esha)).toBe("booked");
     expect(warned).toEqual([]);
+  });
+
+  it("the run reads the window itself: a check-in outside it is neither came nor a no-show, one inside it is came, none at all is a no-show", async () => {
+    clock = T0;
+    const gym = await makeGym("Run Gym");
+    const start = T0 + 3 * HOUR;
+    const end = start + LENGTH;
+    const spin = await classAt(gym, start);
+    const [before, onTheHour, atTheEnd, after, absent, dayBefore, bookedAfter] = await Promise.all(
+      ["Before Bo", "Hour Hy", "End Eli", "After Al", "Absent Abe", "Yesterday Yu", "Booked After Bea"].map((name) => member(gym, name)),
+    );
+    if (
+      before === undefined ||
+      onTheHour === undefined ||
+      atTheEnd === undefined ||
+      after === undefined ||
+      absent === undefined ||
+      dayBefore === undefined ||
+      bookedAfter === undefined
+    ) {
+      throw new Error("no members");
+    }
+    for (const who of [before, onTheHour, atTheEnd, after, absent, dayBefore]) await book(gym, who, spin);
+    // Each a check-in whose mark never reached the booking, a millisecond either side of the window's ends.
+    await visitAt(gym, before, start - HOUR - 1);
+    await visitAt(gym, onTheHour, start - HOUR);
+    await visitAt(gym, atTheEnd, end);
+    await visitAt(gym, after, end + 1);
+    await visitAt(gym, dayBefore, start - 26 * HOUR);
+    // Checked in, and booked the class afterwards: no check-in followed the booking, so only the run can mark it.
+    await visitAt(gym, bookedAfter, start - 10 * MIN);
+    await book(gym, bookedAfter, spin);
+    expect(await statusOf(spin, bookedAfter)).toBe("booked");
+
+    expect(await run(end + 15 * MIN, [gym])).toEqual({ gyms: 1, attended: 3, noShows: 2, left: 2 });
+    for (const who of [onTheHour, atTheEnd, bookedAfter]) expect(await statusOf(spin, who), who.name).toBe("attended");
+    // At the gym that day, outside the window: nothing says they missed the class.
+    for (const who of [before, after]) expect(await statusOf(spin, who), who.name).toBe("booked");
+    for (const who of [absent, dayBefore]) expect(await statusOf(spin, who), who.name).toBe("no_show");
+    expect((await seen(gym, before, spin)).mine?.status).toBe("booked");
   });
 
   it("the window is one hour before the start until the end, to the millisecond, and a second check-in that day counts", async () => {
@@ -398,8 +494,8 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     const one = await classAt(gym, start, { places: 1 });
     const off = await classAt(gym, start, { cancelled: true });
     const spin = await classAt(gym, start);
-    const [holder, waiter, lateCanceller, canceller, inCancelled, tapper, addedLater, checker] = await Promise.all(
-      ["Holder Hana", "Waiter Will", "Late Lena", "Gone Gus", "Off Olga", "Tap Tia", "Added Adi", "Check Cy"].map((name) => member(gym, name)),
+    const [holder, waiter, lateCanceller, canceller, inCancelled, tapper, addedLater, checker, absent] = await Promise.all(
+      ["Holder Hana", "Waiter Will", "Late Lena", "Gone Gus", "Off Olga", "Tap Tia", "Added Adi", "Check Cy", "Absent Abe"].map((name) => member(gym, name)),
     );
     if (
       holder === undefined ||
@@ -409,7 +505,8 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
       inCancelled === undefined ||
       tapper === undefined ||
       addedLater === undefined ||
-      checker === undefined
+      checker === undefined ||
+      absent === undefined
     ) {
       throw new Error("no members");
     }
@@ -423,6 +520,7 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
               VALUES (${gym.id}, ${off}, ${inCancelled.userId}, ${inCancelled.entryId}, gen_random_uuid(), 'booked', false, now(), now())`;
     await book(gym, tapper, spin);
     await book(gym, addedLater, spin);
+    await book(gym, absent, spin);
 
     for (const who of [holder, waiter, lateCanceller, canceller, inCancelled]) expect(await staffCheckIn(gym, who), who.name).toBe("checked_in");
     expect(await statusOf(one, holder)).toBe("attended");
@@ -441,9 +539,11 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     await visitAt(gym, checker, T0);
 
     const done = await run(start + LENGTH + 15 * MIN, [gym]);
-    expect(done).toEqual({ gyms: 1, attended: 0, noShows: 2, left: 0 });
-    expect(await statusOf(spin, tapper)).toBe("no_show");
-    expect(await statusOf(spin, addedLater)).toBe("no_show");
+    expect(done).toEqual({ gyms: 1, attended: 0, noShows: 1, left: 2 });
+    // Neither is a check-in, so neither is marked came; each says they were at the gym, so neither is a no-show.
+    expect(await statusOf(spin, tapper)).toBe("booked");
+    expect(await statusOf(spin, addedLater)).toBe("booked");
+    expect(await statusOf(spin, absent)).toBe("no_show");
     // The run touched nothing else: not the waitlist, a cancel, or a cancelled class.
     expect(await statusOf(one, waiter)).toBe("waitlisted");
     expect(await statusOf(spin, lateCanceller)).toBe("late_cancelled");
@@ -470,25 +570,9 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
   it("a no-show keeps the class used on a pack, and staff changing the mark moves no pack", async () => {
     clock = T0;
     const gym = await makeGym("Pack Gym");
-    const [type] = await sql<{ id: string }[]>`
-      INSERT INTO gym_membership_types
-        (gym_id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, access, covers_all_classes)
-      VALUES (${gym.id}, '10 classes', 'pack', 9000, 'GBP', NULL, NULL, 10, 60, 'all_classes', true)
-      RETURNING id`;
-    if (type === undefined) throw new Error("no type");
-    const holdPack = async (who: Member): Promise<string> => {
-      const [row] = await sql<{ id: string }[]>`
-        INSERT INTO gym_held_memberships
-          (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days,
-           classes_left, starts_on, status, renews)
-        VALUES (${gym.id}, ${who.entryId}, ${type.id}, gen_random_uuid(), 'pack', 9000, 'GBP', NULL, NULL, 10, 60, 10,
-                (now() AT TIME ZONE 'Europe/London')::date - 1, 'active', false)
-        RETURNING id`;
-      if (row === undefined) throw new Error("no pack");
-      return row.id;
-    };
-    const left = async (heldId: string): Promise<number | null> =>
-      (await sql<{ classes_left: number | null }[]>`SELECT classes_left FROM gym_held_memberships WHERE id = ${heldId}`)[0]?.classes_left ?? null;
+    const type = await packType(gym);
+    const holdPack = (who: Member) => holdPackOf(gym, type, who);
+    const left = classesLeft;
     const start = T0 + 30 * MIN;
     const spin = await classAt(gym, start);
     const came = await member(gym, "Came Cara");
@@ -513,34 +597,159 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     clock = T0;
   });
 
-  it("somebody who checked in before the class reads that, and cannot cancel it or book it twice", async () => {
+  it("somebody who checked in before the class reads that, cannot book it twice, and cancels it as any booked place: free, then late, never once it has started", async () => {
     clock = T0;
     const gym = await makeGym("Member Gym");
-    const start = T0 + 30 * MIN;
+    await sql`UPDATE gyms SET booking_free_cancel_minutes = 30 WHERE id = ${gym.id}`;
+    const type = await packType(gym);
+    const start = T0 + 50 * MIN;
     const spin = await classAt(gym, start);
-    const mia = await member(gym, "Mia Wong");
-    await book(gym, mia, spin);
-    expect(await staffCheckIn(gym, mia)).toBe("checked_in");
-
-    const view = await seen(gym, mia, spin);
-    expect(view.mine?.status).toBe("attended");
-    expect(view.can).toEqual({ book: false, joinWaitlist: false, claim: false, cancel: null, why: null });
-    expect(view.booked).toBe(1);
-
-    for (const lateOk of [false, true]) {
-      const res = await cancel(gym, mia, spin, lateOk);
-      expect(no(res)).toBe("409 checked_in");
-      expect((JSON.parse(res.body) as { message: string }).message).toBe(
-        "You've checked in for this class, so it can't be cancelled here. Ask at the front desk.",
-      );
+    const [free, late, stays] = await Promise.all(["Free Fay", "Late Lee", "Stays Sol"].map((name) => member(gym, name)));
+    if (free === undefined || late === undefined || stays === undefined) throw new Error("no members");
+    const packs = { free: await holdPackOf(gym, type, free), late: await holdPackOf(gym, type, late), stays: await holdPackOf(gym, type, stays) };
+    for (const who of [free, late, stays]) {
+      expect((await book(gym, who, spin)).mine?.packCharged).toBe(true);
+      expect(await staffCheckIn(gym, who)).toBe("checked_in");
+      expect(await placeOf(spin, who)).toEqual(["attended", true]);
     }
-    expect((await book(gym, mia, spin)).mine?.status).toBe("attended");
-    expect((await sql`SELECT 1 FROM gym_class_bookings WHERE session_id = ${spin}`).length).toBe(1);
+
+    const view = await seen(gym, free, spin);
+    expect(view.mine?.status).toBe("attended");
+    expect(view.can).toEqual({ book: false, joinWaitlist: false, claim: false, cancel: "free", why: null });
+    expect(view.booked).toBe(3);
+    expect((await book(gym, free, spin)).mine?.status).toBe("attended");
+    expect((await sql`SELECT 1 FROM gym_class_bookings WHERE session_id = ${spin}`).length).toBe(3);
+
+    // Fifty minutes before, with half an hour's notice asked: free, and the pack has its class back.
+    const freed = await cancel(gym, free, spin);
+    expect(freed.statusCode, freed.body).toBe(200);
+    expect(await placeOf(spin, free)).toEqual(["cancelled", false]);
+    expect(await classesLeft(packs.free)).toBe(10);
+
+    // Twenty minutes before: a late cancel, asked first, and the pack keeps the class.
+    clock = start - 20 * MIN;
+    expect((await seen(gym, late, spin)).can.cancel).toBe("late");
+    expect(no(await cancel(gym, late, spin, false))).toBe(`409 ${CLASS_LATE_CANCEL_ERROR}`);
+    expect(await placeOf(spin, late)).toEqual(["attended", true]);
+    expect((await cancel(gym, late, spin, true)).statusCode).toBe(200);
+    expect(await placeOf(spin, late)).toEqual(["late_cancelled", true]);
+    expect(await classesLeft(packs.late)).toBe(9);
 
     // Once it has started the answer is the one any started class gives.
     clock = start + MIN;
-    expect(no(await cancel(gym, mia, spin, true))).toBe("409 class_started");
+    expect((await seen(gym, stays, spin)).can.cancel).toBeNull();
+    expect(no(await cancel(gym, stays, spin, true))).toBe("409 class_started");
+    expect(await placeOf(spin, stays)).toEqual(["attended", true]);
+    expect(await classesLeft(packs.stays)).toBe(9);
+    // A cancel gives up the class, not the visit to the gym.
+    expect((await sql`SELECT 1 FROM gym_attendance WHERE gym_id = ${gym.id}`).length).toBe(3);
     clock = T0;
+  });
+
+  it("staff remove a wrong check-in: the class it marked came, still to start, is booked again; another visit that day, or a class that has started, keeps the mark", async () => {
+    clock = T0;
+    const gym = await makeGym("Fix Gym");
+    const start = T0 + 30 * MIN;
+    const spin = await classAt(gym, start);
+    const [wrong, twice, begun, bystander] = await Promise.all(["Wrong Wes", "Twice Tess", "Begun Bo", "Bystander Bee"].map((name) => member(gym, name)));
+    if (wrong === undefined || twice === undefined || begun === undefined || bystander === undefined) throw new Error("no members");
+    for (const who of [wrong, twice, begun, bystander]) {
+      await book(gym, who, spin);
+      expect(await staffCheckIn(gym, who)).toBe("checked_in");
+      expect(await statusOf(spin, who)).toBe("attended");
+    }
+    // Twice has a second visit that day, one staff added.
+    await sql`
+      INSERT INTO gym_attendance (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
+      VALUES (${gym.id}, ${twice.userId}, ${twice.entryId}, ${gym.owner.userId},
+              (now() AT TIME ZONE 'Europe/London')::date, 'staff', 'added_later', 'added_later', now())`;
+
+    const gone = await removeVisit(gym, await checkInOf(gym, wrong));
+    expect(gone.statusCode, gone.body).toBe(200);
+    expect(await statusOf(spin, wrong)).toBe("booked");
+    expect((await seen(gym, wrong, spin)).mine?.status).toBe("booked");
+    expect((await listOf(gym, spin)).booked.map((b) => [b.name, b.status])).toEqual([
+      ["Wrong Wes", "booked"],
+      ["Twice Tess", "attended"],
+      ["Begun Bo", "attended"],
+      ["Bystander Bee", "attended"],
+    ]);
+    // Removed again: the same answer, and nothing more changes.
+    expect((await removeVisit(gym, (await sql<{ id: string }[]>`SELECT id FROM gym_attendance_removed WHERE gym_id = ${gym.id} AND user_id = ${wrong.userId}`)[0]?.id ?? "")).statusCode).toBe(200);
+
+    expect((await removeVisit(gym, await checkInOf(gym, twice))).statusCode).toBe(200);
+    expect(await statusOf(spin, twice)).toBe("attended");
+
+    // Once the class has started staff have their own buttons, and the mark is history.
+    clock = start + MIN;
+    expect((await removeVisit(gym, await checkInOf(gym, begun))).statusCode).toBe(200);
+    expect(await statusOf(spin, begun)).toBe("attended");
+    expect(await statusOf(spin, bystander)).toBe("attended");
+
+    // Wrong Wes never came: with the gym checking people in, the run says so.
+    expect(await run(start + LENGTH + 15 * MIN, [gym])).toEqual({ gyms: 1, attended: 0, noShows: 1, left: 0 });
+    expect(await statusOf(spin, wrong)).toBe("no_show");
+    clock = T0;
+  });
+
+  it.skipIf(!ROOM_TO_MOVE)("staff move a class after a check-in: still within the hour the mark stays, more than an hour away the place is booked again", async () => {
+    clock = T0;
+    const gym = await makeGym("Move Gym");
+    const start = T0 + 30 * MIN;
+    const spin = await classAt(gym, start);
+    const [early, booked] = await Promise.all(["Early Eve", "Booked Bo"].map((name) => member(gym, name)));
+    if (early === undefined || booked === undefined) throw new Error("no members");
+    await book(gym, early, spin);
+    await book(gym, booked, spin);
+    expect(await staffCheckIn(gym, early)).toBe("checked_in");
+    expect(await statusOf(spin, early)).toBe("attended");
+    const minute = londonMinute(start);
+    const move = (by: number) =>
+      inject("PUT", `/v1/orgs/${gym.id}/class-sessions/${spin}`, gym.owner.cookies, { scope: "this", startMinute: minute + by, minutes: 45, places: null, coachUserId: null });
+
+    const little = await move(10);
+    expect(little.statusCode, little.body).toBe(200);
+    expect(await statusOf(spin, early)).toBe("attended");
+
+    const far = await move(100);
+    expect(far.statusCode, far.body).toBe(200);
+    expect(await statusOf(spin, early)).toBe("booked");
+    expect(await statusOf(spin, booked)).toBe("booked");
+    const view = await seen(gym, early, spin);
+    expect(view.mine?.status).toBe("booked");
+    expect(view.can.cancel).not.toBeNull();
+    expect(view.booked).toBe(2);
+    expect((await listOf(gym, spin)).booked.map((b) => b.status)).toEqual(["booked", "booked"]);
+  });
+
+  it("somebody checked in before a class who leaves the gym, or whose membership staff cancel, gives the place up and the pack has its class back", async () => {
+    clock = T0;
+    const gym = await makeGym("Leave Gym");
+    const type = await packType(gym);
+    const start = T0 + 30 * MIN;
+    const spin = await classAt(gym, start);
+    const [leaver, ended] = await Promise.all(["Leaver Lux", "Ended Ed"].map((name) => member(gym, name)));
+    if (leaver === undefined || ended === undefined) throw new Error("no members");
+    const packs = { leaver: await holdPackOf(gym, type, leaver), ended: await holdPackOf(gym, type, ended) };
+    for (const who of [leaver, ended]) {
+      await book(gym, who, spin);
+      expect(await staffCheckIn(gym, who)).toBe("checked_in");
+      expect(await placeOf(spin, who)).toEqual(["attended", true]);
+    }
+
+    expect(await sql.begin((tx) => endLeaversBookings(tx, gym.id, [leaver.userId], new Date(clock)))).toEqual({ booked: 1, waiting: 0, packClasses: 1 });
+    expect(await placeOf(spin, leaver)).toEqual(["cancelled", false]);
+    expect(await classesLeft(packs.leaver)).toBe(10);
+
+    const cancelHeld = (body: Record<string, unknown>) =>
+      inject("POST", `/v1/orgs/${gym.id}/member-list/entries/${ended.entryId}/memberships/${packs.ended}/cancel`, gym.owner.cookies, body);
+    const asked = await cancelHeld({ when: "today" });
+    expect(no(asked), asked.body).toBe("409 membership_has_bookings");
+    expect((JSON.parse(asked.body) as { ending: ClassBookingsEnding }).ending.booked).toBe(1);
+    const done = await cancelHeld({ when: "today", confirmBookings: 1 });
+    expect(done.statusCode, done.body).toBe(200);
+    expect(await placeOf(spin, ended)).toEqual(["cancelled", false]);
+    expect((await seen(gym, ended, spin)).booked).toBe(0);
   });
 
   it("staff mark came or no-show: who may, when, and what is refused", async () => {
@@ -658,12 +867,11 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     clock = T0;
   });
 
-  it("a check-in and a cancel at one instant, on two servers: one of them stands, whole", async () => {
+  it("a check-in and a cancel at one instant, on two servers, in whichever order they land: the place is given up once and the visit is kept", async () => {
     clock = T0;
     const gym = await makeGym("Race Gym");
     const start = T0 + 30 * MIN;
     const spin = await classAt(gym, start);
-    const outcomes: string[] = [];
     for (let round = 0; round < 8; round++) {
       const who = await member(gym, `Racer ${String(round)}`);
       await book(gym, who, spin);
@@ -673,16 +881,14 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
           : [staffCheckInRaw(gym, who, gym.owner, other()), cancel(gym, who, spin, true, api())],
       );
       expect(checkedIn.statusCode, checkedIn.body).toBe(200);
-      const status = await statusOf(spin, who);
-      // The cancel went through and the place is given up, or the check-in was first and the cancel was refused.
-      if (cancelled.statusCode === 200) expect(status).toBe("late_cancelled");
-      else {
-        expect(no(cancelled)).toBe("409 checked_in");
-        expect(status).toBe("attended");
-      }
-      outcomes.push(status);
+      // Cancel first, and the check-in finds no place to mark; check-in first, and the
+      // cancel gives up the place it marked. Either way the cancel stands.
+      expect(cancelled.statusCode, cancelled.body).toBe(200);
+      expect(["cancelled", "late_cancelled"]).toContain(await statusOf(spin, who));
+      expect((await sql`SELECT 1 FROM gym_class_bookings WHERE session_id = ${spin} AND user_id = ${who.userId}`).length).toBe(1);
+      expect((await sql`SELECT 1 FROM gym_attendance WHERE gym_id = ${gym.id} AND user_id = ${who.userId}`).length).toBe(1);
     }
-    expect(outcomes.every((s) => s === "attended" || s === "late_cancelled")).toBe(true);
+    expect((await listOf(gym, spin)).booked).toEqual([]);
   });
 
   it("two runs and staff's mark at one instant: staff's mark stands, and nobody is marked twice", async () => {

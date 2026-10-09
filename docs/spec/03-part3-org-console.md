@@ -3142,11 +3142,15 @@ waitlist, cancelled or cancelled late is not touched. **The run** (`orgs.class_n
 every five minutes; `markEndedClasses`) reads each gym's places still `booked` in classes
 that ended 15 minutes ago or more and decides each by `decideClassSweep`: `attended`
 where a check-in in the window names the person's own account (a check-in whose mark
-never reached the booking); left as it is where a check-in in the window names only a
-record the booking was made for or the person holds; left as it is where the gym checked
+never reached the booking; a pass always, a key tag's or staff's only while no second
+member holds its record, since one of two people on a record showing a pass later is
+written onto the tag's visit); left as it is where a check-in in the window names only a
+record the booking was made for or the person holds; left as it is where the person has
+ANY visit at the gym that day (an earlier check-in, their own tap, a visit staff added:
+not proof they came to the class, and never proof they did not); left as it is where the gym checked
 NOBODY in during that window, since a gym that does not use check-in, or whose desk was
 off that hour, has no evidence about who came; `no_show` otherwise. A member's own tap
-and a visit staff add for an earlier day are no check-in. A class that ended more than
+and a visit staff add for an earlier day are no check-in: neither marks came. A class that ended more than
 48 hours ago is left for staff. Only a `booked` place is ever written, a gym at a time
 under its lock, so a second run changes nothing. **Both marks keep the class used:** a
 pack stays charged and a limit still counts it, and no mark moves either. **Staff's own
@@ -3156,15 +3160,21 @@ only once the class has started, never in a cancelled class, only a place that i
 the same mark again changes nothing, a mark can be changed to the other, and an audit row
 (`org.class_booking_marked`) says what it was. It answers the class's list, which carries
 `canMark` (started, and runs). **For the member:** checked in before the class, their
-place reads "You're checked in for this class", offers nothing to book, and a cancel
-answers 409 `checked_in` ("…Ask at the front desk."); the check-in routes read the clock
-the booking routes read. On the Calendar a class's Booked list says, once the class has
+place reads "You're checked in for this class", offers nothing to book, and is theirs to
+cancel as any booked place, free or late by the gym's rule, until the class starts; the
+check-in routes read the clock the booking routes read. **A mark made before the start is
+taken back** to `booked` (`putBackToBooked`, under the gym's lock) when staff remove the
+visit and no visit of theirs is left that day, and when the class is changed so that it
+starts more than the hour away; somebody who leaves the gym, or whose membership staff
+cancel, gives such a place up as a booked one, the pack's class back. On the Calendar a class's Booked list says, once the class has
 started, "Not marked yet" with **Came** and **No-show**, then the mark with one button to
 change it, a no-show on a pack saying the class stays used, and one line saying how the
 marks get there by themselves; before the start a check-in reads "Checked in". Personal
 training is still marked by hand (17e-iv-b). Not done: no fee (18h); nobody is told
 (20a); a mark by staff writes no visit, so somebody marked Came who never checked in has
-no gym day for it; a check-in more than an hour early does not count for the class.)*
+no gym day for it; somebody who checked in more than an hour early stays "Not marked
+yet" for staff (never a no-show); a class moved by a few minutes keeps a mark whose
+check-in is now just outside the hour.)*
 
 ### 13.7 Cost at full size, cards, the two extra passes
 

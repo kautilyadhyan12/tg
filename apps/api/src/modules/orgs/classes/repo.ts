@@ -36,7 +36,7 @@ import {
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { sessionsUnderClasses, type SessionUnderClass } from "../pt/repo.js";
-import { endClassBookings, handOverClasses, type BookingsEnded } from "./bookingChanges.js";
+import { classesChanged, endClassBookings, type BookingsEnded } from "./bookingChanges.js";
 import { endingCounts, endingPeople, type EndingCounts, type EndingPersonRow } from "./bookingsRepo.js";
 import { dayVerdict } from "./dayRule.js";
 import { fillClassSessions } from "./fill.js";
@@ -1347,7 +1347,7 @@ export async function changeSlotFrom(
         coachUserId: input.coachUserId,
         ids: restamp,
       });
-      await handOverClasses(tx, input.gymId, restamp, input.now);
+      await classesChanged(tx, input.gymId, restamp, input.now);
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,
@@ -1373,7 +1373,7 @@ export async function changeSlotFrom(
       places: input.places,
       coachUserId: input.coachUserId,
     });
-    await handOverClasses(tx, input.gymId, restamp, input.now);
+    await classesChanged(tx, input.gymId, restamp, input.now);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
@@ -1563,7 +1563,7 @@ export async function bulkChangeSlots(
         restamp,
         ...values,
       });
-      await handOverClasses(tx, input.gymId, restamp, input.now);
+      await classesChanged(tx, input.gymId, restamp, input.now);
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,
@@ -1933,7 +1933,7 @@ export async function changeSession(
         places: `${places(row.places)} -> ${places(input.places)}`,
         coach: `${row.coach_user_id ?? "none"} -> ${input.coachUserId ?? "none"}`,
       };
-      await handOverClasses(tx, input.gymId, [input.sessionId], input.now);
+      await classesChanged(tx, input.gymId, [input.sessionId], input.now);
     } else {
       const status = input.action === "cancel" ? "cancelled" : "scheduled";
       await tx`

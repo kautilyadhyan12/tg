@@ -60,7 +60,7 @@ import { gymTimeZone, membersAgainstList } from "../memberList/repo.js";
 import { sameName } from "../memberList/samePerson.js";
 import { currentRecordOf } from "../memberList/whose.js";
 import { heldOnListOf } from "../memberships/onList.js";
-import { markCameAtCheckin } from "../classes/attendance.js";
+import { markCameAtCheckin, unmarkAfterVisitRemoved } from "../classes/attendance.js";
 import { looksLikePass, makePass, passWindow, readPass, windowEndsAt } from "./pass.js";
 import * as repo from "./repo.js";
 import { decideScan, type ScanPerson, type ScanRead } from "./scanRule.js";
@@ -604,8 +604,9 @@ async function keepStreak(deps: CheckinDeps, gymId: string, userId: string, day:
 
 /** A check-in near a class the person booked marks that booking came (17f): theirs by
  *  their ACCOUNT, so a key tag whose record the list cannot say is one person's marks
- *  nobody's. The visit is saved first; a failure is logged, and the run that marks ended
- *  classes reads the visit. */
+ *  nobody's. The visit is saved first and a failure here is logged. The run that marks
+ *  ended classes then reads their visits: one in the class's window marks them came, and
+ *  an earlier one that day keeps them from being called a no-show. */
 async function markBookedClasses(deps: CheckinDeps, gymId: string, userId: string): Promise<void> {
   try {
     await markCameAtCheckin(deps.sql, gymId, userId, deps.now());
@@ -863,6 +864,8 @@ export async function removeVisit(
         targetId: visitId,
         meta: { day: gone.day, method: gone.method },
       });
+      // A class it had marked them came for, still to start, is booked again (17f).
+      if (gone.userId !== null) await unmarkAfterVisitRemoved(tx, gymId, gone.userId, deps.now());
       return { day: gone.day, userId: gone.userId };
     });
   // A join of two records, or a record deleted, holds the visit at the same moment: the

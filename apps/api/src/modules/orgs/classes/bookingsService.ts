@@ -30,6 +30,7 @@ import {
   decideClassMark,
   memberClassesResponseSchema,
   type BookClassRequest,
+  type BookingTime,
   type ClassBookRefusal,
   type BookingSettingsBody,
   type ClassBookingSettingsResponse,
@@ -127,6 +128,11 @@ async function coverFor(
 const mineOf = (ctx: repo.BookingContext): "booked" | "waitlisted" | null =>
   ctx.latest?.status === "booked" || ctx.latest?.status === "waitlisted" ? ctx.latest.status : null;
 
+/** What a cancel is asked about. A place a check-in marked came before the class starts
+ *  is still the booked place it was: theirs to cancel by the usual rule, free or late. */
+const cancellable = (ctx: repo.BookingContext, time: BookingTime): "booked" | "waitlisted" | null =>
+  ctx.latest?.status === "attended" && time.phase !== "started" ? "booked" : mineOf(ctx);
+
 /** One class as this person sees it now. Somebody who stopped being a member in the
  *  instant after their booking was made is still answered, with nothing they can do. */
 async function viewOf(deps: Pick<BookingsDeps, "sql" | "now">, gymId: string, sessionId: string, userId: string): Promise<ClassBookingView> {
@@ -178,7 +184,7 @@ async function viewFrom(
     });
   const book = ask(false);
   const wait = ask(true);
-  const cancel = decideCancel({ time, cancelled: session.cancelled, mine, packCharged: latest?.packCharged ?? false, lateOk: true });
+  const cancel = decideCancel({ time, cancelled: session.cancelled, mine: cancellable(ctx, time), packCharged: latest?.packCharged ?? false, lateOk: true });
   const startsAt = session.startsAt.getTime();
   // Marked came (a check-in before the class does it) or no-show: the place is theirs
   // already, so there is nothing to book, wait for or claim.
@@ -437,16 +443,12 @@ export async function cancel(
       const decision = decideCancel({
         time,
         cancelled: ctx.session.cancelled,
-        mine: mineOf(ctx),
+        mine: cancellable(ctx, time),
         packCharged: latest?.packCharged ?? false,
         lateOk,
       });
       if (decision.kind === "refuse") {
         if (decision.reason === "late_cancel") return new LateCancel(latest?.packCharged ?? false);
-        // They checked in at the desk before the class: it has not started, and is no longer theirs to cancel.
-        if (latest?.status === "attended" && time.phase !== "started") {
-          return new OrgsError(409, "checked_in", CLASS_MARK_WORDS.checked_in);
-        }
         // A class they came to or missed is over, as one that has started is.
         if (decision.reason === "class_started" || latest !== null) {
           return new OrgsError(409, "class_started", CLASS_BOOKING_WORDS.cancel_started);

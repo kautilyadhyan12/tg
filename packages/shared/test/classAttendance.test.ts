@@ -28,7 +28,7 @@ const END = START + MINUTES * MIN;
 
 describe("somebody who came is never a no-show", () => {
   const sweep = (over: Partial<Parameters<typeof decideClassSweep>[0]>): ClassSweepDecision =>
-    decideClassSweep({ status: "booked", cancelled: false, nowMs: END + 15 * MIN, startsAtMs: START, minutes: MINUTES, visit: null, gymCheckedIn: true, ...over });
+    decideClassSweep({ status: "booked", cancelled: false, nowMs: END + 15 * MIN, startsAtMs: START, minutes: MINUTES, visit: null, hereThatDay: false, gymCheckedIn: true, ...over });
 
   it("a check-in of their own account in the window is came, whatever else is true", () => {
     expect(sweep({ visit: "account" })).toBe("attended");
@@ -47,6 +47,25 @@ describe("somebody who came is never a no-show", () => {
 
   it("no check-in, at a gym that was checking people in, is a no-show", () => {
     expect(sweep({})).toBe("no_show");
+  });
+
+  it("somebody at the gym that day outside the window (an earlier check-in, their own tap, a visit added later) is left, never a no-show", () => {
+    expect(sweep({ hereThatDay: true })).toBe("leave");
+    expect(sweep({ hereThatDay: true, gymCheckedIn: false })).toBe("leave");
+    expect(sweep({ hereThatDay: true, visit: "record" })).toBe("leave");
+    // Their own check-in in the window is still came.
+    expect(sweep({ hereThatDay: true, visit: "account" })).toBe("attended");
+  });
+
+  it("every case: a no-show needs no visit in the window, none that day, and a gym that was checking people in", () => {
+    for (const visit of ["account", "record", null] as const) {
+      for (const hereThatDay of [true, false]) {
+        for (const gymCheckedIn of [true, false]) {
+          const want = visit === "account" ? "attended" : visit === null && !hereThatDay && gymCheckedIn ? "no_show" : "leave";
+          expect(sweep({ visit, hereThatDay, gymCheckedIn }), JSON.stringify({ visit, hereThatDay, gymCheckedIn })).toBe(want);
+        }
+      }
+    }
   });
 
   it("nothing is decided before 15 minutes after the end, to the millisecond", () => {
