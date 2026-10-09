@@ -142,6 +142,9 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
 
   gym_challenge_scores: (sql, u) =>
     sql<Row[]>`SELECT * FROM gym_challenge_scores WHERE user_id = ${u} ORDER BY updated_at, challenge_id`,
+
+  gym_challenge_team_people: (sql, u) =>
+    sql<Row[]>`SELECT * FROM gym_challenge_team_people WHERE user_id = ${u} ORDER BY updated_at, challenge_id`,
 };
 
 /** The most posts one export carries; `total` says how many there are. */

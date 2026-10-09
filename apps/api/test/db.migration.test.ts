@@ -1918,6 +1918,75 @@ d("0001_init on a real database", () => {
       });
   });
 
+  it("0086's teams: a team's target past its days, a person in one team a challenge, only a team of that challenge, and a team's people go with it", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0086-owner') RETURNING id`;
+        if (user === undefined) throw new Error("no user");
+        const [gym] = await tx<{ id: string }[]>`
+          INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES ('zz-0086-a', 'zz 0086', 'Europe/London', ${user.id}) RETURNING id`;
+        if (gym === undefined) throw new Error("no gym");
+        const row = (over: Record<string, unknown> = {}) => ({
+          gym_id: gym.id,
+          challenge_key: randomUUID(),
+          name: "October",
+          counts: "gym_days",
+          starts_on: "2026-10-01",
+          ends_on: "2026-10-07",
+          target: null,
+          who: "everyone",
+          ...over,
+        });
+        /** The constraint an insert trips, or "ok". Each in its own savepoint. */
+        const put = async (table: "gym_challenges" | "gym_challenge_teams" | "gym_challenge_team_people", values: Record<string, unknown>): Promise<string> => {
+          try {
+            await tx.savepoint((sp) => sp`INSERT INTO ${sp(table)} ${sp(values)}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        // A challenge kept before this migration is one people are in alone.
+        const [alone] = await tx<{ id: string; teams: string }[]>`INSERT INTO gym_challenges ${tx(row())} RETURNING id, teams`;
+        expect(alone?.teams).toBe("none");
+        expect(await put("gym_challenges", row({ target: 8 })), "alone, a target past its seven days").toBe("gym_challenges_target_check");
+        expect(await put("gym_challenges", row({ target: 300, teams: "staff" })), "in teams, a target past its days").toBe("ok");
+        expect(await put("gym_challenges", row({ target: 1000001, teams: "members" }))).toBe("gym_challenges_target_check");
+        expect(await put("gym_challenges", row({ teams: "pairs" }))).toBe("gym_challenges_teams_check");
+
+        const [one] = await tx<{ id: string }[]>`INSERT INTO gym_challenges ${tx(row({ teams: "staff" }))} RETURNING id`;
+        const [two] = await tx<{ id: string }[]>`INSERT INTO gym_challenges ${tx(row({ teams: "staff" }))} RETURNING id`;
+        if (one === undefined || two === undefined) throw new Error("no challenge");
+        const team = (challengeId: string, over: Record<string, unknown> = {}) => ({ gym_id: gym.id, challenge_id: challengeId, name: "Red", position: 0, ...over });
+        const [red] = await tx<{ id: string }[]>`INSERT INTO gym_challenge_teams ${tx(team(one.id))} RETURNING id`;
+        const [blue] = await tx<{ id: string }[]>`INSERT INTO gym_challenge_teams ${tx(team(one.id, { name: "Blue", position: 1 }))} RETURNING id`;
+        const [theirs] = await tx<{ id: string }[]>`INSERT INTO gym_challenge_teams ${tx(team(two.id))} RETURNING id`;
+        if (red === undefined || blue === undefined || theirs === undefined) throw new Error("no team");
+        expect(await put("gym_challenge_teams", team(one.id, { name: "" }))).toBe("gym_challenge_teams_name_check");
+        expect(await put("gym_challenge_teams", team(one.id, { position: 8 }))).toBe("gym_challenge_teams_position_check");
+        expect(await put("gym_challenge_teams", team(randomUUID())), "a team of no challenge").toBe("gym_challenge_teams_challenge_fk");
+
+        const person = (over: Record<string, unknown> = {}) => ({ gym_id: gym.id, challenge_id: one.id, team_id: red.id, user_id: user.id, ...over });
+        expect(await put("gym_challenge_team_people", person())).toBe("ok");
+        expect(await put("gym_challenge_team_people", person({ team_id: blue.id })), "in a second team of one challenge").toBe("gym_challenge_team_people_pk");
+        expect(await put("gym_challenge_team_people", person({ challenge_id: two.id })), "in another challenge's team").toBe("gym_challenge_team_people_team_fk");
+        expect(await put("gym_challenge_team_people", person({ challenge_id: two.id, team_id: theirs.id })), "the same person in another challenge").toBe("ok");
+
+        await tx`DELETE FROM gym_challenge_teams WHERE id = ${red.id}`;
+        const [left] = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_challenge_team_people WHERE user_id = ${user.id}`;
+        expect(left?.n, "only the removed team's people go").toBe(1);
+        await tx`DELETE FROM gym_challenges WHERE id = ${two.id}`;
+        const [teams] = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_challenge_teams WHERE gym_id = ${gym.id}`;
+        const [people] = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_challenge_team_people WHERE user_id = ${user.id}`;
+        expect([teams?.n, people?.n], "a challenge's teams and their people go with it").toEqual([1, 0]);
+        throw new Error("ROLLBACK-0086-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0086-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
    *  (Low-1) — which is the highest-value item that round found.
    *
