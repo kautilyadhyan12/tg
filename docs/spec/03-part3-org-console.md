@@ -3040,6 +3040,35 @@ row counts the sessions it ended and the pack sessions it gave back (`ptSessions
 membership's box with classes and sessions says once that the app tells nobody. Not done:
 a trainer leaving the staff, came and no-show (17e-iv-b, built next); nobody is told (the
 inbox, 20a).)*
+*(17e-iv-b, 2026-10-09: **a trainer leaves the staff, and came or no-show.** A trainer's
+staff row is deleted at three doors, and each ends the coming sessions booked WITH them
+(`endTrainersSessions` in `pt/changes.ts`, called where the row is deleted): they become
+cancelled and a pack has each back; one that has started, took place or was cancelled late
+stays. **Remove from staff** (`DELETE …/staff/:userId`) and **Remove from staff and app**
+(`DELETE …/members/:userId?alsoStaff=true`) name the sessions first: 409
+`pt_sessions_ending`, nothing written, until the request sends `confirmPtSessions` equal to
+the mark, worked out again under the gym's lock. Removed from staff and app in one step,
+ONE mark covers the sessions booked with them and the ones booked for them; removed from the
+app alone they stay a trainer and the sessions they give stay. **An account its owner
+deletes** ends them with no box (nobody is there to ask), by the gyms' clock; an owner who
+deletes theirs keeps the gym, so theirs stay. The audit row (`org.staff_removed`) counts
+the sessions ended and the pack sessions given back, never a name. A role change, and
+"isn't taking sessions", end nothing: the person is still on the staff. On the screen the
+box over the page says which removal it is ("Remove Sam from staff?", "… from staff and the
+app?") and each line leads with the person booked. **Came or no-show:**
+`POST …/pt/appointments/:id/mark` with `attended` or `no_show` (`decidePtMark`): only once
+the session has started (the instant it starts counts), never a cancelled or late-cancelled
+one; whoever runs the timetable marks any trainer's and a trainer marks their own; the same
+mark again changes nothing and a mark can be changed to the other. Either way the session
+stays used: the pack stays charged and a membership's limit still counts it (17e-v), so no
+mark moves a pack or a limit. No fee (18h), and nothing marks a session by itself (a desk
+scan near a class is 17f). A session reads `canMark`; the Personal training page shows
+"Not marked yet" with **Came** and **No-show**, then the mark with one button to change it,
+and a no-show says what stays used. **The week turns back:** `from` may be up to 28 days
+before today (`PT_PAST_DAYS`, `firstDay` on the read), so an earlier session can be marked;
+nothing on a day gone by is free. Not done: the sessions of a trainer already off the staff
+that were never marked cannot be opened (their week needs them on the staff); nobody is told
+(the inbox, 20a).)*
 
 ### 13.6 The calendar, the desk and the messages
 

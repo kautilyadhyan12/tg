@@ -649,8 +649,11 @@ d("personal training (real Postgres, two api instances)", { timeout: T }, () => 
     const after = made(await book(open, sam, tom, { day: "2026-10-26", minute: 600 }));
     expect([before.startsAt, after.startsAt]).toEqual(["2026-10-24T09:00:00.000Z", "2026-10-26T10:00:00.000Z"]);
 
-    // A week asked for before today starts today; one past the last day ends on it.
-    expect((await week(open, open.owner, sam, "2026-09-01")).from).toBe(TODAY);
+    // A week asked for further back than four weeks starts four weeks back (17e-iv-b: days
+    // gone by are read, to mark who came) and none of its times is free; one past the last
+    // day ends on it.
+    const firstWeek = await week(open, open.owner, sam, "2026-09-01");
+    expect([firstWeek.from, firstWeek.firstDay, firstWeek.days.flatMap((x) => x.free)]).toEqual(["2026-09-09", "2026-09-09", []]);
     const lastWeek = await week(open, open.owner, sam, "2027-01-01");
     expect(lastWeek.from).toBe("2026-12-01");
     expect(lastWeek.days.slice(1).flatMap((x) => x.free)).toEqual([]);
