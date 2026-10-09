@@ -789,6 +789,18 @@ describe('a 200 that does not match its contract is a FAILURE, not empty data (T
     });
   });
 
+  it('ACCEPTS a gym row with no newMessages, as an older server sends it, and reads it as 0 (20a-ii)', async () => {
+    const row = { ...ORG_BODY, staffRole: null, isMember: true, joinedAt: '2026-10-01T00:00:00.000Z' };
+    answerWith(authApi, { orgs: [row] });
+    const old = await orgService.getMine();
+    expect(old.data.orgs[0].newMessages).toBe(0);
+    answerWith(authApi, { orgs: [{ ...row, newMessages: 3 }] });
+    expect((await orgService.getMine()).data.orgs[0].newMessages).toBe(3);
+    // A count that is not one fails the read; it is never drawn.
+    answerWith(authApi, { orgs: [{ ...row, newMessages: -1 }] });
+    await expect(orgService.getMine()).rejects.toMatchObject({ isContractError: true });
+  });
+
   it('still REJECTS a formerOrgs that is present and malformed', async () => {
     // The default tolerates ABSENCE, not nonsense. A gym summary missing its
     // `removedAt` must fail the contract rather than reach the card, or the

@@ -30,6 +30,7 @@ import { requireSessionsConfirmed, sessionsEndingFor } from "./pt/changes.js";
 import { currentRecordOf, pastRecordOf } from "./memberList/whose.js";
 import type { InviteSettings } from "./invites/settings.js";
 import * as listRepo from "./memberList/repo.js";
+import * as messagesRepo from "./messages/repo.js";
 import * as repo from "./repo.js";
 import { roleById } from "./staffInvites/repo.js";
 import {
@@ -475,9 +476,11 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
   // end — or in BOTH, drawn as "You're a member" over a membership that has
   // just ended. One REPEATABLE READ transaction makes the pair one snapshot; at
   // READ COMMITTED each statement takes its own.
-  const { rows, former } = await deps.sql.begin("isolation level repeatable read read only", async (tx) => ({
+  const { rows, former, newMessages } = await deps.sql.begin("isolation level repeatable read read only", async (tx) => ({
     rows: await repo.listOrgsForUser(tx, userId),
     former: await repo.listFormerOrgsForUser(tx, userId),
+    // The caller's own new messages a gym, for the menu's dot (20a-ii): the inbox's count.
+    newMessages: await messagesRepo.unreadCounts(tx, userId, deps.now?.() ?? new Date()),
   }));
   // Where a gym with too many members for the smaller size it chose would move instead: read
   // only for such a gym, for its billing card.
@@ -604,6 +607,7 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
           : { preset: r.latestNudge.preset, sentAt: r.latestNudge.sentAt.toISOString() },
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
+      newMessages: r.isMember ? (newMessages.get(r.id) ?? 0) : 0,
       };
     }),
     formerOrgs: former.map((f) => ({

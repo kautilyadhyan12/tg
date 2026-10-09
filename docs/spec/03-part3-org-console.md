@@ -4188,6 +4188,11 @@ summary — and the sign-in code. (A lead's follow-ups go from the gym's own ema
 of RULINGS 2026-09-07 (a new one replaces the old; gone after 7 days) becomes the
 inbox's pinned note.
 
+**The menu says a message is waiting** (ROADMAP 20a-ii): the dot beside My Gyms lights
+while any of the member's gyms holds a new message, and goes out once that gym's Inbox
+is opened; with two gyms each gym's button shows its count. The list of my gyms
+(`/v1/orgs/mine`) carries the count a gym, `newMessages`, by the inbox's own rule.
+
 ### 16.2 The automatic messages
 
 Each a switch in Settings → Messages, each number the gym's to change: **Welcome** (on

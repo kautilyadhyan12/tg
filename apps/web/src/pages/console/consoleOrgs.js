@@ -308,6 +308,21 @@ export function applyPaidPlan(gymId, subscription) {
     orgs: state.orgs.map((o) => (o?.id === gymId ? { ...o, subscription, consoleReadOnly: false } : o)),
   });
 }
+/** A member's inbox for one gym was just read or opened: its count of new messages goes
+ *  into the kept row, so the menu's dot and the gym's button agree with the Inbox tab
+ *  without asking the server again (ROADMAP 20a-ii). */
+export function applyInboxCount(gymId, newMessages) {
+  if (typeof gymId !== 'string' || gymId === '' || !Number.isInteger(newMessages) || newMessages < 0) return;
+  const forUserId = getUserId();
+  if (state.status !== 'ready' || state.forUserId !== forUserId) return;
+  if (!Array.isArray(state.orgs)) return;
+  if (!state.orgs.some((o) => o?.id === gymId && o.newMessages !== newMessages)) return;
+  publish({
+    ...state,
+    orgs: state.orgs.map((o) => (o?.id === gymId ? { ...o, newMessages } : o)),
+  });
+}
+
 /** Written out as a named step rather than two inline assignments so that ONE
  *  line names this guarantee and a mutant can point at it (C53). `resetConsoleOrgs`
  *  deliberately does NOT call it — it also has to bump the generation, because

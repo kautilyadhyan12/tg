@@ -1258,6 +1258,10 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  Members in the console's menu (5b-v-d-iv). Counted only for staff who may see the
    *  list's details (`members.confirm`); 0 for everyone else. */
   membersNeedReview: z.number().int().min(0).default(0),
+  /** How many messages in the caller's own inbox from this gym are new, for the dot beside
+   *  My Gyms in the menu (ROADMAP 20a-ii). The same count as the inbox's `unread`; 0 for
+   *  somebody who is not a member, and from an api too old to send it. */
+  newMessages: z.number().int().min(0).default(0),
 });
 export type MyOrg = z.infer<typeof myOrgSchema>;
 

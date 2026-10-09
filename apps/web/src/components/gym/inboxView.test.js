@@ -1,7 +1,7 @@
 // What the member's inbox says (spec Part 3 §16.1; ROADMAP 20a), without a browser.
 import { describe, expect, it } from 'vitest';
 import { GYM_NUDGE_PRESETS } from '@app/shared';
-import { INBOX_NOTE, emptyInbox, inboxTabName, messageRow, pausedInbox, pinnedNote, unreadBadge } from './inboxView';
+import { INBOX_NOTE, emptyInbox, gymButtonName, hasNewMessages, inboxTabName, messageRow, pausedInbox, pinnedNote, unreadBadge } from './inboxView';
 
 const NOW = Date.parse('2026-10-09T12:00:00.000Z');
 const ago = (hours) => new Date(NOW - hours * 3_600_000).toISOString();
@@ -14,6 +14,27 @@ describe('the Inbox tab', () => {
 
   it('is named for a screen reader with how many are new', () => {
     expect([0, 1, 2, 120].map(inboxTabName)).toEqual(['Inbox', 'Inbox, 1 new message', 'Inbox, 2 new messages', 'Inbox, 99+ new messages']);
+  });
+});
+
+describe("the menu's dot and a gym's button (20a-ii)", () => {
+  it('the dot is lit when any gym has a new message, and by nothing else', () => {
+    expect(hasNewMessages([{ id: 'g1', newMessages: 0 }, { id: 'g2', newMessages: 3 }])).toBe(true);
+    expect(hasNewMessages([{ id: 'g1', newMessages: 0 }, { id: 'g2' }])).toBe(false);
+    // A server too old to send the count, a count that is not one, and no list at all.
+    for (const gyms of [[], null, undefined, 'g1', [null], [{ id: 'g1', newMessages: '2' }], [{ id: 'g1', newMessages: -1 }]]) {
+      expect(hasNewMessages(gyms)).toBe(false);
+    }
+  });
+
+  it("a gym's button is named with how many are new", () => {
+    expect([undefined, 0, 1, 2, 120].map((n) => gymButtonName('Iron House', n))).toEqual([
+      'Iron House',
+      'Iron House',
+      'Iron House, 1 new message',
+      'Iron House, 2 new messages',
+      'Iron House, 99+ new messages',
+    ]);
   });
 });
 

@@ -12,7 +12,7 @@ import Classes from '../components/gym/Classes';
 import PersonalTraining from '../components/gym/PersonalTraining';
 import Events from '../components/gym/Events';
 import Inbox from '../components/gym/Inbox';
-import { inboxTabName, unreadBadge } from '../components/gym/inboxView';
+import { gymButtonName, inboxTabName, unreadBadge } from '../components/gym/inboxView';
 import Leaderboard from '../components/gym/Leaderboard';
 import Updates from '../components/gym/Updates';
 import { pickedGym, readPicked, savePicked } from '../components/gym/leaderboardView';
@@ -164,6 +164,7 @@ export default function MyGyms() {
                 type="button"
                 role="tab"
                 aria-selected={gym.id === shownId}
+                aria-label={gymButtonName(gym.name, gym.newMessages)}
                 onClick={() => pick(gym.id)}
                 className="px-3.5 py-2 rounded-xl text-sm font-semibold"
                 style={
@@ -173,6 +174,16 @@ export default function MyGyms() {
                 }
               >
                 {gym.name}
+                {/* Which gym has a new message (20a-ii): the same count as its Inbox tab. */}
+                {unreadBadge(gym.newMessages) !== null ? (
+                  <span
+                    aria-hidden="true"
+                    className="ml-1.5 inline-block rounded-full px-1.5 text-xs font-bold"
+                    style={{ background: '#FF8A1F', color: '#111' }}
+                  >
+                    {unreadBadge(gym.newMessages)}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>

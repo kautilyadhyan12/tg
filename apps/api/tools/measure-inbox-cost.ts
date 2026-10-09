@@ -15,6 +15,7 @@ import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
 import { GYM_INBOX_MAX, GYM_MESSAGE_BODY_MAX } from "@app/shared";
+import { unreadCounts } from "../src/modules/orgs/messages/repo.js";
 import { sendDueMessages } from "../src/modules/orgs/messages/send.js";
 import { getInbox, markRead, type MessagesDeps } from "../src/modules/orgs/messages/service.js";
 
@@ -144,6 +145,14 @@ try {
   await measure(`${String(PEOPLE)} members of one gym reading theirs at the same moment`, () => Promise.all(members.slice(1).map((who) => read(who, 1))));
   await measure(`the fullest inbox: ${String(GYM_INBOX_MAX)} messages of ${String(GYM_MESSAGE_BODY_MAX)}`, () => read(full, GYM_INBOX_MAX));
   await measure("20 members reading the fullest inbox's size at the same moment", () => Promise.all(Array.from({ length: 20 }, () => read(full, GYM_INBOX_MAX))));
+  // The count the list of my gyms carries for the menu's dot (20a-ii): read on every page.
+  const dot = async (who: string, expected: number): Promise<void> => {
+    const n = (await unreadCounts(sql, who, later)).get(gymId) ?? 0;
+    if (n !== expected) throw new Error(`expected ${String(expected)} new, counted ${String(n)}`);
+  };
+  await measure("the menu's count: a member with one new message", () => dot(plain, 1));
+  await measure(`the menu's count: ${String(PEOPLE)} members of one gym at the same moment`, () => Promise.all(members.slice(1).map((who) => dot(who, 1))));
+  await measure(`the menu's count: a member with ${String(GYM_INBOX_MAX + 21)} new`, () => dot(full, GYM_INBOX_MAX + 21));
   await measure("opening the fullest inbox: marked as read", async () => {
     await sql`UPDATE gym_member_messages SET read_at = NULL WHERE gym_id = ${gymId} AND user_id = ${full}`;
     const left = await markRead(deps, full, gymId, { upTo: later.toISOString() }, yes);
