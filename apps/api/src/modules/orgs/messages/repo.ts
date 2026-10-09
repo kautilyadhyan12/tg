@@ -64,12 +64,18 @@ export async function markRead(sql: SqlOrTx, gymId: string, userId: string, upTo
 
 // ── WHAT THE WORKER READS AND WRITES ──
 
-/** The gyms somebody joined in the last `days`: the only gyms a Welcome can be due in.
- *  `gymIds` is for tests on a shared database. */
+/** The gyms where somebody who joined in the last `days` is still in and has had no
+ *  Welcome since: the only gyms a Welcome can be due in, so a gym with nothing to send is
+ *  not held. `gymIds` is for tests on a shared database. */
 export async function gymsWithNewPeople(sql: SqlOrTx, now: Date, days: number, gymIds: readonly string[] | null): Promise<string[]> {
   const rows = await sql<{ gym_id: string }[]>`
     SELECT DISTINCT m.gym_id FROM gym_members m
     WHERE m.joined_at > ${now}::timestamptz - make_interval(days => ${days}::int) AND m.joined_at <= ${now}
+      AND m.removed_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_member_messages x
+        WHERE x.gym_id = m.gym_id AND x.user_id = m.user_id AND x.kind = 'welcome' AND x.sent_at >= m.joined_at
+      )
       ${gymIds === null ? sql`` : sql`AND m.gym_id = ANY(${[...gymIds]}::uuid[])`}
     ORDER BY m.gym_id`;
   return rows.map((row) => row.gym_id);
@@ -101,8 +107,9 @@ export async function gymNow(tx: SqlOrTx, gymId: string, now: Date): Promise<Gym
 export interface NewPerson {
   userId: string;
   displayName: string;
-  /** The day they joined, on the gym's calendar. */
+  /** The day they joined, on the gym's calendar, and in UTC. */
   joinedOn: string;
+  joinedUtcOn: string;
   /** This stay is live and their account is not deleted. */
   member: boolean;
   former: boolean;
@@ -113,9 +120,10 @@ export interface NewPerson {
 /** Everybody who joined the gym in the last `days`, whatever became of them since: the
  *  rule, not this read, decides who is sent anything. */
 export async function newPeople(tx: SqlOrTx, gymId: string, now: Date, days: number): Promise<NewPerson[]> {
-  const rows = await tx<{ user_id: string; display_name: string; joined_on: string; member: boolean; former: boolean; staff: boolean; sent: NewPerson["sent"] }[]>`
+  const rows = await tx<{ user_id: string; display_name: string; joined_on: string; joined_utc_on: string; member: boolean; former: boolean; staff: boolean; sent: NewPerson["sent"] }[]>`
     SELECT m.user_id, u.display_name,
            (m.joined_at AT TIME ZONE g.timezone)::date::text AS joined_on,
+           (m.joined_at AT TIME ZONE 'UTC')::date::text AS joined_utc_on,
            (m.removed_at IS NULL AND u.status = 'active') AS member,
            EXISTS (
              SELECT 1 FROM gym_member_list_entries e
@@ -136,6 +144,7 @@ export async function newPeople(tx: SqlOrTx, gymId: string, now: Date, days: num
     userId: row.user_id,
     displayName: row.display_name,
     joinedOn: row.joined_on,
+    joinedUtcOn: row.joined_utc_on,
     member: row.member,
     former: row.former,
     staff: row.staff,

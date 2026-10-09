@@ -35,6 +35,8 @@ describe("the member messages job", () => {
     expect(calls[0]?.[2]).toMatchObject({ name: ORGS_MEMBER_MESSAGES_JOB });
   });
 
+  // Read as text, as the challenge results job's is: it shows the lines are there, not
+  // that BullMQ reaches them.
   it("the worker schedules it, accepts its name and runs the sending step for it", async () => {
     const worker = await readFile(new URL("../src/worker.ts", import.meta.url), "utf8");
     expect(worker).toContain("await scheduleMemberMessages(queue);");

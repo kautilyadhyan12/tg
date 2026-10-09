@@ -108,7 +108,7 @@ try {
   const cpu = os.cpus()[0];
   console.log(`measure-inbox-cost: ${String(GYMS)} gyms of ${String(PEOPLE)} · ${cpu?.model ?? "?"} at ${String(cpu?.speed ?? 0)} MHz · ${String(RUNS)} runs each`);
 
-  const log = { info: () => undefined };
+  const log = { info: () => undefined, error: () => undefined };
   // The job, once, at its worst: it cannot be run twice with the same work, so one run.
   const worst = await once(async () => {
     const sent = await sendDueMessages({ sql, log }, { now: NOW, gymIds });

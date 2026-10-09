@@ -113,6 +113,9 @@ export interface GymMessageFacts {
     /** The kinds they switched off. */
     off: readonly GymMessageKind[];
     joinedOn: string | null;
+    /** The day they joined in UTC: it names the Welcome's occasion, so a gym that changes
+     *  its time zone cannot make one join into two occasions. */
+    joinedUtcOn: string | null;
     trial: { startsOn: string; endsOn: string } | null;
     /** The last day of a membership that is not a trial and will not renew. */
     membershipEndsOn: string | null;
@@ -196,8 +199,8 @@ export function gymMessageOccasions(facts: GymMessageFacts): GymMessageOccasion[
   }
 
   const sinceJoined = daysBetween(person.joinedOn, today);
-  if (!person.staff && sinceJoined !== null && sinceJoined >= 0 && sinceJoined < GYM_MESSAGE_WELCOME_DAYS) {
-    found.push({ kind: "welcome", occasion: `joined:${String(person.joinedOn)}` });
+  if (!person.staff && sinceJoined !== null && sinceJoined >= 0 && sinceJoined < GYM_MESSAGE_WELCOME_DAYS && dayNumber(person.joinedUtcOn) !== null) {
+    found.push({ kind: "welcome", occasion: `joined:${String(person.joinedUtcOn)}` });
   }
 
   if (person.birthday !== null && isBirthday(person.birthday, today)) found.push({ kind: "birthday", occasion: `birthday:${today.slice(0, 4)}` });

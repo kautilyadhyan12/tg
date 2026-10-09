@@ -23,12 +23,12 @@ import * as repo from "./repo.js";
 
 export interface SendMessagesDeps {
   sql: Sql;
-  log: { info: (obj: object, msg: string) => void };
+  log: { info: (obj: object, msg: string) => void; error: (obj: object, msg: string) => void };
 }
 
-/** The read reaches a day further back than a Welcome can go, so that no time zone's
- *  calendar puts a joiner outside it; the rule keeps the days. */
-const LOOK_BACK_DAYS = GYM_MESSAGE_WELCOME_DAYS + 1;
+/** How far back the read looks for joiners, in days of 24 hours; the rule keeps the
+ *  days of the gym's calendar. */
+const LOOK_BACK_DAYS = GYM_MESSAGE_WELCOME_DAYS;
 
 function factsFor(gym: repo.GymNow, person: repo.NewPerson): GymMessageFacts {
   return {
@@ -39,6 +39,7 @@ function factsFor(gym: repo.GymNow, person: repo.NewPerson): GymMessageFacts {
       staff: person.staff,
       off: [],
       joinedOn: person.joinedOn,
+      joinedUtcOn: person.joinedUtcOn,
       trial: null,
       membershipEndsOn: null,
       bills: [],
@@ -55,33 +56,47 @@ function wordsFor(send: GymMessageOccasion, gym: repo.GymNow, person: repo.NewPe
   return send.kind === "welcome" ? welcomeMessage(gym.name, person.displayName) : null;
 }
 
-/** Sends every automatic message that is due now. `gymIds` is for tests on a shared database. */
+/** Sends every automatic message that is due now. A gym that fails is logged and the
+ *  rest still get theirs; the run then throws, so the job shows failed. `gymIds` is for
+ *  tests on a shared database. */
 export async function sendDueMessages(deps: SendMessagesDeps, opts: { now?: Date; gymIds?: readonly string[] } = {}): Promise<{ gyms: number; sent: number }> {
   const now = opts.now ?? new Date();
   const gymIds = await repo.gymsWithNewPeople(deps.sql, now, LOOK_BACK_DAYS, opts.gymIds ?? null);
   let sent = 0;
+  const failed: string[] = [];
   for (const gymId of gymIds) {
-    sent += await deps.sql.begin(async (tx) => {
-      await lockGym(tx, gymId);
-      const gym = await repo.gymNow(tx, gymId, now);
-      if (gym === null) return 0;
-      const due: repo.NewMessage[] = [];
-      // One person may have two stays in the read (removed, then back): what the first
-      // is sent, the second must see.
-      const sentNow = new Map<string, repo.NewPerson["sent"]>();
-      for (const person of await repo.newPeople(tx, gymId, now, LOOK_BACK_DAYS)) {
-        const before = sentNow.get(person.userId) ?? [];
-        const { send } = gymMessageDue(factsFor(gym, { ...person, sent: [...person.sent, ...before] }));
-        if (send === null) continue;
-        const body = wordsFor(send, gym, person);
-        if (body === null) continue;
-        due.push({ gymId, userId: person.userId, kind: send.kind, occasion: send.occasion, body, gymDay: gym.today });
-        sentNow.set(person.userId, [...before, { ...send, day: gym.today }]);
-      }
-      return repo.insertMessages(tx, due, now, GYM_MESSAGE_KEPT_DAYS);
-    });
+    try {
+      sent += await sendForGym(deps.sql, gymId, now);
+    } catch (err) {
+      failed.push(gymId);
+      deps.log.error({ event: "member_messages.gym_failed", gymId, errName: err instanceof Error ? err.name : typeof err }, "member messages failed for a gym");
+    }
   }
   // Counts only: who was sent what is in the table, never in a log.
   if (sent > 0) deps.log.info({ event: "member_messages.sent", gyms: gymIds.length, sent }, "member messages sent");
+  if (failed.length > 0) throw new Error(`member messages failed for ${String(failed.length)} of ${String(gymIds.length)} gyms`);
   return { gyms: gymIds.length, sent };
+}
+
+/** One gym's due messages, written with the gym's row held. */
+function sendForGym(sql: Sql, gymId: string, now: Date): Promise<number> {
+  return sql.begin(async (tx) => {
+    await lockGym(tx, gymId);
+    const gym = await repo.gymNow(tx, gymId, now);
+    if (gym === null) return 0;
+    const due: repo.NewMessage[] = [];
+    // One person may have two stays in the read (removed, then back): what the first
+    // is sent, the second must see.
+    const sentNow = new Map<string, repo.NewPerson["sent"]>();
+    for (const person of await repo.newPeople(tx, gymId, now, LOOK_BACK_DAYS)) {
+      const before = sentNow.get(person.userId) ?? [];
+      const { send } = gymMessageDue(factsFor(gym, { ...person, sent: [...person.sent, ...before] }));
+      if (send === null) continue;
+      const body = wordsFor(send, gym, person);
+      if (body === null) continue;
+      due.push({ gymId, userId: person.userId, kind: send.kind, occasion: send.occasion, body, gymDay: gym.today });
+      sentNow.set(person.userId, [...before, { ...send, day: gym.today }]);
+    }
+    return repo.insertMessages(tx, due, now, GYM_MESSAGE_KEPT_DAYS);
+  });
 }

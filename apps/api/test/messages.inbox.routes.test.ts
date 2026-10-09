@@ -143,7 +143,7 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
     await sql`UPDATE gym_members SET removed_at = ${at} WHERE gym_id = ${gym.id} AND user_id = ${userId} AND removed_at IS NULL`;
   };
 
-  const log = { info: () => undefined };
+  const log = { info: () => undefined, error: () => undefined };
   /** The sending step, looking only at these gyms: other tests share the database. */
   const run = (gyms: readonly Gym[], now: Date = clock) => sendDueMessages({ sql, log }, { now, gymIds: gyms.map((g) => g.id) });
   const sentTo = async (gym: Gym): Promise<{ user_id: string; kind: string; occasion: string; body: string; day: string; read: boolean }[]> =>
@@ -235,6 +235,7 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
       const theirs = await joins(other, "Theo Other");
       const stranger = await signedIn("Sam Stranger");
       expect((await run([gym, other])).sent).toBe(3);
+      clock = minutes(NOON, 1);
 
       for (const who of [stranger, theirs, other.owner]) {
         expect((await inject("GET", path(gym.id), who.cookies)).statusCode).toBe(404);
@@ -250,13 +251,21 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
       const mine = await inject("GET", path(gym.id), maya.cookies);
       const read = JSON.parse(mine.body) as GymInboxResponse;
       expect(read.messages.map((m) => m.body)).toEqual([welcomeMessage(gym.name, "Maya Rao")]);
+      // Bo's unread message, and a second one written for him, are not in her count.
+      await sql`
+        INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at)
+        VALUES (${gym.id}, ${bo.userId}, 'birthday', 'birthday:2026', 'Happy birthday, Bo.', '2026-10-09', ${NOON}, ${days(NOON, 30)})`;
+      expect((await inbox(gym, maya)).unread).toBe(1);
+      expect((await inbox(gym, bo)).unread).toBe(2);
       expect(mine.body).not.toContain("Bo");
       expect(mine.body).not.toContain(bo.userId);
       expect(mine.body).not.toContain("Theo");
 
       // Maya marking hers as read marks nobody else's, in her gym or any other.
       expect((await inject("POST", `${path(gym.id)}/read`, maya.cookies, { upTo: minutes(NOON, 1).toISOString() })).statusCode).toBe(200);
-      expect((await sentTo(gym)).map((r) => [r.user_id, r.read]).sort()).toEqual([[maya.userId, true], [bo.userId, false]].sort());
+      expect((await sentTo(gym)).map((r) => [r.user_id, r.read]).sort()).toEqual([[maya.userId, true], [bo.userId, false], [bo.userId, false]].sort());
+      expect((await inbox(gym, maya)).unread).toBe(0);
+      expect((await inbox(gym, bo)).unread).toBe(2);
       expect((await sentTo(other)).map((r) => r.read)).toEqual([false]);
     },
     T,
@@ -347,8 +356,9 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
       const late = await joins(night, "Lou Late", new Date("2026-10-10T00:30:00Z"));
       expect((await run([night], new Date("2026-10-10T01:00:00Z"))).sent).toBe(0);
       expect((await run([night], new Date("2026-10-10T12:00:00Z"))).sent).toBe(1);
-      // Joined on the 9th by the gym's own calendar, though the 10th in UTC.
-      expect((await sentTo(night)).find((r) => r.user_id === late.userId)?.occasion).toBe("joined:2026-10-09");
+      // Joined on the 9th by the gym's own calendar and the 10th in UTC: sent on the gym's
+      // 10th, for an occasion named by the UTC day, which no zone change moves.
+      expect((await sentTo(night)).find((r) => r.user_id === late.userId)).toMatchObject({ occasion: "joined:2026-10-10", day: "2026-10-10" });
 
       // The plan comes back within the three days: the Welcome goes then. The closed gym never sends.
       await livePlan(lapsed.id);
@@ -393,7 +403,7 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
 
       // Back in the gym, she is shown only what was sent since she came back.
       clock = minutes(NOON, 20);
-      expect((await inbox(gym, back)).messages).toEqual([]);
+      expect(await inbox(gym, back)).toMatchObject({ messages: [], unread: 0 });
       // Removed and back the NEXT day is a new join, and is welcomed for it.
       await remove(gym, recent.userId, minutes(NOON, 30));
       await inGym(gym, recent.userId, days(NOON, 1));
@@ -405,21 +415,132 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
   );
 
   it(
-    "many members at one address each read their own inbox",
+    "the inbox's own limits at one address: a member past 600 reads in the hour is refused, the next member is not, and a stranger's 404 is not counted",
     async () => {
       clock = NOON;
       const gym = await makeGym("Inbox Wifi Gym");
-      const people = [];
-      for (const name of ["Ana One", "Ben Two", "Cy Three", "Di Four", "Ed Five"]) people.push({ name, who: await joins(gym, name) });
-      expect((await run([gym])).sent).toBe(5);
+      const maya = await joins(gym, "Maya Rao");
+      const bo = await joins(gym, "Bo Lee");
+      const stranger = await signedIn("Sam Stranger");
+      expect((await run([gym])).sent).toBe(2);
       const ADDRESS = "10.88.249.249";
-      for (let round = 0; round < 4; round += 1) {
-        for (const { name, who } of people) {
-          const res = await inject("GET", path(gym.id), who.cookies, undefined, ADDRESS);
-          expect(res.statusCode).toBe(200);
-          expect((JSON.parse(res.body) as GymInboxResponse).messages.map((m) => m.body)).toEqual([welcomeMessage(gym.name, name)]);
-        }
-      }
+      const hers = `rl:orgs_inbox_read:id:${maya.userId}`;
+      const theAddress = `rl:orgs_inbox_read:ip:${ADDRESS}`;
+      const read = (who: Person) => inject("GET", path(gym.id), who.cookies, undefined, ADDRESS);
+
+      // Each read is counted once for her and once for the address.
+      for (let i = 0; i < 3; i += 1) expect((await read(maya)).statusCode).toBe(200);
+      expect([await redis.get(hers), await redis.get(theAddress)]).toEqual(["3", "3"]);
+
+      // Her 600th read of the hour is answered and her 601st is not, by this route's own
+      // limit (the app-wide one says "Too many requests").
+      await redis.setex(hers, 3600, "599");
+      expect((await read(maya)).statusCode).toBe(200);
+      const refused = await read(maya);
+      expect(refused.statusCode).toBe(429);
+      expect((JSON.parse(refused.body) as { message: string }).message).toBe("Too many attempts. Please try again later.");
+      // Her being refused is hers alone: Bo, at the same address, reads his own.
+      const his = await read(bo);
+      expect(his.statusCode).toBe(200);
+      expect((JSON.parse(his.body) as GymInboxResponse).messages.map((m) => m.body)).toEqual([welcomeMessage(gym.name, "Bo Lee")]);
+
+      // A stranger's 404 does not use up the address's reads.
+      const before = await redis.get(theAddress);
+      expect(before).not.toBeNull();
+      for (let i = 0; i < 5; i += 1) expect((await read(stranger)).statusCode).toBe(404);
+      expect(await redis.get(theAddress)).toBe(before);
+
+      // The address's own limit is a whole gym's, not one person's: 700 reads there stop
+      // nobody, and past 6,000 in the hour everybody there waits.
+      await redis.setex(theAddress, 3600, "700");
+      expect((await read(bo)).statusCode).toBe(200);
+      await redis.setex(theAddress, 3600, "6000");
+      expect((await read(bo)).statusCode).toBe(429);
+    },
+    T,
+  );
+
+  it(
+    "a removal that lands while a run is waiting for the gym: the run sees it, and sends that person nothing",
+    async () => {
+      clock = NOON;
+      const gym = await makeGym("Inbox Held Gym");
+      const maya = await joins(gym, "Maya Rao");
+      const rex = await joins(gym, "Rex Removed");
+      let running: Promise<{ gyms: number; sent: number }> | undefined;
+      // Staff's step holds the gym's row, as every removal does, while the run starts.
+      await sql.begin(async (tx) => {
+        await tx`SELECT 1 FROM gyms WHERE id = ${gym.id} FOR UPDATE`;
+        running = run([gym]);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        expect(await sentTo(gym)).toEqual([]);
+        await tx`UPDATE gym_members SET removed_at = ${NOON} WHERE gym_id = ${gym.id} AND user_id = ${rex.userId}`;
+      });
+      expect(await running).toEqual({ gyms: 1, sent: 1 });
+      expect((await sentTo(gym)).map((r) => r.user_id)).toEqual([maya.userId]);
+    },
+    T,
+  );
+
+  it(
+    "a gym that changes its time zone sends nobody a second Welcome",
+    async () => {
+      // 19:00 UTC on the 9th: half past midnight on the 10th in Kolkata.
+      const joined = new Date("2026-10-09T19:00:00Z");
+      const gym = await makeGym("Inbox Moving Gym");
+      const maya = await joins(gym, "Maya Rao", joined);
+      // 09:30 in Kolkata on the 10th.
+      expect((await run([gym], new Date("2026-10-10T04:00:00Z"))).sent).toBe(1);
+      await sql`UPDATE gyms SET timezone = 'Europe/London' WHERE id = ${gym.id}`;
+      // In London she joined on the 9th. Noon there, the next two days.
+      expect((await run([gym], new Date("2026-10-10T11:00:00Z"))).sent).toBe(0);
+      expect((await run([gym], new Date("2026-10-11T11:00:00Z"))).sent).toBe(0);
+      expect((await sentTo(gym)).map((r) => [r.user_id, r.occasion])).toEqual([[maya.userId, "joined:2026-10-09"]]);
+    },
+    T,
+  );
+
+  it(
+    "a gym the run cannot read does not stop the gyms after it: they are sent theirs, and the run still fails",
+    async () => {
+      clock = NOON;
+      const gyms = [await makeGym("Inbox Row One"), await makeGym("Inbox Row Two"), await makeGym("Inbox Row Three")].sort((a, b) => (a.id < b.id ? -1 : 1));
+      const people = [];
+      for (const gym of gyms) people.push(await joins(gym, "Maya Rao"));
+      const [bad, ...good] = gyms;
+      if (bad === undefined) throw new Error("no gym");
+      // The first gym the run reaches has a zone Postgres does not know.
+      await sql`UPDATE gyms SET timezone = 'Not/A_Zone' WHERE id = ${bad.id}`;
+      const errors: object[] = [];
+      const loud = { info: () => undefined, error: (obj: object) => void errors.push(obj) };
+      await expect(sendDueMessages({ sql, log: loud }, { now: NOON, gymIds: gyms.map((g) => g.id) })).rejects.toThrow("member messages failed for 1 of 3 gyms");
+      expect(await sentTo(bad)).toEqual([]);
+      for (const gym of good) expect(await sentTo(gym)).toHaveLength(1);
+      // The log names the gym and the kind of error, and nobody in it.
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatchObject({ event: "member_messages.gym_failed", gymId: bad.id });
+      expect(JSON.stringify(errors)).not.toContain(people[0]?.userId ?? "x");
+      expect(JSON.stringify(errors)).not.toContain("Maya");
+      // Put right, the gym gets its own on the next run and nobody a second.
+      await sql`UPDATE gyms SET timezone = 'Asia/Kolkata' WHERE id = ${bad.id}`;
+      expect(await run(gyms, minutes(NOON, 15))).toEqual({ gyms: 1, sent: 1 });
+    },
+    T,
+  );
+
+  it(
+    "a gym whose new members all have their Welcome is not looked at again",
+    async () => {
+      clock = NOON;
+      const gym = await makeGym("Inbox Quiet Gym");
+      await joins(gym, "Maya Rao");
+      const rex = await joins(gym, "Rex Removed");
+      await remove(gym, rex.userId, minutes(NOON, -5));
+      expect(await run([gym])).toEqual({ gyms: 1, sent: 1 });
+      expect(await run([gym], minutes(NOON, 15))).toEqual({ gyms: 0, sent: 0 });
+      // Somebody new, and the gym is looked at again.
+      await joins(gym, "Bo Lee", minutes(NOON, 20));
+      expect(await run([gym], minutes(NOON, 30))).toEqual({ gyms: 1, sent: 1 });
     },
     T,
   );

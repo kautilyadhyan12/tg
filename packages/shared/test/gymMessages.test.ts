@@ -27,6 +27,7 @@ const nobody: Person = {
   staff: false,
   off: [],
   joinedOn: "2026-01-05",
+  joinedUtcOn: "2026-01-05",
   trial: null,
   membershipEndsOn: null,
   bills: [],
@@ -46,7 +47,8 @@ const DUE: Record<GymMessageKind, { person: Partial<Person>; occasion: string }>
   membership_ending: { person: { membershipEndsOn: "2026-10-16" }, occasion: "ends:2026-10-16" },
   trial_ending: { person: { trial: { startsOn: "2026-09-28", endsOn: "2026-10-11" } }, occasion: "trial:2026-09-28" },
   trial_check_in: { person: { trial: { startsOn: "2026-10-08", endsOn: "2026-10-21" } }, occasion: "trial:2026-10-08" },
-  welcome: { person: { joinedOn: "2026-10-09" }, occasion: "joined:2026-10-09" },
+  // Joined late on the 8th in UTC, which is the 9th on this gym's calendar.
+  welcome: { person: { joinedOn: "2026-10-09", joinedUtcOn: "2026-10-08" }, occasion: "joined:2026-10-08" },
   birthday: { person: { birthday: "10-09" }, occasion: "birthday:2026" },
   milestone: { person: { visits: 50, lastVisitOn: TODAY }, occasion: "visits:50" },
   miss_you: { person: { lastVisitOn: "2026-09-29" }, occasion: "absent:2026-09-29" },
@@ -105,12 +107,12 @@ describe("the message rule", () => {
     const due = gymMessageDue(facts(person));
     expect(due.send).toEqual({ kind: "payment_overdue", occasion: "bill:b1" });
     expect(due.held).toEqual([
-      { kind: "welcome", occasion: "joined:2026-10-09", reason: "another_today" },
+      { kind: "welcome", occasion: "joined:2026-10-08", reason: "another_today" },
       { kind: "birthday", occasion: "birthday:2026", reason: "another_today" },
     ]);
     // The next day the bill's notice is not sent again, and Welcome goes.
     const next = gymMessageDue(facts({ ...person, birthday: null }, { gym: { today: "2026-10-10" }, sent: [{ kind: "payment_overdue", occasion: "bill:b1", day: TODAY }] }));
-    expect(next.send).toEqual({ kind: "welcome", occasion: "joined:2026-10-09" });
+    expect(next.send).toEqual({ kind: "welcome", occasion: "joined:2026-10-08" });
   });
 
   it("the hours: nothing before 08:00 or from 21:00 on the gym's clock", () => {
@@ -159,6 +161,17 @@ describe("the occasions", () => {
     expect(kinds({ joinedOn: "2026-10-10" })).toEqual([]);
     expect(kinds({ joinedOn: TODAY, staff: true })).toEqual([]);
     expect(kinds({ joinedOn: null })).toEqual([]);
+    expect(kinds({ joinedOn: TODAY, joinedUtcOn: null })).toEqual([]);
+  });
+
+  it("welcome: the gym changing its time zone does not make one join a second occasion", () => {
+    // Joined 19:00 UTC on the 9th: the 10th in Kolkata, the 9th in London.
+    const inKolkata = facts({ joinedOn: "2026-10-10", joinedUtcOn: "2026-10-09" }, { gym: { today: "2026-10-10" } });
+    const first = gymMessageDue(inKolkata).send;
+    expect(first).toEqual({ kind: "welcome", occasion: "joined:2026-10-09" });
+    if (first === null) throw new Error("not sent");
+    const inLondon = facts({ joinedOn: "2026-10-09", joinedUtcOn: "2026-10-09" }, { gym: { today: "2026-10-11" }, sent: [{ ...first, day: "2026-10-10" }] });
+    expect(gymMessageDue(inLondon)).toEqual({ send: null, held: [{ kind: "welcome", occasion: "joined:2026-10-09", reason: "already_sent" }] });
   });
 
   it("birthday: on the day, once a year; 29 February is kept on the 28th in a short year", () => {
