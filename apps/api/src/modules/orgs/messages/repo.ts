@@ -152,14 +152,16 @@ export interface NewMessage {
   gymDay: string;
 }
 
-/** Writes one message. False when that occasion already has its message: the unique
- *  index, so two runs at one instant still send once. */
-export async function insertMessage(tx: SqlOrTx, message: NewMessage, now: Date, keptDays: number): Promise<boolean> {
+/** Writes the messages in one statement, and answers how many were written. One whose
+ *  occasion already has its message is not: the unique index, so two runs at one instant
+ *  still send once. */
+export async function insertMessages(tx: SqlOrTx, messages: readonly NewMessage[], now: Date, keptDays: number): Promise<number> {
+  if (messages.length === 0) return 0;
+  const expires = new Date(now.getTime() + keptDays * 86_400_000);
+  const values = messages.map((m) => ({ gym_id: m.gymId, user_id: m.userId, kind: m.kind, occasion: m.occasion, body: m.body, gym_day: m.gymDay, sent_at: now, expires_at: expires }));
   const rows = await tx<{ id: string }[]>`
-    INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at)
-    VALUES (${message.gymId}, ${message.userId}, ${message.kind}, ${message.occasion}, ${message.body}, ${message.gymDay}::date,
-            ${now}, ${now}::timestamptz + make_interval(days => ${keptDays}::int))
+    INSERT INTO gym_member_messages ${tx(values)}
     ON CONFLICT (gym_id, user_id, kind, occasion) DO NOTHING
     RETURNING id`;
-  return rows.length > 0;
+  return rows.length;
 }

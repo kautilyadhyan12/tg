@@ -65,21 +65,20 @@ export async function sendDueMessages(deps: SendMessagesDeps, opts: { now?: Date
       await lockGym(tx, gymId);
       const gym = await repo.gymNow(tx, gymId, now);
       if (gym === null) return 0;
-      let written = 0;
+      const due: repo.NewMessage[] = [];
       // One person may have two stays in the read (removed, then back): what the first
       // is sent, the second must see.
       const sentNow = new Map<string, repo.NewPerson["sent"]>();
       for (const person of await repo.newPeople(tx, gymId, now, LOOK_BACK_DAYS)) {
         const before = sentNow.get(person.userId) ?? [];
-        const due = gymMessageDue(factsFor(gym, { ...person, sent: [...person.sent, ...before] }));
-        if (due.send === null) continue;
-        const body = wordsFor(due.send, gym, person);
+        const { send } = gymMessageDue(factsFor(gym, { ...person, sent: [...person.sent, ...before] }));
+        if (send === null) continue;
+        const body = wordsFor(send, gym, person);
         if (body === null) continue;
-        const wrote = await repo.insertMessage(tx, { gymId, userId: person.userId, kind: due.send.kind, occasion: due.send.occasion, body, gymDay: gym.today }, now, GYM_MESSAGE_KEPT_DAYS);
-        sentNow.set(person.userId, [...before, { ...due.send, day: gym.today }]);
-        if (wrote) written += 1;
+        due.push({ gymId, userId: person.userId, kind: send.kind, occasion: send.occasion, body, gymDay: gym.today });
+        sentNow.set(person.userId, [...before, { ...send, day: gym.today }]);
       }
-      return written;
+      return repo.insertMessages(tx, due, now, GYM_MESSAGE_KEPT_DAYS);
     });
   }
   // Counts only: who was sent what is in the table, never in a log.
