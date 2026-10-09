@@ -761,7 +761,7 @@ function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking
   const leaders = leadersLine(challenge, words);
   const top = challenge.top ?? [];
   const about = challenge.prize !== '' || challenge.details !== '';
-  const posted = resultPostNote(challenge, updatesLink !== null, words);
+  const posted = resultPostNote(challenge, updatesLink !== null, words, readOnly);
   return (
     <div className="flex flex-col gap-4" data-testid="challenge-detail">
       <button type="button" onClick={onBack} className="c-btn c-btn-link self-start">

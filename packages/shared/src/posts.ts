@@ -129,8 +129,9 @@ export const gymPostSchema = z
     /** Hidden from members while staff decide (`GYM_POST_REPORTS_TO_HIDE`). A member is
      *  sent such a post only when they wrote it. */
     hidden: z.boolean(),
-    /** The result of the challenge this post announces; null for every other post, and
-     *  while that challenge is not an ended one (cancelled, or its gym changed time zone). */
+    /** The result of the challenge this post announces; null for every other post. A post
+     *  whose challenge is not an ended one (its gym moved its clock back) is in no list of
+     *  Updates until it is one again, so its words never say "has ended" too soon. */
     challengeResult: gymPostChallengeResultSchema.nullable(),
   })
   .strict();

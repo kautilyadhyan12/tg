@@ -603,9 +603,9 @@ async function staffTeams(deps: ChallengesDeps, gymId: string, rows: readonly re
   return (row) => (teams.get(row.id) ?? []).map((team) => ({ id: team.id, name: team.name, people: sizes.get(team.id) ?? 0, value: null, place: null }));
 }
 
-const resultPostOf = (of: Map<string, { postedAt: Date; removed: boolean }>, challengeId: string): StaffGymChallenge["resultPost"] => {
+const resultPostOf = (of: Map<string, posts.ResultPostRow>, challengeId: string): StaffGymChallenge["resultPost"] => {
   const post = of.get(challengeId);
-  return post === undefined ? null : { postedAt: post.postedAt.toISOString(), removed: post.removed };
+  return post === undefined ? null : { postedAt: post.postedAt.toISOString(), removed: post.removed, hidden: post.hidden };
 };
 
 async function staffChallenge(deps: ChallengesDeps, gymId: string, challengeId: string): Promise<StaffGymChallenge> {

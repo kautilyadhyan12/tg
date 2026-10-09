@@ -164,7 +164,7 @@ describe("the console's Challenges page", () => {
     svc.add.mockImplementation(async (_gym, _key, fields) => challenge('new', fields.name, { ...fields, state: 'coming', joinedCount: 0 }));
     await openAdd();
     // It opens on the commonest challenge.
-    expect(picked('Who counts it')).toBe('The appIt counts gym check-ins or workouts by itself. Nothing for your staff to do.');
+    expect(picked('Who counts it')).toBe("The appIt counts gym check-ins or workouts by itself. Your staff don't enter any numbers.");
     expect(picked('What the app counts')).toBe('Gym daysA day a member is checked in, at your front desk or by your staff. Two visits in one day count once.');
     expect(picked('How it is won')).toBe('Most gym days winsThe member with the most gym days when it ends comes 1st.');
     expect(picked('Who is in it')).toContain('Everyone in the app');
@@ -373,9 +373,9 @@ describe("the console's Challenges page", () => {
     expect(wins()).toEqual([
       'Most seconds winsThe member with the most seconds when it ends comes 1st.',
       'Reach a targetYou set the target, such as 100 seconds. Everyone who reaches it wins.',
-      'Fewest seconds winsFor a fastest time. The member with the fewest seconds when it ends comes 1st.',
+      'Lowest seconds winsFor a fastest time. The member with the lowest number when it ends comes 1st.',
     ]);
-    expect(picked('How it is won')).toContain('Fewest seconds wins');
+    expect(picked('How it is won')).toContain('Lowest seconds wins');
     fireEvent.click(form().getByRole('button', { name: 'Add challenge' }));
     await waitFor(() => expect(svc.add).toHaveBeenCalledTimes(1));
     expect(svc.add.mock.calls[0][2]).toEqual({ name: 'Row 500 m', details: '', prize: '', unit: 'seconds', counts: 'own', startsOn: '2026-10-07', endsOn: '2026-10-14', target: null, who: 'everyone', lowestWins: true, teams: 'none', teamList: [] });
@@ -386,6 +386,11 @@ describe("the console's Challenges page", () => {
     pick('Who counts it', 'The app');
     expect(picked('What the app counts')).toContain('Gym days');
     expect(picked('How it is won')).toContain('Most gym days wins');
+    // The app goes back to what it was last picked to count.
+    pick('What the app counts', 'Workout days');
+    pick('Who counts it', 'Your staff');
+    pick('Who counts it', 'The app');
+    expect(picked('What the app counts')).toContain('Workout days');
   });
 
   it("the gym's own count: staff type each person's number on its board, and only the changed ones are saved", async () => {

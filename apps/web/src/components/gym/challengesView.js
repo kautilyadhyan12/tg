@@ -16,8 +16,17 @@ export const unitOf = (counts) => UNIT[counts];
 
 /** The gym's own count (staff type the numbers) reads in the gym's own word, as typed. */
 const isOwn = (challenge) => challenge.counts === 'own';
+/** The gym's own word after the number 1: "push-ups" → "push-up", "boxes" → "box". Only a
+ *  word whose ending is an English plural's is touched; anything else is printed as typed
+ *  ("kg lifted", "5 km time", "calories"). */
+export function oneOf(unit) {
+  if (/(?:ch|sh|x|ss)es$/i.test(unit)) return unit.slice(0, -2);
+  if (/(?:ss|us|is|ies)$/i.test(unit) || !/[a-z]s$/i.test(unit)) return unit;
+  return unit.slice(0, -1);
+}
+
 /** The word after a number: "gym days", "gym day", or the gym's own word. */
-const wordFor = (challenge, n) => (isOwn(challenge) ? challenge.unit : `${UNIT[challenge.counts]}${n === 1 ? '' : 's'}`);
+const wordFor = (challenge, n) => (isOwn(challenge) ? (n === 1 ? oneOf(challenge.unit) : challenge.unit) : `${UNIT[challenge.counts]}${n === 1 ? '' : 's'}`);
 const amount = (challenge, n) => `${n.toLocaleString('en')} ${wordFor(challenge, n)}`;
 
 /** People are in it in teams (19d-ii-a): a team's number is its people's added together. */
@@ -54,10 +63,10 @@ export function winLine({ counts, unit = '', target, lowestWins = false, teamed 
   const c = { counts, unit };
   if (teamed) {
     if (target !== null) return `Reach ${amount(c, target)} as a team`;
-    return `The team with the ${lowestWins ? 'fewest' : 'most'} ${wordFor(c, 2)} wins`;
+    return `The team with the ${lowestWins ? 'lowest' : 'most'} ${wordFor(c, 2)} wins`;
   }
   if (target !== null) return `Reach ${amount(c, target)}`;
-  return `${lowestWins ? 'Fewest' : 'Most'} ${wordFor(c, 2)} wins`;
+  return `${lowestWins ? 'Lowest' : 'Most'} ${wordFor(c, 2)} wins`;
 }
 
 /** How it is won, in one line. */

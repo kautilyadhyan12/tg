@@ -115,7 +115,8 @@ describe('teams on the Add challenge form', () => {
     expect(form().queryByRole('group', { name: 'Teams' })).toBeNull();
   });
 
-  it('in teams: two boxes to start, more can be added up to eight and removed down to two, and what is typed is what is sent', async () => {
+  // Many presses and two calendars: 1.5 s alone, past the 5 s limit once in a full local run.
+  it('in teams: two boxes to start, more can be added up to eight and removed down to two, and what is typed is what is sent', { timeout: 15_000 }, async () => {
     svc.add.mockImplementation(async (_gymId, _key, fields) => challenge('n', fields.name, { ...fields, state: 'coming', teamList: fields.teamList.map((t, i) => team(`00000000-0000-4000-8000-00000000000${i}`, t.name)) }));
     open();
     fireEvent.click(await screen.findByRole('button', { name: 'Add challenge' }));
@@ -520,7 +521,7 @@ describe('round one', () => {
     pick('Who counts it', 'Your staff');
     type('What your staff count', 'seconds');
     expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio')[2].textContent.replace(/\s+/g, ' ').trim()).toBe(
-      'Fewest seconds winsFor a fastest time. The team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.',
+      'Lowest seconds winsFor a fastest time. The team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.',
     );
   });
 

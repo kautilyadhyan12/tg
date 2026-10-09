@@ -25,7 +25,7 @@ const WORDS = { people: 'members' };
 
 describe('what a challenge’s own page says about its result post', () => {
   const challenge = (over = {}) => ({ state: 'running', cancelled: false, resultPost: null, ...over });
-  const posted = { postedAt: '2026-10-07T18:38:00.000Z', removed: false };
+  const posted = { postedAt: '2026-10-07T18:38:00.000Z', removed: false, hidden: false };
 
   it.each([
     ['running', challenge(), true, { text: 'When it ends, its result is posted to Updates for your members.', link: false, who: null }],
@@ -35,9 +35,16 @@ describe('what a challenge’s own page says about its result post', () => {
     ['ended, not posted yet', challenge({ state: 'ended' }), true, null],
     ['ended and posted, for staff who post updates', challenge({ state: 'ended', resultPost: posted }), true, { text: 'Its result is posted in Updates.', link: true, who: null }],
     ['ended and posted, for staff who do not', challenge({ state: 'ended', resultPost: posted }), false, { text: 'Its result is posted in Updates.', link: false, who: 'The owner and staff who post updates can open it there.' }],
+    ['ended, its post hidden while five reports wait', challenge({ state: 'ended', resultPost: { ...posted, hidden: true } }), true, { text: 'Its result post is hidden from your members while it waits in Reported posts on Updates.', link: true, who: null }],
     ['ended, its post removed', challenge({ state: 'ended', resultPost: { ...posted, removed: true } }), true, { text: "Its result post was removed from Updates, so your members don't see it there now.", link: false, who: null }],
   ])('%s', (_what, given, mayPost, note) => {
     expect(resultPostNote(given, mayPost, WORDS)).toEqual(note);
+  });
+
+  it('on no plan nothing is posted, so a running challenge promises nothing; an ended one still says what is true', () => {
+    expect(resultPostNote(challenge(), true, WORDS, true)).toBeNull();
+    expect(resultPostNote(challenge({ state: 'coming' }), true, WORDS, true)).toBeNull();
+    expect(resultPostNote(challenge({ state: 'ended', resultPost: posted }), true, WORDS, true)?.text).toBe('Its result is posted in Updates.');
   });
 
   it('a challenge read before the server sent the field says nothing false', () => {

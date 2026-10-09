@@ -54,7 +54,7 @@ export const amountOf = (challenge, n) => countText(n, challenge.counts, (challe
 
 /** Who counts a challenge: the app by itself, or the gym's staff by hand. */
 export const COUNTED_BY_CHOICES = [
-  { id: 'app', title: 'The app', sub: 'It counts gym check-ins or workouts by itself. Nothing for your staff to do.' },
+  { id: 'app', title: 'The app', sub: "It counts gym check-ins or workouts by itself. Your staff don't enter any numbers." },
   { id: 'staff', title: 'Your staff', sub: "For anything the app can't count: push-ups, a 5 km time, weight lifted. Your staff enter each person's number." },
 ];
 
@@ -75,23 +75,22 @@ export function winChoices(counts, teams = 'none', unit = '', words = { person: 
   const u = wordsOf({ counts, unit });
   const own = counts === 'own';
   const theMost = u === '' ? 'highest number' : `most ${u}`;
-  const theFewest = u === '' ? 'lowest number' : `fewest ${u}`;
   const most = u === '' ? 'Highest number wins' : `Most ${u} wins`;
-  const fewest = u === '' ? 'Lowest number wins' : `Fewest ${u} wins`;
+  const lowest = u === '' ? 'Lowest number wins' : `Lowest ${u} wins`;
   const example = (n) => (u === '' ? count(n) : `${count(n)} ${u}`);
   if (teams !== 'none') {
     const choices = [
       { id: 'most', title: most, sub: `The team with the ${theMost} when it ends comes 1st. A team's number is its people's numbers added together.` },
       { id: 'target', title: 'Reach a target', sub: `You set a target for a whole team, such as ${example(own ? 500 : 60)}. Every team that reaches it wins.` },
     ];
-    if (own) choices.push({ id: 'lowest', title: fewest, sub: 'For a fastest time. The team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.' });
+    if (own) choices.push({ id: 'lowest', title: lowest, sub: 'For a fastest time. The team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.' });
     return choices;
   }
   const choices = [
     { id: 'most', title: most, sub: `The ${words.person} with the ${theMost} when it ends comes 1st.` },
     { id: 'target', title: 'Reach a target', sub: `You set the target, such as ${example(own ? 100 : 12)}. Everyone who reaches it wins.` },
   ];
-  if (own) choices.push({ id: 'lowest', title: fewest, sub: `For a fastest time. The ${words.person} with the ${theFewest} when it ends comes 1st.` });
+  if (own) choices.push({ id: 'lowest', title: lowest, sub: `For a fastest time. The ${words.person} with the lowest number when it ends comes 1st.` });
   return choices;
 }
 
@@ -114,9 +113,10 @@ export function whoChoices(words, inApp, teams = 'none') {
   ];
 }
 
-/** An empty form: the commonest challenge, most gym days, everyone in. */
+/** An empty form: the commonest challenge, most gym days, everyone in. `appCounts`: what
+ *  the app was last picked to count, kept for coming back from Your staff; never sent. */
 export function newChallengeDraft() {
-  return { name: '', details: '', prize: '', counts: 'gym_days', unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone', teams: 'none', teamList: blankTeams() };
+  return { name: '', details: '', prize: '', counts: 'gym_days', appCounts: 'gym_days', unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone', teams: 'none', teamList: blankTeams() };
 }
 
 /** Two empty teams: the fewest a challenge in teams has. */
@@ -135,6 +135,7 @@ export function draftOf(challenge) {
     details: challenge.details,
     prize: challenge.prize,
     counts: challenge.counts,
+    appCounts: challenge.counts === 'own' ? 'gym_days' : challenge.counts,
     unit: challenge.unit ?? '',
     startsOn: challenge.startsOn,
     endsOn: challenge.endsOn,
@@ -148,13 +149,14 @@ export function draftOf(challenge) {
 
 /** Another thing counted: the lowest number wins only where the staff count. */
 export function withCounts(draft, counts) {
-  return { ...draft, counts, win: counts !== 'own' && draft.win === 'lowest' ? 'most' : draft.win };
+  return { ...draft, counts, appCounts: counts === 'own' ? (draft.appCounts ?? 'gym_days') : counts, win: counts !== 'own' && draft.win === 'lowest' ? 'most' : draft.win };
 }
 
-/** Somebody else counts it: the app starts at gym days; what was typed for the staff's own is kept. */
+/** Somebody else counts it. Back at the app, it counts what it was last picked to count;
+ *  what was typed for the staff's own is kept too. */
 export function withCountedBy(draft, by) {
   if (by === countedBy(draft)) return draft;
-  return withCounts(draft, by === 'staff' ? 'own' : 'gym_days');
+  return withCounts(draft, by === 'staff' ? 'own' : (draft.appCounts ?? 'gym_days'));
 }
 
 /** A new first day moves a last day that is unpicked, or before it, to the same day. */
@@ -369,14 +371,17 @@ export function leadersLine(challenge, words) {
 
 /** What staff are told about a challenge's result post in Updates (ROADMAP 19d-ii-b), or
  *  null with nothing to say. `mayPost`: this worker can open Updates; `who` says who can
- *  when they cannot. */
-export function resultPostNote(challenge, mayPost, words) {
+ *  when they cannot. `readOnly`: the gym is on no plan. */
+export function resultPostNote(challenge, mayPost, words, readOnly = false) {
   if (challenge.cancelled) return null;
-  if (challenge.state !== 'ended') return { text: `When it ends, its result is posted to Updates for your ${words.people}.`, link: false, who: null };
+  // On no plan nothing is posted, so nothing is promised.
+  if (challenge.state !== 'ended') return readOnly ? null : { text: `When it ends, its result is posted to Updates for your ${words.people}.`, link: false, who: null };
   const post = challenge.resultPost ?? null;
   if (post === null) return null;
   if (post.removed) return { text: `Its result post was removed from Updates, so your ${words.people} don't see it there now.`, link: false, who: null };
-  return { text: 'Its result is posted in Updates.', link: mayPost, who: mayPost ? null : 'The owner and staff who post updates can open it there.' };
+  const who = mayPost ? null : 'The owner and staff who post updates can open it there.';
+  if (post.hidden === true) return { text: `Its result post is hidden from your ${words.people} while it waits in Reported posts on Updates.`, link: mayPost, who };
+  return { text: 'Its result is posted in Updates.', link: mayPost, who };
 }
 
 /** Whether staff type this challenge's numbers on `today`: the gym's own count, from its

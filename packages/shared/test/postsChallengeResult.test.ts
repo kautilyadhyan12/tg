@@ -71,9 +71,11 @@ describe("a challenge's result on its post", () => {
   it("staff are sent whether a challenge's result has been posted, and whether that post was removed", () => {
     const sent = { ...without(challenge, ["joined", "can", "teamBoard", "board", "me"]), top: [], withNumber: null, teamList: [] };
     expect(staffGymChallengeSchema.safeParse({ ...sent, resultPost: null }).success).toBe(true);
-    expect(staffGymChallengeSchema.safeParse({ ...sent, resultPost: { postedAt: "2026-10-07T18:38:00.000Z", removed: true } }).success).toBe(true);
+    expect(staffGymChallengeSchema.safeParse({ ...sent, resultPost: { postedAt: "2026-10-07T18:38:00.000Z", removed: true, hidden: false } }).success).toBe(true);
+    // Without whether it is hidden from members, it is not a reply staff are sent.
+    expect(staffGymChallengeSchema.safeParse({ ...sent, resultPost: { postedAt: "2026-10-07T18:38:00.000Z", removed: false } }).success).toBe(false);
     expect(staffGymChallengeSchema.safeParse(sent).success).toBe(false);
-    expect(staffGymChallengeSchema.safeParse({ ...sent, resultPost: { postedAt: "yesterday", removed: false } }).success).toBe(false);
+    expect(staffGymChallengeSchema.safeParse({ ...sent, resultPost: { postedAt: "yesterday", removed: false, hidden: false } }).success).toBe(false);
   });
 });
 

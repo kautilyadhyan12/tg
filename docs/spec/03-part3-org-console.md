@@ -3747,20 +3747,25 @@ the console's Updates as members see it, with no line of their own, told so, wit
 the challenge** for staff who run the leaderboard and a line saying who can for the rest.
 It is pinned, reacted to, reported and removed as any post of the gym's. A challenge's own
 page says, before it ends, that its result is posted to Updates, and after, that it is
-there (**See it in Updates** for staff who post updates) or that its post was removed; the
-form says it too. Nobody is sent a message about it until the inbox (20a).
+there (**See it in Updates** for staff who post updates), that it is hidden from members while
+five reports wait, or that its post was removed; the form says it too. On no plan nothing
+is posted, and a running challenge's page promises nothing. A result post whose challenge
+is running again (its gym moved its clock back) is in no list of Updates until it has
+ended again. Nobody is sent a message about it until the inbox (20a).
 
 **The console's words (Kd's click-through of 19d-ii-b, RULINGS 2026-10-09).** On the
 console's Challenges page a number never stands without its word ("4 gym days", "1 gym
 day", "55 push-ups", "4 people"). How a challenge is won is said in the one line its
-members read (`winLine`): "Most gym days wins", "Fewest seconds wins", "Reach 12 gym days",
+members read (`winLine`): "Most gym days wins", "Lowest seconds wins", "Reach 12 gym days",
 "The team with the most gym days wins", "Reach 60 gym days as a team". The form asks **Who
 counts it**: **The app**, then **What the app counts** (Gym days · Workout days), or **Your
 staff**, then **What your staff count** (the gym's own word). These are the same three
 counts as before (`gym_days`, `workout_days`, `own`), and a count the app makes from an
 exercise (19d-iii) will be offered under The app. **How it is won**: "Most {gym days} wins"
 · "Reach a target" (its box is **Target**, with the word of what it counts beside it) ·
-and where the staff count, "Fewest {seconds} wins". **Individual or teams**: Individual ·
+and where the staff count, "Lowest {seconds} wins" (round one: "Fewest 5 km time wins" was no
+sentence). One of the staff's own word is said as one where the word is a plain plural
+("1 push-up"; "1 kg lifted" as typed). **Individual or teams**: Individual ·
 Teams: you put people in them · Teams: your {members} pick their own, the words the
 challenge's own page uses over its teams. A challenge's facts read "Counted by the app" or
 "Counted by your staff", and who is in it as people ("Everyone in the app · 4 people").

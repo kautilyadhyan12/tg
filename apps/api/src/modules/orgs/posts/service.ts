@@ -172,8 +172,10 @@ async function staffShaped(deps: Pick<PostsDeps, "sql" | "now">, gymId: string, 
 
 const cursorOf = (row: repo.PostRow): string => `${row.createdAt.toISOString()}_${row.id}`;
 
-/** One page: the pinned posts on the first, then the rest newest first. */
-async function page<P>(
+/** One page: the pinned posts on the first, then the rest newest first. A result post whose
+ *  challenge is not an ended one right now (the gym moved its clock back after it ended)
+ *  is left out: its words say "has ended". */
+async function page<P extends { challengeResult: unknown }>(
   deps: Pick<PostsDeps, "sql" | "now">,
   gymId: string,
   before: GymPostsCursor | undefined,
@@ -187,10 +189,12 @@ async function page<P>(
   ]);
   const shown = rows.slice(0, GYM_POSTS_PAGE);
   const last = shown[shown.length - 1];
-  const all = await shape([...pinned, ...shown]);
+  const listed = [...pinned, ...shown];
+  const all = await shape(listed);
+  const said = (from: number, to: number): P[] => all.slice(from, to).filter((post, i) => listed[from + i]?.challengeId == null || post.challengeResult !== null);
   return {
-    pinned: all.slice(0, pinned.length),
-    posts: all.slice(pinned.length),
+    pinned: said(0, pinned.length),
+    posts: said(pinned.length, all.length),
     next: rows.length > GYM_POSTS_PAGE && last !== undefined ? cursorOf(last) : null,
   };
 }

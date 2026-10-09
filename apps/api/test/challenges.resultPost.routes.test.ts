@@ -432,7 +432,7 @@ d("a challenge's result posted to Updates (real Postgres)", () => {
 
       const post = postOf(await feed(gym, vera), challenge.id);
       const seen = await staffSeen(gym, challenge.id);
-      expect(seen.resultPost).toEqual({ postedAt: THURSDAY.toISOString(), removed: false });
+      expect(seen.resultPost).toEqual({ postedAt: THURSDAY.toISOString(), removed: false, hidden: false });
       expect(post.createdAt).toBe(THURSDAY.toISOString());
       // From the gym, by nobody: no member's name on it, and nothing of theirs to remove or block.
       expect([post.author.name, post.fromMember, post.authorId, post.own, post.wrote]).toEqual([null, false, null, false, false]);
@@ -448,13 +448,13 @@ d("a challenge's result posted to Updates (real Postgres)", () => {
       expect(await run([gym])).toEqual({ posted: 0 });
       expect((await rows(gym.id)).map((r) => [r.id, r.removed])).toEqual([[post.id, true]]);
       expect((await feed(gym, vera)).posts).toEqual([]);
-      expect((await staffSeen(gym, challenge.id)).resultPost).toEqual({ postedAt: THURSDAY.toISOString(), removed: true });
+      expect((await staffSeen(gym, challenge.id)).resultPost).toEqual({ postedAt: THURSDAY.toISOString(), removed: true, hidden: false });
     },
     T,
   );
 
   it(
-    "nothing is posted for a challenge that is running, cancelled, or ended more than 14 days ago, or for a gym on no plan until its plan is back",
+    "nothing is posted for a challenge that is running, cancelled, or ended more than 14 days ago, for a closed gym, or for a gym on no plan until its plan is back",
     async () => {
       clock = MONDAY;
       const gym = await makeGym("Rules Hall");
@@ -467,9 +467,16 @@ d("a challenge's result posted to Updates (real Postgres)", () => {
       const theirs = await add(lapsed, { name: "No Plan" });
       await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${lapsed.id}`;
 
+      const closed = await makeGym("Closed Hall");
+      await add(closed, { name: "Shut" });
+      await sql`UPDATE gyms SET status = 'archived' WHERE id = ${closed.id}`;
+
       clock = THURSDAY;
-      expect(await run([gym, lapsed])).toEqual({ posted: 0 });
+      expect(await run([gym, lapsed, closed])).toEqual({ posted: 0 });
       expect(await rows(gym.id)).toEqual([]);
+      // Open again inside the fortnight, it is posted: the line that held it back is the gym's own state.
+      await sql`UPDATE gyms SET status = 'active' WHERE id = ${closed.id}`;
+      expect(await run([closed])).toEqual({ posted: 1 });
       expect((await staffSeen(gym, running.id)).resultPost).toBeNull();
 
       // Its last day was 6 October: the 20th is the 14th day after, the 21st is past it.
@@ -498,6 +505,75 @@ d("a challenge's result posted to Updates (real Postgres)", () => {
       // 23:59 on the 6th in New York, then a minute past its midnight.
       expect(await run([east, west], new Date("2026-10-07T03:59:00Z"))).toEqual({ posted: 0 });
       expect(await run([east, west], new Date("2026-10-07T04:01:00Z"))).toEqual({ posted: 1 });
+    },
+    T,
+  );
+
+  it(
+    "the run the worker makes, with no gyms named, posts this gym's result once",
+    async () => {
+      clock = MONDAY;
+      const gym = await makeGym("Whole Hall");
+      await add(gym);
+      clock = THURSDAY;
+      // Every gym in the database is looked at, as in production: only this gym's rows are read back.
+      await postChallengeResults({ sql, log }, { now: THURSDAY });
+      expect((await rows(gym.id)).map((r) => r.body)).toEqual([`October Six${GYM_CHALLENGE_RESULT_POST_ENDING}`]);
+      await postChallengeResults({ sql, log }, { now: THURSDAY });
+      expect(await rows(gym.id)).toHaveLength(1);
+      expect(await audits(gym.id)).toBe(1);
+    },
+    T,
+  );
+
+  it(
+    "a gym that moves its clock back after the post went up: the post is in no list while the challenge is running again",
+    async () => {
+      clock = MONDAY;
+      const gym = await makeGym("Zone Hall");
+      const vera = await member(gym, "Vera Viewer");
+      const challenge = await add(gym, { name: "Zone Run" });
+      // 00:30 on the 7th in Kolkata: ended, and posted.
+      clock = new Date("2026-10-06T19:00:00Z");
+      expect(await run([gym])).toEqual({ posted: 1 });
+      expect((await feed(gym, vera)).posts.map((p) => p.body)).toEqual([`Zone Run${GYM_CHALLENGE_RESULT_POST_ENDING}`]);
+      // The gym's clock becomes New York's: it is 15:00 on the 6th there, the last day.
+      await sql`UPDATE gyms SET timezone = 'America/New_York' WHERE id = ${gym.id}`;
+      expect((await memberList(gym, vera)).challenges.map((c) => [c.name, c.state])).toEqual([["Zone Run", "running"]]);
+      const during = await feed(gym, vera);
+      expect(during.posts).toEqual([]);
+      expect(during.body.includes("has ended")).toBe(false);
+      expect((await staffFeed(gym)).posts).toEqual([]);
+      // Its last day over there too, the post is back with its result, and no second one was made.
+      clock = THURSDAY;
+      expect(await run([gym])).toEqual({ posted: 0 });
+      expect(postOf(await feed(gym, vera), challenge.id).challengeResult?.challenge.state).toBe("ended");
+      expect(postOf(await staffFeed(gym), challenge.id).body).toBe(`Zone Run${GYM_CHALLENGE_RESULT_POST_ENDING}`);
+    },
+    T,
+  );
+
+  it(
+    "five members report the result post: staff are told it is hidden from members, and members are sent none of it",
+    async () => {
+      clock = MONDAY;
+      const gym = await makeGym("Report Hall");
+      const people = [];
+      for (const name of ["Ann One", "Ben Two", "Cat Three", "Dan Four", "Eve Five", "Fay Six"]) people.push(await member(gym, name));
+      const challenge = await add(gym);
+      clock = THURSDAY;
+      await run([gym]);
+      const [last] = people.slice(-1);
+      if (last === undefined) throw new Error("no member");
+      const post = postOf(await feed(gym, last), challenge.id);
+      for (const who of people.slice(0, 4)) expect((await inject("POST", `${posts(gym.id)}/${post.id}/report`, who.cookies, { reason: "other" })).statusCode).toBe(200);
+      expect((await staffSeen(gym, challenge.id)).resultPost?.hidden).toBe(false);
+      expect((await feed(gym, last)).posts).toHaveLength(1);
+      const fifth = people[4];
+      if (fifth === undefined) throw new Error("no fifth member");
+      expect((await inject("POST", `${posts(gym.id)}/${post.id}/report`, fifth.cookies, { reason: "other" })).statusCode).toBe(200);
+      expect((await feed(gym, last)).posts).toEqual([]);
+      expect((await staffSeen(gym, challenge.id)).resultPost).toEqual({ postedAt: THURSDAY.toISOString(), removed: false, hidden: true });
     },
     T,
   );
@@ -540,6 +616,30 @@ d("a challenge's result posted to Updates (real Postgres)", () => {
       expect([later?.today, later?.canOpen]).toEqual(["2026-10-29", false]);
       expect(later?.challenge.board).toEqual(onTab?.board);
       expect(postOf(await staffFeed(gym), challenge.id).challengeResult?.canOpen).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    "the tab lists the newest three that ended: a fourth inside the 14 days keeps its post and its result, and offers no way to open it",
+    async () => {
+      // Made on the 2nd, so that four can end on the 3rd, 4th, 5th and 6th.
+      clock = new Date("2026-10-02T06:30:00Z");
+      const gym = await makeGym("Four Hall");
+      const vera = await member(gym, "Vera Viewer");
+      const made = [];
+      for (const day of ["03", "04", "05", "06"]) made.push(await add(gym, { name: `Ends ${day}`, endsOn: `2026-10-${day}` }));
+      clock = THURSDAY;
+      expect(await run([gym])).toEqual({ posted: 4 });
+      expect((await memberList(gym, vera)).challenges.map((c) => c.name)).toEqual(["Ends 06", "Ends 05", "Ends 04"]);
+      const read = await feed(gym, vera);
+      expect(made.map((c) => [c.name, postOf(read, c.id).challengeResult?.canOpen])).toEqual([
+        ["Ends 03", false],
+        ["Ends 04", true],
+        ["Ends 05", true],
+        ["Ends 06", true],
+      ]);
+      expect(postOf(read, made[0]?.id ?? "").challengeResult?.challenge.state).toBe("ended");
     },
     T,
   );

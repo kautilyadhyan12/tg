@@ -510,8 +510,9 @@ export const staffGymChallengeSchema = challengeSchema
       )
       .max(GYM_CHALLENGE_TEAMS_MAX),
     /** Its result's post on Updates, made once when it ends; null while there is none. A
-     *  post staff removed stays removed. */
-    resultPost: z.object({ postedAt: z.string().datetime(), removed: z.boolean() }).strict().nullable(),
+     *  post staff removed stays removed. `hidden`: five members reported it, so members are
+     *  not sent it until staff keep or remove it. */
+    resultPost: z.object({ postedAt: z.string().datetime(), removed: z.boolean(), hidden: z.boolean() }).strict().nullable(),
   })
   .strict();
 export type StaffGymChallenge = z.infer<typeof staffGymChallengeSchema>;

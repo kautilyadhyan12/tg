@@ -771,13 +771,22 @@ export async function insertChallengeResultPosts(tx: TransactionSql, now: Date, 
   return rows.map((r) => ({ id: r.id, gymId: r.gym_id, challengeId: r.challenge_id }));
 }
 
-/** Each challenge's result post: when it was made, and whether staff have removed it. */
-export async function resultPostsOf(sql: SqlOrTx, gymId: string, challengeIds: readonly string[]): Promise<Map<string, { postedAt: Date; removed: boolean }>> {
-  const of = new Map<string, { postedAt: Date; removed: boolean }>();
+export interface ResultPostRow {
+  postedAt: Date;
+  /** Staff removed it. */
+  removed: boolean;
+  /** Reported by enough people to be hidden from members until staff decide. */
+  hidden: boolean;
+}
+
+/** Each challenge's result post: when it was made, whether staff have removed it, and
+ *  whether it is hidden from members while it waits in the reported list. */
+export async function resultPostsOf(sql: SqlOrTx, gymId: string, challengeIds: readonly string[]): Promise<Map<string, ResultPostRow>> {
+  const of = new Map<string, ResultPostRow>();
   if (challengeIds.length === 0) return of;
-  const rows = await sql<{ challenge_id: string; created_at: Date; removed: boolean }[]>`
-    SELECT challenge_id, created_at, removed_at IS NOT NULL AS removed
+  const rows = await sql<{ challenge_id: string; created_at: Date; removed: boolean; hidden: boolean }[]>`
+    SELECT challenge_id, created_at, removed_at IS NOT NULL AS removed, hidden_at IS NOT NULL AND removed_at IS NULL AS hidden
     FROM gym_posts WHERE gym_id = ${gymId} AND challenge_id IN ${sql(challengeIds)}`;
-  for (const r of rows) of.set(r.challenge_id, { postedAt: r.created_at, removed: r.removed });
+  for (const r of rows) of.set(r.challenge_id, { postedAt: r.created_at, removed: r.removed, hidden: r.hidden });
   return of;
 }
