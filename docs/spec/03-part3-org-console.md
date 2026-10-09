@@ -3750,6 +3750,21 @@ page says, before it ends, that its result is posted to Updates, and after, that
 there (**See it in Updates** for staff who post updates) or that its post was removed; the
 form says it too. Nobody is sent a message about it until the inbox (20a).
 
+**The console's words (Kd's click-through of 19d-ii-b, RULINGS 2026-10-09).** On the
+console's Challenges page a number never stands without its word ("4 gym days", "1 gym
+day", "55 push-ups", "4 people"). How a challenge is won is said in the one line its
+members read (`winLine`): "Most gym days wins", "Fewest seconds wins", "Reach 12 gym days",
+"The team with the most gym days wins", "Reach 60 gym days as a team". The form asks **Who
+counts it**: **The app**, then **What the app counts** (Gym days · Workout days), or **Your
+staff**, then **What your staff count** (the gym's own word). These are the same three
+counts as before (`gym_days`, `workout_days`, `own`), and a count the app makes from an
+exercise (19d-iii) will be offered under The app. **How it is won**: "Most {gym days} wins"
+· "Reach a target" (its box is **Target**, with the word of what it counts beside it) ·
+and where the staff count, "Fewest {seconds} wins". **Individual or teams**: Individual ·
+Teams: you put people in them · Teams: your {members} pick their own, the words the
+challenge's own page uses over its teams. A challenge's facts read "Counted by the app" or
+"Counted by your staff", and who is in it as people ("Everyone in the app · 4 people").
+
 **The gym's own count (Kd, RULINGS 2026-10-06, built in 19d-i).** A third thing a challenge
 can count: `counts` `own`, with `unit` the gym's word for it ("push-ups", 30 characters).
 Nothing is counted by the app: staff holding `leaderboard.manage` type each person's number
@@ -3762,7 +3777,7 @@ be won by the most, by reaching a number (not bound by its days), or by **the lo
 hidden rule and the three-people rule are the same as every other challenge's; it has no
 flames, since it has no days. A number a member types is still never ranked (§15.5).
 
-**Teams, as built (19d-ii-a).** A challenge is for people **alone** or **in teams**
+**Teams, as built (19d-ii-a).** A challenge is **individual** (each person on their own) or **in teams**
 (`gym_challenges.teams`: `none`, `staff`, `members`; `gym_challenge_teams`,
 `gym_challenge_team_people`, migration `0086`). Staff name two to eight teams on the form
 (40 characters a name, no two alike) and choose who fills them: **the staff** (Put people
