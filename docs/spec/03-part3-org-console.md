@@ -469,6 +469,7 @@ that opens the page where it is done:
 | Invite your staff | Members → Staff, the Invite staff form open (since 23c-ii) | somebody on the staff besides the owner, or an invitation still waiting | `staff.manage` |
 | Add your classes | Classes | a class with a time slot, neither cancelled, past its last day nor archived | `schedule.manage` |
 | Opening hours | Settings, When we're open, open | its hours said (a week, always open, or closed every day) | `org.manage` |
+| How members reach you (20a-iii) | Settings, How members reach you, open | a phone number or an email address for its members | `org.manage` |
 | Front desk check-in | Settings, Check-in devices open | a device that opened its link and is not switched off | `org.manage` |
 
 - **The server works every tick out from the gym's own rows** each time Overview opens
@@ -4162,6 +4163,18 @@ inbox's pinned note.
 while any of the member's gyms holds a new message, and goes out once that gym's Inbox
 is opened; with two gyms each gym's button shows its count. The list of my gyms
 (`/v1/orgs/mine`) carries the count a gym, `newMessages`, by the inbox's own rule.
+
+**Contact the gym** (ROADMAP 20a-iii; RULINGS 2026-10-09): nobody can reply in the inbox, so
+under its note a button, **Contact the gym** (the studio, the trainer), opens the gym's phone
+number as a link that calls and its email as a link that writes. A gym that added neither
+has no button and one line, "{gym} hasn't added a phone number or email yet." The gym types
+them in Settings → **How members reach you** (both optional, saved by the gym's details
+route on `org.manage`; `gyms.contact_phone`, `gyms.contact_email`, migration `0089`). They
+are sent with the inbox (`contact`), so only a live member of that gym reads them, and not
+from a gym that is closed or on no plan. They are never the owner's mobile for payments
+nor the address leads reply to: nothing is copied in. A phone number is 6 to 15 digits,
+with spaces, brackets, hyphens, dots, slashes and one `+` at the start
+(`cleanGymContactPhone`, `packages/shared/src/gymContact.ts`).
 
 ### 16.2 The automatic messages
 

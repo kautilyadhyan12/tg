@@ -267,6 +267,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 20. **Messages, in the app** (RULINGS 2026-09-22, Part 7 of the re-plan; spec Part 3 §16.1–16.4) — it takes in item 2. Every card Opus xhigh (it sends data out to real people).
    - 20a. [x] **The inbox and the message rule** — merged 2026-10-09 (PR #207).
    - 20a-ii. [x] **The menu shows when a message is waiting** — merged 2026-10-09 (PR #209).
+   - 20a-iii. [ ] **Contact the gym** (Kd, RULINGS 2026-10-09): a button in the member's Inbox opens the gym's phone and email as links; the gym adds them in Settings → How members reach you, which is also a step in Start here.
    - 20b. [ ] **The eight automatic messages and their switches** (Settings → Messages; every number the gym's; the gym's ONE own line, no links): Welcome · Trial check-in · Trial ending · We miss you · Membership ending · Payment overdue (after 18a) · Birthday · Milestone. **And a ninth (RULINGS 2026-10-08): Class reminder**, so long before a booked class or session, the time the gym's to change.
    - 20c. **Leads** (split 2026-09-25 in three, RULINGS that day): the small list, and three follow-up EMAILS through 3b-i's checks, caps and unsubscribe.
      - 20c-i. [x] **The Leads list** — merged 2026-09-25 (PR #116).
