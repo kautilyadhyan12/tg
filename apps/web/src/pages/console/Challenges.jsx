@@ -53,6 +53,7 @@ import {
   teamChoices,
   teamLines,
   teamName,
+  teamNotes,
   teamsBox,
   teamsHeading,
   teamsToSave,
@@ -275,7 +276,7 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
         ) : null}
       </div>
 
-      <Choices label="Who is in it" choices={whoChoices(words, list.inApp)} value={draft.who} onPick={(who) => set({ who })} disabled={saving || locked} />
+      <Choices label="Who is in it" choices={whoChoices(words, list.inApp, draft.teams)} value={draft.who} onPick={(who) => set({ who })} disabled={saving || locked} />
 
       </Part>
 
@@ -340,13 +341,13 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
                 draft.teams === 'staff' ? "After you save, open the challenge and press Put people in teams." : `Your ${words.people} pick a team in the app; you can move anybody on the challenge's board.`
               }`}
             </span>
-            {removing.map((line) => (
-              <span key={line} className="c-hint" role="note" style={{ color: 'var(--warn)' }}>
-                {line}
-              </span>
-            ))}
           </div>
         ) : null}
+        {removing.map((line) => (
+          <p key={line} className="c-s14" role="note" style={{ color: 'var(--warn)' }}>
+            {line}
+          </p>
+        ))}
       </div>
 
       <Field label="Prize (optional)">
@@ -416,6 +417,8 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType, canTeam, o
   const [moved, setMoved] = useState({});
   /** The people the box before a save names; null while it is closed. */
   const [moving, setMoving] = useState(null);
+  const [seeAll, setSeeAll] = useState(false);
+  const [asking, setAsking] = useState(false);
   const teamed = inTeams(challenge);
   const load = useCallback(
     () =>
@@ -465,14 +468,34 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType, canTeam, o
     }
   };
   // Everybody moved, on whichever page: not only the page that is open.
-  const changes = () => teamsToSave(Object.entries(kept).map(([userId, person]) => ({ userId, ...person })), moved);
-  const askTeams = () => {
-    const people = changes();
-    if (people.length === 0) {
+  const changesIn = (known) => teamsToSave(Object.entries(known).map(([userId, person]) => ({ userId, ...person })), moved);
+  const changes = () => changesIn(kept);
+  const askTeams = async () => {
+    if (changes().length === 0) {
       setSaid({ bad: false, text: TEAM_NOTES.none });
       return;
     }
     setSaid(null);
+    setAsking(true);
+    // Every page is read again first, so the box names the team each person is in NOW: a
+    // member may have picked one since the page was loaded.
+    let known = kept;
+    try {
+      for (let at = 1; at <= board.pages; at += 1) {
+        const now = await staffChallengesService.board(gymId, challenge.id, at);
+        known = { ...known, ...Object.fromEntries(now.rows.map((row) => [row.userId, { value: row.value, name: row.name, teamId: row.teamId ?? null }])) };
+      }
+      setKept(known);
+    } catch {
+      // The teams as they were loaded; the save says so if somebody has gone.
+    }
+    setAsking(false);
+    const people = changesIn(known);
+    if (people.length === 0) {
+      setSaid({ bad: false, text: TEAM_NOTES.none });
+      return;
+    }
+    setSeeAll(false);
     setMoving(people);
   };
   const saveTeams = async () => {
@@ -494,7 +517,7 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType, canTeam, o
       setSaving(false);
     }
   };
-  const box = moving === null ? null : teamsBox(moving, challenge, words);
+  const box = moving === null ? null : teamsBox(moving, challenge, words, seeAll);
   const unsavedTeams = canTeam ? unsavedTeamsNote(changes().length) : null;
   return (
     <section className="flex flex-col gap-2" aria-label={`The board of ${challenge.name}`} data-testid="challenge-board">
@@ -585,8 +608,8 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType, canTeam, o
       ) : null}
       {canTeam && board.rows.length > 0 && box === null ? (
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={askTeams} disabled={saving} className="c-btn c-btn-p">
-            Save teams
+          <button type="button" onClick={askTeams} disabled={saving || asking} className="c-btn c-btn-p">
+            {asking ? 'Checking…' : 'Save teams'}
           </button>
           {said !== null ? (
             <span className="c-s14" role={said.bad ? 'alert' : 'status'} style={{ color: said.bad ? 'var(--bad)' : 'var(--good)' }}>
@@ -607,6 +630,11 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType, canTeam, o
             <button type="button" onClick={saveTeams} disabled={saving} className="c-btn c-btn-p c-btn-sm">
               {saving ? 'Saving…' : box.yes}
             </button>
+            {box.seeAll !== null ? (
+              <button type="button" onClick={() => setSeeAll(true)} disabled={saving} className="c-btn c-btn-s c-btn-sm">
+                {box.seeAll}
+              </button>
+            ) : null}
             <button type="button" onClick={() => setMoving(null)} disabled={saving} className="c-btn c-btn-s c-btn-sm">
               {box.no}
             </button>
@@ -697,9 +725,24 @@ function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking
   const showBoard = board !== null;
   const canType = takesNumbers(challenge, list.today) && !readOnly;
   const canTeam = takesTeams(challenge, list.today) && !readOnly;
-  const teams = teamLines(challenge);
-  const tag = challengeTag(challenge, list.today);
   const past = challenge.state === 'ended';
+  /** An ended challenge's list carries no team numbers: they are read with its board. */
+  const [teamNumbers, setTeamNumbers] = useState(null);
+  const readsResult = past && !challenge.cancelled && inTeams(challenge);
+  useEffect(() => {
+    if (!readsResult) return undefined;
+    let live = true;
+    staffChallengesService.board(gymId, challenge.id, 1).then(
+      (board) => live && setTeamNumbers(board.teams ?? null),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [gymId, challenge.id, readsResult]);
+  const teams = teamLines(challenge, teamNumbers);
+  const notes = teamNotes(challenge, teams);
+  const tag = challengeTag(challenge, list.today);
   const box = asking ? cancelBox(challenge, words) : null;
   const bar = daysBar(challenge, list.today);
   const numbered = withNumberLine(challenge);
@@ -818,6 +861,11 @@ function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking
                   </li>
                 ))}
               </ol>
+              {notes.map((line) => (
+                <p key={line} className="c-s13 c-t2">
+                  {line}
+                </p>
+              ))}
             </section>
           ) : leaders !== null ? (
             <section className="c-card p-4 md:p-6 flex flex-col gap-3" aria-label="In the lead">

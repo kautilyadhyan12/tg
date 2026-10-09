@@ -279,12 +279,14 @@ interface TeamSum {
   all: number;
   /** The numbers of the people members may see, added together. Nobody hidden is in it. */
   value: number;
+  /** People in it members may see who have no number yet. */
+  waiting: number;
 }
 
 /** Each of the challenge's teams with the people in it who are in the challenge now. */
 function teamSums(row: repo.ChallengeRow, counted: Counted, viewer: Member | undefined): Map<string, TeamSum> {
   const sums = new Map<string, TeamSum>();
-  for (const team of counted.teams.get(row.id) ?? []) sums.set(team.id, { people: 0, all: 0, value: 0 });
+  for (const team of counted.teams.get(row.id) ?? []) sums.set(team.id, { people: 0, all: 0, value: 0, waiting: 0 });
   const joined = joinedOf(row, counted);
   const values = valuesIn(row, counted);
   for (const [userId, teamId] of counted.teamOf.get(row.id) ?? []) {
@@ -293,9 +295,37 @@ function teamSums(row: repo.ChallengeRow, counted: Counted, viewer: Member | und
     if (member === undefined || sum === undefined || (joined !== null && !joined.has(member))) continue;
     sum.all += 1;
     if (seen(member) || member === viewer) sum.people += 1;
-    if (seen(member)) sum.value += values.get(member) ?? 0;
+    if (!seen(member)) continue;
+    const value = values.get(member) ?? 0;
+    sum.value += value;
+    if (value === 0) sum.waiting += 1;
   }
   return sums;
+}
+
+interface TeamStanding {
+  value: number;
+  place: number | null;
+  waiting: number;
+}
+
+/** Each team's number and place as members see them. Where the lowest wins, a team is
+ *  placed only once everyone in it has a number: a total with somebody's number missing is
+ *  lower, and would win for it. `shown`: members see the board; until they do, no numbers. */
+function teamStandings(row: repo.ChallengeRow, sums: Map<string, TeamSum>, shown: boolean): Map<string, TeamStanding> {
+  const standings = new Map<string, TeamStanding>();
+  const placing: { id: string; value: number }[] = [];
+  for (const [id, sum] of sums) {
+    const value = shown ? sum.value : 0;
+    const waiting = shown && row.lowestWins ? sum.waiting : 0;
+    standings.set(id, { value, place: null, waiting });
+    placing.push({ id, value: waiting > 0 ? 0 : value });
+  }
+  for (const [id, place] of placeTeams(placing, row.lowestWins)) {
+    const standing = standings.get(id);
+    if (standing !== undefined) standing.place = place;
+  }
+  return standings;
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -311,17 +341,18 @@ function teamBoardFor(row: repo.ChallengeRow, state: GymChallengeState, counted:
   const myTeam = inIt && viewer !== undefined ? (teamOf.get(viewerId) ?? null) : null;
   const sums = teamSums(row, counted, inIt ? viewer : undefined);
   const teams = counted.teams.get(row.id) ?? [];
-  const totals = teams.map((team) => ({ id: team.id, value: shown ? (sums.get(team.id)?.value ?? 0) : 0 }));
-  const places = placeTeams(totals, row.lowestWins);
-  const rows = teams.map((team, at) => {
-    const value = totals[at]?.value ?? 0;
+  const standings = teamStandings(row, sums, shown);
+  const rows = teams.map((team) => {
+    const standing = standings.get(team.id);
+    const value = standing?.value ?? 0;
     return {
       id: team.id,
       name: team.name,
       people: sums.get(team.id)?.people ?? 0,
       value,
-      place: places.get(team.id) ?? null,
+      place: standing?.place ?? null,
       reached: row.target !== null && value >= row.target,
+      waiting: standing?.waiting ?? 0,
       isMine: team.id === myTeam,
     };
   });
@@ -488,6 +519,12 @@ export async function setJoined(
   if (row.who !== "joined") throw new OrgsError(409, "challenge_everyone", GYM_CHALLENGE_WORDS.join_everyone);
   if (row.cancelled) throw new OrgsError(409, "challenge_cancelled", GYM_CHALLENGE_WORDS.cancelled);
   if (challengeState(row, read.gym.today) === "ended") throw new OrgsError(409, "challenge_ended", GYM_CHALLENGE_WORDS.join_ended);
+  // Where members pick, picking a team is how a person joins: Join alone would leave them
+  // in the challenge and in no team. Somebody who has a team (they left, or staff put them
+  // in one) joins as anywhere.
+  if (joined && row.teams === "members" && !((await repo.teamPeopleOf(deps.sql, gymId, [challengeId])).get(challengeId)?.has(userId) ?? false)) {
+    throw new OrgsError(409, "challenge_pick_team", GYM_CHALLENGE_WORDS.pick_to_join);
+  }
   if (joined) await repo.join(deps.sql, gymId, challengeId, userId, read.now);
   else await repo.leave(deps.sql, gymId, challengeId, userId);
   const view = memberView(row, read.gym.today, await countFor(deps, read, [row], userId), userId, GYM_CHALLENGE_PODIUM);
@@ -572,9 +609,8 @@ export async function getStaffChallenges(deps: ChallengesDeps, staffId: string, 
     });
     const places = placeEntrants(named, "", GYM_CHALLENGE_PODIUM, soloTarget(row));
     // Each team's number and place as members see them: none while they see no board.
-    const sums = teamSums(row, counted, undefined);
-    const teamPlaces = placeTeams([...sums].map(([id, sum]) => ({ id, value: sum.value })), row.lowestWins);
-    const teamList = teamsOf(row).map((team) => (places.status === "shown" ? { ...team, value: sums.get(team.id)?.value ?? 0, place: teamPlaces.get(team.id) ?? null } : team));
+    const standings = teamStandings(row, teamSums(row, counted, undefined), true);
+    const teamList = teamsOf(row).map((team) => (places.status === "shown" ? { ...team, value: standings.get(team.id)?.value ?? 0, place: standings.get(team.id)?.place ?? null } : team));
     return { top: places.top.map((p) => ({ userId: p.userId, name: p.name, initials: p.initials, place: p.place, value: turned(row, p.value) })), withNumber: entrants.length, teamList };
   };
   const sent = (row: repo.ChallengeRow): StaffGymChallenge => ({
@@ -654,6 +690,9 @@ export async function getStaffBoard(
   const rows = [...numbered, ...waiting];
   const pages = Math.max(1, Math.ceil(rows.length / LEADERBOARD_STAFF_PAGE));
   const at = Math.min(page, pages);
+  // Each team's number and place as members see them: an ended challenge's result is read here.
+  const standings = row.teams === "none" ? null : teamStandings(row, teamSums(row, counted, undefined), true);
+  const teams = [...(standings ?? [])].map(([id, standing]) => (shown ? { id, value: standing.value, place: standing.place } : { id, value: null, place: null }));
   return staffGymChallengeBoardResponseSchema.parse({
     challengeId,
     memberStatus: !started ? "not_started" : staff.status,
@@ -664,6 +703,7 @@ export async function getStaffBoard(
     page: at,
     pages,
     rows: rows.slice((at - 1) * LEADERBOARD_STAFF_PAGE, at * LEADERBOARD_STAFF_PAGE),
+    teams,
     asOf: now.toISOString(),
   });
 }

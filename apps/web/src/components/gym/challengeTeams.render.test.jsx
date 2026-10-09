@@ -19,7 +19,7 @@ const RED = 'red';
 const BLUE = 'blue';
 const GREEN = 'green';
 const me = (over = {}) => ({ value: 0, place: null, hidden: null, toNextPlace: null, nextPlace: null, reached: false, days: [], ...over });
-const team = (id, name, people, value, place, over = {}) => ({ id, name, people, value, place, reached: false, isMine: false, ...over });
+const team = (id, name, people, value, place, over = {}) => ({ id, name, people, value, place, reached: false, waiting: 0, isMine: false, ...over });
 const mate = (id, name, value, isMe = false) => ({ userId: id, name, initials: name.slice(0, 1), value, isMe });
 const teamBoard = (over = {}) => ({
   status: 'shown',
@@ -249,6 +249,8 @@ describe("a member's challenge in teams", () => {
     expect(texts(card.getByRole('list', { name: 'Teams' }))).toEqual(['—Red Team1 person', '—Blue TeamYour team1 person']);
     expect(texts(card.getByRole('list', { name: 'People in Blue Team' }))).toEqual(['YouYou2 gym days']);
     expect(card.getByText("The teams' numbers show once 3 people have a gym day in this challenge.")).toBeTruthy();
+    // A teammate with gym days is not listed yet for that reason, not for want of a gym day.
+    expect(card.queryByText(/Teammates show here/)).toBeNull();
   });
 
   it('a member hidden from boards is told their number is not in their team total; one in no team is told who makes the teams', async () => {
@@ -269,5 +271,28 @@ describe("a member's challenge in teams", () => {
     const result = within(cardOf('Last Week').getByLabelText('How it finished'));
     expect(result.getByText('Winner: Blue Team, with 14 gym days.')).toBeTruthy();
     expect(result.getByText('Your team, Blue Team, won. You had 5 gym days.')).toBeTruthy();
+  });
+
+  it('where the lowest wins, a team waiting for a number has no place and says how many it waits for', async () => {
+    const relay = challenge('a', 'Relay', {
+      counts: 'own',
+      unit: 'seconds',
+      lowestWins: true,
+      me: me({ value: 95 }),
+      teamBoard: teamBoard({
+        rows: [team(RED, 'Red Team', 2, 101, 1), team(BLUE, 'Blue Team', 3, 95, null, { isMine: true, waiting: 2 }), team(GREEN, 'Green Team', 2, 60, null, { waiting: 1 })],
+        mine: { teamId: BLUE, people: [mate('me', 'Maya K.', 95, true)], more: 0, counted: true },
+      }),
+    });
+    svc.list.mockResolvedValue(listOf([relay]));
+    render(<Challenges gym={GYM} />);
+    await screen.findByText('Relay');
+    const card = cardOf('Relay');
+    expect(texts(card.getByRole('list', { name: 'Teams' }))).toEqual([
+      '1stRed Team2 people101 seconds',
+      '—Blue TeamYour team3 people · waiting for 2 numbers95 seconds',
+      '—Green Team2 people · waiting for 1 number60 seconds',
+    ]);
+    expect(card.getByText('A team gets its place once everyone in it has a number.')).toBeTruthy();
   });
 });

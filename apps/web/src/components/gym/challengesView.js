@@ -261,12 +261,18 @@ export function teamRows(challenge) {
       id: row.id,
       name: row.name,
       place: shown ? row.place : null,
-      people: inTeam(row.people),
+      people: `${inTeam(row.people)}${(row.waiting ?? 0) > 0 ? ` · waiting for ${row.waiting === 1 ? '1 number' : `${row.waiting.toLocaleString('en')} numbers`}` : ''}`,
       number: shown ? amount(challenge, row.value) : null,
       reached: row.reached,
       isMine: row.isMine,
       label: `${row.name}${row.isMine ? ', your team' : ''}: ${shown && row.place !== null ? `${ordinal(row.place)}, ` : ''}${inTeam(row.people)}${shown ? `, ${amount(challenge, row.value)}` : ''}${row.reached ? ', reached the target' : ''}`,
     }));
+}
+
+/** Where the lowest wins: when a team gets its place. Null otherwise. */
+export function teamRuleNote(challenge) {
+  if (!inTeams(challenge) || challenge.cancelled || !challenge.lowestWins) return null;
+  return 'A team gets its place once everyone in it has a number.';
 }
 
 /** What the member is told about their own team, or null with nothing to say. */
@@ -297,7 +303,9 @@ export function myTeam(challenge) {
     // The leading teammates are named; the rest with a number are counted.
     more: (mine.more ?? 0) > 0 ? `and ${(mine.more).toLocaleString('en')} more with a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]}` : null,
     // Teammates are listed once they have a number of their own.
-    note: mine.people.length + (mine.more ?? 0) < team.people ? `Teammates show here once they have a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]}.` : null,
+    // Only while numbers are shown: until three people have one nobody is listed, with or
+    // without a number, and the card says why (`boardNote`).
+    note: shown && mine.people.length + (mine.more ?? 0) < team.people ? `Teammates show here once they have a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]}.` : null,
   };
 }
 

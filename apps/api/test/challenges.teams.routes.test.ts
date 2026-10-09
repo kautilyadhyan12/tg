@@ -297,7 +297,7 @@ d("teams in a challenge (real Postgres)", () => {
       const chen = await quiet(gym, "Chen Wu");
       const zed = await quiet(gym, "Zed Zero");
 
-      // Five ways to be hidden, a removed member and a deleted account: every one of them
+      // Six ways to be hidden, a removed member and a deleted account: every one of them
       // in the Red Team with seven gym days, more than anybody shown.
       const hema = await member(gym, "Hema Hidden");
       await sql`UPDATE users SET leaderboard_opt_out = true WHERE id = ${hema.userId}`;
@@ -312,7 +312,10 @@ d("teams in a challenge (real Postgres)", () => {
       await inGym(gym.id, nameless.userId);
       const removed = await quiet(gym, "Rana Removed");
       const deleted = await quiet(gym, "Dev Deleted");
-      const hidden = [hema, young, youngByRecord, takenOff, nameless];
+      // Staff are hidden from boards too: a manager who also trains here.
+      const staffer = await quiet(gym, "Sana Staff");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${staffer.userId}, 'manager', ${null})`;
+      const hidden = [hema, young, youngByRecord, takenOff, nameless, staffer];
       const gone = [removed, deleted];
 
       for (const h of [...hidden, ...gone]) await visits(gym, h.userId, DAYS);
@@ -333,7 +336,7 @@ d("teams in a challenge (real Postgres)", () => {
       await sql`UPDATE users SET status = 'deleted' WHERE id = ${deleted.userId}`;
 
       const secret = [...hidden, ...gone].map((p) => p.userId);
-      const names = ["Hema", "Yuvi", "Rhea", "Tariq", "Rana", "Dev Deleted"];
+      const names = ["Hema", "Yuvi", "Rhea", "Tariq", "Rana", "Dev Deleted", "Sana"];
       const nothingOf = (body: string) => {
         for (const id of secret) expect(body.includes(id), `somebody hidden or gone is in the reply: ${id}`).toBe(false);
         for (const name of names) expect(body.includes(name), `the name ${name} is in the reply`).toBe(false);
@@ -384,11 +387,11 @@ d("teams in a challenge (real Postgres)", () => {
         ["Bilal K.", 2, false],
       ]);
 
-      // Staff: everyone in each team now, the hidden too (five) and nobody gone; the number
+      // Staff: everyone in each team now, the hidden too (six) and nobody gone; the number
       // and place as members see them.
       const forStaff = await staffSeen(gym, challenge.id);
       expect(forStaff.teamList.map((team) => [team.name, team.people, team.value, team.place])).toEqual([
-        ["Red Team", 7, 5, 1],
+        ["Red Team", 8, 5, 1],
         ["Blue Team", 3, 3, 2],
       ]);
 
@@ -929,6 +932,231 @@ d("teams in a challenge (real Postgres)", () => {
       expect((JSON.parse(b.body) as { challenge: StaffGymChallenge }).challenge.id).toBe(made.id);
       const rows = await sql<{ name: string }[]>`SELECT name FROM gym_challenge_teams WHERE challenge_id = ${made.id} ORDER BY position`;
       expect(rows.map((row) => row.name)).toEqual(["Red Team", "Blue Team"]);
+    },
+    T,
+  );
+
+  // ===========================================================================
+  // ROUND ONE
+  // ===========================================================================
+
+  const score = async (gym: Gym, id: string, scores: { userId: string; value: number }[]) => {
+    const res = await inject("PUT", `${base(gym.id)}/${id}/scores`, gym.owner.cookies, { scores });
+    expect(res.statusCode, res.body).toBe(200);
+  };
+
+  it(
+    "a big team: the ten leading teammates are named with the reader, the rest with a number are counted, and nobody is named twice",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Big Hall");
+      const vera = await member(gym, "Vera Viewer");
+      const mates: { userId: string }[] = [];
+      for (let i = 0; i < 13; i++) mates.push(await quiet(gym, `Mate ${String.fromCharCode(65 + i)}`));
+      const idle = await quiet(gym, "Ida Idle");
+      const challenge = await add(gym, { counts: "own", unit: "push-ups" });
+      const red = teamId(challenge, "Red Team");
+      await putOk(gym, challenge.id, [vera, ...mates, idle].map((p) => ({ userId: p.userId, teamId: red })));
+      // Vera has the fewest, so she is past the ten and still on her own list.
+      await score(gym, challenge.id, [{ userId: vera.userId, value: 1 }, ...mates.map((p, i) => ({ userId: p.userId, value: 100 - i }))]);
+      const mine = (await seen(gym, vera, challenge.id)).teamBoard?.mine;
+      expect(mine?.people.map((p) => [p.name, p.value, p.isMe])).toEqual([
+        ...mates.slice(0, 10).map((_p, i) => [`Mate ${String.fromCharCode(65 + i)}.`, 100 - i, false]),
+        ["Vera V.", 1, true],
+      ]);
+      // Three more have a number and are not listed; Ida, with none, is in neither.
+      expect(mine?.more).toBe(3);
+      expect(new Set(mine?.people.map((p) => p.userId)).size).toBe(11);
+      // One of the leading ten reads the ten with themselves among them, and four more.
+      const first = await signedIn("Lead Reader");
+      await inGym(gym.id, first.userId);
+      await putOk(gym, challenge.id, [{ userId: first.userId, teamId: red }]);
+      await score(gym, challenge.id, [{ userId: first.userId, value: 500 }]);
+      const theirs = (await seen(gym, first, challenge.id)).teamBoard?.mine;
+      expect(theirs?.people).toHaveLength(10);
+      expect(theirs?.people[0]).toMatchObject({ value: 500, isMe: true });
+      expect(theirs?.more).toBe(5);
+    },
+    T,
+  );
+
+  it(
+    "where the lowest wins, a team with somebody's number missing has no place, however low its total; a hidden person's missing number holds nobody back",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Relay Hall");
+      const vera = await member(gym, "Vera Viewer");
+      const [asha, bilal, chen, dev] = [await quiet(gym, "Asha Rao"), await quiet(gym, "Bilal Khan"), await quiet(gym, "Chen Wu"), await quiet(gym, "Dev Shah")];
+      const hema = await quiet(gym, "Hema Hidden");
+      await sql`UPDATE users SET leaderboard_opt_out = true WHERE id = ${hema.userId}`;
+      const relay = await add(gym, { name: "Relay", counts: "own", unit: "seconds", lowestWins: true });
+      const red = teamId(relay, "Red Team");
+      const blue = teamId(relay, "Blue Team");
+      await putOk(gym, relay.id, [
+        { userId: asha.userId, teamId: red },
+        { userId: bilal.userId, teamId: red },
+        { userId: hema.userId, teamId: red },
+        { userId: vera.userId, teamId: blue },
+        { userId: chen.userId, teamId: blue },
+        { userId: dev.userId, teamId: blue },
+      ]);
+      // Red: both runners members may see are timed (101); its hidden runner is not. Blue: one of three is timed (95).
+      await score(gym, relay.id, [
+        { userId: asha.userId, value: 50 },
+        { userId: bilal.userId, value: 51 },
+        { userId: vera.userId, value: 95 },
+      ]);
+      const rows = async () => (await seen(gym, vera, relay.id)).teamBoard?.rows.map((team) => [team.name, team.value, team.place, team.waiting]);
+      expect(await rows()).toEqual([
+        ["Red Team", 101, 1, 0],
+        ["Blue Team", 95, null, 2],
+      ]);
+      expect((await staffSeen(gym, relay.id)).teamList.map((team) => [team.name, team.value, team.place])).toEqual([
+        ["Red Team", 101, 1],
+        ["Blue Team", 95, null],
+      ]);
+      // One more timed: still waiting for one. All three timed, and faster: Blue is first.
+      await score(gym, relay.id, [{ userId: chen.userId, value: 1 }]);
+      expect(await rows()).toEqual([
+        ["Red Team", 101, 1, 0],
+        ["Blue Team", 96, null, 1],
+      ]);
+      await score(gym, relay.id, [{ userId: dev.userId, value: 2 }]);
+      expect(await rows()).toEqual([
+        ["Red Team", 101, 2, 0],
+        ["Blue Team", 98, 1, 0],
+      ]);
+      // Where the most wins, nobody waits for anybody.
+      const most = await add(gym, { name: "Most", counts: "own", unit: "push-ups" });
+      await putOk(gym, most.id, [
+        { userId: asha.userId, teamId: teamId(most, "Red Team") },
+        { userId: bilal.userId, teamId: teamId(most, "Red Team") },
+        { userId: vera.userId, teamId: teamId(most, "Blue Team") },
+        { userId: chen.userId, teamId: teamId(most, "Blue Team") },
+      ]);
+      await score(gym, most.id, [
+        { userId: asha.userId, value: 50 },
+        { userId: bilal.userId, value: 51 },
+        { userId: vera.userId, value: 95 },
+      ]);
+      expect((await seen(gym, vera, most.id)).teamBoard?.rows.map((team) => [team.name, team.value, team.place, team.waiting])).toEqual([
+        ["Red Team", 101, 1, 0],
+        ["Blue Team", 95, 2, 0],
+      ]);
+    },
+    T,
+  );
+
+  it(
+    "once a challenge in teams has ended, staff read which team won with its board",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Ended Hall");
+      const [asha, bilal, chen] = [await quiet(gym, "Asha Rao"), await quiet(gym, "Bilal Khan"), await quiet(gym, "Chen Wu")];
+      for (const [p, n] of [[asha, 4], [bilal, 3], [chen, 2]] as const) await visits(gym, p.userId, DAYS.slice(0, n));
+      const challenge = await add(gym, { endsOn: "2026-10-08" });
+      const red = teamId(challenge, "Red Team");
+      const blue = teamId(challenge, "Blue Team");
+      await putOk(gym, challenge.id, [
+        { userId: asha.userId, teamId: red },
+        { userId: bilal.userId, teamId: blue },
+        { userId: chen.userId, teamId: blue },
+      ]);
+      const teamsOf = async () => {
+        const board = await staffBoard(gym, challenge.id);
+        return board.teams.map((team) => [team.id === red ? "Red Team" : "Blue Team", team.value, team.place]);
+      };
+      expect(await teamsOf()).toEqual([
+        ["Red Team", 4, 2],
+        ["Blue Team", 5, 1],
+      ]);
+      clock = NEXT_MONDAY;
+      // The list of ended challenges carries no numbers; the board's reply does.
+      const past = (await staffList(gym)).past.find((c) => c.id === challenge.id);
+      expect(past?.teamList.map((team) => [team.name, team.people, team.value, team.place])).toEqual([
+        ["Red Team", 1, null, null],
+        ["Blue Team", 2, null, null],
+      ]);
+      expect(await teamsOf()).toEqual([
+        ["Red Team", 4, 2],
+        ["Blue Team", 5, 1],
+      ]);
+      clock = WEDNESDAY;
+      // A challenge people are in alone carries none; one with too few people carries no numbers.
+      const alone = await add(gym, { name: "Alone", teams: "none", teamList: [] });
+      expect((await staffBoard(gym, alone.id)).teams).toEqual([]);
+      const few = await add(gym, { name: "Few", startsOn: "2026-10-04", endsOn: "2026-10-31" });
+      await putOk(gym, few.id, [{ userId: asha.userId, teamId: teamId(few, "Red Team") }]);
+      expect((await staffBoard(gym, few.id)).teams.map((team) => [team.value, team.place])).toEqual([
+        [null, null],
+        [null, null],
+      ]);
+    },
+    T,
+  );
+
+  it(
+    "where members pick, Join with no team is refused in a sentence; with a team it joins",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Join Pick Hall");
+      const maya = await member(gym, "Maya Member");
+      const challenge = await add(gym, { who: "joined", teams: "members" });
+      const join = () => inject("PUT", `${base(gym.id)}/${challenge.id}/joined`, maya.cookies);
+      const refused = await join();
+      expect([refused.statusCode, codeOf(refused), wordsOf(refused)]).toEqual([409, "challenge_pick_team", GYM_CHALLENGE_WORDS.pick_to_join]);
+      expect(await joinedRows(challenge.id)).toEqual([]);
+      // Staff put her in a team: now Join joins, as her card offers.
+      await sql`INSERT INTO gym_challenge_team_people (gym_id, challenge_id, team_id, user_id) VALUES (${gym.id}, ${challenge.id}, ${teamId(challenge, "Red Team")}, ${maya.userId})`;
+      expect((await seen(gym, maya, challenge.id)).can).toEqual({ join: true, leave: false, pick: false });
+      expect((await join()).statusCode).toBe(200);
+      expect(await joinedRows(challenge.id)).toEqual([maya.userId]);
+    },
+    T,
+  );
+
+  it(
+    "a member picks while staff remove that team, or move the first day to today: both are answered, and she is never left in a team that is gone or in two minds",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Change Hall");
+      const maya = await member(gym, "Maya Member");
+      const three = [...two, { id: null, name: "Green Team" }];
+      const body = (challenge: StaffGymChallenge, over: Record<string, unknown>) => {
+        const fields_: Record<string, unknown> = fields({ name: challenge.name, teams: "members", startsOn: "2026-10-10", teamList: challenge.teamList.map((team) => ({ id: team.id, name: team.name })), ...over });
+        delete fields_["challengeKey"];
+        return fields_;
+      };
+      for (let run = 0; run < 6; run++) {
+        // Staff remove Blue while she picks it.
+        const gone = await add(gym, { name: `Gone ${String(run)}`, teams: "members", startsOn: "2026-10-10", teamList: three });
+        const blue = teamId(gone, "Blue Team");
+        const kept = gone.teamList.filter((team) => team.id !== blue).map((team) => ({ id: team.id, name: team.name }));
+        const [byStaff, byMaya] = await Promise.all([
+          inject("PUT", `${base(gym.id)}/${gone.id}`, gym.owner.cookies, body(gone, { teamList: kept }), run % 2 === 0 ? other() : api()),
+          pick(gym, maya, gone.id, blue, run % 2 === 0 ? api() : other()),
+        ]);
+        expect(byStaff.statusCode, byStaff.body).toBe(200);
+        expect([200, 409], byMaya.body).toContain(byMaya.statusCode);
+        if (byMaya.statusCode === 409) expect(codeOf(byMaya)).toBe("challenge_team_gone");
+        expect(await teamRows(gone.id), `run ${String(run)}: a row for a team that is gone`).toEqual({});
+        await sql`DELETE FROM gym_challenges WHERE id = ${gone.id}`;
+
+        // She is in Red and presses Blue while staff move the first day to today.
+        const moved = await add(gym, { name: `Moved ${String(run)}`, teams: "members", startsOn: "2026-10-10" });
+        const red = teamId(moved, "Red Team");
+        const blue2 = teamId(moved, "Blue Team");
+        await picked(gym, maya, moved.id, red);
+        const [starts, change] = await Promise.all([
+          inject("PUT", `${base(gym.id)}/${moved.id}`, gym.owner.cookies, body(moved, { startsOn: "2026-10-07" }), run % 2 === 0 ? other() : api()),
+          pick(gym, maya, moved.id, blue2, run % 2 === 0 ? api() : other()),
+        ]);
+        expect(starts.statusCode, starts.body).toBe(200);
+        expect([200, 409], change.body).toContain(change.statusCode);
+        if (change.statusCode === 409) expect(codeOf(change)).toBe("challenge_team_locked");
+        expect((await teamRows(moved.id))[maya.userId], `run ${String(run)}`).toBe(change.statusCode === 200 ? blue2 : red);
+        await sql`DELETE FROM gym_challenges WHERE id = ${moved.id}`;
+      }
     },
     T,
   );

@@ -24,6 +24,7 @@ import {
   progress,
   resultOf,
   teamRows,
+  teamRuleNote,
   teamsLine,
   unitOf,
   whatCounts,
@@ -334,6 +335,7 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
   const teams = inTeams(challenge);
   const teamsSaid = teamsLine(challenge, gym.name);
   const teamNote = myTeamNote(challenge, gym.name);
+  const teamRule = teamRuleNote(challenge);
   const pick = picking === null || !teams || !challenge.can.pick ? null : pickBox(challenge, picking);
   const chip = challengeChip(challenge, list.today);
   const result = resultOf(challenge);
@@ -409,6 +411,7 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
           {quiet !== null && <p className="text-xs" style={{ color: ORANGE }}>{quiet}</p>}
           <Mine challenge={challenge} today={list.today} gymName={gym.name} />
           {teams ? <Teams challenge={challenge} busy={busy || pick !== null} onPick={setPicking} /> : <Podium challenge={challenge} />}
+          {teamRule !== null && <p className="text-xs" style={{ color: MUTED }}>{teamRule}</p>}
           {teamNote !== null && <p className="text-sm" style={{ color: SOFT }}>{teamNote}</p>}
           {note !== null && <p className="text-xs" style={{ color: MUTED }}>{note}</p>}
 

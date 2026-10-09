@@ -382,6 +382,9 @@ export const gymChallengeTeamRowSchema = z
     place: z.number().int().min(1).nullable(),
     /** The team has reached the target; false where the challenge has none. */
     reached: z.boolean(),
+    /** Where the lowest wins: people in it members may see who have no number yet. A team
+     *  has a place only at 0, or leaving somebody out would win. Always 0 otherwise. */
+    waiting: z.number().int().min(0),
     isMine: z.boolean(),
   })
   .strict();
@@ -570,6 +573,12 @@ export const staffGymChallengeBoardResponseSchema = z
     page: z.number().int().min(1),
     pages: z.number().int().min(1),
     rows: z.array(staffGymChallengeRowSchema).max(LEADERBOARD_STAFF_PAGE),
+    /** Each team's number and place as MEMBERS see them now, for a challenge in teams: the
+     *  one read that carries an ended challenge's result. Empty where people are in it alone;
+     *  null number and place while members see none. */
+    teams: z
+      .array(z.object({ id: z.string().uuid(), value: z.number().int().min(0).nullable(), place: z.number().int().min(1).nullable() }).strict())
+      .max(GYM_CHALLENGE_TEAMS_MAX),
     asOf: z.string().datetime(),
   })
   .strict();
@@ -593,6 +602,7 @@ export const GYM_CHALLENGE_WORDS = {
   teams_none: "People are in this challenge alone, so it has no teams.",
   teams_staff: "At this challenge the staff put people in teams, so a team can't be picked here.",
   team_gone: "That team isn't in this challenge any more. Load the page again.",
+  pick_to_join: "Pick a team to join this challenge.",
   team_locked: "This challenge has started, so you can't change team now.",
   team_person: "One of these people isn't in this challenge any more. Load the list again.",
   team_ended: "This challenge has ended, so its teams can't be changed.",

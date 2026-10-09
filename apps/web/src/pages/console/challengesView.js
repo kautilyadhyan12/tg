@@ -58,7 +58,7 @@ export function winChoices(counts, teams = 'none') {
       { id: 'most', title: 'The team with the most', sub: 'One board of teams. The first team wins.' },
       { id: 'target', title: 'Every team that reaches a number', sub: 'You set the number. Every team that gets there wins.' },
     ];
-    if (counts === 'own') choices.push({ id: 'lowest', title: 'The team with the lowest', sub: 'For a fastest time. The team with the lowest total wins.' });
+    if (counts === 'own') choices.push({ id: 'lowest', title: 'The team with the lowest', sub: 'For a fastest time. The lowest total wins, and a team is placed once everyone in it has a number, so give each team the same number of people.' });
     return choices;
   }
   const choices = [
@@ -85,10 +85,11 @@ const wordsOf = (c) => (isOwn(c) ? (c.unit ?? '').trim() : `${UNIT[c.counts]}s`)
 const capital = (text) => (text === '' ? text : text.charAt(0).toUpperCase() + text.slice(1));
 
 /** Who is in it. */
-export function whoChoices(words, inApp) {
+export function whoChoices(words, inApp, teams = 'none') {
   return [
     { id: 'everyone', title: 'Everyone in the app', sub: `Everybody using the app is in it: ${peopleCount(inApp)}. Nobody has to do anything.` },
-    { id: 'joined', title: 'Only people who join', sub: `Your ${words.people} see it and tap Join.` },
+    // Where members pick their team, picking one is how they join.
+    { id: 'joined', title: 'Only people who join', sub: teams === 'members' ? `Your ${words.people} see it and join by picking a team.` : `Your ${words.people} see it and tap Join.` },
   ];
 }
 
@@ -508,10 +509,14 @@ export function teamsHeading(challenge, words) {
   return challenge.teams === 'staff' ? 'Teams · you put people in them' : `Teams · your ${words.people} pick their own`;
 }
 
-/** The teams on a card: the placed first, then the rest in the gym's order. */
-export function teamLines(challenge) {
+/** The teams on a challenge's page: the placed first, then the rest in the gym's order.
+ *  `numbers`: each team's number and place as read with the board, for a challenge whose
+ *  list did not carry them (an ended one); null for none. */
+export function teamLines(challenge, numbers = null) {
   if (!hasTeams(challenge)) return [];
+  const read = new Map((numbers ?? []).map((team) => [team.id, team]));
   return (challenge.teamList ?? [])
+    .map((team) => ((team.value ?? null) === null && read.has(team.id) ? { ...team, value: read.get(team.id).value, place: read.get(team.id).place } : team))
     .map((team, at) => ({ team, at }))
     .sort((a, b) => Number((a.team.place ?? null) === null) - Number((b.team.place ?? null) === null) || (a.team.place ?? 0) - (b.team.place ?? 0) || a.at - b.at)
     .map(({ team }) => ({
@@ -522,6 +527,15 @@ export function teamLines(challenge) {
       people: team.people === 0 ? 'Nobody yet' : peopleCount(team.people),
       number: (team.value ?? null) === null ? null : count(team.value),
     }));
+}
+
+/** Under the teams on a challenge's page: what its numbers leave out, and when a team is
+ *  placed where the lowest wins. Nothing while no team has a number. */
+export function teamNotes(challenge, lines) {
+  if (!lines.some((team) => team.number !== null)) return [];
+  const notes = ["A team's number leaves out people your members can't see: staff, under-18s and anyone who chose Hide me."];
+  if (challenge.lowestWins) notes.push('The lowest total wins. A team has a place once everyone in it has a number.');
+  return notes;
 }
 
 /** A team's name by its id; "No team" for none. */
@@ -552,17 +566,17 @@ export function inTeamSaves(people) {
 const NAMED = 5;
 
 /** The box before people are moved: who changes team, from which to which, and who won't. */
-export function teamsBox(changes, challenge, words) {
+export function teamsBox(changes, challenge, words, all = false) {
   const n = changes.length;
-  const lines = changes.slice(0, NAMED).map((p) => `${p.name ?? 'No name yet'}: ${teamName(challenge, p.from)} → ${teamName(challenge, p.teamId)}`);
-  if (n > NAMED) lines.push(`and ${count(n - NAMED)} more`);
+  const lines = (all ? changes : changes.slice(0, NAMED)).map((p) => `${p.name ?? 'No name yet'}: ${teamName(challenge, p.from)} → ${teamName(challenge, p.teamId)}`);
+  if (!all && n > NAMED) lines.push(`and ${count(n - NAMED)} more`);
   lines.push('Nobody else is moved.');
   lines.push(
     challenge.state === 'running'
       ? `The challenge is running, so each of these people's numbers moves with them: the teams' numbers change straight away. Your ${words.people} see their new team in the app. Nobody is emailed.`
       : `Your ${words.people} see their team in the app. Nobody is emailed.`,
   );
-  return { title: n === 1 ? 'Move 1 person?' : `Move ${count(n)} people?`, lines, yes: n === 1 ? 'Move 1 person' : `Move ${count(n)} people`, no: 'Keep editing' };
+  return { title: n === 1 ? 'Move 1 person?' : `Move ${count(n)} people?`, lines, seeAll: !all && n > NAMED ? `See all ${count(n)}` : null, yes: n === 1 ? 'Move 1 person' : `Move ${count(n)} people`, no: 'Keep editing' };
 }
 
 /** Beside Previous and Next while people are moved and not saved; null with none. */

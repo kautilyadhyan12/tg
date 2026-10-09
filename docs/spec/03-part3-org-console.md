@@ -3706,11 +3706,12 @@ flames, since it has no days. A number a member types is still never ranked (§1
 `gym_challenge_team_people`, migration `0086`). Staff name two to eight teams on the form
 (40 characters a name, no two alike) and choose who fills them: **the staff** (Put people
 in teams on the challenge's board: a team to pick beside each person, then a box that names
-everyone who changes, from which team to which, and says nobody else is moved;
+everyone who changes, from which team to which (read again from the server as the box
+opens; five named, See all for the rest), and says nobody else is moved;
 `PUT …/challenges/{id}/team-people`, up to 200 people a save, noted once in `audit_log`),
 or **the members** (each team has Join team on the member's card, asked first;
 `PUT …/challenges/{id}/team`). Where members pick, picking a team is how a person joins a
-challenge people join; a member may change team until the first day, and after it a first
+challenge people join (Join with no team is refused, `challenge_pick_team`); a member may change team until the first day, and after it a first
 pick stands (a late joiner still picks once) and a change is refused; leaving keeps their
 place in the team, so coming back opens no other. Staff may move anybody in either kind
 until the last day ends. Until its first day the teams can be renamed, added or removed (a
@@ -3720,7 +3721,11 @@ started, alone or in teams and the teams themselves cannot change, as its other 
 A team's number is **its people's numbers added together** (the terminal's call, Kd's to
 overrule; RULINGS 2026-10-09), counted over the people in the challenge now. Teams are
 placed by it, the highest first (the lowest where the lowest wins), equal numbers sharing
-a place, a team with no number in none. A target is the **team's** to reach, so it is not
+a place, a team with no number in none. **Where the lowest wins, a team has a place only
+once everyone in it that members may see has a number** (round one, RULINGS 2026-10-09): a
+total with somebody's number missing is lower and would win for it; the card says how many
+numbers a team waits for, and the form tells staff to give each team the same number of
+people. A hidden person's missing number holds nobody back. A target is the **team's** to reach, so it is not
 bound by the challenge's days, and no one person is said to have reached it. The people's
 own board stays, one press away.
 
@@ -3731,6 +3736,9 @@ nobody can work it out from the total; a hidden member reads their own line and 
 their number is not added. Teammates are named only once they have a number of their own,
 as the people's board names people. While fewer than three people members may see have a
 number, no team has a number or a place either. Nothing of a team's number is stored.
+Staff's Teams box counts everyone in a team, the hidden too, and says under it that a
+team's number leaves them out. An ended challenge's teams are read with its board
+(`teams` on the staff board's reply), since the list of ended challenges counts nothing.
 
 **The console's page, redrawn in the same job (Kd, RULINGS 2026-10-09).** The page is one of
 three things at a time, never all at once: a **list**, one line a challenge (name, where it

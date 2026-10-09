@@ -185,11 +185,11 @@ describe('teams on the Add challenge form', () => {
     expect(teams().getAllByRole('textbox').map((box) => box.value)).toEqual(['Red Team', 'Blue Team', 'Green Team']);
     // An empty team goes without a word; one with people says what saving does.
     fireEvent.click(teams().getByRole('button', { name: 'Remove team 3, Green Team' }));
-    expect(teams().queryByRole('note')).toBeNull();
+    expect(form().queryByRole('note')).toBeNull();
     fireEvent.click(teams().getByRole('button', { name: 'Add a team' }));
     type('Team 3 name', 'Gold Team');
     fireEvent.click(teams().getByRole('button', { name: 'Remove team 1, Red Team' }));
-    expect(teams().getByRole('note').textContent).toBe('Red Team has 3 people in it. Saving removes the team, and those people are left in no team. Nobody is told.');
+    expect(form().getByRole('note').textContent).toBe('Red Team has 3 people in it. Saving removes the team, and those people are left in no team. Nobody is told.');
     type('Team 1 name', 'The Blues');
     fireEvent.click(form().getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
@@ -245,6 +245,7 @@ describe('teams on a challenge card', () => {
   });
 
   it('an ended or cancelled challenge, and a gym that can only read, have no Put people in teams', async () => {
+    svc.board.mockResolvedValue(boardOf([], { teams: [] }));
     svc.list.mockResolvedValue(listOf([challenge('x', 'Cancelled Week', { cancelled: true })], { past: [challenge('p', 'Last Week', { state: 'ended', startsOn: '2026-09-28', endsOn: '2026-10-04' })], pastTotal: 1 }));
     open();
     await waitFor(() => expect(cards()).toHaveLength(1));
@@ -314,7 +315,7 @@ describe('putting people in teams', () => {
     move(board, 'Dev Shah', RED);
     move(board, 'Dev Shah', null);
     fireEvent.click(board.getByRole('button', { name: 'Save teams' }));
-    const box = within(screen.getByRole('group', { name: 'Move 3 people?' }));
+    const box = within(await screen.findByRole('group', { name: 'Move 3 people?' }));
     expect(box.getByText('Asha Rao: Red Team → Blue Team')).toBeTruthy();
     expect(box.getByText('Bilal Khan: No team → Red Team')).toBeTruthy();
     expect(box.getByText('Chen Wu: Blue Team → No team')).toBeTruthy();
@@ -330,9 +331,10 @@ describe('putting people in teams', () => {
     expect(board.getByLabelText('Asha Rao: team').value).toBe(BLUE);
 
     svc.setTeamPeople.mockResolvedValue(3);
-    svc.board.mockResolvedValue(boardOf([row('u1', 'Asha Rao', BLUE, { value: 3 }), row('u2', 'Bilal Khan', RED), row('u3', 'Chen Wu', null), row('u4', 'Dev Shah', null)]));
     fireEvent.click(board.getByRole('button', { name: 'Save teams' }));
-    fireEvent.click(within(screen.getByRole('group', { name: 'Move 3 people?' })).getByRole('button', { name: 'Move 3 people' }));
+    const again = within(await screen.findByRole('group', { name: 'Move 3 people?' }));
+    svc.board.mockResolvedValue(boardOf([row('u1', 'Asha Rao', BLUE, { value: 3 }), row('u2', 'Bilal Khan', RED), row('u3', 'Chen Wu', null), row('u4', 'Dev Shah', null)]));
+    fireEvent.click(again.getByRole('button', { name: 'Move 3 people' }));
     await waitFor(() => expect(svc.setTeamPeople).toHaveBeenCalledTimes(1));
     expect(svc.setTeamPeople.mock.calls[0]).toEqual([
       'g1',
@@ -353,7 +355,7 @@ describe('putting people in teams', () => {
     const board = await openTeams(PEOPLE, { state: 'coming', startsOn: '2026-10-12', endsOn: '2026-10-18', withNumber: null });
     move(board, 'Dev Shah', BLUE);
     fireEvent.click(board.getByRole('button', { name: 'Save teams' }));
-    const box = within(screen.getByRole('group', { name: 'Move 1 person?' }));
+    const box = within(await screen.findByRole('group', { name: 'Move 1 person?' }));
     expect(box.getByText('Dev Shah: No team → Blue Team')).toBeTruthy();
     expect(box.getByText('Your members see their team in the app. Nobody is emailed.')).toBeTruthy();
     expect(box.queryByText(/numbers moves/)).toBeNull();
@@ -365,9 +367,14 @@ describe('putting people in teams', () => {
     const board = await openTeams(many);
     for (const p of many) move(board, p.name, RED);
     fireEvent.click(board.getByRole('button', { name: 'Save teams' }));
-    const box = within(screen.getByRole('group', { name: 'Move 8 people?' }));
+    const box = within(await screen.findByRole('group', { name: 'Move 8 people?' }));
     expect(box.getAllByText(/^Member \d: No team → Red Team$/)).toHaveLength(5);
     expect(box.getByText('and 3 more')).toBeTruthy();
+    // See all names every one of them, and the button goes.
+    fireEvent.click(box.getByRole('button', { name: 'See all 8' }));
+    expect(box.getAllByText(/^Member \d: No team → Red Team$/)).toHaveLength(8);
+    expect(box.queryByText('and 3 more')).toBeNull();
+    expect(box.queryByRole('button', { name: /^See all/ })).toBeNull();
     svc.setTeamPeople.mockResolvedValue(8);
     fireEvent.click(box.getByRole('button', { name: 'Move 8 people' }));
     await waitFor(() => expect(svc.setTeamPeople).toHaveBeenCalledTimes(1));
@@ -389,7 +396,7 @@ describe('putting people in teams', () => {
     await board.findByLabelText('Zara Ali: team');
     move(board, 'Zara Ali', BLUE);
     fireEvent.click(board.getByRole('button', { name: 'Save teams' }));
-    const box = within(screen.getByRole('group', { name: 'Move 2 people?' }));
+    const box = within(await screen.findByRole('group', { name: 'Move 2 people?' }));
     expect(box.getByText('Asha Rao: No team → Red Team')).toBeTruthy();
     expect(box.getByText('Zara Ali: No team → Blue Team')).toBeTruthy();
     svc.setTeamPeople.mockResolvedValue(2);
@@ -407,7 +414,7 @@ describe('putting people in teams', () => {
     fireEvent.click(board.getByRole('button', { name: 'Save teams' }));
     svc.setTeamPeople.mockRejectedValue(refusal(409, "One of these people isn't in this challenge any more. Load the list again."));
     const before = svc.board.mock.calls.length;
-    fireEvent.click(within(screen.getByRole('group', { name: 'Move 1 person?' })).getByRole('button', { name: 'Move 1 person' }));
+    fireEvent.click(within(await screen.findByRole('group', { name: 'Move 1 person?' })).getByRole('button', { name: 'Move 1 person' }));
     expect((await board.findByRole('alert')).textContent).toBe("One of these people isn't in this challenge any more. Load the list again.");
     expect(screen.queryByRole('group', { name: 'Move 1 person?' })).toBeNull();
     expect(svc.board.mock.calls.length).toBeGreaterThan(before);
@@ -416,5 +423,100 @@ describe('putting people in teams', () => {
   it('where members pick, the help says staff may still move somebody', async () => {
     const board = await openTeams(PEOPLE, { teams: 'members' });
     expect(board.getByText('Your members pick their own team in the app. You can also put somebody in a team here, or move them: pick the team beside their name and press Save teams.')).toBeTruthy();
+  });
+
+  it('the box names the team each person is in NOW: somebody who picked a team since the page was loaded is read again first', async () => {
+    const board = await openTeams();
+    move(board, 'Bilal Khan', RED);
+    move(board, 'Dev Shah', RED);
+    // Since the page was loaded Bilal picked Blue in the app, and staff elsewhere put Dev in Red.
+    svc.board.mockResolvedValue(boardOf([row('u1', 'Asha Rao', RED, { value: 3 }), row('u2', 'Bilal Khan', BLUE), row('u3', 'Chen Wu', BLUE), row('u4', 'Dev Shah', RED)]));
+    fireEvent.click(board.getByRole('button', { name: 'Save teams' }));
+    const box = within(await screen.findByRole('group', { name: 'Move 1 person?' }));
+    expect(box.getByText('Bilal Khan: Blue Team → Red Team')).toBeTruthy();
+    // Dev is already where staff wanted him: he does not change, and is not named or sent.
+    expect(box.queryByText(/Dev Shah/)).toBeNull();
+    svc.setTeamPeople.mockResolvedValue(1);
+    fireEvent.click(box.getByRole('button', { name: 'Move 1 person' }));
+    await waitFor(() => expect(svc.setTeamPeople).toHaveBeenCalledTimes(1));
+    expect(svc.setTeamPeople.mock.calls[0][2]).toEqual([{ userId: 'u2', teamId: RED }]);
+  });
+});
+
+describe('round one', () => {
+  it('choosing Alone on a challenge with people in teams says, before Save, which teams go and who is left in none', async () => {
+    const coming = challenge('a', 'Next Week', { state: 'coming', startsOn: '2026-10-12', endsOn: '2026-10-18', withNumber: null, teamList: [team(RED, 'Red Team', 3), team(BLUE, 'Blue Team', 1)] });
+    svc.list.mockResolvedValue(listOf([coming]));
+    svc.change.mockResolvedValue({ ...coming, teams: 'none', teamList: [] });
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(cardOf('Next Week').getByRole('button', { name: 'Edit Next Week' }));
+    expect(form().queryByRole('note')).toBeNull();
+    pick('Alone or in teams', 'Alone');
+    expect(form().queryByRole('group', { name: 'Teams' })).toBeNull();
+    expect(form().getAllByRole('note').map((note) => note.textContent)).toEqual([
+      'Red Team has 3 people in it. Saving removes the team, and those people are left in no team. Nobody is told.',
+      'Blue Team has 1 person in it. Saving removes the team, and that person is left in no team. Nobody is told.',
+    ]);
+    // Back in teams, nothing is removed and nothing is said.
+    pick('Alone or in teams', 'In teams you make');
+    expect(form().queryByRole('note')).toBeNull();
+    pick('Alone or in teams', 'Alone');
+    fireEvent.click(form().getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
+    expect(svc.change.mock.calls[0][2]).toMatchObject({ teams: 'none', teamList: [] });
+  });
+
+  it('an ended challenge in teams reads each team number and place with its board, and says what a number leaves out', async () => {
+    const ended = challenge('p', 'Last Week', { state: 'ended', startsOn: '2026-09-28', endsOn: '2026-10-04', withNumber: null, teamList: [team(RED, 'Red Team', 14), team(BLUE, 'Blue Team', 9)] });
+    svc.list.mockResolvedValue(listOf([], { past: [ended], pastTotal: 1 }));
+    svc.board.mockResolvedValue(
+      boardOf([], {
+        challengeId: 'p',
+        memberStatus: 'shown',
+        teams: [
+          { id: RED, value: 231, place: 1 },
+          { id: BLUE, value: 180, place: 2 },
+        ],
+      }),
+    );
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Past challenges (1)' }));
+    const page = cardOf('Last Week');
+    await waitFor(() => expect(texts(page.getByRole('list', { name: 'Teams: Last Week' }))).toEqual(['1stRed Team14 people231', '2ndBlue Team9 people180']));
+    expect(svc.board).toHaveBeenCalledWith('g1', 'p', 1);
+    expect(within(page.getByTestId('challenge-teams')).getByText("A team's number leaves out people your members can't see: staff, under-18s and anyone who chose Hide me.")).toBeTruthy();
+  });
+
+  it('a running challenge reads no board for its teams, and where the lowest wins says when a team is placed', async () => {
+    svc.list.mockResolvedValue(listOf([challenge('a', 'Relay', { counts: 'own', unit: 'seconds', lowestWins: true, withNumber: 3, teamList: [team(RED, 'Red Team', 2, 101, 1), team(BLUE, 'Blue Team', 3, 95, null)] })]));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    const page = cardOf('Relay');
+    expect(texts(page.getByRole('list', { name: 'Teams: Relay' }))).toEqual(['1stRed Team2 people101', 'Blue Team3 people95']);
+    expect(within(page.getByTestId('challenge-teams')).getByText('The lowest total wins. A team has a place once everyone in it has a number.')).toBeTruthy();
+    expect(svc.board).not.toHaveBeenCalled();
+  });
+
+  it('with no number yet the teams box says nothing about numbers', async () => {
+    svc.list.mockResolvedValue(listOf([challenge('a', 'October Week')]));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    expect(within(cardOf('October Week').getByTestId('challenge-teams')).queryByText(/leaves out people/)).toBeNull();
+  });
+
+  it('who is in it reads by how the teams are made, and the lowest choice says its rule', async () => {
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add challenge' }));
+    const joined = () => within(form().getByRole('radiogroup', { name: 'Who is in it' })).getAllByRole('radio')[1].textContent.replace(/\s+/g, ' ').trim();
+    expect(joined()).toBe('Only people who joinYour members see it and tap Join.');
+    pick('Alone or in teams', 'In teams you make');
+    expect(joined()).toBe('Only people who joinYour members see it and tap Join.');
+    pick('Alone or in teams', 'In teams people pick');
+    expect(joined()).toBe('Only people who joinYour members see it and join by picking a team.');
+    pick('What it counts', 'Your own count');
+    expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio')[2].textContent.replace(/\s+/g, ' ').trim()).toBe(
+      'The team with the lowestFor a fastest time. The lowest total wins, and a team is placed once everyone in it has a number, so give each team the same number of people.',
+    );
   });
 });
