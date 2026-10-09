@@ -3687,7 +3687,7 @@ place and what it takes to move up, the top three, Join or Leave, and the whole 
 started. A gym-days challenge at a gym that checks nobody in says so, never a bare 0. A
 gym on no plan: its members are sent none.
 
-Left for **19d-ii**: teams, and the result posted to Updates when it ends.
+Left for **19d-ii-b**: the result posted to Updates when it ends.
 
 **The gym's own count (Kd, RULINGS 2026-10-06, built in 19d-i).** A third thing a challenge
 can count: `counts` `own`, with `unit` the gym's word for it ("push-ups", 30 characters).
@@ -3700,6 +3700,37 @@ be won by the most, by reaching a number (not bound by its days), or by **the lo
 (`lowest_wins`, a fastest time; only for this count and with no target). Places, the
 hidden rule and the three-people rule are the same as every other challenge's; it has no
 flames, since it has no days. A number a member types is still never ranked (§15.5).
+
+**Teams, as built (19d-ii-a).** A challenge is for people **alone** or **in teams**
+(`gym_challenges.teams`: `none`, `staff`, `members`; `gym_challenge_teams`,
+`gym_challenge_team_people`, migration `0086`). Staff name two to eight teams on the form
+(40 characters a name, no two alike) and choose who fills them: **the staff** (Put people
+in teams on the challenge's board: a team to pick beside each person, then a box that names
+everyone who changes, from which team to which, and says nobody else is moved;
+`PUT …/challenges/{id}/team-people`, up to 200 people a save, noted once in `audit_log`),
+or **the members** (each team has Join team on the member's card, asked first;
+`PUT …/challenges/{id}/team`). Where members pick, picking a team is how a person joins a
+challenge people join; a member may change team until the first day, and after it a first
+pick stands (a late joiner still picks once) and a change is refused; leaving keeps their
+place in the team, so coming back opens no other. Staff may move anybody in either kind
+until the last day ends. Until its first day the teams can be renamed, added or removed (a
+removed team's people are left in no team, said on the form before Save); once it has
+started, alone or in teams and the teams themselves cannot change, as its other rules.
+
+A team's number is **its people's numbers added together** (the terminal's call, Kd's to
+overrule; RULINGS 2026-10-09), counted over the people in the challenge now. Teams are
+placed by it, the highest first (the lowest where the lowest wins), equal numbers sharing
+a place, a team with no number in none. A target is the **team's** to reach, so it is not
+bound by the challenge's days, and no one person is said to have reached it. The people's
+own board stays, one press away.
+
+The hidden rule holds for teams as for places: a hidden person (Hide me, under 18, taken
+off, staff, no name), a removed member and a deleted account are in no list of a team's
+people, are not counted among them, and their number is **not in the team's number**, so
+nobody can work it out from the total; a hidden member reads their own line and is told
+their number is not added. Teammates are named only once they have a number of their own,
+as the people's board names people. While fewer than three people members may see have a
+number, no team has a number or a place either. Nothing of a team's number is stored.
 
 ### 15.7 A gym's own plan for a member
 
