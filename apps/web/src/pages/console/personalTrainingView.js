@@ -189,22 +189,24 @@ export function pickDay(week, wanted) {
 }
 
 /** The seven days as the strip over the week shows them: "Fri", "9", and one short note:
- *  sessions waiting for Came or No-show first, then how many are booked, then a whole day
- *  off. `tone` colours the note. */
+ *  sessions waiting for Came or No-show first, then how many are still to come ("booked"),
+ *  then how many took place and are marked, then a whole day off. `tone` colours the note. */
 export function dayTabs(week) {
   return (Array.isArray(week?.days) ? week.days : []).map((day) => {
     const [weekday, date] = dayLabel(day.localDate).split(' ');
-    const booked = day.appointments.length;
     const toMark = day.appointments.filter((a) => a.canMark === true && a.status === 'booked').length;
+    const booked = day.appointments.filter((a) => a.status === 'booked').length - toMark;
+    const marked = day.appointments.length - toMark - booked;
     const off = (day.timeOff ?? []).some((o) => o.fromMinute === null && o.toMinute === null);
-    const note = toMark > 0 ? `${String(toMark)} to mark` : booked > 0 ? `${String(booked)} booked` : off ? 'Time off' : '';
+    const note =
+      toMark > 0 ? `${String(toMark)} to mark` : booked > 0 ? `${String(booked)} booked` : marked > 0 ? `${String(marked)} marked` : off ? 'Time off' : '';
     return {
       localDate: day.localDate,
       weekday,
       date,
       today: day.localDate === week.today,
       note,
-      tone: toMark > 0 ? 'warn' : booked > 0 ? 'on' : 'plain',
+      tone: toMark > 0 ? 'warn' : booked > 0 || marked > 0 ? 'on' : 'plain',
       label: `${dayHeading(day.localDate, week.today)}${note === '' ? '' : `, ${note}`}`,
     };
   });

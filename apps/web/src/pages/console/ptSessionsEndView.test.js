@@ -70,11 +70,23 @@ describe('the box’s words', () => {
 describe('the box over the page says what the person is being removed from (17e-iv-b)', () => {
   const two = { count: 2, packSessions: 0 };
   it.each([
-    ['app', 'Remove Sam Reed?', "Sam Reed hasn't been removed yet: they have personal training booked.", true],
-    ['staff', 'Remove Sam Reed from staff?', "Sam Reed hasn't been removed yet: people are booked with them for personal training.", false],
-    ['both', 'Remove Sam Reed from staff and the app?', "Sam Reed hasn't been removed yet: personal training is booked with them or for them.", false],
-  ])('%s', (from, heading, why, onePerson) => {
-    expect(ptEndBoxWords('Sam Reed', two, from)).toEqual({ heading, why, go: 'Remove and cancel 2 sessions', onePerson });
+    ['app', 'Remove Sam Reed?', "Sam Reed hasn't been removed yet: they have personal training booked.", true, false],
+    ['staff', 'Remove Sam Reed from staff?', "Sam Reed hasn't been removed yet: people are booked with them for personal training.", false, true],
+    ['both', 'Remove Sam Reed from staff and the app?', "Sam Reed hasn't been removed yet: personal training is booked with them or for them.", false, true],
+  ])('%s', (from, heading, why, onePerson, trainerLeaves) => {
+    expect(ptEndBoxWords('Sam Reed', two, from)).toEqual({ heading, why, go: 'Remove and cancel 2 sessions', onePerson, trainerLeaves });
+  });
+
+  it('a trainer’s box never says their times are free again: nobody can be booked with them (the review, H1)', () => {
+    const one = { count: 1, packSessions: 0, mark: 'a'.repeat(64), sessions: [] };
+    const many = { count: 3, packSessions: 2, mark: 'a'.repeat(64), sessions: [] };
+    expect(ptEndingWords(one, '24h', false, true).change).toBe('Nobody can be booked with them after this. A session that has already started stays as it is.');
+    expect(ptEndingWords(many, '24h', false, true).change).toBe(
+      'Nobody can be booked with them after this. 2 sessions go back to their packs. A session that has already started stays as it is.',
+    );
+    // A member's box still says it: there the trainer stays, and the time does open up.
+    expect(ptEndingWords(one, '24h').change).toMatch(/^The time is free again\./);
+    expect(ptEndingWords(many, '24h', true).change).toMatch(/^Those times are free again\./);
   });
 
   it('left out, it is the box for one person in the app', () => {

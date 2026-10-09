@@ -1350,7 +1350,9 @@ describe('Remove from staff and app names the personal training sessions it canc
     expect(box.getByRole('heading', { name: '1 personal training session will be cancelled' })).toBeTruthy();
     // The box may hold sessions she gives and sessions she takes, so each line leads with the person.
     expect(within(box.getByTestId('pt-sessions-ending')).getByRole('listitem').textContent).toMatch(/^Rita SenFri 9 Oct · .*with Sam Trainer$/);
-    expect(box.getByText("The time is free again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
+    // A trainer is going: their time does not open up, and the box never says it does.
+    expect(box.getByText('Nobody can be booked with them after this. 1 session goes back to its pack. A session that has already started stays as it is.')).toBeTruthy();
+    expect(box.queryByText(/free again/)).toBeNull();
     expect(orgService.removeMember).toHaveBeenCalledTimes(1);
 
     fireEvent.click(box.getByRole('button', { name: 'Remove and cancel 1 session' }));
@@ -1417,7 +1419,8 @@ describe('Remove from staff names the personal training sessions booked with a t
     expect(part.getByText(/and 2 more/)).toBeTruthy();
     fireEvent.click(part.getByRole('button', { name: 'See all' }));
     expect(part.getAllByRole('listitem')).toHaveLength(5);
-    expect(part.getByText('Those times are free again. 2 sessions go back to their packs. A session that has already started stays as it is.')).toBeTruthy();
+    expect(part.getByText('Nobody can be booked with them after this. 2 sessions go back to their packs. A session that has already started stays as it is.')).toBeTruthy();
+    expect(part.queryByText(/free again/)).toBeNull();
     expect(part.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
     // It is a question, not an error: no sentence of the server's is shown.
     expect(screen.queryByText('People are booked with this trainer for personal training.')).toBeNull();

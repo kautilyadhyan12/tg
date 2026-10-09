@@ -1017,9 +1017,20 @@ export function registerOrgRoutes(
     },
   );
 
+  // Each press reads every coming session booked with the trainer (17e-iv-b), so it is
+  // limited. A gym's staff share its address, hence the explicit `ipMax`.
+  const staffRemoveLimit = createDualRateLimit({
+    name: "orgs_staff_remove",
+    max: 60,
+    ipMax: 300,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
   app.delete(
     "/v1/orgs/:gymId/staff/:userId",
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate, staffRemoveLimit] },
     async (req, reply) => {
       const params = parseOr400(staffParamsSchema, req.params, req, reply);
       if (params === null) return;

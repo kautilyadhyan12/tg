@@ -771,6 +771,7 @@ describe('the strip of days, and the day it opens on', () => {
   const booked = { status: 'booked', canMark: false };
   const toMark = { status: 'booked', canMark: true };
   const came = { status: 'attended', canMark: true };
+  const missed = { status: 'no_show', canMark: true };
   const allDay = { id: 'o1', fromMinute: null, toMinute: null };
   const week = {
     today: '2026-10-07',
@@ -793,6 +794,15 @@ describe('the strip of days, and the day it opens on', () => {
     ]);
     expect(dayTabs(week).map((t) => t.label)).toEqual(['Today · Wed 7 Oct, 1 to mark', 'Thu 8 Oct, 2 booked', 'Fri 9 Oct, Time off', 'Sat 10 Oct, 1 booked', 'Sun 11 Oct']);
     expect(dayTabs(null)).toEqual([]);
+  });
+
+  it('"booked" counts only sessions still to come: ones already marked are said as marked (the review, L4)', () => {
+    const notes = (appointments) => dayTabs({ today: '2026-10-20', days: [day('2026-10-07', appointments)] }).map((t) => [t.note, t.tone]);
+    expect(notes([came, missed])).toEqual([['2 marked', 'on']]);
+    expect(notes([came])).toEqual([['1 marked', 'on']]);
+    expect(notes([came, booked])).toEqual([['1 booked', 'on']]);
+    expect(notes([came, missed, toMark])).toEqual([['1 to mark', 'warn']]);
+    expect(notes([toMark, booked, booked])).toEqual([['1 to mark', 'warn']]);
   });
 
   it('opens the day asked for while it is in the week, else today, else the first with a session, else the first', () => {

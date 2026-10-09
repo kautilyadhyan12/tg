@@ -1941,8 +1941,11 @@ export async function removeOrgMember(
     beforeClose: async (tx, { staffGoes }) => {
       const confirmed = options.confirmPtSessions ?? null;
       const records = await recordsOfMember(tx, gymId, targetUserId);
-      const entry =
-        records.current !== null && privileges.includes("members.confirm") ? await listRepo.entryFor(tx, gymId, records.current) : null;
+      // Refused before anything is asked: no box may promise a removal this press cannot make.
+      if (records.current !== null && !privileges.includes("members.confirm")) {
+        throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.remove_needs_list);
+      }
+      const entry = records.current === null ? null : await listRepo.entryFor(tx, gymId, records.current);
       // A TRAINER GOES WITH THEIR PLACE (17e-iv-b): the box names, under ONE mark, the
       // sessions booked WITH them and the ones booked FOR them, and nothing is written
       // until that mark comes back. The record's own part is then confirmed with it.
@@ -1953,7 +1956,6 @@ export async function removeOrgMember(
         recordConfirmed = (await sessionsEndingFor(tx, gymId, { entryIds: own }, at))?.mark ?? null;
       }
       if (records.current === null) return records.past;
-      if (!privileges.includes("members.confirm")) throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.remove_needs_list);
       if (entry === null) return null;
       await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites, confirmPtSessions: recordConfirmed }, entry, {
         endApp: false,

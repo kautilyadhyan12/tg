@@ -40,8 +40,9 @@ export const PT_ENDING_NOT_TOLD = "The app doesn't tell them or the trainer yet.
  *  cancelled between the box and its button, and the press did nothing. */
 export const PT_ENDING_MOVED = 'The sessions changed while this was open. Check them and press again.';
 
-/** The box's words: what ends, what happens, what stays. */
-export function ptEndingWords(ending, clockFormat, onePerson = false) {
+/** The box's words: what ends, what happens, what stays. `trainerLeaves`: the box removes
+ *  a trainer from the staff, so their times do not open up: nobody can be booked with them. */
+export function ptEndingWords(ending, clockFormat, onePerson = false, trainerLeaves = false) {
   const words = ptSessionsEndingWords(ending);
   const rows = (Array.isArray(ending?.sessions) ? ending.sessions : []).map((session) => ptEndingRow(session, clockFormat, onePerson));
   return {
@@ -50,7 +51,7 @@ export function ptEndingWords(ending, clockFormat, onePerson = false) {
     /** The server names a hundred at most; the count is whole. */
     unlisted: Math.max(0, ending.count - rows.length),
     change: [
-      ending.count === 1 ? 'The time is free again.' : 'Those times are free again.',
+      trainerLeaves ? 'Nobody can be booked with them after this.' : ending.count === 1 ? 'The time is free again.' : 'Those times are free again.',
       words.packs,
       'A session that has already started stays as it is.',
     ]
@@ -71,6 +72,7 @@ export function ptEndBoxWords(name, ending, from = 'app') {
       why: `${name} hasn't been removed yet: people are booked with them for personal training.`,
       go,
       onePerson: false,
+      trainerLeaves: true,
     };
   }
   if (from === 'both') {
@@ -79,9 +81,10 @@ export function ptEndBoxWords(name, ending, from = 'app') {
       why: `${name} hasn't been removed yet: personal training is booked with them or for them.`,
       go,
       onePerson: false,
+      trainerLeaves: true,
     };
   }
-  return { heading: `Remove ${name}?`, why: `${name} hasn't been removed yet: they have personal training booked.`, go, onePerson: true };
+  return { heading: `Remove ${name}?`, why: `${name} hasn't been removed yet: they have personal training booked.`, go, onePerson: true, trainerLeaves: false };
 }
 
 /** "cancel 2 sessions", for a button that goes ahead. */

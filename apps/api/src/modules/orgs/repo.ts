@@ -2688,6 +2688,11 @@ export async function removeMember(
       });
     };
 
+    // Somebody who was never a member here (staff only, say) is told so before anything
+    // is asked about their sessions: this route does not remove them.
+    const ever = await tx`SELECT 1 FROM gym_members WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} LIMIT 1`;
+    if (ever.length === 0) return { kind: "never_member" };
+
     const removedWith = (await input.beforeClose?.(tx, { staffGoes: staff !== undefined && input.alsoStaff })) ?? null;
     const closed = await tx<{ id: string }[]>`
       UPDATE gym_members SET removed_at = now(), removed_entry_id = ${removedWith}
@@ -2696,17 +2701,10 @@ export async function removeMember(
     const row = closed[0];
 
     if (row === undefined) {
-      // Two different facts, and they are not merged: a SECOND tap (a row
-      // exists, already closed) is idempotent success, while a request naming
-      // somebody who was never in this gym is a 404 — the console only offers
-      // this button on a roster row, so that case means the screen is stale or
-      // the id came from somewhere it should not have. Answering "removed" to
-      // it would be a true-sounding reply to a request nothing honoured.
-      const everRows = await tx<{ id: string }[]>`
-        SELECT id FROM gym_members
-        WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
-        LIMIT 1`;
-      if (everRows[0] === undefined) return { kind: "never_member" };
+      // A SECOND tap (a row exists, already closed) is idempotent success. Somebody who
+      // was never in this gym was answered 404 above: the console only offers this button
+      // on a roster row, so that case means the screen is stale or the id came from
+      // somewhere it should not have.
       await input.afterClose?.(tx);
       await endStaff();
       return { kind: "already_removed" };

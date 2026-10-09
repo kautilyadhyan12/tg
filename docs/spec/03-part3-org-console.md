@@ -3070,7 +3070,12 @@ nothing on a day gone by is free. **The page shows one day at a time** (Kd's cli
 RULINGS 2026-10-09): a trainer is one short row, their hours on as few lines as say them;
 the week is a strip of its seven days, each with one note (sessions to mark, else how many
 are booked, else a whole day off); the open day, today where the week holds it, shows
-Booked first and then Available times. Not done: the sessions of a trainer already off the staff
+Booked first and then Available times. **From the review (2026-10-09):** a trainer's box
+says "Nobody can be booked with them after this.", never that their times are free again;
+a removal that will be refused is refused BEFORE its box (403 for staff who may not change
+the list, 404 `member_not_found` for "from staff and the app" on somebody who was never a
+member); `DELETE …/staff/:userId` is limited (60 an hour a person, 300 an address); a day of
+the strip says "booked" only for sessions still to come. Not done: the sessions of a trainer already off the staff
 that were never marked cannot be opened (their week needs them on the staff); nobody is told
 (the inbox, 20a).)*
 

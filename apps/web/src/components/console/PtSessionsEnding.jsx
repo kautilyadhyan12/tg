@@ -8,9 +8,9 @@ import { PT_ENDING_FIRST, PT_ENDING_MOVED, PT_ENDING_NOT_TOLD, ptEndBoxWords, pt
 // what stays. `ending` is the server's own answer, which carries the sessions. `onePerson`:
 // the box is about one person it has already named, so each line leads with when.
 
-export default function PtSessionsEnding({ ending, clockFormat, moved = false, onePerson = false }) {
+export default function PtSessionsEnding({ ending, clockFormat, moved = false, onePerson = false, trainerLeaves = false }) {
   const [all, setAll] = useState(false);
-  const words = ptEndingWords(ending, clockFormat, onePerson);
+  const words = ptEndingWords(ending, clockFormat, onePerson, trainerLeaves);
   const rows = all ? words.rows : words.rows.slice(0, PT_ENDING_FIRST);
   const hidden = words.rows.length - rows.length;
   return (
@@ -72,7 +72,7 @@ export function PtSessionsEndDialog({ name, ending, clockFormat, from = 'app', m
         </div>
         <div className="px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0 flex flex-col gap-4">
           <p className="c-s15 c-t2 m-0">{box.why}</p>
-          <PtSessionsEnding ending={ending} clockFormat={clockFormat} moved={moved} onePerson={box.onePerson} />
+          <PtSessionsEnding ending={ending} clockFormat={clockFormat} moved={moved} onePerson={box.onePerson} trainerLeaves={box.trainerLeaves} />
           {error !== null ? (
             <p className="c-s14 c-t1 m-0" role="alert">
               {error}

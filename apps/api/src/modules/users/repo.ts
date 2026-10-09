@@ -725,9 +725,14 @@ export async function softDeleteUser(
         AND NOT EXISTS (SELECT 1 FROM gyms g WHERE g.id = s.gym_id AND g.owner_user_id = s.user_id)
       RETURNING s.gym_id, s.role`;
     for (const ended of endedStaff) {
-      // A gym whose staff they joined in the instant after the rows above were held has
-      // no session booked with them yet.
-      const sessions = held.has(ended.gym_id) ? ((await leftStaff?.(tx, ended.gym_id)) ?? {}) : {};
+      // A gym whose staff they joined in the instant after the rows above were held almost
+      // certainly has no session booked with them yet. Its row is not held, so its sessions
+      // are not touched here, and the audit row says so.
+      const sessions: Record<string, string> = held.has(ended.gym_id)
+        ? ((await leftStaff?.(tx, ended.gym_id)) ?? {})
+        : leftStaff === undefined
+          ? {}
+          : { ptSessionsNotRead: "gym_not_held" };
       await tx`
         INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
         VALUES (${userId}, ${ended.gym_id}, 'org.staff_removed', 'gym_staff', ${userId},

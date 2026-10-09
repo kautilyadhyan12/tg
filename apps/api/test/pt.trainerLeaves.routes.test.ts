@@ -79,11 +79,13 @@ d("a trainer leaves the staff, and came or no-show (real Postgres, two api insta
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
+  /** Set, every request comes from this one address: a gym's staff behind one front desk. */
+  let oneAddress: string | null = null;
   const inject = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, cookies: Cookies, payload?: unknown, target = api()) =>
     target.inject({
       method,
       url: path,
-      remoteAddress: nextIp(),
+      remoteAddress: oneAddress ?? nextIp(),
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
@@ -119,9 +121,9 @@ d("a trainer leaves the staff, and came or no-show (real Postgres, two api insta
       VALUES ('gym', ${id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'trialing', 'pilot')`;
     return { id, owner };
   };
-  const staff = async (gym: Gym, name: string, role: "trainer" | "manager" = "trainer"): Promise<Person> => {
+  const staff = async (gym: Gym, name: string, role: "trainer" | "manager" | "owner" = "trainer", privileges: string[] | null = null): Promise<Person> => {
     const person = await signedIn(name);
-    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${person.userId}, ${role}, ${null})`;
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${person.userId}, ${role}, ${privileges})`;
     return person;
   };
   /** Somebody on the gym's list with no app. */
@@ -497,6 +499,203 @@ d("a trainer leaves the staff, and came or no-show (real Postgres, two api insta
         ["booked", true],
       ]);
       expect(await left(mayaPack)).toBe(7);
+
+      // AT EVERY GYM THEY TRAIN AT, AND NO OTHER: Uli trains at two gyms and is a member,
+      // with a session of his own, at a third.
+      clock = NOW.getTime();
+      const [north, south, third] = [await makeGym("Uli North"), await makeGym("Uli South"), await makeGym("Uli Member Here")];
+      const uli = await signedIn("Uli Two Gyms");
+      for (const g of [north, south]) {
+        await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${g.id}, ${uli.userId}, 'trainer', ${null})`;
+        await offering(g, uli);
+      }
+      const [nia, sol] = [await onList(north, "Nia North"), await onList(south, "Sol South")];
+      const northStays = await trainerWith(north, "Nell Stays");
+      const thirdTrainer = await trainerWith(third, "Theo Third");
+      const uliThere = await joined(third, uli);
+      const [atNorth, atSouth, northOther, uliOwn] = [
+        await book(north, uli, nia, 600),
+        await book(south, uli, sol, 600),
+        await book(north, northStays, nia, 660),
+        await book(third, thirdTrainer, uliThere.entryId, 600),
+      ];
+      await deleteAccount(uli);
+      expect([await stateOf(north, [atNorth, northOther]), await stateOf(south, [atSouth]), await stateOf(third, [uliOwn])]).toEqual([
+        [
+          ["cancelled", false],
+          ["booked", false],
+        ],
+        [["cancelled", false]],
+        // His own session as a member is held by his record, which is still on that gym's list.
+        [["booked", false]],
+      ]);
+      for (const g of [north, south]) {
+        expect((await auditOf(g, "org.staff_removed", uli.userId)).map((m) => [m["removedWith"], m["ptSessionsEnded"]])).toEqual([["account_deleted", "1"]]);
+      }
+
+      // AN ACCOUNT DELETED AND A BOOKING WITH THEM AT ONE INSTANT, on two servers: never a
+      // booked session left with a trainer who is gone.
+      const race = await makeGym("Delete Race");
+      const racePack = await typeOf(race, { kind: "pack", name: "PT 10" });
+      for (let round = 0; round < 4; round++) {
+        const vic = await trainerWith(race, `Vic Round ${String(round)}`);
+        const person = await onList(race, `Pat Round ${String(round)}`);
+        const held = await hold(race, person, racePack, { pack: 10 });
+        await book(race, vic, person, 600);
+        expect((await inject("POST", "/v1/users/me/delete-code", vic.cookies, {})).statusCode).toBe(200);
+        const code = deleteCodes.get(vic.email);
+        if (code === undefined) throw new Error("no delete code");
+        const [gone, booking] = await Promise.all([
+          inject("DELETE", "/v1/users/me", vic.cookies, { code }, round % 2 === 0 ? api() : other()),
+          bookRaw(race, vic, person, 660, FRIDAY, round % 2 === 0 ? other() : api()),
+        ]);
+        expect(gone.statusCode, gone.body).toBe(200);
+        expect([200, 404]).toContain(booking.statusCode);
+        const still = await sql`SELECT 1 FROM gym_pt_appointments WHERE gym_id = ${race.id} AND trainer_user_id = ${vic.userId} AND status = 'booked'`;
+        expect([await isStaff(race, vic), still.length, await left(held)], `round ${String(round)}`).toEqual([false, 0, 10]);
+      }
+    },
+    T,
+  );
+
+  it(
+    "a removal and a booking that wait for the gym together: whichever was first is the one the other sees, in BOTH orders",
+    async () => {
+      clock = NOW.getTime();
+      const gym = await makeGym("In Order Trainer");
+      const pack = await typeOf(gym, { kind: "pack", name: "PT 10" });
+      // The order is made certain, not raced: the test holds the gym's row, sends one request
+      // and waits until the database says it is waiting, sends the other and waits again,
+      // then lets go. Only requests held up behind THIS transaction are counted.
+      const lockWaits = async (holder: number): Promise<number> => {
+        const waiting = await sql<{ pid: number; behind: number[] }[]>`
+          SELECT pid, pg_blocking_pids(pid) AS behind FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+        const queued = new Set<number>([holder]);
+        for (let grew = true; grew; ) {
+          grew = false;
+          for (const row of waiting) {
+            if (!queued.has(row.pid) && row.behind.some((pid) => queued.has(pid))) {
+              queued.add(row.pid);
+              grew = true;
+            }
+          }
+        }
+        return queued.size - 1;
+      };
+      const waitsReach = async (holder: number, n: number): Promise<void> => {
+        for (let tries = 0; (await lockWaits(holder)) < n; tries++) {
+          if (tries === 400) throw new Error(`only ${String(await lockWaits(holder))} of ${String(n)} requests are waiting for the gym's lock`);
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      };
+      const inOrder = async (firstIs: "removal" | "booking") => {
+        const sam = await trainerWith(gym, `Sam ${firstIs} first`);
+        const maya = await onList(gym, `Maya ${firstIs}`);
+        const noor = await onList(gym, `Noor ${firstIs}`);
+        const mayaPack = await hold(gym, maya, pack, { pack: 10 });
+        const noorPack = await hold(gym, noor, pack, { pack: 10 });
+        await book(gym, sam, maya, 600);
+        const box = asked(await offStaff(gym, sam, null));
+        let letGo: () => void = () => undefined;
+        let taken: (pid: number) => void = () => undefined;
+        const isTaken = new Promise<number>((resolve) => (taken = resolve));
+        const holding = sql.begin(async (tx) => {
+          const [row] = await tx<{ pid: number }[]>`SELECT pg_backend_pid() AS pid FROM gyms WHERE id = ${gym.id} FOR UPDATE`;
+          if (row === undefined) throw new Error("no gym to hold");
+          taken(row.pid);
+          await new Promise<void>((resolve) => (letGo = resolve));
+        });
+        const holder = await isTaken;
+        const remove = () => offStaff(gym, sam, box.mark, gym.owner, other());
+        const bookNoor = () => bookRaw(gym, sam, noor, 660, FRIDAY, api());
+        let removal: Awaited<ReturnType<typeof remove>>;
+        let booking: Awaited<ReturnType<typeof bookNoor>>;
+        try {
+          const one = firstIs === "removal" ? remove() : bookNoor();
+          await waitsReach(holder, 1);
+          const two = firstIs === "removal" ? bookNoor() : remove();
+          await waitsReach(holder, 2);
+          letGo();
+          const [a, b] = await Promise.all([one, two]);
+          [removal, booking] = firstIs === "removal" ? [a, b] : [b, a];
+        } finally {
+          letGo();
+          await holding;
+        }
+        const booked = await sql<{ entry_id: string }[]>`
+          SELECT entry_id FROM gym_pt_appointments WHERE gym_id = ${gym.id} AND trainer_user_id = ${sam.userId} AND status = 'booked'`;
+        return { codes: [removal.statusCode, booking.statusCode], staff: await isStaff(gym, sam), booked: booked.length, packs: [await left(mayaPack), await left(noorPack)] };
+      };
+      // The removal first: it goes through, and the booking finds nobody to book with.
+      expect(await inOrder("removal")).toEqual({ codes: [200, 404], staff: false, booked: 0, packs: [10, 10] });
+      // The booking first: the box no longer names everything, so nobody is removed.
+      expect(await inOrder("booking")).toEqual({ codes: [409, 200], staff: true, booked: 2, packs: [9, 9] });
+    },
+    T,
+  );
+
+  it(
+    "no box promises a removal the press cannot make: staff who may not change the list, and a trainer who was never a member, are answered before anything is asked",
+    async () => {
+      clock = NOW.getTime();
+      const gym = await makeGym("Refused First");
+      const pack = await typeOf(gym, { kind: "pack", name: "PT 10" });
+      const maya = await onList(gym, "Maya Listed");
+      const mayaPack = await hold(gym, maya, pack, { pack: 10 });
+      // An owner ticked down: may manage staff and remove members, may not change the list.
+      const ticked = await staff(gym, "Olive Ticked Down", "owner", ["staff.manage", "members.read", "members.remove"]);
+      // Sam trains here and is a member here: removing him from the app takes his record off the list.
+      const sam = await joined(gym, await trainerWith(gym, "Sam Both"));
+      const sams = await book(gym, sam, maya, 600);
+      const refused = await offStaffAndApp(gym, sam, null, ticked);
+      expect([refused.statusCode, (JSON.parse(refused.body) as { error: string }).error]).toEqual([403, "forbidden"]);
+      // The whole owner is asked, as before.
+      expect(asked(await offStaffAndApp(gym, sam, null)).sessions.map((s) => s.id)).toEqual([sams]);
+
+      // Tara is staff only. "Remove from staff and app" is not hers: 404 at the first press.
+      const tara = await trainerWith(gym, "Tara Staff Only");
+      const taras = await book(gym, tara, maya, 660);
+      const never = await offStaffAndApp(gym, tara, null);
+      expect([never.statusCode, (JSON.parse(never.body) as { error: string }).error]).toEqual([404, "member_not_found"]);
+      expect([await isStaff(gym, sam), await isStaff(gym, tara), await stateOf(gym, [sams, taras]), await left(mayaPack)]).toEqual([
+        true,
+        true,
+        [
+          ["booked", true],
+          ["booked", true],
+        ],
+        8,
+      ]);
+      // Remove from staff is hers, and asks.
+      expect(asked(await offStaff(gym, tara, null)).sessions.map((s) => s.id)).toEqual([taras]);
+    },
+    T,
+  );
+
+  it(
+    "the staff removal is limited for one person, and one gym's presses at an address slow nobody else there",
+    async () => {
+      clock = NOW.getTime();
+      const gym = await makeGym("Limited Removal");
+      const elsewhere = await makeGym("Same Address Gym");
+      const sam = await trainerWith(gym, "Sam Trainer");
+      const tom = await trainerWith(elsewhere, "Tom Trainer");
+      const maya = await onList(gym, "Maya Listed");
+      const olga = await onList(elsewhere, "Olga Listed");
+      await book(gym, sam, maya, 600);
+      await book(elsewhere, tom, olga, 600);
+      oneAddress = "10.84.250.7";
+      try {
+        const codes: number[] = [];
+        for (let n = 0; n < 62; n++) codes.push((await offStaff(gym, sam, null)).statusCode);
+        expect([codes.slice(0, 60).every((code) => code === 409), codes[60], codes[61]]).toEqual([true, 429, 429]);
+        // Another gym's owner, at the very same address, is asked as usual.
+        expect((await offStaff(elsewhere, tom, null, elsewhere.owner)).statusCode).toBe(409);
+        expect([await isStaff(gym, sam), await isStaff(elsewhere, tom)]).toEqual([true, true]);
+      } finally {
+        oneAddress = null;
+      }
     },
     T,
   );
@@ -622,6 +821,26 @@ d("a trainer leaves the staff, and came or no-show (real Postgres, two api insta
       ]);
       // No mark moved the pack: three sessions stay used, the free cancel came back before.
       expect(await left(mayaPack)).toBe(7);
+
+      // SEVERAL STAFF AT ONE ADDRESS (a front desk): sixty marks by three people, none slowed.
+      const manager = await staff(gym, "Mona Manager", "manager");
+      oneAddress = "10.84.250.9";
+      try {
+        const codes: number[] = [];
+        for (let n = 0; n < 20; n++) {
+          for (const who of [gym.owner, sam, manager]) codes.push((await markRaw(gym, nine, n % 2 === 0 ? "no_show" : "attended", who)).statusCode);
+        }
+        expect([codes.length, codes.every((code) => code === 200)]).toEqual([60, true]);
+      } finally {
+        oneAddress = null;
+      }
+
+      // A TRAINER TAKEN OFF THE STAFF marks nothing, not even their own old session; whoever
+      // runs the timetable still can.
+      expect((await offStaff(gym, sam, null)).statusCode).toBe(200); // nothing of his is still to come
+      expect((await markRaw(gym, ten, "attended", sam)).statusCode).toBe(404);
+      expect((await stateOf(gym, [ten]))[0]).toEqual(["no_show", true]);
+      expect((await marked(gym, ten, "attended", manager)).status).toBe("attended");
     },
     T,
   );
