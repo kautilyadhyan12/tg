@@ -4187,13 +4187,18 @@ picked in the order payment overdue, membership ending, trial ending, trial chec
 welcome, birthday, milestone, we miss you · a Welcome goes up to three days after
 joining, and never to the gym's own staff · after its 30 days a message leaves the inbox
 and its row is kept, so its occasion is never sent again · somebody removed and back sees
-only what was sent since they came back · a closed gym or one on no plan sends nothing
+only what was sent since they came back (Put back opens the same stay again, so it gives
+the old messages back) · a closed gym or one on no plan sends nothing
 and its members are shown none. The member reads it on their gym's page, the **Inbox**
 tab (`GET /v1/orgs/:gymId/inbox`), which counts what is new before it is opened; opening
 it marks them read (`POST …/inbox/read`). The pinned note is the newer of the gym's cheer
 and its come-back line for seven days, read from the fields `/v1/orgs/mine` already
 carries; the cheer's line on the gym's card stays where it was. A person's own switches
-and the gym's are 20b.
+and the gym's are 20b. **An occasion is never named by a day of the gym's calendar that
+a zone change can move** (round one's L1): a Welcome's is the join's day in UTC, and 20b
+names each of its own the same way (a trial's and a membership's by the row they belong
+to). A gym the run cannot read is logged and skipped, the rest are still sent theirs, and
+the run then fails; a gym whose new people all have their Welcome is not looked at.
 
 ### 16.3 Leads
 
