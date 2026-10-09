@@ -567,7 +567,8 @@ export async function pickTeam(deps: ChallengesDeps, userId: string, gymId: stri
 
 /** The result of each of these challenges that has ended, for the posts that announce
  *  them: the challenge as this reader's Challenges tab is sent it (`memberView`), read now,
- *  so the post and the tab never disagree and nobody hidden since is named. `viewerId` null:
+ *  so the post and the tab never disagree and nobody hidden since is named; only the days
+ *  the tab draws as flames are left out. `viewerId` null:
  *  staff reading the console, who are sent it as members see it, with no line of their own.
  *  The caller has already settled that the reader may read this gym's posts. */
 export async function resultsForPosts(deps: ChallengesDeps, gymId: string, challengeIds: readonly string[], viewerId: string | null): Promise<Map<string, GymPostChallengeResult>> {
@@ -586,7 +587,9 @@ export async function resultsForPosts(deps: ChallengesDeps, gymId: string, chall
   const open = listed === null ? null : new Set(listed.map((row) => row.id));
   for (const row of ended) {
     const { challenge } = memberView(row, gym.today, counted, viewerId ?? "", GYM_CHALLENGE_PODIUM);
-    results.set(row.id, { today: gym.today, canOpen: open === null || open.has(row.id), challenge: viewerId === null ? { ...challenge, me: null } : challenge });
+    // The post draws no flames: the reader's counted days, up to a year of them, are left out.
+    const me = viewerId === null || challenge.me === null ? null : { ...challenge.me, days: [] };
+    results.set(row.id, { today: gym.today, canOpen: open === null || open.has(row.id), challenge: { ...challenge, me } });
   }
   return results;
 }

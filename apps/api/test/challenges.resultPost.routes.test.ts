@@ -352,7 +352,7 @@ d("a challenge's result posted to Updates (real Postgres)", () => {
       expect([veras.me?.value, veras.me?.place]).toEqual([1, 4]);
       // Nobody members may see reached 4; the eight who did are not counted.
       expect(resultOf(forVera, reach.id).board.reached).toBe(0);
-      // Red is Asha's 3 and Bilal's 2: 5, never 5 + 8 × 6.
+      // Red is Asha's 3 and Bilal's 2: 5, never 41 with the six hidden people's 36.
       expect(resultOf(forVera, teams.id).teamBoard?.rows.map((t) => [t.name, t.people, t.value, t.place])).toEqual([
         ["Red Team", 2, 5, 1],
         ["Blue Team", 2, 3, 2],
@@ -523,7 +523,9 @@ d("a challenge's result posted to Updates (real Postgres)", () => {
 
       const onTab = (await memberList(gym, vera)).challenges.find((c) => c.id === challenge.id);
       const result = postOf(await feed(gym, vera), challenge.id).challengeResult;
-      expect(result?.challenge).toEqual(onTab);
+      // The same in everything but the days the tab draws as flames, which the post does not carry.
+      expect(onTab?.me?.days).toEqual(DAYS.slice(0, 4));
+      expect(result?.challenge).toEqual({ ...onTab, me: { ...onTab?.me, days: [] } });
       expect([result?.today, result?.canOpen, result?.challenge.prize]).toEqual(["2026-10-08", true, "A month free"]);
       expect(topOf(result?.challenge ?? resultOf({ posts: [] }, ""))).toEqual([
         ["Asha R.", 5, 1],
