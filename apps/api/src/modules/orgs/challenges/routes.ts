@@ -8,7 +8,9 @@ import {
   cancelGymChallengeRequestSchema,
   changeGymChallengeRequestSchema,
   gymChallengeParamsSchema,
+  pickChallengeTeamRequestSchema,
   setChallengeScoresRequestSchema,
+  setChallengeTeamPeopleRequestSchema,
   staffChallengeBoardQuerySchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
@@ -100,6 +102,17 @@ export function registerChallengeRoutes(app: FastifyInstance, deps: service.Chal
     return reply.status(200).send({ challenge });
   });
 
+  // A member's own team, where members pick. Picked twice it is one pick.
+  app.put("/v1/orgs/:gymId/challenges/:challengeId/team", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymChallengeParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(pickChallengeTeamRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const challenge = await service.pickTeam(challengesDeps, requireUserId(req), params.gymId, params.challengeId, body.teamId, gate(joinLimit)(req, reply));
+    if (challenge === null) return;
+    return reply.status(200).send({ challenge });
+  });
+
   // ── STAFF HOLDING `leaderboard.manage` ──
 
   app.get("/v1/orgs/:gymId/challenges/staff", { preHandler: app.authenticate }, async (req, reply) => {
@@ -157,6 +170,17 @@ export function registerChallengeRoutes(app: FastifyInstance, deps: service.Chal
     const body = parseOr400(setChallengeScoresRequestSchema, req.body, req, reply);
     if (body === null) return;
     const saved = await service.setScores(challengesDeps, requireUserId(req), params.gymId, params.challengeId, body, gate(staffWriteLimit)(req, reply));
+    if (saved === null) return;
+    return reply.status(200).send(saved);
+  });
+
+  // Who is in which team, put there by staff.
+  app.put("/v1/orgs/:gymId/challenges/:challengeId/team-people", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(gymChallengeParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(setChallengeTeamPeopleRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const saved = await service.setTeamPeople(challengesDeps, requireUserId(req), params.gymId, params.challengeId, body, gate(staffWriteLimit)(req, reply));
     if (saved === null) return;
     return reply.status(200).send(saved);
   });

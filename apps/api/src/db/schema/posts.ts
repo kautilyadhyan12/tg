@@ -303,6 +303,8 @@ export const gymChallenges = pgTable(
     /** The gym's own count: its word for what is counted, and whether the lowest wins. */
     unit: text("unit").notNull().default(""),
     lowestWins: boolean("lowest_wins").notNull().default(false),
+    /** 'none' alone · 'staff' the staff put people in teams · 'members' people pick (`0086`). */
+    teams: text("teams").notNull().default("none"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: createdAt(),
@@ -319,8 +321,9 @@ export const gymChallenges = pgTable(
     check("gym_challenges_days_check", sql`${t.endsOn} >= ${t.startsOn} AND ${t.endsOn} - ${t.startsOn} < 366`),
     check(
       "gym_challenges_target_check",
-      sql`${t.target} IS NULL OR (${t.counts} = 'own' AND ${t.target} BETWEEN 1 AND 1000000) OR (${t.counts} <> 'own' AND ${t.target} BETWEEN 1 AND ${t.endsOn} - ${t.startsOn} + 1)`,
+      sql`${t.target} IS NULL OR ((${t.counts} = 'own' OR ${t.teams} <> 'none') AND ${t.target} BETWEEN 1 AND 1000000) OR (${t.counts} <> 'own' AND ${t.teams} = 'none' AND ${t.target} BETWEEN 1 AND ${t.endsOn} - ${t.startsOn} + 1)`,
     ),
+    check("gym_challenges_teams_check", sql`${t.teams} IN ('none','staff','members')`),
     check("gym_challenges_unit_check", sql`char_length(${t.unit}) <= 30 AND (${t.counts} = 'own') = (${t.unit} <> '')`),
     check("gym_challenges_lowest_check", sql`NOT ${t.lowestWins} OR (${t.counts} = 'own' AND ${t.target} IS NULL)`),
     index("gym_challenges_ends_idx").on(t.gymId, t.endsOn),
@@ -369,5 +372,52 @@ export const gymChallengeScores = pgTable(
     foreignKey({ name: "gym_challenge_scores_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
     check("gym_challenge_scores_value_check", sql`${t.value} BETWEEN 1 AND 1000000`),
     index("gym_challenge_scores_user_idx").on(t.userId),
+  ],
+);
+
+/** A challenge's teams, in the gym's order (`0086_challenge_teams.sql`, which is the
+ *  record). The gym's own: no user link. */
+export const gymChallengeTeams = pgTable(
+  "gym_challenge_teams",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    challengeId: uuid("challenge_id").notNull(),
+    name: text("name").notNull(),
+    position: integer("position").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({ name: "gym_challenge_teams_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
+    unique("gym_challenge_teams_of_uq").on(t.challengeId, t.id),
+    check("gym_challenge_teams_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 160`),
+    check("gym_challenge_teams_position_check", sql`${t.position} BETWEEN 0 AND 7`),
+    index("gym_challenge_teams_challenge_idx").on(t.gymId, t.challengeId),
+  ],
+);
+
+/** Who is in which team (`0086_challenge_teams.sql`). About the person: deleted with
+ *  their account (`DIRECT_DELETE_TABLES`). */
+export const gymChallengeTeamPeople = pgTable(
+  "gym_challenge_team_people",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    challengeId: uuid("challenge_id").notNull(),
+    teamId: uuid("team_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_challenge_team_people_pk", columns: [t.challengeId, t.userId] }),
+    foreignKey({ name: "gym_challenge_team_people_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
+    foreignKey({ name: "gym_challenge_team_people_team_fk", columns: [t.challengeId, t.teamId], foreignColumns: [gymChallengeTeams.challengeId, gymChallengeTeams.id] }).onDelete("cascade"),
+    index("gym_challenge_team_people_user_idx").on(t.userId),
+    index("gym_challenge_team_people_team_idx").on(t.teamId),
   ],
 );

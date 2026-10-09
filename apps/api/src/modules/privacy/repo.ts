@@ -132,6 +132,7 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   // The challenges they joined (tables.ts, 0082).
   await tx`DELETE FROM gym_challenge_people WHERE user_id = ${userId}`;
   await tx`DELETE FROM gym_challenge_scores WHERE user_id = ${userId}`;
+  await tx`DELETE FROM gym_challenge_team_people WHERE user_id = ${userId}`;
   // The posts they made as a MEMBER, with their photos' rows, reactions and reports by
   // cascade. A post made as staff is the gym's and stays (tables.ts, gym_posts). The
   // photos' files are listed to remove before this (`queueMemberPostPhotoFiles`) and

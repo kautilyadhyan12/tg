@@ -75,7 +75,7 @@ describe('who may open it', () => {
 
 describe('the form', () => {
   it('starts on the commonest challenge and fills in from one that is kept', () => {
-    expect(newChallengeDraft()).toEqual({ name: '', details: '', prize: '', counts: 'gym_days', unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone' });
+    expect(newChallengeDraft()).toEqual({ name: '', details: '', prize: '', counts: 'gym_days', unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone', teams: 'none', teamList: [{ id: null, name: '' }, { id: null, name: '' }] });
     expect(draftOf(challenge({ target: 12, who: 'joined', prize: 'A shaker' }))).toEqual({
       name: 'October Challenge',
       details: '',
@@ -87,6 +87,8 @@ describe('the form', () => {
       win: 'target',
       target: '12',
       who: 'joined',
+      teams: 'none',
+      teamList: [{ id: null, name: '' }, { id: null, name: '' }],
     });
   });
 
@@ -158,6 +160,8 @@ describe('the form', () => {
       target: 12,
       who: 'joined',
       lowestWins: false,
+      teams: 'none',
+      teamList: [],
     });
   });
 
