@@ -65,7 +65,7 @@ describe('teams, in words', () => {
   it('says how a challenge in teams is won', () => {
     expect(howToWin(challenge('a', 'A'))).toBe('The team with the most gym days wins');
     expect(howToWin(challenge('a', 'A', { target: 60 }))).toBe('Reach 60 gym days as a team');
-    expect(howToWin(challenge('a', 'A', { counts: 'own', unit: 'seconds', lowestWins: true }))).toBe('The team with the fewest seconds wins');
+    expect(howToWin(challenge('a', 'A', { counts: 'own', unit: 'seconds', lowestWins: true }))).toBe('The team with the lowest seconds wins');
     // A challenge people are in alone reads as it did.
     expect(howToWin(challenge('a', 'A', { teams: 'none', teamBoard: null }))).toBe('Most gym days wins');
   });

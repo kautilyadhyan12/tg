@@ -8,11 +8,16 @@
 //   - server thread busy: how long the server's one thread answers nobody.
 //
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_b'
-//   corepack pnpm --filter api exec tsx tools/measure-challenges-cost.ts [--members=200] [--challenges=9] [--teams] [--keep]
+//   corepack pnpm --filter api exec tsx tools/measure-challenges-cost.ts [--members=200] [--challenges=9] [--teams] [--results=23] [--keep]
 //
 // --teams puts every challenge in the most teams one can have (eight) with every member in
 // one, and also times a member's pick, a whole gym picking at once and staff's save
 // (ROADMAP 19d-ii-a).
+//
+// --results=N adds N challenges that ended three weeks ago after 300 days, each with its
+// result post, three of them pinned, and times a page of Updates that carries them beside
+// the same page of plain posts (ROADMAP 19d-ii-b). 23 is the most one page can carry. It
+// also runs the posting step over the whole database, which posts whatever is due there.
 //
 // --keep leaves the gym in place after the reads (for EXPLAIN); the next run removes it first.
 //
@@ -22,7 +27,9 @@ import { randomUUID } from "node:crypto";
 import { cpus } from "node:os";
 import { performance } from "node:perf_hooks";
 import postgres from "postgres";
-import { GYM_CHALLENGES_CURRENT_MAX, GYM_CHALLENGES_ENDED_SHOWN, GYM_CHALLENGE_TEAMS_MAX } from "@app/shared";
+import { GYM_CHALLENGES_CURRENT_MAX, GYM_CHALLENGES_ENDED_SHOWN, GYM_CHALLENGE_RESULT_POST_ENDING, GYM_CHALLENGE_TEAMS_MAX, GYM_POSTS_PAGE, GYM_POST_MAX_PINNED } from "@app/shared";
+import { postChallengeResults } from "../src/modules/orgs/challenges/resultPosts.js";
+import { getPosts, getStaffPosts } from "../src/modules/orgs/posts/service.js";
 import { addChallenge, getBoard, getChallenges, getStaffBoard, getStaffChallenges, pickTeam, setCancelled, setJoined, setScores, setTeamPeople } from "../src/modules/orgs/challenges/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -44,6 +51,7 @@ const CROWD = Math.min(MEMBERS, 200);
 const YEARS = 3;
 const KEEP = process.argv.includes("--keep");
 const TEAMS = process.argv.includes("--teams");
+const RESULTS = Math.min(GYM_POSTS_PAGE + GYM_POST_MAX_PINNED, arg("results", 0));
 const RUNS = 5;
 const PLAN = "zz_challenges_cost";
 const PREFIX = "challenges-cost-";
@@ -125,6 +133,14 @@ async function seed(): Promise<Seeded> {
     FROM generate_series(1, ${CHALLENGES - 1}) AS n, LATERAL (SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date AS today) AS t
     RETURNING id, (substring(name from 11))::int AS n, who`;
   const joinedOnes = made.filter((c) => c.who === "joined").map((c) => c.id);
+  // Challenges that ended three weeks ago, off a member's list, for the result posts.
+  if (RESULTS > 0) {
+    await sql`
+      INSERT INTO gym_challenges (gym_id, challenge_key, name, prize, counts, starts_on, ends_on, who)
+      SELECT ${gymId}, gen_random_uuid(), 'Ended ' || n, repeat('P', 120),
+             CASE WHEN n % 2 = 0 THEN 'gym_days' ELSE 'workout_days' END, t.today - 321 - n, t.today - 21 - n, 'everyone'
+      FROM generate_series(1, ${RESULTS}) AS n, LATERAL (SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date AS today) AS t`;
+  }
   // One challenge people join that nobody has: the crowd below joins it.
   const [empty] = await sql<{ id: string }[]>`
     INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, starts_on, ends_on, who)
@@ -212,6 +228,42 @@ try {
     const runs = [];
     for (let i = 0; i < RUNS; i++) runs.push(await time(fn));
     report(name, runs);
+  }
+
+  if (RESULTS > 0) {
+    const postsDeps = { ...deps, supportEmail: null };
+    // The same page twice: plain posts first, then the same number of result posts.
+    const page = async (results: boolean): Promise<void> => {
+      await sql`DELETE FROM gym_posts WHERE gym_id = ${gymId}`;
+      await sql`
+        INSERT INTO gym_posts (gym_id, post_key, body, created_at, pinned_at, challenge_id)
+        SELECT ${gymId}, gen_random_uuid(), c.name || ${GYM_CHALLENGE_RESULT_POST_ENDING}, now() - make_interval(mins => c.n::int),
+               CASE WHEN c.n <= ${GYM_POST_MAX_PINNED} THEN now() END, CASE WHEN ${results} THEN c.id END
+        FROM (SELECT id, name, row_number() OVER (ORDER BY ends_on DESC) AS n FROM gym_challenges WHERE gym_id = ${gymId} AND name LIKE 'Ended %') c`;
+    };
+    for (const results of [false, true]) {
+      await page(results);
+      const feed = await getPosts(postsDeps, viewer, gymId, undefined, allowed);
+      const carried = [...(feed?.pinned ?? []), ...(feed?.posts ?? [])];
+      const what = results ? "result posts" : "plain posts";
+      console.log(`a page of Updates: ${String(carried.length)} ${what}, ${String(carried.filter((p) => p.challengeResult !== null).length)} with a result, ${String(JSON.stringify(feed).length)} bytes of JSON`);
+      const pageReads: [string, () => Promise<unknown>][] = [
+        [`member, a page of ${String(carried.length)} ${what}`, () => getPosts(postsDeps, viewer, gymId, undefined, allowed)],
+        [`${String(CROWD)} members ask for that page at the same instant`, () => Promise.all(crowd.map((id) => getPosts(postsDeps, id, gymId, undefined, allowed)))],
+        [`staff, a page of ${String(carried.length)} ${what}`, () => getStaffPosts(postsDeps, owner, gymId, undefined, allowed)],
+      ];
+      for (const [name, fn] of pageReads) {
+        await fn();
+        const runs = [];
+        for (let i = 0; i < RUNS; i++) runs.push(await time(fn));
+        report(name, runs);
+      }
+    }
+    // The posting step itself, over every gym in this database, with nothing left to post.
+    const all = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_challenges`;
+    const sweeps = [];
+    for (let i = 0; i < RUNS; i++) sweeps.push(await time(() => postChallengeResults({ sql, log: { info: () => undefined } })));
+    report(`the posting step over ${String(all[0]?.n ?? 0)} challenges, nothing to post`, sweeps);
   }
 
   if (KEEP) {

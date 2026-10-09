@@ -13,6 +13,7 @@ import {
   markLabel,
   noChallenges,
   notCountingNote,
+  oneOf,
   placeLine,
   progress,
   resultOf,
@@ -43,6 +44,42 @@ const challenge = (over = {}) => ({
   board: board(),
   me: me(),
   ...over,
+});
+
+describe("one of the gym's own word", () => {
+  // Words gyms count by, from real challenge boards: what is one of each?
+  it.each([
+    ['push-ups', 'push-up'],
+    ['Push-Ups', 'Push-Up'],
+    ['reps', 'rep'],
+    ['seconds', 'second'],
+    ['minutes', 'minute'],
+    ['kilometres', 'kilometre'],
+    ['laps', 'lap'],
+    ['lunges', 'lunge'],
+    ['burpees', 'burpee'],
+    ['boxes', 'box'],
+    ['crunches', 'crunch'],
+    ['passes', 'pass'],
+    ['presses', 'press'],
+    // Left as typed: not a plain plural, or not a plural at all.
+    ['press', 'press'],
+    ['calories', 'calorie'],
+    ['abs', 'abs'],
+    ['series', 'series'],
+    ['kg lifted', 'kg lifted'],
+    ['5 km time', '5 km time'],
+    ['km', 'km'],
+    ['bonus', 'bonus'],
+    ['tennis', 'tennis'],
+    ['kg', 'kg'],
+    ['公里', '公里'],
+    ['x2s', 'x2s'],
+  ])('%s → %s', (typed, one) => {
+    expect(oneOf(typed)).toBe(one);
+    expect(countText(1, 'own', typed)).toBe(`1 ${one}`);
+    expect(countText(2, 'own', typed)).toBe(`2 ${typed}`);
+  });
 });
 
 describe('the mark beside the name', () => {
@@ -261,7 +298,7 @@ describe("the gym's own count, in the gym's own word", () => {
   it('says how it is won and what is counted', () => {
     expect(howToWin(own())).toBe('Most push-ups wins');
     expect(howToWin(own({ target: 50 }))).toBe('Reach 50 push-ups');
-    expect(howToWin(own({ unit: 'seconds', lowestWins: true }))).toBe('Fewest seconds wins');
+    expect(howToWin(own({ unit: 'seconds', lowestWins: true }))).toBe('Lowest seconds wins');
     expect(whatCounts(own(), 'Iron House')).toBe("The staff at Iron House count the push-ups and add each person's number. If yours is missing or wrong, ask at the front desk.");
   });
 

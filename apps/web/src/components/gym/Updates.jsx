@@ -196,7 +196,7 @@ function Composer({ gymId, gymName, onPosted }) {
   );
 }
 
-export default function Updates({ gym }) {
+export default function Updates({ gym, onChallenge = null }) {
   const gymId = gym.id;
   const [state, setState] = useState({ loading: true, error: null, feed: null });
   const [more, setMore] = useState({ loading: false, error: null });
@@ -369,6 +369,7 @@ export default function Updates({ gym }) {
                   onReport={onReport}
                   onBlock={onBlock}
                   onPerson={(p) => setPerson(personOf(p))}
+                  onChallenge={onChallenge}
                 />
               ))}
             </ul>

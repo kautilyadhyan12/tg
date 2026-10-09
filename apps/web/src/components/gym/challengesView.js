@@ -1,6 +1,7 @@
 // A GYM'S CHALLENGES FOR ITS MEMBER, IN WORDS (spec Part 3 §15.6; ROADMAP 19d-i). Pure, so
 // every sentence is tested without a browser. A challenge's days are the gym's own calendar
 // days ("2026-10-05") and are printed as they are.
+import { challengeTakesNumbers } from '@app/shared';
 import { dayLabel, ordinal } from './leaderboardView';
 
 const UNIT = { gym_days: 'gym day', workout_days: 'workout day' };
@@ -15,8 +16,18 @@ export const unitOf = (counts) => UNIT[counts];
 
 /** The gym's own count (staff type the numbers) reads in the gym's own word, as typed. */
 const isOwn = (challenge) => challenge.counts === 'own';
+/** The gym's own word after the number 1: "push-ups" → "push-up", "boxes" → "box". Only a
+ *  word whose ending is an English plural's is touched; anything else is printed as typed
+ *  ("kg lifted", "5 km time", "abs"). */
+export function oneOf(unit) {
+  if (/(?:ch|sh|x|ss)es$/i.test(unit)) return unit.slice(0, -2);
+  // Left as typed: "press", "bonus", "tennis", "series", and a word as short as "abs".
+  if (/(?:ss|us|is|series|species)$/i.test(unit) || !/[a-z]s$/i.test(unit) || unit.length <= 3) return unit;
+  return unit.slice(0, -1);
+}
+
 /** The word after a number: "gym days", "gym day", or the gym's own word. */
-const wordFor = (challenge, n) => (isOwn(challenge) ? challenge.unit : `${UNIT[challenge.counts]}${n === 1 ? '' : 's'}`);
+const wordFor = (challenge, n) => (isOwn(challenge) ? (n === 1 ? oneOf(challenge.unit) : challenge.unit) : `${UNIT[challenge.counts]}${n === 1 ? '' : 's'}`);
 const amount = (challenge, n) => `${n.toLocaleString('en')} ${wordFor(challenge, n)}`;
 
 /** People are in it in teams (19d-ii-a): a team's number is its people's added together. */
@@ -47,14 +58,21 @@ export function challengeDates(challenge, today) {
   return `${first} – ${dayLabel(challenge.endsOn)}${year(challenge.endsOn)}`;
 }
 
+/** How a challenge is won, in the one line a member and the gym's staff both read.
+ *  `teamed`: people are in it in teams. */
+export function winLine({ counts, unit = '', target, lowestWins = false, teamed }) {
+  const c = { counts, unit };
+  if (teamed) {
+    if (target !== null) return `Reach ${amount(c, target)} as a team`;
+    return `The team with the ${lowestWins ? 'lowest' : 'most'} ${wordFor(c, 2)} wins`;
+  }
+  if (target !== null) return `Reach ${amount(c, target)}`;
+  return `${lowestWins ? 'Lowest' : 'Most'} ${wordFor(c, 2)} wins`;
+}
+
 /** How it is won, in one line. */
 export function howToWin(challenge) {
-  if (inTeams(challenge)) {
-    if (challenge.target !== null) return `Reach ${amount(challenge, challenge.target)} as a team`;
-    return `The team with the ${challenge.lowestWins ? 'fewest' : 'most'} ${wordFor(challenge, 2)} wins`;
-  }
-  if (challenge.target !== null) return `Reach ${amount(challenge, challenge.target)}`;
-  return `${challenge.lowestWins ? 'Fewest' : 'Most'} ${wordFor(challenge, 2)} wins`;
+  return winLine({ counts: challenge.counts, unit: challenge.unit, target: challenge.target, lowestWins: challenge.lowestWins === true, teamed: inTeams(challenge) });
 }
 
 /** What is counted, for somebody who has never seen the app. */
@@ -117,14 +135,22 @@ export function notCountingNote(challenge, list) {
   return `${list.gymName} hasn't checked anyone in at the front desk in the last 30 days, so no gym days are being counted.`;
 }
 
-/** How it finished: who won, and how the member did. Null until it has ended. */
-export function resultOf(challenge) {
+/** The gym's own count, ended, with fewer than three numbers in while staff may still type
+ *  them: the result is not in yet, which is not "nobody was in it". Null otherwise. */
+function numbersComing(challenge, at) {
+  if (at === null || !isOwn(challenge) || !challengeTakesNumbers(challenge, at.today)) return null;
+  return `The staff at ${at.gymName} are still adding people's numbers. The result shows here once 3 people have one.`;
+}
+
+/** How it finished: who won, and how the member did. Null until it has ended. `at`: today
+ *  on the gym's calendar and the gym's name, where the page has them. */
+export function resultOf(challenge, at = null) {
   if (challenge.state !== 'ended' || challenge.cancelled) return null;
   const { board, me, target } = challenge;
   const said = (n) => amount(challenge, n);
-  if (inTeams(challenge)) return teamResult(challenge);
+  if (inTeams(challenge)) return teamResult(challenge, at);
   let headline;
-  if (board.status !== 'shown') headline = 'It finished with fewer than 3 people in it, so there are no places.';
+  if (board.status !== 'shown') headline = numbersComing(challenge, at) ?? 'It finished with fewer than 3 people in it, so there are no places.';
   else if (target !== null) {
     headline = board.reached === 0 ? `Nobody reached ${said(target)}.` : `${people(board.reached)} reached ${said(target)}.`;
   } else {
@@ -213,12 +239,12 @@ export const noChallenges = (gymName) => `${gymName} has no challenges on right 
 const listed = (names) => (names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
 
 /** How a challenge in teams finished: which team won, and how the member's own did. */
-function teamResult(challenge) {
+function teamResult(challenge, at = null) {
   const { teamBoard, me, target } = challenge;
   const said = (n) => amount(challenge, n);
   const rows = teamBoard.rows;
   let headline;
-  if (teamBoard.status !== 'shown') headline = 'It finished with fewer than 3 people in it, so there are no places.';
+  if (teamBoard.status !== 'shown') headline = numbersComing(challenge, at) ?? 'It finished with fewer than 3 people in it, so there are no places.';
   else if (target !== null) {
     const reached = rows.filter((row) => row.reached);
     headline = reached.length === 0 ? `No team reached ${said(target)}.` : `${teamCount(reached.length)} reached ${said(target)}: ${listed(reached.map((row) => row.name))}.`;
@@ -308,6 +334,41 @@ export function myTeam(challenge) {
     // Only while numbers are shown: until three people have one nobody is listed, with or
     // without a number, and the card says why (`boardNote`).
     note: shown && mine.people.length + (mine.more ?? 0) < team.people ? `Teammates show here once they have a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]}.` : null,
+  };
+}
+
+// ── THE RESULT, ON ITS POST IN UPDATES (ROADMAP 19d-ii-b) ──
+
+/** A challenge's result as the post that announces it shows it, to a member and to staff:
+ *  the same sentences as the Challenges tab, the first three or the teams, and the prize.
+ *  `result` is the post's `challengeResult`; null with none to show. */
+export function resultPost(result, gymName) {
+  if ((result ?? null) === null) return null;
+  const { challenge, today } = result;
+  const said = resultOf(challenge, { today, gymName });
+  if (said === null) return null;
+  const place = (n) => (n === null ? null : ordinal(n));
+  let rows = [];
+  if (inTeams(challenge)) {
+    if (challenge.teamBoard.status === 'shown') {
+      rows = teamRows(challenge).map((team) => ({ key: team.id, place: team.place, placeText: place(team.place), name: team.name, mine: team.isMine ? 'Your team' : null, sub: team.people, number: team.number, reached: team.reached, label: team.label }));
+    }
+  } else {
+    rows = challenge.board.top.map((row) => {
+      const number = amount(challenge, row.value);
+      const name = row.isMe ? 'You' : row.name;
+      return { key: row.userId, place: row.place, placeText: place(row.place), name, mine: null, sub: null, number, reached: row.reached, label: `${ordinal(row.place)}: ${name}, ${number}${row.reached ? ', reached the target' : ''}` };
+    });
+  }
+  return {
+    challengeId: challenge.id,
+    headline: said.headline,
+    mine: said.mine,
+    facts: `${howToWin(challenge)} · ${challengeDates(challenge, today)}`,
+    rows,
+    rowsLabel: inTeams(challenge) ? 'Teams' : 'Top three',
+    prize: challenge.prize === '' ? null : `Prize: ${challenge.prize}`,
+    canOpen: result.canOpen === true,
   };
 }
 

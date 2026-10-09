@@ -777,6 +777,7 @@ d("a gym's challenges (real Postgres)", () => {
         top: [],
         withNumber: null,
         teamList: [],
+        resultPost: null,
       });
       expect((await staffList(gym)).current).toHaveLength(1);
       expect(await audits(gym.id, "org.challenge_added")).toBe(1);

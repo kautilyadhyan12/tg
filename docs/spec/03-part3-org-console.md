@@ -3773,7 +3773,50 @@ place and what it takes to move up, the top three, Join or Leave, and the whole 
 started. A gym-days challenge at a gym that checks nobody in says so, never a bare 0. A
 gym on no plan: its members are sent none.
 
-Left for **19d-ii-b**: the result posted to Updates when it ends.
+**The result posted to Updates, as built (19d-ii-b).** When a challenge's last day is over
+on its gym's own clock, one post is made in the gym's Updates, from the gym and by no
+worker (`gym_posts.challenge_id`, migration `0087`; the worker's `orgs.challenge_results`
+job every fifteen minutes, `tools/challenge-results.ts` by hand). One post a challenge for
+ever: a second run or two at once write nothing more, and a post staff remove is not made
+again (its row keeps the challenge's one place; the Remove box says so). Nothing is posted
+for a cancelled challenge, for one that ended more than 14 days ago, or for a gym that is
+closed or on no plan, whose result is posted if its plan comes back inside those 14 days.
+
+**The post keeps only "{name} has ended."** Who won is never stored: it is read with the
+post each time (`challengeResult` on a post), and is the challenge exactly as that reader's
+Challenges tab is sent it (`memberView`), less the days the tab draws as flames. So the
+post and the tab give one answer; the hidden rule holds in the post as on the board; a
+person who hides, leaves or deletes their account AFTER the post went up is named in it no
+longer; and numbers staff type after the last day show in the post already up (until three
+people have one it says the staff are still adding them, on the tab too). The post shows
+the headline, the first three or every team, how it was won, its days and the prize, and
+**See the challenge** while the reader's tab still lists it (`canOpen`). Staff read it on
+the console's Updates as members see it, with no line of their own, told so, with **Open
+the challenge** for staff who run the leaderboard and a line saying who can for the rest.
+It is pinned, reacted to, reported and removed as any post of the gym's. A challenge's own
+page says, before it ends, that its result is posted to Updates, and after, that it is
+there (**See it in Updates** for staff who post updates), that it is hidden from members while
+five reports wait, or that its post was removed; the form says it too. On no plan nothing
+is posted, and a running challenge's page promises nothing. A result post whose challenge
+is running again (its gym moved its clock back) is in no list of Updates until it has
+ended again. Nobody is sent a message about it until the inbox (20a).
+
+**The console's words (Kd's click-through of 19d-ii-b, RULINGS 2026-10-09).** On the
+console's Challenges page a number never stands without its word ("4 gym days", "1 gym
+day", "55 push-ups", "4 people"). How a challenge is won is said in the one line its
+members read (`winLine`): "Most gym days wins", "Lowest seconds wins", "Reach 12 gym days",
+"The team with the most gym days wins", "Reach 60 gym days as a team". The form asks **Who
+counts it**: **The app**, then **What the app counts** (Gym days · Workout days), or **Your
+staff**, then **What your staff count** (the gym's own word). These are the same three
+counts as before (`gym_days`, `workout_days`, `own`), and a count the app makes from an
+exercise (19d-iii) will be offered under The app. **How it is won**: "Most {gym days} wins"
+· "Reach a target" (its box is **Target**, with the word of what it counts beside it) ·
+and where the staff count, "Lowest {seconds} wins" (round one: "Fewest 5 km time wins" was no
+sentence). One of the staff's own word is said as one where the word is a plain plural
+("1 push-up"; "1 kg lifted" as typed). **Individual or teams**: Individual ·
+Teams: you put people in them · Teams: your {members} pick their own, the words the
+challenge's own page uses over its teams. A challenge's facts read "Counted by the app" or
+"Counted by your staff", and who is in it as people ("Everyone in the app · 4 people").
 
 **The gym's own count (Kd, RULINGS 2026-10-06, built in 19d-i).** A third thing a challenge
 can count: `counts` `own`, with `unit` the gym's word for it ("push-ups", 30 characters).
@@ -3785,9 +3828,10 @@ members still see its result), for a live app member in it. It can
 be won by the most, by reaching a number (not bound by its days), or by **the lowest**
 (`lowest_wins`, a fastest time; only for this count and with no target). Places, the
 hidden rule and the three-people rule are the same as every other challenge's; it has no
-flames, since it has no days. A number a member types is still never ranked (§15.5).
+flames, since it has no days. A number a member types is still never ranked (§15.5), and
+where the app counts a challenge it never counts either (§15.10; Kd, RULINGS 2026-10-09).
 
-**Teams, as built (19d-ii-a).** A challenge is for people **alone** or **in teams**
+**Teams, as built (19d-ii-a).** A challenge is **individual** (each person on their own) or **in teams**
 (`gym_challenges.teams`: `none`, `staff`, `members`; `gym_challenge_teams`,
 `gym_challenge_team_people`, migration `0086`). Staff name two to eight teams on the form
 (40 characters a name, no two alike) and choose who fills them: **the staff** (Put people
@@ -3858,7 +3902,7 @@ reactions and the safety tools, in three jobs since 2026-10-04: **19b-i** the gy
 posts with photos, pins and reactions · **19b-ii** members' posts, the gym's switch and
 the safety tools · **19b-iii** video (needs a Cloudflare Stream account — Kd's, $5 a
 month for each 1,000 minutes kept and $1 for each 1,000 watched)
-· **19c** events · **19d** challenges · **19e** a gym's own plan (after Stage 1 items
+· **19c** events · **19d** challenges (19d-iii, a challenge about anything the app tracks: §15.10) · **19e** a gym's own plan (after Stage 1 items
 6a and 6b). ONE feature for CLAUDE.md §6.
 
 ### 15.9 Where the facts came from (read 2026-09-22)
@@ -3866,6 +3910,227 @@ month for each 1,000 minutes kept and $1 for each 1,000 watched)
 SugarWOD's own pages (a gym feed with photos, comments and fist bumps; gym
 leaderboards) · Apple's App Review Guidelines, 1.2 (a filter, a report, a block,
 published contact details) · Cloudflare Stream's pricing page.
+
+### 15.10 A challenge about anything the app tracks (planned 2026-10-09; ROADMAP 19d-iii)
+
+*(Planned, not built. Kd's words and what he ruled are RULINGS 2026-10-09. Read that day:
+Strava's support page on challenges ("Manual activities will not count toward challenge
+leaderboards") and BikeRadar's report of its group challenges (Most Activity, Fastest
+Effort, Longest Single Activity); MoveSpring's help pages (Leaderboard, Target, Streak
+and team modes; the organiser switches members' manual entry on or off); Everfit's
+(a coach picks a leaderboard type from a list; "Other leaderboard types are in
+development"); HubFit's (a "Challenge Type" list; Leaderboard and Milestone). Each gives
+the organiser ONE list of what the product tracks, and the list grows with the product.)*
+
+**The idea.** A gym making a challenge answers, in this order: **what it is about** (one
+thing from a list of everything the app tracks, or something of its own that it names),
+**who counts it** (the app, where the app measured the thing itself; or the gym's staff,
+always possible), **what counts** (where there is more than one number to take), **how it
+is won**, **who is in it**, then teams, prize and details as today. When the app comes to
+track something new, that thing joins the list: the form, the board, teams, the posted
+result and the messages are not rewritten.
+
+**The worst thing it could do to a real person**, for the whole family: somebody wins a
+prize, or loses a place, by a number nobody earned (a set typed by hand, a count the
+camera never made, a run nobody ran); or a member's private activity is shown to their
+gym without their choosing. Each job below names its own, and that is its first test.
+
+**Words (one name for one thing).** *About*: Gym visits · Workouts in the app · An
+exercise · Running · Something else. *Who counts it*: The app · Your staff (19d-ii-b's
+words; Kd's "judge" means this). *What counts*: the number each person gets. *How it is
+counted*, said to the gym and to members wherever a number is shown: "Checked in at the
+front desk" · "Counted by the camera" · "Measured by GPS" · "Counted by the staff at
+{gym}". *Target* for a number to reach. Individual and teams as today.
+
+#### 15.10.1 The list
+
+One file of plain data, `packages/shared/src/challengeSubjects.ts`, is the whole list;
+nothing else in the code names a subject, as engine code never names an exercise. Each
+**subject** has: an `id` that never changes and is never used again for something else;
+the words the form shows; whether the gym picks from the exercise library; whether
+"Everyone in the app" may be used (§15.10.5); and its **measures**, the numbers the APP
+can work out for it, each with its id, its words, the word after a number, how the
+number is printed, how it is counted (`desk` · `app` · `camera` · `gps`), which ways to
+win it allows (most · target · fewest), and whether one a day is the most, so that a
+target cannot pass the challenge's days. A subject with no measure can only be counted
+by staff.
+
+| Subject (`id`) | What the app can count (measure) | Counted how | Job |
+|---|---|---|---|
+| Gym visits (`gym_visits`) | Gym days (`days`) | front desk | 19d-iii-a: today's `gym_days` |
+| Workouts in the app (`workouts`) | Workout days (`days`) | the app | 19d-iii-a: today's `workout_days` |
+| An exercise (`exercise`), picked from the library | nothing at first; then all reps added up (`reps`) and days done (`days`); then best single set (`best_set`), time held (`hold_seconds`), longest hold (`best_hold`) | camera | staff count it in -a; `reps` and `days` in -b; the rest in -c |
+| Running (`running`) | distance (`metres`), longest run (`longest_metres`), runs (`runs`), days with a run (`days`) | GPS | 19d-iii-d |
+| Something else (`own`) | never: the gym names it and its staff count it | staff | 19d-iii-a: today's `own` |
+
+A subject is **offered** to a gym only while the app can really do it there. The server
+decides each time the form opens (`GET /v1/orgs/{gymId}/challenges/subjects`, for staff
+holding `leaderboard.manage`). Running is not on the list until the phone app records
+runs. For an exercise the reply marks which ones the camera can count today (those with
+a live definition: squat, chair squat and jump squat of the 58, counted on Folder B's
+local database on 2026-10-09), and of any other the form says "The camera can't count
+{Plank} yet, so your staff count it". Nothing is offered that the app cannot do, and
+nothing a gym has is taken away: every challenge made before is one of the first, second
+or last row.
+
+**An old phone must show a new kind.** A phone app cannot be made to update. So every
+challenge the server sends carries the words that show it: what it is about, the word
+after a number (for one and for many), how its numbers are printed (`whole` · `time` ·
+`km`) and how it is counted. A client prints those; it never looks a subject's id up in a
+list of its own. A subject added next year shows correctly in this year's app.
+
+#### 15.10.2 What is kept
+
+`gym_challenges` holds `subject`, `measure` (null where staff count) and `counted_by`
+(`app` · `staff`) in place of `counts`. One forward migration fills them from `counts`
+(`gym_days` → `gym_visits` · `days` · `app`; `workout_days` → `workouts` · `days` · `app`;
+`own` → `own` · null · `staff`), states the target, unit and lowest-wins CHECKs again in
+their terms, and drops `counts`. `subject` and `measure` are text held to a shape by a
+CHECK and to the list by the request's Zod schema, so a new subject needs no migration
+of its own. The exercises of a challenge are rows of `gym_challenge_exercises` (the gym,
+the challenge, the exercise: one in -a and -b, up to ten in -c), never an array of ids.
+The gym's own word (`unit`) stays for a challenge its staff count: for an exercise it
+starts as the exercise's own name ("squats") and the gym may change it ("seconds" for a
+plank). A number is a whole number in the measure's base unit (reps, seconds, metres),
+and only the printing turns it into "2 min 05 s" or "12.4 km"; a distance is cut to a
+tenth, never rounded up past a target. A target is typed in the printed unit and kept in
+the base unit.
+
+#### 15.10.3 Counting
+
+Each (subject, measure) has ONE counter, in `apps/api/src/modules/orgs/challenges/
+counters.ts`: given the gym, the instant and the spans of the challenges that use it, it
+returns each live member's number in each span, in one pass. §15.5's `daysInRanges` is
+the pattern, and `gymDaysInRanges` and `workoutDaysInRanges` ARE the first two counters.
+`countFor` asks each counter once a read, whatever the number of challenges. Everything
+after the numbers is today's code and does not know where a number came from: places
+(`placeEntrants`), the three-people rule, the hidden rule, teams and their totals, the
+target, the staff board, the posted result.
+
+A counter reads only what passes its subject's own rule, written once and read by the
+board and by What counted alike, as `leaderboard/workouts.ts` is:
+- **An exercise, by camera.** A set counts when its workout counts for Workout days
+  (§15.5: inside the membership, not dated ahead, saved no earlier than an hour before it
+  started and within 7 days after), it is one of the challenge's exercises, its `mode` is
+  `engine`, and it is **believable** (below). A set typed by hand (`log_only`) never
+  counts (Kd, RULINGS 2026-10-09: *"i agree wit you"*).
+- **Running.** A run the phone's GPS recorded, its distance measured by the server from
+  the track with any stretch faster than a person runs dropped (§15.5), started inside
+  the membership. A typed run never counts.
+
+**Believable, and why it has to be built.** `mode = 'engine'` is what the phone SAYS:
+`packages/shared/src/events.ts` calls it "a client claim, not a verification", and today
+the server checks nothing about it (the one flag `/v1/workouts/sync` writes is
+`unknown_exercise`). A challenge is its first use that can decide a prize, so 19d-iii-b
+builds the check the architecture planned (v1 §14, item 1) as a pure rule in
+`packages/shared`: a set passes when its reps fit in its time at the exercise's own
+fastest rep (`minRepMs`, never under the engine's 450 ms), the camera watched for at
+least that long (`watchedMs`), and its definition was live for that exercise; its plan
+settles the rest from v1 §14. A set that fails still saves, still shows in the person's
+own history and is never an error to them (v1 §14); it only does not count here, and
+What counted says why in one plain line. This makes a false count hard and visible, not
+impossible: somebody who rebuilds the app can send believable numbers. So the gym is
+told how a thing is counted where it chooses it, and keeps three things in its own
+hands: count only on a day the person checked in at the gym; count at most so many a
+day; take a person off the board (19a-iii). A gym that wants certainty has its staff
+count.
+
+#### 15.10.4 How it is won
+
+As today: the most; a target, which everyone who reaches it wins; or, where a lower
+number is better, the fewest. Equal numbers share a place, and a team's number is its
+people's added together. What each measure allows is in the list: gym days and a best
+single set have no "fewest". The fewest stays for times the staff count; the app
+counting a fastest time over a set distance (Strava's Fastest Effort) is later, with
+running.
+
+#### 15.10.5 Who is in it
+
+- **Everyone in the app** is offered only where members are ALREADY told a gym sees the
+  thing (`OrgVisibilitySheet`: the days they trained, which exercises, sets, reps and hold
+  time): gym visits, workouts, an exercise. The hidden rule is unchanged (Hide me, under
+  18, taken off, staff, no name), and a member's card for an exercise challenge says in
+  one line that their {squats} in the app count here, with Hide me one press away.
+- **Only people who join** is the one choice for anything else (running; later steps or
+  cycling). The Join box says what the gym's members will see and what they never will
+  ("your running distance from 1 to 30 Nov; never where you ran").
+- **Never counted by the app**, whatever a gym asks: weight, body measurements, meals,
+  anything about nutrition, water. Members are promised a gym never sees them
+  (`OrgVisibilitySheet`), and the health rules of CLAUDE.md §4 stand.
+- A member in Safe mode is offered no exercise or running challenge the app counts until
+  their clearance is confirmed, and their card says so (RULINGS 2026-09-07).
+
+#### 15.10.6 What a gym and a member read
+
+The form's Part 1; the rest is as 19d-ii-b left it, its words following what was picked:
+
+```
+What is the challenge about
+  ( ) Gym visits            Days a member is checked in, at your front desk or by your staff.
+  ( ) Workouts in the app   Days a member finishes a workout in the app.
+  ( ) An exercise           One exercise from the app's library, such as squats.
+  ( ) Something else        Anything the app doesn't track: a rowing time, a tug of war. You name it.
+Which exercise              [ Squats ▾ ]     a list to pick from, never a box to type in
+Who counts it
+  ( ) The app               The camera counts each squat. Sets typed in by hand don't count.
+  ( ) Your staff            Your staff enter each person's number.
+```
+
+Where there is one answer the question is a plain line, not a choice ("Counted by the
+app, from front-desk check-ins."). Where the app cannot count the thing yet, The app is
+shown switched off with the reason in its own line. On the challenge's page: "About ·
+Squats · Counted by the camera". On a member's card: what it is about, how it is counted,
+their number with its word and, from 19d-iii-b, **What counted**: each set that counted,
+and each that did not with why ("typed in by hand" · "the camera couldn't watch this
+set" · "saved more than 7 days later" · "over the 50 a day this challenge counts").
+
+#### 15.10.7 The jobs
+
+Every job is Risky (other people's numbers; a rule that ranks) and Opus xhigh. The two
+extra passes run once over the family, before any gym uses a challenge the camera counts.
+
+- **19d-iii-a, the list and the form that reads it.** The list and its route; the kept
+  shape (§15.10.2); the words sent with every challenge; the form's first question read
+  from the list; staff counting any exercise in the library. No challenge a gym has
+  changes its numbers. *Worst thing, first test:* a challenge made before this job counts
+  something else after it. Every kind (gym days · workout days · the gym's own; most ·
+  target · fewest; individual · teams) reads the same numbers, places and sentences
+  before and after the migration, run on a temp copy of the table. Also first: a subject
+  this client has never heard of is shown from the words the server sent. If it passes
+  about a thousand new lines it is two pull requests: the list and the kept shape, then
+  the form.
+- **19d-iii-b, an exercise the camera counts.** The believable rule; the `reps` and
+  `days` counters; What counted; the member's line and Hide me. *Worst thing, first test:*
+  somebody wins with squats nobody did. A table of sets sent through the real sync route
+  (believable · too fast for the exercise · the camera watched nothing · typed by hand ·
+  another exercise · an exercise the camera cannot count · before joining · saved late ·
+  dated ahead), of which only the first counts. A member's list is measured at 20 gyms of
+  200 with every challenge an exercise, and an index on a person's sets by exercise and
+  day is added only if that measurement asks for it. **Waits** for the camera to count
+  correctly (ROADMAP Stage 4 item 6) or for the phone app's camera. Its plan names
+  2026-08-25's "no camera-dependent gym feature" as replaced for challenges.
+- **19d-iii-c, more ways to count an exercise.** Up to ten exercises in one challenge;
+  the best single set; time held and the longest hold, from sets the camera watched; "at
+  most N a day"; "only on a day they checked in". *Worst thing, first test:* a limit the
+  gym set is not kept, or a best single set is two sets added together. Its plan asks Kd
+  one thing: whether time on the app's clock, with nothing watching, may count (the
+  terminal recommends no: the clock times the minutes, not the exercise).
+- **19d-iii-d, running.** With the phone app's running (Stage 5 item 4). *Worst thing,
+  first test:* a member's route, or a run in a challenge they did not join, is shown; a
+  typed or impossible run counts. The Leaderboard's Running board (§15.5, "Later") reads
+  the same counter.
+
+**Adding a feature later** (steps, cycling, whatever the app comes to track), in this
+order: (1) the feature itself is built, and keeps each person's dated amounts and how
+each was measured; (2) its plan says how it is counted and what is dropped as not
+believable, and a typed amount never counts; (3) one row is added to the list; (4) one
+counter is written, with a table test built from real records that includes what it
+must drop; (5) its What counted lines; (6) its cost is measured at full size. Nothing
+else is touched.
+
+**Not in this plan:** members making challenges of their own · challenges between gyms ·
+knock-outs · a clip of the camera's points run again on the server (v1 §14, item 2; for
+a prize between gyms, if ever) · anything read from a watch (after launch).
 
 ---
 

@@ -401,9 +401,11 @@ export function photoProblem({ unreadable, tooBig, left }) {
 /** The box before a post is removed: what goes, for whom, and that it cannot be undone. */
 export function removeBox(post, words) {
   const photos = post.photos.length === 0 ? '' : post.photos.length === 1 ? ' and its photo' : ` and its ${post.photos.length} photos`;
+  // A challenge's result is posted once: removed, it is not posted again.
+  const result = (post.challengeResult ?? null) !== null ? " The challenge's result isn't posted again." : '';
   return {
     title: 'Remove this post?',
-    line: `The post${photos} will disappear for every one of your ${words.people} and for your staff. This can't be undone.`,
+    line: `The post${photos} will disappear for every one of your ${words.people} and for your staff. This can't be undone.${result}`,
     confirm: 'Remove post',
     cancel: 'Keep post',
   };

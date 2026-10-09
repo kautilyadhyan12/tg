@@ -33,10 +33,16 @@ export const gymPosts = pgTable(
     /** When its fifth waiting report landed (`0077_post_hidden_at.sql`): hidden from
      *  members until staff keep or remove it. */
     hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    /** The challenge whose result this post is (`0087_challenge_result_post.sql`): who won is
+     *  worked out each time it is read, never stored. One post a challenge, a removed one too. */
+    challengeId: uuid("challenge_id"),
   },
   (t) => [
     unique("gym_posts_gym_id_uq").on(t.gymId, t.id),
     unique("gym_posts_post_key_uq").on(t.gymId, t.postKey),
+    foreignKey({ name: "gym_posts_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
+    uniqueIndex("gym_posts_challenge_uq").on(t.gymId, t.challengeId).where(sql`${t.challengeId} IS NOT NULL`),
+    check("gym_posts_challenge_gyms_check", sql`${t.challengeId} IS NULL OR NOT ${t.byMember}`),
     check("gym_posts_body_len_check", sql`char_length(${t.body}) <= 2000`),
     check("gym_posts_removed_not_pinned_check", sql`${t.removedAt} IS NULL OR ${t.pinnedAt} IS NULL`),
     index("gym_posts_feed_idx").on(t.gymId, t.createdAt.desc(), t.id.desc()).where(sql`${t.removedAt} IS NULL`),

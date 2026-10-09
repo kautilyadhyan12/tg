@@ -7,7 +7,7 @@ import { z } from "zod";
 import { classDaySchema } from "./classes.js";
 import { eventNameIsSeen } from "./gymEvents.js";
 import { LEADERBOARD_HIDDEN_REASONS, LEADERBOARD_STAFF_PAGE, LEADERBOARD_TOP } from "./leaderboard.js";
-import { postLength } from "./posts.js";
+import { postLength } from "./postBasics.js";
 
 /** What a challenge counts: one of the leaderboard's checked facts, one a day at most; or
  *  "own", something the gym names and counts itself, whose numbers its staff type in (a
@@ -509,6 +509,10 @@ export const staffGymChallengeSchema = challengeSchema
           .strict(),
       )
       .max(GYM_CHALLENGE_TEAMS_MAX),
+    /** Its result's post on Updates, made once when it ends; null while there is none. A
+     *  post staff removed stays removed. `hidden`: five members reported it, so members are
+     *  not sent it until staff keep or remove it. */
+    resultPost: z.object({ postedAt: z.string().datetime(), removed: z.boolean(), hidden: z.boolean() }).strict().nullable(),
   })
   .strict();
 export type StaffGymChallenge = z.infer<typeof staffGymChallengeSchema>;
@@ -599,7 +603,7 @@ export const GYM_CHALLENGE_WORDS = {
   scores_not_own: "This challenge is counted by the app, so numbers can't be typed for it.",
   scores_not_started: "This challenge hasn't started yet. Numbers can be typed from its first day.",
   scores_person: "One of these people isn't in this challenge any more. Load the list again.",
-  teams_none: "People are in this challenge alone, so it has no teams.",
+  teams_none: "This is an individual challenge, so it has no teams.",
   teams_staff: "At this challenge the staff put people in teams, so a team can't be picked here.",
   team_gone: "That team isn't in this challenge any more. Load the page again.",
   pick_to_join: "Pick a team to join this challenge.",
