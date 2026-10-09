@@ -3687,7 +3687,30 @@ place and what it takes to move up, the top three, Join or Leave, and the whole 
 started. A gym-days challenge at a gym that checks nobody in says so, never a bare 0. A
 gym on no plan: its members are sent none.
 
-Left for **19d-ii-b**: the result posted to Updates when it ends.
+**The result posted to Updates, as built (19d-ii-b).** When a challenge's last day is over
+on its gym's own clock, one post is made in the gym's Updates, from the gym and by no
+worker (`gym_posts.challenge_id`, migration `0087`; the worker's `orgs.challenge_results`
+job every fifteen minutes, `tools/challenge-results.ts` by hand). One post a challenge for
+ever: a second run or two at once write nothing more, and a post staff remove is not made
+again (its row keeps the challenge's one place; the Remove box says so). Nothing is posted
+for a cancelled challenge, for one that ended more than 14 days ago, or for a gym that is
+closed or on no plan, whose result is posted if its plan comes back inside those 14 days.
+
+**The post keeps only "{name} has ended."** Who won is never stored: it is read with the
+post each time (`challengeResult` on a post), and is the challenge exactly as that reader's
+Challenges tab is sent it (`memberView`), less the days the tab draws as flames. So the
+post and the tab give one answer; the hidden rule holds in the post as on the board; a
+person who hides, leaves or deletes their account AFTER the post went up is named in it no
+longer; and numbers staff type after the last day show in the post already up (until three
+people have one it says the staff are still adding them, on the tab too). The post shows
+the headline, the first three or every team, how it was won, its days and the prize, and
+**See the challenge** while the reader's tab still lists it (`canOpen`). Staff read it on
+the console's Updates as members see it, with no line of their own, told so, with **Open
+the challenge** for staff who run the leaderboard and a line saying who can for the rest.
+It is pinned, reacted to, reported and removed as any post of the gym's. A challenge's own
+page says, before it ends, that its result is posted to Updates, and after, that it is
+there (**See it in Updates** for staff who post updates) or that its post was removed; the
+form says it too. Nobody is sent a message about it until the inbox (20a).
 
 **The gym's own count (Kd, RULINGS 2026-10-06, built in 19d-i).** A third thing a challenge
 can count: `counts` `own`, with `unit` the gym's word for it ("push-ups", 30 characters).
