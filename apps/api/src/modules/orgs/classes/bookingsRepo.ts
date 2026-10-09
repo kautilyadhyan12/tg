@@ -429,7 +429,7 @@ export async function markCancelled(
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_class_bookings
     SET status = ${input.status}, cancelled_at = ${input.now}, pack_charged = ${input.packCharged}
-    WHERE gym_id = ${input.gymId} AND id = ${input.bookingId} AND status IN ('booked','waitlisted')
+    WHERE gym_id = ${input.gymId} AND id = ${input.bookingId} AND status IN ('booked','waitlisted','attended')
     RETURNING id`;
   if (rows.length !== 1) throw new Error("a booking was not there to cancel");
 }
@@ -589,7 +589,8 @@ export interface EndedBooking {
  *  `classes`: these classes will not run (staff cancelled or removed them), so everything
  *  on them ends, and a late cancel whose pack kept the charge loses the charge too.
  *  `people`: these people have left the gym, so their bookings of classes that have not
- *  started end; a class already started is history and stays.
+ *  started end (a place a check-in marked came before the start is one of them); a class
+ *  already started is history and stays.
  *  `membership`: staff cancelled this membership, so the places booked on it end. */
 export async function endBookings(
   tx: TransactionSql,
@@ -603,7 +604,7 @@ export async function endBookings(
       ? tx`b.session_id = ANY(${[...which.classes]}::uuid[])
            AND (b.status IN ('booked','waitlisted','attended','no_show') OR (b.status = 'late_cancelled' AND b.pack_charged))`
       : "people" in which
-        ? tx`b.user_id = ANY(${[...which.people]}::uuid[]) AND b.status IN ('booked','waitlisted')
+        ? tx`b.user_id = ANY(${[...which.people]}::uuid[]) AND b.status IN ('booked','waitlisted','attended')
              AND EXISTS (SELECT 1 FROM gym_class_sessions s
                          WHERE s.gym_id = b.gym_id AND s.id = b.session_id AND s.starts_at > ${which.now})`
         : tx`EXISTS (SELECT 1 FROM gym_class_sessions s
@@ -640,8 +641,9 @@ export async function deleteBookingsOf(tx: TransactionSql, gymId: string, sessio
  *  classes (from a date, when the change has one), or every coming class of one kind. */
 export type EndingScope = { by: "session"; id: string } | { by: "slot"; id: string; from: string | null } | { by: "class"; id: string };
 
-/** The places booked on one held membership, in classes that have not started: all of
- *  them, or those on a day after `afterDay` (the membership's last day). Somebody
+/** The places booked on one held membership, in classes that have not started (marked
+ *  came by a check-in before the start or not): all of them, or those on a day after
+ *  `afterDay` (the membership's last day). Somebody
  *  waiting has no membership on their row yet, so no waitlist place is among them. */
 export interface MembershipScope {
   membership: string;
@@ -650,7 +652,7 @@ export interface MembershipScope {
 }
 
 const onMembership = (sql: SqlOrTx, m: MembershipScope) => sql`
-  b.held_membership_id = ${m.membership} AND b.status = 'booked' AND s.starts_at > ${m.now}
+  b.held_membership_id = ${m.membership} AND b.status IN ('booked','attended') AND s.starts_at > ${m.now}
   AND (${m.afterDay}::date IS NULL OR s.local_date > ${m.afterDay}::date)`;
 
 export type EndingWhere = { sessionIds: readonly string[] } | { scope: EndingScope; now: Date } | MembershipScope;
@@ -767,4 +769,192 @@ export async function writeSettings(tx: TransactionSql, gymId: string, { setting
         waitlist_handover_minutes = ${s.handoverMinutes}, waitlist_max = ${s.waitlistMax},
         pt_opens_days = ${pt.opensDays}, pt_free_cancel_minutes = ${pt.freeCancelMinutes}
     WHERE id = ${gymId}`;
+}
+
+// ── CHECK-IN MEETS BOOKINGS (17f) ──
+
+export interface MarkableBooking {
+  id: string;
+  status: ClassBookingStatus;
+  cancelled: boolean;
+  startsAt: Date;
+  minutes: number;
+}
+
+const toMarkable = (r: { id: string; status: string; session_status: string; starts_at: Date; minutes: number }): MarkableBooking => ({
+  id: r.id,
+  status: classBookingStatusSchema.parse(r.status),
+  cancelled: r.session_status === "cancelled",
+  startsAt: r.starts_at,
+  minutes: r.minutes,
+});
+
+/** THIS account's bookings of the gym's classes that start within a day either side of
+ *  `now`: the ones a check-in now could be for, which the rule then chooses among.
+ *  Found by the account alone, never by a record or a name. `lock`: held to the commit. */
+export async function bookingsNear(sql: SqlOrTx, gymId: string, userId: string, now: Date, lock: boolean): Promise<MarkableBooking[]> {
+  const rows = await sql<{ id: string; status: string; session_status: string; starts_at: Date; minutes: number }[]>`
+    SELECT b.id, b.status, s.status AS session_status, s.starts_at, s.minutes
+    FROM gym_class_sessions s
+    JOIN gym_class_bookings b ON b.gym_id = s.gym_id AND b.session_id = s.id
+    WHERE s.gym_id = ${gymId} AND b.user_id = ${userId}
+      AND s.starts_at BETWEEN ${now}::timestamptz - interval '1 day' AND ${now}::timestamptz + interval '1 day'
+    ${lock ? sql`FOR UPDATE OF b` : sql``}`;
+  return rows.map(toMarkable);
+}
+
+/** One booking of one class of this gym, held to the commit; null where there is none. */
+export async function bookingInClass(tx: TransactionSql, gymId: string, sessionId: string, bookingId: string): Promise<{ id: string; status: ClassBookingStatus } | null> {
+  const rows = await tx<{ id: string; status: string }[]>`
+    SELECT id, status FROM gym_class_bookings
+    WHERE gym_id = ${gymId} AND session_id = ${sessionId} AND id = ${bookingId}
+    FOR UPDATE`;
+  const r = rows[0];
+  return r === undefined ? null : { id: r.id, status: classBookingStatusSchema.parse(r.status) };
+}
+
+/** These bookings marked came or no-show: only places that are held, so a place given
+ *  up in the meantime stays given up. The pack and the limit are not touched: both
+ *  marks keep the class used. Answers how many changed. */
+export async function markAs(tx: TransactionSql, gymId: string, ids: readonly string[], to: "attended" | "no_show", from: readonly ClassBookingStatus[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_class_bookings SET status = ${to}
+    WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[]) AND status = ANY(${[...from]}::text[]) AND status <> ${to}
+    RETURNING id`;
+  return rows.length;
+}
+
+/** The gyms with a place still booked in a class that ended at least `afterMinutes` ago
+ *  and started no more than `lookbackHours` (and a day) ago. `only`: of these gyms. */
+export async function gymsWithEndedBooked(
+  sql: SqlOrTx,
+  now: Date,
+  afterMinutes: number,
+  lookbackHours: number,
+  only: readonly string[] | null,
+): Promise<string[]> {
+  const rows = await sql<{ gym_id: string }[]>`
+    SELECT DISTINCT s.gym_id
+    FROM gym_class_sessions s
+    WHERE s.status = 'scheduled'
+      AND s.starts_at > ${now}::timestamptz - make_interval(hours => ${lookbackHours + 24})
+      AND s.starts_at + make_interval(mins => s.minutes + ${afterMinutes}) <= ${now}::timestamptz
+      AND EXISTS (SELECT 1 FROM gym_class_bookings b WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = 'booked')
+      ${only === null ? sql`` : sql`AND s.gym_id = ANY(${[...only]}::uuid[])`}
+    ORDER BY s.gym_id`;
+  return rows.map((r) => r.gym_id);
+}
+
+/** A visit `a` at the gym of class `s` on the class's day, or in the twelve hours before
+ *  it starts (a class soon after midnight). Any kind of visit. */
+const thatDay = (sql: SqlOrTx) => sql`
+  a.gym_id = s.gym_id AND a.day BETWEEN s.local_date - 1 AND s.local_date
+  AND (a.day = s.local_date OR a.marked_at BETWEEN s.starts_at - interval '12 hours' AND s.starts_at)`;
+
+export interface EndedBooked extends MarkableBooking {
+  /** A check-in inside the class's window: by the booking's own account, or only on a
+   *  record the booking was made for or the person now holds. */
+  visit: "account" | "record" | null;
+  /** Their account or record has a visit of any kind at the gym on the class's day. */
+  hereThatDay: boolean;
+  /** The gym checked anybody in inside that window. */
+  gymCheckedIn: boolean;
+}
+
+/** One gym's places still booked in classes that ended at least `afterMinutes` ago, each
+ *  with the check-ins of its class's window (`beforeMinutes` before the start until the
+ *  end), held to the commit. A check-in is a pass, a key tag or staff's own: a visit
+ *  staff added for an earlier day has no hour of its own, and a member's own tap is
+ *  nobody's word but theirs. A pass is its account's own word. A key tag's visit, or
+ *  staff's, is the account's only where nobody else holds or has held its record: a
+ *  record two people share names neither, and one of them showing a pass later that day
+ *  is written onto the morning's visit (`joinVisits`) without having been at the class.
+ *  A class nobody was checked in for is read once and its places' check-ins not at all: the rule
+ *  leaves them whatever else is true, and such classes are most of what a run reads.
+ *  `lock`: the places are held to the commit, for a write under the gym's lock. */
+export async function endedBooked(
+  tx: SqlOrTx,
+  gymId: string,
+  when: { now: Date; afterMinutes: number; beforeMinutes: number; lookbackHours: number },
+  lock: boolean,
+): Promise<EndedBooked[]> {
+  const inWindow = tx`
+    a.gym_id = s.gym_id AND a.method IN ('pass','key_tag','staff') AND a.slot_key <> 'added_later'
+    AND a.day BETWEEN s.local_date - 1 AND s.local_date + 1
+    AND a.marked_at BETWEEN s.starts_at - make_interval(mins => ${when.beforeMinutes}) AND s.starts_at + make_interval(mins => s.minutes)`;
+  const rows = await tx<
+    {
+      id: string;
+      status: string;
+      session_status: string;
+      starts_at: Date;
+      minutes: number;
+      by_account: boolean;
+      by_record: boolean;
+      here_that_day: boolean;
+      gym_checked_in: boolean;
+    }[]
+  >`
+    WITH s AS MATERIALIZED (
+      SELECT s.id, s.gym_id, s.status, s.starts_at, s.minutes, s.local_date,
+             EXISTS (SELECT 1 FROM gym_attendance a WHERE ${inWindow}) AS gym_checked_in
+      FROM gym_class_sessions s
+      WHERE s.gym_id = ${gymId} AND s.status = 'scheduled'
+        AND s.starts_at > ${when.now}::timestamptz - make_interval(hours => ${when.lookbackHours + 24})
+        AND s.starts_at + make_interval(mins => s.minutes + ${when.afterMinutes}) <= ${when.now}::timestamptz
+    )
+    SELECT b.id, b.status, s.status AS session_status, s.starts_at, s.minutes, s.gym_checked_in,
+           (s.gym_checked_in AND EXISTS (
+              SELECT 1 FROM gym_attendance a
+              WHERE ${inWindow} AND a.user_id = b.user_id
+                AND (a.method = 'pass' OR a.entry_id IS NULL OR NOT EXISTS (
+                      SELECT 1 FROM gym_members o
+                      WHERE o.gym_id = a.gym_id AND o.entry_id = a.entry_id AND o.user_id <> b.user_id)))) AS by_account,
+           (s.gym_checked_in AND EXISTS (SELECT 1 FROM gym_attendance a WHERE ${inWindow} AND a.entry_id IN (b.entry_id, m.entry_id))) AS by_record,
+           (s.gym_checked_in
+            AND (EXISTS (SELECT 1 FROM gym_attendance a WHERE ${thatDay(tx)} AND a.user_id = b.user_id)
+                 OR EXISTS (SELECT 1 FROM gym_attendance a WHERE ${thatDay(tx)} AND a.entry_id IN (b.entry_id, m.entry_id)))) AS here_that_day
+    FROM s
+    JOIN gym_class_bookings b ON b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = 'booked'
+    LEFT JOIN gym_members m ON m.gym_id = b.gym_id AND m.user_id = b.user_id AND m.removed_at IS NULL
+    ${lock ? tx`FOR UPDATE OF b` : tx``}`;
+  return rows.map((r) => ({
+    ...toMarkable(r),
+    visit: r.by_account ? "account" : r.by_record ? "record" : null,
+    hereThatDay: r.here_that_day,
+    gymCheckedIn: r.gym_checked_in,
+  }));
+}
+
+/** A place a check-in marked came, in a class that has not started, is the booked place
+ *  it was once the check-in no longer stands for it. Two cases, each under the gym's lock.
+ *
+ *  `visitOf`: staff removed a visit of this account (the wrong person was checked in):
+ *  their places go back where no visit of theirs is left at the gym that day (`thatDay`).
+ *  The day, not the window: a second scan the same day writes no visit of its own.
+ *  `moved`: these classes' times may have changed: a place goes back where the class now
+ *  starts more than `beforeMinutes` from `now`, so no check-in made so far is in its
+ *  window. A class whose time did not change is never in that case: its place was marked
+ *  inside the window, and the clock only goes forward.
+ *  Answers how many places went back. */
+export async function putBackToBooked(
+  tx: TransactionSql,
+  gymId: string,
+  which: { visitOf: string } | { moved: readonly string[]; beforeMinutes: number },
+  now: Date,
+): Promise<number> {
+  if ("moved" in which && which.moved.length === 0) return 0;
+  const unfounded =
+    "visitOf" in which
+      ? tx`b.user_id = ${which.visitOf}
+           AND NOT EXISTS (SELECT 1 FROM gym_attendance a WHERE ${thatDay(tx)} AND a.user_id = b.user_id)`
+      : tx`s.id = ANY(${[...which.moved]}::uuid[]) AND s.starts_at - make_interval(mins => ${which.beforeMinutes}) > ${now}`;
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_class_bookings b SET status = 'booked'
+    FROM gym_class_sessions s
+    WHERE s.gym_id = b.gym_id AND s.id = b.session_id
+      AND b.gym_id = ${gymId} AND b.status = 'attended' AND s.starts_at > ${now} AND ${unfounded}
+    RETURNING b.id`;
+  return rows.length;
 }

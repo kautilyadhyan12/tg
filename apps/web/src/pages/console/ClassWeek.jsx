@@ -210,7 +210,7 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
       )}
 
       {session.started ? (
-        <p className="c-s14 c-t3">This class has started, so it can&apos;t be changed.</p>
+        <p className="c-s14 c-t3">This class has started, so its time, coach and places can&apos;t be changed.</p>
       ) : locked ? null : cancelled ? (
         overBox ?? (
           <div>

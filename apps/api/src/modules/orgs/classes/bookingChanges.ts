@@ -7,7 +7,7 @@
 // booking that stops being charged for it, and a booking already ended is not found again,
 // so each class comes back once however often a change arrives.
 import type { Sql, TransactionSql } from "postgres";
-import { MEMBERSHIP_BOOKINGS_ENDING_SHOWN, type PtSessionsEnding, bookingTime, handsOverNow, pickCover, type Cover, type HeldCover } from "@app/shared";
+import { CLASS_CHECKIN_BEFORE_MINUTES, MEMBERSHIP_BOOKINGS_ENDING_SHOWN, type PtSessionsEnding, bookingTime, handsOverNow, pickCover, type Cover, type HeldCover } from "@app/shared";
 import { chargePack, givePackClassesBack } from "../memberships/heldRepo.js";
 import { endLeaversPlaces } from "../events/places.js";
 import { endSessionsOf, sessionsEndingFor } from "../pt/changes.js";
@@ -112,6 +112,14 @@ export async function handOverClasses(tx: TransactionSql, gymId: string, session
   return moved;
 }
 
+/** THESE CLASSES WERE CHANGED, perhaps to a new time. A place a check-in marked came
+ *  before the start is booked again where the class now starts more than the hour away
+ *  (17f); then free places go to the waitlists. */
+export async function classesChanged(tx: TransactionSql, gymId: string, sessionIds: readonly string[], now: Date): Promise<number> {
+  await repo.putBackToBooked(tx, gymId, { moved: sessionIds, beforeMinutes: CLASS_CHECKIN_BEFORE_MINUTES }, now);
+  return await handOverClasses(tx, gymId, sessionIds, now);
+}
+
 /** As `handOverClasses`, for every coming class of the gym with a waitlist: the gym
  *  changed its hand-over time. */
 export async function handOverComing(tx: TransactionSql, gymId: string, now: Date): Promise<number> {
@@ -177,7 +185,7 @@ export async function endLeaversBookings(tx: TransactionSql, gymId: string, user
   }
   const ended = await repo.endBookings(tx, gymId, { people: userIds, now: at }, at);
   const packClasses = await giveBack(tx, gymId, ended, at);
-  const freed = [...new Set(ended.filter((b) => b.was === "booked").map((b) => b.sessionId))];
+  const freed = [...new Set(ended.filter((b) => b.was === "booked" || b.was === "attended").map((b) => b.sessionId))];
   await handOverClasses(tx, gymId, freed, at);
   // Their places at the gym's events end with them (19c-ii).
   await endLeaversPlaces(tx, gymId, userIds, at);

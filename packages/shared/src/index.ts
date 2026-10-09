@@ -36,6 +36,7 @@ export * from "./heldMemberships.js";
 export * from "./heldOnList.js";
 export * from "./ptSessionsEnding.js";
 export * from "./classBookings.js";
+export * from "./classAttendance.js";
 export * from "./personalTraining.js";
 export * from "./membershipWords.js";
 export * from "./billing.js";

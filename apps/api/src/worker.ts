@@ -40,6 +40,7 @@ import { ORGS_CHALLENGE_RESULTS_JOB, scheduleChallengeResults } from "./modules/
 import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
 import { sendDueMessages } from "./modules/orgs/messages/send.js";
 import { ORGS_MEMBER_MESSAGES_JOB, scheduleMemberMessages } from "./modules/orgs/messages/sendSchedule.js";
+import { markEndedClasses } from "./modules/orgs/classes/attendance.js";
 import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
 import { analyseEntriesIfMoved } from "./modules/orgs/memberList/repo.js";
 import { rollUpGymDays } from "./modules/orgs/rollup.js";
@@ -81,6 +82,7 @@ export { ORGS_ARCHIVE_JOB };
 export const ORGS_ROLLUP_JOB = "orgs.daily_rollup";
 export const ORGS_MEMBER_LIST_EXPIRY_JOB = "orgs.member_list_expiry";
 export const ORGS_CLASS_FILL_JOB = "orgs.class_fill";
+export const ORGS_CLASS_NO_SHOWS_JOB = "orgs.class_no_shows";
 export const ORGS_MEMBER_LIST_ANALYSE_JOB = "orgs.member_list_analyse";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
@@ -306,6 +308,30 @@ try {
   );
 } catch (err) {
   log.fatal({ err }, "failed to register the class calendar fill schedule");
+  process.exit(1);
+}
+
+// Came and no-show for classes that are over (Part 3 §13.6; 17f): every five minutes,
+// on minutes 3, 8, 13 …, off the other schedules' minutes. A class is marked 15 minutes
+// after it ends, so its people read came or no-show within 20.
+try {
+  await queue.upsertJobScheduler(
+    ORGS_CLASS_NO_SHOWS_JOB,
+    { pattern: "3-59/5 * * * *" },
+    {
+      name: ORGS_CLASS_NO_SHOWS_JOB,
+      opts: {
+        // R3.5: only a place still `booked` is marked, so a retry or a second run finds
+        // nothing left to mark.
+        attempts: 3,
+        backoff: { type: "exponential", delay: 30_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the class no-show schedule");
   process.exit(1);
 }
 
@@ -555,6 +581,7 @@ const worker = new Worker(
       job.name !== ORGS_ROLLUP_JOB &&
       job.name !== ORGS_MEMBER_LIST_EXPIRY_JOB &&
       job.name !== ORGS_CLASS_FILL_JOB &&
+      job.name !== ORGS_CLASS_NO_SHOWS_JOB &&
       job.name !== ORGS_CHALLENGE_RESULTS_JOB &&
       job.name !== ORGS_MEMBER_MESSAGES_JOB &&
       job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB
@@ -639,6 +666,16 @@ const worker = new Worker(
       const analysed = await analyseEntriesIfMoved(sql);
       log.info(
         { ...analysed, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
+    // Each gym is its own transaction; one that fails is logged and tried on the next run.
+    if (job.name === ORGS_CLASS_NO_SHOWS_JOB) {
+      const marked = await markEndedClasses({ sql, log });
+      log.info(
+        { ...marked, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

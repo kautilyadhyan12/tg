@@ -96,13 +96,15 @@ export interface CheckinRouteDeps {
   sql: Sql;
   redis: RedisLike;
   config: Pick<AppConfig, "NODE_ENV" | "JWT_SECRET" | "CHECKIN_PASS_SECRET" | "WEB_ORIGIN">;
+  /** The clock a booking reads, so a check-in and a class agree about now. */
+  now?: () => Date;
 }
 
 export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDeps): void {
   const checkinDeps: service.CheckinDeps = {
     sql: deps.sql,
     redis: deps.redis,
-    now: () => new Date(),
+    now: deps.now ?? (() => new Date()),
     passKey: checkinPassKey(deps.config),
     webOrigin: deps.config.WEB_ORIGIN,
     log: app.log,
