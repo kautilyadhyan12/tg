@@ -326,3 +326,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 ## 19d-ii, as first written (split 2026-10-09 into 19d-ii-a and 19d-ii-b)
 
 - 19d-ii. [ ] **Teams, and the result posted to Updates**: staff make the teams or members pick one, a team's number and its board; when a challenge ends its result is posted to Updates once, safe to run twice. After 19d-i.
+
+## 19d-iii, as first written (re-planned 2026-10-09 into 19d-iii-a to 19d-iii-d)
+
+- 19d-iii. [ ] **A challenge the camera counts** (Kd, RULINGS 2026-10-06; with the phone app's camera counting, Stage 5): for its own count a gym picks an exercise from the library and the app counts each member's reps by camera; anything not in the library stays typed by staff. Its plan settles how a count made at home is kept honest, and names 2026-08-25's "no camera-dependent gym feature" as replaced for challenges. **Kd, 2026-10-09 (asked, not ruled; RULINGS that day):** also exercises done for a time, and running; its choices go under the form's Who counts it → The app.
