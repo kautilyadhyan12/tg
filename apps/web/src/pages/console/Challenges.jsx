@@ -42,6 +42,7 @@ import {
   pageLine,
   pastTitle,
   removedTeamLines,
+  resultPostNote,
   rowLeader,
   rowSummary,
   rowNote,
@@ -70,7 +71,7 @@ import {
 } from './challengesView';
 import { nameOf } from './leaderboardStaffView';
 import { useConsoleOrg } from './useConsoleOrg';
-import { orgWords } from './consoleView';
+import { orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 
 // The gym's Challenges, for staff (ROADMAP 19d-i; spec Part 3 §15.6): set one up, change
@@ -383,7 +384,7 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
           Close
         </button>
       </div>
-      <p className="c-hint">{`Every one of your ${words.people} in the app sees it straight away. Nobody is emailed. Staff, under-18s and anyone who chose Hide me are never shown on its board.`}</p>
+      <p className="c-hint">{`Every one of your ${words.people} in the app sees it straight away. Nobody is emailed. When it ends, its result is posted to Updates. Staff, under-18s and anyone who chose Hide me are never shown on its board.`}</p>
     </section>
         <aside className="c-card p-4 md:p-5 flex flex-col gap-3 lg:sticky lg:top-4" aria-label="Your challenge so far" data-testid="challenge-summary">
           <p className="c-s13 c-w6 c-t3" style={{ letterSpacing: '0.04em', textTransform: 'uppercase' }}>
@@ -718,7 +719,7 @@ function ChallengeRow({ challenge, list, words, onOpen }) {
 
 /** One challenge on a page of its own: what it is at the top with what can be done to it,
  *  then who is leading, then its board. */
-function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking, onBack, onEdit, onAsk, onCancel, onUncancel, onTeamsSaved }) {
+function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking, updatesLink, onBack, onEdit, onAsk, onCancel, onUncancel, onTeamsSaved }) {
   /** The board that is open: 'see' to read it, 'type' with a box a person, 'teams' with a
    *  team to pick beside each person; null for none. */
   const [board, setBoard] = useState(null);
@@ -749,6 +750,7 @@ function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking
   const leaders = leadersLine(challenge, words);
   const top = challenge.top ?? [];
   const about = challenge.prize !== '' || challenge.details !== '';
+  const posted = resultPostNote(challenge, updatesLink !== null, words);
   return (
     <div className="flex flex-col gap-4" data-testid="challenge-detail">
       <button type="button" onClick={onBack} className="c-btn c-btn-link self-start">
@@ -773,6 +775,17 @@ function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking
                 <CalendarDays aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3" />
                 {datesLine(challenge, list.today)}
               </p>
+              {posted !== null ? (
+                <p className="c-s14 c-t2 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="result-post-note">
+                  <span>{posted.text}</span>
+                  {posted.link ? (
+                    <Link to={updatesLink} className="c-lk c-w6">
+                      See it in Updates
+                    </Link>
+                  ) : null}
+                  {posted.who !== null ? <span>{posted.who}</span> : null}
+                </p>
+              ) : null}
             </div>
           </div>
           {box === null && !past && !readOnly ? (
@@ -1123,6 +1136,7 @@ export default function Challenges() {
               list={list}
               words={words}
               readOnly={readOnly}
+              updatesLink={viewerPrivileges(org).includes('posts.manage') ? `/console/${orgSlug}/updates` : null}
               busy={busy === opened.id}
               asking={asking === opened.id}
               onBack={() => show(null)}

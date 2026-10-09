@@ -66,6 +66,7 @@ const post = (over = {}) => ({
   wrote: false,
   reported: false,
   hidden: false,
+  challengeResult: null,
   ...over,
 });
 const feed = (over = {}) => ({ gymId: 'g1', gymName: 'Iron House', status: 'shown', posting: 'off', blockedCount: 0, supportEmail: null, pinned: [], posts: [], next: null, ...over });

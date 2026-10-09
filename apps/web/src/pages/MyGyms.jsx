@@ -252,7 +252,7 @@ export default function MyGyms() {
               ))}
             </div>
             {tab === 'updates' ? (
-              <Updates key={`updates-${gym.id}`} gym={gym} />
+              <Updates key={`updates-${gym.id}`} gym={gym} onChallenge={() => setTab('challenges')} />
             ) : tab === 'events' ? (
               <Events key={`events-${gym.id}`} gym={gym} />
             ) : tab === 'challenges' ? (

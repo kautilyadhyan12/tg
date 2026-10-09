@@ -341,6 +341,18 @@ export function leadersLine(challenge, words) {
   return `${words.peopleCap} see no places until 3 people they can see have ${isOwn(challenge) ? 'a number' : `a ${UNIT[challenge.counts]}`}.`;
 }
 
+/** What staff are told about a challenge's result post in Updates (ROADMAP 19d-ii-b), or
+ *  null with nothing to say. `mayPost`: this worker can open Updates; `who` says who can
+ *  when they cannot. */
+export function resultPostNote(challenge, mayPost, words) {
+  if (challenge.cancelled) return null;
+  if (challenge.state !== 'ended') return { text: `When it ends, its result is posted to Updates for your ${words.people}.`, link: false, who: null };
+  const post = challenge.resultPost ?? null;
+  if (post === null) return null;
+  if (post.removed) return { text: `Its result post was removed from Updates, so your ${words.people} don't see it there now.`, link: false, who: null };
+  return { text: 'Its result is posted in Updates.', link: mayPost, who: mayPost ? null : 'The owner and staff who post updates can open it there.' };
+}
+
 /** Whether staff type this challenge's numbers on `today`: the gym's own count, from its
  *  first day until members stop seeing its result; never a cancelled one (the server's rule). */
 export function takesNumbers(challenge, today) {
