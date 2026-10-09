@@ -225,7 +225,7 @@ function teamResult(challenge) {
   } else {
     const first = rows.filter((row) => row.place === 1);
     // Where the lowest wins a team with somebody's number missing has a number and no place.
-    if (first.length === 0) headline = rows.some((row) => (row.waiting ?? 0) > 0) ? 'No team got a place: every team had somebody with no number.' : 'No team had a number.';
+    if (first.length === 0) headline = !rows.some((row) => (row.waiting ?? 0) > 0) ? 'No team had a number.' : rows.every((row) => (row.waiting ?? 0) > 0) ? 'No team got a place: every team had somebody with no number.' : 'No team got a place.';
     else if (first.length === 1) headline = `Winner: ${first[0].name}, with ${said(first[0].value)}.`;
     else headline = `Joint winners: ${listed(first.map((row) => row.name))}, with ${said(first[0].value)} each.`;
   }

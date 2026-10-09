@@ -173,6 +173,8 @@ describe('teams, in words', () => {
       headline: 'No team got a place: every team had somebody with no number.',
       mine: 'Your team, Blue Team, had no place: 2 of its people had no number. You had 95 seconds.',
     });
+    // One team short of a number and the other with nobody in it: "every team" is not said.
+    expect(resultOf(relay([team(RED, 'Red Team', 2, 50, null, { waiting: 1 }), team(BLUE, 'Blue Team', 0, 0, null)], { teamBoard: teamBoard({ rows: [team(RED, 'Red Team', 2, 50, null, { waiting: 1 }), team(BLUE, 'Blue Team', 0, 0, null)], mine: null }), me: null })).headline).toBe('No team got a place.');
     // The reader had no time of their own.
     expect(resultOf(relay([team(RED, 'Red Team', 2, 101, 1), team(BLUE, 'Blue Team', 3, 95, null, { isMine: true, waiting: 2 })], { me: me() })).mine).toBe(
       'Your team, Blue Team, had no place: 2 of its people had no number.',
