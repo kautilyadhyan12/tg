@@ -35,6 +35,8 @@ import { forgetOldStaffInvites } from "./modules/orgs/staffInvites/repo.js";
 import { sendDueStaffInvites } from "./modules/orgs/staffInvites/sender.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { ORGS_ARCHIVE_JOB, unscheduleArchiveSweep } from "./modules/orgs/archiveSchedule.js";
+import { postChallengeResults } from "./modules/orgs/challenges/resultPosts.js";
+import { ORGS_CHALLENGE_RESULTS_JOB, scheduleChallengeResults } from "./modules/orgs/challenges/resultPostsSchedule.js";
 import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
 import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
 import { analyseEntriesIfMoved } from "./modules/orgs/memberList/repo.js";
@@ -305,6 +307,15 @@ try {
   process.exit(1);
 }
 
+// A CHALLENGE'S RESULT IS POSTED TO UPDATES (Part 3 §15.6), four times an hour
+// (`resultPostsSchedule.ts` has the minutes and why).
+try {
+  await scheduleChallengeResults(queue);
+} catch (err) {
+  log.fatal({ err }, "failed to register the challenge results schedule");
+  process.exit(1);
+}
+
 // MEMBER INVITATIONS (Part 3 §9.12). Their own queue, so a slow run of emails never
 // holds up the nightly jobs above, and every minute: the rows are the queue, and each
 // run sends what is due within the caps. Only when invitations are switched on.
@@ -533,6 +544,7 @@ const worker = new Worker(
       job.name !== ORGS_ROLLUP_JOB &&
       job.name !== ORGS_MEMBER_LIST_EXPIRY_JOB &&
       job.name !== ORGS_CLASS_FILL_JOB &&
+      job.name !== ORGS_CHALLENGE_RESULTS_JOB &&
       job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
@@ -615,6 +627,15 @@ const worker = new Worker(
       const analysed = await analyseEntriesIfMoved(sql);
       log.info(
         { ...analysed, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
+    if (job.name === ORGS_CHALLENGE_RESULTS_JOB) {
+      const posted = await postChallengeResults({ sql, log });
+      log.info(
+        { ...posted, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

@@ -19,7 +19,7 @@ import {
 } from "./classBookings.js";
 import { classDaySchema, classStartMinuteSchema } from "./classes.js";
 import { gymPagePhotoSchema } from "./gymPage.js";
-import { GYM_POST_PHOTO_MAX_BYTES, postLength } from "./posts.js";
+import { GYM_POST_PHOTO_MAX_BYTES, postLength } from "./postBasics.js";
 
 export const GYM_EVENT_NAME_MAX = 80;
 export const GYM_EVENT_DETAILS_MAX = 1000;

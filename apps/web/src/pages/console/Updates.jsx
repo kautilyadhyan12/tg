@@ -29,7 +29,8 @@ import { preparePostPhoto } from './gymPagePhotos';
 import { PersonPostsBox } from './PersonPosts';
 import PostCard from './UpdatesPostCard';
 import { useConsoleOrg } from './useConsoleOrg';
-import { orgWords } from './consoleView';
+import { orgWords, viewerPrivileges } from './consoleView';
+import { canManageChallenges } from './challengesView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 
 // The gym's Updates, for staff (ROADMAP 19b-i, 19b-ii-a; spec Part 3 §15.2, §15.3): write a
@@ -280,7 +281,10 @@ export default function Updates() {
     }
   };
 
+  // A result post leads to its challenge, for staff who run challenges.
+  const challengeLink = canManageChallenges(viewerPrivileges(org)) ? (id) => `/console/${orgSlug}/challenges?challenge=${id}` : null;
   const cardActions = {
+    challengeLink,
     onPin: (p, pinned) =>
       act(
         p,

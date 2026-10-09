@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { BicepsFlexed, Check, EyeOff, Flag, Flame, Heart, Pin, PinOff, ThumbsUp, Trash2, UserCheck, UserX } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { BicepsFlexed, Check, EyeOff, Flag, Flame, Heart, Pin, PinOff, ThumbsUp, Trash2, Trophy, UserCheck, UserX } from 'lucide-react';
 import { postPhotoUrl, staffPostsService } from '../../api/postsApi';
 import { errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
@@ -19,6 +20,7 @@ import {
   reportedLine,
   stopBox,
 } from '../../components/gym/postsView';
+import { resultPost } from '../../components/gym/challengesView';
 
 // ONE POST, AS STAFF READ IT (spec Part 3 §15.2, §15.3): on the console's Updates page, its
 // reported list, and a person's own list.
@@ -111,10 +113,49 @@ function Reactions({ gymId, post }) {
   );
 }
 
+/** A challenge's result under its post, as the gym's members read it. `link`: the
+ *  challenge's own page, for staff who run challenges; null for staff who do not. */
+function ChallengeResult({ result, link, words }) {
+  return (
+    <div className="rounded-[14px] p-4 flex flex-col gap-3" style={{ background: 'var(--raise)' }} aria-label="How it finished" data-testid="challenge-result">
+      <p className="c-s15 c-w6 c-t1 flex items-start gap-2 break-words">
+        <Trophy aria-hidden="true" className="w-[18px] h-[18px] mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+        <span>{result.headline}</span>
+      </p>
+      {result.rows.length > 0 ? (
+        <ol className="flex flex-col gap-1.5" aria-label={result.rowsLabel}>
+          {result.rows.map((row) => (
+            <li key={row.key} aria-label={row.label} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+              <span className="c-s14 c-w6 c-t2 c-num" style={{ minWidth: 34 }}>
+                {row.placeText ?? '—'}
+              </span>
+              <span className="c-s14 c-t1 flex-grow min-w-0 break-words">
+                {row.name}
+                {row.sub !== null ? <span className="c-s13 c-t2">{` · ${row.sub}`}</span> : null}
+              </span>
+              {row.number !== null ? <span className="c-s14 c-w6 c-t1 c-num">{row.number}</span> : null}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      <p className="c-s13 c-t2 break-words">{result.facts}</p>
+      {result.prize !== null ? <p className="c-s14 c-t1 break-words">{result.prize}</p> : null}
+      <p className="c-s13 c-t2">{`This is what your ${words.people} see. It changes by itself if a number changes, or if someone is hidden from boards or leaves.`}</p>
+      {link !== null ? (
+        <Link to={link} className="c-btn c-btn-s c-btn-sm self-start">
+          Open the challenge
+        </Link>
+      ) : (
+        <p className="c-s13 c-t2">The owner and staff who run the leaderboard can open the challenge.</p>
+      )}
+    </div>
+  );
+}
+
 /** One post. `report`: its entry on the reported list, where it is drawn with why it was
  *  reported and Keep in place of Pin. With `onPin` null (a person's own list) there is no
  *  Pin; with `onPerson` a member's name opens that person's posts. */
-export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words, readOnly, busy, report = null, reportedRead = false, onPin = null, onRemove, onKeep, onStop, onOpen, onPerson = null }) {
+export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words, readOnly, busy, report = null, reportedRead = false, onPin = null, onRemove, onKeep, onStop, onOpen, onPerson = null, challengeLink = null }) {
   /** Which box is open: null, 'remove' or 'stop'. */
   const [asking, setAsking] = useState(null);
   const box = removeBox(post, words);
@@ -122,6 +163,7 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
   const full = report === null && onPin !== null ? pinNote(post, pinnedCount) : null;
   const hidden = hiddenStaffNote(post, words, report !== null ? 'list' : reportedRead ? 'later' : null);
   const canStop = post.fromMember && post.authorId !== null;
+  const result = resultPost(post.challengeResult, gymName);
   const opens = onPerson !== null && canOpenPerson(post);
   const Who = opens ? 'button' : 'div';
   return (
@@ -171,6 +213,7 @@ export default function PostCard({ gymId, gymName, post, pinnedCount = 0, words,
         ) : null}
       </div>
       {post.body !== '' ? <p className="c-s15 c-t1 whitespace-pre-wrap break-words">{post.body}</p> : null}
+      {result !== null ? <ChallengeResult result={result} link={challengeLink === null ? null : challengeLink(result.challengeId)} words={words} /> : null}
       {post.photos.length > 0 ? (
         <ul className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {post.photos.map((photo, i) => (

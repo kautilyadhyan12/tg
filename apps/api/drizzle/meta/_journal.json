@@ -603,6 +603,13 @@
       "when": 1788739200070,
       "tag": "0086_challenge_teams",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1788825600071,
+      "tag": "0087_challenge_result_post",
+      "breakpoints": true
     }
   ]
 }

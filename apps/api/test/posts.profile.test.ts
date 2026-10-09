@@ -424,12 +424,12 @@ d("a person's posts on their profile, and the day's photo posts (real Postgres, 
         asked += 1;
         return Promise.resolve(true);
       };
-      await expect(getPersonPosts({ sql }, stranger.userId, gym.id, writer.userId, undefined, limit)).rejects.toMatchObject({ statusCode: 404 });
+      await expect(getPersonPosts({ sql, now: () => new Date() }, stranger.userId, gym.id, writer.userId, undefined, limit)).rejects.toMatchObject({ statusCode: 404 });
       expect(asked).toBe(0);
-      expect(await getPersonPosts({ sql }, writer.userId, gym.id, writer.userId, undefined, limit)).toEqual(NOBODY);
+      expect(await getPersonPosts({ sql, now: () => new Date() }, writer.userId, gym.id, writer.userId, undefined, limit)).toEqual(NOBODY);
       expect(asked).toBe(1);
       // A limit that has already answered leaves the read undone.
-      expect(await getPersonPosts({ sql }, writer.userId, gym.id, writer.userId, undefined, () => Promise.resolve(false))).toBeNull();
+      expect(await getPersonPosts({ sql, now: () => new Date() }, writer.userId, gym.id, writer.userId, undefined, () => Promise.resolve(false))).toBeNull();
     },
     T,
   );

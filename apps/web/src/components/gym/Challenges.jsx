@@ -338,7 +338,7 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
   const teamRule = teamRuleNote(challenge);
   const pick = picking === null || !teams || !challenge.can.pick ? null : pickBox(challenge, picking);
   const chip = challengeChip(challenge, list.today);
-  const result = resultOf(challenge);
+  const result = resultOf(challenge, { today: list.today, gymName: gym.name });
   const note = boardNote(challenge);
   const quiet = notCountingNote(challenge, list);
   const join = joinNote(challenge);

@@ -134,6 +134,13 @@ export async function challengeById(sql: SqlOrTx, gymId: string, challengeId: st
   return r === undefined ? null : toRow(r);
 }
 
+/** These challenges of the gym, whatever their dates. */
+export async function challengesByIds(sql: SqlOrTx, gymId: string, challengeIds: readonly string[]): Promise<ChallengeRow[]> {
+  if (challengeIds.length === 0) return [];
+  const rows = await sql<RawChallenge[]>`SELECT ${columns(sql)} FROM gym_challenges c WHERE c.gym_id = ${gymId} AND c.id IN ${sql(challengeIds)}`;
+  return rows.map(toRow);
+}
+
 /** The challenge, held until the step ends: two changes to it run one after the other. */
 export async function lockChallenge(tx: TransactionSql, gymId: string, challengeId: string): Promise<ChallengeRow | null> {
   const rows = await tx<RawChallenge[]>`SELECT ${columns(tx)} FROM gym_challenges c WHERE c.gym_id = ${gymId} AND c.id = ${challengeId} FOR UPDATE`;

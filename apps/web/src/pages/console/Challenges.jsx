@@ -9,12 +9,14 @@ import { DateField, Field } from './ClassFields';
 import {
   CHALLENGE_LIMITS,
   CHALLENGE_NOTES,
-  COUNT_CHOICES,
+  COUNTED_BY_CHOICES,
   LOCKED_NOTE,
   NUMBER_NOTES,
   TEAMS_BUTTON,
   TEAM_LIMITS,
   TEAM_NOTES,
+  amountOf,
+  appCountChoices,
   badBox,
   boardButton,
   boardLines,
@@ -22,6 +24,7 @@ import {
   cardFacts,
   challengeProblem,
   challengeTag,
+  countedBy,
   datesLine,
   dayAfter,
   daysBar,
@@ -42,6 +45,7 @@ import {
   pageLine,
   pastTitle,
   removedTeamLines,
+  resultPostNote,
   rowLeader,
   rowSummary,
   rowNote,
@@ -50,6 +54,7 @@ import {
   takesNumbers,
   takesTeams,
   targetHint,
+  targetUnit,
   teamChoices,
   teamLines,
   teamName,
@@ -61,6 +66,7 @@ import {
   unsavedTeamsNote,
   whoChoices,
   winChoices,
+  withCountedBy,
   withCounts,
   withNumberLine,
   withStartDay,
@@ -70,7 +76,7 @@ import {
 } from './challengesView';
 import { nameOf } from './leaderboardStaffView';
 import { useConsoleOrg } from './useConsoleOrg';
-import { orgWords } from './consoleView';
+import { orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 
 // The gym's Challenges, for staff (ROADMAP 19d-i; spec Part 3 §15.6): set one up, change
@@ -89,7 +95,7 @@ function Choice({ on, title, sub, onClick, disabled }) {
       aria-checked={on}
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-xl px-4 py-3 min-h-[44px] text-left border disabled:opacity-60 ${on ? 'c-picked' : ''}`}
+      className={`flex flex-col justify-start rounded-xl px-4 py-3 min-h-[44px] text-left border disabled:opacity-60 ${on ? 'c-picked' : ''}`}
       style={{ background: on ? undefined : 'var(--card)', borderColor: on ? 'var(--accent)' : 'var(--ctl-line)' }}
     >
       <span className="flex items-center gap-2 c-s15 c-w6 c-t1">
@@ -152,7 +158,12 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
   const own = draft.counts === 'own';
   const teamed = draft.teams !== 'none';
   const removing = removedTeamLines(draft, challenge);
-  const toReach = teamed ? 'Number a team has to reach' : own ? 'Number to reach' : `${draft.counts === 'gym_days' ? 'Gym days' : 'Workout days'} to reach`;
+  const unitAfter = targetUnit(draft);
+  const changeCounts = (change) => {
+    setDraft(change);
+    setProblem(null);
+    setError(null);
+  };
 
   const save = async () => {
     const wrong = challengeProblem(draft, list.today, challenge);
@@ -196,25 +207,17 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
         </p>
       ) : null}
 
-      <div className="flex flex-col gap-1.5">
-        <Choices
-          label="What it counts"
-          choices={COUNT_CHOICES}
-          value={draft.counts}
-          onPick={(counts) => {
-            setDraft((d) => withCounts(d, counts));
-            setProblem(null);
-            setError(null);
-          }}
-          disabled={saving || locked}
-        />
+      <div className="flex flex-col gap-3">
+        <Choices label="Who counts it" choices={COUNTED_BY_CHOICES} value={countedBy(draft)} onPick={(by) => changeCounts((d) => withCountedBy(d, by))} disabled={saving || locked} />
         {own ? (
-          <label className="c-field mt-2">
-            <span className="c-label">What are you counting?</span>
-            <input value={draft.unit} onChange={(e) => set({ unit: e.target.value })} aria-label="What are you counting?" disabled={saving} maxLength={CHALLENGE_LIMITS.unit * 2} className="c-input" style={{ maxWidth: 320 }} placeholder="push-ups" />
-            <span className="c-hint">{`As you would say it after a number: push-ups, kilometres, seconds. Your staff type each person's number on the challenge's board, so it works for anything, in the gym or away from it.`}</span>
+          <label className="c-field">
+            <span className="c-label">What your staff count</span>
+            <input value={draft.unit} onChange={(e) => set({ unit: e.target.value })} aria-label="What your staff count" disabled={saving} maxLength={CHALLENGE_LIMITS.unit * 2} className="c-input" style={{ maxWidth: 320 }} placeholder="push-ups" />
+            <span className="c-hint">{`As you would say it after a number: push-ups, kilometres, seconds. From the challenge's first day, open it and press Enter numbers to add each ${words.person}'s number.`}</span>
           </label>
-        ) : null}
+        ) : (
+          <Choices label="What the app counts" choices={appCountChoices(words)} value={draft.counts} onPick={(counts) => changeCounts((d) => withCounts(d, counts))} disabled={saving || locked} />
+        )}
         {quiet !== null ? (
           <span className="c-hint" role="note" style={{ color: 'var(--warn)' }}>
             {quiet}
@@ -257,20 +260,27 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
 
       <Part n={2} title="How it is won, and who is in it">
       <div className="flex flex-col gap-3">
-        <Choices label="How it is won" choices={winChoices(draft.counts, draft.teams)} value={draft.win} onPick={(win) => set({ win })} disabled={saving || locked} />
+        <Choices label="How it is won" choices={winChoices(draft.counts, draft.teams, draft.unit, words)} value={draft.win} onPick={(win) => set({ win })} disabled={saving || locked} />
         {draft.win === 'target' ? (
           <div className="c-field">
-            <span className="c-label">{toReach}</span>
-            <input
-              value={draft.target}
-              onChange={(e) => set({ target: e.target.value })}
-              aria-label={toReach}
-              disabled={saving || locked}
-              inputMode="numeric"
-              className="c-input"
-              style={{ width: 104 }}
-              placeholder="12"
-            />
+            <span className="c-label">Target</span>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <input
+                value={draft.target}
+                onChange={(e) => set({ target: e.target.value })}
+                aria-label={unitAfter === '' ? 'Target' : `Target, in ${unitAfter}`}
+                disabled={saving || locked}
+                inputMode="numeric"
+                className="c-input"
+                style={{ width: 104 }}
+                placeholder={own ? '100' : teamed ? '60' : '12'}
+              />
+              {unitAfter !== '' ? (
+                <span className="c-s14 c-t2 break-words min-w-0" data-testid="target-unit">
+                  {unitAfter}
+                </span>
+              ) : null}
+            </div>
             <span className="c-hint">{targetHint(draft)}</span>
           </div>
         ) : null}
@@ -282,7 +292,7 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
 
       <Part n={3} title="Teams, prize and details">
       <div className="flex flex-col gap-3">
-        <Choices label="Alone or in teams" choices={teamChoices(words)} value={draft.teams} onPick={(teams) => set({ teams })} disabled={saving || locked} />
+        <Choices label="Individual or teams" choices={teamChoices(words)} value={draft.teams} onPick={(teams) => set({ teams })} disabled={saving || locked} />
         {teamed ? (
           <div className="c-field" role="group" aria-label="Teams">
             <span className="c-label">Teams</span>
@@ -383,7 +393,7 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
           Close
         </button>
       </div>
-      <p className="c-hint">{`Every one of your ${words.people} in the app sees it straight away. Nobody is emailed. Staff, under-18s and anyone who chose Hide me are never shown on its board.`}</p>
+      <p className="c-hint">{`Every one of your ${words.people} in the app sees it straight away. Nobody is emailed. When it ends, its result is posted to Updates. Staff, under-18s and anyone who chose Hide me are never shown on its board.`}</p>
     </section>
         <aside className="c-card p-4 md:p-5 flex flex-col gap-3 lg:sticky lg:top-4" aria-label="Your challenge so far" data-testid="challenge-summary">
           <p className="c-s13 c-w6 c-t3" style={{ letterSpacing: '0.04em', textTransform: 'uppercase' }}>
@@ -587,7 +597,9 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType, canTeam, o
                     placeholder="—"
                   />
                 ) : (
-                  <span className="c-s15 c-w6 c-num c-t1 w-10 text-right flex-shrink-0">{row.value.toLocaleString('en')}</span>
+                  <span className="c-s14 c-w6 c-num c-t1 text-right break-words flex-shrink-0" style={{ maxWidth: '50%' }}>
+                    {amountOf(challenge, row.value)}
+                  </span>
                 )}
               </li>
             );
@@ -718,7 +730,7 @@ function ChallengeRow({ challenge, list, words, onOpen }) {
 
 /** One challenge on a page of its own: what it is at the top with what can be done to it,
  *  then who is leading, then its board. */
-function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking, onBack, onEdit, onAsk, onCancel, onUncancel, onTeamsSaved }) {
+function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking, updatesLink, onBack, onEdit, onAsk, onCancel, onUncancel, onTeamsSaved }) {
   /** The board that is open: 'see' to read it, 'type' with a box a person, 'teams' with a
    *  team to pick beside each person; null for none. */
   const [board, setBoard] = useState(null);
@@ -749,6 +761,7 @@ function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking
   const leaders = leadersLine(challenge, words);
   const top = challenge.top ?? [];
   const about = challenge.prize !== '' || challenge.details !== '';
+  const posted = resultPostNote(challenge, updatesLink !== null, words, readOnly);
   return (
     <div className="flex flex-col gap-4" data-testid="challenge-detail">
       <button type="button" onClick={onBack} className="c-btn c-btn-link self-start">
@@ -773,6 +786,17 @@ function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking
                 <CalendarDays aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3" />
                 {datesLine(challenge, list.today)}
               </p>
+              {posted !== null ? (
+                <p className="c-s14 c-t2 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="result-post-note">
+                  <span>{posted.text}</span>
+                  {posted.link ? (
+                    <Link to={updatesLink} className="c-lk c-w6">
+                      See it in Updates
+                    </Link>
+                  ) : null}
+                  {posted.who !== null ? <span>{posted.who}</span> : null}
+                </p>
+              ) : null}
             </div>
           </div>
           {box === null && !past && !readOnly ? (
@@ -857,7 +881,11 @@ function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking
                       <span className="c-s14 c-w6 c-t1 c-ell">{team.name}</span>
                       <span className="c-s13 c-t2">{team.people}</span>
                     </span>
-                    {team.number !== null ? <span className="c-s16 c-w7 c-num c-t1 flex-shrink-0">{team.number}</span> : null}
+                    {team.number !== null ? (
+                      <span className="c-s15 c-w7 c-num c-t1 text-right break-words flex-shrink-0" style={{ maxWidth: '50%' }}>
+                        {team.number}
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ol>
@@ -886,7 +914,9 @@ function ChallengeDetail({ gymId, challenge, list, words, readOnly, busy, asking
                         {ordinal(person.place)}
                       </span>
                       <span className="c-s14 c-w6 c-t1 c-ell flex-grow">{person.name}</span>
-                      <span className="c-s16 c-w7 c-num c-t1 flex-shrink-0">{person.value.toLocaleString('en')}</span>
+                      <span className="c-s15 c-w7 c-num c-t1 text-right break-words flex-shrink-0" style={{ maxWidth: '50%' }}>
+                        {amountOf(challenge, person.value)}
+                      </span>
                     </li>
                   ))}
                 </ol>
@@ -1063,7 +1093,7 @@ export default function Challenges() {
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between min-w-0">
         <div className="flex flex-col gap-1.5 min-w-0">
           <h1 className="c-h1">Challenges</h1>
-          <p className="c-sub">{`Friendly contests for your ${words.people} at ${org.name}, counted for you from check-ins and app workouts`}</p>
+          <p className="c-sub">{`Contests for your ${words.people} at ${org.name}. The app counts gym check-ins and workouts for you, or your staff count anything else.`}</p>
         </div>
         {!readOnly && !state.refused && list !== null && view === 'list' ? (
           <button type="button" onClick={() => open(null)} className="c-btn c-btn-p self-start md:self-auto">
@@ -1123,6 +1153,7 @@ export default function Challenges() {
               list={list}
               words={words}
               readOnly={readOnly}
+              updatesLink={viewerPrivileges(org).includes('posts.manage') ? `/console/${orgSlug}/updates` : null}
               busy={busy === opened.id}
               asking={asking === opened.id}
               onBack={() => show(null)}
@@ -1140,7 +1171,7 @@ export default function Challenges() {
               <p className="c-s15 c-t2">
                 {readOnly
                   ? 'Nothing to show yet.'
-                  : `A challenge is a contest with a start and an end, such as "Most gym days in October" or "Reach 12 workouts this month". The app does the counting. Press Add challenge to set one up.`}
+                  : `A challenge is a contest with a start and an end, such as "Most gym days in October" or "Most push-ups in a minute". The app counts gym check-ins and workouts for you, and your staff can count anything else. Press Add challenge to set one up.`}
               </p>
             </section>
           ) : null}

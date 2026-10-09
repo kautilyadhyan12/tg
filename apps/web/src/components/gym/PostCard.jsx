@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Ban, BicepsFlexed, EyeOff, Flag, Flame, Heart, Pin, ThumbsUp, Trash2 } from 'lucide-react';
+import { Ban, BicepsFlexed, Check, ChevronRight, EyeOff, Flag, Flame, Heart, Medal, Pin, ThumbsUp, Trash2, Trophy } from 'lucide-react';
 import { postPhotoUrl } from '../../api/postsApi';
 import { errorText } from '../../api/orgsApi';
 import {
@@ -19,6 +19,7 @@ import {
   reportBox,
   reportNoteLine,
 } from './postsView';
+import { resultPost } from './challengesView';
 
 // ONE POST, AS A MEMBER READS IT (spec Part 3 §15.2, §15.3): on the gym's Updates and on a
 // person's profile. A member's name opens that person's posts where `onPerson` is given.
@@ -51,6 +52,76 @@ function Photos({ gymId, post, onOpen }) {
           />
         </button>
       ))}
+    </div>
+  );
+}
+
+const MEDAL = { 1: '#F5C542', 2: '#C9CED6', 3: '#D08A5B' };
+
+/** A challenge's result, under the post that says it ended: who won as the Challenges tab
+ *  says it, the first three or the teams, the prize, and a way to the challenge itself. */
+function ChallengeResult({ result, onChallenge }) {
+  return (
+    <div className="mt-3 rounded-xl p-3 flex flex-col gap-2.5" style={{ background: 'rgba(245,197,66,0.08)', border: '1px solid rgba(245,197,66,0.3)' }} aria-label="How it finished" data-testid="challenge-result">
+      <div className="flex items-start gap-2.5">
+        <Trophy aria-hidden="true" className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: MEDAL[1] }} />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white break-words">{result.headline}</p>
+          {result.mine !== null && (
+            <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              {result.mine}
+            </p>
+          )}
+        </div>
+      </div>
+      {result.rows.length > 0 && (
+        <ol className="flex flex-col gap-1.5" aria-label={result.rowsLabel}>
+          {result.rows.map((row) => (
+            <li key={row.key} aria-label={row.label} className="rounded-xl px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1" style={{ background: 'rgba(255,255,255,0.04)' }}>
+              <span className="w-11 flex items-center gap-1 text-sm font-bold flex-shrink-0" style={{ color: MEDAL[row.place] ?? MUTED }}>
+                {row.placeText === null ? (
+                  '—'
+                ) : (
+                  <>
+                    {row.place <= 3 && <Medal aria-hidden="true" className="w-4 h-4" />}
+                    {row.placeText}
+                  </>
+                )}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold text-white break-words">
+                  {row.name}
+                  {row.mine !== null && (
+                    <span className="ml-2 text-[11px] font-bold px-1.5 py-0.5 rounded-full align-middle" style={{ background: ORANGE, color: '#111' }}>
+                      {row.mine}
+                    </span>
+                  )}
+                </span>
+                {row.sub !== null && (
+                  <span className="block text-xs" style={{ color: MUTED }}>
+                    {row.sub}
+                  </span>
+                )}
+              </span>
+              {row.reached && (
+                <span className="flex items-center gap-0.5 text-[11px] font-semibold flex-shrink-0" style={{ color: ORANGE }}>
+                  <Check aria-hidden="true" className="w-3 h-3" strokeWidth={3} /> Reached
+                </span>
+              )}
+              {row.number !== null && <span className="text-sm font-bold text-white tabular-nums flex-shrink-0">{row.number}</span>}
+            </li>
+          ))}
+        </ol>
+      )}
+      <p className="text-xs break-words" style={{ color: MUTED }}>
+        {result.facts}
+      </p>
+      {result.prize !== null && <p className="text-sm text-white break-words">{result.prize}</p>}
+      {result.canOpen && onChallenge !== null && (
+        <button type="button" onClick={() => onChallenge(result.challengeId)} className="self-start rounded-xl px-3.5 text-sm font-semibold min-h-11 flex items-center gap-1" style={SOFT}>
+          See the challenge <ChevronRight aria-hidden="true" className="w-4 h-4" />
+        </button>
+      )}
     </div>
   );
 }
@@ -110,7 +181,7 @@ function ReportBox({ name, gymName, busy, error, onSend, onCancel }) {
   );
 }
 
-export default function PostCard({ gymId, gymName, post, busy, onReact, onOpen, onRemove, onReport, onBlock, onPerson = null }) {
+export default function PostCard({ gymId, gymName, post, busy, onReact, onOpen, onRemove, onReport, onBlock, onPerson = null, onChallenge = null }) {
   /** Which box is open under the post: null, 'remove', 'report' or 'block'. */
   const [asking, setAsking] = useState(null);
   const [working, setWorking] = useState(false);
@@ -120,6 +191,7 @@ export default function PostCard({ gymId, gymName, post, busy, onReact, onOpen, 
   const action = memberPostAction(post);
   const blocking = blockBox(post, gymName);
   const hidden = hiddenOwnNote(post, gymName);
+  const result = resultPost(post.challengeResult, gymName);
   const opens = onPerson !== null && canOpenPerson(post);
   const Who = opens ? 'button' : 'div';
 
@@ -183,6 +255,7 @@ export default function PostCard({ gymId, gymName, post, busy, onReact, onOpen, 
           {post.body}
         </p>
       )}
+      {result !== null && <ChallengeResult result={result} onChallenge={onChallenge} />}
       <Photos gymId={gymId} post={post} onOpen={(i) => onOpen(post, i)} />
       <div className="flex flex-wrap items-center gap-2 mt-3">
         {reactionButtons(post).map((r) => {
