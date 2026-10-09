@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { CalendarDays, Check, Gift, Medal, Pencil, Plus } from 'lucide-react';
+import { CalendarDays, Check, Gift, Medal, Pencil, Plus, Users, X } from 'lucide-react';
 import { staffChallengesService } from '../../api/challengesApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -12,6 +12,9 @@ import {
   COUNT_CHOICES,
   LOCKED_NOTE,
   NUMBER_NOTES,
+  TEAMS_BUTTON,
+  TEAM_LIMITS,
+  TEAM_NOTES,
   badBox,
   boardButton,
   boardLines,
@@ -25,8 +28,11 @@ import {
   detailsLine,
   draftOf,
   emptyBoard,
+  fieldsForKept,
   fieldsOf,
   inSaves,
+  inTeamSaves,
+  inTeams,
   isLocked,
   leadersLine,
   newChallengeDraft,
@@ -34,17 +40,29 @@ import {
   numbersToSave,
   pageLine,
   pastTitle,
+  removedTeamLines,
   rowNote,
   sameAsSent,
   startHint,
   takesNumbers,
+  takesTeams,
   targetHint,
+  teamChoices,
+  teamLines,
+  teamName,
+  teamsBox,
+  teamsHeading,
+  teamsToSave,
   unsavedNote,
+  unsavedTeamsNote,
   whoChoices,
   winChoices,
   withCounts,
   withNumberLine,
   withStartDay,
+  withTeamAdded,
+  withTeamNamed,
+  withTeamRemoved,
 } from './challengesView';
 import { nameOf } from './leaderboardStaffView';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -113,7 +131,9 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
   const quiet = notCheckingInNote(draft.counts, list, words);
   const started = startHint(draft, list.today);
   const own = draft.counts === 'own';
-  const toReach = own ? 'Number to reach' : `${draft.counts === 'gym_days' ? 'Gym days' : 'Workout days'} to reach`;
+  const teamed = draft.teams !== 'none';
+  const removing = removedTeamLines(draft, challenge);
+  const toReach = teamed ? 'Number a team has to reach' : own ? 'Number to reach' : `${draft.counts === 'gym_days' ? 'Gym days' : 'Workout days'} to reach`;
 
   const save = async () => {
     const wrong = challengeProblem(draft, list.today, challenge);
@@ -128,7 +148,7 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
       let saved = adding ? await staffChallengesService.add(gymId, challengeKey, fields) : await staffChallengesService.change(gymId, challenge.id, fields);
       // An earlier press of this form was kept and its reply lost: the server answered
       // with that challenge, so what the form holds now is sent as a change to it.
-      if (adding && !sameAsSent(saved, fields)) saved = await staffChallengesService.change(gymId, saved.id, fields);
+      if (adding && !sameAsSent(saved, fields)) saved = await staffChallengesService.change(gymId, saved.id, fieldsForKept(fields, saved));
       onSaved(saved, adding);
     } catch (err) {
       setError(errorText(err, "We couldn't save that. Please try again."));
@@ -208,7 +228,7 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
       </div>
 
       <div className="flex flex-col gap-3">
-        <Choices label="How it is won" choices={winChoices(draft.counts)} value={draft.win} onPick={(win) => set({ win })} disabled={saving || locked} />
+        <Choices label="How it is won" choices={winChoices(draft.counts, draft.teams)} value={draft.win} onPick={(win) => set({ win })} disabled={saving || locked} />
         {draft.win === 'target' ? (
           <div className="c-field">
             <span className="c-label">{toReach}</span>
@@ -228,6 +248,75 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
       </div>
 
       <Choices label="Who is in it" choices={whoChoices(words, list.inApp)} value={draft.who} onPick={(who) => set({ who })} disabled={saving || locked} />
+
+      <div className="flex flex-col gap-3">
+        <Choices label="Alone or in teams" choices={teamChoices(words)} value={draft.teams} onPick={(teams) => set({ teams })} disabled={saving || locked} />
+        {teamed ? (
+          <div className="c-field" role="group" aria-label="Teams">
+            <span className="c-label">Teams</span>
+            <div className="flex flex-col gap-2" style={{ maxWidth: 420 }}>
+              {draft.teamList.map((team, i) => (
+                <div key={team.id ?? `new-${i}`} className="flex items-center gap-2">
+                  <input
+                    value={team.name}
+                    onChange={(e) => {
+                      setDraft((d) => withTeamNamed(d, i, e.target.value));
+                      setProblem(null);
+                      setError(null);
+                    }}
+                    aria-label={`Team ${i + 1} name`}
+                    disabled={saving || locked}
+                    maxLength={TEAM_LIMITS.name * 2}
+                    className="c-input flex-grow"
+                    placeholder={i === 0 ? 'Red Team' : i === 1 ? 'Blue Team' : `Team ${i + 1}`}
+                  />
+                  {draft.teamList.length > TEAM_LIMITS.min && !locked ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft((d) => withTeamRemoved(d, i));
+                        setProblem(null);
+                        setError(null);
+                      }}
+                      disabled={saving}
+                      className="c-btn c-btn-quiet c-btn-sm flex-shrink-0"
+                      aria-label={`Remove team ${i + 1}${team.name.trim() === '' ? '' : `, ${team.name.trim()}`}`}
+                    >
+                      <X aria-hidden="true" className="w-4 h-4" />
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            {draft.teamList.length < TEAM_LIMITS.max && !locked ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft((d) => withTeamAdded(d));
+                  setProblem(null);
+                  setError(null);
+                }}
+                disabled={saving}
+                className="c-btn c-btn-s c-btn-sm self-start"
+              >
+                <Plus aria-hidden="true" className="w-4 h-4" />
+                Add a team
+              </button>
+            ) : null}
+            <span className="c-hint">
+              {`${TEAM_LIMITS.min} to ${TEAM_LIMITS.max} teams. A team's number is its people's numbers added together. ${
+                draft.teams === 'staff' ? "After you save, press Put people in teams on the challenge's card." : `Your ${words.people} pick a team in the app; you can move anybody on the challenge's board.`
+              }`}
+            </span>
+            {removing.map((line) => (
+              <span key={line} className="c-hint" role="note" style={{ color: 'var(--warn)' }}>
+                {line}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
 
       <Field label="Prize (optional)">
         <input value={draft.prize} onChange={(e) => set({ prize: e.target.value })} disabled={saving} maxLength={CHALLENGE_LIMITS.prize * 2} className="c-input" placeholder="A free month for the winner" />
@@ -266,7 +355,7 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
 }
 
 /** A challenge's board for staff: everybody's full name, and why members do not see some. */
-function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
+function ChallengeBoard({ gymId, challenge, timezone, words, canType, canTeam, onTeamsSaved }) {
   const [page, setPage] = useState(1);
   const [state, setState] = useState({ loading: true, error: null, board: null });
   /** What is typed in each person's box and not yet saved, by person, on every page. */
@@ -275,11 +364,16 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
   const [kept, setKept] = useState({});
   const [saving, setSaving] = useState(false);
   const [said, setSaid] = useState(null);
+  /** The team picked beside each person and not yet saved, by person, on every page. */
+  const [moved, setMoved] = useState({});
+  /** The people the box before a save names; null while it is closed. */
+  const [moving, setMoving] = useState(null);
+  const teamed = inTeams(challenge);
   const load = useCallback(
     () =>
       staffChallengesService.board(gymId, challenge.id, page).then(
         (board) => {
-          setKept((k) => ({ ...k, ...Object.fromEntries(board.rows.map((row) => [row.userId, { value: row.value, name: row.name }])) }));
+          setKept((k) => ({ ...k, ...Object.fromEntries(board.rows.map((row) => [row.userId, { value: row.value, name: row.name, teamId: row.teamId ?? null }])) }));
           setState({ loading: false, error: null, board });
         },
         (err) => setState((s) => ({ loading: false, error: errorText(err, "We couldn't load the board."), board: s.board })),
@@ -322,9 +416,42 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
       setSaving(false);
     }
   };
+  // Everybody moved, on whichever page: not only the page that is open.
+  const changes = () => teamsToSave(Object.entries(kept).map(([userId, person]) => ({ userId, ...person })), moved);
+  const askTeams = () => {
+    const people = changes();
+    if (people.length === 0) {
+      setSaid({ bad: false, text: TEAM_NOTES.none });
+      return;
+    }
+    setSaid(null);
+    setMoving(people);
+  };
+  const saveTeams = async () => {
+    const people = moving;
+    setSaving(true);
+    try {
+      for (const save of inTeamSaves(people)) await staffChallengesService.setTeamPeople(gymId, challenge.id, save);
+      setMoved({});
+      setMoving(null);
+      await load();
+      setSaid({ bad: false, text: TEAM_NOTES.saved(people.length) });
+      onTeamsSaved();
+    } catch (err) {
+      setMoving(null);
+      setSaid({ bad: true, text: errorText(err, "We couldn't save the teams. Please try again.") });
+      // Somebody left, or a team changed, meanwhile: show the list as it is now.
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  };
+  const box = moving === null ? null : teamsBox(moving, challenge, words);
+  const unsavedTeams = canTeam ? unsavedTeamsNote(changes().length) : null;
   return (
     <section className="flex flex-col gap-2" aria-label={`The board of ${challenge.name}`} data-testid="challenge-board">
       {canType ? <p className="c-s14 c-t1">{NUMBER_NOTES.help(challenge, words)}</p> : null}
+      {canTeam ? <p className="c-s14 c-t1">{TEAM_NOTES.help(challenge, words)}</p> : null}
       {boardLines(board, challenge, words).map((line) => (
         <p key={line} className="c-s14 c-t2">
           {line}
@@ -339,7 +466,7 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
             return (
               <li
                 key={row.userId}
-                className="flex items-center gap-3 px-3 md:px-4 py-2.5 min-h-11"
+                className={`flex items-center gap-x-3 gap-y-2 px-3 md:px-4 py-2.5 min-h-11 ${canTeam ? 'flex-wrap md:flex-nowrap' : ''}`}
                 style={{ borderTop: i > 0 ? '1px solid var(--line)' : undefined, opacity: row.hidden !== null ? 0.72 : 1 }}
                 data-testid="challenge-row"
               >
@@ -347,7 +474,27 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
                 <span className="flex flex-col md:flex-row md:items-center gap-x-3 gap-y-0.5 min-w-0 flex-grow">
                   <span className="c-s14 c-w6 c-t1 c-ell">{nameOf(row)}</span>
                   {note !== null ? <span className="c-tag c-tag-plain self-start md:self-auto">{note}</span> : null}
+                  {teamed && !canTeam ? <span className={`c-tag self-start md:self-auto ${row.teamId === null ? 'c-tag-plain' : 'c-tag-good'}`}>{teamName(challenge, row.teamId)}</span> : null}
                 </span>
+                {canTeam ? (
+                  <select
+                    value={moved[row.userId] === undefined ? (row.teamId ?? '') : (moved[row.userId] ?? '')}
+                    onChange={(e) => {
+                      setMoved((m) => ({ ...m, [row.userId]: e.target.value === '' ? null : e.target.value }));
+                      setSaid(null);
+                    }}
+                    aria-label={`${nameOf(row)}: team`}
+                    disabled={saving || moving !== null}
+                    className="c-sel order-last md:order-none basis-full md:basis-auto md:flex-shrink-0 md:max-w-[180px]"
+                  >
+                    <option value="">No team</option>
+                    {(challenge.teamList ?? []).map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
                 {row.reached ? (
                   <span className="c-tag c-tag-good flex-shrink-0">
                     <Check aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} />
@@ -388,6 +535,36 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
           ) : null}
         </div>
       ) : null}
+      {canTeam && board.rows.length > 0 && box === null ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={askTeams} disabled={saving} className="c-btn c-btn-p">
+            Save teams
+          </button>
+          {said !== null ? (
+            <span className="c-s14" role={said.bad ? 'alert' : 'status'} style={{ color: said.bad ? 'var(--bad)' : 'var(--good)' }}>
+              {said.text}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {box !== null ? (
+        <div className="c-callout flex-col" role="group" aria-label={box.title}>
+          <p className="c-s15 c-w6 c-t1">{box.title}</p>
+          {box.lines.map((line) => (
+            <p key={line} className="c-s14 c-t1">
+              {line}
+            </p>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={saveTeams} disabled={saving} className="c-btn c-btn-p c-btn-sm">
+              {saving ? 'Saving…' : box.yes}
+            </button>
+            <button type="button" onClick={() => setMoving(null)} disabled={saving} className="c-btn c-btn-s c-btn-sm">
+              {box.no}
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-3">
         {pages !== null ? (
           <>
@@ -403,6 +580,11 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
                 {unsavedNote(typed)}
               </span>
             ) : null}
+            {unsavedTeams !== null ? (
+              <span className="c-s13 c-t1" role="note">
+                {unsavedTeams}
+              </span>
+            ) : null}
           </>
         ) : null}
         <span className="c-s13 c-t3">{updatedText(board.asOf, timezone)}</span>
@@ -416,11 +598,14 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType }) {
   );
 }
 
-function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, onEdit, onAsk, onCancel, onUncancel }) {
-  /** The board that is open: 'see' to read it, 'type' with a box a person; null for none. */
+function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, onEdit, onAsk, onCancel, onUncancel, onTeamsSaved }) {
+  /** The board that is open: 'see' to read it, 'type' with a box a person, 'teams' with a
+   *  team to pick beside each person; null for none. */
   const [board, setBoard] = useState(null);
   const showBoard = board !== null;
   const canType = takesNumbers(challenge, list.today) && !readOnly;
+  const canTeam = takesTeams(challenge, list.today) && !readOnly;
+  const teams = teamLines(challenge);
   const tag = challengeTag(challenge, list.today);
   const past = challenge.state === 'ended';
   const box = asking ? cancelBox(challenge, words) : null;
@@ -487,6 +672,31 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
             ) : null}
           </div>
         ) : null}
+        {teams.length > 0 ? (
+          <div className="flex flex-col gap-2" data-testid="challenge-teams">
+            <span className="c-s13 c-w6 c-t1 flex items-center gap-2">
+              <Users aria-hidden="true" className="w-4 h-4 c-t3" />
+              {teamsHeading(challenge, words)}
+            </span>
+            <ol className="grid grid-cols-1 sm:grid-cols-2 gap-2.5" aria-label={`Teams: ${challenge.name}`}>
+              {teams.map((team) => (
+                <li key={team.id} className={`c-podium ${team.place === 1 ? 'c-podium-1' : ''}`}>
+                  {team.placeText !== null ? (
+                    <span className={`flex items-center gap-1 c-s13 c-w7 flex-shrink-0 c-medal-${Math.min(team.place, 3)}`}>
+                      <Medal aria-hidden="true" className="w-[18px] h-[18px]" />
+                      {team.placeText}
+                    </span>
+                  ) : null}
+                  <span className="flex flex-col min-w-0 flex-grow">
+                    <span className="c-s14 c-w6 c-t1 c-ell">{team.name}</span>
+                    <span className="c-s13 c-t2">{team.people}</span>
+                  </span>
+                  {team.number !== null ? <span className="c-s16 c-w7 c-num c-t1 flex-shrink-0">{team.number}</span> : null}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
         {challenge.prize !== '' ? (
           <p className="c-s14 c-t2 flex items-start gap-2">
             <Gift aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t3 mt-0.5" />
@@ -506,6 +716,12 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
           {canType && board !== 'type' ? (
             <button type="button" onClick={() => setBoard('type')} className="c-btn c-btn-s c-btn-sm" aria-label={`Enter numbers: ${challenge.name}`}>
               Enter numbers
+            </button>
+          ) : null}
+          {canTeam && board !== 'teams' ? (
+            <button type="button" onClick={() => setBoard('teams')} className="c-btn c-btn-s c-btn-sm" aria-label={`${TEAMS_BUTTON}: ${challenge.name}`}>
+              <Users aria-hidden="true" className="w-4 h-4" />
+              {TEAMS_BUTTON}
             </button>
           ) : null}
           {!past && !readOnly ? (
@@ -528,7 +744,7 @@ function ChallengeCard({ gymId, challenge, list, words, readOnly, busy, asking, 
         </div>
       ) : null}
 
-      {showBoard && !challenge.cancelled && box === null ? <ChallengeBoard gymId={gymId} challenge={challenge} timezone={list.timezone} words={words} canType={canType && board === 'type'} /> : null}
+      {showBoard && !challenge.cancelled && box === null ? <ChallengeBoard gymId={gymId} challenge={challenge} timezone={list.timezone} words={words} canType={canType && board === 'type'} canTeam={canTeam && board === 'teams'} onTeamsSaved={onTeamsSaved} /> : null}
 
       {box !== null ? (
         <div className="c-callout flex-col" role="group" aria-label={box.title}>
@@ -677,6 +893,7 @@ export default function Challenges() {
       onAsk={setAsking}
       onCancel={(c) => setCancelled(c, true)}
       onUncancel={(c) => setCancelled(c, false)}
+      onTeamsSaved={load}
     />
   );
 

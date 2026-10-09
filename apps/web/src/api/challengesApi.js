@@ -1,5 +1,6 @@
 import {
   challengeScoresResponseSchema,
+  challengeTeamPeopleResponseSchema,
   gymChallengeBoardResponseSchema,
   gymChallengeResponseSchema,
   gymChallengesResponseSchema,
@@ -37,6 +38,9 @@ export const challengesService = {
     readThrough(memberGymChallengeResponseSchema, 'the challenge', authApi.put(`${challengePath(gymId, challengeId)}/joined`)).then((data) => data.challenge),
   leave: (gymId, challengeId) =>
     readThrough(memberGymChallengeResponseSchema, 'the challenge', authApi.delete(`${challengePath(gymId, challengeId)}/joined`)).then((data) => data.challenge),
+  /** Pick a team, where members pick. Picked twice it is one pick. */
+  pickTeam: (gymId, challengeId, teamId) =>
+    readThrough(memberGymChallengeResponseSchema, 'the challenge', authApi.put(`${challengePath(gymId, challengeId)}/team`, { teamId })).then((data) => data.challenge),
 };
 
 // THE CONSOLE'S CHALLENGES PAGE: for staff holding `leaderboard.manage`. The server refuses
@@ -53,6 +57,9 @@ export const staffChallengesService = {
   /** Numbers staff type for the gym's own count: `scores` is [{ userId, value }], null takes one off. */
   setScores: (gymId, challengeId, scores) =>
     readThrough(challengeScoresResponseSchema, 'the numbers', authApi.put(`${challengePath(gymId, challengeId)}/scores`, { scores })).then((data) => data.saved),
+  /** Who is in which team: `people` is [{ userId, teamId }], a null team takes them out of every team. */
+  setTeamPeople: (gymId, challengeId, people) =>
+    readThrough(challengeTeamPeopleResponseSchema, 'the teams', authApi.put(`${challengePath(gymId, challengeId)}/team-people`, { people })).then((data) => data.saved),
   setCancelled: (gymId, challengeId, cancelled) =>
     readThrough(gymChallengeResponseSchema, 'the challenge', authApi.put(`${challengePath(gymId, challengeId)}/cancelled`, { cancelled })).then((data) => data.challenge),
 };

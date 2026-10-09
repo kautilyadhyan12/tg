@@ -8,12 +8,19 @@ import {
   GYM_CHALLENGE_SCORE_MAX,
   GYM_CHALLENGE_UNIT_MAX,
   GYM_CHALLENGE_SCORES_A_SAVE,
+  GYM_CHALLENGE_TEAMS_MAX,
+  GYM_CHALLENGE_TEAMS_MIN,
+  GYM_CHALLENGE_TEAM_NAME_MAX,
+  GYM_CHALLENGE_TEAM_PEOPLE_A_SAVE,
   GYM_CHALLENGE_WORDS,
   challengeSaveProblem,
   challengeTakesNumbers,
+  challengeTakesTeams,
   eventNameIsSeen,
   postLength,
+  teamNameKey,
 } from '@app/shared';
+import { ordinal } from '../../components/gym/leaderboardView';
 import { dayLabel } from '../../components/gym/leaderboardView';
 import { HIDDEN_TAG } from './leaderboardStaffView';
 
@@ -25,6 +32,7 @@ export function canManageChallenges(privileges) {
   return Array.isArray(privileges) && privileges.includes('leaderboard.manage');
 }
 
+export const TEAM_LIMITS = { min: GYM_CHALLENGE_TEAMS_MIN, max: GYM_CHALLENGE_TEAMS_MAX, name: GYM_CHALLENGE_TEAM_NAME_MAX };
 export const CHALLENGE_LIMITS = { unit: GYM_CHALLENGE_UNIT_MAX, score: GYM_CHALLENGE_SCORE_MAX, name: GYM_CHALLENGE_NAME_MAX, details: GYM_CHALLENGE_DETAILS_MAX, prize: GYM_CHALLENGE_PRIZE_MAX, days: GYM_CHALLENGE_MAX_DAYS, back: GYM_CHALLENGE_MAX_DAYS_BACK, ahead: GYM_CHALLENGE_MAX_DAYS_AHEAD };
 
 const UNIT = { gym_days: 'gym day', workout_days: 'workout day' };
@@ -44,13 +52,30 @@ export const COUNT_CHOICES = [
 ];
 
 /** How it is won. The lowest number can win only where the gym counts for itself (a time). */
-export function winChoices(counts) {
+export function winChoices(counts, teams = 'none') {
+  if (teams !== 'none') {
+    const choices = [
+      { id: 'most', title: 'The team with the most', sub: 'One board of teams. The first team wins.' },
+      { id: 'target', title: 'Every team that reaches a number', sub: 'You set the number. Every team that gets there wins.' },
+    ];
+    if (counts === 'own') choices.push({ id: 'lowest', title: 'The team with the lowest', sub: 'For a fastest time. The team with the lowest total wins.' });
+    return choices;
+  }
   const choices = [
     { id: 'most', title: 'Whoever has the most', sub: 'One board. First place wins.' },
     { id: 'target', title: 'Everyone who reaches a number', sub: 'You set the number. Everybody who gets there wins.' },
   ];
   if (counts === 'own') choices.push({ id: 'lowest', title: 'Whoever has the lowest', sub: 'For a fastest time. The lowest number wins.' });
   return choices;
+}
+
+/** Alone, or in teams, and who makes the teams. */
+export function teamChoices(words) {
+  return [
+    { id: 'none', title: 'Alone', sub: 'Each person has their own number and their own place.' },
+    { id: 'staff', title: 'In teams you make', sub: "You name the teams and put people in them on the challenge's board." },
+    { id: 'members', title: 'In teams people pick', sub: `You name the teams. Your ${words.people} pick their own in the app.` },
+  ];
 }
 export const WIN_CHOICES = winChoices('gym_days');
 
@@ -69,8 +94,17 @@ export function whoChoices(words, inApp) {
 
 /** An empty form: the commonest challenge, most gym days, everyone in. */
 export function newChallengeDraft() {
-  return { name: '', details: '', prize: '', counts: 'gym_days', unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone' };
+  return { name: '', details: '', prize: '', counts: 'gym_days', unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone', teams: 'none', teamList: blankTeams() };
 }
+
+/** Two empty teams: the fewest a challenge in teams has. */
+const blankTeams = () => [
+  { id: null, name: '' },
+  { id: null, name: '' },
+];
+const hasTeams = (c) => (c.teams ?? 'none') !== 'none';
+/** A challenge's teams as the form and the rules hold them. */
+const teamsOf = (challenge) => (challenge.teamList ?? []).map((team) => ({ id: team.id, name: team.name }));
 
 /** The form filled in from a challenge as the server has it. */
 export function draftOf(challenge) {
@@ -85,6 +119,8 @@ export function draftOf(challenge) {
     win: challenge.target !== null ? 'target' : challenge.lowestWins ? 'lowest' : 'most',
     target: challenge.target === null ? '' : String(challenge.target),
     who: challenge.who,
+    teams: challenge.teams ?? 'none',
+    teamList: hasTeams(challenge) ? teamsOf(challenge) : blankTeams(),
   };
 }
 
@@ -115,10 +151,12 @@ const rulesOf = (draft) => ({
   target: draft.win === 'target' ? wholeNumber(draft.target) : null,
   who: draft.who,
   lowestWins: isOwn(draft) && draft.win === 'lowest',
+  teams: draft.teams,
+  teamList: hasTeams(draft) ? draft.teamList.map((team) => ({ id: team.id, name: team.name.trim() })) : [],
 });
 
-/** Once a challenge has started, what it counts, its first day, who is in it and its
- *  target stay as they are (the server's own rule). */
+/** Once a challenge has started, what it counts, its first day, who is in it, its target
+ *  and its teams stay as they are (the server's own rule). */
 export function isLocked(challenge) {
   return challenge !== null && challenge.state === 'running';
 }
@@ -141,17 +179,31 @@ export function challengeProblem(draft, today, before = null) {
     const target = wholeNumber(draft.target);
     const unit = wordsOf(draft);
     if (target === null || target < 1) return { field: 'target', text: `Type how many ${unit} to reach, as a whole number.` };
-    if (isOwn(draft)) {
+    // A team's number is several people's added together: it is not bound by the days.
+    if (isOwn(draft) || hasTeams(draft)) {
       if (target > CHALLENGE_LIMITS.score) return { field: 'target', text: `The number to reach can be ${count(CHALLENGE_LIMITS.score)} at most.` };
     } else if (target > days) {
       return { field: 'target', text: `One a day is counted and this challenge is ${plural(days, 'day')} long, so the most anyone can reach is ${count(days)}. Type ${count(days)} or less, or make it longer.` };
     }
   }
+  if (hasTeams(draft)) {
+    const names = draft.teamList.map((team) => team.name.trim());
+    if (names.length < TEAM_LIMITS.min) return { field: 'teams', text: `A challenge in teams needs at least ${TEAM_LIMITS.min} teams.` };
+    const empty = names.findIndex((name) => !eventNameIsSeen(name));
+    if (empty !== -1) return { field: 'teams', text: `Give team ${empty + 1} a name, or remove it.` };
+    const long = names.find((name) => postLength(name) > TEAM_LIMITS.name);
+    if (long !== undefined) return { field: 'teams', text: `Keep each team's name to ${TEAM_LIMITS.name} characters.` };
+    const twice = names.find((name, i) => names.findIndex((other) => teamNameKey(other) === teamNameKey(name)) !== i);
+    if (twice !== undefined) return { field: 'teams', text: `Two teams are called ${twice}. Give each team its own name.` };
+  }
   if (postLength(draft.prize.trim()) > CHALLENGE_LIMITS.prize) return { field: 'prize', text: `Keep the prize to ${CHALLENGE_LIMITS.prize} characters.` };
   if (postLength(draft.details.trim()) > CHALLENGE_LIMITS.details) return { field: 'details', text: `Keep the details to ${CHALLENGE_LIMITS.details} characters.` };
   const rule = challengeSaveProblem({
     today,
-    before: before === null ? null : { counts: before.counts, startsOn: before.startsOn, endsOn: before.endsOn, target: before.target, who: before.who, lowestWins: before.lowestWins === true },
+    before:
+      before === null
+        ? null
+        : { counts: before.counts, startsOn: before.startsOn, endsOn: before.endsOn, target: before.target, who: before.who, lowestWins: before.lowestWins === true, teams: before.teams ?? 'none', teamList: teamsOf(before) },
     next: rulesOf(draft),
   });
   if (rule === null) return null;
@@ -167,7 +219,16 @@ export function fieldsOf(draft) {
 /** Whether the challenge the server kept is the one this form holds: a save whose reply
  *  was lost and whose form was then changed is answered with the first one. */
 export function sameAsSent(challenge, fields) {
-  return ['name', 'details', 'prize', 'counts', 'unit', 'startsOn', 'endsOn', 'target', 'who', 'lowestWins'].every((key) => challenge[key] === fields[key]);
+  const same = ['name', 'details', 'prize', 'counts', 'unit', 'startsOn', 'endsOn', 'target', 'who', 'lowestWins'].every((key) => challenge[key] === fields[key]);
+  const names = (list) => (list ?? []).map((team) => team.name).join('\n');
+  return same && (challenge.teams ?? 'none') === (fields.teams ?? 'none') && names(challenge.teamList) === names(fields.teamList);
+}
+
+/** What is sent as a CHANGE to the challenge an earlier press of an Add form made: its
+ *  teams by the ids the server gave them, so they are kept and not made again. */
+export function fieldsForKept(fields, kept) {
+  const byName = new Map((kept.teamList ?? []).map((team) => [teamNameKey(team.name), team.id]));
+  return { ...fields, teamList: (fields.teamList ?? []).map((team) => ({ id: byName.get(teamNameKey(team.name)) ?? null, name: team.name })) };
 }
 
 /** "500 characters left", and whether it is over. */
@@ -179,6 +240,7 @@ export function detailsLine(text) {
 
 /** Under the target box: the most that can be reached, once the days are known. */
 export function targetHint(draft) {
+  if (hasTeams(draft)) return "A team's number is its people's numbers added together. Every team that reaches this wins.";
   if (isOwn(draft)) return 'Everybody whose number reaches this wins.';
   const days = draftDays(draft);
   const unit = UNIT[draft.counts];
@@ -222,6 +284,10 @@ export function datesLine(challenge, today) {
 /** "Counts gym days · whoever has the most wins" */
 export function rulesLine(challenge) {
   const what = `Counts ${wordsOf(challenge)}`;
+  if (hasTeams(challenge)) {
+    if (challenge.target === null) return `${what} · the team with the ${challenge.lowestWins ? 'lowest' : 'most'} wins`;
+    return `${what} · every team that reaches ${count(challenge.target)} wins`;
+  }
   if (challenge.target === null) return `${what} · whoever has the ${challenge.lowestWins ? 'lowest' : 'most'} wins`;
   return `${what} · everyone who reaches ${count(challenge.target)} wins`;
 }
@@ -236,9 +302,10 @@ export function cardFacts(challenge, inApp, words) {
       : challenge.joinedCount === 0
         ? `${words.peopleCap} who join · none yet`
         : `${words.peopleCap} who join · ${count(challenge.joinedCount)}`;
+  const wonNote = hasTeams(challenge) ? (challenge.target !== null ? 'Every team that gets there' : 'The first team') : challenge.target !== null ? 'Everybody who gets there' : 'First place';
   return [
     { label: 'Counts', value: counts, note: isOwn(challenge) ? 'Typed in by your staff' : 'Counted by the app' },
-    { label: 'How it is won', value: won, note: challenge.target !== null ? 'Everybody who gets there' : 'First place' },
+    { label: 'How it is won', value: won, note: wonNote },
     { label: 'Who is in it', value: who, note: null },
   ];
 }
@@ -266,6 +333,8 @@ export function withNumberLine(challenge) {
  *  was not sent them. */
 export function leadersLine(challenge, words) {
   if (challenge.withNumber === null || challenge.withNumber === undefined) return null;
+  // In teams the card lists the teams in place of the first three people.
+  if (hasTeams(challenge)) return null;
   if ((challenge.top ?? []).length > 0) return 'In the lead';
   if (challenge.withNumber === 0) return null;
   return `${words.peopleCap} see no places until 3 people they can see have ${isOwn(challenge) ? 'a number' : `a ${UNIT[challenge.counts]}`}.`;
@@ -408,4 +477,108 @@ export function pastTitle(list) {
 }
 
 /** What the locked fields say, once a challenge has started. */
-export const LOCKED_NOTE = "This challenge has started, so what it counts, its first day, who is in it and how it is won can't change now. You can still change its name, prize, details and last day.";
+export const LOCKED_NOTE = "This challenge has started, so what it counts, its first day, who is in it, how it is won and its teams can't change now. You can still change its name, prize, details and last day.";
+
+// ── TEAMS (ROADMAP 19d-ii-a) ──
+
+export const inTeams = hasTeams;
+
+/** Whether staff may put people in teams on `today` (the server's rule). */
+export function takesTeams(challenge, today) {
+  return challengeTakesTeams({ teams: challenge.teams ?? 'none', endsOn: challenge.endsOn, cancelled: challenge.cancelled }, today);
+}
+
+/** The form's teams with one more, one fewer, or one renamed. */
+export const withTeamAdded = (draft) => (draft.teamList.length >= TEAM_LIMITS.max ? draft : { ...draft, teamList: [...draft.teamList, { id: null, name: '' }] });
+export const withTeamRemoved = (draft, at) => (draft.teamList.length <= TEAM_LIMITS.min ? draft : { ...draft, teamList: draft.teamList.filter((_team, i) => i !== at) });
+export const withTeamNamed = (draft, at, name) => ({ ...draft, teamList: draft.teamList.map((team, i) => (i === at ? { ...team, name } : team)) });
+
+/** Before Save: the teams with people in them that saving would remove, each in a line
+ *  that names the team and how many people it has. */
+export function removedTeamLines(draft, before) {
+  if (before === null || before === undefined) return [];
+  const kept = new Set(hasTeams(draft) ? draft.teamList.flatMap((team) => (team.id === null ? [] : [team.id])) : []);
+  return (before.teamList ?? [])
+    .filter((team) => !kept.has(team.id) && team.people > 0)
+    .map((team) => `${team.name} has ${peopleCount(team.people)} in it. Saving removes the team, and ${team.people === 1 ? 'that person is' : 'those people are'} left in no team. Nobody is told.`);
+}
+
+/** Above the teams on a card. */
+export function teamsHeading(challenge, words) {
+  return challenge.teams === 'staff' ? 'Teams · you put people in them' : `Teams · your ${words.people} pick their own`;
+}
+
+/** The teams on a card: the placed first, then the rest in the gym's order. */
+export function teamLines(challenge) {
+  if (!hasTeams(challenge)) return [];
+  return (challenge.teamList ?? [])
+    .map((team, at) => ({ team, at }))
+    .sort((a, b) => Number((a.team.place ?? null) === null) - Number((b.team.place ?? null) === null) || (a.team.place ?? 0) - (b.team.place ?? 0) || a.at - b.at)
+    .map(({ team }) => ({
+      id: team.id,
+      name: team.name,
+      place: team.place ?? null,
+      placeText: (team.place ?? null) === null ? null : ordinal(team.place),
+      people: team.people === 0 ? 'Nobody yet' : peopleCount(team.people),
+      number: (team.value ?? null) === null ? null : count(team.value),
+    }));
+}
+
+/** A team's name by its id; "No team" for none. */
+export function teamName(challenge, teamId) {
+  if (teamId === null || teamId === undefined) return 'No team';
+  return (challenge.teamList ?? []).find((team) => team.id === teamId)?.name ?? 'No team';
+}
+
+/** Who to send: only the people whose team is no longer the one that is kept, on whichever
+ *  page they were moved. `known`: every person loaded so far with the team that is kept. */
+export function teamsToSave(known, moved) {
+  const people = [];
+  for (const person of known) {
+    const to = moved[person.userId];
+    if (to === undefined || to === (person.teamId ?? null)) continue;
+    people.push({ userId: person.userId, name: person.name, from: person.teamId ?? null, teamId: to });
+  }
+  return people;
+}
+
+/** The people to send, a save's worth at a time. */
+export function inTeamSaves(people) {
+  const saves = [];
+  for (let i = 0; i < people.length; i += GYM_CHALLENGE_TEAM_PEOPLE_A_SAVE) saves.push(people.slice(i, i + GYM_CHALLENGE_TEAM_PEOPLE_A_SAVE).map((p) => ({ userId: p.userId, teamId: p.teamId })));
+  return saves;
+}
+
+const NAMED = 5;
+
+/** The box before people are moved: who changes team, from which to which, and who won't. */
+export function teamsBox(changes, challenge, words) {
+  const n = changes.length;
+  const lines = changes.slice(0, NAMED).map((p) => `${p.name ?? 'No name yet'}: ${teamName(challenge, p.from)} → ${teamName(challenge, p.teamId)}`);
+  if (n > NAMED) lines.push(`and ${count(n - NAMED)} more`);
+  lines.push('Nobody else is moved.');
+  lines.push(
+    challenge.state === 'running'
+      ? `The challenge is running, so each of these people's numbers moves with them: the teams' numbers change straight away. Your ${words.people} see their new team in the app. Nobody is emailed.`
+      : `Your ${words.people} see their team in the app. Nobody is emailed.`,
+  );
+  return { title: n === 1 ? 'Move 1 person?' : `Move ${count(n)} people?`, lines, yes: n === 1 ? 'Move 1 person' : `Move ${count(n)} people`, no: 'Keep editing' };
+}
+
+/** Beside Previous and Next while people are moved and not saved; null with none. */
+export function unsavedTeamsNote(n) {
+  if (n === 0) return null;
+  return `${n === 1 ? '1 person is' : `${count(n)} people are`} moved and not saved yet. They are kept while you change page; press Save teams to save them all.`;
+}
+
+export const TEAM_NOTES = {
+  saved: (n) => `Saved. ${n === 1 ? '1 person' : `${count(n)} people`} moved.`,
+  none: 'Nobody has been moved yet. Pick a team beside a person first.',
+  help: (challenge, words) =>
+    challenge.teams === 'members'
+      ? `Your ${words.people} pick their own team in the app. You can also put somebody in a team here, or move them: pick the team beside their name and press Save teams.`
+      : 'Pick a team beside each person and press Save teams. Somebody left on No team is in the challenge, and their number counts for no team.',
+};
+
+/** The button that opens the board to put people in teams. */
+export const TEAMS_BUTTON = 'Put people in teams';

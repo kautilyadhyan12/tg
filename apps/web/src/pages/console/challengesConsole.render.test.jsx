@@ -170,7 +170,7 @@ describe("the console's Challenges page", () => {
     const [gymId, key, fields] = svc.add.mock.calls[0];
     expect(gymId).toBe('g1');
     expect(key).toMatch(/^[0-9a-f-]{36}$/);
-    expect(fields).toEqual({ name: 'Autumn Twelve', details: '', prize: 'A free month', unit: '', counts: 'workout_days', startsOn: '2026-10-12', endsOn: '2026-11-08', target: 12, who: 'joined', lowestWins: false });
+    expect(fields).toEqual({ name: 'Autumn Twelve', details: '', prize: 'A free month', unit: '', counts: 'workout_days', startsOn: '2026-10-12', endsOn: '2026-11-08', target: 12, who: 'joined', lowestWins: false, teams: 'none', teamList: [] });
     expect((await screen.findByRole('status')).textContent).toBe('Challenge added. Your members can see it now.');
     expect(screen.queryByTestId('challenge-form')).toBeNull();
     expect(svc.change).not.toHaveBeenCalled();
@@ -246,7 +246,7 @@ describe("the console's Challenges page", () => {
     pickDate('Last day', '2026-10-18');
     fireEvent.click(form().getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
-    expect(svc.change.mock.calls[0]).toEqual(['g1', 'a', { name: 'October Fortnight', details: '', prize: 'A towel', unit: '', counts: 'gym_days', startsOn: '2026-10-05', endsOn: '2026-10-18', target: 5, who: 'joined', lowestWins: false }]);
+    expect(svc.change.mock.calls[0]).toEqual(['g1', 'a', { name: 'October Fortnight', details: '', prize: 'A towel', unit: '', counts: 'gym_days', startsOn: '2026-10-05', endsOn: '2026-10-18', target: 5, who: 'joined', lowestWins: false, teams: 'none', teamList: [] }]);
     expect((await screen.findByRole('status')).textContent).toBe('Changes saved. Your members see them now.');
   });
 
@@ -337,7 +337,7 @@ describe("the console's Challenges page", () => {
     type('What are you counting?', 'seconds');
     fireEvent.click(form().getByRole('button', { name: 'Add challenge' }));
     await waitFor(() => expect(svc.add).toHaveBeenCalledTimes(1));
-    expect(svc.add.mock.calls[0][2]).toEqual({ name: 'Row 500 m', details: '', prize: '', unit: 'seconds', counts: 'own', startsOn: '2026-10-07', endsOn: '2026-10-14', target: null, who: 'everyone', lowestWins: true });
+    expect(svc.add.mock.calls[0][2]).toEqual({ name: 'Row 500 m', details: '', prize: '', unit: 'seconds', counts: 'own', startsOn: '2026-10-07', endsOn: '2026-10-14', target: null, who: 'everyone', lowestWins: true, teams: 'none', teamList: [] });
     // Back on the app's own count, lowest wins is gone and is not sent.
     fireEvent.click(await screen.findByRole('button', { name: 'Add challenge' }));
     pick('What it counts', 'Your own count');

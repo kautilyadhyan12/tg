@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarDays, Check, Flame, Gift, Info, Loader2, Medal, Target, Trophy, Users } from 'lucide-react';
+import { CalendarDays, Check, Flag, Flame, Gift, Info, Loader2, Medal, Target, Trophy, Users } from 'lucide-react';
 import { challengesService } from '../../api/challengesApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import PersonProfile from './PersonProfile';
@@ -11,14 +11,20 @@ import {
   countText,
   dayMarks,
   howToWin,
+  inTeams,
   joinNote,
   leaveBox,
   markLabel,
+  myTeam,
+  myTeamNote,
   noChallenges,
   notCountingNote,
+  pickBox,
   placeLine,
   progress,
   resultOf,
+  teamRows,
+  teamsLine,
   unitOf,
   whatCounts,
   whoLine,
@@ -175,6 +181,81 @@ function Podium({ challenge }) {
   );
 }
 
+/** The teams, the leading one first, each with its people and its number; and the member's
+ *  own team's people under them. Where members pick, each team has its button. */
+function Teams({ challenge, busy, onPick }) {
+  const rows = teamRows(challenge);
+  const mine = myTeam(challenge);
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2 mt-1">
+      <ol className="flex flex-col gap-1.5" aria-label="Teams">
+        {rows.map((team) => {
+          const colour = MEDAL[team.place] ?? MUTED;
+          return (
+            <li
+              key={team.id}
+              aria-label={team.label}
+              className="rounded-xl px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2"
+              style={{
+                background: team.place === 1 ? 'linear-gradient(90deg, rgba(245,197,66,0.16), rgba(255,255,255,0.03))' : team.isMine ? 'rgba(255,138,31,0.10)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${team.place === 1 ? 'rgba(245,197,66,0.5)' : team.isMine ? 'rgba(255,138,31,0.45)' : 'rgba(255,255,255,0.06)'}`,
+              }}
+            >
+              <span className="w-11 flex items-center gap-1 text-sm font-bold flex-shrink-0" style={{ color: colour }}>
+                {team.place === null ? '—' : (
+                  <>
+                    {team.place <= 3 && <Medal aria-hidden="true" className="w-4 h-4" />}
+                    {ordinal(team.place)}
+                  </>
+                )}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold text-white break-words">
+                  {team.name}
+                  {team.isMine && (
+                    <span className="ml-2 text-[11px] font-bold px-1.5 py-0.5 rounded-full align-middle" style={{ background: ORANGE, color: '#111' }}>
+                      Your team
+                    </span>
+                  )}
+                </span>
+                <span className="block text-xs" style={{ color: MUTED }}>{team.people}</span>
+              </span>
+              {team.reached && (
+                <span className="flex items-center gap-0.5 text-[11px] font-semibold flex-shrink-0" style={{ color: ORANGE }}>
+                  <Check aria-hidden="true" className="w-3 h-3" strokeWidth={3} /> Reached
+                </span>
+              )}
+              {team.number !== null && <span className="text-sm font-bold text-white tabular-nums flex-shrink-0">{team.number}</span>}
+              {challenge.can.pick && !team.isMine && (
+                <button type="button" onClick={() => onPick(team)} disabled={busy} aria-label={`${mine === null ? 'Join' : 'Move to'} ${team.name}`} className={BUTTON} style={mine === null ? MAIN : QUIET}>
+                  {mine === null ? 'Join team' : 'Move here'}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {mine !== null && (
+        <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <p className="text-xs font-semibold mb-1.5" style={{ color: SOFT }}>{`Your team: ${mine.name}`}</p>
+          <ul className="flex flex-col gap-1" aria-label={`People in ${mine.name}`}>
+            {mine.people.map((p) => (
+              <li key={p.userId} className="flex items-center gap-3 text-sm text-white">
+                <Initials text={p.initials} />
+                <span className="flex-1 min-w-0 truncate">{p.name}</span>
+                {p.number !== null && <span className="font-semibold tabular-nums flex-shrink-0">{p.number}</span>}
+              </li>
+            ))}
+          </ul>
+          {mine.more !== null && <p className="text-xs mt-1.5" style={{ color: SOFT }}>{mine.more}</p>}
+          {mine.note !== null && <p className="text-xs mt-1.5" style={{ color: MUTED }}>{mine.note}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** The whole board: the first hundred, and the member's own line. */
 function BoardSheet({ gym, challenge, onClose, onPerson }) {
   const [state, setState] = useState({ loading: true, error: null, board: null });
@@ -246,8 +327,14 @@ function BoardSheet({ gym, challenge, onClose, onPerson }) {
   );
 }
 
-function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLeave, onAsk, onBoard }) {
+function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLeave, onAsk, onBoard, onPick }) {
   const [info, setInfo] = useState(false);
+  /** The team a pick is being asked about, before it is sent. */
+  const [picking, setPicking] = useState(null);
+  const teams = inTeams(challenge);
+  const teamsSaid = teamsLine(challenge, gym.name);
+  const teamNote = myTeamNote(challenge, gym.name);
+  const pick = picking === null || !teams || !challenge.can.pick ? null : pickBox(challenge, picking);
   const chip = challengeChip(challenge, list.today);
   const result = resultOf(challenge);
   const note = boardNote(challenge);
@@ -296,6 +383,12 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
           <Info className="w-4 h-4" />
         </button>
       </p>
+      {teamsSaid !== null && (
+        <p className="text-sm flex items-center gap-1.5" style={{ color: SOFT }}>
+          <Flag aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: ORANGE }} />
+          {teamsSaid}
+        </p>
+      )}
       {info && <p className="text-xs rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.65)' }}>{whatCounts(challenge, gym.name)}</p>}
       {challenge.details !== '' && <p className="text-sm whitespace-pre-wrap break-words" style={{ color: 'rgba(255,255,255,0.65)' }}>{challenge.details}</p>}
 
@@ -315,10 +408,34 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
           {waiting && <p className="text-sm font-semibold" style={{ color: GREEN }}>You&apos;re in.</p>}
           {quiet !== null && <p className="text-xs" style={{ color: ORANGE }}>{quiet}</p>}
           <Mine challenge={challenge} today={list.today} gymName={gym.name} />
-          <Podium challenge={challenge} />
+          {teams ? <Teams challenge={challenge} busy={busy || pick !== null} onPick={setPicking} /> : <Podium challenge={challenge} />}
+          {teamNote !== null && <p className="text-sm" style={{ color: SOFT }}>{teamNote}</p>}
           {note !== null && <p className="text-xs" style={{ color: MUTED }}>{note}</p>}
 
-          {asking ? (
+          {pick !== null ? (
+            <div role="group" aria-label={pick.title} className="flex flex-col gap-2 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }}>
+              <p className="text-sm font-semibold text-white">{pick.title}</p>
+              <p className="text-sm" style={{ color: SOFT }}>{pick.line}</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const team = picking;
+                    setPicking(null);
+                    onPick(challenge, team.id);
+                  }}
+                  disabled={busy}
+                  className={BUTTON}
+                  style={MAIN}
+                >
+                  {busy ? 'Working…' : pick.yes}
+                </button>
+                <button type="button" onClick={() => setPicking(null)} disabled={busy} className={BUTTON} style={QUIET}>
+                  {pick.no}
+                </button>
+              </div>
+            </div>
+          ) : asking ? (
             <div role="group" aria-label={box.title} className="flex flex-col gap-2 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }}>
               <p className="text-sm font-semibold text-white">{box.title}</p>
               <p className="text-sm" style={{ color: SOFT }}>{box.line}</p>
@@ -340,7 +457,7 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
               )}
               {challenge.board.status === 'shown' && (
                 <button type="button" onClick={() => onBoard(challenge)} aria-label={`See the whole board of ${challenge.name}`} className={BUTTON} style={QUIET}>
-                  {`See the whole board (${challenge.board.ranked.toLocaleString('en')})`}
+                  {`${teams ? "See everyone's numbers" : 'See the whole board'} (${challenge.board.ranked.toLocaleString('en')})`}
                 </button>
               )}
               {challenge.can.leave && (
@@ -350,7 +467,7 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
               )}
             </div>
           )}
-          {join !== null && !asking && <p className="text-xs" style={{ color: MUTED }}>{join}</p>}
+          {join !== null && !asking && pick === null && <p className="text-xs" style={{ color: MUTED }}>{join}</p>}
         </>
       )}
       {said !== null && <p className="text-sm" role="alert" style={{ color: RED }}>{said}</p>}
@@ -399,12 +516,18 @@ export default function Challenges({ gym }) {
     load();
   };
 
-  const act = async (challenge, joining) => {
+  /** Join (true), leave (false), or pick the team whose id is given. */
+  const act = async (challenge, what) => {
     if (busyId !== null) return;
     setBusyId(challenge.id);
     setSaid((m) => ({ ...m, [challenge.id]: null }));
     try {
-      const now = joining ? await challengesService.join(gym.id, challenge.id) : await challengesService.leave(gym.id, challenge.id);
+      const now =
+        typeof what === 'string'
+          ? await challengesService.pickTeam(gym.id, challenge.id, what)
+          : what
+            ? await challengesService.join(gym.id, challenge.id)
+            : await challengesService.leave(gym.id, challenge.id);
       // A slower read of the list asked before this tap must not draw over its answer.
       asked.current += 1;
       setState((s) => (s.list === null ? s : { ...s, list: { ...s.list, challenges: s.list.challenges.map((c) => (c.id === now.id ? now : c)) } }));
@@ -453,6 +576,7 @@ export default function Challenges({ gym }) {
               onLeave={(c) => act(c, false)}
               onAsk={setAsking}
               onBoard={(c) => setSheet({ kind: 'board', id: c.id })}
+              onPick={(c, teamId) => act(c, teamId)}
             />
           ))}
         </ul>
