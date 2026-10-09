@@ -2194,16 +2194,16 @@ d("0001_init on a real database", () => {
             return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
           }
         };
-        for (const phone of ["020 7946 0958", "+44 20 7946 0958", "(212) 555-0123", "030/901820", "212.555.0123", "123456"]) {
+        for (const phone of ["020 7946 0958", "+44 20 7946 0958", "(212) 555-0123", "030/901820", "212.555.0123", "123456", "(+91) 98765 43210", "+44 (0)20 7946 0958"]) {
           expect(await set({ contact_phone: phone }), phone).toBe("ok");
         }
-        for (const phone of ["", "12345", "ask at the desk", "020 7946 0958 ext 12", "020+7946 0958", "tel:02079460958", "1".repeat(31)]) {
+        for (const phone of ["", "12345", "ask at the desk", "020 7946 0958 ext 12", "020+7946 0958", "tel:02079460958", "1".repeat(31), "(((((123456", "------123456", "+ 123456", "++44 20 7946 0958"]) {
           expect(await set({ contact_phone: phone }), phone).toBe("gyms_contact_phone_check");
         }
         for (const email of ["hello@ironhouse.com", "a@b"]) {
           expect(await set({ contact_email: email }), email).toBe("ok");
         }
-        for (const email of ["", "ab", "ironhouse.com", "hello @ironhouse.com", "a@b@c", `${"a".repeat(250)}@x.com`]) {
+        for (const email of ["", "ab", "ironhouse.com", "hello @ironhouse.com", "a@b@c", `${"a".repeat(250)}@x.com`, "a@b?subject=x", "a@b.com&cc=c@d.com", "a@b.com,c@d.com", "<a@b.com>", "a%40b@c.com", "a@b.com#x", "a@b.com;c@d.com"]) {
           expect(await set({ contact_email: email }), email).toBe("gyms_contact_email_check");
         }
         // Each clears on its own, and neither is tied to the mobile for payments.

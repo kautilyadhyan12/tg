@@ -40,6 +40,20 @@ export const startHereSchema = z
 export type StartHere = z.infer<typeof startHereSchema>;
 
 export const startHereResponseSchema = z.object({ startHere: startHereSchema }).strict();
+
+/** An answer with any step this build has no words for taken out, before it is checked: a
+ *  page loaded before a step was added still reads its list. Anything else is handed back
+ *  as it came, for the check to refuse. */
+export function withKnownStartHereSteps(body: unknown): unknown {
+  if (typeof body !== "object" || body === null || !("startHere" in body)) return body;
+  const list: unknown = body.startHere;
+  if (typeof list !== "object" || list === null || !("steps" in list) || !Array.isArray(list.steps)) return body;
+  const steps: unknown[] = list.steps;
+  const known = steps.filter(
+    (row) => typeof row !== "object" || row === null || !("step" in row) || startHereStepSchema.safeParse(row.step).success,
+  );
+  return { ...body, startHere: { ...list, steps: known } };
+}
 export type StartHereResponse = z.infer<typeof startHereResponseSchema>;
 
 export const setStartHereRequestSchema = z.object({ hidden: z.boolean() }).strict();

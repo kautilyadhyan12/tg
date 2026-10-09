@@ -1,6 +1,8 @@
 import { GYM_COME_BACK_LINES, GYM_MESSAGE_KEPT_DAYS, GYM_PINNED_NOTE_DAYS, gymContactTel, orgWords } from '@app/shared';
 import { cheerLine } from '../../utils/cheerPresets';
 import { cheerAge } from './gymMembershipView';
+import { placeFor } from '../../pages/console/consolePlaces';
+import { viewerPrivileges } from '../../pages/console/consoleView';
 
 // WHAT THE MEMBER'S INBOX SAYS (spec Part 3 §16.1; ROADMAP 20a). Pure: the screen draws
 // what these return.
@@ -81,6 +83,12 @@ export function contactView(contact, gymName) {
   if (phone !== null) ways.push({ kind: 'phone', label: `Call ${phone}`, href: gymContactTel(phone) });
   if (email !== null) ways.push({ kind: 'email', label: `Email ${email}`, href: `mailto:${email}` });
   return { ways, none: ways.length === 0 ? `${gymName} hasn't added a phone number or email yet.` : null };
+}
+
+/** Where somebody who may change the gym's details adds them, or null for a member who
+ *  may not: the line above then stands alone. */
+export function contactSetUp(gym) {
+  return placeFor(gym?.slug, viewerPrivileges(gym), 'memberContact');
 }
 
 /** A gym that is closed, or not on a plan: its members are shown no messages. */

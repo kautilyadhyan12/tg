@@ -7,6 +7,7 @@ import {
   GYM_POSTAL_ADDRESS_MAX_CHARS,
   cleanGymContactEmail,
   cleanGymContactPhone,
+  gymContactPhoneProblem,
   MEMBER_LIST_BY_HAND_WORDS,
   JOIN_CODE_LENGTH,
   ORG_TYPES_PHRASE,
@@ -429,8 +430,12 @@ export async function updateOrg(
   if ("contactPhone" in req && req.contactPhone !== undefined) {
     if (req.contactPhone === null || req.contactPhone.trim() === "") patch.contactPhone = null;
     else {
+      const wrong = gymContactPhoneProblem(req.contactPhone);
       const phone = cleanGymContactPhone(req.contactPhone);
-      if (phone === null) throw new OrgsError(400, "bad_contact_phone", GYM_CONTACT_WORDS.bad_contact_phone);
+      if (wrong !== null || phone === null) {
+        const code = wrong ?? "bad_contact_phone";
+        throw new OrgsError(400, code, GYM_CONTACT_WORDS[code]);
+      }
       patch.contactPhone = phone;
     }
   }

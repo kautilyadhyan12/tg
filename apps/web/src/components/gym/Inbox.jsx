@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Loader2, Mail, Phone, Pin } from 'lucide-react';
-import { INBOX_NOTE, contactButton, contactView, emptyInbox, messageRow, pausedInbox, pinnedNote } from './inboxView';
+import { INBOX_NOTE, contactButton, contactSetUp, contactView, emptyInbox, messageRow, pausedInbox, pinnedNote } from './inboxView';
 
 // THE MEMBER'S INBOX FROM THEIR GYM (spec Part 3 §16.1; ROADMAP 20a): the gym's one pinned
 // note, then its messages, newest first. Opening it tells the server they have been seen;
@@ -19,10 +20,23 @@ function ContactGym({ gym, contact }) {
   const panelId = useId();
   const view = contactView(contact, gym.name);
   if (view.none !== null) {
+    // Somebody who trains at the gym they run is given the place to add them.
+    const setUp = contactSetUp(gym);
     return (
-      <p className="text-xs" style={{ color: MUTED }}>
-        {view.none}
-      </p>
+      <div className="flex flex-col items-start gap-2">
+        <p className="text-xs" style={{ color: MUTED }}>
+          {view.none}
+        </p>
+        {setUp === null ? null : (
+          <Link
+            to={setUp}
+            className="rounded-xl px-3.5 py-2 text-sm font-semibold min-h-11 inline-flex items-center"
+            style={{ background: 'rgba(255,138,31,0.15)', color: ORANGE, border: '1px solid rgba(255,138,31,0.30)' }}
+          >
+            Add your phone or email
+          </Link>
+        )}
+      </div>
     );
   }
   return (

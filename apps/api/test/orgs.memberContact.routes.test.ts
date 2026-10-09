@@ -228,6 +228,14 @@ d("how members reach their gym (real Postgres)", () => {
       expect(paused.body).not.toContain("2301234");
       await livePlan(iron.id);
       expect(await contactFor(iron, maya)).toEqual({ phone: "0376 2301234", email: "desk@contactiron.com" });
+
+      // A closed gym likewise.
+      await sql`UPDATE gyms SET status = 'archived' WHERE id = ${iron.id}`;
+      const closed = await inbox(iron, maya);
+      expect(closed.statusCode).toBe(200);
+      expect(gymInboxResponseSchema.parse(JSON.parse(closed.body))).toMatchObject({ status: "paused", contact: NOTHING });
+      expect(closed.body).not.toContain("2301234");
+      expect(closed.body).not.toContain("contactiron");
     },
     T,
   );
@@ -285,6 +293,10 @@ d("how members reach their gym (real Postgres)", () => {
         [{ contactPhone: "020 7946 0958 ext 12" }, "bad_contact_phone", GYM_CONTACT_WORDS.bad_contact_phone],
         [{ contactPhone: "ask at the desk" }, "bad_contact_phone", GYM_CONTACT_WORDS.bad_contact_phone],
         [{ contactPhone: "12345" }, "bad_contact_phone", GYM_CONTACT_WORDS.bad_contact_phone],
+        [{ contactPhone: "(((((123456" }, "bad_contact_phone", GYM_CONTACT_WORDS.bad_contact_phone],
+        // Two numbers, or a second line: a link can call only one.
+        [{ contactPhone: "2345678 / 2345679" }, "two_contact_phones", GYM_CONTACT_WORDS.two_contact_phones],
+        [{ contactPhone: "0376-2301234/35" }, "two_contact_phones", GYM_CONTACT_WORDS.two_contact_phones],
         [{ contactEmail: "hello@contacttyped.com?subject=hi" }, "bad_contact_email", GYM_CONTACT_WORDS.bad_contact_email],
         [{ contactEmail: "contacttyped.com" }, "bad_contact_email", GYM_CONTACT_WORDS.bad_contact_email],
         // One good and one bad: neither is kept.
@@ -301,6 +313,12 @@ d("how members reach their gym (real Postgres)", () => {
         expect((JSON.parse(res.body) as { error: string }).error).toBe("validation_error");
       }
       expect(await stored(gym)).toMatchObject({ contact_phone: "(212) 555-0123", contact_email: "Front.Desk@ContactTyped.com" });
+
+      // Written the British way and with the code in brackets, each is kept as typed.
+      const gymTwo = await makeGym("Contact Typed Two");
+      for (const typed of ["+44 (0)20 7946 0958", "(+91) 98765 43210", "030/901820"]) {
+        expect((await saved(gymTwo, { contactPhone: typed })).contactPhone, typed).toBe(typed);
+      }
 
       // The same again changes nothing and is not written down a second time.
       const audits = () =>

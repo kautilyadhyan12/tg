@@ -1,4 +1,4 @@
-import { GYM_CONTACT_WORDS, cleanGymContactEmail, cleanGymContactPhone, orgWords } from '@app/shared';
+import { GYM_CONTACT_WORDS, cleanGymContactEmail, gymContactPhoneProblem, orgWords } from '@app/shared';
 
 // SETTINGS → HOW MEMBERS REACH YOU (ROADMAP 20a-iii). Pure: the box draws what these return.
 // The rules for a phone number and an email address are the server's own, from
@@ -19,7 +19,8 @@ export function memberContactChanged(draft, kept) {
 
 /** What is wrong with what is typed, or null. An empty box is fine: both are optional. */
 export function memberContactProblem(draft) {
-  if (draft.phone.trim() !== '' && cleanGymContactPhone(draft.phone) === null) return GYM_CONTACT_WORDS.bad_contact_phone;
+  const phone = draft.phone.trim() === '' ? null : gymContactPhoneProblem(draft.phone);
+  if (phone !== null) return GYM_CONTACT_WORDS[phone];
   if (draft.email.trim() !== '' && cleanGymContactEmail(draft.email) === null) return GYM_CONTACT_WORDS.bad_contact_email;
   return null;
 }

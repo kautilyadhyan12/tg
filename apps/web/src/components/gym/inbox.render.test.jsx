@@ -196,6 +196,24 @@ describe('Contact the gym, under the inbox', () => {
     expect(screen.queryByRole('button', { name: /Contact/ })).toBeNull();
   });
 
+  it('somebody who runs the gym they train at gets a button to the place that adds them; a member gets none', async () => {
+    const { MemoryRouter } = await import('react-router-dom');
+    svc.read.mockResolvedValue(inboxOf([]));
+    render(
+      <MemoryRouter>
+        <Page gym={{ ...GYM, slug: 'iron-house', staffRole: 'owner', privileges: ['org.manage'] }} />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Iron House hasn't added a phone number or email yet.");
+    expect(screen.getByRole('link', { name: 'Add your phone or email' }).getAttribute('href')).toBe('/console/iron-house/settings#member-contact');
+    cleanup();
+
+    // A trainer without that permission, and a plain member: the line alone.
+    render(<Page gym={{ ...GYM, slug: 'iron-house', staffRole: 'trainer', privileges: ['members.read'] }} />);
+    await screen.findByText("Iron House hasn't added a phone number or email yet.");
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
   it('a studio has its own word on the button', async () => {
     svc.read.mockResolvedValue(inboxOf([], { contact: CONTACT }));
     render(<Page gym={{ ...GYM, orgType: 'studio' }} />);

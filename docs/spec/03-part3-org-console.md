@@ -4203,8 +4203,12 @@ route on `org.manage`; `gyms.contact_phone`, `gyms.contact_email`, migration `00
 are sent with the inbox (`contact`), so only a live member of that gym reads them, and not
 from a gym that is closed or on no plan. They are never the owner's mobile for payments
 nor the address leads reply to: nothing is copied in. A phone number is 6 to 15 digits,
-with spaces, brackets, hyphens, dots, slashes and one `+` at the start
-(`cleanGymContactPhone`, `packages/shared/src/gymContact.ts`).
+with spaces, brackets, hyphens, dots, slashes and one `+` at the start or straight after an
+opening bracket (`gymContactPhoneProblem`, `packages/shared/src/gymContact.ts`). It is ONE
+number: a slash after seven or more digits is a second number or line and is refused as
+"Add one phone number only." The Call link dials the digits, and with a country code it
+drops the "(0)" written after it ("+44 (0)20…" dials +44 20…). Somebody who runs the gym
+they train at reads the line with a button to the Settings box.
 
 ### 16.2 The automatic messages
 

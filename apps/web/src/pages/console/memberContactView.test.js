@@ -44,6 +44,8 @@ describe('what is wrong with what is typed', () => {
     expect(memberContactProblem({ phone: 'ask at the desk', email: '' })).toBe(GYM_CONTACT_WORDS.bad_contact_phone);
     expect(memberContactProblem({ phone: '', email: 'ironhouse.com' })).toBe(GYM_CONTACT_WORDS.bad_contact_email);
     expect(memberContactProblem({ phone: '12', email: 'x' })).toBe(GYM_CONTACT_WORDS.bad_contact_phone);
+    expect(memberContactProblem({ phone: '2345678 / 2345679', email: '' })).toBe('Add one phone number only. Members press it to call you.');
+    expect(memberContactProblem({ phone: '+44 (0)20 7946 0958', email: '' })).toBeNull();
   });
 });
 

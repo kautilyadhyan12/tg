@@ -5,6 +5,7 @@ import {
   GYM_CONTACT_PHONE_MAX_CHARS,
   cleanGymContactEmail,
   cleanGymContactPhone,
+  gymContactPhoneProblem,
   gymContactSchema,
   gymContactTel,
   gymInboxResponseSchema,
@@ -28,6 +29,13 @@ describe("a gym's phone number for its members", () => {
     ["São Paulo", "+55 (11) 91234-5678", "tel:+5511912345678"],
     ["an Australian free number", "1800 123 456", "tel:1800123456"],
     ["the longest a number can be", "+123456789012345", "tel:+123456789012345"],
+    // The zero in brackets is dialled only inside the country, so a link with the code drops it.
+    ["London, the British way", "+44 (0)20 7946 0958", "tel:+442079460958"],
+    ["Berlin, from abroad", "+49 (0)30 901820", "tel:+4930901820"],
+    ["London, with no code, keeps its zero", "(0)20 7946 0958", "tel:02079460958"],
+    ["an Indian mobile, the code in brackets", "(+91) 98765 43210", "tel:+919876543210"],
+    ["London, the code in brackets", "(+44) (0)20 7946 0958", "tel:+442079460958"],
+    ["an Indian landline, a slash after its area code", "0376/2301234", "tel:03762301234"],
   ];
   it.each(kept)("%s is kept as typed and calls the right number", (_where, typed, tel) => {
     expect(cleanGymContactPhone(typed)).toBe(typed);
@@ -54,9 +62,24 @@ describe("a gym's phone number for its members", () => {
     ["nothing but marks", "(--) .. //"],
     ["longer than is kept", `020 7946 0958${" -".repeat(GYM_CONTACT_PHONE_MAX_CHARS / 2)}`],
     ["empty", ""],
+    ["brackets with no meaning", "(((((123456"],
+    ["hyphens before the number", "------123456"],
+    ["a plus standing alone", "+ 123456"],
+    ["a plus inside brackets, after a digit", "(0+44) 20 7946 0958"],
+    ["a second number after a slash", "2345678 / 2345679"],
+    ["a second line after a slash", "0376-2301234/35"],
+    ["a second line, spaced", "080 4567 8900 / 01"],
   ];
   it.each(refused)("%s is not a phone number", (_what, typed) => {
     expect(cleanGymContactPhone(typed)).toBeNull();
+  });
+
+  it("two numbers with a slash between them are refused in their own words, and nothing else is", () => {
+    for (const typed of ["2345678 / 2345679", "0376-2301234/35", "080 4567 8900 / 01", "+44 20 7946 0958/59"]) {
+      expect(gymContactPhoneProblem(typed), typed).toBe("two_contact_phones");
+    }
+    for (const [, typed] of refused.filter(([, t]) => !t.includes("/"))) expect(gymContactPhoneProblem(typed), typed).toBe("bad_contact_phone");
+    for (const [, typed] of kept) expect(gymContactPhoneProblem(typed), typed).toBeNull();
   });
 });
 

@@ -144,10 +144,10 @@ export const gyms = pgTable(
       sql`${t.leaderboardBoardsOff} <@ ARRAY['gym_days','workout_days','streak']::text[]`,
     ),
     check("gyms_billing_mobile_check", sql`${t.billingMobile} IS NULL OR ${t.billingMobile} ~ '^\\+91[6-9][0-9]{9}$'`),
-    check("gyms_contact_phone_check", sql`${t.contactPhone} IS NULL OR ${t.contactPhone} ~ '^\\+?[0-9 ()./-]{6,30}$'`),
+    check("gyms_contact_phone_check", sql`${t.contactPhone} IS NULL OR ${t.contactPhone} ~ '^(\\+|\\(\\+?)?[0-9][0-9 ()./-]{5,29}$'`),
     check(
       "gyms_contact_email_check",
-      sql`${t.contactEmail} IS NULL OR (length(${t.contactEmail}) BETWEEN 3 AND 254 AND ${t.contactEmail} ~ '^[^[:space:]@]+@[^[:space:]@]+$')`,
+      sql`${t.contactEmail} IS NULL OR (length(${t.contactEmail}) BETWEEN 3 AND 254 AND ${t.contactEmail} ~ '^[^[:space:]@]+@[^[:space:]@]+$' AND ${t.contactEmail} !~ '[?&#%,;<>]')`,
     ),
     check("gyms_postal_address_check", sql`${t.postalAddress} IS NULL OR length(${t.postalAddress}) BETWEEN 1 AND 200`),
     check(
