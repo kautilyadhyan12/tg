@@ -1078,3 +1078,52 @@ describe('the week is a strip of seven days and one open day', () => {
     expect(within(screen.getByTestId('pt-day')).getByRole('heading', { name: 'Thu 8 Oct' })).toBeTruthy();
   });
 });
+
+// GO TO A DATE (Kd's click-through of 17e-iv-b: a calendar beside Previous week and Next week).
+describe('Go to a date', () => {
+  const laterWeek = () =>
+    week([], {
+      firstDay: '2026-09-09',
+      from: '2026-10-20',
+      to: '2026-10-26',
+      days: ['2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26'].map((localDate) => ({
+        localDate,
+        free: localDate === '2026-10-20' ? [540] : [],
+        appointments: [],
+        classes: [],
+      })),
+    });
+
+  it('a day of the week on screen opens that day, with no new read', async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([mayaSession()], { firstDay: '2026-09-09' }) });
+    open();
+    await screen.findAllByTestId('pt-day-tab');
+    const reads = api.getPtWeek.mock.calls.length;
+    const picker = within(screen.getByTestId('pt-go-to-date'));
+    fireEvent.click(picker.getByRole('button', { name: 'Go to a date' }));
+    fireEvent.click(within(picker.getByRole('dialog')).getByRole('button', { name: /\b9 Oct/ }));
+    expect(within(screen.getByTestId('pt-day')).getByRole('heading', { name: 'Fri 9 Oct' })).toBeTruthy();
+    expect(screen.getAllByTestId('pt-day-tab')[2].getAttribute('aria-pressed')).toBe('true');
+    expect(api.getPtWeek.mock.calls.length).toBe(reads);
+  });
+
+  it('a day outside it reads the week that starts on that day and opens it; days the page cannot show cannot be picked', async () => {
+    api.getPtWeek.mockImplementation((gymId, trainer, from) =>
+      Promise.resolve({ data: from === '2026-10-20' ? laterWeek() : week([mayaSession()], { firstDay: '2026-09-09' }) }),
+    );
+    open();
+    await screen.findAllByTestId('pt-day-tab');
+    const picker = within(screen.getByTestId('pt-go-to-date'));
+    fireEvent.click(picker.getByRole('button', { name: 'Go to a date' }));
+    const calendar = within(picker.getByRole('dialog'));
+    // Sessions run to 1 December, and the page turns back to 9 September.
+    fireEvent.click(calendar.getByRole('button', { name: 'Previous month' }));
+    expect(calendar.getByRole('button', { name: /\b8 Sep/ }).disabled).toBe(true);
+    expect(calendar.getByRole('button', { name: /\b9 Sep/ }).disabled).toBe(false);
+    fireEvent.click(calendar.getByRole('button', { name: 'Next month' }));
+    fireEvent.click(calendar.getByRole('button', { name: /\b20 Oct/ }));
+    await waitFor(() => expect(api.getPtWeek).toHaveBeenLastCalledWith('g1', SAM, '2026-10-20'));
+    expect(await within(await screen.findByTestId('pt-day')).findByRole('heading', { name: 'Tue 20 Oct' })).toBeTruthy();
+    expect(screen.getAllByTestId('pt-day-tab')[0].getAttribute('aria-pressed')).toBe('true');
+  });
+});

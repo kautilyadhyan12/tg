@@ -685,7 +685,8 @@ d("a trainer leaves the staff, and came or no-show (real Postgres, two api insta
       const olga = await onList(elsewhere, "Olga Listed");
       await book(gym, sam, maya, 600);
       await book(elsewhere, tom, olga, 600);
-      oneAddress = "10.84.250.7";
+      // This run's own address: its count lives an hour in the real Redis.
+      oneAddress = `10.85.${String(Math.floor(Math.random() * 250))}.${String(1 + Math.floor(Math.random() * 250))}`;
       try {
         const codes: number[] = [];
         for (let n = 0; n < 62; n++) codes.push((await offStaff(gym, sam, null)).statusCode);
@@ -824,7 +825,7 @@ d("a trainer leaves the staff, and came or no-show (real Postgres, two api insta
 
       // SEVERAL STAFF AT ONE ADDRESS (a front desk): sixty marks by three people, none slowed.
       const manager = await staff(gym, "Mona Manager", "manager");
-      oneAddress = "10.84.250.9";
+      oneAddress = `10.86.${String(Math.floor(Math.random() * 250))}.${String(1 + Math.floor(Math.random() * 250))}`;
       try {
         const codes: number[] = [];
         for (let n = 0; n < 20; n++) {

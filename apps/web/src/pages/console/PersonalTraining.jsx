@@ -4,6 +4,7 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Circle, Loader2, Plus, Search,
 import { orgWords } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import DatePick from '../../components/console/DatePick';
 import BookingRulesLine from '../../components/console/BookingRulesLine';
 import PlaceLink from '../../components/console/PlaceLink';
 import TimePick from '../../components/console/TimePick';
@@ -1265,12 +1266,31 @@ export default function PersonalTraining() {
               {shownWeek?.data ? weekTitle(shownWeek.data) : 'Sessions'}
             </h2>
             {shownWeek?.data ? (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Straight to any day: the calendar offers the days the week can show. */}
+                <div className="w-full md:w-52" data-testid="pt-go-to-date">
+                  <DatePick
+                    label="Go to a date"
+                    value={pickDay(shownWeek.data, dayWanted)}
+                    min={shownWeek.data.firstDay ?? shownWeek.data.today}
+                    max={shownWeek.data.lastDay}
+                    today={shownWeek.data.today}
+                    onChange={(date) => {
+                      setBooking(null);
+                      setCancelling(null);
+                      setDayWanted(date);
+                      // A day outside the week on screen starts the week it is read from.
+                      if (date < shownWeek.data.from || date > shownWeek.data.to) setFrom(date);
+                    }}
+                    newLook
+                    floating
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => setFrom(addDays(shownWeek.data.from, -7))}
                   disabled={!canGoEarlier(shownWeek.data)}
-                  className="c-btn c-btn-sm c-btn-s"
+                  className="c-btn c-btn-s"
                 >
                   <ChevronLeft aria-hidden="true" className="w-4 h-4" /> {PREVIOUS_WEEK}
                 </button>
@@ -1278,7 +1298,7 @@ export default function PersonalTraining() {
                   type="button"
                   onClick={() => setFrom(addDays(shownWeek.data.from, 7))}
                   disabled={!canGoLater(shownWeek.data)}
-                  className="c-btn c-btn-sm c-btn-s"
+                  className="c-btn c-btn-s"
                 >
                   {NEXT_WEEK} <ChevronRight aria-hidden="true" className="w-4 h-4" />
                 </button>
