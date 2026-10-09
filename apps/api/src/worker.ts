@@ -38,6 +38,8 @@ import { ORGS_ARCHIVE_JOB, unscheduleArchiveSweep } from "./modules/orgs/archive
 import { postChallengeResults } from "./modules/orgs/challenges/resultPosts.js";
 import { ORGS_CHALLENGE_RESULTS_JOB, scheduleChallengeResults } from "./modules/orgs/challenges/resultPostsSchedule.js";
 import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
+import { sendDueMessages } from "./modules/orgs/messages/send.js";
+import { ORGS_MEMBER_MESSAGES_JOB, scheduleMemberMessages } from "./modules/orgs/messages/sendSchedule.js";
 import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
 import { analyseEntriesIfMoved } from "./modules/orgs/memberList/repo.js";
 import { rollUpGymDays } from "./modules/orgs/rollup.js";
@@ -316,6 +318,15 @@ try {
   process.exit(1);
 }
 
+// A GYM'S AUTOMATIC MESSAGES TO ITS MEMBERS (Part 3 §16.2), four times an hour
+// (`sendSchedule.ts` has the minutes and why).
+try {
+  await scheduleMemberMessages(queue);
+} catch (err) {
+  log.fatal({ err }, "failed to register the member messages schedule");
+  process.exit(1);
+}
+
 // MEMBER INVITATIONS (Part 3 §9.12). Their own queue, so a slow run of emails never
 // holds up the nightly jobs above, and every minute: the rows are the queue, and each
 // run sends what is due within the caps. Only when invitations are switched on.
@@ -545,6 +556,7 @@ const worker = new Worker(
       job.name !== ORGS_MEMBER_LIST_EXPIRY_JOB &&
       job.name !== ORGS_CLASS_FILL_JOB &&
       job.name !== ORGS_CHALLENGE_RESULTS_JOB &&
+      job.name !== ORGS_MEMBER_MESSAGES_JOB &&
       job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
@@ -636,6 +648,15 @@ const worker = new Worker(
       const posted = await postChallengeResults({ sql, log });
       log.info(
         { ...posted, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
+    if (job.name === ORGS_MEMBER_MESSAGES_JOB) {
+      const messages = await sendDueMessages({ sql, log });
+      log.info(
+        { ...messages, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

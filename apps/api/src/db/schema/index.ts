@@ -22,3 +22,4 @@ export * from "./staffInvites.js";
 export * from "./checkin.js";
 export * from "./posts.js";
 export * from "./personalTraining.js";
+export * from "./messages.js";
