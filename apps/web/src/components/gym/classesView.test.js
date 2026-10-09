@@ -96,7 +96,11 @@ describe('what a class says', () => {
     expect(mineText(klass({ mine: mine('waitlisted', { waitlistPlace: 2 }) }))).toBe('On the waitlist, not booked · 2nd in line');
     expect(mineText(klass({ mine: mine('cancelled') }))).toBeNull();
     expect(mineText(klass({ mine: mine('late_cancelled', { packCharged: true }) }))).toBe('You cancelled late · the class stays used on your pack');
-    expect(mineText(klass({ mine: mine('attended') }))).toBe('You came');
+    // A check-in at the gym before the class marks it came: the class has not started.
+    const before = new Date('2026-10-08T12:00:00.000Z').getTime();
+    const after = new Date('2026-10-08T12:30:00.000Z').getTime();
+    expect(mineText(klass({ mine: mine('attended') }), before)).toBe("You're checked in for this class");
+    expect(mineText(klass({ mine: mine('attended') }), after)).toBe('You came');
     expect(mineText(klass({ mine: mine('no_show') }))).toBe('You missed this class');
   });
 

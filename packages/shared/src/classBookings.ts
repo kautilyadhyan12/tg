@@ -324,6 +324,8 @@ export const classSessionBookingsResponseSchema = z
     waitlisted: z.array(staffBookingSchema),
     lateCancelled: z.array(staffBookingSchema),
     lateCancelledTotal: z.number().int(),
+    /** The class has started and runs, so the reader can mark who came (17f). */
+    canMark: z.boolean(),
   })
   .strict();
 export type ClassSessionBookingsResponse = z.infer<typeof classSessionBookingsResponseSchema>;

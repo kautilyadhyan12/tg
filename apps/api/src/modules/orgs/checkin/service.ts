@@ -60,6 +60,7 @@ import { gymTimeZone, membersAgainstList } from "../memberList/repo.js";
 import { sameName } from "../memberList/samePerson.js";
 import { currentRecordOf } from "../memberList/whose.js";
 import { heldOnListOf } from "../memberships/onList.js";
+import { markCameAtCheckin, unmarkAfterVisitRemoved } from "../classes/attendance.js";
 import { looksLikePass, makePass, passWindow, readPass, windowEndsAt } from "./pass.js";
 import * as repo from "./repo.js";
 import { decideScan, type ScanPerson, type ScanRead } from "./scanRule.js";
@@ -601,6 +602,22 @@ async function keepStreak(deps: CheckinDeps, gymId: string, userId: string, day:
   }
 }
 
+/** A check-in near a class the person booked marks that booking came (17f): theirs by
+ *  their ACCOUNT, so a key tag whose record the list cannot say is one person's marks
+ *  nobody's. The visit is saved first and a failure here is logged. The run that marks
+ *  ended classes then reads their visits: one in the class's window marks them came, and
+ *  an earlier one that day keeps them from being called a no-show. */
+async function markBookedClasses(deps: CheckinDeps, gymId: string, userId: string): Promise<void> {
+  try {
+    await markCameAtCheckin(deps.sql, gymId, userId, deps.now());
+  } catch (err: unknown) {
+    deps.log.warn(
+      { event: "checkin.class_mark_failed", gymId, errName: err instanceof Error ? err.name : typeof err },
+      "a check-in could not mark its booked class",
+    );
+  }
+}
+
 /** One try at the visit; null when the record it names is no longer on the list. */
 async function writeNamedVisit(deps: CheckinDeps, gymId: string, read: ScanRead, named: Named | null, made: Made): Promise<Visit | null> {
   const who = named?.who ?? null;
@@ -625,7 +642,11 @@ async function writeNamedVisit(deps: CheckinDeps, gymId: string, read: ScanRead,
   });
   if (decision.result === "already") {
     const joined = await repo.joinVisits(deps.sql, gymId, ctx.day, who);
-    if (who.userId !== null) await keepStreak(deps, gymId, who.userId, ctx.day, joined > 0);
+    if (who.userId !== null) {
+      await keepStreak(deps, gymId, who.userId, ctx.day, joined > 0);
+      // Here again later the same day, for a class: no new visit, and still at the desk now.
+      await markBookedClasses(deps, gymId, who.userId);
+    }
     return already(decision.firstAt);
   }
 
@@ -640,7 +661,10 @@ async function writeNamedVisit(deps: CheckinDeps, gymId: string, read: ScanRead,
     slotKey: decision.slotKey,
   });
   if (written === null) return null;
-  if (who.userId !== null) await keepStreak(deps, gymId, who.userId, ctx.day, written.inserted || written.joined > 0);
+  if (who.userId !== null) {
+    await keepStreak(deps, gymId, who.userId, ctx.day, written.inserted || written.joined > 0);
+    await markBookedClasses(deps, gymId, who.userId);
+  }
   return written.inserted ? { result: "checked_in", named, timezone: ctx.timezone } : already(written.firstAt);
 }
 
@@ -840,6 +864,8 @@ export async function removeVisit(
         targetId: visitId,
         meta: { day: gone.day, method: gone.method },
       });
+      // A class it had marked them came for, still to start, is booked again (17f).
+      if (gone.userId !== null) await unmarkAfterVisitRemoved(tx, gymId, gone.userId, deps.now());
       return { day: gone.day, userId: gone.userId };
     });
   // A join of two records, or a record deleted, holds the visit at the same moment: the

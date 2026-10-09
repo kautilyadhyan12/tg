@@ -1,6 +1,6 @@
 // The words of a class's list of people (ROADMAP 17c-iii).
 import { describe, expect, it } from 'vitest';
-import { bookedHeading, bookingRow, lateHeading, listRefusal, waitlistHeading } from './classBookingsListView';
+import { MARK_HELP, bookedHeading, bookingRow, lateHeading, listRefusal, markRow, waitlistHeading } from './classBookingsListView';
 
 // (Which names open a person's page is the screen's test: classWeek.render.test.jsx.)
 const people = (n) => Array.from({ length: n }, (_, i) => ({ bookingId: String(i) }));
@@ -35,5 +35,54 @@ describe('a list that could not be read', () => {
     expect(listRefusal({ response: { status: 403, data: { message: "Your role doesn't allow that." } } })).toBe('Only this class’s coach and staff who can change classes see who is booked.');
     expect(listRefusal({ response: { status: 500, data: {} } })).toBe("We couldn't load who is booked.");
     expect(listRefusal(new Error('offline'))).toBe("Couldn't reach the server. Check your connection and try again.");
+  });
+});
+
+// CAME OR NO-SHOW (17f). The worst these words could do: call somebody who came a
+// no-show, or offer a mark the server will refuse.
+describe('came or no-show for one place', () => {
+  const started = { canMark: true };
+  const coming = { canMark: false };
+  const labels = (row) => row?.actions.map((a) => [a.status, a.label, a.aria]);
+
+  it('before the class starts nobody can be marked, and a check-in reads as checked in', () => {
+    expect(markRow({ name: 'Maya Shah', status: 'booked' }, coming)).toBeNull();
+    expect(markRow({ name: 'Maya Shah', status: 'attended' }, coming)).toEqual({ tag: { label: 'Checked in', tone: 'good' }, note: '', actions: [] });
+    // A list from a server that says nothing about marking is one that cannot be marked.
+    expect(markRow({ name: 'Maya Shah', status: 'booked' }, {})).toBeNull();
+  });
+
+  it('once it has started: not marked yet with both buttons, then the mark with one button to change it', () => {
+    const open = markRow({ name: 'Maya Shah', status: 'booked' }, started);
+    expect(open?.tag).toBeNull();
+    expect(open?.note).toBe('Not marked yet');
+    expect(labels(open)).toEqual([
+      ['attended', 'Came', 'Mark that Maya Shah came'],
+      ['no_show', 'No-show', 'Mark Maya Shah as a no-show'],
+    ]);
+    const came = markRow({ name: 'Maya Shah', status: 'attended' }, started);
+    expect(came?.tag).toEqual({ label: 'Came', tone: 'good' });
+    expect(labels(came)).toEqual([['no_show', 'Change to no-show', 'Change Maya Shah to no-show']]);
+    const missed = markRow({ name: null, status: 'no_show', packCharged: false }, started);
+    expect(missed?.tag).toEqual({ label: 'No-show', tone: 'warn' });
+    expect(missed?.note).toBe('');
+    expect(labels(missed)).toEqual([['attended', 'Change to came', 'Change this person to came']]);
+  });
+
+  it('a no-show on a pack says the class stays used; a coach is not sent what paid, and is told nothing about it', () => {
+    expect(markRow({ name: 'Leo Grant', status: 'no_show', packCharged: true }, started)?.note).toBe('The class stays used on their pack.');
+    expect(markRow({ name: 'Leo Grant', status: 'no_show', packCharged: null }, started)?.note).toBe('');
+  });
+
+  it('nobody waiting or cancelled is marked', () => {
+    for (const status of ['waitlisted', 'cancelled', 'late_cancelled', undefined]) {
+      expect(markRow({ name: 'Tom Reed', status }, started), String(status)).toBeNull();
+    }
+  });
+
+  it('the line under Booked says the hour before, the 15 minutes after, and that staff can change it', () => {
+    expect(MARK_HELP).toContain('1 hour before the class');
+    expect(MARK_HELP).toContain('15 minutes after it ends');
+    expect(MARK_HELP).toContain('You can change any of them here.');
   });
 });

@@ -17,6 +17,7 @@ import {
   CLASS_BOOKING_HOLDS_PLACE,
   CLASS_BOOKING_WORDS,
   CLASS_LATE_CANCEL_ERROR,
+  CLASS_MARK_WORDS,
   MEMBER_CLASSES_MAX,
   addDays,
   bookingTime,
@@ -26,8 +27,10 @@ import {
   classSessionBookingsResponseSchema,
   decideBook,
   decideCancel,
+  decideClassMark,
   memberClassesResponseSchema,
   type BookClassRequest,
+  type BookingTime,
   type ClassBookRefusal,
   type BookingSettingsBody,
   type ClassBookingSettingsResponse,
@@ -38,11 +41,12 @@ import {
   type Cover,
   type HeldCover,
   type MemberClassesQuery,
+  type MarkClassBookingRequest,
   type MemberClassesResponse,
   type StaffClassBooking,
 } from "@app/shared";
 import { getOrgById, getStaffAuthority, gymHasLivePlan, insertAudit, isLiveMember, lockOrgRow, type OrgRow } from "../repo.js";
-import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { OrgsError, holdsPrivilege, requirePrivilege, requireWritableGym, requireWritablePrivilege } from "../service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { chargePack, givePackClassBack } from "../memberships/heldRepo.js";
@@ -124,6 +128,11 @@ async function coverFor(
 const mineOf = (ctx: repo.BookingContext): "booked" | "waitlisted" | null =>
   ctx.latest?.status === "booked" || ctx.latest?.status === "waitlisted" ? ctx.latest.status : null;
 
+/** What a cancel is asked about. A place a check-in marked came before the class starts
+ *  is still the booked place it was: theirs to cancel by the usual rule, free or late. */
+const cancellable = (ctx: repo.BookingContext, time: BookingTime): "booked" | "waitlisted" | null =>
+  ctx.latest?.status === "attended" && time.phase !== "started" ? "booked" : mineOf(ctx);
+
 /** One class as this person sees it now. Somebody who stopped being a member in the
  *  instant after their booking was made is still answered, with nothing they can do. */
 async function viewOf(deps: Pick<BookingsDeps, "sql" | "now">, gymId: string, sessionId: string, userId: string): Promise<ClassBookingView> {
@@ -175,9 +184,12 @@ async function viewFrom(
     });
   const book = ask(false);
   const wait = ask(true);
-  const cancel = decideCancel({ time, cancelled: session.cancelled, mine, packCharged: latest?.packCharged ?? false, lateOk: true });
+  const cancel = decideCancel({ time, cancelled: session.cancelled, mine: cancellable(ctx, time), packCharged: latest?.packCharged ?? false, lateOk: true });
   const startsAt = session.startsAt.getTime();
-  const member = booker !== null;
+  // Marked came (a check-in before the class does it) or no-show: the place is theirs
+  // already, so there is nothing to book, wait for or claim.
+  const marked = latest?.status === "attended" || latest?.status === "no_show";
+  const member = booker !== null && !marked;
   return {
     sessionId: session.id,
     className: session.className,
@@ -204,7 +216,7 @@ async function viewFrom(
       book: member && book.kind === "book" && !book.fromWaitlist,
       joinWaitlist: member && wait.kind === "waitlist",
       claim: member && book.kind === "book" && book.fromWaitlist,
-      cancel: member && cancel.kind === "cancel" ? (cancel.status === "cancelled" ? "free" : "late") : null,
+      cancel: booker !== null && cancel.kind === "cancel" ? (cancel.status === "cancelled" ? "free" : "late") : null,
       why: member && wait.kind === "refuse" ? wait.reason : null,
     },
   };
@@ -427,10 +439,11 @@ export async function cancel(
       const { latest } = ctx;
       if (latest?.status === "cancelled" || latest?.status === "late_cancelled") return null;
       const now = deps.now();
+      const time = bookingTime(now.getTime(), ctx.session.startsAt.getTime(), ctx.settings);
       const decision = decideCancel({
-        time: bookingTime(now.getTime(), ctx.session.startsAt.getTime(), ctx.settings),
+        time,
         cancelled: ctx.session.cancelled,
-        mine: mineOf(ctx),
+        mine: cancellable(ctx, time),
         packCharged: latest?.packCharged ?? false,
         lateOk,
       });
@@ -463,7 +476,7 @@ export async function cancel(
 
 /** A class's list for staff holding `schedule.manage`, or for the class's own coach. */
 export async function getSessionBookings(
-  deps: Pick<BookingsDeps, "sql">,
+  deps: Pick<BookingsDeps, "sql" | "now">,
   staffId: string,
   gymId: string,
   sessionId: string,
@@ -511,7 +524,63 @@ export async function getSessionBookings(
     waitlisted: shown(waitlisted),
     lateCancelled: shown(late),
     lateCancelledTotal: lateTotal,
+    canMark: !session.cancelled && deps.now().getTime() >= session.startsAt.getTime(),
   });
+}
+
+/** Staff mark one person's place came or no-show, once the class has started: whoever
+ *  runs the timetable, and the class's own coach. The same mark again changes nothing,
+ *  and a mark can be changed to the other, the one a check-in or the end of the class
+ *  made too. The class stays used either way, so no pack and no limit moves. Answers the
+ *  class's list as it now is. */
+export async function markBooking(
+  deps: Pick<BookingsDeps, "sql" | "now">,
+  staffId: string,
+  gymId: string,
+  sessionId: string,
+  bookingId: string,
+  req: MarkClassBookingRequest,
+  limit: Limit,
+): Promise<ClassSessionBookingsResponse | null> {
+  const [org, authority] = await Promise.all([getOrgById(deps.sql, gymId), getStaffAuthority(deps.sql, gymId, staffId)]);
+  if (org === null || authority === null) throw notFound();
+  const manages = await holdsPrivilege(deps, gymId, staffId, "schedule.manage");
+  // Whose class it is decides who may mark it, so it is read before the lock.
+  const seen = await repo.sessionById(deps.sql, gymId, sessionId, false);
+  if (!manages && (seen === null || seen.coachUserId !== staffId)) {
+    throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
+  }
+  await requireWritableGym(deps, org);
+  if (!(await limit())) return null;
+  if (seen === null) throw classNotFound();
+
+  const refused = await deps.sql.begin(async (tx): Promise<OrgsError | null> => {
+    await lockOrgRow(tx, gymId);
+    const session = await repo.sessionById(tx, gymId, sessionId, true);
+    if (session === null) return classNotFound();
+    const booking = await repo.bookingInClass(tx, gymId, sessionId, bookingId);
+    if (booking === null) return new OrgsError(404, "booking_not_found", CLASS_MARK_WORDS.booking_not_found);
+    const decision = decideClassMark({
+      status: booking.status,
+      cancelled: session.cancelled,
+      started: deps.now().getTime() >= session.startsAt.getTime(),
+      to: req.status,
+    });
+    if (decision.kind === "already") return null;
+    if (decision.kind === "refuse") return new OrgsError(409, decision.reason, CLASS_MARK_WORDS[decision.reason]);
+    await repo.markAs(tx, gymId, [booking.id], req.status, ["booked", "attended", "no_show"]);
+    await insertAudit(tx, {
+      actorUserId: staffId,
+      gymId,
+      action: "org.class_booking_marked",
+      targetType: "gym_class_booking",
+      targetId: booking.id,
+      meta: { status: req.status, was: booking.status },
+    });
+    return null;
+  });
+  if (refused !== null) throw refused;
+  return await getSessionBookings(deps, staffId, gymId, sessionId, () => Promise.resolve(true));
 }
 
 /** Everybody whose booking a change to the timetable would end, a page at a time, for

@@ -421,6 +421,11 @@ export const classSessionParamsSchema = z
   .strict();
 export type ClassSessionParams = z.infer<typeof classSessionParamsSchema>;
 
+/** A gym, one date on its calendar and one booking of it, always together (17f). */
+export const classBookingParamsSchema = z
+  .object({ gymId: z.string().uuid(), sessionId: z.string().uuid(), bookingId: z.string().uuid() })
+  .strict();
+
 /** A gym and one of its leads (20c-i), always together. */
 export const leadParamsSchema = z.object({ gymId: z.string().uuid(), leadId: z.string().uuid() }).strict();
 export type LeadParams = z.infer<typeof leadParamsSchema>;
