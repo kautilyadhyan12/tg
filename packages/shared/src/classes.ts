@@ -19,6 +19,7 @@
 // two decisions — the server derives the first from the second and never the
 // other way.
 import { z } from "zod";
+import { classOnlineLinkSchema } from "./classOnline.js";
 
 /** EIGHT WEEKS, and it is a HORIZON rather than a deadline.
  *
@@ -249,6 +250,9 @@ export const gymClassScheduleSchema = z
      *  screen then offers tomorrow as the first date a change starts from, so a
      *  move never gives today a second class (17b-ii-b-ii-a, round one L-4). */
     startedToday: z.boolean(),
+    /** An online class, and the gym's own video link for it; the link null until staff add it (17g). */
+    online: z.boolean(),
+    onlineLink: z.string().nullable(),
   })
   .strict();
 export type GymClassSchedule = z.infer<typeof gymClassScheduleSchema>;
@@ -407,9 +411,16 @@ export const createGymClassScheduleRequestSchema = z
     startsOn: classDaySchema,
     endsOn: classDaySchema.nullable().optional(),
     ...classScheduleFieldsShape,
+    /** Left out: not an online class. Changed afterwards at the time slot's own `…/online`. */
+    online: z.boolean().optional(),
+    onlineLink: classOnlineLinkSchema.nullable().optional(),
     confirmTrainerSessions: confirmTrainerSessionsField.optional(),
   })
   .strict()
+  .refine((r) => r.online === true || r.onlineLink === undefined || r.onlineLink === null, {
+    message: "a link goes only with `online: true`",
+    path: ["onlineLink"],
+  })
   // AN INVERTED WINDOW IS A 400, NOT A REPEAT THAT SILENTLY RUNS ON NO DAY.
   // Compared as strings on `attendanceHistoryQuerySchema`'s stated terms: a
   // fixed-width zero-padded `YYYY-MM-DD` sorts in calendar order, and these two
@@ -515,6 +526,13 @@ export const gymClassSessionSchema = z
     /** Has it already started, by the server's clock? A started date cannot be
      *  changed, cancelled or put back. */
     started: z.boolean(),
+    /** An online class and its link, this class's own. `onlineAlone`: staff set them for
+     *  this class on its own, so a change to its time slot's leaves them. */
+    online: z.boolean(),
+    onlineLink: z.string().nullable(),
+    onlineAlone: z.boolean(),
+    /** Over, by the server's clock: its link can no longer be changed. */
+    ended: z.boolean(),
   })
   .strict();
 export type GymClassSession = z.infer<typeof gymClassSessionSchema>;

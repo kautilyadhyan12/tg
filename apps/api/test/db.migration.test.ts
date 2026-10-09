@@ -2110,13 +2110,77 @@ d("0001_init on a real database", () => {
       });
   });
 
-  it("0089's contact: a gym's phone and email for its members are each optional, a phone is digits and marks, an email has one @", async () => {
+  it("0089's online classes: a time slot and a class start at the gym, and a link is kept only for an online one, as https and no longer than 500", async () => {
     await sql
       .begin(async (tx) => {
-        const [owner] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0089-owner') RETURNING id`;
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0089-owner') RETURNING id`;
+        if (user === undefined) throw new Error("no user");
+        const [gym] = await tx<{ id: string }[]>`INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES ('zz-0089-a', 'zz 0089', 'Europe/London', ${user.id}) RETURNING id`;
+        if (gym === undefined) throw new Error("no gym");
+        const [type] = await tx<{ id: string }[]>`
+          INSERT INTO gym_class_types (gym_id, name, minutes, colour, open_gym) VALUES (${gym.id}, 'zz yoga', 45, 'blue', false) RETURNING id`;
+        if (type === undefined) throw new Error("no class");
+        const slot = (over: Record<string, unknown> = {}) => ({
+          gym_id: gym.id,
+          class_type_id: type.id,
+          weekdays: [1],
+          local_start_minute: 600,
+          starts_on: "2026-10-19",
+          minutes: 45,
+          ...over,
+        });
+        const klass = (over: Record<string, unknown> = {}) => ({
+          gym_id: gym.id,
+          class_type_id: type.id,
+          local_date: "2026-10-19",
+          local_start_minute: 600,
+          starts_at: "2026-10-19T09:00:00Z",
+          minutes: 45,
+          ...over,
+        });
+        /** The constraint an insert trips, or "ok". Each in its own savepoint. */
+        const put = async (table: "gym_class_schedules" | "gym_class_sessions", values: Record<string, unknown>): Promise<string> => {
+          try {
+            await tx.savepoint((sp) => sp`INSERT INTO ${sp(table)} ${sp(values)}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        // A row written as before this migration is a class at the gym.
+        const [plain] = await tx<{ online: boolean; online_link: string | null }[]>`
+          INSERT INTO gym_class_schedules ${tx(slot())} RETURNING online, online_link`;
+        expect(plain).toEqual({ online: false, online_link: null });
+        const [day] = await tx<{ online: boolean; online_link: string | null; online_alone: boolean }[]>`
+          INSERT INTO gym_class_sessions ${tx(klass())} RETURNING online, online_link, online_alone`;
+        expect(day).toEqual({ online: false, online_link: null, online_alone: false });
+        const link = "https://zoom.us/j/5551112222";
+        for (const [table, row, check] of [
+          ["gym_class_schedules", slot, "gym_class_schedules_online_link_check"],
+          ["gym_class_sessions", klass, "gym_class_sessions_online_link_check"],
+        ] as const) {
+          expect(await put(table, row({ online: true, online_link: link, local_start_minute: 601 }))).toBe("ok");
+          expect(await put(table, row({ online: true, local_start_minute: 602 })), "online, the link added later").toBe("ok");
+          expect(await put(table, row({ online_link: link })), "a link on a class at the gym").toBe(check);
+          expect(await put(table, row({ online: true, online_link: "http://zoom.us/j/5551112222" })), "not https").toBe(check);
+          expect(await put(table, row({ online: true, online_link: "zoom.us/j/5551112222" })), "no scheme").toBe(check);
+          expect(await put(table, row({ online: true, online_link: `https://zoom.us/j/${"1".repeat(500)}` })), "too long").toBe(check);
+        }
+        throw new Error("ROLLBACK-0089-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0089-FIXTURE") return;
+        throw err;
+      });
+  });
+
+  it("0090's contact: a gym's phone and email for its members are each optional, a phone is digits and marks, an email has one @", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [owner] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0090-owner') RETURNING id`;
         if (owner === undefined) throw new Error("no user");
         const [gym] = await tx<{ id: string; contact_phone: string | null; contact_email: string | null }[]>`
-          INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES ('zz-0089', 'zz 0089', 'Europe/London', ${owner.id})
+          INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES ('zz-0090', 'zz 0090', 'Europe/London', ${owner.id})
           RETURNING id, contact_phone, contact_email`;
         if (gym === undefined) throw new Error("no gym");
         // A gym starts with neither.
@@ -2145,10 +2209,10 @@ d("0001_init on a real database", () => {
         // Each clears on its own, and neither is tied to the mobile for payments.
         expect(await set({ contact_phone: null, contact_email: "hello@ironhouse.com", billing_mobile: null })).toBe("ok");
         expect(await set({ contact_phone: "020 7946 0958", contact_email: null, billing_mobile: "+919876543210" })).toBe("ok");
-        throw new Error("ROLLBACK-0089-FIXTURE");
+        throw new Error("ROLLBACK-0090-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0089-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0090-FIXTURE") return;
         throw err;
       });
   });

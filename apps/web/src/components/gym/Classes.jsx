@@ -4,7 +4,7 @@ import { CLASS_LATE_CANCEL_ERROR, MEMBER_CLASSES_WEEKS } from '@app/shared';
 import { classesService } from '../../api/classesApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
-import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, mineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
+import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, LINK_READ_AGAIN_MS, mineText, nextReadAt, onlineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
 
 // A GYM'S CLASSES FOR ITS MEMBER (spec Part 3 §13.6; ROADMAP 17d): the coming classes by
 // day, with Book, Join waitlist, Claim place and Cancel. The server decides every one; a
@@ -30,6 +30,7 @@ function ClassRow({ c, busy, said, onTake, onGive }) {
   const places = placesText(c);
   const why = whyText(c);
   const waiting = c.mine?.status === 'waitlisted';
+  const online = onlineText(c);
   return (
     <li className="rounded-xl p-3 flex flex-col gap-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
       <div className="flex items-start justify-between gap-3">
@@ -46,6 +47,23 @@ function ClassRow({ c, busy, said, onTake, onGive }) {
       </div>
       {mine !== null && !c.cancelled && (
         <p className="text-xs font-semibold" style={{ color: waiting ? ORANGE : c.mine.status === 'booked' ? GREEN : MUTED }}>{mine}</p>
+      )}
+      {online !== null && (
+        <p className="text-xs" style={{ color: online.ready ? GREEN : MUTED }} data-testid="class-online">{online.line}</p>
+      )}
+      {online !== null && online.link !== null && (
+        <div>
+          <a
+            href={online.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Join class: ${c.className}, ${whenText(c)}`}
+            className="inline-flex items-center px-3.5 py-2 rounded-xl text-sm font-semibold min-h-11"
+            style={{ background: GREEN, color: '#161412' }}
+          >
+            Join class
+          </a>
+        </div>
       )}
       {why !== null && <p className="text-xs" style={{ color: MUTED }}>{why}</p>}
       {said !== null && (
@@ -94,7 +112,12 @@ export default function Classes({ gym }) {
   const keys = useRef(new Map());
   const asked = useRef(0);
 
-  const load = useCallback(() => {
+  // When a read the page made by itself last failed; null once a read has answered.
+  const [missedAt, setMissedAt] = useState(null);
+
+  // `quiet`: a read the page makes by itself while a link is waited for. One that fails
+  // leaves the classes on the screen and is tried again; it never takes the list away.
+  const load = useCallback((quiet = false) => {
     const mine = ++asked.current;
     classesService
       .list(gym.id, week)
@@ -102,10 +125,15 @@ export default function Classes({ gym }) {
         if (mine !== asked.current) return;
         // A class they hold needs no kept key: the tap it was for has plainly been answered.
         for (const c of list.classes) if (c.mine?.status === 'booked' || c.mine?.status === 'waitlisted') keys.current.delete(c.sessionId);
+        setMissedAt(null);
         setState({ loading: false, error: null, list });
       })
       .catch((err) => {
         if (mine !== asked.current) return;
+        if (quiet === true) {
+          setMissedAt(Date.now());
+          return;
+        }
         // The server's 404 is for anybody who is not a member of a gym on a live plan.
         const error = errorStatus(err) === 404 ? `${gym.name}'s classes aren't available right now.` : errorText(err, "Couldn't load the classes.");
         setState({ loading: false, error, list: null });
@@ -117,6 +145,16 @@ export default function Classes({ gym }) {
       asked.current += 1;
     };
   }, [load]);
+
+  // The list is read again when a class's link is due, and when a class with a link ends,
+  // so Join class comes and goes by itself. Set again after every read.
+  const listRead = state.list;
+  useEffect(() => {
+    const at = missedAt !== null ? missedAt + LINK_READ_AGAIN_MS : nextReadAt(listRead?.classes);
+    if (at === null) return undefined;
+    const timer = setTimeout(() => load(true), Math.max(0, at - Date.now()));
+    return () => clearTimeout(timer);
+  }, [listRead, missedAt, load]);
 
   const go = (to) => {
     setState((s) => ({ ...s, loading: true }));

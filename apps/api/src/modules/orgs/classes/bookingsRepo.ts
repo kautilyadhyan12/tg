@@ -34,6 +34,8 @@ export interface BookingSession {
   places: number | null;
   cancelled: boolean;
   coachUserId: string | null;
+  online: boolean;
+  onlineLink: string | null;
 }
 
 /** One class of this gym, or null. `lock`: held until the transaction ends. */
@@ -51,10 +53,12 @@ export async function sessionById(sql: SqlOrTx, gymId: string, sessionId: string
       places: number | null;
       status: string;
       coach_user_id: string | null;
+      online: boolean;
+      online_link: string | null;
     }[]
   >`
     SELECT s.id, s.class_type_id, t.name, t.open_gym, s.local_date::text AS local_date, s.local_start_minute,
-           s.starts_at, s.minutes, s.places, s.status, s.coach_user_id
+           s.starts_at, s.minutes, s.places, s.status, s.coach_user_id, s.online, s.online_link
     FROM gym_class_sessions s
     JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
     WHERE s.gym_id = ${gymId} AND s.id = ${sessionId}
@@ -73,6 +77,8 @@ export async function sessionById(sql: SqlOrTx, gymId: string, sessionId: string
     places: r.places,
     cancelled: r.status === "cancelled",
     coachUserId: r.coach_user_id,
+    online: r.online,
+    onlineLink: r.online_link,
   };
 }
 
@@ -141,6 +147,8 @@ const rawContext = z.object({
   places: z.number().int().nullable(),
   session_status: z.string(),
   coach_user_id: z.string().nullable(),
+  online: z.boolean(),
+  online_link: z.string().nullable(),
   opens: z.number().int(),
   free: z.number().int(),
   handover: z.number().int(),
@@ -158,7 +166,7 @@ const rawContext = z.object({
 async function contexts(sql: SqlOrTx, gymId: string, userId: string, which: ReturnType<SqlOrTx>, tail: ReturnType<SqlOrTx>): Promise<BookingContext[]> {
   const rows = await sql`
     SELECT s.id, s.class_type_id, t.name, t.open_gym, s.local_date::text AS local_date, s.local_start_minute,
-           s.starts_at, s.minutes, s.places, s.status AS session_status, s.coach_user_id,
+           s.starts_at, s.minutes, s.places, s.status AS session_status, s.coach_user_id, s.online, s.online_link,
            g.booking_opens_days AS opens, g.booking_free_cancel_minutes AS free,
            g.waitlist_handover_minutes AS handover, g.waitlist_max AS waitlist, g.timezone,
            (SELECT count(*)::int FROM gym_class_bookings b
@@ -196,6 +204,8 @@ async function contexts(sql: SqlOrTx, gymId: string, userId: string, which: Retu
         places: r.places,
         cancelled: r.session_status === "cancelled",
         coachUserId: r.coach_user_id,
+        online: r.online,
+        onlineLink: r.online_link,
       },
       settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist, timezone: r.timezone },
       counts: { booked: r.booked, waitlisted: r.waitlisted },
@@ -214,7 +224,9 @@ export async function contextOf(sql: SqlOrTx, gymId: string, sessionId: string, 
 }
 
 /** The gym's classes that have not started, on its own days `from` to `to`, the soonest
- *  first, each as this person meets it: at most `limit`. A plain read. */
+ *  first, each as this person meets it: at most `limit`. With them an online class under
+ *  way that this person holds a place in: its link is theirs until it ends, so one that
+ *  began on the day before `from` and runs past midnight is still there. A plain read. */
 export async function comingContexts(
   sql: SqlOrTx,
   gymId: string,
@@ -225,7 +237,13 @@ export async function comingContexts(
     sql,
     gymId,
     userId,
-    sql`s.starts_at > ${when.now} AND s.local_date BETWEEN ${when.from}::date AND ${when.to}::date`,
+    sql`s.local_date BETWEEN ${when.from}::date - 1 AND ${when.to}::date
+        AND ((s.starts_at > ${when.now} AND s.local_date >= ${when.from}::date)
+             OR (s.online AND s.status = 'scheduled' AND s.starts_at <= ${when.now}
+                 AND s.starts_at + make_interval(mins => s.minutes) > ${when.now}
+                 AND EXISTS (SELECT 1 FROM gym_class_bookings o
+                             WHERE o.gym_id = s.gym_id AND o.session_id = s.id AND o.user_id = ${userId}
+                               AND o.status = ANY(${[...CLASS_BOOKING_HOLDS_PLACE]}::text[]))))`,
     sql`ORDER BY s.starts_at, s.id LIMIT ${when.limit}`,
   );
 }
@@ -429,7 +447,7 @@ export async function markCancelled(
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_class_bookings
     SET status = ${input.status}, cancelled_at = ${input.now}, pack_charged = ${input.packCharged}
-    WHERE gym_id = ${input.gymId} AND id = ${input.bookingId} AND status IN ('booked','waitlisted','attended')
+    WHERE gym_id = ${input.gymId} AND id = ${input.bookingId} AND status IN ('booked','waitlisted','attended','no_show')
     RETURNING id`;
   if (rows.length !== 1) throw new Error("a booking was not there to cancel");
 }
@@ -514,7 +532,7 @@ const rawClassContext = rawContext.omit({ member: true, entry_id: true, mine_id:
 export async function classContext(tx: TransactionSql, gymId: string, sessionId: string): Promise<ClassContext | null> {
   const rows = await tx`
     SELECT s.id, s.class_type_id, t.name, t.open_gym, s.local_date::text AS local_date, s.local_start_minute,
-           s.starts_at, s.minutes, s.places, s.status AS session_status, s.coach_user_id,
+           s.starts_at, s.minutes, s.places, s.status AS session_status, s.coach_user_id, s.online, s.online_link,
            g.booking_opens_days AS opens, g.booking_free_cancel_minutes AS free,
            g.waitlist_handover_minutes AS handover, g.waitlist_max AS waitlist, g.timezone,
            (SELECT count(*)::int FROM gym_class_bookings b
@@ -543,6 +561,8 @@ export async function classContext(tx: TransactionSql, gymId: string, sessionId:
       places: r.places,
       cancelled: r.session_status === "cancelled",
       coachUserId: r.coach_user_id,
+      online: r.online,
+      onlineLink: r.online_link,
     },
     settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist, timezone: r.timezone },
     counts: { booked: r.booked, waitlisted: r.waitlisted },
@@ -791,13 +811,14 @@ const toMarkable = (r: { id: string; status: string; session_status: string; sta
 
 /** THIS account's bookings of the gym's classes that start within a day either side of
  *  `now`: the ones a check-in now could be for, which the rule then chooses among.
- *  Found by the account alone, never by a record or a name. `lock`: held to the commit. */
+ *  Found by the account alone, never by a record or a name. Never an online class: a
+ *  check-in at the gym says nothing about who was on a video call. `lock`: held to the commit. */
 export async function bookingsNear(sql: SqlOrTx, gymId: string, userId: string, now: Date, lock: boolean): Promise<MarkableBooking[]> {
   const rows = await sql<{ id: string; status: string; session_status: string; starts_at: Date; minutes: number }[]>`
     SELECT b.id, b.status, s.status AS session_status, s.starts_at, s.minutes
     FROM gym_class_sessions s
     JOIN gym_class_bookings b ON b.gym_id = s.gym_id AND b.session_id = s.id
-    WHERE s.gym_id = ${gymId} AND b.user_id = ${userId}
+    WHERE s.gym_id = ${gymId} AND b.user_id = ${userId} AND NOT s.online
       AND s.starts_at BETWEEN ${now}::timestamptz - interval '1 day' AND ${now}::timestamptz + interval '1 day'
     ${lock ? sql`FOR UPDATE OF b` : sql``}`;
   return rows.map(toMarkable);
@@ -811,6 +832,24 @@ export async function bookingInClass(tx: TransactionSql, gymId: string, sessionI
     FOR UPDATE`;
   const r = rows[0];
   return r === undefined ? null : { id: r.id, status: classBookingStatusSchema.parse(r.status) };
+}
+
+/** One booking of one class of this gym as a removal by staff reads it, held to the
+ *  commit; null where there is none. */
+export async function bookingToRemove(
+  tx: TransactionSql,
+  gymId: string,
+  sessionId: string,
+  bookingId: string,
+): Promise<{ id: string; status: ClassBookingStatus; heldMembershipId: string | null; packCharged: boolean } | null> {
+  const rows = await tx<{ id: string; status: string; held_membership_id: string | null; pack_charged: boolean }[]>`
+    SELECT id, status, held_membership_id, pack_charged FROM gym_class_bookings
+    WHERE gym_id = ${gymId} AND session_id = ${sessionId} AND id = ${bookingId}
+    FOR UPDATE`;
+  const r = rows[0];
+  return r === undefined
+    ? null
+    : { id: r.id, status: classBookingStatusSchema.parse(r.status), heldMembershipId: r.held_membership_id, packCharged: r.pack_charged };
 }
 
 /** These bookings marked came or no-show: only places that are held, so a place given
@@ -837,7 +876,7 @@ export async function gymsWithEndedBooked(
   const rows = await sql<{ gym_id: string }[]>`
     SELECT DISTINCT s.gym_id
     FROM gym_class_sessions s
-    WHERE s.status = 'scheduled'
+    WHERE s.status = 'scheduled' AND NOT s.online
       AND s.starts_at > ${now}::timestamptz - make_interval(hours => ${lookbackHours + 24})
       AND s.starts_at + make_interval(mins => s.minutes + ${afterMinutes}) <= ${now}::timestamptz
       AND EXISTS (SELECT 1 FROM gym_class_bookings b WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = 'booked')
@@ -900,7 +939,7 @@ export async function endedBooked(
       SELECT s.id, s.gym_id, s.status, s.starts_at, s.minutes, s.local_date,
              EXISTS (SELECT 1 FROM gym_attendance a WHERE ${inWindow}) AS gym_checked_in
       FROM gym_class_sessions s
-      WHERE s.gym_id = ${gymId} AND s.status = 'scheduled'
+      WHERE s.gym_id = ${gymId} AND s.status = 'scheduled' AND NOT s.online
         AND s.starts_at > ${when.now}::timestamptz - make_interval(hours => ${when.lookbackHours + 24})
         AND s.starts_at + make_interval(mins => s.minutes + ${when.afterMinutes}) <= ${when.now}::timestamptz
     )

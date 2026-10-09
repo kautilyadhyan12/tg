@@ -338,3 +338,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 ## 20a, as it stood when it was built (merged 2026-10-09, PR #207)
 
 - 20a. [ ] **The inbox and the message rule**: a gym's messages to a member as an inbox on the gym's page (a phone notification once the phone app has push); ONE pure rule that decides what is due, its table test first — every kind × every reason NOT to send (former · removed · switched off · already sent for this occasion · another that day · night by the gym's clock · the gym lapsed); one row an occasion, so a second run sends nothing. **First tests: a job run twice sends once; a former or removed member gets nothing.**
+
+- 17g. [ ] **Online classes** (Kd, RULINGS 2026-10-08): a time slot marked Online carries the gym's own video link (Zoom or any other; we host no video); only people booked on it see the link, from shortly before it starts; places, the waitlist and cancelling work as for any class. Its plan reads how Mindbody, Momence and TeamUp do it first. Before the passes over 17.

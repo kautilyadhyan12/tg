@@ -375,6 +375,9 @@ describe('the time slot form', () => {
       time: '18:00',
       startsOn: '2026-09-21',
       endsOn: '',
+      // Not an online class until the gym ticks it (17g).
+      online: false,
+      link: '',
       minutes: '45',
       unlimited: false,
       places: '12',

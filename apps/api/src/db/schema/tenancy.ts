@@ -106,7 +106,7 @@ export const gyms = pgTable(
     /** An Indian gym's owner's mobile for its payments (`+91…`), given to Razorpay's window so
      *  it asks nothing (ROADMAP 1d-i). Seen and changed only by staff who manage billing. */
     billingMobile: text("billing_mobile"),
-    /** How members reach the gym (0089; spec Part 3 §16.1): the phone and email it typed for
+    /** How members reach the gym (0090; spec Part 3 §16.1): the phone and email it typed for
      *  them to see in the app. Never `billingMobile`. */
     contactPhone: text("contact_phone"),
     contactEmail: text("contact_email"),

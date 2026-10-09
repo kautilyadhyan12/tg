@@ -622,7 +622,14 @@
       "idx": 88,
       "version": "7",
       "when": 1788998400089,
-      "tag": "0089_gym_member_contact",
+      "tag": "0089_online_classes",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1789084800090,
+      "tag": "0090_gym_member_contact",
       "breakpoints": true
     }
   ]

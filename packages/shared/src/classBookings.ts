@@ -5,6 +5,7 @@
 // the server reads them under the gym's lock.
 import { z } from "zod";
 import { classDaySchema } from "./classes.js";
+import { classOnlineViewSchema } from "./classOnline.js";
 import { ptSessionsEndingSchema } from "./ptSessionsEnding.js";
 import { addDays, heldMembershipView, type HeldMembership } from "./heldMemberships.js";
 import type { MembershipAccess, MembershipLimitPeriod } from "./memberships.js";
@@ -283,6 +284,9 @@ export const classBookingViewSchema = z
         why: classBookRefusalSchema.nullable(),
       })
       .strict(),
+    /** An online class as this person meets it, its link only while it is theirs to use
+     *  (`classOnlineView`); null for a class at the gym. */
+    online: classOnlineViewSchema.nullable(),
   })
   .strict();
 export type ClassBookingView = z.infer<typeof classBookingViewSchema>;
@@ -326,6 +330,11 @@ export const classSessionBookingsResponseSchema = z
     lateCancelledTotal: z.number().int(),
     /** The class has started and runs, so the reader can mark who came (17f). */
     canMark: z.boolean(),
+    /** The class runs and has not started, so the reader can take a person off it (17g). */
+    canRemove: z.boolean(),
+    /** An online class and its link, for the staff who run it. */
+    online: z.boolean(),
+    onlineLink: z.string().nullable(),
   })
   .strict();
 export type ClassSessionBookingsResponse = z.infer<typeof classSessionBookingsResponseSchema>;
@@ -459,7 +468,8 @@ export type MemberClassesQuery = z.infer<typeof memberClassesQuerySchema>;
 /** How many classes one page of a member's list holds at most. */
 export const MEMBER_CLASSES_MAX = 500;
 
-/** The gym's classes in that week that have not started, the soonest first, each as the
+/** The gym's classes in that week that have not started, and an online class under way
+ *  that the reader holds a place in, the soonest first, each as the
  *  person reading meets it: what one class's own read answers. `from` and `to` are the
  *  week's first and last day, the gym's own. `more`: the week holds more classes than
  *  the page does, and the later ones are not on it. */
