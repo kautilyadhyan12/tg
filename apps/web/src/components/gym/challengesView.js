@@ -224,7 +224,8 @@ function teamResult(challenge) {
     headline = reached.length === 0 ? `No team reached ${said(target)}.` : `${teamCount(reached.length)} reached ${said(target)}: ${listed(reached.map((row) => row.name))}.`;
   } else {
     const first = rows.filter((row) => row.place === 1);
-    if (first.length === 0) headline = 'No team had a number.';
+    // Where the lowest wins a team with somebody's number missing has a number and no place.
+    if (first.length === 0) headline = rows.some((row) => (row.waiting ?? 0) > 0) ? 'No team got a place: every team had somebody with no number.' : 'No team had a number.';
     else if (first.length === 1) headline = `Winner: ${first[0].name}, with ${said(first[0].value)}.`;
     else headline = `Joint winners: ${listed(first.map((row) => row.name))}, with ${said(first[0].value)} each.`;
   }
@@ -233,6 +234,7 @@ function teamResult(challenge) {
   if (my !== undefined && teamBoard.status === 'shown') {
     const own = me !== null && me.value > 0 ? ` You had ${said(me.value)}.` : '';
     if (target !== null) mine = my.reached ? `Your team, ${my.name}, reached it: ${said(my.value)}.${own}` : `Your team, ${my.name}, got to ${my.value.toLocaleString('en')} of ${target.toLocaleString('en')}.${own}`;
+    else if (my.place === null && (my.waiting ?? 0) > 0) mine = `Your team, ${my.name}, had no place: ${my.waiting === 1 ? '1 of its people' : `${my.waiting.toLocaleString('en')} of its people`} had no number.${own}`;
     else if (my.place === null) mine = `Your team, ${my.name}, had no number.`;
     else if (my.place === 1) mine = `Your team, ${my.name}, ${rows.filter((row) => row.place === 1).length > 1 ? 'was joint first' : 'won'}.${own}`;
     else mine = `Your team, ${my.name}, finished ${ordinal(my.place)}, with ${said(my.value)}.${own}`;

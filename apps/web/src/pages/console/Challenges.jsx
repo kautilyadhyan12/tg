@@ -555,7 +555,7 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType, canTeam, o
                       setSaid(null);
                     }}
                     aria-label={`${nameOf(row)}: team`}
-                    disabled={saving || moving !== null}
+                    disabled={saving || asking || moving !== null}
                     className="c-sel order-last md:order-none basis-full md:basis-auto md:flex-shrink-0 md:max-w-[180px]"
                   >
                     <option value="">No team</option>
@@ -621,8 +621,8 @@ function ChallengeBoard({ gymId, challenge, timezone, words, canType, canTeam, o
       {box !== null ? (
         <div className="c-callout flex-col" role="group" aria-label={box.title}>
           <p className="c-s15 c-w6 c-t1">{box.title}</p>
-          {box.lines.map((line) => (
-            <p key={line} className="c-s14 c-t1">
+          {box.lines.map((line, at) => (
+            <p key={`${String(at)}:${line}`} className="c-s14 c-t1">
               {line}
             </p>
           ))}

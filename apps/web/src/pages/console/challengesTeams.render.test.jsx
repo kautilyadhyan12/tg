@@ -436,6 +436,8 @@ describe('putting people in teams', () => {
     expect(box.getByText('Bilal Khan: Blue Team → Red Team')).toBeTruthy();
     // Dev is already where staff wanted him: he does not change, and is not named or sent.
     expect(box.queryByText(/Dev Shah/)).toBeNull();
+    // While the box is open nobody's team can be picked: a pick made now would not be in it.
+    expect(board.getAllByRole('combobox').every((pickerBox) => pickerBox.disabled)).toBe(true);
     svc.setTeamPeople.mockResolvedValue(1);
     fireEvent.click(box.getByRole('button', { name: 'Move 1 person' }));
     await waitFor(() => expect(svc.setTeamPeople).toHaveBeenCalledTimes(1));
@@ -518,5 +520,28 @@ describe('round one', () => {
     expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio')[2].textContent.replace(/\s+/g, ' ').trim()).toBe(
       'The team with the lowestFor a fastest time. The lowest total wins, and a team is placed once everyone in it has a number, so give each team the same number of people.',
     );
+  });
+
+  it('while the teams are read again before the box, no team can be picked; two people with no name moved the same way are each a line', async () => {
+    svc.list.mockResolvedValue(listOf([challenge('a', 'October Week')]));
+    const rows = [{ ...row('n1', 'x', null), name: null, initials: '?' }, { ...row('n2', 'x', null), name: null, initials: '?' }, row('u1', 'Asha Rao', null)];
+    svc.board.mockResolvedValue(boardOf(rows));
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(1));
+    fireEvent.click(cardOf('October Week').getByRole('button', { name: 'Put people in teams: October Week' }));
+    const board = within(await screen.findByTestId('challenge-board'));
+    const pickers = () => board.getAllByRole('combobox');
+    await waitFor(() => expect(pickers()).toHaveLength(3));
+    fireEvent.change(pickers()[0], { target: { value: RED } });
+    fireEvent.change(pickers()[1], { target: { value: RED } });
+    // The read before the box is held: until it answers, the pickers are off.
+    let answer;
+    svc.board.mockImplementation(() => new Promise((resolve) => (answer = () => resolve(boardOf(rows)))));
+    fireEvent.click(board.getByRole('button', { name: 'Save teams' }));
+    await waitFor(() => expect(board.getByRole('button', { name: 'Checking…' }).disabled).toBe(true));
+    expect(pickers().every((pickerBox) => pickerBox.disabled)).toBe(true);
+    answer();
+    const box = within(await screen.findByRole('group', { name: 'Move 2 people?' }));
+    expect(box.getAllByText('No name yet: No team → Red Team')).toHaveLength(2);
   });
 });

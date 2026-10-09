@@ -154,6 +154,29 @@ describe('teams, in words', () => {
     expect(resultOf(ended({ target: 60, teamBoard: none, me: null }))).toEqual({ headline: 'No team reached 60 gym days.', mine: null });
     expect(resultOf(ended({ teamBoard: teamBoard({ status: 'too_few', ...noTeam }) }))).toEqual({ headline: 'It finished with fewer than 3 people in it, so there are no places.', mine: null });
     expect(resultOf(ended({ teamBoard: teamBoard({ rows: [team(RED, 'Red Team', 0, 0, null), team(BLUE, 'Blue Team', 0, 0, null)], mine: null }), me: me() }))).toEqual({ headline: 'No team had a number.', mine: null });
+    // The reader's team at nothing at all: it had no number, and that is what is said.
+    expect(resultOf(ended({ teamBoard: teamBoard({ rows: [team(RED, 'Red Team', 4, 20, 1), team(BLUE, 'Blue Team', 5, 0, null, { isMine: true })] }), me: me() })).mine).toBe('Your team, Blue Team, had no number.');
+  });
+
+  it('where the lowest wins, a team short of somebody number finished with a number and no place, and is told so', () => {
+    const relay = (rows, over = {}) => challenge('a', 'Relay', { state: 'ended', counts: 'own', unit: 'seconds', lowestWins: true, me: me({ value: 95 }), teamBoard: teamBoard({ rows }), ...over });
+    // Red was complete and won; Blue, the reader's, had 95 seconds and two people with no time.
+    expect(resultOf(relay([team(RED, 'Red Team', 2, 101, 1), team(BLUE, 'Blue Team', 3, 95, null, { isMine: true, waiting: 2 })]))).toEqual({
+      headline: 'Winner: Red Team, with 101 seconds.',
+      mine: 'Your team, Blue Team, had no place: 2 of its people had no number. You had 95 seconds.',
+    });
+    expect(resultOf(relay([team(RED, 'Red Team', 2, 101, 1), team(BLUE, 'Blue Team', 3, 95, null, { isMine: true, waiting: 1 })])).mine).toBe(
+      'Your team, Blue Team, had no place: 1 of its people had no number. You had 95 seconds.',
+    );
+    // Every team short of one: nobody is placed, and nobody is told there were no numbers.
+    expect(resultOf(relay([team(RED, 'Red Team', 2, 50, null, { waiting: 1 }), team(BLUE, 'Blue Team', 3, 95, null, { isMine: true, waiting: 2 })]))).toEqual({
+      headline: 'No team got a place: every team had somebody with no number.',
+      mine: 'Your team, Blue Team, had no place: 2 of its people had no number. You had 95 seconds.',
+    });
+    // The reader had no time of their own.
+    expect(resultOf(relay([team(RED, 'Red Team', 2, 101, 1), team(BLUE, 'Blue Team', 3, 95, null, { isMine: true, waiting: 2 })], { me: me() })).mine).toBe(
+      'Your team, Blue Team, had no place: 2 of its people had no number.',
+    );
   });
 });
 
@@ -294,5 +317,27 @@ describe("a member's challenge in teams", () => {
       '—Green Team2 people · waiting for 1 number60 seconds',
     ]);
     expect(card.getByText('A team gets its place once everyone in it has a number.')).toBeTruthy();
+  });
+
+  it('an ended relay draws the team number beside the line that says it had no place', async () => {
+    const relay = challenge('a', 'Relay', {
+      state: 'ended',
+      startsOn: '2026-09-28',
+      endsOn: '2026-10-04',
+      counts: 'own',
+      unit: 'seconds',
+      lowestWins: true,
+      me: me({ value: 95 }),
+      teamBoard: teamBoard({ rows: [team(RED, 'Red Team', 2, 101, 1), team(BLUE, 'Blue Team', 3, 95, null, { isMine: true, waiting: 2 })], mine: { teamId: BLUE, people: [mate('me', 'Maya K.', 95, true)], more: 0, counted: true } }),
+    });
+    svc.list.mockResolvedValue(listOf([relay]));
+    render(<Challenges gym={GYM} />);
+    await screen.findByText('Relay');
+    const card = cardOf('Relay');
+    const result = within(card.getByLabelText('How it finished'));
+    expect(result.getByText('Winner: Red Team, with 101 seconds.')).toBeTruthy();
+    expect(result.getByText('Your team, Blue Team, had no place: 2 of its people had no number. You had 95 seconds.')).toBeTruthy();
+    expect(card.queryByText(/had no number\.$/)).toBeNull();
+    expect(texts(card.getByRole('list', { name: 'Teams' }))[1]).toBe('—Blue TeamYour team3 people · waiting for 2 numbers95 seconds');
   });
 });
