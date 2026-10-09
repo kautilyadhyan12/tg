@@ -79,7 +79,7 @@ export function placesText(c) {
 export const MORE_CLASSES = 'These 7 days have more classes than this page shows. The later ones are not listed.';
 
 /** What the person has in the class, or null. Waiting never reads as booked. */
-export function mineText(c) {
+export function mineText(c, now = Date.now()) {
   if (c.mine === null) return null;
   switch (c.mine.status) {
     case 'booked':
@@ -87,7 +87,8 @@ export function mineText(c) {
     case 'waitlisted':
       return c.mine.waitlistPlace === null ? 'On the waitlist, not booked' : `On the waitlist, not booked · ${ordinal(c.mine.waitlistPlace)} in line`;
     case 'attended':
-      return 'You came';
+      // A check-in at the gym before the class marks it; the list shows only classes still to start.
+      return new Date(c.startsAt).getTime() > now ? "You're checked in for this class" : 'You came';
     case 'no_show':
       return 'You missed this class';
     case 'late_cancelled':

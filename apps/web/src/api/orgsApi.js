@@ -1713,6 +1713,19 @@ export const orgService = {
       authApi.get(`/v1/orgs/${gymId}/class-sessions/${sessionId}/bookings`),
     ),
 
+  /** POST …/class-sessions/:sessionId/bookings/:bookingId/mark — came (`attended`) or
+   *  no-show (`no_show`) for one person's place, once the class has started. Answers the
+   *  class's list as it now is. */
+  markClassBooking: (gymId, sessionId, bookingId, status) =>
+    readThrough(
+      classSessionBookingsResponseSchema,
+      'who is booked',
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/class-sessions/${encodeURIComponent(sessionId)}/bookings/${encodeURIComponent(bookingId)}/mark`,
+        { status },
+      ),
+    ),
+
   /** GET …/class-bookings/ending — everybody whose booking a change to the timetable
    *  would end, a hundred at a time: `{ by: 'session' | 'slot' | 'class', id, from?, after? }`.
    *  The box that asks shows the first few from the 409 itself; this is its "See all". */

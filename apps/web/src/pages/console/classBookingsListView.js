@@ -35,6 +35,47 @@ export function bookingRow(booking) {
 
 export const NOBODY_BOOKED = 'Nobody has booked this class yet.';
 
+/** Came or no-show for one person's place (17f); null where there is nothing to say or
+ *  do. What it is marked now (`tag`), what that means for the person (`note`), and the
+ *  buttons, each `status` what the server is sent. Before the class starts
+ *  (`list.canMark` false) a check-in at the gym shows as "Checked in" and nothing can be
+ *  changed. */
+export function markRow(booking, list) {
+  const status = booking?.status;
+  const canMark = list?.canMark === true;
+  const name = typeof booking?.name === 'string' && booking.name !== '' ? booking.name : 'this person';
+  if (status === 'attended') {
+    return {
+      tag: { label: canMark ? 'Came' : 'Checked in', tone: 'good' },
+      note: '',
+      actions: canMark ? [{ status: 'no_show', label: 'Change to no-show', aria: `Change ${name} to no-show` }] : [],
+    };
+  }
+  if (status === 'no_show') {
+    return {
+      tag: { label: 'No-show', tone: 'warn' },
+      note: booking.packCharged === true ? 'The class stays used on their pack.' : '',
+      actions: canMark ? [{ status: 'attended', label: 'Change to came', aria: `Change ${name} to came` }] : [],
+    };
+  }
+  if (status !== 'booked' || !canMark) return null;
+  return {
+    tag: null,
+    note: 'Not marked yet',
+    actions: [
+      { status: 'attended', label: 'Came', aria: `Mark that ${name} came` },
+      { status: 'no_show', label: 'No-show', aria: `Mark ${name} as a no-show` },
+    ],
+  };
+}
+
+/** Under "Booked", once the class has started: how the marks get there by themselves. */
+export const MARK_HELP =
+  'Anyone who checks in at the gym from 1 hour before the class is marked Came. 15 minutes after it ends, everyone else is marked No-show, if the gym was checking people in at that time. You can change any of them here.';
+
+/** What staff read when a mark is refused and the server says no more. */
+export const MARK_FAILED = "We couldn't save that. Please try again.";
+
 /** Why the list could not be read: staff who neither manage classes nor coach this one
  *  are told who can; anything else is the usual sentence. */
 export function listRefusal(err) {

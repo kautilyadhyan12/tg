@@ -9,11 +9,12 @@ import {
   cancelClassBookingRequestSchema,
   bookingSettingsBodySchema,
   classBookingsEndingQuerySchema,
+  markClassBookingRequestSchema,
   memberClassesQuerySchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { classSessionParamsSchema, orgParamsSchema } from "../schemas.js";
+import { classBookingParamsSchema, classSessionParamsSchema, orgParamsSchema } from "../schemas.js";
 import * as service from "./bookingsService.js";
 
 function parseOr400<S extends z.ZodTypeAny>(
@@ -123,6 +124,27 @@ export function registerClassBookingRoutes(app: FastifyInstance, deps: { sql: Sq
     const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
     if (params === null) return;
     const list = await service.getSessionBookings(bookingDeps, requireUserId(req), params.gymId, params.sessionId, gate(staffReadLimit)(req, reply));
+    if (list === null) return;
+    return reply.status(200).send(list);
+  });
+
+  // Came or no-show, once the class has started (17f). The same mark again is a 200. A
+  // class of forty marked by three staff at one desk is well inside these.
+  const markLimit = limiter("orgs_bookings_mark", 600, 1800);
+  app.post("/v1/orgs/:gymId/class-sessions/:sessionId/bookings/:bookingId/mark", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(classBookingParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(markClassBookingRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await service.markBooking(
+      bookingDeps,
+      requireUserId(req),
+      params.gymId,
+      params.sessionId,
+      params.bookingId,
+      body,
+      gate(markLimit)(req, reply),
+    );
     if (list === null) return;
     return reply.status(200).send(list);
   });

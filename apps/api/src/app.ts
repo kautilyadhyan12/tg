@@ -340,7 +340,7 @@ export async function buildApp(
   );
   // Check-in at the front desk (spec Part 3 §12): the member's pass, the desk devices and
   // the scan, whose device key is the one credential that is not a person's session.
-  registerCheckinRoutes(app, { sql, redis, config });
+  registerCheckinRoutes(app, { sql, redis, config, ...(overrides.orgs?.now === undefined ? {} : { now: overrides.orgs.now }) });
   // The unsubscribe link in every invitation: public, and not under /v1/orgs.
   registerUnsubscribeRoutes(app, { sql, redis, settings: invites });
   // What Resend reports about each email: signed, kept once, acted on by the worker.

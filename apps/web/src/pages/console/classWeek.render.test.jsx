@@ -13,6 +13,7 @@ const api = {
   getStaff: vi.fn(),
   getClassWeek: vi.fn(),
   getClassBookings: vi.fn(),
+  markClassBooking: vi.fn(),
   getMemberList: vi.fn(),
   getMemberListEntry: vi.fn(),
   getHeldMemberships: vi.fn(),
@@ -161,6 +162,7 @@ beforeEach(() => {
   });
   api.getClassWeek.mockReset().mockResolvedValue(week());
   api.getClassBookings.mockReset().mockResolvedValue(bookings());
+  api.markClassBooking.mockReset().mockResolvedValue(bookings());
   api.changeClassDay.mockReset().mockResolvedValue(week());
   api.cancelClassDay.mockReset().mockResolvedValue(week());
   api.restoreClassDay.mockReset().mockResolvedValue(week());
@@ -726,5 +728,80 @@ describe("a class on the Calendar saved over its coach's personal training sessi
       coachUserId: 'u8',
       confirmTrainerSessions: OVER_MARK,
     });
+  });
+});
+
+// CAME OR NO-SHOW (17f). The worst this list could do: mark the wrong person, or show a
+// mark the server did not make.
+describe('a class that has started says who came, and staff can mark or change it', () => {
+  const MAYA_ID = '00000000-0000-4000-8000-000000000101';
+  const LEO_ID = '00000000-0000-4000-8000-000000000102';
+  const leo = (over = {}) => person(2, 'Leo Grant', { status: 'no_show', membership: '10 classes', packCharged: true, ...over });
+  const started = (over = {}) =>
+    bookings({
+      canMark: true,
+      booked: [person(1, 'Maya Shah'), leo(), person(3, 'Ana Diaz', { status: 'attended' })],
+      waitlisted: [person(4, 'Tom Reed', { status: 'waitlisted' })],
+      ...over,
+    });
+  const markOf = (list, name) => within(list.getByRole('group', { name: `Did ${name} come?` }));
+
+  it('before it starts there are no buttons, and somebody who checked in early reads Checked in', async () => {
+    api.getClassBookings.mockResolvedValue(bookings({ canMark: false, booked: [person(1, 'Maya Shah'), person(3, 'Ana Diaz', { status: 'attended' })] }));
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    const list = within(await screen.findByTestId('class-bookings'));
+    expect(list.queryByRole('group', { name: 'Did Maya Shah come?' })).toBeNull();
+    expect(markOf(list, 'Ana Diaz').getByText('Checked in')).toBeTruthy();
+    expect(list.queryAllByRole('button', { name: /came|no-show/i })).toEqual([]);
+    expect(list.queryByText(/1 hour before the class/)).toBeNull();
+  });
+
+  it('each place says its mark; Came sends that person and that mark, and the screen draws what the server answers', async () => {
+    api.getClassBookings.mockResolvedValue(started());
+    api.markClassBooking.mockResolvedValue(started({ booked: [person(1, 'Maya Shah', { status: 'attended' }), leo(), person(3, 'Ana Diaz', { status: 'attended' })] }));
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    const list = within(await screen.findByTestId('class-bookings'));
+    expect(list.getByText(/Anyone who checks in at the gym from 1 hour before the class is marked Came/)).toBeTruthy();
+    expect(markOf(list, 'Maya Shah').getByText('Not marked yet')).toBeTruthy();
+    expect(markOf(list, 'Leo Grant').getByText('No-show')).toBeTruthy();
+    expect(list.getByText('The class stays used on their pack.')).toBeTruthy();
+    expect(markOf(list, 'Ana Diaz').getByText('Came')).toBeTruthy();
+    // Nobody waiting is marked.
+    expect(list.queryByRole('group', { name: 'Did Tom Reed come?' })).toBeNull();
+
+    fireEvent.click(list.getByRole('button', { name: 'Mark that Maya Shah came' }));
+    await waitFor(() => expect(api.markClassBooking).toHaveBeenCalledWith('g1', 'x1', MAYA_ID, 'attended'));
+    await waitFor(() => expect(markOf(list, 'Maya Shah').getByText('Came')).toBeTruthy());
+    expect(list.getByRole('button', { name: 'Change Maya Shah to no-show' })).toBeTruthy();
+    expect(api.markClassBooking).toHaveBeenCalledTimes(1);
+  });
+
+  it('a no-show is changed to came for that person alone', async () => {
+    api.getClassBookings.mockResolvedValue(started());
+    api.markClassBooking.mockResolvedValue(started());
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    const list = within(await screen.findByTestId('class-bookings'));
+    fireEvent.click(list.getByRole('button', { name: 'Change Leo Grant to came' }));
+    await waitFor(() => expect(api.markClassBooking).toHaveBeenCalledWith('g1', 'x1', LEO_ID, 'attended'));
+    expect(api.markClassBooking).toHaveBeenCalledTimes(1);
+  });
+
+  it('a mark the server refuses says its sentence under that person, and the list is read again', async () => {
+    api.getClassBookings.mockResolvedValue(started());
+    api.markClassBooking.mockRejectedValue({
+      response: { status: 409, data: { error: 'mark_cancelled', message: 'This class was cancelled, so nobody in it can be marked.' } },
+    });
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    const list = within(await screen.findByTestId('class-bookings'));
+    const reads = api.getClassBookings.mock.calls.length;
+    fireEvent.click(list.getByRole('button', { name: 'Mark Maya Shah as a no-show' }));
+    expect((await list.findByRole('alert')).textContent).toBe('This class was cancelled, so nobody in it can be marked.');
+    await waitFor(() => expect(api.getClassBookings.mock.calls.length).toBeGreaterThan(reads));
+    // Still as the server has it: not marked.
+    expect(markOf(list, 'Maya Shah').getByText('Not marked yet')).toBeTruthy();
   });
 });
