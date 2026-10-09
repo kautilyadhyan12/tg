@@ -52,3 +52,4 @@ export * from "./posts.js";
 export * from "./gymEvents.js";
 export * from "./gymChallenges.js";
 export * from "./startHere.js";
+export * from "./gymMessages.js";

@@ -334,3 +334,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 ## 19d-ii-b, as it stood when it was built (merged 2026-10-09, PR #205)
 
 - 19d-ii-b. [ ] **The result posted to Updates**: when a challenge ends its result is posted to Updates once, safe to run twice; for a challenge in teams, the winning team. After 19d-ii-a.
+
+## 20a, as it stood when it was built (merged 2026-10-09, PR #207)
+
+- 20a. [ ] **The inbox and the message rule**: a gym's messages to a member as an inbox on the gym's page (a phone notification once the phone app has push); ONE pure rule that decides what is due, its table test first — every kind × every reason NOT to send (former · removed · switched off · already sent for this occasion · another that day · night by the gym's clock · the gym lapsed); one row an occasion, so a second run sends nothing. **First tests: a job run twice sends once; a former or removed member gets nothing.**

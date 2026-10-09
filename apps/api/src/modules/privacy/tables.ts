@@ -74,6 +74,9 @@ export const DIRECT_DELETE_TABLES = [
   // Which of a gym's challenges a member joined (migration 0082; ROADMAP 19d-i): the
   // person's own choice, deleted at Day 14 and exported.
   "gym_challenge_people",
+  // A gym's messages to the person in the app (migration 0088; ROADMAP 20a): about the
+  // person, deleted at Day 14 and exported.
+  "gym_member_messages",
   // A person's number in a challenge of the gym's own count, typed by staff (0082): about
   // the person, deleted at Day 14 and exported.
   "gym_challenge_scores",

@@ -127,6 +127,10 @@ d("DPDP data export (real Postgres)", () => {
         VALUES (${postGymId}, gen_random_uuid(), 'fixture challenge', 'gym_days', current_date, current_date + 7, 'joined') RETURNING id
       )
       INSERT INTO gym_challenge_people (gym_id, challenge_id, user_id) SELECT ${postGymId}, c.id, ${userId} FROM c`;
+    // A message their gym sent them in the app (20a).
+    await sql`
+      INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, expires_at)
+      VALUES (${postGymId}, ${userId}, 'welcome', 'joined:fixture', 'Welcome.', current_date, now() + interval '30 days')`;
     await sql`
       WITH c AS (
         INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, unit, starts_on, ends_on, who)

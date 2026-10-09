@@ -48,6 +48,7 @@ import { registerGymPageRoutes } from "./gymPage/routes.js";
 import { registerPostRoutes } from "./posts/routes.js";
 import { registerEventRoutes } from "./events/routes.js";
 import { registerChallengeRoutes } from "./challenges/routes.js";
+import { registerMessageRoutes } from "./messages/routes.js";
 import type { PhotoStore } from "./gymPage/photoStore.js";
 import type { RobotCheck } from "./gymPage/robotCheck.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
@@ -163,6 +164,9 @@ export function registerOrgRoutes(
 
   // The gym's challenges: made by staff, a board for its members (Part 3 §15.6).
   registerChallengeRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+
+  // A member's inbox from their gym (Part 3 §16.1).
+  registerMessageRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).

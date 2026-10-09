@@ -2042,6 +2042,74 @@ d("0001_init on a real database", () => {
       });
   });
 
+  it("0088's messages: one a gym, person, kind and occasion for ever, only the eight kinds, and they go with the gym or the person", async () => {
+    await sql
+      .begin(async (tx) => {
+        const user = async (name: string): Promise<string> => {
+          const [row] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES (${name}) RETURNING id`;
+          if (row === undefined) throw new Error("no user");
+          return row.id;
+        };
+        const owner = await user("zz-0088-owner");
+        const maya = await user("zz-0088-maya");
+        const bo = await user("zz-0088-bo");
+        const gym = async (slug: string): Promise<string> => {
+          const [row] = await tx<{ id: string }[]>`INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0088', 'Europe/London', ${owner}) RETURNING id`;
+          if (row === undefined) throw new Error("no gym");
+          return row.id;
+        };
+        const mine = await gym("zz-0088-a");
+        const theirs = await gym("zz-0088-b");
+        const message = (over: Record<string, unknown> = {}) => ({
+          gym_id: mine,
+          user_id: maya,
+          kind: "welcome",
+          occasion: "joined:2026-10-09",
+          body: "Welcome.",
+          gym_day: "2026-10-09",
+          sent_at: "2026-10-09T06:30:00Z",
+          expires_at: "2026-11-08T06:30:00Z",
+          ...over,
+        });
+        /** The constraint an insert trips, or "ok". Each in its own savepoint. */
+        const put = async (values: Record<string, unknown>): Promise<string> => {
+          try {
+            await tx.savepoint((sp) => sp`INSERT INTO gym_member_messages ${sp(values)}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        expect(await put(message())).toBe("ok");
+        expect(await put(message()), "the same occasion again").toBe("gym_member_messages_occasion_uq");
+        expect(await put(message({ body: "Other words.", gym_day: "2026-10-10" })), "the same occasion on another day").toBe("gym_member_messages_occasion_uq");
+        // Another person, another gym, another kind and another occasion are each their own message.
+        expect(await put(message({ user_id: bo }))).toBe("ok");
+        expect(await put(message({ gym_id: theirs }))).toBe("ok");
+        expect(await put(message({ occasion: "joined:2026-11-20" }))).toBe("ok");
+        for (const kind of ["payment_overdue", "membership_ending", "trial_ending", "trial_check_in", "birthday", "milestone", "miss_you"]) {
+          expect(await put(message({ kind })), kind).toBe("ok");
+        }
+        expect(await put(message({ kind: "advert", occasion: "x" })), "a kind that is not one").toBe("gym_member_messages_kind_check");
+        expect(await put(message({ occasion: "" })), "no occasion").toBe("gym_member_messages_occasion_check");
+        expect(await put(message({ occasion: "y", body: "" })), "no words").toBe("gym_member_messages_body_check");
+        expect(await put(message({ occasion: "y", body: "x".repeat(501) })), "too many words").toBe("gym_member_messages_body_check");
+        expect(await put(message({ occasion: "y", expires_at: "2026-10-09T06:30:00Z" })), "gone as it is sent").toBe("gym_member_messages_expires_check");
+        const count = async (): Promise<number> => (await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_member_messages WHERE gym_id IN (${mine}, ${theirs})`)[0]?.n ?? -1;
+        expect(await count()).toBe(11);
+        // A person's messages go with their account, and a gym's with the gym.
+        await tx`DELETE FROM users WHERE id = ${bo}`;
+        expect(await count()).toBe(10);
+        await tx`DELETE FROM gyms WHERE id = ${theirs}`;
+        expect(await count()).toBe(9);
+        throw new Error("ROLLBACK-0088-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0088-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
    *  (Low-1) — which is the highest-value item that round found.
    *
