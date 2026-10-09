@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ORG_TYPES_PHRASE } from '@app/shared';
 import { Building2, Loader2 } from 'lucide-react';
+import { useGymInbox } from '../hooks/useGymInbox';
 import { useMyGyms } from '../hooks/useMyGyms';
 import GymHoursNote from '../components/gym/GymHoursNote';
 import AttendancePanel from '../components/gym/AttendancePanel';
@@ -10,6 +11,8 @@ import Challenges from '../components/gym/Challenges';
 import Classes from '../components/gym/Classes';
 import PersonalTraining from '../components/gym/PersonalTraining';
 import Events from '../components/gym/Events';
+import Inbox from '../components/gym/Inbox';
+import { inboxTabName, unreadBadge } from '../components/gym/inboxView';
 import Leaderboard from '../components/gym/Leaderboard';
 import Updates from '../components/gym/Updates';
 import { pickedGym, readPicked, savePicked } from '../components/gym/leaderboardView';
@@ -60,6 +63,7 @@ function CheerNote({ latestCheer }) {
 }
 
 const PAGE_TABS = [
+  { id: 'inbox', label: 'Inbox' },
   { id: 'updates', label: 'Updates' },
   { id: 'events', label: 'Events' },
   { id: 'leaderboard', label: 'Leaderboard' },
@@ -83,6 +87,10 @@ export default function MyGyms() {
     savePicked(id);
   };
   const [tab, setTab] = useState('updates');
+  // The shown gym's inbox is read with its page, so the Inbox tab says how many are new
+  // before it is opened (ROADMAP 20a).
+  const inbox = useGymInbox(shownId ?? null);
+  const newMessages = unreadBadge(inbox.unread);
 
   return (
     <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
@@ -239,6 +247,7 @@ export default function MyGyms() {
                   type="button"
                   role="tab"
                   aria-selected={tab === t.id}
+                  aria-label={t.id === 'inbox' ? inboxTabName(inbox.unread) : undefined}
                   onClick={() => setTab(t.id)}
                   className="px-3.5 py-2 rounded-xl text-sm font-semibold min-h-11"
                   style={
@@ -248,10 +257,21 @@ export default function MyGyms() {
                   }
                 >
                   {t.label}
+                  {t.id === 'inbox' && newMessages !== null ? (
+                    <span
+                      aria-hidden="true"
+                      className="ml-1.5 inline-block rounded-full px-1.5 text-xs font-bold"
+                      style={{ background: '#FF8A1F', color: '#111' }}
+                    >
+                      {newMessages}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
-            {tab === 'updates' ? (
+            {tab === 'inbox' ? (
+              <Inbox key={`inbox-${gym.id}`} gym={gym} inbox={inbox} />
+            ) : tab === 'updates' ? (
               <Updates key={`updates-${gym.id}`} gym={gym} onChallenge={() => setTab('challenges')} />
             ) : tab === 'events' ? (
               <Events key={`events-${gym.id}`} gym={gym} />

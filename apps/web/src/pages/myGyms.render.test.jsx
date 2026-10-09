@@ -12,7 +12,7 @@
 // the rule — the sidebar and the screen read the same kept answer here, exactly
 // as they do in the browser.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, act, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const api = {
@@ -46,6 +46,9 @@ vi.mock('../api/eventsApi', () => ({ eventsService: events, eventPosterUrl: () =
 // And its challenges (challenges.render.test.jsx).
 const challenges = { list: vi.fn(() => new Promise(() => {})) };
 vi.mock('../api/challengesApi', () => ({ challengesService: challenges }));
+// And its inbox (inbox.render.test.jsx), read with the page for the tab's count.
+const inboxSvc = { read: vi.fn(() => new Promise(() => {})), markRead: vi.fn(() => new Promise(() => {})) };
+vi.mock('../api/inboxApi', () => ({ inboxService: inboxSvc }));
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', displayName: 'Kd' }, logout: vi.fn(), loading: false }),
 }));
@@ -325,6 +328,45 @@ describe('the screen', () => {
     expect(screen.getByRole('tab', { name: 'Challenges' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('region', { name: `${GYM.name}'s challenges` })).toBeTruthy();
     await waitFor(() => expect(challenges.list).toHaveBeenCalledWith('g1'));
+  });
+
+  // THE INBOX (20a): its tab says how many are new before it is opened, and opening it is
+  // what tells the server they were seen.
+  it('the Inbox tab counts the new messages before it is opened, and opening it shows them and clears the count', async () => {
+    inboxSvc.read.mockClear();
+    inboxSvc.markRead.mockClear();
+    inboxSvc.read.mockResolvedValueOnce({
+      gymId: 'g1',
+      gymName: 'Iron House',
+      status: 'shown',
+      messages: [{ id: 'm1', kind: 'welcome', body: 'Welcome to Iron House, Kd.', sentAt: '2026-09-02T10:00:00.000Z', read: false }],
+      unread: 1,
+      asOf: '2026-09-02T12:00:00.000Z',
+    });
+    inboxSvc.markRead.mockResolvedValueOnce(0);
+    drawScreen();
+    const tab = await screen.findByRole('tab', { name: 'Inbox, 1 new message' });
+    expect(tab.textContent).toBe('Inbox1');
+    expect(inboxSvc.read).toHaveBeenCalledWith('g1');
+    // Updates is still the tab the page opens on, and nothing has been marked.
+    expect(screen.getByRole('tab', { name: 'Updates' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByText('Welcome to Iron House, Kd.')).toBeNull();
+    expect(inboxSvc.markRead).not.toHaveBeenCalled();
+
+    fireEvent.click(tab);
+    expect(screen.getByText('Welcome to Iron House, Kd.')).toBeTruthy();
+    expect(screen.queryByTestId('updates')).toBeNull();
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Inbox' }).textContent).toBe('Inbox'));
+    expect(inboxSvc.markRead).toHaveBeenCalledTimes(1);
+    expect(inboxSvc.markRead).toHaveBeenCalledWith('g1', '2026-09-02T12:00:00.000Z');
+    expect(inboxSvc.read).toHaveBeenCalledTimes(1);
+  });
+
+  it("the tabs of a gym's page, in order, with no count while nothing is new", async () => {
+    drawScreen();
+    await waitFor(() => expect(screen.getByRole('tablist', { name: "Iron House's page" })).toBeTruthy());
+    const tabs = within(screen.getByRole('tablist', { name: "Iron House's page" })).getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['Inbox', 'Updates', 'Events', 'Leaderboard', 'Challenges', 'Classes', 'Personal training']);
   });
 
   // THE TAP IS GONE FOR EVERY GYM (ROADMAP 16c), whatever the gym's old switch says.
