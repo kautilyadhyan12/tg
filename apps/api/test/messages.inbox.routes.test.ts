@@ -560,4 +560,103 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
     },
     T,
   );
+
+  // ── THE MENU'S DOT (ROADMAP 20a-ii): the count of new messages on the list of my gyms ──
+
+  /** Each of the caller's gyms with its count of new messages, as `/v1/orgs/mine` sends it. */
+  const mine = async (who: Person): Promise<Record<string, number>> => {
+    const res = await inject("GET", "/v1/orgs/mine", who.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    const { orgs } = JSON.parse(res.body) as { orgs: { id: string; newMessages?: number }[] };
+    return Object.fromEntries(orgs.map((o) => [o.id, o.newMessages ?? -1]));
+  };
+  const write = async (gym: Gym, userId: string, occasion: string, sentAt: Date, read: Date | null = null): Promise<void> => {
+    await sql`
+      INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at, read_at)
+      VALUES (${gym.id}, ${userId}, 'birthday', ${occasion}, 'Happy birthday.', ${sentAt.toISOString().slice(0, 10)}, ${sentAt}, ${days(sentAt, 30)}, ${read})`;
+  };
+
+  it(
+    "THE DOT'S WORST THING: the list of my gyms counts only the caller's own new messages, a gym at a time, and never one that has left the inbox or came before this stay",
+    async () => {
+      clock = NOON;
+      const gym = await makeGym("Dot Iron House");
+      const other = await makeGym("Dot Other Gym");
+      // Maya has been in both for forty days; Bo is in the first.
+      const maya = await joins(gym, "Maya Rao", days(NOON, -40));
+      await inGym(other, maya.userId, days(NOON, -40));
+      const bo = await joins(gym, "Bo Lee", days(NOON, -40));
+      expect(await mine(maya)).toEqual({ [gym.id]: 0, [other.id]: 0 });
+
+      // Bo's three new messages in her gym, and one of hers in the other gym.
+      for (const n of [1, 2, 3]) await write(gym, bo.userId, `bo:${String(n)}`, minutes(NOON, -n));
+      await write(other, maya.userId, "other:1", minutes(NOON, -1));
+      expect(await mine(maya)).toEqual({ [gym.id]: 0, [other.id]: 1 });
+      expect(await mine(bo)).toEqual({ [gym.id]: 3 });
+
+      // Hers in the first gym: one that left the inbox yesterday, one she has opened, one
+      // that is not sent yet, and one new.
+      await write(gym, maya.userId, "gone", days(NOON, -31));
+      await write(gym, maya.userId, "opened", minutes(NOON, -9), minutes(NOON, -8));
+      await write(gym, maya.userId, "later", minutes(NOON, 30));
+      expect(await mine(maya)).toEqual({ [gym.id]: 0, [other.id]: 1 });
+      await write(gym, maya.userId, "new", minutes(NOON, -2));
+      expect(await mine(maya)).toEqual({ [gym.id]: 1, [other.id]: 1 });
+
+      // Removed and back: what came before this stay is not counted, in this gym only.
+      await remove(gym, maya.userId, minutes(NOON, -1));
+      expect(await mine(maya)).toEqual({ [other.id]: 1 });
+      await inGym(gym, maya.userId, NOON);
+      clock = minutes(NOON, 5);
+      expect(await mine(maya)).toEqual({ [gym.id]: 0, [other.id]: 1 });
+      await write(gym, maya.userId, "since", minutes(NOON, 1));
+      expect(await mine(maya)).toEqual({ [gym.id]: 1, [other.id]: 1 });
+
+      // The list and each inbox give one answer.
+      for (const g of [gym, other]) expect((await inbox(g, maya)).unread).toBe((await mine(maya))[g.id]);
+      expect((await inbox(gym, bo)).unread).toBe((await mine(bo))[gym.id]);
+
+      // Opening one gym's inbox puts that gym's count out, and nobody else's.
+      expect((await inject("POST", `${path(gym.id)}/read`, maya.cookies, { upTo: clock.toISOString() })).statusCode).toBe(200);
+      expect(await mine(maya)).toEqual({ [gym.id]: 0, [other.id]: 1 });
+      expect(await mine(bo)).toEqual({ [gym.id]: 3 });
+    },
+    T,
+  );
+
+  it(
+    "the dot's count is nobody's but a member's: a stranger, the gym's own staff, a closed gym and a gym on no plan read 0, as the inbox does",
+    async () => {
+      clock = NOON;
+      const gym = await makeGym("Dot Staff Gym");
+      const lapsed = await makeGym("Dot Lapsed Gym");
+      const closed = await makeGym("Dot Closed Gym");
+      const maya = await joins(gym, "Maya Rao", days(NOON, -5));
+      await inGym(lapsed, maya.userId, days(NOON, -5));
+      await inGym(closed, maya.userId, days(NOON, -5));
+      for (const g of [gym, lapsed, closed]) await write(g, maya.userId, "one", minutes(NOON, -3));
+      expect(await mine(maya)).toEqual({ [gym.id]: 1, [lapsed.id]: 1, [closed.id]: 1 });
+
+      // The owner runs the gym and is not a member of it: a row in their name is not counted.
+      await write(gym, gym.owner.userId, "owner", minutes(NOON, -3));
+      expect(await mine(gym.owner)).toEqual({ [gym.id]: 0 });
+      const stranger = await signedIn("Sam Stranger");
+      expect(await mine(stranger)).toEqual({});
+      expect((await inject("GET", "/v1/orgs/mine", {})).statusCode).toBe(401);
+
+      await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${lapsed.id}`;
+      await sql`UPDATE gyms SET status = 'archived' WHERE id = ${closed.id}`;
+      const now = await mine(maya);
+      expect(now[gym.id]).toBe(1);
+      expect(now[lapsed.id]).toBe(0);
+      // A closed gym may have left the list; where it is listed it counts nothing.
+      expect(now[closed.id] ?? 0).toBe(0);
+      expect((await inbox(lapsed, maya)).unread).toBe(0);
+      expect((await inbox(closed, maya)).unread).toBe(0);
+      // The plan is back: so is the count.
+      await livePlan(lapsed.id);
+      expect((await mine(maya))[lapsed.id]).toBe(1);
+    },
+    T,
+  );
 });

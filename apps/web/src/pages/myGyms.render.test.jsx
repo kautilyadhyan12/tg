@@ -1273,4 +1273,93 @@ describe('the dot on the nav item', () => {
     await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
     expect(screen.queryByLabelText('New message')).toBeNull();
   });
+
+  // ── A NEW INBOX MESSAGE (ROADMAP 20a-ii) ──
+  const oneInbox = (gymId, gymName, unread) => ({
+    gymId,
+    gymName,
+    status: 'shown',
+    messages: Array.from({ length: unread }, (_, i) => ({
+      id: `${gymId}-m${String(i)}`,
+      kind: 'welcome',
+      body: `Message ${String(i + 1)} from ${gymName}.`,
+      sentAt: '2026-09-02T10:00:00.000Z',
+      read: false,
+    })),
+    unread,
+    asOf: '2026-09-02T12:00:00.000Z',
+  });
+  const drawBoth = () =>
+    render(
+      <MemoryRouter initialEntries={['/my-gyms']}>
+        <Sidebar />
+        <MyGyms />
+      </MemoryRouter>,
+    );
+  const neverAnswers = () => new Promise(() => {});
+
+  it('appears for a new inbox message with no cheer, and not for a count of none', async () => {
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, latestCheer: null, newMessages: 0 }], formerOrgs: [] } });
+    const first = drawSidebar();
+    await waitFor(() => expect(screen.getByText('My Gyms')).toBeTruthy());
+    expect(screen.queryByLabelText('New message')).toBeNull();
+    first.unmount();
+    resetConsoleOrgs();
+
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, latestCheer: null, newMessages: 2 }], formerOrgs: [] } });
+    drawSidebar();
+    await waitFor(() => expect(screen.getByLabelText('New message')).toBeTruthy());
+  });
+
+  it("with two gyms, each gym's button says which has a message, and the dot goes out only when both inboxes have been opened", async () => {
+    const other = { ...GYM, id: 'g2', slug: 'bar-bell', name: 'Bar Bell Club', newMessages: 2 };
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, newMessages: 1 }, other], formerOrgs: [] } });
+    inboxSvc.read.mockClear();
+    inboxSvc.markRead.mockClear();
+    inboxSvc.read.mockImplementation((gymId) =>
+      Promise.resolve(gymId === 'g1' ? oneInbox('g1', 'Iron House', 1) : oneInbox('g2', 'Bar Bell Club', 2)),
+    );
+    inboxSvc.markRead.mockResolvedValue(0);
+    try {
+      drawBoth();
+      const iron = await screen.findByRole('tab', { name: 'Iron House, 1 new message' });
+      expect(iron.textContent).toBe('Iron House1');
+      expect(screen.getByRole('tab', { name: 'Bar Bell Club, 2 new messages' }).textContent).toBe('Bar Bell Club2');
+      expect(screen.getByLabelText('New message')).toBeTruthy();
+
+      // Iron House's inbox is opened: its button loses its count, the other keeps its own,
+      // and the dot stays for the gym still holding a message.
+      fireEvent.click(await screen.findByRole('tab', { name: 'Inbox, 1 new message' }));
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Iron House' }).textContent).toBe('Iron House'));
+      expect(screen.getByRole('tab', { name: 'Bar Bell Club, 2 new messages' })).toBeTruthy();
+      expect(screen.getByLabelText('New message')).toBeTruthy();
+      expect(inboxSvc.markRead).toHaveBeenCalledTimes(1);
+      expect(inboxSvc.markRead).toHaveBeenCalledWith('g1', '2026-09-02T12:00:00.000Z');
+
+      // The other gym's page, its Inbox still the open tab: now nothing is new anywhere.
+      fireEvent.click(screen.getByRole('tab', { name: 'Bar Bell Club, 2 new messages' }));
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Bar Bell Club' }).textContent).toBe('Bar Bell Club'));
+      expect(inboxSvc.markRead).toHaveBeenLastCalledWith('g2', '2026-09-02T12:00:00.000Z');
+      await waitFor(() => expect(screen.queryByLabelText('New message')).toBeNull());
+      // The list of gyms was asked for once: the counts came from the inbox's own answers.
+      expect(api.getMine).toHaveBeenCalledTimes(1);
+    } finally {
+      inboxSvc.read.mockImplementation(neverAnswers);
+      inboxSvc.markRead.mockImplementation(neverAnswers);
+    }
+  });
+
+  it('a mark the server refuses leaves the dot and the count as they were', async () => {
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, newMessages: 1 }], formerOrgs: [] } });
+    inboxSvc.read.mockClear();
+    inboxSvc.markRead.mockClear();
+    inboxSvc.read.mockResolvedValueOnce(oneInbox('g1', 'Iron House', 1));
+    inboxSvc.markRead.mockRejectedValueOnce(new Error('offline'));
+    drawBoth();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Inbox, 1 new message' }));
+    await waitFor(() => expect(inboxSvc.markRead).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    expect(screen.getByRole('tab', { name: 'Inbox, 1 new message' })).toBeTruthy();
+    expect(screen.getByLabelText('New message')).toBeTruthy();
+  });
 });

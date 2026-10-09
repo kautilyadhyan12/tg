@@ -11,6 +11,19 @@ export function unreadBadge(unread) {
   return unread > 99 ? '99+' : String(unread);
 }
 
+/** Does any of the person's gyms hold a new message for them? The menu's dot beside My
+ *  Gyms reads this (ROADMAP 20a-ii); the count is the server's, the inbox's own. */
+export function hasNewMessages(gyms) {
+  return (Array.isArray(gyms) ? gyms : []).some((gym) => unreadBadge(gym?.newMessages) !== null);
+}
+
+/** What a screen reader hears for a gym's button at the top of My Gyms. */
+export function gymButtonName(name, unread) {
+  const badge = unreadBadge(unread);
+  if (badge === null) return name;
+  return unread === 1 ? `${name}, 1 new message` : `${name}, ${badge} new messages`;
+}
+
 /** What a screen reader hears for the tab. */
 export function inboxTabName(unread) {
   const badge = unreadBadge(unread);

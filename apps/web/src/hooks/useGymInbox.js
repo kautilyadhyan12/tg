@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { inboxService } from '../api/inboxApi';
 import { errorText } from '../api/orgsApi';
+import { applyInboxCount } from '../pages/console/consoleOrgs';
 
 const LOADING = { loading: true, error: null, inbox: null, unread: 0 };
 
@@ -16,7 +17,12 @@ export function useGymInbox(gymId) {
     if (gymId === null) return;
     const mine = ++asked.current;
     inboxService.read(gymId).then(
-      (inbox) => asked.current === mine && setState({ gymId, loading: false, error: null, inbox, unread: inbox.unread }),
+      (inbox) => {
+        if (asked.current !== mine) return;
+        setState({ gymId, loading: false, error: null, inbox, unread: inbox.unread });
+        // The menu's dot and the gym's button say what this read said.
+        applyInboxCount(gymId, inbox.unread);
+      },
       (err) => asked.current === mine && setState({ gymId, loading: false, error: errorText(err, "Couldn't load your messages."), inbox: null, unread: 0 }),
     );
   }, [gymId]);
@@ -39,7 +45,10 @@ export function useGymInbox(gymId) {
   const markSeen = useCallback(() => {
     if (gymId === null || read === null || unread === 0) return;
     inboxService.markRead(gymId, read.asOf).then(
-      (left) => setState((s) => (s.inbox === read ? { ...s, unread: left } : s)),
+      (left) => {
+        setState((s) => (s.inbox === read ? { ...s, unread: left } : s));
+        applyInboxCount(gymId, left);
+      },
       () => {},
     );
   }, [gymId, read, unread]);

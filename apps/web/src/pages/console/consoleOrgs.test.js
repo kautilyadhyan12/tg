@@ -15,6 +15,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
 const { orgService } = await import('../../api/orgsApi');
 const { setCurrentUserId } = await import('../../utils/storage');
 const {
+  applyInboxCount,
   consoleOrgsRegainedFocus,
   consoleOrgsSnapshot,
   ensureConsoleOrgs,
@@ -234,6 +235,44 @@ describe('the console changing a gym from the inside', () => {
     await settled();
 
     expect(consoleOrgsSnapshot()).toMatchObject({ status: 'ready', orgs: [ORG] });
+  });
+});
+
+describe("a member's inbox count (20a-ii)", () => {
+  const TWO = [{ ...ORG, newMessages: 2 }, { ...ORG, id: 'g2', name: 'Bar Bell Club', newMessages: 1 }];
+
+  it("goes into that gym's row and no other, without asking the server again", async () => {
+    orgService.getMine.mockResolvedValue(answer(TWO));
+    ensureConsoleOrgs();
+    await settled();
+    const seen = vi.fn();
+    const stop = subscribeConsoleOrgs(seen, { watch: false });
+    applyInboxCount('g1', 0);
+    expect(consoleOrgsSnapshot().orgs.map((o) => [o.id, o.newMessages])).toEqual([['g1', 0], ['g2', 1]]);
+    expect(seen).toHaveBeenCalledTimes(1);
+    // The same number again changes nothing, and tells nobody.
+    applyInboxCount('g1', 0);
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(orgService.getMine).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('ignores a gym that is not in the list, a number that is not a count, and the next person signed in', async () => {
+    orgService.getMine.mockResolvedValue(answer(TWO));
+    ensureConsoleOrgs();
+    await settled();
+    const before = consoleOrgsSnapshot();
+    for (const [id, n] of [['g9', 0], ['', 0], [null, 0], ['g1', -1], ['g1', 1.5], ['g1', '0'], ['g1', null]]) applyInboxCount(id, n);
+    expect(consoleOrgsSnapshot()).toBe(before);
+    setCurrentUserId('u2');
+    applyInboxCount('g1', 0);
+    setCurrentUserId('u1');
+    expect(consoleOrgsSnapshot()).toBe(before);
+  });
+
+  it('does nothing before the list has been read', () => {
+    applyInboxCount('g1', 0);
+    expect(consoleOrgsSnapshot()).toMatchObject({ status: 'idle', orgs: null });
   });
 });
 
