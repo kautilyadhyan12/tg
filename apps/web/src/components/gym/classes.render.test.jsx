@@ -371,6 +371,43 @@ describe('an online class, for a member', () => {
     }
   });
 
+  it('a read the page makes by itself that fails leaves the classes on the screen, and is tried again', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-07T16:29:58.000Z'));
+      const early = klass('s1', 'Online Pilates', { mine: mine('booked'), can: can({ cancel: 'free' }), online: online('early') });
+      serve([early, klass('s2', 'Floor Spin')]);
+      render(<Classes gym={GYM} />);
+      await vi.waitFor(() => expect(screen.getByText('Online Pilates')).toBeTruthy());
+
+      // The phone drops the request the page makes when the link is due.
+      svc.list.mockImplementation(() => Promise.reject(new Error('offline')));
+      await act(() => vi.advanceTimersByTimeAsync(3_500));
+      expect(svc.list).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('Online Pilates')).toBeTruthy();
+      expect(screen.getByText('Floor Spin')).toBeTruthy();
+      expect(screen.queryByText("Couldn't load the classes.")).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+
+      // Twenty seconds on it reads again, and the link is there.
+      serve([{ ...early, online: online('open', LINK) }, klass('s2', 'Floor Spin')]);
+      await act(() => vi.advanceTimersByTimeAsync(19_000));
+      expect(svc.list).toHaveBeenCalledTimes(2);
+      await act(() => vi.advanceTimersByTimeAsync(2_000));
+      expect(svc.list).toHaveBeenCalledTimes(3);
+      expect(screen.getByRole('link', { name: /^Join class/ }).getAttribute('href')).toBe(LINK);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a failed read the member asked for still says so, with Try again', async () => {
+    svc.list.mockImplementation(() => Promise.reject(new Error('offline')));
+    render(<Classes gym={GYM} />);
+    expect(await screen.findByText("Couldn't load the classes.")).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
   it('a class whose link the gym has not added yet is read again until it is there', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     try {

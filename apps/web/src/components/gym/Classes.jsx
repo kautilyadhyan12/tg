@@ -4,7 +4,7 @@ import { CLASS_LATE_CANCEL_ERROR, MEMBER_CLASSES_WEEKS } from '@app/shared';
 import { classesService } from '../../api/classesApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
-import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, mineText, nextReadAt, onlineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
+import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, LINK_READ_AGAIN_MS, mineText, nextReadAt, onlineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
 
 // A GYM'S CLASSES FOR ITS MEMBER (spec Part 3 §13.6; ROADMAP 17d): the coming classes by
 // day, with Book, Join waitlist, Claim place and Cancel. The server decides every one; a
@@ -112,7 +112,12 @@ export default function Classes({ gym }) {
   const keys = useRef(new Map());
   const asked = useRef(0);
 
-  const load = useCallback(() => {
+  // When a read the page made by itself last failed; null once a read has answered.
+  const [missedAt, setMissedAt] = useState(null);
+
+  // `quiet`: a read the page makes by itself while a link is waited for. One that fails
+  // leaves the classes on the screen and is tried again; it never takes the list away.
+  const load = useCallback((quiet = false) => {
     const mine = ++asked.current;
     classesService
       .list(gym.id, week)
@@ -120,10 +125,15 @@ export default function Classes({ gym }) {
         if (mine !== asked.current) return;
         // A class they hold needs no kept key: the tap it was for has plainly been answered.
         for (const c of list.classes) if (c.mine?.status === 'booked' || c.mine?.status === 'waitlisted') keys.current.delete(c.sessionId);
+        setMissedAt(null);
         setState({ loading: false, error: null, list });
       })
       .catch((err) => {
         if (mine !== asked.current) return;
+        if (quiet === true) {
+          setMissedAt(Date.now());
+          return;
+        }
         // The server's 404 is for anybody who is not a member of a gym on a live plan.
         const error = errorStatus(err) === 404 ? `${gym.name}'s classes aren't available right now.` : errorText(err, "Couldn't load the classes.");
         setState({ loading: false, error, list: null });
@@ -140,11 +150,11 @@ export default function Classes({ gym }) {
   // so Join class comes and goes by itself. Set again after every read.
   const listRead = state.list;
   useEffect(() => {
-    const at = nextReadAt(listRead?.classes);
+    const at = missedAt !== null ? missedAt + LINK_READ_AGAIN_MS : nextReadAt(listRead?.classes);
     if (at === null) return undefined;
-    const timer = setTimeout(load, Math.max(0, at - Date.now()));
+    const timer = setTimeout(() => load(true), Math.max(0, at - Date.now()));
     return () => clearTimeout(timer);
-  }, [listRead, load]);
+  }, [listRead, missedAt, load]);
 
   const go = (to) => {
     setState((s) => ({ ...s, loading: true }));

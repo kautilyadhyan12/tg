@@ -41,12 +41,16 @@ export function onlineText(c) {
 
 /** How often the list is read again while a link is due and not here, by this device's clock. */
 export const LINK_READ_AGAIN_MS = 20_000;
+/** Once a link has been due for this long here and the server still says early, the
+ *  device's clock is plainly wrong: the list is read once a minute from then. */
+export const LINK_READ_SLOWER_AFTER_MS = 10 * 60_000;
+export const LINK_READ_SLOWER_MS = 60_000;
 
 /** When the list should be read again by itself, for the online classes they hold a place
  *  in; null where nothing is waited for. The server decides the moments, and this device's
  *  clock may be fast or slow, so: a link still to show is read for a second after its
  *  moment, and every 20 seconds once that moment has passed here and the server still says
- *  early; a link the gym has not added yet is read for every 20 seconds; a link showing is
+ *  early (once a minute after ten minutes of that); a link the gym has not added yet is read for every 20 seconds; a link showing is
  *  read again a second after the class ends, and every 20 seconds until the server says so. */
 export function nextReadAt(classes, now = Date.now()) {
   let soonest = null;
@@ -58,7 +62,7 @@ export function nextReadAt(classes, now = Date.now()) {
     if (state === 'early') {
       const at = Date.parse(c.online.opensAt);
       if (Number.isNaN(at) || at - now > 86_400_000) continue;
-      want(at > now ? at + 1000 : now + LINK_READ_AGAIN_MS);
+      want(at > now ? at + 1000 : now + (now - at > LINK_READ_SLOWER_AFTER_MS ? LINK_READ_SLOWER_MS : LINK_READ_AGAIN_MS));
     } else if (state === 'no_link') {
       want(now + LINK_READ_AGAIN_MS);
     } else if (state === 'open') {

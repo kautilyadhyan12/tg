@@ -1,6 +1,6 @@
 // A MEMBER'S CLASSES, IN WORDS (ROADMAP 17d).
 import { describe, expect, it } from 'vitest';
-import { actionsOf, byDay, cancelAsk, cancelledText, clockText, dayHeading, instantText, mineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
+import { actionsOf, byDay, cancelAsk, cancelledText, clockText, dayHeading, instantText, mineText, nextReadAt, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
 
 const can = (over = {}) => ({ book: false, joinWaitlist: false, claim: false, cancel: null, why: null, ...over });
 const klass = (over = {}) => ({
@@ -22,6 +22,50 @@ const klass = (over = {}) => ({
   ...over,
 });
 const mine = (status, over = {}) => ({ status, waitlistPlace: null, packCharged: false, ...over });
+
+describe('when a member’s list is read again by itself (17g)', () => {
+  const OPENS = Date.parse('2026-10-07T16:30:00.000Z');
+  const held = (state, over = {}) => ({ startsAt: '2026-10-07T17:00:00.000Z', minutes: 45, online: { state, opensAt: '2026-10-07T16:30:00.000Z', link: null }, ...over });
+  const inMs = (classes, now) => {
+    const at = nextReadAt(classes, now);
+    return at === null ? null : at - now;
+  };
+
+  it('nothing is waited for: a class at the gym, one not booked, one waited for, one over', () => {
+    expect(nextReadAt([], OPENS)).toBeNull();
+    expect(nextReadAt([{ online: null }, held('not_booked'), held('waiting'), held('closed')], OPENS)).toBeNull();
+    expect(nextReadAt(undefined, OPENS)).toBeNull();
+  });
+
+  it('a link still to show: a second after its moment, and not at all when that is over a day away', () => {
+    expect(inMs([held('early')], OPENS - 5 * 60_000)).toBe(5 * 60_000 + 1000);
+    expect(inMs([held('early')], OPENS - 25 * 3_600_000)).toBeNull();
+  });
+
+  it('the moment has passed on this device and the server still says early: every 20 seconds, then once a minute after ten minutes', () => {
+    expect(inMs([held('early')], OPENS)).toBe(20_000);
+    expect(inMs([held('early')], OPENS + 5_000)).toBe(20_000);
+    expect(inMs([held('early')], OPENS + 10 * 60_000)).toBe(20_000);
+    expect(inMs([held('early')], OPENS + 10 * 60_000 + 1)).toBe(60_000);
+    // A device two days ahead.
+    expect(inMs([held('early')], OPENS + 48 * 3_600_000)).toBe(60_000);
+  });
+
+  it('no link added yet: every 20 seconds', () => {
+    expect(inMs([held('no_link')], OPENS + 60_000)).toBe(20_000);
+  });
+
+  it('a link showing: a second after the class ends, and every 20 seconds once that has passed here', () => {
+    const END = Date.parse('2026-10-07T17:45:00.000Z');
+    expect(inMs([held('open')], END - 10 * 60_000)).toBe(10 * 60_000 + 1000);
+    expect(inMs([held('open')], END + 5_000)).toBe(20_000);
+  });
+
+  it('the soonest of several', () => {
+    expect(inMs([held('open'), held('early'), held('no_link')], OPENS - 60_000)).toBe(20_000);
+    expect(inMs([held('open'), held('early')], OPENS - 60_000)).toBe(61_000);
+  });
+});
 
 describe('the time is the gym’s own', () => {
   it('prints the gym’s clock as it arrived', () => {

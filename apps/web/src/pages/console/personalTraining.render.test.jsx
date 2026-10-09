@@ -986,8 +986,9 @@ describe('came or no-show', () => {
     expect(api.markPt).not.toHaveBeenCalled();
     fireEvent.click(mark.getByRole('button', { name: 'Mark that Maya Lopez came' }));
     await waitFor(() => expect(api.markPt).toHaveBeenCalledWith('g1', SESSION, 'attended'));
-    await waitFor(() => expect(within(screen.getByTestId('pt-mark')).getByText('Came')).toBeTruthy());
-    expect(screen.queryByText('Not marked yet')).toBeNull();
+    // The week read again is what takes "Not marked yet" away; the word "Came" is on the button before it.
+    await waitFor(() => expect(screen.queryByText('Not marked yet')).toBeNull());
+    expect(within(screen.getByTestId('pt-mark')).getByText('Came')).toBeTruthy();
     expect(within(screen.getByTestId('pt-mark')).getByRole('button', { name: 'Change Maya Lopez to no-show' })).toBeTruthy();
   });
 
