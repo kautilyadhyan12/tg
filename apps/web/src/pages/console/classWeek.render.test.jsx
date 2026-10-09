@@ -606,7 +606,7 @@ describe('one class on one date', () => {
   it('a class that has already started offers nothing to press', async () => {
     draw();
     await openDay('Spin on Mon 21 Sep 2026 at 18:00');
-    expect(screen.getByText("This class has started, so it can't be changed.")).toBeTruthy();
+    expect(screen.getByText("This class has started, so its time, coach and places can't be changed.")).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Cancel class' })).toBeNull();
   });
@@ -637,7 +637,7 @@ describe('one class on one date', () => {
     expect(await screen.findByText(sentence)).toBeTruthy();
     await waitFor(() => expect(api.getClassWeek).toHaveBeenLastCalledWith('g1', '2026-09-21'));
     expect(
-      await screen.findByText("This class has started, so it can't be changed."),
+      await screen.findByText("This class has started, so its time, coach and places can't be changed."),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Cancel class' })).toBeNull();
   });

@@ -856,11 +856,13 @@ export interface EndedBooked extends MarkableBooking {
  *  with the check-ins of its class's window (`beforeMinutes` before the start until the
  *  end), held to the commit. A check-in is a pass, a key tag or staff's own: a visit
  *  staff added for an earlier day has no hour of its own, and a member's own tap is
- *  nobody's word but theirs. For a write under the gym's lock. */
+ *  nobody's word but theirs. `lock`: the places are held to the commit, for a write
+ *  under the gym's lock. */
 export async function endedBooked(
-  tx: TransactionSql,
+  tx: SqlOrTx,
   gymId: string,
   when: { now: Date; afterMinutes: number; beforeMinutes: number; lookbackHours: number },
+  lock: boolean,
 ): Promise<EndedBooked[]> {
   const inWindow = tx`
     a.gym_id = s.gym_id AND a.method IN ('pass','key_tag','staff') AND a.slot_key <> 'added_later'
@@ -879,6 +881,6 @@ export async function endedBooked(
     WHERE s.gym_id = ${gymId} AND s.status = 'scheduled'
       AND s.starts_at > ${when.now}::timestamptz - make_interval(hours => ${when.lookbackHours + 24})
       AND s.starts_at + make_interval(mins => s.minutes + ${when.afterMinutes}) <= ${when.now}::timestamptz
-    FOR UPDATE OF b`;
+    ${lock ? tx`FOR UPDATE OF b` : tx``}`;
   return rows.map((r) => ({ ...toMarkable(r), visit: r.by_account ? "account" : r.by_record ? "record" : null, gymCheckedIn: r.gym_checked_in }));
 }

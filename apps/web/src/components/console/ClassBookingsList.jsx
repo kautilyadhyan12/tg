@@ -30,7 +30,7 @@ function People({ heading, help = null, rows, numbered = false, onOpen, list = n
           const mark = list === null ? null : markRow(booking, list);
           return (
             <li key={booking.bookingId} className="min-w-0 flex flex-col gap-1" data-testid="class-booking">
-              <div className="min-w-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <div className="min-w-0 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <div className="min-w-0 flex items-baseline gap-2">
                   {numbered ? <span className="c-s14 c-t3 c-num">{index + 1}.</span> : null}
                   <span className="min-w-0">

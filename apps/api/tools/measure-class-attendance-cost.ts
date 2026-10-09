@@ -104,8 +104,8 @@ async function makeGym(n: number, t0: number): Promise<Gym> {
     INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
     SELECT ${gymId}, ${type.id}, (s.at AT TIME ZONE 'UTC')::date,
            (EXTRACT(HOUR FROM s.at AT TIME ZONE 'UTC') * 60 + EXTRACT(MINUTE FROM s.at AT TIME ZONE 'UTC'))::int, s.at, 45, NULL, 'scheduled'
-    FROM (SELECT ${new Date(t0)}::timestamptz + make_interval(mins => k * ${each} + 7) AS at
-          FROM generate_series(${-CLASSES_A_WEEK * WEEKS_EACH_WAY}, ${CLASSES_A_WEEK * WEEKS_EACH_WAY - 1}) AS k
+    FROM (SELECT ${new Date(t0)}::timestamptz + make_interval(mins => k * ${each}::int + 7) AS at
+          FROM generate_series(${-CLASSES_A_WEEK * WEEKS_EACH_WAY}::int, ${CLASSES_A_WEEK * WEEKS_EACH_WAY - 1}::int) AS k
           WHERE k NOT BETWEEN -1 AND 1) s`;
   await sql`
     INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, request_key, status, pack_charged, created_at, booked_at)
@@ -113,7 +113,7 @@ async function makeGym(n: number, t0: number): Promise<Gym> {
            CASE WHEN s.starts_at < ${new Date(t0)}::timestamptz - interval '49 hours' THEN 'attended' ELSE 'booked' END, false, now(), now()
     FROM (SELECT id, starts_at, (row_number() OVER (ORDER BY starts_at))::int AS sn FROM gym_class_sessions WHERE gym_id = ${gymId}) s
     JOIN (SELECT user_id, entry_id, (row_number() OVER (ORDER BY user_id) - 1)::int AS rn FROM gym_members WHERE gym_id = ${gymId}) m
-      ON (m.rn + s.sn * ${BOOKED}) % ${MEMBERS} < ${BOOKED}`;
+      ON (m.rn + s.sn * ${BOOKED}::int) % ${MEMBERS}::int < ${BOOKED}::int`;
 
   const big = async (startsAt: number): Promise<string> => {
     const [row] = await sql<{ id: string }[]>`
@@ -200,7 +200,11 @@ try {
     `measure-class-attendance-cost: ${String(GYMS)} gyms of ${String(MEMBERS)} members · ${String(sessions)} classes and ${String(bookings)} bookings in all · ${cpu?.model ?? "?"} at ${String(cpu?.speed ?? 0)} MHz`,
   );
 
-  const log = { warn: (obj: object) => console.error("  WARNED", JSON.stringify(obj)) };
+  const log = {
+    warn: (obj: object): void => {
+      console.error("  WARNED", JSON.stringify(obj));
+    },
+  };
   const { gymId, owner, members, soon, ended } = measured;
   const now = new Date(t0);
   const unmark = async (sessionIds: readonly string[]): Promise<void> => {
