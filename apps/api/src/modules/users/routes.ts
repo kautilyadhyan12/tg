@@ -69,7 +69,7 @@ function parseTimeZone(req: FastifyRequest, reply: FastifyReply): string | null 
 
 export function registerUserRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; config: AppConfig; redis: RedisLike; emailSender?: UsersEmailSender },
+  deps: { sql: Sql; config: AppConfig; redis: RedisLike; emailSender?: UsersEmailSender; now?: () => Date },
 ): void {
   const usersDeps: service.UsersDeps = {
     sql: deps.sql,
@@ -77,6 +77,7 @@ export function registerUserRoutes(
     redis: deps.redis,
     emailSender: deps.emailSender ?? createLogOnlyUsersEmailSender(app.log),
     log: app.log,
+    ...(deps.now === undefined ? {} : { now: deps.now }),
   };
 
   const authedUserId = (req: FastifyRequest): string => {

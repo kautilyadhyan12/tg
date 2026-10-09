@@ -341,6 +341,17 @@ export async function markCancelled(
   if (rows.length !== 1) throw new Error("a session was not there to cancel");
 }
 
+/** A session marked came or no-show. The caller holds the gym's lock and has decided it
+ *  by the rule; a cancelled session is never one of these rows. */
+export async function markAttendance(tx: TransactionSql, input: { gymId: string; id: string; status: "attended" | "no_show" }): Promise<void> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_pt_appointments
+    SET status = ${input.status}
+    WHERE gym_id = ${input.gymId} AND id = ${input.id} AND status = ANY(${[...PT_HOLDS_TIME]}::text[])
+    RETURNING id`;
+  if (rows.length !== 1) throw new Error("a session was not there to mark");
+}
+
 export interface PersonRow {
   entryId: string;
   fullName: string;
@@ -833,16 +844,23 @@ export async function trainerHolds(sql: SqlOrTx, gymId: string, trainerId: strin
 // ── SESSIONS WHEN A PERSON LEAVES (17e-iv-a) ──
 
 /** Whose coming sessions end: those booked for these records (they are leaving the gym's
- *  list), or those booked on one held membership staff cancel (all of them, or those on a
- *  day after `afterDay`, its last day). */
-export type EndingSessionsOf = { entryIds: readonly string[] } | { membership: string; afterDay: string | null };
+ *  list), those booked on one held membership staff cancel (all of them, or those on a
+ *  day after `afterDay`, its last day), or those booked WITH one trainer who is leaving
+ *  the staff (17e-iv-b), together with those booked for `entryIds` where that person's
+ *  own record leaves in the same step. */
+export type EndingSessionsOf =
+  | { entryIds: readonly string[] }
+  | { membership: string; afterDay: string | null }
+  | { trainerId: string; entryIds?: readonly string[] };
 
 const endingOf = (sql: SqlOrTx, of: EndingSessionsOf) =>
-  "entryIds" in of
-    ? sql`a.entry_id = ANY(${[...of.entryIds]}::uuid[])`
-    : sql`a.held_membership_id = ${of.membership} AND (${of.afterDay}::date IS NULL OR a.local_date > ${of.afterDay}::date)`;
+  "trainerId" in of
+    ? sql`(a.trainer_user_id = ${of.trainerId} OR a.entry_id = ANY(${[...(of.entryIds ?? [])]}::uuid[]))`
+    : "entryIds" in of
+      ? sql`a.entry_id = ANY(${[...of.entryIds]}::uuid[])`
+      : sql`a.held_membership_id = ${of.membership} AND (${of.afterDay}::date IS NULL OR a.local_date > ${of.afterDay}::date)`;
 
-const nobody = (of: EndingSessionsOf): boolean => "entryIds" in of && of.entryIds.length === 0;
+const nobody = (of: EndingSessionsOf): boolean => !("trainerId" in of) && "entryIds" in of && of.entryIds.length === 0;
 
 export interface EndingSessionRow {
   id: string;

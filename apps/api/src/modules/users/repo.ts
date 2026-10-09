@@ -640,16 +640,21 @@ export async function softDeleteUser(
   /** What else ends at a gym the person has just left: their coming class bookings
    *  (17c-ii-a). Called once a gym, inside this transaction, with that gym's row held. */
   leftGym?: (tx: TransactionSql, gymId: string) => Promise<void>,
+  /** What else ends at a gym whose staff the person has just left: the personal training
+   *  booked with them (17e-iv-b). Called once a gym, inside this transaction, with that
+   *  gym's row held; what it answers goes on that gym's audit row. */
+  leftStaff?: (tx: TransactionSql, gymId: string) => Promise<Record<string, string>>,
 ): Promise<DeletedUserRow | null> {
   return await sql.begin(async (tx) => {
     // The person's gyms, each gym's row held before anything else and in one order:
-    // every write on a gym's members and bookings holds that row first, so a booking
-    // being made at this instant lands before this or waits for it.
+    // every write on a gym's members, bookings and sessions holds that row first, so a
+    // booking being made at this instant lands before this or waits for it.
     const held = new Set<string>();
-    if (leftGym !== undefined) {
+    if (leftGym !== undefined || leftStaff !== undefined) {
       const gyms = await tx<{ id: string }[]>`
         SELECT g.id FROM gyms g
         WHERE g.id IN (SELECT gym_id FROM gym_members WHERE user_id = ${userId} AND removed_at IS NULL)
+           OR g.id IN (SELECT gym_id FROM gym_staff WHERE user_id = ${userId})
         ORDER BY g.id
         FOR UPDATE OF g`;
       for (const gym of gyms) held.add(gym.id);
@@ -720,10 +725,13 @@ export async function softDeleteUser(
         AND NOT EXISTS (SELECT 1 FROM gyms g WHERE g.id = s.gym_id AND g.owner_user_id = s.user_id)
       RETURNING s.gym_id, s.role`;
     for (const ended of endedStaff) {
+      // A gym whose staff they joined in the instant after the rows above were held has
+      // no session booked with them yet.
+      const sessions = held.has(ended.gym_id) ? ((await leftStaff?.(tx, ended.gym_id)) ?? {}) : {};
       await tx`
         INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
         VALUES (${userId}, ${ended.gym_id}, 'org.staff_removed', 'gym_staff', ${userId},
-                ${tx.json({ role: ended.role, removedWith: "account_deleted" })})`;
+                ${tx.json({ role: ended.role, removedWith: "account_deleted", ...sessions })})`;
     }
     await tx`DELETE FROM push_tokens WHERE user_id = ${userId}`;
     return { email: row.email, displayName: row.display_name };

@@ -18,6 +18,7 @@ import { slotKeyFor } from "./attendanceSlot.js";
 import { endLeaversBookings } from "./classes/bookingChanges.js";
 import { reworkInstants as reworkEventInstants } from "./events/repo.js";
 import { reworkTimeOffInstants } from "./pt/repo.js";
+import { endTrainersSessions, endedAuditMeta, requireSessionsConfirmed } from "./pt/changes.js";
 import { streaks, visitsWithOwner } from "./leaderboard/visits.js";
 import {
   ATTENDANCE_PAGE_LIMIT,
@@ -2638,10 +2639,14 @@ export async function removeMember(
     actorManagesStaff: boolean;
     /** Take their staff access in the same step (the box's tick). */
     alsoStaff: boolean;
+    /** The instant of the removal: which sessions booked with them are still to come. */
+    at: Date;
     /** Run in the same transaction just before a live membership is closed, while the
      *  person still counts as a member: moving their list record to past members. It
-     *  answers the record the membership is removed with, which Put back gives back. */
-    beforeClose?: (tx: TransactionSql) => Promise<string | null>;
+     *  answers the record the membership is removed with, which Put back gives back.
+     *  `staffGoes`: their staff row goes in this step too, so the personal training
+     *  booked with them ends, and the caller asks about it here, before anything is written. */
+    beforeClose?: (tx: TransactionSql, facts: { staffGoes: boolean }) => Promise<string | null>;
     /** Run in the same transaction once the membership is closed (or was already):
      *  withdrawing the person's invitation, so signing in again lets nobody back in. */
     afterClose?: (tx: TransactionSql) => Promise<unknown>;
@@ -2671,17 +2676,19 @@ export async function removeMember(
       // An account deleted at this instant has already removed the row and said so.
       const gone = await tx`DELETE FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} RETURNING user_id`;
       if (gone.length === 0) return;
+      // The sessions booked with them end with their staff row (17e-iv-b).
+      const ended = await endTrainersSessions(tx, input.gymId, input.userId, input.at);
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,
         action: "org.staff_removed",
         targetType: "gym_staff",
         targetId: input.userId,
-        meta: { role: toOrgRole(staff.role), removedWith: "membership" },
+        meta: { role: toOrgRole(staff.role), removedWith: "membership", ...endedAuditMeta(ended) },
       });
     };
 
-    const removedWith = (await input.beforeClose?.(tx)) ?? null;
+    const removedWith = (await input.beforeClose?.(tx, { staffGoes: staff !== undefined && input.alsoStaff })) ?? null;
     const closed = await tx<{ id: string }[]>`
       UPDATE gym_members SET removed_at = now(), removed_entry_id = ${removedWith}
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL
@@ -3757,6 +3764,10 @@ export async function removeStaff(
      *  door (T3 round 2, Low-1). Policy stays in the service. */
     lastOwnerRequires: readonly string[];
     actorUserId: string;
+    /** The instant of the removal: which sessions booked with them are still to come. */
+    at: Date;
+    /** The mark of the personal training sessions the screen was told this ends (17e-iv-b). */
+    confirmPtSessions: string | null;
   },
 ): Promise<RemoveStaffOutcome> {
   return await sql.begin(async (tx) => {
@@ -3794,6 +3805,10 @@ export async function removeStaff(
       if ((otherOwners[0]?.n ?? 0) === 0) return { kind: "last_owner" };
     }
 
+    // The personal training booked with them ends with their staff row: named first (it
+    // throws, and nothing is written), worked out here under the gym's lock.
+    await requireSessionsConfirmed(tx, input.gymId, { trainerId: input.userId }, input.at, input.confirmPtSessions);
+
     const deleted = await tx<{ user_id: string }[]>`
       DELETE FROM gym_staff
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
@@ -3801,6 +3816,7 @@ export async function removeStaff(
     if (deleted[0] === undefined) {
       throw new Error("DELETE FROM gym_staff removed no row under the org lock");
     }
+    const ended = await endTrainersSessions(tx, input.gymId, input.userId, input.at);
 
     // Nothing to undo on `gym_members`: their seat starts counting again the
     // moment the staff row is gone, because `claimSeat` asks `gym_staff` rather
@@ -3812,7 +3828,7 @@ export async function removeStaff(
       action: "org.staff_removed",
       targetType: "gym_staff",
       targetId: input.userId,
-      meta: { role },
+      meta: { role, ...endedAuditMeta(ended) },
     });
 
     return { kind: "removed" };
