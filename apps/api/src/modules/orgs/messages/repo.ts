@@ -33,24 +33,28 @@ export interface InboxRow {
 }
 
 /** The person's messages from this gym that are still in the inbox, newest first: sent
- *  since they joined this time, and not past their 30 days. */
-export async function inboxRows(sql: SqlOrTx, gymId: string, userId: string, since: Date, now: Date, max: number): Promise<InboxRow[]> {
+ *  since they joined this time, and not past their 30 days. The join is read from its own
+ *  row, to the microsecond: a JS instant drops them, and would let in a message from just
+ *  before the stay. */
+export async function inboxRows(sql: SqlOrTx, gymId: string, userId: string, now: Date, max: number): Promise<InboxRow[]> {
   const rows = await sql<{ id: string; kind: string; body: string; sent_at: Date; read: boolean }[]>`
     SELECT id, kind, body, sent_at, read_at IS NOT NULL AS read
     FROM gym_member_messages
     WHERE gym_id = ${gymId} AND user_id = ${userId}
-      AND sent_at >= ${since} AND sent_at <= ${now} AND expires_at > ${now}
+      AND sent_at >= (SELECT m.joined_at FROM gym_members m WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL)
+      AND sent_at <= ${now} AND expires_at > ${now}
     ORDER BY sent_at DESC, id
     LIMIT ${max}`;
   return rows.map((row) => ({ id: row.id, kind: row.kind, body: row.body, sentAt: row.sent_at, read: row.read }));
 }
 
 /** How many of them the person has not opened. */
-export async function unreadCount(sql: SqlOrTx, gymId: string, userId: string, since: Date, now: Date): Promise<number> {
+export async function unreadCount(sql: SqlOrTx, gymId: string, userId: string, now: Date): Promise<number> {
   const rows = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM gym_member_messages
     WHERE gym_id = ${gymId} AND user_id = ${userId} AND read_at IS NULL
-      AND sent_at >= ${since} AND sent_at <= ${now} AND expires_at > ${now}`;
+      AND sent_at >= (SELECT m.joined_at FROM gym_members m WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL)
+      AND sent_at <= ${now} AND expires_at > ${now}`;
   return rows[0]?.n ?? 0;
 }
 

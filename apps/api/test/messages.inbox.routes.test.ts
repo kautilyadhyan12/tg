@@ -649,13 +649,34 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
       const now = await mine(maya);
       expect(now[gym.id]).toBe(1);
       expect(now[lapsed.id]).toBe(0);
-      // A closed gym may have left the list; where it is listed it counts nothing.
-      expect(now[closed.id] ?? 0).toBe(0);
+      // A closed gym is still on the list, and counts nothing.
+      expect(now).toHaveProperty(closed.id);
+      expect(now[closed.id]).toBe(0);
       expect((await inbox(lapsed, maya)).unread).toBe(0);
       expect((await inbox(closed, maya)).unread).toBe(0);
       // The plan is back: so is the count.
       await livePlan(lapsed.id);
       expect((await mine(maya))[lapsed.id]).toBe(1);
+    },
+    T,
+  );
+
+  it(
+    "a message sent in the same millisecond as the join, and before it, is in neither the inbox nor the menu's count",
+    async () => {
+      clock = minutes(NOON, 5);
+      const gym = await makeGym("Dot Same Instant Gym");
+      const maya = await signedIn("Maya Rao");
+      // Joined at .123456, as Postgres' own clock writes a join; the message is from .123.
+      await sql`INSERT INTO gym_members (gym_id, user_id, joined_at) VALUES (${gym.id}, ${maya.userId}, '2026-10-09T06:00:00.123456Z')`;
+      await write(gym, maya.userId, "before", new Date("2026-10-09T06:00:00.123Z"));
+      expect(await inbox(gym, maya)).toMatchObject({ messages: [], unread: 0 });
+      expect(await mine(maya)).toEqual({ [gym.id]: 0 });
+      // One from the next millisecond is in both.
+      await write(gym, maya.userId, "after", new Date("2026-10-09T06:00:00.124Z"));
+      expect(await inbox(gym, maya)).toMatchObject({ unread: 1 });
+      expect((await inbox(gym, maya)).messages).toHaveLength(1);
+      expect(await mine(maya)).toEqual({ [gym.id]: 1 });
     },
     T,
   );
