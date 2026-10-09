@@ -103,14 +103,14 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('teams on the Add challenge form', () => {
-  it('a new challenge is one people are in alone, with no team boxes, and sends no team', async () => {
+  it('a new challenge is an individual one, with no team boxes, and sends no team', async () => {
     open();
     fireEvent.click(await screen.findByRole('button', { name: 'Add challenge' }));
-    const group = form().getByRole('radiogroup', { name: 'Alone or in teams' });
+    const group = form().getByRole('radiogroup', { name: 'Individual or teams' });
     expect(within(group).getAllByRole('radio').map((r) => [r.textContent.replace(/\s+/g, ' ').trim(), r.getAttribute('aria-checked')])).toEqual([
-      ['AloneEach person has their own number and their own place.', 'true'],
-      ["In teams you makeYou name the teams and put people in them on the challenge's board.", 'false'],
-      ['In teams people pickYou name the teams. Your members pick their own in the app.', 'false'],
+      ['IndividualEach member competes on their own.', 'true'],
+      ['Teams: you put people in themYou name the teams, then put each member in one.', 'false'],
+      ['Teams: your members pick their ownYou name the teams. Each member picks their own in the app.', 'false'],
     ]);
     expect(form().queryByRole('group', { name: 'Teams' })).toBeNull();
   });
@@ -122,7 +122,7 @@ describe('teams on the Add challenge form', () => {
     type('Challenge name', 'Team October');
     pickDate('First day', '2026-10-12');
     pickDate('Last day', '2026-10-18');
-    pick('Alone or in teams', 'In teams you make');
+    pick('Individual or teams', 'Teams: you put people in them');
     const teams = () => within(form().getByRole('group', { name: 'Teams' }));
     expect(teams().getAllByRole('textbox')).toHaveLength(2);
     // With two there is nothing to remove.
@@ -130,8 +130,8 @@ describe('teams on the Add challenge form', () => {
     expect(teams().getByText(/2 to 8 teams\. A team's number is its people's numbers added together\. After you save, open the challenge and press Put people in teams\./)).toBeTruthy();
     // How it is won now speaks of teams.
     expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio').map((r) => r.textContent.replace(/\s+/g, ' ').trim())).toEqual([
-      'The team with the mostOne board of teams. The first team wins.',
-      'Every team that reaches a numberYou set the number. Every team that gets there wins.',
+      "Most gym days winsThe team with the most gym days when it ends comes 1st. A team's number is its people's numbers added together.",
+      'Reach a targetYou set a target for a whole team, such as 60 gym days. Every team that reaches it wins.',
     ]);
 
     // Saved with a box empty: said, and nothing sent.
@@ -156,8 +156,9 @@ describe('teams on the Add challenge form', () => {
     for (let n = 8; n > 3; n -= 1) fireEvent.click(teams().getByRole('button', { name: `Remove team ${n}` }));
 
     // A team's target may be more than the challenge's seven days.
-    pick('How it is won', 'Every team that reaches a number');
-    type('Number a team has to reach', '60');
+    pick('How it is won', 'Reach a target');
+    expect(form().getByTestId('target-unit').textContent).toBe('gym days, for a whole team');
+    type('Target, in gym days, for a whole team', '60');
     expect(form().getByText("A team's number is its people's numbers added together. Every team that reaches this wins.")).toBeTruthy();
     fireEvent.click(form().getByRole('button', { name: 'Add challenge' }));
     await waitFor(() => expect(svc.add).toHaveBeenCalledTimes(1));
@@ -212,7 +213,7 @@ describe('teams on the Add challenge form', () => {
     expect(teams.getAllByRole('textbox').every((box) => box.disabled)).toBe(true);
     expect(teams.queryByRole('button', { name: 'Add a team' })).toBeNull();
     expect(teams.queryByRole('button', { name: /^Remove team/ })).toBeNull();
-    expect(within(form().getByRole('radiogroup', { name: 'Alone or in teams' })).getAllByRole('radio').every((r) => r.disabled)).toBe(true);
+    expect(within(form().getByRole('radiogroup', { name: 'Individual or teams' })).getAllByRole('radio').every((r) => r.disabled)).toBe(true);
   });
 });
 
@@ -229,8 +230,8 @@ describe('teams on a challenge card', () => {
     await waitFor(() => expect(cards()).toHaveLength(3));
     const a = cardOf('October Week');
     expect(within(a.getByTestId('challenge-teams')).getByText('Teams · you put people in them')).toBeTruthy();
-    expect(texts(a.getByRole('list', { name: 'Teams: October Week' }))).toEqual(['1stBlue Team5 people14', '2ndRed Team4 people11', 'Green TeamNobody yet0']);
-    expect(within(a.getByTestId('challenge-facts')).getAllByRole('definition').map((d) => d.textContent)).toEqual(['Gym days', 'Counted by the app', 'Most wins', 'The first team', 'Everyone in the app · 143']);
+    expect(texts(a.getByRole('list', { name: 'Teams: October Week' }))).toEqual(['1stBlue Team5 people14 gym days', '2ndRed Team4 people11 gym days', 'Green TeamNobody yet0 gym days']);
+    expect(within(a.getByTestId('challenge-facts')).getAllByRole('definition').map((d) => d.textContent)).toEqual(['Gym days', 'Counted by the app', 'The team with the most gym days wins', "A team's number is its people's added together", 'Everyone in the app', '143 people']);
     // The first three people are not drawn for a challenge in teams.
     expect(a.queryByRole('list', { name: 'In the lead: October Week' })).toBeNull();
     const b = cardOf('Pick Week');
@@ -283,10 +284,10 @@ describe('putting people in teams', () => {
     fireEvent.click(cardOf('October Week').getByRole('button', { name: 'See the board: October Week' }));
     const board = within(await screen.findByTestId('challenge-board'));
     expect(board.getAllByTestId('challenge-row').map((li) => li.textContent.replace(/\s+/g, ' ').trim())).toEqual([
-      '—Asha RaoRed Team3',
-      '—Bilal KhanNothing counted yetNo team0',
-      '—Chen WuNothing counted yetBlue Team0',
-      '—Dev ShahNothing counted yetNo team0',
+      '—Asha RaoRed Team3 gym days',
+      '—Bilal KhanNothing counted yetNo team0 gym days',
+      '—Chen WuNothing counted yetBlue Team0 gym days',
+      '—Dev ShahNothing counted yetNo team0 gym days',
     ]);
     expect(board.queryByRole('combobox')).toBeNull();
     expect(board.queryByRole('button', { name: 'Save teams' })).toBeNull();
@@ -446,7 +447,7 @@ describe('putting people in teams', () => {
 });
 
 describe('round one', () => {
-  it('choosing Alone on a challenge with people in teams says, before Save, which teams go and who is left in none', async () => {
+  it('choosing Individual on a challenge with people in teams says, before Save, which teams go and who is left in none', async () => {
     const coming = challenge('a', 'Next Week', { state: 'coming', startsOn: '2026-10-12', endsOn: '2026-10-18', withNumber: null, teamList: [team(RED, 'Red Team', 3), team(BLUE, 'Blue Team', 1)] });
     svc.list.mockResolvedValue(listOf([coming]));
     svc.change.mockResolvedValue({ ...coming, teams: 'none', teamList: [] });
@@ -454,16 +455,16 @@ describe('round one', () => {
     await waitFor(() => expect(cards()).toHaveLength(1));
     fireEvent.click(cardOf('Next Week').getByRole('button', { name: 'Edit Next Week' }));
     expect(form().queryByRole('note')).toBeNull();
-    pick('Alone or in teams', 'Alone');
+    pick('Individual or teams', 'Individual');
     expect(form().queryByRole('group', { name: 'Teams' })).toBeNull();
     expect(form().getAllByRole('note').map((note) => note.textContent)).toEqual([
       'Red Team has 3 people in it. Saving removes the team, and those people are left in no team. Nobody is told.',
       'Blue Team has 1 person in it. Saving removes the team, and that person is left in no team. Nobody is told.',
     ]);
     // Back in teams, nothing is removed and nothing is said.
-    pick('Alone or in teams', 'In teams you make');
+    pick('Individual or teams', 'Teams: you put people in them');
     expect(form().queryByRole('note')).toBeNull();
-    pick('Alone or in teams', 'Alone');
+    pick('Individual or teams', 'Individual');
     fireEvent.click(form().getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
     expect(svc.change.mock.calls[0][2]).toMatchObject({ teams: 'none', teamList: [] });
@@ -485,7 +486,7 @@ describe('round one', () => {
     open();
     fireEvent.click(await screen.findByRole('button', { name: 'Past challenges (1)' }));
     const page = cardOf('Last Week');
-    await waitFor(() => expect(texts(page.getByRole('list', { name: 'Teams: Last Week' }))).toEqual(['1stRed Team14 people231', '2ndBlue Team9 people180']));
+    await waitFor(() => expect(texts(page.getByRole('list', { name: 'Teams: Last Week' }))).toEqual(['1stRed Team14 people231 gym days', '2ndBlue Team9 people180 gym days']));
     expect(svc.board).toHaveBeenCalledWith('g1', 'p', 1);
     expect(within(page.getByTestId('challenge-teams')).getByText("A team's number leaves out people your members can't see: staff, under-18s and anyone who chose Hide me.")).toBeTruthy();
   });
@@ -495,7 +496,7 @@ describe('round one', () => {
     open();
     await waitFor(() => expect(cards()).toHaveLength(1));
     const page = cardOf('Relay');
-    expect(texts(page.getByRole('list', { name: 'Teams: Relay' }))).toEqual(['1stRed Team2 people101', 'Blue Team3 people95']);
+    expect(texts(page.getByRole('list', { name: 'Teams: Relay' }))).toEqual(['1stRed Team2 people101 seconds', 'Blue Team3 people95 seconds']);
     expect(within(page.getByTestId('challenge-teams')).getByText('The lowest total wins. A team has a place once everyone in it has a number.')).toBeTruthy();
     expect(svc.board).not.toHaveBeenCalled();
   });
@@ -512,13 +513,14 @@ describe('round one', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Add challenge' }));
     const joined = () => within(form().getByRole('radiogroup', { name: 'Who is in it' })).getAllByRole('radio')[1].textContent.replace(/\s+/g, ' ').trim();
     expect(joined()).toBe('Only people who joinYour members see it and tap Join.');
-    pick('Alone or in teams', 'In teams you make');
+    pick('Individual or teams', 'Teams: you put people in them');
     expect(joined()).toBe('Only people who joinYour members see it and tap Join.');
-    pick('Alone or in teams', 'In teams people pick');
+    pick('Individual or teams', 'Teams: your members pick their own');
     expect(joined()).toBe('Only people who joinYour members see it and join by picking a team.');
-    pick('What it counts', 'Your own count');
+    pick('Who counts it', 'Your staff');
+    type('What your staff count', 'seconds');
     expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio')[2].textContent.replace(/\s+/g, ' ').trim()).toBe(
-      'The team with the lowestFor a fastest time. The lowest total wins, and a team is placed once everyone in it has a number, so give each team the same number of people.',
+      'Fewest seconds winsFor a fastest time. The team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.',
     );
   });
 

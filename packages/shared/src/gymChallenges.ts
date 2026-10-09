@@ -602,7 +602,7 @@ export const GYM_CHALLENGE_WORDS = {
   scores_not_own: "This challenge is counted by the app, so numbers can't be typed for it.",
   scores_not_started: "This challenge hasn't started yet. Numbers can be typed from its first day.",
   scores_person: "One of these people isn't in this challenge any more. Load the list again.",
-  teams_none: "People are in this challenge alone, so it has no teams.",
+  teams_none: "This is an individual challenge, so it has no teams.",
   teams_staff: "At this challenge the staff put people in teams, so a team can't be picked here.",
   team_gone: "That team isn't in this challenge any more. Load the page again.",
   pick_to_join: "Pick a team to join this challenge.",

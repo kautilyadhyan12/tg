@@ -48,14 +48,21 @@ export function challengeDates(challenge, today) {
   return `${first} – ${dayLabel(challenge.endsOn)}${year(challenge.endsOn)}`;
 }
 
+/** How a challenge is won, in the one line a member and the gym's staff both read.
+ *  `teamed`: people are in it in teams. */
+export function winLine({ counts, unit = '', target, lowestWins = false, teamed }) {
+  const c = { counts, unit };
+  if (teamed) {
+    if (target !== null) return `Reach ${amount(c, target)} as a team`;
+    return `The team with the ${lowestWins ? 'fewest' : 'most'} ${wordFor(c, 2)} wins`;
+  }
+  if (target !== null) return `Reach ${amount(c, target)}`;
+  return `${lowestWins ? 'Fewest' : 'Most'} ${wordFor(c, 2)} wins`;
+}
+
 /** How it is won, in one line. */
 export function howToWin(challenge) {
-  if (inTeams(challenge)) {
-    if (challenge.target !== null) return `Reach ${amount(challenge, challenge.target)} as a team`;
-    return `The team with the ${challenge.lowestWins ? 'fewest' : 'most'} ${wordFor(challenge, 2)} wins`;
-  }
-  if (challenge.target !== null) return `Reach ${amount(challenge, challenge.target)}`;
-  return `${challenge.lowestWins ? 'Fewest' : 'Most'} ${wordFor(challenge, 2)} wins`;
+  return winLine({ counts: challenge.counts, unit: challenge.unit, target: challenge.target, lowestWins: challenge.lowestWins === true, teamed: inTeams(challenge) });
 }
 
 /** What is counted, for somebody who has never seen the app. */
