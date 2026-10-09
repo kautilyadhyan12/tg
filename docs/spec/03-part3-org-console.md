@@ -4205,7 +4205,8 @@ from a gym that is closed or on no plan. They are never the owner's mobile for p
 nor the address leads reply to: nothing is copied in. A phone number is 6 to 15 digits,
 with spaces, brackets, hyphens, dots, slashes and one `+` at the start or straight after an
 opening bracket (`gymContactPhoneProblem`, `packages/shared/src/gymContact.ts`). It is ONE
-number: a slash after seven or more digits is a second number or line and is refused as
+number: a slash after seven or more digits (ten with a country code), or a spaced slash or
+hyphen with six or more digits each side, is a second number or line and is refused as
 "Add one phone number only." The Call link dials the digits, and with a country code it
 drops the "(0)" written after it ("+44 (0)20…" dials +44 20…). Somebody who runs the gym
 they train at reads the line with a button to the Settings box.

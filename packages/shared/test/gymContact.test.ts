@@ -36,6 +36,12 @@ describe("a gym's phone number for its members", () => {
     ["an Indian mobile, the code in brackets", "(+91) 98765 43210", "tel:+919876543210"],
     ["London, the code in brackets", "(+44) (0)20 7946 0958", "tel:+442079460958"],
     ["an Indian landline, a slash after its area code", "0376/2301234", "tel:03762301234"],
+    // A German town's long area code, with the country code before it: still one number.
+    ["Lübbenau, from abroad", "+49 (0)3541/123456", "tel:+493541123456"],
+    ["a German village, from abroad", "+49 (0)33203/12345", "tel:+493320312345"],
+    ["the same village, at home", "033203/12345", "tel:03320312345"],
+    ["London, the code written 00", "0044 (0)20 7946 0958", "tel:00442079460958"],
+    ["only the first zero in brackets is dropped", "+44 (0)20 (0)7946 095", "tel:+442007946095"],
   ];
   it.each(kept)("%s is kept as typed and calls the right number", (_where, typed, tel) => {
     expect(cleanGymContactPhone(typed)).toBe(typed);
@@ -69,16 +75,18 @@ describe("a gym's phone number for its members", () => {
     ["a second number after a slash", "2345678 / 2345679"],
     ["a second line after a slash", "0376-2301234/35"],
     ["a second line, spaced", "080 4567 8900 / 01"],
+    ["two short numbers, a spaced slash", "234567 / 234568"],
+    ["two numbers, a spaced hyphen", "2345678 - 2345679"],
   ];
   it.each(refused)("%s is not a phone number", (_what, typed) => {
     expect(cleanGymContactPhone(typed)).toBeNull();
   });
 
   it("two numbers with a slash between them are refused in their own words, and nothing else is", () => {
-    for (const typed of ["2345678 / 2345679", "0376-2301234/35", "080 4567 8900 / 01", "+44 20 7946 0958/59"]) {
+    for (const typed of ["2345678 / 2345679", "0376-2301234/35", "080 4567 8900 / 01", "+44 20 7946 0958/59", "234567 / 234568", "2345678 - 2345679"]) {
       expect(gymContactPhoneProblem(typed), typed).toBe("two_contact_phones");
     }
-    for (const [, typed] of refused.filter(([, t]) => !t.includes("/"))) expect(gymContactPhoneProblem(typed), typed).toBe("bad_contact_phone");
+    for (const [, typed] of refused.filter(([, t]) => !t.includes("/") && t !== "2345678 - 2345679")) expect(gymContactPhoneProblem(typed), typed).toBe("bad_contact_phone");
     for (const [, typed] of kept) expect(gymContactPhoneProblem(typed), typed).toBeNull();
   });
 });
