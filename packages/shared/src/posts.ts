@@ -6,14 +6,17 @@
 // stays until it is removed: by staff, or a member's own by the member (RULINGS 2026-10-04).
 // Any member can report a post; staff see the reported ones in a list of their own.
 import { z } from "zod";
+import { classDaySchema } from "./classes.js";
+import { memberGymChallengeSchema } from "./gymChallenges.js";
 import { gymPagePhotoSchema } from "./gymPage.js";
+import { GYM_POST_PHOTO_MAX_BYTES, postLength } from "./postBasics.js";
+
+export { GYM_POST_PHOTO_MAX_BYTES, postLength };
 
 export const GYM_POST_MAX_CHARS = 2000;
 export const GYM_POST_MAX_PHOTOS = 4;
 /** Longest side the browser shrinks a post's photo to before it is sent (ROADMAP 19b-iv). */
 export const GYM_POST_PHOTO_SEND_SIDE = 1600;
-/** The most one photo of a post may weigh, as sent. */
-export const GYM_POST_PHOTO_MAX_BYTES = 1024 * 1024;
 /** Posts kept at the top of the page at once. */
 export const GYM_POST_MAX_PINNED = 3;
 /** Posts a page of the list carries; the pinned ones ride on the first page beside them. */
@@ -75,18 +78,30 @@ const reactionCountsSchema = z
   .strict();
 export type GymPostReactionCounts = z.infer<typeof reactionCountsSchema>;
 
-/** How long a post's words are, as the screen and the database count them: by character,
- *  so an emoji is one, not the two units a JavaScript string holds it in. */
-export function postLength(text: string): number {
-  return Array.from(text).length;
-}
-
 /** A post's words: at most 2,000 characters by `postLength`. The unit cap in front of it
  *  only stops a huge string being walked. */
 const postWords = z
   .string()
   .max(GYM_POST_MAX_CHARS * 2)
   .refine((text) => postLength(text) <= GYM_POST_MAX_CHARS, { message: "too many characters" });
+
+/** What a challenge's result post says when it is made: its name, then this. Who won is
+ *  never in the words; it is read with the post each time (`challengeResult`). */
+export const GYM_CHALLENGE_RESULT_POST_ENDING = " has ended.";
+
+/** A challenge's result, on the post that announces it (ROADMAP 19d-ii-b): the challenge
+ *  exactly as this reader's Challenges tab is sent it, read when the post is, so the two
+ *  never disagree and nobody hidden since is named. */
+export const gymPostChallengeResultSchema = z
+  .object({
+    /** Today on the gym's calendar. */
+    today: classDaySchema,
+    /** The reader can open the challenge itself: for a member, their Challenges tab still lists it. */
+    canOpen: z.boolean(),
+    challenge: memberGymChallengeSchema,
+  })
+  .strict();
+export type GymPostChallengeResult = z.infer<typeof gymPostChallengeResultSchema>;
 
 export const gymPostSchema = z
   .object({
@@ -114,6 +129,9 @@ export const gymPostSchema = z
     /** Hidden from members while staff decide (`GYM_POST_REPORTS_TO_HIDE`). A member is
      *  sent such a post only when they wrote it. */
     hidden: z.boolean(),
+    /** The result of the challenge this post announces; null for every other post, and
+     *  while that challenge is not an ended one (cancelled, or its gym changed time zone). */
+    challengeResult: gymPostChallengeResultSchema.nullable(),
   })
   .strict();
 export type GymPost = z.infer<typeof gymPostSchema>;

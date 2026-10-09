@@ -7,7 +7,7 @@ import { z } from "zod";
 import { classDaySchema } from "./classes.js";
 import { eventNameIsSeen } from "./gymEvents.js";
 import { LEADERBOARD_HIDDEN_REASONS, LEADERBOARD_STAFF_PAGE, LEADERBOARD_TOP } from "./leaderboard.js";
-import { postLength } from "./posts.js";
+import { postLength } from "./postBasics.js";
 
 /** What a challenge counts: one of the leaderboard's checked facts, one a day at most; or
  *  "own", something the gym names and counts itself, whose numbers its staff type in (a
@@ -509,6 +509,9 @@ export const staffGymChallengeSchema = challengeSchema
           .strict(),
       )
       .max(GYM_CHALLENGE_TEAMS_MAX),
+    /** Its result's post on Updates, made once when it ends; null while there is none. A
+     *  post staff removed stays removed. */
+    resultPost: z.object({ postedAt: z.string().datetime(), removed: z.boolean() }).strict().nullable(),
   })
   .strict();
 export type StaffGymChallenge = z.infer<typeof staffGymChallengeSchema>;

@@ -41,6 +41,7 @@ import {
   type GymChallengeRow,
   type GymChallengeSaveProblem,
   type GymChallengeState,
+  type GymPostChallengeResult,
   type GymChallengesResponse,
   type LeaderboardHiddenReason,
   type MemberGymChallenge,
@@ -58,6 +59,7 @@ import { gymToday } from "../events/repo.js";
 import { fullName, hiddenReason, rankStaffBoard, shownName, type BoardPerson } from "../leaderboard/rank.js";
 import * as boards from "../leaderboard/repo.js";
 import { lockGym } from "../memberList/repo.js";
+import * as posts from "../posts/repo.js";
 import { placeEntrants, type Entrant } from "./place.js";
 import * as repo from "./repo.js";
 
@@ -561,6 +563,34 @@ export async function pickTeam(deps: ChallengesDeps, userId: string, gymId: stri
   return memberGymChallengeSchema.parse(view.challenge);
 }
 
+// ── A RESULT, ON ITS POST IN UPDATES (19d-ii-b) ──
+
+/** The result of each of these challenges that has ended, for the posts that announce
+ *  them: the challenge as this reader's Challenges tab is sent it (`memberView`), read now,
+ *  so the post and the tab never disagree and nobody hidden since is named. `viewerId` null:
+ *  staff reading the console, who are sent it as members see it, with no line of their own.
+ *  The caller has already settled that the reader may read this gym's posts. */
+export async function resultsForPosts(deps: ChallengesDeps, gymId: string, challengeIds: readonly string[], viewerId: string | null): Promise<Map<string, GymPostChallengeResult>> {
+  const results = new Map<string, GymPostChallengeResult>();
+  if (challengeIds.length === 0) return results;
+  const now = deps.now();
+  const gym = await boards.boardGym(deps.sql, gymId, now);
+  if (gym === null) return results;
+  const [rows, listed] = await Promise.all([
+    repo.challengesByIds(deps.sql, gymId, challengeIds),
+    viewerId === null ? Promise.resolve(null) : repo.memberChallenges(deps.sql, gymId, gym.today, now),
+  ]);
+  const ended = rows.filter((row) => !row.cancelled && challengeState(row, gym.today) === "ended");
+  if (ended.length === 0) return results;
+  const counted = await countFor(deps, { gymId, gym, at: now.toISOString() }, ended, viewerId);
+  const open = listed === null ? null : new Set(listed.map((row) => row.id));
+  for (const row of ended) {
+    const { challenge } = memberView(row, gym.today, counted, viewerId ?? "", GYM_CHALLENGE_PODIUM);
+    results.set(row.id, { today: gym.today, canOpen: open === null || open.has(row.id), challenge: viewerId === null ? { ...challenge, me: null } : challenge });
+  }
+  return results;
+}
+
 // ── STAFF HOLDING `leaderboard.manage` ──
 
 /** A challenge's teams as staff are sent them, with everyone in each; no numbers. */
@@ -570,15 +600,21 @@ async function staffTeams(deps: ChallengesDeps, gymId: string, rows: readonly re
   return (row) => (teams.get(row.id) ?? []).map((team) => ({ id: team.id, name: team.name, people: sizes.get(team.id) ?? 0, value: null, place: null }));
 }
 
+const resultPostOf = (of: Map<string, { postedAt: Date; removed: boolean }>, challengeId: string): StaffGymChallenge["resultPost"] => {
+  const post = of.get(challengeId);
+  return post === undefined ? null : { postedAt: post.postedAt.toISOString(), removed: post.removed };
+};
+
 async function staffChallenge(deps: ChallengesDeps, gymId: string, challengeId: string): Promise<StaffGymChallenge> {
-  const [row, today, counts] = await Promise.all([
+  const [row, today, counts, resultPosts] = await Promise.all([
     repo.challengeById(deps.sql, gymId, challengeId),
     gymToday(deps.sql, gymId, deps.now()),
     repo.joinedCounts(deps.sql, gymId, [challengeId]),
+    posts.resultPostsOf(deps.sql, gymId, [challengeId]),
   ]);
   if (row === null || today === null) throw challengeNotFound();
   const teamList = (await staffTeams(deps, gymId, [row]))(row);
-  return staffGymChallengeSchema.parse({ ...shaped(row, today), joinedCount: row.who === "joined" ? (counts.get(row.id) ?? 0) : null, top: [], withNumber: null, teamList });
+  return staffGymChallengeSchema.parse({ ...shaped(row, today), joinedCount: row.who === "joined" ? (counts.get(row.id) ?? 0) : null, top: [], withNumber: null, teamList, resultPost: resultPostOf(resultPosts, row.id) });
 }
 
 /** The gym's challenges, current and ended, for its staff holding the tick. */
@@ -599,6 +635,7 @@ export async function getStaffChallenges(deps: ChallengesDeps, staffId: string, 
   // number: one read for all of them (six at most).
   const counted = current.length === 0 ? null : await countFor(deps, { gymId, gym, at: now.toISOString() }, current, null);
   const teamsOf = await staffTeams(deps, gymId, [...current, ...past]);
+  const resultPosts = await posts.resultPostsOf(deps.sql, gymId, past.map((row) => row.id));
   const leading = (row: repo.ChallengeRow): Pick<StaffGymChallenge, "top" | "withNumber" | "teamList"> => {
     if (counted === null || row.cancelled || challengeState(row, gym.today) === "coming") return { top: [], withNumber: null, teamList: teamsOf(row) };
     const entrants = entrantsOf(row, counted);
@@ -619,6 +656,7 @@ export async function getStaffChallenges(deps: ChallengesDeps, staffId: string, 
     top: [],
     withNumber: null,
     teamList: teamsOf(row),
+    resultPost: resultPostOf(resultPosts, row.id),
   });
   const sentCurrent = (row: repo.ChallengeRow): StaffGymChallenge => ({ ...sent(row), ...leading(row) });
   return staffGymChallengesResponseSchema.parse({

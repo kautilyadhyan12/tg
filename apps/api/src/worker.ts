@@ -35,6 +35,7 @@ import { forgetOldStaffInvites } from "./modules/orgs/staffInvites/repo.js";
 import { sendDueStaffInvites } from "./modules/orgs/staffInvites/sender.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { ORGS_ARCHIVE_JOB, unscheduleArchiveSweep } from "./modules/orgs/archiveSchedule.js";
+import { postChallengeResults } from "./modules/orgs/challenges/resultPosts.js";
 import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
 import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
 import { analyseEntriesIfMoved } from "./modules/orgs/memberList/repo.js";
@@ -77,6 +78,7 @@ export { ORGS_ARCHIVE_JOB };
 export const ORGS_ROLLUP_JOB = "orgs.daily_rollup";
 export const ORGS_MEMBER_LIST_EXPIRY_JOB = "orgs.member_list_expiry";
 export const ORGS_CLASS_FILL_JOB = "orgs.class_fill";
+export const ORGS_CHALLENGE_RESULTS_JOB = "orgs.challenge_results";
 export const ORGS_MEMBER_LIST_ANALYSE_JOB = "orgs.member_list_analyse";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
@@ -302,6 +304,30 @@ try {
   );
 } catch (err) {
   log.fatal({ err }, "failed to register the class calendar fill schedule");
+  process.exit(1);
+}
+
+// A CHALLENGE'S RESULT IS POSTED TO UPDATES (Part 3 §15.6), every fifteen minutes: a
+// challenge ends at midnight on its gym's own clock, which is on the hour, the half or the
+// quarter somewhere, so the post is up within a quarter of an hour of it. Minutes 8, 23,
+// 38 and 53 keep it off the other schedules' minutes.
+try {
+  await queue.upsertJobScheduler(
+    ORGS_CHALLENGE_RESULTS_JOB,
+    { pattern: "8-59/15 * * * *" },
+    {
+      name: ORGS_CHALLENGE_RESULTS_JOB,
+      opts: {
+        // One `INSERT … ON CONFLICT DO NOTHING` against a unique index on the challenge,
+        // and the next run posts whatever this one missed.
+        attempts: 1,
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the challenge results schedule");
   process.exit(1);
 }
 
@@ -533,6 +559,7 @@ const worker = new Worker(
       job.name !== ORGS_ROLLUP_JOB &&
       job.name !== ORGS_MEMBER_LIST_EXPIRY_JOB &&
       job.name !== ORGS_CLASS_FILL_JOB &&
+      job.name !== ORGS_CHALLENGE_RESULTS_JOB &&
       job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
@@ -615,6 +642,15 @@ const worker = new Worker(
       const analysed = await analyseEntriesIfMoved(sql);
       log.info(
         { ...analysed, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
+    if (job.name === ORGS_CHALLENGE_RESULTS_JOB) {
+      const posted = await postChallengeResults({ sql, log });
+      log.info(
+        { ...posted, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

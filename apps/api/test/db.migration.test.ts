@@ -1987,6 +1987,61 @@ d("0001_init on a real database", () => {
       });
   });
 
+  it("0087's result post: one a challenge for ever, only the gym's own post, only a challenge of that gym, and it goes with its challenge", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0087-owner') RETURNING id`;
+        if (user === undefined) throw new Error("no user");
+        const gym = async (slug: string): Promise<string> => {
+          const [row] = await tx<{ id: string }[]>`INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, 'zz 0087', 'Europe/London', ${user.id}) RETURNING id`;
+          if (row === undefined) throw new Error("no gym");
+          return row.id;
+        };
+        const mine = await gym("zz-0087-a");
+        const theirs = await gym("zz-0087-b");
+        const challenge = async (gymId: string): Promise<string> => {
+          const [row] = await tx<{ id: string }[]>`
+            INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, starts_on, ends_on, who)
+            VALUES (${gymId}, ${randomUUID()}, 'October', 'gym_days', '2026-10-01', '2026-10-07', 'everyone') RETURNING id`;
+          if (row === undefined) throw new Error("no challenge");
+          return row.id;
+        };
+        const one = await challenge(mine);
+        const other = await challenge(theirs);
+        const post = (over: Record<string, unknown> = {}) => ({ gym_id: mine, post_key: randomUUID(), body: "October has ended.", ...over });
+        /** The constraint an insert trips, or "ok". Each in its own savepoint. */
+        const put = async (values: Record<string, unknown>): Promise<string> => {
+          try {
+            await tx.savepoint((sp) => sp`INSERT INTO gym_posts ${sp(values)}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        // A post kept before this migration announces no challenge, and any number may.
+        const [plain] = await tx<{ challenge_id: string | null }[]>`INSERT INTO gym_posts ${tx(post())} RETURNING challenge_id`;
+        expect(plain?.challenge_id).toBeNull();
+        expect(await put(post())).toBe("ok");
+        expect(await put(post({ challenge_id: one, by_member: true })), "a member's own post").toBe("gym_posts_challenge_gyms_check");
+        expect(await put(post({ challenge_id: other })), "another gym's challenge").toBe("gym_posts_challenge_fk");
+        expect(await put(post({ challenge_id: randomUUID() })), "a challenge that is nobody's").toBe("gym_posts_challenge_fk");
+        expect(await put(post({ challenge_id: one }))).toBe("ok");
+        expect(await put(post({ challenge_id: one })), "a second post for one challenge").toBe("gym_posts_challenge_uq");
+        // Removed by staff, its row still holds the challenge's one place.
+        await tx`UPDATE gym_posts SET removed_at = now() WHERE gym_id = ${mine} AND challenge_id = ${one}`;
+        expect(await put(post({ challenge_id: one })), "a second post after the first was removed").toBe("gym_posts_challenge_uq");
+        await tx`DELETE FROM gym_challenges WHERE id = ${one}`;
+        const [left] = await tx<{ n: number; results: number }[]>`
+          SELECT count(*)::int AS n, count(challenge_id)::int AS results FROM gym_posts WHERE gym_id = ${mine}`;
+        expect([left?.n, left?.results], "a challenge's post goes with it; the gym's other posts stay").toEqual([2, 0]);
+        throw new Error("ROLLBACK-0087-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0087-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
    *  (Low-1) — which is the highest-value item that round found.
    *

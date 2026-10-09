@@ -22,6 +22,8 @@ export interface PostRow {
   removed: boolean;
   /** Reported by enough people to be hidden from members until staff decide. */
   hidden: boolean;
+  /** The challenge whose result this post announces; null for every other post. */
+  challengeId: string | null;
 }
 
 interface RawPost {
@@ -36,6 +38,7 @@ interface RawPost {
   created_at: Date;
   removed: boolean;
   hidden: boolean;
+  challenge_id: string | null;
 }
 
 const toPost = (r: RawPost): PostRow => ({
@@ -50,6 +53,7 @@ const toPost = (r: RawPost): PostRow => ({
   createdAt: r.created_at,
   removed: r.removed,
   hidden: r.hidden,
+  challengeId: r.challenge_id,
 });
 
 /** The gym's posts. `visible`: not removed and, for a member's own post, its writer still a
@@ -61,7 +65,7 @@ function posts(sql: SqlOrTx, gymId: string) {
     SELECT p.id, p.body, p.pinned_at, p.created_at, p.post_key, p.removed_at IS NOT NULL AS removed,
            p.author_user_id AS author_id, p.by_member,
            p.removed_at IS NULL AND (NOT p.by_member OR (u.status = 'active' AND am.user_id IS NOT NULL) IS TRUE) AS visible,
-           p.hidden_at IS NOT NULL AS hidden,
+           p.hidden_at IS NOT NULL AS hidden, p.challenge_id,
            CASE WHEN u.status = 'active' THEN u.display_name END AS author_name,
            CASE WHEN u.status = 'active' THEN u.email::text END AS author_email,
            CASE WHEN u.status = 'active' THEN nullif(btrim(e.full_name), '') END AS author_record_name
@@ -739,4 +743,41 @@ export async function queuedFor(sql: SqlOrTx, minutes: number, limit: number): P
     ORDER BY created_at, storage_key
     LIMIT ${limit}`;
   return rows.map((r) => r.storage_key);
+}
+
+// ── A CHALLENGE'S RESULT (ROADMAP 19d-ii-b) ──
+
+/** Makes the result post of every challenge that ended in the last `days` days on its
+ *  gym's own calendar and has none: not a cancelled one, and not for a gym that is closed
+ *  or on no plan, whose members are sent no posts. Nobody is its author. One statement;
+ *  the unique index makes a second run, or two at once, write nothing more. `gymIds`: only
+ *  these gyms, for a test on a database other tests are using. */
+export async function insertChallengeResultPosts(tx: TransactionSql, now: Date, days: number, ending: string, gymIds: readonly string[] | null = null): Promise<{ id: string; gymId: string; challengeId: string }[]> {
+  const rows = await tx<{ id: string; gym_id: string; challenge_id: string }[]>`
+    INSERT INTO gym_posts (gym_id, author_user_id, post_key, body, by_member, created_at, challenge_id)
+    SELECT c.gym_id, NULL, gen_random_uuid(), c.name || ${ending}, false, ${now}, c.id
+    FROM gym_challenges c
+    JOIN gyms g ON g.id = c.gym_id
+    WHERE c.cancelled_at IS NULL
+      AND g.status = 'active'
+      ${gymIds === null ? tx`` : tx`AND c.gym_id = ANY(${[...gymIds]}::uuid[])`}
+      AND c.ends_on < (${now}::timestamptz AT TIME ZONE g.timezone)::date
+      AND c.ends_on >= (${now}::timestamptz AT TIME ZONE g.timezone)::date - ${days}::int
+      AND EXISTS (
+        SELECT 1 FROM subscriptions s
+        WHERE s.owner_type = 'gym' AND s.owner_id = g.id AND s.status IN ('trialing','active','past_due'))
+    ON CONFLICT (gym_id, challenge_id) WHERE challenge_id IS NOT NULL DO NOTHING
+    RETURNING id, gym_id, challenge_id`;
+  return rows.map((r) => ({ id: r.id, gymId: r.gym_id, challengeId: r.challenge_id }));
+}
+
+/** Each challenge's result post: when it was made, and whether staff have removed it. */
+export async function resultPostsOf(sql: SqlOrTx, gymId: string, challengeIds: readonly string[]): Promise<Map<string, { postedAt: Date; removed: boolean }>> {
+  const of = new Map<string, { postedAt: Date; removed: boolean }>();
+  if (challengeIds.length === 0) return of;
+  const rows = await sql<{ challenge_id: string; created_at: Date; removed: boolean }[]>`
+    SELECT challenge_id, created_at, removed_at IS NOT NULL AS removed
+    FROM gym_posts WHERE gym_id = ${gymId} AND challenge_id IN ${sql(challengeIds)}`;
+  for (const r of rows) of.set(r.challenge_id, { postedAt: r.created_at, removed: r.removed });
+  return of;
 }
