@@ -18,10 +18,11 @@ export const unitOf = (counts) => UNIT[counts];
 const isOwn = (challenge) => challenge.counts === 'own';
 /** The gym's own word after the number 1: "push-ups" → "push-up", "boxes" → "box". Only a
  *  word whose ending is an English plural's is touched; anything else is printed as typed
- *  ("kg lifted", "5 km time", "calories"). */
+ *  ("kg lifted", "5 km time", "abs"). */
 export function oneOf(unit) {
   if (/(?:ch|sh|x|ss)es$/i.test(unit)) return unit.slice(0, -2);
-  if (/(?:ss|us|is|ies)$/i.test(unit) || !/[a-z]s$/i.test(unit)) return unit;
+  // Left as typed: "press", "bonus", "tennis", "series", and a word as short as "abs".
+  if (/(?:ss|us|is|series|species)$/i.test(unit) || !/[a-z]s$/i.test(unit) || unit.length <= 3) return unit;
   return unit.slice(0, -1);
 }
 

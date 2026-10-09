@@ -64,7 +64,9 @@ describe("one of the gym's own word", () => {
     ['presses', 'press'],
     // Left as typed: not a plain plural, or not a plural at all.
     ['press', 'press'],
-    ['calories', 'calories'],
+    ['calories', 'calorie'],
+    ['abs', 'abs'],
+    ['series', 'series'],
     ['kg lifted', 'kg lifted'],
     ['5 km time', '5 km time'],
     ['km', 'km'],

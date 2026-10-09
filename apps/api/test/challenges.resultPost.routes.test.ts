@@ -512,14 +512,16 @@ d("a challenge's result posted to Updates (real Postgres)", () => {
   it(
     "the run the worker makes, with no gyms named, posts this gym's result once",
     async () => {
-      clock = MONDAY;
+      // Every gym in the database is looked at, as in production. The run is made in 2031,
+      // where no other test's challenge is inside the fortnight, so no other gym gets a post.
+      clock = new Date("2031-03-05T06:30:00Z");
       const gym = await makeGym("Whole Hall");
-      await add(gym);
-      clock = THURSDAY;
-      // Every gym in the database is looked at, as in production: only this gym's rows are read back.
-      await postChallengeResults({ sql, log }, { now: THURSDAY });
+      await add(gym, { startsOn: "2031-03-01", endsOn: "2031-03-06" });
+      const later = new Date("2031-03-08T06:30:00Z");
+      clock = later;
+      await postChallengeResults({ sql, log }, { now: later });
       expect((await rows(gym.id)).map((r) => r.body)).toEqual([`October Six${GYM_CHALLENGE_RESULT_POST_ENDING}`]);
-      await postChallengeResults({ sql, log }, { now: THURSDAY });
+      await postChallengeResults({ sql, log }, { now: later });
       expect(await rows(gym.id)).toHaveLength(1);
       expect(await audits(gym.id)).toBe(1);
     },

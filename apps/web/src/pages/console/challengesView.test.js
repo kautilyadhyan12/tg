@@ -449,6 +449,7 @@ describe('every number with its word, and every choice in plain words', () => {
     // One of the staff's own: said as one where the word is a plain plural.
     expect(amountOf(challenge({ counts: 'own', unit: 'push-ups' }), 1)).toBe('1 push-up');
     expect(amountOf(challenge({ counts: 'own', unit: 'kg lifted' }), 1)).toBe('1 kg lifted');
+    expect(amountOf(challenge({ counts: 'own', unit: 'abs' }), 1)).toBe('1 abs');
   });
 
   it.each([
