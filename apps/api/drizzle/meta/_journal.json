@@ -617,6 +617,13 @@
       "when": 1788912000088,
       "tag": "0088_gym_member_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1788998400089,
+      "tag": "0089_gym_member_contact",
+      "breakpoints": true
     }
   ]
 }

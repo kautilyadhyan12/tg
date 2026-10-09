@@ -1013,9 +1013,9 @@ describe('a step already open when the gym lapses', () => {
  *  sentence unconditionally would satisfy the lapsed half alone (:7104's PG1). */
 describe('every Settings panel that greys a control explains itself, in its own section', () => {
   // Staff left Settings for Members → Staff (23c-ii); its own cases are "the staff list" above.
-  const GREYING_SECTIONS = ['gym details', "when we're open", 'check-in devices', 'follow-up emails to leads'];
+  const GREYING_SECTIONS = ['gym details', "when we're open", 'how members reach you', 'check-in devices', 'follow-up emails to leads'];
 
-  it('draws exactly these four sections and no fifth one nobody is checking', async () => {
+  it('draws exactly these five sections and no sixth one nobody is checking', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
     renderConsole(Settings, '/console/iron-house/settings');
     await screen.findByTestId('console-banner');

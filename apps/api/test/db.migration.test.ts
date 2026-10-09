@@ -2110,6 +2110,49 @@ d("0001_init on a real database", () => {
       });
   });
 
+  it("0089's contact: a gym's phone and email for its members are each optional, a phone is digits and marks, an email has one @", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [owner] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0089-owner') RETURNING id`;
+        if (owner === undefined) throw new Error("no user");
+        const [gym] = await tx<{ id: string; contact_phone: string | null; contact_email: string | null }[]>`
+          INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES ('zz-0089', 'zz 0089', 'Europe/London', ${owner.id})
+          RETURNING id, contact_phone, contact_email`;
+        if (gym === undefined) throw new Error("no gym");
+        // A gym starts with neither.
+        expect(gym).toMatchObject({ contact_phone: null, contact_email: null });
+        /** The constraint an update trips, or "ok". Each in its own savepoint. */
+        const set = async (values: Record<string, unknown>): Promise<string> => {
+          try {
+            await tx.savepoint((sp) => sp`UPDATE gyms SET ${sp(values)} WHERE id = ${gym.id}`);
+            return "ok";
+          } catch (err) {
+            return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+          }
+        };
+        for (const phone of ["020 7946 0958", "+44 20 7946 0958", "(212) 555-0123", "030/901820", "212.555.0123", "123456"]) {
+          expect(await set({ contact_phone: phone }), phone).toBe("ok");
+        }
+        for (const phone of ["", "12345", "ask at the desk", "020 7946 0958 ext 12", "020+7946 0958", "tel:02079460958", "1".repeat(31)]) {
+          expect(await set({ contact_phone: phone }), phone).toBe("gyms_contact_phone_check");
+        }
+        for (const email of ["hello@ironhouse.com", "a@b"]) {
+          expect(await set({ contact_email: email }), email).toBe("ok");
+        }
+        for (const email of ["", "ab", "ironhouse.com", "hello @ironhouse.com", "a@b@c", `${"a".repeat(250)}@x.com`]) {
+          expect(await set({ contact_email: email }), email).toBe("gyms_contact_email_check");
+        }
+        // Each clears on its own, and neither is tied to the mobile for payments.
+        expect(await set({ contact_phone: null, contact_email: "hello@ironhouse.com", billing_mobile: null })).toBe("ok");
+        expect(await set({ contact_phone: "020 7946 0958", contact_email: null, billing_mobile: "+919876543210" })).toBe("ok");
+        throw new Error("ROLLBACK-0089-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0089-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
    *  (Low-1) — which is the highest-value item that round found.
    *

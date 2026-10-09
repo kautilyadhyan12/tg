@@ -5,6 +5,7 @@
 // the ONE rule that decides what is sent, and it is pure: the worker gathers the facts
 // and writes what this returns, one row an occasion.
 import { z } from "zod";
+import { gymContactSchema } from "./gymContact.js";
 import { instantSchema } from "./time.js";
 
 /** Every kind of automatic message, in the order one is picked when several are due on
@@ -287,6 +288,9 @@ export const gymInboxResponseSchema = z.object({
   messages: z.array(gymInboxMessageSchema).max(GYM_INBOX_MAX),
   unread: z.number().int().min(0),
   asOf: instantSchema,
+  /** The gym's phone and email for its members (ROADMAP 20a-iii), since they cannot reply
+   *  here. Both null for a paused gym and from an api too old to send them. */
+  contact: gymContactSchema.default({ phone: null, email: null }),
 });
 export type GymInboxResponse = z.infer<typeof gymInboxResponseSchema>;
 

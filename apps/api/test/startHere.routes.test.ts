@@ -51,6 +51,7 @@ const NOTHING_DONE: Record<StartHereStep, boolean> = {
   staff: false,
   classes: false,
   hours: false,
+  contact: false,
   frontDesk: false,
 };
 const only = (...steps: StartHereStep[]): Record<StartHereStep, boolean> => ({
@@ -215,6 +216,18 @@ d("Overview's Start here list: whose ticks, who sees which step, and who hides i
     const res = await put(`/v1/orgs/${gymId}/hours`, body, owner.cookies);
     expect(res.statusCode, res.body).toBe(200);
   };
+  /** Settings → How members reach you. */
+  const setContact = async (gymId: string, owner: User, body: unknown) => {
+    const res = await api().inject({
+      method: "PATCH",
+      url: `/v1/orgs/${gymId}`,
+      remoteAddress: nextIp(),
+      cookies: owner.cookies,
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify(body),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+  };
   const A_WEEK = { mode: "scheduled", week: [{ weekday: 2, sessions: [{ opensMinute: 6 * 60, closesMinute: 21 * 60 }] }] };
 
   /** A device added in Settings. Its link is opened on the tablet by `openLink`. */
@@ -267,12 +280,13 @@ d("Overview's Start here list: whose ticks, who sees which step, and who hides i
       expect(doneOf(await read(setUp, setUpOwner))).toEqual(NOTHING_DONE);
       expect(doneOf(await read(empty, emptyOwner))).toEqual(NOTHING_DONE);
 
-      // One gym does all six, each on its own page.
+      // One gym does all seven, each on its own page.
       await addMembership(setUp, setUpOwner);
       await addPerson(setUp, setUpOwner);
       await inviteStaff(setUp, setUpOwner, "worst-coach");
       await addTimeSlot(setUp, setUpOwner, await addClass(setUp, setUpOwner));
       await setHours(setUp, setUpOwner, A_WEEK);
+      await setContact(setUp, setUpOwner, { contactPhone: "020 7946 0958" });
       await openLink((await addDevice(setUp, setUpOwner)).token);
 
       const mine = await read(setUp, setUpOwner);
@@ -410,6 +424,16 @@ d("Overview's Start here list: whose ticks, who sees which step, and who hides i
       await setHours(closed, owner, { mode: "scheduled", week: [] });
       expect(await done(closed)).toEqual(only("hours"));
 
+      // How members reach the gym: a phone number or an email address, and neither once
+      // both are cleared.
+      const reach = await fresh("Reach");
+      await setContact(reach, owner, { contactEmail: "hello@sthreach.com" });
+      expect(await done(reach)).toEqual(only("contact"));
+      await setContact(reach, owner, { contactPhone: "+44 20 7946 0958", contactEmail: null });
+      expect(await done(reach)).toEqual(only("contact"));
+      await setContact(reach, owner, { contactPhone: "" });
+      expect(await done(reach)).toEqual(NOTHING_DONE);
+
       // The front desk: a device whose link was opened on the tablet; one only added, or
       // switched off, checks nobody in.
       const desk = await fresh("Desk");
@@ -440,7 +464,7 @@ d("Overview's Start here list: whose ticks, who sees which step, and who hides i
           canHide: false,
         },
         { who: "desk", role: "trainer", ticks: ["members.read", "members.confirm"], steps: ["members"], canHide: false },
-        { who: "details", role: "manager", ticks: ["org.manage"], steps: ["hours", "frontDesk"], canHide: true },
+        { who: "details", role: "manager", ticks: ["org.manage"], steps: ["hours", "contact", "frontDesk"], canHide: true },
         { who: "prices", role: "trainer", ticks: ["memberships.manage"], steps: ["memberships"], canHide: false },
         { who: "none", role: "trainer", ticks: [], steps: [], canHide: false },
       ];

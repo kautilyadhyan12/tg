@@ -106,6 +106,10 @@ export const gyms = pgTable(
     /** An Indian gym's owner's mobile for its payments (`+91…`), given to Razorpay's window so
      *  it asks nothing (ROADMAP 1d-i). Seen and changed only by staff who manage billing. */
     billingMobile: text("billing_mobile"),
+    /** How members reach the gym (0089; spec Part 3 §16.1): the phone and email it typed for
+     *  them to see in the app. Never `billingMobile`. */
+    contactPhone: text("contact_phone"),
+    contactEmail: text("contact_email"),
     /** Set when too many of the gym's invitations bounced or one was marked as spam
      *  (Part 3 §9.12): it sends none until started again. */
     invitesStoppedAt: timestamp("invites_stopped_at", { withTimezone: true }),
@@ -140,6 +144,11 @@ export const gyms = pgTable(
       sql`${t.leaderboardBoardsOff} <@ ARRAY['gym_days','workout_days','streak']::text[]`,
     ),
     check("gyms_billing_mobile_check", sql`${t.billingMobile} IS NULL OR ${t.billingMobile} ~ '^\\+91[6-9][0-9]{9}$'`),
+    check("gyms_contact_phone_check", sql`${t.contactPhone} IS NULL OR ${t.contactPhone} ~ '^\\+?[0-9 ()./-]{6,30}$'`),
+    check(
+      "gyms_contact_email_check",
+      sql`${t.contactEmail} IS NULL OR (length(${t.contactEmail}) BETWEEN 3 AND 254 AND ${t.contactEmail} ~ '^[^[:space:]@]+@[^[:space:]@]+$')`,
+    ),
     check("gyms_postal_address_check", sql`${t.postalAddress} IS NULL OR length(${t.postalAddress}) BETWEEN 1 AND 200`),
     check(
       "gyms_invites_stopped_reason_check",

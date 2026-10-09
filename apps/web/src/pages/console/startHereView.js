@@ -47,6 +47,12 @@ function stepWords(step, orgSlug, orgType) {
         line: `Say when you're open, so your ${words.people} see it in the app.`,
         actions: [{ label: 'Set opening hours', to: to('openingHours') }],
       };
+    case 'contact':
+      return {
+        title: `How ${words.people} reach you`,
+        line: `Add a phone number or an email address. Your ${words.people} see it in the app, so they can call or write to you.`,
+        actions: [{ label: 'Add your phone or email', to: to('memberContact') }],
+      };
     case 'frontDesk':
       return {
         title: 'Front desk check-in',
@@ -100,7 +106,7 @@ export function startHereView(startHere, orgSlug, orgType) {
   };
 }
 
-/** "2 of 6 done". */
+/** "2 of 7 done". */
 export function startHereCount(view) {
   return `${String(view.doneCount)} of ${String(view.total)} done`;
 }

@@ -57,7 +57,7 @@ const ownerSeat = {
   staff: { role: 'owner', roleName: null },
 };
 
-const ALL = ['memberships', 'members', 'staff', 'classes', 'hours', 'frontDesk'];
+const ALL = ['memberships', 'members', 'staff', 'classes', 'hours', 'contact', 'frontDesk'];
 /** The server's answer, held to its contract so a fixture cannot drift from it. */
 const answer = ({ done = [], steps = ALL, hidden = false, canHide = true } = {}) => ({
   data: startHereResponseSchema.parse({
@@ -96,12 +96,12 @@ afterEach(() => {
 });
 
 describe('a gym made today', () => {
-  it('opens on Start here: six steps, none done, each with a button to its own place', async () => {
+  it('opens on Start here: seven steps, none done, each with a button to its own place', async () => {
     draw();
     const card = await box();
     expect(orgService.getStartHere).toHaveBeenCalledWith(ORG.id);
     expect(within(card).getByRole('heading', { name: 'Set up your gym' })).toBeTruthy();
-    expect(within(card).getByTestId('start-here-count').textContent).toBe('0 of 6 done');
+    expect(within(card).getByTestId('start-here-count').textContent).toBe('0 of 7 done');
     const rows = [...card.querySelectorAll('[data-step]')];
     expect(rows.map((r) => r.getAttribute('data-step'))).toEqual(ALL);
     expect(rows.every((r) => r.getAttribute('data-done') === 'false')).toBe(true);
@@ -117,6 +117,7 @@ describe('a gym made today', () => {
       ['Invite staff', '/console/iron-house/members?view=staff&open=invite'],
       ['Set up classes', '/console/iron-house/classes'],
       ['Set opening hours', '/console/iron-house/settings#opening-hours'],
+      ['Add your phone or email', '/console/iron-house/settings#member-contact'],
       ['Set up check-in', '/console/iron-house/settings#check-in-devices'],
     ]);
   });
@@ -145,8 +146,8 @@ describe('ticks', () => {
     orgService.getStartHere.mockResolvedValue(answer({ done: ['memberships', 'hours'] }));
     draw();
     const card = await box();
-    expect(within(card).getByTestId('start-here-count').textContent).toBe('2 of 6 done');
-    expect(ALL.map((step) => rowOf(card, step).getAttribute('data-done'))).toEqual(['true', 'false', 'false', 'false', 'true', 'false']);
+    expect(within(card).getByTestId('start-here-count').textContent).toBe('2 of 7 done');
+    expect(ALL.map((step) => rowOf(card, step).getAttribute('data-done'))).toEqual(['true', 'false', 'false', 'false', 'true', 'false', 'false']);
     expect(rowOf(card, 'memberships').textContent).toMatch(/What you sell · Done/);
     expect(rowOf(card, 'members').textContent).toMatch(/Not done yet/);
     expect(within(rowOf(card, 'memberships')).getByRole('link', { name: 'Set up memberships' }).getAttribute('href')).toBe(
@@ -170,6 +171,7 @@ describe('ticks', () => {
       ['Invite staff', 'plain'],
       ['Set up classes', 'plain'],
       ['Set opening hours', 'done'],
+      ['Add your phone or email', 'plain'],
       ['Set up check-in', 'plain'],
     ]);
   });
@@ -188,7 +190,7 @@ describe('ticks', () => {
     draw();
     const card = await box();
     expect(within(card).getByRole('heading', { name: 'Your gym is set up' })).toBeTruthy();
-    expect(within(card).getByTestId('start-here-count').textContent).toBe('6 of 6 done');
+    expect(within(card).getByTestId('start-here-count').textContent).toBe('7 of 7 done');
     expect(within(card).queryByText(/Not done yet/)).toBeNull();
     expect(within(card).getByRole('button', { name: 'Hide this list' })).toBeTruthy();
   });
@@ -244,7 +246,7 @@ describe('Hide this list, and showing it again', () => {
     fireEvent.click(within(line).getByRole('button', { name: 'Show the Start here list' }));
     const again = await box();
     expect(orgService.setStartHereHidden).toHaveBeenLastCalledWith(ORG.id, false);
-    expect(within(again).getByTestId('start-here-count').textContent).toBe('1 of 6 done');
+    expect(within(again).getByTestId('start-here-count').textContent).toBe('1 of 7 done');
     expect(screen.queryByTestId('start-here-hidden')).toBeNull();
     expect(screen.queryByTestId('bring-members-in')).toBeNull();
   });

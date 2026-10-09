@@ -7,6 +7,7 @@ import {
   GYM_INBOX_MAX,
   gymInboxResponseSchema,
   markGymInboxReadResponseSchema,
+  type GymContact,
   type GymInboxResponse,
   type MarkGymInboxReadRequest,
   type MarkGymInboxReadResponse,
@@ -29,13 +30,15 @@ interface Reader {
   now: Date;
   /** The gym is closed or on no plan: its members are shown no messages. */
   paused: boolean;
+  /** How this member reaches the gym, as the gym typed it. */
+  contact: GymContact;
 }
 
 async function forMember(deps: MessagesDeps, gymId: string, userId: string): Promise<Reader> {
   const now = deps.now();
   const gate = await repo.memberGate(deps.sql, gymId, userId);
   if (gate === null || !gate.member || gate.joinedAt === null) throw notFound();
-  return { name: gate.name, now, paused: !(gate.open && gate.live) };
+  return { name: gate.name, now, paused: !(gate.open && gate.live), contact: { phone: gate.contactPhone, email: gate.contactEmail } };
 }
 
 /** The member's inbox from this gym, newest first. Reading it marks nothing. */
@@ -51,6 +54,7 @@ export async function getInbox(deps: MessagesDeps, userId: string, gymId: string
   return gymInboxResponseSchema.parse({
     ...head,
     status: "shown",
+    contact: reader.contact,
     messages: rows.map((row) => ({ id: row.id, kind: row.kind, body: row.body, sentAt: row.sentAt.toISOString(), read: row.read })),
     unread,
   });

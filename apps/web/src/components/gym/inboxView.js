@@ -1,4 +1,4 @@
-import { GYM_COME_BACK_LINES, GYM_MESSAGE_KEPT_DAYS, GYM_PINNED_NOTE_DAYS } from '@app/shared';
+import { GYM_COME_BACK_LINES, GYM_MESSAGE_KEPT_DAYS, GYM_PINNED_NOTE_DAYS, gymContactTel, orgWords } from '@app/shared';
 import { cheerLine } from '../../utils/cheerPresets';
 import { cheerAge } from './gymMembershipView';
 
@@ -65,6 +65,23 @@ export function emptyInbox(gymName) {
 
 /** Said under every inbox, so nothing about it is a surprise. */
 export const INBOX_NOTE = `Messages stay here for ${GYM_MESSAGE_KEPT_DAYS} days. You can't reply to them here.`;
+
+/** The button under that note: "Contact the gym", in the organisation's own word. */
+export function contactButton(orgType) {
+  return `Contact the ${orgWords(orgType).itToMembers}`;
+}
+
+/** How the member reaches the gym (ROADMAP 20a-iii): a link that calls and a link that
+ *  writes, each only if the gym added it, or the one line said when it added neither. */
+export function contactView(contact, gymName) {
+  const text = (value) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
+  const phone = text(contact?.phone);
+  const email = text(contact?.email);
+  const ways = [];
+  if (phone !== null) ways.push({ kind: 'phone', label: `Call ${phone}`, href: gymContactTel(phone) });
+  if (email !== null) ways.push({ kind: 'email', label: `Email ${email}`, href: `mailto:${email}` });
+  return { ways, none: ways.length === 0 ? `${gymName} hasn't added a phone number or email yet.` : null };
+}
 
 /** A gym that is closed, or not on a plan: its members are shown no messages. */
 export function pausedInbox(gymName) {
