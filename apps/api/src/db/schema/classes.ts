@@ -134,7 +134,7 @@ export const gymClassSchedules = pgTable(
      *  link at all". The FK walk in `privacy.purge.test.ts` refuses a table
      *  that does not. */
     coachUserId: uuid("coach_user_id").references(() => users.id, { onDelete: "set null" }),
-    /** An online class, and the gym's own video link for it (17g, `0088`). */
+    /** An online class, and the gym's own video link for it (17g, `0089`). */
     online: boolean("online").notNull().default(false),
     onlineLink: text("online_link"),
     createdAt: createdAt(),

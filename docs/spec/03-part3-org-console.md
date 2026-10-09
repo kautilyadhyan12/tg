@@ -2671,7 +2671,7 @@ listed twice until the date, and the Classes screen reads 24 a class.)*
 An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a
 trainer sees the lists of their own classes.
 *(17g, 2026-10-09: **online classes.** A time slot is marked Online and carries the gym's
-own video link (`gym_class_schedules.online`, `online_link`; `0088`); each class on the
+own video link (`gym_class_schedules.online`, `online_link`; `0089`); each class on the
 calendar has its own copy, stamped when it is written, and a time slot that carries on
 from another (a split or a move from a date) takes its answer; a class given a link of
 its own keeps it on the class a move writes for its date. The link is an `https://`
@@ -4204,6 +4204,31 @@ already sent for this occasion · another automatic message that day · night by
 gym's clock · the gym lapsed. `(gym, person, kind, occasion)` is UNIQUE, so a second
 run cannot send a second message. A member can switch each kind off, except a payment
 notice.
+
+**Built in 20a (2026-10-09):** the table is `gym_member_messages` (`0088`), one row a
+(gym, person, kind, occasion) under a unique index. The rule is `gymMessageDue` in
+`packages/shared/src/gymMessages.ts`, pure, with its table test over every kind and every
+reason; the worker's `orgs.member_messages` runs it four times an hour
+(`messages/send.ts`), a gym at a time with the gym's row held. **Only Welcome is sent
+yet**: the other seven kinds are in the rule and are given no facts until 20b reads
+memberships, bills, birthdays and visits for them. The terminal's own, Kd's to overrule
+(RULINGS 2026-10-09): messages go from 08:00 up to 21:00 on the gym's clock · one a day,
+picked in the order payment overdue, membership ending, trial ending, trial check-in,
+welcome, birthday, milestone, we miss you · a Welcome goes up to three days after
+joining, and never to the gym's own staff · after its 30 days a message leaves the inbox
+and its row is kept, so its occasion is never sent again · somebody removed and back sees
+only what was sent since they came back (Put back opens the same stay again, so it gives
+the old messages back) · a closed gym or one on no plan sends nothing
+and its members are shown none. The member reads it on their gym's page, the **Inbox**
+tab (`GET /v1/orgs/:gymId/inbox`), which counts what is new before it is opened; opening
+it marks them read (`POST …/inbox/read`). The pinned note is the newer of the gym's cheer
+and its come-back line for seven days, read from the fields `/v1/orgs/mine` already
+carries; the cheer's line on the gym's card stays where it was. A person's own switches
+and the gym's are 20b. **An occasion is never named by a day of the gym's calendar that
+a zone change can move** (round one's L1): a Welcome's is the join's day in UTC, and 20b
+names each of its own the same way (a trial's and a membership's by the row they belong
+to). A gym the run cannot read is logged and skipped, the rest are still sent theirs, and
+the run then fails; a gym whose new people all have their Welcome is not looked at.
 
 ### 16.3 Leads
 
