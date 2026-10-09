@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Loader2, X } from 'lucide-react';
-import { PT_ENDING_FIRST, PT_ENDING_MOVED, PT_ENDING_NOT_TOLD, ptEndingAction, ptEndingWords } from '../../pages/console/ptSessionsEndView';
+import { PT_ENDING_FIRST, PT_ENDING_MOVED, PT_ENDING_NOT_TOLD, ptEndBoxWords, ptEndingWords } from '../../pages/console/ptSessionsEndView';
 
 // PERSONAL TRAINING SESSIONS THAT WILL BE CANCELLED (ROADMAP 17e-iv-a; CLAUDE.md §4's screen
 // rule): the part of a Remove box, or of a membership's cancel, that names the sessions
@@ -8,9 +8,9 @@ import { PT_ENDING_FIRST, PT_ENDING_MOVED, PT_ENDING_NOT_TOLD, ptEndingAction, p
 // what stays. `ending` is the server's own answer, which carries the sessions. `onePerson`:
 // the box is about one person it has already named, so each line leads with when.
 
-export default function PtSessionsEnding({ ending, clockFormat, moved = false, onePerson = false }) {
+export default function PtSessionsEnding({ ending, clockFormat, moved = false, onePerson = false, trainerLeaves = false }) {
   const [all, setAll] = useState(false);
-  const words = ptEndingWords(ending, clockFormat, onePerson);
+  const words = ptEndingWords(ending, clockFormat, onePerson, trainerLeaves);
   const rows = all ? words.rows : words.rows.slice(0, PT_ENDING_FIRST);
   const hidden = words.rows.length - rows.length;
   return (
@@ -48,30 +48,31 @@ export default function PtSessionsEnding({ ending, clockFormat, moved = false, o
 }
 
 /** The same, as a box of its own over the page, for a Remove pressed on one person in the
- *  app: it names who is being removed and their sessions, and waits for its own button.
- *  Nothing has been done while it is open. */
-export function PtSessionsEndDialog({ name, ending, clockFormat, moved = false, busy = false, error = null, onConfirm, onClose }) {
+ *  app or on the staff: it names who is being removed and the sessions, and waits for its
+ *  own button. Nothing has been done while it is open. `from`: 'app', 'staff' or 'both'. */
+export function PtSessionsEndDialog({ name, ending, clockFormat, from = 'app', moved = false, busy = false, error = null, onConfirm, onClose }) {
+  const box = ptEndBoxWords(name, ending, from);
   return (
     <div className="fixed inset-0 z-[60]" style={{ background: 'var(--scrim)' }}>
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`Remove ${name}`}
+        aria-label={box.heading.replace(/\?$/, '')}
         data-testid="pt-sessions-end-box"
         className="c-sheet absolute inset-x-0 bottom-0 md:top-24 md:bottom-auto md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-[560px] max-h-[calc(100%-64px)] flex flex-col rounded-t-[20px] md:rounded-[20px] border"
         style={{ borderColor: 'var(--card-line)' }}
       >
         <div className="flex items-center gap-3 pl-4 pr-2 pt-3 md:px-7 md:pt-6 md:pb-2">
           <h2 className="c-h2 flex-grow" style={{ fontSize: 22, lineHeight: '28px', fontWeight: 700 }}>
-            {`Remove ${name}?`}
+            {box.heading}
           </h2>
           <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
             <X aria-hidden="true" className="w-5 h-5" />
           </button>
         </div>
         <div className="px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0 flex flex-col gap-4">
-          <p className="c-s15 c-t2 m-0">{`${name} hasn't been removed yet: they have personal training booked.`}</p>
-          <PtSessionsEnding ending={ending} clockFormat={clockFormat} moved={moved} onePerson />
+          <p className="c-s15 c-t2 m-0">{box.why}</p>
+          <PtSessionsEnding ending={ending} clockFormat={clockFormat} moved={moved} onePerson={box.onePerson} trainerLeaves={box.trainerLeaves} />
           {error !== null ? (
             <p className="c-s14 c-t1 m-0" role="alert">
               {error}
@@ -79,12 +80,12 @@ export function PtSessionsEndDialog({ name, ending, clockFormat, moved = false, 
           ) : null}
         </div>
         <div
-          className="grid grid-cols-[1fr_auto] md:flex md:justify-end gap-2 md:gap-3 px-4 pt-3 pb-5 md:px-7 md:py-4 border-t"
+          className="grid grid-cols-1 md:flex md:justify-end gap-2 md:gap-3 px-4 pt-3 pb-5 md:px-7 md:py-4 border-t"
           style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
         >
           <button type="button" onClick={onConfirm} disabled={busy} data-testid="pt-sessions-end-confirm" className="c-btn c-btn-danger c-btn-lg md:order-2">
             {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-            {`Remove and ${ptEndingAction(ending)}`}
+            {box.go}
           </button>
           <button type="button" onClick={onClose} disabled={busy} className="c-btn c-btn-s c-btn-lg md:order-1">
             Don&apos;t remove

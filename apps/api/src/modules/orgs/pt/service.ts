@@ -27,6 +27,7 @@ import {
   PT_MEMBER_CANCEL_WORDS,
   PT_MEMBER_WORDS,
   PT_NOT_KEPT_ERROR,
+  PT_PAST_DAYS,
   PT_PEOPLE_SHOWN,
   PT_TIME_OFF_OVER_MESSAGE,
   PT_TIME_OFF_OVER_SHOWN,
@@ -35,6 +36,7 @@ import {
   addDays,
   decidePtBook,
   decidePtCancel,
+  decidePtMark,
   pickPtCover,
   ptAllowanceOf,
   ptAppointmentSchema,
@@ -54,6 +56,7 @@ import {
   type AddPtTimeOffRequest,
   type BookPtRequest,
   type CancelPtRequest,
+  type MarkPtRequest,
   type PtAppointment,
   type PtBookRefusal,
   type PtHeld,
@@ -163,6 +166,7 @@ function shown(row: repo.AppointmentRow, view: { now: Date; freeCancelMinutes: n
     packCharged: row.packCharged,
     usesLimit: row.usesLimit,
     cancel: row.status !== "booked" || time.started ? null : time.freeCancel ? "free" : "late",
+    canMark: decidePtMark({ status: row.status, started: time.started, to: "attended" }).kind !== "refuse",
   });
 }
 
@@ -253,13 +257,15 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
   const now = deps.now();
   const today = dayInTz(now, clock.timezone);
   const lastDay = addDays(today, PT_HORIZON_DAYS - 1);
-  const from = query.from === undefined || query.from < today ? today : query.from > lastDay ? lastDay : query.from;
+  // Days gone by are read too, for marking who came; nothing on them is free.
+  const firstDay = addDays(today, -PT_PAST_DAYS);
+  const from = query.from === undefined ? today : query.from < firstDay ? firstDay : query.from > lastDay ? lastDay : query.from;
   const to = addDays(from, PT_WEEK_DAYS - 1);
   const days = Array.from({ length: PT_WEEK_DAYS }, (_, n) => addDays(from, n));
 
   const offered =
     trainer.offers && trainer.sessionMinutes !== null
-      ? ptOfferedTimes(trainer.hours, trainer.sessionMinutes, days.filter((day) => day <= lastDay))
+      ? ptOfferedTimes(trainer.hours, trainer.sessionMinutes, days.filter((day) => day >= today && day <= lastDay))
       : [];
   const [slots, appointments, coached, timeOff] = await Promise.all([
     repo.instantsOf(deps.sql, clock.timezone, offered),
@@ -283,6 +289,7 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
     from,
     to,
     lastDay,
+    firstDay,
     freeCancelMinutes: clock.freeCancelMinutes,
     sessionMinutes: trainer.sessionMinutes,
     offers: trainer.offers,
@@ -548,6 +555,55 @@ export async function cancelUnderLock(
     meta: { status: decision.status, packSessionBack: String(decision.refundPack) },
   });
   return null;
+}
+
+// ── CAME OR NO-SHOW (17e-iv-b) ──
+
+/** Mark a session that has started: the person came, or did not. Whoever runs the timetable
+ *  marks any trainer's; a trainer marks their own. The same mark again changes nothing, and
+ *  a mark can be changed to the other. The session stays used either way, so no pack and
+ *  no limit moves. */
+export async function mark(
+  deps: PtDeps,
+  staffId: string,
+  gymId: string,
+  appointmentId: string,
+  req: MarkPtRequest,
+  limit: Limit,
+): Promise<PtAppointment | null> {
+  const standing = await standingOf(deps, gymId, staffId);
+  // Whose session it is decides who may mark it, so it is read before the lock.
+  const seen = await repo.appointmentById(deps.sql, gymId, appointmentId, false);
+  if (seen === null) throw appointmentNotFound();
+  if (!standing.manages && seen.trainerId !== staffId) throw forbidden();
+  await requireWritableGym(deps, standing.org);
+  if (!(await limit())) return null;
+
+  const refused = await deps.sql.begin(async (tx): Promise<OrgsError | null> => {
+    await lockOrgRow(tx, gymId);
+    const now = deps.now();
+    const [row, clock] = await Promise.all([repo.appointmentById(tx, gymId, appointmentId, true), repo.gymClock(tx, gymId)]);
+    if (row === null || clock === null) return appointmentNotFound();
+    const decision = decidePtMark({
+      status: row.status,
+      started: ptTime(now.getTime(), row.startsAt.getTime(), clock.freeCancelMinutes).started,
+      to: req.status,
+    });
+    if (decision.kind === "already") return null;
+    if (decision.kind === "refuse") return new OrgsError(409, decision.reason, PT_WORDS[decision.reason]);
+    await repo.markAttendance(tx, { gymId, id: row.id, status: req.status });
+    await insertAudit(tx, {
+      actorUserId: staffId,
+      gymId,
+      action: "org.pt_marked",
+      targetType: "gym_pt_appointment",
+      targetId: row.id,
+      meta: { status: req.status, was: row.status },
+    });
+    return null;
+  });
+  if (refused !== null) throw refused;
+  return await appointmentView(deps, standing, gymId, appointmentId);
 }
 
 // ── A TRAINER'S TIME OFF (17e-iii-b) ──

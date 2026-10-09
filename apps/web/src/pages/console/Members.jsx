@@ -803,6 +803,7 @@ export default function Members() {
           name={ptEnding.member.displayName}
           ending={ptEnding.sessions}
           clockFormat={org?.clockFormat}
+          from={ptEnding.alsoStaff ? 'both' : 'app'}
           moved={ptEnding.moved}
           busy={removingId === ptEnding.member.userId}
           onConfirm={() => void removeMember(ptEnding.member, { alsoStaff: ptEnding.alsoStaff }, ptEnding.sessions)}

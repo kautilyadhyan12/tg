@@ -29,6 +29,8 @@ export const PT_MINUTE_STEP = 5;
 export const PT_HORIZON_DAYS = CLASS_FILL_HORIZON_DAYS;
 /** How many days of one trainer a read answers. */
 export const PT_WEEK_DAYS = 7;
+/** How far back a trainer's week can be turned, to mark who came. */
+export const PT_PAST_DAYS = 28;
 
 export const PT_APPOINTMENT_STATUSES = ["booked", "cancelled", "late_cancelled", "attended", "no_show"] as const;
 export const ptAppointmentStatusSchema = z.enum(PT_APPOINTMENT_STATUSES);
@@ -311,6 +313,26 @@ export function decidePtCancel(i: {
   return { kind: "cancel", status: "late_cancelled", refundPack: false };
 }
 
+/** What staff mark a session that has started: the person came, or did not. */
+export const PT_MARKS = ["attended", "no_show"] as const;
+export const ptMarkSchema = z.enum(PT_MARKS);
+export type PtMark = z.infer<typeof ptMarkSchema>;
+
+export type PtMarkDecision =
+  | { kind: "mark" }
+  /** It is already marked so, and nothing changes. */
+  | { kind: "already" }
+  | { kind: "refuse"; reason: "not_started" | "mark_cancelled" };
+
+/** Mark a session came or no-show: only once it has started, and never a cancelled one.
+ *  A mark can be changed to the other. Either way the session stays used: a pack keeps it
+ *  charged and a membership's limit counts it (`PT_COUNTED`). */
+export function decidePtMark(i: { status: PtAppointmentStatus; started: boolean; to: PtMark }): PtMarkDecision {
+  if (i.status === "cancelled" || i.status === "late_cancelled") return { kind: "refuse", reason: "mark_cancelled" };
+  if (!i.started) return { kind: "refuse", reason: "not_started" };
+  return i.status === i.to ? { kind: "already" } : { kind: "mark" };
+}
+
 /** Where `nowMs` stands against a session that starts at `startsAtMs`. */
 export function ptTime(nowMs: number, startsAtMs: number, freeCancelMinutes: number): { started: boolean; freeCancel: boolean } {
   const left = startsAtMs - nowMs;
@@ -399,6 +421,8 @@ export const PT_WORDS = {
   late_cancel: "It's too late to cancel for free.",
   kept_used: "This session was already cancelled as a late cancel. The session stays used.",
   not_kept: "This session was already cancelled, and not as a late cancel. No session was used.",
+  not_started: "This session hasn't started yet. Mark it once it has.",
+  mark_cancelled: "This session was cancelled, so it can't be marked.",
   request_reused: "That didn't go through. Try again.",
   appointment_not_found: "That session was not found.",
   person_not_found: "That person isn't on your member list.",
@@ -526,11 +550,14 @@ export const ptAppointmentSchema = z
     usesLimit: z.boolean(),
     /** What a cancel now would be; null once it has started or is cancelled. */
     cancel: z.enum(["free", "late"]).nullable(),
+    /** It has started and was not cancelled, so staff can mark it came or no-show. */
+    canMark: z.boolean(),
   })
   .strict();
 export type PtAppointment = z.infer<typeof ptAppointmentSchema>;
 
-/** `from`: the first of the seven days, the gym's own; today when left out. */
+/** `from`: the first of the seven days, the gym's own; today when left out. It can be up
+ *  to `PT_PAST_DAYS` back, for marking who came. */
 export const ptWeekQuerySchema = z.object({ trainer: z.string().uuid(), from: classDaySchema.optional() }).strict();
 export type PtWeekQuery = z.infer<typeof ptWeekQuerySchema>;
 
@@ -552,6 +579,8 @@ export const ptWeekResponseSchema = z
     to: classDaySchema,
     /** The last day a session can be booked on. */
     lastDay: classDaySchema,
+    /** The earliest day the week can be turned back to. */
+    firstDay: classDaySchema,
     /** Personal training's free-cancel time as this read found it: what a session's
      *  `cancel` on it was decided by. */
     freeCancelMinutes: z.number().int(),
@@ -626,6 +655,10 @@ export type PtPeopleResponse = z.infer<typeof ptPeopleResponseSchema>;
 
 export const cancelPtRequestSchema = z.object({ lateOk: z.boolean(), giveBack: z.boolean() }).strict();
 export type CancelPtRequest = z.infer<typeof cancelPtRequestSchema>;
+
+/** Came or no-show, for a session that has started. */
+export const markPtRequestSchema = z.object({ status: ptMarkSchema }).strict();
+export type MarkPtRequest = z.infer<typeof markPtRequestSchema>;
 
 export const ptAppointmentResponseSchema = z.object({ appointment: ptAppointmentSchema }).strict();
 export type PtAppointmentResponse = z.infer<typeof ptAppointmentResponseSchema>;

@@ -26,6 +26,7 @@ import { codeFromBytes, slugCandidate, slugifyName } from "./codes.js";
 import { cleanGymText } from "./invites/gymText.js";
 import { withdrawForAccounts } from "./invites/join.js";
 import { recordsOfMember, removeRecordIn } from "./memberList/oneRemove.js";
+import { requireSessionsConfirmed, sessionsEndingFor } from "./pt/changes.js";
 import { currentRecordOf, pastRecordOf } from "./memberList/whose.js";
 import type { InviteSettings } from "./invites/settings.js";
 import * as listRepo from "./memberList/repo.js";
@@ -1931,18 +1932,32 @@ export async function removeOrgMember(
     actorUserId: userId,
     actorManagesStaff: privileges.includes("staff.manage"),
     alsoStaff: options.alsoStaff,
+    at,
     // ONE REMOVE (RULINGS 2026-09-27): the current record that is certainly theirs becomes
     // a past member in the same step — that record only, never another at their address,
     // and none when a family's shared email leaves the list unable to say. The membership
     // keeps the record it was removed with (their past one if that is all they have), for
     // Put back.
-    beforeClose: async (tx) => {
+    beforeClose: async (tx, { staffGoes }) => {
+      const confirmed = options.confirmPtSessions ?? null;
       const records = await recordsOfMember(tx, gymId, targetUserId);
+      // Refused before anything is asked: no box may promise a removal this press cannot make.
+      if (records.current !== null && !privileges.includes("members.confirm")) {
+        throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.remove_needs_list);
+      }
+      const entry = records.current === null ? null : await listRepo.entryFor(tx, gymId, records.current);
+      // A TRAINER GOES WITH THEIR PLACE (17e-iv-b): the box names, under ONE mark, the
+      // sessions booked WITH them and the ones booked FOR them, and nothing is written
+      // until that mark comes back. The record's own part is then confirmed with it.
+      let recordConfirmed = confirmed;
+      if (staffGoes) {
+        const own = entry === null ? [] : [entry.id];
+        await requireSessionsConfirmed(tx, gymId, { trainerId: targetUserId, entryIds: own }, at, confirmed);
+        recordConfirmed = (await sessionsEndingFor(tx, gymId, { entryIds: own }, at))?.mark ?? null;
+      }
       if (records.current === null) return records.past;
-      if (!privileges.includes("members.confirm")) throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.remove_needs_list);
-      const entry = await listRepo.entryFor(tx, gymId, records.current);
       if (entry === null) return null;
-      await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites, confirmPtSessions: options.confirmPtSessions ?? null }, entry, {
+      await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites, confirmPtSessions: recordConfirmed }, entry, {
         endApp: false,
         mayEndApp: true,
       });
@@ -2288,12 +2303,17 @@ export async function removeOrgStaff(
   userId: string,
   gymId: string,
   targetUserId: string,
+  /** The mark of the personal training sessions the box named (409 `pt_sessions_ending`). */
+  confirmPtSessions: string | null = null,
 ): Promise<RemoveOrgStaffResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
 
   const outcome = await repo.removeStaff(deps.sql, {
     gymId,
     userId: targetUserId,
+    // The clock every other removal reads: which sessions are still to come is decided by it.
+    at: deps.now?.() ?? new Date(),
+    confirmPtSessions,
     // The same list the ticks door uses: "can somebody else still run this gym"
     // is one question, and answering it differently at the two doors is what
     // T3 round 2 found (Low-1).

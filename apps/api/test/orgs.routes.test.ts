@@ -4020,6 +4020,7 @@ d("orgs routes (real Postgres)", () => {
           actorUserId: owner.userId,
           actorManagesStaff: true,
           alsoStaff: true,
+          at: new Date(),
         }),
       ]);
     } finally {

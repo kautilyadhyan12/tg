@@ -1345,12 +1345,14 @@ describe('Remove from staff and app names the personal training sessions it canc
     fireEvent.click(panel.getByRole('button', { name: 'Remove from staff and app' }));
     const box = within(await screen.findByTestId('pt-sessions-end-box'));
     expect(orgService.removeMember).toHaveBeenLastCalledWith(ORG.id, 'u2', { alsoStaff: true });
-    expect(box.getByRole('heading', { name: 'Remove Rita Sen?' })).toBeTruthy();
-    expect(box.getByText("Rita Sen hasn't been removed yet: they have personal training booked.")).toBeTruthy();
+    expect(box.getByRole('heading', { name: 'Remove Rita Sen from staff and the app?' })).toBeTruthy();
+    expect(box.getByText("Rita Sen hasn't been removed yet: personal training is booked with them or for them.")).toBeTruthy();
     expect(box.getByRole('heading', { name: '1 personal training session will be cancelled' })).toBeTruthy();
-    // One person's box: the line leads with when, and her name is in the title alone.
-    expect(within(box.getByTestId('pt-sessions-ending')).getByRole('listitem').textContent).toMatch(/^Fri 9 Oct · .*with Sam Trainer$/);
-    expect(box.getByText("The time is free again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
+    // The box may hold sessions she gives and sessions she takes, so each line leads with the person.
+    expect(within(box.getByTestId('pt-sessions-ending')).getByRole('listitem').textContent).toMatch(/^Rita SenFri 9 Oct · .*with Sam Trainer$/);
+    // A trainer is going: their time does not open up, and the box never says it does.
+    expect(box.getByText('Nobody can be booked with them after this. 1 session goes back to its pack. A session that has already started stays as it is.')).toBeTruthy();
+    expect(box.queryByText(/free again/)).toBeNull();
     expect(orgService.removeMember).toHaveBeenCalledTimes(1);
 
     fireEvent.click(box.getByRole('button', { name: 'Remove and cancel 1 session' }));
@@ -1372,5 +1374,92 @@ describe('Remove from staff and app names the personal training sessions it canc
     expect(screen.queryByTestId('pt-sessions-end-box')).toBeNull();
     expect(orgService.removeMember).toHaveBeenCalledTimes(1);
     expect(orgService.removeStaff).not.toHaveBeenCalled();
+  });
+});
+
+// REMOVE FROM STAFF, WITH PEOPLE BOOKED WITH THEM FOR PERSONAL TRAINING (17e-iv-b).
+describe('Remove from staff names the personal training sessions booked with a trainer', () => {
+  const MARK = 'd'.repeat(64);
+  const row = (n, personName, localDate, packSession) => ({
+    id: `77777777-7777-4777-8777-00000000000${String(n)}`, personName, trainerName: 'Rita Sen', localDate, localStartMinute: 600, minutes: 60, packSession,
+  });
+  const sessions = {
+    count: 5,
+    packSessions: 2,
+    mark: MARK,
+    sessions: [
+      row(1, 'Maya Lopez', '2026-10-09', true),
+      row(2, 'Noor Khan', '2026-10-09', true),
+      row(3, 'Wendy Park', '2026-10-12', false),
+      row(4, 'Omar Aziz', '2026-10-13', false),
+      row(5, 'Lena Fox', '2026-10-14', false),
+    ],
+  };
+  const asks = (over = sessions) =>
+    Object.assign(new Error('refused'), {
+      response: { status: 409, data: { error: 'pt_sessions_ending', message: 'People are booked with this trainer for personal training.', sessions: over } },
+    });
+
+  it('the press removes nobody and opens the box that names who is booked with them; its own button sends the mark back', async () => {
+    orgService.removeStaff.mockReset();
+    orgService.removeStaff.mockRejectedValueOnce(asks()).mockResolvedValueOnce({ data: { status: 'removed' } });
+    const panel = await drawPerson();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    const box = within(await screen.findByTestId('pt-sessions-end-box'));
+    expect(orgService.removeStaff).toHaveBeenCalledTimes(1);
+    expect(orgService.removeStaff).toHaveBeenLastCalledWith(ORG.id, 'u2');
+    expect(orgService.removeMember).not.toHaveBeenCalled();
+    expect(box.getByRole('heading', { name: 'Remove Rita Sen from staff?' })).toBeTruthy();
+    expect(box.getByText("Rita Sen hasn't been removed yet: people are booked with them for personal training.")).toBeTruthy();
+    expect(box.getByRole('heading', { name: '5 personal training sessions will be cancelled' })).toBeTruthy();
+    // A few names, then "and N more", See all: each line leads with the person booked.
+    const part = within(box.getByTestId('pt-sessions-ending'));
+    expect(part.getAllByRole('listitem').map((li) => li.textContent.replace(/Fri.*|Mon.*/, ''))).toEqual(['Maya Lopez', 'Noor Khan', 'Wendy Park']);
+    expect(part.getByText(/and 2 more/)).toBeTruthy();
+    fireEvent.click(part.getByRole('button', { name: 'See all' }));
+    expect(part.getAllByRole('listitem')).toHaveLength(5);
+    expect(part.getByText('Nobody can be booked with them after this. 2 sessions go back to their packs. A session that has already started stays as it is.')).toBeTruthy();
+    expect(part.queryByText(/free again/)).toBeNull();
+    expect(part.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
+    // It is a question, not an error: no sentence of the server's is shown.
+    expect(screen.queryByText('People are booked with this trainer for personal training.')).toBeNull();
+
+    fireEvent.click(box.getByRole('button', { name: 'Remove and cancel 5 sessions' }));
+    await waitFor(() => expect(orgService.removeStaff).toHaveBeenCalledTimes(2));
+    expect(orgService.removeStaff).toHaveBeenLastCalledWith(ORG.id, 'u2', { confirmPtSessions: MARK });
+    await waitFor(() => expect(screen.queryByTestId('pt-sessions-end-box')).toBeNull());
+    expect(await screen.findByText('Rita Sen was removed from staff.')).toBeTruthy();
+    expect(orgService.removeMember).not.toHaveBeenCalled();
+  });
+
+  it('a session booked while the box was open: the box says so, names them again, and waits for a new press', async () => {
+    const more = { ...sessions, count: 6, mark: 'e'.repeat(64), sessions: [...sessions.sessions, row(6, 'Pia Late', '2026-10-15', false)] };
+    orgService.removeStaff.mockReset();
+    orgService.removeStaff.mockRejectedValueOnce(asks()).mockRejectedValueOnce(asks(more)).mockResolvedValueOnce({ data: { status: 'removed' } });
+    const panel = await drawPerson();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    const box = within(await screen.findByTestId('pt-sessions-end-box'));
+    fireEvent.click(box.getByRole('button', { name: 'Remove and cancel 5 sessions' }));
+    expect(await box.findByText('The sessions changed while this was open. Check them and press again.')).toBeTruthy();
+    expect(box.getByRole('heading', { name: '6 personal training sessions will be cancelled' })).toBeTruthy();
+    expect(screen.queryByText('Rita Sen was removed from staff.')).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Remove and cancel 6 sessions' }));
+    await waitFor(() => expect(orgService.removeStaff).toHaveBeenLastCalledWith(ORG.id, 'u2', { confirmPtSessions: 'e'.repeat(64) }));
+    expect(await screen.findByText('Rita Sen was removed from staff.')).toBeTruthy();
+  });
+
+  it("Don't remove keeps them on the staff, with nothing more sent", async () => {
+    orgService.removeStaff.mockReset();
+    orgService.removeStaff.mockRejectedValue(asks());
+    const panel = await drawPerson();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    const box = within(await screen.findByTestId('pt-sessions-end-box'));
+    fireEvent.click(box.getByRole('button', { name: "Don't remove" }));
+    expect(screen.queryByTestId('pt-sessions-end-box')).toBeNull();
+    expect(orgService.removeStaff).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Rita Sen was removed from staff.')).toBeNull();
   });
 });
