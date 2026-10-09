@@ -563,7 +563,7 @@ d("a gym's challenges (real Postgres)", () => {
 
       // Nobody has joined: nobody is in it, whatever their gym days.
       const before = await seen(gym, vera, c.id);
-      expect([before.joined, before.can, before.joinedCount, before.me, before.board.status]).toEqual([false, { join: true, leave: false }, 0, null, "too_few"]);
+      expect([before.joined, before.can, before.joinedCount, before.me, before.board.status]).toEqual([false, { join: true, leave: false, pick: false }, 0, null, "too_few"]);
 
       for (const p of [asha, bilal, chen]) expect((await joinAs(gym, p, c.id)).statusCode).toBe(200);
       const outside = await seen(gym, vera, c.id);
@@ -574,7 +574,7 @@ d("a gym's challenges (real Postgres)", () => {
       const res = await joinAs(gym, vera, c.id);
       expect(res.statusCode).toBe(200);
       const mine = (JSON.parse(res.body) as { challenge: MemberGymChallenge }).challenge;
-      expect([mine.joined, mine.can, mine.joinedCount]).toEqual([true, { join: false, leave: true }, 4]);
+      expect([mine.joined, mine.can, mine.joinedCount]).toEqual([true, { join: false, leave: true, pick: false }, 4]);
       expect([mine.me?.value, mine.me?.place, mine.me?.days]).toEqual([2, 2, ["2026-10-05", "2026-10-06"]]);
       expect(places((await boardOf(gym, vera, c.id)).rows)).toEqual([["Asha R.", 1, 3], ["Bilal K.", 2, 2], ["Chen W.", 2, 2], ["Vera V.", 2, 2]]);
 
@@ -643,7 +643,7 @@ d("a gym's challenges (real Postgres)", () => {
       const left = await leaveAs(gym, vera, ending.id);
       expect([left.statusCode, codeOf(left)]).toEqual([409, "challenge_ended"]);
       expect(await joinRows(ending.id)).toBe(1);
-      expect((await seen(gym, vera, ending.id)).can).toEqual({ join: false, leave: false });
+      expect((await seen(gym, vera, ending.id)).can).toEqual({ join: false, leave: false, pick: false });
       clock = WEDNESDAY;
     },
     T,
@@ -706,7 +706,7 @@ d("a gym's challenges (real Postgres)", () => {
       clock = new Date("2026-11-02T06:30:00Z");
       expect((await inject("PUT", `${base(gym.id)}/${later.id}/cancelled`, gym.owner.cookies, { cancelled: true })).statusCode).toBe(200);
       const marked = await seen(gym, vera, later.id);
-      expect([marked.cancelled, marked.board, marked.me, marked.can]).toEqual([true, { status: "not_started", ranked: 0, top: [], leaders: 0, reached: null }, null, { join: false, leave: false }]);
+      expect([marked.cancelled, marked.board, marked.me, marked.can]).toEqual([true, { status: "not_started", ranked: 0, top: [], leaders: 0, reached: null }, null, { join: false, leave: false, pick: false }]);
       clock = new Date("2026-11-09T06:29:00Z");
       expect((await names()).some(([name]) => name === "November")).toBe(true);
       clock = new Date("2026-11-09T06:31:00Z");
@@ -770,11 +770,13 @@ d("a gym's challenges (real Postgres)", () => {
         who: "joined",
         unit: "",
         lowestWins: false,
+        teams: "none",
         cancelled: false,
         state: "running",
         joinedCount: 0,
         top: [],
         withNumber: null,
+        teamList: [],
       });
       expect((await staffList(gym)).current).toHaveLength(1);
       expect(await audits(gym.id, "org.challenge_added")).toBe(1);

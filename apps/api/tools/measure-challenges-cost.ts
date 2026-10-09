@@ -8,7 +8,11 @@
 //   - server thread busy: how long the server's one thread answers nobody.
 //
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_b'
-//   corepack pnpm --filter api exec tsx tools/measure-challenges-cost.ts [--members=200] [--challenges=9] [--keep]
+//   corepack pnpm --filter api exec tsx tools/measure-challenges-cost.ts [--members=200] [--challenges=9] [--teams] [--keep]
+//
+// --teams puts every challenge in the most teams one can have (eight) with every member in
+// one, and also times a member's pick, a whole gym picking at once and staff's save
+// (ROADMAP 19d-ii-a).
 //
 // --keep leaves the gym in place after the reads (for EXPLAIN); the next run removes it first.
 //
@@ -18,8 +22,8 @@ import { randomUUID } from "node:crypto";
 import { cpus } from "node:os";
 import { performance } from "node:perf_hooks";
 import postgres from "postgres";
-import { GYM_CHALLENGES_CURRENT_MAX, GYM_CHALLENGES_ENDED_SHOWN } from "@app/shared";
-import { addChallenge, getBoard, getChallenges, getStaffBoard, getStaffChallenges, setCancelled, setJoined, setScores } from "../src/modules/orgs/challenges/service.js";
+import { GYM_CHALLENGES_CURRENT_MAX, GYM_CHALLENGES_ENDED_SHOWN, GYM_CHALLENGE_TEAMS_MAX } from "@app/shared";
+import { addChallenge, getBoard, getChallenges, getStaffBoard, getStaffChallenges, pickTeam, setCancelled, setJoined, setScores, setTeamPeople } from "../src/modules/orgs/challenges/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -39,6 +43,7 @@ const CHALLENGES = Math.min(MOST, arg("challenges", MOST));
 const CROWD = Math.min(MEMBERS, 200);
 const YEARS = 3;
 const KEEP = process.argv.includes("--keep");
+const TEAMS = process.argv.includes("--teams");
 const RUNS = 5;
 const PLAN = "zz_challenges_cost";
 const PREFIX = "challenges-cost-";
@@ -67,6 +72,8 @@ interface Seeded {
   everyone: string;
   joined: string;
   empty: string;
+  /** The teams of "Nobody yet", where members pick; none without --teams. */
+  emptyTeams: string[];
 }
 
 async function seed(): Promise<Seeded> {
@@ -129,12 +136,31 @@ async function seed(): Promise<Seeded> {
       INSERT INTO gym_challenge_people (gym_id, challenge_id, user_id)
       SELECT ${gymId}, c.id, m.id FROM unnest(${joinedOnes}::uuid[]) AS c(id), unnest(${memberIds}::uuid[]) AS m(id)`;
   }
+  let emptyTeams: string[] = [];
+  if (TEAMS) {
+    // Every challenge in eight teams, every member in one; "Nobody yet" is the one members pick in.
+    await sql`UPDATE gym_challenges SET teams = CASE WHEN id = ${empty?.id ?? ""} THEN 'members' ELSE 'staff' END WHERE gym_id = ${gymId}`;
+    await sql`
+      INSERT INTO gym_challenge_teams (gym_id, challenge_id, name, position)
+      SELECT ${gymId}, c.id, 'Team ' || (n + 1), n FROM gym_challenges c, generate_series(0, ${GYM_CHALLENGE_TEAMS_MAX - 1}) AS n WHERE c.gym_id = ${gymId}`;
+    await sql`
+      INSERT INTO gym_challenge_team_people (gym_id, challenge_id, team_id, user_id)
+      SELECT ${gymId}, c.id, t.id, m.user_id
+      FROM gym_challenges c
+      JOIN (SELECT user_id, (row_number() OVER (ORDER BY user_id) - 1) % ${GYM_CHALLENGE_TEAMS_MAX} AS slot FROM gym_members WHERE gym_id = ${gymId}) m ON true
+      JOIN gym_challenge_teams t ON t.challenge_id = c.id AND t.position = m.slot
+      WHERE c.gym_id = ${gymId} AND c.id <> ${empty?.id ?? ""}`;
+    const rows = await sql<{ id: string }[]>`SELECT id FROM gym_challenge_teams WHERE challenge_id = ${empty?.id ?? ""} ORDER BY position`;
+    emptyTeams = rows.map((row) => row.id);
+    await sql`ANALYZE gym_challenge_teams`;
+    await sql`ANALYZE gym_challenge_team_people`;
+  }
   await sql`VACUUM ANALYZE gym_attendance`;
   await sql`VACUUM ANALYZE workouts`;
   await sql`ANALYZE gym_challenges`;
   await sql`ANALYZE gym_challenge_people`;
   const first = (who: string): string => made.find((c) => c.who === who && c.n <= running)?.id ?? "";
-  return { gymId, owner, members: memberIds, everyone: first("everyone"), joined: first("joined"), empty: empty?.id ?? "" };
+  return { gymId, owner, members: memberIds, everyone: first("everyone"), joined: first("joined"), empty: empty?.id ?? "", emptyTeams };
 }
 
 const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
@@ -155,7 +181,7 @@ function report(name: string, runs: { wall: number; js: number }[]): void {
 }
 
 await cleanup();
-const { gymId, owner, members, everyone, joined, empty } = await seed();
+const { gymId, owner, members, everyone, joined, empty, emptyTeams } = await seed();
 try {
   const deps = { sql, now: () => new Date() };
   const allowed = (): Promise<boolean> => Promise.resolve(true);
@@ -193,6 +219,31 @@ try {
     process.exit(0);
   }
 
+  if (TEAMS) {
+    const teamOf = (n: number): string => emptyTeams[n % emptyTeams.length] ?? "";
+    const picks = [];
+    const crowdPicks = [];
+    const saves = [];
+    const clear = async (): Promise<void> => {
+      await sql`DELETE FROM gym_challenge_team_people WHERE gym_id = ${gymId} AND challenge_id = ${empty}`;
+      await sql`DELETE FROM gym_challenge_people WHERE gym_id = ${gymId} AND challenge_id = ${empty}`;
+    };
+    for (let i = 0; i < RUNS; i++) {
+      await clear();
+      picks.push(await time(() => pickTeam(deps, viewer, gymId, empty, teamOf(0), allowed)));
+      await clear();
+      // Every member picks at once: each is a short step holding the challenge's row shared, and one read back.
+      crowdPicks.push(await time(() => Promise.all(crowd.map((id, n) => pickTeam(deps, id, gymId, empty, teamOf(n), allowed)))));
+      // Staff move every one of them in one save, under the gym's row.
+      const people = crowd.map((userId, n) => ({ userId, teamId: teamOf(n + 1 + i) }));
+      saves.push(await time(() => setTeamPeople(deps, owner, gymId, empty, { people }, allowed)));
+    }
+    report("one member picks a team", picks);
+    report(`${String(CROWD)} members pick a team at the same instant`, crowdPicks);
+    report(`staff move ${String(CROWD)} people between teams in one save`, saves);
+    await clear();
+  }
+
   const joins = [];
   const leaves = [];
   const crowds = [];
@@ -216,7 +267,7 @@ try {
     let id = "";
     adds.push(
       await time(async () => {
-        const made = await addChallenge(deps, owner, gymId, { challengeKey: randomUUID(), name: "Added", details: "", prize: "", counts: "gym_days", startsOn: today, endsOn: today, target: null, who: "everyone", unit: "", lowestWins: false }, allowed);
+        const made = await addChallenge(deps, owner, gymId, { challengeKey: randomUUID(), name: "Added", details: "", prize: "", counts: "gym_days", startsOn: today, endsOn: today, target: null, who: "everyone", unit: "", lowestWins: false, teams: "none", teamList: [] }, allowed);
         id = made?.id ?? "";
       }),
     );

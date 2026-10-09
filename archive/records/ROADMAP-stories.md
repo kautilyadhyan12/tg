@@ -322,3 +322,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 17e-iv. **Sessions when people change** (the line as first written; split 2026-10-09 into 17e-iv-a and 17e-iv-b): a person removed or taken off the list, a membership cancelled and a trainer leaving the staff end the coming sessions and give packs their sessions back, each naming the people first; came and no-show (with a route test that a session marked came or missed still counts against a membership's limit, 17e-v).
 
 - 17e-iv-a. [x] **Sessions when a person leaves** (the line as it stood; merged 2026-10-09, PR #202): a person removed or taken off the list, and a membership cancelled, end the coming sessions and give packs their sessions back, each naming the sessions first.
+
+## 19d-ii, as first written (split 2026-10-09 into 19d-ii-a and 19d-ii-b)
+
+- 19d-ii. [ ] **Teams, and the result posted to Updates**: staff make the teams or members pick one, a team's number and its board; when a challenge ends its result is posted to Updates once, safe to run twice. After 19d-i.

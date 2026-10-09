@@ -10,7 +10,10 @@ import {
   challengeLength,
   challengeSaveProblem,
   challengeState,
+  challengeTakesTeams,
   changeGymChallengeRequestSchema,
+  placeTeams,
+  teamNameKey,
   type ChallengeRules,
   type GymChallengeSaveProblem,
 } from "../src/index.js";
@@ -24,6 +27,8 @@ const rules = (over: Partial<ChallengeRules> = {}): ChallengeRules => ({
   target: null,
   who: "everyone",
   lowestWins: false,
+  teams: "none",
+  teamList: [],
   ...over,
 });
 
@@ -109,17 +114,32 @@ describe("what may be saved", () => {
 });
 
 describe("what a member can do", () => {
-  const base = { who: "joined", cancelled: false, state: "running", joined: false } as const;
+  const base = { who: "joined", cancelled: false, state: "running", joined: false, teams: "none", hasTeam: false } as const;
+  const picks = { ...base, teams: "members" } as const;
   it.each([
-    ["a challenge people join, not joined", base, { join: true, leave: false }],
-    ["joined", { ...base, joined: true }, { join: false, leave: true }],
-    ["not started yet", { ...base, state: "coming" }, { join: true, leave: false }],
-    ["not started yet, joined", { ...base, state: "coming", joined: true }, { join: false, leave: true }],
-    ["ended", { ...base, state: "ended" }, { join: false, leave: false }],
-    ["ended, joined", { ...base, state: "ended", joined: true }, { join: false, leave: false }],
-    ["cancelled", { ...base, cancelled: true }, { join: false, leave: false }],
-    ["cancelled, joined", { ...base, cancelled: true, joined: true }, { join: false, leave: false }],
-    ["everyone's challenge", { ...base, who: "everyone" }, { join: false, leave: false }],
+    ["a challenge people join, not joined", base, { join: true, leave: false, pick: false }],
+    ["joined", { ...base, joined: true }, { join: false, leave: true, pick: false }],
+    ["not started yet", { ...base, state: "coming" }, { join: true, leave: false, pick: false }],
+    ["not started yet, joined", { ...base, state: "coming", joined: true }, { join: false, leave: true, pick: false }],
+    ["ended", { ...base, state: "ended" }, { join: false, leave: false, pick: false }],
+    ["ended, joined", { ...base, state: "ended", joined: true }, { join: false, leave: false, pick: false }],
+    ["cancelled", { ...base, cancelled: true }, { join: false, leave: false, pick: false }],
+    ["cancelled, joined", { ...base, cancelled: true, joined: true }, { join: false, leave: false, pick: false }],
+    ["everyone's challenge", { ...base, who: "everyone" }, { join: false, leave: false, pick: false }],
+    // In teams. Where staff make them a member never picks, and joins as before.
+    ["staff make the teams, not joined", { ...base, teams: "staff" }, { join: true, leave: false, pick: false }],
+    ["staff make the teams, in one", { ...base, teams: "staff", joined: true, hasTeam: true }, { join: false, leave: true, pick: false }],
+    // Where members pick, picking is how they join: no Join button beside it.
+    ["members pick, in no team", picks, { join: false, leave: false, pick: true }],
+    ["members pick, in no team, before it starts", { ...picks, state: "coming" }, { join: false, leave: false, pick: true }],
+    ["members pick, in a team, before it starts: they may change", { ...picks, state: "coming", joined: true, hasTeam: true }, { join: false, leave: true, pick: true }],
+    ["members pick, in a team, once it runs: no change", { ...picks, joined: true, hasTeam: true }, { join: false, leave: true, pick: false }],
+    ["members pick, left after it started: back into the same team only", { ...picks, hasTeam: true }, { join: true, leave: false, pick: false }],
+    ["members pick, joined and staff took them out of their team", { ...picks, joined: true }, { join: false, leave: true, pick: true }],
+    ["members pick, everyone's challenge, in no team", { ...picks, who: "everyone" }, { join: false, leave: false, pick: true }],
+    ["members pick, everyone's challenge, in a team, running", { ...picks, who: "everyone", hasTeam: true }, { join: false, leave: false, pick: false }],
+    ["members pick, ended", { ...picks, state: "ended" }, { join: false, leave: false, pick: false }],
+    ["members pick, cancelled", { ...picks, cancelled: true }, { join: false, leave: false, pick: false }],
   ] as const)("%s", (_what, input, can) => {
     expect(challengeCan(input)).toEqual(can);
   });
@@ -168,5 +188,138 @@ describe("the request", () => {
     expect(changeGymChallengeRequestSchema.safeParse(fields).success).toBe(false);
     delete fields["challengeKey"];
     expect(changeGymChallengeRequestSchema.safeParse(fields).success).toBe(true);
+  });
+});
+
+// ── TEAMS (ROADMAP 19d-ii-a) ──
+
+describe("a team's place", () => {
+  const T = (id: string, value: number) => ({ id, value });
+  const places = (teams: { id: string; value: number }[], lowestWins = false) => Object.fromEntries(placeTeams(teams, lowestWins));
+  it.each([
+    ["the highest number is first", [T("a", 40), T("b", 90), T("c", 10)], false, { a: 2, b: 1, c: 3 }],
+    ["two level share a place, and the next is third", [T("a", 50), T("b", 50), T("c", 10)], false, { a: 1, b: 1, c: 3 }],
+    ["all level", [T("a", 7), T("b", 7), T("c", 7)], false, { a: 1, b: 1, c: 1 }],
+    ["a team with no number has no place", [T("a", 12), T("b", 0), T("c", 3)], false, { a: 1, b: null, c: 2 }],
+    ["nobody has a number", [T("a", 0), T("b", 0)], false, { a: null, b: null }],
+    ["a team of one against a team of many, by the number alone", [T("solo", 30), T("many", 29)], false, { solo: 1, many: 2 }],
+    ["one team", [T("a", 4)], false, { a: 1 }],
+    ["no teams", [], false, {}],
+    ["the lowest wins: the smallest number is first", [T("a", 40), T("b", 90), T("c", 10)], true, { a: 2, b: 3, c: 1 }],
+    ["the lowest wins: a team with no number is not first", [T("a", 40), T("b", 0), T("c", 10)], true, { a: 2, b: null, c: 1 }],
+    ["the lowest wins: two level", [T("a", 15), T("b", 15), T("c", 99)], true, { a: 1, b: 1, c: 3 }],
+    ["eight teams, two groups level", [T("a", 8), T("b", 6), T("c", 6), T("d", 5), T("e", 5), T("f", 5), T("g", 1), T("h", 0)], false, { a: 1, b: 2, c: 2, d: 4, e: 4, f: 4, g: 7, h: null }],
+  ] as const)("%s", (_what, teams, lowestWins, expected) => {
+    expect(places([...teams], lowestWins)).toEqual(expected);
+  });
+});
+
+describe("teams in the request", () => {
+  const body = (over: Record<string, unknown> = {}) => ({
+    name: "October Challenge",
+    details: "",
+    prize: "",
+    counts: "gym_days",
+    startsOn: "2026-10-01",
+    endsOn: "2026-10-31",
+    target: null,
+    who: "everyone",
+    ...over,
+  });
+  const team = (name: string, id: string | null = null) => ({ id, name });
+  const ID = "00000000-0000-4000-8000-0000000000a1";
+  const ok = (over: Record<string, unknown>): boolean => changeGymChallengeRequestSchema.safeParse(body(over)).success;
+
+  it("a challenge sent with no word about teams is one people are in alone", () => {
+    const parsed = changeGymChallengeRequestSchema.parse(body());
+    expect(parsed.teams).toBe("none");
+    expect(parsed.teamList).toEqual([]);
+  });
+
+  it.each([
+    ["two teams, staff make them", { teams: "staff", teamList: [team("Red"), team("Blue")] }, true],
+    ["eight teams, members pick", { teams: "members", teamList: ["A", "B", "C", "D", "E", "F", "G", "H"].map((n) => team(n)) }, true],
+    ["nine teams", { teams: "staff", teamList: ["A", "B", "C", "D", "E", "F", "G", "H", "I"].map((n) => team(n)) }, false],
+    ["one team", { teams: "staff", teamList: [team("Red")] }, false],
+    ["in teams with none named", { teams: "members", teamList: [] }, false],
+    ["alone, with teams named", { teams: "none", teamList: [team("Red"), team("Blue")] }, false],
+    ["two teams with one name", { teams: "staff", teamList: [team("Red"), team("Red")] }, false],
+    ["one name in other capitals", { teams: "staff", teamList: [team("Red Team"), team("RED  team")] }, false],
+    ["one name in full-width letters", { teams: "staff", teamList: [team("Red"), team("Ｒｅｄ")] }, false],
+    ["a name nobody can see", { teams: "staff", teamList: [team("Red"), team("​")] }, false],
+    ["a name of spaces", { teams: "staff", teamList: [team("Red"), team("   ")] }, false],
+    ["a name of 40 characters", { teams: "staff", teamList: [team("Red"), team("x".repeat(40))] }, true],
+    ["a name of 41 characters", { teams: "staff", teamList: [team("Red"), team("x".repeat(41))] }, false],
+    ["one kept team listed twice", { teams: "staff", teamList: [team("Red", ID), team("Blue", ID)] }, false],
+    ["an id that is not one", { teams: "staff", teamList: [team("Red", "nope"), team("Blue")] }, false],
+    ["a kind of teams nobody knows", { teams: "pairs", teamList: [team("Red"), team("Blue")] }, false],
+  ] as const)("%s", (_what, over, expected) => {
+    expect(ok(over)).toBe(expected);
+  });
+
+  it("a team's target is not bound by the challenge's days; one person's is", () => {
+    const week = { startsOn: "2026-10-01", endsOn: "2026-10-07", target: 100 };
+    expect(ok(week)).toBe(false);
+    expect(ok({ ...week, teams: "staff", teamList: [team("Red"), team("Blue")] })).toBe(true);
+  });
+
+  it("a name is kept trimmed", () => {
+    const parsed = changeGymChallengeRequestSchema.parse(body({ teams: "staff", teamList: [team("  Red  "), team("Blue")] }));
+    expect(parsed.teamList.map((t) => t.name)).toEqual(["Red", "Blue"]);
+  });
+
+  it("names are compared as a person reads them", () => {
+    expect(teamNameKey("  RED   Team ")).toBe("red team");
+    expect(teamNameKey("Ｒｅｄ")).toBe("red");
+  });
+});
+
+describe("teams once a challenge has started", () => {
+  const A = "00000000-0000-4000-8000-0000000000a1";
+  const B = "00000000-0000-4000-8000-0000000000b1";
+  const red = { id: A, name: "Red" };
+  const blue = { id: B, name: "Blue" };
+  const kept = [red, blue];
+  const running = rules({ startsOn: "2026-10-01", endsOn: "2026-10-31", teams: "staff", teamList: kept });
+  const coming = rules({ teams: "staff", teamList: kept });
+  const problem = (before: ChallengeRules, over: Partial<ChallengeRules>): GymChallengeSaveProblem | null =>
+    challengeSaveProblem({ today: TODAY, before, next: { ...before, ...over } });
+
+  const cases: [string, Partial<ChallengeRules>, GymChallengeSaveProblem | null][] = [
+    ["nothing changed", {}, null],
+    ["its last day", { endsOn: "2026-11-05" }, null],
+    ["a team renamed", { teamList: [{ id: A, name: "Reds" }, blue] }, "started_locked"],
+    ["a team added", { teamList: [...kept, { id: null, name: "Green" }] }, "started_locked"],
+    ["a team removed and another added", { teamList: [red, { id: null, name: "Green" }] }, "started_locked"],
+    ["the teams in another order", { teamList: [blue, red] }, "started_locked"],
+    ["members pick where staff made them", { teams: "members" }, "started_locked"],
+    ["made a challenge people are in alone", { teams: "none", teamList: [] }, "started_locked"],
+  ];
+  it.each(cases)("running: %s", (_what, over, expected) => {
+    expect(problem(running, over)).toBe(expected);
+  });
+
+  it("a running challenge people are in alone cannot be put in teams", () => {
+    const alone = rules({ startsOn: "2026-10-01", endsOn: "2026-10-31" });
+    expect(problem(alone, { teams: "staff", teamList: [{ id: null, name: "Red" }, { id: null, name: "Blue" }] })).toBe("started_locked");
+  });
+
+  it("before its first day everything about its teams can change", () => {
+    expect(problem(coming, { teams: "members", teamList: [{ id: A, name: "Reds" }, { id: null, name: "Green" }] })).toBeNull();
+    expect(problem(coming, { teams: "none", teamList: [] })).toBeNull();
+  });
+});
+
+describe("when staff may put people in teams", () => {
+  const c = { teams: "staff", endsOn: "2026-10-31", cancelled: false } as const;
+  it.each([
+    ["before it starts and while it runs", c, "2026-10-07", true],
+    ["on its last day", c, "2026-10-31", true],
+    ["the day after", c, "2026-11-01", false],
+    ["cancelled", { ...c, cancelled: true }, "2026-10-07", false],
+    ["where members pick, staff still may", { ...c, teams: "members" }, "2026-10-07", true],
+    ["a challenge people are in alone", { ...c, teams: "none" }, "2026-10-07", false],
+  ] as const)("%s", (_what, challenge, today, expected) => {
+    expect(challengeTakesTeams(challenge, today)).toBe(expected);
   });
 });

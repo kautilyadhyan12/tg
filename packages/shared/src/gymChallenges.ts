@@ -19,6 +19,18 @@ export type GymChallengeCounts = (typeof GYM_CHALLENGE_COUNTS)[number];
 export const GYM_CHALLENGE_WHO = ["everyone", "joined"] as const;
 export type GymChallengeWho = (typeof GYM_CHALLENGE_WHO)[number];
 
+/** Alone, or in teams: "staff" put people in them, or "members" pick their own
+ *  (ROADMAP 19d-ii-a). */
+export const GYM_CHALLENGE_TEAMS = ["none", "staff", "members"] as const;
+export type GymChallengeTeams = (typeof GYM_CHALLENGE_TEAMS)[number];
+export const GYM_CHALLENGE_TEAMS_MIN = 2;
+export const GYM_CHALLENGE_TEAMS_MAX = 8;
+export const GYM_CHALLENGE_TEAM_NAME_MAX = 40;
+/** The teammates named on a member's card, the leading ones first; the rest are counted. */
+export const GYM_CHALLENGE_TEAMMATES_SHOWN = 10;
+/** How many people one save of who is in which team carries. */
+export const GYM_CHALLENGE_TEAM_PEOPLE_A_SAVE = 200;
+
 export const GYM_CHALLENGE_NAME_MAX = 80;
 export const GYM_CHALLENGE_DETAILS_MAX = 500;
 export const GYM_CHALLENGE_PRIZE_MAX = 120;
@@ -98,7 +110,23 @@ const challengeFields = {
   unit: words(GYM_CHALLENGE_UNIT_MAX).default(""),
   /** The gym's own count only, with no target: the lowest number wins (a fastest time). */
   lowestWins: z.boolean().default(false),
+  teams: z.enum(GYM_CHALLENGE_TEAMS).default("none"),
+  /** The teams, in the gym's order. `id` null: a new team; a team left out is removed. */
+  teamList: z
+    .array(
+      z
+        .object({
+          id: z.string().uuid().nullable(),
+          name: words(GYM_CHALLENGE_TEAM_NAME_MAX).refine(eventNameIsSeen, { message: "a name is needed" }),
+        })
+        .strict(),
+    )
+    .max(GYM_CHALLENGE_TEAMS_MAX)
+    .default([]),
 };
+
+/** A team's name as two are compared: look-alike forms and capitals made one. */
+export const teamNameKey = (name: string): string => name.normalize("NFKC").toLowerCase().replace(/\s+/gu, " ").trim();
 
 interface Dated {
   counts: GymChallengeCounts;
@@ -107,18 +135,29 @@ interface Dated {
   target: number | null;
   unit: string;
   lowestWins: boolean;
+  teams: GymChallengeTeams;
+  teamList: readonly { id: string | null; name: string }[];
 }
 
 const datesInOrder = (c: Dated): boolean => {
   const days = challengeLength(c);
   return days >= 1 && days <= GYM_CHALLENGE_MAX_DAYS;
 };
-/** One a day at most is counted, so a target above the challenge's days cannot be reached. */
-const targetInReach = (c: Dated): boolean => c.counts === "own" || c.target === null || !datesInOrder(c) || c.target <= challengeLength(c);
+/** One a day at most is counted, so a target above the challenge's days cannot be reached.
+ *  A team's number is its people's added together, so a team's target is not bound by them. */
+const targetInReach = (c: Dated): boolean => c.counts === "own" || c.teams !== "none" || c.target === null || !datesInOrder(c) || c.target <= challengeLength(c);
 /** The gym's own count has its word; the app's counts have none. */
 const unitFits = (c: Dated): boolean => (c.counts === "own" ? eventNameIsSeen(c.unit) : c.unit === "");
 /** Lowest wins only for the gym's own count, and never with a number to reach. */
 const lowestFits = (c: Dated): boolean => !c.lowestWins || (c.counts === "own" && c.target === null);
+/** Alone: no team. In teams: two to eight, no two with one name, no team listed twice. */
+const teamsFit = (c: Dated): boolean => {
+  if (c.teams === "none") return c.teamList.length === 0;
+  if (c.teamList.length < GYM_CHALLENGE_TEAMS_MIN) return false;
+  const names = new Set(c.teamList.map((team) => teamNameKey(team.name)));
+  const ids = c.teamList.flatMap((team) => (team.id === null ? [] : [team.id]));
+  return names.size === c.teamList.length && new Set(ids).size === ids.length;
+};
 
 export const addGymChallengeRequestSchema = z
   .object({
@@ -130,7 +169,8 @@ export const addGymChallengeRequestSchema = z
   .refine(datesInOrder, { message: "the last day must not be before the first", path: ["endsOn"] })
   .refine(targetInReach, { message: "the target is more than the challenge's days", path: ["target"] })
   .refine(unitFits, { message: "say what is counted", path: ["unit"] })
-  .refine(lowestFits, { message: "lowest wins is for the gym's own count with no target", path: ["lowestWins"] });
+  .refine(lowestFits, { message: "lowest wins is for the gym's own count with no target", path: ["lowestWins"] })
+  .refine(teamsFit, { message: "two to eight teams, each with its own name", path: ["teamList"] });
 export type AddGymChallengeRequest = z.infer<typeof addGymChallengeRequestSchema>;
 
 export const changeGymChallengeRequestSchema = z
@@ -139,7 +179,8 @@ export const changeGymChallengeRequestSchema = z
   .refine(datesInOrder, { message: "the last day must not be before the first", path: ["endsOn"] })
   .refine(targetInReach, { message: "the target is more than the challenge's days", path: ["target"] })
   .refine(unitFits, { message: "say what is counted", path: ["unit"] })
-  .refine(lowestFits, { message: "lowest wins is for the gym's own count with no target", path: ["lowestWins"] });
+  .refine(lowestFits, { message: "lowest wins is for the gym's own count with no target", path: ["lowestWins"] })
+  .refine(teamsFit, { message: "two to eight teams, each with its own name", path: ["teamList"] });
 export type ChangeGymChallengeRequest = z.infer<typeof changeGymChallengeRequestSchema>;
 
 export const cancelGymChallengeRequestSchema = z.object({ cancelled: z.boolean() }).strict();
@@ -159,13 +200,29 @@ export const setChallengeScoresRequestSchema = z
 export type SetChallengeScoresRequest = z.infer<typeof setChallengeScoresRequestSchema>;
 export const challengeScoresResponseSchema = z.object({ saved: z.number().int().min(0) }).strict();
 
+/** Staff put people in a team, move them, or take them out of every team (`teamId` null). */
+export const setChallengeTeamPeopleRequestSchema = z
+  .object({
+    people: z
+      .array(z.object({ userId: z.string().uuid(), teamId: z.string().uuid().nullable() }).strict())
+      .min(1)
+      .max(GYM_CHALLENGE_TEAM_PEOPLE_A_SAVE),
+  })
+  .strict();
+export type SetChallengeTeamPeopleRequest = z.infer<typeof setChallengeTeamPeopleRequestSchema>;
+export const challengeTeamPeopleResponseSchema = z.object({ saved: z.number().int().min(0) }).strict();
+
+/** A member picks their team. */
+export const pickChallengeTeamRequestSchema = z.object({ teamId: z.string().uuid() }).strict();
+
 export const staffChallengeBoardQuerySchema = z.object({ page: z.coerce.number().int().min(1).max(10_000).default(1) }).strict();
 
 // ── WHAT MAY BE SAVED ──
 //
 // Once a challenge has started, people are already being counted in it: what is counted,
 // its first day, who is in it and its target stay as they were. Its name, words, prize
-// and last day can still change.
+// and last day can still change. Alone or in teams, and the teams, stay too: who is in
+// which team is staff's to change on the board.
 
 export const GYM_CHALLENGE_SAVE_PROBLEMS = ["ended", "starts_too_early", "starts_too_far", "ends_before_today", "started_locked"] as const;
 export type GymChallengeSaveProblem = (typeof GYM_CHALLENGE_SAVE_PROBLEMS)[number];
@@ -177,7 +234,16 @@ export interface ChallengeRules {
   target: number | null;
   who: GymChallengeWho;
   lowestWins: boolean;
+  teams: GymChallengeTeams;
+  /** A kept team has its id; a new one null. */
+  teamList: readonly { id: string | null; name: string }[];
 }
+
+const sameTeams = (a: ChallengeRules, b: ChallengeRules): boolean =>
+  a.teams === b.teams && a.teamList.length === b.teamList.length && a.teamList.every((team, i) => {
+    const other = b.teamList[i];
+    return other !== undefined && team.id !== null && team.id === other.id && team.name === other.name;
+  });
 
 const dayAfter = (day: string, days: number): string => new Date((dayNumber(day) + days) * 86_400_000).toISOString().slice(0, 10);
 
@@ -187,7 +253,7 @@ export function challengeSaveProblem(input: { today: string; before: ChallengeRu
   const { today, before, next } = input;
   if (before !== null && challengeState(before, today) === "ended") return "ended";
   if (before !== null && challengeState(before, today) === "running") {
-    const same = before.counts === next.counts && before.startsOn === next.startsOn && before.who === next.who && before.target === next.target && before.lowestWins === next.lowestWins;
+    const same = before.counts === next.counts && before.startsOn === next.startsOn && before.who === next.who && before.target === next.target && before.lowestWins === next.lowestWins && sameTeams(before, next);
     if (!same) return "started_locked";
   } else {
     if (next.startsOn < dayAfter(today, -GYM_CHALLENGE_MAX_DAYS_BACK)) return "starts_too_early";
@@ -206,9 +272,43 @@ export function challengeTakesNumbers(c: { counts: GymChallengeCounts; startsOn:
 
 /** What a member can do about a challenge. Joining stays open until its last day ends:
  *  what is counted was checked at the time, so a late joiner's days since the start count. */
-export function challengeCan(c: { who: GymChallengeWho; cancelled: boolean; state: GymChallengeState; joined: boolean }): { join: boolean; leave: boolean } {
-  const open = c.who === "joined" && !c.cancelled && c.state !== "ended";
-  return { join: open && !c.joined, leave: open && c.joined };
+export function challengeCan(c: {
+  who: GymChallengeWho;
+  cancelled: boolean;
+  state: GymChallengeState;
+  joined: boolean;
+  teams: GymChallengeTeams;
+  /** They are in one of its teams, whether they picked it or staff put them there. */
+  hasTeam: boolean;
+}): { join: boolean; leave: boolean; pick: boolean } {
+  const open = !c.cancelled && c.state !== "ended";
+  // Their team is theirs to change until the first day; a first pick stays open after it.
+  const pick = open && c.teams === "members" && (!c.hasTeam || c.state === "coming");
+  // Where members pick, picking a team is how a person joins.
+  const join = open && c.who === "joined" && !c.joined && !(c.teams === "members" && !c.hasTeam);
+  return { join, leave: open && c.who === "joined" && c.joined, pick };
+}
+
+/** Whether staff may put people in teams on `today`: until the challenge's last day ends. */
+export function challengeTakesTeams(c: { teams: GymChallengeTeams; endsOn: string; cancelled: boolean }, today: string): boolean {
+  return c.teams !== "none" && !c.cancelled && today <= c.endsOn;
+}
+
+export interface TeamTotal {
+  id: string;
+  /** Its people's numbers added together; 0 with none. */
+  value: number;
+}
+
+/** Each team's place: the highest number first (the lowest where the lowest wins), equal
+ *  numbers sharing a place, and a team with no number in no place. */
+export function placeTeams(teams: readonly TeamTotal[], lowestWins: boolean): Map<string, number | null> {
+  const ahead = (a: number, b: number): boolean => (lowestWins ? a < b : a > b);
+  const places = new Map<string, number | null>();
+  for (const team of teams) {
+    places.set(team.id, team.value <= 0 ? null : 1 + teams.filter((other) => other.value > 0 && ahead(other.value, team.value)).length);
+  }
+  return places;
 }
 
 // ── WHAT IS SENT ──
@@ -227,6 +327,7 @@ const challengeSchema = z
     /** The gym's word for what it counts; empty for the app's counts. */
     unit: z.string(),
     lowestWins: z.boolean(),
+    teams: z.enum(GYM_CHALLENGE_TEAMS),
     cancelled: z.boolean(),
     /** By the gym's own date when it was read. */
     state: z.enum(GYM_CHALLENGE_STATES),
@@ -269,12 +370,58 @@ const challengeMeSchema = z
   .strict();
 export type GymChallengeMe = z.infer<typeof challengeMeSchema>;
 
+export const gymChallengeTeamRowSchema = z
+  .object({
+    id: z.string().uuid(),
+    name: z.string(),
+    /** People in it that this member may count: nobody hidden, and themselves. */
+    people: z.number().int().min(0),
+    /** Its people's numbers added together, of the people members may see; 0 while the
+     *  board is not shown. */
+    value: z.number().int().min(0),
+    place: z.number().int().min(1).nullable(),
+    /** The team has reached the target; false where the challenge has none. */
+    reached: z.boolean(),
+    /** Where the lowest wins: people in it members may see who have no number yet. A team
+     *  has a place only at 0, or leaving somebody out would win. Always 0 otherwise. */
+    waiting: z.number().int().min(0),
+    isMine: z.boolean(),
+  })
+  .strict();
+export type GymChallengeTeamRow = z.infer<typeof gymChallengeTeamRowSchema>;
+
+/** The teams of a challenge as one member is sent them. */
+const memberTeamBoardSchema = z
+  .object({
+    /** As the people's board: no numbers while fewer than three people have one. */
+    status: z.enum(GYM_CHALLENGE_BOARD_STATUSES),
+    rows: z.array(gymChallengeTeamRowSchema).max(GYM_CHALLENGE_TEAMS_MAX),
+    /** Their own team: themselves, and the leading teammates members may see who have a number. */
+    mine: z
+      .object({
+        teamId: z.string().uuid(),
+        people: z
+          .array(z.object({ userId: z.string().uuid(), name: z.string(), initials: z.string(), value: z.number().int().min(0), isMe: z.boolean() }).strict())
+          .max(GYM_CHALLENGE_TEAMMATES_SHOWN + 1),
+        /** Teammates with a number who are not listed. */
+        more: z.number().int().min(0),
+        /** Their own number is added to the team's; false while they are hidden from boards. */
+        counted: z.boolean(),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+export type MemberTeamBoard = z.infer<typeof memberTeamBoardSchema>;
+
 /** A challenge as one member is sent it. */
 export const memberGymChallengeSchema = challengeSchema
   .extend({
     /** They joined it. Always false for everyone's challenge. */
     joined: z.boolean(),
-    can: z.object({ join: z.boolean(), leave: z.boolean() }).strict(),
+    can: z.object({ join: z.boolean(), leave: z.boolean(), pick: z.boolean() }).strict(),
+    /** Null for a challenge people are in alone. */
+    teamBoard: memberTeamBoardSchema.nullable(),
     /** People who have joined, as members may count them; null for everyone's challenge. */
     joinedCount: z.number().int().min(0).nullable(),
     board: z
@@ -345,6 +492,23 @@ export const staffGymChallengeSchema = challengeSchema
       .max(GYM_CHALLENGE_PODIUM),
     /** People with a number in it, the hidden included; null where it was not counted. */
     withNumber: z.number().int().min(0).nullable(),
+    /** Its teams in the gym's order; empty for a challenge people are in alone. */
+    teamList: z
+      .array(
+        z
+          .object({
+            id: z.string().uuid(),
+            name: z.string(),
+            /** Everyone in it who is in the challenge now, the hidden included. */
+            people: z.number().int().min(0),
+            /** Its number and place as MEMBERS see them; null where they were not counted
+             *  or members see none. */
+            value: z.number().int().min(0).nullable(),
+            place: z.number().int().min(1).nullable(),
+          })
+          .strict(),
+      )
+      .max(GYM_CHALLENGE_TEAMS_MAX),
   })
   .strict();
 export type StaffGymChallenge = z.infer<typeof staffGymChallengeSchema>;
@@ -385,6 +549,8 @@ export const staffGymChallengeRowSchema = z
     /** Why members do not see this person, or null when they do. */
     hidden: z.enum(LEADERBOARD_HIDDEN_REASONS).nullable(),
     reached: z.boolean(),
+    /** The team they are in; null for none, and where the challenge has no teams. */
+    teamId: z.string().uuid().nullable(),
   })
   .strict();
 export type StaffGymChallengeRow = z.infer<typeof staffGymChallengeRowSchema>;
@@ -407,6 +573,12 @@ export const staffGymChallengeBoardResponseSchema = z
     page: z.number().int().min(1),
     pages: z.number().int().min(1),
     rows: z.array(staffGymChallengeRowSchema).max(LEADERBOARD_STAFF_PAGE),
+    /** Each team's number and place as MEMBERS see them now, for a challenge in teams: the
+     *  one read that carries an ended challenge's result. Empty where people are in it alone;
+     *  null number and place while members see none. */
+    teams: z
+      .array(z.object({ id: z.string().uuid(), value: z.number().int().min(0).nullable(), place: z.number().int().min(1).nullable() }).strict())
+      .max(GYM_CHALLENGE_TEAMS_MAX),
     asOf: z.string().datetime(),
   })
   .strict();
@@ -419,7 +591,7 @@ export const GYM_CHALLENGE_WORDS = {
   starts_too_early: `A new challenge can start up to ${String(GYM_CHALLENGE_MAX_DAYS_BACK)} days back. Choose a later first day.`,
   starts_too_far: "A challenge can start up to a year from today. Choose an earlier first day.",
   ends_before_today: "The last day has already passed. Choose today or a later day.",
-  started_locked: "This challenge has started, so what it counts, its first day, who is in it and its target can't change now. Its name, details, prize and last day still can.",
+  started_locked: "This challenge has started, so what it counts, its first day, who is in it, its target and its teams can't change now. Its name, details, prize and last day still can.",
   full: `You have ${String(GYM_CHALLENGES_CURRENT_MAX)} challenges running or coming up, which is the most allowed. Wait for one to end, then add this.`,
   cancelled: "This challenge has been cancelled.",
   join_ended: "This challenge has ended.",
@@ -427,5 +599,12 @@ export const GYM_CHALLENGE_WORDS = {
   scores_not_own: "This challenge is counted by the app, so numbers can't be typed for it.",
   scores_not_started: "This challenge hasn't started yet. Numbers can be typed from its first day.",
   scores_person: "One of these people isn't in this challenge any more. Load the list again.",
+  teams_none: "People are in this challenge alone, so it has no teams.",
+  teams_staff: "At this challenge the staff put people in teams, so a team can't be picked here.",
+  team_gone: "That team isn't in this challenge any more. Load the page again.",
+  pick_to_join: "Pick a team to join this challenge.",
+  team_locked: "This challenge has started, so you can't change team now.",
+  team_person: "One of these people isn't in this challenge any more. Load the list again.",
+  team_ended: "This challenge has ended, so its teams can't be changed.",
   scores_closed: `This challenge ended more than ${String(GYM_CHALLENGE_ENDED_DAYS)} days ago, so its numbers can't be changed now.`,
 } as const;
