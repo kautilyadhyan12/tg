@@ -155,12 +155,58 @@ export function timeRange(fromMinute, toMinute, clockFormat) {
   return `${clockLabel(fromMinute, clockFormat)} – ${clockLabel(toMinute, clockFormat)}`;
 }
 
-/** A trainer's hours, one line a weekday that has any: "Monday · 09:00 – 13:00, 16:00 – 20:00". */
-export function hoursLines(trainer, clockFormat) {
-  return WEEKDAYS.flatMap((day) => {
-    const ranges = trainer.hours.filter((h) => h.weekday === day.iso).sort((a, b) => a.fromMinute - b.fromMinute);
-    if (ranges.length === 0) return [];
-    return [`${day.label} · ${ranges.map((r) => timeRange(r.fromMinute, r.toMinute, clockFormat)).join(', ')}`];
+/** A trainer's weekly hours in as few lines as say them: days in a row with the same hours
+ *  are one line ("Every day · 09:00 – 17:00", "Mon – Fri · 09:00 – 17:00", "Sat · 09:00 – 13:00"). */
+export function hoursBrief(trainer, clockFormat) {
+  const days = WEEKDAYS.map((day) => ({
+    short: day.label.slice(0, 3),
+    times: trainer.hours
+      .filter((h) => h.weekday === day.iso)
+      .sort((a, b) => a.fromMinute - b.fromMinute)
+      .map((r) => timeRange(r.fromMinute, r.toMinute, clockFormat))
+      .join(', '),
+  }));
+  const runs = [];
+  for (const day of days) {
+    const last = runs[runs.length - 1];
+    if (last !== undefined && last.times === day.times) last.to = day.short;
+    else runs.push({ from: day.short, to: day.short, times: day.times, n: 0 });
+    runs[runs.length - 1].n += 1;
+  }
+  return runs
+    .filter((run) => run.times !== '')
+    .map((run) => `${run.n === 7 ? 'Every day' : run.from === run.to ? run.from : `${run.from} – ${run.to}`} · ${run.times}`);
+}
+
+/** Which day of the week on screen is open: the one asked for while it is in this week,
+ *  else today, else the first day with a session, else the first day. */
+export function pickDay(week, wanted) {
+  const days = Array.isArray(week?.days) ? week.days : [];
+  const has = (localDate) => days.some((day) => day.localDate === localDate);
+  if (typeof wanted === 'string' && has(wanted)) return wanted;
+  if (has(week?.today)) return week.today;
+  return (days.find((day) => day.appointments.length > 0) ?? days[0])?.localDate ?? null;
+}
+
+/** The seven days as the strip over the week shows them: "Fri", "9", and one short note:
+ *  sessions waiting for Came or No-show first, then how many are booked, then a whole day
+ *  off. `tone` colours the note. */
+export function dayTabs(week) {
+  return (Array.isArray(week?.days) ? week.days : []).map((day) => {
+    const [weekday, date] = dayLabel(day.localDate).split(' ');
+    const booked = day.appointments.length;
+    const toMark = day.appointments.filter((a) => a.canMark === true && a.status === 'booked').length;
+    const off = (day.timeOff ?? []).some((o) => o.fromMinute === null && o.toMinute === null);
+    const note = toMark > 0 ? `${String(toMark)} to mark` : booked > 0 ? `${String(booked)} booked` : off ? 'Time off' : '';
+    return {
+      localDate: day.localDate,
+      weekday,
+      date,
+      today: day.localDate === week.today,
+      note,
+      tone: toMark > 0 ? 'warn' : booked > 0 ? 'on' : 'plain',
+      label: `${dayHeading(day.localDate, week.today)}${note === '' ? '' : `, ${note}`}`,
+    };
   });
 }
 

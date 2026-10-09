@@ -43,7 +43,9 @@ import {
   freeTimeLabel,
   hoursDraft,
   hoursFormProblem,
-  hoursLines,
+  dayTabs,
+  hoursBrief,
+  pickDay,
   hoursRequest,
   noTimesNote,
   peopleHeading,
@@ -799,6 +801,8 @@ export default function PersonalTraining() {
   // Came or no-show: the session being saved, and the one whose save was refused.
   const [markBusy, setMarkBusy] = useState(null);
   const [markFailed, setMarkFailed] = useState(null);
+  // The day of the week on screen that is open: one day at a time.
+  const [dayWanted, setDayWanted] = useState(null);
   // A press on a trainer's name or See week: their week is brought into view once it is
   // drawn, so the press is seen to do something in a short window (Kd, 23d's click-through).
   const weekRef = useRef(null);
@@ -1136,11 +1140,8 @@ export default function PersonalTraining() {
                         {' · '}
                         <span className="c-t2 c-w5">{trainerSummary(t)}</span>
                       </span>
-                      {hoursLines(t, clockFormat).map((line) => (
-                        <span key={line} className="c-s13 c-t3">
-                          {line}
-                        </span>
-                      ))}
+                      {/* Their hours on as few lines as say them, so every trainer is a short row. */}
+                      {hoursBrief(t, clockFormat).length > 0 ? <span className="c-s13 c-t3 c-num">{hoursBrief(t, clockFormat).join('  ·  ')}</span> : null}
                       {timeOffSummary(t, clockFormat, today) === null ? null : (
                         <span className="c-s13 c-w5 c-t2 c-num">{timeOffSummary(t, clockFormat, today)}</span>
                       )}
@@ -1238,8 +1239,8 @@ export default function PersonalTraining() {
           </div>
           {hoursForm ?? (
             <ul className="m-0 p-0 list-none flex flex-col gap-1">
-              {hoursLines(trainer, clockFormat).map((line) => (
-                <li key={line} className="c-s15 c-t1">
+              {hoursBrief(trainer, clockFormat).map((line) => (
+                <li key={line} className="c-s15 c-t1 c-num">
                   {line}
                 </li>
               ))}
@@ -1301,130 +1302,176 @@ export default function PersonalTraining() {
                   You can see and cancel these sessions. To book one, ask a manager: booking picks a person from the member list.
                 </p>
               ) : null}
-              <div className="grid gap-4 xl:grid-cols-2 items-start">
-                {shownWeek.data.days.map((day) => {
-                  const openSlot = booking !== null && booking.localDate === day.localDate ? booking : null;
-                  const minutes = shownWeek.data.sessionMinutes;
-                  const canBook = list.canBook && !readOnly && minutes !== null;
-                  const dayOff = day.timeOff ?? [];
-                  // A day with nothing on it and nothing to book is one line, so a week reads at a glance.
-                  if (day.appointments.length === 0 && day.free.length === 0 && day.classes.length === 0) {
-                    return (
-                      <section key={day.localDate} className="c-card px-5 py-3 flex items-center justify-between gap-3 min-w-0" data-testid="pt-day">
-                        <h3 className="c-s15 c-w6 c-t2 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
-                        <span className="c-s13 c-t3 c-num">{dayOff.length > 0 ? dayOff.map((o) => dayTimeOffRow(o, clockFormat)).join(', ') : 'No available times'}</span>
-                      </section>
-                    );
-                  }
-                  return (
-                    <section key={day.localDate} className="c-card p-5 flex flex-col gap-4 min-w-0" data-testid="pt-day">
-                      <h3 className="c-h3 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
+              {(() => {
+                const openDate = pickDay(shownWeek.data, dayWanted);
+                const day = shownWeek.data.days.find((d) => d.localDate === openDate);
+                if (day === undefined) return null;
+                const openSlot = booking !== null && booking.localDate === day.localDate ? booking : null;
+                const minutes = shownWeek.data.sessionMinutes;
+                const canBook = list.canBook && !readOnly && minutes !== null;
+                const dayOff = day.timeOff ?? [];
+                return (
+                  <>
+                    {/* One day at a time: the seven days across, each with what is on it. */}
+                    <div className="flex gap-1.5 md:gap-2" role="group" aria-label="Days of this week" data-testid="pt-days">
+                      {dayTabs(shownWeek.data).map((tab) => {
+                        const on = tab.localDate === day.localDate;
+                        return (
+                          <button
+                            key={tab.localDate}
+                            type="button"
+                            aria-pressed={on}
+                            aria-label={tab.label}
+                            onClick={() => {
+                              setBooking(null);
+                              setCancelling(null);
+                              setDayWanted(tab.localDate);
+                            }}
+                            data-testid="pt-day-tab"
+                            className="flex flex-col items-center justify-center gap-0.5 flex-1 min-w-0 rounded-xl border px-1 md:px-2 py-2"
+                            style={{
+                              minHeight: 76,
+                              cursor: 'pointer',
+                              background: on ? 'var(--soft)' : 'var(--card)',
+                              borderColor: on ? 'var(--accent)' : 'var(--card-line)',
+                            }}
+                          >
+                            <span className={on ? 'c-s13 c-w6 c-t1' : 'c-s13 c-w5 c-t3'}>{tab.today ? 'Today' : tab.weekday}</span>
+                            <span className="c-w7 c-t1 c-num" style={{ fontSize: 20, lineHeight: '24px' }}>
+                              {tab.date}
+                            </span>
+                            {/* All seven days fit a phone: there the note is a dot, and the day's own label says it. */}
+                            <span className="hidden md:block c-s13 c-w5 c-num" style={{ color: tab.tone === 'warn' ? 'var(--warn)' : tab.tone === 'on' ? 'var(--t1)' : 'var(--t3)', minHeight: 18 }}>
+                              {tab.note}
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className="md:hidden rounded-full"
+                              style={{ width: 6, height: 6, background: tab.note === '' ? 'transparent' : tab.tone === 'warn' ? 'var(--warn)' : 'var(--accent)' }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                      {dayOff.length > 0 ? (
-                        <ul className="m-0 p-0 list-none flex flex-wrap gap-2" data-testid="pt-day-off">
-                          {dayOff.map((o) => (
-                            <li key={o.id} className="c-tag c-tag-warn c-num">
-                              {dayTimeOffRow(o, clockFormat)}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-
-                      {day.appointments.length > 0 ? (
-                        <div className="flex flex-col gap-1">
-                          <span className="c-s13 c-w6 c-t3">Booked</span>
-                          <ul className="m-0 p-0 list-none flex flex-col">
-                            {day.appointments.map((appointment, index) => (
-                              <SessionRow
-                                key={appointment.id}
-                                appointment={appointment}
-                                classes={day.classes}
-                                timeOff={dayOff}
-                                canBook={list.canBook}
-                                first={index === 0}
-                                clockFormat={clockFormat}
-                                freeCancelMinutes={shownWeek.data.freeCancelMinutes ?? list.freeCancelMinutes}
-                                locked={readOnly}
-                                asking={cancelling === appointment.id}
-                                settled={cancelling === appointment.id && cancelSettled}
-                                onClose={readWeekAgain}
-                                busy={cancelBusy}
-                                error={cancelling === appointment.id ? cancelError : null}
-                                marking={markBusy !== null}
-                                markError={markFailed?.id === appointment.id ? markFailed.message : null}
-                                onMark={(status) => void markSession(appointment, status)}
-                                onAsk={() => {
-                                  setBooking(null);
-                                  setCancelError(null);
-                                  setCancelSettled(false);
-                                  setCancelling(appointment.id);
-                                }}
-                                onKeep={() => {
-                                  setCancelling(null);
-                                  setCancelError(null);
-                                }}
-                                onCancel={(choice) => void cancelSession(appointment, choice)}
-                              />
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-
-                      {day.classes.length > 0 ? (
-                        <div className="flex flex-col gap-1" data-testid="pt-coaching">
-                          <span className="c-s13 c-w6 c-t3">Coaching a class, so not available</span>
-                          <ul className="m-0 p-0 list-none flex flex-col gap-0.5">
-                            {day.classes.map((coached) => (
-                              <li key={`${String(coached.localStartMinute)}:${coached.name}`} className="flex flex-col">
-                                <span className="c-s15 c-t2 c-num">{coachedClassRow(coached, clockFormat)}</span>
-                                {classInTimeOff(coached, dayOff) === null ? null : (
-                                  <>
-                                    <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
-                                      {classInTimeOff(coached, dayOff, calendarFor(null) !== null)}
-                                    </span>
-                                    <PlaceLink to={calendarFor(day.localDate)} className="c-btn c-btn-s c-btn-sm self-start mt-1">
-                                      Open the Calendar
-                                    </PlaceLink>
-                                  </>
-                                )}
+                    <section className="c-card p-5 md:p-6 flex flex-col gap-5 min-w-0" data-testid="pt-day">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h3 className="c-h3 m-0">{dayHeading(day.localDate, shownWeek.data.today)}</h3>
+                        {dayOff.length > 0 ? (
+                          <ul className="m-0 p-0 list-none flex flex-wrap gap-2" data-testid="pt-day-off">
+                            {dayOff.map((o) => (
+                              <li key={o.id} className="c-tag c-tag-warn c-num">
+                                {dayTimeOffRow(o, clockFormat)}
                               </li>
                             ))}
                           </ul>
-                        </div>
-                      ) : null}
+                        ) : null}
+                      </div>
 
-                      {day.free.length === 0 && minutes !== null ? <span className="c-s13 c-t3">No available times</span> : null}
-                      {day.free.length > 0 && minutes !== null ? (
-                        <div className="flex flex-col gap-2">
-                          <span className="c-s13 c-w6 c-t3">{canBook ? 'Available times. Press one to book it.' : 'Available times'}</span>
-                          <div className="flex flex-wrap gap-2">
-                            {day.free.map((minute) => {
-                              const picked = openSlot !== null && openSlot.startMinute === minute;
-                              const label = freeTimeLabel(minute, minutes, clockFormat);
-                              return canBook ? (
-                                <button
-                                  key={minute}
-                                  type="button"
-                                  aria-pressed={picked}
-                                  aria-label={`Book ${label}`}
-                                  onClick={() => {
-                                    setCancelling(null);
-                                    setBooking(picked ? null : { localDate: day.localDate, startMinute: minute });
-                                  }}
-                                  className={picked ? 'c-btn c-btn-sm c-btn-p c-num' : 'c-btn c-btn-sm c-btn-s c-num'}
-                                >
-                                  <Plus aria-hidden="true" className="w-4 h-4" />
-                                  {label}
-                                </button>
-                              ) : (
-                                <span key={minute} className="c-tag c-tag-plain c-num">
-                                  {label}
-                                </span>
-                              );
-                            })}
+                      <div className="grid gap-6 lg:grid-cols-2 items-start">
+                        {/* What is on this day, first. */}
+                        <div className="flex flex-col gap-4 min-w-0">
+                          <div className="flex flex-col gap-1">
+                            <span className="c-s13 c-w6 c-t3">Booked</span>
+                            {day.appointments.length === 0 ? (
+                              <span className="c-s15 c-t2">No sessions booked</span>
+                            ) : (
+                              <ul className="m-0 p-0 list-none flex flex-col">
+                                {day.appointments.map((appointment, index) => (
+                                  <SessionRow
+                                    key={appointment.id}
+                                    appointment={appointment}
+                                    classes={day.classes}
+                                    timeOff={dayOff}
+                                    canBook={list.canBook}
+                                    first={index === 0}
+                                    clockFormat={clockFormat}
+                                    freeCancelMinutes={shownWeek.data.freeCancelMinutes ?? list.freeCancelMinutes}
+                                    locked={readOnly}
+                                    asking={cancelling === appointment.id}
+                                    settled={cancelling === appointment.id && cancelSettled}
+                                    onClose={readWeekAgain}
+                                    busy={cancelBusy}
+                                    error={cancelling === appointment.id ? cancelError : null}
+                                    marking={markBusy !== null}
+                                    markError={markFailed?.id === appointment.id ? markFailed.message : null}
+                                    onMark={(status) => void markSession(appointment, status)}
+                                    onAsk={() => {
+                                      setBooking(null);
+                                      setCancelError(null);
+                                      setCancelSettled(false);
+                                      setCancelling(appointment.id);
+                                    }}
+                                    onKeep={() => {
+                                      setCancelling(null);
+                                      setCancelError(null);
+                                    }}
+                                    onCancel={(choice) => void cancelSession(appointment, choice)}
+                                  />
+                                ))}
+                              </ul>
+                            )}
                           </div>
+
+                          {day.classes.length > 0 ? (
+                            <div className="flex flex-col gap-1" data-testid="pt-coaching">
+                              <span className="c-s13 c-w6 c-t3">Coaching a class, so not available</span>
+                              <ul className="m-0 p-0 list-none flex flex-col gap-0.5">
+                                {day.classes.map((coached) => (
+                                  <li key={`${String(coached.localStartMinute)}:${coached.name}`} className="flex flex-col">
+                                    <span className="c-s15 c-t2 c-num">{coachedClassRow(coached, clockFormat)}</span>
+                                    {classInTimeOff(coached, dayOff) === null ? null : (
+                                      <>
+                                        <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+                                          {classInTimeOff(coached, dayOff, calendarFor(null) !== null)}
+                                        </span>
+                                        <PlaceLink to={calendarFor(day.localDate)} className="c-btn c-btn-s c-btn-sm self-start mt-1">
+                                          Open the Calendar
+                                        </PlaceLink>
+                                      </>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
+
+                        {/* Then what can still be booked on it. */}
+                        <div className="flex flex-col gap-2 min-w-0">
+                          <span className="c-s13 c-w6 c-t3">{day.free.length > 0 && canBook ? 'Available times. Press one to book it.' : 'Available times'}</span>
+                          {day.free.length === 0 || minutes === null ? (
+                            <span className="c-s15 c-t2">No available times</span>
+                          ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {day.free.map((minute) => {
+                                const picked = openSlot !== null && openSlot.startMinute === minute;
+                                const label = freeTimeLabel(minute, minutes, clockFormat);
+                                return canBook ? (
+                                  <button
+                                    key={minute}
+                                    type="button"
+                                    aria-pressed={picked}
+                                    aria-label={`Book ${label}`}
+                                    onClick={() => {
+                                      setCancelling(null);
+                                      setBooking(picked ? null : { localDate: day.localDate, startMinute: minute });
+                                    }}
+                                    className={picked ? 'c-btn c-btn-sm c-btn-p c-num w-full' : 'c-btn c-btn-sm c-btn-s c-num w-full'}
+                                  >
+                                    <Plus aria-hidden="true" className="w-4 h-4" />
+                                    {label}
+                                  </button>
+                                ) : (
+                                  <span key={minute} className="c-tag c-tag-plain c-num justify-center">
+                                    {label}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
 
                       {openSlot !== null && minutes !== null ? (
                         <BookBox
@@ -1441,9 +1488,9 @@ export default function PersonalTraining() {
                         />
                       ) : null}
                     </section>
-                  );
-                })}
-              </div>
+                  </>
+                );
+              })()}
             </>
           ) : null}
         </section>

@@ -11,6 +11,9 @@ import {
   bookableUntil,
   canAddRange,
   canGoEarlier,
+  dayTabs,
+  hoursBrief,
+  pickDay,
   markRow,
   pastDaysNote,
   canGoLater,
@@ -23,7 +26,6 @@ import {
   freeTimeLabel,
   hoursDraft,
   hoursFormProblem,
-  hoursLines,
   hoursRequest,
   noTimesNote,
   peopleHeading,
@@ -101,9 +103,9 @@ describe('a trainer on the page', () => {
   });
 
   it('lists their hours by day, earliest first, on the clock the gym reads', () => {
-    expect(hoursLines(trainer(), '24h')).toEqual(['Monday · 09:00 – 11:00, 16:00 – 20:00', 'Friday · 07:00 – 10:00']);
-    expect(hoursLines(trainer(), '12h')).toEqual(['Monday · 9:00 AM – 11:00 AM, 4:00 PM – 8:00 PM', 'Friday · 7:00 AM – 10:00 AM']);
-    expect(hoursLines(trainer({ hours: [] }), '24h')).toEqual([]);
+    expect(hoursBrief(trainer(), '24h')).toEqual(['Mon · 09:00 – 11:00, 16:00 – 20:00', 'Fri · 07:00 – 10:00']);
+    expect(hoursBrief(trainer(), '12h')).toEqual(['Mon · 9:00 AM – 11:00 AM, 4:00 PM – 8:00 PM', 'Fri · 7:00 AM – 10:00 AM']);
+    expect(hoursBrief(trainer({ hours: [] }), '24h')).toEqual([]);
   });
 
   it('the staff are those set up to take sessions, and the rest who can be added', () => {
@@ -742,5 +744,64 @@ describe('came or no-show (17e-iv-b)', () => {
     expect(canGoEarlier({ ...week, from: '2026-09-09', to: '2026-09-15' })).toBe(false);
     expect(pastDaysNote(week)).toBeNull();
     expect(pastDaysNote({ ...week, from: '2026-09-30', to: '2026-10-06' })).toBe('Days that have passed are shown so you can mark who came.');
+  });
+});
+
+describe('a trainer’s hours on as few lines as say them', () => {
+  const at = (weekday, fromMinute, toMinute) => ({ weekday, fromMinute, toMinute });
+  it.each([
+    ['every day the same', [1, 2, 3, 4, 5, 6, 7].map((d) => at(d, 540, 1020)), ['Every day · 09:00 – 17:00']],
+    ['weekdays, and a short Saturday', [...[1, 2, 3, 4, 5].map((d) => at(d, 540, 1020)), at(6, 540, 780)], ['Mon – Fri · 09:00 – 17:00', 'Sat · 09:00 – 13:00']],
+    ['one day', [at(5, 540, 720)], ['Fri · 09:00 – 12:00']],
+    ['a day off in the middle splits the run', [at(1, 540, 720), at(2, 540, 720), at(4, 540, 720)], ['Mon – Tue · 09:00 – 12:00', 'Thu · 09:00 – 12:00']],
+    ['two sets of hours on a day', [at(1, 900, 1020), at(1, 540, 720)], ['Mon · 09:00 – 12:00, 15:00 – 17:00']],
+    ['the same days with different hours are not joined', [at(1, 540, 720), at(2, 600, 720)], ['Mon · 09:00 – 12:00', 'Tue · 10:00 – 12:00']],
+    ['no hours', [], []],
+  ])('%s', (_name, hours, lines) => {
+    expect(hoursBrief({ hours }, '24h')).toEqual(lines);
+  });
+
+  it('reads on the gym’s clock', () => {
+    expect(hoursBrief({ hours: [{ weekday: 5, fromMinute: 540, toMinute: 780 }] }, '12h')).toEqual(['Fri · 9:00 AM – 1:00 PM']);
+  });
+});
+
+describe('the strip of days, and the day it opens on', () => {
+  const day = (localDate, appointments = [], timeOff = []) => ({ localDate, appointments, timeOff, free: [], classes: [] });
+  const booked = { status: 'booked', canMark: false };
+  const toMark = { status: 'booked', canMark: true };
+  const came = { status: 'attended', canMark: true };
+  const allDay = { id: 'o1', fromMinute: null, toMinute: null };
+  const week = {
+    today: '2026-10-07',
+    days: [
+      day('2026-10-07', [toMark, came]),
+      day('2026-10-08', [booked, booked]),
+      day('2026-10-09', [], [allDay]),
+      day('2026-10-10', [booked], [allDay]),
+      day('2026-10-11', [], [{ id: 'o2', fromMinute: 540, toMinute: 600 }]),
+    ],
+  };
+
+  it('each day says the one thing that matters most: to mark, then booked, then a whole day off', () => {
+    expect(dayTabs(week).map((t) => [t.weekday, t.date, t.today, t.note, t.tone])).toEqual([
+      ['Wed', '7', true, '1 to mark', 'warn'],
+      ['Thu', '8', false, '2 booked', 'on'],
+      ['Fri', '9', false, 'Time off', 'plain'],
+      ['Sat', '10', false, '1 booked', 'on'],
+      ['Sun', '11', false, '', 'plain'],
+    ]);
+    expect(dayTabs(week).map((t) => t.label)).toEqual(['Today · Wed 7 Oct, 1 to mark', 'Thu 8 Oct, 2 booked', 'Fri 9 Oct, Time off', 'Sat 10 Oct, 1 booked', 'Sun 11 Oct']);
+    expect(dayTabs(null)).toEqual([]);
+  });
+
+  it('opens the day asked for while it is in the week, else today, else the first with a session, else the first', () => {
+    expect(pickDay(week, '2026-10-09')).toBe('2026-10-09');
+    expect(pickDay(week, '2026-11-01')).toBe('2026-10-07');
+    expect(pickDay(week, null)).toBe('2026-10-07');
+    const past = { today: '2026-10-20', days: [day('2026-10-07'), day('2026-10-08', [came]), day('2026-10-09', [booked])] };
+    expect(pickDay(past, null)).toBe('2026-10-08');
+    expect(pickDay({ today: '2026-10-20', days: [day('2026-10-07'), day('2026-10-08')] }, null)).toBe('2026-10-07');
+    expect(pickDay({ today: '2026-10-20', days: [] }, null)).toBeNull();
   });
 });

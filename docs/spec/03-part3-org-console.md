@@ -3066,7 +3066,11 @@ scan near a class is 17f). A session reads `canMark`; the Personal training page
 "Not marked yet" with **Came** and **No-show**, then the mark with one button to change it,
 and a no-show says what stays used. **The week turns back:** `from` may be up to 28 days
 before today (`PT_PAST_DAYS`, `firstDay` on the read), so an earlier session can be marked;
-nothing on a day gone by is free. Not done: the sessions of a trainer already off the staff
+nothing on a day gone by is free. **The page shows one day at a time** (Kd's click-through,
+RULINGS 2026-10-09): a trainer is one short row, their hours on as few lines as say them;
+the week is a strip of its seven days, each with one note (sessions to mark, else how many
+are booked, else a whole day off); the open day, today where the week holds it, shows
+Booked first and then Available times. Not done: the sessions of a trainer already off the staff
 that were never marked cannot be opened (their week needs them on the staff); nobody is told
 (the inbox, 20a).)*
 
