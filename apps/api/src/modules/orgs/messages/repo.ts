@@ -5,11 +5,22 @@ import type { Sql, TransactionSql } from "postgres";
 
 type SqlOrTx = Sql | TransactionSql;
 
+export interface MemberGate {
+  name: string;
+  open: boolean;
+  live: boolean;
+  member: boolean;
+  joinedAt: Date | null;
+  /** The phone and email the gym typed for its members (ROADMAP 20a-iii). */
+  contactPhone: string | null;
+  contactEmail: string | null;
+}
+
 /** The gym for a live app member of it: null for a gym that is not there, `member` false
  *  for anybody who is not in it now. `joinedAt` is when this stay in the gym began. */
-export async function memberGate(sql: SqlOrTx, gymId: string, userId: string): Promise<{ name: string; open: boolean; live: boolean; member: boolean; joinedAt: Date | null } | null> {
-  const rows = await sql<{ name: string; open: boolean; live: boolean; joined_at: Date | null }[]>`
-    SELECT g.name, g.status = 'active' AS open,
+export async function memberGate(sql: SqlOrTx, gymId: string, userId: string): Promise<MemberGate | null> {
+  const rows = await sql<{ name: string; open: boolean; live: boolean; joined_at: Date | null; contact_phone: string | null; contact_email: string | null }[]>`
+    SELECT g.name, g.status = 'active' AS open, g.contact_phone, g.contact_email,
            EXISTS (
              SELECT 1 FROM subscriptions s
              WHERE s.owner_type = 'gym' AND s.owner_id = g.id AND s.status IN ('trialing','active','past_due')
@@ -21,7 +32,15 @@ export async function memberGate(sql: SqlOrTx, gymId: string, userId: string): P
     FROM gyms g WHERE g.id = ${gymId}`;
   const row = rows[0];
   if (row === undefined) return null;
-  return { name: row.name, open: row.open, live: row.live, member: row.joined_at !== null, joinedAt: row.joined_at };
+  return {
+    name: row.name,
+    open: row.open,
+    live: row.live,
+    member: row.joined_at !== null,
+    joinedAt: row.joined_at,
+    contactPhone: row.contact_phone,
+    contactEmail: row.contact_email,
+  };
 }
 
 export interface InboxRow {

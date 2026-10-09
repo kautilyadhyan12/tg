@@ -153,3 +153,100 @@ describe("a member's inbox from their gym", () => {
     expect(svc.read.mock.calls.map((c) => c[0])).toEqual(['g1', 'g2']);
   });
 });
+
+describe('Contact the gym, under the inbox', () => {
+  const CONTACT = { phone: '020 7946 0958', email: 'desk@ironhouse.com' };
+  const links = () => within(screen.getByRole('list', { name: 'How to reach Iron House' })).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')]);
+
+  it('is a button that opens the phone number and the email as links, and shuts them again', async () => {
+    svc.read.mockResolvedValue(inboxOf([message('m1', 'One', { read: true })], { contact: CONTACT }));
+    render(<Page />);
+    const button = await screen.findByRole('button', { name: 'Contact the gym' });
+    // Nothing is shown until it is pressed.
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.queryByText(/hasn't added/)).toBeNull();
+    fireEvent.click(button);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(links()).toEqual([
+      ['Call 020 7946 0958', 'tel:02079460958'],
+      ['Email desk@ironhouse.com', 'mailto:desk@ironhouse.com'],
+    ]);
+    fireEvent.click(button);
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('shows only what the gym added', async () => {
+    svc.read.mockResolvedValue(inboxOf([], { contact: { phone: null, email: 'desk@ironhouse.com' } }));
+    render(<Page />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Contact the gym' }));
+    expect(links()).toEqual([['Email desk@ironhouse.com', 'mailto:desk@ironhouse.com']]);
+  });
+
+  it('a gym that added neither has one plain line and no button; so does an answer that carries none', async () => {
+    svc.read.mockResolvedValue(inboxOf([], { contact: { phone: null, email: null } }));
+    const first = render(<Page />);
+    expect(await screen.findByText("Iron House hasn't added a phone number or email yet.")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Contact/ })).toBeNull();
+    first.unmount();
+
+    svc.read.mockResolvedValue(inboxOf([]));
+    render(<Page />);
+    expect(await screen.findByText("Iron House hasn't added a phone number or email yet.")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Contact/ })).toBeNull();
+  });
+
+  it('somebody who runs the gym they train at gets a button to the place that adds them; a member gets none', async () => {
+    const { MemoryRouter } = await import('react-router-dom');
+    svc.read.mockResolvedValue(inboxOf([]));
+    render(
+      <MemoryRouter>
+        <Page gym={{ ...GYM, slug: 'iron-house', staffRole: 'owner', privileges: ['org.manage'] }} />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Iron House hasn't added a phone number or email yet.");
+    expect(screen.getByRole('link', { name: 'Add your phone or email' }).getAttribute('href')).toBe('/console/iron-house/settings#member-contact');
+    cleanup();
+
+    // A trainer without that permission, and a plain member: the line alone.
+    render(<Page gym={{ ...GYM, slug: 'iron-house', staffRole: 'trainer', privileges: ['members.read'] }} />);
+    await screen.findByText("Iron House hasn't added a phone number or email yet.");
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('a studio has its own word on the button', async () => {
+    svc.read.mockResolvedValue(inboxOf([], { contact: CONTACT }));
+    render(<Page gym={{ ...GYM, orgType: 'studio' }} />);
+    expect(await screen.findByRole('button', { name: 'Contact the studio' })).toBeTruthy();
+  });
+
+  it('a paused gym, a failed read and a read on its way show no button and no line about it', async () => {
+    svc.read.mockResolvedValue(inboxOf([], { status: 'paused', contact: CONTACT }));
+    const paused = render(<Page />);
+    await screen.findByText("Iron House isn't sending messages in the app right now.");
+    expect(screen.queryByRole('button', { name: /Contact/ })).toBeNull();
+    expect(screen.queryByText(/hasn't added/)).toBeNull();
+    paused.unmount();
+
+    svc.read.mockRejectedValue(new Error('down'));
+    render(<Page />);
+    await screen.findByRole('button', { name: 'Try again' });
+    expect(screen.queryByRole('button', { name: /Contact/ })).toBeNull();
+    expect(screen.queryByText(/hasn't added/)).toBeNull();
+  });
+
+  it("another gym's page starts shut and shows that gym's own, never the first one's", async () => {
+    svc.read.mockImplementation((gymId) =>
+      Promise.resolve(gymId === 'g1' ? inboxOf([], { contact: CONTACT }) : inboxOf([], { gymId: 'g2', gymName: 'Steel Yard', contact: { phone: '(212) 555-0123', email: null } })),
+    );
+    const { rerender } = render(<Page />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Contact the gym' }));
+    expect(links()).toHaveLength(2);
+    rerender(<Page gym={{ id: 'g2', name: 'Steel Yard', latestCheer: null, latestNudge: null }} />);
+    await screen.findByText('No messages from Steel Yard yet. When they send you one, it shows up here.');
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.queryByText(/ironhouse/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Contact the gym' }));
+    expect(within(screen.getByRole('list', { name: 'How to reach Steel Yard' })).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['tel:2125550123']);
+  });
+});

@@ -23,6 +23,7 @@ export async function readStartHere(sql: Sql | TransactionSql, gymId: string, no
       staff: boolean;
       classes: boolean;
       hours: boolean;
+      contact: boolean;
       front_desk: boolean;
     }[]
   >`
@@ -56,6 +57,7 @@ export async function readStartHere(sql: Sql | TransactionSql, gymId: string, no
           AND t.archived_at IS NULL
       ) AS classes,
       g.hours_mode <> 'unset' AS hours,
+      (g.contact_phone IS NOT NULL OR g.contact_email IS NOT NULL) AS contact,
       EXISTS (
         SELECT 1 FROM gym_checkin_devices d
         WHERE d.gym_id = g.id AND d.switched_off_at IS NULL AND d.key_hash IS NOT NULL
@@ -72,6 +74,7 @@ export async function readStartHere(sql: Sql | TransactionSql, gymId: string, no
       staff: row.staff,
       classes: row.classes,
       hours: row.hours,
+      contact: row.contact,
       frontDesk: row.front_desk,
     },
   };

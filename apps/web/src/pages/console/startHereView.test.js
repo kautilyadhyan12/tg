@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { startHereCount, startHereView } from './startHereView';
 
-const ALL = ['memberships', 'members', 'staff', 'classes', 'hours', 'frontDesk'];
+const ALL = ['memberships', 'members', 'staff', 'classes', 'hours', 'contact', 'frontDesk'];
 const answer = ({ done = [], steps = ALL, hidden = false, canHide = true } = {}) => ({
   hidden,
   canHide,
@@ -25,6 +25,7 @@ describe('where each button goes', () => {
       ['staff', [['Invite staff', '/console/iron-house/members?view=staff&open=invite']]],
       ['classes', [['Set up classes', '/console/iron-house/classes']]],
       ['hours', [['Set opening hours', '/console/iron-house/settings#opening-hours']]],
+      ['contact', [['Add your phone or email', '/console/iron-house/settings#member-contact']]],
       ['frontDesk', [['Set up check-in', '/console/iron-house/settings#check-in-devices']]],
     ]);
   });
@@ -44,19 +45,19 @@ describe('where each button goes', () => {
 });
 
 describe('what is drawn', () => {
-  it('a new gym: six steps, none done, the first one next', () => {
+  it('a new gym: seven steps, none done, the first one next', () => {
     const v = view(answer());
     expect(v.show).toBe('list');
-    expect([v.doneCount, v.total, v.allDone, v.hasMembers]).toEqual([0, 6, false, true]);
-    expect(startHereCount(v)).toBe('0 of 6 done');
+    expect([v.doneCount, v.total, v.allDone, v.hasMembers]).toEqual([0, 7, false, true]);
+    expect(startHereCount(v)).toBe('0 of 7 done');
     expect(v.rows.filter((r) => r.next).map((r) => r.step)).toEqual(['memberships']);
   });
 
   it('the next step is the first one not done, wherever it is', () => {
     const v = view(answer({ done: ['memberships', 'members', 'classes'] }));
-    expect(startHereCount(v)).toBe('3 of 6 done');
+    expect(startHereCount(v)).toBe('3 of 7 done');
     expect(v.rows.filter((r) => r.next).map((r) => r.step)).toEqual(['staff']);
-    expect(v.rows.map((r) => r.done)).toEqual([true, true, false, true, false, false]);
+    expect(v.rows.map((r) => r.done)).toEqual([true, true, false, true, false, false, false]);
   });
 
   it("somebody's own steps only: the count is theirs", () => {
@@ -93,7 +94,7 @@ describe('what is drawn', () => {
     const v = view(answer({ done: ALL }));
     expect(v.show).toBe('list');
     expect(v.allDone).toBe(true);
-    expect(startHereCount(v)).toBe('6 of 6 done');
+    expect(startHereCount(v)).toBe('7 of 7 done');
     expect(v.rows.some((r) => r.next)).toBe(false);
   });
 

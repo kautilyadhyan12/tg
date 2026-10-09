@@ -3,6 +3,7 @@ import { orgWords } from '@app/shared';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import GymDetailsPanel from '../../components/console/GymDetailsPanel';
 import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
+import MemberContactPanel from '../../components/console/MemberContactPanel';
 import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
@@ -14,7 +15,7 @@ import { canManageOrg } from './gymDetailsView';
 import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
 
-// SETTINGS — Part 3 §3.1's sixth nav item: the gym's own details, when it is open, class
+// SETTINGS — Part 3 §3.1's sixth nav item: the gym's own details, when it is open, how its members reach it, class
 // bookings, the front desk's devices and the follow-up emails to leads. What the gym
 // sells is the Memberships page (23c-i) and its staff are on Members → Staff (23c-ii).
 //
@@ -162,6 +163,21 @@ export default function Settings() {
             privileges={privileges}
             readOnly={readOnly}
             startOpen={linked(section === SETTINGS_SECTION.hours)}
+          />
+        </div>
+      ) : null}
+
+      {/* HOW MEMBERS REACH YOU (20a-iii): the phone and email the gym's members see in the
+          app, on `org.manage` as the server gates the save. Keyed per gym for the panels'
+          reason above: it holds a draft. */}
+      {canEditGym ? (
+        // `id`: Overview's Start here list opens the page here.
+        <div id={SETTINGS_SECTION.memberContact} style={{ scrollMarginTop: 16 }}>
+          <MemberContactPanel
+            key={`member-contact-${org.id}`}
+            org={org}
+            readOnly={readOnly}
+            startOpen={linked(section === SETTINGS_SECTION.memberContact)}
           />
         </div>
       ) : null}

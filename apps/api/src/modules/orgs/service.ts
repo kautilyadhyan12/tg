@@ -3,7 +3,11 @@
 // step 3); the repo enforces tenancy in every WHERE and the routes stay thin.
 import type { Sql } from "postgres";
 import {
+  GYM_CONTACT_WORDS,
   GYM_POSTAL_ADDRESS_MAX_CHARS,
+  cleanGymContactEmail,
+  cleanGymContactPhone,
+  gymContactPhoneProblem,
   MEMBER_LIST_BY_HAND_WORDS,
   JOIN_CODE_LENGTH,
   ORG_TYPES_PHRASE,
@@ -421,6 +425,29 @@ export async function updateOrg(
     patch.billingMobile = null;
   }
 
+  // How members reach the gym (ROADMAP 20a-iii). Typed by the gym for its members to read,
+  // and never filled from the mobile for payments above. Empty clears one.
+  if ("contactPhone" in req && req.contactPhone !== undefined) {
+    if (req.contactPhone === null || req.contactPhone.trim() === "") patch.contactPhone = null;
+    else {
+      const wrong = gymContactPhoneProblem(req.contactPhone);
+      const phone = cleanGymContactPhone(req.contactPhone);
+      if (wrong !== null || phone === null) {
+        const code = wrong ?? "bad_contact_phone";
+        throw new OrgsError(400, code, GYM_CONTACT_WORDS[code]);
+      }
+      patch.contactPhone = phone;
+    }
+  }
+  if ("contactEmail" in req && req.contactEmail !== undefined) {
+    if (req.contactEmail === null || req.contactEmail.trim() === "") patch.contactEmail = null;
+    else {
+      const email = cleanGymContactEmail(req.contactEmail);
+      if (email === null) throw new OrgsError(400, "bad_contact_email", GYM_CONTACT_WORDS.bad_contact_email);
+      patch.contactEmail = email;
+    }
+  }
+
   const outcome = await repo.updateOrg(deps.sql, { gymId, patch, actorUserId: userId });
 
   switch (outcome.kind) {
@@ -434,6 +461,8 @@ export async function updateOrg(
         org: toOrgSummary(outcome.org),
         postalAddress: outcome.postalAddress,
         billingMobile: seesMobile ? outcome.billingMobile : null,
+        contactPhone: outcome.contactPhone,
+        contactEmail: outcome.contactEmail,
       });
     case "currency_locked":
       // KD RULING 2026-08-26. The sentence names the reason and the way out,
@@ -579,6 +608,9 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       postalAddress: r.staffRole === null ? null : r.postalAddress,
       // The owner's mobile for payments: only for staff who manage billing (ROADMAP 1d-i).
       billingMobile: privileges.includes("billing.manage") ? r.billingMobile : null,
+      // For the Settings box. A member reads them with the inbox, while they are a member.
+      contactPhone: r.staffRole === null ? null : r.contactPhone,
+      contactEmail: r.staffRole === null ? null : r.contactEmail,
       // THE NEWEST CHEER THIS GYM SENT **THIS CALLER** — and it is the one field
       // on this response that is NOT withheld from a plain member.
       //

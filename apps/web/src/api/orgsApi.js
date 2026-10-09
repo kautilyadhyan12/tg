@@ -129,6 +129,7 @@ import {
   ptWeekResponseSchema,
   sendGymCheerResponseSchema,
   startHereResponseSchema,
+  withKnownStartHereSteps,
   startOrgTrialResponseSchema,
   updateOrgResponseSchema,
 } from '@app/shared';
@@ -167,6 +168,10 @@ async function readThrough(schema, what, request) {
   if (!parsed.success) throw contractError(what);
   return { ...res, data: parsed.data };
 }
+
+/** A Start here answer without any step this build has no words for: a page loaded before
+ *  a step was added still reads its list. */
+const knownSteps = (request) => request.then((res) => ({ ...res, data: withKnownStartHereSteps(res.data) }));
 
 /** Where a gym page's photo is shown from: the console's (staff, page on or off) or
  *  the public page's (anybody, page on). Used as an <img> address, so it is the api's
@@ -515,10 +520,10 @@ export const orgService = {
    *  each done or not, and whether the gym has hidden the list. Read once when Overview
    *  opens; 300 an hour a person. */
   getStartHere: (gymId) =>
-    readThrough(startHereResponseSchema, 'your Start here list', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/start-here`)),
+    readThrough(startHereResponseSchema, 'your Start here list', knownSteps(authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/start-here`))),
   /** Hide the list for the whole gym, or show it again (`org.manage`). */
   setStartHereHidden: (gymId, hidden) =>
-    readThrough(startHereResponseSchema, 'your Start here list', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/start-here`, { hidden })),
+    readThrough(startHereResponseSchema, 'your Start here list', knownSteps(authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/start-here`, { hidden }))),
 
   /** GET /v1/orgs/:gymId/members — Part 3 §2.4's roster and nothing else:
    *  display name, join date, the label of the code they came in through, and

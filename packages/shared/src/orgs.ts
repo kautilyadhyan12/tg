@@ -4,6 +4,7 @@
 // visibility boundary), §3.3 (route surface), §4.0 (onboarding wizard fields);
 // Part 4 §3.2 (DDL), §4.2 (seat-safe join).
 import { z } from "zod";
+import { GYM_CONTACT_EMAIL_MAX_CHARS, GYM_CONTACT_PHONE_MAX_CHARS } from "./gymContact.js";
 import { GYM_POSTAL_ADDRESS_MAX_CHARS } from "./memberInvites.js";
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { instantSchema } from "./time.js";
@@ -465,6 +466,11 @@ export const updateOrgRequestSchema = z
     /** An Indian gym's owner's mobile for its payments, as typed; null clears it. Only staff
      *  who manage billing may change it, and only on a gym in India. */
     billingMobile: z.string().max(40).nullable(),
+    /** How members reach the gym (ROADMAP 20a-iii): a phone number and an email address its
+     *  members see in the app, as typed; null or empty clears one. The server reads each
+     *  with `cleanGymContactPhone` and `cleanGymContactEmail` and refuses what is neither. */
+    contactPhone: z.string().max(GYM_CONTACT_PHONE_MAX_CHARS * 2).nullable(),
+    contactEmail: z.string().max(GYM_CONTACT_EMAIL_MAX_CHARS * 2).nullable(),
   })
   .partial()
   .strict()
@@ -487,6 +493,9 @@ export const updateOrgResponseSchema = z.object({
   postalAddress: z.string().nullable().default(null),
   /** The owner's mobile for payments (`+91…`), for staff who manage billing only. */
   billingMobile: z.string().nullable().default(null),
+  /** How members reach the gym, as stored. */
+  contactPhone: z.string().nullable().default(null),
+  contactEmail: z.string().nullable().default(null),
 });
 export type UpdateOrgResponse = z.infer<typeof updateOrgResponseSchema>;
 
@@ -1201,6 +1210,10 @@ export const myOrgSchema = orgSummarySchema.extend({
   /** An Indian gym's owner's mobile for its payments (`+91…`, ROADMAP 1d-i). Only for staff
    *  who manage billing; null for everybody else and for a gym with none. */
   billingMobile: z.string().nullable().default(null),
+  /** How members reach the gym (ROADMAP 20a-iii), for its staff's Settings box; null for
+   *  one not added and for a caller who is not staff. A member reads them with the inbox. */
+  contactPhone: z.string().nullable().default(null),
+  contactEmail: z.string().nullable().default(null),
   /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's ruling of
    *  2026-09-02 (:29961 ruling 4), reaching the member.
    *

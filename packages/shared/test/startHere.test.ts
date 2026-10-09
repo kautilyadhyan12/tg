@@ -9,6 +9,7 @@ import {
   ORG_PRIVILEGES,
   ROLE_PRIVILEGES,
   START_HERE_STEPS,
+  withKnownStartHereSteps,
   START_HERE_STEP_PRIVILEGE,
   setStartHereRequestSchema,
   startHereResponseSchema,
@@ -20,23 +21,23 @@ import {
 
 describe("the steps a person is shown", () => {
   const cases: { who: string; ticks: readonly OrgPrivilege[]; steps: StartHereStep[] }[] = [
-    { who: "an owner", ticks: ROLE_PRIVILEGES.owner, steps: ["memberships", "members", "staff", "classes", "hours", "frontDesk"] },
+    { who: "an owner", ticks: ROLE_PRIVILEGES.owner, steps: ["memberships", "members", "staff", "classes", "hours", "contact", "frontDesk"] },
     { who: "a manager on the usual ticks", ticks: ROLE_PRIVILEGES.manager, steps: ["memberships", "members", "classes"] },
     { who: "a trainer on the usual ticks", ticks: ROLE_PRIVILEGES.trainer, steps: [] },
     { who: "nobody's ticks", ticks: [], steps: [] },
-    { who: "only the gym's details", ticks: ["org.manage"], steps: ["hours", "frontDesk"] },
+    { who: "only the gym's details", ticks: ["org.manage"], steps: ["hours", "contact", "frontDesk"] },
     { who: "only staff", ticks: ["staff.manage"], steps: ["staff"] },
     { who: "only the price list", ticks: ["memberships.manage"], steps: ["memberships"] },
     { who: "only the member list", ticks: ["members.confirm"], steps: ["members"] },
     { who: "only the timetable", ticks: ["schedule.manage"], steps: ["classes"] },
-    // Ticks that open none of the six pages.
+    // Ticks that open none of the seven pages.
     {
       who: "every other tick",
       ticks: ["members.read", "codes.invite", "codes.manage", "members.remove", "billing.manage", "attendance.read", "attendance.mark", "leaderboard.manage", "posts.manage"],
       steps: [],
     },
     // The list's order, whatever order the ticks arrive in.
-    { who: "ticks in another order", ticks: ["org.manage", "schedule.manage", "memberships.manage"], steps: ["memberships", "classes", "hours", "frontDesk"] },
+    { who: "ticks in another order", ticks: ["org.manage", "schedule.manage", "memberships.manage"], steps: ["memberships", "classes", "hours", "contact", "frontDesk"] },
   ];
   it.each(cases)("$who", ({ ticks, steps }) => {
     expect(startHereStepsFor(ticks)).toEqual(steps);
@@ -58,7 +59,17 @@ describe("what crosses the wire", () => {
     }
   });
 
-  it("the answer names only the six steps", () => {
+  it("a step this build has never heard of is dropped before the answer is checked, and nothing else is", () => {
+    const sent = { startHere: { hidden: false, canHide: true, steps: [{ step: "members", done: true }, { step: "waiver", done: false }, { step: "hours", done: false }] } };
+    const read = startHereResponseSchema.parse(withKnownStartHereSteps(sent));
+    expect(read.startHere.steps.map((s) => s.step)).toEqual(["members", "hours"]);
+    // A broken row or a broken answer is still refused.
+    const broken = { startHere: { hidden: false, canHide: true, steps: [{ step: "members" }, "x"] } };
+    expect(startHereResponseSchema.safeParse(withKnownStartHereSteps(broken)).success).toBe(false);
+    for (const body of [null, "x", {}, { startHere: null }, { startHere: { steps: "all" } }]) expect(withKnownStartHereSteps(body)).toBe(body);
+  });
+
+  it("the answer names only the seven steps", () => {
     const ok = { startHere: { hidden: false, canHide: true, steps: [{ step: "members", done: true }] } };
     expect(startHereResponseSchema.safeParse(ok).success).toBe(true);
     const unknownStep = { startHere: { hidden: false, canHide: true, steps: [{ step: "billing", done: true }] } };

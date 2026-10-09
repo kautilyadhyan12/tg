@@ -1,7 +1,7 @@
 // What the member's inbox says (spec Part 3 §16.1; ROADMAP 20a), without a browser.
 import { describe, expect, it } from 'vitest';
 import { GYM_NUDGE_PRESETS } from '@app/shared';
-import { INBOX_NOTE, emptyInbox, gymButtonName, hasNewMessages, inboxTabName, messageRow, pausedInbox, pinnedNote, unreadBadge } from './inboxView';
+import { INBOX_NOTE, contactButton, contactSetUp, contactView, emptyInbox, gymButtonName, hasNewMessages, inboxTabName, messageRow, pausedInbox, pinnedNote, unreadBadge } from './inboxView';
 
 const NOW = Date.parse('2026-10-09T12:00:00.000Z');
 const ago = (hours) => new Date(NOW - hours * 3_600_000).toISOString();
@@ -80,5 +80,40 @@ describe('a message, and the lines around the list', () => {
     expect(emptyInbox('Iron House')).toBe('No messages from Iron House yet. When they send you one, it shows up here.');
     expect(pausedInbox('Iron House')).toBe("Iron House isn't sending messages in the app right now.");
     expect(INBOX_NOTE).toBe("Messages stay here for 30 days. You can't reply to them here.");
+  });
+});
+
+describe('Contact the gym', () => {
+  it("is named in the organisation's own word", () => {
+    expect(['gym', 'studio', 'personal_trainer', undefined].map(contactButton)).toEqual(['Contact the gym', 'Contact the studio', 'Contact the trainer', 'Contact the gym']);
+  });
+
+  it('is a link that calls and a link that writes, each only if the gym added it', () => {
+    expect(contactView({ phone: '+44 20 7946 0958', email: 'desk@ironhouse.com' }, 'Iron House')).toEqual({
+      ways: [
+        { kind: 'phone', label: 'Call +44 20 7946 0958', href: 'tel:+442079460958' },
+        { kind: 'email', label: 'Email desk@ironhouse.com', href: 'mailto:desk@ironhouse.com' },
+      ],
+      none: null,
+    });
+    expect(contactView({ phone: '(212) 555-0123', email: null }, 'Iron House').ways).toEqual([{ kind: 'phone', label: 'Call (212) 555-0123', href: 'tel:2125550123' }]);
+    expect(contactView({ phone: null, email: 'desk@ironhouse.com' }, 'Iron House').ways.map((w) => w.kind)).toEqual(['email']);
+    // Written the British way: the label is as typed, and the link drops the zero in brackets.
+    expect(contactView({ phone: '+44 (0)20 7946 0958', email: null }, 'Iron House').ways).toEqual([{ kind: 'phone', label: 'Call +44 (0)20 7946 0958', href: 'tel:+442079460958' }]);
+  });
+
+  it('whoever may change the gym\'s details is given the place to add them, and nobody else is', () => {
+    const gym = { slug: 'iron-house', staffRole: 'owner', privileges: ['org.manage'] };
+    expect(contactSetUp(gym)).toBe('/console/iron-house/settings#member-contact');
+    expect(contactSetUp({ ...gym, staffRole: 'trainer', privileges: ['members.read'] })).toBeNull();
+    expect(contactSetUp({ slug: 'iron-house', staffRole: null, privileges: null })).toBeNull();
+    expect(contactSetUp({ slug: 'iron-house' })).toBeNull();
+  });
+
+  it('is one plain line, and no way to press, for a gym that added neither or an answer with none', () => {
+    const none = { ways: [], none: "Iron House hasn't added a phone number or email yet." };
+    for (const contact of [{ phone: null, email: null }, { phone: '  ', email: '' }, {}, null, undefined, { phone: 5 }]) {
+      expect(contactView(contact, 'Iron House')).toEqual(none);
+    }
   });
 });

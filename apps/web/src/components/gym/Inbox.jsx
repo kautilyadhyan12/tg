@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
-import { Loader2, Mail, Pin } from 'lucide-react';
-import { INBOX_NOTE, emptyInbox, messageRow, pausedInbox, pinnedNote } from './inboxView';
+import { useEffect, useId, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Loader2, Mail, Phone, Pin } from 'lucide-react';
+import { INBOX_NOTE, contactButton, contactSetUp, contactView, emptyInbox, messageRow, pausedInbox, pinnedNote } from './inboxView';
 
 // THE MEMBER'S INBOX FROM THEIR GYM (spec Part 3 §16.1; ROADMAP 20a): the gym's one pinned
 // note, then its messages, newest first. Opening it tells the server they have been seen;
@@ -10,6 +11,69 @@ import { INBOX_NOTE, emptyInbox, messageRow, pausedInbox, pinnedNote } from './i
 const ORANGE = '#FF8A1F';
 const MUTED = 'rgba(255,255,255,0.45)';
 const RED = '#ef4444';
+
+// CONTACT THE GYM (ROADMAP 20a-iii): nobody can reply in the inbox, so the button under it
+// opens the phone number and email the gym added for its members. A gym that added
+// neither has no button, and one line saying so.
+function ContactGym({ gym, contact }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const view = contactView(contact, gym.name);
+  if (view.none !== null) {
+    // Somebody who trains at the gym they run is given the place to add them.
+    const setUp = contactSetUp(gym);
+    return (
+      <div className="flex flex-col items-start gap-2">
+        <p className="text-xs" style={{ color: MUTED }}>
+          {view.none}
+        </p>
+        {setUp === null ? null : (
+          <Link
+            to={setUp}
+            className="rounded-xl px-3.5 py-2 text-sm font-semibold min-h-11 inline-flex items-center"
+            style={{ background: 'rgba(255,138,31,0.15)', color: ORANGE, border: '1px solid rgba(255,138,31,0.30)' }}
+          >
+            Add your phone or email
+          </Link>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="rounded-xl px-3.5 py-2 text-sm font-semibold min-h-11"
+        style={{ background: 'rgba(255,138,31,0.15)', color: ORANGE, border: '1px solid rgba(255,138,31,0.30)' }}
+      >
+        {contactButton(gym.orgType)}
+      </button>
+      {open ? (
+        <ul id={panelId} className="flex flex-col gap-2 w-full" aria-label={`How to reach ${gym.name}`}>
+          {view.ways.map((way) => (
+            <li key={way.kind}>
+              <a
+                href={way.href}
+                className="rounded-xl px-3.5 py-2 text-sm min-h-11 inline-flex items-center gap-2.5 max-w-full"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff', overflowWrap: 'anywhere' }}
+              >
+                {way.kind === 'phone' ? (
+                  <Phone className="w-4 h-4 flex-shrink-0" style={{ color: ORANGE }} aria-hidden="true" />
+                ) : (
+                  <Mail className="w-4 h-4 flex-shrink-0" style={{ color: ORANGE }} aria-hidden="true" />
+                )}
+                {way.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 export default function Inbox({ gym, inbox }) {
   const { loading, error, reload, markSeen } = inbox;
@@ -107,6 +171,8 @@ export default function Inbox({ gym, inbox }) {
       <p className="text-xs" style={{ color: MUTED }}>
         {INBOX_NOTE}
       </p>
+      {/* Keyed: another gym's page starts with its own button shut. */}
+      <ContactGym key={gym.id} gym={gym} contact={read.contact} />
     </div>
   );
 }

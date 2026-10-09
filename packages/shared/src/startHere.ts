@@ -1,10 +1,11 @@
-// The console's "Start here" list on Overview (spec Part 3 §5.1; ROADMAP 23b): six things
+// The console's "Start here" list on Overview (spec Part 3 §5.1; ROADMAP 23b): seven things
 // a new gym sets up, each ticked by the server from what the gym already has.
 import { z } from "zod";
 import type { OrgPrivilege } from "./orgs.js";
 
-/** The six steps, in the order the list shows them. */
-export const START_HERE_STEPS = ["memberships", "members", "staff", "classes", "hours", "frontDesk"] as const;
+/** The seven steps, in the order the list shows them. `contact` is how members reach the
+ *  gym (ROADMAP 20a-iii): done once it has added a phone number or an email address. */
+export const START_HERE_STEPS = ["memberships", "members", "staff", "classes", "hours", "contact", "frontDesk"] as const;
 export const startHereStepSchema = z.enum(START_HERE_STEPS);
 export type StartHereStep = z.infer<typeof startHereStepSchema>;
 
@@ -15,6 +16,7 @@ export const START_HERE_STEP_PRIVILEGE: Readonly<Record<StartHereStep, OrgPrivil
   staff: "staff.manage",
   classes: "schedule.manage",
   hours: "org.manage",
+  contact: "org.manage",
   frontDesk: "org.manage",
 };
 
@@ -38,6 +40,20 @@ export const startHereSchema = z
 export type StartHere = z.infer<typeof startHereSchema>;
 
 export const startHereResponseSchema = z.object({ startHere: startHereSchema }).strict();
+
+/** An answer with any step this build has no words for taken out, before it is checked: a
+ *  page loaded before a step was added still reads its list. Anything else is handed back
+ *  as it came, for the check to refuse. */
+export function withKnownStartHereSteps(body: unknown): unknown {
+  if (typeof body !== "object" || body === null || !("startHere" in body)) return body;
+  const list: unknown = body.startHere;
+  if (typeof list !== "object" || list === null || !("steps" in list) || !Array.isArray(list.steps)) return body;
+  const steps: unknown[] = list.steps;
+  const known = steps.filter(
+    (row) => typeof row !== "object" || row === null || !("step" in row) || startHereStepSchema.safeParse(row.step).success,
+  );
+  return { ...body, startHere: { ...list, steps: known } };
+}
 export type StartHereResponse = z.infer<typeof startHereResponseSchema>;
 
 export const setStartHereRequestSchema = z.object({ hidden: z.boolean() }).strict();
