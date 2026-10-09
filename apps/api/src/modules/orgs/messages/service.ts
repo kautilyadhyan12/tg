@@ -27,7 +27,6 @@ const notFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisat
 interface Reader {
   name: string;
   now: Date;
-  since: Date;
   /** The gym is closed or on no plan: its members are shown no messages. */
   paused: boolean;
 }
@@ -36,7 +35,7 @@ async function forMember(deps: MessagesDeps, gymId: string, userId: string): Pro
   const now = deps.now();
   const gate = await repo.memberGate(deps.sql, gymId, userId);
   if (gate === null || !gate.member || gate.joinedAt === null) throw notFound();
-  return { name: gate.name, now, since: gate.joinedAt, paused: !(gate.open && gate.live) };
+  return { name: gate.name, now, paused: !(gate.open && gate.live) };
 }
 
 /** The member's inbox from this gym, newest first. Reading it marks nothing. */
@@ -46,8 +45,8 @@ export async function getInbox(deps: MessagesDeps, userId: string, gymId: string
   const head = { gymId, gymName: reader.name, asOf: reader.now.toISOString() };
   if (reader.paused) return gymInboxResponseSchema.parse({ ...head, status: "paused", messages: [], unread: 0 });
   const [rows, unread] = await Promise.all([
-    repo.inboxRows(deps.sql, gymId, userId, reader.since, reader.now, GYM_INBOX_MAX),
-    repo.unreadCount(deps.sql, gymId, userId, reader.since, reader.now),
+    repo.inboxRows(deps.sql, gymId, userId, reader.now, GYM_INBOX_MAX),
+    repo.unreadCount(deps.sql, gymId, userId, reader.now),
   ]);
   return gymInboxResponseSchema.parse({
     ...head,
@@ -66,5 +65,5 @@ export async function markRead(deps: MessagesDeps, userId: string, gymId: string
   // Never past now: an instant in the future would mark what has not been shown.
   const upTo = new Date(Math.min(Date.parse(body.upTo), reader.now.getTime()));
   await repo.markRead(deps.sql, gymId, userId, upTo, reader.now);
-  return markGymInboxReadResponseSchema.parse({ unread: await repo.unreadCount(deps.sql, gymId, userId, reader.since, reader.now) });
+  return markGymInboxReadResponseSchema.parse({ unread: await repo.unreadCount(deps.sql, gymId, userId, reader.now) });
 }
