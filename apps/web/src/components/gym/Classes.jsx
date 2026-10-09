@@ -4,7 +4,7 @@ import { CLASS_LATE_CANCEL_ERROR, MEMBER_CLASSES_WEEKS } from '@app/shared';
 import { classesService } from '../../api/classesApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
-import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, mineText, nextLinkAt, onlineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
+import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, mineText, nextReadAt, onlineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
 
 // A GYM'S CLASSES FOR ITS MEMBER (spec Part 3 §13.6; ROADMAP 17d): the coming classes by
 // day, with Book, Join waitlist, Claim place and Cancel. The server decides every one; a
@@ -136,13 +136,15 @@ export default function Classes({ gym }) {
     };
   }, [load]);
 
-  // The list is read again the moment a class's link is due, so Join class shows by itself.
-  const linkAt = nextLinkAt(state.list?.classes);
+  // The list is read again when a class's link is due, and when a class with a link ends,
+  // so Join class comes and goes by itself. Set again after every read.
+  const listRead = state.list;
   useEffect(() => {
-    if (linkAt === null) return undefined;
-    const timer = setTimeout(load, Math.max(0, linkAt - Date.now()) + 1000);
+    const at = nextReadAt(listRead?.classes);
+    if (at === null) return undefined;
+    const timer = setTimeout(load, Math.max(0, at - Date.now()));
     return () => clearTimeout(timer);
-  }, [linkAt, load]);
+  }, [listRead, load]);
 
   const go = (to) => {
     setState((s) => ({ ...s, loading: true }));

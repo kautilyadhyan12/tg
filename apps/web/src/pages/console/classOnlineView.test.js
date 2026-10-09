@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { removeAsk } from './classBookingsListView';
 import { repeatDraft, repeatProblem, repeatRequest } from './classesView';
 import {
+  onlineAffectedLine,
   onlineButton,
   onlineChanged,
   onlineDraft,
@@ -50,6 +51,24 @@ describe('the Online class tick and its link', () => {
       expect(onlineProblem({ online: false, link })).toBeNull();
     },
   );
+
+  it('a capital H from a phone is taken, and sent as https://', () => {
+    expect(onlineProblem({ online: true, link: 'Https://meet.google.com/abc-defg-hij' })).toBeNull();
+    expect(onlineRequest({ online: true, link: 'Https://meet.google.com/abc-defg-hij' })).toEqual({ online: true, onlineLink: 'https://meet.google.com/abc-defg-hij' });
+    expect(onlineProblem({ online: true, link: 'https://zoom.us/j/555\u200b111' })).toBe('Paste the whole link, starting with https://');
+  });
+
+  it('says how many people a change reaches, from the server’s count, and nothing until it is known', () => {
+    expect(onlineAffectedLine('class', null)).toBe('');
+    expect(onlineAffectedLine('slot', {})).toBe('');
+    expect(onlineAffectedLine('class', { classes: 1, booked: 0 })).toBe('Nobody is booked on this class yet.');
+    expect(onlineAffectedLine('class', { classes: 1, booked: 1 })).toBe('1 person is booked on this class.');
+    expect(onlineAffectedLine('class', { classes: 1, booked: 14 })).toBe('14 people are booked on this class.');
+    expect(onlineAffectedLine('slot', { classes: 0, booked: 0 })).toBe('This time slot has no coming classes to change.');
+    expect(onlineAffectedLine('slot', { classes: 8, booked: 0 })).toBe('Nobody is booked on the 8 coming classes this changes yet.');
+    expect(onlineAffectedLine('slot', { classes: 1, booked: 1 })).toBe('1 booking is held on the 1 coming class this changes.');
+    expect(onlineAffectedLine('slot', { classes: 57, booked: 1140 })).toBe('1,140 bookings are held on the 57 coming classes this changes.');
+  });
 
   it('Save is for a change only', () => {
     const holder = { online: true, onlineLink: LINK };
@@ -104,6 +123,13 @@ describe('the box that asks before staff take one person off a class', () => {
     expect(lines(booking(), list())).not.toContain('The free place goes to the waitlist, by your booking rules.');
     expect(lines(booking(), list({ online: true }))).toContain('They stop seeing the link to this online class.');
     expect(lines(booking(), list())).not.toContain('They stop seeing the link to this online class.');
+  });
+
+  it('a coach, who is not sent what a person paid with, is told what happens if a pack paid', () => {
+    const lines = removeAsk(booking({ packCharged: null }), list()).lines;
+    expect(lines).toContain('If a pack paid for this class, the class goes back on it.');
+    expect(lines).not.toContain('The class goes back on their pack.');
+    expect(removeAsk(booking({ packCharged: false }), list()).lines.join(' ')).not.toMatch(/pack/);
   });
 
   it('somebody waiting leaves the waitlist, and no place or pack is spoken of', () => {

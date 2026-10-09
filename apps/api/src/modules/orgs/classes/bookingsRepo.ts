@@ -225,7 +225,8 @@ export async function contextOf(sql: SqlOrTx, gymId: string, sessionId: string, 
 
 /** The gym's classes that have not started, on its own days `from` to `to`, the soonest
  *  first, each as this person meets it: at most `limit`. With them an online class under
- *  way that this person holds a place in: its link is theirs until it ends. A plain read. */
+ *  way that this person holds a place in: its link is theirs until it ends, so one that
+ *  began on the day before `from` and runs past midnight is still there. A plain read. */
 export async function comingContexts(
   sql: SqlOrTx,
   gymId: string,
@@ -236,9 +237,10 @@ export async function comingContexts(
     sql,
     gymId,
     userId,
-    sql`s.local_date BETWEEN ${when.from}::date AND ${when.to}::date
-        AND (s.starts_at > ${when.now}
-             OR (s.online AND s.status = 'scheduled' AND s.starts_at + make_interval(mins => s.minutes) > ${when.now}
+    sql`s.local_date BETWEEN ${when.from}::date - 1 AND ${when.to}::date
+        AND ((s.starts_at > ${when.now} AND s.local_date >= ${when.from}::date)
+             OR (s.online AND s.status = 'scheduled' AND s.starts_at <= ${when.now}
+                 AND s.starts_at + make_interval(mins => s.minutes) > ${when.now}
                  AND EXISTS (SELECT 1 FROM gym_class_bookings o
                              WHERE o.gym_id = s.gym_id AND o.session_id = s.id AND o.user_id = ${userId}
                                AND o.status = ANY(${[...CLASS_BOOKING_HOLDS_PLACE]}::text[]))))`,
@@ -445,7 +447,7 @@ export async function markCancelled(
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_class_bookings
     SET status = ${input.status}, cancelled_at = ${input.now}, pack_charged = ${input.packCharged}
-    WHERE gym_id = ${input.gymId} AND id = ${input.bookingId} AND status IN ('booked','waitlisted','attended')
+    WHERE gym_id = ${input.gymId} AND id = ${input.bookingId} AND status IN ('booked','waitlisted','attended','no_show')
     RETURNING id`;
   if (rows.length !== 1) throw new Error("a booking was not there to cancel");
 }

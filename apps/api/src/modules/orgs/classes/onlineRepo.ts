@@ -2,6 +2,7 @@
 // ROADMAP 17g). Every statement carries `gym_id`; each write runs under the gym's lock,
 // as every timetable write does. The link itself is never written to the audit log.
 import type { Sql } from "postgres";
+import { CLASS_BOOKING_HOLDS_PLACE } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
 
 export interface OnlineInput {
@@ -47,6 +48,31 @@ export async function setSlotOnline(sql: Sql, input: OnlineInput & { scheduleId:
     });
     return { kind: "ok" };
   });
+}
+
+/** Who a change to a time slot's online answer, or one class's, would reach: the classes
+ *  it would change (as the two writes below choose them) and the bookings that hold a
+ *  place on them. Null where the gym has no such time slot or class. A plain read. */
+export async function onlineAffected(
+  sql: Sql,
+  gymId: string,
+  which: { scheduleId: string } | { sessionId: string },
+  now: Date,
+): Promise<{ classes: number; booked: number } | null> {
+  const found =
+    "scheduleId" in which
+      ? await sql`SELECT 1 FROM gym_class_schedules WHERE id = ${which.scheduleId} AND gym_id = ${gymId} AND ended_at IS NULL`
+      : await sql`SELECT 1 FROM gym_class_sessions WHERE id = ${which.sessionId} AND gym_id = ${gymId}`;
+  if (found.length === 0) return null;
+  const these = "scheduleId" in which ? sql`s.schedule_id = ${which.scheduleId} AND NOT s.online_alone` : sql`s.id = ${which.sessionId}`;
+  const [row] = await sql<{ classes: number; booked: number }[]>`
+    SELECT count(DISTINCT s.id)::int AS classes, count(b.id)::int AS booked
+    FROM gym_class_sessions s
+    LEFT JOIN gym_class_bookings b
+      ON b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = ANY(${[...CLASS_BOOKING_HOLDS_PLACE]}::text[])
+    WHERE s.gym_id = ${gymId} AND ${these} AND s.status = 'scheduled'
+      AND s.starts_at + make_interval(mins => s.minutes) > ${now}`;
+  return { classes: row?.classes ?? 0, booked: row?.booked ?? 0 };
 }
 
 export type ClassOnlineOutcome = { kind: "ok"; localDate: string } | { kind: "not_found" } | { kind: "ended" } | { kind: "cancelled" };

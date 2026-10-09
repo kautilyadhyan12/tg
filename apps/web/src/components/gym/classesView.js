@@ -39,15 +39,33 @@ export function onlineText(c) {
   return { line, link, ready: link !== null };
 }
 
-/** When the list should be read again by itself: the moment the next link shows, for a
- *  class they hold a place in. Null where no link is waited for, or it is a day away. */
-export function nextLinkAt(classes, now = Date.now()) {
+/** How often the list is read again while a link is due and not here, by this device's clock. */
+export const LINK_READ_AGAIN_MS = 20_000;
+
+/** When the list should be read again by itself, for the online classes they hold a place
+ *  in; null where nothing is waited for. The server decides the moments, and this device's
+ *  clock may be fast or slow, so: a link still to show is read for a second after its
+ *  moment, and every 20 seconds once that moment has passed here and the server still says
+ *  early; a link the gym has not added yet is read for every 20 seconds; a link showing is
+ *  read again a second after the class ends, and every 20 seconds until the server says so. */
+export function nextReadAt(classes, now = Date.now()) {
   let soonest = null;
-  for (const c of Array.isArray(classes) ? classes : []) {
-    if (c?.online?.state !== 'early') continue;
-    const at = Date.parse(c.online.opensAt);
-    if (Number.isNaN(at) || at <= now || at - now > 86_400_000) continue;
+  const want = (at) => {
     if (soonest === null || at < soonest) soonest = at;
+  };
+  for (const c of Array.isArray(classes) ? classes : []) {
+    const state = c?.online?.state;
+    if (state === 'early') {
+      const at = Date.parse(c.online.opensAt);
+      if (Number.isNaN(at) || at - now > 86_400_000) continue;
+      want(at > now ? at + 1000 : now + LINK_READ_AGAIN_MS);
+    } else if (state === 'no_link') {
+      want(now + LINK_READ_AGAIN_MS);
+    } else if (state === 'open') {
+      const end = Date.parse(c.startsAt) + c.minutes * 60_000;
+      if (Number.isNaN(end)) continue;
+      want(end > now ? end + 1000 : now + LINK_READ_AGAIN_MS);
+    }
   }
   return soonest;
 }

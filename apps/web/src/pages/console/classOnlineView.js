@@ -5,7 +5,7 @@ import { CLASS_ONLINE_LINK_BEFORE_MINUTES, classOnlineLinkSchema } from '@app/sh
 // pastes its own link (Zoom, Google Meet, any other); the app hosts no video.
 
 /** Under the tick, on every form that has it. */
-export const ONLINE_HELP = `People who are booked see the link in the app from ${String(CLASS_ONLINE_LINK_BEFORE_MINUTES)} minutes before the class until it ends. Nobody else sees it.`;
+export const ONLINE_HELP = `People who are booked see the link in the app from ${String(CLASS_ONLINE_LINK_BEFORE_MINUTES)} minutes before the class until it ends. No other member sees it.`;
 
 /** Under the link box. */
 export const ONLINE_LINK_HELP = 'Paste the link from Zoom, Google Meet or whatever you use. You can add it later.';
@@ -31,12 +31,29 @@ export function onlineProblem(draft) {
   return null;
 }
 
+const count = (n) => n.toLocaleString('en');
+
+/** Who Save reaches, from the server's count; '' until it is known. `kind`: a time slot, or one class. */
+export function onlineAffectedLine(kind, affected) {
+  if (!Number.isInteger(affected?.booked) || !Number.isInteger(affected?.classes)) return '';
+  const { booked, classes } = affected;
+  if (kind === 'class') {
+    if (booked === 0) return 'Nobody is booked on this class yet.';
+    return booked === 1 ? '1 person is booked on this class.' : `${count(booked)} people are booked on this class.`;
+  }
+  if (classes === 0) return 'This time slot has no coming classes to change.';
+  const these = classes === 1 ? 'the 1 coming class' : `the ${count(classes)} coming classes`;
+  if (booked === 0) return `Nobody is booked on ${these} this changes yet.`;
+  return `${booked === 1 ? '1 booking is' : `${count(booked)} bookings are`} held on ${these} this changes.`;
+}
+
 /** What the server is sent: both keys, every time. */
 export function onlineRequest(draft) {
   if (onlineProblem(draft) !== null) return null;
   const online = draft?.online === true;
   const link = typed(draft);
-  return { online, onlineLink: online && link !== '' ? link : null };
+  // As the rule keeps it: "Https://" from a phone's keyboard is sent as "https://".
+  return { online, onlineLink: online && link !== '' ? classOnlineLinkSchema.parse(link) : null };
 }
 
 /** Has the form changed what the time slot or class holds? */

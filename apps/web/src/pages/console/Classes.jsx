@@ -1059,6 +1059,7 @@ export default function Classes() {
                                 busy={busy === `online:${schedule.id}`}
                                 onSave={(body) => run(`online:${schedule.id}`, () => orgService.setClassRepeatOnline(gymId, schedule.id, body))}
                                 onClose={() => setOnlineFor(null)}
+                                readAffected={() => orgService.getClassRepeatOnline(gymId, schedule.id)}
                               />
                             ) : null}
 

@@ -1306,6 +1306,14 @@ export async function changeSlotFrom(
     };
     if (change === "move") {
       const ended = await endClassBookings(tx, input.gymId, replace, input.now, { remove: true });
+      // A class staff gave a link of its own keeps it on the class written for its date.
+      const ownLinks =
+        replace.length === 0
+          ? []
+          : await tx<{ local_date: string; online: boolean; online_link: string | null }[]>`
+              SELECT local_date::text AS local_date, online, online_link FROM gym_class_sessions
+              WHERE gym_id = ${input.gymId} AND schedule_id = ${scheduleId}
+                AND id = ANY(${tx.array(replace)}::uuid[]) AND online_alone`;
       const removed =
         replace.length === 0
           ? 0
@@ -1333,6 +1341,11 @@ export async function changeSlotFrom(
         scheduleIds: [newId],
         now: input.now,
       });
+      for (const own of ownLinks) {
+        await tx`
+          UPDATE gym_class_sessions SET online = ${own.online}, online_link = ${own.online_link}, online_alone = true
+          WHERE gym_id = ${input.gymId} AND schedule_id = ${newId} AND local_date = ${own.local_date}::date`;
+      }
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,

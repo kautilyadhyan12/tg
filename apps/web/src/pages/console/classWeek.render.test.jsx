@@ -16,6 +16,7 @@ const api = {
   markClassBooking: vi.fn(),
   removeClassBooking: vi.fn(),
   setClassDayOnline: vi.fn(),
+  getClassDayOnline: vi.fn(),
   getMemberList: vi.fn(),
   getMemberListEntry: vi.fn(),
   getHeldMemberships: vi.fn(),
@@ -167,6 +168,7 @@ beforeEach(() => {
   api.markClassBooking.mockReset().mockResolvedValue(bookings());
   api.removeClassBooking.mockReset().mockResolvedValue(bookings());
   api.setClassDayOnline.mockReset().mockResolvedValue(week());
+  api.getClassDayOnline.mockReset().mockResolvedValue({ data: { classes: 1, booked: 7 } });
   api.changeClassDay.mockReset().mockResolvedValue(week());
   api.cancelClassDay.mockReset().mockResolvedValue(week());
   api.restoreClassDay.mockReset().mockResolvedValue(week());
@@ -921,6 +923,8 @@ describe('an online class on the Calendar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Change link' }));
     const box = within(screen.getByRole('group', { name: 'Online class' }));
     expect(box.getByText('This changes this class only. It then keeps its own link when the time slot’s link changes.')).toBeTruthy();
+    expect((await box.findByTestId('online-affected')).textContent).toBe('7 people are booked on this class.');
+    expect(api.getClassDayOnline).toHaveBeenCalledWith('g1', 'x1');
     const NEW = 'https://meet.google.com/new-room-xyz';
     fireEvent.change(box.getByLabelText('Video link'), { target: { value: NEW } });
     api.setClassDayOnline.mockResolvedValue(week({ sessions: [online({ onlineLink: NEW, onlineAlone: true })] }));
@@ -940,7 +944,11 @@ describe('an online class on the Calendar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close this class' }));
     await openDay('Spin on Fri 25 Sep 2026 at 18:00');
     expect(screen.queryByTestId('class-online')).toBeNull();
+    // The count that cannot be read leaves the box as it is, with its other lines.
+    api.getClassDayOnline.mockRejectedValue(new Error('offline'));
     fireEvent.click(screen.getByRole('button', { name: 'Make it online' }));
+    expect(screen.getByText("The app doesn't tell people who are already booked yet. Tell them yourself if this changes for them.")).toBeTruthy();
+    expect(screen.queryByTestId('online-affected')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(api.setClassDayOnline).not.toHaveBeenCalled();
   });

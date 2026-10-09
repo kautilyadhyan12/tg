@@ -13,6 +13,7 @@ import type { ClassBookingView, ClassSessionBookingsResponse, GymClassWeekRespon
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { markEndedClasses } from "../src/modules/orgs/classes/attendance.js";
+import { onlineFor } from "../src/modules/orgs/classes/bookingsService.js";
 import { fillClassSessions } from "../src/modules/orgs/classes/fill.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
@@ -261,12 +262,14 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
     const start = T0 + 3 * HOUR;
     const opens = start - 30 * MIN;
     const end = start + LENGTH;
-    const cls = await classAt(gym, start, { places: 2, link: LINK });
+    const cls = await classAt(gym, start, { places: 4, link: LINK });
     // A class at another gym and one at a gym on no plan, each online with the same link.
     const theirs = await classAt(elsewhere, start, { link: LINK });
     const lapsedClass = await classAt(lapsed, start, { link: LINK });
 
     const booked = await member(gym, "Bea Booked");
+    const came = await member(gym, "Cam Came");
+    const missed = await member(gym, "Mona Missed");
     const left = await member(gym, "Liam Left");
     const gaveUp = await member(gym, "Cara Cancelled");
     const waiting = await member(gym, "Wes Waiting");
@@ -283,6 +286,11 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
     expect((await cancel(gym, gaveUp, cls)).statusCode).toBe(200);
     await book(gym, booked, cls);
     await book(gym, left, cls);
+    // Two places already marked: came (a check-in before the class) and no-show (staff, during it).
+    await book(gym, came, cls);
+    await book(gym, missed, cls);
+    await sql`UPDATE gym_class_bookings SET status = 'attended' WHERE session_id = ${cls} AND user_id = ${came.userId}`;
+    await sql`UPDATE gym_class_bookings SET status = 'no_show' WHERE session_id = ${cls} AND user_id = ${missed.userId}`;
     expect((await book(gym, waiting, cls, true)).mine?.status).toBe("waitlisted");
     // Liam's membership of the gym ends with his place still on the class's row.
     await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${left.userId}`;
@@ -290,6 +298,8 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
 
     const everyone: [Person, Gym, string][] = [
       [booked, gym, cls],
+      [came, gym, cls],
+      [missed, gym, cls],
       [left, gym, cls],
       [gaveUp, gym, cls],
       [waiting, gym, cls],
@@ -315,8 +325,8 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
         for (const [who, where, session] of everyone) {
           const one = await seenRaw(where, who, session, target);
           const week = await weekRaw(where, who, target);
-          // Otto is booked on nothing, in his own gym or this one.
-          const theirOwn = who === booked;
+          // The three who hold a place. Otto is booked on nothing, in his own gym or this one.
+          const theirOwn = who === booked || who === came || who === missed;
           for (const res of [one, week]) {
             expect(res.body.includes(LINK), `${who.name} at ${where.id === gym.id ? "the gym" : "another gym"}, ${when}`).toBe(theirOwn && inside);
           }
@@ -334,6 +344,13 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
       expect((await seen(gym, never, cls)).online?.state, when).toBe(at >= end ? "closed" : "not_booked");
     }
 
+    // The rule's own guard, on what the read would hold for somebody who stopped being a
+    // member a moment after the gate let them through: a place still booked, and no link.
+    const session = { id: cls, classTypeId: cls, className: "x", openGym: false, localDate: "2026-01-01", localStartMinute: 0, startsAt: new Date(start), minutes: 45, places: 4, cancelled: false, coachUserId: null, online: true, onlineLink: LINK };
+    const kept = { id: cls, seq: 1, sessionId: cls, userId: left.userId, status: "booked" as const, heldMembershipId: null, packCharged: false };
+    expect(onlineFor({ session, booker: { entryId: null }, latest: kept }, new Date(start))).toMatchObject({ state: "open", link: LINK });
+    expect(onlineFor({ session, booker: null, latest: kept }, new Date(start))).toMatchObject({ state: "not_booked", link: null });
+
     // Under way, the class is still on Bea's list, with her link; it is on nobody else's.
     clock = start + 10 * MIN;
     const onList = async (who: Person): Promise<boolean> =>
@@ -341,8 +358,49 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
     expect(await onList(booked)).toBe(true);
     expect(await onList(waiting)).toBe(false);
     expect(await onList(never)).toBe(false);
+    // Staff cancel it while it runs: it is on no list, and the link is nobody's.
+    await sql`UPDATE gym_class_sessions SET status = 'cancelled' WHERE id = ${cls}`;
+    expect(await onList(booked)).toBe(false);
+    expect((await seenRaw(gym, booked, cls)).body).not.toContain(LINK);
+    await sql`UPDATE gym_class_sessions SET status = 'scheduled' WHERE id = ${cls}`;
+    expect(await onList(booked)).toBe(true);
     clock = end;
     expect(await onList(booked)).toBe(false);
+  });
+
+  it("an online class that runs over the gym's midnight stays on its member's list, with the link, until it ends", async () => {
+    const LINK = linkFor("midnight");
+    const gym = await makeGym("Midnight House");
+    // Tomorrow, 23:30 to 00:15 on the gym's own clock.
+    const [at] = await sql<{ start: Date }[]>`
+      SELECT (((now() AT TIME ZONE 'Europe/London')::date + 1 + time '23:30') AT TIME ZONE 'Europe/London') AS start`;
+    if (at === undefined) throw new Error("no start");
+    const start = at.start.getTime();
+    clock = start - HOUR;
+    const cls = await classAt(gym, start, { link: LINK });
+    const who = await member(gym, "Nell Night");
+    const other = await member(gym, "Ola Other");
+    await book(gym, who, cls);
+    const onList = async (p: Person): Promise<boolean> => {
+      const res = await weekRaw(gym, p);
+      const has = (JSON.parse(res.body) as MemberClassesResponse).classes.some((c) => c.sessionId === cls);
+      expect(res.body.includes(LINK)).toBe(has && p === who && clock >= start - 30 * MIN);
+      return has;
+    };
+    for (const [minute, mine] of [
+      [-60, true],
+      [20, true],
+      [29, true],
+      // Past midnight: the gym's today is the day after the class's own.
+      [31, true],
+      [44, true],
+      [45, false],
+    ] as const) {
+      clock = start + minute * MIN;
+      expect(await onList(who), String(minute)).toBe(mine);
+      // Somebody not booked sees it only while it can still be booked.
+      expect(await onList(other), String(minute)).toBe(minute < 0);
+    }
   });
 
   it("the place staff take away, and the place the waitlist is handed, each change who is sent the link", async () => {
@@ -381,7 +439,7 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
 
     const LINK = linkFor("late");
     const set = (body: unknown, by: Person = gym.owner, session = cls) => inject("PUT", `/v1/orgs/${gym.id}/class-sessions/${session}/online`, by.cookies, body);
-    const saved = await set({ online: true, onlineLink: LINK });
+    const saved = await set({ online: true, onlineLink: LINK.replace("https://", "Https://") });
     expect(saved.statusCode, saved.body).toBe(200);
     const week = JSON.parse(saved.body) as GymClassWeekResponse;
     expect(week.sessions.find((s) => s.id === cls)).toMatchObject({ online: true, onlineLink: LINK, onlineAlone: true, ended: false });
@@ -430,6 +488,24 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
     expect((await set({ online: true, onlineLink: LINK }, manager, fresh)).statusCode).toBe(200);
     await sql`UPDATE gym_class_sessions SET status = 'cancelled' WHERE id = ${fresh}`;
     expect(no(await set({ online: true, onlineLink: NEW }, manager, fresh))).toBe("409 class_day_cancelled");
+
+    // Who a change would reach, for the box that asks: this class's people who hold a place.
+    const reach = await classAt(gym, T0 + 2 * DAY, { places: 1, link: LINK });
+    const waits = await member(gym, "Wim Waits");
+    await book(gym, who, reach);
+    await book(gym, waits, reach, true);
+    const affected = (by: Person, session = reach, at = gym) => inject("GET", `/v1/orgs/${at.id}/class-sessions/${session}/online`, by.cookies);
+    expect(JSON.parse((await affected(gym.owner)).body)).toEqual({ classes: 1, booked: 1 });
+    expect(JSON.parse((await affected(manager)).body)).toEqual({ classes: 1, booked: 1 });
+    expect(no(await affected(trainer))).toBe("403 forbidden");
+    expect((await affected(rival.owner)).statusCode).toBe(404);
+    expect((await affected(rival.owner, reach, rival)).statusCode).toBe(404);
+    expect((await affected(who)).statusCode).toBe(404);
+    expect((await inject("GET", `/v1/orgs/${gym.id}/class-sessions/${reach}/online`, {})).statusCode).toBe(401);
+    // Over, it changes nothing and reaches nobody.
+    clock = T0 + 2 * DAY + LENGTH;
+    expect(JSON.parse((await affected(gym.owner)).body)).toEqual({ classes: 0, booked: 0 });
+    clock = T0;
 
     // The link is in no audit row.
     const logged = await sql<{ meta: unknown }[]>`SELECT meta FROM audit_log WHERE gym_id = ${gym.id}`;
@@ -482,6 +558,18 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
     expect((await inject("PUT", `/v1/orgs/${rival.id}/class-repeats/${slotId}/online`, rival.owner.cookies, { online: true, onlineLink: NEW })).statusCode).toBe(404);
     expect((await put(`/class-repeats/${slotId}/online`, { online: false, onlineLink: NEW })).statusCode).toBe(400);
     expect((await classes()).filter((c) => c.online_link === NEW)).toHaveLength(0);
+    // Who that change would reach: every class of the time slot still to end, but the one
+    // with its own link, and the bookings held on them (one person on two classes is two).
+    const fan = await member(gym, "Fay Fan");
+    const coming = written.filter((c) => c.starts_at.getTime() + LENGTH > clock && c.id !== own.id);
+    for (const c of coming.slice(0, 2)) await book(gym, fan, c.id);
+    await sql`INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, request_key, status, created_at, booked_at)
+              VALUES (${gym.id}, ${own.id}, ${fan.userId}, ${fan.entryId}, gen_random_uuid(), 'booked', now(), now())`;
+    const reach = (by: Person, at = gym) => inject("GET", `/v1/orgs/${at.id}/class-repeats/${slotId}/online`, by.cookies);
+    expect(JSON.parse((await reach(gym.owner)).body)).toEqual({ classes: coming.length, booked: 2 });
+    expect(no(await reach(trainer))).toBe("403 forbidden");
+    expect((await reach(rival.owner)).statusCode).toBe(404);
+    expect((await reach(rival.owner, rival)).statusCode).toBe(404);
     const changed = await put(`/class-repeats/${slotId}/online`, { online: true, onlineLink: NEW });
     expect(changed.statusCode, changed.body).toBe(200);
     expect((JSON.parse(changed.body) as GymClassesResponse).entries[0]?.schedules[0]).toMatchObject({ online: true, onlineLink: NEW });
@@ -506,14 +594,23 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
     expect(slots.every((s) => s.online && s.onlineLink === NEW)).toBe(true);
     const later = slots.find((s) => s.id !== slotId)?.id ?? "";
 
-    // A new start time from a date replaces the classes: the new ones are online, with the link.
+    // A new start time from a date replaces the classes: the new ones are online, with the
+    // link, and a class staff gave a link of its own keeps it on the class written for its date.
     const fromMove = after[20]?.local_date ?? "";
+    const guest = after[25];
+    if (guest === undefined) throw new Error("too few classes");
+    const GUEST = linkFor("guest");
+    expect((await put(`/class-sessions/${guest.id}/online`, { online: true, onlineLink: GUEST })).statusCode).toBe(200);
     const moved = await put(`/class-repeats/${later}`, { updateFrom: fromMove, weekdays: slotBody.weekdays, startMinute: 660, minutes: 60, places: 12, coachUserId: null });
     expect(moved.statusCode, moved.body).toBe(200);
     const all = await classes();
     const atEleven = all.filter((c) => c.local_date >= fromMove);
     expect(atEleven.length).toBeGreaterThan(20);
-    expect(atEleven.every((c) => c.online && c.online_link === NEW && c.schedule_id !== later && c.schedule_id !== slotId)).toBe(true);
+    expect(atEleven.every((c) => c.online && c.schedule_id !== later && c.schedule_id !== slotId && !written.some((w) => w.id === c.id))).toBe(true);
+    for (const c of atEleven) {
+      expect([c.online_link, c.online_alone], c.local_date).toEqual(c.local_date === guest.local_date ? [GUEST, true] : [NEW, false]);
+    }
+    expect(atEleven.some((c) => c.local_date === guest.local_date)).toBe(true);
     expect((JSON.parse(moved.body) as GymClassesResponse).entries[0]?.schedules.every((s) => s.online && s.onlineLink === NEW)).toBe(true);
 
     // Switched off for the first time slot: its coming classes are at the gym again, with no link kept, and the one with its own is left.
@@ -649,8 +746,19 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
     const coach = await staff(gym, "Cy Coach", "trainer");
     const coached = await classAt(gym, T0 + DAY, { coach: coach.userId });
     await book(gym, cat, coached);
+    expect(await classesLeft(packs.get(cat.userId))).toBe(9);
+    // The coach is not sent what a person paid with, and the pack still has its class back.
+    expect((await listOf(gym, coached, coach)).booked[0]).toMatchObject({ packCharged: null, membership: null });
     expect((await removeRaw(gym, coached, await bookingId(coached, cat), coach)).statusCode).toBe(200);
-    expect(await statusOf(coached, cat)).toBe("cancelled");
+    expect(await placeOf(coached, cat)).toEqual(["cancelled", false]);
+    expect(await classesLeft(packs.get(cat.userId))).toBe(10);
+    // A coach taken off the class may no longer remove anybody from it.
+    await book(gym, cat, coached);
+    await sql`UPDATE gym_class_sessions SET coach_user_id = NULL WHERE id = ${coached}`;
+    expect(no(await removeRaw(gym, coached, await bookingId(coached, cat), coach))).toBe("403 forbidden");
+    expect(await statusOf(coached, cat)).toBe("booked");
+    await sql`UPDATE gym_class_sessions SET coach_user_id = ${coach.userId} WHERE id = ${coached}`;
+    expect((await removeRaw(gym, coached, await bookingId(coached, cat), coach)).statusCode).toBe(200);
     await book(gym, cat, coached);
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
     const refused = await removeRaw(gym, coached, await bookingId(coached, cat));

@@ -22,6 +22,7 @@ const api = {
   getStaff: vi.fn(),
   getBookingSettings: vi.fn(),
   setClassRepeatOnline: vi.fn(),
+  getClassRepeatOnline: vi.fn(),
 };
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -105,6 +106,7 @@ beforeEach(() => {
     .mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
   api.addClassRepeat.mockReset().mockResolvedValue(timetable());
   api.setClassRepeatOnline.mockReset().mockResolvedValue(timetable());
+  api.getClassRepeatOnline.mockReset().mockResolvedValue({ data: { classes: 16, booked: 31 } });
   api.updateClassRepeat.mockReset().mockResolvedValue(timetable());
   api.bulkEditClass.mockReset().mockResolvedValue(timetable());
   api.stopClassRepeat.mockReset().mockResolvedValue(timetable({ entries: [{ type: YOGA, schedules: [] }] }));
@@ -1248,7 +1250,7 @@ describe('an online time slot', () => {
     // Nothing about a link until the box is ticked.
     expect(screen.queryByLabelText('Video link')).toBeNull();
     fireEvent.click(screen.getByLabelText('Online class'));
-    expect(screen.getByText('People who are booked see the link in the app from 30 minutes before the class until it ends. Nobody else sees it.')).toBeTruthy();
+    expect(screen.getByText('People who are booked see the link in the app from 30 minutes before the class until it ends. No other member sees it.')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Video link'), { target: { value: 'zoom.us/j/81234567890' } });
     expect(screen.getByText('Paste the whole link, starting with https://')).toBeTruthy();
@@ -1272,6 +1274,9 @@ describe('an online time slot', () => {
     const box = within(screen.getByRole('group', { name: 'Online class' }));
     expect(box.getByText('This changes every coming class of this time slot, except a class you gave a link of its own.')).toBeTruthy();
     expect(box.getByText("The app doesn't tell people who are already booked yet. Tell them yourself if this changes for them.")).toBeTruthy();
+    // How many it reaches, read from the server as the box opens.
+    expect((await box.findByTestId('online-affected')).textContent).toBe('31 bookings are held on the 16 coming classes this changes.');
+    expect(api.getClassRepeatOnline).toHaveBeenCalledWith('g1', 's1');
     // Nothing changed yet, so there is nothing to save.
     expect(box.getByRole('button', { name: 'Save' }).disabled).toBe(true);
     fireEvent.click(box.getByLabelText('Online class'));

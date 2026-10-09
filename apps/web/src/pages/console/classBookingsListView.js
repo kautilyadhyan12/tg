@@ -93,6 +93,8 @@ export function removeAsk(booking, list) {
   } else {
     lines.push('Their place is cancelled. It is not counted as a late cancel.');
     if (booking.packCharged === true) lines.push('The class goes back on their pack.');
+    // A coach is not sent what a person paid with.
+    else if (booking.packCharged === null || booking.packCharged === undefined) lines.push('If a pack paid for this class, the class goes back on it.');
     if (Array.isArray(list?.waitlisted) && list.waitlisted.length > 0) {
       lines.push('The free place goes to the waitlist, by your booking rules.');
     }

@@ -193,17 +193,7 @@ async function viewFrom(
   // already, so there is nothing to book, wait for or claim.
   const marked = latest?.status === "attended" || latest?.status === "no_show";
   const member = booker !== null && !marked;
-  // The link is read for somebody who is a member now; a place kept by somebody who has
-  // left the gym is nobody's way in.
-  const online = classOnlineView({
-    online: session.online,
-    link: session.onlineLink,
-    status: booker === null ? null : (latest?.status ?? null),
-    cancelled: session.cancelled,
-    nowMs: now.getTime(),
-    startsAtMs: startsAt,
-    minutes: session.minutes,
-  });
+  const online = onlineFor(ctx, now);
   return {
     sessionId: session.id,
     className: session.className,
@@ -236,6 +226,21 @@ async function viewFrom(
     online: online === null ? null : { state: online.state, opensAt: new Date(online.opensAtMs).toISOString(), link: online.link },
   };
 }
+/** An online class as this person meets it now, by the one rule. The link is for
+ *  somebody who is a member now: a place kept by somebody who has left the gym is nobody's
+ *  way in. */
+export function onlineFor(ctx: Pick<repo.BookingContext, "session" | "booker" | "latest">, now: Date): ReturnType<typeof classOnlineView> {
+  return classOnlineView({
+    online: ctx.session.online,
+    link: ctx.session.onlineLink,
+    status: ctx.booker === null ? null : (ctx.latest?.status ?? null),
+    cancelled: ctx.session.cancelled,
+    nowMs: now.getTime(),
+    startsAtMs: ctx.session.startsAt.getTime(),
+    minutes: ctx.session.minutes,
+  });
+}
+
 export async function getBooking(deps: Pick<BookingsDeps, "sql" | "now">, userId: string, gymId: string, sessionId: string, limit: Limit): Promise<ClassBookingView | null> {
   await requireMember(deps, gymId, userId);
   if (!(await limit())) return null;
@@ -629,6 +634,8 @@ export async function removeBooking(
       await lockOrgRow(tx, gymId);
       const ctx = await repo.classContext(tx, gymId, sessionId);
       if (ctx === null) return classNotFound();
+      // Whose class it is, read again now that it is held.
+      if (!manages && ctx.session.coachUserId !== staffId) return new OrgsError(403, "forbidden", "Your role doesn't allow that.");
       const booking = await repo.bookingToRemove(tx, gymId, sessionId, bookingId);
       if (booking === null) return new OrgsError(404, "booking_not_found", CLASS_REMOVE_WORDS.booking_not_found);
       const now = deps.now();

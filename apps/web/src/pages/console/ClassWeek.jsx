@@ -128,6 +128,7 @@ function DayForm({
  *  class has none, a cancelled one can be un-cancelled, any other can be edited
  *  or cancelled. */
 function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVersion, trainingTo, onOpenPerson, onClose, onChange, onCancel, onRestore, onOnline }) {
+  const readAffected = () => orgService.getClassDayOnline(gymId, session.id);
   const [mode, setMode] = useState(null);
   const [draft, setDraft] = useState(() => dayDraft(session));
   const [scope, setScope] = useState('this');
@@ -225,7 +226,7 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
       )}
 
       {mode === 'online' ? (
-        <OnlineBox holder={session} kind="class" busy={busy} onSave={onOnline} onClose={() => setMode(null)} />
+        <OnlineBox holder={session} kind="class" busy={busy} onSave={onOnline} onClose={() => setMode(null)} readAffected={readAffected} />
       ) : session.started ? (
         <div className="flex flex-col gap-3">
           <p className="c-s14 c-t3">This class has started, so its time, coach and places can&apos;t be changed.</p>

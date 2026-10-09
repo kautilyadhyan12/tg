@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Tick } from './ClassFields';
 import {
   ONLINE_HELP,
   ONLINE_LINK_HELP,
   ONLINE_NOT_TOLD,
+  onlineAffectedLine,
   onlineChanged,
   onlineDraft,
   onlineProblem,
@@ -52,15 +53,40 @@ export function OnlineFields({ draft, set, disabled }) {
 }
 
 /** `holder`: the time slot or the class as the server last sent it. `onSave(body)`
- *  answers true when it was saved. */
-export function OnlineBox({ holder, kind, busy, onSave, onClose }) {
+ *  answers true when it was saved. `readAffected()`: the server's count of who a change
+ *  reaches, read as the box opens. */
+export function OnlineBox({ holder, kind, busy, onSave, onClose, readAffected }) {
   const [draft, setDraft] = useState(() => onlineDraft(holder));
+  const [affected, setAffected] = useState(null);
+  useEffect(() => {
+    let live = true;
+    Promise.resolve()
+      .then(() => readAffected())
+      .then(
+        (res) => {
+          if (live) setAffected(res.data);
+        },
+        // Without the count the box still says who is not told.
+        () => undefined,
+      );
+    return () => {
+      live = false;
+    };
+    // Read once, as the box opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const reaches = onlineAffectedLine(kind, affected);
   const body = onlineRequest(draft);
   const changed = onlineChanged(holder, draft);
   return (
     <div className="flex flex-col gap-4 c-narrow" role="group" aria-label="Online class">
       <OnlineFields draft={draft} set={(patch) => setDraft({ ...draft, ...patch })} disabled={busy} />
       <p className="c-s13 c-t2 m-0">{onlineScopeNote(kind, holder)}</p>
+      {reaches === '' ? null : (
+        <p className="c-s14 c-w5 c-t1 m-0" data-testid="online-affected">
+          {reaches}
+        </p>
+      )}
       <p className="c-s13 c-t3 m-0">{ONLINE_NOT_TOLD}</p>
       <div className="flex flex-wrap items-center gap-2">
         <button

@@ -332,6 +332,18 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     return reply.status(200).send(answer.body);
   });
 
+  /** Who a change to a class's, or a time slot's, online answer would reach. */
+  app.get("/v1/orgs/:gymId/class-sessions/:sessionId/online", guarded, async (req, reply) => {
+    const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.getOnlineAffected(classDeps, requireUserId(req), params.gymId, { sessionId: params.sessionId }));
+  });
+  app.get("/v1/orgs/:gymId/class-repeats/:scheduleId/online", guarded, async (req, reply) => {
+    const params = parseOr400(classScheduleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.getOnlineAffected(classDeps, requireUserId(req), params.gymId, { scheduleId: params.scheduleId }));
+  });
+
   /** PUT: whether one class is online, and its link, both every time (17g). */
   app.put("/v1/orgs/:gymId/class-sessions/:sessionId/online", guarded, async (req, reply) => {
     const params = parseOr400(classSessionParamsSchema, req.params, req, reply);

@@ -49,6 +49,8 @@ import {
   type GymClassType,
   type GymClassWeekResponse,
   type SetClassOnlineRequest,
+  type ClassOnlineAffected,
+  classOnlineAffectedSchema,
   type UpdateGymClassScheduleRequest,
   type UpdateGymClassTypeRequest,
 } from "@app/shared";
@@ -760,6 +762,20 @@ export async function changeClassSession(
   );
   if (done.kind !== "ok") return done;
   return { kind: "ok", body: await readWeekOr404(deps, gymId, done.localDate) };
+}
+
+/** Who a change to a time slot's online answer (`scheduleId`) or one class's
+ *  (`sessionId`) would reach, for the box that asks before Save. */
+export async function getOnlineAffected(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  which: { scheduleId: string } | { sessionId: string },
+): Promise<ClassOnlineAffected> {
+  await requirePrivilege(deps, gymId, userId, "schedule.manage");
+  const affected = await online.onlineAffected(deps.sql, gymId, which, deps.now());
+  if (affected === null) throw new OrgsError(404, "class_not_found", NOT_FOUND_MESSAGE);
+  return classOnlineAffectedSchema.parse(affected);
 }
 
 /** A time slot is online or not, with the gym's own link: the time slot and each of its

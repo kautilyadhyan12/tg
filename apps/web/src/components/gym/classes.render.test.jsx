@@ -1,7 +1,7 @@
 // A GYM'S CLASSES FOR ITS MEMBER, drawn (spec Part 3 §13.6; ROADMAP 17d). Only the network
 // is mocked: what a member sees is read off the real component.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const svc = { list: vi.fn(), book: vi.fn(), cancel: vi.fn() };
 vi.mock('../../api/classesApi', () => ({ classesService: svc }));
@@ -334,6 +334,57 @@ describe('an online class, for a member', () => {
     await screen.findByText('Bad Scheme');
     expect(screen.queryByRole('link')).toBeNull();
     expect(within(rowOf('Cancelled Online')).queryByTestId('class-online')).toBeNull();
+  });
+
+  it('a device whose clock runs fast keeps reading until the server sends the link, and reads once more when the class ends', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      // The link is due at 16:30:00 by the server. This device says 16:29:58 when the
+      // server's clock says 16:29:53: five seconds fast.
+      vi.setSystemTime(new Date('2026-10-07T16:29:58.000Z'));
+      const early = klass('s1', 'Online Pilates', { mine: mine('booked'), can: can({ cancel: 'free' }), online: online('early') });
+      serve([early]);
+      render(<Classes gym={GYM} />);
+      await vi.waitFor(() => expect(screen.getByText('Online Pilates')).toBeTruthy());
+      expect(svc.list).toHaveBeenCalledTimes(1);
+
+      // Its own 16:30:01: the server still says early. It must not give up.
+      // `act`: the screen is drawn from each read before the clock moves on, as on a real device.
+      await act(() => vi.advanceTimersByTimeAsync(3_500));
+      expect(svc.list).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole('link')).toBeNull();
+      // Twenty seconds on the server has passed its moment: the link is sent, and drawn.
+      serve([{ ...early, online: online('open', LINK) }]);
+      await act(() => vi.advanceTimersByTimeAsync(20_500));
+      expect(screen.getByRole('link', { name: /^Join class/ }).getAttribute('href')).toBe(LINK);
+      const reads = svc.list.mock.calls.length;
+
+      // The class ends at 17:45: the list is read again and the way in goes.
+      serve([]);
+      await act(() => vi.advanceTimersByTimeAsync(74 * 60_000));
+      expect(svc.list.mock.calls.length).toBe(reads);
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(svc.list.mock.calls.length).toBe(reads + 1);
+      expect(screen.queryByRole('link')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a class whose link the gym has not added yet is read again until it is there', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-07T16:40:00.000Z'));
+      const waiting = klass('s1', 'Online Core', { mine: mine('booked'), can: can({ cancel: 'free' }), online: online('no_link') });
+      serve([waiting]);
+      render(<Classes gym={GYM} />);
+      await vi.waitFor(() => expect(screen.getByText('Online Core')).toBeTruthy());
+      serve([{ ...waiting, online: online('open', LINK) }]);
+      await act(() => vi.advanceTimersByTimeAsync(21_000));
+      expect(screen.getByRole('link', { name: /^Join class/ }).getAttribute('href')).toBe(LINK);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reads the list again by itself the moment a booked class’s link is due', async () => {

@@ -111,8 +111,21 @@ describe("the gym's own link", () => {
     expect(classOnlineLinkSchema.parse(link)).toBe(link.trim());
   });
 
+  it("a capital H, as a phone's keyboard writes it, is taken and kept as https://", () => {
+    expect(classOnlineLinkSchema.parse("Https://meet.google.com/abc-defg-hij")).toBe("https://meet.google.com/abc-defg-hij");
+    expect(classOnlineLinkSchema.parse("HTTPS://zoom.us/j/5551112222")).toBe("https://zoom.us/j/5551112222");
+    // The rest of the link is kept as typed: a meeting's password is case-sensitive.
+    expect(classOnlineLinkSchema.parse("HTTPS://Zoom.us/j/555?pwd=AbC")).toBe("https://Zoom.us/j/555?pwd=AbC");
+    expect(setClassOnlineRequestSchema.parse({ online: true, onlineLink: "Https://zoom.us/j/1" })).toEqual({ online: true, onlineLink: "https://zoom.us/j/1" });
+  });
+
   it.each([
-    ["no https", "http://zoom.us/j/5551112222"],
+    ["a character nobody can see, copied in with it", "https://zoom.us/j/555\u200b1112222"],
+    ["a joiner nobody can see", "https://zoom.us/j/555\u200d1112222"],
+    ["a byte-order mark inside it", "https://zoom.us/j/\ufeff5551112222"],
+    ["a site that is only a dot", "https://./x"],
+    ["a site that ends at its dot", "https://zoom./j/1"],
+    ["a capital HTTP", "HTTP://zoom.us/j/5551112222"],
     ["no scheme", "zoom.us/j/5551112222"],
     ["the Zoom app's own scheme", "zoommtg://zoom.us/join?confno=5551112222"],
     ["a script", "javascript:alert(1)"],
@@ -160,6 +173,10 @@ describe("staff take one person off a class", () => {
 
   it("a place a check-in marked came before the start is removed as the booked place it was", () => {
     expect(remove({ status: "attended", packCharged: true })).toEqual({ kind: "remove", refundPack: true, freesPlace: true });
+  });
+
+  it("a place marked no-show before the start (nothing writes one today) is removed as a held place", () => {
+    expect(remove({ status: "no_show", packCharged: true })).toEqual({ kind: "remove", refundPack: true, freesPlace: true });
   });
 
   it("somebody waiting: removed, and no place is freed", () => {

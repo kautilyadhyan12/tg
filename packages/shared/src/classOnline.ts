@@ -21,20 +21,33 @@ function webAddress(value: string): URL | null {
 }
 
 /** The gym's own video link: an `https://` address of a named site, with no sign-in
- *  written into it and no spaces. */
+ *  written into it, no spaces and no character that cannot be seen. "Https://", as a
+ *  phone's keyboard writes it, is taken and kept as "https://". */
 export const classOnlineLinkSchema = z
   .string()
   .trim()
   .min(1)
   .max(CLASS_ONLINE_LINK_MAX)
+  .transform((value) => value.replace(/^https:\/\//i, "https://"))
   .refine(
     (value) => {
-      if (!value.startsWith("https://") || /\s/.test(value)) return false;
+      if (!value.startsWith("https://") || /[\s\u200b-\u200d\ufeff]/.test(value)) return false;
       const url = webAddress(value);
-      return url !== null && url.protocol === "https:" && url.username === "" && url.password === "" && url.hostname.includes(".");
+      return (
+        url !== null &&
+        url.protocol === "https:" &&
+        url.username === "" &&
+        url.password === "" &&
+        /[a-z0-9]\.[a-z0-9]/i.test(url.hostname)
+      );
     },
     { message: "not an https link" },
   );
+
+/** Who a change to a time slot's or a class's online answer reaches: the classes it
+ *  changes, and the bookings that hold a place on them (in one class, people). */
+export const classOnlineAffectedSchema = z.object({ classes: z.number().int().min(0), booked: z.number().int().min(0) }).strict();
+export type ClassOnlineAffected = z.infer<typeof classOnlineAffectedSchema>;
 
 /** A time slot's or one class's online answer, both keys every time: `online` false
  *  carries no link, and `online` true with no link is "the link is added later". */

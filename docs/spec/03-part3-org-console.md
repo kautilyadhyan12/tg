@@ -2673,9 +2673,10 @@ trainer sees the lists of their own classes.
 *(17g, 2026-10-09: **online classes.** A time slot is marked Online and carries the gym's
 own video link (`gym_class_schedules.online`, `online_link`; `0088`); each class on the
 calendar has its own copy, stamped when it is written, and a time slot that carries on
-from another (a split or a move from a date) takes its answer. The link is an `https://`
-address of a named site, at most 500 characters, with no sign-in written into it; it may
-be added later. It is changed at `PUT …/class-repeats/:id/online` (the time slot and each
+from another (a split or a move from a date) takes its answer; a class given a link of
+its own keeps it on the class a move writes for its date. The link is an `https://`
+address of a named site, at most 500 characters, with no sign-in written into it and no
+character that cannot be seen ("Https://" is kept as "https://"); it may be added later. It is changed at `PUT …/class-repeats/:id/online` (the time slot and each
 of its classes that has not ended, except one set on its own) and
 `PUT …/class-sessions/:id/online` (one class, until it ends, which then keeps its own:
 `online_alone`), both on `schedule.manage`, both keys every time. We host no video. **Who
@@ -2683,7 +2684,9 @@ is sent the link** is one rule, `classOnlineView` in `packages/shared/src/classO
 somebody who holds a place (booked, or marked came or no-show), from 30 minutes before the
 class starts until it ends, in a class that runs; nobody waiting, nobody who cancelled or
 was taken off, nobody else. A member's list keeps an online class under way that they hold
-a place in, so Join class stays until it ends. Staff who run the timetable, and the class's
+a place in, one that runs past the gym's midnight too, so Join class stays until it ends;
+the screen reads the list again when a link is due and when the class ends, and every 20
+seconds while a link is due and not there. Staff who run the timetable, and the class's
 own coach, read the link with the class. The link is never written to the audit log. A
 check-in at the gym never marks an online class, and the run after a class ends leaves it:
 staff mark it. Places, the waitlist and cancelling are as for any class.)*
