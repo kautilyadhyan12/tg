@@ -1424,11 +1424,13 @@ export const orgService = {
    *
    *  Keys first, then membership: a failure between the two leaves somebody who is
    *  a member and no longer staff, which the panel names. */
-  removeStaff: (gymId, userId) =>
+  removeStaff: (gymId, userId, { confirmPtSessions = null } = {}) =>
     readThrough(
       removeOrgStaffResponseSchema,
       'that removal',
-      authApi.delete(`/v1/orgs/${gymId}/staff/${userId}`),
+      // 17e-iv-b: `confirmPtSessions` is the `mark` of the personal training sessions booked
+      // with them that the box named (409 `pt_sessions_ending`).
+      authApi.delete(`/v1/orgs/${gymId}/staff/${userId}`, { params: confirmPtSessions === null ? {} : { confirmPtSessions } }),
     ),
 
   /** The gym's membership types (Part 3 §13.1): what it sells and what each costs.
@@ -1812,6 +1814,15 @@ export const orgService = {
       ptAppointmentResponseSchema,
       'that session',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/pt/appointments/${encodeURIComponent(appointmentId)}/cancel`, { lateOk, giveBack }),
+    ),
+
+  /** POST …/pt/appointments/:id/mark — came (`attended`) or no-show (`no_show`), once the
+   *  session has started. The same mark again changes nothing. */
+  markPt: (gymId, appointmentId, status) =>
+    readThrough(
+      ptAppointmentResponseSchema,
+      'that session',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/pt/appointments/${encodeURIComponent(appointmentId)}/mark`, { status }),
     ),
 };
 

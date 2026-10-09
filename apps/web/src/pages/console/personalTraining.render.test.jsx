@@ -11,6 +11,7 @@ const api = {
   getPtPeople: vi.fn(),
   bookPt: vi.fn(),
   cancelPt: vi.fn(),
+  markPt: vi.fn(),
   addPtTimeOff: vi.fn(),
   removePtTimeOff: vi.fn(),
   getBookingSettings: vi.fn(),
@@ -951,5 +952,80 @@ describe("a trainer's time off", () => {
     expect(panel().queryByRole('button', { name: /Remove time off/ })).toBeNull();
     expect(panel().queryByRole('button', { name: 'Add time off' })).toBeNull();
     expect(panel().getByRole('button', { name: 'Close' })).toBeTruthy();
+  });
+});
+
+// CAME OR NO-SHOW (17e-iv-b).
+describe('came or no-show', () => {
+  const startedSession = (over = {}) => mayaSession({ cancel: null, canMark: true, ...over });
+
+  it('a session that has not started has no mark buttons', async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([mayaSession({ canMark: false })]) });
+    open();
+    const day = await friday();
+    expect(day.queryByTestId('pt-mark')).toBeNull();
+    expect(day.queryByRole('button', { name: 'Mark that Maya Lopez came' })).toBeNull();
+  });
+
+  it('a started session reads Not marked yet with Came and No-show; Came is sent and the week is read again', async () => {
+    api.getPtWeek
+      .mockResolvedValueOnce({ data: week([startedSession()]) })
+      .mockResolvedValue({ data: week([startedSession({ status: 'attended' })]) });
+    api.markPt.mockResolvedValue({ data: { appointment: startedSession({ status: 'attended' }) } });
+    open();
+    const mark = within(await (await friday()).findByTestId('pt-mark'));
+    expect(mark.getByText('Not marked yet')).toBeTruthy();
+    expect(mark.getByRole('button', { name: 'Mark Maya Lopez as a no-show' }).textContent).toBe('No-show');
+    expect(api.markPt).not.toHaveBeenCalled();
+    fireEvent.click(mark.getByRole('button', { name: 'Mark that Maya Lopez came' }));
+    await waitFor(() => expect(api.markPt).toHaveBeenCalledWith('g1', SESSION, 'attended'));
+    await waitFor(() => expect(within(screen.getByTestId('pt-mark')).getByText('Came')).toBeTruthy());
+    expect(screen.queryByText('Not marked yet')).toBeNull();
+    expect(within(screen.getByTestId('pt-mark')).getByRole('button', { name: 'Change Maya Lopez to no-show' })).toBeTruthy();
+  });
+
+  it('a no-show says the session stays used, and can be changed to came', async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([startedSession({ status: 'no_show' })]) });
+    api.markPt.mockResolvedValue({ data: { appointment: startedSession({ status: 'attended' }) } });
+    open();
+    const mark = within(await (await friday()).findByTestId('pt-mark'));
+    expect(mark.getByText('No-show')).toBeTruthy();
+    expect(mark.getByText('The session stays used on their pack.')).toBeTruthy();
+    fireEvent.click(mark.getByRole('button', { name: 'Change Maya Lopez to came' }));
+    await waitFor(() => expect(api.markPt).toHaveBeenCalledWith('g1', SESSION, 'attended'));
+  });
+
+  it("a refused mark shows the server's sentence under the session, and the week is read again", async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([startedSession()]) });
+    api.markPt.mockRejectedValue({ response: { status: 409, data: { error: 'mark_cancelled', message: "This session was cancelled, so it can't be marked." } } });
+    open();
+    const mark = within(await (await friday()).findByTestId('pt-mark'));
+    const reads = api.getPtWeek.mock.calls.length;
+    fireEvent.click(mark.getByRole('button', { name: 'Mark Maya Lopez as a no-show' }));
+    expect(await screen.findByText("This session was cancelled, so it can't be marked.")).toBeTruthy();
+    await waitFor(() => expect(api.getPtWeek.mock.calls.length).toBeGreaterThan(reads));
+  });
+
+  it('Previous week turns back to days gone by, and the page says why they are shown', async () => {
+    const past = week([startedSession({ localDate: '2026-10-02' })], {
+      firstDay: '2026-09-09',
+      from: '2026-09-30',
+      to: '2026-10-06',
+      days: ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06'].map((localDate) => ({
+        localDate,
+        free: [],
+        appointments: localDate === '2026-10-02' ? [startedSession({ localDate })] : [],
+        classes: [],
+      })),
+    });
+    api.getPtWeek.mockImplementation((gymId, trainer, from) => Promise.resolve({ data: from === '2026-09-30' ? past : week([mayaSession()], { firstDay: '2026-09-09' }) }));
+    open();
+    await friday();
+    expect(screen.queryByText('Days that have passed are shown so you can mark who came.')).toBeNull();
+    const previous = screen.getByRole('button', { name: /Previous week/ });
+    expect(previous.disabled).toBe(false);
+    fireEvent.click(previous);
+    expect(await screen.findByText('Days that have passed are shown so you can mark who came.')).toBeTruthy();
+    expect(within(screen.getByTestId('pt-mark')).getByRole('button', { name: 'Mark that Maya Lopez came' })).toBeTruthy();
   });
 });

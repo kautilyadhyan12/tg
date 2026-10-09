@@ -30,6 +30,7 @@ import {
   addRange,
   bookCost,
   bookSentence,
+  MARK_FAILED,
   bookableUntil,
   canAddRange,
   canGoEarlier,
@@ -51,6 +52,8 @@ import {
   pickerIsEmpty,
   removeRange,
   sessionClash,
+  markRow,
+  pastDaysNote,
   sessionRow,
   sessionsAWeek,
   setRange,
@@ -656,10 +659,31 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, orgType, membersT
 }
 
 /** One booked session, with its Cancel and the box that asks first. */
-function SessionRow({ appointment, classes, timeOff, canBook, first, clockFormat, freeCancelMinutes, locked, asking, settled, busy, error, onAsk, onKeep, onCancel, onClose }) {
+function SessionRow({
+  appointment,
+  classes,
+  timeOff,
+  canBook,
+  first,
+  clockFormat,
+  freeCancelMinutes,
+  locked,
+  asking,
+  settled,
+  busy,
+  error,
+  marking,
+  markError,
+  onAsk,
+  onKeep,
+  onCancel,
+  onClose,
+  onMark,
+}) {
   const row = sessionRow(appointment, clockFormat);
   const clash = sessionClash(appointment, classes, timeOff, canBook);
   const box = asking ? cancelBox(appointment, { freeCancelMinutes, clockFormat }) : null;
+  const mark = markRow(appointment);
   return (
     <li className="flex flex-col gap-3 py-3 min-w-0" style={first ? undefined : { borderTop: '1px solid var(--line)' }} data-testid="pt-session">
       <div className="flex items-center justify-between gap-3 min-w-0 min-h-11">
@@ -680,6 +704,34 @@ function SessionRow({ appointment, classes, timeOff, canBook, first, clockFormat
           </button>
         ) : null}
       </div>
+      {mark !== null ? (
+        // Came or no-show, once the session has started (17e-iv-b).
+        <div className="flex flex-col gap-2" role="group" aria-label={`Did ${row.name} come?`} data-testid="pt-mark">
+          <div className="flex flex-wrap items-center gap-2">
+            {mark.tag !== null ? <span className={`c-tag c-tag-${mark.tag.tone}`}>{mark.tag.label}</span> : <span className="c-s13 c-w5 c-t2">{mark.note}</span>}
+            {locked
+              ? null
+              : mark.actions.map((action) => (
+                  <button
+                    key={action.status}
+                    type="button"
+                    onClick={() => onMark(action.status)}
+                    disabled={marking}
+                    aria-label={action.aria}
+                    className="c-btn c-btn-sm c-btn-s"
+                  >
+                    {action.label}
+                  </button>
+                ))}
+          </div>
+          {mark.tag !== null && mark.note !== '' ? <span className="c-s13 c-t3">{mark.note}</span> : null}
+          {markError !== null ? (
+            <p className="c-s14 c-w5 m-0" role="alert" style={{ color: 'var(--bad)' }}>
+              {markError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {box !== null ? (
         <div className="flex flex-col gap-3" role="group" aria-label="Cancel this session">
           {settled ? null : <p className="c-s14 c-t1 m-0">{box.question}</p>}
@@ -744,6 +796,9 @@ export default function PersonalTraining() {
   // The server said the session was already cancelled another way: its words stay on
   // screen until staff close the box, and only then is the week read again.
   const [cancelSettled, setCancelSettled] = useState(false);
+  // Came or no-show: the session being saved, and the one whose save was refused.
+  const [markBusy, setMarkBusy] = useState(null);
+  const [markFailed, setMarkFailed] = useState(null);
   // A press on a trainer's name or See week: their week is brought into view once it is
   // drawn, so the press is seen to do something in a short window (Kd, 23d's click-through).
   const weekRef = useRef(null);
@@ -938,6 +993,20 @@ export default function PersonalTraining() {
       }
     } finally {
       setCancelBusy(false);
+    }
+  };
+
+  const markSession = async (appointment, status) => {
+    setMarkBusy(appointment.id);
+    setMarkFailed(null);
+    try {
+      await orgService.markPt(gymId, appointment.id, status);
+    } catch (err) {
+      // Refused (cancelled meanwhile, say): the server's sentence, and the week as it now is.
+      setMarkFailed({ id: appointment.id, message: errorText(err, MARK_FAILED) });
+    } finally {
+      setWeekKey((n) => n + 1);
+      setMarkBusy(null);
     }
   };
 
@@ -1221,7 +1290,7 @@ export default function PersonalTraining() {
 
           {shownWeek?.data ? (
             <>
-              <p className="c-s13 c-t3 m-0">{bookableUntil(shownWeek.data)}</p>
+              <p className="c-s13 c-t3 m-0">{pastDaysNote(shownWeek.data) ?? bookableUntil(shownWeek.data)}</p>
               {noTimesNote(shownWeek.data, trainer) !== null ? (
                 <section className="c-card p-5">
                   <p className="c-s15 c-t2 m-0">{noTimesNote(shownWeek.data, trainer)}</p>
@@ -1281,6 +1350,9 @@ export default function PersonalTraining() {
                                 onClose={readWeekAgain}
                                 busy={cancelBusy}
                                 error={cancelling === appointment.id ? cancelError : null}
+                                marking={markBusy !== null}
+                                markError={markFailed?.id === appointment.id ? markFailed.message : null}
+                                onMark={(status) => void markSession(appointment, status)}
                                 onAsk={() => {
                                   setBooking(null);
                                   setCancelError(null);

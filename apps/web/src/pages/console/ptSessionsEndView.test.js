@@ -2,7 +2,7 @@
 // membership's cancel ends them (ROADMAP 17e-iv-a).
 import { describe, expect, it } from 'vitest';
 import { ptSessionsEndingSchema } from '@app/shared';
-import { ptEndingAction, ptEndingRow, ptEndingWords, ptSessionsAsked } from './ptSessionsEndView';
+import { ptEndBoxWords, ptEndingAction, ptEndingRow, ptEndingWords, ptSessionsAsked } from './ptSessionsEndView';
 
 const MARK = 'c'.repeat(64);
 const session = (n, over = {}) => ({
@@ -64,5 +64,20 @@ describe('the box’s words', () => {
     expect([words.title, words.change, ptEndingAction(box)]).toEqual([title, change, action]);
     // The server names a hundred at most; the rest are counted, never dropped.
     expect(words.unlisted).toBe(count - 1);
+  });
+});
+
+describe('the box over the page says what the person is being removed from (17e-iv-b)', () => {
+  const two = { count: 2, packSessions: 0 };
+  it.each([
+    ['app', 'Remove Sam Reed?', "Sam Reed hasn't been removed yet: they have personal training booked.", true],
+    ['staff', 'Remove Sam Reed from staff?', "Sam Reed hasn't been removed yet: people are booked with them for personal training.", false],
+    ['both', 'Remove Sam Reed from staff and the app?', "Sam Reed hasn't been removed yet: personal training is booked with them or for them.", false],
+  ])('%s', (from, heading, why, onePerson) => {
+    expect(ptEndBoxWords('Sam Reed', two, from)).toEqual({ heading, why, go: 'Remove and cancel 2 sessions', onePerson });
+  });
+
+  it('left out, it is the box for one person in the app', () => {
+    expect(ptEndBoxWords('Sam Reed', { count: 1, packSessions: 0 }).heading).toBe('Remove Sam Reed?');
   });
 });

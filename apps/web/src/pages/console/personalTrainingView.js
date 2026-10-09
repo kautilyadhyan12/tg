@@ -266,9 +266,52 @@ export function weekTitle(week) {
   return `${dayLabel(week.from)} – ${dayLabel(week.to)}`;
 }
 
+/** Days gone by can be turned back to, as far as the server reads them, to mark who came. */
 export function canGoEarlier(week) {
-  return week.from > week.today;
+  return week.from > (week.firstDay ?? week.today);
 }
+
+/** Said over a week that holds days gone by; null for any other. */
+export function pastDaysNote(week) {
+  return week.from < week.today ? 'Days that have passed are shown so you can mark who came.' : null;
+}
+
+/** Came or no-show, for a session that has started (`canMark`); null for any other. What
+ *  it is marked now (`tag`), what that means for the person (`note`), and the buttons:
+ *  each `status` is what the server is sent. */
+export function markRow(appointment) {
+  if (appointment?.canMark !== true) return null;
+  const name = appointment.name ?? 'this person';
+  if (appointment.status === 'attended') {
+    return {
+      tag: { label: 'Came', tone: 'good' },
+      note: '',
+      actions: [{ status: 'no_show', label: 'Change to no-show', aria: `Change ${name} to no-show` }],
+    };
+  }
+  if (appointment.status === 'no_show') {
+    return {
+      tag: { label: 'No-show', tone: 'warn' },
+      note: appointment.packCharged
+        ? 'The session stays used on their pack.'
+        : appointment.usesLimit === true
+          ? 'It still counts as one of the sessions their membership includes.'
+          : '',
+      actions: [{ status: 'attended', label: 'Change to came', aria: `Change ${name} to came` }],
+    };
+  }
+  return {
+    tag: null,
+    note: 'Not marked yet',
+    actions: [
+      { status: 'attended', label: 'Came', aria: `Mark that ${name} came` },
+      { status: 'no_show', label: 'No-show', aria: `Mark ${name} as a no-show` },
+    ],
+  };
+}
+
+/** What staff read when a mark is refused. */
+export const MARK_FAILED = "We couldn't save that. Please try again.";
 
 export function canGoLater(week) {
   return week.to < week.lastDay;

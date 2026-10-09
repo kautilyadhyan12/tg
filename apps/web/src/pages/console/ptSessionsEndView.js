@@ -1,4 +1,5 @@
 import { PT_SESSIONS_ENDING_ERROR, ptSessionsEndingSchema, ptSessionsEndingWords } from '@app/shared';
+// A trainer leaving the staff ends the sessions booked WITH them the same way (17e-iv-b).
 import { dayHeading, timeRange } from './classesView';
 
 // PERSONAL TRAINING SESSIONS THAT END WHEN A PERSON LEAVES (spec Part 3 §13.5; ROADMAP
@@ -56,6 +57,31 @@ export function ptEndingWords(ending, clockFormat, onePerson = false) {
       .filter((line) => line !== null)
       .join(' '),
   };
+}
+
+/** The box of its own over the page: its heading, why nobody was removed yet, and its two
+ *  buttons. `from`: what they are being removed from: 'app' (a member), 'staff' (a trainer
+ *  who keeps their place in the app) or 'both'. A trainer's box names the people booked
+ *  with them, so its lines lead with the person. */
+export function ptEndBoxWords(name, ending, from = 'app') {
+  const go = `Remove and ${ptEndingAction(ending)}`;
+  if (from === 'staff') {
+    return {
+      heading: `Remove ${name} from staff?`,
+      why: `${name} hasn't been removed yet: people are booked with them for personal training.`,
+      go,
+      onePerson: false,
+    };
+  }
+  if (from === 'both') {
+    return {
+      heading: `Remove ${name} from staff and the app?`,
+      why: `${name} hasn't been removed yet: personal training is booked with them or for them.`,
+      go,
+      onePerson: false,
+    };
+  }
+  return { heading: `Remove ${name}?`, why: `${name} hasn't been removed yet: they have personal training booked.`, go, onePerson: true };
 }
 
 /** "cancel 2 sessions", for a button that goes ahead. */

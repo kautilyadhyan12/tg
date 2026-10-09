@@ -11,6 +11,8 @@ import {
   bookableUntil,
   canAddRange,
   canGoEarlier,
+  markRow,
+  pastDaysNote,
   canGoLater,
   cancelBox,
   classInTimeOff,
@@ -691,5 +693,54 @@ describe('the steps to a first session, with a tick on each one done', () => {
       title: 'Put your clients on your list',
       line: 'Anybody on your client list can be booked. Import your list, or add people one at a time.',
     });
+  });
+});
+
+describe('came or no-show (17e-iv-b)', () => {
+  const started = (over = {}) => ({ name: 'Maya Lopez', status: 'booked', packCharged: false, usesLimit: false, cancel: null, canMark: true, ...over });
+
+  it('a session that has not started, or was read before the server said, has nothing to mark', () => {
+    expect(markRow(started({ canMark: false, cancel: 'free' }))).toBeNull();
+    expect(markRow({ name: 'Maya Lopez', status: 'booked', cancel: null })).toBeNull();
+    expect(markRow(null)).toBeNull();
+  });
+
+  it('not marked yet: two buttons, each saying who', () => {
+    expect(markRow(started())).toEqual({
+      tag: null,
+      note: 'Not marked yet',
+      actions: [
+        { status: 'attended', label: 'Came', aria: 'Mark that Maya Lopez came' },
+        { status: 'no_show', label: 'No-show', aria: 'Mark Maya Lopez as a no-show' },
+      ],
+    });
+    expect(markRow(started({ name: null })).actions[0].aria).toBe('Mark that this person came');
+  });
+
+  it('marked: what it is, and one button to change it', () => {
+    expect(markRow(started({ status: 'attended', packCharged: true }))).toEqual({
+      tag: { label: 'Came', tone: 'good' },
+      note: '',
+      actions: [{ status: 'no_show', label: 'Change to no-show', aria: 'Change Maya Lopez to no-show' }],
+    });
+    expect(markRow(started({ status: 'no_show' }))).toEqual({
+      tag: { label: 'No-show', tone: 'warn' },
+      note: '',
+      actions: [{ status: 'attended', label: 'Change to came', aria: 'Change Maya Lopez to came' }],
+    });
+  });
+
+  it('a no-show says what it costs the person: a pack first, then a limit, else nothing', () => {
+    expect(markRow(started({ status: 'no_show', packCharged: true, usesLimit: true })).note).toBe('The session stays used on their pack.');
+    expect(markRow(started({ status: 'no_show', usesLimit: true })).note).toBe('It still counts as one of the sessions their membership includes.');
+    expect(markRow(started({ status: 'no_show' })).note).toBe('');
+  });
+
+  it('the week turns back as far as the server reads, and says why days gone by are shown', () => {
+    const week = { today: '2026-10-07', firstDay: '2026-09-09', from: '2026-10-07', to: '2026-10-13', lastDay: '2026-12-01' };
+    expect(canGoEarlier(week)).toBe(true);
+    expect(canGoEarlier({ ...week, from: '2026-09-09', to: '2026-09-15' })).toBe(false);
+    expect(pastDaysNote(week)).toBeNull();
+    expect(pastDaysNote({ ...week, from: '2026-09-30', to: '2026-10-06' })).toBe('Days that have passed are shown so you can mark who came.');
   });
 });
