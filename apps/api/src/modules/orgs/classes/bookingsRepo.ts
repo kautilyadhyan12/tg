@@ -867,10 +867,10 @@ export interface EndedBooked extends MarkableBooking {
  *  end), held to the commit. A check-in is a pass, a key tag or staff's own: a visit
  *  staff added for an earlier day has no hour of its own, and a member's own tap is
  *  nobody's word but theirs. A pass is its account's own word. A key tag's visit, or
- *  staff's, is the account's only while no second member of the gym holds its record: a
+ *  staff's, is the account's only where nobody else holds or has held its record: a
  *  record two people share names neither, and one of them showing a pass later that day
  *  is written onto the morning's visit (`joinVisits`) without having been at the class.
- *  A class nobody was checked in for is read once and its places not at all: the rule
+ *  A class nobody was checked in for is read once and its places' check-ins not at all: the rule
  *  leaves them whatever else is true, and such classes are most of what a run reads.
  *  `lock`: the places are held to the commit, for a write under the gym's lock. */
 export async function endedBooked(
@@ -910,7 +910,7 @@ export async function endedBooked(
               WHERE ${inWindow} AND a.user_id = b.user_id
                 AND (a.method = 'pass' OR a.entry_id IS NULL OR NOT EXISTS (
                       SELECT 1 FROM gym_members o
-                      WHERE o.gym_id = a.gym_id AND o.entry_id = a.entry_id AND o.user_id <> b.user_id AND o.removed_at IS NULL)))) AS by_account,
+                      WHERE o.gym_id = a.gym_id AND o.entry_id = a.entry_id AND o.user_id <> b.user_id)))) AS by_account,
            (s.gym_checked_in AND EXISTS (SELECT 1 FROM gym_attendance a WHERE ${inWindow} AND a.entry_id IN (b.entry_id, m.entry_id))) AS by_record,
            (s.gym_checked_in
             AND (EXISTS (SELECT 1 FROM gym_attendance a WHERE ${thatDay(tx)} AND a.user_id = b.user_id)
