@@ -232,15 +232,17 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
     setPanelError(null);
     setNotice(null);
     try {
-      if (alsoApp) await orgService.removeMember(gymId, person.userId, { alsoStaff: true, ...(named === null ? {} : { confirmPtSessions: named.mark }) });
-      else await orgService.removeStaff(gymId, person.userId);
+      const confirmed = named === null ? {} : { confirmPtSessions: named.mark };
+      if (alsoApp) await orgService.removeMember(gymId, person.userId, { alsoStaff: true, ...confirmed });
+      else if (named === null) await orgService.removeStaff(gymId, person.userId);
+      else await orgService.removeStaff(gymId, person.userId, confirmed);
       setPtEnding(null);
     } catch (err) {
-      // Personal training is booked for them (17e-iv-a): nobody was removed, and the box
-      // names the sessions and waits for its own button.
-      const sessions = alsoApp ? ptSessionsAsked(err) : null;
+      // Personal training is booked with them, or for them (17e-iv-a, 17e-iv-b): nobody was
+      // removed, and the box names the sessions and waits for its own button.
+      const sessions = ptSessionsAsked(err);
       if (sessions !== null) {
-        setPtEnding({ person, sessions, moved: named !== null });
+        setPtEnding({ person, sessions, alsoApp, moved: named !== null });
         setBusyId(null);
         return;
       }
@@ -433,9 +435,10 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
           name={ptEnding.person.displayName}
           ending={ptEnding.sessions}
           clockFormat={gym?.clockFormat}
+          from={ptEnding.alsoApp ? 'both' : 'staff'}
           moved={ptEnding.moved}
           busy={busyId !== null}
-          onConfirm={() => void remove(ptEnding.person, { alsoApp: true }, ptEnding.sessions)}
+          onConfirm={() => void remove(ptEnding.person, { alsoApp: ptEnding.alsoApp }, ptEnding.sessions)}
           onClose={() => setPtEnding(null)}
         />
       ) : null}

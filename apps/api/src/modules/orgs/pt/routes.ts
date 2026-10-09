@@ -10,6 +10,7 @@ import {
   addPtTimeOffRequestSchema,
   bookPtRequestSchema,
   cancelPtRequestSchema,
+  markPtRequestSchema,
   memberBookPtRequestSchema,
   memberCancelPtRequestSchema,
   memberPtQuerySchema,
@@ -166,6 +167,17 @@ export function registerPtRoutes(app: FastifyInstance, deps: { sql: Sql; redis: 
       if (!(err instanceof service.PtLateCancel)) throw err;
       return reply.status(409).send({ error: PT_LATE_CANCEL_ERROR, message: err.message, packCharged: err.packCharged, requestId: req.id });
     }
+  });
+
+  // Came or no-show, once the session has started (17e-iv-b). The same mark again is a 200.
+  app.post("/v1/orgs/:gymId/pt/appointments/:appointmentId/mark", staff, async (req, reply) => {
+    const params = parseOr400(appointmentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(markPtRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const appointment = await service.mark(ptDeps, requireUserId(req), params.gymId, params.appointmentId, body, gate(writeLimit)(req, reply));
+    if (appointment === null) return;
+    return reply.status(200).send({ appointment });
   });
 
   // ── MEMBERS: THEIR OWN SESSIONS (17e-ii) ──

@@ -155,12 +155,60 @@ export function timeRange(fromMinute, toMinute, clockFormat) {
   return `${clockLabel(fromMinute, clockFormat)} – ${clockLabel(toMinute, clockFormat)}`;
 }
 
-/** A trainer's hours, one line a weekday that has any: "Monday · 09:00 – 13:00, 16:00 – 20:00". */
-export function hoursLines(trainer, clockFormat) {
-  return WEEKDAYS.flatMap((day) => {
-    const ranges = trainer.hours.filter((h) => h.weekday === day.iso).sort((a, b) => a.fromMinute - b.fromMinute);
-    if (ranges.length === 0) return [];
-    return [`${day.label} · ${ranges.map((r) => timeRange(r.fromMinute, r.toMinute, clockFormat)).join(', ')}`];
+/** A trainer's weekly hours in as few lines as say them: days in a row with the same hours
+ *  are one line ("Every day · 09:00 – 17:00", "Mon – Fri · 09:00 – 17:00", "Sat · 09:00 – 13:00"). */
+export function hoursBrief(trainer, clockFormat) {
+  const days = WEEKDAYS.map((day) => ({
+    short: day.label.slice(0, 3),
+    times: trainer.hours
+      .filter((h) => h.weekday === day.iso)
+      .sort((a, b) => a.fromMinute - b.fromMinute)
+      .map((r) => timeRange(r.fromMinute, r.toMinute, clockFormat))
+      .join(', '),
+  }));
+  const runs = [];
+  for (const day of days) {
+    const last = runs[runs.length - 1];
+    if (last !== undefined && last.times === day.times) last.to = day.short;
+    else runs.push({ from: day.short, to: day.short, times: day.times, n: 0 });
+    runs[runs.length - 1].n += 1;
+  }
+  return runs
+    .filter((run) => run.times !== '')
+    .map((run) => `${run.n === 7 ? 'Every day' : run.from === run.to ? run.from : `${run.from} – ${run.to}`} · ${run.times}`);
+}
+
+/** Which day of the week on screen is open: the one asked for while it is in this week,
+ *  else today, else the first day with a session, else the first day. */
+export function pickDay(week, wanted) {
+  const days = Array.isArray(week?.days) ? week.days : [];
+  const has = (localDate) => days.some((day) => day.localDate === localDate);
+  if (typeof wanted === 'string' && has(wanted)) return wanted;
+  if (has(week?.today)) return week.today;
+  return (days.find((day) => day.appointments.length > 0) ?? days[0])?.localDate ?? null;
+}
+
+/** The seven days as the strip over the week shows them: "Fri", "9", and one short note:
+ *  sessions waiting for Came or No-show first, then how many are still to come ("booked"),
+ *  then how many took place and are marked, then a whole day off. `tone` colours the note. */
+export function dayTabs(week) {
+  return (Array.isArray(week?.days) ? week.days : []).map((day) => {
+    const [weekday, date] = dayLabel(day.localDate).split(' ');
+    const toMark = day.appointments.filter((a) => a.canMark === true && a.status === 'booked').length;
+    const booked = day.appointments.filter((a) => a.status === 'booked').length - toMark;
+    const marked = day.appointments.length - toMark - booked;
+    const off = (day.timeOff ?? []).some((o) => o.fromMinute === null && o.toMinute === null);
+    const note =
+      toMark > 0 ? `${String(toMark)} to mark` : booked > 0 ? `${String(booked)} booked` : marked > 0 ? `${String(marked)} marked` : off ? 'Time off' : '';
+    return {
+      localDate: day.localDate,
+      weekday,
+      date,
+      today: day.localDate === week.today,
+      note,
+      tone: toMark > 0 ? 'warn' : booked > 0 || marked > 0 ? 'on' : 'plain',
+      label: `${dayHeading(day.localDate, week.today)}${note === '' ? '' : `, ${note}`}`,
+    };
   });
 }
 
@@ -266,9 +314,52 @@ export function weekTitle(week) {
   return `${dayLabel(week.from)} – ${dayLabel(week.to)}`;
 }
 
+/** Days gone by can be turned back to, as far as the server reads them, to mark who came. */
 export function canGoEarlier(week) {
-  return week.from > week.today;
+  return week.from > (week.firstDay ?? week.today);
 }
+
+/** Said over a week that holds days gone by; null for any other. */
+export function pastDaysNote(week) {
+  return week.from < week.today ? 'Days that have passed are shown so you can mark who came.' : null;
+}
+
+/** Came or no-show, for a session that has started (`canMark`); null for any other. What
+ *  it is marked now (`tag`), what that means for the person (`note`), and the buttons:
+ *  each `status` is what the server is sent. */
+export function markRow(appointment) {
+  if (appointment?.canMark !== true) return null;
+  const name = appointment.name ?? 'this person';
+  if (appointment.status === 'attended') {
+    return {
+      tag: { label: 'Came', tone: 'good' },
+      note: '',
+      actions: [{ status: 'no_show', label: 'Change to no-show', aria: `Change ${name} to no-show` }],
+    };
+  }
+  if (appointment.status === 'no_show') {
+    return {
+      tag: { label: 'No-show', tone: 'warn' },
+      note: appointment.packCharged
+        ? 'The session stays used on their pack.'
+        : appointment.usesLimit === true
+          ? 'It still counts as one of the sessions their membership includes.'
+          : '',
+      actions: [{ status: 'attended', label: 'Change to came', aria: `Change ${name} to came` }],
+    };
+  }
+  return {
+    tag: null,
+    note: 'Not marked yet',
+    actions: [
+      { status: 'attended', label: 'Came', aria: `Mark that ${name} came` },
+      { status: 'no_show', label: 'No-show', aria: `Mark ${name} as a no-show` },
+    ],
+  };
+}
+
+/** What staff read when a mark is refused. */
+export const MARK_FAILED = "We couldn't save that. Please try again.";
 
 export function canGoLater(week) {
   return week.to < week.lastDay;

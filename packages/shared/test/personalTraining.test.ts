@@ -12,9 +12,11 @@ import {
   bookPtRequestSchema,
   decidePtBook,
   decidePtCancel,
+  decidePtMark,
   giveHeldMembership,
   isoWeekday,
   pickPtCover,
+  markPtRequestSchema,
   ptBusy,
   ptFreeTimes,
   ptHoursProblem,
@@ -409,5 +411,43 @@ describe("a trainer's time off", () => {
     expect(ptTimeOffOnDay(week, "2026-10-27")).toBeNull();
     expect(ptTimeOffOnDay(hours("2026-10-20", 540, 720), "2026-10-20")).toEqual({ fromMinute: 540, toMinute: 720 });
     expect(ptTimeOffOnDay(hours("2026-10-20", 540, 720), "2026-10-21")).toBeNull();
+  });
+});
+
+describe("decidePtMark: came or no-show (17e-iv-b)", () => {
+  // Every status a session can have, before and after its start, marked each way.
+  const cases = [
+    ["booked", false, "attended", "refuse:not_started"],
+    ["booked", false, "no_show", "refuse:not_started"],
+    ["booked", true, "attended", "mark"],
+    ["booked", true, "no_show", "mark"],
+    ["attended", true, "attended", "already"],
+    ["attended", true, "no_show", "mark"],
+    ["no_show", true, "no_show", "already"],
+    ["no_show", true, "attended", "mark"],
+    ["cancelled", false, "attended", "refuse:mark_cancelled"],
+    ["cancelled", true, "attended", "refuse:mark_cancelled"],
+    ["cancelled", true, "no_show", "refuse:mark_cancelled"],
+    ["late_cancelled", false, "no_show", "refuse:mark_cancelled"],
+    ["late_cancelled", true, "attended", "refuse:mark_cancelled"],
+    ["late_cancelled", true, "no_show", "refuse:mark_cancelled"],
+  ] as const;
+  it.each(cases)("%s, started %s, marked %s: %s", (status, started, to, expected) => {
+    const decision = decidePtMark({ status, started, to });
+    expect(decision.kind === "refuse" ? `refuse:${decision.reason}` : decision.kind).toBe(expected);
+  });
+
+  it("the start is the edge: the instant it starts it can be marked, a millisecond before it cannot", () => {
+    const startsAt = Date.UTC(2026, 9, 7, 8, 0);
+    const at = (nowMs: number) => decidePtMark({ status: "booked", started: ptTime(nowMs, startsAt, 120).started, to: "attended" }).kind;
+    expect([at(startsAt - 1), at(startsAt), at(startsAt + 1)]).toEqual(["refuse", "mark", "mark"]);
+  });
+
+  it("the request names came or no-show and nothing else", () => {
+    expect(markPtRequestSchema.safeParse({ status: "attended" }).success).toBe(true);
+    expect(markPtRequestSchema.safeParse({ status: "no_show" }).success).toBe(true);
+    for (const bad of [{ status: "booked" }, { status: "cancelled" }, { status: "late_cancelled" }, {}, { status: "attended", packCharged: false }]) {
+      expect(markPtRequestSchema.safeParse(bad).success).toBe(false);
+    }
   });
 });

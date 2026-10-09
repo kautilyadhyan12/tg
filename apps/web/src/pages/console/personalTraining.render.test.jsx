@@ -11,6 +11,7 @@ const api = {
   getPtPeople: vi.fn(),
   bookPt: vi.fn(),
   cancelPt: vi.fn(),
+  markPt: vi.fn(),
   addPtTimeOff: vi.fn(),
   removePtTimeOff: vi.fn(),
   getBookingSettings: vi.fn(),
@@ -77,10 +78,13 @@ const open = (path = '/console/iron-house/personal-training') =>
       </Routes>
     </MemoryRouter>,
   );
-const friday = async () => {
-  const days = await screen.findAllByTestId('pt-day');
-  return within(days[2]);
+/** Open one day of the week on screen (0 is its first day) and answer its panel. */
+const openDay = async (index) => {
+  const tabs = await screen.findAllByTestId('pt-day-tab');
+  fireEvent.click(tabs[index]);
+  return within(screen.getByTestId('pt-day'));
 };
+const friday = () => openDay(2);
 
 beforeEach(() => {
   ORG = {
@@ -129,7 +133,7 @@ describe('the page for whoever runs the timetable', () => {
     const rows = screen.getAllByTestId('pt-trainer');
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain('Sam Reed · 60-minute sessions');
-    expect(rows[0].textContent).toContain('Friday · 09:00 – 12:00');
+    expect(rows[0].textContent).toContain('Fri · 09:00 – 12:00');
     expect(within(rows[0]).getByText('Week shown below')).toBeTruthy();
     // The owner is not a trainer, and is not drawn as one.
     expect(screen.queryByText(/Harbour Owner \(you\) ·/)).toBeNull();
@@ -336,7 +340,7 @@ describe('the page for whoever runs the timetable', () => {
     expect(day.getByRole('button', { name: 'Book 11:00 AM – 12:00 PM' })).toBeTruthy();
     // The session booked from 10:00 runs into the class given to the trainer afterwards, and says so.
     expect(day.getByText('This runs into Spin, a class they coach at the same time. Move one of them.')).toBeTruthy();
-    const saturday = within(screen.getAllByTestId('pt-day')[3]);
+    const saturday = await openDay(3);
     expect(saturday.getByText('6:00 PM – 7:00 PM · Yoga')).toBeTruthy();
     expect(saturday.getByText('No available times')).toBeTruthy();
   });
@@ -379,11 +383,12 @@ describe('the page for whoever runs the timetable', () => {
     fireEvent.click(within(screen.getByTestId('pt-hours-form')).getByRole('button', { name: 'Close' }));
     expect(screen.queryByTestId('pt-day')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: "See Sam Reed's week" }));
-    expect((await screen.findAllByTestId('pt-day')).length).toBe(7);
+    expect((await screen.findAllByTestId('pt-day-tab')).length).toBe(7);
+    expect(screen.getAllByTestId('pt-day')).toHaveLength(1);
     expect(screen.getByLabelText('Add a trainer').value).toBe('');
     // Editing Sam's own hours keeps Sam's week on screen.
     fireEvent.click(screen.getByRole('button', { name: 'Edit hours for Sam Reed' }));
-    expect(screen.getAllByTestId('pt-day')).toHaveLength(7);
+    expect(screen.getAllByTestId('pt-day-tab')).toHaveLength(7);
   });
 
   it('See week on another trainer reads theirs', async () => {
@@ -663,7 +668,7 @@ describe('hours', () => {
     expect(form.getByRole('button', { name: 'Save hours' }).disabled).toBe(false);
     fireEvent.click(form.getByRole('button', { name: 'Close' }));
     expect(api.savePtTrainer).not.toHaveBeenCalled();
-    expect(screen.getByTestId('pt-trainer').textContent).toContain('Friday · 09:00 – 12:00');
+    expect(screen.getByTestId('pt-trainer').textContent).toContain('Fri · 09:00 – 12:00');
   });
 });
 
@@ -927,10 +932,13 @@ describe("a trainer's time off", () => {
     expect(within(day.getByTestId('pt-coaching')).getByRole('link', { name: 'Open the Calendar' }).getAttribute('href')).toBe(
       '/console/iron-house/classes?view=week&week=2026-10-09',
     );
-    // A day with nothing else on it says it is off, not only that nothing is free.
-    const days = screen.getAllByTestId('pt-day');
-    expect(days[3].textContent).toBe('Sat 10 OctTime off · all day');
-    expect(days[4].textContent).toBe('Sun 11 OctNo available times');
+    // A day with nothing else on it says it is off, on the strip and when opened.
+    const tabs = screen.getAllByTestId('pt-day-tab');
+    expect([tabs[3].textContent, tabs[4].textContent]).toEqual(['Sat10Time off', 'Sun11']);
+    const saturday = await openDay(3);
+    expect(saturday.getByTestId('pt-day-off').textContent).toBe('Time off · all day');
+    expect(saturday.getByText('No sessions booked')).toBeTruthy();
+    expect(saturday.getByText('No available times')).toBeTruthy();
   });
 
   it('a trainer who runs no timetable has Time off for themselves', async () => {
@@ -951,5 +959,171 @@ describe("a trainer's time off", () => {
     expect(panel().queryByRole('button', { name: /Remove time off/ })).toBeNull();
     expect(panel().queryByRole('button', { name: 'Add time off' })).toBeNull();
     expect(panel().getByRole('button', { name: 'Close' })).toBeTruthy();
+  });
+});
+
+// CAME OR NO-SHOW (17e-iv-b).
+describe('came or no-show', () => {
+  const startedSession = (over = {}) => mayaSession({ cancel: null, canMark: true, ...over });
+
+  it('a session that has not started has no mark buttons', async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([mayaSession({ canMark: false })]) });
+    open();
+    const day = await friday();
+    expect(day.queryByTestId('pt-mark')).toBeNull();
+    expect(day.queryByRole('button', { name: 'Mark that Maya Lopez came' })).toBeNull();
+  });
+
+  it('a started session reads Not marked yet with Came and No-show; Came is sent and the week is read again', async () => {
+    api.getPtWeek
+      .mockResolvedValueOnce({ data: week([startedSession()]) })
+      .mockResolvedValue({ data: week([startedSession({ status: 'attended' })]) });
+    api.markPt.mockResolvedValue({ data: { appointment: startedSession({ status: 'attended' }) } });
+    open();
+    const mark = within(await (await friday()).findByTestId('pt-mark'));
+    expect(mark.getByText('Not marked yet')).toBeTruthy();
+    expect(mark.getByRole('button', { name: 'Mark Maya Lopez as a no-show' }).textContent).toBe('No-show');
+    expect(api.markPt).not.toHaveBeenCalled();
+    fireEvent.click(mark.getByRole('button', { name: 'Mark that Maya Lopez came' }));
+    await waitFor(() => expect(api.markPt).toHaveBeenCalledWith('g1', SESSION, 'attended'));
+    await waitFor(() => expect(within(screen.getByTestId('pt-mark')).getByText('Came')).toBeTruthy());
+    expect(screen.queryByText('Not marked yet')).toBeNull();
+    expect(within(screen.getByTestId('pt-mark')).getByRole('button', { name: 'Change Maya Lopez to no-show' })).toBeTruthy();
+  });
+
+  it('a no-show says the session stays used, and can be changed to came', async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([startedSession({ status: 'no_show' })]) });
+    api.markPt.mockResolvedValue({ data: { appointment: startedSession({ status: 'attended' }) } });
+    open();
+    const mark = within(await (await friday()).findByTestId('pt-mark'));
+    expect(mark.getByText('No-show')).toBeTruthy();
+    expect(mark.getByText('The session stays used on their pack.')).toBeTruthy();
+    fireEvent.click(mark.getByRole('button', { name: 'Change Maya Lopez to came' }));
+    await waitFor(() => expect(api.markPt).toHaveBeenCalledWith('g1', SESSION, 'attended'));
+  });
+
+  it("a refused mark shows the server's sentence under the session, and the week is read again", async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([startedSession()]) });
+    api.markPt.mockRejectedValue({ response: { status: 409, data: { error: 'mark_cancelled', message: "This session was cancelled, so it can't be marked." } } });
+    open();
+    const mark = within(await (await friday()).findByTestId('pt-mark'));
+    const reads = api.getPtWeek.mock.calls.length;
+    fireEvent.click(mark.getByRole('button', { name: 'Mark Maya Lopez as a no-show' }));
+    expect(await screen.findByText("This session was cancelled, so it can't be marked.")).toBeTruthy();
+    await waitFor(() => expect(api.getPtWeek.mock.calls.length).toBeGreaterThan(reads));
+  });
+
+  it('Previous week turns back to days gone by, and the page says why they are shown', async () => {
+    const past = week([startedSession({ localDate: '2026-10-02' })], {
+      firstDay: '2026-09-09',
+      from: '2026-09-30',
+      to: '2026-10-06',
+      days: ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06'].map((localDate) => ({
+        localDate,
+        free: [],
+        appointments: localDate === '2026-10-02' ? [startedSession({ localDate })] : [],
+        classes: [],
+      })),
+    });
+    api.getPtWeek.mockImplementation((gymId, trainer, from) => Promise.resolve({ data: from === '2026-09-30' ? past : week([mayaSession()], { firstDay: '2026-09-09' }) }));
+    open();
+    await friday();
+    expect(screen.queryByText('Days that have passed are shown so you can mark who came.')).toBeNull();
+    const previous = screen.getByRole('button', { name: /Previous week/ });
+    expect(previous.disabled).toBe(false);
+    fireEvent.click(previous);
+    expect(await screen.findByText('Days that have passed are shown so you can mark who came.')).toBeTruthy();
+    expect(within(screen.getByTestId('pt-mark')).getByRole('button', { name: 'Mark that Maya Lopez came' })).toBeTruthy();
+  });
+});
+
+// ONE DAY AT A TIME (Kd's click-through of 17e-iv-b: the week was a pile of boxes).
+describe('the week is a strip of seven days and one open day', () => {
+  it('opens on today, shows each day’s count on the strip, and a pressed day replaces the one shown', async () => {
+    open();
+    const tabs = await screen.findAllByTestId('pt-day-tab');
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Today7', 'Thu8', 'Fri91 booked', 'Sat10', 'Sun11', 'Mon12', 'Tue13']);
+    expect(tabs.map((tab) => tab.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false', 'false', 'false', 'false']);
+    expect(tabs[2].getAttribute('aria-label')).toBe('Fri 9 Oct, 1 booked');
+    // Today has nothing on it, and says so in both parts.
+    const today = within(screen.getByTestId('pt-day'));
+    expect(today.getByRole('heading', { name: 'Today · Wed 7 Oct' })).toBeTruthy();
+    expect(today.getByText('No sessions booked')).toBeTruthy();
+    expect(today.getByText('No available times')).toBeTruthy();
+    expect(screen.queryByTestId('pt-session')).toBeNull();
+
+    fireEvent.click(tabs[2]);
+    expect(screen.getAllByTestId('pt-day')).toHaveLength(1);
+    const day = within(screen.getByTestId('pt-day'));
+    expect(day.getByRole('heading', { name: 'Fri 9 Oct' })).toBeTruthy();
+    expect(day.getByTestId('pt-session').textContent).toContain('Maya Lopez');
+    expect(day.getByRole('button', { name: 'Book 09:00 – 10:00' })).toBeTruthy();
+    expect(screen.getAllByTestId('pt-day-tab')[2].getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('a session waiting for Came or No-show is said on its day of the strip', async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([mayaSession({ cancel: null, canMark: true })]) });
+    open();
+    const tabs = await screen.findAllByTestId('pt-day-tab');
+    expect(tabs[2].textContent).toBe('Fri91 to mark');
+  });
+
+  it('an open booking box closes when another day is pressed', async () => {
+    open();
+    const day = await friday();
+    fireEvent.click(day.getByRole('button', { name: 'Book 09:00 – 10:00' }));
+    expect(await screen.findByRole('group', { name: 'Book a session' })).toBeTruthy();
+    fireEvent.click(screen.getAllByTestId('pt-day-tab')[1]);
+    expect(screen.queryByRole('group', { name: 'Book a session' })).toBeNull();
+    expect(within(screen.getByTestId('pt-day')).getByRole('heading', { name: 'Thu 8 Oct' })).toBeTruthy();
+  });
+});
+
+// GO TO A DATE (Kd's click-through of 17e-iv-b: a calendar beside Previous week and Next week).
+describe('Go to a date', () => {
+  const laterWeek = () =>
+    week([], {
+      firstDay: '2026-09-09',
+      from: '2026-10-20',
+      to: '2026-10-26',
+      days: ['2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26'].map((localDate) => ({
+        localDate,
+        free: localDate === '2026-10-20' ? [540] : [],
+        appointments: [],
+        classes: [],
+      })),
+    });
+
+  it('a day of the week on screen opens that day, with no new read', async () => {
+    api.getPtWeek.mockResolvedValue({ data: week([mayaSession()], { firstDay: '2026-09-09' }) });
+    open();
+    await screen.findAllByTestId('pt-day-tab');
+    const reads = api.getPtWeek.mock.calls.length;
+    const picker = within(screen.getByTestId('pt-go-to-date'));
+    fireEvent.click(picker.getByRole('button', { name: 'Go to a date' }));
+    fireEvent.click(within(picker.getByRole('dialog')).getByRole('button', { name: /\b9 Oct/ }));
+    expect(within(screen.getByTestId('pt-day')).getByRole('heading', { name: 'Fri 9 Oct' })).toBeTruthy();
+    expect(screen.getAllByTestId('pt-day-tab')[2].getAttribute('aria-pressed')).toBe('true');
+    expect(api.getPtWeek.mock.calls.length).toBe(reads);
+  });
+
+  it('a day outside it reads the week that starts on that day and opens it; days the page cannot show cannot be picked', async () => {
+    api.getPtWeek.mockImplementation((gymId, trainer, from) =>
+      Promise.resolve({ data: from === '2026-10-20' ? laterWeek() : week([mayaSession()], { firstDay: '2026-09-09' }) }),
+    );
+    open();
+    await screen.findAllByTestId('pt-day-tab');
+    const picker = within(screen.getByTestId('pt-go-to-date'));
+    fireEvent.click(picker.getByRole('button', { name: 'Go to a date' }));
+    const calendar = within(picker.getByRole('dialog'));
+    // Sessions run to 1 December, and the page turns back to 9 September.
+    fireEvent.click(calendar.getByRole('button', { name: 'Previous month' }));
+    expect(calendar.getByRole('button', { name: /\b8 Sep/ }).disabled).toBe(true);
+    expect(calendar.getByRole('button', { name: /\b9 Sep/ }).disabled).toBe(false);
+    fireEvent.click(calendar.getByRole('button', { name: 'Next month' }));
+    fireEvent.click(calendar.getByRole('button', { name: /\b20 Oct/ }));
+    await waitFor(() => expect(api.getPtWeek).toHaveBeenLastCalledWith('g1', SAM, '2026-10-20'));
+    expect(await within(await screen.findByTestId('pt-day')).findByRole('heading', { name: 'Tue 20 Oct' })).toBeTruthy();
+    expect(screen.getAllByTestId('pt-day-tab')[0].getAttribute('aria-pressed')).toBe('true');
   });
 });

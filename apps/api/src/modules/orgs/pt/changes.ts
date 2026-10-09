@@ -9,7 +9,7 @@
 // pack session comes back once however often a change arrives.
 import { createHash } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
-import { PT_SESSIONS_ENDING_MESSAGE, PT_SESSIONS_ENDING_SHOWN, type PtSessionsEnding } from "@app/shared";
+import { PT_SESSIONS_ENDING_MESSAGE, PT_SESSIONS_ENDING_SHOWN, PT_TRAINER_SESSIONS_ENDING_MESSAGE, type PtSessionsEnding } from "@app/shared";
 import { givePackClassesBack } from "../memberships/heldRepo.js";
 import * as repo from "./repo.js";
 
@@ -47,8 +47,8 @@ export async function sessionsEndingFor(sql: Sql | TransactionSql, gymId: string
  *  the first write, so nothing is done. */
 export class PtSessionsEndAsk extends Error {
   readonly sessions: PtSessionsEnding;
-  constructor(sessions: PtSessionsEnding) {
-    super(PT_SESSIONS_ENDING_MESSAGE);
+  constructor(sessions: PtSessionsEnding, message: string = PT_SESSIONS_ENDING_MESSAGE) {
+    super(message);
     this.name = "PtSessionsEndAsk";
     this.sessions = sessions;
   }
@@ -64,7 +64,9 @@ export async function requireSessionsConfirmed(
   confirmed: string | null,
 ): Promise<PtSessionsEnding | null> {
   const ending = await sessionsEndingFor(tx, gymId, of, now);
-  if (ending !== null && ending.mark !== confirmed) throw new PtSessionsEndAsk(ending);
+  if (ending !== null && ending.mark !== confirmed) {
+    throw new PtSessionsEndAsk(ending, "trainerId" in of ? PT_TRAINER_SESSIONS_ENDING_MESSAGE : PT_SESSIONS_ENDING_MESSAGE);
+  }
   return ending;
 }
 
@@ -77,6 +79,10 @@ export interface SessionsEnded {
   /** Sessions given back to packs. */
   packSessions: number;
 }
+
+/** The same counts for an audit row, of sessions already ended; nothing where none were. */
+export const endedAuditMeta = (ended: SessionsEnded): Record<string, string> =>
+  ended.sessions === 0 ? {} : { ptSessionsEnded: String(ended.sessions), ptPackSessionsBack: String(ended.packSessions) };
 
 /** End them, and give each pack its sessions back. */
 export async function endSessionsOf(tx: TransactionSql, gymId: string, of: repo.EndingSessionsOf, now: Date): Promise<SessionsEnded> {
@@ -93,4 +99,11 @@ export async function endSessionsOf(tx: TransactionSql, gymId: string, of: repo.
  *  so no door can take somebody off and leave their sessions booked. */
 export async function endLeaversSessions(tx: TransactionSql, gymId: string, entryIds: readonly string[], at: Date): Promise<SessionsEnded> {
   return await endSessionsOf(tx, gymId, { entryIds }, at);
+}
+
+/** THIS TRAINER HAS LEFT THE GYM'S STAFF (17e-iv-b): called where their staff row is
+ *  deleted, so no door can take a trainer off the staff and leave people booked with
+ *  nobody. Only the sessions booked WITH them; nobody else's trainer is read. */
+export async function endTrainersSessions(tx: TransactionSql, gymId: string, trainerId: string, at: Date): Promise<SessionsEnded> {
+  return await endSessionsOf(tx, gymId, { trainerId }, at);
 }

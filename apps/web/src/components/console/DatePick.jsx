@@ -20,7 +20,8 @@ const boxStyle = {
 // years back such as a date of birth; with it, an empty calendar opens on today's
 // month rather than on the earliest allowed one. `newLook` draws it from `console.css`
 // (spec Part 3 §17) on a page already restyled; other pages keep the old look until
-// their own R-job.
+// their own R-job. `floating` opens the calendar over the page instead of pushing what is
+// under it down, for a picker in a row of buttons.
 export default function DatePick({
   label,
   value,
@@ -33,6 +34,7 @@ export default function DatePick({
   onClear,
   yearSelect,
   newLook = false,
+  floating = false,
 }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(() => openingMonth(value, yearSelect ? '' : min, today));
@@ -64,7 +66,7 @@ export default function DatePick({
   const text = value ? closureDateLabel(value) : (emptyText ?? 'Pick a date');
 
   return (
-    <div ref={wrap}>
+    <div ref={wrap} className={floating ? 'relative' : undefined}>
       <button
         type="button"
         aria-label={label}
@@ -96,7 +98,7 @@ export default function DatePick({
         <div
           role="dialog"
           aria-label={`${label}: pick a date`}
-          className={newLook ? 'c-sheet mt-2 w-80 max-w-full rounded-xl p-3' : 'mt-2 w-72 max-w-full rounded-xl p-3'}
+          className={`${newLook ? 'c-sheet mt-2 w-80 rounded-xl p-3' : 'mt-2 w-72 rounded-xl p-3'} ${floating ? 'absolute z-30 left-0 md:left-auto md:right-0 max-w-[calc(100vw-32px)]' : 'max-w-full'}`}
           style={
             newLook
               ? { border: '1px solid var(--card-line)' }
