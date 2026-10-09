@@ -582,3 +582,51 @@ export const TEAM_NOTES = {
 
 /** The button that opens the board to put people in teams. */
 export const TEAMS_BUTTON = 'Put people in teams';
+
+// ── THE LIST'S ROWS, AND THE FORM'S SUMMARY ──
+
+/** A row's one line of what a challenge is: "Gym days · Most wins · Everyone in the app · 143". */
+export function rowSummary(challenge, inApp, words) {
+  const facts = cardFacts(challenge, inApp, words).map((fact) => fact.value);
+  return (hasTeams(challenge) ? [...facts, 'In teams'] : facts).join(' · ');
+}
+
+/** Who is first, for a row: the leading team, else the leading person; null with nobody. */
+export function rowLeader(challenge) {
+  if (hasTeams(challenge)) {
+    const first = teamLines(challenge).find((team) => team.place === 1);
+    return first === undefined ? null : `${first.name} · ${first.number}`;
+  }
+  const first = (challenge.top ?? []).find((person) => person.place === 1);
+  return first === undefined ? null : `${first.name} · ${count(first.value)}`;
+}
+
+/** The challenge the form holds, said back in a few lines as it is filled in. `empty`:
+ *  nothing is there yet, and the line says what is missing. */
+export function draftSummary(draft, list, words) {
+  const name = draft.name.trim();
+  const days = draftDays(draft);
+  const target = draft.win === 'target' ? wholeNumber(draft.target) : null;
+  const unit = isOwn(draft) ? draft.unit.trim() : `${UNIT[draft.counts]}s`;
+  const reach = target === null ? 'a number' : `${count(target)}${unit === '' ? '' : ` ${unit}`}`;
+  const teamed = hasTeams(draft);
+  const won =
+    draft.win === 'target'
+      ? `${teamed ? 'Every team that reaches' : 'Everyone who reaches'} ${reach}`
+      : `${teamed ? 'The team with the' : 'Whoever has the'} ${isOwn(draft) && draft.win === 'lowest' ? 'lowest' : 'most'}`;
+  const named = draft.teamList.map((team) => team.name.trim()).filter((team) => team !== '');
+  const lines = [
+    { label: 'Name', value: name === '' ? 'Not named yet' : name, empty: name === '' },
+    { label: 'When', value: days === null ? 'Days not picked yet' : datesLine(draft, list.today), empty: days === null },
+    { label: 'Counts', value: isOwn(draft) ? (unit === '' ? 'Your own count' : capital(unit)) : draft.counts === 'gym_days' ? 'Gym days' : 'Workout days', empty: false },
+    { label: 'How it is won', value: won, empty: false },
+    { label: 'Who is in it', value: draft.who === 'everyone' ? `Everyone in the app · ${count(list.inApp)}` : `${words.peopleCap} who join`, empty: false },
+    {
+      label: 'Teams',
+      value: !teamed ? 'Alone, no teams' : `${named.length === 0 ? 'Not named yet' : named.join(', ')} · ${draft.teams === 'staff' ? 'you put people in them' : `your ${words.people} pick`}`,
+      empty: teamed && named.length === 0,
+    },
+    { label: 'Prize', value: draft.prize.trim() === '' ? 'None' : draft.prize.trim(), empty: draft.prize.trim() === '' },
+  ];
+  return lines;
+}

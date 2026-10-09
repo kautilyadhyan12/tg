@@ -3732,6 +3732,16 @@ their number is not added. Teammates are named only once they have a number of t
 as the people's board names people. While fewer than three people members may see have a
 number, no team has a number or a place either. Nothing of a team's number is stored.
 
+**The console's page, redrawn in the same job (Kd, RULINGS 2026-10-09).** The page is one of
+three things at a time, never all at once: a **list**, one line a challenge (name, where it
+is on the calendar, its dates, what it is in a line, who is leading, Open); **one challenge**
+on a page of its own (`?challenge=` in the address, All challenges to go back: what it is and
+Edit and Cancel at the top, then its teams or who is leading, its prize and details, and its
+Board with See the board, Enter numbers and Put people in teams); or the **form**, in three
+numbered parts on one page (what and when · how it is won and who is in it · teams, prize
+and details) with the challenge said back beside it as it is filled in. Every button, field
+and message it had is kept.
+
 ### 15.7 A gym's own plan for a member
 
 A trainer with `plans.write` (a new tick) opens a member's weekly workout plan and

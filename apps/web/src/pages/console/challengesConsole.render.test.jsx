@@ -64,7 +64,16 @@ const open = (org = ORG) => {
   );
 };
 const cards = () => screen.queryAllByTestId('challenge');
-const cardOf = (name) => cards().find((el) => within(el).queryByRole('heading', { name }) !== null);
+/** A challenge's own page: opened from its row on the list (going back to the list first
+ *  when another one is open). */
+const cardOf = (name) => {
+  const detail = screen.queryByTestId('challenge-detail');
+  if (detail !== null && within(detail).queryByRole('heading', { name }) !== null) return detail;
+  if (detail !== null) fireEvent.click(within(detail).getByRole('button', { name: 'All challenges' }));
+  fireEvent.click(screen.getByRole('button', { name: `Open ${name}` }));
+  return screen.getByTestId('challenge-detail');
+};
+const backToList = () => fireEvent.click(within(screen.getByTestId('challenge-detail')).getByRole('button', { name: 'All challenges' }));
 const form = () => within(screen.getByTestId('challenge-form'));
 const refusal = (status, message) => Object.assign(new Error(message), { response: { status, data: { error: 'x', message } } });
 
@@ -142,7 +151,13 @@ describe("the console's Challenges page", () => {
     expect(b.getByText('Starts in 5 days')).toBeTruthy();
     expect(within(b.getByTestId('challenge-facts')).getAllByRole('definition').map((d) => d.textContent)).toEqual(['Workout days', 'Counted by the app', 'Most wins', 'First place', 'Members who join · 24']);
     expect(b.getByRole('button', { name: 'See who has joined: Next Week' })).toBeTruthy();
+    // Back on the list: a line a challenge, each with who is leading and its way in.
+    backToList();
     expect(screen.getByText('Running and coming up (2)')).toBeTruthy();
+    expect(cards().map((li) => li.textContent.replace(/\s+/g, ' ').trim())).toEqual([
+      'October WeekRunning · 5 days leftMon 5 Oct – Sun 11 Oct · 7 daysGym days · Reach 5 · Everyone in the app · 143Priya Sharma · 3In the leadPriya Sharma · 3Open',
+      'Next WeekStarts in 5 daysMon 12 Oct – Sun 18 Oct · 7 daysWorkout days · Most wins · Members who join · 24Open',
+    ]);
   });
 
   it('adds a challenge from the form: every choice says what it means, and what is sent is what was picked', async () => {
@@ -455,6 +470,8 @@ describe("the console's Challenges page", () => {
     expect(card.getByText('Ended Wed 30 Sep')).toBeTruthy();
     expect(card.getByRole('button', { name: 'See the board: September' })).toBeTruthy();
     expect(card.queryByRole('button', { name: /Edit|Cancel/ })).toBeNull();
+    // Back on the list, the past ones are still open under their button.
+    backToList();
     expect(screen.getByText("Challenges that have ended. Your members see each one's result for 14 days. They can't be changed.")).toBeTruthy();
   });
 
@@ -474,5 +491,91 @@ describe("the console's Challenges page", () => {
     open();
     expect(await screen.findByText("Your role doesn't allow that.")).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add challenge' })).toBeNull();
+  });
+});
+
+describe('the page is a list, one challenge, or the form: never all at once', () => {
+  const two = () =>
+    listOf([
+      challenge('a', 'October Week', { prize: 'A shaker', withNumber: 3, top: [{ userId: 'u1', name: 'Priya Sharma', initials: 'PS', place: 1, value: 3 }] }),
+      challenge('b', 'Next Week', { state: 'coming', startsOn: '2026-10-12', endsOn: '2026-10-18' }),
+    ]);
+
+  it('Open shows one challenge on its own with a way back, and the list is as it was', async () => {
+    svc.list.mockResolvedValue(two());
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    // The list holds no board, no Edit and no Cancel: only each challenge's way in.
+    expect(screen.queryByRole('button', { name: /^(Edit|Cancel|See the board)/ })).toBeNull();
+    expect(screen.getAllByRole('button', { name: /^Open / }).map((b) => b.getAttribute('aria-label'))).toEqual(['Open October Week', 'Open Next Week']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open October Week' }));
+    const page = within(screen.getByTestId('challenge-detail'));
+    expect(page.getByRole('heading', { name: 'October Week' })).toBeTruthy();
+    // The other challenge and Add challenge are not on this page.
+    expect(cards()).toHaveLength(0);
+    expect(screen.queryByText('Next Week')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add challenge' })).toBeNull();
+    expect(page.getByRole('button', { name: 'Edit October Week' })).toBeTruthy();
+    expect(page.getByRole('button', { name: 'Cancel October Week' })).toBeTruthy();
+    expect(within(page.getByRole('region', { name: 'Prize and details' })).getByText('Prize: A shaker')).toBeTruthy();
+    expect(within(page.getByRole('region', { name: 'Board' })).getByRole('button', { name: 'See the board: October Week' })).toBeTruthy();
+
+    fireEvent.click(page.getByRole('button', { name: 'All challenges' }));
+    expect(screen.queryByTestId('challenge-detail')).toBeNull();
+    expect(cards()).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Add challenge' })).toBeTruthy();
+  });
+
+  it('Edit opens the form in place of the challenge, and its back button returns to the challenge with nothing sent', async () => {
+    svc.list.mockResolvedValue(two());
+    open();
+    await waitFor(() => expect(cards()).toHaveLength(2));
+    fireEvent.click(within(cardOf('Next Week')).getByRole('button', { name: 'Edit Next Week' }));
+    expect(screen.queryByTestId('challenge-detail')).toBeNull();
+    expect(form().getByRole('heading', { name: 'Edit Next Week' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to all challenges' }));
+    expect(screen.queryByTestId('challenge-form')).toBeNull();
+    expect(within(screen.getByTestId('challenge-detail')).getByRole('heading', { name: 'Next Week' })).toBeTruthy();
+    expect(svc.change).not.toHaveBeenCalled();
+  });
+
+  it('the form is three numbered parts, and says the challenge back as it is filled in', async () => {
+    await openAdd();
+    expect(form().getAllByRole('group', { name: /^Part \d: / }).map((g) => g.getAttribute('aria-label'))).toEqual([
+      'Part 1: What it is, and when',
+      'Part 2: How it is won, and who is in it',
+      'Part 3: Teams, prize and details',
+    ]);
+    // Each question sits in its own part.
+    expect(within(form().getByRole('group', { name: 'Part 1: What it is, and when' })).getByRole('radiogroup', { name: 'What it counts' })).toBeTruthy();
+    expect(within(form().getByRole('group', { name: 'Part 2: How it is won, and who is in it' })).getByRole('radiogroup', { name: 'Who is in it' })).toBeTruthy();
+    expect(within(form().getByRole('group', { name: 'Part 3: Teams, prize and details' })).getByRole('radiogroup', { name: 'Alone or in teams' })).toBeTruthy();
+
+    const summary = () => within(screen.getByTestId('challenge-summary')).getAllByRole('definition').map((d) => d.textContent);
+    expect(within(screen.getByTestId('challenge-summary')).getAllByRole('term').map((t) => t.textContent)).toEqual(['Name', 'When', 'Counts', 'How it is won', 'Who is in it', 'Teams', 'Prize']);
+    expect(summary()).toEqual(['Not named yet', 'Days not picked yet', 'Gym days', 'Whoever has the most', 'Everyone in the app · 143', 'Alone, no teams', 'None']);
+
+    type('Challenge name', '  Autumn Twelve ');
+    pickDate('First day', '2026-10-12');
+    pickDate('Last day', '2026-10-18');
+    pick('What it counts', 'Workout days');
+    pick('How it is won', 'Everyone who reaches a number');
+    type('Workout days to reach', '5');
+    pick('Who is in it', 'Only people who join');
+    pick('Alone or in teams', 'In teams people pick');
+    type('Team 1 name', 'Lions');
+    type('Prize (optional)', 'A free month');
+    expect(summary()).toEqual([
+      'Autumn Twelve',
+      'Mon 12 Oct – Sun 18 Oct · 7 days',
+      'Workout days',
+      'Every team that reaches 5 workout days',
+      'Members who join',
+      'Lions · your members pick',
+      'A free month',
+    ]);
+    type('Team 1 name', '');
+    expect(summary()[5]).toBe('Not named yet · your members pick');
   });
 });

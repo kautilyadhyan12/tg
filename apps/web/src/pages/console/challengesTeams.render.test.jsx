@@ -70,7 +70,16 @@ const open = (org = ORG) => {
   );
 };
 const cards = () => screen.queryAllByTestId('challenge');
-const cardOf = (name) => within(cards().find((el) => within(el).queryByRole('heading', { name }) !== null));
+/** A challenge's own page: opened from its row on the list (going back to the list first
+ *  when another one is open). */
+const pageOf = (name) => {
+  const detail = screen.queryByTestId('challenge-detail');
+  if (detail !== null && within(detail).queryByRole('heading', { name }) !== null) return detail;
+  if (detail !== null) fireEvent.click(within(detail).getByRole('button', { name: 'All challenges' }));
+  fireEvent.click(screen.getByRole('button', { name: `Open ${name}` }));
+  return screen.getByTestId('challenge-detail');
+};
+const cardOf = (name) => within(pageOf(name));
 const form = () => within(screen.getByTestId('challenge-form'));
 const refusal = (status, message) => Object.assign(new Error(message), { response: { status, data: { error: 'x', message } } });
 const pickDate = (label, day) => {
@@ -118,7 +127,7 @@ describe('teams on the Add challenge form', () => {
     expect(teams().getAllByRole('textbox')).toHaveLength(2);
     // With two there is nothing to remove.
     expect(teams().queryByRole('button', { name: /^Remove team/ })).toBeNull();
-    expect(teams().getByText(/2 to 8 teams\. A team's number is its people's numbers added together\. After you save, press Put people in teams/)).toBeTruthy();
+    expect(teams().getByText(/2 to 8 teams\. A team's number is its people's numbers added together\. After you save, open the challenge and press Put people in teams\./)).toBeTruthy();
     // How it is won now speaks of teams.
     expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio').map((r) => r.textContent.replace(/\s+/g, ' ').trim())).toEqual([
       'The team with the mostOne board of teams. The first team wins.',
@@ -240,6 +249,7 @@ describe('teams on a challenge card', () => {
     open();
     await waitFor(() => expect(cards()).toHaveLength(1));
     expect(cardOf('Cancelled Week').queryByRole('button', { name: /Put people in teams/ })).toBeNull();
+    fireEvent.click(within(screen.getByTestId('challenge-detail')).getByRole('button', { name: 'All challenges' }));
     fireEvent.click(screen.getByRole('button', { name: 'Past challenges (1)' }));
     expect(cardOf('Last Week').queryByRole('button', { name: /Put people in teams/ })).toBeNull();
     cleanup();
