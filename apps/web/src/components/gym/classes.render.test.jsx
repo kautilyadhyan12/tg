@@ -291,3 +291,70 @@ describe('a member’s classes', () => {
     expect(screen.queryByText('Organisation not found.')).toBeNull();
   });
 });
+
+// ONLINE CLASSES FOR A MEMBER (17g). The worst this screen could do: draw a way into the
+// class for somebody the server sent no link to.
+describe('an online class, for a member', () => {
+  const LINK = 'https://us02web.zoom.us/j/81234567890?pwd=abc';
+  const online = (state, link = null) => ({ state, opensAt: '2026-10-07T16:30:00.000Z', link });
+
+  it('says what each person must do to get the link, and offers Join class only with the server’s link', async () => {
+    serve([
+      klass('s1', 'Online Yoga', { online: online('not_booked') }),
+      klass('s2', 'Online Spin', { mine: mine('waitlisted', { waitlistPlace: 1 }), can: can({ cancel: 'free' }), online: online('waiting') }),
+      klass('s3', 'Online Pilates', { mine: mine('booked'), can: can({ cancel: 'free' }), online: online('early') }),
+      klass('s4', 'Online Boxing', { mine: mine('booked'), can: can(), online: online('open', LINK) }),
+      klass('s5', 'Online Core', { mine: mine('booked'), can: can({ cancel: 'free' }), online: online('no_link') }),
+      klass('s6', 'Floor Spin'),
+    ]);
+    render(<Classes gym={GYM} />);
+    await screen.findByText('Online Yoga');
+    const line = (name) => within(rowOf(name)).queryByTestId('class-online')?.textContent ?? null;
+    expect(line('Online Yoga')).toBe('Online class. Book it to get the link.');
+    expect(line('Online Spin')).toBe('Online class. You get the link once you have a place.');
+    expect(line('Online Pilates')).toBe('Online class. The link shows here 30 minutes before it starts.');
+    expect(line('Online Boxing')).toBe('Online class. Your link is ready.');
+    expect(line('Online Core')).toBe("Online class. Your gym hasn't added the link yet. Ask the front desk.");
+    expect(line('Floor Spin')).toBeNull();
+
+    // One way in on the whole page, and it is the booked class's own link.
+    const joins = screen.getAllByRole('link');
+    expect(joins).toHaveLength(1);
+    expect(within(rowOf('Online Boxing')).getByRole('link', { name: /^Join class: Online Boxing/ }).getAttribute('href')).toBe(LINK);
+    expect(joins[0].getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('draws no way in from a link that is not https, or that came with any state but open', async () => {
+    serve([
+      klass('s1', 'Bad Scheme', { mine: mine('booked'), can: can(), online: online('open', 'javascript:alert(1)') }),
+      klass('s2', 'Wrong State', { mine: mine('booked'), can: can(), online: online('early', LINK) }),
+      klass('s3', 'Cancelled Online', { cancelled: true, online: online('closed') }),
+    ]);
+    render(<Classes gym={GYM} />);
+    await screen.findByText('Bad Scheme');
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(within(rowOf('Cancelled Online')).queryByTestId('class-online')).toBeNull();
+  });
+
+  it('reads the list again by itself the moment a booked class’s link is due', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-07T16:29:30.000Z'));
+      const early = klass('s1', 'Online Pilates', { mine: mine('booked'), can: can({ cancel: 'free' }), online: online('early') });
+      serve([early]);
+      render(<Classes gym={GYM} />);
+      await vi.waitFor(() => expect(screen.getByText('Online Pilates')).toBeTruthy());
+      expect(svc.list).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('link')).toBeNull();
+
+      serve([{ ...early, online: online('open', LINK) }]);
+      await vi.advanceTimersByTimeAsync(29_000);
+      expect(svc.list).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await vi.waitFor(() => expect(screen.getByRole('link', { name: /^Join class/ }).getAttribute('href')).toBe(LINK));
+      expect(svc.list).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

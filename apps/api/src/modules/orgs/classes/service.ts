@@ -48,6 +48,7 @@ import {
   type GymClassSchedule,
   type GymClassType,
   type GymClassWeekResponse,
+  type SetClassOnlineRequest,
   type UpdateGymClassScheduleRequest,
   type UpdateGymClassTypeRequest,
 } from "@app/shared";
@@ -55,6 +56,7 @@ import { fullName } from "../leaderboard/rank.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import type { EndingPersonRow } from "./bookingsRepo.js";
 import * as repo from "./repo.js";
+import * as online from "./onlineRepo.js";
 
 /** A person whose booking a change would end, as staff read them: the name as on
  *  Members, never an email. */
@@ -190,6 +192,8 @@ function toSchedule(row: repo.ClassScheduleRow): GymClassSchedule {
     datesComplete: row.datesComplete,
     finished: row.finished,
     startedToday: row.startedToday,
+    online: row.online,
+    onlineLink: row.onlineLink,
   };
 }
 
@@ -421,6 +425,8 @@ export async function createSchedule(
     minutes: req.minutes,
     places: req.places,
     coachUserId: req.coachUserId,
+    online: req.online ?? false,
+    onlineLink: req.onlineLink ?? null,
     confirmTrainerSessions: req.confirmTrainerSessions ?? null,
     actorUserId: userId,
     now: deps.now(),
@@ -618,6 +624,10 @@ async function readWeekOr404(
       coachName: s.coachName,
       status: classSessionStatusSchema.parse(s.status),
       changedAlone: s.changedAlone,
+      online: s.online,
+      onlineLink: s.onlineLink,
+      onlineAlone: s.onlineAlone,
+      ended: s.ended,
       started: s.started,
     })),
   });
@@ -750,6 +760,47 @@ export async function changeClassSession(
   );
   if (done.kind !== "ok") return done;
   return { kind: "ok", body: await readWeekOr404(deps, gymId, done.localDate) };
+}
+
+/** A time slot is online or not, with the gym's own link: the time slot and each of its
+ *  classes that has not ended, except one whose own was set on its own. */
+export async function setScheduleOnline(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  scheduleId: string,
+  req: SetClassOnlineRequest,
+): Promise<GymClassesResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
+  const outcome = await online.setSlotOnline(deps.sql, { gymId, scheduleId, online: req.online, onlineLink: req.onlineLink, actorUserId: userId, now: deps.now() });
+  if (outcome.kind === "not_found") throw new OrgsError(404, "class_not_found", NOT_FOUND_MESSAGE);
+  return await readOr404(deps, gymId);
+}
+
+/** One class is online or not, with its own link, until it ends. */
+export async function setSessionOnline(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  sessionId: string,
+  req: SetClassOnlineRequest,
+): Promise<GymClassWeekResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
+  const outcome = await online.setClassOnline(deps.sql, { gymId, sessionId, online: req.online, onlineLink: req.onlineLink, actorUserId: userId, now: deps.now() });
+  switch (outcome.kind) {
+    case "ok":
+      return await readWeekOr404(deps, gymId, outcome.localDate);
+    case "not_found":
+      throw new OrgsError(404, "class_not_found", NOT_FOUND_MESSAGE);
+    case "ended":
+      throw new OrgsError(409, "class_ended", "This class is over, so its link can't be changed now.");
+    case "cancelled":
+      throw new OrgsError(409, "class_day_cancelled", "This class is cancelled. Un-cancel it first, then change its link.");
+    default: {
+      const never: never = outcome;
+      throw new Error(`unhandled class online outcome: ${JSON.stringify(never)}`);
+    }
+  }
 }
 
 export async function cancelClassSession(

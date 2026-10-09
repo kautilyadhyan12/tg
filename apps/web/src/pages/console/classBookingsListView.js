@@ -73,6 +73,45 @@ export function markRow(booking, list) {
 export const MARK_HELP =
   'Anyone who checks in at the gym from 1 hour before the class is marked Came. 15 minutes after it ends, everyone else is marked No-show, if the gym was checking people in at that time. You can change any of them here.';
 
+/** The same place, for an online class: nobody checks in at the gym for it. */
+export const MARK_HELP_ONLINE = 'This is an online class, so the app marks nobody by itself. Mark each person Came or No-show here.';
+
+/** Staff take one person off a class before it starts (17g); null where they cannot: the
+ *  class has started or is cancelled (`list.canRemove` false), or the place is not one
+ *  that is held or waited for. The button, and the box that asks first: what happens to
+ *  this person, and who is not touched. */
+export function removeAsk(booking, list) {
+  if (list?.canRemove !== true) return null;
+  const status = booking?.status;
+  if (status !== 'booked' && status !== 'waitlisted' && status !== 'attended') return null;
+  const name = typeof booking?.name === 'string' && booking.name !== '' ? booking.name : 'this person';
+  const className = typeof list?.className === 'string' && list.className !== '' ? list.className : 'this class';
+  const waiting = status === 'waitlisted';
+  const lines = [];
+  if (waiting) {
+    lines.push('They leave the waitlist. Nobody else moves.');
+  } else {
+    lines.push('Their place is cancelled. It is not counted as a late cancel.');
+    if (booking.packCharged === true) lines.push('The class goes back on their pack.');
+    if (Array.isArray(list?.waitlisted) && list.waitlisted.length > 0) {
+      lines.push('The free place goes to the waitlist, by your booking rules.');
+    }
+    if (list?.online === true) lines.push('They stop seeing the link to this online class.');
+  }
+  lines.push('Nobody else in this class is changed.');
+  lines.push("The app doesn't tell them yet. Tell them yourself.");
+  return {
+    button: { label: waiting ? 'Remove from waitlist' : 'Remove from class', aria: `Remove ${name} from ${waiting ? 'the waitlist' : className}` },
+    title: waiting ? `Remove ${name} from the waitlist of ${className}?` : `Remove ${name} from ${className}?`,
+    lines,
+    yes: waiting ? 'Yes, remove from waitlist' : 'Yes, remove from class',
+    no: 'Keep them',
+  };
+}
+
+/** What staff read when a removal is refused and the server says no more. */
+export const REMOVE_FAILED = "We couldn't remove them. Please try again.";
+
 /** What staff read when a mark is refused and the server says no more. */
 export const MARK_FAILED = "We couldn't save that. Please try again.";
 

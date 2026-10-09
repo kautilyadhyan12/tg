@@ -5,6 +5,7 @@ import {
   CLASS_SCHEDULE_PREVIEW_DATES,
   CLASS_SLOT_REPLACES_ERROR,
 } from '@app/shared';
+import { onlineProblem, onlineRequest } from './classOnlineView';
 import {
   MONTH_SHORT,
   WEEKDAYS,
@@ -326,6 +327,8 @@ export function repeatDraft(type, today) {
     time: '18:00',
     startsOn: today ?? '',
     endsOn: '',
+    online: false,
+    link: '',
     ...fields,
     ...(gone ? { coachUserId: '', coachName: null } : {}),
   };
@@ -554,7 +557,7 @@ export function repeatProblem(draft) {
     // the calendar.
     if (until < draft.startsOn) return 'The end date is before the start date.';
   }
-  return null;
+  return onlineProblem(draft);
 }
 
 export function repeatRequest(draft) {
@@ -568,6 +571,8 @@ export function repeatRequest(draft) {
   // ABSENT, NOT NULL, when the gym left it blank — the schema takes either, and
   // absent is what "we have not said" looks like on a wire.
   if ((draft.endsOn ?? '') !== '') body.endsOn = draft.endsOn;
+  // Sent only for an online class: left out is a class at the gym.
+  if (draft.online === true) Object.assign(body, onlineRequest(draft));
   return body;
 }
 

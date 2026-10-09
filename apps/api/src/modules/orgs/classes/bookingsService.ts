@@ -18,6 +18,9 @@ import {
   CLASS_BOOKING_WORDS,
   CLASS_LATE_CANCEL_ERROR,
   CLASS_MARK_WORDS,
+  CLASS_REMOVE_WORDS,
+  classOnlineView,
+  decideStaffRemove,
   MEMBER_CLASSES_MAX,
   addDays,
   bookingTime,
@@ -190,6 +193,17 @@ async function viewFrom(
   // already, so there is nothing to book, wait for or claim.
   const marked = latest?.status === "attended" || latest?.status === "no_show";
   const member = booker !== null && !marked;
+  // The link is read for somebody who is a member now; a place kept by somebody who has
+  // left the gym is nobody's way in.
+  const online = classOnlineView({
+    online: session.online,
+    link: session.onlineLink,
+    status: booker === null ? null : (latest?.status ?? null),
+    cancelled: session.cancelled,
+    nowMs: now.getTime(),
+    startsAtMs: startsAt,
+    minutes: session.minutes,
+  });
   return {
     sessionId: session.id,
     className: session.className,
@@ -219,6 +233,7 @@ async function viewFrom(
       cancel: booker !== null && cancel.kind === "cancel" ? (cancel.status === "cancelled" ? "free" : "late") : null,
       why: member && wait.kind === "refuse" ? wait.reason : null,
     },
+    online: online === null ? null : { state: online.state, opensAt: new Date(online.opensAtMs).toISOString(), link: online.link },
   };
 }
 export async function getBooking(deps: Pick<BookingsDeps, "sql" | "now">, userId: string, gymId: string, sessionId: string, limit: Limit): Promise<ClassBookingView | null> {
@@ -525,6 +540,9 @@ export async function getSessionBookings(
     lateCancelled: shown(late),
     lateCancelledTotal: lateTotal,
     canMark: !session.cancelled && deps.now().getTime() >= session.startsAt.getTime(),
+    canRemove: !session.cancelled && deps.now().getTime() < session.startsAt.getTime(),
+    online: session.online,
+    onlineLink: session.onlineLink,
   });
 }
 
@@ -579,6 +597,65 @@ export async function markBooking(
     });
     return null;
   });
+  if (refused !== null) throw refused;
+  return await getSessionBookings(deps, staffId, gymId, sessionId, () => Promise.resolve(true));
+}
+
+/** Staff take one person off a class before it starts: whoever runs the timetable, and
+ *  the class's own coach. The place is cancelled and never a late cancel, a pack has its
+ *  class back, and a freed place goes to the waitlist by the usual rule. The same removal
+ *  again changes nothing. Answers the class's list as it now is. */
+export async function removeBooking(
+  deps: BookingsDeps,
+  staffId: string,
+  gymId: string,
+  sessionId: string,
+  bookingId: string,
+  limit: Limit,
+): Promise<ClassSessionBookingsResponse | null> {
+  const [org, authority] = await Promise.all([getOrgById(deps.sql, gymId), getStaffAuthority(deps.sql, gymId, staffId)]);
+  if (org === null || authority === null) throw notFound();
+  const manages = await holdsPrivilege(deps, gymId, staffId, "schedule.manage");
+  const seen = await repo.sessionById(deps.sql, gymId, sessionId, false);
+  if (!manages && (seen === null || seen.coachUserId !== staffId)) {
+    throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
+  }
+  await requireWritableGym(deps, org);
+  if (!(await limit())) return null;
+  if (seen === null) throw classNotFound();
+
+  const refused = await deps.inLine(gymId, () =>
+    deps.sql.begin(async (tx): Promise<OrgsError | null> => {
+      await lockOrgRow(tx, gymId);
+      const ctx = await repo.classContext(tx, gymId, sessionId);
+      if (ctx === null) return classNotFound();
+      const booking = await repo.bookingToRemove(tx, gymId, sessionId, bookingId);
+      if (booking === null) return new OrgsError(404, "booking_not_found", CLASS_REMOVE_WORDS.booking_not_found);
+      const now = deps.now();
+      const decision = decideStaffRemove({
+        status: booking.status,
+        cancelled: ctx.session.cancelled,
+        started: now.getTime() >= ctx.session.startsAt.getTime(),
+        packCharged: booking.packCharged,
+      });
+      if (decision.kind === "already") return null;
+      if (decision.kind === "refuse") return new OrgsError(409, decision.reason, CLASS_REMOVE_WORDS[decision.reason]);
+      await repo.markCancelled(tx, { gymId, bookingId: booking.id, status: "cancelled", packCharged: booking.packCharged && !decision.refundPack, now });
+      if (decision.refundPack && booking.heldMembershipId !== null) await givePackClassBack(tx, gymId, booking.heldMembershipId, now);
+      await insertAudit(tx, {
+        actorUserId: staffId,
+        gymId,
+        action: "org.class_booking_removed",
+        targetType: "gym_class_booking",
+        targetId: booking.id,
+        meta: { was: booking.status, packGivenBack: String(decision.refundPack && booking.heldMembershipId !== null) },
+      });
+      if (decision.freesPlace) {
+        await handOver(tx, gymId, { ...ctx, counts: { ...ctx.counts, booked: ctx.counts.booked - 1 } }, now);
+      }
+      return null;
+    }),
+  );
   if (refused !== null) throw refused;
   return await getSessionBookings(deps, staffId, gymId, sessionId, () => Promise.resolve(true));
 }

@@ -9,6 +9,8 @@ import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/c
 import { bookingsAsked, endingTotal } from './bookingsEndView';
 import { sessionsAsked } from './trainerSessionsView';
 import { RunFields, StartTimePick } from './ClassFields';
+import { OnlineBox } from './ClassOnline';
+import { onlineButton, onlineLine, onlineNeedsLink } from './classOnlineView';
 import MemberListPerson from './MemberListPerson';
 import { canRemoveMembers, viewerPrivileges } from './consoleView';
 import { placeTo } from './consolePlaces';
@@ -125,7 +127,7 @@ function DayForm({
 /** One date, opened. Its actions follow what the server says it is: a started
  *  class has none, a cancelled one can be un-cancelled, any other can be edited
  *  or cancelled. */
-function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVersion, trainingTo, onOpenPerson, onClose, onChange, onCancel, onRestore }) {
+function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVersion, trainingTo, onOpenPerson, onClose, onChange, onCancel, onRestore, onOnline }) {
   const [mode, setMode] = useState(null);
   const [draft, setDraft] = useState(() => dayDraft(session));
   const [scope, setScope] = useState('this');
@@ -180,6 +182,9 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
   const tag = sessionTag(session);
   const name = sessionName(session, clockFormat);
   const cancelled = session.status === 'cancelled';
+  const online = onlineLine(session);
+  // The link can be set until the class is over, a class under way included.
+  const canSetOnline = !locked && !cancelled && session.ended !== true;
 
   return (
     <section
@@ -198,6 +203,16 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
           </div>
           <div className="c-s14 c-t2">{sessionWhenLine(session, clockFormat)}</div>
           <div className="c-s14 c-t2">{peopleLine(session)}</div>
+          {online === '' ? null : (
+            <div className="c-s14 c-w5" style={{ color: onlineNeedsLink(session) ? 'var(--warn)' : 'var(--t2)' }} data-testid="class-online">
+              {online}
+            </div>
+          )}
+          {session.online === true && typeof session.onlineLink === 'string' && !cancelled ? (
+            <a href={session.onlineLink} target="_blank" rel="noopener noreferrer" className="c-btn-link c-s14 break-all">
+              {session.onlineLink}
+            </a>
+          ) : null}
         </div>
         <button type="button" onClick={onClose} aria-label="Close this class" className="c-icon-btn">
           <X aria-hidden="true" className="w-[18px] h-[18px]" />
@@ -209,8 +224,19 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
         <ClassBookingsList gymId={gymId} sessionId={session.id} version={`${String(saves)}-${String(peopleVersion)}`} onOpen={onOpenPerson} />
       )}
 
-      {session.started ? (
-        <p className="c-s14 c-t3">This class has started, so its time, coach and places can&apos;t be changed.</p>
+      {mode === 'online' ? (
+        <OnlineBox holder={session} kind="class" busy={busy} onSave={onOnline} onClose={() => setMode(null)} />
+      ) : session.started ? (
+        <div className="flex flex-col gap-3">
+          <p className="c-s14 c-t3">This class has started, so its time, coach and places can&apos;t be changed.</p>
+          {canSetOnline && session.online === true ? (
+            <div>
+              <button type="button" onClick={() => setMode('online')} className="c-btn c-btn-soft">
+                {onlineButton(session)}
+              </button>
+            </div>
+          ) : null}
+        </div>
       ) : locked ? null : cancelled ? (
         overBox ?? (
           <div>
@@ -325,6 +351,9 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
             className="c-btn c-btn-soft"
           >
             Edit
+          </button>
+          <button type="button" onClick={() => setMode('online')} className="c-btn c-btn-soft">
+            {onlineButton(session)}
           </button>
           <button type="button" onClick={() => setMode('cancel')} className="c-btn c-btn-ghost">
             Cancel class
@@ -555,7 +584,7 @@ export default function ClassWeek({ gymId, org, readOnly, staff, locked, startDa
                         setSelected(selected === s.id ? null : s.id);
                       }}
                       aria-pressed={selected === s.id}
-                      aria-label={`${sessionName(s, lists.clockFormat)}${tag === '' ? '' : `, ${tag.toLowerCase()}`}`}
+                      aria-label={`${sessionName(s, lists.clockFormat)}${tag === '' ? '' : `, ${tag.toLowerCase()}`}${s.online === true && !cancelled ? ', online' : ''}`}
                       className="c-card text-left min-w-0 flex flex-col gap-px"
                       style={{
                         borderRadius: 10,
@@ -573,6 +602,7 @@ export default function ClassWeek({ gymId, org, readOnly, staff, locked, startDa
                         {s.name}
                       </span>
                       <span className="c-s12 c-t3 c-ell">{peopleLine(s)}</span>
+                      {s.online === true && !cancelled ? <span className="c-s12 c-w6 c-lk">Online</span> : null}
                       {tag === '' ? null : (
                         <span className="c-s12 c-w6" style={{ color: cancelled ? 'var(--bad)' : 'var(--warn)' }}>
                           {tag}
@@ -608,6 +638,7 @@ export default function ClassWeek({ gymId, org, readOnly, staff, locked, startDa
                     )
                   }
                   onRestore={(confirm) => act(() => orgService.restoreClassDay(gymId, open.id, confirm))}
+                  onOnline={(body) => act(() => orgService.setClassDayOnline(gymId, open.id, body))}
                 />
               </div>
             )}

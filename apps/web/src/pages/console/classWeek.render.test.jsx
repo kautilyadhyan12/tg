@@ -14,6 +14,8 @@ const api = {
   getClassWeek: vi.fn(),
   getClassBookings: vi.fn(),
   markClassBooking: vi.fn(),
+  removeClassBooking: vi.fn(),
+  setClassDayOnline: vi.fn(),
   getMemberList: vi.fn(),
   getMemberListEntry: vi.fn(),
   getHeldMemberships: vi.fn(),
@@ -163,6 +165,8 @@ beforeEach(() => {
   api.getClassWeek.mockReset().mockResolvedValue(week());
   api.getClassBookings.mockReset().mockResolvedValue(bookings());
   api.markClassBooking.mockReset().mockResolvedValue(bookings());
+  api.removeClassBooking.mockReset().mockResolvedValue(bookings());
+  api.setClassDayOnline.mockReset().mockResolvedValue(week());
   api.changeClassDay.mockReset().mockResolvedValue(week());
   api.cancelClassDay.mockReset().mockResolvedValue(week());
   api.restoreClassDay.mockReset().mockResolvedValue(week());
@@ -803,5 +807,174 @@ describe('a class that has started says who came, and staff can mark or change i
     await waitFor(() => expect(api.getClassBookings.mock.calls.length).toBeGreaterThan(reads));
     // Still as the server has it: not marked.
     expect(markOf(list, 'Maya Shah').getByText('Not marked yet')).toBeTruthy();
+  });
+});
+
+// STAFF TAKE ONE PERSON OFF A CLASS (17g; Kd: a second confirmation, never on the first
+// press). The worst this screen could do: remove somebody on one press, or the wrong person.
+describe('Remove from class asks first', () => {
+  const full = () =>
+    bookings({
+      canRemove: true,
+      canMark: false,
+      online: false,
+      onlineLink: null,
+      booked: [person(1, 'Maya Shah', { membership: '10 classes', packCharged: true }), person(2, 'Leo Grant')],
+      waitlisted: [person(4, 'Tom Reed', { status: 'waitlisted' })],
+    });
+  const rowOf = (list, name) => within(list.getByText(name).closest('li'));
+
+  it('the first press removes nobody and opens a box naming that person; Keep them sends nothing; Yes removes that one person', async () => {
+    api.getClassBookings.mockResolvedValue(full());
+    api.removeClassBooking.mockResolvedValue(bookings({ canRemove: true, canMark: false, booked: [person(2, 'Leo Grant'), person(4, 'Tom Reed')] }));
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    const list = within(await screen.findByTestId('class-bookings'));
+
+    fireEvent.click(list.getByRole('button', { name: 'Remove Maya Shah from Spin' }));
+    expect(api.removeClassBooking).not.toHaveBeenCalled();
+    const box = within(list.getByRole('group', { name: 'Remove Maya Shah from Spin?' }));
+    expect(box.getByText('Their place is cancelled. It is not counted as a late cancel.')).toBeTruthy();
+    expect(box.getByText('The class goes back on their pack.')).toBeTruthy();
+    expect(box.getByText('The free place goes to the waitlist, by your booking rules.')).toBeTruthy();
+    expect(box.getByText('Nobody else in this class is changed.')).toBeTruthy();
+    expect(box.getByText("The app doesn't tell them yet. Tell them yourself.")).toBeTruthy();
+    // One box at a time, under its own person; nobody else's row has one.
+    expect(list.getAllByTestId('class-remove-ask')).toHaveLength(1);
+    expect(rowOf(list, 'Leo Grant').queryByTestId('class-remove-ask')).toBeNull();
+
+    fireEvent.click(box.getByRole('button', { name: 'Keep them' }));
+    expect(list.queryByTestId('class-remove-ask')).toBeNull();
+    expect(api.removeClassBooking).not.toHaveBeenCalled();
+
+    fireEvent.click(list.getByRole('button', { name: 'Remove Maya Shah from Spin' }));
+    fireEvent.click(list.getByRole('button', { name: 'Yes, remove from class' }));
+    await waitFor(() => expect(api.removeClassBooking).toHaveBeenCalledTimes(1));
+    expect(api.removeClassBooking).toHaveBeenCalledWith('g1', 'x1', person(1, 'Maya Shah').bookingId);
+    // The list is the server's answer: Maya gone, Tom moved in.
+    await waitFor(() => expect(list.queryByText('Maya Shah')).toBeNull());
+    expect(list.getByText('Booked · 2 of 12 places')).toBeTruthy();
+    expect(list.queryByTestId('class-remove-ask')).toBeNull();
+  });
+
+  it('somebody waiting is removed from the waitlist, by their own box', async () => {
+    api.getClassBookings.mockResolvedValue(full());
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    const list = within(await screen.findByTestId('class-bookings'));
+    fireEvent.click(list.getByRole('button', { name: 'Remove Tom Reed from the waitlist' }));
+    const box = within(list.getByRole('group', { name: 'Remove Tom Reed from the waitlist of Spin?' }));
+    expect(box.getByText('They leave the waitlist. Nobody else moves.')).toBeTruthy();
+    fireEvent.click(box.getByRole('button', { name: 'Yes, remove from waitlist' }));
+    await waitFor(() => expect(api.removeClassBooking).toHaveBeenCalledWith('g1', 'x1', person(4, 'Tom Reed').bookingId));
+  });
+
+  it('no Remove button once the class has started, on a late cancel, or where the server does not say staff can', async () => {
+    api.getClassBookings.mockResolvedValue(
+      bookings({
+        canRemove: false,
+        canMark: true,
+        booked: [person(1, 'Maya Shah')],
+        lateCancelled: [person(6, 'Ana Diaz', { status: 'late_cancelled' })],
+        lateCancelledTotal: 1,
+      }),
+    );
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    const list = within(await screen.findByTestId('class-bookings'));
+    expect(list.getByText('Maya Shah')).toBeTruthy();
+    expect(list.queryByTestId('class-remove')).toBeNull();
+  });
+
+  it('a removal the server refuses says the server’s sentence, closes the box and reads the list again', async () => {
+    api.getClassBookings.mockResolvedValue(full());
+    api.removeClassBooking.mockRejectedValue({
+      response: { status: 409, data: { error: 'class_started', message: 'This class has already started. Mark them Came or No-show instead.' } },
+    });
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    const list = within(await screen.findByTestId('class-bookings'));
+    fireEvent.click(list.getByRole('button', { name: 'Remove Leo Grant from Spin' }));
+    const reads = api.getClassBookings.mock.calls.length;
+    fireEvent.click(list.getByRole('button', { name: 'Yes, remove from class' }));
+    expect(await list.findByText('This class has already started. Mark them Came or No-show instead.')).toBeTruthy();
+    await waitFor(() => expect(api.getClassBookings.mock.calls.length).toBe(reads + 1));
+    expect(list.queryByTestId('class-remove-ask')).toBeNull();
+    expect(list.getByText('Leo Grant')).toBeTruthy();
+  });
+});
+
+// ONLINE CLASSES ON THE CALENDAR (17g).
+describe('an online class on the Calendar', () => {
+  const LINK = 'https://meet.google.com/abc-defg-hij';
+  const online = (over = {}) => day({ online: true, onlineLink: LINK, onlineAlone: false, ended: false, ...over });
+
+  it('is marked Online in the week, and opened it shows its link and a button to change it', async () => {
+    api.getClassWeek.mockResolvedValue(week({ sessions: [online(), YOGA_WED] }));
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00, online');
+    expect(screen.getByTestId('class-online').textContent).toBe('Online class · link added');
+    const link = screen.getByRole('link', { name: LINK });
+    expect(link.getAttribute('href')).toBe(LINK);
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change link' }));
+    const box = within(screen.getByRole('group', { name: 'Online class' }));
+    expect(box.getByText('This changes this class only. It then keeps its own link when the time slot’s link changes.')).toBeTruthy();
+    const NEW = 'https://meet.google.com/new-room-xyz';
+    fireEvent.change(box.getByLabelText('Video link'), { target: { value: NEW } });
+    api.setClassDayOnline.mockResolvedValue(week({ sessions: [online({ onlineLink: NEW, onlineAlone: true })] }));
+    fireEvent.click(box.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.setClassDayOnline).toHaveBeenCalledWith('g1', 'x1', { online: true, onlineLink: NEW }));
+    expect((await screen.findByRole('link', { name: NEW })).getAttribute('href')).toBe(NEW);
+    expect(screen.queryByRole('group', { name: 'Online class' })).toBeNull();
+  });
+
+  it('with no link yet it says so and the button adds it; a class at the gym offers Make it online', async () => {
+    api.getClassWeek.mockResolvedValue(week({ sessions: [online({ onlineLink: null }), day({ id: 'x3', localDate: '2026-09-25' })] }));
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00, online');
+    expect(screen.getByTestId('class-online').textContent).toBe('Online class · no link yet');
+    expect(screen.queryByRole('link', { name: /^https:/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add the link' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close this class' }));
+    await openDay('Spin on Fri 25 Sep 2026 at 18:00');
+    expect(screen.queryByTestId('class-online')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Make it online' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(api.setClassDayOnline).not.toHaveBeenCalled();
+  });
+
+  it('under way its link can still be changed; over, or cancelled, it cannot', async () => {
+    api.getClassWeek.mockResolvedValue(
+      week({
+        sessions: [
+          online({ started: true }),
+          online({ id: 'x8', localDate: '2026-09-21', started: true, ended: true }),
+          online({ id: 'x9', localDate: '2026-09-23', status: 'cancelled' }),
+        ],
+      }),
+    );
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00, online');
+    expect(screen.getByRole('button', { name: 'Change link' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close this class' }));
+    await openDay('Spin on Mon 21 Sep 2026 at 18:00, online');
+    expect(screen.queryByRole('button', { name: 'Change link' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close this class' }));
+    // A cancelled class is not called online in the week, and shows no link.
+    await openDay('Spin on Wed 23 Sep 2026 at 18:00, cancelled');
+    expect(screen.queryByRole('button', { name: 'Change link' })).toBeNull();
+    expect(screen.queryByRole('link', { name: /^https:/ })).toBeNull();
+  });
+
+  it('once it has started, the list says staff mark an online class themselves', async () => {
+    api.getClassWeek.mockResolvedValue(week({ sessions: [online({ started: true })] }));
+    api.getClassBookings.mockResolvedValue(bookings({ canMark: true, canRemove: false, online: true, onlineLink: LINK, booked: [person(1, 'Maya Shah')] }));
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00, online');
+    const list = within(await screen.findByTestId('class-bookings'));
+    expect(list.getByText('This is an online class, so the app marks nobody by itself. Mark each person Came or No-show here.')).toBeTruthy();
+    expect(list.queryByText(/Anyone who checks in at the gym/)).toBeNull();
   });
 });

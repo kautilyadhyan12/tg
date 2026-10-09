@@ -149,6 +149,17 @@ export function registerClassBookingRoutes(app: FastifyInstance, deps: { sql: Sq
     return reply.status(200).send(list);
   });
 
+  // Staff take one person off a class before it starts (17g). The same removal again is
+  // a 200. A whole class taken off one by one by three staff at a desk is inside these.
+  const removeLimit = limiter("orgs_bookings_remove", 600, 1800);
+  app.post("/v1/orgs/:gymId/class-sessions/:sessionId/bookings/:bookingId/remove", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(classBookingParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await service.removeBooking(bookingDeps, requireUserId(req), params.gymId, params.sessionId, params.bookingId, gate(removeLimit)(req, reply));
+    if (list === null) return;
+    return reply.status(200).send(list);
+  });
+
   // ── STAFF HOLDING `schedule.manage` ──
 
   // Staff set a timetable and its settings now and then; three at one front desk share

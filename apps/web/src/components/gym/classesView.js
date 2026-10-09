@@ -1,4 +1,4 @@
-import { CLASS_BOOKING_WORDS } from '@app/shared';
+import { CLASS_BOOKING_WORDS, CLASS_ONLINE_WORDS } from '@app/shared';
 import { dayLabel, ordinal, timeText } from './leaderboardView';
 
 // A MEMBER'S CLASSES, IN WORDS (spec Part 3 §13.6; ROADMAP 17d). Pure. A class's day and
@@ -26,6 +26,30 @@ export function dayHeading(day, today) {
   if (day === today) return `Today · ${dayLabel(day)}`;
   if (day === nextDay(today)) return `Tomorrow · ${dayLabel(day)}`;
   return dayLabel(day);
+}
+
+/** An online class as this member meets it (17g); null for a class at the gym. The line
+ *  they read, and the link once it is theirs: the server sends it only to somebody who
+ *  holds a place, from 30 minutes before the class until it ends. */
+export function onlineText(c) {
+  const online = c?.online ?? null;
+  if (online === null || c.cancelled === true) return null;
+  const line = CLASS_ONLINE_WORDS[online.state] ?? CLASS_ONLINE_WORDS.closed;
+  const link = online.state === 'open' && typeof online.link === 'string' && online.link.startsWith('https://') ? online.link : null;
+  return { line, link, ready: link !== null };
+}
+
+/** When the list should be read again by itself: the moment the next link shows, for a
+ *  class they hold a place in. Null where no link is waited for, or it is a day away. */
+export function nextLinkAt(classes, now = Date.now()) {
+  let soonest = null;
+  for (const c of Array.isArray(classes) ? classes : []) {
+    if (c?.online?.state !== 'early') continue;
+    const at = Date.parse(c.online.opensAt);
+    if (Number.isNaN(at) || at <= now || at - now > 86_400_000) continue;
+    if (soonest === null || at < soonest) soonest = at;
+  }
+  return soonest;
 }
 
 /** The classes under their days, in the order they arrived. */

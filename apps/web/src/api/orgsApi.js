@@ -1726,6 +1726,34 @@ export const orgService = {
       ),
     ),
 
+  /** POST …/class-sessions/:sessionId/bookings/:bookingId/remove — staff take one person
+   *  off a class before it starts (17g). Answers the class's list as it now is. */
+  removeClassBooking: (gymId, sessionId, bookingId) =>
+    readThrough(
+      classSessionBookingsResponseSchema,
+      'who is booked',
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/class-sessions/${encodeURIComponent(sessionId)}/bookings/${encodeURIComponent(bookingId)}/remove`,
+      ),
+    ),
+
+  /** PUT …/class-repeats/:scheduleId/online — whether a time slot is online, and its
+   *  link: `{ online, onlineLink }`, both every time (17g). Answers the whole timetable. */
+  setClassRepeatOnline: (gymId, scheduleId, body) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'that time slot',
+      authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/class-repeats/${encodeURIComponent(scheduleId)}/online`, body),
+    ),
+
+  /** PUT …/class-sessions/:sessionId/online — the same for one class. Answers its week. */
+  setClassDayOnline: (gymId, sessionId, body) =>
+    readThrough(
+      gymClassWeekResponseSchema,
+      'that day',
+      authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/class-sessions/${encodeURIComponent(sessionId)}/online`, body),
+    ),
+
   /** GET …/class-bookings/ending — everybody whose booking a change to the timetable
    *  would end, a hundred at a time: `{ by: 'session' | 'slot' | 'class', id, from?, after? }`.
    *  The box that asks shows the first few from the 409 itself; this is its "See all". */

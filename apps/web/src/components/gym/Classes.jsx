@@ -4,7 +4,7 @@ import { CLASS_LATE_CANCEL_ERROR, MEMBER_CLASSES_WEEKS } from '@app/shared';
 import { classesService } from '../../api/classesApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
-import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, mineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
+import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, mineText, nextLinkAt, onlineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
 
 // A GYM'S CLASSES FOR ITS MEMBER (spec Part 3 §13.6; ROADMAP 17d): the coming classes by
 // day, with Book, Join waitlist, Claim place and Cancel. The server decides every one; a
@@ -30,6 +30,7 @@ function ClassRow({ c, busy, said, onTake, onGive }) {
   const places = placesText(c);
   const why = whyText(c);
   const waiting = c.mine?.status === 'waitlisted';
+  const online = onlineText(c);
   return (
     <li className="rounded-xl p-3 flex flex-col gap-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
       <div className="flex items-start justify-between gap-3">
@@ -46,6 +47,23 @@ function ClassRow({ c, busy, said, onTake, onGive }) {
       </div>
       {mine !== null && !c.cancelled && (
         <p className="text-xs font-semibold" style={{ color: waiting ? ORANGE : c.mine.status === 'booked' ? GREEN : MUTED }}>{mine}</p>
+      )}
+      {online !== null && (
+        <p className="text-xs" style={{ color: online.ready ? GREEN : MUTED }} data-testid="class-online">{online.line}</p>
+      )}
+      {online !== null && online.link !== null && (
+        <div>
+          <a
+            href={online.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Join class: ${c.className}, ${whenText(c)}`}
+            className="inline-flex items-center px-3.5 py-2 rounded-xl text-sm font-semibold min-h-11"
+            style={{ background: GREEN, color: '#161412' }}
+          >
+            Join class
+          </a>
+        </div>
       )}
       {why !== null && <p className="text-xs" style={{ color: MUTED }}>{why}</p>}
       {said !== null && (
@@ -117,6 +135,14 @@ export default function Classes({ gym }) {
       asked.current += 1;
     };
   }, [load]);
+
+  // The list is read again the moment a class's link is due, so Join class shows by itself.
+  const linkAt = nextLinkAt(state.list?.classes);
+  useEffect(() => {
+    if (linkAt === null) return undefined;
+    const timer = setTimeout(load, Math.max(0, linkAt - Date.now()) + 1000);
+    return () => clearTimeout(timer);
+  }, [linkAt, load]);
 
   const go = (to) => {
     setState((s) => ({ ...s, loading: true }));
