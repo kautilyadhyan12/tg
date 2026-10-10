@@ -1566,6 +1566,10 @@ export const memberListCountsSchema = z.object({
    *  A former record admits nobody and is invited by nothing, so counting one under
    *  `canBeInvited` would be an ex-member offered a way back in by a number. */
   former: z.number().int().min(0).default(0),
+  /** How many of those former records still owe (18a-ii): a bill of theirs is open and
+   *  has fallen due. The Past members Filter offers "Payment due" only where this is
+   *  above nought. */
+  formerOwing: z.number().int().min(0).default(0),
 });
 export type MemberListCounts = z.infer<typeof memberListCountsSchema>;
 

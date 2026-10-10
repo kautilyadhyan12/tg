@@ -495,7 +495,7 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
       hasList: true,
       version: 2,
       lastConfirmedAt: new Date().toISOString(),
-      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1, former: 0 },
+      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1, former: 0, formerOwing: 0 },
       statuses: [{ label: "Active", count: 8, inApp: 3, canBeInvited: 5 }],
       // 3a-v-b's three, each with a default so a view built before it still parses.
       membershipTypes: [],
@@ -685,7 +685,7 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
       hasList: true,
       version: 2,
       lastConfirmedAt: new Date().toISOString(),
-      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1, former: 4 },
+      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1, former: 4, formerOwing: 1 },
       statuses: [{ label: "Active", count: 8, inApp: 3, canBeInvited: 5 }],
       membershipTypes: [{ label: "Gold", count: 6, inApp: 2, canBeInvited: 4 }],
       paymentStatuses: [{ label: "Overdue", count: 1, inApp: 0, canBeInvited: 1 }],

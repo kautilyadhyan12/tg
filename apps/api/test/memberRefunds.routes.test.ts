@@ -318,6 +318,8 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
         ["Ivy Past Member", "2026-01-15"],
         ["Jo Past Paid", null],
       ]);
+      // The list's own count of them, which the Past members Filter shows on its chip.
+      expect((await listService.readList(listAt, owner.userId, gymId, yes))?.counts).toMatchObject({ former: 2, formerOwing: 1 });
       const pastDue = await listService.readEntries(listAt, owner.userId, gymId, { records: "former", paymentStatus: "payment due" }, yes);
       expect(pastDue?.entries.map((entry) => entry.fullName)).toEqual(["Ivy Past Member"]);
       // With a status word nobody on Past members carries, she is not found; with none of that kind, she is.
@@ -335,6 +337,7 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       expect(first(await heldService.getHeldMemberships(listAt, owner.userId, gymId, ivy.entryId)).view.payment).toBeNull();
       const pastAfter = await listService.readEntries(listAt, owner.userId, gymId, { records: "former", paymentStatus: "payment due" }, yes);
       expect(pastAfter?.entries).toEqual([]);
+      expect((await listService.readList(listAt, owner.userId, gymId, yes))?.counts).toMatchObject({ former: 2, formerOwing: 0 });
 
       // The Filter finds exactly the three, and its count says three.
       const due = await listService.readEntries(listAt, owner.userId, gymId, { paymentStatus: "payment due" }, yes);

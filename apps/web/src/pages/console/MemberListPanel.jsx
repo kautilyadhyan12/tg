@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronRight, Download, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Upload, UserMinus, UserPlus, X } from 'lucide-react';
-import { MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
+import { HELD_PAYMENT_WORDS, MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import ScrollJump from '../../components/console/ScrollJump';
@@ -113,7 +113,7 @@ function FilterBox({ list, gymTags, filters, words, total, onChange, onClear, on
             ? group(
                 'Show',
                 <>
-                  <Chip role="radio" pressed={!past} onClick={() => onChange({ ...filters, records: 'current' })}>
+                  <Chip role="radio" pressed={!past} onClick={() => onChange({ ...filters, records: 'current', paymentStatus: past ? [] : filters.paymentStatus })}>
                     {words.peopleCap} <span className="c-n">{count(list.counts.entries)}</span>
                   </Chip>
                   <Chip role="radio" pressed={past} onClick={() => onChange({ ...EMPTY_FILTERS, query: filters.query, records: 'former' })}>
@@ -150,6 +150,15 @@ function FilterBox({ list, gymTags, filters, words, total, onChange, onClear, on
                   </div>
                 );
               })
+            : null}
+          {/* Past members have one word of their own to be found by (18a-ii): who still owes. */}
+          {list !== null && past && (list.counts.formerOwing ?? 0) > 0
+            ? group(
+                'Payment',
+                <Chip pressed={isTicked(filters, 'paymentStatus', HELD_PAYMENT_WORDS.due)} onClick={() => onChange(toggleWord(filters, 'paymentStatus', HELD_PAYMENT_WORDS.due))}>
+                  {HELD_PAYMENT_WORDS.due} <span className="c-n">{count(list.counts.formerOwing)}</span>
+                </Chip>,
+              )
             : null}
           {gymTags.length > 0 ? (
             <div className="flex flex-col gap-2.5" data-testid="filter-tags">
@@ -1045,6 +1054,13 @@ export default function MemberListPanel({
                       {e.needsReview ? (
                         <span className="c-tag c-tag-warn self-start mt-1" data-testid="review-tag">
                           Review needed
+                        </span>
+                      ) : null}
+                      {/* A past member who left a bill unpaid (18a-ii): said here at every width,
+                          since a past member's row has no Payment column. */}
+                      {past && cells.owes ? (
+                        <span className="c-tag c-tag-warn self-start mt-1" data-testid="owes-tag">
+                          {cells.payment}
                         </span>
                       ) : null}
                       {/* Somebody who also runs the gym (Kd's 4a-ii click-through). */}

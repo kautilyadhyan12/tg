@@ -1422,13 +1422,16 @@ export async function readList(
 ): Promise<MemberListView | null> {
   const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const [state, members, fields, held] = await Promise.all([
+  const today = dayInTz(deps.now(), org.timezone);
+  const [state, members, fields, held, owing] = await Promise.all([
     repo.listState(deps.sql, gymId),
     repo.membersAgainstList(deps.sql, gymId),
     repo.listFields(deps.sql, gymId),
     // The people who hold a membership here: their chips are counted by the app's own
     // words, on the gym's own day (23a-i).
-    heldOnListOf(deps.sql, gymId, dayInTz(deps.now(), org.timezone), null),
+    heldOnListOf(deps.sql, gymId, today, null),
+    // The past members who still owe, for the one chip Past members has (18a-ii).
+    pastOwing(deps.sql, gymId, today),
   ]);
   const inApp = inAppEntryIds(members);
   const mine = heldChips(held, new Set(inApp));
@@ -1447,7 +1450,7 @@ export async function readList(
   // gym past the ceiling read "200 people" above a list of 205, with `canBeInvited`
   // short by the truncated groups (review of PR #88, High-3). The sum now happens
   // inside the statement, before the cut.
-  const counts: MemberListCounts = totals;
+  const counts: MemberListCounts = { ...totals, formerOwing: owing.length };
   return {
     hasList: state !== null,
     version: state?.version ?? 0,
