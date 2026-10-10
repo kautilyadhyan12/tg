@@ -1,7 +1,7 @@
 // The Reports page's attendance words and CSVs (ROADMAP 21a-ii; spec Part 3 §16.5).
 import { describe, expect, it } from 'vitest';
 import { attendanceReportFrom, orgWords } from '@app/shared';
-import { classRows, classTiles, classesCsv, dayBars, daysCsv, hourGrid, hourLabel, hoursCsv, visitTiles, visitsLine, weekRows, weeksCsv } from './reportsAttendanceView';
+import { classRows, classTiles, chartTop, classesCsv, dayChart, daysCsv, hourGrid, hourLabel, hoursCsv, smoothLine, visitTiles, visitsLine, weekRows, weeksCsv } from './reportsAttendanceView';
 
 const words = orgWords('gym');
 
@@ -78,26 +78,99 @@ describe('the visit tiles', () => {
 });
 
 describe('the pictures', () => {
-  it('a bar is a share of the busiest day, and each Monday carries its date', () => {
-    const bars = dayBars(report());
-    expect(bars).toHaveLength(28);
-    expect(bars.filter((b) => b.monday).map((b) => b.label)).toEqual(['14 Sep', '21 Sep', '28 Sep', '5 Oct']);
-    expect(bars[22]).toMatchObject({ visits: 10, height: 100, text: 'Mon 5 Oct: 10 visits' });
-    expect(bars[27]).toMatchObject({ visits: 5, height: 50, text: 'Today, Sat 10 Oct: 5 visits so far' });
-    expect(bars[0]).toMatchObject({ visits: 0, height: 0 });
+  it.each([
+    [0, 4],
+    [1, 4],
+    [4, 4],
+    [5, 8],
+    [22, 24],
+    [24, 24],
+    [25, 32],
+    [857, 1000],
+    [5000, 6000],
+    [90000, 120000],
+  ])('a busiest day of %i gives a chart that tops out at %i, in four whole steps', (max, top) => {
+    expect(chartTop(max)).toBe(top);
+    expect(Number.isInteger(top / 4)).toBe(true);
   });
 
-  it('with no visit at all no bar divides by nothing', () => {
-    expect(dayBars(report({ days: [] })).every((b) => b.height === 0)).toBe(true);
+  it('a point for each day: how high against the top of the chart, the weekend, each Monday with its date', () => {
+    const chart = dayChart(report());
+    expect(chart.points).toHaveLength(28);
+    expect(chart.top).toBe(12);
+    expect(chart.ticks.map((t) => t.label)).toEqual(['12', '6', '0']);
+    expect(chart.points.filter((p) => p.monday).map((p) => p.label)).toEqual(['14 Sep', '21 Sep', '28 Sep', '5 Oct']);
+    expect(chart.points.filter((p) => p.weekend)).toHaveLength(8);
+    expect(chart.points[0]).toMatchObject({ at: 0, up: 0, visits: 0, today: false });
+    expect(chart.points[22]).toMatchObject({ visits: 10, text: 'Mon 5 Oct: 10 visits', title: 'Mon 5 Oct', said: '10 visits' });
+    expect(chart.points[22].up).toBeCloseTo(10 / 12);
+    expect(chart.points[27]).toMatchObject({ at: 1, today: true, text: 'Today, Sat 10 Oct: 5 visits so far' });
+    // Today is still going: the usual day is the 27 that have ended, 10 visits between them.
+    expect(chart.summary).toBe('About 0.4 a day · busiest: Mon 5 Oct, 10 visits');
+    expect(chart.any).toBe(true);
+  });
+
+  it('two days level are not called the busiest, and with no visit at all there is nothing to draw', () => {
+    const level = dayChart(report({ days: [{ day: '2026-10-05', visits: 7 }, { day: '2026-10-07', visits: 7 }] }));
+    expect(level.summary).toBe('About 0.5 a day · most in one day: 7');
+    const none = dayChart(report({ days: [] }));
+    expect(none).toMatchObject({ any: false, top: 4, summary: 'About 0 a day' });
+    expect(none.points.every((p) => p.up === 0)).toBe(true);
+    // The first day of check-in: one point, in the middle.
+    const first = dayChart(report({ firstVisitOn: '2026-10-10', days: [{ day: '2026-10-10', visits: 3 }], weeks: [] }));
+    expect(first.points).toHaveLength(1);
+    expect(first.points[0]).toMatchObject({ at: 0.5, visits: 3 });
+    expect(first.summary).toBe('Visits each day, the last 1 days');
+  });
+
+  it('the line passes through every day, and never leaves the chart', () => {
+    const shape = smoothLine(
+      [
+        { at: 0, up: 0 },
+        { at: 0.5, up: 1 },
+        { at: 1, up: 0.25 },
+      ],
+      200,
+      100,
+    );
+    expect(shape.xy).toEqual([
+      { x: 0, y: 100 },
+      { x: 100, y: 0 },
+      { x: 200, y: 75 },
+    ]);
+    expect(shape.line).toBe('M0 100 C50 100 50 0 100 0 C150 0 150 75 200 75');
+    expect(shape.area).toBe('M0 100 C50 100 50 0 100 0 C150 0 150 75 200 75 L200 100 L0 100 Z');
+    // Every number in the path is inside the box.
+    const numbers = shape.line.match(/-?\d+(\.\d+)?/g).map(Number);
+    expect(numbers.every((n) => n >= 0 && n <= 200)).toBe(true);
   });
 
   it('the grid runs from the earliest hour to the latest, and a square is a share of the busiest', () => {
     const grid = hourGrid(report(), '24h');
     expect(grid.columns.map((c) => c.hour)).toEqual([0, 1, 2, 3, 4, 5, 6]);
     expect(grid.rows.map((r) => r.label)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
-    expect(grid.rows[1].cells[6]).toMatchObject({ visits: 40, share: 1 });
-    expect(grid.rows[5].cells[0]).toMatchObject({ visits: 3, share: 0.075, text: 'Saturday 00:00 to 01:00: 3 visits' });
+    expect(grid.rows[1].cells[6]).toMatchObject({ visits: 40, share: 1, level: 5, best: true });
+    expect(grid.rows[5].cells[0]).toMatchObject({ visits: 3, share: 0.075, level: 1, best: false, text: 'Saturday 00:00 to 01:00: 3 visits' });
+    expect(grid.rows[0].cells[0]).toMatchObject({ visits: 0, level: 0, best: false });
+    expect(grid.marked).toBe(true);
     expect(hourGrid(report({ firstVisitOn: '2026-10-01' }), '24h')).toBeNull();
+  });
+});
+
+describe('the shades of the grid', () => {
+  const grid = (hours) => hourGrid(report({ hours }), '24h');
+  it('five shades from quiet to the busiest hour, and none for nobody', () => {
+    const cells = grid([1, 2, 3, 4, 5, 6, 7].map((weekday, i) => ({ weekday, hour: 9, visits: [1, 20, 21, 40, 60, 80, 100][i] }))).rows.map((r) => r.cells[0].level);
+    expect(cells).toEqual([1, 1, 2, 2, 3, 4, 5]);
+  });
+
+  it('the busiest hour is ringed when one or a few stand out, and no hour is when many tie', () => {
+    const three = grid([1, 2, 3].map((weekday) => ({ weekday, hour: 9, visits: 6 })));
+    expect(three.marked).toBe(true);
+    expect(three.rows.flatMap((r) => r.cells).filter((c) => c.best)).toHaveLength(3);
+    const four = grid([1, 2, 3, 4].map((weekday) => ({ weekday, hour: 9, visits: 6 })));
+    expect(four.marked).toBe(false);
+    expect(four.rows.flatMap((r) => r.cells).some((c) => c.best)).toBe(false);
   });
 });
 

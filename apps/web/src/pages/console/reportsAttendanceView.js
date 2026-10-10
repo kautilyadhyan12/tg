@@ -29,10 +29,12 @@ export function hourLabel(hour, clockFormat) {
 const hourSpan = (cell, clockFormat) =>
   `${weekdayName(cell.weekday)} ${hourLabel(cell.hour, clockFormat)} to ${hourLabel((cell.hour + 1) % 24, clockFormat)}`;
 
-const notYet = (report) => {
-  const have = report.fullWeeks === 0 ? 'none yet' : `${String(report.fullWeeks)} so far`;
-  return `Not enough data yet. This needs ${String(REPORT_FULL_WEEKS_NEEDED)} full weeks of check-ins, Monday to Sunday; you have ${have}.`;
-};
+// Each box says in its own words why it has no figure yet.
+const have = (report) => (report.fullWeeks === 0 ? 'none yet' : `${String(report.fullWeeks)} so far`);
+const memberNotYet = (report, words) =>
+  `Not enough data yet. Visits a ${words.person} are shared over ${String(REPORT_FULL_WEEKS_NEEDED)} full weeks of check-ins or more, Monday to Sunday; you have ${have(report)}.`;
+const busiestNotYet = (report) =>
+  `Not enough data yet. The busiest time is picked once every weekday has been counted twice: ${String(REPORT_FULL_WEEKS_NEEDED)} full weeks of check-ins; you have ${have(report)}.`;
 
 /** The line above the visit figures: where they come from. Null while nobody has checked in. */
 export function visitsLine(report) {
@@ -58,7 +60,7 @@ export function visitTiles(report, words, clockFormat) {
   } else {
     member = {
       value: null,
-      line: report.perMember.state === 'no_members' ? `Nobody is on your ${words.person} list, so there is nobody to share the visits between.` : notYet(report),
+      line: report.perMember.state === 'no_members' ? `Nobody is on your ${words.person} list, so there is nobody to share the visits between.` : memberNotYet(report, words),
       note: null,
       how: `Visits by the ${words.people} on your list today in the last full weeks, Monday to Sunday (4 at most), shared between them and those weeks.`,
     };
@@ -88,7 +90,7 @@ export function visitTiles(report, words, clockFormat) {
           ? hours.noTime > 0
             ? `The only visits in the last ${String(hours.weeks)} full weeks were added by staff on a later day, so their time is not known.`
             : `Nobody checked in in the last ${String(hours.weeks)} full weeks.`
-          : notYet(report),
+          : busiestNotYet(report),
       note: null,
       how: 'Check-ins in the last full weeks, Monday to Sunday (8 at most), counted by weekday and hour on your clock.',
     };
@@ -111,22 +113,74 @@ export function visitTiles(report, words, clockFormat) {
   ];
 }
 
-/** A bar for each day shown, as a share of the busiest day. */
-export function dayBars(report) {
-  const top = Math.max(1, ...report.days.map((d) => d.visits));
-  return report.days.map((d) => {
+/** A round number at or above `max` that splits into four whole steps, for the chart's side:
+ *  the nearest one, so the line fills the chart. */
+export function chartTop(max) {
+  for (const step of [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 2500, 5000, 10000]) {
+    if (step * 4 >= max) return step * 4;
+  }
+  return Math.ceil(max / 40000) * 40000;
+}
+
+/** Visits day by day as a line: a point for each day shown, the numbers down the side, and
+ *  one line of words saying the usual day and the busiest one. `at` is where a point sits
+ *  along the chart, from 0 to 1; `up` is how high, as a share of the chart's top. */
+export function dayChart(report) {
+  const days = report.days;
+  const top = chartTop(Math.max(1, ...days.map((d) => d.visits)));
+  const points = days.map((d, i) => {
     const weekday = weekdayOf(d.day);
-    const title = d.day === report.today ? `Today, ${dayNamed(d.day)}` : dayNamed(d.day);
+    const today = d.day === report.today;
     return {
       key: d.day,
-      // A week's first day carries its date under the bars.
-      label: weekday === 1 ? dayShort(d.day) : '',
-      monday: weekday === 1,
+      at: days.length === 1 ? 0.5 : i / (days.length - 1),
+      up: d.visits / top,
       visits: d.visits,
-      height: (d.visits / top) * 100,
-      text: `${title}: ${d.day === report.today ? `${visitsWord(d.visits)} so far` : visitsWord(d.visits)}`,
+      today,
+      weekend: weekday >= 6,
+      monday: weekday === 1,
+      label: dayShort(d.day),
+      title: today ? `Today, ${dayNamed(d.day)}` : dayNamed(d.day),
+      said: today ? `${visitsWord(d.visits)} so far` : visitsWord(d.visits),
+      text: `${today ? `Today, ${dayNamed(d.day)}` : dayNamed(d.day)}: ${today ? `${visitsWord(d.visits)} so far` : visitsWord(d.visits)}`,
     };
   });
+  // Today is still going, so the usual day is worked out from the days that have ended.
+  const ended = days.filter((d) => d.day !== report.today);
+  const most = Math.max(0, ...days.map((d) => d.visits));
+  const busiest = days.filter((d) => d.visits === most);
+  const parts = [];
+  if (ended.length >= 2) {
+    const usual = Math.round((ended.reduce((sum, d) => sum + d.visits, 0) / ended.length) * 10) / 10;
+    parts.push(`About ${count(usual)} a day`);
+  }
+  if (most > 0 && days.length >= 2) parts.push(busiest.length === 1 ? `busiest: ${dayNamed(busiest[0].day)}, ${visitsWord(most)}` : `most in one day: ${count(most)}`);
+  return {
+    points,
+    top,
+    ticks: [top, top / 2, 0].map((value) => ({ value, label: count(value) })),
+    summary: parts.length === 0 ? `Visits each day, the last ${String(days.length)} days` : parts.join(' · '),
+    any: most > 0,
+  };
+}
+
+/** A smooth line through points in a box `width` by `height`: each stretch leaves and
+ *  arrives level, so the line never dips under zero or climbs over a day's own number. */
+export function smoothLine(points, width, height) {
+  const xy = points.map((p) => ({ x: Math.round(p.at * width * 10) / 10, y: Math.round((height - p.up * height) * 10) / 10 }));
+  let line = '';
+  xy.forEach((p, i) => {
+    if (i === 0) {
+      line = `M${String(p.x)} ${String(p.y)}`;
+      return;
+    }
+    const before = xy[i - 1];
+    const mid = Math.round(((before.x + p.x) / 2) * 10) / 10;
+    line += ` C${String(mid)} ${String(before.y)} ${String(mid)} ${String(p.y)} ${String(p.x)} ${String(p.y)}`;
+  });
+  const first = xy[0];
+  const last = xy[xy.length - 1];
+  return { xy, line, area: xy.length === 0 ? '' : `${line} L${String(last.x)} ${String(height)} L${String(first.x)} ${String(height)} Z` };
 }
 
 /** The week-by-week table's rows, newest first. */
@@ -139,6 +193,9 @@ export function weekRows(report) {
   }));
 }
 
+/** How many shades the grid of hours has, quiet to busy. */
+export const HEAT_LEVELS = 5;
+
 /** The busiest hours as a grid: a row for each weekday, a column for each hour from the
  *  earliest to the latest that had a visit. `share` is a cell's visits against the busiest
  *  hour's. Null without the figure. */
@@ -150,6 +207,8 @@ export function hourGrid(report, clockFormat) {
   const columns = [];
   for (let hour = from; hour <= to; hour += 1) columns.push({ hour, label: hourLabel(hour, clockFormat) });
   const visitsAt = new Map(hours.cells.map((c) => [`${String(c.weekday)}-${String(c.hour)}`, c.visits]));
+  // The busiest hour is ringed only where the tile names it: one hour, or a few that tie.
+  const marked = hours.tied <= hours.busiest.length;
   return {
     columns,
     rows: [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({
@@ -157,10 +216,20 @@ export function hourGrid(report, clockFormat) {
       label: weekdayShort(weekday),
       cells: columns.map(({ hour }) => {
         const visits = visitsAt.get(`${String(weekday)}-${String(hour)}`) ?? 0;
-        return { key: `${String(weekday)}-${String(hour)}`, hour, visits, share: visits / hours.top, text: `${hourSpan({ weekday, hour }, clockFormat)}: ${visitsWord(visits)}` };
+        return {
+          key: `${String(weekday)}-${String(hour)}`,
+          hour,
+          visits,
+          share: visits / hours.top,
+          // 0 is nobody; 1 to 5 from quiet to the busiest hour.
+          level: visits === 0 ? 0 : Math.min(HEAT_LEVELS, Math.max(1, Math.ceil((visits / hours.top) * HEAT_LEVELS))),
+          best: marked && visits === hours.top,
+          text: `${hourSpan({ weekday, hour }, clockFormat)}: ${visitsWord(visits)}`,
+        };
       }),
     })),
     caption: `Check-ins by weekday and hour, ${span(hours.from, hours.to)}`,
+    marked,
   };
 }
 

@@ -162,14 +162,21 @@ describe('the attendance figures', () => {
     await screen.findByTestId('day-bars');
     const bars = screen.getAllByTestId('day-bar');
     expect(bars).toHaveLength(28);
-    expect(screen.getByTestId('day-bars-said').textContent).toBe('Visits each day, the last 28 days');
+    // One line of words over the chart; a card for the day under the pointer and no other time.
+    expect(screen.getByTestId('day-bars-summary').textContent).toBe('About 0.3 a day · busiest: Thu 8 Oct, 4 visits');
+    expect(screen.queryByTestId('day-bars-card')).toBeNull();
+    expect(screen.getByTestId('day-bars').querySelector('[data-part="today"]')).not.toBeNull();
     fireEvent.mouseEnter(bars[27]);
     expect(screen.getByTestId('day-bars-said').textContent).toBe('Today, Sat 10 Oct: 1 visit so far');
+    expect(screen.getByTestId('day-bars-card').textContent).toBe('Today, Sat 10 Oct1 visit so far');
     fireEvent.focus(bars[25]);
     expect(screen.getByTestId('day-bars-said').textContent).toBe('Thu 8 Oct: 4 visits');
-    // Only a day somebody came has a bar; the busiest is the tallest.
-    expect(bars.filter((b) => b.querySelector('[data-part="visits"]') !== null)).toHaveLength(4);
-    expect(bars[25].querySelector('[data-part="visits"]').style.height).toBe('100%');
+    expect(screen.getByTestId('day-bars-card').textContent).toBe('Thu 8 Oct4 visits');
+    fireEvent.blur(bars[25]);
+    expect(screen.queryByTestId('day-bars-card')).toBeNull();
+    // Four weekends shaded, and the numbers down the side from the top of the chart to zero.
+    expect(screen.getByTestId('day-bars').querySelectorAll('[data-part="weekend"]')).toHaveLength(8);
+    expect(screen.getByTestId('day-bars').textContent).toContain('420');
 
     // Seven weekdays, and the hours from the earliest to the latest anybody came: 07 to 20.
     const cells = screen.getAllByTestId('hour-cell');
@@ -179,6 +186,13 @@ describe('the attendance figures', () => {
       'Wednesday 07:00 to 08:00: 1 visit',
       'Sunday 20:00 to 21:00: 1 visit',
     ]);
+    // The number sits on its square, the busiest is ringed, and the key says what the shades mean.
+    const monday6 = screen.getByRole('button', { name: 'Monday 18:00 to 19:00: 5 visits' });
+    expect(monday6.textContent).toBe('5');
+    expect([monday6.dataset.level, monday6.dataset.best]).toEqual(['5', 'yes']);
+    expect(cells.filter((c) => c.dataset.best === 'yes')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Wednesday 07:00 to 08:00: 1 visit' }).dataset.level).toBe('1');
+    expect(screen.getByTestId('hour-grid').textContent).toContain('QuietBusyNobodyThe busiest');
     expect(screen.getByTestId('hour-grid-said').textContent).toBe('Check-ins by weekday and hour, 31 Aug to 4 Oct 2026');
     fireEvent.click(cells[0]);
     expect(screen.getByTestId('hour-grid-said').textContent).toBe('Monday 07:00 to 08:00: 0 visits');
@@ -217,9 +231,13 @@ describe('what a gym has not done yet is never a zero', () => {
     svc.attendance.mockResolvedValue(attendanceReportFrom(facts({ firstVisitOn: '2026-09-28', hours: [{ weekday: 1, hour: 18, visits: 9 }] })));
     open();
     await screen.findByTestId('tile-week');
-    const line = 'Not enough data yet. This needs 2 full weeks of check-ins, Monday to Sunday; you have 1 so far.';
-    expect(tile('per-member').textContent).toBe(`Visits a member a week${line}`);
-    expect(tile('busiest').textContent).toBe(`Busiest time${line}`);
+    // Each box in its own words.
+    expect(tile('per-member').textContent).toBe(
+      'Visits a member a weekNot enough data yet. Visits a member are shared over 2 full weeks of check-ins or more, Monday to Sunday; you have 1 so far.',
+    );
+    expect(tile('busiest').textContent).toBe(
+      'Busiest timeNot enough data yet. The busiest time is picked once every weekday has been counted twice: 2 full weeks of check-ins; you have 1 so far.',
+    );
     expect(screen.queryByTestId('hour-grid')).toBeNull();
     expect(screen.queryByRole('region', { name: 'Busiest hours' })).toBeNull();
   });

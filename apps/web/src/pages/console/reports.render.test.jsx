@@ -133,8 +133,15 @@ describe('the members figures', () => {
     svc.members.mockResolvedValue(membersReportFrom(NOBODY_REMOVED));
     open();
     await screen.findByTestId('tile-active');
-    for (const key of ['left', 'churn', 'retention', 'stay']) {
-      expect(tile(key).textContent, key).toContain('Nobody has been removed from your member list yet.');
+    // Each box in its own words: what the figure is, and why there is none.
+    const lines = {
+      left: 'Nobody has been removed from your member list yet.',
+      churn: 'Churn is the share of your members who leave in a month. Nobody has been removed from your list yet, so there is none to show.',
+      retention: 'Retention is the share of your members you keep each month. It shows once somebody has been removed from your list, so the app knows you record who leaves.',
+      stay: 'Average stay is how long your members had been with you when they left. Nobody has left yet.',
+    };
+    for (const [key, line] of Object.entries(lines)) {
+      expect(tile(key).textContent, key).toContain(line);
       expect(tile(key).textContent, key).not.toMatch(/\d/);
     }
     expect(tile('active').textContent).toContain('Members now11');
@@ -149,8 +156,13 @@ describe('the members figures', () => {
     svc.members.mockResolvedValue(membersReportFrom(facts({ firstListedOn: '2026-08-15' })));
     open();
     await screen.findByTestId('tile-active');
-    for (const key of ['churn', 'retention', 'stay']) {
-      expect(tile(key).textContent, key).toContain('Not enough data yet. This needs 3 full months of your member list here; you have 1 so far.');
+    const lines = {
+      churn: 'Not enough data yet. Churn compares 3 full months of your member list; you have 1 so far.',
+      retention: 'Not enough data yet. Retention is worked out over the same 3 full months as churn; you have 1 so far.',
+      stay: 'Not enough data yet. Average stay shows after 3 full months of your member list here; you have 1 so far.',
+    };
+    for (const [key, line] of Object.entries(lines)) {
+      expect(tile(key).textContent, key).toContain(line);
       expect(tile(key).textContent, key).not.toContain('%');
     }
     expect(tile('left').textContent).toBe('Left this month1October 2026, so far · September: 1');

@@ -8,7 +8,7 @@ import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import { LeadBars, MembersTrend, MonthBars, StayBar } from './ReportCharts';
-import { DayBars, HourGrid } from './ReportAttendanceCharts';
+import { DayLine, HourGrid } from './ReportAttendanceCharts';
 import {
   classRows,
   classTiles,
@@ -274,7 +274,7 @@ function VisitsReport({ report, org, orgSlug }) {
               <h3 className="c-h3">Visits day by day</h3>
               <CsvButton name={csvName('visits-by-day', report)} text={daysCsv(report)} />
             </div>
-            <DayBars report={report} />
+            <DayLine report={report} />
           </section>
           <section className="c-card overflow-hidden" aria-label="Visits week by week">
             <div className="px-4 md:px-5 pt-4 pb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
