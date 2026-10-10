@@ -12,6 +12,7 @@ import {
   GYM_GROUP_MESSAGES_A_DAY,
   GYM_GROUP_MESSAGE_PROBLEM_WORDS,
   GYM_GROUP_MESSAGE_WORDS,
+  GYM_MESSAGE_KEPT_DAYS,
   gymGroupMessageDoneResponseSchema,
   gymGroupMessagePreviewResponseSchema,
   gymInboxResponseSchema,
@@ -22,6 +23,8 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { GROUP_MESSAGE_SENDS_PER_HOUR } from "../src/modules/orgs/memberList/routes.js";
 import { groupMessagePlan } from "../src/modules/orgs/messages/group.js";
+import { insertGroupMessage } from "../src/modules/orgs/messages/groupRepo.js";
+import { sendDueMessages } from "../src/modules/orgs/messages/send.js";
 import { createIoRedis, createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -562,8 +565,9 @@ d("a message to a chosen group: who gets it, who may send it, and how often (rea
     const trainer = await onStaff(gym, "Ty Desk", "trainer");
     const stranger = await signedIn("Sy Desk");
     const desk = "10.93.7.7";
-    // Refused before the limit: neither counts against the address.
-    for (let n = 0; n < 30; n++) {
+    // Refused before the limit, and more of them than one address may make in an hour: had
+    // they counted, the owner's first press below would be 429.
+    for (let n = 0; n < GROUP_MESSAGE_SENDS_PER_HOUR * 4 + 10; n++) {
       const who = n % 2 === 0 ? trainer : stranger;
       expect((await press(gym, [ada.entryId], "", 1, who, randomUUID(), desk)).statusCode).toBe(n % 2 === 0 ? 403 : 404);
     }
@@ -605,5 +609,100 @@ d("a message to a chosen group: who gets it, who may send it, and how often (rea
     // A payment notice cannot be switched off (§16.2).
     expect(await refusal((tx) => tx`INSERT INTO gym_member_messages_off ${tx(off("payment_overdue"))}`)).toBe("gym_member_messages_off_kind_check");
     expect(await refusal((tx) => tx`INSERT INTO gym_member_messages_off ${tx([off("group"), off("group")])}`)).toBe("gym_member_messages_off_pk");
+  });
+
+  it("a message to a group is not the day's one automatic message: the Welcome still goes that day, and every day a notice does", async () => {
+    clock = NOON;
+    const gym = await makeGym("Grpm Welcome Gym");
+    // Joined this morning, two hours ago.
+    const entryId = await record(gym, "Ana Welcome");
+    const ana = await signedIn("Ana Welcome");
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym.id}, ${ana.userId}, ${entryId}, ${hours(NOON, -2)})`;
+    await send(gym, [entryId], "The sauna is closed today.", 1);
+    // The worker an hour later.
+    clock = hours(NOON, 1);
+    await sendDueMessages({ sql, log: { info: () => undefined, error: () => undefined } }, { now: clock, gymIds: [gym.id] });
+    const kinds = async (): Promise<string[]> =>
+      (await sql<{ kind: string }[]>`SELECT kind FROM gym_member_messages WHERE gym_id = ${gym.id} AND user_id = ${ana.userId} ORDER BY sent_at, kind`).map((row) => row.kind);
+    expect(await kinds()).toEqual(["group", "welcome"]);
+    // Run again, and after another notice: still one Welcome.
+    clock = hours(NOON, 2);
+    await send(gym, [entryId], "The sauna is open again.", 1);
+    await sendDueMessages({ sql, log: { info: () => undefined, error: () => undefined } }, { now: hours(NOON, 3), gymIds: [gym.id] });
+    expect(await kinds()).toEqual(["group", "welcome", "group"]);
+  });
+
+  it("the write itself reaches nobody who is not a live member of this gym, whatever ids it is handed", async () => {
+    clock = NOON;
+    const gym = await makeGym("Grpm Write Gym");
+    const other = await makeGym("Grpm Write Other");
+    const live = await member(gym, "Liv Live");
+    const removed = await member(gym, "Rem Removed");
+    await sql`UPDATE gym_members SET removed_at = ${NOON} WHERE gym_id = ${gym.id} AND user_id = ${removed.person.userId}`;
+    const deleted = await member(gym, "Del Gone");
+    await sql`UPDATE users SET status = 'deleted' WHERE id = ${deleted.person.userId}`;
+    const nextDoor = await member(other, "Ned Nextdoor");
+    const stranger = await signedIn("Sal Stranger");
+    const handed = [live.person.userId, removed.person.userId, deleted.person.userId, nextDoor.person.userId, stranger.userId];
+    const wrote = await sql.begin((tx) =>
+      insertGroupMessage(tx, { gymId: gym.id, sentBy: gym.owner.userId, body: "Straight to the table.", gymDay: "2026-10-09", sendKey: randomUUID(), userIds: handed }, NOON, 30),
+    );
+    expect(wrote.sent).toBe(1);
+    expect(await written(gym, other)).toEqual(["Grpm Write Gym: Liv Live: Straight to the table."]);
+    // The message's own count is the copies written, not the ids handed in.
+    expect((await sentRows(gym)).map((row) => row.people)).toEqual([1]);
+    // Handed nobody who can get it, it writes no copy and says so.
+    const none = await sql.begin((tx) =>
+      insertGroupMessage(tx, { gymId: gym.id, sentBy: gym.owner.userId, body: "To nobody.", gymDay: "2026-10-09", sendKey: randomUUID(), userIds: [removed.person.userId, nextDoor.person.userId] }, NOON, 30),
+    );
+    expect(none.sent).toBe(0);
+    expect(await written(gym, other)).toHaveLength(1);
+  });
+
+  it("a message leaves the inbox after its 30 days", async () => {
+    clock = NOON;
+    const gym = await makeGym("Grpm Days Gym");
+    const ada = await member(gym, "Ada Days");
+    await send(gym, [ada.entryId], "Here for thirty days.", 1);
+    const kept = await sql<{ days: number }[]>`
+      SELECT round(extract(epoch FROM expires_at - sent_at) / 86400)::int AS days FROM gym_member_messages WHERE gym_id = ${gym.id} AND kind = 'group'`;
+    expect(kept.map((row) => row.days)).toEqual([GYM_MESSAGE_KEPT_DAYS]);
+    clock = hours(NOON, 24 * GYM_MESSAGE_KEPT_DAYS - 1);
+    expect((await inbox(gym, ada.person)).messages.map((m) => m.body)).toEqual(["Here for thirty days."]);
+    clock = hours(NOON, 24 * GYM_MESSAGE_KEPT_DAYS + 1);
+    expect((await inbox(gym, ada.person)).messages).toEqual([]);
+  });
+
+  it("a box's key pressed again with other words is told the first went and this one did not; the same words again answer as before", async () => {
+    clock = NOON;
+    const gym = await makeGym("Grpm Key Gym");
+    const ada = await member(gym, "Ada Key");
+    const bo = await member(gym, "Bo Key");
+    const key = randomUUID();
+    expect((await send(gym, [ada.entryId, bo.entryId], "Bring a towel.", 2, gym.owner, key)).sent).toBe(2);
+    const other = await press(gym, [ada.entryId], "Bring two towels.", 1, gym.owner, key);
+    expect([other.statusCode, errorOf(other), messageOf(other)]).toEqual([409, "group_message_earlier_sent", GYM_GROUP_MESSAGE_WORDS.earlier_sent(2)]);
+    expect(await written(gym)).toEqual(["Grpm Key Gym: Ada Key: Bring a towel.", "Grpm Key Gym: Bo Key: Bring a towel."]);
+    // The same words, typed with other spaces, are the same message.
+    expect((await send(gym, [ada.entryId, bo.entryId], "  Bring a towel.\r\n", 2, gym.owner, key)).sent).toBe(2);
+    expect(await sentRows(gym)).toHaveLength(1);
+    // A new key sends the other words.
+    expect((await send(gym, [ada.entryId], "Bring two towels.", 1)).sent).toBe(1);
+  });
+
+  it("the words are kept as typed: an emoji of several parts and a joined letter are not broken, and each counts as it is read", async () => {
+    clock = NOON;
+    const gym = await makeGym("Grpm Emoji Gym");
+    const ada = await member(gym, "Ada Emoji");
+    // A woman lifting weights (five code points with a joiner), and Hindi with a joiner.
+    const lifter = String.fromCodePoint(0x1f3cb, 0xfe0f, 0x200d, 0x2640, 0xfe0f);
+    const hindi = String.fromCodePoint(0x0915, 0x094d, 0x200d, 0x0937);
+    await send(gym, [ada.entryId], `Well done ${lifter} ${hindi}`, 1);
+    expect((await inbox(gym, ada.person)).messages.map((m) => m.body)).toEqual([`Well done ${lifter} ${hindi}`]);
+    // 500 emoji are 500 characters, though twice that in the way JavaScript counts.
+    const arm = String.fromCodePoint(0x1f4aa);
+    await send(gym, [ada.entryId], arm.repeat(500), 1);
+    const over = await press(gym, [ada.entryId], arm.repeat(501), 1);
+    expect([over.statusCode, errorOf(over)]).toEqual([400, "group_message_too_long"]);
   });
 });

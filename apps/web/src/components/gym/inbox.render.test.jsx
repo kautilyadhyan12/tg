@@ -262,8 +262,9 @@ describe("the switch for a gym's messages to groups", () => {
     render(<Page />);
     await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('true'));
     expect(theSwitch().textContent).toBe('News and notices from Iron HouseMessages the gym sends to many people at once, like a closed day or a new class.');
-    // A message to a group is a row like any other.
+    // A message to a group is a row like any other, and its line breaks are drawn.
     expect(rows()).toEqual(['Closed on Monday.New · 2 hours ago']);
+    expect(screen.getByText('Closed on Monday.').style.whiteSpace).toBe('pre-line');
 
     svc.setGroupMessages.mockResolvedValue(false);
     fireEvent.click(theSwitch());

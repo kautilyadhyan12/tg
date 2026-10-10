@@ -13,6 +13,7 @@ import {
   GYM_MESSAGE_BODY_MAX,
   gymGroupMessageSendRequestSchema,
   gymInboxResponseSchema,
+  groupMessageLength,
   groupMessageProblem,
   tidyGroupMessage,
 } from "../src/index.js";
@@ -158,5 +159,103 @@ describe("the shapes on the wire", () => {
     expect(gymInboxResponseSchema.parse(inbox).groupMessages).toBe(true);
     expect(gymInboxResponseSchema.parse({ ...inbox, groupMessages: false }).groupMessages).toBe(false);
     expect(gymInboxResponseSchema.safeParse({ ...inbox, messages: [{ ...inbox.messages[0], kind: "advert" }] }).success).toBe(false);
+  });
+});
+
+// What round one's review ran through the real functions (2026-10-10), kept as cases.
+describe("a full stop with its space missing is a sentence, not an address", () => {
+  const slips = [
+    "Sign up at the desk.Online classes start Monday.",
+    "Classes are back.Info at the desk.",
+    "We are closed Monday.App bookings open Tuesday.",
+    "Parking is full.Co-op car park is open.",
+    "New in the lounge.TV and sofas.",
+    "Classes run Sat.Sun/Mon this week",
+    "See you at the gym.Bring water.",
+    "Join the club.Shop opens at 9.",
+  ];
+  it.each(slips)("%s", (text) => {
+    expect(problem(text)).toBeNull();
+  });
+  // In capitals throughout, or small throughout, it is still an address.
+  it.each(["IRONHOUSE.COM", "Ironhouse.com", "book at IRONHOUSE.CO.UK now", "Sign up: ironhouse.fitness/Join"])("still refused: %s", (text) => {
+    expect(problem(text)).toBe("link");
+  });
+  // Written down: a slip in small letters that has a slash after it reads as an address, and
+  // the sentence says what to do.
+  it("a small-letter slip with a slash is refused, and the sentence says how to put it right", () => {
+    expect(problem("Bring a towel.and/or a mat")).toBe("link");
+    expect(GYM_GROUP_MESSAGE_PROBLEM_WORDS.link).toContain("put a space after the full stop");
+  });
+  // Written down too: an address whose ending alone starts with a capital reads as a new
+  // sentence. Nobody types one so; the inbox shows words only, never a link to press.
+  it("not caught: an ending with a capital after small letters", () => {
+    expect(problem("Sign up: Ironhouse.Fitness/join")).toBeNull();
+  });
+});
+
+describe("bare addresses on the endings gyms really use, and look-alike marks", () => {
+  const cp = (...points: number[]): string => String.fromCodePoint(...points);
+  const links = [
+    "cult.fit has the timetable",
+    "ironhouse.gym",
+    "book on ironhouse.club",
+    "ironhouse.shop",
+    "ironhouse.store",
+    "ironhouse.site",
+    "ironhouse.link",
+    "ironhouse.us",
+    "ironhouse.de",
+    "ironhouse.ai",
+    // A full-width dot, an ideographic full stop, a one-dot leader.
+    `ironhouse${cp(0xff0e)}com`,
+    `ironhouse${cp(0x3002)}com`,
+    `ironhouse${cp(0x2024)}com`,
+    // A joiner hidden inside the name.
+    `iron${cp(0x200d)}house.com`,
+    `ironhouse.c${cp(0x200c)}om`,
+  ];
+  it.each(links)("%s", (text) => {
+    expect(problem(text)).toBe("link");
+  });
+  it("a small @ and a full-width @ are an @", () => {
+    expect(problem(`${cp(0xfe6b)}ironhouse`)).toBe("at");
+    expect(problem(`${cp(0xff20)}ironhouse`)).toBe("at");
+  });
+  // Left out on purpose and written in the spec: endings that are everyday words.
+  it.each(["ironhouse.in", "ironhouse.me", "see you there.it starts at 6"])("not caught: %s", (text) => {
+    expect(problem(text)).toBeNull();
+  });
+});
+
+describe("tidying keeps what a word or a picture is written with", () => {
+  const cp = (...points: number[]): string => String.fromCodePoint(...points);
+  const kept: [string, string][] = [
+    ["a woman lifting weights", cp(0x1f3cb, 0xfe0f, 0x200d, 0x2640, 0xfe0f)],
+    ["a family of three", cp(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467)],
+    ["the flag of England", cp(0x1f3f4, 0xe0067, 0xe0062, 0xe0065, 0xe006e, 0xe0067, 0xe007f)],
+    ["Hindi ksha with its joiner", cp(0x0915, 0x094d, 0x200d, 0x0937)],
+    ["Bengali ra with ya-phala", cp(0x09b0, 0x200d, 0x09cd, 0x09af)],
+    ["Persian with a zero-width non-joiner", cp(0x0645, 0x06cc, 0x200c, 0x062e, 0x0648, 0x0627, 0x0647, 0x0645)],
+  ];
+  it.each(kept)("%s", (_name, text) => {
+    expect(tidyGroupMessage(`Well done ${text}`)).toBe(`Well done ${text}`);
+    expect(problem(`Well done ${text}`)).toBeNull();
+  });
+  it("a zero-width space, a soft hyphen and a direction mark still go", () => {
+    expect(tidyGroupMessage(`Hel${cp(0x200b)}lo${cp(0xad)} the${cp(0x202e)}re`)).toBe("Hello there");
+  });
+  it("nothing but joiners is nothing to send", () => {
+    expect(problem(cp(0x200d, 0x200c, 0x200d))).toBe("empty");
+  });
+  it("an emoji is one character, as a person counts it", () => {
+    const arm = cp(0x1f4aa);
+    expect(groupMessageLength(arm.repeat(251))).toBe(251);
+    expect(problem(arm.repeat(GYM_MESSAGE_BODY_MAX))).toBeNull();
+    expect(problem(arm.repeat(GYM_MESSAGE_BODY_MAX + 1))).toBe("too_long");
+  });
+  it("says how many people the earlier message went to", () => {
+    expect(GYM_GROUP_MESSAGE_WORDS.earlier_sent(1)).toBe("Your earlier message was already sent to 1 person. This one was not sent. Press Send again to send it as well.");
+    expect(GYM_GROUP_MESSAGE_WORDS.earlier_sent(2000)).toContain("2,000 people");
   });
 });

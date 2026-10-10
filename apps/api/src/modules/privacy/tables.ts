@@ -463,7 +463,9 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gym_member_entry_tags",
   // gym_group_messages.sent_by — which member of staff sent a message to a group (`0092`),
   // on the same footing: the gym's record; `ON DELETE set null`. Each person's own copy is
-  // a gym_member_messages row, deleted with them.
+  // a gym_member_messages row, deleted with them. The words are free text staff typed and
+  // can name a member ("Zed, your locker key is at the desk"): they stay with the gym, on a
+  // staff note's footing. How long the list of sent messages is kept is 20f-ii's to decide.
   "gym_group_messages",
   "api_cost_events",
   "usage_daily",

@@ -1,6 +1,6 @@
 // A GYM'S MESSAGES TO A MEMBER: the only file that reads or writes `gym_member_messages`
 // (spec Part 3 §16.1; ROADMAP 20a). Every statement names the gym and the person.
-import type { GymMessageKind } from "@app/shared";
+import { GYM_GROUP_MESSAGE_KIND, type GymMessageKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -162,7 +162,8 @@ export interface NewPerson {
 }
 
 /** Everybody who joined the gym in the last `days`, whatever became of them since: the
- *  rule, not this read, decides who is sent anything. */
+ *  rule, not this read, decides who is sent anything. `sent` is the automatic messages
+ *  only: a message staff typed for a group is never the day's one automatic message. */
 export async function newPeople(tx: SqlOrTx, gymId: string, now: Date, days: number): Promise<NewPerson[]> {
   const rows = await tx<{ user_id: string; display_name: string; joined_on: string; joined_utc_on: string; member: boolean; former: boolean; staff: boolean; sent: NewPerson["sent"] }[]>`
     SELECT m.user_id, u.display_name,
@@ -176,7 +177,8 @@ export async function newPeople(tx: SqlOrTx, gymId: string, now: Date, days: num
            (g.owner_user_id = m.user_id OR EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = g.id AND s.user_id = m.user_id)) AS staff,
            coalesce((
              SELECT json_agg(json_build_object('kind', x.kind, 'occasion', x.occasion, 'day', x.gym_day::text))
-             FROM gym_member_messages x WHERE x.gym_id = g.id AND x.user_id = m.user_id
+             FROM gym_member_messages x
+             WHERE x.gym_id = g.id AND x.user_id = m.user_id AND x.kind <> ${GYM_GROUP_MESSAGE_KIND}
            ), '[]'::json) AS sent
     FROM gyms g
     JOIN gym_members m ON m.gym_id = g.id

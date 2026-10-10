@@ -909,6 +909,14 @@ export default function MemberListPanel({
             selectionMoved(fresh);
             setMessageFor(null);
           }}
+          onInvite={() => {
+            setMessageFor(null);
+            setInvitingSelected(true);
+          }}
+          onOpenPerson={(entryId) => {
+            setMessageFor(null);
+            setOpenId(entryId);
+          }}
           onClose={() => setMessageFor(null)}
         />
       ) : null}

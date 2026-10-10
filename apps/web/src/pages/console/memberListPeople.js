@@ -10,6 +10,7 @@ import {
   MEMBER_LIST_TICKED_MAX,
   GYM_GROUP_MESSAGE_WORDS,
   GYM_MESSAGE_BODY_MAX,
+  groupMessageLength,
   MEMBER_TAGS_MAX_PER_PERSON,
   heldNamesLine,
   turns18On,
@@ -919,9 +920,9 @@ export function tagDoneLine(done) {
 export function messageBoxWords(preview) {
   const k = preview.sendCount;
   const lines = {
-    not_in_app: "Not in the app yet. Messages are read in the app, so invite them first.",
+    not_in_app: 'Not in the app yet. Messages are read in the app.',
     switched_off: 'Switched your messages off in their app.',
-    shared: "Two app accounts are on this one person's page, so we can't tell whose inbox it is.",
+    shared: "Two app accounts are on this one person's page, so we can't tell whose inbox it is. Open their page to see both.",
     former: 'No longer a member.',
     gone: 'No longer on your list.',
   };
@@ -933,6 +934,8 @@ export function messageBoxWords(preview) {
     button: k === 0 || left === 0 ? null : `Send to ${people(k)}`,
     keptHeading: kept === 0 ? null : `${people(kept)} won't get it`,
     kept: preview.kept.map((group) => ({ key: group.reason, count: group.count, people: group.people, line: lines[group.reason] })),
+    // What each reason opens, for staff to set it right (L7): Invite, or the person's page.
+    invite: 'Invite them to the app',
     today:
       left === 0
         ? GYM_GROUP_MESSAGE_WORDS.day_full
@@ -952,5 +955,5 @@ export function messageDoneLine(done) {
 
 /** "120 of 500". */
 export function messageCount(typed) {
-  return `${n(typed.length)} of ${n(GYM_MESSAGE_BODY_MAX)}`;
+  return `${n(groupMessageLength(typed))} of ${n(GYM_MESSAGE_BODY_MAX)}`;
 }

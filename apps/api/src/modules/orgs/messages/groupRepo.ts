@@ -50,9 +50,9 @@ export async function sentOnDay(sql: SqlOrTx, gymId: string, gymDay: string): Pr
 }
 
 /** The message already sent from this box, if one was. */
-export async function byKey(sql: SqlOrTx, gymId: string, sendKey: string): Promise<{ id: string; people: number } | null> {
-  const rows = await sql<{ id: string; people: number }[]>`
-    SELECT id, people FROM gym_group_messages WHERE gym_id = ${gymId} AND send_key = ${sendKey}`;
+export async function byKey(sql: SqlOrTx, gymId: string, sendKey: string): Promise<{ id: string; people: number; body: string } | null> {
+  const rows = await sql<{ id: string; people: number; body: string }[]>`
+    SELECT id, people, body FROM gym_group_messages WHERE gym_id = ${gymId} AND send_key = ${sendKey}`;
   return rows[0] ?? null;
 }
 
@@ -66,8 +66,8 @@ export interface NewGroupMessage {
 }
 
 /** Writes the message and one copy for each person, in the caller's transaction. Each copy
- *  is written only for an account that is in this gym at that instant, whatever the list
- *  of ids holds. Answers the message's id and how many copies were written. */
+ *  is written only for an account that is in this gym at that instant and is not deleted,
+ *  whatever the list of ids holds. Answers the message's id and how many copies were written. */
 export async function insertGroupMessage(tx: TransactionSql, message: NewGroupMessage, now: Date, keptDays: number): Promise<{ id: string; sent: number }> {
   const expires = new Date(now.getTime() + keptDays * 86_400_000);
   const made = await tx<{ id: string }[]>`
@@ -81,6 +81,7 @@ export async function insertGroupMessage(tx: TransactionSql, message: NewGroupMe
     SELECT ${message.gymId}, m.user_id, ${GYM_GROUP_MESSAGE_KIND}, ${id}::text, ${message.body}, ${message.gymDay}::date, ${now}, ${expires}
     FROM unnest(${[...message.userIds]}::uuid[]) AS picked (user_id)
     JOIN gym_members m ON m.gym_id = ${message.gymId} AND m.user_id = picked.user_id AND m.removed_at IS NULL
+    JOIN users u ON u.id = m.user_id AND u.status = 'active'
     ON CONFLICT (gym_id, user_id, kind, occasion) DO NOTHING
     RETURNING id`;
   // Nobody at all: the caller sends nothing and the transaction is undone.

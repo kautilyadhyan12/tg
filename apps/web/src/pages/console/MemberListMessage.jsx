@@ -1,7 +1,14 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import { GYM_GROUP_MESSAGE_PROBLEM_WORDS, GYM_MESSAGE_BODY_MAX, MEMBER_LIST_SELECTION_CHANGED_WORDS, groupMessageProblem, tidyGroupMessage } from '@app/shared';
-import { orgService, errorText, groupMessagePeopleChanged, selectionChanged } from '../../api/orgsApi';
+import {
+  GYM_GROUP_MESSAGE_PROBLEM_WORDS,
+  GYM_MESSAGE_BODY_MAX,
+  MEMBER_LIST_SELECTION_CHANGED_WORDS,
+  groupMessageLength,
+  groupMessageProblem,
+  tidyGroupMessage,
+} from '@app/shared';
+import { orgService, errorCode, errorText, groupMessagePeopleChanged, selectionChanged } from '../../api/orgsApi';
 import { Names } from './MemberListRemove';
 import { Refusal, Sheet } from './MemberListTags';
 import { messageBoxWords, messageCount, messageDoneLine, selectedWords } from './memberListPeople';
@@ -14,7 +21,10 @@ import { messageBoxWords, messageCount, messageDoneLine, selectedWords } from '.
 /** One key for one box: pressed twice, the message is sent once. */
 const newKey = () => crypto.randomUUID();
 
-export default function MemberListMessage({ gymId, selection, picked, onSelectionChanged, onClose }) {
+/** How many names of a record two accounts share are shown as buttons. */
+const SHARED_SHOWN = 5;
+
+export default function MemberListMessage({ gymId, selection, picked, onSelectionChanged, onInvite, onOpenPerson, onClose }) {
   const [preview, setPreview] = useState(null);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
@@ -50,7 +60,7 @@ export default function MemberListMessage({ gymId, selection, picked, onSelectio
   }, [gymId]);
 
   const tidied = tidyGroupMessage(typed);
-  const over = tidied.length > GYM_MESSAGE_BODY_MAX;
+  const over = groupMessageLength(tidied) > GYM_MESSAGE_BODY_MAX;
 
   const press = async () => {
     if (busy || preview === null) return;
@@ -75,6 +85,8 @@ export default function MemberListMessage({ gymId, selection, picked, onSelectio
         setPreview(box);
         setError(errorText(err, 'The people who will get this changed. Nothing was sent.'));
       } else {
+        // The box's earlier message went and these are other words: the next press is a new one.
+        if (errorCode(err) === 'group_message_earlier_sent') key.current = newKey();
         setError(errorText(err, "We couldn't send that message. Please try again."));
       }
     } finally {
@@ -129,7 +141,26 @@ export default function MemberListMessage({ gymId, selection, picked, onSelectio
             {words.kept.map((group) => (
               <div key={group.key} className="flex flex-col gap-1.5" data-testid={`message-kept-${group.key}`}>
                 <p className="c-s14 c-t2">{`${group.count.toLocaleString('en')} · ${group.line}`}</p>
-                <Names people={group.people} total={group.count} testId={`message-names-${group.key}`} />
+                {group.key === 'shared' ? (
+                  // Each name opens that person's page, where both accounts are shown.
+                  <ul className="flex flex-col gap-1" data-testid="message-names-shared">
+                    {group.people.slice(0, SHARED_SHOWN).map((one) => (
+                      <li key={one.entryId}>
+                        <button type="button" onClick={() => onOpenPerson(one.entryId)} aria-label={`Open ${one.name || 'No name'}'s page`} className="c-btn-link c-w6 c-s15 min-h-11 text-left">
+                          {one.name || 'No name'}
+                        </button>
+                      </li>
+                    ))}
+                    {group.count > SHARED_SHOWN ? <li className="c-s14 c-t2">{`and ${(group.count - SHARED_SHOWN).toLocaleString('en')} more`}</li> : null}
+                  </ul>
+                ) : (
+                  <Names people={group.people} total={group.count} testId={`message-names-${group.key}`} />
+                )}
+                {group.key === 'not_in_app' ? (
+                  <button type="button" onClick={onInvite} data-testid="message-invite" className="c-btn c-btn-s c-btn-sm self-start">
+                    {words.invite}
+                  </button>
+                ) : null}
               </div>
             ))}
           </section>

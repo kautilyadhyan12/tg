@@ -15,6 +15,9 @@ import {
 
 vi.mock('./MemberMemberships', () => ({ default: () => null }));
 vi.mock('./MemberNotes', () => ({ default: () => null }));
+// The two places the box can open: what each is opened for is all these tests read.
+vi.mock('./MemberListInvite', () => ({ default: ({ selection }) => <div data-testid="invite-stub">{JSON.stringify(selection)}</div> }));
+vi.mock('./MemberListPerson', () => ({ default: ({ entryId }) => <div data-testid="person-stub">{entryId}</div> }));
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -126,7 +129,8 @@ describe('Send message, for the people selected', () => {
     expect(within(box.getByTestId('message-names-send')).getByText('Ada Lovelace')).toBeTruthy();
     // Who won't, and why.
     expect(within(box.getByTestId('message-kept')).getByText("1 person won't get it")).toBeTruthy();
-    expect(box.getByTestId('message-kept-not_in_app').textContent).toContain('1 · Not in the app yet. Messages are read in the app, so invite them first.');
+    expect(box.getByTestId('message-kept-not_in_app').textContent).toContain('1 · Not in the app yet. Messages are read in the app.');
+    expect(box.getByTestId('message-invite').textContent).toBe('Invite them to the app');
     expect(within(box.getByTestId('message-names-not_in_app')).getByText('Ben Carter')).toBeTruthy();
     // Cara was never ticked: she is nowhere in the box.
     expect(box.queryByText('Cara Diaz')).toBeNull();
@@ -170,7 +174,7 @@ describe('Send message, for the people selected', () => {
     expect(box.getByTestId('message-send').textContent).toContain('and 3 more');
     expect(within(box.getByTestId('message-kept')).getByText("5 people won't get it")).toBeTruthy();
     expect(box.getByTestId('message-kept-switched_off').textContent).toContain('1 · Switched your messages off in their app.');
-    expect(box.getByTestId('message-kept-shared').textContent).toContain("1 · Two app accounts are on this one person's page, so we can't tell whose inbox it is.");
+    expect(box.getByTestId('message-kept-shared').textContent).toContain("1 · Two app accounts are on this one person's page, so we can't tell whose inbox it is. Open their page to see both.");
     expect(box.getByTestId('message-kept-former').textContent).toContain('1 · No longer a member.');
     expect(box.getByTestId('message-kept-gone').textContent).toBe('1 · No longer on your list.');
     expect(box.getByTestId('message-press').textContent).toBe('Send to 4 people');
@@ -287,5 +291,52 @@ describe('Send message, for the people selected', () => {
     fireEvent.click(tickOf('Ada Lovelace'));
     expect(bar().queryByTestId('bar-message')).toBeNull();
     expect(bar().getByTestId('bar-download')).toBeTruthy();
+  });
+});
+
+// What round one's review found (2026-10-10).
+describe('Send message, after the review', () => {
+  it('"Invite them to the app" shuts this box and opens Invite for the same people', async () => {
+    const box = await open(boxOf({ selected: 2, send: [person(ada)], kept: [{ reason: 'not_in_app', count: 1, people: [person(ben)] }] }));
+    fireEvent.click(await box.findByTestId('message-invite'));
+    expect(screen.queryByTestId('message-box')).toBeNull();
+    expect(screen.getByTestId('invite-stub').textContent).toBe(JSON.stringify({ kind: 'ticked', entryIds: [ada.entryId, ben.entryId] }));
+    expect(orgService.sendGroupMessage).not.toHaveBeenCalled();
+  });
+
+  it('a name on a page two accounts share opens that page, and the box shuts', async () => {
+    const box = await open(boxOf({ selected: 2, send: [person(ada)], kept: [{ reason: 'shared', count: 1, people: [person(ben)] }] }));
+    await box.findByTestId('message-send');
+    expect(box.queryByTestId('message-invite')).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: "Open Ben Carter's page" }));
+    expect(screen.queryByTestId('message-box')).toBeNull();
+    expect(screen.getByTestId('person-stub').textContent).toBe(ben.entryId);
+  });
+
+  it('an emoji counts as one character, and 500 of them can be sent', async () => {
+    const box = await open(boxOf({ selected: 2, send: [person(ada), person(ben)] }));
+    await box.findByTestId('message-send');
+    const arm = String.fromCodePoint(0x1f4aa);
+    type(box, arm.repeat(500));
+    expect(box.getByTestId('message-count').textContent).toBe('500 of 500');
+    expect(box.getByTestId('message-press').disabled).toBe(false);
+    type(box, arm.repeat(501));
+    expect(box.getByTestId('message-count').textContent).toBe('501 of 500');
+    expect(box.getByTestId('message-press').disabled).toBe(true);
+  });
+
+  it('told the earlier message went and this one did not, the next press is a new message with a new key', async () => {
+    const box = await open(boxOf({ selected: 2, send: [person(ada), person(ben)] }));
+    await box.findByTestId('message-send');
+    type(box, 'Bring two towels.');
+    orgService.sendGroupMessage.mockRejectedValueOnce(refusal(409, { error: 'group_message_earlier_sent', message: GYM_GROUP_MESSAGE_WORDS.earlier_sent(2) }));
+    fireEvent.click(box.getByTestId('message-press'));
+    expect((await box.findByRole('alert')).textContent).toBe('Your earlier message was already sent to 2 people. This one was not sent. Press Send again to send it as well.');
+    expect(box.queryByTestId('message-done')).toBeNull();
+    orgService.sendGroupMessage.mockResolvedValueOnce(doneOf({ sent: 2 }));
+    fireEvent.click(box.getByTestId('message-press'));
+    await box.findByTestId('message-done');
+    const keys = orgService.sendGroupMessage.mock.calls.map((call) => call[1].key);
+    expect(keys[0]).not.toBe(keys[1]);
   });
 });

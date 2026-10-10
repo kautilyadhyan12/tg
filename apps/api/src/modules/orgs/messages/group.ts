@@ -139,7 +139,11 @@ export async function sendGroupMessage(
     if (gym === null) throw gymNotFound();
     const sentToday = await groupRepo.sentOnDay(tx, gymId, gym.today);
     const before = await groupRepo.byKey(tx, gymId, request.key);
-    if (before !== null) return { sent: before.people, kept: [], leftToday: leftOf(sentToday) };
+    if (before !== null) {
+      // The same press again. With other words it is another message, and it has not gone.
+      if (before.body !== body) throw new OrgsError(409, "group_message_earlier_sent", GYM_GROUP_MESSAGE_WORDS.earlier_sent(before.people));
+      return { sent: before.people, kept: [], leftToday: leftOf(sentToday) };
+    }
     if (sentToday >= GYM_GROUP_MESSAGES_A_DAY) throw new OrgsError(409, "group_messages_day_full", GYM_GROUP_MESSAGE_WORDS.day_full);
     const plan = groupMessagePlan(await groupRepo.groupStateOf(tx, gymId, ids), ids.length);
     if (plan.send.length !== request.sendCount) throw new GroupPeopleChanged(previewOf(plan, ids.length, sentToday));

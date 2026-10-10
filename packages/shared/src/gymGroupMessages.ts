@@ -15,13 +15,18 @@ export const GYM_GROUP_MESSAGE_BOX_NAMES_MAX = 100;
 
 // ── WHAT STAFF MAY TYPE ──
 
+/** Characters nobody sees that are part of how a word or a picture is written, and are
+ *  kept: the two joiners (an emoji of several parts, and Hindi, Bengali and Persian
+ *  spelling) and the tag characters of a flag such as England's. */
+const JOINERS = /[\u200c\u200d\u{E0020}-\u{E007F}]/gu;
+
 /** The words as kept: one kind of line break, nothing a screen cannot draw, no space at
  *  either end of a line, and never more than one empty line together. */
 export function tidyGroupMessage(text: string): string {
   return text
     .replace(/\r\n?/g, "\n")
     .replace(/[^\S\n]/g, " ")
-    .replace(/[\p{Cc}\p{Cf}]/gu, (c) => (c === "\n" ? c : ""))
+    .replace(/[\p{Cc}\p{Cf}]/gu, (c) => (c === "\n" || c.search(JOINERS) === 0 ? c : ""))
     .split("\n")
     .map((line) => line.trim())
     .join("\n")
@@ -29,33 +34,54 @@ export function tidyGroupMessage(text: string): string {
     .trim();
 }
 
-/** Endings that are a web address wherever they stand, and are not a word people end a
- *  sentence with ("in", "it", "me" and "to" are countries' endings too, and are left out:
- *  "see you there.it starts at 6" is a slip of the thumb, not an address). */
-const ADDRESS_ENDINGS = "com|net|org|io|co|uk|ca|au|nz|ie|app|ly|info|biz|gg|xyz|tv|cc|dev|online";
+/** How long a message is, as a person counts it and as the table does: an emoji is one. */
+export function groupMessageLength(tidied: string): number {
+  return Array.from(tidied).length;
+}
+
+/** Endings that are a web address wherever they stand. Left out on purpose, because they
+ *  are words people end a sentence before ("see you there.it starts at 6"): in, it, me, to. */
+const ADDRESS_ENDINGS = new Set(
+  "com net org io co uk ca au nz ie app ly info biz gg xyz tv cc dev online fit gym club shop store site link ai us de".split(" "),
+);
+
+const SCHEME = /[a-z][a-z0-9+.-]*:\/\//iu;
+const WWW = /(?<![\p{L}\p{N}])www\.[\p{L}\p{N}]/iu;
+/** Words joined by dots: the name, its last part, and a slash after it if there is one. */
+const DOTTED = /(?<![\p{L}\p{N}.])([\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*)\.(\p{L}{2,})(?:(\/\S)|(?![\p{L}\p{N}]))/gu;
 
 /** A web address, by its shape first: a scheme, a "www.", or words joined by dots with a
  *  slash after them ("wa.me/44…"). The list of endings is only the backstop, for an
- *  address typed bare ("ironhouse.com"). */
-const LINK = new RegExp(
-  [
-    String.raw`[a-z][a-z0-9+.-]*:\/\/`,
-    String.raw`(?<![\p{L}\p{N}])www\.[\p{L}\p{N}]`,
-    String.raw`(?<![\p{L}\p{N}])[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}\/[^\s]`,
-    String.raw`(?<![\p{L}\p{N}.])[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.(?:${ADDRESS_ENDINGS})(?![\p{L}\p{N}])`,
-  ].join("|"),
-  "iu",
-);
+ *  address typed bare ("ironhouse.com"). A capital straight after a small letter and a
+ *  full stop is a new sentence with its space missing ("at the desk.Online classes"),
+ *  never an address. */
+function hasLink(text: string): boolean {
+  if (SCHEME.test(text) || WWW.test(text)) return true;
+  for (const match of text.matchAll(DOTTED)) {
+    const [, name = "", ending = "", slash] = match;
+    if (/\p{Ll}$/u.test(name) && /^\p{Lu}/u.test(ending)) continue;
+    if (slash !== undefined || ADDRESS_ENDINGS.has(ending.toLowerCase())) return true;
+  }
+  return false;
+}
+
+/** The text the checks read: look-alike characters as the plain ones they are read as (a
+ *  full-width dot or @, a small @, an ideographic full stop), and the kept joiners out, so
+ *  none of them can split an address. Only the checks read it; the words kept are as typed. */
+function forChecks(tidied: string): string {
+  return tidied.normalize("NFKC").replace(/[。｡]/g, ".").replace(JOINERS, "");
+}
 
 export const GYM_GROUP_MESSAGE_PROBLEMS = ["empty", "too_long", "link", "at"] as const;
 export type GymGroupMessageProblem = (typeof GYM_GROUP_MESSAGE_PROBLEMS)[number];
 
 /** Why these words cannot be sent, or null. Read after `tidyGroupMessage`. */
 export function groupMessageProblem(tidied: string): GymGroupMessageProblem | null {
-  if (tidied === "") return "empty";
-  if (tidied.length > GYM_MESSAGE_BODY_MAX) return "too_long";
-  if (tidied.includes("@") || tidied.includes("＠")) return "at";
-  if (LINK.test(tidied)) return "link";
+  const read = forChecks(tidied);
+  if (read.trim() === "") return "empty";
+  if (groupMessageLength(tidied) > GYM_MESSAGE_BODY_MAX) return "too_long";
+  if (read.includes("@")) return "at";
+  if (hasLink(read)) return "link";
   return null;
 }
 
@@ -63,7 +89,7 @@ export function groupMessageProblem(tidied: string): GymGroupMessageProblem | nu
 export const GYM_GROUP_MESSAGE_PROBLEM_WORDS: Record<GymGroupMessageProblem, string> = {
   empty: "Write your message first.",
   too_long: `A message can be up to ${String(GYM_MESSAGE_BODY_MAX)} characters. Make it shorter and try again.`,
-  link: "A message can't have a web address in it. Take the link out and try again.",
+  link: "A message can't have a web address in it. Take the link out and try again. If it isn't a link, put a space after the full stop.",
   at: "A message can't have an @ in it, so no email addresses or social media names. Take it out and try again.",
 };
 
@@ -76,6 +102,8 @@ export const GYM_GROUP_MESSAGE_WORDS = {
   day_full: `You've sent ${String(GYM_GROUP_MESSAGES_A_DAY)} messages to groups today, which is the most for one day. You can send again tomorrow.`,
   people_changed: "The people who will get this changed while you were writing. Nothing was sent. Check the names again, then send.",
   nobody: "Nobody you selected can get a message, so nothing was sent.",
+  earlier_sent: (people: number): string =>
+    `Your earlier message was already sent to ${people === 1 ? "1 person" : `${people.toLocaleString("en")} people`}. This one was not sent. Press Send again to send it as well.`,
 } as const;
 
 // ── WHO GETS IT, AND WHO DOESN'T ──

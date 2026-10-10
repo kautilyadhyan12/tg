@@ -207,7 +207,7 @@ export default function Inbox({ gym, inbox }) {
             >
               <Mail className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: row.isNew ? ORANGE : MUTED }} aria-hidden="true" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm" style={{ color: '#fff', overflowWrap: 'anywhere' }}>
+                <p className="text-sm" style={{ color: '#fff', overflowWrap: 'anywhere', whiteSpace: 'pre-line' }}>
                   {row.body}
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: MUTED }}>
