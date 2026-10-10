@@ -194,28 +194,41 @@ describe('the attendance figures', () => {
     expect(screen.getByRole('button', { name: 'Wednesday 07:00 to 08:00: 1 visit' }).dataset.level).toBe('1');
     expect(screen.getByTestId('hour-grid').textContent).toContain('QuietBusyNobodyThe busiest');
     expect(screen.getByTestId('hour-grid-caption').textContent).toBe('Check-ins by weekday and hour, 31 Aug to 4 Oct 2026');
-    // Nothing is picked until a square is pressed; a pressed square stays picked, with a card on it.
-    expect(screen.getByTestId('hour-grid-said').textContent).toBe('Press a square to see that hour.');
+    // Nothing is shown until a square is pointed at or pressed, and nothing stays behind after.
+    const idle = 'Point at a square, or press one, to see that hour.';
+    const grid = cells[0].parentElement.parentElement;
+    const ringed = () => cells.filter((c) => c.querySelector('[data-part="picked"]') !== null);
+    expect(screen.getByTestId('hour-grid-said').textContent).toBe(idle);
     expect(screen.queryByTestId('hour-grid-card')).toBeNull();
-    fireEvent.click(monday6);
+    expect(ringed()).toEqual([]);
+    fireEvent.mouseEnter(monday6);
     expect(screen.getByTestId('hour-grid-said').textContent).toBe('Monday 18:00 to 19:00: 5 visits');
     expect(screen.getByTestId('hour-grid-card').textContent).toBe('Monday 18:00 to 19:005 visits');
-    expect(monday6.getAttribute('aria-pressed')).toBe('true');
-    expect(monday6.querySelector('[data-part="picked"]')).not.toBeNull();
-    // Pointing at another shows that one; leaving the grid goes back to the one pressed.
+    expect(ringed()).toEqual([monday6]);
+    // Pressed, then the pointer moves to another square: only that one is shown.
+    fireEvent.focus(monday6);
+    fireEvent.click(monday6);
     fireEvent.mouseEnter(cells[0]);
-    expect(screen.getByTestId('hour-grid-said').textContent).toBe('Monday 07:00 to 08:00: 0 visits');
     expect(screen.getByTestId('hour-grid-card').textContent).toBe('Monday 07:00 to 08:00Nobody checked in');
     expect(screen.getAllByTestId('hour-grid-card')).toHaveLength(1);
-    fireEvent.mouseLeave(cells[0].parentElement.parentElement);
-    expect(screen.getByTestId('hour-grid-said').textContent).toBe('Monday 18:00 to 19:00: 5 visits');
-    // Pressing another picks that one instead; pressing it again picks nothing.
+    expect(ringed()).toEqual([cells[0]]);
+    // The pointer leaves the squares: nothing is left on the one that was pressed.
+    fireEvent.mouseLeave(grid);
+    expect(screen.getByTestId('hour-grid-said').textContent).toBe(idle);
+    expect(screen.queryByTestId('hour-grid-card')).toBeNull();
+    expect(ringed()).toEqual([]);
+    // A finger: a press shows the hour, and a press anywhere else on the page takes it away.
     fireEvent.click(cells[0]);
-    expect(cells.filter((c) => c.getAttribute('aria-pressed') === 'true')).toEqual([cells[0]]);
-    fireEvent.mouseLeave(cells[0].parentElement.parentElement);
-    fireEvent.click(cells[0]);
-    fireEvent.mouseLeave(cells[0].parentElement.parentElement);
-    expect(screen.getByTestId('hour-grid-said').textContent).toBe('Press a square to see that hour.');
+    expect(ringed()).toEqual([cells[0]]);
+    fireEvent.pointerDown(cells[1]);
+    expect(ringed()).toEqual([cells[0]]);
+    fireEvent.pointerDown(screen.getByRole('heading', { name: 'Reports' }));
+    expect(screen.getByTestId('hour-grid-said').textContent).toBe(idle);
+    expect(ringed()).toEqual([]);
+    // The same on the day chart.
+    fireEvent.click(bars[25]);
+    expect(screen.getByTestId('day-bars-card').textContent).toBe('Thu 8 Oct4 visits');
+    fireEvent.pointerDown(screen.getByRole('heading', { name: 'Reports' }));
     expect(screen.queryByTestId('hour-grid-card')).toBeNull();
   });
 

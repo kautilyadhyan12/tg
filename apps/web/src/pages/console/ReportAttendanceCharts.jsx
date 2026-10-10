@@ -1,9 +1,24 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { HEAT_LEVELS, dayChart, hourGrid, smoothLine } from './reportsAttendanceView';
 
 // The Reports page's attendance pictures (ROADMAP 21a-ii). Each is drawn from the same
 // answer as the numbers beside it and says the number under the pointer, a finger or the
 // keyboard; the exact counts stay in the tiles, the tables and the CSVs.
+
+/** What a picture shows for the day or hour under the pointer goes away when the pointer
+ *  leaves. A finger has no leaving, so a press anywhere outside the picture clears it too. */
+function useClearOutside(shown, clear) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!shown) return undefined;
+    const onDown = (event) => {
+      if (ref.current !== null && !ref.current.contains(event.target)) clear();
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [shown, clear]);
+  return ref;
+}
 
 const CHART_HEIGHT = 168;
 const SIDE = 34;
@@ -14,6 +29,7 @@ export function DayLine({ report }) {
   const chart = dayChart(report);
   const fill = useId();
   const [at, setAt] = useState(null);
+  const plot = useClearOutside(at !== null, () => setAt(null));
   // Nothing to draw: no picture, and the table says the rest.
   if (!chart.any) return null;
   const { points } = chart;
@@ -50,7 +66,7 @@ export function DayLine({ report }) {
             </span>
           ))}
         </div>
-        <div className="relative flex-1 min-w-0" style={{ height: CHART_HEIGHT }} onMouseLeave={() => setAt(null)}>
+        <div ref={plot} className="relative flex-1 min-w-0" style={{ height: CHART_HEIGHT }} onMouseLeave={() => setAt(null)}>
           {[0, 1, 2, 3, 4].map((i) => (
             <span
               key={i}
@@ -164,17 +180,17 @@ export function DayLine({ report }) {
 const SHADE = [0, 0.16, 0.34, 0.54, 0.76, 1];
 
 /** Weekday by hour: the stronger the square, the more check-ins in that hour, with the
- *  number on it. A square is a button: pointed at or pressed, it says its hour and visits in
- *  a card and in the line above. On a phone a square is as tall as a finger needs. */
+ *  number on it. A square pointed at or pressed says its hour and visits in a card and in
+ *  the line above, and stops when the pointer leaves or a press lands elsewhere. On a phone a square is as tall as a finger needs. */
 export function HourGrid({ report, clockFormat }) {
   const grid = hourGrid(report, clockFormat);
-  // The square under the pointer or the keyboard, and the one that was pressed: a pressed
-  // square stays picked until it is pressed again or another is.
+  // The square under the pointer, the keyboard or a finger. Nothing stays picked: it goes
+  // when the pointer leaves the squares, or a press lands anywhere else.
   const [over, setOver] = useState(null);
-  const [picked, setPicked] = useState(null);
+  const squares = useClearOutside(over !== null, () => setOver(null));
   if (grid === null) return null;
   const cells = grid.rows.flatMap((row) => row.cells);
-  const shown = cells.find((c) => c.key === (over ?? picked)) ?? null;
+  const shown = cells.find((c) => c.key === over) ?? null;
   // Every hour is named on a wide screen where they fit; every third on a phone.
   const wide = grid.columns.length <= 16 ? 1 : 2;
   const last = grid.columns.length - 1;
@@ -182,13 +198,13 @@ export function HourGrid({ report, clockFormat }) {
     <figure className="flex flex-col gap-3 m-0 px-4 md:px-5 pb-4" data-testid="hour-grid">
       <figcaption className="flex flex-col gap-1">
         <span className="c-s15 c-w6 c-t1" aria-live="polite" data-testid="hour-grid-said">
-          {shown === null ? 'Press a square to see that hour.' : shown.text}
+          {shown === null ? 'Point at a square, or press one, to see that hour.' : shown.text}
         </span>
         <span className="c-s14 c-t2" data-testid="hour-grid-caption">
           {grid.caption}
         </span>
       </figcaption>
-      <div className="flex flex-col gap-[3px]" onMouseLeave={() => setOver(null)}>
+      <div ref={squares} className="flex flex-col gap-[3px]" onMouseLeave={() => setOver(null)}>
         <div className="flex gap-[3px] c-s12 c-t3" aria-hidden="true">
           <span className="shrink-0" style={{ width: SIDE }} />
           {grid.columns.map((col, i) => (
@@ -213,13 +229,12 @@ export function HourGrid({ report, clockFormat }) {
                   data-level={c.level}
                   data-best={c.best ? 'yes' : 'no'}
                   aria-label={c.text}
-                  aria-pressed={picked === c.key}
                   className="flex-1 min-w-0 p-0 border-0 bg-transparent cursor-pointer relative h-11 md:h-9"
-                  style={{ zIndex: on ? 3 : 'auto' }}
+                  style={{ zIndex: on ? 3 : 'auto', transform: on ? 'scale(1.14)' : 'none', transition: 'transform 80ms ease-out' }}
                   onMouseEnter={() => setOver(c.key)}
                   onFocus={() => setOver(c.key)}
                   onBlur={() => setOver(null)}
-                  onClick={() => setPicked((was) => (was === c.key ? null : c.key))}
+                  onClick={() => setOver(c.key)}
                 >
                   <span className="absolute inset-0" style={{ borderRadius: 6, background: 'var(--raise)', overflow: 'hidden' }}>
                     {c.level > 0 ? <span className="absolute inset-0" style={{ background: 'var(--accent)', opacity: SHADE[c.level] }} /> : null}
@@ -232,7 +247,8 @@ export function HourGrid({ report, clockFormat }) {
                   {c.best ? <span aria-hidden="true" className="absolute inset-0" style={{ borderRadius: 6, boxShadow: 'inset 0 0 0 2px var(--t1)' }} /> : null}
                   {on ? (
                     <>
-                      <span aria-hidden="true" data-part="picked" className="absolute" style={{ inset: -3, borderRadius: 9, boxShadow: '0 0 0 2px var(--t1)' }} />
+                      {/* Lifted, not ringed: the ring is the busiest hour's alone. */}
+                      <span aria-hidden="true" data-part="picked" className="absolute inset-0" style={{ borderRadius: 6, boxShadow: 'var(--pop)' }} />
                       <span
                         aria-hidden="true"
                         data-testid="hour-grid-card"
