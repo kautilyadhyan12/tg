@@ -4521,7 +4521,8 @@ The one rule is `groupMessagePlan` (`apps/api/src/modules/orgs/messages/group.ts
 with its table test. Past members' tab and a gym that can change nothing have no button.
 
 **The words** (`packages/shared/src/gymGroupMessages.ts`): 1 to 500 characters after
-tidying, an emoji counted as one, as a person and the table count it (one kind of line
+tidying, an emoji counted as one, as a person, the table and the inbox's own shape
+(`gymMessageLength`) count it (one kind of line
 break, one empty line at most, nothing a screen cannot draw; the joiners an emoji of
 several parts and Hindi, Bengali and Persian spelling are written with are kept, and the
 member's inbox draws the line breaks);
@@ -4535,7 +4536,8 @@ its space missing** ("at the desk.Online classes"), never an address; the refusa
 sentence ends "If it isn't a link, put a space after the full stop." Not caught, and
 written down: a bare address on an ending the list lacks ("ironhouse.fitness"); the
 endings `in`, `it`, `me` and `to`, left out on purpose because they are words a sentence
-goes on with ("see you there.it starts at 6"), so "ironhouse.in" goes; an address whose
+goes on with ("see you there.it starts at 6"), so "ironhouse.in" goes (an ending inside
+the name is still read: "ironhouse.co.in" is refused); an address whose
 ending alone starts with a capital. The inbox shows words only, never a link to press.
 
 **The send** (`POST …/member-list/selected/message`; the box is `…/message-preview`):

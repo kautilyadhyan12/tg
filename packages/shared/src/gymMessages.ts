@@ -39,6 +39,11 @@ export const GYM_MESSAGE_KEPT_DAYS = 30;
 export const GYM_INBOX_MAX = 100;
 /** The longest a message's words can be. */
 export const GYM_MESSAGE_BODY_MAX = 500;
+/** How long a message is, as a person counts it and as the table's own check does: an
+ *  emoji is one, though JavaScript's `length` (and Zod's `max`) call it two. */
+export function gymMessageLength(body: string): number {
+  return Array.from(body).length;
+}
 /** A cheer or a come-back line is pinned for this many days (RULINGS 2026-09-07). */
 export const GYM_PINNED_NOTE_DAYS = 7;
 
@@ -280,7 +285,12 @@ export const GYM_COME_BACK_LINES: Record<string, string> = {
 export const gymInboxMessageSchema = z.object({
   id: z.string().uuid(),
   kind: gymInboxKindSchema,
-  body: z.string().min(1).max(GYM_MESSAGE_BODY_MAX),
+  // Counted as the rule that let it be sent counts it: a shorter limit here and one long
+  // message would make the whole inbox unreadable.
+  body: z
+    .string()
+    .min(1)
+    .refine((body) => gymMessageLength(body) <= GYM_MESSAGE_BODY_MAX, { message: "too_long" }),
   sentAt: instantSchema,
   /** False until the member has opened the inbox with it in. */
   read: z.boolean(),

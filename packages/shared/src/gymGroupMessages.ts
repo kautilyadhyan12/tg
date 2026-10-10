@@ -6,7 +6,7 @@
 // file holds what staff may type and the shapes that cross the wire.
 import { z } from "zod";
 import { memberListSelectionSchema } from "./memberList.js";
-import { GYM_MESSAGE_BODY_MAX } from "./gymMessages.js";
+import { GYM_MESSAGE_BODY_MAX, gymMessageLength } from "./gymMessages.js";
 
 /** How many group messages a gym may send on one day of its own calendar. */
 export const GYM_GROUP_MESSAGES_A_DAY = 3;
@@ -36,7 +36,7 @@ export function tidyGroupMessage(text: string): string {
 
 /** How long a message is, as a person counts it and as the table does: an emoji is one. */
 export function groupMessageLength(tidied: string): number {
-  return Array.from(tidied).length;
+  return gymMessageLength(tidied);
 }
 
 /** Endings that are a web address wherever they stand. Left out on purpose, because they
@@ -61,6 +61,10 @@ function hasLink(text: string): boolean {
     const [, name = "", ending = "", slash] = match;
     if (/\p{Ll}$/u.test(name) && /^\p{Lu}/u.test(ending)) continue;
     if (slash !== undefined || ADDRESS_ENDINGS.has(ending.toLowerCase())) return true;
+    // The last part is no ending ("in", left out on purpose): one before it may be
+    // ("ironhouse.co.in"). The first part is the name itself, never an ending.
+    const parts = name.split(".");
+    if (parts.some((part, at) => at > 0 && ADDRESS_ENDINGS.has(part.toLowerCase()) && !(/\p{Ll}$/u.test(parts[at - 1] ?? "") && /^\p{Lu}/u.test(part)))) return true;
   }
   return false;
 }

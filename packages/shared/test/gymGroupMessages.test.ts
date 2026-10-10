@@ -259,3 +259,31 @@ describe("tidying keeps what a word or a picture is written with", () => {
     expect(GYM_GROUP_MESSAGE_WORDS.earlier_sent(2000)).toContain("2,000 people");
   });
 });
+
+// What the re-check found (2026-10-10).
+describe("after the re-check", () => {
+  const inbox = (body: string) => ({
+    gymId: "00000000-0000-4000-8000-000000000003",
+    gymName: "Iron House",
+    status: "shown",
+    messages: [{ id: "00000000-0000-4000-8000-000000000004", kind: "group", body, sentAt: "2026-10-09T06:30:00.000Z", read: false }],
+    unread: 1,
+    asOf: "2026-10-09T06:30:00.000Z",
+  });
+  const arm = String.fromCodePoint(0x1f4aa);
+  it("every message the rule lets through is one the inbox's own shape can hold", () => {
+    for (const body of [arm.repeat(251), arm.repeat(GYM_MESSAGE_BODY_MAX), "z".repeat(GYM_MESSAGE_BODY_MAX), `${"z".repeat(GYM_MESSAGE_BODY_MAX - 1)}${arm}`]) {
+      expect(problem(body)).toBeNull();
+      expect(gymInboxResponseSchema.safeParse(inbox(body)).success).toBe(true);
+    }
+    expect(gymInboxResponseSchema.safeParse(inbox(arm.repeat(GYM_MESSAGE_BODY_MAX + 1))).success).toBe(false);
+    expect(gymInboxResponseSchema.safeParse(inbox("z".repeat(GYM_MESSAGE_BODY_MAX + 1))).success).toBe(false);
+    expect(gymInboxResponseSchema.safeParse(inbox("")).success).toBe(false);
+  });
+  it.each(["Book at ironhouse.co.in today", "ironhouse.com.in", "ironhouse.co.it", "shop.ironhouse.net.in"])("an ending inside the name: %s", (text) => {
+    expect(problem(text)).toBe("link");
+  });
+  it.each(["See you there.it starts at 6", "ironhouse.in", "Classes are back.Info.in the app"])("still goes: %s", (text) => {
+    expect(problem(text)).toBeNull();
+  });
+});
