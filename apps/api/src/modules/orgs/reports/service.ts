@@ -1,7 +1,17 @@
-// The Reports page (spec Part 3 §16.5; ROADMAP 21a-i): the members figures, for staff
-// holding `reports.read`. Counts only; no person's name or details leave here.
+// The Reports page (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii): the members and attendance
+// figures, for staff holding `reports.read`. Counts only; no person's name or details leave here.
 import type { Sql } from "postgres";
-import { leadSourceSchema, membersReportFrom, membersReportResponseSchema, type LeadSource, type MembersReportResponse } from "@app/shared";
+import {
+  attendanceReportFrom,
+  attendanceReportResponseSchema,
+  attendanceWindows,
+  leadSourceSchema,
+  membersReportFrom,
+  membersReportResponseSchema,
+  type AttendanceReportResponse,
+  type LeadSource,
+  type MembersReportResponse,
+} from "@app/shared";
 import { requirePrivilege } from "../service.js";
 import * as repo from "./repo.js";
 
@@ -36,6 +46,28 @@ export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { 
       months: counts.months,
       stay: { leavers: counts.stay_leavers, totalDays: counts.stay_days },
       leads,
+    }),
+  });
+}
+
+/** The attendance figures for a gym whose reader has been checked. */
+export async function getAttendanceReport(deps: ReportsDeps, gymId: string, org: { timezone: string }): Promise<AttendanceReportResponse> {
+  const now = deps.now();
+  const clock = await repo.readVisitClock(deps.sql, gymId, org.timezone, now);
+  const windows = attendanceWindows(clock.today, clock.firstVisitOn);
+  const visits = await repo.readVisitCounts(deps.sql, gymId, org.timezone, clock.today, windows);
+  const classes = await repo.readClassCounts(deps.sql, gymId, org.timezone, windows.classesFrom, now);
+  return attendanceReportResponseSchema.parse({
+    report: attendanceReportFrom({
+      timezone: org.timezone,
+      today: clock.today,
+      firstVisitOn: clock.firstVisitOn,
+      days: visits.days,
+      weeks: visits.weeks,
+      hours: visits.hours,
+      hoursNoTime: visits.hours_no_time,
+      member: { members: visits.members, visits: visits.member_visits, visitors: visits.member_visitors },
+      classes,
     }),
   });
 }
