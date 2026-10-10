@@ -181,7 +181,7 @@ describe('whose membership is on screen', () => {
       amountMinor: 9000,
       method: 'card_at_desk',
     });
-    expect(await (await boxSoon()).findByText('£90.00 recorded. 10 classes is paid.')).toBeTruthy();
+    expect(await (await boxSoon()).findByText('£90.00 recorded. That bill is paid.')).toBeTruthy();
   });
 });
 
@@ -1026,7 +1026,7 @@ describe("on the person's page", () => {
     // Saved: told once. The form kept its key, so the second press is the same request.
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([held(1, GOLD, '2026-10-04', true)]));
     fireEvent.click(pay().getByRole('button', { name: 'Record payment' }));
-    expect(await box().findByText('£49.99 recorded. Gold Monthly is paid.')).toBeTruthy();
+    expect(await box().findByText('£49.99 recorded. That bill is paid.')).toBeTruthy();
     expect(orgService.changeHeldMembership.mock.calls[1][4]).toEqual(orgService.changeHeldMembership.mock.calls[0][4]);
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
@@ -1124,7 +1124,7 @@ describe("on the person's page", () => {
     fireEvent.click(box().getByRole('button', { name: 'Record payment' }));
     fireEvent.change(within(screen.getByTestId('held-pay')).getByLabelText('How they paid'), { target: { value: 'cash' } });
     fireEvent.click(within(screen.getByTestId('held-pay')).getByRole('button', { name: 'Record payment' }));
-    await box().findByText('£49.99 recorded. Gold Monthly is paid.');
+    await box().findByText('£49.99 recorded. That bill is paid.');
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([held(1, GOLD, '2026-10-04', false)]));
     fireEvent.click(box().getByRole('button', { name: 'Freeze' }));
     const asks = box().getAllByRole('button', { name: /^Freeze/ });

@@ -272,7 +272,7 @@ export const gymMemberPayments = pgTable(
       columns: [t.gymId, t.billId],
       foreignColumns: [gymMemberBills.gymId, gymMemberBills.id],
     }).onDelete("cascade"),
-    uniqueIndex("gym_member_payments_provider_uq").on(t.provider, t.providerPaymentId).where(sql`${t.provider} IS NOT NULL`),
+    uniqueIndex("gym_member_payments_provider_uq").on(t.gymId, t.provider, t.providerPaymentId).where(sql`${t.provider} IS NOT NULL`),
     index("gym_member_payments_bill_idx").on(t.gymId, t.billId),
   ],
 );

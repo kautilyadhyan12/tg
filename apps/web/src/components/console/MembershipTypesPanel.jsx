@@ -810,7 +810,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
         </>
       )}
       {/* The gym's one setting for bills (18a-i), under the price list they are made from. */}
-      {formOpen ? null : <BillSettingsCard gymId={gymId} readOnly={readOnly} />}
+      {formOpen ? null : <BillSettingsCard gymId={gymId} readOnly={readOnly} readOnlyLine={readOnlyNote(org.orgType)} />}
     </div>
   );
 }

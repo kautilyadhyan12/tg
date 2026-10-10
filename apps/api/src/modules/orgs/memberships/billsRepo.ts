@@ -62,16 +62,22 @@ export async function recordPayment(
 
     // The same request, or the same payment of a company's, again: the one recorded
     // stands and nothing is added.
-    const [byKey] = await tx<{ held_membership_id: string }[]>`
-      SELECT b.held_membership_id
+    // The same key with anything else in it, or after its payment was taken back, is not
+    // the same request: it is refused, never answered as recorded.
+    const [byKey] = await tx<{ held_membership_id: string; period_index: number; amount_minor: number; undone: boolean }[]>`
+      SELECT b.held_membership_id, b.period_index, p.amount_minor, p.undone_at IS NOT NULL AS undone
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       WHERE p.gym_id = ${input.gymId} AND p.request_key = ${input.requestKey}`;
-    if (byKey !== undefined) return byKey.held_membership_id === input.membershipId ? { kind: "ok" } : { kind: "request_reused" };
+    if (byKey !== undefined) {
+      const same =
+        byKey.held_membership_id === input.membershipId && byKey.period_index === input.periodIndex && byKey.amount_minor === input.amountMinor && !byKey.undone;
+      return same ? { kind: "ok" } : { kind: "request_reused" };
+    }
     if (input.provider !== undefined) {
       const [byCompany] = await tx<{ id: string }[]>`
         SELECT id FROM gym_member_payments
-        WHERE provider = ${input.provider.name} AND provider_payment_id = ${input.provider.paymentId}`;
+        WHERE gym_id = ${input.gymId} AND provider = ${input.provider.name} AND provider_payment_id = ${input.provider.paymentId}`;
       if (byCompany !== undefined) return { kind: "ok" };
     }
 
@@ -84,7 +90,20 @@ export async function recordPayment(
     if (target === null || target.periodIndex !== input.periodIndex) return { kind: "not_allowed" };
     if (input.amountMinor > target.leftMinor) return { kind: "too_much", leftMinor: target.leftMinor, currency: row.currency };
 
-    let bill = bills.find((b) => b.periodIndex === target.periodIndex);
+    // Everything that can refuse is asked before anything is written: a refusal leaves no
+    // bill behind.
+    const found = bills.find((b) => b.periodIndex === target.periodIndex);
+    const paid = payMemberBill(found ?? { status: "open", amountMinor: row.priceMinor, paidMinor: 0 }, input.amountMinor);
+    if (!paid.ok) return { kind: "not_allowed" };
+    // The count of paid periods moves with the payment that settles the bill, or not at all.
+    let paidPeriods: number | null = null;
+    if (paid.status === "paid") {
+      const count = countAfterPayment(row.membership, target, input.today);
+      if (!count.ok) return { kind: "not_allowed" };
+      paidPeriods = count.paidPeriods;
+    }
+
+    let bill = found;
     if (bill === undefined) {
       const [opened] = await insertBills(
         tx,
@@ -94,16 +113,6 @@ export async function recordPayment(
       );
       if (opened === undefined) throw new Error("a bill to pay was not opened under the gym's lock");
       bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0 };
-    }
-    const paid = payMemberBill(bill, input.amountMinor);
-    if (!paid.ok) return { kind: "not_allowed" };
-
-    // The count of paid periods moves with the payment that settles the bill, or not at all.
-    let paidPeriods: number | null = null;
-    if (paid.status === "paid") {
-      const count = countAfterPayment(row.membership, target, input.today);
-      if (!count.ok) return { kind: "not_allowed" };
-      paidPeriods = count.paidPeriods;
     }
 
     const paymentId = await insertPayment(

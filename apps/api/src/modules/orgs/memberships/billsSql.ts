@@ -139,6 +139,14 @@ export async function setBillStatus(tx: TransactionSql, gymId: string, billId: s
     WHERE gym_id = ${gymId} AND id = ${billId}`;
 }
 
+/** Cancels open bills with their membership (`billsAtCancel`): they are kept, marked. */
+export async function voidBills(tx: TransactionSql, gymId: string, billIds: readonly string[], now: Date): Promise<void> {
+  if (billIds.length === 0) return;
+  await tx`
+    UPDATE gym_member_bills SET status = 'void', updated_at = ${now}
+    WHERE gym_id = ${gymId} AND id = ANY(${[...billIds]}::uuid[]) AND status = 'open'`;
+}
+
 export interface NewPayment {
   gymId: string;
   billId: string;

@@ -22,6 +22,7 @@ import { z } from "zod";
 import {
   HELD_EARLIER_PAGE,
   HELD_LIVE_MAX,
+  billsAtCancel,
   billsToOpen,
   giveHeldMembership,
   heldMembershipStatusSchema,
@@ -42,7 +43,7 @@ import {
 } from "@app/shared";
 import { insertAudit } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
-import { billsFor, insertBills, insertPayment, overdueDaysOf, paymentsFor, setBillStatus, type BillRow, type PaymentRow } from "./billsSql.js";
+import { billsFor, insertBills, insertPayment, overdueDaysOf, paymentsFor, setBillStatus, voidBills, type BillRow, type PaymentRow } from "./billsSql.js";
 import type { HasBookings, MembershipEndConfirmed } from "../classes/bookingChanges.js";
 import type { MembershipScope } from "../classes/bookingsRepo.js";
 
@@ -272,7 +273,9 @@ export type HeldWriteOutcome =
    *  so a start date after it would be taken; a repeating one that renews has none. */
   | { kind: "already_held"; typeName: string; ends: boolean }
   /** Given as paid, with a price, and the request does not say how they paid. */
-  | { kind: "method_needed" };
+  | { kind: "method_needed" }
+  /** A cancel, and a payment stands on a bill for days after the membership's last day. */
+  | { kind: "early_payment" };
 
 /** The record under the gym's lock and its own: null where it is not this gym's. */
 export async function lockedEntry(tx: TransactionSql, gymId: string, entryId: string): Promise<{ past: boolean } | null> {
@@ -529,6 +532,19 @@ export async function moveHeld(
     if (!move.changed) return { kind: "ok" };
     const m = move.membership;
 
+    // A cancel takes with it the bills for days after its last day (18a-i): nobody is left
+    // owing, or reading Overdue, for a month they never had.
+    let voided: string[] = [];
+    if (input.event.type === "cancel") {
+      const lastDay = m.status === "cancelled" ? input.today : heldMembershipView(m, input.today).endsOn;
+      if (lastDay !== null) {
+        const bills = await billsFor(tx, input.gymId, [before.id]);
+        const after = billsAtCancel(bills, lastDay);
+        if (after.blocked) return { kind: "early_payment" };
+        voided = bills.filter((b) => after.voids.includes(b.periodIndex)).map((b) => b.id);
+      }
+    }
+
     // A cancel ends the places booked on it (17c-iii): every class not yet started, or,
     // where it runs on to the end of what is paid, the classes after its last day.
     let ends: MembershipScope | null = null;
@@ -548,6 +564,7 @@ export async function moveHeld(
           updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
     const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
+    await voidBills(tx, input.gymId, voided, input.now);
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -564,6 +581,7 @@ export async function moveHeld(
         paidBefore: String(before.membership.paidPeriods),
         paidAfter: String(m.paidPeriods),
         renews: String(m.renews),
+        ...(voided.length === 0 ? {} : { billsCancelled: String(voided.length) }),
         ...(ended === null
           ? {}
           : {

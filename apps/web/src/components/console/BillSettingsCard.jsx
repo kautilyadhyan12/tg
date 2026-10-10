@@ -8,7 +8,8 @@ import { NO_PAYMENTS_LINE, graceChoices, graceExample } from '../../pages/consol
 // It waits for Save. Staff without the payments tick read it and are told who can
 // change it; a gym with no live plan reads it too.
 
-export default function BillSettingsCard({ gymId, readOnly }) {
+// `readOnlyLine`: why nothing here can be changed, for a gym with no live plan.
+export default function BillSettingsCard({ gymId, readOnly, readOnlyLine = null }) {
   /** What the server holds: { overdueAfterDays, canChange }. */
   const [saved, setSaved] = useState(null);
   const [days, setDays] = useState(0);
@@ -81,6 +82,7 @@ export default function BillSettingsCard({ gymId, readOnly }) {
         <span className="c-hint">{graceExample(days)}</span>
       </div>
       {!saved.canChange ? <p className="c-s14 c-t2 m-0">{NO_PAYMENTS_LINE}</p> : null}
+      {saved.canChange && readOnly && readOnlyLine !== null ? <p className="c-s14 c-t2 m-0">{readOnlyLine}</p> : null}
       {canChange ? (
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="c-btn c-btn-p" disabled={busy || !changed} onClick={() => void save()}>

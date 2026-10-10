@@ -27,6 +27,7 @@ import {
   type HeldMembership,
   type HeldMembershipEvent,
   type HeldMembershipShown,
+  type HeldMembershipView,
   type HeldMembershipsResponse,
   type MemberBilling,
   type RecordMemberPaymentRequest,
@@ -91,6 +92,16 @@ function billingOf(
   };
 }
 
+/** The membership as the rule reads it, with ONE day for what is owed: where the first
+ *  unpaid period has a bill, the day that bill fell due. A freeze moves the membership's
+ *  own dates and never a bill's, and every reader is sent the same day. */
+function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly BillRow[], today: string): HeldMembershipView {
+  const view = heldMembershipView(row.membership, today);
+  if (view.payment === null || view.payment.state !== "due" || view.payment.since === null) return view;
+  const owed = bills.find((b) => b.membershipId === row.id && b.periodIndex === row.membership.paidPeriods && b.status === "open");
+  return owed === undefined ? view : { ...view, payment: { state: "due", since: owed.dueOn } };
+}
+
 async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: string, canBill: boolean): Promise<HeldMembershipsResponse> {
   const list = await repo.readHeld(deps.sql, gymId, entryId);
   if (list === null) throw notFound();
@@ -114,7 +125,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       frozenOn: row.membership.frozenOn,
       classesLeft: row.membership.classesLeft,
       fromList: row.fromList,
-      view: heldMembershipView(row.membership, today),
+      view: viewOf(row, list.bills, today),
     }))
     .sort(
       (a, b) =>
@@ -181,6 +192,12 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "request_reused", "That was already saved for somebody else. Open the form again.");
     case "method_needed":
       throw new OrgsError(400, "payment_method_needed", "Pick how they paid.");
+    case "early_payment":
+      throw new OrgsError(
+        409,
+        "early_payment_stands",
+        "A payment is recorded for a month after its last day. Take that payment back first (Undo last payment), then cancel.",
+      );
     case "not_allowed":
       throw new OrgsError(
         409,
@@ -298,7 +315,7 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
     case "past_member":
       throw new OrgsError(409, "past_member", "This is a past member. Put them back on your list first.");
     case "request_reused":
-      throw new OrgsError(409, "request_reused", "That was already saved for somebody else. Open the form again.");
+      throw new OrgsError(409, "request_reused", "That form was already used for another payment. Open it again.");
     case "too_much":
       throw new OrgsError(
         409,

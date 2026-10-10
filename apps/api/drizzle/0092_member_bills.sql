@@ -71,8 +71,9 @@ CREATE TABLE "gym_member_payments" (
 	CONSTRAINT "gym_member_payments_bill_fk" FOREIGN KEY ("gym_id", "bill_id")
 		REFERENCES "gym_member_bills"("gym_id", "id") ON DELETE CASCADE
 );--> statement-breakpoint
--- A payment company's own id for a payment (18d): the same event twice is one row.
-CREATE UNIQUE INDEX "gym_member_payments_provider_uq" ON "gym_member_payments" ("provider", "provider_payment_id") WHERE "provider" IS NOT NULL;--> statement-breakpoint
+-- A payment company's own id for a payment (18d): the same event twice is one row. Kept
+-- to its gym: one gym's id never stands in for another's.
+CREATE UNIQUE INDEX "gym_member_payments_provider_uq" ON "gym_member_payments" ("gym_id", "provider", "provider_payment_id") WHERE "provider" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "gym_member_payments_bill_idx" ON "gym_member_payments" ("gym_id", "bill_id");--> statement-breakpoint
 
 -- A sixteenth privilege, `billing.members`: record what a member paid their gym. Owner and

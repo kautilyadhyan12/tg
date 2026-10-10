@@ -103,11 +103,12 @@ export function paymentBody(m, draft) {
   return { problem: null, body: { requestKey: draft.requestKey, periodIndex: pay.periodIndex, amountMinor, method: draft.method } };
 }
 
-/** What a recorded payment says back: all of it, or what is still owed. */
+/** What a recorded payment says back: that bill is paid, or what is still owed on it.
+ *  Never that the membership is paid: another of its bills may still be owed. */
 export function paidWords(m, amountMinor) {
   const left = m.billing.pay.leftMinor - amountMinor;
   const amount = formatMinor(amountMinor, m.currency);
-  return left > 0 ? `${amount} recorded. ${formatMinor(left, m.currency)} is still left to pay.` : `${amount} recorded. ${m.typeName} is paid.`;
+  return left > 0 ? `${amount} recorded. ${formatMinor(left, m.currency)} is still left to pay.` : `${amount} recorded. That bill is paid.`;
 }
 
 /** The question the Undo button asks, for a recorded payment and for an older mark. */

@@ -131,6 +131,18 @@ export function memberPayTarget(
   return { periodIndex: index, leftMinor: bill.amountMinor - bill.paidMinor, dueOn: bill.dueOn, covers: bill.covers ?? null, advances: true };
 }
 
+/** WHAT A CANCEL DOES TO THE BILLS STILL OPEN. `lastDay` is the last day the membership
+ *  runs: the day it is cancelled, or the last paid day where it is set to stop. A bill
+ *  that falls due after that day is for days the person will never have: one with
+ *  nothing paid on it is cancelled with the membership (`voids`, by period), and one with
+ *  a payment standing stops the cancel (`blocked`) until that payment is taken back, so
+ *  no bill is left reading Overdue for a month nobody had. A bill due on or before the
+ *  last day stays owed. */
+export function billsAtCancel(bills: readonly BillFacts[], lastDay: string): { voids: number[]; blocked: boolean } {
+  const after = bills.filter((b) => b.status === "open" && b.dueOn > lastDay);
+  return { voids: after.filter((b) => b.paidMinor === 0).map((b) => b.periodIndex), blocked: after.some((b) => b.paidMinor > 0) };
+}
+
 /** The count of paid periods once a payment has settled `target`'s bill: the number to
  *  write, null to leave it, or refused. It moves through the membership's own rule; a
  *  membership of one period that is over has no date standing on the count, so its one

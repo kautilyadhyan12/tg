@@ -3312,7 +3312,12 @@ with the payment that settles the bill of the first unpaid period.
 - **Opened by itself**: when a membership is given, and by an hourly run for every
   period that has begun since (each gym on its own day). A bill keeps the days it was
   opened for and the day it fell due: a later freeze moves the membership's dates and
-  never a bill's. Nothing is opened for a
+  never a bill's, and every reader is sent that one day for what is owed.
+- **A cancel** takes with it the open bills that fall due after the membership's last
+  day (the day it is cancelled, or the last paid day where it is set to stop): one with
+  nothing paid on it is kept and marked cancelled, so nobody owes for a month they never
+  had; one with a payment on it stops the cancel until that payment is taken back. A
+  bill that fell due on or before the last day stays owed. Nothing is opened for a
   membership that is cancelled, ended, frozen, free, set to stop at the end of what is
   paid, or a past member's. A bill already owed stays owed after the membership ends,
   so somebody who left without paying is still found.

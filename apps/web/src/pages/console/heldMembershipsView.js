@@ -114,11 +114,9 @@ export function classesLine(m) {
 }
 
 /** What is paid or owed, and whether it needs staff's eye; null where there is nothing
- *  to pay or the membership is over. `today` is the gym's own day. Where the reader is
- *  sent the bills (18a-i), the day it fell due is the owed bill's own: a freeze moves the
- *  membership's dates and never a bill's, and the line and the bill under it say one day. */
+ *  to pay or the membership is over. `today` is the gym's own day. */
 export function paymentLine(m, today) {
-  const p = owedOnItsBill(m);
+  const p = m.view.payment;
   if (p === null) return null;
   if (p.state === 'paid') {
     if (p.until === null) return { text: 'Paid', due: false };
@@ -127,13 +125,6 @@ export function paymentLine(m, today) {
   if (p.since === null) return { text: 'Payment due', due: true };
   if (p.since > today) return { text: `Payment due on ${dayWords(p.since)}`, due: false };
   return { text: p.since === today ? 'Payment due today' : `Payment due since ${dayWords(p.since)}`, due: true };
-}
-
-function owedOnItsBill(m) {
-  const p = m.view.payment;
-  const owed = m.billing?.pay ?? null;
-  if (p === null || p.state !== 'due' || p.since === null || owed === null) return p;
-  return { state: 'due', since: owed.dueOn };
 }
 
 /** What the type costs once: "£49.99", or "Free". */

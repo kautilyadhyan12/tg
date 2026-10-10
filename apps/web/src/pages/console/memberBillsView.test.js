@@ -112,7 +112,8 @@ describe('the amount typed is the amount sent', () => {
   });
 
   it('says back all of it, or what is still left', () => {
-    expect(paidWords(m, 4999)).toBe('£49.99 recorded. Gold Monthly is paid.');
+    // Never "Gold Monthly is paid": another of its bills may still be owed.
+    expect(paidWords(m, 4999)).toBe('£49.99 recorded. That bill is paid.');
     expect(paidWords(m, 2000)).toBe('£20.00 recorded. £29.99 is still left to pay.');
   });
 });

@@ -218,26 +218,68 @@ describe('what the bills show', () => {
   });
 });
 
-describe('one day for what is owed', () => {
-  it('the line above the bills prints the day the bill fell due, after a freeze has moved the membership\'s own dates', async () => {
-    // Owing since 4 October, frozen for five days: the membership's rule now says the 9th.
-    const gold = held(1, GOLD, '2026-10-04', false, [
-      [{ type: 'freeze' }, '2026-10-10'],
-      [{ type: 'unfreeze' }, '2026-10-15'],
-    ]);
-    expect(gold.view.payment).toEqual({ state: 'due', since: '2026-10-09' });
-    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+describe('a membership that is over', () => {
+  it('a payment recorded on it by mistake can be taken back: the Undo link is drawn beside Record payment, and alone once nothing is owed', async () => {
+    // A fixed term that ended unpaid: its one bill is still owed.
+    const TERM = { ...GOLD, id: '22222222-2222-4222-8222-000000000003', name: 'One week', kind: 'one_time', termCount: 1, termUnit: 'week', priceMinor: 2000 };
+    const owing = held(3, TERM, '2026-10-01', false);
+    expect(owing.view.status).toBe('ended');
+    // Part of it recorded: the rest is owed, and that payment can be taken back.
+    const bill = { ...owing.billing.bills[0], paidMinor: 500, payments: [{ id: '66666666-6666-4666-8666-000000000031', amountMinor: 500, method: 'cash', paidOn: '2026-10-19', by: 'Sam Owner' }] };
+    const part = { ...owing, billing: { ...owing.billing, bills: [bill], pay: { ...owing.billing.pay, leftMinor: 1500 }, undo: { kind: 'payment', paymentId: bill.payments[0].id } } };
+    orgService.getHeldMemberships.mockResolvedValue(answer([part], { types: [GOLD, PACK, TERM] }));
+    orgService.changeHeldMembership.mockResolvedValue(answer([owing], { types: [GOLD, PACK, TERM] }));
     const view = render(draw());
     const [row] = await rowsSoon();
-    expect(within(row).getByTestId('held-payment').textContent).toBe('Payment due since 4 October 2026');
-    expect(billsOf(row)[0]).toContain('Was due 4 October 2026');
+    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Record payment', 'Undo last payment']);
+    fireEvent.click(within(row).getByRole('button', { name: 'Undo last payment' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-undo')).getByRole('button', { name: 'Take it back' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, part.id, `payments/${bill.payments[0].id}/undo`));
     view.unmount();
 
-    // Staff who are sent no bill read the membership's own day, as before.
-    orgService.getHeldMemberships.mockResolvedValue(withoutBills([gold]));
+    // Settled in full: nothing is owed, it is folded away, and its Undo is still there.
+    const settled = held(3, TERM, '2026-10-01', true);
+    expect(settled.billing).toMatchObject({ pay: null, undo: { kind: 'payment' } });
+    orgService.getHeldMemberships.mockResolvedValue(answer([settled], { types: [GOLD, PACK, TERM] }));
     render(draw());
-    const [plain] = await rowsSoon();
-    expect(within(plain).getByTestId('held-payment').textContent).toBe('Payment due since 9 October 2026');
+    fireEvent.click(await screen.findByRole('button', { name: 'Show 1 earlier membership' }));
+    const [folded] = await rowsSoon();
+    expect(within(folded).getAllByRole('button').map((b) => b.textContent)).toEqual(['Undo last payment']);
+  });
+
+  it('a past member is offered no Undo: they are put back on the list first', async () => {
+    const TERM = { ...GOLD, id: '22222222-2222-4222-8222-000000000003', name: 'One week', kind: 'one_time', termCount: 1, termUnit: 'week', priceMinor: 2000 };
+    const settled = held(3, TERM, '2026-10-01', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...settled, billing: { ...settled.billing, undo: { kind: 'payment', paymentId: settled.billing.bills[0].payments[0].id } } }], { types: [GOLD, PACK, TERM] }));
+    render(draw());
+    fireEvent.click(await screen.findByRole('button', { name: 'Show 1 earlier membership' }));
+    const [row] = await rowsSoon();
+    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Undo last payment']);
+    cleanup();
+    // The same page for a past member.
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...settled, billing: { ...settled.billing, undo: { kind: 'payment', paymentId: settled.billing.bills[0].payments[0].id } } }], { types: [GOLD, PACK, TERM], past: true }));
+    render(draw());
+    fireEvent.click(await screen.findByRole('button', { name: 'Show 1 earlier membership' }));
+    const [past] = await rowsSoon();
+    expect(within(past).queryAllByRole('button')).toEqual([]);
+  });
+});
+
+describe('one payment said back', () => {
+  it('says that bill is paid, never that the membership is, while another of its bills is owed', async () => {
+    // Two months owed: September's and October's.
+    const gold = held(1, GOLD, '2026-09-04', false);
+    expect(gold.billing.bills.map((b) => b.state)).toEqual(['overdue', 'overdue']);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([gold]));
+    render(draw());
+    const [row] = await rowsSoon();
+    fireEvent.click(within(row).getByRole('button', { name: 'Record payment' }));
+    const form = within(within(row).getByTestId('held-pay'));
+    fireEvent.change(form.getByLabelText('How they paid'), { target: { value: 'cash' } });
+    fireEvent.click(form.getByRole('button', { name: 'Record payment' }));
+    expect(await screen.findByText('£49.99 recorded. That bill is paid.')).toBeTruthy();
+    expect(screen.queryByText(/Gold Monthly is paid/)).toBeNull();
   });
 });
 
@@ -315,10 +357,12 @@ describe('the Bills card on Memberships', () => {
 
   it('a gym with no live plan reads it and cannot change it; a save that fails says so; one that cannot be read draws nothing', async () => {
     orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 3, canChange: true } });
-    const lapsed = render(<BillSettingsCard gymId={GYM} readOnly />);
+    const lapsed = render(<BillSettingsCard gymId={GYM} readOnly readOnlyLine="Start a plan to change anything here." />);
     await screen.findByTestId('bill-settings');
     expect(card().getByLabelText('Grace period before an unpaid bill reads Overdue').disabled).toBe(true);
     expect(card().queryByRole('button', { name: 'Save' })).toBeNull();
+    // The greyed list says why.
+    expect(card().getByText('Start a plan to change anything here.')).toBeTruthy();
     lapsed.unmount();
 
     orgService.saveBillSettings.mockRejectedValue({ response: { status: 409, data: { error: 'gym_not_on_plan', message: 'Start a plan to change this.' } } });

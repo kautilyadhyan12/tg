@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   BILLS_OPEN_A_RUN,
   billCovers,
+  billsAtCancel,
   billsToOpen,
   countAfterPayment,
   countAfterUndo,
@@ -265,6 +266,29 @@ describe("which period a payment can be taken for", () => {
     // The month they left owing is the first unpaid one: paying it counts, so the bill and
     // the count agree if they are put back on the list.
     expect(memberPayTarget(unpaid, 4999, "2026-01-20", [billOf(0)], true)).toEqual({ periodIndex: 0, leftMinor: 4999, dueOn: "2026-01-15", covers: null, advances: true });
+  });
+});
+
+describe("a cancel takes with it the bills for days the person will never have", () => {
+  it("cancels the bill of a membership that never started, and leaves nothing owed", () => {
+    // Given on 5 January to start on the 15th; cancelled on the 6th.
+    expect(billsAtCancel([billOf(0, { dueOn: "2026-01-15" })], "2026-01-06")).toEqual({ voids: [0], blocked: false });
+  });
+
+  it("keeps a bill that fell due on or before the last day: that month was had", () => {
+    expect(billsAtCancel([billOf(0, { dueOn: "2026-01-15" })], "2026-01-15")).toEqual({ voids: [], blocked: false });
+    expect(billsAtCancel([billOf(0, { dueOn: "2026-01-15" }), billOf(1, { dueOn: "2026-02-15" })], "2026-02-20")).toEqual({ voids: [], blocked: false });
+  });
+
+  it("set to stop on 14 February: next month's unpaid bill goes, and one with a payment on it stops the cancel", () => {
+    const next = billOf(1, { dueOn: "2026-02-15" });
+    expect(billsAtCancel([billOf(0, { status: "paid", paidMinor: 4999 }), next], "2026-02-14")).toEqual({ voids: [1], blocked: false });
+    expect(billsAtCancel([billOf(0, { status: "paid", paidMinor: 4999 }), { ...next, paidMinor: 1000 }], "2026-02-14")).toEqual({ voids: [], blocked: true });
+  });
+
+  it("touches no bill that is already paid, cancelled or refunded", () => {
+    const later = (status: BillFacts["status"]) => billOf(1, { dueOn: "2026-02-15", status, paidMinor: status === "paid" ? 4999 : 0 });
+    expect(billsAtCancel([later("paid"), later("void"), later("refunded")], "2026-01-20")).toEqual({ voids: [], blocked: false });
   });
 });
 

@@ -454,6 +454,13 @@ export default function MemberMemberships({
     const inUse = canAct && isLive(m);
     // A bill left owing is paid whatever became of the membership or the person.
     const canPay = !readOnly && owes(m);
+    // A payment recorded by mistake is taken back on a membership that is over too.
+    const canUndo = canAct && m.billing !== null && m.billing.undo !== null;
+    const undoLink = canUndo ? (
+      <button type="button" className="c-btn c-btn-link c-btn-sm" disabled={busy} onClick={() => ask('undo', m)}>
+        {undoWords(m, name).link}
+      </button>
+    ) : null;
     return (
       <li key={m.id} className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-membership">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -479,11 +486,14 @@ export default function MemberMemberships({
           ) : (
             renderAsk(m)
           )
-        ) : canPay && !inUse ? (
+        ) : !inUse && (canPay || canUndo) ? (
           <div className="flex flex-wrap gap-2 pt-1">
-            <button type="button" className={SMALL} disabled={busy} onClick={() => startPay(m)}>
-              {payLabel(m, today)}
-            </button>
+            {canPay ? (
+              <button type="button" className={SMALL} disabled={busy} onClick={() => startPay(m)}>
+                {payLabel(m, today)}
+              </button>
+            ) : null}
+            {undoLink}
           </div>
         ) : inUse ? (
           <div className="flex flex-wrap gap-2 pt-1">
@@ -507,11 +517,7 @@ export default function MemberMemberships({
                 Cancel membership
               </button>
             ) : null}
-            {m.billing !== null && m.billing.undo !== null ? (
-              <button type="button" className="c-btn c-btn-link c-btn-sm" disabled={busy} onClick={() => ask('undo', m)}>
-                {undoWords(m, name).link}
-              </button>
-            ) : null}
+            {undoLink}
           </div>
         ) : null}
       </li>
