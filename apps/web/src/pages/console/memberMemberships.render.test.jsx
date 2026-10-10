@@ -34,6 +34,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   };
 });
 
+const { asPast, billingFor } = await import('./billingFixture');
 const { orgService } = await import('../../api/orgsApi');
 const MemberMemberships = (await import('./MemberMemberships')).default;
 const MemberListPerson = (await import('./MemberListPerson')).default;
@@ -63,6 +64,7 @@ function held(n, type, startsOn, paid, moves = []) {
   const made = giveHeldMembership(type, startsOn, paid, startsOn);
   if (!made.ok) throw new Error(made.reason);
   let m = made.membership;
+  const given = m;
   for (const [event, on] of moves) {
     const move = moveHeldMembership(m, event, on);
     if (!move.ok) throw new Error('refused');
@@ -84,11 +86,21 @@ function held(n, type, startsOn, paid, moves = []) {
     classesLeft: m.classesLeft,
     fromList: false,
     view: heldMembershipView(m, TODAY),
+    billing: billingFor(n, given, m, type.priceMinor, TODAY),
   };
 }
 /** What the server answers: the memberships, and the gym's price list beside them. */
 const answer = (memberships, past = false, more = {}) => ({
-  data: heldMembershipsResponseSchema.parse({ today: TODAY, past, memberships, earlierNotShown: 0, types: [GOLD, PACK], listed: null, ...more }),
+  data: heldMembershipsResponseSchema.parse({
+    today: TODAY,
+    past,
+    memberships: past ? memberships.map((m) => ({ ...m, billing: asPast(m.billing) })) : memberships,
+    earlierNotShown: 0,
+    types: [GOLD, PACK],
+    listed: null,
+    canBill: true,
+    ...more,
+  }),
 });
 const refusal = (status, data) => Object.assign(new Error('refused'), { response: { status, data } });
 
@@ -147,16 +159,28 @@ describe('whose membership is on screen', () => {
     expect(within(packRow).getByTestId('held-payment').textContent).toBe('Payment due since 10 October 2026');
     expect(within(goldRow).getByTestId('held-payment').textContent).toBe('Paid · next payment due 4 November 2026');
 
-    fireEvent.click(within(packRow).getByRole('button', { name: 'Mark paid' }));
-    // The question is under the pack, names Ada, and Gold keeps its own buttons.
-    const ask = within(packRow).getByTestId('held-ask-paid');
-    expect(within(ask).getByText("Mark Ada Lovelace's 10 classes as paid?")).toBeTruthy();
-    expect(within(goldRow).queryByTestId('held-ask-paid')).toBeNull();
+    fireEvent.click(within(packRow).getByRole('button', { name: 'Record payment' }));
+    // The form is under the pack, names Ada, and Gold keeps its own buttons.
+    const form = within(packRow).getByTestId('held-pay');
+    expect(within(form).getByText("Record a payment for Ada Lovelace's 10 classes")).toBeTruthy();
+    expect(within(form).getByText('£90.00 is left to pay. This only writes it in your records: no money is taken.')).toBeTruthy();
+    expect(within(goldRow).queryByTestId('held-pay')).toBeNull();
+    expect(within(goldRow).getByRole('button', { name: 'Record payment' })).toBeTruthy();
+    // The amount starts at what is left; how they paid is not guessed.
+    expect(within(form).getByLabelText('Amount paid (GBP)').value).toBe('90.00');
+    fireEvent.click(within(form).getByRole('button', { name: 'Record payment' }));
+    expect(within(form).getByRole('alert').textContent).toBe('Pick how they paid.');
     expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
-    fireEvent.click(within(ask).getByRole('button', { name: 'Mark paid' }));
+    fireEvent.change(within(form).getByLabelText('How they paid'), { target: { value: 'card_at_desk' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Record payment' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
-    expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, pack.id, 'paid', { paidPeriods: 1 });
-    expect(await (await boxSoon()).findByText('10 classes marked paid.')).toBeTruthy();
+    expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, pack.id, 'payments', {
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      periodIndex: 0,
+      amountMinor: 9000,
+      method: 'card_at_desk',
+    });
+    expect(await (await boxSoon()).findByText('£90.00 recorded. 10 classes is paid.')).toBeTruthy();
   });
 });
 
@@ -376,7 +400,7 @@ describe('what the box draws', () => {
     expect(within(row).getByText('Frozen')).toBeTruthy();
     expect(within(row).getByText('£49.99 every month')).toBeTruthy();
     expect(within(row).getByText('Started 4 October 2026 · Frozen since 10 October 2026')).toBeTruthy();
-    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Mark paid', 'Unfreeze', 'Cancel membership', 'Undo mark paid']);
+    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Record payment', 'Unfreeze', 'Cancel membership', 'Undo last payment']);
 
     // The cancelled one is behind one line, with no buttons of its own.
     fireEvent.click(box().getByRole('button', { name: 'Show 5 earlier memberships' }));
@@ -456,12 +480,22 @@ describe('adding a membership', () => {
 
     fireEvent.change(form.getByRole('combobox'), { target: { value: GOLD.id } });
     expect(form.getByTestId('held-add-line').textContent).toBe('Started 20 October 2026 · Renews 20 November 2026');
+    // How they paid is asked only once it is ticked as paid, and the form waits for it.
+    expect(form.queryByLabelText('How they paid')).toBeNull();
     fireEvent.click(form.getByRole('checkbox', { name: 'They have paid up to 20 November 2026' }));
+    expect(form.getByRole('button', { name: 'Add membership' }).disabled).toBe(true);
+    expect(within(form.getByLabelText('How they paid')).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Choose one',
+      'Cash',
+      'Card at the desk',
+      'Bank transfer',
+    ]);
+    fireEvent.change(form.getByLabelText('How they paid'), { target: { value: 'cash' } });
     fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
     await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
     const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
     expect([gym, entry]).toEqual([GYM, ADA]);
-    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true });
+    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash' });
 
     // It failed: the form stays, and pressing again sends the same key, so one membership.
     expect(await (await boxSoon()).findByRole('alert')).toBeTruthy();
@@ -522,7 +556,7 @@ describe('changing a membership', () => {
     expect(box().getByText("Started 4 October 2026 · Ends 3 November 2026, won't renew")).toBeTruthy();
   });
 
-  it('Freeze, Unfreeze and Undo mark paid each send their own step', async () => {
+  it('Freeze, Unfreeze and Undo last payment each send their own step', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     const frozen = held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, '2026-10-18']]);
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
@@ -539,9 +573,14 @@ describe('changing a membership', () => {
     fireEvent.click(within(screen.getByTestId('held-ask-unfreeze')).getByRole('button', { name: 'Unfreeze' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'unfreeze', undefined));
 
-    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Undo mark paid' }));
-    fireEvent.click(within(screen.getByTestId('held-ask-undoPaid')).getByRole('button', { name: 'Take it back' }));
-    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'paid', { paidPeriods: 0 }));
+    // The payment taken back is named: its amount and its day.
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Undo last payment' }));
+    const ask = within(screen.getByTestId('held-ask-undo'));
+    expect(ask.getByText("Take back the £49.99 recorded on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
+    fireEvent.click(ask.getByRole('button', { name: 'Take it back' }));
+    const paymentId = gold.billing.bills[0].payments[0].id;
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, `payments/${paymentId}/undo`));
+    expect(await (await boxSoon()).findByText('The last payment for Gold Monthly was taken back.')).toBeTruthy();
   });
 
   it('a membership somebody else changed first is said so, and read again', async () => {
@@ -588,8 +627,8 @@ describe('Add member gives a membership in the same form', () => {
       handEdited: [],
       members: [],
     });
-  const openAdd = () =>
-    render(<MemberListPerson gymId={GYM} gym={IRON} entryId={null} list={{ fields: [] }} words={WORDS} readOnly={false} onClose={() => {}} onChanged={() => {}} />);
+  const openAdd = (gym = IRON) =>
+    render(<MemberListPerson gymId={GYM} gym={gym} entryId={null} list={{ fields: [] }} words={WORDS} readOnly={false} onClose={() => {}} onChanged={() => {}} />);
   const typeName = (label, value) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
   beforeEach(() => {
@@ -628,18 +667,30 @@ describe('Add member gives a membership in the same form', () => {
 
   it('gives the membership picked to the person just added, and to nobody else', async () => {
     orgService.giveHeldMembership.mockResolvedValue(answer([]));
-    openAdd();
+    // Staff who may record payments: saying it is paid records one.
+    openAdd({ ...IRON, privileges: ['members.confirm', 'billing.members'] });
     const choice = within(await screen.findByTestId('add-membership'));
     typeName('Name', 'Bea Hart');
     typeName('Email', 'bea@members.example');
     fireEvent.change(choice.getByRole('combobox'), { target: { value: PACK.id } });
     expect(choice.getByTestId('held-add-line').textContent).toMatch(/^Start(ed|s) .* · Ends .* · 10 of 10 classes left$/);
     fireEvent.click(choice.getByRole('checkbox', { name: 'They have paid the £90.00' }));
+    // Ticked as paid with no way of paying picked: nobody is added, and the form says why.
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    expect(await screen.findByText('Pick how they paid.')).toBeTruthy();
+    expect(orgService.addMemberListEntry).not.toHaveBeenCalled();
+    fireEvent.change(choice.getByLabelText('How they paid'), { target: { value: 'bank_transfer' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
     await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
     const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
     expect([gym, entry]).toEqual([GYM, BEA]);
-    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: PACK.id, startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), paid: true });
+    expect(body).toEqual({
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      typeId: PACK.id,
+      startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      paid: true,
+      method: 'bank_transfer',
+    });
     // The person was added first, as typed; the type's name became their Membership word
     // on the list only after the membership was given.
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
@@ -710,6 +761,23 @@ describe('Add member gives a membership in the same form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
     expect((await screen.findByTestId('panel-alert')).textContent).toContain('this membership would already be over');
     expect(orgService.addMemberListEntry).not.toHaveBeenCalled();
+  });
+
+  it('staff who cannot record payments are not offered the paid tick, are told who can, and the membership is given unpaid', async () => {
+    orgService.giveHeldMembership.mockResolvedValue(answer([]));
+    openAdd({ ...IRON, privileges: ['members.confirm'] });
+    const choice = within(await screen.findByTestId('add-membership'));
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea@members.example');
+    fireEvent.change(choice.getByRole('combobox'), { target: { value: PACK.id } });
+    expect(choice.queryByRole('checkbox')).toBeNull();
+    expect(choice.getByTestId('held-add-no-payments').textContent).toBe(
+      `They will owe it until a payment is recorded. You can't record payments. Ask the owner to turn on "Record members' payments" for you.`,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.giveHeldMembership.mock.calls[0][2]).toMatchObject({ typeId: PACK.id, paid: false });
+    expect(orgService.giveHeldMembership.mock.calls[0][2].method).toBeUndefined();
   });
 
   it('adds the person as before where the gym has no price list', async () => {
@@ -897,8 +965,8 @@ describe("on the person's page", () => {
     // What the gym's own list says sits under its own heading, not a second "Membership".
     expect(screen.getByRole('heading', { name: 'Details' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Memberships' })).toBeTruthy();
-    fireEvent.click(box().getByRole('button', { name: 'Mark paid' }));
-    expect(within(screen.getByTestId('held-ask-paid')).getByText("Mark Ada Lovelace's Gold Monthly as paid?")).toBeTruthy();
+    fireEvent.click(box().getByRole('button', { name: 'Record payment' }));
+    expect(within(screen.getByTestId('held-pay')).getByText("Record a payment for Ada Lovelace's Gold Monthly")).toBeTruthy();
   });
 
   // 23a-i: the list behind the page says what the person holds, so a change here must
@@ -946,16 +1014,19 @@ describe("on the person's page", () => {
 
     // Refused: nothing changed, so nothing behind the page reads again.
     orgService.changeHeldMembership.mockRejectedValueOnce({ response: { status: 409, data: { error: 'conflict', message: 'Try again.' } } });
-    fireEvent.click(box().getByRole('button', { name: 'Mark paid' }));
-    fireEvent.click(within(screen.getByTestId('held-ask-paid')).getByRole('button', { name: 'Mark paid' }));
+    fireEvent.click(box().getByRole('button', { name: 'Record payment' }));
+    const pay = () => within(screen.getByTestId('held-pay'));
+    fireEvent.change(pay().getByLabelText('How they paid'), { target: { value: 'cash' } });
+    fireEvent.click(pay().getByRole('button', { name: 'Record payment' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
     await box().findByText('Try again.');
     expect(onChanged).not.toHaveBeenCalled();
 
-    // Saved: told once.
+    // Saved: told once. The form kept its key, so the second press is the same request.
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([held(1, GOLD, '2026-10-04', true)]));
-    fireEvent.click(within(screen.getByTestId('held-ask-paid')).getByRole('button', { name: 'Mark paid' }));
-    expect(await box().findByText('Gold Monthly marked paid.')).toBeTruthy();
+    fireEvent.click(pay().getByRole('button', { name: 'Record payment' }));
+    expect(await box().findByText('£49.99 recorded. Gold Monthly is paid.')).toBeTruthy();
+    expect(orgService.changeHeldMembership.mock.calls[1][4]).toEqual(orgService.changeHeldMembership.mock.calls[0][4]);
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
@@ -1049,9 +1120,10 @@ describe("on the person's page", () => {
     expect(screen.queryByText('Expired')).toBeNull();
 
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([held(1, GOLD, '2026-10-04', true)]));
-    fireEvent.click(box().getByRole('button', { name: 'Mark paid' }));
-    fireEvent.click(within(screen.getByTestId('held-ask-paid')).getByRole('button', { name: 'Mark paid' }));
-    await box().findByText('Gold Monthly marked paid.');
+    fireEvent.click(box().getByRole('button', { name: 'Record payment' }));
+    fireEvent.change(within(screen.getByTestId('held-pay')).getByLabelText('How they paid'), { target: { value: 'cash' } });
+    fireEvent.click(within(screen.getByTestId('held-pay')).getByRole('button', { name: 'Record payment' }));
+    await box().findByText('£49.99 recorded. Gold Monthly is paid.');
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([held(1, GOLD, '2026-10-04', false)]));
     fireEvent.click(box().getByRole('button', { name: 'Freeze' }));
     const asks = box().getAllByRole('button', { name: /^Freeze/ });

@@ -34,6 +34,7 @@ import {
 } from '../../pages/console/membershipTypesView';
 import { formWordsFor, notSetUp, typeTies, withSetUpCount } from '../../pages/console/membershipWordsView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from './ConsoleStates';
+import BillSettingsCard from './BillSettingsCard';
 import PlaceLink from './PlaceLink';
 import { GiveBox, NotSetUp, TypeTies } from './MembershipFromList';
 import { useListMemberships } from './useListMemberships';
@@ -808,6 +809,8 @@ export default function MembershipTypesPanel({ org, readOnly }) {
           ) : null}
         </>
       )}
+      {/* The gym's one setting for bills (18a-i), under the price list they are made from. */}
+      {formOpen ? null : <BillSettingsCard gymId={gymId} readOnly={readOnly} />}
     </div>
   );
 }

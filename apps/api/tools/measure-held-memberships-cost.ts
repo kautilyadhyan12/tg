@@ -1,7 +1,7 @@
 // What a person's memberships cost at full size (ROADMAP 17a-ii; CLAUDE.md §4 "Cost at
 // full size"). One gym of 2,100 people on its list (--people= for another size), each
 // holding three memberships and one of them holding years of earlier ones; a person's
-// memberships read as staff read them, one given, and one changed. Two numbers each,
+// memberships read as staff read them, one given, and one payment recorded. Two numbers each,
 // over several runs:
 //   - total: how long the call takes (a write holds the gym's row for that long, so the
 //     gym's other writes wait behind it);
@@ -15,7 +15,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { HELD_EARLIER_PAGE } from "@app/shared";
-import { getHeldMemberships, giveHeldMembership, moveHeldMembership } from "../src/modules/orgs/memberships/heldService.js";
+import { getHeldMemberships, giveHeldMembership, recordMemberPayment } from "../src/modules/orgs/memberships/heldService.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -124,12 +124,13 @@ const calls: [string, () => Promise<unknown>][] = [
     },
   ],
   [
-    "mark one paid",
+    "record one payment",
     async () => {
       const [m] = await sql<{ id: string }[]>`
         SELECT id FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id = ${typical} AND status = 'active'`;
+      const periodIndex = paid;
       paid += 1;
-      return moveHeldMembership(deps, owner, gymId, typical, m?.id ?? "", { type: "paid", paidPeriods: paid });
+      return recordMemberPayment(deps, owner, gymId, typical, m?.id ?? "", { requestKey: randomUUID(), periodIndex, amountMinor: 4999, method: "cash" });
     },
   ],
 ];
