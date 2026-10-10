@@ -276,6 +276,41 @@ describe("the gym's own list", () => {
     expect(within(screen.getByTestId('showing')).getByRole('button', { name: 'Stop showing only Past members' })).toBeTruthy();
   });
 
+  it('a past member who still owes says so on their row, and Past members has one chip to find them by', async () => {
+    orgService.getMemberList.mockResolvedValue({ data: { list: view({ counts: { entries: 312, inApp: 40, canBeInvited: 250, noEmail: 22, former: 4, formerOwing: 1 } }) } });
+    const ivy = entry('Ivy Left Owing', { formerAt: '2026-09-03T10:00:00.000Z', owedSince: '2026-08-01', paymentStatus: 'Paid' });
+    const jo = entry('Jo Left Paid', { formerAt: '2026-09-03T10:00:00.000Z', paymentStatus: 'Paid' });
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ivy, jo]));
+    draw();
+    await openFilter();
+    fireEvent.click(within(filterBox().getByRole('radiogroup', { name: 'Show' })).getByRole('radio', { name: 'Past members 4' }));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'records=former'));
+    // The one chip, with its count; no other word chips for past members.
+    const chip = within(filterBox().getByRole('group', { name: 'Payment' })).getByRole('button', { name: 'Payment due 1' });
+    expect(filterBox().queryByRole('group', { name: 'Status' })).toBeNull();
+    fireEvent.click(chip);
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'records=former&paymentStatus=Payment+due'));
+    fireEvent.click(filterBox().getByRole('button', { name: 'Close' }));
+    // The "Showing" line says both, and each can be dropped on its own.
+    expect(within(screen.getByTestId('showing')).getByRole('button', { name: 'Stop showing only Payment due' })).toBeTruthy();
+    expect(within(screen.getByTestId('showing')).getByRole('button', { name: 'Stop showing only Past members' })).toBeTruthy();
+    // On the rows as drawn: the one who owes carries the tag, the one who paid does not.
+    const rows = await screen.findAllByTestId('list-row');
+    const tagged = rows.filter((row) => within(row).queryByTestId('owes-tag') !== null);
+    expect(tagged.map((row) => within(row).getByTestId('owes-tag').textContent)).toEqual(['Payment due']);
+    expect(tagged[0]?.textContent).toContain('Ivy Left Owing');
+    expect(rows.find((row) => row.textContent.includes('Jo Left Paid'))?.textContent).not.toContain('Payment due');
+  });
+
+  it('Past members has no Payment chip where nobody who left owes', async () => {
+    orgService.getMemberList.mockResolvedValue({ data: { list: view({ counts: { entries: 312, inApp: 40, canBeInvited: 250, noEmail: 22, former: 4 } }) } });
+    draw();
+    await openFilter();
+    fireEvent.click(within(filterBox().getByRole('radiogroup', { name: 'Show' })).getByRole('radio', { name: 'Past members 4' }));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'records=former'));
+    expect(filterBox().queryByRole('group', { name: 'Payment' })).toBeNull();
+  });
+
   it('offers no past-members choice to a gym that has none', async () => {
     draw();
     await openFilter();

@@ -1,4 +1,4 @@
-// Bills and payments (spec Part 3 §14.2; ROADMAP 18a-i).
+// Bills and payments (spec Part 3 §14.2; ROADMAP 18a-i and 18a-ii).
 //
 // The first two blocks are the worst this job could do to a real person: ask somebody
 // for money after they cancelled, and show "Overdue" about somebody who has paid. The
@@ -13,11 +13,15 @@ import {
   countAfterPayment,
   countAfterUndo,
   giveHeldMembership,
+  heldMembershipView,
   memberBillState,
+  memberCancelTarget,
   memberPayTarget,
   memberUndoTarget,
   moveHeldMembership,
   payMemberBill,
+  refundMemberPayment,
+  refundableMinor,
   type BillFacts,
   type HeldMembership,
   type HeldMembershipEvent,
@@ -421,5 +425,151 @@ describe("which payment can be taken back", () => {
 
   it("is nothing where there is no payment", () => {
     expect(memberUndoTarget(paid, "2026-01-16", [settled], [])).toBeNull();
+  });
+});
+
+// ── 18a-ii: a bill staff cancel, and a refund noted ─────────────────────────
+//
+// The worst these could do to a real person: leave somebody the gym let off reading as
+// owing, with no way left to pay or clear it; and let a gym's notebook say it gave back
+// more than it took.
+
+describe("a bill staff cancel settles its period: nobody let off is left owing", () => {
+  const unpaid = given(monthly, "2026-01-15", false, "2026-01-15");
+
+  it("is the bill a payment would be taken for, and only with nothing paid on it", () => {
+    expect(memberCancelTarget(unpaid, 4999, "2026-01-15", [billOf(0)])).toEqual(memberPayTarget(unpaid, 4999, "2026-01-15", [billOf(0)]));
+    expect(memberCancelTarget(unpaid, 4999, "2026-01-15", [billOf(0, { paidMinor: 1 })])).toBeNull();
+    // No bill opened yet for the period a payment could be taken for: nothing to cancel.
+    expect(memberPayTarget(unpaid, 4999, "2026-01-15", [])).not.toBeNull();
+    expect(memberCancelTarget(unpaid, 4999, "2026-01-15", [])).toBeNull();
+    for (const status of ["paid", "void", "refunded"] as const) {
+      expect(memberCancelTarget(unpaid, 4999, "2026-01-15", [billOf(0, { status })]), status).toBeNull();
+    }
+  });
+
+  it("two months unpaid are cancelled in the order they would be paid in, never the later one first", () => {
+    const bills = [billOf(1, { dueOn: "2026-02-15" }), billOf(0)];
+    expect(memberCancelTarget(unpaid, 4999, "2026-02-20", bills)?.periodIndex).toBe(0);
+  });
+
+  it("moves the count as a payment would, so the next month can be paid and the page no longer says Payment due", () => {
+    const target = memberCancelTarget(unpaid, 4999, "2026-01-20", [billOf(0)]);
+    if (target === null) throw new Error("no target");
+    expect(countAfterPayment(unpaid, target, "2026-01-20")).toEqual({ ok: true, paidPeriods: 1 });
+    const after: HeldMembership = { ...unpaid, paidPeriods: 1 };
+    const cancelled = billOf(0, { status: "void" });
+    // January is settled; February is the period a payment is taken for, at its own day.
+    expect(memberPayTarget(after, 4999, "2026-01-20", [cancelled])).toMatchObject({ periodIndex: 1, dueOn: "2026-02-15", advances: true });
+    expect(heldMembershipView(after, "2026-01-20").payment).toEqual({ state: "paid", until: "2026-02-15" });
+    // And on 15 February the run opens February's bill, nothing for January again.
+    expect(indexes(after, "2026-02-15", new Set([0]))).toEqual([1]);
+  });
+
+  it("had the count stayed, the membership would be stuck: owing, with nothing that can be paid", () => {
+    // What the rule above prevents, shown: the count on a period whose bill is cancelled.
+    expect(heldMembershipView(unpaid, "2026-01-20").payment).toMatchObject({ state: "due" });
+    expect(memberPayTarget(unpaid, 4999, "2026-01-20", [billOf(0, { status: "void" })])).toBeNull();
+  });
+
+  it("a fixed term, a pack, and a membership that is over: the one bill cancelled leaves nothing owed", () => {
+    for (const type of [threeMonths, tenPack]) {
+      const m = given(type, "2026-01-15", false, "2026-01-15");
+      const target = memberCancelTarget(m, type.priceMinor, "2026-01-16", [billOf(0, { amountMinor: type.priceMinor })]);
+      if (target === null) throw new Error("no target");
+      expect(countAfterPayment(m, target, "2026-01-16")).toEqual({ ok: true, paidPeriods: 1 });
+    }
+    // Cancelled on 20 February owing January and February: each can be cancelled, in order,
+    // and no date moves.
+    const over = moved(unpaid, { type: "cancel", when: "today" }, "2026-02-20");
+    const first = memberCancelTarget(over, 4999, "2026-03-01", [billOf(1, { dueOn: "2026-02-15" }), billOf(0)]);
+    expect(first).toMatchObject({ periodIndex: 0, advances: false });
+    const second = memberCancelTarget(over, 4999, "2026-03-01", [billOf(1, { dueOn: "2026-02-15" }), billOf(0, { status: "void" })]);
+    expect(second).toMatchObject({ periodIndex: 1, advances: false });
+    expect(memberCancelTarget(over, 4999, "2026-03-01", [billOf(1, { status: "void", dueOn: "2026-02-15" }), billOf(0, { status: "void" })])).toBeNull();
+  });
+
+  it("a past member's bill can be cancelled: the gym lets go of what a leaver owed", () => {
+    expect(memberCancelTarget(unpaid, 4999, "2026-01-20", [billOf(0)], true)).toMatchObject({ periodIndex: 0 });
+    expect(memberCancelTarget(unpaid, 4999, "2026-01-20", [], true)).toBeNull();
+  });
+
+  it("is whatever can be paid, no more: a frozen one's and a free one's answers are the payment's own", () => {
+    const frozen = moved(unpaid, { type: "freeze" }, "2026-01-20");
+    expect(memberCancelTarget(frozen, 4999, "2026-01-21", [billOf(0)])).toEqual(memberPayTarget(frozen, 4999, "2026-01-21", [billOf(0)]));
+    expect(memberCancelTarget(given(freeMonthly, "2026-01-15", false, "2026-01-15"), 0, "2026-01-15", [])).toBeNull();
+  });
+});
+
+describe("a refund never says more was given back than was paid", () => {
+  const bill = { status: "paid" as const, paidMinor: 4999, refundedMinor: 0 };
+  const payment = { amountMinor: 4999, refundedMinor: 0 };
+
+  it("all of it: the bill reads Refunded", () => {
+    expect(refundMemberPayment(bill, payment, 4999)).toEqual({ ok: true, billStatus: "refunded" });
+  });
+
+  it("part of it: the bill stays Paid, and the rest can still be given back, to the cent", () => {
+    expect(refundMemberPayment(bill, payment, 2000)).toEqual({ ok: true, billStatus: "paid" });
+    const after = { bill: { ...bill, refundedMinor: 2000 }, payment: { ...payment, refundedMinor: 2000 } };
+    expect(refundableMinor("paid", after.payment)).toBe(2999);
+    expect(refundMemberPayment(after.bill, after.payment, 2999)).toEqual({ ok: true, billStatus: "refunded" });
+    expect(refundMemberPayment(after.bill, after.payment, 3000)).toEqual({ ok: false, reason: "too_much", leftMinor: 2999 });
+  });
+
+  it("more than the payment is refused, by one cent too, and so is anything once it is all given back", () => {
+    expect(refundMemberPayment(bill, payment, 5000)).toEqual({ ok: false, reason: "too_much", leftMinor: 4999 });
+    const gone = { ...payment, refundedMinor: 4999 };
+    expect(refundableMinor("paid", gone)).toBe(0);
+    expect(refundMemberPayment({ ...bill, refundedMinor: 4999 }, gone, 1)).toEqual({ ok: false, reason: "too_much", leftMinor: 0 });
+  });
+
+  it("a bill paid in two parts: each payment gives back only its own, and the bill is Refunded with the last cent", () => {
+    const a = { amountMinor: 2000, refundedMinor: 0 };
+    const b = { amountMinor: 2999, refundedMinor: 0 };
+    // More than payment a took is refused though the bill took more.
+    expect(refundMemberPayment(bill, a, 2001)).toEqual({ ok: false, reason: "too_much", leftMinor: 2000 });
+    expect(refundMemberPayment(bill, a, 2000)).toEqual({ ok: true, billStatus: "paid" });
+    expect(refundMemberPayment({ ...bill, refundedMinor: 2000 }, b, 2998)).toEqual({ ok: true, billStatus: "paid" });
+    expect(refundMemberPayment({ ...bill, refundedMinor: 2000 }, b, 2999)).toEqual({ ok: true, billStatus: "refunded" });
+  });
+
+  it("nothing is refunded on a bill that is not settled; one refunded in full says nothing is left, never that it is unpaid", () => {
+    for (const status of ["open", "void"] as const) {
+      expect(refundableMinor(status, payment), status).toBe(0);
+      expect(refundMemberPayment({ ...bill, status }, payment, 1), status).toEqual({ ok: false, reason: "not_settled" });
+    }
+    const gone = { ...payment, refundedMinor: 4999 };
+    expect(refundableMinor("refunded", gone)).toBe(0);
+    expect(refundMemberPayment({ status: "refunded", paidMinor: 4999, refundedMinor: 4999 }, gone, 1)).toEqual({ ok: false, reason: "too_much", leftMinor: 0 });
+    expect(refundMemberPayment({ status: "refunded", paidMinor: 4999, refundedMinor: 4999 }, gone, 4999)).toEqual({ ok: false, reason: "too_much", leftMinor: 0 });
+  });
+
+  it("refuses an amount that is not one", () => {
+    for (const amount of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(refundMemberPayment(bill, payment, amount)).toEqual({ ok: false, reason: "not_an_amount" });
+    }
+  });
+
+  it("a payment with a refund standing on its bill is not taken back: the refund is taken back first", () => {
+    const paid = given(monthly, "2026-01-15", true, "2026-01-15");
+    const settled = billOf(0, { status: "paid", paidMinor: 4999 });
+    expect(memberUndoTarget(paid, "2026-01-16", [settled], [{ id: "a", periodIndex: 0, seq: 1, refundedMinor: 1 }])).toBeNull();
+    expect(memberUndoTarget(paid, "2026-01-16", [settled], [{ id: "a", periodIndex: 0, seq: 1, refundedMinor: 0 }])?.paymentId).toBe("a");
+    // Two parts, the refund on the older: the newer is not taken back either, or the bill
+    // would be owed again with a refund standing on it.
+    const parts = [
+      { id: "a", periodIndex: 0, seq: 1, refundedMinor: 500 },
+      { id: "b", periodIndex: 0, seq: 2 },
+    ];
+    expect(memberUndoTarget(paid, "2026-01-16", [settled], parts)).toBeNull();
+    // A refund on another month's bill stops nothing here.
+    const two = moved(paid, { type: "paid", paidPeriods: 2 }, "2026-01-15");
+    const bills = [settled, billOf(1, { status: "paid", paidMinor: 4999, dueOn: "2026-02-15" })];
+    const other = [
+      { id: "a", periodIndex: 0, seq: 1, refundedMinor: 4999 },
+      { id: "b", periodIndex: 1, seq: 2 },
+    ];
+    expect(memberUndoTarget(two, "2026-01-16", bills, other)?.paymentId).toBe("b");
   });
 });

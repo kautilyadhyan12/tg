@@ -558,7 +558,13 @@ d("the Members list says what each person holds (real Postgres)", () => {
       expect(stored.map((row) => row.status)).toEqual(["active", "active", "active"]);
 
       const page = await pageOf(gymId, owner);
-      expect(rowOf(page, cy).held).toEqual({ status: "ended", memberships: ["Day pass"], day: { what: "ended", on: addDays(today, -3) }, payment: null });
+      // Cy's pass is over and its bill was never paid: still owed (18a-ii), since its own day.
+      expect(rowOf(page, cy).held).toEqual({
+        status: "ended",
+        memberships: ["Day pass"],
+        day: { what: "ended", on: addDays(today, -3) },
+        payment: { state: "due", since: addDays(today, -3) },
+      });
       const month1 = rowOf(page, ed).held;
       expect(month1).toMatchObject({ status: "ended", memberships: ["One month"], payment: null });
       expect(month1?.day?.what).toBe("ended");
@@ -570,9 +576,10 @@ d("the Members list says what each person holds (real Postgres)", () => {
       const view = await viewOf(gymId, owner);
       expect(chips(view.statuses)).toEqual({ Active: 2, Ended: 2 });
       expect(chips(view.membershipTypes)).toEqual({ "Day pass": 1, "Gold Monthly": 1, "One month": 1, "Gold Plus": 1 });
-      expect(chips(view.paymentStatuses)).toEqual({ Paid: 1, "": 3 });
+      expect(chips(view.paymentStatuses)).toEqual({ "Payment due": 1, Paid: 1, "": 2 });
       expect(namesOf(await pageOf(gymId, owner, "?status=Ended"))).toEqual(["Cy Brandt", "Ed Novak"]);
-      expect(await countsAgree(gymId, owner, view)).toBe(8);
+      expect(namesOf(await pageOf(gymId, owner, "?paymentStatus=payment%20due"))).toEqual(["Cy Brandt"]);
+      expect(await countsAgree(gymId, owner, view)).toBe(9);
     },
     TEST_TIMEOUT_MS,
   );

@@ -68,6 +68,9 @@ export function entriesQueryString(filters, cursor) {
   if (filters.records === 'current') {
     for (const word of filters.app) params.append('app', word);
     for (const { kind } of CHIP_KINDS) for (const word of filters[kind]) params.append(kind, word);
+  } else {
+    // Past members have one word to be found by: who still owes (18a-ii).
+    for (const word of filters.paymentStatus) params.append('paymentStatus', word);
   }
   if (filters.tag !== null) params.append('tag', filters.tag.id);
   const query = filters.query.trim();
@@ -81,7 +84,9 @@ export function entriesQueryString(filters, cursor) {
 export function activeFilters(filters, words) {
   const tag = filters.tag === null ? [] : [{ key: `tag:${filters.tag.id}`, text: `Tag: ${filters.tag.name}`, without: { ...filters, tag: null } }];
   if (filters.records === 'former') {
-    return [{ key: 'records', text: `Past ${words.people}`, without: { ...filters, records: 'current' } }, ...tag];
+    const owing = filters.paymentStatus.map((label) => ({ key: `paymentStatus:${label}`, text: label, without: toggleWord(filters, 'paymentStatus', label) }));
+    // Leaving Past members drops its one word too: on the list it would mean something else.
+    return [{ key: 'records', text: `Past ${words.people}`, without: { ...filters, records: 'current', paymentStatus: [] } }, ...owing, ...tag];
   }
   const out = [];
   for (const { kind, none } of CHIP_KINDS) {
@@ -245,7 +250,15 @@ export function rowCells(entry, today = null) {
   const held = entry.held ?? null;
   if (held === null) {
     const word = (w) => (w === null || w === undefined || w === '' ? null : w);
-    return { status: word(entry.status), membership: word(entry.membershipType), ends: endsWords(entry, today), payment: word(entry.paymentStatus), owes: false };
+    // A past member who left a bill unpaid (18a-ii): the server says since when.
+    const owes = (entry.owedSince ?? null) !== null;
+    return {
+      status: word(entry.status),
+      membership: word(entry.membershipType),
+      ends: endsWords(entry, today),
+      payment: owes ? HELD_PAYMENT_WORDS.due : word(entry.paymentStatus),
+      owes,
+    };
   }
   const pay = held.payment;
   return {
@@ -259,6 +272,8 @@ export function rowCells(entry, today = null) {
 
 /** What the list says about the person in one line, as a phone's row shows it. */
 export function rowWords(entry, today = null, person = 'member') {
+  // A past member who still owes says so in a tag under their name (`rowCells().owes`),
+  // at every width, so it is not said a second time here.
   if (entry.formerAt !== null) return [pastWords(entry, person)].filter((w) => w !== null);
   const cells = rowCells(entry, today);
   return [cells.status, cells.membership, cells.ends, cells.payment].filter((w) => w !== null && w !== '');
@@ -354,6 +369,8 @@ export function selectionFilter(filters) {
   if (filters.records === 'current') {
     if (filters.app.length > 0) out.app = [...filters.app];
     for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) out[kind] = [...filters[kind]];
+  } else if (filters.paymentStatus.length > 0) {
+    out.paymentStatus = [...filters.paymentStatus];
   }
   if (filters.tag !== null) out.tag = filters.tag.id;
   const query = filters.query.trim();

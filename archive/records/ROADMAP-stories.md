@@ -362,3 +362,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **20f-ii, as it stood when it was built (merged 2026-10-10, PR #217):**
 
      - 20f-ii. [ ] **Sent messages**: a list on the console of the group messages a gym has sent: the words, who sent it, when, and to how many. Its plan says how long a sent message is kept (its words can name a member; 20f-i's review, L8).
+
+**18a-ii, as it stood when it was built (merged 2026-10-11, PR #218):**
+
+     - 18a-ii. [ ] **Void a bill, note a refund, and the Members list's Payment filter reads the bills**, so somebody who never paid for a membership that has since ended is found on the list too (their page already shows the bill). After 18a-i.

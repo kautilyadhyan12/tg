@@ -414,6 +414,22 @@ export const memberPaymentParamsSchema = z
   .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), membershipId: z.string().uuid(), paymentId: z.string().uuid() })
   .strict();
 
+/** A gym, a record, one membership it holds and one bill of it (§14.2). */
+export const memberBillParamsSchema = z
+  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), membershipId: z.string().uuid(), billId: z.string().uuid() })
+  .strict();
+
+/** The same down to one refund noted against a payment (§14.2). */
+export const memberRefundParamsSchema = z
+  .object({
+    gymId: z.string().uuid(),
+    entryId: z.string().uuid(),
+    membershipId: z.string().uuid(),
+    paymentId: z.string().uuid(),
+    refundId: z.string().uuid(),
+  })
+  .strict();
+
 /** A gym and one of its repeats. See the note above on why it is its own shape. */
 export const classScheduleParamsSchema = z
   .object({ gymId: z.string().uuid(), scheduleId: z.string().uuid() })
