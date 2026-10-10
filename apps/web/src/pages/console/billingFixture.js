@@ -16,7 +16,7 @@ export function asPast(billing) {
   const owed = [...billing.bills].filter((b) => b.state === 'due' || b.state === 'overdue').sort((a, b) => a.periodIndex - b.periodIndex)[0];
   return {
     ...billing,
-    pay: owed === undefined ? null : { periodIndex: owed.periodIndex, leftMinor: owed.amountMinor - owed.paidMinor, dueOn: owed.dueOn, state: owed.state },
+    pay: owed === undefined ? null : { periodIndex: owed.periodIndex, covers: owed.covers, leftMinor: owed.amountMinor - owed.paidMinor, dueOn: owed.dueOn, state: owed.state },
     undo: null,
   };
 }
@@ -61,7 +61,7 @@ export function billingFor(n, given, m, priceMinor, today, by = 'Sam Owner') {
     pay:
       pay === null
         ? null
-        : { periodIndex: pay.periodIndex, leftMinor: pay.leftMinor, dueOn: pay.dueOn, state: memberBillState({ status: 'open', dueOn: pay.dueOn }, today, 0) === 'overdue' ? 'overdue' : 'due' },
+        : { periodIndex: pay.periodIndex, covers: billCovers(m, pay.periodIndex), leftMinor: pay.leftMinor, dueOn: pay.dueOn, state: memberBillState({ status: 'open', dueOn: pay.dueOn }, today, 0) === 'overdue' ? 'overdue' : 'due' },
     undo: undo === null ? null : { kind: 'payment', paymentId: undo.paymentId },
   };
 }

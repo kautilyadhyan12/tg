@@ -32,6 +32,7 @@ import {
   PAYMENT_METHODS,
   billRow,
   paidWords,
+  payLabel,
   paymentBody,
   paymentDraft,
   paymentWords,
@@ -228,7 +229,7 @@ export default function MemberMemberships({
 
   /** Record payment: the amount, starting at what is left, and how it was paid. */
   const renderPay = (m) => {
-    const words = paymentWords(m, name);
+    const words = paymentWords(m, name, today);
     const { problem, body } = paymentBody(m, payForm);
     return (
       <form
@@ -481,14 +482,14 @@ export default function MemberMemberships({
         ) : canPay && !inUse ? (
           <div className="flex flex-wrap gap-2 pt-1">
             <button type="button" className={SMALL} disabled={busy} onClick={() => startPay(m)}>
-              Record payment
+              {payLabel(m, today)}
             </button>
           </div>
         ) : inUse ? (
           <div className="flex flex-wrap gap-2 pt-1">
             {canPay ? (
               <button type="button" className={SMALL} disabled={busy} onClick={() => startPay(m)}>
-                Record payment
+                {payLabel(m, today)}
               </button>
             ) : null}
             {can.freeze ? (

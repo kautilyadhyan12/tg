@@ -63,6 +63,7 @@ export default function BillSettingsCard({ gymId, readOnly }) {
           <span className="c-label">Grace period before an unpaid bill reads Overdue</span>
           <select
             className="c-sel"
+            style={{ maxWidth: 280 }}
             value={String(days)}
             disabled={!canChange || busy}
             onChange={(e) => {

@@ -83,6 +83,7 @@ function billingOf(
         ? null
         : {
             periodIndex: pay.periodIndex,
+            covers: billCovers(row.membership, pay.periodIndex),
             leftMinor: pay.leftMinor,
             dueOn: pay.dueOn,
             state: memberBillState({ status: "open", dueOn: pay.dueOn }, ctx.today, ctx.overdueAfterDays) === "overdue" ? "overdue" : "due",

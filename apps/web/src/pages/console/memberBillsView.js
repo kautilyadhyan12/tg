@@ -65,16 +65,26 @@ export function paymentDraft(m, newKey) {
   return { requestKey: newKey(), amount: minorToPriceText(m.billing.pay.leftMinor, m.currency), method: '' };
 }
 
-/** What the form says above its fields. */
-export function paymentWords(m, name) {
+/** Whether the payment that can be recorded is for a period not due yet. */
+export function paysEarly(m, today) {
+  return m.billing.pay.dueOn > today;
+}
+
+/** The button that opens the form: it says so where nothing is due yet. */
+export function payLabel(m, today) {
+  return paysEarly(m, today) ? 'Record payment early' : 'Record payment';
+}
+
+/** What the form says above its fields: what is left, for which days, and when it is
+ *  due where that day is still to come. `today` is the gym's own day. */
+export function paymentWords(m, name, today) {
   const pay = m.billing.pay;
   const left = formatMinor(pay.leftMinor, m.currency);
-  const bill = m.billing.bills.find((b) => b.periodIndex === pay.periodIndex) ?? null;
-  const covers = bill?.covers ?? null;
-  const what = covers === null ? '' : ` for ${dayWords(covers.from)} to ${dayWords(covers.to)}`;
+  const what = pay.covers === null ? '' : ` for ${dayWords(pay.covers.from)} to ${dayWords(pay.covers.to)}`;
+  const early = paysEarly(m, today) ? ` It is not due until ${dayWords(pay.dueOn)}.` : '';
   return {
     title: `Record a payment for ${name}'s ${m.typeName}`,
-    detail: `${left} is left to pay${what}. This only writes it in your records: no money is taken.`,
+    detail: `${left} is left to pay${what}.${early} This only writes it in your records: no money is taken.`,
   };
 }
 

@@ -12,6 +12,7 @@ import {
   graceChoices,
   graceExample,
   paidWords,
+  payLabel,
   paymentBody,
   paymentDraft,
   paymentWords,
@@ -35,7 +36,7 @@ const membership = (over = {}, billing = {}) => ({
   id: '44444444-4444-4444-8444-000000000001',
   typeName: 'Gold Monthly',
   currency: 'GBP',
-  billing: { bills: [bill()], billsNotShown: 0, pay: { periodIndex: 0, leftMinor: 4999, dueOn: '2026-10-04', state: 'due' }, undo: null, ...billing },
+  billing: { bills: [bill()], billsNotShown: 0, pay: { periodIndex: 0, covers: bill().covers, leftMinor: 4999, dueOn: '2026-10-04', state: 'due' }, undo: null, ...billing },
   ...over,
 });
 
@@ -72,10 +73,21 @@ describe('the amount typed is the amount sent', () => {
 
   it('starts at what is left, with how they paid not chosen', () => {
     expect(paymentDraft(m, () => 'key-1')).toEqual({ requestKey: 'key-1', amount: '49.99', method: '' });
-    expect(paymentWords(m, 'Ada Lovelace')).toEqual({
+    expect(paymentWords(m, 'Ada Lovelace', TODAY)).toEqual({
       title: "Record a payment for Ada Lovelace's Gold Monthly",
       detail: '£49.99 is left to pay for 4 October 2026 to 3 November 2026. This only writes it in your records: no money is taken.',
     });
+    expect(payLabel(m, TODAY)).toBe('Record payment');
+  });
+
+  it('says so, on the button and in the form, where the period is not due yet', () => {
+    const next = membership({}, { pay: { periodIndex: 1, covers: { from: '2026-11-04', to: '2026-12-03' }, leftMinor: 4999, dueOn: '2026-11-04', state: 'due' } });
+    expect(payLabel(next, TODAY)).toBe('Record payment early');
+    expect(paymentWords(next, 'Ada Lovelace', TODAY).detail).toBe(
+      '£49.99 is left to pay for 4 November 2026 to 3 December 2026. It is not due until 4 November 2026. This only writes it in your records: no money is taken.',
+    );
+    // Due today is not early.
+    expect(payLabel(next, '2026-11-04')).toBe('Record payment');
   });
 
   it('sends the period shown, the pennies typed and the way picked', () => {
@@ -93,7 +105,7 @@ describe('the amount typed is the amount sent', () => {
   });
 
   it('asks for a whole number in a currency with no pennies', () => {
-    const yen = membership({ currency: 'JPY' }, { pay: { periodIndex: 0, leftMinor: 5000, dueOn: '2026-10-04', state: 'due' } });
+    const yen = membership({ currency: 'JPY' }, { pay: { periodIndex: 0, covers: null, leftMinor: 5000, dueOn: '2026-10-04', state: 'due' } });
     expect(paymentDraft(yen, () => 'k').amount).toBe('5000');
     expect(paymentBody(yen, { requestKey: 'k', amount: '50.5', method: 'cash' }).problem).toBe('Type the amount they paid, as a whole number.');
     expect(paymentBody(yen, { requestKey: 'k', amount: '5000', method: 'cash' }).body.amountMinor).toBe(5000);

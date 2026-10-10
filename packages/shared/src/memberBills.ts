@@ -88,7 +88,14 @@ export const memberBillingSchema = z
     bills: z.array(memberBillSchema),
     billsNotShown: z.number().int().min(0),
     pay: z
-      .object({ periodIndex: z.number().int().min(0), leftMinor: minorSchema, dueOn: daySchema, state: z.enum(["due", "overdue"]) })
+      .object({
+        periodIndex: z.number().int().min(0),
+        /** The days that period covers; null for a membership of one period. */
+        covers: z.object({ from: daySchema, to: daySchema }).strict().nullable(),
+        leftMinor: minorSchema,
+        dueOn: daySchema,
+        state: z.enum(["due", "overdue"]),
+      })
       .strict()
       .nullable(),
     undo: z

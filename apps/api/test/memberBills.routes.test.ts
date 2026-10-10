@@ -259,7 +259,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       expect(m.billing).toEqual({
         bills: [{ id: expect.any(String) as string, periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, amountMinor: 4999, paidMinor: 0, dueOn: today, state: "due", payments: [] }],
         billsNotShown: 0,
-        pay: { periodIndex: 0, leftMinor: 4999, dueOn: today, state: "due" },
+        pay: { periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, leftMinor: 4999, dueOn: today, state: "due" },
         undo: null,
       });
       const payUrl = oneUrl(gymId, person, m.id, "payments");

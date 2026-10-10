@@ -165,7 +165,8 @@ describe('whose membership is on screen', () => {
     expect(within(form).getByText("Record a payment for Ada Lovelace's 10 classes")).toBeTruthy();
     expect(within(form).getByText('£90.00 is left to pay. This only writes it in your records: no money is taken.')).toBeTruthy();
     expect(within(goldRow).queryByTestId('held-pay')).toBeNull();
-    expect(within(goldRow).getByRole('button', { name: 'Record payment' })).toBeTruthy();
+    // Gold is paid up to 4 November: its next payment can be recorded, and the button says it is early.
+    expect(within(goldRow).getByRole('button', { name: 'Record payment early' })).toBeTruthy();
     // The amount starts at what is left; how they paid is not guessed.
     expect(within(form).getByLabelText('Amount paid (GBP)').value).toBe('90.00');
     fireEvent.click(within(form).getByRole('button', { name: 'Record payment' }));
@@ -400,7 +401,7 @@ describe('what the box draws', () => {
     expect(within(row).getByText('Frozen')).toBeTruthy();
     expect(within(row).getByText('£49.99 every month')).toBeTruthy();
     expect(within(row).getByText('Started 4 October 2026 · Frozen since 10 October 2026')).toBeTruthy();
-    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Record payment', 'Unfreeze', 'Cancel membership', 'Undo last payment']);
+    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Record payment early', 'Unfreeze', 'Cancel membership', 'Undo last payment']);
 
     // The cancelled one is behind one line, with no buttons of its own.
     fireEvent.click(box().getByRole('button', { name: 'Show 5 earlier memberships' }));
