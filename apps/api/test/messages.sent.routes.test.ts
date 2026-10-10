@@ -18,6 +18,7 @@ import {
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { hourlyTidyUp } from "../src/modules/orgs/hourlyTidyUp.js";
 import { forgetOldGroupMessages, sentMessagesKeptSince } from "../src/modules/orgs/messages/group.js";
 import { createIoRedis, createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
@@ -245,9 +246,10 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
     ];
     const ironId = irons.messages[0]?.id ?? "";
     const oakId = oaks.messages[0]?.id ?? "";
-    for (const [who, cookies, status] of refusals) {
+    for (const [who, cookies, status, code] of refusals) {
       for (const res of [await ask(iron, cookies), await askPeople(iron, cookies, ironId)]) {
         expect(res.statusCode, who).toBe(status);
+        expect(errorOf(res), who).toBe(code);
         expect(res.body, who).not.toContain("locker");
         expect(res.body, who).not.toContain("Zed");
         expect(res.body, who).not.toContain("Maya");
@@ -290,6 +292,13 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
       VALUES (${oak.id}, ${omar.person.userId}, 'group', ${ironId}, 'not this gym', ${NOON}::date, ${NOON}, ${days(NOON, 30)})`;
     expect((await sentTo(iron, ironId)).people.map((p) => p.name)).toEqual(["Maya Rao", "Zed Locker"]);
     expect((await askPeople(oak, oak.owner.cookies, ironId)).statusCode).toBe(404);
+    // And somebody of THIS gym, never sent it here, holding a copy NEXT DOOR under this
+    // gym's message id: a copy counts only at the gym it is in.
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${oak.id}, ${nia.person.userId}, ${null}, ${days(NOON, -3)})`;
+    await sql`
+      INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at)
+      VALUES (${oak.id}, ${nia.person.userId}, 'group', ${ironId}, 'not this gym', ${NOON}::date, ${NOON}, ${days(NOON, 30)})`;
+    expect((await sentTo(iron, ironId)).people.map((p) => p.name)).toEqual(["Maya Rao", "Zed Locker"]);
     expect(errorOf(await ask(iron, stranger.cookies))).toBe(errorOf(await ask(iron, oak.owner.cookies)));
     // A trainer the owner gave the tick reads it.
     expect((await list(iron, tickedTrainer)).messages.map((m) => m.body)).toContain("Zed, your locker key is at the desk.");
@@ -356,6 +365,29 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
     expect((await askPeople(gym, gym.owner.cookies, randomUUID())).statusCode).toBe(404);
   });
 
+  it("the allowance: one person past it is refused on both routes, and a colleague at the same address is not", async () => {
+    clock = NOON;
+    const gym = await makeGym("Sentm Allowance");
+    const manager = await onStaff(gym, "Mel Manager", "manager");
+    const id = await row(gym, "Read many times", NOON);
+    const address = "10.93.250.7";
+    const listUrl = `/v1/orgs/${gym.id}/member-list/messages`;
+    const peopleUrl = `${listUrl}/${id}/people`;
+    let refusedAt = -1;
+    for (let i = 0; i < 700 && refusedAt < 0; i += 1) {
+      const res = await inject("GET", i % 2 === 0 ? listUrl : peopleUrl, manager.cookies, undefined, address);
+      if (res.statusCode === 429) refusedAt = i;
+      else expect(res.statusCode, res.body).toBe(200);
+    }
+    // 600 reads an hour a person, the Members list's own allowance.
+    expect(refusedAt).toBe(600);
+    expect((await inject("GET", listUrl, manager.cookies, undefined, address)).statusCode).toBe(429);
+    expect((await inject("GET", peopleUrl, manager.cookies, undefined, address)).statusCode).toBe(429);
+    // The owner, at the same address, still reads both.
+    expect((await inject("GET", listUrl, gym.owner.cookies, undefined, address)).statusCode).toBe(200);
+    expect((await inject("GET", peopleUrl, gym.owner.cookies, undefined, address)).statusCode).toBe(200);
+  });
+
   it("who it went to: somebody removed since is still named, a deleted account is counted and not named, and a rejoin is one name", async () => {
     clock = NOON;
     const gym = await makeGym("Sentm People");
@@ -363,29 +395,42 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
     const rex = await member(gym, "Rex Removed");
     const del = await member(gym, "Del Deleted");
     const jo = await member(gym, "Jo Rejoined");
+    const farah = await member(gym, "Farah Leaves");
+    const moe = await member(gym, "Moe Moved");
+    const moeNew = await member(gym, "Moe Newrecord");
     // In the app on no record: named by their own name.
     const una = await signedIn("Una Unlisted");
     await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym.id}, ${una.userId}, ${null}, ${days(NOON, -5)})`;
-    await send(gym, [ada.entryId, rex.entryId, del.entryId, jo.entryId], "The sauna is fixed.");
+    await send(gym, [ada.entryId, rex.entryId, del.entryId, jo.entryId, farah.entryId, moe.entryId], "The sauna is fixed.");
     const id = (await list(gym)).messages[0]?.id ?? "";
     await sql`
       INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at)
       VALUES (${gym.id}, ${una.userId}, 'group', ${id}, 'The sauna is fixed.', ${NOON}::date, ${NOON}, ${days(NOON, 30)})`;
-    await sql`UPDATE gym_group_messages SET people = 5 WHERE id = ${id}`;
+    await sql`UPDATE gym_group_messages SET people = 7 WHERE id = ${id}`;
     // Since then: Rex is removed from the app, Del deleted their account, Jo left and came back.
     await sql`UPDATE gym_members SET removed_at = ${NOON}, removed_entry_id = entry_id, entry_id = NULL WHERE gym_id = ${gym.id} AND user_id = ${rex.person.userId}`;
     await sql`UPDATE users SET deleted_at = ${NOON}, status = 'deleted' WHERE id = ${del.person.userId}`;
     await sql`UPDATE gym_members SET removed_at = ${NOON}, removed_entry_id = entry_id, entry_id = NULL WHERE gym_id = ${gym.id} AND user_id = ${jo.person.userId}`;
     await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym.id}, ${jo.person.userId}, ${jo.entryId}, ${days(NOON, 1)})`;
 
+    // Farah left and came back on NO record: her record of before still names her and opens.
+    await sql`UPDATE gym_members SET removed_at = ${NOON}, removed_entry_id = entry_id, entry_id = NULL WHERE gym_id = ${gym.id} AND user_id = ${farah.person.userId}`;
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym.id}, ${farah.person.userId}, ${null}, ${days(NOON, 1)})`;
+    // Moe left and came back on ANOTHER record: the newest record is the one named.
+    await sql`DELETE FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${moeNew.person.userId}`;
+    await sql`UPDATE gym_members SET removed_at = ${NOON}, removed_entry_id = entry_id, entry_id = NULL WHERE gym_id = ${gym.id} AND user_id = ${moe.person.userId}`;
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym.id}, ${moe.person.userId}, ${moeNew.entryId}, ${days(NOON, 1)})`;
+
     const got = await sentTo(gym, id);
     expect(got.people).toEqual([
       { entryId: ada.entryId, name: "Ada Stays" },
+      { entryId: farah.entryId, name: "Farah Leaves" },
       { entryId: jo.entryId, name: "Jo Rejoined" },
+      { entryId: moeNew.entryId, name: "Moe Newrecord" },
       { entryId: rex.entryId, name: "Rex Removed" },
       { entryId: null, name: "Una Unlisted" },
     ]);
-    expect([got.named, got.gone]).toEqual([4, 1]);
+    expect([got.named, got.gone]).toEqual([6, 1]);
     // Past its year the message is not found, and nobody is named.
     await sql`UPDATE gym_group_messages SET sent_at = ${days(NOON, -GYM_SENT_MESSAGES_KEPT_DAYS)} WHERE id = ${id}`;
     const old = await askPeople(gym, gym.owner.cookies, id);
@@ -457,9 +502,10 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
           FROM gym_member_messages m JOIN gyms g ON g.id = m.gym_id WHERE m.gym_id IN (${iron.id}, ${oak.id}) ORDER BY 1`
       ).map((r) => r.line),
     });
-    const first = await forgetOldGroupMessages(sql, NOON);
-    expect(first.messages).toBeGreaterThanOrEqual(3);
-    expect(first.copies).toBeGreaterThanOrEqual(3);
+    // What the worker's hourly job runs. It has no gym: on this LOCAL database it removes
+    // every gym's messages sent a year before NOON, a click-through gym's included.
+    const first = await hourlyTidyUp({ sql, log: { info: () => undefined } }, NOON);
+    expect(first.groupMessagesForgotten).toBeGreaterThanOrEqual(3);
     const after = await left();
     expect(after.sent).toEqual(["A minute inside the year", "Oak, last week", "Yesterday"]);
     expect(after.copies).toEqual(

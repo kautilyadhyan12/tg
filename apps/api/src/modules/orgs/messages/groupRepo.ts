@@ -1,6 +1,7 @@
 // A MESSAGE TO A CHOSEN GROUP: the only file that reads or writes `gym_group_messages`
-// and `gym_member_messages_off` (spec Part 3 §16.8; ROADMAP 20f-i). Every statement names
-// the gym.
+// and `gym_member_messages_off` (spec Part 3 §16.8; ROADMAP 20f-i). It also writes each
+// person's copy into `gym_member_messages`, reads who holds one and removes the copies with
+// their message (20f-ii). Every statement names the gym.
 import { GYM_GROUP_MESSAGE_KIND } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 
@@ -129,7 +130,8 @@ export async function sentMessagePeopleCount(sql: SqlOrTx, gymId: string, messag
 /** Who holds a copy of this gym's message, by the name the gym's list has for them (their
  *  own name where they are on no record), in name order: the first `limit`, and how many
  *  in all. Read from the gym's people to their copy, so it never walks every copy the gym
- *  has. Somebody whose account is deleted is not named. */
+ *  has. Somebody whose account is deleted is not named. Of a person's stays at the gym,
+ *  one that has a record is read before one that has none, then the newest. */
 export async function sentMessagePeople(
   sql: SqlOrTx,
   gymId: string,
@@ -146,7 +148,7 @@ export async function sentMessagePeople(
       JOIN users u ON u.id = m.user_id AND u.status = 'active' AND u.deleted_at IS NULL
       LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = coalesce(m.entry_id, m.removed_entry_id)
       WHERE m.gym_id = ${gymId}
-      ORDER BY m.user_id, m.joined_at DESC
+      ORDER BY m.user_id, (coalesce(m.entry_id, m.removed_entry_id) IS NULL), m.joined_at DESC
     )
     SELECT entry_id, name, (count(*) OVER ())::int AS named FROM got ORDER BY name, user_id LIMIT ${limit}`;
   return { people: rows.map((row) => ({ entryId: row.entry_id, name: row.name })), named: rows[0]?.named ?? 0 };

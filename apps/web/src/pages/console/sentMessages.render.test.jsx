@@ -127,8 +127,8 @@ describe('the words of a sent message', () => {
     expect(sentToWords(1)).toBe('Sent to 1 person');
     expect(sentToWords(1200)).toBe('Sent to 1,200 people');
     expect([initialsOf('Nora Owner'), initialsOf('nora'), initialsOf('Ana María de la Cruz'), initialsOf('  '), initialsOf(null)]).toEqual(['NO', 'NO', 'AC', '', '']);
-    expect(sentTodayWords(3)).toBe('You can send 3 more messages to groups today.');
-    expect(sentTodayWords(1)).toBe('You can send 1 more message to a group today.');
+    expect(sentTodayWords(3)).toBe('You can send 3 more messages to groups today. To send one, tick the members you want on your list, then press Send message.');
+    expect(sentTodayWords(1, 'clients')).toBe('You can send 1 more message to a group today. To send one, tick the clients you want on your list, then press Send message.');
     expect(sentTodayWords(0)).toBe(GYM_GROUP_MESSAGE_WORDS.day_full);
     expect(sentGoneWords(1)).toBe("1 more person got it and has since deleted their account, so we can't name them.");
     expect(sentGoneWords(2)).toBe("2 more people got it and have since deleted their accounts, so we can't name them.");
@@ -162,7 +162,9 @@ describe('the Sent messages page', () => {
     expect(screen.getAllByTestId('sent-day-heading').map((h) => h.textContent)).toEqual(['9 March', '8 March']);
     // How long it is kept, and how many more can go today, with the way to send one.
     expect(screen.getByText((text) => text.includes(GYM_SENT_MESSAGES_KEPT_WORDS))).toBeTruthy();
-    expect(screen.getByTestId('sent-today').textContent).toContain('You can send 2 more messages to groups today.');
+    expect(screen.getByTestId('sent-today').textContent).toBe(
+      'You can send 2 more messages to groups today. To send one, tick the members you want on your list, then press Send message.Go to members',
+    );
     expect(screen.getByTestId('sent-send-one').getAttribute('href')).toBe('/console/iron-house/members');
     expect(screen.queryByText('Load more')).toBeNull();
     expect(screen.getByRole('link', { name: 'Members' }).getAttribute('href')).toBe('/console/iron-house/members');
@@ -204,6 +206,19 @@ describe('the Sent messages page', () => {
     fireEvent.click(peopleButton((await rows())[0]));
     expect((await box().findByTestId('sent-to-more')).textContent).toBe('and 149 more');
     expect(box().getByTestId('sent-to-gone').textContent).toBe("3 more people got it and have since deleted their accounts, so we can't name them.");
+  });
+
+  it('two people now on one record are two lines', async () => {
+    orgService.getSentMessages.mockResolvedValue(answer([message(1, { people: 2 })]));
+    orgService.getSentMessagePeople.mockResolvedValue(names([{ entryId: ADA, name: 'Ada Lovelace' }, { entryId: ADA, name: 'Ada Lovelace' }]));
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    draw();
+    fireEvent.click(peopleButton((await rows())[0]));
+    await box().findByTestId('sent-to-names');
+    expect(within(box().getByTestId('sent-to-names')).getAllByRole('listitem')).toHaveLength(2);
+    // React says nothing about two rows with one key.
+    expect(errors.mock.calls.filter((call) => String(call[0]).includes('same key'))).toEqual([]);
+    errors.mockRestore();
   });
 
   it('names that could not be read say so, never an empty list, and Try again asks again', async () => {
@@ -261,7 +276,7 @@ describe('the Sent messages page', () => {
     expect(within(none).getByRole('link', { name: 'Go to clients' })).toBeTruthy();
   });
 
-  it("a full day says so with no Send a message, and a gym that can change nothing has neither", async () => {
+  it('a full day says so with no button to the list, and a gym that can change nothing has neither', async () => {
     orgService.getSentMessages.mockResolvedValue(answer([message(1)], null, 0));
     draw();
     await rows();

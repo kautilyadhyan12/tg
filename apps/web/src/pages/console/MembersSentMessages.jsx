@@ -76,7 +76,7 @@ function SentTo({ gymId, message, onOpenPerson, onClose }) {
           {sentTo.people.length > 0 ? (
             <ul className="flex flex-col" data-testid="sent-to-names">
               {sentTo.people.map((one, i) => (
-                <li key={one.entryId ?? `none-${String(i)}`} className={i > 0 ? 'border-t' : ''} style={{ borderColor: 'var(--line)' }}>
+                <li key={String(i)} className={i > 0 ? 'border-t' : ''} style={{ borderColor: 'var(--line)' }}>
                   {one.entryId !== null ? (
                     <button
                       type="button"
@@ -243,15 +243,14 @@ export default function MembersSentMessages() {
 
       {may && !page.loading && !first ? (
         <>
-          {/* How many more can go today, and the way to send one: a gym that can change
+          {/* How many more can go today, and how to send one: a gym that can change
               nothing sends none, so it has neither. */}
           {!readOnly && page.leftToday !== null ? (
             <section className="c-card px-4 py-3.5 md:px-5 flex flex-wrap items-center gap-x-4 gap-y-3" data-testid="sent-today">
-              <p className="c-s15 c-t1 m-0 flex-1 min-w-[220px]">{sentTodayWords(page.leftToday)}</p>
+              <p className="c-s15 c-t1 m-0 flex-1 min-w-[220px]">{sentTodayWords(page.leftToday, words.people)}</p>
               {page.leftToday > 0 ? (
                 <Link to={back} className="c-btn c-btn-soft c-btn-lg" data-testid="sent-send-one">
-                  <MessageSquare aria-hidden="true" className="w-4 h-4" />
-                  Send a message
+                  {`Go to ${words.people}`}
                 </Link>
               ) : null}
             </section>

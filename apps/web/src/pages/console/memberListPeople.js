@@ -1014,10 +1014,11 @@ export function initialsOf(name) {
   return ((first[0] ?? '') + ([...(parts[parts.length - 1] ?? '')][0] ?? '')).toUpperCase();
 }
 
-/** The line at the top of Sent messages: how many more can go today. */
-export function sentTodayWords(left) {
+/** The line at the top of Sent messages: how many more can go today, and how to send one. */
+export function sentTodayWords(left, peopleWord = 'members') {
   if (left === 0) return GYM_GROUP_MESSAGE_WORDS.day_full;
-  return left === 1 ? 'You can send 1 more message to a group today.' : `You can send ${String(left)} more messages to groups today.`;
+  const more = left === 1 ? 'You can send 1 more message to a group today.' : `You can send ${String(left)} more messages to groups today.`;
+  return `${more} To send one, tick the ${peopleWord} you want on your list, then press Send message.`;
 }
 
 /** The line in the box of names for the people who cannot be named any more. */
