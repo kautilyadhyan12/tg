@@ -50,7 +50,8 @@ export const heldOnListSchema = z
     /** `due` where ANY membership in use is owed today, since the earliest day (null
      *  where none of them says a day); else `later` where one has a payment whose day
      *  has not come, on the nearest such day; else `paid`; `free` where there is nothing
-     *  to pay. Null once every membership is over. */
+     *  to pay (a free membership, or a month staff let off by cancelling its bill). Null
+     *  once every membership is over and no bill of theirs is open. */
     payment: z
       .discriminatedUnion("state", [
         z.object({ state: z.literal("due"), since: daySchema.nullable() }).strict(),
@@ -70,6 +71,9 @@ export interface HeldForList {
   typeName: string;
   fromList: boolean;
   membership: HeldMembership;
+  /** Its newest period counted as paid was settled by a bill staff cancelled, not by a
+   *  payment (18a-ii): nothing is owed for it, and it is never read as "Paid". */
+  notCharged?: boolean;
 }
 
 type Seen = HeldForList & { view: HeldMembershipFacts };
@@ -115,7 +119,8 @@ function paymentOf(inUse: readonly Seen[], today: string): NonNullable<HeldOnLis
   }
   const later = due.filter((day): day is string => day !== null).sort()[0];
   if (later !== undefined) return { state: "later", on: later };
-  return inUse.some((m) => m.view.payment?.state === "paid") ? { state: "paid" } : { state: "free" };
+  // A month staff let off is nothing to pay, as a free membership is: never "Paid".
+  return inUse.some((m) => m.view.payment?.state === "paid" && m.notCharged !== true) ? { state: "paid" } : { state: "free" };
 }
 
 /** A bill left open is owed whatever the memberships in use say: one from before the

@@ -172,25 +172,38 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
   }));
 }
 
-/** For the Members list: each current record with a bill still open that fell due on or
- *  before `today`, and the earliest such day, whichever of its memberships the bill is
- *  for (one that is over too). Asked of the records named, or of the whole gym (null). */
-export async function owedSinceByEntry(
+/** What the Members list reads of the bills, one statement, for the records named or for
+ *  the whole gym (null):
+ *  - `owedSince`: each record with a bill still open that fell due on or before `today`,
+ *    and the earliest such day, whichever of its memberships the bill is for (one that
+ *    is over too);
+ *  - `notCharged`: the memberships whose newest period counted as paid was settled by a
+ *    bill staff cancelled, not by a payment. */
+export async function listBillFacts(
   sql: Sql | TransactionSql,
   gymId: string,
   today: string,
   entryIds: readonly string[] | null,
-): Promise<Map<string, string>> {
-  if (entryIds !== null && entryIds.length === 0) return new Map();
+): Promise<{ owedSince: Map<string, string>; notCharged: Set<string> }> {
+  const facts = { owedSince: new Map<string, string>(), notCharged: new Set<string>() };
+  if (entryIds !== null && entryIds.length === 0) return facts;
   const ids = entryIds === null ? null : [...entryIds];
-  const rows = await sql<{ entry_id: string; since: string }[]>`
-    SELECT h.entry_id, min(b.due_on)::text AS since
+  const rows = await sql<{ entry_id: string; id: string; since: string | null; not_charged: boolean }[]>`
+    SELECT h.entry_id, h.id,
+           min(b.due_on) FILTER (WHERE b.status = 'open')::text AS since,
+           COALESCE(bool_or(b.status = 'void' AND b.period_index = h.paid_periods - 1), false) AS not_charged
     FROM gym_member_bills b
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
-    WHERE b.gym_id = ${gymId} AND b.status = 'open' AND b.due_on <= ${today}::date
+    WHERE b.gym_id = ${gymId}
+      AND ((b.status = 'open' AND b.due_on <= ${today}::date) OR (b.status = 'void' AND b.void_reason IS NOT NULL))
       AND (${ids}::uuid[] IS NULL OR h.entry_id = ANY(${ids}::uuid[]))
-    GROUP BY h.entry_id`;
-  return new Map(rows.map((r) => [r.entry_id, r.since]));
+    GROUP BY h.entry_id, h.id`;
+  for (const row of rows) {
+    const had = facts.owedSince.get(row.entry_id);
+    if (row.since !== null && (had === undefined || row.since < had)) facts.owedSince.set(row.entry_id, row.since);
+    if (row.not_charged) facts.notCharged.add(row.id);
+  }
+  return facts;
 }
 
 export interface NewBill {

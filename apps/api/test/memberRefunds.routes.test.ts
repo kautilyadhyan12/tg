@@ -463,6 +463,11 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       expect(after.notCharged).toBe(true);
       expect(after.billing.bills[0]).toMatchObject({ state: "void", cancelled: { reason: "mistake", on: "2026-01-20" }, payments: [] });
       expect(after.billing).toMatchObject({ cancel: null, undo: null, pay: { periodIndex: 1, dueOn: "2026-02-15" } });
+      // The Members list agrees with her page: nothing to pay, never "Paid".
+      const listAt = (iso: string) => ({ sql, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date(iso) });
+      const yes = () => Promise.resolve(true);
+      const onList = async (iso: string) => (await listService.readEntries(listAt(iso), owner.userId, gymId, {}, yes))?.entries.find((entry) => entry.entryId === person)?.held;
+      expect(await onList("2026-01-20T12:00:00Z")).toMatchObject({ status: "active", payment: { state: "free" } });
       // The old "mark" route cannot take the month back either.
       await expect(heldService.undoPaidMark(day, owner.userId, gymId, person, m.id, 0)).rejects.toMatchObject({ code: "held_membership_changed" });
       expect(await countOf(gymId, m.id)).toBe(1);
@@ -482,9 +487,11 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       const owing = first(await heldService.getHeldMemberships(feb, owner.userId, gymId, person));
       expect(owing.view.payment).toEqual({ state: "due", since: "2026-02-15" });
       expect(owing.notCharged).toBe(true);
+      expect(await onList("2026-02-16T12:00:00Z")).toMatchObject({ payment: { state: "due", since: "2026-02-15" } });
       const paid = first(await heldService.recordMemberPayment(feb, owner.userId, gymId, person, m.id, { requestKey: nextKey(), periodIndex: 1, amountMinor: 4999, method: "cash" }));
       expect(paid.view.payment).toEqual({ state: "paid", until: "2026-03-15" });
       expect(paid.notCharged).toBe(false);
+      expect(await onList("2026-02-16T12:00:00Z")).toMatchObject({ payment: { state: "paid" } });
       expect(await countOf(gymId, m.id)).toBe(2);
     },
     TEST_TIMEOUT_MS,
@@ -583,6 +590,13 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       expect(noted.billing.undo).toBeNull();
       expect(answer(await undoPayment())).toEqual([409, "held_membership_changed"]);
       expect((await paymentsOf(gymId))[0]?.undone).toBe(false);
+
+      // Asked for through somebody else's membership, that refund is not found and stands.
+      const elsewhere = await addPerson(gymId, owner.cookies, "Omar Aziz");
+      const theirMembership = first(await given(gymId, elsewhere, owner.cookies, { typeId: gold, startsOn: today, paid: true }));
+      const wrongDoor = await post(oneUrl(gymId, elsewhere, theirMembership.id, `payments/${payment}/refunds/${refund}/undo`), {}, owner.cookies);
+      expect(answer(wrongDoor)).toEqual([404, "member_payment_not_found"]);
+      expect(await refundsOf(gymId)).toMatchObject([{ id: refund, undone: false }]);
 
       // The refund is taken back, twice at once: marked once, kept, and the page as it was.
       const backUrl = `${refundUrl}/${refund}/undo`;
@@ -729,6 +743,9 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
     await expect(refund({ method: "company" })).rejects.toThrow(/gym_member_refunds_method_check/);
     await expect(refund({ reason: "because" })).rejects.toThrow(/gym_member_refunds_reason_check/);
     await expect(refund({ payment_id: NO_SUCH })).rejects.toThrow(/gym_member_refunds_payment_fk/);
+    // A refund names a payment of its own gym: next door's row cannot point at this one.
+    const nextDoor = await makeOrg(owner.cookies, "Mrf Checks Next Door");
+    await expect(refund({ gym_id: nextDoor.org.id })).rejects.toThrow(/gym_member_refunds_payment_fk/);
     const key = nextKey();
     await refund({ request_key: key });
     await expect(refund({ request_key: key })).rejects.toThrow(/gym_member_refunds_request_uq/);

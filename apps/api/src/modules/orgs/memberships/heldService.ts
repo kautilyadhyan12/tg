@@ -166,7 +166,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       frozenOn: row.membership.frozenOn,
       classesLeft: row.membership.classesLeft,
       fromList: row.fromList,
-      notCharged: list.bills.some((b) => b.membershipId === row.id && b.status === "void" && b.periodIndex === row.membership.paidPeriods - 1),
+      notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       view: viewOf(row, list.bills, today),
     }))
     .sort(

@@ -7,9 +7,9 @@
 // the one rule (`heldOnList` in `@app/shared`) on the gym's own day. Everybody else reads
 // as before.
 import type { Sql, TransactionSql } from "postgres";
-import { HELD_PAYMENT_WORDS, HELD_STATUS_WORDS, heldListWords, heldOnList, type HeldOnList } from "@app/shared";
-import { inUseForList, overForList, type ListHeld } from "./heldRepo.js";
-import { owedSinceByEntry } from "./billsSql.js";
+import { HELD_PAYMENT_WORDS, HELD_STATUS_WORDS, heldListWords, heldOnList, type HeldForList, type HeldOnList } from "@app/shared";
+import { inUseForList, overForList } from "./heldRepo.js";
+import { listBillFacts } from "./billsSql.js";
 
 export interface HeldShown {
   shown: HeldOnList;
@@ -42,20 +42,23 @@ export async function heldOnListOf(
  *  stored over that finished last and what the list's own word names.
  *
  *  Payment reads the bills too (18a-ii): a bill still open is owed whichever membership it
- *  is for, so somebody whose membership ended unpaid is found under "Payment due". */
+ *  is for, so somebody whose membership ended unpaid is found under "Payment due"; and a
+ *  month staff let off by cancelling its bill reads "Free", never "Paid". */
 async function bothReads(
   sql: Sql | TransactionSql,
   gymId: string,
   today: string,
   entryIds: readonly string[] | null,
 ): Promise<Map<string, HeldShown>> {
-  const byEntry = new Map<string, { noEmail: boolean; held: ListHeld[] }>();
+  const bills = await listBillFacts(sql, gymId, today, entryIds);
+  const owed = bills.owedSince;
+  const byEntry = new Map<string, { noEmail: boolean; held: HeldForList[] }>();
   for (const row of await inUseForList(sql, gymId, entryIds)) {
+    const held: HeldForList = { ...row.held, notCharged: bills.notCharged.has(row.held.id) };
     const mine = byEntry.get(row.entryId);
-    if (mine === undefined) byEntry.set(row.entryId, { noEmail: row.noEmail, held: [row.held] });
-    else mine.held.push(row.held);
+    if (mine === undefined) byEntry.set(row.entryId, { noEmail: row.noEmail, held: [held] });
+    else mine.held.push(held);
   }
-  const owed = await owedSinceByEntry(sql, gymId, today, entryIds);
   const out = new Map<string, HeldShown>();
   const ended: string[] = [];
   for (const [entryId, mine] of byEntry) {

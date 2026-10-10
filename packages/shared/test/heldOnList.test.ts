@@ -315,6 +315,21 @@ describe("a bill left open is Payment due on the list, whatever became of the me
     expect(owing([free, endedPass], "2026-07-10")?.payment).toEqual({ state: "due", since: "2026-07-10" });
   });
 
+  it("a month staff let off by cancelling its bill is Free on the list, never Paid; a paid membership beside it is Paid; owing still wins", () => {
+    const letOff = { ...paidUp, notCharged: true };
+    expect(owing([paidUp], null)?.payment).toEqual({ state: "paid" });
+    expect(owing([letOff], null)?.payment).toEqual({ state: "free" });
+    const ended = owing([letOff], null);
+    if (ended === null) throw new Error("no row");
+    expect(heldListWords(ended).payment).toBe("Free");
+    const other = held("Ten classes", given(tenPack, "2026-10-02", true, "2026-10-02"));
+    expect(owing([letOff, other], null)?.payment).toEqual({ state: "paid" });
+    expect(owing([letOff], "2026-07-10")?.payment).toEqual({ state: "due", since: "2026-07-10" });
+    // Owing again the month after: the flag says nothing about a month that is due.
+    const unpaid = { ...held("Gold Monthly", given(monthly, "2026-10-01", false, "2026-10-01")), notCharged: true };
+    expect(owing([unpaid], null)?.payment).toEqual({ state: "due", since: "2026-10-01" });
+  });
+
   it("the gym's own words still answer where its list names a membership they never had here", () => {
     expect(owing([endedPass], "2026-07-10", "Silver")).toBeNull();
     expect(owing([], "2026-07-10")).toBeNull();

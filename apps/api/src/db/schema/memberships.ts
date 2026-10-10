@@ -241,6 +241,7 @@ export const gymMemberBills = pgTable(
       foreignColumns: [gymHeldMemberships.gymId, gymHeldMemberships.id],
     }).onDelete("cascade"),
     index("gym_member_bills_open_idx").on(t.gymId, t.dueOn).where(sql`${t.status} = 'open'`),
+    index("gym_member_bills_staff_void_idx").on(t.gymId).where(sql`${t.status} = 'void' AND ${t.voidReason} IS NOT NULL`),
   ],
 );
 
