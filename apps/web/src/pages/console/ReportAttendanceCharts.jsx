@@ -52,7 +52,8 @@ export function DayBars({ report }) {
   );
 }
 
-/** Weekday by hour: the darker the square, the more check-ins in that hour. */
+/** Weekday by hour: the darker the square, the more check-ins in that hour. On a phone a
+ *  square is as tall as a finger needs. */
 export function HourGrid({ report, clockFormat }) {
   const grid = hourGrid(report, clockFormat);
   const [said, setSaid] = useState(null);
@@ -77,8 +78,8 @@ export function HourGrid({ report, clockFormat }) {
                 data-testid="hour-cell"
                 data-visits={c.visits}
                 aria-label={c.text}
-                className="flex-1 min-w-0 p-0 border-0 cursor-default relative"
-                style={{ height: 22, borderRadius: 3, background: 'var(--line)', overflow: 'hidden' }}
+                className="flex-1 min-w-0 p-0 border-0 cursor-default relative h-11 md:h-6"
+                style={{ borderRadius: 3, background: 'var(--line)', overflow: 'hidden' }}
                 onMouseEnter={() => setSaid(c.text)}
                 onFocus={() => setSaid(c.text)}
                 onBlur={() => setSaid(null)}

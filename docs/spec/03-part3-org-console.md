@@ -4432,7 +4432,30 @@ that uses only part of the app is told what feeds a figure, with a button to the
 (RULINGS 2026-10-10). The month the list began shows no New (its first people are not new members) and no
 "at start". **Leads that became members**: leads marked Joined over all leads, by where
 they heard of the gym; until one lead is marked Joined the shares are a sentence. Each table downloads as a CSV of counts, never a name.
-Worked out when the page opens, in one statement over the gym's list. Attendance is 21a-ii.
+Worked out when the page opens, in one statement over the gym's list.
+
+**Built by 21a-ii (2026-10-10): attendance.** A **visit** is a row of the Attendance page
+(a scan at the desk, staff's Check in, a visit staff added later), so a day or a week here
+is the number Attendance and Overview show; a person is their record on the list, or their
+app account when the visit has none. Shown: the last 28 days one by one and the last 12
+weeks, Monday to Sunday, from the gym's first check-in on (a day nobody came is a zero;
+nothing earlier is drawn). **Visits a member a week** is the visits of the people on the
+list today over the newest four full weeks, shared between them and those weeks, with how
+many of them came at all. **The busiest hours** are check-ins by weekday and hour on the
+gym's clock over the newest eight full weeks; a visit added on a later day has no time and
+is left out, and hours that tie are all named (past three, none is). Both wait for two
+full weeks of check-ins and read "Not enough data yet" until then; only whole weeks are
+counted, so every weekday is counted the same number of times. **How full classes are**
+is places booked (booked, came or no-show; never a cancelled booking or the waitlist) over
+places, in classes that started in the last 56 days; a cancelled class and a class with no
+limit on places are left out. **No-shows** are the places marked No-show over the places
+marked Came or No-show, so a place nobody marked is in neither, and a gym that marks
+nobody reads a sentence and a button to the Calendar, never 0%. A gym with no check-in, or
+no classes, reads what feeds each with a button to Attendance or Classes. Each table
+downloads as a CSV of counts. `GET /v1/orgs/:gymId/reports/attendance` (`reports.read`),
+from the same allowance as the members read; the rule is `attendanceReportFrom`
+(`packages/shared/src/reportsAttendance.ts`), the counts `reports/repo.ts`, read from
+`gym_attendance` and the class tables themselves, not the nightly rollup.
 
 ### 16.6 Cards
 

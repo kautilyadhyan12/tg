@@ -389,6 +389,67 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
   );
 
   it(
+    "an hour is the gym's own on a clock a half or three-quarters of an hour from UTC",
+    async () => {
+      const owner = await makeUser("zones-owner");
+      const cells = async (timezone: string, visits: readonly string[]) => {
+        const gym: Gym = { id: await makeGym(owner, `Rep ${timezone}`, timezone), timezone, ownerId: owner.userId };
+        const who = { entryId: await listed(gym.id, "Zone Regular") };
+        // A first check-in on Monday 21 September, at the gym's noon: two whole weeks by 10 October.
+        for (const at of visits) await visit(gym, who, at);
+        clock = NOON;
+        try {
+          const { hours } = await read(gym.id, owner);
+          return hours.state === "ok" ? hours.cells : hours.state;
+        } finally {
+          clock = null;
+        }
+      };
+      // Kathmandu is 5 hours 45 minutes ahead: 12:14 UTC is 17:59 there, 12:15 is 18:00.
+      expect(
+        await cells("Asia/Kathmandu", [
+          "2026-09-21T06:15:00Z", // Mon 12:00
+          "2026-09-22T12:14:59Z", // Tue 17:59
+          "2026-09-23T12:15:00Z", // Wed 18:00
+          "2026-09-24T12:29:00Z", // Thu 18:14
+          "2026-09-24T18:25:00Z", // Fri 00:10, the next day there
+        ]),
+      ).toEqual([
+        { weekday: 1, hour: 12, visits: 1 },
+        { weekday: 2, hour: 17, visits: 1 },
+        { weekday: 3, hour: 18, visits: 1 },
+        { weekday: 4, hour: 18, visits: 1 },
+        { weekday: 5, hour: 0, visits: 1 },
+      ]);
+      // Delhi is 5 hours 30 minutes ahead: 01:29 UTC is 06:59 there, 01:30 is 07:00.
+      expect(
+        await cells("Asia/Kolkata", [
+          "2026-09-21T06:30:00Z", // Mon 12:00
+          "2026-09-22T01:29:59Z", // Tue 06:59
+          "2026-09-23T01:30:00Z", // Wed 07:00
+        ]),
+      ).toEqual([
+        { weekday: 1, hour: 12, visits: 1 },
+        { weekday: 2, hour: 6, visits: 1 },
+        { weekday: 3, hour: 7, visits: 1 },
+      ]);
+      // Adelaide, 9 hours 30 minutes ahead until its clocks go forward on 4 October: 20:29 UTC is 05:59 there.
+      expect(
+        await cells("Australia/Adelaide", [
+          "2026-09-21T02:30:00Z", // Mon 12:00
+          "2026-09-22T20:29:00Z", // Wed 05:59
+          "2026-09-23T20:30:00Z", // Thu 06:00
+        ]),
+      ).toEqual([
+        { weekday: 1, hour: 12, visits: 1 },
+        { weekday: 3, hour: 5, visits: 1 },
+        { weekday: 4, hour: 6, visits: 1 },
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a gym that uses neither check-in nor classes is told so, never shown a zero",
     async () => {
       const owner = await makeUser("empty-owner");

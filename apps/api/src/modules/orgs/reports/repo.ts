@@ -113,12 +113,17 @@ const visitCountsSchema = z.object({
 });
 export type VisitCounts = z.infer<typeof visitCountsSchema>;
 
-/** The gym's visits counted over the report's windows, in one pass over the days shown.
+/** The gym's visits counted over the report's windows, in two passes over the days shown.
  *
  *  A visit is a row of the Attendance page, so a day here and a day there are one number.
  *  A person is their record on the list, or their app account when the visit has none. A
  *  visit's hour is on the gym's clock; one staff added on a later day has no hour. Visits
- *  a member counts the people on the list today and only their visits. */
+ *  a member counts the people on the list today and only their visits.
+ *
+ *  The hours are counted by the quarter-hour first and put on the gym's clock after: every
+ *  zone is a whole number of quarter-hours from UTC, and a few thousand quarter-hours are
+ *  converted where every visit would have been. The member window is whole weeks, so the
+ *  pass that counts people by the week serves it too. */
 export async function readVisitCounts(
   sql: Sql,
   gymId: string,
@@ -131,28 +136,41 @@ export async function readVisitCounts(
   const memberFrom = windows.member?.from ?? null;
   const memberTo = windows.member?.to ?? null;
   const rows = await sql<Record<string, unknown>[]>`
-    WITH v AS MATERIALIZED (
-      SELECT a.day, a.entry_id, COALESCE(a.entry_id, a.user_id) AS who,
-             CASE WHEN a.hours_status <> 'added_later'
-                  THEN extract(hour FROM a.marked_at AT TIME ZONE ${timezone})::int END AS hour
+    WITH by_quarter AS MATERIALIZED (
+      SELECT a.day,
+             CASE WHEN a.day >= ${hoursFrom}::date AND a.day <= ${hoursTo}::date AND a.hours_status <> 'added_later'
+                  THEN date_bin('15 minutes', a.marked_at, TIMESTAMPTZ '2000-01-01 00:00:00+00') END AS quarter,
+             COALESCE(a.day >= ${hoursFrom}::date AND a.day <= ${hoursTo}::date AND a.hours_status = 'added_later', false) AS no_time,
+             count(*)::int AS visits
       FROM gym_attendance a
       WHERE a.gym_id = ${gymId} AND a.day >= ${windows.weeksFrom}::date AND a.day <= ${today}::date
+      GROUP BY 1, 2, 3
+    ),
+    by_person AS MATERIALIZED (
+      SELECT (a.day - (extract(isodow FROM a.day)::int - 1)) AS week_start,
+             COALESCE(a.entry_id, a.user_id) AS who, a.entry_id, count(*)::int AS visits
+      FROM gym_attendance a
+      WHERE a.gym_id = ${gymId} AND a.day >= ${windows.weeksFrom}::date AND a.day <= ${today}::date
+      GROUP BY 1, 2, 3
+    ),
+    of_members AS (
+      SELECT COALESCE(sum(p.visits), 0)::int AS visits, count(DISTINCT p.entry_id)::int AS visitors
+      FROM by_person p
+      JOIN gym_member_list_entries e ON e.id = p.entry_id AND e.gym_id = ${gymId} AND e.former_at IS NULL
+      WHERE p.week_start >= ${memberFrom}::date AND p.week_start <= ${memberTo}::date
     )
     SELECT
       (SELECT COALESCE(json_agg(json_build_object('day', to_char(d.day, 'YYYY-MM-DD'), 'visits', d.visits)), '[]'::json)
-       FROM (SELECT day, count(*)::int AS visits FROM v WHERE day >= ${windows.daysFrom}::date GROUP BY day) d) AS days,
+       FROM (SELECT day, sum(visits)::int AS visits FROM by_quarter WHERE day >= ${windows.daysFrom}::date GROUP BY day) d) AS days,
       (SELECT COALESCE(json_agg(json_build_object('weekStart', to_char(w.week_start, 'YYYY-MM-DD'), 'visits', w.visits, 'people', w.people)), '[]'::json)
-       FROM (SELECT date_trunc('week', day)::date AS week_start, count(*)::int AS visits, count(DISTINCT who)::int AS people
-             FROM v GROUP BY 1) w) AS weeks,
+       FROM (SELECT week_start, sum(visits)::int AS visits, count(DISTINCT who)::int AS people FROM by_person GROUP BY 1) w) AS weeks,
       (SELECT COALESCE(json_agg(json_build_object('weekday', h.weekday, 'hour', h.hour, 'visits', h.visits)), '[]'::json)
-       FROM (SELECT extract(isodow FROM day)::int AS weekday, hour, count(*)::int AS visits
-             FROM v WHERE day >= ${hoursFrom}::date AND day <= ${hoursTo}::date AND hour IS NOT NULL GROUP BY 1, 2) h) AS hours,
-      (SELECT count(*)::int FROM v WHERE day >= ${hoursFrom}::date AND day <= ${hoursTo}::date AND hour IS NULL) AS hours_no_time,
+       FROM (SELECT extract(isodow FROM day)::int AS weekday, extract(hour FROM quarter AT TIME ZONE ${timezone})::int AS hour, sum(visits)::int AS visits
+             FROM by_quarter WHERE quarter IS NOT NULL GROUP BY 1, 2) h) AS hours,
+      (SELECT COALESCE(sum(visits), 0)::int FROM by_quarter WHERE no_time) AS hours_no_time,
       (SELECT count(*)::int FROM gym_member_list_entries e WHERE e.gym_id = ${gymId} AND e.former_at IS NULL) AS members,
-      (SELECT count(*)::int FROM v JOIN gym_member_list_entries e ON e.id = v.entry_id AND e.gym_id = ${gymId} AND e.former_at IS NULL
-       WHERE v.day >= ${memberFrom}::date AND v.day <= ${memberTo}::date) AS member_visits,
-      (SELECT count(DISTINCT v.entry_id)::int FROM v JOIN gym_member_list_entries e ON e.id = v.entry_id AND e.gym_id = ${gymId} AND e.former_at IS NULL
-       WHERE v.day >= ${memberFrom}::date AND v.day <= ${memberTo}::date) AS member_visitors`;
+      (SELECT visits FROM of_members) AS member_visits,
+      (SELECT visitors FROM of_members) AS member_visitors`;
   return visitCountsSchema.parse(rows[0]);
 }
 
