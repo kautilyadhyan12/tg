@@ -469,6 +469,13 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
       expect((await get(reportUrl(other), otherOwner.cookies, desk)).statusCode).toBe(200);
       expect(await redis.get(`rl:orgs_reports:ip:${other}:${desk}`)).toBe("1");
       expect(await redis.get(addressKey)).toBe(before);
+
+      // A stranger cannot ask without end: past 300 asks an hour they are refused as too
+      // many, on their own count alone. The gym's staff at that address still read.
+      for (let i = 0; i < 260; i += 1) expect((await get(reportUrl(gym), stranger.cookies, desk)).statusCode).toBe(404);
+      expect((await get(reportUrl(gym), stranger.cookies, desk)).statusCode).toBe(429);
+      expect(await redis.get(addressKey)).toBe(before);
+      expect((await get(reportUrl(gym), second.cookies, desk)).statusCode).toBe(200);
     },
     TEST_TIMEOUT_MS,
   );

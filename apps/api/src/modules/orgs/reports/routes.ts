@@ -1,5 +1,5 @@
-// The Reports page's route (ROADMAP 21a-i): authenticate, Zod-parse, who may read, the
-// limit, then the read. The service owns the authorisation.
+// The Reports page's route (ROADMAP 21a-i): authenticate, the asker's own ceiling,
+// Zod-parse, who may read, the limit, then the read. The service owns the authorisation.
 //
 //   GET /v1/orgs/:gymId/reports/members   the members figures (`reports.read`)
 import type { FastifyInstance } from "fastify";
@@ -28,7 +28,19 @@ export function registerReportsRoutes(app: FastifyInstance, deps: { sql: Sql; re
     redis: deps.redis,
   });
 
-  app.get("/v1/orgs/:gymId/reports/members", { preHandler: [app.authenticate] }, async (req, reply) => {
+  /** Every ask, refused ones too, against the asker alone and never the address: somebody
+   *  who is not this gym's staff cannot ask without end, and uses up nobody else's allowance.
+   *  Above a reader's own 120, so staff meet that one first. */
+  const askerLimit = createDualRateLimit({
+    name: "orgs_reports_asks",
+    max: 300,
+    ipMax: null,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.get("/v1/orgs/:gymId/reports/members", { preHandler: [app.authenticate, askerLimit] }, async (req, reply) => {
     const params = orgParamsSchema.safeParse(req.params);
     if (!params.success) {
       // Issue paths and codes only, never the offending value.
