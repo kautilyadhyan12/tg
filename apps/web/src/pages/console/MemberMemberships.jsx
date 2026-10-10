@@ -84,6 +84,12 @@ const PLAIN = 'c-btn c-btn-s';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 const DANGER = 'c-btn c-btn-danger';
 const LINK = 'c-btn c-btn-link c-btn-sm';
+// A small button's colour says what kind of thing it does: taking a payment is the
+// page's main colour, giving money back its soft one, anything that cancels is red, and
+// the rest (Freeze, Undo) stay plain.
+const PAY = 'c-btn c-btn-p c-btn-sm';
+const REFUND = 'c-btn c-btn-soft c-btn-sm';
+const STOP = 'c-btn c-btn-danger c-btn-sm';
 /** Refusals that mean the page is out of date: it is read again. */
 const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled'];
 
@@ -563,7 +569,7 @@ export default function MemberMemberships({
                       </span>
                       <span className="c-s13 c-t2 md:flex-1">{p.detail}</span>
                       {acts && p.refundable ? (
-                        <button type="button" className={`${SMALL} self-start md:self-auto`} disabled={busy} onClick={() => startRefund(m, p.id)}>
+                        <button type="button" className={`${REFUND} self-start md:self-auto`} disabled={busy} onClick={() => startRefund(m, p.id)}>
                           Note a refund
                         </button>
                       ) : null}
@@ -585,11 +591,11 @@ export default function MemberMemberships({
                 ))}
                 {pays ? (
                   <div className="flex flex-wrap gap-2 px-3 py-2.5" style={SPLIT}>
-                    <button type="button" className={`${MAIN} c-btn-sm`} disabled={busy} onClick={() => startPay(m)}>
+                    <button type="button" className={PAY} disabled={busy} onClick={() => startPay(m)}>
                       {payLabel(m, today)}
                     </button>
                     {cancelId === row.id ? (
-                      <button type="button" className={SMALL} disabled={busy} onClick={() => startCancelBill(m)}>
+                      <button type="button" className={STOP} disabled={busy} onClick={() => startCancelBill(m)}>
                         Cancel this bill
                       </button>
                     ) : null}
@@ -746,7 +752,7 @@ export default function MemberMemberships({
     const payInBill = canPay && m.billing.bills.some((b) => b.periodIndex === m.billing.pay.periodIndex);
     const payButton =
       canPay && !payInBill ? (
-        <button type="button" className={SMALL} disabled={busy} onClick={() => startPay(m)}>
+        <button type="button" className={PAY} disabled={busy} onClick={() => startPay(m)}>
           {payLabel(m, today)}
         </button>
       ) : null;
@@ -802,7 +808,7 @@ export default function MemberMemberships({
               </button>
             ) : null}
             {can.cancel ? (
-              <button type="button" className={SMALL} disabled={busy} onClick={() => ask('cancel', m)}>
+              <button type="button" className={STOP} disabled={busy} onClick={() => ask('cancel', m)}>
                 Cancel membership
               </button>
             ) : null}
