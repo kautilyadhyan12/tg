@@ -370,19 +370,24 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
     const gym = await makeGym("Sentm Allowance");
     const manager = await onStaff(gym, "Mel Manager", "manager");
     const id = await row(gym, "Read many times", NOON);
-    const address = "10.93.250.7";
+    // One address for every read here, and a new one each run: the real Redis keeps an address's count for an hour.
+    const address = `10.94.${String(Math.floor(Math.random() * 250))}.${String(1 + Math.floor(Math.random() * 250))}`;
     const listUrl = `/v1/orgs/${gym.id}/member-list/messages`;
     const peopleUrl = `${listUrl}/${id}/people`;
-    let refusedAt = -1;
-    for (let i = 0; i < 700 && refusedAt < 0; i += 1) {
-      const res = await inject("GET", i % 2 === 0 ? listUrl : peopleUrl, manager.cookies, undefined, address);
-      if (res.statusCode === 429) refusedAt = i;
-      else expect(res.statusCode, res.body).toBe(200);
+    // The Members list's own allowance is 600 reads an hour a person. 596 are counted
+    // straight into its counter, as other limits here are reached: the app's own floor of
+    // 600 requests a MINUTE would otherwise answer first and prove nothing about this one.
+    for (let i = 0; i < 596; i += 1) await redis.incrWithTtl(`rl:memberlist_read:id:${manager.userId}`, 3600);
+    // Two reads of the list and two of the names are the 597th to the 600th: each counts.
+    for (const path of [listUrl, peopleUrl, listUrl, peopleUrl]) {
+      const res = await inject("GET", path, manager.cookies, undefined, address);
+      expect(res.statusCode, res.body).toBe(200);
     }
-    // 600 reads an hour a person, the Members list's own allowance.
-    expect(refusedAt).toBe(600);
-    expect((await inject("GET", listUrl, manager.cookies, undefined, address)).statusCode).toBe(429);
-    expect((await inject("GET", peopleUrl, manager.cookies, undefined, address)).statusCode).toBe(429);
+    for (const path of [listUrl, peopleUrl]) {
+      const res = await inject("GET", path, manager.cookies, undefined, address);
+      expect(res.statusCode, path).toBe(429);
+      expect(res.body).not.toContain("Read many times");
+    }
     // The owner, at the same address, still reads both.
     expect((await inject("GET", listUrl, gym.owner.cookies, undefined, address)).statusCode).toBe(200);
     expect((await inject("GET", peopleUrl, gym.owner.cookies, undefined, address)).statusCode).toBe(200);
