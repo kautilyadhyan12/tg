@@ -872,7 +872,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       // BEFORE ANY LIST: a screen, not a 404.
       const empty = listOf(await get(listUrl(org.org.id), owner.cookies));
       expect(empty).toMatchObject({ hasList: false, version: 0, lastConfirmedAt: null });
-      expect(empty.counts).toEqual({ former: 0, entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0 });
+      expect(empty.counts).toEqual({ former: 0, formerOwing: 0, entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0 });
       expect(empty.statuses).toEqual([]);
 
       await joinAsMember(inApp.cookies, org, owner.cookies);
@@ -896,7 +896,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       expect(list.lastConfirmedAt).not.toBeNull();
       // THE THREE NUMBERS DO NOT PARTITION AND MUST NOT BE MADE TO: one person is
       // in the app, three of the other four can be invited, one has no address.
-      expect(list.counts).toEqual({ former: 0, entries: 5, inApp: 1, canBeInvited: 3, noEmail: 1 });
+      expect(list.counts).toEqual({ former: 0, formerOwing: 0, entries: 5, inApp: 1, canBeInvited: 3, noEmail: 1 });
       const words = Object.fromEntries(list.statuses.map((s) => [s.label, s]));
       expect(Object.keys(words).sort()).toEqual(["Active", "Frozen"]);
       expect(words["Active"]).toMatchObject({ count: 3, inApp: 1, canBeInvited: 2 });
@@ -1063,7 +1063,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
 
       const list = listOf(await get(listUrl(org.org.id), owner.cookies));
       // THE HEADER IS THE WHOLE LIST.
-      expect(list.counts).toEqual({ former: 0, entries: OVER, inApp: 0, canBeInvited: OVER, noEmail: 0 });
+      expect(list.counts).toEqual({ former: 0, formerOwing: 0, entries: OVER, inApp: 0, canBeInvited: OVER, noEmail: 0 });
       // ...and the chips stop at the ceiling rather than growing with the gym's history.
       expect(list.statuses.length).toBe(MEMBER_LIST_STATUS_CHIPS_MAX);
       // The ones kept are the list's OWN first words, not an arbitrary 200.
@@ -1154,7 +1154,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
 
       // NOBODY HERE CAN BE INVITED — every one of them already has it.
       const list = listOf(await get(listUrl(org.org.id), owner.cookies));
-      expect(list.counts).toEqual({ former: 0, entries: 4, inApp: 4, canBeInvited: 0, noEmail: 0 });
+      expect(list.counts).toEqual({ former: 0, formerOwing: 0, entries: 4, inApp: 4, canBeInvited: 0, noEmail: 0 });
       expect(list.statuses[0]).toMatchObject({ label: "Active", count: 4, inApp: 4, canBeInvited: 0 });
 
       // ...and the filter agrees with the flag, rather than answering separately.
