@@ -115,5 +115,5 @@ export function messageSettingsSummary(kept) {
 /** Said above the messages: what these are, where they go, and what a member controls. */
 export function messageSettingsNote(orgType) {
   const words = orgWords(orgType);
-  return `The app sends these to your ${words.people} by itself. Each lands in their Inbox in the app. Nobody gets more than one a day, and none is sent at night. A ${words.person} can switch off Birthday, Visit milestone and We miss you for themselves.`;
+  return `The app sends these to your ${words.people} by itself. Each lands in their Inbox in the app. Nobody gets more than one a day, and none is sent at night. A ${words.person} can switch off Birthday, Visit milestone and We miss you for themselves. In the examples below, Maya stands in for each ${words.person}'s own first name.`;
 }

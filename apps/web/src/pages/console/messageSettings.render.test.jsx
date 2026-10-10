@@ -62,6 +62,7 @@ describe('Automatic messages', () => {
     expect(preview('miss_you')).toBe("We haven't seen you at Iron House for a while, Maya. We hope to see you soon.");
     expect(within(box('Birthday')).getByText(/from the date of birth on your Members list/)).toBeTruthy();
     expect(screen.getByText(/Nobody gets more than one a day, and none is sent at night\./)).toBeTruthy();
+    expect(screen.getByText(/In the examples below, Maya stands in for each member's own first name\./)).toBeTruthy();
     // The gym's numbers as kept.
     expect(within(box('Visit milestone')).getAllByRole('checkbox').map((c) => c.checked)).toEqual([false, false, true, true, false, false, false]);
     expect(within(box('We miss you')).getByLabelText('Days without a check-in').value).toBe('10');
