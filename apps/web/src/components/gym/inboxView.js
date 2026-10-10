@@ -91,9 +91,9 @@ export function kindSwitches(gym, off) {
   ];
 }
 
-/** The heading over every switch. */
+/** The button that opens the switches. */
 export function switchesHeading(gym) {
-  return `What ${gym.name} can send you`;
+  return `Choose what ${gym.name} can send you`;
 }
 
 /** The button under that note: "Contact the gym", in the organisation's own word. */

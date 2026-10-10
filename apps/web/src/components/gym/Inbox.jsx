@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, Mail, Phone, Pin } from 'lucide-react';
+import { ChevronDown, Loader2, Mail, Phone, Pin } from 'lucide-react';
 import { inboxService } from '../../api/inboxApi';
 import {
   INBOX_NOTE,
@@ -143,18 +143,36 @@ function SwitchRow({ words, on, change }) {
 
 // THE MEMBER'S OWN SWITCHES for this gym: its messages to many people at once (ROADMAP
 // 20f-i), then each automatic message a member can switch off (20b-i). Off, the gym's
-// staff are told this person gets none, and the sender writes them none.
+// staff are told this person gets none, and the sender writes them none. They are shut
+// behind one button until it is pressed, so the Inbox shows its messages first (Kd's
+// click-through of 20b-i).
 function MessageSwitches({ gym, startGroup, startOff }) {
+  const [open, setOpen] = useState(false);
   const [group, setGroup] = useState(startGroup);
   const [off, setOff] = useState(startOff);
+  const panelId = useId();
   return (
-    <section className="flex flex-col gap-2 mt-2" aria-label={switchesHeading(gym)}>
-      <h3 className="text-sm font-semibold text-white">{switchesHeading(gym)}</h3>
-      <SwitchRow words={groupSwitch(gym, group)} on={group} change={async (on) => setGroup(await inboxService.setGroupMessages(gym.id, on))} />
-      {kindSwitches(gym, off).map((row) => (
-        <SwitchRow key={row.kind} words={row} on={row.on} change={async (on) => setOff(await inboxService.setKindSwitch(gym.id, row.kind, on))} />
-      ))}
-    </section>
+    <div className="flex flex-col items-start gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="rounded-xl px-3.5 py-2 text-sm font-semibold min-h-11 inline-flex items-center gap-2 text-left"
+        style={{ background: 'rgba(255,138,31,0.15)', color: ORANGE, border: '1px solid rgba(255,138,31,0.30)' }}
+      >
+        {switchesHeading(gym)}
+        <ChevronDown className="w-4 h-4 flex-shrink-0 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div id={panelId} className="flex flex-col gap-2 w-full">
+          <SwitchRow words={groupSwitch(gym, group)} on={group} change={async (on) => setGroup(await inboxService.setGroupMessages(gym.id, on))} />
+          {kindSwitches(gym, off).map((row) => (
+            <SwitchRow key={row.kind} words={row} on={row.on} change={async (on) => setOff(await inboxService.setKindSwitch(gym.id, row.kind, on))} />
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

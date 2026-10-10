@@ -56,13 +56,15 @@ describe('Automatic messages', () => {
       ['Send the Visit milestone message', 'true'],
       ['Send the We miss you message', 'true'],
     ]);
-    expect(preview('welcome')).toBe("Welcome to Iron House, Maya. We're glad you joined. Messages from us will show up here.");
-    expect(preview('birthday')).toBe('Happy birthday, Maya! From everyone at Iron House.');
-    expect(preview('milestone')).toBe("That's 50 visits to Iron House, Maya. Well done.");
-    expect(preview('miss_you')).toBe("We haven't seen you at Iron House for a while, Maya. We hope to see you soon.");
+    expect(preview('welcome')).toBe("Welcome to Iron House, [member's first name]. We're glad you joined. Messages from us will show up here.");
+    expect(preview('birthday')).toBe("Happy birthday, [member's first name]! From everyone at Iron House.");
+    expect(preview('milestone')).toBe("That's 50 visits to Iron House, [member's first name]. Well done.");
+    expect(preview('miss_you')).toBe("We haven't seen you at Iron House for a while, [member's first name]. We hope to see you soon.");
     expect(within(box('Birthday')).getByText(/from the date of birth on your Members list/)).toBeTruthy();
     expect(screen.getByText(/Nobody gets more than one a day, and none is sent at night\./)).toBeTruthy();
-    expect(screen.getByText(/In the examples below, Maya stands in for each member's own first name\./)).toBeTruthy();
+    expect(screen.getByText(/Where you see \[member's first name\] below, each member reads their own first name: "Happy birthday, Priya!"/)).toBeTruthy();
+    // No name of a person is in any example.
+    expect(document.body.textContent).not.toContain('Maya');
     // The gym's numbers as kept.
     expect(within(box('Visit milestone')).getAllByRole('checkbox').map((c) => c.checked)).toEqual([false, false, true, true, false, false, false]);
     expect(within(box('We miss you')).getByLabelText('Days without a check-in').value).toBe('10');
@@ -82,8 +84,8 @@ describe('Automatic messages', () => {
     fireEvent.change(within(box('We miss you')).getByLabelText('Days without a check-in'), { target: { value: '14' } });
     fireEvent.change(line('We miss you'), { target: { value: '  Your first class back is on us. ' } });
     // The words follow what is typed, before any save.
-    expect(preview('miss_you')).toBe("We haven't seen you at Iron House for a while, Maya. We hope to see you soon.\nYour first class back is on us.");
-    expect(preview('milestone')).toBe("That's 10 visits to Iron House, Maya. Well done.");
+    expect(preview('miss_you')).toBe("We haven't seen you at Iron House for a while, [member's first name]. We hope to see you soon.\nYour first class back is on us.");
+    expect(preview('milestone')).toBe("That's 10 visits to Iron House, [member's first name]. Well done.");
     expect(screen.getByText('Not saved yet.')).toBeTruthy();
     expect(updateMessageSettings).not.toHaveBeenCalled();
 

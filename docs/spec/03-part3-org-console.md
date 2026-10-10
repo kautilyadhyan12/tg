@@ -4325,7 +4325,8 @@ two, Membership ending, Payment overdue) are 20b-ii and the class reminder 20b-i
 - **The gym's box**, Settings → **Automatic messages** (`org.manage`;
   `GET` and `PUT /v1/orgs/:gymId/message-settings`; `gym_message_settings`, one row a gym a
   kind, migration `0094`; a kind with no row has its starting values): for each message a
-  switch, when it is sent, the words a member will read, and ONE line of the gym's own for
+  switch, when it is sent, the words a member will read (with **[member's first name]**
+  where the name goes, never a sample name: RULINGS 2026-10-11), and ONE line of the gym's own for
   that message (140 characters, a message to a group's rule for a web address and an @,
   15.3's filter), sent on a line of its own under the fixed words. The numbers are picked:
   visits 10 · 25 · 50 · 100 · 250 · 500 · 1,000, days 7 · 10 · 14 · 21 · 30. One Save.
@@ -4345,7 +4346,9 @@ two, Membership ending, Payment overdue) are 20b-ii and the class reminder 20b-i
   accounts on one record have none). It is no birthday when five of the gym's records
   share that date, when it is 1 January 1970, or when the person would be over 110 or not
   yet born: those are what an export writes for "not known".
-- **A member's switches**, under their Inbox (`PUT /v1/orgs/:gymId/inbox/switches`;
+- **A member's switches**, under their Inbox, shut behind one button, **Choose what {gym}
+  can send you**, with the news switch of 16.8 (Kd, RULINGS 2026-10-11)
+  (`PUT /v1/orgs/:gymId/inbox/switches`;
   `gym_member_messages_off`): Birthday, Visit milestone, We miss you, for that gym
   alone. Welcome has none: it is sent once, on joining.
 - **A gym nobody is checked in at** (no check-in in 30 days) reads so on the two messages

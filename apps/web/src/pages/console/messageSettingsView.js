@@ -17,8 +17,11 @@ import {
 
 export const MESSAGE_KINDS = GYM_MESSAGE_SETTING_KINDS;
 
-/** The name a message is given in "What they'll read". */
-const EXAMPLE_NAME = 'Maya';
+/** Where a member's own first name goes, as "What they'll read" shows it. A real name
+ *  there was read as the name the message would be sent with (Kd's click-through). */
+export const NAME_PLACE = "[member's first name]";
+/** What stands there while the words are made: one word, as a first name is. */
+const NAME_TOKEN = 'Firstnameplace';
 
 /** The box's fields, from what the server holds. */
 export function messageDraft(settings) {
@@ -72,10 +75,13 @@ export function toggleMilestone(milestones, visits) {
   return (milestones.includes(visits) ? milestones.filter((n) => n !== visits) : [...milestones, visits]).sort((a, b) => a - b);
 }
 
-/** The message as a member called Maya will read it, the gym's own line under it. */
+/** The message as a member will read it, with `NAME_PLACE` where their own first name
+ *  goes, and the gym's own line under it. */
 export function messagePreview(kind, gymName, draft) {
   const occasion = kind === 'milestone' ? `visits:${String(draft.milestones[0] ?? 50)}` : 'example';
-  return automaticMessage({ kind, occasion }, gymName, EXAMPLE_NAME, tidyOwnLine(draft.lines[kind])) ?? '';
+  const words = automaticMessage({ kind, occasion }, gymName, NAME_TOKEN, null) ?? '';
+  const line = tidyOwnLine(draft.lines[kind]);
+  return [words.split(NAME_TOKEN).join(NAME_PLACE), ...(line === '' ? [] : [line])].join('\n');
 }
 
 /** How many characters of the own line are used, as the server counts them. */
@@ -115,5 +121,5 @@ export function messageSettingsSummary(kept) {
 /** Said above the messages: what these are, where they go, and what a member controls. */
 export function messageSettingsNote(orgType) {
   const words = orgWords(orgType);
-  return `The app sends these to your ${words.people} by itself. Each lands in their Inbox in the app. Nobody gets more than one a day, and none is sent at night. A ${words.person} can switch off Birthday, Visit milestone and We miss you for themselves. In the examples below, Maya stands in for each ${words.person}'s own first name.`;
+  return `The app sends these to your ${words.people} by itself. Each lands in their Inbox in the app. Nobody gets more than one a day, and none is sent at night. A ${words.person} can switch off Birthday, Visit milestone and We miss you for themselves. Where you see ${NAME_PLACE} below, each ${words.person} reads their own first name: "Happy birthday, Priya!"`;
 }
