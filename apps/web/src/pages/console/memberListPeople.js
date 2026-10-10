@@ -953,6 +953,27 @@ export function messageDoneLine(done) {
   return kept === 0 ? did : `${did} ${n(kept)} didn't get it.`;
 }
 
+/** When a message was sent, on the gym's own calendar and clock: "9 October 2026, 12:00"
+ *  or "9 October 2026, 12:00 PM". */
+export function sentWhen(iso, timeZone, clockFormat) {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  const options = { hour: '2-digit', minute: '2-digit', hour12: clockFormat === '12h' };
+  let time;
+  try {
+    time = at.toLocaleTimeString(clockFormat === '12h' ? 'en-US' : 'en-GB', timeZone ? { ...options, timeZone } : options);
+  } catch {
+    time = at.toLocaleTimeString(clockFormat === '12h' ? 'en-US' : 'en-GB', options);
+  }
+  // "09:05 PM" reads as a 24-hour time at a glance: "9:05 PM".
+  return `${noteDay(iso, timeZone)}, ${clockFormat === '12h' ? time.replace(/^0/, '') : time}`;
+}
+
+/** "Sent to 1 person", "Sent to 1,200 people". */
+export function sentToWords(count) {
+  return `Sent to ${people(count)}`;
+}
+
 /** "120 of 500". */
 export function messageCount(typed) {
   return `${n(groupMessageLength(typed))} of ${n(GYM_MESSAGE_BODY_MAX)}`;

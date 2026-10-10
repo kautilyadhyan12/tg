@@ -3,6 +3,7 @@
 // not ticked, or anything going before the box has named who will get it and who won't.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, within, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import {
   GYM_GROUP_MESSAGE_PROBLEM_WORDS,
   GYM_GROUP_MESSAGE_WORDS,
@@ -338,5 +339,64 @@ describe('Send message, after the review', () => {
     await box.findByTestId('message-done');
     const keys = orgService.sendGroupMessage.mock.calls.map((call) => call[1].key);
     expect(keys[0]).not.toBe(keys[1]);
+  });
+});
+
+// Sent messages (20f-ii): the button on Members and the link after a send, for staff who
+// may send one. The panel is given the page's address only for them.
+describe('Sent messages, from Members', () => {
+  const SENT = '/console/iron-house/members/sent-messages';
+  const drawIn = (props = {}) =>
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/members']}>
+        <Routes>
+          <Route path="/console/:orgSlug/members" element={<MemberListPanel gymId={GYM} gym={GYM_ROW} words={WORDS} readOnly={false} refreshKey={0} {...props} />} />
+          <Route path="/console/:orgSlug/members/sent-messages" element={<p>the sent messages page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+  it('the button opens the page; with people ticked it gives way to the bar', async () => {
+    drawIn({ sentMessagesTo: SENT });
+    await screen.findByText('Ben Carter');
+    const button = screen.getByTestId('sent-messages');
+    expect(button.textContent).toBe('Sent messages');
+    expect(button.getAttribute('href')).toBe(SENT);
+    fireEvent.click(tickOf('Ada Lovelace'));
+    expect(screen.queryByTestId('sent-messages')).toBeNull();
+    fireEvent.click(tickOf('Ada Lovelace'));
+    fireEvent.click(screen.getByTestId('sent-messages'));
+    expect(await screen.findByText('the sent messages page')).toBeTruthy();
+  });
+
+  it('a gym that can change nothing still reads what it sent', async () => {
+    drawIn({ sentMessagesTo: SENT, readOnly: true });
+    await screen.findByText('Ben Carter');
+    expect(screen.getByTestId('sent-messages').getAttribute('href')).toBe(SENT);
+  });
+
+  it('staff who may not send have no button, and no link after a send', async () => {
+    drawIn();
+    await screen.findByText('Ben Carter');
+    expect(screen.queryByTestId('sent-messages')).toBeNull();
+    expect(screen.queryByText('Sent messages')).toBeNull();
+  });
+
+  it('after a send, See sent messages opens the page', async () => {
+    orgService.previewGroupMessage.mockResolvedValue(boxOf({ selected: 1, send: [person(ada)] }));
+    orgService.sendGroupMessage.mockResolvedValue(doneOf({ sent: 1 }));
+    drawIn({ sentMessagesTo: SENT });
+    await screen.findByText('Ben Carter');
+    fireEvent.click(tickOf('Ada Lovelace'));
+    fireEvent.click(bar().getByTestId('bar-message'));
+    const box = within(await screen.findByTestId('message-box'));
+    await box.findByTestId('message-send');
+    // Nothing is sent yet: no link to a list it is not in.
+    expect(box.queryByTestId('message-see-sent')).toBeNull();
+    type(box, 'Closed on Monday.');
+    fireEvent.click(box.getByTestId('message-press'));
+    await box.findByTestId('message-done');
+    fireEvent.click(box.getByTestId('message-see-sent'));
+    expect(await screen.findByText('the sent messages page')).toBeTruthy();
   });
 });
