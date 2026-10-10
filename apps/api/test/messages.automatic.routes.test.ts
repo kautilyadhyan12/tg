@@ -261,6 +261,10 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       const rae = await member(gym, "Rae Removed", { joinedAt: days(NOON, -2) });
       await visit(gym, rae, day(-12));
       await remove(gym, rae);
+      // A deleted account that last came in twelve days ago: its visits are still its own.
+      const dee = await member(gym, "Dee Deleted");
+      await visit(gym, dee, day(-12));
+      await sql`UPDATE users SET deleted_at = ${NOON}, status = 'deleted' WHERE id = ${dee.userId}`;
       // Removed long ago and not in the read at all.
       const old = await member(gym, "Old Removed", { born: "1996-10-09" });
       await visit(gym, old, day(-12));
