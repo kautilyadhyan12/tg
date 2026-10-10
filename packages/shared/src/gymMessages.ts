@@ -55,6 +55,13 @@ export const GYM_MESSAGE_WELCOME_DAYS = 3;
 /** A trial check-in still goes one day late. */
 export const GYM_MESSAGE_CHECK_IN_LATE_DAYS = 1;
 
+/** We miss you waits until the gym has checked somebody in on this many days since the
+ *  person's last visit: half the gym's days, rounded up. A gym that stopped using check-in,
+ *  or was shut for those days, has not seen anybody, so nobody there is told they were missed. */
+export function missYouGymDays(missYouDays: number): number {
+  return Math.ceil(missYouDays / 2);
+}
+
 /** The numbers a gym can change (20b); these are the starting values of §16.2. */
 export interface GymMessageNumbers {
   /** Trial check-in: on this day of a trial, the first day being day 1. */
@@ -115,6 +122,8 @@ export interface GymMessageFacts {
     hour: number;
     on: Record<GymMessageKind, boolean>;
     numbers: GymMessageNumbers;
+    /** The days the desk or staff checked anybody in, up to today. */
+    visitDays: readonly string[];
   };
   person: {
     /** A live member of the gym in the app, with an account that is not deleted. */
@@ -135,8 +144,10 @@ export interface GymMessageFacts {
     bills: readonly { id: string; dueOn: string; paid: boolean }[];
     /** `MM-DD`. */
     birthday: string | null;
-    /** Every visit they have made. */
+    /** The days they have visited, one a day. */
     visits: number;
+    /** How many of those days are today or yesterday: 0, 1 or 2. */
+    recentVisitDays: number;
     lastVisitOn: string | null;
   };
   /** What they were already sent by this gym: every row of today, and every row of an
@@ -220,8 +231,16 @@ export function gymMessageOccasions(facts: GymMessageFacts): GymMessageOccasion[
 
   const sinceVisit = daysBetween(person.lastVisitOn, today);
   if (sinceVisit !== null && sinceVisit >= 0) {
-    if (sinceVisit <= 1 && numbers.milestones.includes(person.visits)) found.push({ kind: "milestone", occasion: `visits:${String(person.visits)}` });
-    if (sinceVisit >= numbers.missYouDays) found.push({ kind: "miss_you", occasion: `absent:${String(person.lastVisitOn)}` });
+    // The newest milestone reached by a visit of today or yesterday: a visit made at night
+    // and another before the morning's first run must not step over it.
+    const recent = Number.isInteger(person.recentVisitDays) ? Math.min(Math.max(person.recentVisitDays, 0), 2) : 0;
+    const reached = numbers.milestones.filter((m) => m <= person.visits && m > person.visits - recent);
+    if (sinceVisit <= 1 && reached.length > 0) found.push({ kind: "milestone", occasion: `visits:${String(Math.max(...reached))}` });
+    const lastVisitOn = person.lastVisitOn ?? "";
+    const gymDaysSince = new Set(gym.visitDays.filter((day) => dayNumber(day) !== null && day > lastVisitOn && day <= today)).size;
+    if (!person.staff && sinceVisit >= numbers.missYouDays && gymDaysSince >= missYouGymDays(numbers.missYouDays)) {
+      found.push({ kind: "miss_you", occasion: `absent:${lastVisitOn}` });
+    }
   }
 
   return found.sort((a, b) => GYM_MESSAGE_KINDS.indexOf(a.kind) - GYM_MESSAGE_KINDS.indexOf(b.kind));
@@ -272,6 +291,30 @@ export function welcomeMessage(gymName: string, displayName: string | null): str
   return (name === null ? `Welcome to ${gym}.` : `Welcome to ${gym}, ${name}.`) + " We're glad you joined. Messages from us will show up here.";
 }
 
+/** The fixed words of each kind this app sends, before the gym's own line. Null for a kind
+ *  that has no words yet, and for a milestone whose occasion names no number. */
+function fixedWords(send: GymMessageOccasion, gym: string, displayName: string | null): string | null {
+  if (send.kind === "welcome") return welcomeMessage(gym, displayName);
+  const name = greetingName(displayName);
+  if (send.kind === "birthday") return (name === null ? "Happy birthday!" : `Happy birthday, ${name}!`) + ` From everyone at ${gym}.`;
+  if (send.kind === "miss_you") return `We haven't seen you at ${gym} for a while${name === null ? "" : `, ${name}`}. We hope to see you soon.`;
+  if (send.kind === "milestone") {
+    const visits = /^visits:([1-9][0-9]{0,5})$/.exec(send.occasion)?.[1];
+    if (visits === undefined) return null;
+    return `That's ${Number(visits).toLocaleString("en")} visits to ${gym}${name === null ? "" : `, ${name}`}. Well done.`;
+  }
+  return null;
+}
+
+/** A message as sent: the fixed words, then the gym's own line for that kind on a line of
+ *  its own. Null for a kind with no words yet: nothing is sent for it. */
+export function automaticMessage(send: GymMessageOccasion, gymName: string, displayName: string | null, ownLine: string | null): string | null {
+  const fixed = fixedWords(send, gymName.trim(), displayName);
+  if (fixed === null) return null;
+  const line = (ownLine ?? "").trim();
+  return line === "" ? fixed : [fixed, line].join("\n");
+}
+
 /** The four come-back lines a gym can send (Kd's, 2026-09-07), as the member reads them. */
 export const GYM_COME_BACK_LINES: Record<string, string> = {
   miss_you: "We miss you — hope to see you soon.",
@@ -310,6 +353,8 @@ export const gymInboxResponseSchema = z.object({
   contact: gymContactSchema.default({ phone: null, email: null }),
   /** False once the member has switched this gym's messages to groups off (ROADMAP 20f-i). */
   groupMessages: z.boolean().default(true),
+  /** The automatic kinds the member has switched off for this gym (ROADMAP 20b-i). */
+  off: z.array(gymMessageKindSchema).default([]),
 });
 export type GymInboxResponse = z.infer<typeof gymInboxResponseSchema>;
 

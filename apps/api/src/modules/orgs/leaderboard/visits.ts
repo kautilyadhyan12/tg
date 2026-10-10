@@ -21,7 +21,7 @@ export function gymWeeks(sql: SqlOrTx, gymId: string, today: string) {
 }
 
 /** Each record held by exactly ONE live app member of the gym: (entry_id, user_id). */
-function soloHolders(sql: SqlOrTx, gymId: string) {
+export function soloHolders(sql: SqlOrTx, gymId: string) {
   return sql`
     SELECT m.entry_id, min(m.user_id::text)::uuid AS user_id
     FROM gym_members m JOIN users u ON u.id = m.user_id AND u.status = 'active'
