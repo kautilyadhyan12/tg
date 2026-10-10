@@ -6,11 +6,10 @@
 // the code under test.
 import { describe, expect, it } from "vitest";
 import {
-  BILLS_OPEN_A_RUN,
   billCovers,
   billsAtCancel,
   billsToOpen,
-  countAfterAway,
+  countAfterGap,
   countAfterPayment,
   countAfterUndo,
   giveHeldMembership,
@@ -52,12 +51,15 @@ describe("a cancelled membership is never billed again", () => {
   // Given unpaid on 15 Jan 2026: period 0 is 15 Jan – 14 Feb, period 1 from 15 Feb.
   const unpaid = given(monthly, "2026-01-15", false, "2026-01-15");
 
-  it("is owed its period while it runs", () => {
+  it("is owed the period today falls in while it runs, as that period begins, and never an older one", () => {
     expect(owed(unpaid, "2026-01-15")).toEqual([{ periodIndex: 0, dueOn: "2026-01-15" }]);
-    expect(owed(unpaid, "2026-02-15")).toEqual([
-      { periodIndex: 0, dueOn: "2026-01-15" },
-      { periodIndex: 1, dueOn: "2026-02-15" },
-    ]);
+    expect(owed(unpaid, "2026-02-14")).toEqual([{ periodIndex: 0, dueOn: "2026-01-15" }]);
+    // 15 February: the second month, whether or not January has its bill.
+    expect(owed(unpaid, "2026-02-15")).toEqual([{ periodIndex: 1, dueOn: "2026-02-15" }]);
+    expect(indexes(unpaid, "2026-02-15", new Set([0]))).toEqual([1]);
+    // A week-by-week membership a year on: this week, not fifty-two.
+    const old = given(weekly, "2026-01-05", false, "2026-01-05");
+    expect(owed(old, "2027-01-04")).toEqual([{ periodIndex: 52, dueOn: "2027-01-04" }]);
   });
 
   it("is owed nothing new from the day it is cancelled, however long after", () => {
@@ -123,23 +125,18 @@ describe("a cancelled membership is never billed again", () => {
     expect(owed(upcoming, "2026-02-10")).toEqual([{ periodIndex: 0, dueOn: "2026-03-01" }]);
   });
 
-  it("opens at most so many in one run, oldest first", () => {
-    const old = given(weekly, "2026-01-05", false, "2026-01-05");
-    const first = indexes(old, "2027-01-04");
-    expect(first).toHaveLength(BILLS_OPEN_A_RUN);
-    expect(first[0]).toBe(0);
-    expect(indexes(old, "2027-01-04", new Set(first))[0]).toBe(BILLS_OPEN_A_RUN);
-  });
-
   it("follows a month's end as the membership does: 31 Jan, 28 Feb, 31 Mar", () => {
     const m = given(monthly, "2026-01-31", false, "2026-01-31");
-    expect(billsToOpen(m, "2026-03-31", none).map((b) => b.dueOn)).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
+    const opened = ["2026-01-31", "2026-02-28", "2026-03-31"].map((day) => billsToOpen(m, day, none)[0]);
+    expect(opened.map((b) => b?.dueOn)).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
     expect(billCovers(m, 1)).toEqual({ from: "2026-02-28", to: "2026-03-30" });
-    expect(billsToOpen(m, "2026-03-31", none).map((b) => b.covers)).toEqual([
+    expect(opened.map((b) => b?.covers)).toEqual([
       { from: "2026-01-31", to: "2026-02-27" },
       { from: "2026-02-28", to: "2026-03-30" },
       { from: "2026-03-31", to: "2026-04-29" },
     ]);
+    // The day before a period begins, it is not opened yet.
+    expect(billsToOpen(m, "2026-02-27", new Set([0]))).toEqual([]);
     expect(billCovers(given(threeMonths, "2026-01-15", false, "2026-01-15"), 0)).toBeNull();
   });
 });
@@ -270,48 +267,56 @@ describe("which period a payment can be taken for", () => {
   });
 });
 
-describe("somebody put back on the list is not asked for the months they were away", () => {
-  // Paid for 15 January to 14 February, then away.
+describe("a period nobody was asked for is never billed afterwards", () => {
+  // Paid for 15 January to 14 February. Period 5 is 15 June to 14 July.
   const paid = given(monthly, "2026-01-15", true, "2026-01-15");
+  const bills = (...periods: number[]) => new Set(periods);
 
-  it("owes from the period today falls in: back on 16 June, that is the month from 15 June", () => {
-    expect(countAfterAway(paid, "2026-06-16")).toBe(5);
+  it("back on 16 June with no bill since January: the count stands at June, and June is the one bill owed", () => {
+    expect(countAfterGap(paid, "2026-06-16", bills(0))).toBe(5);
+    const now = { ...paid, paidPeriods: 5, paidFloor: 5 };
+    expect(billsToOpen(now, "2026-06-16", bills(0)).map((b) => [b.periodIndex, b.dueOn])).toEqual([[5, "2026-06-15"]]);
+    expect(billsToOpen(now, "2026-07-15", bills(0, 5)).map((b) => b.periodIndex)).toEqual([6]);
+  });
+
+  it("somebody who never left keeps every month they owe: each has its bill", () => {
+    // February to June all billed as they came, none paid.
+    expect(countAfterGap(paid, "2026-06-16", bills(0, 1, 2, 3, 4, 5))).toBeNull();
+    // And in the minutes after a period begins, before its bill is opened, nothing moves.
+    expect(countAfterGap(paid, "2026-06-15", bills(0, 1, 2, 3, 4))).toBeNull();
+    expect(billsToOpen(paid, "2026-06-15", bills(0, 1, 2, 3, 4)).map((b) => b.periodIndex)).toEqual([5]);
+  });
+
+  it("a month billed before they left stays owed, and the months after it that were never billed are passed over", () => {
+    // Paid January, billed for February (unpaid), away March to May, back in June.
+    expect(countAfterGap(paid, "2026-06-16", bills(0, 1))).toBe(5);
     const back = { ...paid, paidPeriods: 5, paidFloor: 5 };
-    // One bill, for the month they are in; February to May are never opened.
-    expect(billsToOpen(back, "2026-06-16", none).map((b) => [b.periodIndex, b.dueOn])).toEqual([[5, "2026-06-15"]]);
-    expect(billsToOpen(back, "2026-07-15", new Set([5])).map((b) => b.periodIndex)).toEqual([6]);
-  });
-
-  it("moves nothing for somebody back inside a month they paid for, or on its last day", () => {
-    expect(countAfterAway(paid, "2026-02-01")).toBeNull();
-    expect(countAfterAway(paid, "2026-02-14")).toBeNull();
-    expect(countAfterAway(paid, "2026-02-15")).toBeNull();
-    expect(countAfterAway(paid, "2026-03-15")).toBe(2);
-  });
-
-  it("moves nothing for a membership that is free, of one period, frozen, cancelled or set to stop", () => {
-    expect(countAfterAway(given(freeMonthly, "2026-01-15", false, "2026-01-15"), "2026-06-16")).toBeNull();
-    expect(countAfterAway(given(threeMonths, "2026-01-15", false, "2026-01-15"), "2026-03-16")).toBeNull();
-    expect(countAfterAway(moved(paid, { type: "freeze" }, "2026-02-01"), "2026-06-16")).toBeNull();
-    expect(countAfterAway(moved(paid, { type: "cancel", when: "today" }, "2026-02-01"), "2026-06-16")).toBeNull();
-    expect(countAfterAway(moved(paid, { type: "cancel", when: "period_end" }, "2026-02-01"), "2026-06-16")).toBeNull();
-  });
-
-  it("a month they left owing before they went is still owed, is paid first, and moves no date", () => {
-    // Never paid January; away from February; back in June with the count at June.
-    const back = { ...given(monthly, "2026-01-15", false, "2026-01-15"), paidPeriods: 5, paidFloor: 5 };
-    const january = billOf(0);
+    const february = billOf(1, { dueOn: "2026-02-15" });
     const june = billOf(5, { dueOn: "2026-06-15" });
-    expect(memberPayTarget(back, 4999, "2026-06-16", [june, january])).toMatchObject({ periodIndex: 0, advances: false });
-    expect(countAfterPayment(back, { periodIndex: 0, leftMinor: 4999, dueOn: "2026-01-15", covers: null, advances: false }, "2026-06-16")).toEqual({ ok: true, paidPeriods: null });
-    // January settled: June is next, and that one counts.
-    expect(memberPayTarget(back, 4999, "2026-06-16", [june, { ...january, status: "paid", paidMinor: 4999 }])).toMatchObject({ periodIndex: 5, advances: true });
-    // The January payment, recorded by mistake, is taken back without touching the count.
-    expect(memberUndoTarget(back, "2026-06-16", [june, { ...january, status: "paid", paidMinor: 4999 }], [{ id: "a", periodIndex: 0, seq: 7 }])).toEqual({
-      paymentId: "a",
-      reopens: true,
-      goesBack: false,
-    });
+    // February is owed first and moves no date; then June, which counts.
+    expect(memberPayTarget(back, 4999, "2026-06-16", [june, february])).toMatchObject({ periodIndex: 1, advances: false });
+    expect(countAfterPayment(back, { periodIndex: 1, leftMinor: 4999, dueOn: "2026-02-15", covers: null, advances: false }, "2026-06-16")).toEqual({ ok: true, paidPeriods: null });
+    const settled = { ...february, status: "paid" as const, paidMinor: 4999 };
+    expect(memberPayTarget(back, 4999, "2026-06-16", [june, settled])).toMatchObject({ periodIndex: 5, advances: true });
+    // February's payment, recorded by mistake, is taken back without touching the count.
+    expect(memberUndoTarget(back, "2026-06-16", [june, settled], [{ id: "a", periodIndex: 1, seq: 7 }])).toEqual({ paymentId: "a", reopens: true, goesBack: false });
+  });
+
+  it("moves nothing inside what is paid, nor on the first day after it", () => {
+    for (const day of ["2026-02-01", "2026-02-14", "2026-02-15"]) expect(countAfterGap(paid, day, bills(0)), day).toBeNull();
+    expect(countAfterGap(paid, "2026-03-15", bills(0))).toBe(2);
+    // Paid ahead to 15 April: nothing to pass over in March.
+    const ahead = moved(moved(paid, { type: "paid", paidPeriods: 2 }, "2026-01-15"), { type: "paid", paidPeriods: 3 }, "2026-01-15");
+    expect(countAfterGap(ahead, "2026-03-20", bills(0, 1, 2))).toBeNull();
+  });
+
+  it("moves nothing for a membership that is free, of one period, frozen, cancelled, set to stop or still to start", () => {
+    expect(countAfterGap(given(freeMonthly, "2026-01-15", false, "2026-01-15"), "2026-06-16", bills())).toBeNull();
+    expect(countAfterGap(given(threeMonths, "2026-01-15", false, "2026-01-15"), "2026-03-16", bills())).toBeNull();
+    expect(countAfterGap(moved(paid, { type: "freeze" }, "2026-02-01"), "2026-06-16", bills(0))).toBeNull();
+    expect(countAfterGap(moved(paid, { type: "cancel", when: "today" }, "2026-02-01"), "2026-06-16", bills(0))).toBeNull();
+    expect(countAfterGap(moved(paid, { type: "cancel", when: "period_end" }, "2026-02-01"), "2026-06-16", bills(0))).toBeNull();
+    expect(countAfterGap(given(monthly, "2026-07-01", false, "2026-06-16"), "2026-06-16", bills(0))).toBeNull();
   });
 });
 

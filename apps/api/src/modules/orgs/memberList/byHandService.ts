@@ -43,7 +43,7 @@ import { bustEntitlements } from "../../entitlements/service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { acceptAgainForAccounts, markWrongPersonFor, withdrawForAccounts, withdrawForAddress } from "../invites/join.js";
 import { invitationsOf, inviteEntryInTx, readyToSend } from "../invites/service.js";
-import { resumeAfterAway, settle as settleHeldMemberships, typeHeldByBoth } from "../memberships/heldRepo.js";
+import { settle as settleHeldMemberships, typeHeldByBoth } from "../memberships/heldRepo.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit, placesFree } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -296,8 +296,6 @@ async function placeOnList(
     // Whatever the new values change, what an import found wrong there goes with it.
     const review = reviewAfterEdit(stored.review, changedFields(stored.values, written));
     await repo.writeEntry(tx, gymId, entryId, { values: written, identityKey: key, handEdited: stored.handEdited, review, formerAt: null });
-    // Back on the list: what they hold owes from the period they are in now (18a-i).
-    await resumeAfterAway(tx, { gymId, entryIds: [entryId], actorUserId: input.userId, now: at });
   }
   await repo.stampListedByContact(tx, gymId, currentContacts({ values: written, current: true }), [entryId], at);
   const version = await repo.bumpListVersion(tx, gymId);
@@ -703,8 +701,6 @@ async function setOnListIn(
   // later upload holds them again, until staff send the invitation again (§10.2).
   if (!on) await withdrawForAddress(tx, deps.invites ?? null, { gymId, email: stored.values.email, at });
   const app = on ? await giveAppBack(tx, deps, { userId, gymId, entryId, at }) : null;
-  // Back on the list: what they hold owes from the period they are in now (18a-i).
-  if (on) await resumeAfterAway(tx, { gymId, entryIds: [entryId], actorUserId: userId, now: at });
   input.reopened?.push(...(app?.reopened ?? []));
   const version = await repo.bumpListVersion(tx, gymId);
   await insertAudit(tx, {
@@ -812,8 +808,6 @@ export async function mergeEntries(
       review: reviewAfterMerge(keep.review, gone.review, filled),
       formerAt: current ? null : keep.formerAt,
     });
-    // A past member's record kept as a current one: what it held owes from now (18a-i).
-    if (current && keep.formerAt !== null) await resumeAfterAway(tx, { gymId, entryIds: [keepId], actorUserId: userId, now: at });
     // What points at the record not kept moves onto the kept one before it is deleted
     // (the reference test lists every table that does).
     await repo.moveMembershipLinks(tx, gymId, goneId, keepId);

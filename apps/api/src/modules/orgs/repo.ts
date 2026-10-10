@@ -3907,6 +3907,17 @@ export async function insertAudit(
             ${entry.targetType}, ${entry.targetId}, ${tx.json(entry.meta)})`;
 }
 
+/** Several notes in ONE statement, for a write that changes many rows at once (the hourly
+ *  bills run moving a gym's counts): the same columns `insertAudit` writes. */
+export async function insertAudits(tx: TransactionSql, entries: readonly Parameters<typeof insertAudit>[1][]): Promise<void> {
+  if (entries.length === 0) return;
+  const payload = entries.map((e) => ({ actor: e.actorUserId, gym: e.gymId, action: e.action, type: e.targetType, id: e.targetId, meta: e.meta }));
+  await tx`
+    INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
+    SELECT r.actor, r.gym, r.action, r.type, r.id, r.meta
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(actor uuid, gym uuid, action text, type text, id text, meta jsonb)`;
+}
+
 // ---------------------------------------------------------------------------
 // OPENING HOURS (Kd 2026-08-31, :26624 + :26684 + :26736). Tenancy is in every
 // WHERE below, like every other function in this file (R3.2).

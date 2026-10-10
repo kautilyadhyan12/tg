@@ -1,7 +1,8 @@
 // What bills and payments cost at full size (ROADMAP 18a-i; CLAUDE.md §4 "Cost at full
 // size"). The launch shape, 20 gyms of 200 people, and one gym of 2,000 beside them; every
-// person holds one repeating membership given 40 days ago and never paid, so each is owed
-// two bills. Measured:
+// person holds one repeating membership given 40 days ago, never paid and never billed, so
+// the first run has the most it can ever have to do for each: move the count over the
+// month nobody was asked for, and open this month's bill. Measured:
 //   - the hourly run when everything is owed at once (the first run after a deploy), for
 //     the 20 gyms, for one gym of 200 and for the gym of 2,000: a gym's run holds that
 //     gym's row, so the gym's other writes wait that long;
@@ -111,7 +112,7 @@ const big = await seedGym(BIG);
 await sql`VACUUM ANALYZE gym_held_memberships`;
 const ids = gyms.map((g) => g.id);
 const log = { info: () => undefined, error: (obj: object) => { console.error("a gym failed", obj); } };
-console.log(`${String(GYMS)} gyms of ${String(PEOPLE)} and one of ${String(BIG)}, each person owed two bills; cpu ${String(cpus()[0]?.speed ?? 0)} MHz`);
+console.log(`${String(GYMS)} gyms of ${String(PEOPLE)} and one of ${String(BIG)}, each person a count to move and a bill to open; cpu ${String(cpus()[0]?.speed ?? 0)} MHz`);
 
 const delay = monitorEventLoopDelay({ resolution: 1 });
 delay.enable();
@@ -142,14 +143,14 @@ console.log(
 
 const deps = { sql, now: () => new Date() };
 const calls: [string, () => Promise<unknown>][] = [
-  ["read a person's page, 2 bills", () => getHeldMemberships(deps, gyms[0]?.owner ?? "", ids[0] ?? "", gyms[0]?.first ?? "")],
+  ["read a person's page, with its bill", () => getHeldMemberships(deps, gyms[0]?.owner ?? "", ids[0] ?? "", gyms[0]?.first ?? "")],
   [
     "record a payment (a new person each time)",
     async () => {
       const [m] = await sql<{ id: string; entry_id: string }[]>`
         SELECT h.id, h.entry_id FROM gym_held_memberships h
-        WHERE h.gym_id = ${big.id} AND h.paid_periods = 0 ORDER BY random() LIMIT 1`;
-      return recordMemberPayment(deps, big.owner, big.id, m?.entry_id ?? "", m?.id ?? "", { requestKey: randomUUID(), periodIndex: 0, amountMinor: 4999, method: "cash" });
+        WHERE h.gym_id = ${big.id} AND h.paid_periods = 1 ORDER BY random() LIMIT 1`;
+      return recordMemberPayment(deps, big.owner, big.id, m?.entry_id ?? "", m?.id ?? "", { requestKey: randomUUID(), periodIndex: 1, amountMinor: 4999, method: "cash" });
     },
   ],
 ];

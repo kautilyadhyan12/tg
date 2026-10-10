@@ -9,6 +9,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import {
   billsToOpen,
+  countAfterGap,
   countAfterPayment,
   countAfterUndo,
   memberPayTarget,
@@ -22,7 +23,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { lockGym } from "../memberList/repo.js";
 import { billsFor, insertBills, insertPayment, paymentsFor, setBillStatus, setOverdueDays, type NewBill } from "./billsSql.js";
-import { listHeldMembership, lockedEntry, lockedHeld, settle, writePaidPeriods, type ListHeldColumns } from "./heldRepo.js";
+import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
 
 export type BillWriteOutcome =
   | { kind: "ok" }
@@ -81,9 +82,11 @@ export async function recordPayment(
       if (byCompany !== undefined) return { kind: "ok" };
     }
 
+    // What the clock has done is written first, then the membership is read. A past
+    // member's memberships are not in use and are left as they stand.
+    if (!entry.past) await settle(tx, input.gymId, input.entryId, input.today, input.now);
     const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
     if (row === null) return { kind: "membership_not_found" };
-    if (!entry.past) await settle(tx, input.gymId, input.entryId, input.today, input.now);
 
     const bills = await billsFor(tx, input.gymId, [row.id]);
     const target = memberPayTarget(row.membership, row.priceMinor, input.today, bills, entry.past);
@@ -165,6 +168,7 @@ export async function undoPayment(
   return await sql.begin(async (tx): Promise<BillWriteOutcome> => {
     const entry = await lockedEntry(tx, input.gymId, input.entryId);
     if (entry === null) return { kind: "entry_not_found" };
+    if (!entry.past) await settle(tx, input.gymId, input.entryId, input.today, input.now);
     const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
     if (row === null) return { kind: "membership_not_found" };
 
@@ -176,7 +180,6 @@ export async function undoPayment(
     if (payment === undefined) return { kind: "payment_not_found" };
     if (payment.undone) return { kind: "ok" };
     if (entry.past) return { kind: "past_member" };
-    await settle(tx, input.gymId, input.entryId, input.today, input.now);
 
     const bills = await billsFor(tx, input.gymId, [row.id]);
     const payments = await paymentsFor(tx, input.gymId, [row.id]);
@@ -222,10 +225,10 @@ export async function undoMark(
   return await sql.begin(async (tx): Promise<BillWriteOutcome> => {
     const entry = await lockedEntry(tx, input.gymId, input.entryId);
     if (entry === null) return { kind: "entry_not_found" };
+    if (!entry.past) await settle(tx, input.gymId, input.entryId, input.today, input.now);
     const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
     if (row === null) return { kind: "membership_not_found" };
     if (entry.past) return { kind: "past_member" };
-    await settle(tx, input.gymId, input.entryId, input.today, input.now);
 
     const before = row.membership.paidPeriods;
     // Only ever back, and only by the rule's one step.
@@ -266,7 +269,7 @@ export async function saveOverdueDays(sql: Sql, input: { gymId: string; days: nu
 
 // ── The run that opens the bills that have fallen due ───────────────────────
 
-type Owing = ListHeldColumns & { gym_id: string; timezone: string; price_minor: number; currency: string };
+type Owing = ListHeldColumns & { gym_id: string; entry_id: string; timezone: string; price_minor: number; currency: string };
 
 /** The memberships that may be owed a bill: stored active, with a price, of a current
  *  record of a gym that is open, and either repeating and renewing or never paid. Which
@@ -276,7 +279,7 @@ const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => s
          (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.status,
          h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
          h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
-         h.gym_id, g.timezone, h.price_minor, h.currency
+         h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency
   FROM gym_held_memberships h
   JOIN gyms g ON g.id = h.gym_id AND g.status = 'active'
   JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
@@ -306,22 +309,38 @@ async function billedOpen(sql: Sql | TransactionSql, gymIds: readonly string[] |
 
 const NONE: ReadonlySet<number> = new Set();
 
-function owed(rows: readonly Owing[], billed: ReadonlyMap<string, ReadonlySet<number>>, now: Date): Map<string, NewBill[]> {
-  const byGym = new Map<string, NewBill[]>();
-  const todayOf = new Map<string, string>();
-  for (const row of rows) {
-    let today = todayOf.get(row.gym_id);
-    if (today === undefined) {
-      today = dayInTz(now, row.timezone);
-      todayOf.set(row.gym_id, today);
+/** What one gym's run has to write: counts to move over periods nobody was asked for
+ *  (`countAfterGap`), and the bills then owed. */
+interface GymWork {
+  today: string;
+  counts: CountMove[];
+  bills: NewBill[];
+}
+
+function owed(rows: readonly Owing[], billed: ReadonlyMap<string, ReadonlySet<number>>, now: Date): Map<string, GymWork> {
+  const byGym = new Map<string, GymWork>();
+  const workOf = (row: Owing): GymWork => {
+    let work = byGym.get(row.gym_id);
+    if (work === undefined) {
+      work = { today: dayInTz(now, row.timezone), counts: [], bills: [] };
+      byGym.set(row.gym_id, work);
     }
-    const membership: HeldMembership = listHeldMembership(row);
-    for (const due of billsToOpen(membership, today, billed.get(row.id) ?? NONE)) {
-      const list = byGym.get(row.gym_id) ?? [];
-      list.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: row.price_minor, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
-      byGym.set(row.gym_id, list);
+    return work;
+  };
+  for (const row of rows) {
+    const work = workOf(row);
+    const have = billed.get(row.id) ?? NONE;
+    let membership: HeldMembership = listHeldMembership(row);
+    const count = countAfterGap(membership, work.today, have);
+    if (count !== null) {
+      work.counts.push({ entryId: row.entry_id, row: { id: row.id, typeName: row.type_name, membership }, count });
+      membership = { ...membership, paidPeriods: count, paidFloor: count };
+    }
+    for (const due of billsToOpen(membership, work.today, have)) {
+      work.bills.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: row.price_minor, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
     }
   }
+  for (const [gymId, work] of byGym) if (work.counts.length === 0 && work.bills.length === 0) byGym.delete(gymId);
   return byGym;
 }
 
@@ -345,8 +364,10 @@ export async function openDueBills(deps: OpenBillsDeps, opts: { now?: Date; gymI
     try {
       const made = await deps.sql.begin(async (tx) => {
         await lockGym(tx, gymId);
-        const due = owed(await owing(tx, [gymId]), await billedOpen(tx, [gymId]), now).get(gymId) ?? [];
-        const rows = await insertBills(tx, gymId, due, now);
+        const work = owed(await owing(tx, [gymId]), await billedOpen(tx, [gymId]), now).get(gymId);
+        if (work === undefined) return 0;
+        await writeCountsAfterGap(tx, { gymId, moves: work.counts, today: work.today, now });
+        const rows = await insertBills(tx, gymId, work.bills, now);
         if (rows.length > 0) {
           await insertAudit(tx, {
             actorUserId: null,

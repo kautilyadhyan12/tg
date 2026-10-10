@@ -3309,16 +3309,22 @@ billing here; the two are never mixed on one person.
 membership (`gym_member_bills`, one a membership a period); a membership's count of
 paid periods (§13.2) is still what its dates are worked out from, and it moves on only
 with the payment that settles the bill of the first unpaid period.
-- **Opened by itself**: when a membership is given, and by an hourly run for every
-  period that has begun since (each gym on its own day). A bill keeps the days it was
+- **Opened by itself**: when a membership is given, and by an hourly run as each
+  period begins (each gym on its own day). A bill keeps the days it was
   opened for and the day it fell due: a later freeze moves the membership's dates and
   never a bill's, and every reader is sent that one day for what is owed.
-- **Back on the list** (Kd, RULINGS 2026-10-10): put back, added again, held by a new
-  file, or joined with a current record, a repeating membership owes from the period
-  today falls in, and that period's bill is opened then; the months away are never
-  billed. The same for a person taken from the gym's own file whose renewal day has
-  passed (§13.2): they owe from the month they are in now. A bill opened before the
-  person left stays owed, is paid first, and moves no date.
+- **A period is asked for as it begins, or not at all** (Kd, RULINGS 2026-10-10). A
+  repeating membership's bill is opened for the period today falls in, as that period
+  begins, and only while its person is on the gym's list. A period that began earlier
+  and has no bill was never asked for (the person was a past member then, or the gym's
+  own file was not linked yet, §13.2) and is never billed afterwards: the membership's
+  count of paid periods moves over it, to the period today falls in, the next time the
+  membership is read or written or the hourly run reaches it. This is ONE rule on the
+  membership and its bills (`countAfterGap`), not a step in each way of coming back, so
+  put back, added again, a new file and two records joined are the same case. A bill
+  that was opened stays owed, is paid first, and moves no date. **Its one cost:** if the
+  hourly run itself were stopped for longer than a whole period, the periods it missed
+  are not billed afterwards either; each count moved is written to the gym's record.
 - **A cancel** takes with it the open bills that fall due after the membership's last
   day (the day it is cancelled, or the last paid day where it is set to stop): one with
   nothing paid on it is kept and marked cancelled, so nobody owes for a month they never

@@ -14,6 +14,7 @@ import {
   HELD_EARLIER_PAGE,
   MEMBER_LIST_BY_HAND_WORDS,
   billSettingsResponseSchema,
+  countAfterGap,
   formatMinor,
   heldMembershipView,
   heldMembershipsResponseSchema,
@@ -106,7 +107,15 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const list = await repo.readHeld(deps.sql, gymId, entryId);
   if (list === null) throw notFound();
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays };
-  const all = [...list.inUse, ...list.over]
+  // The page reads a membership as the next write will find it: with its count moved
+  // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
+  const asOfToday = (row: repo.HeldRow): repo.HeldRow => {
+    if (list.past) return row;
+    const have = new Set(list.bills.filter((b) => b.membershipId === row.id).map((b) => b.periodIndex));
+    const count = countAfterGap(row.membership, today, have);
+    return count === null ? row : { ...row, membership: { ...row.membership, paidPeriods: count, paidFloor: count } };
+  };
+  const all = [...list.inUse.map(asOfToday), ...list.over]
     .map((row) => ({
       billing: canBill
         ? billingOf(row, list.bills.filter((b) => b.membershipId === row.id), list.payments.filter((p) => p.membershipId === row.id), ctx)

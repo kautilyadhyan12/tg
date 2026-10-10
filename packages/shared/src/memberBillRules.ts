@@ -3,7 +3,7 @@
 // Pure: the day is the gym's own, passed in. `memberBills.ts` has how this sits with a
 // membership's count of paid periods.
 import { addDays, heldMembershipView, moveHeldMembership, periodIndex, periodStart, type HeldMembership } from "./heldMemberships.js";
-import { BILLS_OPEN_A_RUN, type MemberBillState, type MemberBillStatus } from "./memberBills.js";
+import type { MemberBillState, MemberBillStatus } from "./memberBills.js";
 
 export interface BillToOpen {
   periodIndex: number;
@@ -13,10 +13,13 @@ export interface BillToOpen {
   covers: { from: string; to: string } | null;
 }
 
-/** THE BILLS A MEMBERSHIP IS OWED TODAY AND DOES NOT HAVE. Nothing for one that is
- *  cancelled, ended, frozen, free, or set to stop at the end of what is paid: none of
- *  those is asked for money again. A repeating one is owed every period from the first
- *  not paid up to the one today falls in; any other kind is owed once.
+/** THE BILL A MEMBERSHIP IS OWED TODAY AND DOES NOT HAVE: at most one. A repeating
+ *  membership is billed for the period today falls in, as that period begins; any other
+ *  kind is billed once, for the whole of it. Nothing for one that is cancelled, ended,
+ *  frozen, free, set to stop at the end of what is paid, or paid for that period already.
+ *
+ *  Never for a period that began before today's: a period is asked for as it comes or
+ *  not at all (`countAfterGap` says what becomes of one that was not).
  *
  *  `have` is the periods that already have a bill, of any status. */
 export function billsToOpen(m: HeldMembership, today: string, have: ReadonlySet<number>): BillToOpen[] {
@@ -27,12 +30,9 @@ export function billsToOpen(m: HeldMembership, today: string, have: ReadonlySet<
     return m.paidPeriods >= 1 || have.has(0) ? [] : [{ periodIndex: 0, dueOn: m.startsOn, covers: null }];
   }
   if (!m.renews) return [];
-  const last = periodIndex(m, today);
-  const out: BillToOpen[] = [];
-  for (let i = m.paidPeriods; i <= last && out.length < BILLS_OPEN_A_RUN; i += 1) {
-    if (!have.has(i)) out.push({ periodIndex: i, dueOn: periodStart(m, i), covers: billCovers(m, i) });
-  }
-  return out;
+  const current = periodIndex(m, today);
+  if (m.paidPeriods > current || have.has(current)) return [];
+  return [{ periodIndex: current, dueOn: periodStart(m, current), covers: billCovers(m, current) }];
 }
 
 /** The days a bill is for when it is opened: a repeating membership's period as its dates
@@ -137,16 +137,27 @@ export function memberPayTarget(
   return { periodIndex: index, leftMinor: bill.amountMinor - bill.paidMinor, dueOn: bill.dueOn, covers: bill.covers ?? null, advances: true };
 }
 
-/** THE COUNT OF PAID PERIODS FOR SOMEBODY PUT BACK ON THE GYM'S LIST (Kd, RULINGS
- *  2026-10-10): the periods that passed while they were away are not asked about, so a
- *  repeating membership that is running owes from the period today falls in. The number
- *  to write as both the count and its floor, or null where nothing moves. A bill opened
- *  before they left stays owed (`memberPayTarget`). */
-export function countAfterAway(m: HeldMembership, today: string): number | null {
+/** THE COUNT OF PAID PERIODS, MOVED OVER THE PERIODS NOBODY WAS ASKED FOR (Kd, RULINGS
+ *  2026-10-10). A period's bill is opened as the period begins, and only while its person
+ *  is on the gym's list. So a period that began before the one today falls in and has NO
+ *  bill is one this app never asked for: the person was a past member then, or the gym's
+ *  own file was not linked yet. Such periods are never billed afterwards. This answers the
+ *  count (and its floor) a repeating membership that is running should stand at: the
+ *  period today falls in; or null where nothing moves.
+ *
+ *  It reads only the membership and its bills, never HOW the person came back, so every
+ *  way back (put back, added again, a new file, two records joined, and any way added
+ *  later) is the same case. A bill that exists stays owed: one from before the gap is
+ *  below the new floor and is paid first (`memberPayTarget`).
+ *
+ *  `have` is the periods that have a bill, of any status. */
+export function countAfterGap(m: HeldMembership, today: string, have: ReadonlySet<number>): number | null {
   if (m.free || m.kind !== "recurring" || !m.renews) return null;
   if (heldMembershipView(m, today).status !== "active") return null;
   const current = periodIndex(m, today);
-  return m.paidPeriods < current ? current : null;
+  let first = m.paidPeriods;
+  while (first < current && have.has(first)) first += 1;
+  return first < current ? current : null;
 }
 
 /** WHAT A CANCEL DOES TO THE BILLS STILL OPEN. `lastDay` is the last day the membership

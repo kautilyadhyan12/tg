@@ -24,7 +24,7 @@ import {
   HELD_LIVE_MAX,
   billsAtCancel,
   billsToOpen,
-  countAfterAway,
+  countAfterGap,
   giveHeldMembership,
   heldMembershipStatusSchema,
   heldMembershipView,
@@ -42,8 +42,7 @@ import {
   type MemberPaymentByHand,
   type PtHeld,
 } from "@app/shared";
-import { dayInTz } from "../../gamification/streak.js";
-import { insertAudit } from "../repo.js";
+import { insertAudit, insertAudits } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
 import { billsFor, insertBills, insertPayment, overdueDaysOf, paymentsFor, setBillStatus, voidBills, type BillRow, type PaymentRow } from "./billsSql.js";
 import type { HasBookings, MembershipEndConfirmed } from "../classes/bookingChanges.js";
@@ -289,8 +288,10 @@ export async function lockedEntry(tx: TransactionSql, gymId: string, entryId: st
   return entry ?? null;
 }
 
-/** Mark the record's memberships the clock has ended, and answer how many are still in
- *  use. Under the record's lock. */
+/** What the clock alone has done to the record's memberships, written before any change
+ *  to them: the ones it has ended are marked, and a count that stands before periods
+ *  nobody was asked for is moved over them (`countAfterGap`). Answers how many are still
+ *  in use. Under the record's lock; a caller reads the rows it works on AFTER this. */
 export async function settle(tx: TransactionSql, gymId: string, entryId: string, today: string, now: Date): Promise<number> {
   const rows = (await held(tx, gymId, entryId, IN_USE, IN_USE_READ)).map(shape);
   const ended = rows.filter((row) => heldMembershipView(row.membership, today).status === "ended").map((row) => row.id);
@@ -299,7 +300,52 @@ export async function settle(tx: TransactionSql, gymId: string, entryId: string,
       UPDATE gym_held_memberships SET status = 'ended', updated_at = ${now}
       WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND status = 'active' AND id = ANY(${ended}::uuid[])`;
   }
+  // Read the bills only for a membership whose count is behind today's period at all.
+  const behind = rows.filter((row) => countAfterGap(row.membership, today, new Set()) !== null);
+  if (behind.length > 0) {
+    const bills = await billsFor(tx, gymId, behind.map((row) => row.id));
+    const moves: CountMove[] = [];
+    for (const row of behind) {
+      const count = countAfterGap(row.membership, today, new Set(bills.filter((b) => b.membershipId === row.id).map((b) => b.periodIndex)));
+      if (count !== null) moves.push({ entryId, row, count });
+    }
+    await writeCountsAfterGap(tx, { gymId, moves, today, now });
+  }
   return rows.length - ended.length;
+}
+
+/** A membership whose count `countAfterGap` says to move, and the count to move it to. */
+export interface CountMove {
+  entryId: string;
+  row: { id: string; typeName: string; membership: HeldMembership };
+  count: number;
+}
+
+/** The one write of `countAfterGap`'s answers: two statements however many memberships,
+ *  each with its note in the record. Nobody did this, the days passing did. Used by
+ *  `settle` for one record and by the hourly run for a whole gym. */
+export async function writeCountsAfterGap(
+  tx: TransactionSql,
+  input: { gymId: string; moves: readonly CountMove[]; today: string; now: Date },
+): Promise<void> {
+  if (input.moves.length === 0) return;
+  const payload = input.moves.map((move) => ({ id: move.row.id, was: move.row.membership.paidPeriods, count: move.count }));
+  await tx`
+    UPDATE gym_held_memberships h
+    SET paid_periods = r.count, paid_floor = r.count, updated_at = ${input.now}
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(id uuid, was int, count int)
+    WHERE h.gym_id = ${input.gymId} AND h.id = r.id AND h.paid_periods = r.was`;
+  await insertAudits(
+    tx,
+    input.moves.map((move) => ({
+      actorUserId: null,
+      gymId: input.gymId,
+      action: "org.held_membership_count_moved",
+      targetType: "gym_held_membership",
+      targetId: move.row.id,
+      meta: { entryId: move.entryId, type: move.row.typeName, on: input.today, paidBefore: String(move.row.membership.paidPeriods), paidAfter: String(move.count) },
+    })),
+  );
 }
 
 /** Two records about to be merged: the name of a type both have running at once, which
@@ -453,53 +499,6 @@ export async function giveHeld(
   });
 }
 
-/** SOMEBODY IS BACK ON THE GYM'S LIST (put back, added again, in a new file, or joined
- *  with a current record): the periods that passed while they were away are not asked
- *  about (`countAfterAway`), and the period they are in now has its bill. Called by every
- *  write that makes a past member current, in its transaction, under the gym's lock. */
-export async function resumeAfterAway(
-  tx: TransactionSql,
-  input: { gymId: string; entryIds: readonly string[]; actorUserId: string | null; now: Date },
-): Promise<void> {
-  if (input.entryIds.length === 0) return;
-  const [gym] = await tx<{ timezone: string }[]>`SELECT timezone FROM gyms WHERE id = ${input.gymId}`;
-  if (gym === undefined) return;
-  const today = dayInTz(input.now, gym.timezone);
-  const rows = await tx`
-    SELECT ${COLUMNS(tx)}, h.entry_id
-    FROM gym_held_memberships h
-    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-    WHERE h.gym_id = ${input.gymId} AND h.entry_id = ANY(${[...input.entryIds]}::uuid[]) AND h.status = 'active'
-    ORDER BY h.id
-    FOR UPDATE OF h`;
-  const moved = rows
-    .map((row) => ({ row: shape(row), entryId: z.object({ entry_id: z.string() }).passthrough().parse(row).entry_id }))
-    .map((held) => ({ ...held, count: countAfterAway(held.row.membership, today) }))
-    .filter((held): held is typeof held & { count: number } => held.count !== null);
-  if (moved.length === 0) return;
-  const bills = await billsFor(tx, input.gymId, moved.map((held) => held.row.id));
-  const open = [];
-  for (const { row, entryId, count } of moved) {
-    await tx`
-      UPDATE gym_held_memberships SET paid_periods = ${count}, paid_floor = ${count}, updated_at = ${input.now}
-      WHERE gym_id = ${input.gymId} AND id = ${row.id}`;
-    const now = { ...row.membership, paidPeriods: count, paidFloor: count };
-    const have = new Set(bills.filter((b) => b.membershipId === row.id).map((b) => b.periodIndex));
-    for (const due of billsToOpen(now, today, have)) {
-      open.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
-    }
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.held_membership_resumed",
-      targetType: "gym_held_membership",
-      targetId: row.id,
-      meta: { entryId, type: row.typeName, on: today, paidBefore: String(row.membership.paidPeriods), paidAfter: String(count) },
-    });
-  }
-  await insertBills(tx, input.gymId, open, input.now);
-}
-
 /** One membership of a record, held for a write, or null where it is not that record's.
  *  Under the gym's lock and the record's. */
 export async function lockedHeld(tx: TransactionSql, gymId: string, entryId: string, membershipId: string): Promise<HeldRow | null> {
@@ -574,7 +573,9 @@ export async function moveHeld(
     if (raw === undefined) return { kind: "membership_not_found" };
     if (entry.past) return { kind: "past_member" };
     await settle(tx, input.gymId, input.entryId, input.today, input.now);
-    const before = shape(raw);
+    // Read again: what the clock has done is written now, and the change is decided on that.
+    const before = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
+    if (before === null) return { kind: "membership_not_found" };
 
     const move = moveHeldMembership(before.membership, input.event, input.today);
     if (!move.ok) return { kind: "not_allowed" };

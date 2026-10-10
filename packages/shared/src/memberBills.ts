@@ -38,8 +38,6 @@ export const MEMBER_PAYMENT_METHOD_WORDS: Readonly<Record<MemberPaymentMethod, s
 /** How many days after its due date an unpaid bill reads Overdue: the gym's own number. */
 export const BILL_OVERDUE_DAYS_DEFAULT = 0;
 export const BILL_OVERDUE_DAYS_MAX = 60;
-/** The most bills one run opens for one membership, oldest first; the next run goes on. */
-export const BILLS_OPEN_A_RUN = 24;
 /** How many of a membership's bills a person's page shows, newest first. */
 export const BILLS_SHOWN = 12;
 
