@@ -656,6 +656,7 @@ export default function Members() {
           words={words}
           readOnly={readOnly}
           refreshKey={listKey}
+          sentMessagesTo={viewerPrivileges(org).includes('members.confirm') ? `/console/${orgSlug}/members/sent-messages` : null}
           action={action}
           onActionTaken={clearAction}
           emptyExtra={

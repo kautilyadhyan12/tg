@@ -310,6 +310,7 @@ export default function MemberListPanel({
   emptyExtra = null,
   onRosterChanged = () => undefined,
   canRemove = false,
+  sentMessagesTo = null,
 }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
@@ -781,6 +782,14 @@ export default function MemberListPanel({
                 Download CSV
               </button>
             ) : null}
+            {/* What the gym has sent (20f-ii), for staff who may send: `sentMessagesTo` is its
+                page, given only to them. It stays with people ticked: it acts on nobody. */}
+            {current && sentMessagesTo !== null ? (
+              <Link to={sentMessagesTo} data-testid="sent-messages" className="c-btn c-btn-s c-btn-lg">
+                <MessageSquare aria-hidden="true" className="w-4 h-4" />
+                Sent messages
+              </Link>
+            ) : null}
             <span className="flex-grow" />
             {/* Check these (§18.2), as one quiet link beside the count, as Leads keeps its
                 own line: it shows the people whose tag carries a ⚠. */}
@@ -905,6 +914,7 @@ export default function MemberListPanel({
           gymId={gymId}
           selection={messageFor}
           picked={picked}
+          sentMessagesTo={sentMessagesTo}
           onSelectionChanged={(fresh) => {
             selectionMoved(fresh);
             setMessageFor(null);

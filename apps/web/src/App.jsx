@@ -46,6 +46,7 @@ import ConsoleMembers  from './pages/console/Members';
 import ConsoleMemberships from './pages/console/Memberships';
 import ConsoleMembersReview from './pages/console/MembersReview';
 import ConsoleMembersDuplicates from './pages/console/MembersDuplicates';
+import ConsoleMembersSentMessages from './pages/console/MembersSentMessages';
 import ConsoleAttendance from './pages/console/Attendance';
 import ConsoleClasses  from './pages/console/Classes';
 import ConsolePersonalTraining from './pages/console/PersonalTraining';
@@ -256,6 +257,12 @@ export default function App() {
             <Route path="/console/:orgSlug/members/duplicates" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleMembersDuplicates /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* The messages a gym sent to groups (20f-ii): Members' Sent messages opens it. */}
+            <Route path="/console/:orgSlug/members/sent-messages" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleMembersSentMessages /></ConsoleLayout>
               </ProtectedRoute>
             } />
             {/* WHAT THE GYM SELLS (Part 3 §13.1; ROADMAP 23c-i): a page of its own. The nav

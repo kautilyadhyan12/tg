@@ -1,6 +1,7 @@
 // A MESSAGE TO A CHOSEN GROUP: the only file that reads or writes `gym_group_messages`
-// and `gym_member_messages_off` (spec Part 3 §16.8; ROADMAP 20f-i). Every statement names
-// the gym.
+// and `gym_member_messages_off` (spec Part 3 §16.8; ROADMAP 20f-i). It also writes each
+// person's copy into `gym_member_messages`, reads who holds one and removes the copies with
+// their message (20f-ii). Every statement names the gym.
 import { GYM_GROUP_MESSAGE_KIND } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 
@@ -89,6 +90,83 @@ export async function insertGroupMessage(tx: TransactionSql, message: NewGroupMe
     await tx`UPDATE gym_group_messages SET people = ${copies.length} WHERE gym_id = ${message.gymId} AND id = ${id}`;
   }
   return { id, sent: copies.length };
+}
+
+// ── THE LIST OF SENT MESSAGES (20f-ii) ──
+
+export interface SentMessageRow {
+  id: string;
+  body: string;
+  sentAt: Date;
+  people: number;
+  /** Null when that member of staff's account is gone. */
+  sentByName: string | null;
+}
+
+/** This gym's sent messages, newest first, sent after `since`. `after` is the id of the
+ *  last message of the page before; an id that is not this gym's message gives no rows. */
+export async function sentMessages(sql: SqlOrTx, gymId: string, since: Date, after: string | null, limit: number): Promise<SentMessageRow[]> {
+  const rows = await sql<{ id: string; body: string; sent_at: Date; people: number; sent_by_name: string | null }[]>`
+    SELECT g.id, g.body, g.sent_at, g.people,
+           CASE WHEN u.deleted_at IS NULL THEN u.display_name END AS sent_by_name
+    FROM gym_group_messages g
+    LEFT JOIN users u ON u.id = g.sent_by
+    WHERE g.gym_id = ${gymId} AND g.sent_at > ${since}
+      AND (${after}::uuid IS NULL OR (g.sent_at, g.id) < (
+        SELECT p.sent_at, p.id FROM gym_group_messages p WHERE p.gym_id = ${gymId} AND p.id = ${after}::uuid))
+    ORDER BY g.sent_at DESC, g.id DESC
+    LIMIT ${limit}`;
+  return rows.map((row) => ({ id: row.id, body: row.body, sentAt: row.sent_at, people: row.people, sentByName: row.sent_by_name }));
+}
+
+/** How many people this gym's message was sent to, or null when it is not this gym's
+ *  message or was sent at or before `since`. */
+export async function sentMessagePeopleCount(sql: SqlOrTx, gymId: string, messageId: string, since: Date): Promise<number | null> {
+  const rows = await sql<{ people: number }[]>`
+    SELECT people FROM gym_group_messages WHERE gym_id = ${gymId} AND id = ${messageId} AND sent_at > ${since}`;
+  return rows[0]?.people ?? null;
+}
+
+/** Who holds a copy of this gym's message, by the name the gym's list has for them (their
+ *  own name where they are on no record), in name order: the first `limit`, and how many
+ *  in all. Read from the gym's people to their copy, so it never walks every copy the gym
+ *  has. Somebody whose account is deleted is not named. Of a person's stays at the gym,
+ *  one that has a record is read before one that has none, then the newest. */
+export async function sentMessagePeople(
+  sql: SqlOrTx,
+  gymId: string,
+  messageId: string,
+  limit: number,
+): Promise<{ people: { entryId: string | null; name: string }[]; named: number }> {
+  const rows = await sql<{ entry_id: string | null; name: string; named: number }[]>`
+    WITH got AS (
+      SELECT DISTINCT ON (m.user_id) m.user_id, e.id AS entry_id,
+             coalesce(nullif(e.full_name, ''), u.display_name) AS name
+      FROM gym_members m
+      JOIN gym_member_messages x
+        ON x.gym_id = m.gym_id AND x.user_id = m.user_id AND x.kind = ${GYM_GROUP_MESSAGE_KIND} AND x.occasion = ${messageId}
+      JOIN users u ON u.id = m.user_id AND u.status = 'active' AND u.deleted_at IS NULL
+      LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = coalesce(m.entry_id, m.removed_entry_id)
+      WHERE m.gym_id = ${gymId}
+      ORDER BY m.user_id, (coalesce(m.entry_id, m.removed_entry_id) IS NULL), m.joined_at DESC
+    )
+    SELECT entry_id, name, (count(*) OVER ())::int AS named FROM got ORDER BY name, user_id LIMIT ${limit}`;
+  return { people: rows.map((row) => ({ entryId: row.entry_id, name: row.name })), named: rows[0]?.named ?? 0 };
+}
+
+/** Removes every gym's messages sent at or before `before`, each with every person's copy
+ *  of it (the hourly job). Run twice it removes nothing more. */
+export async function forgetGroupMessages(sql: SqlOrTx, before: Date): Promise<{ messages: number; copies: number }> {
+  const rows = await sql<{ messages: number; copies: number }[]>`
+    WITH gone AS (
+      DELETE FROM gym_group_messages WHERE sent_at <= ${before} RETURNING id, gym_id
+    ), copies AS (
+      DELETE FROM gym_member_messages m USING gone
+      WHERE m.gym_id = gone.gym_id AND m.kind = ${GYM_GROUP_MESSAGE_KIND} AND m.occasion = gone.id::text
+      RETURNING m.id
+    )
+    SELECT (SELECT count(*) FROM gone)::int AS messages, (SELECT count(*) FROM copies)::int AS copies`;
+  return rows[0] ?? { messages: 0, copies: 0 };
 }
 
 // ── THE MEMBER'S OWN SWITCH ──

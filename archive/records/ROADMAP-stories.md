@@ -358,3 +358,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **20f-i, as it stood when it was built (merged 2026-10-10, PR #216):**
 
      - 20f-i. [ ] **Send message, from the Members list**: staff tick people (or filter and Select all), read in a box who will get it and who won't, write one message, and it lands in each person's Inbox in the app; three a day a gym, no links, the bad-words check, and a member's own switch under their Inbox.
+
+**20f-ii, as it stood when it was built (merged 2026-10-10, PR #217):**
+
+     - 20f-ii. [ ] **Sent messages**: a list on the console of the group messages a gym has sent: the words, who sent it, when, and to how many. Its plan says how long a sent message is kept (its words can name a member; 20f-i's review, L8).
