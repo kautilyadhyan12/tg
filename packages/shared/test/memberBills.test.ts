@@ -9,6 +9,8 @@ import {
   BILLS_OPEN_A_RUN,
   billCovers,
   billsToOpen,
+  countAfterPayment,
+  countAfterUndo,
   giveHeldMembership,
   memberBillState,
   memberPayTarget,
@@ -242,6 +244,57 @@ describe("which period a payment can be taken for", () => {
 
   it("is nothing where the bill of the first unpaid period is void", () => {
     expect(memberPayTarget(unpaid, 4999, "2026-01-15", [billOf(0, { status: "void" })])).toBeNull();
+  });
+
+  it("is only a bill already open for a past member, and no bill is opened for them", () => {
+    expect(memberPayTarget(unpaid, 4999, "2026-01-20", [], true)).toBeNull();
+    // The month they left owing is the first unpaid one: paying it counts, so the bill and
+    // the count agree if they are put back on the list.
+    expect(memberPayTarget(unpaid, 4999, "2026-01-20", [billOf(0)], true)).toEqual({ periodIndex: 0, leftMinor: 4999, dueOn: "2026-01-15", advances: true });
+  });
+});
+
+describe("the count of paid periods never disagrees with a settled bill", () => {
+  const target = (m: HeldMembership, today: string, past = false) => {
+    const found = memberPayTarget(m, 4999, today, [billOf(m.paidPeriods)], past);
+    if (found === null) throw new Error("nothing to pay");
+    return found;
+  };
+
+  it("moves on by one for a membership in use, and for a past member's that would be in use", () => {
+    const unpaid = given(monthly, "2026-01-15", false, "2026-01-15");
+    expect(countAfterPayment(unpaid, target(unpaid, "2026-01-16"), "2026-01-16")).toEqual({ ok: true, paidPeriods: 1 });
+    expect(countAfterPayment(unpaid, target(unpaid, "2026-01-16", true), "2026-01-16")).toEqual({ ok: true, paidPeriods: 1 });
+  });
+
+  it("counts the one payment of a fixed term or a pack that is over: a pack given a class back then reads Paid, not Payment due", () => {
+    const term = given(threeMonths, "2026-01-15", false, "2026-01-15");
+    // Over since 15 April, and paid in May.
+    const late = target(term, "2026-05-01");
+    expect(late.advances).toBe(true);
+    expect(countAfterPayment(term, late, "2026-05-01")).toEqual({ ok: true, paidPeriods: 1 });
+    const used = { ...given(tenPack, "2026-01-01", false, "2026-01-01"), classesLeft: 0 };
+    expect(countAfterPayment(used, target(used, "2026-01-10"), "2026-01-10")).toEqual({ ok: true, paidPeriods: 1 });
+  });
+
+  it("leaves a repeating membership that is over as it was: its last day stands on the count", () => {
+    const cancelled = moved(given(monthly, "2026-01-15", false, "2026-01-15"), { type: "cancel", when: "today" }, "2026-02-20");
+    const owed = target(cancelled, "2026-03-01");
+    expect(owed.advances).toBe(false);
+    expect(countAfterPayment(cancelled, owed, "2026-03-01")).toEqual({ ok: true, paidPeriods: null });
+  });
+
+  it("goes back with the payment taken back, for a fixed term that is over too", () => {
+    const paid = given(monthly, "2026-01-15", true, "2026-01-15");
+    expect(countAfterUndo(paid, true, "2026-01-16")).toEqual({ ok: true, paidPeriods: 0 });
+    expect(countAfterUndo(paid, false, "2026-01-16")).toEqual({ ok: true, paidPeriods: null });
+    const term = given(threeMonths, "2026-01-15", true, "2026-01-15");
+    const settled = billOf(0, { status: "paid", paidMinor: 4999 });
+    expect(memberUndoTarget(term, "2026-05-01", [settled], [{ id: "a", periodIndex: 0, seq: 1 }])).toEqual({ paymentId: "a", reopens: true, goesBack: true });
+    expect(countAfterUndo(term, true, "2026-05-01")).toEqual({ ok: true, paidPeriods: 0 });
+    // One set to stop keeps its count: nothing is taken back from under its last day.
+    const stopping = moved(paid, { type: "cancel", when: "period_end" }, "2026-01-20");
+    expect(countAfterUndo(stopping, true, "2026-01-21")).toEqual({ ok: false });
   });
 });
 

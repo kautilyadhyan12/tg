@@ -2,7 +2,7 @@
 //
 // Pure: the day is the gym's own, passed in. `memberBills.ts` has how this sits with a
 // membership's count of paid periods.
-import { addDays, heldMembershipView, periodIndex, periodStart, type HeldMembership } from "./heldMemberships.js";
+import { addDays, heldMembershipView, moveHeldMembership, periodIndex, periodStart, type HeldMembership } from "./heldMemberships.js";
 import { BILLS_OPEN_A_RUN, type MemberBillState, type MemberBillStatus } from "./memberBills.js";
 
 export interface BillToOpen {
@@ -82,7 +82,8 @@ export interface PayTarget {
   /** What is left to pay for that period. */
   leftMinor: number;
   dueOn: string;
-  /** Settling it moves the membership's count of paid periods on by one. */
+  /** Settling it moves the membership's count of paid periods on by one
+   *  (`countAfterPayment` says to what). */
   advances: boolean;
 }
 
@@ -91,7 +92,10 @@ export interface PayTarget {
  *  A membership in use is paid in order: the first period not paid, and only where the
  *  membership's own rule would let it be marked paid (so nothing is taken for one that
  *  is free, already paid, or set to stop). One that is over, or a past member's, takes
- *  payment only for a bill it was left owing, and its dates do not move. */
+ *  payment only for a bill it was left owing: no bill is opened for it. Its count of
+ *  paid periods still moves where that bill is the first unpaid period's, so the bill
+ *  and the count never disagree if the person is put back on the list or a pack runs
+ *  again; a repeating one that is over keeps its count, which its last day stands on. */
 export function memberPayTarget(
   m: HeldMembership,
   priceMinor: number,
@@ -104,7 +108,10 @@ export function memberPayTarget(
   if (past || view.status === "ended" || view.status === "cancelled") {
     const owed = bills.filter((b) => b.status === "open").sort((a, b) => a.periodIndex - b.periodIndex)[0];
     if (owed === undefined) return null;
-    return { periodIndex: owed.periodIndex, leftMinor: owed.amountMinor - owed.paidMinor, dueOn: owed.dueOn, advances: false };
+    const over = view.status === "ended" || view.status === "cancelled";
+    const first = owed.periodIndex === m.paidPeriods;
+    const advances = m.kind === "recurring" ? first && !over && view.can.markPaid !== null : first && m.paidPeriods === 0;
+    return { periodIndex: owed.periodIndex, leftMinor: owed.amountMinor - owed.paidMinor, dueOn: owed.dueOn, advances };
   }
   if (view.can.markPaid === null) return null;
   const index = m.paidPeriods;
@@ -115,6 +122,27 @@ export function memberPayTarget(
   }
   if (bill.status !== "open") return null;
   return { periodIndex: index, leftMinor: bill.amountMinor - bill.paidMinor, dueOn: bill.dueOn, advances: true };
+}
+
+/** The count of paid periods once a payment has settled `target`'s bill: the number to
+ *  write, null to leave it, or refused. It moves through the membership's own rule; a
+ *  membership of one period that is over has no date standing on the count, so its one
+ *  payment is counted as it is. */
+export function countAfterPayment(m: HeldMembership, target: PayTarget, today: string): { ok: true; paidPeriods: number | null } | { ok: false } {
+  if (!target.advances) return { ok: true, paidPeriods: null };
+  const move = moveHeldMembership(m, { type: "paid", paidPeriods: m.paidPeriods + 1 }, today);
+  if (move.ok && move.membership.paidPeriods === m.paidPeriods + 1) return { ok: true, paidPeriods: move.membership.paidPeriods };
+  if (m.kind !== "recurring" && m.paidPeriods === 0) return { ok: true, paidPeriods: 1 };
+  return { ok: false };
+}
+
+/** The same for a payment taken back, where `goesBack`. */
+export function countAfterUndo(m: HeldMembership, goesBack: boolean, today: string): { ok: true; paidPeriods: number | null } | { ok: false } {
+  if (!goesBack) return { ok: true, paidPeriods: null };
+  const move = moveHeldMembership(m, { type: "paid", paidPeriods: m.paidPeriods - 1 }, today);
+  if (move.ok && move.membership.paidPeriods === m.paidPeriods - 1) return { ok: true, paidPeriods: move.membership.paidPeriods };
+  if (m.kind !== "recurring" && m.paidPeriods === 1) return { ok: true, paidPeriods: 0 };
+  return { ok: false };
 }
 
 /** A payment as the rule below needs it; `seq` orders them, newest highest. */
@@ -137,8 +165,10 @@ export function memberUndoTarget(
   const bill = bills.find((b) => b.periodIndex === newest.periodIndex);
   if (bill === undefined || (bill.status !== "open" && bill.status !== "paid")) return null;
   if (bill.status === "open") return { paymentId: newest.id, reopens: false, goesBack: false };
-  // A settled bill: the period after the count was paid outside the membership's dates.
+  // A settled bill the count never took in: it is owed again and nothing else moves.
   if (newest.periodIndex >= m.paidPeriods) return { paymentId: newest.id, reopens: true, goesBack: false };
+  // A membership of one period: its count is whether its one bill is settled.
+  if (m.kind !== "recurring") return { paymentId: newest.id, reopens: true, goesBack: true };
   const view = heldMembershipView(m, today);
   if (newest.periodIndex === m.paidPeriods - 1 && view.can.undoPaid !== null) {
     return { paymentId: newest.id, reopens: true, goesBack: true };

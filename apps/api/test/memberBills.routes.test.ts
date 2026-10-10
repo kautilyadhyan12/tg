@@ -345,7 +345,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
   );
 
   it(
-    "a cancelled membership is never billed again, nor one frozen, set to stop, free, paid ahead, over, or a past member's; and a run twice opens one bill",
+    "a cancelled membership is never billed again, nor one frozen, set to stop, free, paid ahead, over by the clock alone, or a past member's; and a run twice opens one bill",
     async () => {
       const owner = await makeUser("run-owner");
       const org = await makeOrg(owner.cookies, "Mbl Run Gym");
@@ -354,6 +354,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       const gold = await addType(gymId, owner.cookies, monthly());
       const term = await addType(gymId, owner.cookies, oneMonth({ name: "Three months", termCount: 3, priceMinor: 12000 }));
       const free = await addType(gymId, owner.cookies, monthly({ name: "Staff", priceMinor: 0 }));
+      const week = await addType(gymId, owner.cookies, oneMonth({ name: "One week", termUnit: "week", priceMinor: 2000 }));
       const theirGold = await addType(nextDoor.org.id, owner.cookies, monthly());
       const at = (iso: string) => ({ sql, now: () => new Date(iso) });
       // Everything is given at noon on 15 January 2026: period 1 of a monthly starts 15 February.
@@ -379,6 +380,10 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       await add("Free", free, false);
       const ahead = await add("Ahead", gold, true);
       await add("Term", term, false);
+      // Given unpaid before bills were kept, and over since 21 January: the table still
+      // says active, so only the rule's own reading of the day keeps it from a bill.
+      const lapsed = await add("Lapsed", week, false);
+      await sql`DELETE FROM gym_member_bills WHERE gym_id = ${gymId} AND held_membership_id = ${lapsed.id}`;
       await add("NextDoor", theirGold, false, nextDoor.org.id);
 
       const on = at("2026-01-20T12:00:00Z");
@@ -400,7 +405,8 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
         }
         return out;
       };
-      const still = { Cancelled: [0], Stopping: [0], Frozen: [0], Gone: [0], Free: [], Term: [0], NextDoor: [0] };
+      const still = { Cancelled: [0], Stopping: [0], Frozen: [0], Gone: [0], Free: [], Term: [0], Lapsed: [], NextDoor: [0] };
+      expect((await rowsOf(gymId)).find((r) => r.id === lapsed.id)?.status).toBe("active");
       expect(await periods()).toEqual({ ...still, Running: [0], Ahead: [0, 1] });
 
       const log = { info: () => undefined, error: () => undefined };
@@ -440,6 +446,60 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
         [null, { bills: "2" }],
         [null, { bills: "24" }],
       ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a membership cancelled while the run waits for its gym is not billed: the run reads the gym again under its lock",
+    async () => {
+      const owner = await makeUser("race-owner");
+      const org = await makeOrg(owner.cookies, "Mbl Race Gym");
+      const gymId = org.org.id;
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const person = await addPerson(gymId, owner.cookies, "Olivia Brown");
+      const start = { sql, now: () => new Date("2026-01-15T12:00:00Z") };
+      await heldService.giveHeldMembership(start, owner.userId, gymId, person, { requestKey: nextKey(), typeId: gold, startsOn: "2026-01-15", paid: false });
+      const id = (await rowsOf(gymId))[0]?.id ?? "";
+      const log = { info: () => undefined, error: () => undefined };
+
+      // A cancel holds the gym's row, as every write to a membership does.
+      const other = postgres(url ?? "", { prepare: false, max: 1 });
+      let cancelNow: () => void = () => undefined;
+      const go = new Promise<void>((resolve) => {
+        cancelNow = resolve;
+      });
+      let held: () => void = () => undefined;
+      const holding = new Promise<void>((resolve) => {
+        held = resolve;
+      });
+      const cancel = other.begin(async (tx) => {
+        await tx`SELECT 1 FROM gyms WHERE id = ${gymId} FOR UPDATE`;
+        held();
+        await go;
+        await tx`UPDATE gym_held_memberships SET status = 'cancelled', cancelled_on = '2026-02-16' WHERE gym_id = ${gymId} AND id = ${id}`;
+      });
+      await holding;
+      // The run on 16 February sees the second month owed, then waits for the gym's row.
+      const run = openDueBills({ sql, log }, { now: new Date("2026-02-16T12:00:00Z"), gymIds: [gymId] });
+      let waiting = 0;
+      for (let i = 0; i < 200 && waiting === 0; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        const [row] = await sql<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock' AND query LIKE ${"%FROM gyms WHERE id = %FOR UPDATE%"} AND query NOT LIKE '%pg_stat_activity%'`;
+        waiting = row?.n ?? 0;
+      }
+      expect(waiting).toBe(1);
+      cancelNow();
+      await cancel;
+      await other.end({ timeout: 5 });
+
+      expect(await run).toEqual({ opened: 0, gyms: 0, failed: 0 });
+      expect((await billsOf(gymId)).map((b) => b.period_index)).toEqual([0]);
+      // The control: nobody cancels, and the same run opens the second month's bill.
+      await sql`UPDATE gym_held_memberships SET status = 'active', cancelled_on = NULL WHERE gym_id = ${gymId} AND id = ${id}`;
+      expect(await openDueBills({ sql, log }, { now: new Date("2026-02-16T12:00:00Z"), gymIds: [gymId] })).toEqual({ opened: 1, gyms: 1, failed: 0 });
     },
     TEST_TIMEOUT_MS,
   );
@@ -748,10 +808,23 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       expect(past).toMatchObject({ past: true, memberships: [{ billing: { pay: { periodIndex: 0 }, undo: null } }] });
       const settled = await pay(left, leftId);
       expect(settled.statusCode, settled.body).toBe(200);
-      expect((await rowsOf(gymId)).find((r) => r.id === leftId)?.paid_periods).toBe(0);
+      // The month they left owing was the first unpaid one: it counts, so the bill and the
+      // count agree. No bill is opened for a past member: the next period cannot be paid.
+      expect((await rowsOf(gymId)).find((r) => r.id === leftId)?.paid_periods).toBe(1);
+      expect(list(settled).memberships[0]?.billing?.pay).toBeNull();
+      expect((await pay(left, leftId, 1)).statusCode).toBe(409);
       const theirPayment = list(settled).memberships[0]?.billing?.bills[0]?.payments[0]?.id ?? "";
       const undoPast = await post(`${oneUrl(gymId, left, leftId, "payments")}/${theirPayment}/undo`, {}, owner.cookies);
       expect([undoPast.statusCode, errorOf(undoPast)]).toEqual([409, "past_member"]);
+
+      // Put back on the list after paying: Paid, never Payment due beside a paid bill.
+      const back = await addPerson(gymId, owner.cookies, "Noah Reed");
+      const backId = (await given(gymId, back, owner.cookies, { typeId: gold, startsOn: today, paid: false })).memberships[0]?.id ?? "";
+      expect((await del(entryUrl(gymId, back), owner.cookies)).statusCode).toBe(200);
+      expect((await pay(back, backId)).statusCode).toBe(200);
+      expect((await post(`${entryUrl(gymId, back)}/restore`, {}, owner.cookies)).statusCode).toBe(200);
+      const restored = list(await get(heldUrl(gymId, back), owner.cookies)).memberships[0];
+      expect(restored).toMatchObject({ view: { status: "active", payment: { state: "paid" } }, billing: { bills: [{ periodIndex: 0, state: "paid" }], pay: { periodIndex: 1 } } });
 
       // A merge: the kept record holds the membership, its bill and its payment.
       const twin = await addPerson(gymId, owner.cookies, "Olivia Browne");
@@ -760,8 +833,8 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
 
       // Deleted for good: the record's bills and payments go with it, and nobody else's.
       expect((await del(`/v1/orgs/${gymId}/member-list/former/${left}`, owner.cookies)).statusCode).toBe(200);
-      expect((await billsOf(gymId)).map((b) => b.held_membership_id)).toEqual([quitId]);
-      expect(await paymentsOf(gymId)).toHaveLength(1);
+      expect((await billsOf(gymId)).map((b) => b.held_membership_id).sort()).toEqual([quitId, backId].sort());
+      expect(await paymentsOf(gymId)).toHaveLength(2);
     },
     TEST_TIMEOUT_MS,
   );

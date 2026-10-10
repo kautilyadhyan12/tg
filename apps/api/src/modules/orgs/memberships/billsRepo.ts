@@ -9,6 +9,8 @@
 import type { Sql, TransactionSql } from "postgres";
 import {
   billsToOpen,
+  countAfterPayment,
+  countAfterUndo,
   memberPayTarget,
   memberUndoTarget,
   moveHeldMembership,
@@ -98,10 +100,10 @@ export async function recordPayment(
 
     // The count of paid periods moves with the payment that settles the bill, or not at all.
     let paidPeriods: number | null = null;
-    if (paid.status === "paid" && target.advances) {
-      const move = moveHeldMembership(row.membership, { type: "paid", paidPeriods: row.membership.paidPeriods + 1 }, input.today);
-      if (!move.ok || !move.changed) return { kind: "not_allowed" };
-      paidPeriods = move.membership.paidPeriods;
+    if (paid.status === "paid") {
+      const count = countAfterPayment(row.membership, target, input.today);
+      if (!count.ok) return { kind: "not_allowed" };
+      paidPeriods = count.paidPeriods;
     }
 
     const paymentId = await insertPayment(
@@ -172,12 +174,9 @@ export async function undoPayment(
     const target = memberUndoTarget(row.membership, input.today, bills, payments);
     if (target === null || target.paymentId !== input.paymentId) return { kind: "not_allowed" };
 
-    let paidPeriods: number | null = null;
-    if (target.goesBack) {
-      const move = moveHeldMembership(row.membership, { type: "paid", paidPeriods: row.membership.paidPeriods - 1 }, input.today);
-      if (!move.ok || !move.changed) return { kind: "not_allowed" };
-      paidPeriods = move.membership.paidPeriods;
-    }
+    const count = countAfterUndo(row.membership, target.goesBack, input.today);
+    if (!count.ok) return { kind: "not_allowed" };
+    const paidPeriods = count.paidPeriods;
 
     await tx`
       UPDATE gym_member_payments SET undone_at = ${input.now}, undone_by = ${input.actorUserId}
@@ -258,7 +257,7 @@ export async function saveOverdueDays(sql: Sql, input: { gymId: string; days: nu
 
 // ── The run that opens the bills that have fallen due ───────────────────────
 
-type Owing = ListHeldColumns & { gym_id: string; timezone: string; price_minor: number; currency: string; billed: number[] };
+type Owing = ListHeldColumns & { gym_id: string; timezone: string; price_minor: number; currency: string };
 
 /** The memberships that may be owed a bill: stored active, with a price, of a current
  *  record of a gym that is open, and either repeating and renewing or never paid. Which
@@ -268,9 +267,7 @@ const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => s
          (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.status,
          h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
          h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
-         h.gym_id, g.timezone, h.price_minor, h.currency,
-         ARRAY(SELECT b.period_index FROM gym_member_bills b
-               WHERE b.gym_id = h.gym_id AND b.held_membership_id = h.id) AS billed
+         h.gym_id, g.timezone, h.price_minor, h.currency
   FROM gym_held_memberships h
   JOIN gyms g ON g.id = h.gym_id AND g.status = 'active'
   JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
@@ -279,7 +276,28 @@ const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => s
     AND ((h.kind = 'recurring' AND h.renews) OR (h.kind <> 'recurring' AND h.paid_periods = 0))
     AND (${gymIds === null ? null : [...gymIds]}::uuid[] IS NULL OR h.gym_id = ANY(${gymIds === null ? null : [...gymIds]}::uuid[]))`;
 
-function owed(rows: readonly Owing[], now: Date): Map<string, NewBill[]> {
+/** The periods that already have an open bill, by membership: a plain read beside the one
+ *  above. Asked inside it, one membership at a time, the same answer took 3.8 s for 8,000
+ *  memberships on a table with no statistics yet (`tools/measure-member-bills-cost.ts`).
+ *  Only open bills are read: every period from a candidate's first unpaid one on has an
+ *  open bill or none, and the unique index is what keeps a period to one bill. */
+async function billedOpen(sql: Sql | TransactionSql, gymIds: readonly string[] | null): Promise<Map<string, Set<number>>> {
+  const ids = gymIds === null ? null : [...gymIds];
+  const rows = await sql<{ held_membership_id: string; period_index: number }[]>`
+    SELECT held_membership_id, period_index FROM gym_member_bills
+    WHERE status = 'open' AND (${ids}::uuid[] IS NULL OR gym_id = ANY(${ids}::uuid[]))`;
+  const have = new Map<string, Set<number>>();
+  for (const row of rows) {
+    const set = have.get(row.held_membership_id);
+    if (set === undefined) have.set(row.held_membership_id, new Set([row.period_index]));
+    else set.add(row.period_index);
+  }
+  return have;
+}
+
+const NONE: ReadonlySet<number> = new Set();
+
+function owed(rows: readonly Owing[], billed: ReadonlyMap<string, ReadonlySet<number>>, now: Date): Map<string, NewBill[]> {
   const byGym = new Map<string, NewBill[]>();
   const todayOf = new Map<string, string>();
   for (const row of rows) {
@@ -289,7 +307,7 @@ function owed(rows: readonly Owing[], now: Date): Map<string, NewBill[]> {
       todayOf.set(row.gym_id, today);
     }
     const membership: HeldMembership = listHeldMembership(row);
-    for (const due of billsToOpen(membership, today, new Set(row.billed))) {
+    for (const due of billsToOpen(membership, today, billed.get(row.id) ?? NONE)) {
       const list = byGym.get(row.gym_id) ?? [];
       list.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: row.price_minor, currency: row.currency, dueOn: due.dueOn });
       byGym.set(row.gym_id, list);
@@ -310,7 +328,7 @@ export interface OpenBillsDeps {
  *  logged and tried on the next run. `gymIds` is for tests on a shared database. */
 export async function openDueBills(deps: OpenBillsDeps, opts: { now?: Date; gymIds?: readonly string[] } = {}): Promise<{ opened: number; gyms: number; failed: number }> {
   const now = opts.now ?? new Date();
-  const first = owed(await owing(deps.sql, opts.gymIds ?? null), now);
+  const first = owed(await owing(deps.sql, opts.gymIds ?? null), await billedOpen(deps.sql, opts.gymIds ?? null), now);
   let opened = 0;
   let gyms = 0;
   let failed = 0;
@@ -318,7 +336,7 @@ export async function openDueBills(deps: OpenBillsDeps, opts: { now?: Date; gymI
     try {
       const made = await deps.sql.begin(async (tx) => {
         await lockGym(tx, gymId);
-        const due = owed(await owing(tx, [gymId]), now).get(gymId) ?? [];
+        const due = owed(await owing(tx, [gymId]), await billedOpen(tx, [gymId]), now).get(gymId) ?? [];
         const rows = await insertBills(tx, gymId, due, now);
         if (rows.length > 0) {
           await insertAudit(tx, {
