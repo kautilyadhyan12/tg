@@ -783,8 +783,8 @@ export default function MemberListPanel({
               </button>
             ) : null}
             {/* What the gym has sent (20f-ii), for staff who may send: `sentMessagesTo` is its
-                page, given only to them. */}
-            {current && picked === 0 && sentMessagesTo !== null ? (
+                page, given only to them. It stays with people ticked: it acts on nobody. */}
+            {current && sentMessagesTo !== null ? (
               <Link to={sentMessagesTo} data-testid="sent-messages" className="c-btn c-btn-s c-btn-lg">
                 <MessageSquare aria-hidden="true" className="w-4 h-4" />
                 Sent messages

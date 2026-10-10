@@ -356,15 +356,15 @@ describe('Sent messages, from Members', () => {
       </MemoryRouter>,
     );
 
-  it('the button opens the page; with people ticked it gives way to the bar', async () => {
+  it('the button opens the page, with people ticked too', async () => {
     drawIn({ sentMessagesTo: SENT });
     await screen.findByText('Ben Carter');
     const button = screen.getByTestId('sent-messages');
     expect(button.textContent).toBe('Sent messages');
     expect(button.getAttribute('href')).toBe(SENT);
+// It acts on nobody, so it stays with people ticked.
     fireEvent.click(tickOf('Ada Lovelace'));
-    expect(screen.queryByTestId('sent-messages')).toBeNull();
-    fireEvent.click(tickOf('Ada Lovelace'));
+    expect(screen.getByTestId('sent-messages').getAttribute('href')).toBe(SENT);
     fireEvent.click(screen.getByTestId('sent-messages'));
     expect(await screen.findByText('the sent messages page')).toBeTruthy();
   });

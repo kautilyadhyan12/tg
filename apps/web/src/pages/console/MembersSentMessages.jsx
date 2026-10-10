@@ -135,11 +135,11 @@ export default function MembersSentMessages() {
                   <p className="c-s15 c-t1 m-0 whitespace-pre-wrap break-words" data-testid="sent-message-words">
                     {one.body}
                   </p>
-                  <p className="c-s14 c-t2 m-0 flex flex-wrap gap-x-2 gap-y-1" data-testid="sent-message-facts">
+                  <p className="c-s14 c-t2 m-0 flex flex-col md:flex-row md:flex-wrap gap-x-2 gap-y-1" data-testid="sent-message-facts">
                     <span className="c-w6 c-t1 c-num">{sentToWords(one.people)}</span>
-                    <span aria-hidden="true">·</span>
+                    <span aria-hidden="true" className="hidden md:inline">·</span>
                     <span>{sentWhen(one.sentAt, org?.timezone, org?.clockFormat)}</span>
-                    <span aria-hidden="true">·</span>
+                    <span aria-hidden="true" className="hidden md:inline">·</span>
                     <span>{`Sent by ${one.sentByName ?? MEMBER_NOTE_NO_AUTHOR_WORDS.toLowerCase()}`}</span>
                   </p>
                 </li>
