@@ -350,3 +350,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **20f, as first written (split 2026-10-10 into 20f-i and 20f-ii):**
 
    - 20f. [ ] **Messages to a chosen group** (Kd, RULINGS 2026-10-08): staff pick people with the Members list's filters and tags (5d), read in a box who will get it and who won't, write one message, and it lands in each person's inbox in the app (20a); no SMS and no email (RULINGS 2026-09-22). Held by §15.3's filter, limited a day, and a person can switch a gym's group messages off. After 20a and 5d.
+
+**20f-i, as it stood when it was built (merged 2026-10-10, PR #216):**
+
+     - 20f-i. [ ] **Send message, from the Members list**: staff tick people (or filter and Select all), read in a box who will get it and who won't, write one message, and it lands in each person's Inbox in the app; three a day a gym, no links, the bad-words check, and a member's own switch under their Inbox.

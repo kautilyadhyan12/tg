@@ -701,6 +701,8 @@ d("a message to a chosen group: who gets it, who may send it, and how often (rea
     expect((await inbox(gym, ada.person)).messages.map((m) => m.body)).toEqual([`Well done ${lifter} ${hindi}`]);
     // 500 emoji are 500 characters, though twice that in the way JavaScript counts.
     const arm = String.fromCodePoint(0x1f4aa);
+    // A minute on: two messages of one instant come back in the order of their ids.
+    clock = new Date(NOON.getTime() + 60_000);
     await send(gym, [ada.entryId], arm.repeat(500), 1);
     // The inbox still opens with it in, and with the message before it.
     expect((await inbox(gym, ada.person)).messages.map((m) => m.body)).toEqual([arm.repeat(500), `Well done ${lifter} ${hindi}`]);
