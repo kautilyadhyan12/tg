@@ -70,6 +70,9 @@ export function nobodyRemovedNote(report, words) {
  *  there is none; `note` is the small line under a number; `how` is how it is worked out. */
 export function memberTiles(report, words) {
   const month = monthLong(report.thisMonth.month);
+  // The month before, whole, beside this month's so far. Not an arrow: ten days against thirty would mislead.
+  const before = report.months.length >= 2 ? report.months[report.months.length - 2] : null;
+  const soFar = (n) => (before === null ? `${month}, so far` : `${month}, so far · ${monthName(before.month)}: ${count(n(before))}`);
   const churn = shareTile(report.churn, report);
   const retention = shareTile(report.retention, report);
   const over = report.churnMonths.length > 0 ? monthList(report.churnMonths) : 'the last 3 full months';
@@ -98,7 +101,7 @@ export function memberTiles(report, words) {
       label: 'New this month',
       value: count(report.thisMonth.joined),
       line: null,
-      note: `${month}, so far`,
+      note: soFar((m) => m.joined),
       how: `${words.peopleCap} whose join date is in ${month}. Where your list gave no join date, or one later than the day they were added here, it is the day they were added.`,
     },
     {
@@ -106,7 +109,7 @@ export function memberTiles(report, words) {
       label: 'Left this month',
       value: report.everLeft ? count(report.thisMonth.left) : null,
       line: report.everLeft ? null : NOBODY_REMOVED,
-      note: report.everLeft ? `${month}, so far` : null,
+      note: report.everLeft ? soFar((m) => m.left) : null,
       how: `${words.peopleCap} removed from your ${words.person} list in ${month}. Someone you removed and later put back counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
     },
     {
@@ -156,6 +159,8 @@ export function leadRows(report) {
     leads: count(s.leads),
     joined: count(s.joined),
     share: percentText(s.percent),
+    percent: s.percent,
+    text: `${count(s.joined)} of ${count(s.leads)} joined`,
   }));
 }
 
@@ -207,4 +212,48 @@ export function saveCsv(text, filename) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
+// THE PICTURES. Each is drawn from the same answer as the numbers beside it.
+
+/** Members over the months shown: how many were on the list as each month began, then today. */
+export function trendPoints(report, words) {
+  const said = (n) => (n === 1 ? `1 ${words.person}` : `${count(n)} ${words.people}`);
+  return [
+    ...report.months.map((m) => ({ key: m.month, label: `1 ${monthShort(m.month)}`, value: m.activeAtStart, text: said(m.activeAtStart) })),
+    { key: 'today', label: `Today, ${dayText(report.today)}`, value: report.activeNow, text: said(report.activeNow) },
+  ];
+}
+
+/** The line through those points in a box `width` by `height`, from zero at the bottom. */
+export function trendShape(points, width, height) {
+  const top = Math.max(1, ...points.map((p) => p.value));
+  const step = points.length > 1 ? width / (points.length - 1) : 0;
+  const xy = points.map((p, i) => ({ x: Math.round(i * step * 10) / 10, y: Math.round((height - (p.value / top) * height) * 10) / 10 }));
+  const line = xy.map((p, i) => `${i === 0 ? 'M' : 'L'}${String(p.x)} ${String(p.y)}`).join(' ');
+  return { xy, line, area: `${line} L${String(width)} ${String(height)} L0 ${String(height)} Z`, top };
+}
+
+/** A bar for each month: New upwards and Left downwards, as a share of the tallest bar. */
+export function monthBars(report) {
+  const top = Math.max(1, ...report.months.flatMap((m) => [m.joined, report.everLeft ? m.left : 0]));
+  return report.months.map((m) => {
+    const title = m.month === report.thisMonth.month ? `${monthLong(m.month)} (so far)` : monthLong(m.month);
+    return {
+      key: m.month,
+      label: monthName(m.month).slice(0, 3),
+      title,
+      joined: m.joined,
+      left: report.everLeft ? m.left : null,
+      up: (m.joined / top) * 100,
+      down: report.everLeft ? (m.left / top) * 100 : 0,
+      text: report.everLeft ? `${title}: ${count(m.joined)} new, ${count(m.left)} left` : `${title}: ${count(m.joined)} new`,
+    };
+  });
+}
+
+/** Stayed and left as two parts of one bar; null without a churn figure. */
+export function staySplit(report) {
+  if (report.churn.state !== 'ok' || report.retention.state !== 'ok') return null;
+  return { stayed: report.retention.percent, left: report.churn.percent };
 }

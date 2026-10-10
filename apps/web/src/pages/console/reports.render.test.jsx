@@ -91,11 +91,11 @@ describe('the members figures', () => {
     expect(svc.members).toHaveBeenCalledTimes(1);
     expect(svc.members).toHaveBeenCalledWith('g1');
     expect(['active', 'new', 'left', 'churn', 'retention', 'stay'].map((k) => tile(k).textContent)).toEqual([
-      'Members now11',
-      'New this month1October 2026, so far',
-      'Left this month1October 2026, so far',
+      'Members now11Members on your list, month by month1 Jun 2026Today',
+      'New this month1October 2026, so far · September: 0',
+      'Left this month1October 2026, so far · September: 1',
       'Churn5.3%a month, Jul to Sep 2026',
-      'Retention94.7%a month, Jul to Sep 2026',
+      'Retention94.7%a month, Jul to Sep 202694.7% stayed5.3% left',
       'Average stay11 months4 people left in the last 12 months',
     ]);
     expect(screen.getByText('These figures come from your member list. Someone was last added or removed on 3 Oct 2026.')).toBeTruthy();
@@ -108,10 +108,9 @@ describe('the members figures', () => {
       ['Jun 2026', '10', '3', '0', '–'],
     ]);
     expect(screen.getByTestId('leads-report').textContent).toContain('50%2 of 4 leads joined');
-    expect(tableRows('Leads by where they heard of you')).toEqual([
-      ['Where they heard of you', 'Leads', 'Joined', 'Share'],
-      ['Walked in', '3', '1', '33.3%'],
-      ['A friend', '1', '1', '100%'],
+    expect([...screen.getByTestId('lead-bars').querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      'Walked in1 of 3 joined · 33.3%',
+      'A friend1 of 1 joined · 100%',
     ]);
     expect(screen.queryByTestId('nobody-removed-note')).toBeNull();
   });
@@ -124,7 +123,10 @@ describe('the members figures', () => {
       expect(tile(key).textContent, key).toContain('Nobody has been removed from your member list yet.');
       expect(tile(key).textContent, key).not.toMatch(/\d/);
     }
-    expect(tile('active').textContent).toBe('Members now11');
+    expect(tile('active').textContent).toContain('Members now11');
+    // No Left bars and no stayed-and-left bar for a gym that has removed nobody.
+    expect(screen.queryByTestId('stay-bar')).toBeNull();
+    expect(screen.getByTestId('month-bars').textContent).toBe('NewJunJulAugSepOct');
     expect(screen.getByTestId('nobody-removed-note').textContent).toContain('count members you remove from your list or mark as left in an import');
     expect(tableRows('Members, month by month')[1]).toEqual(['Oct 2026 (so far)', '11', '1', '–', '–']);
   });
@@ -137,7 +139,8 @@ describe('the members figures', () => {
       expect(tile(key).textContent, key).toContain('Not enough data yet. This needs 3 full months of your member list here; you have 1 so far.');
       expect(tile(key).textContent, key).not.toContain('%');
     }
-    expect(tile('left').textContent).toBe('Left this month1October 2026, so far');
+    expect(tile('left').textContent).toBe('Left this month1October 2026, so far · September: 1');
+    expect(screen.queryByTestId('stay-bar')).toBeNull();
   });
 
   it('each figure says how it is worked out when its button is pressed, and not before', async () => {
@@ -152,12 +155,30 @@ describe('the members figures', () => {
       'Of the members on your list at the start of July, August and September, the share who left during that month, the three months taken together.',
     );
     // Only that one opened.
-    expect(tile('retention').textContent).toBe('Retention94.7%a month, Jul to Sep 2026');
+    expect(tile('retention').textContent).toBe('Retention94.7%a month, Jul to Sep 202694.7% stayed5.3% left');
     fireEvent.click(button);
     expect(tile('churn').textContent).toBe('Churn5.3%a month, Jul to Sep 2026');
     for (const label of ['Members now', 'New this month', 'Left this month', 'Retention', 'Average stay', 'leads that became members']) {
       expect(screen.getByRole('button', { name: `How ${label} is worked out` })).toBeTruthy();
     }
+  });
+
+  it('the pictures say the number under the pointer, and their parts in words', async () => {
+    open();
+    await screen.findByTestId('tile-active');
+    const trend = screen.getByTestId('members-trend');
+    expect(within(trend).getByRole('img').getAttribute('aria-label')).toBe('Members on your list: 10 members on 1 Jun 2026, 11 members today');
+    const strips = trend.querySelectorAll('.flex-1');
+    expect(strips).toHaveLength(6);
+    fireEvent.mouseEnter(strips[2]);
+    expect(screen.getByTestId('members-trend-said').textContent).toBe('1 Aug 2026: 13 members');
+    fireEvent.mouseEnter(strips[5]);
+    expect(screen.getByTestId('members-trend-said').textContent).toBe('Today, 10 Oct 2026: 11 members');
+    const bars = screen.getByTestId('month-bars');
+    expect(bars.textContent).toBe('NewLeftJunJulAugSepOct');
+    fireEvent.mouseEnter(bars.querySelector('[title^="July 2026"]'));
+    expect(screen.getByTestId('month-bars-said').textContent).toBe('July 2026: 1 new, 1 left');
+    expect(within(screen.getByTestId('stay-bar')).getByRole('img').getAttribute('aria-label')).toBe('94.7% stayed, 5.3% left');
   });
 
   it('Download CSV saves the months under a dated name', async () => {
@@ -230,7 +251,7 @@ describe('who sees it, and when it cannot be read', () => {
   it("a studio reads its own word for its people", async () => {
     open({ ...ORG, orgType: 'studio' });
     await screen.findByTestId('tile-active');
-    expect(tile('active').textContent).toBe('Clients now11');
+    expect(tile('active').textContent).toContain('Clients now11Clients on your list');
     expect(screen.getByRole('heading', { name: 'Leads that became clients' })).toBeTruthy();
   });
 });

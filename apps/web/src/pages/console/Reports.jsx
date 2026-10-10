@@ -7,6 +7,7 @@ import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleS
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
+import { LeadBars, MembersTrend, MonthBars, StayBar } from './ReportCharts';
 import {
   LEADS_HOW,
   canReadReports,
@@ -53,10 +54,10 @@ function useHow(label, text) {
   };
 }
 
-function Tile({ tile }) {
+function Tile({ tile, className = '', children = null }) {
   const how = useHow(tile.label, tile.how);
   return (
-    <section className="c-card p-4 md:p-5 flex flex-col gap-2" aria-label={tile.label} data-testid={`tile-${tile.key}`}>
+    <section className={`c-card p-4 md:p-5 flex flex-col gap-2 ${className}`} aria-label={tile.label} data-testid={`tile-${tile.key}`}>
       <div className="flex items-center justify-between gap-2">
         <h3 className="c-eyebrow">{tile.label}</h3>
         {how.button}
@@ -64,6 +65,7 @@ function Tile({ tile }) {
       {tile.value !== null ? <p className="c-big-sm c-t1">{tile.value}</p> : <p className="c-s14 c-t2">{tile.line}</p>}
       {tile.note !== null ? <p className="c-s13 c-t3">{tile.note}</p> : null}
       {how.line}
+      {children}
     </section>
   );
 }
@@ -139,6 +141,7 @@ function MembersReport({ report, org, orgSlug }) {
   const words = orgWords(org.orgType);
   const privileges = viewerPrivileges(org);
   const tiles = memberTiles(report, words);
+  const tile = (key) => tiles.find((t) => t.key === key);
   const note = nobodyRemovedNote(report, words);
   const months = monthRows(report);
   const leads = leadRows(report);
@@ -162,9 +165,16 @@ function MembersReport({ report, org, orgSlug }) {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-              {tiles.map((tile) => (
-                <Tile key={tile.key} tile={tile} />
-              ))}
+              <Tile tile={tile('active')} className="sm:col-span-2 lg:row-span-2 justify-between">
+                <MembersTrend report={report} words={words} />
+              </Tile>
+              <Tile tile={tile('new')} />
+              <Tile tile={tile('left')} />
+              <Tile tile={tile('retention')}>
+                <StayBar report={report} />
+              </Tile>
+              <Tile tile={tile('churn')} />
+              <Tile tile={tile('stay')} />
             </div>
             {note !== null ? (
               <p className="c-card p-4 md:p-5 c-s14 c-t2" data-testid="nobody-removed-note">
@@ -176,6 +186,7 @@ function MembersReport({ report, org, orgSlug }) {
                 <h3 className="c-h3">Month by month</h3>
                 <CsvButton name={csvName(`${words.people}-report`, report)} text={membersCsv(report, words)} />
               </div>
+              <MonthBars report={report} />
               <CountTable
                 caption={`${words.peopleCap}, month by month`}
                 heads={['Month', `${words.peopleCap} at start`, 'New', 'Left', 'Churn']}
@@ -209,12 +220,7 @@ function MembersReport({ report, org, orgSlug }) {
               </div>
               <CsvButton name={csvName('leads-report', report)} text={leadsCsv(report)} />
             </div>
-            <CountTable
-              caption="Leads by where they heard of you"
-              heads={['Where they heard of you', 'Leads', 'Joined', 'Share']}
-              rows={leads}
-              cells={['source', 'leads', 'joined', 'share']}
-            />
+            <LeadBars rows={leads} />
           </section>
         )}
       </section>

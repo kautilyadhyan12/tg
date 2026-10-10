@@ -14,8 +14,12 @@ import {
   monthLong,
   monthRows,
   monthShort,
+  monthBars,
   nobodyRemovedNote,
+  staySplit,
   stayText,
+  trendPoints,
+  trendShape,
 } from './reportsView';
 
 const GYM = orgWords('gym');
@@ -80,8 +84,8 @@ describe('the tiles', () => {
     const tiles = memberTiles(r, GYM);
     expect(tiles.map((t) => [t.label, t.value, t.note])).toEqual([
       ['Members now', '1,234', null],
-      ['New this month', '1', 'October 2026, so far'],
-      ['Left this month', '1', 'October 2026, so far'],
+      ['New this month', '1', 'October 2026, so far · September: 0'],
+      ['Left this month', '1', 'October 2026, so far · September: 1'],
       ['Churn', '5.3%', 'a month, Jul to Sep 2026'],
       ['Retention', '94.7%', 'a month, Jul to Sep 2026'],
       ['Average stay', '11 months', '4 people left in the last 12 months'],
@@ -157,8 +161,8 @@ describe('the tables and their CSV', () => {
     const r = report();
     expect(leadsHeadline(r)).toEqual({ value: '50%', note: '2 of 4 leads joined' });
     expect(leadRows(r)).toEqual([
-      { key: 'walk_in', source: 'Walked in', leads: '3', joined: '1', share: '33.3%' },
-      { key: 'friend', source: 'A friend', leads: '1', joined: '1', share: '100%' },
+      { key: 'walk_in', source: 'Walked in', leads: '3', joined: '1', share: '33.3%', percent: 33.3, text: '1 of 3 joined' },
+      { key: 'friend', source: 'A friend', leads: '1', joined: '1', share: '100%', percent: 100, text: '1 of 1 joined' },
     ]);
     expect(leadsCsv(r)).toBe(
       ['"Where they heard of you","Leads","Joined","Share %"', '"Walked in","3","1","33.3"', '"A friend","1","1","100"', '"All leads","4","2","50"', ''].join('\r\n'),
@@ -168,5 +172,46 @@ describe('the tables and their CSV', () => {
   it('have no leads headline with no leads', () => {
     expect(leadsHeadline(report({ leads: [] }))).toBeNull();
     expect(leadsHeadline(report({ leads: [{ source: 'other', leads: 1, joined: 0 }] }))).toEqual({ value: '0%', note: '0 of 1 lead joined' });
+  });
+});
+
+describe('the pictures are the same numbers', () => {
+  it('the line is the list as each month began, then today, drawn from zero', () => {
+    const points = trendPoints(report(), GYM);
+    expect(points.map((p) => [p.label, p.value, p.text])).toEqual([
+      ['1 Jun 2026', 10, '10 members'],
+      ['1 Jul 2026', 13, '13 members'],
+      ['1 Aug 2026', 13, '13 members'],
+      ['1 Sep 2026', 12, '12 members'],
+      ['1 Oct 2026', 11, '11 members'],
+      ['Today, 10 Oct 2026', 1234, '1,234 members'],
+    ]);
+    const shape = trendShape([{ value: 0 }, { value: 5 }, { value: 10 }], 200, 100);
+    expect(shape.xy).toEqual([{ x: 0, y: 100 }, { x: 100, y: 50 }, { x: 200, y: 0 }]);
+    expect(shape.line).toBe('M0 100 L100 50 L200 0');
+    // Nobody at all: a flat line on the floor, never a division by nothing.
+    expect(trendShape([{ value: 0 }, { value: 0 }], 200, 100).xy).toEqual([{ x: 0, y: 100 }, { x: 200, y: 100 }]);
+    expect(trendPoints(report({ activeNow: 1 }), STUDIO).at(-1).text).toBe('1 client');
+  });
+
+  it('the month bars share one scale, and have no Left for a gym that removed nobody', () => {
+    const bars = monthBars(report());
+    expect(bars.map((b) => [b.label, b.joined, b.left, Math.round(b.up), Math.round(b.down)])).toEqual([
+      ['Jun', 3, 0, 100, 0],
+      ['Jul', 1, 1, 33, 33],
+      ['Aug', 0, 1, 0, 33],
+      ['Sep', 0, 1, 0, 33],
+      ['Oct', 1, 1, 33, 33],
+    ]);
+    expect(bars.at(-1).text).toBe('October 2026 (so far): 1 new, 1 left');
+    const none = monthBars(report({ everLeft: false }));
+    expect(none.every((b) => b.left === null && b.down === 0)).toBe(true);
+    expect(none[0].text).toBe('June 2026: 3 new');
+  });
+
+  it('stayed and left are drawn only when there is a churn figure', () => {
+    expect(staySplit(report())).toEqual({ stayed: 94.7, left: 5.3 });
+    expect(staySplit(report({ everLeft: false }))).toBeNull();
+    expect(staySplit(report({ firstListedOn: '2026-08-15' }))).toBeNull();
   });
 });
