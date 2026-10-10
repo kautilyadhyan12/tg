@@ -14,7 +14,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
-import { getMembersReport, type ReportsDeps } from "../src/modules/orgs/reports/service.js";
+import { getMembersReport, requireReportsReader, type ReportsDeps } from "../src/modules/orgs/reports/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -97,7 +97,7 @@ try {
 
   const deps: ReportsDeps = { sql, now: () => now };
   const read = async (gym: { gymId: string; owner: string }, expectActive: number): Promise<number> => {
-    const { report } = await getMembersReport(deps, gym.owner, gym.gymId);
+    const { report } = await getMembersReport(deps, gym.gymId, await requireReportsReader(deps, gym.owner, gym.gymId));
     if (report.activeNow !== expectActive) throw new Error(`expected ${String(expectActive)} on the list, read ${String(report.activeNow)}`);
     return JSON.stringify(report).length;
   };

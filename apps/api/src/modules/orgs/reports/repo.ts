@@ -21,8 +21,10 @@ export type MemberCounts = z.infer<typeof countsRowSchema>;
  *
  *  A person starts on the join date the gym gave, when it is earlier than the day they
  *  went on the list, and otherwise on that day; they leave on the day they came off. A
- *  month's "at its start" is everybody who had started before its first day and had not
- *  left before it. */
+ *  month's "at its start" is everybody who had started before its first day, had not left
+ *  before it, and was on the list before the month ended: a list imported in September
+ *  with last year's join dates fills no month before September, when nobody on it could
+ *  have been seen to leave. */
 export async function readMemberCounts(sql: Sql, gymId: string, timezone: string, now: Date): Promise<MemberCounts> {
   const rows = await sql<Record<string, unknown>[]>`
     WITH clock AS (
@@ -43,10 +45,12 @@ export async function readMemberCounts(sql: Sql, gymId: string, timezone: string
     ),
     by_month AS (
       SELECT m.first_day,
-        (count(p.started) FILTER (WHERE p.started < m.first_day AND (p.left_on IS NULL OR p.left_on >= m.first_day)))::int AS active_at_start,
+        (count(p.started) FILTER (WHERE p.started < m.first_day AND p.listed_on < m.next_first
+                                    AND (p.left_on IS NULL OR p.left_on >= m.first_day)))::int AS active_at_start,
         (count(p.started) FILTER (WHERE p.started >= m.first_day AND p.started < m.next_first))::int AS joined,
         (count(p.started) FILTER (WHERE p.left_on >= m.first_day AND p.left_on < m.next_first))::int AS left_count,
-        (count(p.started) FILTER (WHERE p.started < m.first_day AND p.left_on >= m.first_day AND p.left_on < m.next_first))::int AS left_of_start
+        (count(p.started) FILTER (WHERE p.started < m.first_day AND p.listed_on < m.next_first
+                                    AND p.left_on >= m.first_day AND p.left_on < m.next_first))::int AS left_of_start
       FROM months m
       LEFT JOIN people p ON true
       GROUP BY m.first_day

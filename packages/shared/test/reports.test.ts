@@ -194,3 +194,30 @@ describe("leads that became members", () => {
     expect(report({ leads: [{ source: "other", leads: 0, joined: 0 }] }).leads.sources).toEqual([]);
   });
 });
+
+describe("the month the list began", () => {
+  it("has no New, and no month before the list was kept from its first day has an 'at start'", () => {
+    const r = report({
+      firstListedOn: "2026-07-20",
+      months: monthsTo("2026-10-10", {}, { activeAtStart: 7, joined: 200, left: 1 }),
+    });
+    expect(r.months.map((m) => [m.month, m.activeAtStart, m.joined])).toEqual([
+      ["2026-07", null, null],
+      ["2026-08", 7, 200],
+      ["2026-09", 7, 200],
+      ["2026-10", 7, 200],
+    ]);
+    expect(r.thisMonth.joined).toBe(200);
+  });
+
+  it("a list begun on the 1st has its 'at start', and still no New that month", () => {
+    const r = report({ firstListedOn: "2026-08-01", months: monthsTo("2026-10-10", {}, { activeAtStart: 0, joined: 9 }) });
+    expect(r.months[0]).toMatchObject({ month: "2026-08", activeAtStart: 0, joined: null, full: true });
+  });
+
+  it("this month's New is not given when the list began this month", () => {
+    const r = report({ firstListedOn: "2026-10-08", months: monthsTo("2026-10-10", { "2026-10": { joined: 200 } }) });
+    expect(r.thisMonth).toEqual({ month: "2026-10", joined: null, left: 0 });
+    expect(r.months).toEqual([{ month: "2026-10", full: false, activeAtStart: null, joined: null, left: 0, churnPercent: null }]);
+  });
+});

@@ -4411,7 +4411,8 @@ over monthly churn). A gym that keeps its billing in other software has no money
 report and is told why. A figure with too little behind it — under three full months
 for churn and lifetime value — says "not enough data yet", never a made-up number
 (RULINGS 2026-07-15). Worked out when the page opens from indexed rows or §3.2's
-nightly rollups, the cost measured at 2,100 members with a bystander beside it.
+nightly rollups, the cost measured at the biggest size sold (2,000 on the list since
+2026-09-24, with 6,000 former records, beside 19 gyms of 200; `tools/measure-reports-cost.ts`).
 
 **Built by 21a-i (2026-10-10): the page and the members figures.** `reports.read` is a
 tick of its own (owner and manager; the owner can give it to a trainer), and Reports has
@@ -4420,14 +4421,17 @@ earlier than the day they went on the list, and otherwise on that day; they **le
 the day they are removed from the list (a membership that runs out removes nobody: Kd,
 RULINGS 2026-10-10). Somebody removed and put back counts as there the whole time; a
 record deleted for good is not counted. **Churn** is the people on the list as a month
-began who left during it, over the newest three full months taken together; retention is
+began who left during it, over the newest three full months taken together (a person
+counts at a month's start only if the list held them before that month ended, so a late
+import fills no earlier month); retention is
 the rest of 100; the **average stay** is over those who left in the twelve months shown.
 A full month is one the list was kept for from its first day. Before three of them the
 three figures read "Not enough data yet", and while nobody has ever been removed Left and
 the three read "Nobody has been removed from your member list yet", never a zero: a gym
 that uses only part of the app is told what feeds a figure, with a button to the place
-(RULINGS 2026-10-10). **Leads that became members**: leads marked Joined over all leads,
-by where they heard of the gym. Each table downloads as a CSV of counts, never a name.
+(RULINGS 2026-10-10). The month the list began shows no New (its first people are not new members) and no
+"at start". **Leads that became members**: leads marked Joined over all leads, by where
+they heard of the gym; until one lead is marked Joined the shares are a sentence. Each table downloads as a CSV of counts, never a name.
 Worked out when the page opens, in one statement over the gym's list. Attendance is 21a-ii.
 
 ### 16.6 Cards

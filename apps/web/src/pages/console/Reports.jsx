@@ -21,6 +21,7 @@ import {
   monthRows,
   nobodyRemovedNote,
   saveCsv,
+  trendPoints,
 } from './reportsView';
 
 // REPORTS (spec Part 3 §16.5; ROADMAP 21a-i): the gym's figures about its members and its
@@ -142,6 +143,8 @@ function MembersReport({ report, org, orgSlug }) {
   const privileges = viewerPrivileges(org);
   const tiles = memberTiles(report, words);
   const tile = (key) => tiles.find((t) => t.key === key);
+  // The wide box is for the line; without one the tile is a tile like the rest.
+  const hasTrend = trendPoints(report, words).length >= 2;
   const note = nobodyRemovedNote(report, words);
   const months = monthRows(report);
   const leads = leadRows(report);
@@ -165,7 +168,7 @@ function MembersReport({ report, org, orgSlug }) {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-              <Tile tile={tile('active')} className="sm:col-span-2 lg:row-span-2 justify-between">
+              <Tile tile={tile('active')} className={hasTrend ? 'sm:col-span-2 lg:row-span-2 justify-between' : ''}>
                 <MembersTrend report={report} words={words} />
               </Tile>
               <Tile tile={tile('new')} />
@@ -215,7 +218,7 @@ function MembersReport({ report, org, orgSlug }) {
           <section className="c-card overflow-hidden" aria-label="Leads by where they heard of you" data-testid="leads-report">
             <div className="px-4 md:px-5 pt-4 pb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex flex-col gap-1">
-                <p className="c-big-sm c-t1">{headline.value}</p>
+                {headline.value !== null ? <p className="c-big-sm c-t1">{headline.value}</p> : <p className="c-s14 c-t2">{headline.line}</p>}
                 <p className="c-s13 c-t3">{headline.note}</p>
               </div>
               <CsvButton name={csvName('leads-report', report)} text={leadsCsv(report)} />

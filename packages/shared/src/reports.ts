@@ -77,7 +77,8 @@ export const membersReportSchema = z
     everLeft: z.boolean(),
     /** Full months the list has been kept, and whether that is enough for churn. */
     fullMonths: countSchema,
-    thisMonth: z.object({ month: monthSchema, joined: countSchema, left: countSchema }).strict(),
+    /** `joined` is null in the month the list began: its first people are not new members. */
+    thisMonth: z.object({ month: monthSchema, joined: countSchema.nullable(), left: countSchema }).strict(),
     /** The full months churn was worked out over, oldest first; empty without a figure. */
     churnMonths: z.array(monthSchema).max(REPORT_CHURN_MONTHS),
     churn: shareFigureSchema,
@@ -90,8 +91,10 @@ export const membersReportSchema = z
             month: monthSchema,
             /** A whole month the list was kept for; the month in progress is not one. */
             full: z.boolean(),
-            activeAtStart: countSchema,
-            joined: countSchema,
+            /** Null for a month that began before the list did. */
+            activeAtStart: countSchema.nullable(),
+            /** Null in the month the list began. */
+            joined: countSchema.nullable(),
             left: countSchema,
             /** Null for a month that is not full, with nobody at its start, or before there is enough to say. */
             churnPercent: percentSchema.nullable(),
@@ -196,7 +199,7 @@ export function membersReportFrom(facts: MembersReportFacts): MembersReport {
     activeNow: facts.activeNow,
     everLeft: facts.everLeft,
     fullMonths,
-    thisMonth: { month: thisMonth, joined: current?.joined ?? 0, left: current?.left ?? 0 },
+    thisMonth: { month: thisMonth, joined: thisMonth === firstMonth ? null : (current?.joined ?? 0), left: current?.left ?? 0 },
     churnMonths: churn.state === "ok" ? churnOver.map((m) => m.month) : [],
     churn,
     retention,
@@ -206,8 +209,9 @@ export function membersReportFrom(facts: MembersReportFacts): MembersReport {
       return {
         month: m.month,
         full,
-        activeAtStart: m.activeAtStart,
-        joined: m.joined,
+        activeAtStart: firstFull !== null && m.month >= firstFull ? m.activeAtStart : null,
+        // Whoever a gym puts on its list first has been with it for years, whatever the file says.
+        joined: m.month === firstMonth ? null : m.joined,
         left: m.left,
         churnPercent: full && enough && facts.everLeft && m.activeAtStart > 0 ? percentOf(m.leftOfStart, m.activeAtStart) : null,
       };

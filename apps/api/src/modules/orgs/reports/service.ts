@@ -10,8 +10,14 @@ export interface ReportsDeps {
   now: () => Date;
 }
 
-export async function getMembersReport(deps: ReportsDeps, userId: string, gymId: string): Promise<MembersReportResponse> {
+/** Whoever may read this gym's reports, with the gym's time zone; anybody else is refused. */
+export async function requireReportsReader(deps: ReportsDeps, userId: string, gymId: string): Promise<{ timezone: string }> {
   const { org } = await requirePrivilege(deps, gymId, userId, "reports.read");
+  return { timezone: org.timezone };
+}
+
+/** The members figures for a gym whose reader has been checked. */
+export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { timezone: string }): Promise<MembersReportResponse> {
   const counts = await repo.readMemberCounts(deps.sql, gymId, org.timezone, deps.now());
   const leadRows = await repo.readLeadCounts(deps.sql, gymId);
   const leads: { source: LeadSource; leads: number; joined: number }[] = [];

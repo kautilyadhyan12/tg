@@ -216,7 +216,8 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
           // 71 + 20 + 623 + 624 days between the four who left.
           averageStay: { state: "ok", days: 335, leavers: 4 },
           months: [
-            { month: "2026-06", full: false, activeAtStart: 10, joined: 3, left: 0, churnPercent: null },
+            // The month the list began: nobody was on it as June started, and its first people are not new.
+            { month: "2026-06", full: false, activeAtStart: null, joined: null, left: 0, churnPercent: null },
             { month: "2026-07", full: true, activeAtStart: 13, joined: 1, left: 1, churnPercent: 0 },
             { month: "2026-08", full: true, activeAtStart: 13, joined: 0, left: 1, churnPercent: 7.7 },
             { month: "2026-09", full: true, activeAtStart: 12, joined: 0, left: 1, churnPercent: 8.3 },
@@ -247,7 +248,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
           retention: { state: "not_enough_data" },
           averageStay: { state: "not_enough_data" },
           months: [
-            { month: "2026-09", full: true, activeAtStart: 0, joined: 3, left: 0, churnPercent: null },
+            { month: "2026-09", full: true, activeAtStart: 0, joined: null, left: 0, churnPercent: null },
             { month: "2026-10", full: false, activeAtStart: 3, joined: 0, left: 1, churnPercent: null },
           ],
           leads: { total: 2, joined: 0, percent: 0, sources: [{ source: "website", leads: 2, joined: 0, percent: 0 }] },
@@ -269,6 +270,45 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
         // Counts only: no name and no address of anybody on the list or the leads.
         const raw = (await get(reportUrl(london), londonOwner.cookies)).body;
         expect(raw).not.toMatch(/Founder|Nodate|July Only|Lead Person|rep-t-|@example\.com/);
+      } finally {
+        clock = null;
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a list imported late fills no month before it: churn counts only people the list held in that month",
+    async () => {
+      const owner = await makeUser("late-owner");
+      const gym = await makeGym(owner, "Rep Late");
+      // Five people typed in on 20 May, one removed on 15 June.
+      for (let i = 1; i <= 4; i += 1) await listed(gym, `Early Stayer ${String(i)}`, "2026-05-20T09:00:00Z");
+      await listed(gym, "Early Leaver", "2026-05-20T09:00:00Z", { leftAt: "2026-06-15T09:00:00Z" });
+      // The gym's real 200, imported on 12 September with join dates of 2024; six removed on 22 September.
+      for (let i = 1; i <= 194; i += 1) await listed(gym, `Import Stayer ${String(i)}`, "2026-09-12T09:00:00Z", { joinedOn: "2024-03-01" });
+      for (let i = 1; i <= 6; i += 1) {
+        await listed(gym, `Import Leaver ${String(i)}`, "2026-09-12T09:00:00Z", { joinedOn: "2024-03-01", leftAt: "2026-09-22T09:00:00Z" });
+      }
+      clock = NOON;
+      try {
+        const r = await read(gym, owner);
+        expect(r.months).toEqual([
+          { month: "2026-05", full: false, activeAtStart: null, joined: null, left: 0, churnPercent: null },
+          // Five on the list and one left: 20%, not one of 205.
+          { month: "2026-06", full: true, activeAtStart: 5, joined: 0, left: 1, churnPercent: 20 },
+          { month: "2026-07", full: true, activeAtStart: 4, joined: 0, left: 0, churnPercent: 0 },
+          { month: "2026-08", full: true, activeAtStart: 4, joined: 0, left: 0, churnPercent: 0 },
+          // The import is on the list before September ends, and its people joined in 2024.
+          { month: "2026-09", full: true, activeAtStart: 204, joined: 0, left: 6, churnPercent: 2.9 },
+          { month: "2026-10", full: false, activeAtStart: 198, joined: 0, left: 0, churnPercent: null },
+        ]);
+        // 6 of 4 + 4 + 204, never 6 of 612.
+        expect(r.churn).toEqual({ state: "ok", percent: 2.8 });
+        expect(r.retention).toEqual({ state: "ok", percent: 97.2 });
+        expect(r).toMatchObject({ activeNow: 198, fullMonths: 4, thisMonth: { month: "2026-10", joined: 0, left: 0 } });
+        // 26 days for the one, 935 for each of the six.
+        expect(r.averageStay).toEqual({ state: "ok", days: 805, leavers: 7 });
       } finally {
         clock = null;
       }
@@ -313,26 +353,34 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
       expect(empty.churn).toEqual({ state: "nobody_left" });
       expect(empty.leads).toEqual({ total: 0, joined: 0, percent: null, sources: [] });
 
+      // The list's first person, added today: on the list, and not a new member.
+      const first = await post(`/v1/orgs/${gym}/member-list/entries`, { fullName: "Ola First", email: "rep-t-ola@example.com" }, owner.cookies);
+      expect([200, 201], first.body).toContain(first.statusCode);
+      const began = await read(gym, owner);
+      expect(began).toMatchObject({ activeNow: 1, thisMonth: { joined: null, left: 0 } });
+      expect(began.months).toHaveLength(1);
+      // The same list seventy days on: what staff add now is new.
+      await sql`UPDATE gym_member_list_entries SET created_at = created_at - interval '70 days' WHERE gym_id = ${gym}`;
+
       const added = await post(`/v1/orgs/${gym}/member-list/entries`, { fullName: "Priya Shah", email: "rep-t-priya@example.com" }, owner.cookies);
       expect([200, 201], added.body).toContain(added.statusCode);
-      const [entry] = await sql<{ id: string }[]>`SELECT id FROM gym_member_list_entries WHERE gym_id = ${gym}`;
+      const [entry] = await sql<{ id: string }[]>`SELECT id FROM gym_member_list_entries WHERE gym_id = ${gym} AND full_name = 'Priya Shah'`;
       if (entry === undefined) throw new Error("the person is not on the list");
 
       const one = await read(gym, owner);
-      expect(one).toMatchObject({ activeNow: 1, everLeft: false, thisMonth: { joined: 1, left: 0 } });
-      expect(one.months).toHaveLength(1);
+      expect(one).toMatchObject({ activeNow: 2, everLeft: false, thisMonth: { joined: 1, left: 0 } });
       expect(one.averageStay).toEqual({ state: "nobody_left" });
 
       const off = await send("DELETE", `/v1/orgs/${gym}/member-list/entries/${entry.id}`, owner.cookies);
       expect(off.statusCode, off.body).toBe(200);
       const gone = await read(gym, owner);
-      expect(gone).toMatchObject({ activeNow: 0, everLeft: true, thisMonth: { joined: 1, left: 1 } });
+      expect(gone).toMatchObject({ activeNow: 1, everLeft: true, thisMonth: { joined: 1, left: 1 } });
       // Somebody has left, and there are not yet three full months.
       expect(gone.churn).toEqual({ state: "not_enough_data" });
 
       const back = await post(`/v1/orgs/${gym}/member-list/entries/${entry.id}/restore`, {}, owner.cookies);
       expect(back.statusCode, back.body).toBe(200);
-      expect(await read(gym, owner)).toMatchObject({ activeNow: 1, everLeft: false, thisMonth: { joined: 1, left: 0 } });
+      expect(await read(gym, owner)).toMatchObject({ activeNow: 2, everLeft: false, thisMonth: { joined: 1, left: 0 } });
 
       const made = await post(`/v1/orgs/${gym}/leads`, { fullName: "Omar Aziz", email: "rep-t-omar@example.com", source: "social" }, owner.cookies);
       expect(made.statusCode, made.body).toBe(201);
@@ -347,7 +395,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
       expect(joined.statusCode, joined.body).toBe(200);
       const after = await read(gym, owner);
       expect(after.leads).toEqual({ total: 1, joined: 1, percent: 100, sources: [{ source: "social", leads: 1, joined: 1, percent: 100 }] });
-      expect(after).toMatchObject({ activeNow: 2, thisMonth: { joined: 2, left: 0 } });
+      expect(after).toMatchObject({ activeNow: 3, thisMonth: { joined: 2, left: 0 } });
     },
     TEST_TIMEOUT_MS,
   );
@@ -400,6 +448,27 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
       expect(refused).toBe(5);
       expect((await get(reportUrl(gym), second.cookies, desk)).statusCode).toBe(200);
       expect((await get(reportUrl(gym), third.cookies, desk)).statusCode).toBe(200);
+
+      // Somebody refused uses up nobody's allowance: the address's count for this gym is
+      // the reads its staff were given, whatever a stranger and a trainer there ask.
+      const addressKey = `rl:orgs_reports:ip:${gym}:${desk}`;
+      const before = await redis.get(addressKey);
+      expect(before).toBe("132");
+      const stranger = await makeUser("limit-stranger");
+      const trainer = await makeUser("limit-trainer");
+      await makeStaff(gym, trainer, "trainer", null);
+      for (let i = 0; i < 40; i += 1) {
+        expect((await get(reportUrl(gym), stranger.cookies, desk)).statusCode).toBe(404);
+        expect((await get(reportUrl(gym), trainer.cookies, desk)).statusCode).toBe(403);
+      }
+      expect(await redis.get(addressKey)).toBe(before);
+      expect(await redis.get(`rl:orgs_reports:id:${stranger.userId}`)).toBeNull();
+      // Another gym's staff at the same address have a count of their own.
+      const otherOwner = await makeUser("limit-other-owner");
+      const other = await makeGym(otherOwner, "Rep Limit Two");
+      expect((await get(reportUrl(other), otherOwner.cookies, desk)).statusCode).toBe(200);
+      expect(await redis.get(`rl:orgs_reports:ip:${other}:${desk}`)).toBe("1");
+      expect(await redis.get(addressKey)).toBe(before);
     },
     TEST_TIMEOUT_MS,
   );
