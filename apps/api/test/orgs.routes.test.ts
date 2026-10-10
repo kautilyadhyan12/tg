@@ -2462,19 +2462,18 @@ d("orgs routes (real Postgres)", () => {
     expect(codes[0]?.code).toBe(org.joinCode.code);
   });
 
-  it("gives a studio TRAINER the join codes even though it holds them off the roster (§2.2)", { timeout: 30_000 }, async () => {
+  it("gives a studio's coach the join codes on the Invite tick alone, without the list's", { timeout: 30_000 }, async () => {
     const studioOwner = await makeUser("jc-trainer-owner");
     const trainer = await makeUser("jc-trainer");
     const studio = await makeOrg(studioOwner.cookies, "Orgs Test Joincodes Trainer", {
       orgType: "studio",
     });
     await sql`
-      INSERT INTO gym_staff (gym_id, user_id, role)
-      VALUES (${studio.org.id}, ${trainer.userId}, 'trainer')`;
+      INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+      VALUES (${studio.org.id}, ${trainer.userId}, 'trainer', ARRAY['codes.invite'])`;
 
-    // §2.2 grants Invite to all three roles; the group-scoping hold-back is
-    // about the MEMBER LIST only. A trainer who cannot read the roster can
-    // still hand a walk-in the poster code.
+    // Two ticks, two answers: somebody without the list's tick can still hand a
+    // walk-in the poster code.
     expect(
       (await get(`/v1/orgs/${studio.org.id}/members`, { cookies: trainer.cookies })).statusCode,
     ).toBe(403);
@@ -3194,32 +3193,74 @@ d("orgs routes (real Postgres)", () => {
     expect(seen).toEqual(all.items.map((i) => i.userId));
   });
 
-  it("gives a gym trainer the roster and holds a studio trainer back (§2.2/§2.3)", { timeout: 30_000 }, async () => {
+  it("a studio's coach reads their own studio's clients and nobody else's, and nothing the owner has not ticked (4e)", { timeout: 60_000 }, async () => {
+    const sara = await makeUser("coach-sara-owner");
+    const leo = await makeUser("coach-leo");
+    const maya = await makeUser("coach-maya-client");
+    const studio = await makeOrg(sara.cookies, "Orgs Test Coach Pilates", { orgType: "studio" });
+    await joinAsMember(maya.cookies, studio, sara.cookies);
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${studio.org.id}, ${leo.userId}, 'trainer')`;
+
+    // The studio next door, with a client and a coach of its own.
+    const otherOwner = await makeUser("coach-other-owner");
+    const otherCoach = await makeUser("coach-other-coach");
+    const otherClient = await makeUser("coach-other-client");
+    const other = await makeOrg(otherOwner.cookies, "Orgs Test Coach Barre", { orgType: "studio" });
+    await joinAsMember(otherClient.cookies, other, otherOwner.cookies);
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${other.org.id}, ${otherCoach.userId}, 'trainer')`;
+
+    // Sara puts Maya on the studio's own list, so there IS a list name to withhold.
+    await proveAddress(sql, maya.email);
+    const put = await post(`/v1/orgs/${studio.org.id}/member-list/entries/from-member/${maya.userId}`, {}, { cookies: sara.cookies });
+    expect([200, 201]).toContain(put.statusCode);
+
+    const membersUrl = (gymId: string) => `/v1/orgs/${gymId}/members`;
+    type Row = Record<string, unknown> & { userId: string };
+
+    // Leo reads his studio: Sara and Maya, and nobody from next door.
+    const mine = await get(membersUrl(studio.org.id), { cookies: leo.cookies });
+    expect(mine.statusCode).toBe(200);
+    const rows = (JSON.parse(mine.body) as { items: Row[] }).items;
+    expect(rows.map((r) => r.userId).sort()).toEqual([sara.userId, maya.userId].sort());
+    expect(mine.body).not.toContain(otherClient.userId);
+    // What the owner has not ticked for him stays out: no address, nothing from the
+    // studio's own list, nobody's role.
+    expect(mine.body).not.toContain("@");
+    for (const row of rows) {
+      expect(Object.keys(row).sort()).toEqual(["complimentary", "displayName", "groupLabel", "joinedAt", "takesSeat", "userId"]);
+    }
+    // The owner, who holds those ticks, is sent the list's name for the same person.
+    const owners = (JSON.parse((await get(membersUrl(studio.org.id), { cookies: sara.cookies })).body) as { items: Row[] }).items;
+    expect(owners.find((r) => r.userId === maya.userId)).toHaveProperty("onList");
+    // The studio's own list, with its emails and phones, stays shut to him.
+    expect((await get(`/v1/orgs/${studio.org.id}/member-list/entries`, { cookies: leo.cookies })).statusCode).toBe(403);
+
+    // Next door's coach, its owner, a client and a stranger are each told there is no such place.
+    const stranger = await makeUser("coach-stranger");
+    for (const who of [otherCoach, otherOwner, maya, stranger]) {
+      const res = await get(membersUrl(studio.org.id), { cookies: who.cookies });
+      expect(res.statusCode).toBe(404);
+      expect(res.body).not.toContain(maya.userId);
+    }
+    expect((await get(membersUrl(other.org.id), { cookies: leo.cookies })).statusCode).toBe(404);
+    expect((await get(membersUrl(studio.org.id))).statusCode).toBe(401);
+
+    // Sara unticks "see clients" for Leo: refused, and no name in the refusal.
+    await sql`UPDATE gym_staff SET privileges = ARRAY['codes.invite'] WHERE gym_id = ${studio.org.id} AND user_id = ${leo.userId}`;
+    const unticked = await get(membersUrl(studio.org.id), { cookies: leo.cookies });
+    expect(unticked.statusCode).toBe(403);
+    expect((JSON.parse(unticked.body) as { error: string }).error).toBe("forbidden");
+    expect(unticked.body).not.toContain(maya.userId);
+  });
+
+  it("a gym's trainer reads the list as before", { timeout: 30_000 }, async () => {
     const owner = await makeUser("trainer-owner");
     const trainer = await makeUser("trainer-user");
     const gym = await makeOrg(owner.cookies, "Orgs Test Trainer Gym");
-    const studioOwner = await makeUser("trainer-studio-owner");
-    // Was a clinic before Kd's 2026-08-18 ruling. A studio exercises the same
-    // branch — §2.3 makes group scoping core for studios too — and is a type
-    // the product still has.
-    const studio = await makeOrg(studioOwner.cookies, "Orgs Test Trainer Studio", {
-      orgType: "studio",
-    });
-    await sql`
-      INSERT INTO gym_staff (gym_id, user_id, role) VALUES
-        (${gym.org.id}, ${trainer.userId}, 'trainer'),
-        (${studio.org.id}, ${trainer.userId}, 'trainer')`;
-
-    expect(
-      (await get(`/v1/orgs/${gym.org.id}/members`, { cookies: trainer.cookies })).statusCode,
-    ).toBe(200);
-    const held = await get(`/v1/orgs/${studio.org.id}/members`, { cookies: trainer.cookies });
-    expect(held.statusCode).toBe(403);
-    const refusal = JSON.parse(held.body) as { error: string; message: string };
-    expect(refusal.error).toBe("trainer_scope_unavailable");
-    // ROADMAP 2b, review round 1 finding 4: this arm fires only where the role
-    // is NOT called Trainer, so the sentence says Coach at a studio.
-    expect(refusal.message).toBe("Coach access to this list isn't available yet.");
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${gym.org.id}, ${trainer.userId}, 'trainer')`;
+    const res = await get(`/v1/orgs/${gym.org.id}/members`, { cookies: trainer.cookies });
+    expect(res.statusCode).toBe(200);
+    expect((JSON.parse(res.body) as { items: { userId: string }[] }).items.map((i) => i.userId)).toContain(owner.userId);
   });
 
   it("gives a personal trainer's assistant the client list — there are no groups to scope to", { timeout: 30_000 }, async () => {
