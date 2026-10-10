@@ -4493,6 +4493,70 @@ Twilio support: "A2P 10DLC Sole Proprietor Brands FAQ" (the one-person registrat
 for the US and Canada) · the churn and lifetime-value formulas are the plain ones every
 subscription business uses; each card names its source before it builds.
 
+### 16.8 Messages to a chosen group (ROADMAP 20f; RULINGS 2026-10-08, 2026-10-10)
+
+*(ADDED 2026-10-10 with 20f-i. Read first: PushPress (tick members, Send message),
+GymFlow (the filtered list, Select all, a message into the in-app inbox), Gymdesk (members
+switch announcements off). Mindbody's own page was not found.)*
+
+**The worst thing it could do to a real person:** a gym's words in the inbox of somebody
+who was not ticked, who is another gym's, who was removed, or who switched these messages
+off. The first test written holds every such person in two gyms and reads who was written
+to from the table, for both.
+
+**Staff** holding `members.confirm` tick people on Members → Your list (or filter by
+status or tag and Select all, §18.5) and press **Send message** in the action bar. The box
+names who will get it and, under "N won't get it", each group left out with its reason
+(the first 100 names, then a count):
+
+| Reason | Who | The line |
+|---|---|---|
+| `not_in_app` | no live app account on the record (never joined, removed from the app, account deleted) | Not in the app yet. Messages are read in the app, so invite them first. |
+| `switched_off` | switched this gym's group messages off | Switched your messages off in their app. |
+| `shared` | two app accounts on one record: it is nobody's | Two app accounts are on this one person's page, so we can't tell whose inbox it is. |
+| `former` | a past member's record | No longer a member. |
+| `gone` | a record no longer on this gym's list (or never this gym's): counted, never named | No longer on your list. |
+
+The one rule is `groupMessagePlan` (`apps/api/src/modules/orgs/messages/group.ts`), pure,
+with its table test. Past members' tab and a gym that can change nothing have no button.
+
+**The words** (`packages/shared/src/gymGroupMessages.ts`): 1 to 500 characters after
+tidying (one kind of line break, one empty line at most, nothing a screen cannot draw);
+no web address and no `@` (as a gym's own line, §16.2); the bad-words check of §15.3
+refuses it and names the word. A web address is read by its shape first (a scheme,
+"www.", words joined by dots with a slash after them); a list of endings is the backstop
+for a bare address. Not caught, and written down: a bare address on an ending the list
+lacks ("ironhouse.fitness"); the inbox shows words only, never a link to press.
+
+**The send** (`POST …/member-list/selected/message`; the box is `…/message-preview`):
+with the gym's row held, who gets it is worked out again and it goes only if that is as
+many people as the button named (`sendCount`); otherwise nothing is sent and the answer
+carries the box as it now stands (409 `group_message_people_changed`). A Select all that
+moved is §18.5's `selection_changed`. The box carries one key, so the same press twice
+sends once. **Three a day a gym**, counted on the gym's own calendar
+(`GYM_GROUP_MESSAGES_A_DAY`); 20 presses an hour a person, the address counted a gym at a
+time. A gym on no plan reads the box and sends nothing. The audit note holds a count,
+never the words. Each person's copy is a `gym_member_messages` row of kind `group` whose
+occasion is the message's id (`gym_group_messages`, migration `0092`), so it follows the
+inbox's own rules: 30 days, the menu's dot, nothing shown for a closed gym.
+
+**The member's own switch**, under their Inbox: "News and notices from {gym}", on until
+they switch it off (`PUT …/inbox/group-messages`; `gym_member_messages_off`, which 20b's
+switches for the automatic kinds also use; a payment notice can never be a row there).
+Off, what they were already sent stays, staff are told, and nothing is written for them.
+
+**Cost at full size** (`tools/measure-group-message-cost.ts`; one gym of 2,000 on its
+list and in the app beside 19 gyms of 200, a message of 255 characters; mains, 2,592 MHz,
+20 runs): the big gym's box 138.8 ms, thread busy 26.9 ms, longest stall 25.5 ms · its
+send to all 2,000, 371.0 ms, busy 31.5 ms, longest stall 29.1 ms (its own gym's row is
+held for that time) · a member's inbox after 21 such sends 4.5 ms · a gym of 200: the box
+21.0 ms, the send 82.6 ms, busy 6.5 ms · all 20 gyms sending at one moment 784.3 ms, busy
+228.3 ms, longest stall 26.1 ms.
+
+**Not built in 20f-i:** the list of what a gym has sent (20f-ii) · people in the app who
+are on no record cannot be ticked (Put on the list first) · no phone notification until
+the phone app has push.
+
 ## 17. The console's look
 
 Kd, 2026-09-26: the LOOK of every console page redesigned — layout, sizes, fonts, text
