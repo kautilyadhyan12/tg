@@ -346,3 +346,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 - **21a-i as it stood when it was finished (merged 2026-10-10, PR #211):** 21a-i. [ ] **The Reports page, with the members figures**: active, new, left, churn, retention, average stay and leads that became members by where they came from; each with how it is worked out; "Not enough data yet" before three full months; a sentence, never a zero, for what a gym does not use; the CSV; the cost measured at 2,000 members.
 
 - **21a-ii as it stood when it was finished (merged 2026-10-10, PR #214):** 21a-ii. [ ] **Attendance on the Reports page**: visits by day and week, busiest hours, visits a member, how full classes are, no-shows; a gym with no check-in or no classes is told what feeds each, with a button. After 21a-i.
+
+**20f, as first written (split 2026-10-10 into 20f-i and 20f-ii):**
+
+   - 20f. [ ] **Messages to a chosen group** (Kd, RULINGS 2026-10-08): staff pick people with the Members list's filters and tags (5d), read in a box who will get it and who won't, write one message, and it lands in each person's inbox in the app (20a); no SMS and no email (RULINGS 2026-09-22). Held by §15.3's filter, limited a day, and a person can switch a gym's group messages off. After 20a and 5d.
