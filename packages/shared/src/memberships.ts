@@ -9,6 +9,7 @@
 // the bottom are the only place a typed price becomes minor units and the only
 // place minor units become a printed price.
 import { z } from "zod";
+import { VISIBLE_TEXT } from "./visibleText.js";
 import { supportedCountrySchema, type SupportedCountry } from "./orgs.js";
 
 /** The four kinds (§13.1). A day pass is a pack of 1 class valid for 1 day, as
@@ -129,17 +130,6 @@ export const gymMembershipTypesResponseSchema = z
   })
   .strict();
 export type GymMembershipTypesResponse = z.infer<typeof gymMembershipTypesResponseSchema>;
-
-/** Text a gym types that is printed as a name: no control characters, no half of a
- *  surrogate pair (Postgres refuses one inside JSON), and none of the invisible or
- *  direction-turning characters that make two names look like one. The two joiners
- *  (U+200C, U+200D) are let through: Hindi, Persian and joined emoji are typed with them. */
-const VISIBLE_TEXT = /^[^\p{Cc}\p{Cs}\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]*$/u;
-
-/** Whether a name or description holds nothing hidden, as the server will ask. */
-export function isVisibleText(text: string): boolean {
-  return VISIBLE_TEXT.test(text);
-}
 
 const membershipTypeFields = {
   name: z.string().trim().min(1).max(MEMBERSHIP_NAME_MAX).regex(VISIBLE_TEXT),

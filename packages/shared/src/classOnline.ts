@@ -21,7 +21,9 @@ function webAddress(value: string): URL | null {
 }
 
 /** The gym's own video link: an `https://` address of a named site, with no sign-in
- *  written into it, no spaces and no character that cannot be seen. "Https://", as a
+ *  written into it and only plain keyboard characters: no space, nothing that cannot be
+ *  seen, no letter of another alphabet that reads as one of ours. The site is a name
+ *  ending in letters, never a bare number address. "Https://", as a
  *  phone's keyboard writes it, is taken and kept as "https://". */
 export const classOnlineLinkSchema = z
   .string()
@@ -31,14 +33,14 @@ export const classOnlineLinkSchema = z
   .transform((value) => value.replace(/^https:\/\//i, "https://"))
   .refine(
     (value) => {
-      if (!value.startsWith("https://") || /[\s\u200b-\u200d\ufeff]/.test(value)) return false;
+      if (!value.startsWith("https://") || !/^[!-~]+$/.test(value)) return false;
       const url = webAddress(value);
       return (
         url !== null &&
         url.protocol === "https:" &&
         url.username === "" &&
         url.password === "" &&
-        /[a-z0-9]\.[a-z0-9]/i.test(url.hostname)
+        /^(?!xn--)[a-z0-9-]+(?:\.(?!xn--)[a-z0-9-]+)*\.[a-z]{2,}$/i.test(url.hostname)
       );
     },
     { message: "not an https link" },

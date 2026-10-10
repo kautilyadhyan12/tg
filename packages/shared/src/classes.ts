@@ -20,6 +20,7 @@
 // other way.
 import { z } from "zod";
 import { classOnlineLinkSchema } from "./classOnline.js";
+import { isVisibleLines, VISIBLE_TEXT } from "./visibleText.js";
 
 /** EIGHT WEEKS, and it is a HORIZON rather than a deadline.
  *
@@ -117,8 +118,11 @@ export const classStartMinuteSchema = z.number().int().min(0).max(1439);
 
 /** A calendar date, shape only. The SERVICE calendar-checks it — `2026-02-31`
  *  matches this pattern and is not a day, and Postgres refusing the cast is a
- *  500 nobody can act on. `attendanceDayQuerySchema` records the same split. */
-export const classDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+ *  500 nobody can act on. `attendanceDayQuerySchema` records the same split.
+ *
+ *  The year is 1900 to 2199: day arithmetic on a date at the end of year 9999 has no
+ *  answer, and no class, session or event is that far off. */
+export const classDaySchema = z.string().regex(/^(?:19|20|21)\d{2}-\d{2}-\d{2}$/);
 
 /** How long a class runs, in minutes. Five is the shortest thing anybody
  *  timetables; 600 is ten hours, which an all-day open-gym block reaches and
@@ -338,8 +342,8 @@ export const confirmTrainerSessionsBodySchema = z.object({ confirmTrainerSession
  *  rendered "" under a dangling heading is `closeGymDayRequestSchema`'s lesson. */
 export const createGymClassTypeRequestSchema = z
   .object({
-    name: z.string().trim().min(1).max(80),
-    description: z.string().trim().max(500).optional(),
+    name: z.string().trim().min(1).max(80).regex(VISIBLE_TEXT),
+    description: z.string().trim().max(500).refine(isVisibleLines).optional(),
     minutes: classMinutesSchema,
     places: classPlacesSchema.nullable().optional(),
     coachUserId: z.string().uuid().nullable().optional(),
@@ -392,15 +396,15 @@ const classWeekdaysField = z
  *  counts again under the gym's lock and moves only when the two agree. */
 const confirmReplaceField = z.number().int().min(1).max(1000);
 
-/** How many people's bookings a change ends (booked and waiting together), as the screen
- *  was told when the server asked (409 `class_has_bookings`). The server counts again
- *  under the gym's lock and goes ahead only when the two agree. */
-export const confirmBookingsField = z.number().int().min(1).max(1_000_000);
+/** The mark of the bookings a change ends, as the screen was told when the server asked
+ *  (409 `class_has_bookings`, its `ending.mark`). The server works it out again under the
+ *  gym's lock and goes ahead only when the two are the same bookings. */
+export const confirmBookingsField = z.string().regex(/^[0-9a-f]{64}$/);
 
 /** Cancelling one class, cancelling a time slot and removing a class carry it alone. */
 export const confirmBookingsBodySchema = z.object({ confirmBookings: confirmBookingsField.optional() }).strict();
 export const confirmBookingsQuerySchema = z
-  .object({ confirmBookings: z.coerce.number().int().min(1).max(1_000_000).optional() })
+  .object({ confirmBookings: confirmBookingsField.optional() })
   .strict();
 
 /** A repeat, as a gym types it. */

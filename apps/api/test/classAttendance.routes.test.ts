@@ -745,8 +745,9 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
       inject("POST", `/v1/orgs/${gym.id}/member-list/entries/${ended.entryId}/memberships/${packs.ended}/cancel`, gym.owner.cookies, body);
     const asked = await cancelHeld({ when: "today" });
     expect(no(asked), asked.body).toBe("409 membership_has_bookings");
-    expect((JSON.parse(asked.body) as { ending: ClassBookingsEnding }).ending.booked).toBe(1);
-    const done = await cancelHeld({ when: "today", confirmBookings: 1 });
+    const ending = (JSON.parse(asked.body) as { ending: ClassBookingsEnding }).ending;
+    expect(ending.booked).toBe(1);
+    const done = await cancelHeld({ when: "today", confirmBookings: ending.mark });
     expect(done.statusCode, done.body).toBe(200);
     expect(await placeOf(spin, ended)).toEqual(["cancelled", false]);
     expect((await seen(gym, ended, spin)).booked).toBe(0);

@@ -611,23 +611,31 @@ export interface EndedBooking {
  *  `people`: these people have left the gym, so their bookings of classes that have not
  *  started end (a place a check-in marked came before the start is one of them); a class
  *  already started is history and stays.
+ *  `records`: these records have come off the gym's list, so the bookings made on them
+ *  end the same way, whether or not the person's app has ended.
  *  `membership`: staff cancelled this membership, so the places booked on it end. */
 export async function endBookings(
   tx: TransactionSql,
   gymId: string,
-  which: { classes: readonly string[] } | { people: readonly string[]; now: Date } | MembershipScope,
+  which: { classes: readonly string[] } | { people: readonly string[]; now: Date } | { records: readonly string[]; now: Date } | MembershipScope,
   at: Date,
 ): Promise<EndedBooking[]> {
-  if ("classes" in which ? which.classes.length === 0 : "people" in which && which.people.length === 0) return [];
+  if ("classes" in which && which.classes.length === 0) return [];
+  if ("people" in which && which.people.length === 0) return [];
+  if ("records" in which && which.records.length === 0) return [];
+  const notStarted = (now: Date) => tx`
+    b.status IN ('booked','waitlisted','attended')
+    AND EXISTS (SELECT 1 FROM gym_class_sessions s
+                WHERE s.gym_id = b.gym_id AND s.id = b.session_id AND s.starts_at > ${now})`;
   const chosen =
     "classes" in which
       ? tx`b.session_id = ANY(${[...which.classes]}::uuid[])
            AND (b.status IN ('booked','waitlisted','attended','no_show') OR (b.status = 'late_cancelled' AND b.pack_charged))`
       : "people" in which
-        ? tx`b.user_id = ANY(${[...which.people]}::uuid[]) AND b.status IN ('booked','waitlisted','attended')
-             AND EXISTS (SELECT 1 FROM gym_class_sessions s
-                         WHERE s.gym_id = b.gym_id AND s.id = b.session_id AND s.starts_at > ${which.now})`
-        : tx`EXISTS (SELECT 1 FROM gym_class_sessions s
+        ? tx`b.user_id = ANY(${[...which.people]}::uuid[]) AND ${notStarted(which.now)}`
+        : "records" in which
+          ? tx`b.entry_id = ANY(${[...which.records]}::uuid[]) AND ${notStarted(which.now)}`
+          : tx`EXISTS (SELECT 1 FROM gym_class_sessions s
                      WHERE s.gym_id = b.gym_id AND s.id = b.session_id AND ${onMembership(tx, which)})`;
   const rows = await tx<{ user_id: string; session_id: string; was: string; charged: boolean; held_membership_id: string | null }[]>`
     WITH old AS (
@@ -686,8 +694,14 @@ const endingWhere = (sql: SqlOrTx, where: EndingWhere) => {
   return sql`s.schedule_id = ${scope.id} AND s.starts_at > ${now} AND s.local_date >= COALESCE(${scope.from}::date, s.local_date)`;
 };
 
+/** The mark of no bookings at all: sha256 of nothing. */
+const NO_BOOKINGS_MARK = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
 /** BOOKINGS, not people: somebody booked on three of the classes is three. */
 export interface EndingCounts {
+  /** One value for exactly these bookings (their ids), so a box confirmed is confirmed
+   *  for the bookings it named and no others. */
+  mark: string;
   /** Classes with at least one booking that holds a place or waits. */
   classes: number;
   booked: number;
@@ -696,15 +710,16 @@ export interface EndingCounts {
 
 /** How many bookings hold a place or wait in those classes. */
 export async function endingCounts(sql: SqlOrTx, gymId: string, where: EndingWhere): Promise<EndingCounts> {
-  if ("sessionIds" in where && where.sessionIds.length === 0) return { classes: 0, booked: 0, waiting: 0 };
+  if ("sessionIds" in where && where.sessionIds.length === 0) return { classes: 0, booked: 0, waiting: 0, mark: NO_BOOKINGS_MARK };
   const rows = await sql<EndingCounts[]>`
     SELECT count(DISTINCT b.session_id)::int AS classes,
            count(*) FILTER (WHERE b.status <> 'waitlisted')::int AS booked,
-           count(*) FILTER (WHERE b.status = 'waitlisted')::int AS waiting
+           count(*) FILTER (WHERE b.status = 'waitlisted')::int AS waiting,
+           encode(sha256(convert_to(coalesce(string_agg(b.id::text, ',' ORDER BY b.id), ''), 'UTF8')), 'hex') AS mark
     FROM gym_class_bookings b
     JOIN gym_class_sessions s ON s.gym_id = b.gym_id AND s.id = b.session_id
     WHERE b.gym_id = ${gymId} AND b.status IN ('booked','waitlisted','attended','no_show') AND ${endingWhere(sql, where)}`;
-  return rows[0] ?? { classes: 0, booked: 0, waiting: 0 };
+  return rows[0] ?? { classes: 0, booked: 0, waiting: 0, mark: NO_BOOKINGS_MARK };
 }
 
 export interface EndingPersonRow {

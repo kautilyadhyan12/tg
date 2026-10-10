@@ -6,7 +6,7 @@ import BookingsEndBox from '../../components/console/BookingsEndBox';
 import TrainerSessionsBox from '../../components/console/TrainerSessionsBox';
 import ClassBookingsList from '../../components/console/ClassBookingsList';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
-import { bookingsAsked, endingTotal } from './bookingsEndView';
+import { bookingsAsked, endingMark } from './bookingsEndView';
 import { sessionsAsked } from './trainerSessionsView';
 import { RunFields, StartTimePick } from './ClassFields';
 import { OnlineBox } from './ClassOnline';
@@ -283,7 +283,7 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
                   cancelLabel="Go back"
                   onCancel={() => setEnding(null)}
                   onConfirm={async () => {
-                    const body = dayRequest(draft, scope, asked, endingTotal(ending));
+                    const body = dayRequest(draft, scope, asked, endingMark(ending));
                     if (body !== null) settle(await send(body));
                   }}
                 />
@@ -335,7 +335,7 @@ function DayPanel({ gymId, session, clockFormat, staff, locked, busy, peopleVers
                 setEnding(null);
                 setMode(null);
               }}
-              onConfirm={async () => settle(await onCancel(endingTotal(ending)))}
+              onConfirm={async () => settle(await onCancel(endingMark(ending)))}
             />
           )}
         </div>

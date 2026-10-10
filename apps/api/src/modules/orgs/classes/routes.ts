@@ -48,6 +48,7 @@ import {
   classTypeParamsSchema,
   orgParamsSchema,
 } from "../schemas.js";
+import { staffOnly } from "../staffLimit.js";
 import * as service from "./service.js";
 
 function parseOr400<S extends z.ZodTypeAny>(
@@ -133,7 +134,7 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  const guarded = { preHandler: [app.authenticate, limit] };
+  const guarded = { preHandler: [app.authenticate, staffOnly(deps.sql, limit)] };
 
   app.get("/v1/orgs/:gymId/classes", guarded, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);

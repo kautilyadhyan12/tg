@@ -230,6 +230,13 @@ describe('the class form', () => {
     expect(classProblem({ ...ok, name: '   ' })).toBe('Give the class a name.');
     expect(classProblem({ ...ok, name: 'x'.repeat(81) })).toMatch(/too long/);
     expect(classProblem({ ...ok, description: 'x'.repeat(501) })).toMatch(/too long/);
+    // Something nobody can see, pasted in: said before Save, as the server would refuse it.
+    const hidden = String.fromCodePoint(0x202e);
+    expect(classProblem({ ...ok, name: `Yoga ${hidden}gnirpS` })).toBe('Something hidden was pasted in with the name. Delete it and type it again.');
+    expect(classProblem({ ...ok, description: `Slow${String.fromCodePoint(0x200b)} flow` })).toBe(
+      'Something hidden was pasted in with the description. Delete it and type it again.',
+    );
+    expect(classProblem({ ...ok, description: 'Slow flow.\nBring a mat.' })).toBeNull();
     expect(classProblem({ ...ok, minutes: '4' })).toBe('Length must be 5 to 600 minutes.');
     expect(classProblem({ ...ok, minutes: '601' })).toBe('Length must be 5 to 600 minutes.');
     expect(classProblem({ ...ok, minutes: '30.5' })).toBe('Length must be 5 to 600 minutes.');

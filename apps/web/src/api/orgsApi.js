@@ -186,7 +186,7 @@ export function gymPhotoUrl({ gymId = null, slug = null, photoId }) {
 
 /** How many people's bookings the gym agreed to end, sent back after the server asked
  *  (409 `class_has_bookings`); nothing until then. */
-const confirmBookingsOf = (n) => (Number.isInteger(n) && n > 0 ? { confirmBookings: n } : {});
+const confirmBookingsOf = (mark) => (typeof mark === 'string' && mark !== '' ? { confirmBookings: mark } : {});
 
 export const orgService = {
   /** POST /v1/orgs — Part 3 §4.0 steps 1/4/6 in one transaction server-side.

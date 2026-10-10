@@ -221,7 +221,7 @@ d("a class put over a personal training session (real Postgres, two api instance
     if (found === undefined) throw new Error("the time slot was not answered");
     return found.id;
   };
-  const editSlot = (gym: Gym, scheduleId: string, over: SlotBody, confirm?: string, more: Record<string, number> = {}) =>
+  const editSlot = (gym: Gym, scheduleId: string, over: SlotBody, confirm?: string, more: Record<string, string> = {}) =>
     inject("PUT", `/v1/orgs/${gym.id}/class-repeats/${scheduleId}`, gym.owner.cookies, {
       ...slotBody(over),
       updateFrom: TODAY,
@@ -568,14 +568,15 @@ d("a class put over a personal training session (real Postgres, two api instance
     // The move to 10:30 first asks about Leo's booking, which the move would end.
     const first = await editSlot(gym, slotId, { coachUserId: sam.userId });
     expect([first.statusCode, errorOf(first)]).toEqual([409, "class_has_bookings"]);
+    const leos = (JSON.parse(first.body) as { ending: { mark: string } }).ending.mark;
     // Staff say yes to that. Now it asks about Maya's session, and Leo's booking and pack are as they were.
-    const second = asked(await editSlot(gym, slotId, { coachUserId: sam.userId }, undefined, { confirmBookings: 1 }));
+    const second = asked(await editSlot(gym, slotId, { coachUserId: sam.userId }, undefined, { confirmBookings: leos }));
     expect(second.shown.map((s) => s.name)).toEqual(["Maya Lopez"]);
     expect(await written(gym)).toBe(stood);
     expect(await packLeft(leosPack)).toBe(9);
 
     // Both answered: the time slot moves, Leo's booking ends and his pack has its class back.
-    const done = await editSlot(gym, slotId, { coachUserId: sam.userId }, second.mark, { confirmBookings: 1 });
+    const done = await editSlot(gym, slotId, { coachUserId: sam.userId }, second.mark, { confirmBookings: leos });
     expect(done.statusCode, done.body).toBe(200);
     const [left] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_class_bookings WHERE gym_id = ${gym.id} AND status = 'booked'`;
     expect([left?.n, await packLeft(leosPack)]).toEqual([0, 10]);
