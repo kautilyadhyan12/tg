@@ -174,7 +174,7 @@ d("the Members list says what each person holds (real Postgres)", () => {
 
   /** Give a membership through the person's page's own route; the membership's id. */
   const give = async (gymId: string, entryId: string, who: User, body: { typeId: string; startsOn: string; paid: boolean }): Promise<string> => {
-    const res = await post(heldUrl(gymId, entryId), { requestKey: nextKey(), ...body }, who.cookies);
+    const res = await post(heldUrl(gymId, entryId), { requestKey: nextKey(), ...body, ...(body.paid ? { method: "cash" as const } : {}) }, who.cookies);
     expect(res.statusCode, res.body).toBe(201);
     const made = (JSON.parse(res.body) as HeldMembershipsResponse).memberships.find((m) => m.typeId === body.typeId);
     if (made === undefined) throw new Error("the membership given is not on the page");
@@ -183,7 +183,7 @@ d("the Members list says what each person holds (real Postgres)", () => {
   /** Give one as it was given so many days ago: the same service, its clock set back. */
   const gaveDaysAgo = async (days: number, owner: User, gymId: string, entryId: string, body: { typeId: string; startsOn: string; paid: boolean }): Promise<string> => {
     const then = new Date(Date.now() - days * DAY_MS);
-    const page = await heldService.giveHeldMembership({ sql, now: () => then }, owner.userId, gymId, entryId, { requestKey: nextKey(), ...body });
+    const page = await heldService.giveHeldMembership({ sql, now: () => then }, owner.userId, gymId, entryId, { requestKey: nextKey(), ...body, ...(body.paid ? { method: "cash" as const } : {}) });
     const made = page.memberships.find((m) => m.typeId === body.typeId);
     if (made === undefined) throw new Error("the membership given is not on the page");
     return made.id;
@@ -743,6 +743,7 @@ d("the Members list says what each person holds (real Postgres)", () => {
           typeId: gold,
           startsOn: "2026-10-04",
           paid: true,
+          method: "cash",
         });
         const page = await listService.readEntries(at(late), owner.userId, gymId, {}, yes);
         shown[city] = page?.entries.find((entry) => entry.entryId === person)?.held?.payment;
@@ -787,8 +788,11 @@ d("the Members list says what each person holds (real Postgres)", () => {
 
       // Before the press, Ann is marked paid and Bob's mark is taken back: one person still
       // owes, the list's version has not moved, and it is not the person the box showed.
-      await change(gymId, ann, hers, "paid", { paidPeriods: 1 }, owner);
-      await change(gymId, bob, his, "paid", { paidPeriods: 0 }, owner);
+      // Ann pays her month; Bob's payment is taken back (18a-i: a period is paid by its payment).
+      await change(gymId, ann, hers, "payments", { requestKey: nextKey(), periodIndex: 0, amountMinor: 4500, method: "cash" }, owner);
+      const bobs = (JSON.parse((await get(heldUrl(gymId, bob), owner.cookies)).body) as HeldMembershipsResponse).memberships[0]?.billing?.undo;
+      if (bobs?.kind !== "payment") throw new Error("Bob has no payment to take back");
+      await change(gymId, bob, his, `payments/${bobs.paymentId}/undo`, {}, owner);
       const second = await previewOf(gymId, owner, due);
       expect(second).toMatchObject({ reach: 1, version: first.version });
       expect(second.digest).not.toBe(first.digest);

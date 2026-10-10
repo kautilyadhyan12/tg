@@ -1593,6 +1593,181 @@ d("0001_init on a real database", () => {
       });
   });
 
+  /** `0093`'s backfill: whoever holds the list's tick in a stored set gains the payments
+   *  tick, on staff, on an invitation still waiting and on a gym's own saved role;
+   *  nobody without it does, and a row reading its role's defaults is left as it was. */
+  it("0093's backfill gives billing.members to every stored set holding members.confirm, and to no other", async () => {
+    const migration = await readFile(new URL("../drizzle/0093_member_bills.sql", import.meta.url), "utf8");
+    const updates = migration
+      .split("--> statement-breakpoint")
+      .map((s) => s.trim())
+      .filter((s) => s.includes("array_append"));
+    if (updates.length !== 3) throw new Error(`0093 no longer contains its three backfill UPDATEs (found ${String(updates.length)})`);
+    const holds = ["members.read", "members.confirm"];
+    const lacks = ["members.read", "attendance.read"];
+
+    await sql
+      .begin(async (tx) => {
+        const ids: Record<string, string> = {};
+        for (const name of ["owner", "manager", "trainer", "defaults", "desk"]) {
+          const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES (${`zz-0093-${name}`}) RETURNING id`;
+          if (user === undefined) throw new Error("0093 user insert failed");
+          ids[name] = user.id;
+        }
+        const owner = ids.owner ?? "";
+        const [gym] = await tx<{ id: string }[]>`
+          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0093', 'zz 0093', ${owner}) RETURNING id`;
+        const gymId = gym?.id;
+        if (gymId === undefined) throw new Error("0093 gym insert failed");
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${owner}, 'owner', ${holds})`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.manager ?? ""}, 'manager', ${lacks})`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.trainer ?? ""}, 'trainer', ${holds})`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.defaults ?? ""}, 'manager', NULL)`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges, role_name) VALUES (${gymId}, ${ids.desk ?? ""}, 'manager', ${holds}, 'Front desk')`;
+        const invite = (email: string, privileges: string[], state: string) => tx`
+          INSERT INTO gym_staff_invites (gym_id, email, role, privileges, created_at, expires_at, state, answered_at)
+          VALUES (${gymId}, ${email}, 'manager', ${privileges}, now(), now() + interval '7 days', ${state},
+                  ${state === "pending" ? null : tx`now()`})`;
+        await invite("zz-0093-a@example.com", holds, "pending");
+        await invite("zz-0093-b@example.com", lacks, "pending");
+        await invite("zz-0093-c@example.com", holds, "cancelled");
+        await tx`INSERT INTO gym_staff_roles (gym_id, name, privileges, created_at) VALUES (${gymId}, 'Front desk', ${holds}, now())`;
+        await tx`INSERT INTO gym_staff_roles (gym_id, name, privileges, created_at) VALUES (${gymId}, 'Coach', ${lacks}, now())`;
+
+        for (const update of [...updates, ...updates]) await tx.unsafe(update);
+
+        const gained = [...holds, "billing.members"];
+        expect(
+          await tx<{ display_name: string; privileges: string[] | null }[]>`
+            SELECT u.display_name, s.privileges FROM gym_staff s JOIN users u ON u.id = s.user_id
+            WHERE s.gym_id = ${gymId} ORDER BY u.display_name`,
+        ).toEqual([
+          { display_name: "zz-0093-defaults", privileges: null },
+          { display_name: "zz-0093-desk", privileges: gained },
+          { display_name: "zz-0093-manager", privileges: lacks },
+          { display_name: "zz-0093-owner", privileges: gained },
+          { display_name: "zz-0093-trainer", privileges: gained },
+        ]);
+        expect(
+          await tx<{ email: string; privileges: string[] }[]>`
+            SELECT email::text AS email, privileges FROM gym_staff_invites WHERE gym_id = ${gymId} ORDER BY email`,
+        ).toEqual([
+          { email: "zz-0093-a@example.com", privileges: gained },
+          { email: "zz-0093-b@example.com", privileges: lacks },
+          { email: "zz-0093-c@example.com", privileges: holds },
+        ]);
+        expect(
+          await tx<{ name: string; privileges: string[] }[]>`
+            SELECT name::text AS name, privileges FROM gym_staff_roles WHERE gym_id = ${gymId} ORDER BY name`,
+        ).toEqual([
+          { name: "Coach", privileges: lacks },
+          { name: "Front desk", privileges: gained },
+        ]);
+        throw new Error("ROLLBACK-0093-BACKFILL-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0093-BACKFILL-FIXTURE") return;
+        throw err;
+      });
+  });
+
+  it("0093's bills and payments: each CHECK bites, one bill a period, one row a request and a company's id, and they name only their own gym's rows", async () => {
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0093-bills') RETURNING id`;
+        if (user === undefined) throw new Error("no user");
+        const made: { gym: string; held: string }[] = [];
+        for (const slug of ["zz-0093-a", "zz-0093-b"]) {
+          const [gym] = await tx<{ id: string }[]>`INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, ${slug}, 'Europe/London', ${user.id}) RETURNING id`;
+          if (gym === undefined) throw new Error("no gym");
+          const [entry] = await tx<{ id: string }[]>`
+            INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+            VALUES (${gym.id}, 'Zz Person', ${slug + "@example.com"}, ${"0".repeat(63) + slug.slice(-1)}, 'typed') RETURNING id`;
+          const [type] = await tx<{ id: string }[]>`
+            INSERT INTO gym_membership_types (gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
+            VALUES (${gym.id}, 'Gold', 'recurring', 4999, 'GBP', 1, 'month', 'all_classes') RETURNING id`;
+          if (entry === undefined || type === undefined) throw new Error("no entry or type");
+          const [held] = await tx<{ id: string }[]>`
+            INSERT INTO gym_held_memberships (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, renews)
+            VALUES (${gym.id}, ${entry.id}, ${type.id}, gen_random_uuid(), 'recurring', 4999, 'GBP', 1, 'month', '2026-01-15', true) RETURNING id`;
+          if (held === undefined) throw new Error("no membership");
+          made.push({ gym: gym.id, held: held.id });
+        }
+        const [one, two] = made;
+        if (one === undefined || two === undefined) throw new Error("no gyms");
+
+        /** Runs a statement that must be refused, inside a savepoint, and answers the constraint. */
+        const refused = async (run: (sp: typeof tx) => Promise<unknown>): Promise<string> => {
+          try {
+            await tx.savepoint(async (sp) => {
+              await run(sp);
+            });
+          } catch (err) {
+            return (err as { constraint_name?: string }).constraint_name ?? "no constraint";
+          }
+          return "accepted";
+        };
+        const bill = (sp: typeof tx, over: Record<string, unknown> = {}) => {
+          const b = { gym: one.gym, held: one.held, period: 0, amount: 4999, currency: "GBP", status: "open", ...over };
+          return sp<{ id: string }[]>`
+            INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, status)
+            VALUES (${b.gym}, ${b.held}, ${b.period}, ${b.amount}, ${b.currency}, '2026-01-15', ${b.status})
+            RETURNING id`;
+        };
+        const [first] = await bill(tx);
+        if (first === undefined) throw new Error("no bill");
+        expect(await refused((sp) => bill(sp))).toBe("gym_member_bills_period_uq");
+        expect(await refused((sp) => bill(sp, { period: 1, amount: 0 }))).toBe("gym_member_bills_amount_check");
+        expect(await refused((sp) => bill(sp, { period: 1, currency: "gbp" }))).toBe("gym_member_bills_currency_check");
+        expect(await refused((sp) => bill(sp, { period: 1, status: "overdue" }))).toBe("gym_member_bills_status_check");
+        expect(await refused((sp) => bill(sp, { period: -1 }))).toBe("gym_member_bills_period_check");
+        // The days a bill is for: both or neither, and never backwards.
+        const covers = (sp: typeof tx, from: string | null, to: string | null) => sp`
+          INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to)
+          VALUES (${one.gym}, ${one.held}, 5, 4999, 'GBP', '2026-06-15', ${from}::date, ${to}::date)`;
+        expect(await refused((sp) => covers(sp, "2026-06-15", null))).toBe("gym_member_bills_covers_check");
+        expect(await refused((sp) => covers(sp, "2026-06-15", "2026-06-14"))).toBe("gym_member_bills_covers_check");
+        // Another gym's membership under this gym's id.
+        expect(await refused((sp) => bill(sp, { held: two.held, period: 1 }))).toBe("gym_member_bills_membership_fk");
+
+        const key = "00000000-0000-4000-8000-000000009300";
+        const payment = (sp: typeof tx, over: Record<string, unknown> = {}) => {
+          const p = { gym: one.gym, bill: first.id, amount: 4999, method: "cash", provider: null, providerId: null, key, ...over };
+          return sp`
+            INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, provider, provider_payment_id, request_key, paid_on)
+            VALUES (${p.gym}, ${p.bill}, ${p.amount}, 'GBP', ${p.method}, ${p.provider as string | null},
+                    ${p.providerId as string | null}, ${p.key}, '2026-01-15')`;
+        };
+        await payment(tx);
+        const other = "00000000-0000-4000-8000-000000009301";
+        expect(await refused((sp) => payment(sp))).toBe("gym_member_payments_request_uq");
+        expect(await refused((sp) => payment(sp, { key: other, amount: 0 }))).toBe("gym_member_payments_amount_check");
+        expect(await refused((sp) => payment(sp, { key: other, method: "cheque" }))).toBe("gym_member_payments_method_check");
+        // A company's payment needs the company's id, and a hand-recorded one has none.
+        expect(await refused((sp) => payment(sp, { key: other, method: "company" }))).toBe("gym_member_payments_provider_check");
+        expect(await refused((sp) => payment(sp, { key: other, provider: "square", providerId: "p1" }))).toBe("gym_member_payments_provider_check");
+        await payment(tx, { key: other, method: "company", provider: "square", providerId: "p1" });
+        expect(
+          await refused((sp) => payment(sp, { key: "00000000-0000-4000-8000-000000009302", method: "company", provider: "square", providerId: "p1" })),
+        ).toBe("gym_member_payments_provider_uq");
+        // This gym's bill under another gym's id.
+        expect(await refused((sp) => payment(sp, { gym: two.gym, key: "00000000-0000-4000-8000-000000009303" }))).toBe("gym_member_payments_bill_fk");
+        expect(await refused((sp) => sp`UPDATE gyms SET bills_overdue_days = 61 WHERE id = ${one.gym}`)).toBe("gyms_bills_overdue_days_check");
+
+        // The membership gone, its bills and their payments go with it.
+        await tx`DELETE FROM gym_held_memberships WHERE id = ${one.held}`;
+        const [left] = await tx<{ bills: number; payments: number }[]>`
+          SELECT (SELECT count(*)::int FROM gym_member_bills WHERE gym_id = ${one.gym}) AS bills,
+                 (SELECT count(*)::int FROM gym_member_payments WHERE gym_id = ${one.gym}) AS payments`;
+        expect(left).toEqual({ bills: 0, payments: 0 });
+        throw new Error("ROLLBACK-0093-TABLES-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0093-TABLES-FIXTURE") return;
+        throw err;
+      });
+  });
+
   it("0070's held memberships: each CHECK bites, a membership names only its own gym's record and type, and goes with its record", async () => {
     await sql
       .begin(async (tx) => {

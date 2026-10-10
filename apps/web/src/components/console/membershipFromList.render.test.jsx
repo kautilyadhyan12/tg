@@ -11,6 +11,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
     ...actual,
     orgService: {
       getMembershipTypes: vi.fn(),
+      // The Bills card under the price list has its own tests (`memberBills.render.test.jsx`).
+      getBillSettings: vi.fn(() => new Promise(() => undefined)),
       createMembershipType: vi.fn(),
       updateMembershipType: vi.fn(),
       archiveMembershipType: vi.fn(),

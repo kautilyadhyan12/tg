@@ -47,6 +47,7 @@ function held(type, startsOn, paid, { givenOn = startsOn, moves = [], today = TO
     classesLeft: m.classesLeft,
     fromList: false,
     view: heldMembershipView(m, today),
+    billing: null,
   });
 }
 
@@ -159,17 +160,10 @@ describe("what the member list says their membership is, where they do not hold 
 describe('each button asks first, naming the person and what will happen', () => {
   const active = held(monthly, '2026-10-04', true);
 
-  it('mark paid names the money, the days it covers and the next due day, and that no money is taken', () => {
-    expect(askWords('paid', active, 'Olivia Brown', TODAY)).toEqual({
-      question: "Mark Olivia Brown's Gold Monthly as paid?",
-      detail:
-        'This notes that Olivia Brown paid £49.99 for 4 November 2026 up to 4 December 2026. Their next payment is then due 4 December 2026. It only notes it here: no money is taken.',
-      button: 'Mark paid',
-    });
-    expect(askWords('paid', held(threeMonths, '2026-10-04', false), 'Olivia Brown', TODAY).detail).toBe(
-      'This notes that Olivia Brown paid £49.99. It only notes it here: no money is taken.',
-    );
-    expect(askWords('undoPaid', active, 'Olivia Brown', TODAY).question).toBe("Take back the last payment noted for Olivia Brown's Gold Monthly?");
+  // Recording a payment and taking one back have their own words (`memberBillsView.test.js`).
+  it('asks nothing for the two steps that left this file with 18a-i', () => {
+    expect(askWords('paid', active, 'Olivia Brown', TODAY)).toBeNull();
+    expect(askWords('undoPaid', held(threeMonths, '2026-10-04', false), 'Olivia Brown', TODAY)).toBeNull();
   });
 
   it('freeze and unfreeze say what happens to the days', () => {
@@ -193,10 +187,8 @@ describe('each button asks first, naming the person and what will happen', () =>
   });
 
   it('says back what each press did', () => {
-    expect(['give', 'paid', 'undoPaid', 'freeze', 'unfreeze', 'cancelLater', 'cancel'].map((what) => doneWords(what, active))).toEqual([
+    expect(['give', 'freeze', 'unfreeze', 'cancelLater', 'cancel'].map((what) => doneWords(what, active))).toEqual([
       'Membership added.',
-      'Gold Monthly marked paid.',
-      'The last payment noted for Gold Monthly was taken back.',
       'Gold Monthly is frozen.',
       'Gold Monthly is running again.',
       "Gold Monthly will end and won't renew.",

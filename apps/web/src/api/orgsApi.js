@@ -77,6 +77,7 @@ import {
   memberListRowsResponseSchema,
   myInvitationsResponseSchema,
   notMeInvitationResponseSchema,
+  billSettingsResponseSchema,
   classBookingSettingsResponseSchema,
   classBookingsEndingResponseSchema,
   classSessionBookingsResponseSchema,
@@ -1806,6 +1807,13 @@ export const orgService = {
         params: { by, id, ...(typeof from === 'string' && from !== '' ? { from } : {}), ...(typeof after === 'string' && after !== '' ? { after } : {}) },
       }),
     ),
+
+  /** GET and PUT …/bill-settings: how long after its due date an unpaid bill reads
+   *  Overdue (`billing.members` to change it). */
+  getBillSettings: (gymId) =>
+    readThrough(billSettingsResponseSchema, 'your bill settings', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/bill-settings`)),
+  saveBillSettings: (gymId, body) =>
+    readThrough(billSettingsResponseSchema, 'your bill settings', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/bill-settings`, body)),
 
   /** GET and PUT …/booking-settings — the gym's four booking settings (`schedule.manage`),
    *  all four every time. */

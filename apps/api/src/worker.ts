@@ -39,6 +39,8 @@ import { ORGS_CHALLENGE_RESULTS_JOB, scheduleChallengeResults } from "./modules/
 import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
 import { sendDueMessages } from "./modules/orgs/messages/send.js";
 import { ORGS_MEMBER_MESSAGES_JOB, scheduleMemberMessages } from "./modules/orgs/messages/sendSchedule.js";
+import { openDueBills } from "./modules/orgs/memberships/billsRepo.js";
+import { ORGS_MEMBER_BILLS_JOB, scheduleMemberBills } from "./modules/orgs/memberships/billsSchedule.js";
 import { markEndedClasses } from "./modules/orgs/classes/attendance.js";
 import { hourlyTidyUp } from "./modules/orgs/hourlyTidyUp.js";
 import { analyseEntriesIfMoved } from "./modules/orgs/memberList/repo.js";
@@ -352,6 +354,15 @@ try {
   process.exit(1);
 }
 
+// THE BILLS THAT HAVE FALLEN DUE (Part 3 §14.2), once an hour (`billsSchedule.ts` has
+// the minute and why).
+try {
+  await scheduleMemberBills(queue);
+} catch (err) {
+  log.fatal({ err }, "failed to register the member bills schedule");
+  process.exit(1);
+}
+
 // MEMBER INVITATIONS (Part 3 §9.12). Their own queue, so a slow run of emails never
 // holds up the nightly jobs above, and every minute: the rows are the queue, and each
 // run sends what is due within the caps. Only when invitations are switched on.
@@ -583,6 +594,7 @@ const worker = new Worker(
       job.name !== ORGS_CLASS_NO_SHOWS_JOB &&
       job.name !== ORGS_CHALLENGE_RESULTS_JOB &&
       job.name !== ORGS_MEMBER_MESSAGES_JOB &&
+      job.name !== ORGS_MEMBER_BILLS_JOB &&
       job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
@@ -693,6 +705,16 @@ const worker = new Worker(
       const messages = await sendDueMessages({ sql, log });
       log.info(
         { ...messages, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
+    // Each gym is its own transaction; one that fails is logged and tried on the next run.
+    if (job.name === ORGS_MEMBER_BILLS_JOB) {
+      const bills = await openDueBills({ sql, log });
+      log.info(
+        { ...bills, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

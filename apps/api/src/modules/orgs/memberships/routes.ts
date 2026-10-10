@@ -35,7 +35,9 @@ import {
   membershipLinkPreviewRequestSchema,
   membershipLinkRequestSchema,
   membershipUnlinkRequestSchema,
+  billSettingsSchema,
   paidHeldMembershipRequestSchema,
+  recordMemberPaymentRequestSchema,
   saveGymMembershipTypeRequestSchema,
   updateGymMembershipTypeRequestSchema,
 } from "@app/shared";
@@ -43,6 +45,7 @@ import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import {
   heldMembershipParamsSchema,
+  memberPaymentParamsSchema,
   memberListEntryParamsSchema,
   membershipTypeParamsSchema,
   orgParamsSchema,
@@ -257,15 +260,56 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     if (params === null) return;
     const body = parseOr400(paidHeldMembershipRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const answer = await held.moveHeldMembership(
-      heldDeps,
-      requireUserId(req),
-      params.gymId,
-      params.entryId,
-      params.membershipId,
-      { type: "paid", paidPeriods: body.paidPeriods },
-    );
-    return sendHeld(reply, req, answer);
+    // Since 18a-i this only takes back a mark that has no payment behind it: a period
+    // is paid by recording its payment, below.
+    const list = await held.undoPaidMark(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, body.paidPeriods);
+    return reply.status(200).send(list);
+  });
+
+  // ── Bills and payments (§14.2; 18a-i) ──
+
+  /** Payments have their own allowance, apart from the other changes to a membership:
+   *  a desk on the first of the month records one for most of its members. */
+  const paymentLimit = createDualRateLimit({
+    name: "org_member_payments",
+    max: 300,
+    ipMax: 900,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const paymentGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, paymentLimit)] };
+
+  app.post(`${heldUrl}/:membershipId/payments`, paymentGuarded, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(recordMemberPaymentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await held.recordMemberPayment(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, body);
+    return reply.status(200).send(list);
+  });
+
+  app.post(`${heldUrl}/:membershipId/payments/:paymentId/undo`, paymentGuarded, async (req, reply) => {
+    const params = parseOr400(memberPaymentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await held.undoMemberPayment(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.paymentId);
+    return reply.status(200).send(list);
+  });
+
+  const billSettingsUrl = "/v1/orgs/:gymId/bill-settings";
+
+  app.get(billSettingsUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await held.getBillSettings(heldDeps, requireUserId(req), params.gymId));
+  });
+
+  app.put(billSettingsUrl, heldGuarded, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(billSettingsSchema, req.body, req, reply);
+    if (body === null) return;
+    return reply.status(200).send(await held.saveBillSettings(heldDeps, requireUserId(req), params.gymId, body));
   });
 
   // ── A list's word linked to a type ──

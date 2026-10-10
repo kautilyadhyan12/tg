@@ -3305,6 +3305,53 @@ audit row of amounts and ids, never a card detail. `billing.members` is a new ti
 The status word a gym's FILE carried (§11) stays what that gym sees until it starts
 billing here; the two are never mixed on one person.
 
+**As built, 18a-i (2026-10-10; RULINGS that day).** A bill is one period of one held
+membership (`gym_member_bills`, one a membership a period); a membership's count of
+paid periods (§13.2) is still what its dates are worked out from, and it moves on only
+with the payment that settles the bill of the first unpaid period.
+- **Opened by itself**: when a membership is given, and by an hourly run as each
+  period begins (each gym on its own day). A bill keeps the days it was
+  opened for and the day it fell due: a later freeze moves the membership's dates and
+  never a bill's, and every reader is sent that one day for what is owed.
+- **A period is asked for as it begins, or not at all** (Kd, RULINGS 2026-10-10). A
+  repeating membership's bill is opened for the period today falls in, as that period
+  begins, and only while its person is on the gym's list. A period that began earlier
+  and has no bill was never asked for (the person was a past member then, or the gym's
+  own file was not linked yet, §13.2) and is never billed afterwards: the membership's
+  count of paid periods moves over it, to the period today falls in, the next time the
+  membership is read or written or the hourly run reaches it. This is ONE rule on the
+  membership and its bills (`countAfterGap`), not a step in each way of coming back, so
+  put back, added again, a new file and two records joined are the same case. A bill
+  that was opened stays owed, is paid first, and moves no date. **Its one cost:** if the
+  hourly run itself were stopped for longer than a whole period, the periods it missed
+  are not billed afterwards either; each count moved is written to the gym's record.
+- **A cancel** takes with it the open bills that fall due after the membership's last
+  day (the day it is cancelled, or the last paid day where it is set to stop): one with
+  nothing paid on it is kept and marked cancelled, so nobody owes for a month they never
+  had; one with a payment on it stops the cancel until that payment is taken back. A
+  bill that fell due on or before the last day stays owed. Nothing is opened for a
+  membership that is cancelled, ended, frozen, free, set to stop at the end of what is
+  paid, or a past member's. A bill already owed stays owed after the membership ends,
+  so somebody who left without paying is still found.
+- **Record payment** (a person's page → Memberships): the amount, starting at what is
+  left, and how it was paid (Cash · Card at the desk · Bank transfer). Less than what
+  is left keeps the bill Due for the rest; more is refused. Periods are paid in order.
+  Giving a membership as paid records its payment in the same step, so the Add form
+  asks how they paid.
+- **Paid · Due · Overdue** is worked out on the gym's own day and stored nowhere. A bill
+  reads Overdue once the gym's **grace period** has passed after its due date: 0 to 60
+  days, starting at 0, set in the Bills box on Memberships (as Gymdesk lets a gym set
+  when a manual payment turns overdue).
+- **Undo last payment** takes back the newest payment on a membership, one at a time;
+  its row is kept, marked. A period counted paid before bills were kept, or on the word
+  of the gym's own list, has no payment behind it and is taken back as it always was.
+- **Who**: `billing.members` (owner and manager by default; "Record members' payments"
+  on the staff form) to read a person's bills and payments, record, undo and change the
+  grace period. Staff with the list's tick alone still read Paid or Payment due on the
+  person's page, as before, and are told who can record.
+- **Left for 18a-ii**: void a bill, note a refund, and the Members list's Payment filter
+  reading the bills (it still reads the count of paid periods, which a payment moves).
+
 ### 14.3 The register
 
 **Sell**: staff pick a product or a membership type (a day pass, a bottle of water),

@@ -9,21 +9,37 @@
 // gym's time zone, never the caller's.
 import type { Sql } from "postgres";
 import {
+  BILLS_SHOWN,
+  BILL_OVERDUE_DAYS_MAX,
   HELD_EARLIER_PAGE,
   MEMBER_LIST_BY_HAND_WORDS,
+  billSettingsResponseSchema,
+  countAfterGap,
+  formatMinor,
   heldMembershipView,
   heldMembershipsResponseSchema,
+  memberBillState,
+  memberPayTarget,
+  memberUndoTarget,
+  type BillSettings,
+  type BillSettingsResponse,
   type ClassBookingsEnding,
   type GiveHeldMembershipRequest,
+  type HeldMembership,
   type HeldMembershipEvent,
   type HeldMembershipShown,
+  type HeldMembershipView,
   type HeldMembershipsResponse,
+  type MemberBilling,
+  type RecordMemberPaymentRequest,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { endMembershipBookings, membershipBookingsAsk } from "../classes/bookingChanges.js";
 import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import * as repo from "./heldRepo.js";
+import * as billsRepo from "./billsRepo.js";
+import { overdueDaysOf, type BillRow, type PaymentRow } from "./billsSql.js";
 
 export interface HeldDeps {
   sql: Sql;
@@ -35,11 +51,79 @@ const notFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_L
 /** In use first, then the ones that are over; newest start first within each. */
 const ORDER: Record<HeldMembershipShown, number> = { active: 0, frozen: 0, upcoming: 1, ended: 2, cancelled: 2 };
 
-async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: string): Promise<HeldMembershipsResponse> {
+/** One membership's bills, newest first, and the one payment that can be recorded or
+ *  taken back now: what the write will be decided by, worked out by the same rules. */
+function billingOf(
+  row: { id: string; priceMinor: number; membership: HeldMembership },
+  bills: readonly BillRow[],
+  payments: readonly PaymentRow[],
+  ctx: { today: string; past: boolean; overdueAfterDays: number },
+): MemberBilling {
+  const view = heldMembershipView(row.membership, ctx.today);
+  const pay = memberPayTarget(row.membership, row.priceMinor, ctx.today, bills, ctx.past);
+  const back = ctx.past ? null : memberUndoTarget(row.membership, ctx.today, bills, payments);
+  // A mark with no payment behind it: taken back as it always was.
+  const settledAt = (index: number): boolean => bills.some((b) => b.periodIndex === index && b.status === "paid");
+  const mark = !ctx.past && back === null && view.can.undoPaid !== null && !settledAt(view.can.undoPaid.paidPeriods) ? view.can.undoPaid : null;
+  return {
+    bills: bills.slice(0, BILLS_SHOWN).map((b) => ({
+      id: b.id,
+      periodIndex: b.periodIndex,
+      covers: b.covers,
+      amountMinor: b.amountMinor,
+      paidMinor: b.paidMinor,
+      dueOn: b.dueOn,
+      state: memberBillState(b, ctx.today, ctx.overdueAfterDays),
+      payments: payments
+        .filter((p) => p.billId === b.id)
+        .map((p) => ({ id: p.id, amountMinor: p.amountMinor, method: p.method, paidOn: p.paidOn, by: p.by })),
+    })),
+    billsNotShown: Math.max(0, bills.length - BILLS_SHOWN),
+    pay:
+      pay === null
+        ? null
+        : {
+            periodIndex: pay.periodIndex,
+            covers: pay.covers,
+            leftMinor: pay.leftMinor,
+            dueOn: pay.dueOn,
+            state: memberBillState({ status: "open", dueOn: pay.dueOn }, ctx.today, ctx.overdueAfterDays) === "overdue" ? "overdue" : "due",
+          },
+    undo: back !== null ? { kind: "payment", paymentId: back.paymentId } : mark !== null ? { kind: "mark", paidPeriods: mark.paidPeriods } : null,
+  };
+}
+
+/** The membership as the rule reads it, with ONE day for what is owed: the day its OLDEST
+ *  open bill fell due, where it has one at or before the first unpaid period. That is the
+ *  bill a payment is taken for first, so the line above the bills and the oldest bill
+ *  under it say the same day; a freeze moves the membership's own dates and never a
+ *  bill's; and every reader is sent the same day. */
+function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly BillRow[], today: string): HeldMembershipView {
+  const view = heldMembershipView(row.membership, today);
+  if (view.payment === null || view.payment.state !== "due" || view.payment.since === null) return view;
+  const owed = bills
+    .filter((b) => b.membershipId === row.id && b.status === "open" && b.periodIndex <= row.membership.paidPeriods)
+    .sort((a, b) => a.periodIndex - b.periodIndex)[0];
+  return owed === undefined ? view : { ...view, payment: { state: "due", since: owed.dueOn } };
+}
+
+async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: string, canBill: boolean): Promise<HeldMembershipsResponse> {
   const list = await repo.readHeld(deps.sql, gymId, entryId);
   if (list === null) throw notFound();
-  const all = [...list.inUse, ...list.over]
+  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays };
+  // The page reads a membership as the next write will find it: with its count moved
+  // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
+  const asOfToday = (row: repo.HeldRow): repo.HeldRow => {
+    if (list.past) return row;
+    const have = new Set(list.bills.filter((b) => b.membershipId === row.id).map((b) => b.periodIndex));
+    const count = countAfterGap(row.membership, today, have);
+    return count === null ? row : { ...row, membership: { ...row.membership, paidPeriods: count, paidFloor: count } };
+  };
+  const all = [...list.inUse.map(asOfToday), ...list.over]
     .map((row) => ({
+      billing: canBill
+        ? billingOf(row, list.bills.filter((b) => b.membershipId === row.id), list.payments.filter((p) => p.membershipId === row.id), ctx)
+        : null,
       id: row.id,
       typeId: row.typeId,
       typeName: row.typeName,
@@ -54,7 +138,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       frozenOn: row.membership.frozenOn,
       classesLeft: row.membership.classesLeft,
       fromList: row.fromList,
-      view: heldMembershipView(row.membership, today),
+      view: viewOf(row, list.bills, today),
     }))
     .sort(
       (a, b) =>
@@ -75,6 +159,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     earlierNotShown: over.length - shown.length + stored,
     types: list.types,
     listed: list.listed,
+    canBill,
   });
 }
 
@@ -118,6 +203,14 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       );
     case "request_reused":
       throw new OrgsError(409, "request_reused", "That was already saved for somebody else. Open the form again.");
+    case "method_needed":
+      throw new OrgsError(400, "payment_method_needed", "Pick how they paid.");
+    case "early_payment":
+      throw new OrgsError(
+        409,
+        "early_payment_stands",
+        "A payment is recorded for a month after its last day. Take that payment back first (Undo last payment), then cancel.",
+      );
     case "not_allowed":
       throw new OrgsError(
         409,
@@ -137,8 +230,8 @@ export async function getHeldMemberships(
   gymId: string,
   entryId: string,
 ): Promise<HeldMembershipsResponse> {
-  const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
-  return await readOr404(deps, gymId, entryId, dayInTz(deps.now(), org.timezone));
+  const { org, privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  return await readOr404(deps, gymId, entryId, dayInTz(deps.now(), org.timezone), privileges.includes(BILLING));
 }
 
 export async function giveHeldMembership(
@@ -148,7 +241,10 @@ export async function giveHeldMembership(
   entryId: string,
   req: GiveHeldMembershipRequest,
 ): Promise<HeldMembershipsResponse> {
-  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const canBill = privileges.includes(BILLING);
+  // Saying it is paid records a payment, which is the notebook's own tick.
+  if (req.paid && !canBill) throw new OrgsError(403, "forbidden", NO_BILLING);
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
   throwOnFailure(
@@ -159,12 +255,13 @@ export async function giveHeldMembership(
       requestKey: req.requestKey,
       startsOn: req.startsOn,
       paid: req.paid,
+      method: req.method ?? null,
       today,
       actorUserId: userId,
       now,
     }),
   );
-  return await readOr404(deps, gymId, entryId, today);
+  return await readOr404(deps, gymId, entryId, today, canBill);
 }
 
 const CANCEL_BOOKINGS = { ask: membershipBookingsAsk, end: endMembershipBookings };
@@ -179,7 +276,7 @@ export async function moveHeldMembership(
   confirmBookings: string | null = null,
   confirmPtSessions: string | null = null,
 ): Promise<BookingsAnswer<HeldMembershipsResponse>> {
-  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
   const outcome = await repo.moveHeld(deps.sql, CANCEL_BOOKINGS, {
@@ -199,5 +296,121 @@ export async function moveHeldMembership(
     return { kind: "bookings", ending };
   }
   throwOnFailure(outcome);
-  return { kind: "ok", body: await readOr404(deps, gymId, entryId, today) };
+  return { kind: "ok", body: await readOr404(deps, gymId, entryId, today, privileges.includes(BILLING)) };
+}
+
+// ── Bills and payments (spec Part 3 §14.2; ROADMAP 18a-i) ────────────────────
+//
+// Reading a person's bills, recording a payment and taking one back need
+// `billing.members`, and the person's page they are drawn on needs `members.confirm`:
+// both are asked.
+
+const BILLING = "billing.members";
+const NO_BILLING = "Recording payments isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
+
+async function requireBilling(deps: HeldDeps, userId: string, gymId: string): Promise<{ today: string; now: Date }> {
+  const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
+  const now = deps.now();
+  return { today: dayInTz(now, org.timezone), now };
+}
+
+function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
+  switch (outcome.kind) {
+    case "ok":
+      return;
+    case "entry_not_found":
+      throw notFound();
+    case "membership_not_found":
+      throw new OrgsError(404, "held_membership_not_found", "That membership was not found.");
+    case "payment_not_found":
+      throw new OrgsError(404, "member_payment_not_found", "That payment was not found.");
+    case "past_member":
+      throw new OrgsError(409, "past_member", "This is a past member. Put them back on your list first.");
+    case "request_reused":
+      throw new OrgsError(409, "request_reused", "That form was already used for another payment. Open it again.");
+    case "too_much":
+      throw new OrgsError(
+        409,
+        "payment_too_much",
+        `That is more than is left to pay. ${formatMinor(outcome.leftMinor, outcome.currency)} is left.`,
+      );
+    case "not_allowed":
+      throw new OrgsError(
+        409,
+        "held_membership_changed",
+        "This membership has changed since you opened it. Nothing was saved: check it and try again.",
+      );
+    default: {
+      const never: never = outcome;
+      throw new Error(`unhandled bill outcome: ${JSON.stringify(never)}`);
+    }
+  }
+}
+
+export async function recordMemberPayment(
+  deps: HeldDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  req: RecordMemberPaymentRequest,
+): Promise<HeldMembershipsResponse> {
+  const { today, now } = await requireBilling(deps, userId, gymId);
+  throwOnBillFailure(
+    await billsRepo.recordPayment(deps.sql, {
+      gymId,
+      entryId,
+      membershipId,
+      requestKey: req.requestKey,
+      periodIndex: req.periodIndex,
+      amountMinor: req.amountMinor,
+      method: req.method,
+      today,
+      actorUserId: userId,
+      now,
+    }),
+  );
+  return await readOr404(deps, gymId, entryId, today, true);
+}
+
+export async function undoMemberPayment(
+  deps: HeldDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  paymentId: string,
+): Promise<HeldMembershipsResponse> {
+  const { today, now } = await requireBilling(deps, userId, gymId);
+  throwOnBillFailure(await billsRepo.undoPayment(deps.sql, { gymId, entryId, membershipId, paymentId, today, actorUserId: userId, now }));
+  return await readOr404(deps, gymId, entryId, today, true);
+}
+
+/** Takes back a mark that has no payment behind it. A count that would go up is
+ *  refused: a period is paid by recording its payment. */
+export async function undoPaidMark(
+  deps: HeldDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  paidPeriods: number,
+): Promise<HeldMembershipsResponse> {
+  const { today, now } = await requireBilling(deps, userId, gymId);
+  throwOnBillFailure(await billsRepo.undoMark(deps.sql, { gymId, entryId, membershipId, paidPeriods, today, actorUserId: userId, now }));
+  return await readOr404(deps, gymId, entryId, today, true);
+}
+
+export async function getBillSettings(deps: HeldDeps, userId: string, gymId: string): Promise<BillSettingsResponse> {
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.read");
+  return billSettingsResponseSchema.parse({ overdueAfterDays: await overdueDaysOf(deps.sql, gymId), canChange: privileges.includes(BILLING) });
+}
+
+export async function saveBillSettings(deps: HeldDeps, userId: string, gymId: string, req: BillSettings): Promise<BillSettingsResponse> {
+  const { privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.read");
+  if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
+  const days = Math.min(BILL_OVERDUE_DAYS_MAX, Math.max(0, req.overdueAfterDays));
+  await billsRepo.saveOverdueDays(deps.sql, { gymId, days, actorUserId: userId });
+  return billSettingsResponseSchema.parse({ overdueAfterDays: days, canChange: true });
 }

@@ -136,6 +136,9 @@ export const gyms = pgTable(
      *  `gyms_pt_booking_settings_check`: a session reads these, never the class ones. */
     ptOpensDays: integer("pt_opens_days").notNull().default(7),
     ptFreeCancelMinutes: integer("pt_free_cancel_minutes").notNull().default(120),
+    /** Days after its due date an unpaid bill reads Overdue (0093; spec Part 3 §14.2),
+     *  under `gyms_bills_overdue_days_check`. */
+    billsOverdueDays: integer("bills_overdue_days").notNull().default(0),
     createdAt: createdAt(),
   },
   (t) => [
@@ -828,7 +831,7 @@ export const gymStaff = pgTable(
      *  eleventh (`0064`) `leaderboard.manage` the twelfth (`0067`) `memberships.manage` the thirteenth (`0069`) `posts.manage` the fourteenth (`0071`) and `reports.read` the fifteenth (`0091`). */
     check(
       "gym_staff_privileges_check",
-      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark','leaderboard.manage','memberships.manage','posts.manage','reports.read']::text[]`,
+      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark','leaderboard.manage','memberships.manage','posts.manage','reports.read','billing.members']::text[]`,
     ),
   ],
 );
