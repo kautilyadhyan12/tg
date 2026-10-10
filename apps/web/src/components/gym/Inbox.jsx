@@ -2,7 +2,19 @@ import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Mail, Phone, Pin } from 'lucide-react';
 import { inboxService } from '../../api/inboxApi';
-import { INBOX_NOTE, contactButton, contactSetUp, contactView, emptyInbox, groupSwitch, messageRow, pausedInbox, pinnedNote } from './inboxView';
+import {
+  INBOX_NOTE,
+  contactButton,
+  contactSetUp,
+  contactView,
+  emptyInbox,
+  groupSwitch,
+  kindSwitches,
+  messageRow,
+  pausedInbox,
+  pinnedNote,
+  switchesHeading,
+} from './inboxView';
 
 // THE MEMBER'S INBOX FROM THEIR GYM (spec Part 3 §16.1; ROADMAP 20a): the gym's one pinned
 // note, then its messages, newest first. Opening it tells the server they have been seen;
@@ -76,19 +88,17 @@ function ContactGym({ gym, contact }) {
   );
 }
 
-// THE MEMBER'S OWN SWITCH (ROADMAP 20f-i) for the messages a gym sends to many people at
-// once. Off, staff are told this person gets none. The whole row is the thing to press.
-function GroupMessagesSwitch({ gym, start }) {
-  const [on, setOn] = useState(start);
+// ONE OF THE MEMBER'S OWN SWITCHES. The whole row is the thing to press. `change` sends
+// the new setting and answers how it now stands.
+function SwitchRow({ words, on, change }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const words = groupSwitch(gym, on);
   const press = async () => {
     if (busy) return;
     setBusy(true);
     setFailed(false);
     try {
-      setOn(await inboxService.setGroupMessages(gym.id, !on));
+      await change(!on);
     } catch {
       setFailed(true);
     } finally {
@@ -128,6 +138,23 @@ function GroupMessagesSwitch({ gym, start }) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+// THE MEMBER'S OWN SWITCHES for this gym: its messages to many people at once (ROADMAP
+// 20f-i), then each automatic message a member can switch off (20b-i). Off, the gym's
+// staff are told this person gets none, and the sender writes them none.
+function MessageSwitches({ gym, startGroup, startOff }) {
+  const [group, setGroup] = useState(startGroup);
+  const [off, setOff] = useState(startOff);
+  return (
+    <section className="flex flex-col gap-2 mt-2" aria-label={switchesHeading(gym)}>
+      <h3 className="text-sm font-semibold text-white">{switchesHeading(gym)}</h3>
+      <SwitchRow words={groupSwitch(gym, group)} on={group} change={async (on) => setGroup(await inboxService.setGroupMessages(gym.id, on))} />
+      {kindSwitches(gym, off).map((row) => (
+        <SwitchRow key={row.kind} words={row} on={row.on} change={async (on) => setOff(await inboxService.setKindSwitch(gym.id, row.kind, on))} />
+      ))}
+    </section>
   );
 }
 
@@ -229,7 +256,7 @@ export default function Inbox({ gym, inbox }) {
       </p>
       {/* Keyed: another gym's page starts with its own button shut. */}
       <ContactGym key={gym.id} gym={gym} contact={read.contact} />
-      <GroupMessagesSwitch key={`switch-${gym.id}`} gym={gym} start={read.groupMessages !== false} />
+      <MessageSwitches key={`switch-${gym.id}`} gym={gym} startGroup={read.groupMessages !== false} startOff={read.off ?? []} />
     </div>
   );
 }
