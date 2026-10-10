@@ -3393,10 +3393,11 @@ list's Payment reads the bills.
   membership's own, as before, except that a month staff let off by cancelling its bill
   reads "Free" (nothing to pay), never "Paid", as the person's own page says "Nothing to
   pay".
-- **A past member who still owes** is on the Past members list as owing: their row's
-  Payment reads "Payment due" (`owedSince` on the entry), and that list's Filter finds
-  them under "Payment due" by their open bills, their other two words staying the gym's
-  own. Their page's payment line comes from their open bills alone: due since the oldest,
+- **A past member who still owes** is on the Past members list as owing: their row
+  carries a "Payment due" tag under the name at every width (`owedSince` on the entry;
+  a past member's row has no Payment column), and that list's Filter has one chip,
+  "Payment due" with its count (`counts.formerOwing`), shown only where somebody owes,
+  which finds them by their open bills, their other two words staying the gym's own. Their page's payment line comes from their open bills alone: due since the oldest,
   and nothing once none is open, since a past member's memberships are not in use and
   their own clock says nothing true of money.
 - **A bill owed however long** is always sent to the page (the newest twelve and the one
