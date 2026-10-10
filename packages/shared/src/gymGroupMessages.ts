@@ -7,6 +7,7 @@
 import { z } from "zod";
 import { memberListSelectionSchema } from "./memberList.js";
 import { GYM_MESSAGE_BODY_MAX, gymMessageLength } from "./gymMessages.js";
+import { instantSchema } from "./time.js";
 
 /** How many group messages a gym may send on one day of its own calendar. */
 export const GYM_GROUP_MESSAGES_A_DAY = 3;
@@ -179,3 +180,60 @@ export type GymGroupMessagesSwitchRequest = z.infer<typeof gymGroupMessagesSwitc
 
 export const gymGroupMessagesSwitchResponseSchema = z.object({ groupMessages: z.boolean() }).strict();
 export type GymGroupMessagesSwitchResponse = z.infer<typeof gymGroupMessagesSwitchResponseSchema>;
+
+// ── THE LIST OF SENT MESSAGES (20f-ii) ──
+
+/** How long a gym's sent message is kept: a year, then it is removed with every copy of it.
+ *  Its words are free text and can name a member, so it is not kept for ever. */
+export const GYM_SENT_MESSAGES_KEPT_DAYS = 365;
+/** How many sent messages one page of the list carries. */
+export const GYM_SENT_MESSAGES_PAGE = 20;
+/** What the page says about that keeping. */
+export const GYM_SENT_MESSAGES_KEPT_WORDS = "A message is kept here for a year, then removed.";
+
+/** `after` is the id of the last message of the page before. */
+export const gymSentMessagesQuerySchema = z.object({ after: z.string().uuid().optional() }).strict();
+export type GymSentMessagesQuery = z.infer<typeof gymSentMessagesQuerySchema>;
+
+/** One message as the gym sent it. Who got it is a count here; the names are asked for
+ *  one message at a time. `sentByName` is null when that member of staff's account is gone. */
+export const gymSentMessageSchema = z
+  .object({
+    id: z.string().uuid(),
+    body: z.string().min(1),
+    sentByName: z.string().nullable(),
+    sentAt: instantSchema,
+    people: z.number().int().min(1),
+  })
+  .strict();
+export type GymSentMessage = z.infer<typeof gymSentMessageSchema>;
+
+export const gymSentMessagesPageSchema = z
+  .object({
+    messages: z.array(gymSentMessageSchema).max(GYM_SENT_MESSAGES_PAGE),
+    /** The id to ask the next page after, or null when this is the last. */
+    next: z.string().uuid().nullable(),
+    /** How many more group messages the gym can send today. */
+    leftToday: z.number().int().min(0).max(GYM_GROUP_MESSAGES_A_DAY),
+  })
+  .strict();
+export type GymSentMessagesPage = z.infer<typeof gymSentMessagesPageSchema>;
+
+export const gymSentMessagesResponseSchema = z.object({ page: gymSentMessagesPageSchema }).strict();
+
+/** Who one sent message went to. */
+export const gymSentMessageParamsSchema = z.object({ gymId: z.string().uuid(), messageId: z.string().uuid() }).strict();
+
+/** The people one message was sent to, by name: the first of them, and how many in all.
+ *  `entryId` is their record on the gym's list, null when they are on none now. `gone`
+ *  is how many it was sent to who cannot be named any more: their account is deleted. */
+export const gymSentMessagePeopleSchema = z
+  .object({
+    people: z.array(z.object({ entryId: z.string().uuid().nullable(), name: z.string() }).strict()).max(GYM_GROUP_MESSAGE_BOX_NAMES_MAX),
+    named: z.number().int().min(0),
+    gone: z.number().int().min(0),
+  })
+  .strict();
+export type GymSentMessagePeople = z.infer<typeof gymSentMessagePeopleSchema>;
+
+export const gymSentMessagePeopleResponseSchema = z.object({ sentTo: gymSentMessagePeopleSchema }).strict();

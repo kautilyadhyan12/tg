@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, Loader2 } from 'lucide-react';
 import {
   GYM_GROUP_MESSAGE_PROBLEM_WORDS,
@@ -24,7 +25,7 @@ const newKey = () => crypto.randomUUID();
 /** How many names of a record two accounts share are shown as buttons. */
 const SHARED_SHOWN = 5;
 
-export default function MemberListMessage({ gymId, selection, picked, onSelectionChanged, onInvite, onOpenPerson, onClose }) {
+export default function MemberListMessage({ gymId, selection, picked, onSelectionChanged, onInvite, onOpenPerson, onClose, sentMessagesTo = null }) {
   const [preview, setPreview] = useState(null);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
@@ -108,9 +109,16 @@ export default function MemberListMessage({ gymId, selection, picked, onSelectio
       </p>
     );
     footer = (
-      <button type="button" onClick={onClose} className="c-btn c-btn-p c-btn-lg">
-        Done
-      </button>
+      <>
+        <button type="button" onClick={onClose} className="c-btn c-btn-p c-btn-lg md:order-2">
+          Done
+        </button>
+        {sentMessagesTo !== null ? (
+          <Link to={sentMessagesTo} data-testid="message-see-sent" className="c-btn c-btn-s c-btn-lg md:order-1">
+            See sent messages
+          </Link>
+        ) : null}
+      </>
     );
   } else if (preview === null) {
     body =

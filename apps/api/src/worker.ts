@@ -31,7 +31,6 @@ import { operatorTeller } from "./modules/orgs/invites/operatorNote.js";
 import { processInviteResults } from "./modules/orgs/invites/results.js";
 import { devInviteTransport, sendDueInvites } from "./modules/orgs/invites/sender.js";
 import { sendDueLeadEmails } from "./modules/orgs/leads/sender.js";
-import { forgetOldStaffInvites } from "./modules/orgs/staffInvites/repo.js";
 import { sendDueStaffInvites } from "./modules/orgs/staffInvites/sender.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { ORGS_ARCHIVE_JOB, unscheduleArchiveSweep } from "./modules/orgs/archiveSchedule.js";
@@ -43,7 +42,7 @@ import { ORGS_MEMBER_MESSAGES_JOB, scheduleMemberMessages } from "./modules/orgs
 import { openDueBills } from "./modules/orgs/memberships/billsRepo.js";
 import { ORGS_MEMBER_BILLS_JOB, scheduleMemberBills } from "./modules/orgs/memberships/billsSchedule.js";
 import { markEndedClasses } from "./modules/orgs/classes/attendance.js";
-import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
+import { hourlyTidyUp } from "./modules/orgs/hourlyTidyUp.js";
 import { analyseEntriesIfMoved } from "./modules/orgs/memberList/repo.js";
 import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { ORGS_SWEEP_JOB, runJoinSweep, scheduleJoinSweep } from "./modules/orgs/joinSweepSchedule.js";
@@ -661,11 +660,11 @@ const worker = new Worker(
     // the run either applied or raised, and a raise is already an unhandled
     // rejection that lands the job on the failed set.
     if (job.name === ORGS_MEMBER_LIST_EXPIRY_JOB) {
-      const gone = await expireStagedMemberListUploads({ sql, log });
-      // Staff invitations past their keeping (4a-i), on the same hourly tidy-up.
-      const staffInvitesForgotten = await forgetOldStaffInvites(sql, new Date());
+      // Staged uploads past their time, staff invitations past their keeping (4a-i) and
+      // messages to groups past their year (20f-ii).
+      const gone = await hourlyTidyUp({ sql, log });
       log.info(
-        { ...gone, staffInvitesForgotten, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        { ...gone, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

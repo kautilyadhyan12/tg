@@ -1,5 +1,6 @@
-// A GYM'S MESSAGES TO A MEMBER: the only file that reads or writes `gym_member_messages`
-// (spec Part 3 §16.1; ROADMAP 20a). Every statement names the gym and the person.
+// A GYM'S MESSAGES TO A MEMBER: reads and writes `gym_member_messages` (spec Part 3 §16.1;
+// ROADMAP 20a). Every statement names the gym and the person. The copies of a message to a
+// group are written, read back by message and removed in `groupRepo.ts`.
 import { GYM_GROUP_MESSAGE_KIND, type GymMessageKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 

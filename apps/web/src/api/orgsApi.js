@@ -136,6 +136,8 @@ import {
   gymGroupMessageDoneResponseSchema,
   gymGroupMessagePreviewResponseSchema,
   gymGroupMessagePreviewSchema,
+  gymSentMessagePeopleResponseSchema,
+  gymSentMessagesResponseSchema,
 } from '@app/shared';
 import authApi from './authApi';
 
@@ -1493,6 +1495,16 @@ export const orgService = {
     readThrough(gymGroupMessagePreviewResponseSchema, 'who would get it', authApi.post(`${tagsUrl(gymId)}/selected/message-preview`, { selection })),
   sendGroupMessage: (gymId, body) =>
     readThrough(gymGroupMessageDoneResponseSchema, 'that message', authApi.post(`${tagsUrl(gymId)}/selected/message`, body)),
+  // The messages the gym has sent to groups (20f-ii), twenty at a time after the id `after`.
+  getSentMessages: (gymId, after) =>
+    readThrough(
+      gymSentMessagesResponseSchema,
+      'your sent messages',
+      authApi.get(`${tagsUrl(gymId)}/messages${after ? `?after=${encodeURIComponent(after)}` : ''}`),
+    ),
+  // Who one of them went to, by name.
+  getSentMessagePeople: (gymId, messageId) =>
+    readThrough(gymSentMessagePeopleResponseSchema, 'who it was sent to', authApi.get(`${tagsUrl(gymId)}/messages/${encodeURIComponent(messageId)}/people`)),
   renameGymTag: (gymId, tagId, name) =>
     readThrough(memberGymTagsResponseSchema, "your gym's tags", authApi.patch(`${tagsUrl(gymId)}/tags/${encodeURIComponent(tagId)}`, { name })),
   // `people` is how many people the Delete box named: a tag now on more or fewer is not deleted.
