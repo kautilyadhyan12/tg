@@ -135,6 +135,7 @@ import {
   gymGroupMessageDoneResponseSchema,
   gymGroupMessagePreviewResponseSchema,
   gymGroupMessagePreviewSchema,
+  gymSentMessagePeopleResponseSchema,
   gymSentMessagesResponseSchema,
 } from '@app/shared';
 import authApi from './authApi';
@@ -1500,6 +1501,9 @@ export const orgService = {
       'your sent messages',
       authApi.get(`${tagsUrl(gymId)}/messages${after ? `?after=${encodeURIComponent(after)}` : ''}`),
     ),
+  // Who one of them went to, by name.
+  getSentMessagePeople: (gymId, messageId) =>
+    readThrough(gymSentMessagePeopleResponseSchema, 'who it was sent to', authApi.get(`${tagsUrl(gymId)}/messages/${encodeURIComponent(messageId)}/people`)),
   renameGymTag: (gymId, tagId, name) =>
     readThrough(memberGymTagsResponseSchema, "your gym's tags", authApi.patch(`${tagsUrl(gymId)}/tags/${encodeURIComponent(tagId)}`, { name })),
   // `people` is how many people the Delete box named: a tag now on more or fewer is not deleted.

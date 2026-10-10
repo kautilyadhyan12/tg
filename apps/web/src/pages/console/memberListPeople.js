@@ -969,6 +969,64 @@ export function sentWhen(iso, timeZone, clockFormat) {
   return `${noteDay(iso, timeZone)}, ${clockFormat === '12h' ? time.replace(/^0/, '') : time}`;
 }
 
+/** The gym's own calendar day of an instant, "2026-10-09". */
+function gymDay(at, timeZone) {
+  try {
+    return at.toLocaleDateString('en-CA', timeZone ? { timeZone } : {});
+  } catch {
+    return at.toLocaleDateString('en-CA');
+  }
+}
+
+/** The time a message was sent, on the gym's clock: "12:05" or "12:05 PM". */
+export function sentTime(iso, timeZone, clockFormat) {
+  const whole = sentWhen(iso, timeZone, clockFormat);
+  return whole === '' ? '' : whole.slice(whole.lastIndexOf(', ') + 2);
+}
+
+/** The sent messages under a heading for each day of the gym's calendar, in the order
+ *  given: "Today", "Yesterday", then "7 October" (with the year when it is not this one). */
+export function sentByDay(messages, timeZone, now = new Date()) {
+  const today = gymDay(now, timeZone);
+  const yesterday = gymDay(new Date(now.getTime() - 86_400_000), timeZone);
+  const days = [];
+  for (const one of messages) {
+    const at = new Date(one.sentAt);
+    const key = Number.isNaN(at.getTime()) ? '' : gymDay(at, timeZone);
+    let last = days[days.length - 1];
+    if (last === undefined || last.key !== key) {
+      const full = noteDay(one.sentAt, timeZone);
+      const heading = key === today ? 'Today' : key === yesterday ? 'Yesterday' : key.slice(0, 4) === today.slice(0, 4) ? full.replace(/ \d{4}$/, '') : full;
+      last = { key, heading, messages: [] };
+      days.push(last);
+    }
+    last.messages.push(one);
+  }
+  return days;
+}
+
+/** "Nora Owner" → "NO"; one name → its first two letters; nothing → "". */
+export function initialsOf(name) {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  const first = [...(parts[0] ?? '')];
+  if (parts.length === 1) return first.slice(0, 2).join('').toUpperCase();
+  return ((first[0] ?? '') + ([...(parts[parts.length - 1] ?? '')][0] ?? '')).toUpperCase();
+}
+
+/** The line at the top of Sent messages: how many more can go today. */
+export function sentTodayWords(left) {
+  if (left === 0) return GYM_GROUP_MESSAGE_WORDS.day_full;
+  return left === 1 ? 'You can send 1 more message to a group today.' : `You can send ${String(left)} more messages to groups today.`;
+}
+
+/** The line in the box of names for the people who cannot be named any more. */
+export function sentGoneWords(gone) {
+  return gone === 1
+    ? "1 more person got it and has since deleted their account, so we can't name them."
+    : `${n(gone)} more people got it and have since deleted their accounts, so we can't name them.`;
+}
+
 /** "Sent to 1 person", "Sent to 1,200 people". */
 export function sentToWords(count) {
   return `Sent to ${people(count)}`;

@@ -265,6 +265,13 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
       gone: 0,
     });
     expect((await sentTo(oak, oakId)).people).toEqual([{ entryId: omar.entryId, name: "Omar Oak" }]);
+    // A second message, to Nia alone: each message names its own people and not the other's.
+    clock = new Date(NOON.getTime() + 120_000);
+    await send(iron, [nia.entryId], "Nia, your towel is at the desk.");
+    const second = (await list(iron)).messages[0]?.id ?? "";
+    expect(second).not.toBe(ironId);
+    expect((await sentTo(iron, second)).people).toEqual([{ entryId: nia.entryId, name: "Nia Unticked" }]);
+    expect((await sentTo(iron, ironId)).people.map((p) => p.name)).toEqual(["Maya Rao", "Zed Locker"]);
     expect(JSON.stringify(await sentTo(iron, ironId, tickedTrainer))).not.toContain(nia.entryId);
     // One gym's message asked for through the other gym: not found, by either owner, and no name.
     for (const [gym, who, id] of [
@@ -285,7 +292,7 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
     expect((await askPeople(oak, oak.owner.cookies, ironId)).statusCode).toBe(404);
     expect(errorOf(await ask(iron, stranger.cookies))).toBe(errorOf(await ask(iron, oak.owner.cookies)));
     // A trainer the owner gave the tick reads it.
-    expect((await list(iron, tickedTrainer)).messages).toHaveLength(1);
+    expect((await list(iron, tickedTrainer)).messages.map((m) => m.body)).toContain("Zed, your locker key is at the desk.");
 
     // A page asked for after NEXT DOOR's message: nothing of theirs, and nothing at all.
     const crossed = await list(iron, iron.owner, oakId);

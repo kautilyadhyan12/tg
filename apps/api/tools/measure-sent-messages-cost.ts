@@ -1,7 +1,8 @@
 // What the list of sent messages costs the server (ROADMAP 20f-ii; CLAUDE.md §4 "Cost at
 // full size"). One gym of 2,000 people (--people= for another size) that sent three
 // messages on every day of a year, the most the app allows, with every person's copy of
-// each, beside 19 gyms that sent as many: a page of the list, every page, and the hourly
+// each, beside 19 gyms that sent as many: a page of the list, every page, who one message
+// went to, and the hourly
 // tidy-up that removes a day's messages with their copies.
 //
 // Two numbers each: how long it takes, and how long the server's one thread is busy and
@@ -17,7 +18,7 @@ import os from "node:os";
 import postgres from "postgres";
 import { GYM_GROUP_MESSAGES_A_DAY, GYM_SENT_MESSAGES_KEPT_DAYS, GYM_SENT_MESSAGES_PAGE } from "@app/shared";
 import type { MemberListDeps } from "../src/modules/orgs/memberList/service.js";
-import { forgetOldGroupMessages, readSentMessages } from "../src/modules/orgs/messages/group.js";
+import { forgetOldGroupMessages, readSentMessagePeople, readSentMessages } from "../src/modules/orgs/messages/group.js";
 import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -118,6 +119,12 @@ try {
     if (read === null) throw new Error("the limit answered");
     return { next: read.next, n: read.messages.length, chars: JSON.stringify(read).length };
   };
+  let newest = "";
+  const names = async (gym: Gym, who: string): Promise<number> => {
+    const got = await readSentMessagePeople(deps, who, gym.gymId, newest, pass);
+    if (got === null || got.named !== PEOPLE) throw new Error(`named ${String(got?.named)} of ${String(PEOPLE)}`);
+    return JSON.stringify(got).length;
+  };
   const everyPage = async (gym: Gym): Promise<number> => {
     let after: string | null = null;
     let seen = 0;
@@ -163,6 +170,8 @@ try {
   console.log(
     `one gym of ${String(PEOPLE)} with ${String(perGym)} sent messages (${String(GYM_GROUP_MESSAGES_A_DAY)} a day for ${String(GYM_SENT_MESSAGES_KEPT_DAYS)} days) and ${String(copies[0]?.n ?? 0)} copies, beside ${String(OTHER_GYMS)} gyms with ${String(perGym)} each; a message of ${String(BODY.length)} characters`,
   );
+  const firstRead = await readSentMessages(deps, big.owner, big.gymId, {}, pass);
+  newest = firstRead?.messages[0]?.id ?? "";
   const first = await page(big, big.owner, null);
   if (first.n !== GYM_SENT_MESSAGES_PAGE) throw new Error(`the first page held ${String(first.n)}`);
   console.log(`  a page of ${String(first.n)} is ${String(first.chars)} characters`);
@@ -175,6 +184,9 @@ try {
   await measure("the big gym's first page", () => page(big, big.owner, null));
   await measure("the big gym's page 31", () => page(big, big.owner, deep));
   await measure(`the big gym's whole year, ${String(Math.ceil(perGym / GYM_SENT_MESSAGES_PAGE))} pages one after another`, () => everyPage(big), 5);
+  console.log(`  the names of one message, the first 100 of ${String(PEOPLE)}, are ${String(await names(big, big.owner))} characters`);
+  await measure("who the big gym's newest message went to", () => names(big, big.owner));
+  await measure("its 5 staff open those names at one moment", () => Promise.all([big.owner, ...big.staff].map((who) => names(big, who))));
   await measure("its 5 staff open the page at one moment", () => Promise.all([big.owner, ...big.staff].map((who) => page(big, who, null))));
   await measure("all 20 gyms open the page at one moment", () => Promise.all([big, ...others].map((gym) => page(gym, gym.owner, null))));
   await measure("the hourly tidy-up with nothing to remove", () => forgetOldGroupMessages(sql, NOW));
