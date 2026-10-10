@@ -7,6 +7,7 @@ import { canSeeLeaderboard } from './leaderboardStaffView';
 import { canManageChallenges } from './challengesView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManagePosts } from '../../components/gym/postsView';
+import { canReadReports } from './reportsView';
 
 /** Settings holds sections gated on two permissions (the gym's details: `org.manage`;
  *  Booking rules: `schedule.manage`), so its page is drawn for whoever holds either.
@@ -61,6 +62,8 @@ export function consoleMenu(orgSlug, privileges, orgType) {
       phone: 'more',
     },
     canManageChallenges(privileges) && { key: 'challenges', to: `${base}/challenges`, end: false, label: 'Challenges', phone: 'more' },
+    // The gym's figures (21a-i): read every week, so a line of their own.
+    canReadReports(privileges) && { key: 'reports', to: `${base}/reports`, end: false, label: 'Reports', phone: 'more' },
     settingsIsReachable(privileges) && {
       key: 'settings',
       to: `${base}/settings`,

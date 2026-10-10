@@ -5,7 +5,7 @@
 // control the page had before R3 for an owner, a lapsed gym and a refused role.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, within, waitFor } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { leadSchema } from '@app/shared';
 
 const api = {
@@ -87,9 +87,14 @@ afterEach(() => {
   resetConsoleOrgs();
 });
 
-const draw = () =>
+function Address() {
+  const { pathname, search } = useLocation();
+  return <span data-testid="address">{pathname + search}</span>;
+}
+const draw = (address = '/console/iron-house/leads') =>
   render(
-    <MemoryRouter initialEntries={['/console/iron-house/leads']}>
+    <MemoryRouter initialEntries={[address]}>
+      <Address />
       <Routes>
         <Route path="/console/:orgSlug/leads" element={<Leads />} />
       </Routes>
@@ -145,6 +150,27 @@ describe('the list keeps every control', () => {
     expect(screen.getByRole('searchbox', { name: 'Search your leads' })).toBeTruthy();
     expect(rows()).toHaveLength(2);
     expect(row('Arjun Shah').textContent).toContain('arjun@example.com · +447700900004');
+  });
+
+  it('"?open=add" opens Add lead once: it leaves the address, and closing the form does not open it again', async () => {
+    draw('/console/iron-house/leads?open=add');
+    await within(await screen.findByRole('dialog')).findByRole('heading', { name: 'Add lead' });
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe('/console/iron-house/leads'));
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await screen.findAllByTestId('lead-row');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it.each([
+    ['a lapsed gym', LAPSED],
+    ['a role without the tick', NO_TICK],
+  ])('"?open=add" opens no form for %s, and still leaves the address', async (_who, org) => {
+    useOrg(org);
+    draw('/console/iron-house/leads?open=add');
+    await screen.findAllByTestId('lead-row');
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe('/console/iron-house/leads'));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('a search says how many match; a status chip asks the server for that status', async () => {

@@ -825,10 +825,10 @@ export const gymStaff = pgTable(
      *  next wrong one hides. **The order is `ORG_PRIVILEGES`' order**: this
      *  array, that array and `0035`'s CHECK are one vocabulary written three
      *  times, and they move together or not at all. `attendance.mark` is the
-     *  eleventh (`0064`) `leaderboard.manage` the twelfth (`0067`) `memberships.manage` the thirteenth (`0069`) and `posts.manage` the fourteenth (`0071`). */
+     *  eleventh (`0064`) `leaderboard.manage` the twelfth (`0067`) `memberships.manage` the thirteenth (`0069`) `posts.manage` the fourteenth (`0071`) and `reports.read` the fifteenth (`0091`). */
     check(
       "gym_staff_privileges_check",
-      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark','leaderboard.manage','memberships.manage','posts.manage']::text[]`,
+      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark','leaderboard.manage','memberships.manage','posts.manage','reports.read']::text[]`,
     ),
   ],
 );

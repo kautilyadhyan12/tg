@@ -55,6 +55,7 @@ const PLACES = {
   personalTraining: { path: '/personal-training', may: onStaff },
   attendance: { path: '/attendance', may: canReadAttendance },
   leads: { path: '/leads', may: (privileges) => has(privileges, 'members.confirm') },
+  addLead: { path: '/leads?open=add', may: (privileges) => has(privileges, 'members.confirm') },
   plan: { path: `#${PLAN_SECTION}`, may: canManageBilling },
 };
 

@@ -54,6 +54,7 @@ import ConsoleLeaderboard from './pages/console/Leaderboard';
 import ConsoleUpdates  from './pages/console/Updates';
 import ConsoleEvents   from './pages/console/Events';
 import ConsoleChallenges from './pages/console/Challenges';
+import ConsoleReports  from './pages/console/Reports';
 import ConsoleSettings from './pages/console/Settings';
 import ConsoleMore     from './pages/console/More';
 
@@ -323,6 +324,13 @@ export default function App() {
             <Route path="/console/:orgSlug/challenges" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleChallenges /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* THE GYM'S REPORTS (21a-i). The nav draws it for `reports.read`; the server is
+                the enforcement. */}
+            <Route path="/console/:orgSlug/reports" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleReports /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={
