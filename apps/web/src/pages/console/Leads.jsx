@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronRight, FileUp, Globe, Loader2, Search, Trash2, UserPlus } from 'lucide-react';
 import { LEAD_EMAIL_SETTINGS_WORDS, LEAD_FILE_WORDS, LEAD_LIST_WORDS, LEAD_QUERY_MAX_CHARS, LEADS_TICKED_MAX } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
@@ -82,6 +82,22 @@ export default function Leads() {
   const [selNote, setSelNote] = useState(null);
   /** The selection the Delete box was opened for: it keeps it after the list clears. */
   const [deleteFor, setDeleteFor] = useState(null);
+
+  // A button on another page opens Add lead here (`?open=add`), once.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const opening = searchParams.get('open');
+  useEffect(() => {
+    if (opening === null || !org) return;
+    setSearchParams(
+      (was) => {
+        const params = new URLSearchParams(was);
+        params.delete('open');
+        return params;
+      },
+      { replace: true },
+    );
+    if (opening === 'add' && mayKeep && !readOnly) setOpenId(null);
+  }, [opening, org, mayKeep, readOnly, setSearchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => setFilters((f) => (f.query === typed ? f : { ...f, query: typed })), 300);

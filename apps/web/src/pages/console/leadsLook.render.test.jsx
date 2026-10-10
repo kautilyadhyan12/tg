@@ -87,9 +87,9 @@ afterEach(() => {
   resetConsoleOrgs();
 });
 
-const draw = () =>
+const draw = (address = '/console/iron-house/leads') =>
   render(
-    <MemoryRouter initialEntries={['/console/iron-house/leads']}>
+    <MemoryRouter initialEntries={[address]}>
       <Routes>
         <Route path="/console/:orgSlug/leads" element={<Leads />} />
       </Routes>
@@ -145,6 +145,17 @@ describe('the list keeps every control', () => {
     expect(screen.getByRole('searchbox', { name: 'Search your leads' })).toBeTruthy();
     expect(rows()).toHaveLength(2);
     expect(row('Arjun Shah').textContent).toContain('arjun@example.com · +447700900004');
+  });
+
+  it('"?open=add" opens Add lead once; a lapsed gym and a role without the tick get no form', async () => {
+    draw('/console/iron-house/leads?open=add');
+    await within(await screen.findByRole('dialog')).findByRole('heading', { name: 'Add lead' });
+    cleanup();
+    resetConsoleOrgs();
+    useOrg(LAPSED);
+    draw('/console/iron-house/leads?open=add');
+    await screen.findAllByTestId('lead-row');
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('a search says how many match; a status chip asks the server for that status', async () => {
