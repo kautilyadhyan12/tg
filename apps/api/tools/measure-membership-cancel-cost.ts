@@ -168,7 +168,9 @@ await measure(`the ask: cancel a membership with ${String(BOOKED)} classes booke
   if (answer.kind !== "bookings" || answer.ending.booked !== BOOKED) throw new Error("it did not ask");
 });
 await measure(`the cancel: ${String(BOOKED)} bookings ended, each place handed to 1 waiting person`, onePersonsClasses, async () => {
-  const answer = await moveHeldMembership(deps, owner, gymId, firstEntry, firstHeld.id, { type: "cancel", when: "today" }, BOOKED);
+  const ask = await moveHeldMembership(deps, owner, gymId, firstEntry, firstHeld.id, { type: "cancel", when: "today" });
+  if (ask.kind !== "bookings") throw new Error("it did not ask");
+  const answer = await moveHeldMembership(deps, owner, gymId, firstEntry, firstHeld.id, { type: "cancel", when: "today" }, ask.ending.mark);
   if (answer.kind !== "ok") throw new Error("it was not cancelled");
   const [row] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_class_bookings WHERE gym_id = ${gymId} AND status = 'booked'`;
   if (row?.n !== BOOKED) throw new Error(`${String(row?.n)} places handed over`);

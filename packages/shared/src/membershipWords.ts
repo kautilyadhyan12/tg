@@ -7,12 +7,14 @@
 import { z } from "zod";
 import { heldMembershipTypeChoiceSchema } from "./heldMemberships.js";
 import { MEMBER_LIST_MAX_STATUS_CHARS } from "./memberList.js";
+import { hasNoNul } from "./visibleText.js";
 
 /** How many people of one group a preview names; the counts are of everybody. */
 export const MEMBERSHIP_WORD_PEOPLE_SHOWN = 200;
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const wordSchema = z.string().min(1).max(MEMBER_LIST_MAX_STATUS_CHARS);
+// A word is the file's own, so whatever a file can hold is taken; Postgres keeps no NUL.
+const wordSchema = z.string().min(1).max(MEMBER_LIST_MAX_STATUS_CHARS).refine(hasNoNul);
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/);
 
 /** One membership word on the gym's list, and the type it is linked to. `waiting` is

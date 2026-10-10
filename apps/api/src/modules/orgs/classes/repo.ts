@@ -345,6 +345,8 @@ export type ClassWriteOutcome =
   | { kind: "not_found" }
   | { kind: "coach_not_staff" }
   | { kind: "clashes" }
+  /** The gym already runs a class of this name. */
+  | { kind: "name_taken" }
   /** The gym's limit of classes. */
   | { kind: "too_many"; cap: number }
   /** The class's limit of time slots running at once. */
@@ -360,17 +362,16 @@ export interface HasBookings {
 }
 
 /** The question a change that ends bookings must have answered first (17c-ii-a): null
- *  when nobody is booked or waiting, or when `confirmed` is their number as counted here,
- *  under the gym's lock. Asked before the change's first write. */
+ *  when nobody is booked or waiting, or when `confirmed` is the mark of exactly those
+ *  bookings as worked out here, under the gym's lock. Asked before the change's first write. */
 async function bookingsAsk(
   tx: TransactionSql,
   gymId: string,
   sessionIds: readonly string[],
-  confirmed: number | null,
+  confirmed: string | null,
 ): Promise<HasBookings | null> {
   const counts = await endingCounts(tx, gymId, { sessionIds });
-  const people = counts.booked + counts.waiting;
-  if (people === 0 || people === confirmed) return null;
+  if (counts.booked + counts.waiting === 0 || counts.mark === confirmed) return null;
   return {
     kind: "has_bookings",
     ending: { ...counts, people: await endingPeople(tx, gymId, { sessionIds }, null, CLASS_BOOKINGS_ENDING_SHOWN) },
@@ -437,9 +438,21 @@ type Watch = (coachIds: readonly (string | null)[]) => Promise<void>;
  *  new one the request must have confirmed exactly those sessions (their mark), or
  *  everything the write did is rolled back and the sessions are the answer. Read off the
  *  calendar as written, so no way of writing a class goes round it. */
+/** A timetable write's clock. Where the caller hands over `clock`, it is read again once
+ *  the gym's lock is held: a request that waited for the lock is judged by the time it is
+ *  let in, so a class that started meanwhile is a started class. */
+export interface Clocked {
+  now: Date;
+  clock?: () => Date;
+}
+
+export function readClockUnderLock(w: Clocked): void {
+  if (w.clock !== undefined) w.now = w.clock();
+}
+
 async function askingTrainers<T extends { kind: string }>(
   sql: Sql,
-  w: { gymId: string; confirmTrainerSessions: string | null; now: Date },
+  w: { gymId: string; confirmTrainerSessions: string | null } & Clocked,
   write: (tx: TransactionSql, watch: Watch) => Promise<T>,
 ): Promise<T | OverSessions> {
   const pair = (r: SessionUnderClass): string => `${r.appointmentId}|${r.classId}`;
@@ -448,6 +461,7 @@ async function askingTrainers<T extends { kind: string }>(
   try {
     await sql.begin(async (tx) => {
       await lockOrgRow(tx, w.gymId);
+      readClockUnderLock(w);
       const watched: { coaches: string[] | null; before: Set<string> } = { coaches: null, before: new Set() };
       const done = await write(tx, async (coachIds) => {
         if (watched.coaches !== null) throw new Error("a timetable write named its coaches twice");
@@ -495,6 +509,7 @@ export async function createClassType(
       SELECT count(*)::int AS n FROM gym_class_types
       WHERE gym_id = ${input.gymId} AND archived_at IS NULL`;
     if ((live?.n ?? 0) >= CLASS_TYPES_MAX) return { kind: "too_many", cap: CLASS_TYPES_MAX };
+    if (await classNameTaken(tx, input.gymId, input.name, null)) return { kind: "name_taken" };
 
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_class_types
@@ -518,6 +533,17 @@ export async function createClassType(
   });
 }
 
+/** Whether the gym runs another class of this name, in any capitals. Asked under the
+ *  gym's lock, so the same Add arriving twice makes one class. */
+async function classNameTaken(tx: TransactionSql, gymId: string, name: string, exceptId: string | null): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    SELECT id FROM gym_class_types
+    WHERE gym_id = ${gymId} AND archived_at IS NULL AND lower(name) = lower(${name})
+      AND (${exceptId}::uuid IS NULL OR id <> ${exceptId}::uuid)
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
 export async function updateClassType(
   sql: Sql,
   input: ClassTypeInput & {
@@ -526,6 +552,7 @@ export async function updateClassType(
     confirmTrainerSessions: string | null;
     actorUserId: string;
     now: Date;
+    clock?: () => Date;
   },
 ): Promise<ClassWriteOutcome | OverSessions> {
   return await askingTrainers<ClassWriteOutcome>(sql, input, async (tx, watch) => {
@@ -536,6 +563,10 @@ export async function updateClassType(
     if (before === undefined) return { kind: "not_found" };
     if (!(await coachIsStaff(tx, input.gymId, input.coachUserId))) {
       return { kind: "coach_not_staff" };
+    }
+    // Only a name being changed is asked about: a class saved under the name it has is let be.
+    if (before.name.toLowerCase() !== input.name.toLowerCase() && (await classNameTaken(tx, input.gymId, input.name, input.classTypeId))) {
+      return { kind: "name_taken" };
     }
     // An open-gym slot takes nobody's time; made a taught class, its coming classes take
     // their coaches'.
@@ -595,10 +626,11 @@ export async function updateClassType(
  *  back, and the bookings go with the dates. */
 export async function archiveClassType(
   sql: Sql,
-  input: { gymId: string; classTypeId: string; confirmBookings: number | null; actorUserId: string; now: Date },
+  input: { gymId: string; classTypeId: string; confirmBookings: string | null; actorUserId: string } & Clocked,
 ): Promise<ClassWriteOutcome | HasBookings> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
+    readClockUnderLock(input);
     const [before] = await tx<{ id: string; name: string }[]>`
       SELECT id, name FROM gym_class_types
       WHERE id = ${input.classTypeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
@@ -660,10 +692,11 @@ export async function archiveClassType(
  *  `createClassType` answers. */
 export async function restoreClassType(
   sql: Sql,
-  input: { gymId: string; classTypeId: string; actorUserId: string; now: Date },
+  input: { gymId: string; classTypeId: string; actorUserId: string } & Clocked,
 ): Promise<ClassWriteOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
+    readClockUnderLock(input);
     // The pair is the key, and `archived_at IS NOT NULL` is part of it: bringing
     // back a class that is already live is a 404, not a silent no-op, because
     // the caller is acting on a list that has moved under them.
@@ -676,6 +709,7 @@ export async function restoreClassType(
       SELECT count(*)::int AS n FROM gym_class_types
       WHERE gym_id = ${input.gymId} AND archived_at IS NULL`;
     if ((live?.n ?? 0) >= CLASS_TYPES_MAX) return { kind: "too_many", cap: CLASS_TYPES_MAX };
+    if (await classNameTaken(tx, input.gymId, before.name, input.classTypeId)) return { kind: "name_taken" };
 
     await tx`
       UPDATE gym_class_types SET archived_at = NULL, updated_at = ${input.now}
@@ -751,6 +785,7 @@ export async function createSchedule(
       confirmTrainerSessions: string | null;
       actorUserId: string;
       now: Date;
+      clock?: () => Date;
     },
 ): Promise<ClassWriteOutcome | OverSessions> {
   return await askingTrainers<ClassWriteOutcome>(sql, input, async (tx, watch) => {
@@ -1047,10 +1082,11 @@ export async function changeSlotFrom(
     target: SlotChangeTarget;
     startMinute: number;
     confirmReplace: number | null;
-    confirmBookings: number | null;
+    confirmBookings: string | null;
     confirmTrainerSessions: string | null;
     actorUserId: string;
     now: Date;
+    clock?: () => Date;
   },
 ): Promise<SlotChangeOutcome> {
   return await askingTrainers<SlotChangeOutcome>(sql, input, async (tx, watch) => {
@@ -1455,6 +1491,7 @@ export async function bulkChangeSlots(
     confirmTrainerSessions: string | null;
     actorUserId: string;
     now: Date;
+    clock?: () => Date;
   },
 ): Promise<BulkEditOutcome> {
   return await askingTrainers<BulkEditOutcome>(sql, input, async (tx, watch) => {
@@ -1623,10 +1660,11 @@ export async function bulkChangeSlots(
  *  destroy the only record that the two ever differed. */
 export async function endSchedule(
   sql: Sql,
-  input: { gymId: string; scheduleId: string; confirmBookings: number | null; actorUserId: string; now: Date },
+  input: { gymId: string; scheduleId: string; confirmBookings: string | null; actorUserId: string } & Clocked,
 ): Promise<ClassWriteOutcome | HasBookings> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
+    readClockUnderLock(input);
     const [before] = await tx<{ id: string }[]>`
       SELECT id FROM gym_class_schedules
       WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId} AND ended_at IS NULL`;
@@ -1827,7 +1865,7 @@ export type ClassDayOutcome =
 /** A change to one date: `change` carries the new values, the other two none. */
 export type ClassDayInput =
   | ({ action: "change"; startMinute: number } & ClassScheduleFields)
-  | { action: "cancel"; confirmBookings: number | null }
+  | { action: "cancel"; confirmBookings: string | null }
   | { action: "restore" };
 
 /** CHANGE, CANCEL OR PUT BACK ONE DATE — under the gym's row lock, like every
@@ -1862,6 +1900,7 @@ export async function changeSession(
     confirmTrainerSessions: string | null;
     actorUserId: string;
     now: Date;
+    clock?: () => Date;
   },
 ): Promise<ClassDayOutcome> {
   return await askingTrainers<ClassDayOutcome>(sql, input, async (tx, watch) => {

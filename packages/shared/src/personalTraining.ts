@@ -9,6 +9,7 @@
 import { z } from "zod";
 import { CLASS_FILL_HORIZON_DAYS, classDaySchema } from "./classes.js";
 import { bookingPeriod } from "./classBookings.js";
+import { hasNoNul } from "./visibleText.js";
 import { addDays, heldMembershipView, type HeldMembership } from "./heldMemberships.js";
 import { membershipLimitPeriodSchema, type MembershipLimitPeriod } from "./memberships.js";
 
@@ -622,7 +623,7 @@ export const PT_PEOPLE_SHOWN = 30;
 
 /** `query`: part of a name or an email; left out, the start of the list. `day`: the day
  *  of the session being booked, the gym's own; today when left out. */
-export const ptPeopleQuerySchema = z.object({ query: z.string().trim().max(100).optional(), day: classDaySchema.optional() }).strict();
+export const ptPeopleQuerySchema = z.object({ query: z.string().trim().max(100).refine(hasNoNul).optional(), day: classDaySchema.optional() }).strict();
 export type PtPeopleQuery = z.infer<typeof ptPeopleQuerySchema>;
 
 /** The people on the member list a session can be booked for, those who hold something

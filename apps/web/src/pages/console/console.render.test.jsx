@@ -733,14 +733,13 @@ describe('The gym', () => {
 
   it('offers no retry on a refusal that retrying can never fix (round 2 Low-4)', async () => {
     // The L-3 fix stopped one refused read taking the whole screen but left the
-    // refused pane promising a retry. A trainer held off the roster is a
-    // permanent 403 until group scoping is built; a button saying otherwise is
-    // a small false thing on screen.
+    // refused pane promising a retry. A role without the tick is a 403 until the
+    // owner ticks it; a button saying otherwise is a small false thing on screen.
     orgService.getMembers.mockRejectedValue(
-      apiError(403, 'trainer_scope_unavailable', "Trainer access to this list isn't available yet."),
+      apiError(403, 'forbidden', "Your role doesn't allow that."),
     );
     drawOverview();
-    expect(await screen.findByText(/Trainer access to this list isn't available yet/i)).toBeTruthy();
+    expect(await screen.findByText(/Your role doesn't allow that/i)).toBeTruthy();
     expect(screen.queryAllByText('Try again')).toHaveLength(0);
     // The half that works is still there — this must not become "hide it all".
     expect(within(screen.getByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
@@ -775,17 +774,16 @@ describe('The gym', () => {
   });
 
   it('keeps the half that works when only ONE of the two reads is refused (L-3)', async () => {
-    // §2.2 grants a trainer Invite while the roster is held back, and the API is
-    // deliberately built that way (one trainer, 200 on codes, 403 on members).
+    // A role may hold Invite without the list (200 on codes, 403 on members).
     // Collapsed into one Promise.all, that trainer lost the whole screen.
     orgService.getMembers.mockRejectedValue(
-      apiError(403, 'trainer_scope_unavailable', "Trainer access to this list isn't available yet."),
+      apiError(403, 'forbidden', "Your role doesn't allow that."),
     );
     drawOverview();
 
     expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
     expect(screen.getByText(/Give this code to your members/i)).toBeTruthy();
-    expect(screen.getByText(/Trainer access to this list isn't available yet/i)).toBeTruthy();
+    expect(screen.getByText(/Your role doesn't allow that/i)).toBeTruthy();
   });
 
   it('shows the first LIVE code, not merely the oldest one (L-4)', async () => {
@@ -1321,12 +1319,12 @@ describe('Members', () => {
     expect(screen.queryByText(/Nobody has joined yet/i)).toBeNull();
   });
 
-  it("tells a held-back trainer what the server told it, not that the gym is empty", async () => {
+  it("tells somebody without the tick what the server told them, not that the gym is empty", async () => {
     orgService.getMembers.mockRejectedValue(
-      apiError(403, 'trainer_scope_unavailable', "Trainer access to this list isn't available yet."),
+      apiError(403, 'forbidden', "Your role doesn't allow that."),
     );
     drawMembers();
-    expect(await screen.findByText(/Trainer access to this list isn't available yet/i)).toBeTruthy();
+    expect(await screen.findByText(/Your role doesn't allow that/i)).toBeTruthy();
     expect(screen.queryByText(/Nobody has joined yet/i)).toBeNull();
   });
 

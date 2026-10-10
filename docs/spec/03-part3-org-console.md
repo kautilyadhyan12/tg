@@ -99,7 +99,7 @@ merely hides)
 | Capability | owner | manager | trainer |
 |---|---|---|---|
 | Overview, Leaderboard, Reports (view) | ✔ | ✔ | ✔ |
-| Members list + detail | ✔ | ✔ | **assigned/group only** (gym: all) |
+| Members list + detail | ✔ | ✔ | ✔ (every type since 2026-10-10, ROADMAP 4e: a studio's coach reads the people in the app as a gym's trainer does: a name, the join date, the group, whether their place is free and whether it is one of the paid places; the owner's ticks decide the rest) |
 | Invite (share code / print poster) | ✔ | ✔ | ✔ |
 | Remove / restore member | ✔ | ✔ | — |
 | Create / rotate / expire codes | ✔ | ✔ | — |
@@ -130,7 +130,7 @@ owner may enable for wellness programs) |
 | Challenges (v1.1) | ✔ | ✔ | off |
 | At-risk list | ✔ | ✔ | ✔ (renamed "Inactive clients") |
 | Groups (named codes) | optional | **core** | **core** (caseloads) |
-| Trainer scoping to group | optional | ✔ | ✔ |
+| Trainer scoping to group | not built, and not the rule since 2026-10-10 (ROADMAP 4e): a trainer or coach with the tick reads everyone in the app, in every type |||
 | Program/plan assignment surfacing | v1.5 | v1.5 core | Phase 2 core |
 | Adherence report per client | — | v1.5 | Phase 2 core |
 | Monthly org report PDF | ✔ | ✔ | ✔ (adherence framing) |
@@ -288,7 +288,7 @@ friendly "first week collecting" state with the checklist beside it |
 | List | **At-risk members** (top 5 of the §3.2 query, "Inactive clients"
 for clinic) | cached 1 h | row = name · last active · lifetime workouts ·
 **[Send nudge]** one-tap (push via member app: "Your gym misses you    💪—
-{org}"; rate-limit 1/member/7d; trainer sees own group only). Empty:
+{org}"; rate-limit 1/member/7d). Empty:
 "Nobody's slipping — nice." Error: retry chip |
 | Side | Activation checklist (until complete, §5.1) · This month's report
 shortcut | `gyms.activation` | disappears forever once done |
@@ -3218,6 +3218,25 @@ waitlist, on the server · **17d** the member's side · **17e** personal trainin
 **17f** check-in meets bookings. 17a and 17c–17f need the durable record (3a-v-b) and
 `entry_id` on the membership (3b-ii); 17b needs neither and can be built beside the
 member list. ONE feature for CLAUDE.md §6: both extra passes run once over 17a–17f.
+
+**What the two passes changed (17h, 2026-10-10):**
+- A staff route's limit on Classes and Memberships is asked only of the gym's own staff, so
+  nobody else at the gym's address can use it up.
+- A record taken off the list (by hand, ticked, or left out of an import) loses its coming
+  class bookings as it loses its sessions: the pack has the class back and the place goes
+  to the waitlist, whether or not the person's app ends.
+- One person holds one membership type once at a time: a second that would run over the
+  same days is refused ("They already have Gold Monthly. Cancel that one first.", and "or
+  pick a start date after it ends" only where the one they hold has a last day). Class
+  packs are not asked.
+- Two records are not merged while the kept one would hold a type twice, or have two
+  personal training sessions at one time; staff are told what to cancel first.
+- A box that ends bookings is confirmed by `ending.mark`, the mark of exactly the bookings
+  it counted, sent back as `confirmBookings`; a count is no longer taken.
+- A timetable write reads the clock again once it holds the gym's lock.
+- A gym has one live class of a name, in any capitals.
+- A class's name and description, and a video link, hold nothing hidden; a link's site is a
+  plain name ending in letters; a day's year is 1900 to 2199.
 
 ### 13.8 Where the facts came from (read 2026-09-21)
 

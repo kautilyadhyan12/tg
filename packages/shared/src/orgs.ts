@@ -397,9 +397,8 @@ export type JoinCode = z.infer<typeof joinCodeSchema>;
  *    - `slug` — minted once against `RESERVED_SLUGS`, and a gym named "New"
  *      already collides with the console's own create form (:10596 L-2).
  *      Renaming an address is a separate and harder question with its own line.
- *    - `orgType` — changing a gym into a studio changes who may read the roster
- *      (§2.3's trainer hold-back reads it), so it is an authorisation change
- *      wearing a settings field's clothes.
+ *    - `orgType` — picked once, when the organisation is made: every screen's words
+ *      follow it. (It no longer decides who reads the list: ROADMAP 4e.)
  *    - `locale` — a control with no effect; nothing reads the column and its own
  *      `OWED.md` line says so. Offering it would be a box that does nothing.
  *  A refusal is louder than a silent strip: an owner who typed a currency finds
@@ -801,7 +800,7 @@ export type OrgCodesResponse = z.infer<typeof orgCodesResponseSchema>;
  *  was put to him: a label is Part 3 §2.1's GROUP mechanism — the thing that
  *  eventually tells a gym which desk, class or campaign a member arrived
  *  through — so dropping the input means a gym cannot tell its cohorts apart
- *  later, and §2.3's trainer-scoping-to-group has nothing to scope to.
+ *  later. (Trainer scoping to a group was never built: ROADMAP 4e.)
  *
  *  **The COLUMN is untouched and keeps its `'Front Desk'` default** (no-removal
  *  rule: narrowed at the door, never deleted from the database — the same shape
@@ -1766,10 +1765,9 @@ export type StaffAssignableRole = z.infer<typeof staffAssignableRoleSchema>;
  *  outside this list, so a widened enum without a migration fails loudly rather
  *  than storing a permission that does nothing.
  *
- *  **NOT a scope** (:11429 rule 6). "May see members" is a tick; WHICH members
- *  (§2.2's trainer *assigned/group only*) is a different axis, still blocked on
- *  `gym_staff` having no group column. Conflating them hands a trainer the whole
- *  roster. */
+ *  **NOT a scope.** "May see members" is a tick, and since ROADMAP 4e it opens
+ *  everyone in the app, in every organisation type; nothing scopes a trainer to
+ *  a group. */
 export const ORG_PRIVILEGES = [
   "members.read",
   "codes.invite",
@@ -1809,9 +1807,7 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *
  *  `members.read` and `codes.invite` reproduce §2.2's own rows exactly — the
  *  matrix grants "Members list + detail" and "Invite (share code / print
- *  poster)" to all three roles, and the studio/clinic trainer hold-back on the
- *  ROSTER is a separate rule applied at its own call site (§2.3's group
- *  scoping, still unbuildable).
+ *  poster)" to all three roles, in every organisation type (ROADMAP 4e).
  *
  *  `members.confirm` is an ADDITION — §2.2 predates the application door — and
  *  it is aligned with the matrix's "Remove / restore member" row (owner and

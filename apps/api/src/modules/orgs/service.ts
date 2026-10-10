@@ -1455,27 +1455,12 @@ export async function listOrgMembers(
   gymId: string,
   query: OrgMemberListQuery,
 ): Promise<OrgMemberPage> {
-  const { org, role, privileges } = await requirePrivilege(deps, gymId, userId, "members.read");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.read");
   // The list's names are the gym's list, which `members.read` alone does not open.
   const seesList = privileges.includes("members.confirm");
 
-  // §2.2 gives trainers the member list "assigned/group only (gym: all)", and
-  // §2.3 makes group scoping CORE for studios and clinics. Nothing assigns a
-  // trainer to a group yet — `gym_staff` has no group column — so an unscoped
-  // list is the only thing buildable, and handing a clinic trainer every
-  // caseload is the wrong direction to guess in. Gyms get the "all" the matrix
-  // already grants them; a personal trainer's assistant gets the one client
-  // list, because a trainer has no groups to scope to and never will; studios
-  // and clinics wait for the scoping card.
-  if (role === "trainer" && org.orgType !== "gym" && org.orgType !== "personal_trainer") {
-    throw new OrgsError(
-      403,
-      "trainer_scope_unavailable",
-      // This arm fires only where the role is NOT called Trainer — a studio's
-      // Coach, a clinic's Clinician — so the role word follows the type.
-      `${orgWords(org.orgType).coachCap} access to this list isn't available yet.`,
-    );
-  }
+  // A studio's coach reads the list as a gym's trainer does (ROADMAP 4e): the
+  // `members.read` tick decides, whatever the type.
 
   const typed = (query.query ?? "").trim();
   const page = await repo.listMembers(deps.sql, {
@@ -1522,11 +1507,8 @@ export async function listOrgMembers(
 /** Part 3 §3.3's `GET /codes`, read half.
  *
  *  ALL THREE ROLES, and that is not an oversight: §2.2's matrix grants "Invite
- *  (share code / print poster)" to owner, manager AND trainer alike. The
- *  studio/clinic trainer hold-back a few lines up belongs to the MEMBER LIST —
- *  §2.2 scopes a trainer's roster to their own group and nothing assigns groups
- *  yet — and has nothing to say about handing somebody a poster code. A trainer
- *  who may not read the roster may still invite. */
+ *  (share code / print poster)" to owner, manager AND trainer alike. It is its own
+ *  tick: somebody without the member list's tick may still invite. */
 export async function listOrgCodes(
   deps: OrgsDeps,
   userId: string,

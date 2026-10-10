@@ -101,17 +101,9 @@ export default function Overview() {
 
   // T3 L-3: TWO INDEPENDENTLY-AUTHORISED READS, TWO OUTCOMES.
   //
-  // These were one `Promise.all`, and the two endpoints do not share an
-  // authorisation answer: §2.2 grants a trainer Invite (the codes) while the
-  // roster is held back for anyone whose group scoping does not exist yet — and
-  // the API is deliberately built that way, with a test proving one trainer gets
-  // 200 on codes and 403 on members. Collapsed together, that trainer lost the
-  // WHOLE screen to "Trainer access to this list isn't available yet", under a
-  // Try again that could never succeed. Each pane now reports its own outcome.
-  //
-  // Unreachable today (no route creates a trainer row), and fixed anyway: the
-  // API's guarantee is real and tested, and a screen that cannot express it is
-  // the client half of the same defect.
+  // Two reads, each reporting its own outcome: the endpoints do not share an
+  // authorisation answer (a role may hold Invite without the list), so one refused
+  // read must not take the whole screen.
   // `retired`: the server has join codes switched off (ROADMAP 3c; spec Part 3 §10.6),
   // so "Bring your members in" stands where the code was.
   const [codes, setCodes] = useState({ loading: true, error: null, retryable: true, list: null, retired: false });

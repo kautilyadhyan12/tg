@@ -186,7 +186,7 @@ export function gymPhotoUrl({ gymId = null, slug = null, photoId }) {
 
 /** How many people's bookings the gym agreed to end, sent back after the server asked
  *  (409 `class_has_bookings`); nothing until then. */
-const confirmBookingsOf = (n) => (Number.isInteger(n) && n > 0 ? { confirmBookings: n } : {});
+const confirmBookingsOf = (mark) => (typeof mark === 'string' && mark !== '' ? { confirmBookings: mark } : {});
 
 export const orgService = {
   /** POST /v1/orgs — Part 3 §4.0 steps 1/4/6 in one transaction server-side.
@@ -2026,9 +2026,9 @@ const PERMANENT_ERROR_CODES = ['gym_not_on_plan', 'trial_already_used'];
  *  **403 is permanent, and so are the two 409s above:** 401 rotates and retries
  *  by itself, 404 means the thing vanished and the screen re-resolves, 5xx and
  *  offline are exactly what a retry is FOR, and a contract failure may well be a
- *  deploy mid-flight. A trainer held off the roster (§2.2, a permanent 403 until
- *  group scoping is built) is not going to be let in by pressing a button, and a
- *  button that promises otherwise is a small false thing on screen.
+ *  deploy mid-flight. Somebody whose role lacks a tick is not going to be let in by
+ *  pressing a button, and a button that promises otherwise is a small false thing
+ *  on screen.
  *
  *  **THE TWO 409s WERE ADDED 2026-08-29 (OWED.md, from :23928's Low-6).** Both
  *  are permanent: no amount of pressing puts a gym back on a plan or gives an

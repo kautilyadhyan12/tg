@@ -365,9 +365,9 @@ export type ClassBookingsEndingPerson = z.infer<typeof endingPersonSchema>;
 /** The bookings a change to the timetable would end: cancelling a class, cancelling a
  *  time slot, removing a class, or moving a time slot to another day or time. The 409
  *  `class_has_bookings` carries it as `ending`, with the first few; the request goes
- *  through when it sends `confirmBookings` equal to `booked + waiting`, counted again
- *  under the gym's lock. The number confirmed is a count, not the list: a booking made
- *  and another cancelled in the moment between the box and its button leave it equal. */
+ *  through when it sends `confirmBookings` equal to `mark`, worked out again under the
+ *  gym's lock. The mark is of exactly these bookings: one made, cancelled or moved in
+ *  between the box and its button changes it, and the box is shown again. */
 export const classBookingsEndingSchema = z
   .object({
     /** Classes with a booking that holds a place or waits. */
@@ -376,6 +376,8 @@ export const classBookingsEndingSchema = z
      *  classes is three. In one class they are people. */
     booked: z.number().int(),
     waiting: z.number().int(),
+    /** One value for exactly these bookings, all of them and not only the rows below. */
+    mark: z.string().regex(/^[0-9a-f]{64}$/),
     /** One row a booking, in the order they were made. */
     people: z.array(endingPersonSchema),
     /** A membership's cancel only: the personal training sessions booked on it, which end

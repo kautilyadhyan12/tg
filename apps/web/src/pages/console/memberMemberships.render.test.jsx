@@ -174,7 +174,7 @@ describe('cancelling a membership that classes are booked with', () => {
   });
   const FOUR = [row(1, 'Yoga', '2026-10-21', 420), row(2, 'Spin', '2026-10-22', 1080), row(3, 'Yoga', '2026-10-23', 420), row(4, 'Boxing', '2026-10-24', 600)];
   const asks = (people, booked = people.length) =>
-    refusal(409, { error: 'membership_has_bookings', message: 'They have classes booked.', ending: { classes: booked, booked, waiting: 0, people } });
+    refusal(409, { error: 'membership_has_bookings', message: 'They have classes booked.', ending: { classes: booked, booked, waiting: 0, mark: 'd'.repeat(64), people } });
 
   it('names the classes first, ends nothing until its own button, and sends back the number the server gave', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
@@ -205,7 +205,7 @@ describe('cancelling a membership that classes are booked with', () => {
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([cancelled]));
     fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 4 bookings' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2));
-    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', confirmBookings: 4 });
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', confirmBookings: 'd'.repeat(64) });
     expect(await b.findByText('Gold Monthly is cancelled.')).toBeTruthy();
     expect(screen.queryByTestId('held-ending')).toBeNull();
   });
@@ -247,7 +247,7 @@ describe('cancelling a membership that classes are booked with', () => {
     expect(ending.getByText('Classes up to 3 November 2026 stay booked. So do classes booked with another membership or a pack.')).toBeTruthy();
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([gold]));
     fireEvent.click(ending.getByRole('button', { name: 'Cancel on 3 November 2026 and end 1 booking' }));
-    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'period_end', confirmBookings: 1 }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'period_end', confirmBookings: 'd'.repeat(64) }));
   });
 });
 
@@ -259,7 +259,7 @@ describe('cancelling a pack that classes are booked with', () => {
       refusal(409, {
         error: 'membership_has_bookings',
         message: 'They have classes booked.',
-        ending: { classes: 1, booked: 1, waiting: 0, people: [{ id: '55555555-5555-4555-8555-000000000009', name: 'Ada Lovelace', initials: 'AL', waiting: false, className: 'Yoga', localDate: '2026-10-21', localStartMinute: 420 }] },
+        ending: { classes: 1, booked: 1, waiting: 0, mark: 'd'.repeat(64), people: [{ id: '55555555-5555-4555-8555-000000000009', name: 'Ada Lovelace', initials: 'AL', waiting: false, className: 'Yoga', localDate: '2026-10-21', localStartMinute: 420 }] },
       }),
     );
     render(draw(ADA, 'Ada Lovelace'));
@@ -1118,7 +1118,7 @@ describe('cancelling a membership that personal training is booked with', () => 
     const gold = held(1, GOLD, '2026-10-04', true);
     const cancelled = held(1, GOLD, '2026-10-04', true, [[{ type: 'cancel', when: 'today' }, TODAY]]);
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
-    orgService.changeHeldMembership.mockRejectedValueOnce(asks({ classes: 0, booked: 0, waiting: 0, people: [], ptSessions: TWO }));
+    orgService.changeHeldMembership.mockRejectedValueOnce(asks({ classes: 0, booked: 0, waiting: 0, mark: 'e'.repeat(64), people: [], ptSessions: TWO }));
     render(draw(ADA, 'Ada Lovelace', { clockFormat: '12h' }));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
@@ -1149,7 +1149,7 @@ describe('cancelling a membership that personal training is booked with', () => 
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
     const people = [{ id: '55555555-5555-4555-8555-000000000001', name: 'Ada Lovelace', initials: 'AL', waiting: false, className: 'Yoga', localDate: '2026-10-21', localStartMinute: 420 }];
     const one = { count: 1, packSessions: 1, mark: MARK, sessions: [session(1, '2026-10-21', 600, true)] };
-    orgService.changeHeldMembership.mockRejectedValue(asks({ classes: 1, booked: 1, waiting: 0, people, ptSessions: one }));
+    orgService.changeHeldMembership.mockRejectedValue(asks({ classes: 1, booked: 1, waiting: 0, mark: 'd'.repeat(64), people, ptSessions: one }));
     render(draw(ADA, 'Ada Lovelace', { clockFormat: '12h' }));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
@@ -1163,7 +1163,7 @@ describe('cancelling a membership that personal training is booked with', () => 
     expect(ending.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
     fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 1 booking and 1 session' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2));
-    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', confirmBookings: 1, confirmPtSessions: MARK });
+    expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', confirmBookings: 'd'.repeat(64), confirmPtSessions: MARK });
     // Asked again (the mock refuses every time): the box says what is booked changed.
     const again = within(await b.findByTestId('held-ending'));
     expect(await again.findByText('What is booked changed while this was open. Check it and press again.')).toBeTruthy();

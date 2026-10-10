@@ -184,7 +184,9 @@ await measure(`the ask: cancel a class of ${String(BOOKED)} with ${String(WAITIN
   if (answer.kind !== "bookings") throw new Error("it did not ask");
 });
 await measure(`the cancel itself: ${String(BOOKED + WAITING)} bookings ended, ${String(BOOKED)} packs given back`, bigClass, async (id) => {
-  const answer = await cancelClassSession(deps, owner, gymId, id, BOOKED + WAITING);
+  const ask = await cancelClassSession(deps, owner, gymId, id, null);
+  if (ask.kind !== "bookings") throw new Error("it did not ask");
+  const answer = await cancelClassSession(deps, owner, gymId, id, ask.ending.mark);
   if (answer.kind !== "ok") throw new Error("it was not cancelled");
 });
 await measure("See all: one page of 100 names", bigClass, async (id) => {
@@ -223,7 +225,9 @@ await measure(
     return { typeId, bookings: row?.n ?? 0 };
   },
   async ({ typeId, bookings }) => {
-    const answer = await archiveClassType(deps, owner, gymId, typeId, bookings);
+    const ask = await archiveClassType(deps, owner, gymId, typeId, null);
+    if (bookings === 0 || ask.kind !== "bookings") throw new Error("it did not ask");
+    const answer = await archiveClassType(deps, owner, gymId, typeId, ask.ending.mark);
     if (answer.kind !== "ok") throw new Error("it was not archived");
   },
 );

@@ -4,6 +4,7 @@
 import type { Sql } from "postgres";
 import { CLASS_BOOKING_HOLDS_PLACE } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
+import { readClockUnderLock } from "./repo.js";
 
 export interface OnlineInput {
   gymId: string;
@@ -12,6 +13,8 @@ export interface OnlineInput {
   onlineLink: string | null;
   actorUserId: string;
   now: Date;
+  /** Read again under the gym's lock (`readClockUnderLock`). */
+  clock?: () => Date;
 }
 
 export type SlotOnlineOutcome = { kind: "ok" } | { kind: "not_found" };
@@ -22,6 +25,7 @@ export async function setSlotOnline(sql: Sql, input: OnlineInput & { scheduleId:
   const link = input.online ? input.onlineLink : null;
   return await sql.begin(async (tx): Promise<SlotOnlineOutcome> => {
     await lockOrgRow(tx, input.gymId);
+    readClockUnderLock(input);
     const [slot] = await tx<{ id: string; online: boolean; online_link: string | null }[]>`
       SELECT id, online, online_link FROM gym_class_schedules
       WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId} AND ended_at IS NULL
@@ -83,6 +87,7 @@ export async function setClassOnline(sql: Sql, input: OnlineInput & { sessionId:
   const link = input.online ? input.onlineLink : null;
   return await sql.begin(async (tx): Promise<ClassOnlineOutcome> => {
     await lockOrgRow(tx, input.gymId);
+    readClockUnderLock(input);
     const [row] = await tx<{ local_date: string; status: string; ended: boolean; online: boolean; online_link: string | null }[]>`
       SELECT local_date::text AS local_date, status, online, online_link,
              starts_at + make_interval(mins => minutes) <= ${input.now} AS ended

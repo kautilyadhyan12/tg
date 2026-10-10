@@ -235,7 +235,9 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
     const rows = await sql<{ status: string; n: number }[]>`SELECT status, count(*)::int AS n FROM gym_class_bookings WHERE session_id = ${sessionId} GROUP BY status`;
     return Object.fromEntries(rows.map((r) => [r.status, r.n]));
   };
-  const cancelClass = (gym: Gym, sessionId: string, confirmBookings?: number, target = api()) =>
+  /** A mark of the right shape that is no booking's. */
+  const NOT_THEIRS = "a".repeat(64);
+  const cancelClass = (gym: Gym, sessionId: string, confirmBookings?: string, target = api()) =>
     inject("POST", `/v1/orgs/${gym.id}/class-sessions/${sessionId}/cancel`, gym.owner.cookies, confirmBookings === undefined ? {} : { confirmBookings }, target);
   const settingsUrl = (gym: Gym) => `/v1/orgs/${gym.id}/booking-settings`;
 
@@ -304,7 +306,7 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       expect(await Promise.all(people.map((p) => left(p.pack)))).toEqual(people.map(() => 4));
       expect(await Promise.all(waiting.map((p) => left(p.pack)))).toEqual(waiting.map(() => 5));
 
-      // Without the number it only asks, naming the first few, and changes nothing.
+      // Without the mark it only asks, naming the first few, and changes nothing.
       const ask = asked(await cancelClass(sells, spin.id));
       expect({ classes: ask.classes, booked: ask.booked, waiting: ask.waiting }).toEqual({ classes: 1, booked: 11, waiting: 3 });
       expect(ask.people.map((p) => [p.name, p.waiting])).toEqual([
@@ -312,21 +314,20 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
         ["Pack Person 1", false],
         ["Pack Person 2", false],
       ]);
-      // A number that is not theirs is asked again.
-      expect(asked(await cancelClass(sells, spin.id, 13)).booked).toBe(11);
+      // A mark that is not theirs is asked again.
+      expect(asked(await cancelClass(sells, spin.id, NOT_THEIRS)).booked).toBe(11);
       expect(await tally(spin.id)).toEqual({ booked: 11, waitlisted: 3, late_cancelled: 1 });
       expect(await Promise.all(people.map((p) => left(p.pack)))).toEqual(people.map(() => 4));
 
       // Five people cancel for themselves at the same instant as two staff cancels, on two
-      // servers. A staff cancel that lost the race is told the new number and sends it.
+      // servers. A staff cancel that lost the race is told the new mark and sends it.
       const own = people.slice(0, 5).map((who, n) => cancel(sells, who, spin.id, either(n)));
       const staffCancel = async (n: number): Promise<number> => {
-        let confirm = 14;
+        let confirm = ask.mark;
         for (let tries = 0; tries < 20; tries++) {
           const res = await cancelClass(sells, spin.id, confirm, either(n));
           if (res.statusCode === 200) return tries;
-          const again = asked(res);
-          confirm = again.booked + again.waiting;
+          confirm = asked(res).mark;
         }
         throw new Error("the class was never cancelled");
       };
@@ -393,7 +394,7 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
         ["Amy Adams", londonDay(clock, 4), 18 * 60],
         ["Ben Brown", londonDay(clock, 3), 18 * 60],
       ]);
-      const moved = await inject("PUT", slotUrl, sells.owner.cookies, { ...move, confirmBookings: 3 });
+      const moved = await inject("PUT", slotUrl, sells.owner.cookies, { ...move, confirmBookings: moveAsk.mark });
       expect(moved.statusCode, moved.body).toBe(200);
       expect([await left(amy.pack), await left(ben.pack)]).toEqual([9, 10]);
       classes = await classesOf(sells, yoga.typeId);
@@ -409,20 +410,21 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       expect(await booked(sells, ben, later.id)).toBe("booked");
       expect(await left(ben.pack)).toBe(9);
       const stopUrl = `/v1/orgs/${sells.id}/class-repeats/${later.scheduleId}`;
-      expect(asked(await inject("DELETE", stopUrl, sells.owner.cookies)).booked).toBe(1);
+      const stopAsk = asked(await inject("DELETE", stopUrl, sells.owner.cookies));
+      expect(stopAsk.booked).toBe(1);
       expect(await left(ben.pack)).toBe(9);
-      const stopped = await inject("DELETE", `${stopUrl}?confirmBookings=1`, sells.owner.cookies);
+      const stopped = await inject("DELETE", `${stopUrl}?confirmBookings=${stopAsk.mark}`, sells.owner.cookies);
       expect(stopped.statusCode, stopped.body).toBe(200);
       expect(await left(ben.pack)).toBe(10);
       // The same request again finds the time slot gone, and gives nothing back twice.
-      expect((await inject("DELETE", `${stopUrl}?confirmBookings=1`, sells.owner.cookies)).statusCode).toBe(404);
+      expect((await inject("DELETE", `${stopUrl}?confirmBookings=${stopAsk.mark}`, sells.owner.cookies)).statusCode).toBe(404);
       expect(await left(ben.pack)).toBe(10);
 
       // The class REMOVED: Amy's booking of tomorrow, on the first time slot, ends with it.
       const typeUrl = `/v1/orgs/${sells.id}/classes/${yoga.typeId}`;
       const removeAsk = asked(await inject("DELETE", typeUrl, sells.owner.cookies));
       expect([removeAsk.classes, removeAsk.booked, removeAsk.people.map((p) => p.name)]).toEqual([1, 1, ["Amy Adams"]]);
-      const removed = await inject("DELETE", `${typeUrl}?confirmBookings=1`, sells.owner.cookies);
+      const removed = await inject("DELETE", `${typeUrl}?confirmBookings=${removeAsk.mark}`, sells.owner.cookies);
       expect(removed.statusCode, removed.body).toBe(200);
       expect(await left(amy.pack)).toBe(10);
       expect(await classesOf(sells, yoga.typeId)).toEqual([]);
@@ -657,12 +659,12 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
         expect((await inject("GET", settingsUrl(open), who.cookies)).statusCode, who.name).toBe(status);
         expect((await inject("PUT", settingsUrl(open), who.cookies, body)).statusCode, who.name).toBe(status);
         expect((await inject("GET", endingUrl, who.cookies)).statusCode, who.name).toBe(status);
-        expect((await inject("POST", cancelUrl, who.cookies, { confirmBookings: 1 })).statusCode, who.name).toBe(status);
+        expect((await inject("POST", cancelUrl, who.cookies, { confirmBookings: NOT_THEIRS })).statusCode, who.name).toBe(status);
         // The other three doors that end bookings: a time slot cancelled, a class archived,
         // a time slot moved.
-        expect((await inject("DELETE", `/v1/orgs/${open.id}/class-repeats/${slot.id}?confirmBookings=1`, who.cookies)).statusCode, who.name).toBe(status);
-        expect((await inject("DELETE", `/v1/orgs/${open.id}/classes/${spin.typeId}?confirmBookings=1`, who.cookies)).statusCode, who.name).toBe(status);
-        const move = { updateFrom: londonDay(clock, 1), weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: 60, minutes: 45, places: 5, coachUserId: null, confirmBookings: 1 };
+        expect((await inject("DELETE", `/v1/orgs/${open.id}/class-repeats/${slot.id}?confirmBookings=${NOT_THEIRS}`, who.cookies)).statusCode, who.name).toBe(status);
+        expect((await inject("DELETE", `/v1/orgs/${open.id}/classes/${spin.typeId}?confirmBookings=${NOT_THEIRS}`, who.cookies)).statusCode, who.name).toBe(status);
+        const move = { updateFrom: londonDay(clock, 1), weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: 60, minutes: 45, places: 5, coachUserId: null, confirmBookings: NOT_THEIRS };
         expect((await inject("PUT", `/v1/orgs/${open.id}/class-repeats/${slot.id}`, who.cookies, move)).statusCode, who.name).toBe(status);
       }
       const [standing] = await sql<{ archived: boolean; ended: boolean; minute: number }[]>`
@@ -673,8 +675,9 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       const cross = await inject("GET", `/v1/orgs/${sells.id}/class-bookings/ending?by=session&id=${spin.id}`, sells.owner.cookies);
       expect(cross.statusCode, cross.body).toBe(200);
       expect(JSON.parse(cross.body)).toMatchObject({ classes: 0, booked: 0, waiting: 0, people: [] });
-      // Nor cancel its class with the right number.
-      expect((await inject("POST", `/v1/orgs/${sells.id}/class-sessions/${spin.id}/cancel`, sells.owner.cookies, { confirmBookings: 1 })).statusCode).toBe(404);
+      // Nor cancel its class with the right mark, the one this class's own gym is given.
+      const theirs = asked(await inject("POST", cancelUrl, open.owner.cookies, {})).mark;
+      expect((await inject("POST", `/v1/orgs/${sells.id}/class-sessions/${spin.id}/cancel`, sells.owner.cookies, { confirmBookings: theirs })).statusCode).toBe(404);
       expect(await tally(spin.id)).toEqual({ booked: 1 });
       const [row] = await sql<{ booking_opens_days: number }[]>`SELECT booking_opens_days FROM gyms WHERE id = ${open.id}`;
       expect(row?.booking_opens_days).toBe(7);
@@ -815,7 +818,7 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
         ["Zoe Gold", zoe.entryId, null],
       ]);
 
-      // Without the number it only asks, naming the classes, and changes nothing.
+      // Without the mark it only asks, naming the classes, and changes nothing.
       const ask = askedHeld(await cancelHeld(sells, maya.entryId, mayaGold, { when: "today" }));
       expect({ classes: ask.classes, booked: ask.booked, waiting: ask.waiting }).toEqual({ classes: 3, booked: 3, waiting: 0 });
       expect(ask.people.map((p) => [p.name, p.waiting, p.localStartMinute])).toEqual([
@@ -823,31 +826,31 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
         ["Maya Pack", false, later.minute],
         ["Maya Pack", false, near.minute],
       ]);
-      // A number that is not theirs is asked again.
-      expect(askedHeld(await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: 5 })).booked).toBe(3);
+      // A mark that is not theirs is asked again.
+      expect(askedHeld(await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: NOT_THEIRS })).booked).toBe(3);
       expect((await heldStatus(mayaGold))?.status).toBe("active");
       expect(await tally(full.id)).toEqual({ booked: 1, waitlisted: 1 });
 
-      // Nobody outside the gym's staff cancels it, with the right number or without.
+      // Nobody outside the gym's staff cancels it, with the right mark or without.
       const stranger = await signedIn("Stranger");
       for (const who of [stranger, open.owner, zoe]) {
-        const res = await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: 3 }, who);
+        const res = await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: ask.mark }, who);
         expect([403, 404], who.name).toContain(res.statusCode);
       }
       expect((await inject("POST", `/v1/orgs/${sells.id}/member-list/entries/${maya.entryId}/memberships/${mayaGold}/cancel`, {}, { when: "today" })).statusCode).toBe(401);
       // Another gym's owner, through their own gym's address, finds no such membership.
-      expect((await inject("POST", `/v1/orgs/${open.id}/member-list/entries/${maya.entryId}/memberships/${mayaGold}/cancel`, open.owner.cookies, { when: "today", confirmBookings: 3 })).statusCode).toBe(404);
+      expect((await inject("POST", `/v1/orgs/${open.id}/member-list/entries/${maya.entryId}/memberships/${mayaGold}/cancel`, open.owner.cookies, { when: "today", confirmBookings: ask.mark })).statusCode).toBe(404);
       expect((await heldStatus(mayaGold))?.status).toBe("active");
       expect(await tally(later.id)).toEqual({ booked: 2 });
 
       // Two staff cancels on two servers, at the instant Maya cancels one class herself. A
-      // cancel that lost the race is told the new number and sends it.
+      // cancel that lost the race is told the new mark and sends it.
       const staffCancel = async (n: number): Promise<void> => {
-        let confirm = 3;
+        let confirm = ask.mark;
         for (let tries = 0; tries < 20; tries++) {
           const res = await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: confirm }, sells.owner, either(n));
           if (res.statusCode === 200) return;
-          confirm = askedHeld(res).booked;
+          confirm = askedHeld(res).mark;
         }
         throw new Error("the membership was never cancelled");
       };
@@ -872,7 +875,7 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       expect((await heldStatus(zoeGold))?.status).toBe("active");
 
       // The cancel arriving again changes nothing.
-      expect((await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: 2 })).statusCode).toBe(200);
+      expect((await cancelHeld(sells, maya.entryId, mayaGold, { when: "today", confirmBookings: NOT_THEIRS })).statusCode).toBe(200);
       expect(await left(tom.pack)).toBe(4);
       expect(await left(maya.pack)).toBe(4);
       expect(await tally(full.id)).toEqual({ booked: 1, cancelled: 1 });
@@ -921,7 +924,7 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       expect({ classes: ask.classes, booked: ask.booked }).toEqual({ classes: 2, booked: 2 });
       expect(ask.people.map((p) => p.localStartMinute).sort((a, b) => a - b)).toEqual([15, after.minute].sort((a, b) => a - b));
       expect(await heldStatus(anaGold)).toEqual({ status: "active", renews: true });
-      expect((await cancelHeld(sells, ana.entryId, anaGold, { when: "period_end", confirmBookings: 2 })).statusCode).toBe(200);
+      expect((await cancelHeld(sells, ana.entryId, anaGold, { when: "period_end", confirmBookings: ask.mark })).statusCode).toBe(200);
       expect((await bookingOf(ana, lastNight)).map((b) => b.status)).toEqual(["booked"]);
       expect((await bookingOf(ana, nextMorning)).map((b) => b.status)).toEqual(["cancelled"]);
       expect(await heldStatus(anaGold)).toEqual({ status: "active", renews: false });
@@ -932,15 +935,16 @@ d("bookings when a class or a person goes (real Postgres, two api instances)", (
       const pat = await packed(sells, packType, "Pat Pack", 5);
       expect(await booked(sells, pat, soon.id)).toBe("booked");
       expect(await left(pat.pack)).toBe(4);
-      expect(askedHeld(await cancelHeld(sells, pat.entryId, pat.pack, { when: "today" })).booked).toBe(1);
-      expect((await cancelHeld(sells, pat.entryId, pat.pack, { when: "today", confirmBookings: 1 })).statusCode).toBe(200);
+      const patAsk = askedHeld(await cancelHeld(sells, pat.entryId, pat.pack, { when: "today" }));
+      expect(patAsk.booked).toBe(1);
+      expect((await cancelHeld(sells, pat.entryId, pat.pack, { when: "today", confirmBookings: patAsk.mark })).statusCode).toBe(200);
       expect(await bookingOf(pat, soon.id)).toEqual([{ status: "cancelled", held: pat.pack, charged: false }]);
       expect([(await heldStatus(pat.pack))?.status, await left(pat.pack)]).toEqual(["cancelled", 5]);
 
-      // Nothing booked on it: cancelled at once, and a number sent anyway does not stop it.
+      // Nothing booked on it: cancelled at once, and a mark sent anyway does not stop it.
       const sam = await listed(sells, "Sam Monthly");
       const samGold = await holdMonthly(sells, sam.entryId, gold);
-      expect((await cancelHeld(sells, sam.entryId, samGold, { when: "today", confirmBookings: 4 })).statusCode).toBe(200);
+      expect((await cancelHeld(sells, sam.entryId, samGold, { when: "today", confirmBookings: NOT_THEIRS })).statusCode).toBe(200);
       expect((await heldStatus(samGold))?.status).toBe("cancelled");
     },
     T,

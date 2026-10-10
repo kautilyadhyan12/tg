@@ -199,7 +199,7 @@ export function membershipBookingsAsked(err) {
  *  sessions' mark, each only where the box named some. */
 export function endingConfirm(ending) {
   return {
-    ...((ending?.booked ?? 0) > 0 ? { confirmBookings: ending.booked } : {}),
+    ...((ending?.booked ?? 0) > 0 && typeof ending.mark === 'string' ? { confirmBookings: ending.mark } : {}),
     ...(ending?.ptSessions ? { confirmPtSessions: ending.ptSessions.mark } : {}),
   };
 }

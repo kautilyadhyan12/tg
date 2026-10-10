@@ -997,7 +997,7 @@ describe('isRetryable', () => {
   });
 
   it('keeps 403 permanent and 401/404/5xx retryable, unchanged', () => {
-    expect(isRetryable(apiError(403, 'trainer_scope_unavailable', 'Not available yet.'))).toBe(false);
+    expect(isRetryable(apiError(403, 'forbidden', "Your role doesn't allow that."))).toBe(false);
     expect(isRetryable(apiError(401, 'unauthorized', 'Signed out.'))).toBe(true);
     expect(isRetryable(apiError(404, 'not_found', 'Gone.'))).toBe(true);
     expect(isRetryable(apiError(500, 'internal_error', 'Oops.'))).toBe(true);

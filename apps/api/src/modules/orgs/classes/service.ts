@@ -287,6 +287,8 @@ function throwOnFailure(outcome: repo.ClassWriteOutcome): void {
         "repeat_clashes",
         "This class already has a time slot at this time on one of those days. Cancel that time slot first, or pick another time.",
       );
+    case "name_taken":
+      throw new OrgsError(409, "class_name_taken", "You already have a class with this name. Pick another name.");
     case "too_many":
       throw new OrgsError(
         409,
@@ -359,6 +361,7 @@ export async function updateClassType(
     confirmTrainerSessions: req.confirmTrainerSessions ?? null,
     actorUserId: userId,
     now: deps.now(),
+    clock: deps.now,
   });
   if (outcome.kind === "over_sessions") return toSessions(outcome);
   throwOnFailure(outcome);
@@ -370,7 +373,7 @@ export async function archiveClassType(
   userId: string,
   gymId: string,
   classTypeId: string,
-  confirmBookings: number | null,
+  confirmBookings: string | null,
 ): Promise<BookingsAnswer<GymClassesResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const outcome = await repo.archiveClassType(deps.sql, {
@@ -379,6 +382,7 @@ export async function archiveClassType(
     confirmBookings,
     actorUserId: userId,
     now: deps.now(),
+    clock: deps.now,
   });
   if (outcome.kind === "has_bookings") return { kind: "bookings", ending: toEnding(outcome) };
   throwOnFailure(outcome);
@@ -401,6 +405,7 @@ export async function restoreClassType(
       classTypeId,
       actorUserId: userId,
       now: deps.now(),
+      clock: deps.now,
     }),
   );
   return await readOr404(deps, gymId);
@@ -432,6 +437,7 @@ export async function createSchedule(
     confirmTrainerSessions: req.confirmTrainerSessions ?? null,
     actorUserId: userId,
     now: deps.now(),
+    clock: deps.now,
   });
   if (outcome.kind === "over_sessions") return toSessions(outcome);
   throwOnFailure(outcome);
@@ -556,6 +562,7 @@ export async function updateSchedule(
       confirmTrainerSessions: req.confirmTrainerSessions ?? null,
       actorUserId: userId,
       now: deps.now(),
+      clock: deps.now,
     }),
     "list",
   );
@@ -582,6 +589,7 @@ export async function bulkEditSchedules(
     confirmTrainerSessions: req.confirmTrainerSessions ?? null,
     actorUserId: userId,
     now: deps.now(),
+    clock: deps.now,
   });
   if (outcome.kind === "from_outside" && outcome.verdict !== "past") {
     throw new OrgsError(
@@ -666,6 +674,7 @@ async function writeDay(
     confirmTrainerSessions,
     actorUserId: userId,
     now: deps.now(),
+    clock: deps.now,
   });
   switch (outcome.kind) {
     case "ok":
@@ -757,6 +766,7 @@ export async function changeClassSession(
       confirmTrainerSessions: req.confirmTrainerSessions ?? null,
       actorUserId: userId,
       now: deps.now(),
+      clock: deps.now,
     }),
     "calendar",
   );
@@ -788,7 +798,7 @@ export async function setScheduleOnline(
   req: SetClassOnlineRequest,
 ): Promise<GymClassesResponse> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
-  const outcome = await online.setSlotOnline(deps.sql, { gymId, scheduleId, online: req.online, onlineLink: req.onlineLink, actorUserId: userId, now: deps.now() });
+  const outcome = await online.setSlotOnline(deps.sql, { gymId, scheduleId, online: req.online, onlineLink: req.onlineLink, actorUserId: userId, now: deps.now(), clock: deps.now });
   if (outcome.kind === "not_found") throw new OrgsError(404, "class_not_found", NOT_FOUND_MESSAGE);
   return await readOr404(deps, gymId);
 }
@@ -802,7 +812,7 @@ export async function setSessionOnline(
   req: SetClassOnlineRequest,
 ): Promise<GymClassWeekResponse> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
-  const outcome = await online.setClassOnline(deps.sql, { gymId, sessionId, online: req.online, onlineLink: req.onlineLink, actorUserId: userId, now: deps.now() });
+  const outcome = await online.setClassOnline(deps.sql, { gymId, sessionId, online: req.online, onlineLink: req.onlineLink, actorUserId: userId, now: deps.now(), clock: deps.now });
   switch (outcome.kind) {
     case "ok":
       return await readWeekOr404(deps, gymId, outcome.localDate);
@@ -824,7 +834,7 @@ export async function cancelClassSession(
   userId: string,
   gymId: string,
   sessionId: string,
-  confirmBookings: number | null,
+  confirmBookings: string | null,
 ): Promise<BookingsAnswer<GymClassWeekResponse>> {
   const done = await writeDay(deps, userId, gymId, sessionId, { action: "cancel", confirmBookings });
   if (done.kind === "sessions") throw new Error("cancelling a class asked about a trainer's sessions");
@@ -848,7 +858,7 @@ export async function endSchedule(
   userId: string,
   gymId: string,
   scheduleId: string,
-  confirmBookings: number | null,
+  confirmBookings: string | null,
 ): Promise<BookingsAnswer<GymClassesResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
   const outcome = await repo.endSchedule(deps.sql, {
@@ -857,6 +867,7 @@ export async function endSchedule(
     confirmBookings,
     actorUserId: userId,
     now: deps.now(),
+    clock: deps.now,
   });
   if (outcome.kind === "has_bookings") return { kind: "bookings", ending: toEnding(outcome) };
   throwOnFailure(outcome);

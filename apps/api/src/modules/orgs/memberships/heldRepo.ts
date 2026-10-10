@@ -25,6 +25,7 @@ import {
   giveHeldMembership,
   heldMembershipStatusSchema,
   heldMembershipView,
+  sameTypeTwice,
   membershipAccessSchema,
   membershipKindSchema,
   membershipLimitPeriodSchema,
@@ -254,7 +255,10 @@ export type HeldWriteOutcome =
   | { kind: "request_reused" }
   | { kind: "membership_not_found" }
   /** The rule refuses this change of the membership as it is today. */
-  | { kind: "not_allowed" };
+  | { kind: "not_allowed" }
+  /** The person has this type running already. `ends`: the one they hold has a last day,
+   *  so a start date after it would be taken; a repeating one that renews has none. */
+  | { kind: "already_held"; typeName: string; ends: boolean };
 
 /** The record under the gym's lock and its own: null where it is not this gym's. */
 async function lockedEntry(tx: TransactionSql, gymId: string, entryId: string): Promise<{ past: boolean } | null> {
@@ -277,6 +281,20 @@ export async function settle(tx: TransactionSql, gymId: string, entryId: string,
       WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND status = 'active' AND id = ANY(${ended}::uuid[])`;
   }
   return rows.length - ended.length;
+}
+
+/** Two records about to be merged: the name of a type both have running at once, which
+ *  the kept record would then hold twice; null where there is none. One taken from the
+ *  list is not asked about: it is left with its record (`moveHeldMemberships`). Both
+ *  records settled first, under the gym's lock. */
+export async function typeHeldByBoth(tx: TransactionSql, gymId: string, goneId: string, keepId: string, today: string): Promise<string | null> {
+  const gone = (await held(tx, gymId, goneId, IN_USE, IN_USE_READ)).map(shape).filter((row) => !row.fromList);
+  if (gone.length === 0) return null;
+  const kept = (await held(tx, gymId, keepId, IN_USE, IN_USE_READ)).map(shape);
+  for (const a of gone) {
+    if (kept.some((b) => b.typeId === a.typeId && sameTypeTwice(a.membership, b.membership, today))) return a.typeName;
+  }
+  return null;
 }
 
 export async function giveHeld(
@@ -315,6 +333,14 @@ export async function giveHeld(
     const given = giveHeldMembership(type, input.startsOn, input.paid, input.today);
     if (!given.ok) return { kind: given.reason };
     const m = given.membership;
+
+    // Asked under the record's lock, so two staff pressing Add at one instant give one.
+    const running = (await held(tx, input.gymId, input.entryId, IN_USE, IN_USE_READ)).map(shape);
+    const clash = running.filter((row) => row.typeId === input.typeId && sameTypeTwice(row.membership, m, input.today));
+    if (clash.length > 0) {
+      const ends = clash.every((row) => heldMembershipView(row.membership, input.today).endsOn !== null);
+      return { kind: "already_held", typeName: type.name, ends };
+    }
 
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_held_memberships
@@ -382,7 +408,7 @@ export async function moveHeld(
     /** The gym's own day. */
     today: string;
     /** A cancel: the number of bookings the screen was told it would end. */
-    confirmBookings: number | null;
+    confirmBookings: string | null;
     /** A cancel: the mark of the personal training sessions it was told it would end. */
     confirmPtSessions?: string | null;
     actorUserId: string;

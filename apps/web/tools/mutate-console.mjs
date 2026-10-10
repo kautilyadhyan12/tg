@@ -728,69 +728,14 @@ const MUTANTS = [
     to: `          onClick={() => onRemove(true)}${String.fromCharCode(10)}          className="text-xs rounded-lg px-3 py-1.5 self-start sm:self-end"`,
   },
   {
-    // T3 C/H-1. The trainer hint promised a STUDIO's trainer the member list,
-    // which `listOrgMembers` refuses with 403 `trainer_scope_unavailable`. This
-    // mutant makes the hint unconditional again — the shipped defect exactly.
-    id: 'S14',
-    target: 'staffview',
-    suite: STAFF_VIEW_SUITE,
-    why: "FALSE ON SCREEN: a STUDIO owner is told their trainer can see the member list, and the server turns that trainer away — the owner appoints somebody for a job the app has just promised on its behalf",
-    expect: 'does NOT promise a STUDIO trainer the member list',
-    from: "      orgType === 'gym'",
-    to: "      orgType !== null",
-  },
-  {
-    // T3 C/H-1's other half, and the S11 class again: the helper can be right
-    // while the SCREEN never passes it the org type.
-    //
-    // THIS ROW SURVIVED ITS FIRST RUN AND THE FILTER WAS WHY — :11846's lesson,
-    // incurred by the chat that quoted it. Dropping the prop makes `orgType`
-    // undefined, which the helper treats as NOT-a-gym, so EVERY org now reads
-    // the studio sentence. The studio test therefore still PASSES; the test that
-    // fails is the GYM one, and the filter was pointed at the studio. A mutant
-    // has two halves — the anchor says what breaks, the filter says what should
-    // notice — and only the anchor was right.
-    //
-    // Keep the pair together: the studio test proves the helper is consulted at
-    // all, this mutant proves the SCREEN feeds it the real type.
+    // The Staff tab is never told what kind of organisation this is, so a studio's
+    // Invite staff form calls its Coach a Trainer. (The hint no longer follows the
+    // type, ROADMAP 4e; the role's name still does.)
     id: 'S15',
-    target: 'settings',
-    suite: SETTINGS_SUITE,
-    why: 'FALSE ON SCREEN, THROUGH A DROPPED PROP: the Staff panel is never told what kind of org this is, so `staffRoleChoices` falls to its refusing default and every GYM owner is told their trainer cannot see the member list — a correct helper bypassed entirely by the screen that renders it',
-    expect: 'tells a GYM owner their trainer CAN see it',
-    // RE-ANCHORED 2026-08-26 (gym-details card). `Settings.jsx` now resolves
-    // `viewerPrivileges(org)` ONCE into a local, because two sections read it,
-    // so the old inline call is gone from this line. The whole-table pre-check
-    // ABORTED the sweep before a byte was written — seventh time on this branch
-    // that guard has paid for itself — and the mutant was re-measured RED rather
-    // than assumed to still work.
-    // RE-ANCHORED AGAIN 2026-08-26 by round 3's `key` fix, which is on this same
-    // line. Third time this mutant's anchor has moved on this branch; the
-    // whole-table pre-check ABORTED before a byte was written each time, and it
-    // is re-measured RED rather than assumed. **C82 is its neighbour on the same
-    // line and they guard different things** — this one that the ORG TYPE
-    // reaches the panel, C82 that the panel is thrown away when the gym changes.
-    // (That sentence named C81 until 2026-08-27; C81 is the same guarantee on
-    // the GYM-DETAILS panel one line above, not on this one.)
-    //
-    // RE-ANCHORED A FOURTH TIME 2026-08-27, AND THIS ONE WAS NOT CAUGHT AT THE
-    // TIME. Round 4's fix (`af27965`) prefixed both panel keys — `staff-${…}`
-    // and `gym-${…}` — which moved this anchor, C81's and C82's all at once, and
-    // none of the three was re-aimed. Measured on the trial card, with
-    // `Settings.jsx` byte-identical to HEAD: all THREE matched ZERO times, so
-    // the whole-table pre-check has been aborting every sweep since, and the
-    // guarantees these carry — including round 3's own Critical/High — have had
-    // no mutant behind them for two commits. Round 5 shipped on a SUBSET run,
-    // which is why nothing noticed. Re-aimed at the SAME call sites, never at
-    // whichever line looked closest (:15770), and each re-measured RED.
-    //
-    // RE-ANCHORED A FIFTH TIME 2026-08-29 by the read-only card, which gave both
-    // panels a `readOnly` prop and so broke each mount onto its own lines. The
-    // anchors are now ONE PROP each rather than a whole element, which is the
-    // shape that stops this recurring: a prop line moves only when that prop
-    // moves. **Caught by the whole-table pre-check before a byte was written**,
-    // and re-measured RED rather than assumed — the fourth re-anchor above is
-    // the one that was NOT caught, and it cost two commits of no coverage.
+    target: 'members',
+    suite: 'src/pages/console/membersStaff.render.test.jsx',
+    why: "FALSE ON SCREEN, THROUGH A DROPPED PROP: a studio's owner is offered a role called Trainer on a console that calls it Coach everywhere else",
+    expect: 'tells a STUDIO owner their Coach can see who is in the app',
     from: '          orgType={org.orgType}',
     to: '          orgType={undefined}',
   },

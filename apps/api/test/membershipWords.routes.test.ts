@@ -797,7 +797,8 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       const org = await makeOrg(owner.cookies, "Mwl Out Gym");
       const gymId = org.org.id;
       const term = await addType(gymId, owner.cookies, oneMonth({ name: "Three months", termCount: 3 }));
-      const filler = await addType(gymId, owner.cookies, oneMonth({ name: "One month" }));
+      // A class pack, the one kind a person can be given several of at once.
+      const filler = await addType(gymId, owner.cookies, monthly({ name: "10 classes", kind: "pack", termCount: null, termUnit: null, packClasses: 10, packDays: 60 }));
       const full = await addPerson(gymId, owner.cookies, "Full Up", { membershipType: "Term" });
       const today = list(await get(heldUrl(gymId, full), owner.cookies)).today;
       for (let i = 0; i < HELD_LIVE_MAX; i++) await given(gymId, full, owner.cookies, { typeId: filler, startsOn: today });

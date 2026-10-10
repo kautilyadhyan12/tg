@@ -28,7 +28,7 @@ const person = (n, over = {}) => ({
   ...over,
 });
 const page = (from, to, next) => ({
-  data: { classes: 2, booked: 150, waiting: 4, people: Array.from({ length: to - from + 1 }, (_, i) => person(from + i)), next },
+  data: { classes: 2, booked: 150, waiting: 4, mark: 'f'.repeat(64), people: Array.from({ length: to - from + 1 }, (_, i) => person(from + i)), next },
 });
 
 beforeEach(() => {
@@ -37,7 +37,7 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('the box that asks before bookings end', () => {
-  const ENDING = { classes: 2, booked: 150, waiting: 4, people: [person(1), person(2), person(3, { waiting: true })] };
+  const ENDING = { classes: 2, booked: 150, waiting: 4, mark: 'f'.repeat(64), people: [person(1), person(2), person(3, { waiting: true })] };
   const draw = (over = {}) => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
