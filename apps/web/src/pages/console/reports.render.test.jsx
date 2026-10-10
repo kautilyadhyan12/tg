@@ -6,9 +6,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { membersReportFrom } from '@app/shared';
+import { attendanceReportFrom, membersReportFrom } from '@app/shared';
 
-const svc = { members: vi.fn() };
+const svc = { members: vi.fn(), attendance: vi.fn() };
 const orgApi = { getMine: vi.fn() };
 vi.mock('../../api/reportsApi', () => ({ reportsService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -77,6 +77,20 @@ const tableRows = (name) =>
 beforeEach(() => {
   resetConsoleOrgs();
   svc.members.mockResolvedValue(membersReportFrom(facts()));
+  // The attendance half has its own file; here the gym has neither check-ins nor classes.
+  svc.attendance.mockResolvedValue(
+    attendanceReportFrom({
+      timezone: 'Europe/London',
+      today: '2026-10-10',
+      firstVisitOn: null,
+      days: [],
+      weeks: [],
+      hours: [],
+      hoursNoTime: 0,
+      member: { members: 0, visits: 0, visitors: 0 },
+      classes: { ever: false, types: [] },
+    }),
+  );
 });
 afterEach(() => {
   cleanup();

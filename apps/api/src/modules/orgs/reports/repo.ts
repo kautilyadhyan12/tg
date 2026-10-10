@@ -1,8 +1,9 @@
-// The Reports page's reads (ROADMAP 21a-i): counts of the gym's member list and its leads.
+// The Reports page's reads (ROADMAP 21a-i, 21a-ii): counts of the gym's member list, its
+// leads, its visits and its classes.
 // Every read names the gym in the WHERE and returns counts, never a person.
 import type { Sql } from "postgres";
 import { z } from "zod";
-import { REPORT_MONTHS } from "@app/shared";
+import { REPORT_MONTHS, type AttendanceWindows, type ReportClassCounts } from "@app/shared";
 
 const count = z.number().int().min(0);
 const countsRowSchema = z.object({
@@ -88,4 +89,117 @@ export async function readLeadCounts(sql: Sql, gymId: string): Promise<LeadCount
     FROM gym_leads
     WHERE gym_id = ${gymId}
     GROUP BY source`;
+}
+
+const visitClockSchema = z.object({ today: z.string(), first_visit_on: z.string().nullable() });
+
+/** The gym's own day today, and the day of its first check-in. */
+export async function readVisitClock(sql: Sql, gymId: string, timezone: string, now: Date): Promise<{ today: string; firstVisitOn: string | null }> {
+  const rows = await sql<Record<string, unknown>[]>`
+    SELECT to_char((${now}::timestamptz AT TIME ZONE ${timezone})::date, 'YYYY-MM-DD') AS today,
+           (SELECT to_char(min(a.day), 'YYYY-MM-DD') FROM gym_attendance a WHERE a.gym_id = ${gymId}) AS first_visit_on`;
+  const row = visitClockSchema.parse(rows[0]);
+  return { today: row.today, firstVisitOn: row.first_visit_on };
+}
+
+const visitCountsSchema = z.object({
+  days: z.array(z.object({ day: z.string(), visits: count })),
+  weeks: z.array(z.object({ weekStart: z.string(), visits: count, people: count })),
+  hours: z.array(z.object({ weekday: z.number().int(), hour: z.number().int(), visits: count })),
+  hours_no_time: count,
+  members: count,
+  member_visits: count,
+  member_visitors: count,
+});
+export type VisitCounts = z.infer<typeof visitCountsSchema>;
+
+/** The gym's visits counted over the report's windows, in one pass over the days shown.
+ *
+ *  A visit is a row of the Attendance page, so a day here and a day there are one number.
+ *  A person is their record on the list, or their app account when the visit has none. A
+ *  visit's hour is on the gym's clock; one staff added on a later day has no hour. Visits
+ *  a member counts the people on the list today and only their visits. */
+export async function readVisitCounts(
+  sql: Sql,
+  gymId: string,
+  timezone: string,
+  today: string,
+  windows: AttendanceWindows,
+): Promise<VisitCounts> {
+  const hoursFrom = windows.hours?.from ?? null;
+  const hoursTo = windows.hours?.to ?? null;
+  const memberFrom = windows.member?.from ?? null;
+  const memberTo = windows.member?.to ?? null;
+  const rows = await sql<Record<string, unknown>[]>`
+    WITH v AS MATERIALIZED (
+      SELECT a.day, a.entry_id, COALESCE(a.entry_id, a.user_id) AS who,
+             CASE WHEN a.hours_status <> 'added_later'
+                  THEN extract(hour FROM a.marked_at AT TIME ZONE ${timezone})::int END AS hour
+      FROM gym_attendance a
+      WHERE a.gym_id = ${gymId} AND a.day >= ${windows.weeksFrom}::date AND a.day <= ${today}::date
+    )
+    SELECT
+      (SELECT COALESCE(json_agg(json_build_object('day', to_char(d.day, 'YYYY-MM-DD'), 'visits', d.visits)), '[]'::json)
+       FROM (SELECT day, count(*)::int AS visits FROM v WHERE day >= ${windows.daysFrom}::date GROUP BY day) d) AS days,
+      (SELECT COALESCE(json_agg(json_build_object('weekStart', to_char(w.week_start, 'YYYY-MM-DD'), 'visits', w.visits, 'people', w.people)), '[]'::json)
+       FROM (SELECT date_trunc('week', day)::date AS week_start, count(*)::int AS visits, count(DISTINCT who)::int AS people
+             FROM v GROUP BY 1) w) AS weeks,
+      (SELECT COALESCE(json_agg(json_build_object('weekday', h.weekday, 'hour', h.hour, 'visits', h.visits)), '[]'::json)
+       FROM (SELECT extract(isodow FROM day)::int AS weekday, hour, count(*)::int AS visits
+             FROM v WHERE day >= ${hoursFrom}::date AND day <= ${hoursTo}::date AND hour IS NOT NULL GROUP BY 1, 2) h) AS hours,
+      (SELECT count(*)::int FROM v WHERE day >= ${hoursFrom}::date AND day <= ${hoursTo}::date AND hour IS NULL) AS hours_no_time,
+      (SELECT count(*)::int FROM gym_member_list_entries e WHERE e.gym_id = ${gymId} AND e.former_at IS NULL) AS members,
+      (SELECT count(*)::int FROM v JOIN gym_member_list_entries e ON e.id = v.entry_id AND e.gym_id = ${gymId} AND e.former_at IS NULL
+       WHERE v.day >= ${memberFrom}::date AND v.day <= ${memberTo}::date) AS member_visits,
+      (SELECT count(DISTINCT v.entry_id)::int FROM v JOIN gym_member_list_entries e ON e.id = v.entry_id AND e.gym_id = ${gymId} AND e.former_at IS NULL
+       WHERE v.day >= ${memberFrom}::date AND v.day <= ${memberTo}::date) AS member_visitors`;
+  return visitCountsSchema.parse(rows[0]);
+}
+
+const classCountsSchema = z.object({
+  name: z.string(),
+  classes: count,
+  limitedClasses: count,
+  places: count,
+  booked: count,
+  bookings: count,
+  attended: count,
+  noShows: count,
+});
+
+/** Whether the gym has set up any class, and the classes that started from `fromDay` on
+ *  the gym's calendar up to now, counted for each class the gym runs. A cancelled class
+ *  is not counted; a place is taken while it is booked, came or no-show. */
+export async function readClassCounts(
+  sql: Sql,
+  gymId: string,
+  timezone: string,
+  fromDay: string,
+  now: Date,
+): Promise<{ ever: boolean; types: ReportClassCounts[] }> {
+  const ever = await sql<{ ever: boolean }[]>`
+    SELECT EXISTS (SELECT 1 FROM gym_class_types t WHERE t.gym_id = ${gymId}) AS ever`;
+  const rows = await sql<Record<string, unknown>[]>`
+    SELECT t.name,
+           count(*)::int AS classes,
+           (count(*) FILTER (WHERE s.places IS NOT NULL))::int AS "limitedClasses",
+           COALESCE(sum(s.places), 0)::int AS places,
+           COALESCE(sum(LEAST(b.taken, s.places)) FILTER (WHERE s.places IS NOT NULL), 0)::int AS booked,
+           COALESCE(sum(b.taken), 0)::int AS bookings,
+           COALESCE(sum(b.attended), 0)::int AS attended,
+           COALESCE(sum(b.no_shows), 0)::int AS "noShows"
+    FROM gym_class_sessions s
+    JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
+    CROSS JOIN LATERAL (
+      SELECT count(*) FILTER (WHERE k.status IN ('booked', 'attended', 'no_show')) AS taken,
+             count(*) FILTER (WHERE k.status = 'attended') AS attended,
+             count(*) FILTER (WHERE k.status = 'no_show') AS no_shows
+      FROM gym_class_bookings k
+      WHERE k.gym_id = s.gym_id AND k.session_id = s.id
+    ) b
+    WHERE s.gym_id = ${gymId} AND s.status = 'scheduled'
+      AND s.starts_at >= (${fromDay}::date::timestamp AT TIME ZONE ${timezone})
+      AND s.starts_at <= ${now}::timestamptz
+    GROUP BY t.id, t.name`;
+  return { ever: ever[0]?.ever === true, types: z.array(classCountsSchema).parse(rows) };
 }
