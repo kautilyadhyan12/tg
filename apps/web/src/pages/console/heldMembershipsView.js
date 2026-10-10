@@ -137,26 +137,6 @@ export function priceWords(m) {
 export function askWords(what, m, name, today) {
   const whose = `${name}'s ${m.typeName}`;
   switch (what) {
-    case 'paid': {
-      const p = m.view.payment;
-      const from = p === null ? null : p.state === 'paid' ? p.until : p.since;
-      const until = m.view.can.markPaid?.until ?? null;
-      const period =
-        m.kind === 'recurring' && from !== null && until !== null
-          ? ` for ${dayWords(from)} up to ${dayWords(until)}. Their next payment is then due ${dayWords(until)}`
-          : '';
-      return {
-        question: `Mark ${whose} as paid?`,
-        detail: `This notes that ${name} paid ${priceWords(m)}${period}. It only notes it here: no money is taken.`,
-        button: 'Mark paid',
-      };
-    }
-    case 'undoPaid':
-      return {
-        question: `Take back the last payment noted for ${whose}?`,
-        detail: 'Use this when Mark paid was pressed by mistake. Nothing is refunded: this only changes the note.',
-        button: 'Take it back',
-      };
     case 'freeze':
       return {
         question: `Freeze ${whose}?`,
@@ -266,10 +246,6 @@ export function doneWords(what, m) {
   switch (what) {
     case 'give':
       return 'Membership added.';
-    case 'paid':
-      return `${m.typeName} marked paid.`;
-    case 'undoPaid':
-      return `The last payment noted for ${m.typeName} was taken back.`;
     case 'freeze':
       return `${m.typeName} is frozen.`;
     case 'unfreeze':
@@ -319,15 +295,23 @@ export function givePreview(type, startsOn, paid, today) {
 }
 
 /** What a choice of membership comes to: the type, the line under the date, the words of
- *  the paid tick, and why it cannot be given. `value` is { typeId, startsOn, paid }. */
+ *  the paid tick, and why it cannot be given. `value` is { typeId, startsOn, paid, method }.
+ *  `methodNeeded`: it is ticked as paid and how they paid is not picked yet. */
 export function membershipChoice(types, value, today) {
   const type = types.find((t) => t.id === value.typeId) ?? null;
-  return { type, ...givePreview(type, value.startsOn, value.paid, today) };
+  const preview = givePreview(type, value.startsOn, value.paid, today);
+  const pays = type !== null && type.priceMinor > 0 && value.paid === true;
+  return { type, ...preview, methodNeeded: pays && preview.problem === null && (value.method ?? '') === '' };
 }
 
-/** What the server is sent for a choice. `requestKey` is made once a form. */
+/** Said where a form is sent with the paid tick on and no way of paying picked. */
+export const METHOD_NEEDED = 'Pick how they paid.';
+
+/** What the server is sent for a choice. `requestKey` is made once a form. A paid one
+ *  says how it was paid: the server records the payment with the membership. */
 export function giveBody(requestKey, type, value) {
-  return { requestKey, typeId: type.id, startsOn: value.startsOn, paid: type.priceMinor === 0 ? false : value.paid };
+  const paid = type.priceMinor === 0 ? false : value.paid;
+  return { requestKey, typeId: type.id, startsOn: value.startsOn, paid, ...(paid ? { method: value.method } : {}) };
 }
 
 /** A key the server takes one membership for, however often the request arrives. */

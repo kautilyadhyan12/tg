@@ -30,7 +30,8 @@ import { ptEndingAction, ptSessionsAsked } from './ptSessionsEndView';
 import MemberMemberships from './MemberMemberships';
 import MemberNotes from './MemberNotes';
 import MembershipChoice from './MembershipChoice';
-import { giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
+import { METHOD_NEEDED, giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
+import { canRecordPayments } from './memberBillsView';
 import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
 import { canOpenPlace, placeFor } from './consolePlaces';
@@ -460,7 +461,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [priceList, setPriceList] = useState(undefined);
   const [priceAsk, setPriceAsk] = useState(0);
   const giveTypes = Array.isArray(priceList) && priceList.length > 0 ? priceList : null;
-  const [giving, setGiving] = useState(() => ({ requestKey: newRequestKey(), typeId: '', startsOn: gymToday(gym?.timezone), paid: false }));
+  const [giving, setGiving] = useState(() => ({ requestKey: newRequestKey(), typeId: '', startsOn: gymToday(gym?.timezone), paid: false, method: '' }));
   /** Where a refusal or the warning shows: at the top, above a form whose buttons are at its foot. */
   const alertRef = useRef(null);
 
@@ -720,6 +721,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     const choice = giveTypes === null ? null : membershipChoice(giveTypes, giving, gymToday(gym?.timezone));
     if (choice !== null && choice.type !== null && choice.problem !== null) {
       setRefusal({ message: choice.problem, openId: null, ack: null });
+      setBusy(false);
+      return;
+    }
+    if (choice !== null && choice.methodNeeded) {
+      setRefusal({ message: METHOD_NEEDED, openId: null, ack: null });
       setBusy(false);
       return;
     }
@@ -1118,6 +1124,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             types={giveTypes}
             today={gymToday(gym?.timezone)}
             value={giving}
+            canBill={canRecordPayments(viewerPrivileges(gym))}
             onChange={(next) => {
               setRefusal(null);
               setGiving(next);

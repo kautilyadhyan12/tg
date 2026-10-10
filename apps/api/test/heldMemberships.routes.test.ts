@@ -196,7 +196,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
   const errorOf = (res: { body: string }) => (JSON.parse(res.body) as { error: string }).error;
 
   const give = (gymId: string, entryId: string, cookies: Cookies, body: Record<string, unknown>) =>
-    post(heldUrl(gymId, entryId), { requestKey: nextKey(), paid: true, ...body }, cookies);
+    post(heldUrl(gymId, entryId), { requestKey: nextKey(), paid: true, method: "cash", ...body }, cookies);
   const given = async (gymId: string, entryId: string, cookies: Cookies, body: Record<string, unknown>) => {
     const res = await give(gymId, entryId, cookies, body);
     expect(res.statusCode, res.body).toBe(201);
@@ -264,6 +264,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
             typeId,
             startsOn: "2026-10-04",
             paid: true,
+            method: "cash",
           });
         }
         results[city] = {
@@ -275,7 +276,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
         const visitor = await addPerson(gymId, owner.cookies, `Liam ${city}`);
         const pass = await addType(gymId, owner.cookies, pack({ name: "Day pass", packClasses: 1, packDays: 1 }));
         const dayPass = await heldService
-          .giveHeldMembership(at(late), owner.userId, gymId, visitor, { requestKey: nextKey(), typeId: pass, startsOn: "2026-11-03", paid: true })
+          .giveHeldMembership(at(late), owner.userId, gymId, visitor, { requestKey: nextKey(), typeId: pass, startsOn: "2026-11-03", paid: true, method: "cash" })
           .then(() => "given", (err: unknown) => (err instanceof OrgsError ? err.code : "threw"));
         const goldId = results[city].late.memberships.find((m) => m.typeName === "Gold Monthly")?.id ?? "";
         const frozen = moved(await heldService.moveHeldMembership(at(late), owner.userId, gymId, person, goldId, { type: "freeze" }));
@@ -387,7 +388,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
 
       // Six of the same request at the same instant.
       const requestKey = nextKey();
-      const body = { requestKey, typeId, startsOn: today, paid: true };
+      const body = { requestKey, typeId, startsOn: today, paid: true, method: "cash" };
       const answers = await Promise.all(Array.from({ length: 6 }, () => post(heldUrl(gymId, person), body, owner.cookies)));
       expect(answers.map((r) => r.statusCode)).toEqual([201, 201, 201, 201, 201, 201]);
       for (const res of answers) expect(list(res).memberships).toHaveLength(1);
@@ -405,15 +406,18 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       const [first] = await rowsOf(gymId);
       if (first === undefined) throw new Error("no row");
 
-      // Mark paid names the count it moves to: six at once move it by one.
-      const paidUrl = oneUrl(gymId, person, first.id, "paid");
-      const marks = await Promise.all(Array.from({ length: 6 }, () => post(paidUrl, { paidPeriods: 2 }, owner.cookies)));
+      // The next period's payment, six of the same request at once: one period paid.
+      const payment = { requestKey: nextKey(), periodIndex: 1, amountMinor: 4999, method: "cash" };
+      const marks = await Promise.all(Array.from({ length: 6 }, () => post(oneUrl(gymId, person, first.id, "payments"), payment, owner.cookies)));
       expect(marks.map((r) => r.statusCode)).toEqual([200, 200, 200, 200, 200, 200]);
       expect((await rowsOf(gymId))[0]?.paid_periods).toBe(2);
-      // A count more than one step away is refused.
-      const far = await post(paidUrl, { paidPeriods: 4 }, owner.cookies);
-      expect(far.statusCode).toBe(409);
-      expect(errorOf(far)).toBe("held_membership_changed");
+      // The old route never marks a period paid: a count that goes up is refused.
+      const paidUrl = oneUrl(gymId, person, first.id, "paid");
+      for (const paidPeriods of [3, 4]) {
+        const up = await post(paidUrl, { paidPeriods }, owner.cookies);
+        expect(up.statusCode).toBe(409);
+        expect(errorOf(up)).toBe("held_membership_changed");
+      }
       expect((await rowsOf(gymId))[0]?.paid_periods).toBe(2);
 
       // Freeze, cancel at the period's end and cancel today, each six at once.
@@ -427,7 +431,6 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       const audit = (await auditOf(gymId)).filter((a) => a.target_id === first.id);
       expect(audit.map((a) => a.action)).toEqual([
         "org.held_membership_given",
-        "org.held_membership_paid",
         "org.held_membership_frozen",
         "org.held_membership_unfrozen",
         "org.held_membership_cancelled",
@@ -435,8 +438,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       ]);
       for (const row of audit) expect(row.actor_user_id, row.action).toBe(owner.userId);
       expect(audit[0]?.meta).toMatchObject({ entryId: person, type: "Gold Monthly", startsOn: today, paidPeriods: "1", priceMinor: "4999", currency: "GBP" });
-      expect(audit[1]?.meta).toMatchObject({ paidBefore: "1", paidAfter: "2" });
-      expect(audit[5]?.meta).toMatchObject({ statusBefore: "active", statusAfter: "cancelled" });
+      expect(audit[4]?.meta).toMatchObject({ statusBefore: "active", statusAfter: "cancelled" });
     },
     TEST_TIMEOUT_MS,
   );
@@ -616,7 +618,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       const month = await addType(gymId, owner.cookies, oneMonth());
       const winter = await addPerson(gymId, owner.cookies, "Liam Hughes");
       for (const typeId of [gold, month]) {
-        await heldService.giveHeldMembership(at("2026-01-29T12:00:00Z"), owner.userId, gymId, winter, { requestKey: nextKey(), typeId, startsOn: "2026-01-29", paid: true });
+        await heldService.giveHeldMembership(at("2026-01-29T12:00:00Z"), owner.userId, gymId, winter, { requestKey: nextKey(), typeId, startsOn: "2026-01-29", paid: true, method: "cash" });
       }
       const before = await heldService.getHeldMemberships(at("2026-02-01T12:00:00Z"), owner.userId, gymId, winter);
       const shown = (answer: HeldMembershipsResponse, name: string) => answer.memberships.find((m) => m.typeName === name);

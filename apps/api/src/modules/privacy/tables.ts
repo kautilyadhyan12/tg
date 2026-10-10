@@ -467,6 +467,11 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // can name a member ("Zed, your locker key is at the desk"): they stay with the gym, on a
   // staff note's footing. How long the list of sent messages is kept is 20f-ii's to decide.
   "gym_group_messages",
+  // gym_member_payments.recorded_by and undone_by — which member of staff recorded a
+  // payment in the gym's notebook and who took it back (`0093`), on gym_leads' footing:
+  // the gym's record; `ON DELETE set null`. The person who paid is a record on the gym's
+  // list, not an account, and a payment goes with that record's membership.
+  "gym_member_payments",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

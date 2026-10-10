@@ -8,7 +8,7 @@
 // Every refusal is checked by reading the tables, not the reply.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { HELD_LIVE_MAX, addDays, shownRenewal } from "@app/shared";
+import { HELD_LIVE_MAX, addDays, addTerms, shownRenewal } from "@app/shared";
 import type {
   GymMembershipTypesResponse,
   HeldMembershipsResponse,
@@ -181,7 +181,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
   const errorOf = (res: { body: string }) => (JSON.parse(res.body) as { error: string }).error;
 
   const give = (gymId: string, entryId: string, cookies: Cookies, body: Record<string, unknown>) =>
-    post(heldUrl(gymId, entryId), { requestKey: nextKey(), paid: true, ...body }, cookies);
+    post(heldUrl(gymId, entryId), { requestKey: nextKey(), paid: true, method: "cash", ...body }, cookies);
   const given = async (gymId: string, entryId: string, cookies: Cookies, body: Record<string, unknown>) => {
     const res = await give(gymId, entryId, cookies, body);
     expect(res.statusCode, res.body).toBe(201);
@@ -419,7 +419,11 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       expect(preview.counts).toEqual({ settled: 1, due: 1, ask: 1, has: 1, full: 0, ended: 0, day: 0, past: 1 });
       const of = (id: string) => preview.people.find((p) => p.entryId === id);
       expect(of(paidUp)).toMatchObject({ group: "settled", renewsOn: addDays(today, 9), since: null });
-      expect(of(lapsed)).toMatchObject({ group: "due", since: addDays(today, -31) });
+      // Their renewal day passed 31 days ago: they owe from the month they are in now, the one
+      // that began a month after that day, never for the month before it (RULINGS 2026-10-10).
+      const owesFrom = addTerms(addDays(today, -31), 1, "month", 1);
+      expect(owesFrom <= today && owesFrom > addDays(today, -4)).toBe(true);
+      expect(of(lapsed)).toMatchObject({ group: "due", since: owesFrom });
       expect(of(undated)).toMatchObject({ group: "ask", dated: false });
       expect(of(first)).toMatchObject({ group: "has" });
       expect(of(gone)).toBeUndefined();
@@ -500,10 +504,10 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       expect(await pageOf(gymId, undated, owner.cookies)).toEqual([]);
       expect(await pageOf(gymId, gone, owner.cookies)).toEqual([]);
 
-      // The rest, not paid: the lapsed one owes since the list's day, the undated one since today.
+      // The rest, not paid: the lapsed one owes since the month they are in, the undated one since today.
       const rest = await link(gymId, owner.cookies, "Gold", gold, { paid: false });
       expect((JSON.parse(rest.body) as MembershipLinkResponse).given).toBe(2);
-      expect((await pageOf(gymId, lapsed, owner.cookies))[0]?.view.payment).toEqual({ state: "due", since: addDays(today, -31) });
+      expect((await pageOf(gymId, lapsed, owner.cookies))[0]?.view.payment).toEqual({ state: "due", since: owesFrom });
       expect((await pageOf(gymId, lapsed, owner.cookies))[0]?.view.status).toBe("active");
       expect((await pageOf(gymId, undated, owner.cookies))[0]?.view.payment).toEqual({ state: "due", since: today });
       // The one who held it already still has one, and it is the one given by hand.

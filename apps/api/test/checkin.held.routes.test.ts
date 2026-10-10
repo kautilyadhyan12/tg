@@ -202,7 +202,7 @@ d("a check-in says what the person holds (real Postgres)", () => {
 
   /** Give a membership through the person's page's own route; the membership's id. */
   const give = async (gymId: string, entryId: string, who: Person, body: { typeId: string; startsOn: string; paid: boolean }): Promise<string> => {
-    const res = await post(heldUrl(gymId, entryId), { requestKey: nextKey(), ...body }, who.cookies);
+    const res = await post(heldUrl(gymId, entryId), { requestKey: nextKey(), ...body, ...(body.paid ? { method: "cash" as const } : {}) }, who.cookies);
     expect(res.statusCode, res.body).toBe(201);
     const made = (JSON.parse(res.body) as HeldMembershipsResponse).memberships.find((m) => m.typeId === body.typeId);
     if (made === undefined) throw new Error("the membership given is not on the page");

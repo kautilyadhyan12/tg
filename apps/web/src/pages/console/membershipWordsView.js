@@ -188,7 +188,7 @@ export function giveGroups(preview) {
     groups.push({
       key: 'due',
       title: `${people(counts.due)} · payment due`,
-      detail: 'Their renewal date in your list has passed. Each will show "Payment due" since that date.',
+      detail: 'Their renewal date in your list has passed. Each will show "Payment due" from the month they are in now, never for the months before.',
     });
   }
   if (counts.ask > 0) {
