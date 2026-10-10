@@ -136,6 +136,24 @@ describe('the words of a sent message', () => {
 });
 
 describe('the Sent messages page', () => {
+  it('says the app also sends messages by itself, with a button to their box in Settings', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [gymRow({ privileges: ['members.read', 'members.confirm', 'org.manage'] })] } });
+    orgService.getSentMessages.mockResolvedValue(answer([]));
+    draw();
+    const card = await screen.findByTestId('sent-automatic');
+    expect(card.textContent).toContain('The app also sends Welcome, Birthday, Visit milestone and We miss you by itself. Those are not listed here.');
+    expect(within(card).getByRole('link', { name: 'Automatic messages' }).getAttribute('href')).toBe('/console/iron-house/settings#automatic-messages');
+  });
+
+  it('a manager who may send messages and may not change the settings is told who can, with no button', async () => {
+    orgService.getSentMessages.mockResolvedValue(answer([]));
+    orgService.getMine.mockResolvedValue({ data: { orgs: [gymRow({ staffRole: 'manager' })] } });
+    draw();
+    const told = await screen.findByTestId('sent-automatic');
+    expect(told.textContent).toContain('The owner can switch them on or off.');
+    expect(within(told).queryByRole('link')).toBeNull();
+  });
+
   it("the worst thing: it asks for the gym in the address and no other, shows that gym's messages as sent, and asks for no names until a message is pressed", async () => {
     orgService.getSentMessages.mockResolvedValue(
       answer(

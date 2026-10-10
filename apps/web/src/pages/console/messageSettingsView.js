@@ -123,3 +123,9 @@ export function messageSettingsNote(orgType) {
   const words = orgWords(orgType);
   return `The app sends these to your ${words.people} by itself. Each lands in their Inbox in the app. Nobody gets more than one a day, and none is sent at night. A ${words.person} can switch off Birthday, Visit milestone and We miss you for themselves. Where you see ${NAME_PLACE} below, each ${words.person} reads their own first name: "Happy birthday, Priya!"`;
 }
+
+/** Said on the Sent messages page, which lists only what staff typed: the app sends these
+ *  too, and where they are changed. */
+export const SENT_AUTOMATIC_NOTE = `The app also sends ${MESSAGE_KINDS.map(messageName).join(', ').replace(/, ([^,]*)$/, ' and $1')} by itself. Those are not listed here.`;
+/** Who can, for somebody who cannot open the box. */
+export const SENT_AUTOMATIC_ASK = 'The owner can switch them on or off.';

@@ -4330,6 +4330,10 @@ two, Membership ending, Payment overdue) are 20b-ii and the class reminder 20b-i
   that message (140 characters, a message to a group's rule for a web address and an @,
   15.3's filter), sent on a line of its own under the fixed words. The numbers are picked:
   visits 10 · 25 · 50 · 100 · 250 · 500 · 1,000, days 7 · 10 · 14 · 21 · 30. One Save.
+- **Found from Sent messages** (Kd, RULINGS 2026-10-11): the page of 16.8 says "The app also
+  sends Welcome, Birthday, Visit milestone and We miss you by itself. Those are not listed
+  here.", with a button, **Automatic messages**, that opens this box, or "The owner can
+  switch them on or off." for staff who cannot open it.
 - **The words** (`automaticMessage`, `packages/shared/src/gymMessages.ts`): "Happy birthday,
   Maya! From everyone at {gym}." · "That's 50 visits to {gym}, Maya. Well done." · "We
   haven't seen you at {gym} for a while, Maya. We hope to see you soon."
