@@ -303,6 +303,18 @@ export function heldMembershipFacts(stored: HeldMembership, today: string): Held
   return settled(settle(stored, today), today).facts;
 }
 
+/** Whether two memberships of ONE type would run at once for one person: both still in
+ *  use on `today`, and neither over before the other starts. A frozen one, and a
+ *  repeating one that renews, have no last day. Two class packs are never asked here: a
+ *  second pack bought before the first runs out is an ordinary sale. */
+export function sameTypeTwice(a: HeldMembership, b: HeldMembership, today: string): boolean {
+  if (a.kind === "pack" || b.kind === "pack") return false;
+  const [fa, fb] = [heldMembershipFacts(a, today), heldMembershipFacts(b, today)];
+  const over = (status: string): boolean => status === "ended" || status === "cancelled";
+  if (over(fa.status) || over(fb.status)) return false;
+  return (fa.endsOn === null || fa.endsOn >= b.startsOn) && (fb.endsOn === null || fb.endsOn >= a.startsOn);
+}
+
 /** What a held membership is on `today`, the gym's own day. */
 export function heldMembershipView(stored: HeldMembership, today: string): HeldMembershipView {
   const m = settle(stored, today);
@@ -675,7 +687,7 @@ export type GiveHeldMembershipRequest = z.infer<typeof giveHeldMembershipRequest
 export const cancelHeldMembershipRequestSchema = z
   .object({
     when: z.enum(["today", "period_end"]),
-    confirmBookings: z.number().int().min(1).max(1_000_000).optional(),
+    confirmBookings: z.string().regex(/^[0-9a-f]{64}$/).optional(),
     confirmPtSessions: confirmPtSessionsField.optional(),
   })
   .strict();

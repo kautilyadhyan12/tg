@@ -49,7 +49,7 @@ describe("where it rides", () => {
   it("the Remove box and a membership's cancel carry it only where there are sessions", () => {
     expect(memberRemovePreviewSchema.parse(preview).ptSessions).toBeUndefined();
     expect(memberRemovePreviewSchema.parse({ ...preview, ptSessions: ending }).ptSessions?.count).toBe(2);
-    const classes = { classes: 0, booked: 0, waiting: 0, people: [] };
+    const classes = { classes: 0, booked: 0, waiting: 0, mark: MARK, people: [] };
     expect(classBookingsEndingSchema.parse(classes).ptSessions).toBeUndefined();
     expect(classBookingsEndingSchema.parse({ ...classes, ptSessions: ending }).ptSessions?.mark).toBe(MARK);
   });
