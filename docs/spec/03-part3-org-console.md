@@ -3313,6 +3313,12 @@ with the payment that settles the bill of the first unpaid period.
   period that has begun since (each gym on its own day). A bill keeps the days it was
   opened for and the day it fell due: a later freeze moves the membership's dates and
   never a bill's, and every reader is sent that one day for what is owed.
+- **Back on the list** (Kd, RULINGS 2026-10-10): put back, added again, held by a new
+  file, or joined with a current record, a repeating membership owes from the period
+  today falls in, and that period's bill is opened then; the months away are never
+  billed. The same for a person taken from the gym's own file whose renewal day has
+  passed (§13.2): they owe from the month they are in now. A bill opened before the
+  person left stays owed, is paid first, and moves no date.
 - **A cancel** takes with it the open bills that fall due after the membership's last
   day (the day it is cancelled, or the last paid day where it is set to stop): one with
   nothing paid on it is kept and marked cancelled, so nobody owes for a month they never

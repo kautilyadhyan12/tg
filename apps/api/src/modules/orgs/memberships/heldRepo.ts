@@ -24,6 +24,7 @@ import {
   HELD_LIVE_MAX,
   billsAtCancel,
   billsToOpen,
+  countAfterAway,
   giveHeldMembership,
   heldMembershipStatusSchema,
   heldMembershipView,
@@ -41,6 +42,7 @@ import {
   type MemberPaymentByHand,
   type PtHeld,
 } from "@app/shared";
+import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
 import { billsFor, insertBills, insertPayment, overdueDaysOf, paymentsFor, setBillStatus, voidBills, type BillRow, type PaymentRow } from "./billsSql.js";
@@ -449,6 +451,53 @@ export async function giveHeld(
     }
     return { kind: "ok" };
   });
+}
+
+/** SOMEBODY IS BACK ON THE GYM'S LIST (put back, added again, in a new file, or joined
+ *  with a current record): the periods that passed while they were away are not asked
+ *  about (`countAfterAway`), and the period they are in now has its bill. Called by every
+ *  write that makes a past member current, in its transaction, under the gym's lock. */
+export async function resumeAfterAway(
+  tx: TransactionSql,
+  input: { gymId: string; entryIds: readonly string[]; actorUserId: string | null; now: Date },
+): Promise<void> {
+  if (input.entryIds.length === 0) return;
+  const [gym] = await tx<{ timezone: string }[]>`SELECT timezone FROM gyms WHERE id = ${input.gymId}`;
+  if (gym === undefined) return;
+  const today = dayInTz(input.now, gym.timezone);
+  const rows = await tx`
+    SELECT ${COLUMNS(tx)}, h.entry_id
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    WHERE h.gym_id = ${input.gymId} AND h.entry_id = ANY(${[...input.entryIds]}::uuid[]) AND h.status = 'active'
+    ORDER BY h.id
+    FOR UPDATE OF h`;
+  const moved = rows
+    .map((row) => ({ row: shape(row), entryId: z.object({ entry_id: z.string() }).passthrough().parse(row).entry_id }))
+    .map((held) => ({ ...held, count: countAfterAway(held.row.membership, today) }))
+    .filter((held): held is typeof held & { count: number } => held.count !== null);
+  if (moved.length === 0) return;
+  const bills = await billsFor(tx, input.gymId, moved.map((held) => held.row.id));
+  const open = [];
+  for (const { row, entryId, count } of moved) {
+    await tx`
+      UPDATE gym_held_memberships SET paid_periods = ${count}, paid_floor = ${count}, updated_at = ${input.now}
+      WHERE gym_id = ${input.gymId} AND id = ${row.id}`;
+    const now = { ...row.membership, paidPeriods: count, paidFloor: count };
+    const have = new Set(bills.filter((b) => b.membershipId === row.id).map((b) => b.periodIndex));
+    for (const due of billsToOpen(now, today, have)) {
+      open.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
+    }
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.held_membership_resumed",
+      targetType: "gym_held_membership",
+      targetId: row.id,
+      meta: { entryId, type: row.typeName, on: today, paidBefore: String(row.membership.paidPeriods), paidAfter: String(count) },
+    });
+  }
+  await insertBills(tx, input.gymId, open, input.now);
 }
 
 /** One membership of a record, held for a write, or null where it is not that record's.

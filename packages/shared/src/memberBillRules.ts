@@ -120,6 +120,12 @@ export function memberPayTarget(
     const advances = m.kind === "recurring" ? first && !over && view.can.markPaid !== null : first && m.paidPeriods === 0;
     return { periodIndex: owed.periodIndex, leftMinor: owed.amountMinor - owed.paidMinor, dueOn: owed.dueOn, covers: owed.covers ?? null, advances };
   }
+  // A bill from before the count's floor (opened before the person was away) is owed
+  // first, and paying it moves no date.
+  const older = bills.filter((b) => b.status === "open" && b.periodIndex < m.paidFloor).sort((a, b) => a.periodIndex - b.periodIndex)[0];
+  if (older !== undefined) {
+    return { periodIndex: older.periodIndex, leftMinor: older.amountMinor - older.paidMinor, dueOn: older.dueOn, covers: older.covers ?? null, advances: false };
+  }
   if (view.can.markPaid === null) return null;
   const index = m.paidPeriods;
   const bill = bills.find((b) => b.periodIndex === index);
@@ -129,6 +135,18 @@ export function memberPayTarget(
   }
   if (bill.status !== "open") return null;
   return { periodIndex: index, leftMinor: bill.amountMinor - bill.paidMinor, dueOn: bill.dueOn, covers: bill.covers ?? null, advances: true };
+}
+
+/** THE COUNT OF PAID PERIODS FOR SOMEBODY PUT BACK ON THE GYM'S LIST (Kd, RULINGS
+ *  2026-10-10): the periods that passed while they were away are not asked about, so a
+ *  repeating membership that is running owes from the period today falls in. The number
+ *  to write as both the count and its floor, or null where nothing moves. A bill opened
+ *  before they left stays owed (`memberPayTarget`). */
+export function countAfterAway(m: HeldMembership, today: string): number | null {
+  if (m.free || m.kind !== "recurring" || !m.renews) return null;
+  if (heldMembershipView(m, today).status !== "active") return null;
+  const current = periodIndex(m, today);
+  return m.paidPeriods < current ? current : null;
 }
 
 /** WHAT A CANCEL DOES TO THE BILLS STILL OPEN. `lastDay` is the last day the membership
@@ -179,13 +197,18 @@ export function memberUndoTarget(
   bills: readonly BillFacts[],
   payments: readonly PaymentFacts[],
 ): { paymentId: string; reopens: boolean; goesBack: boolean } | null {
-  const newest = [...payments].sort((a, b) => b.periodIndex - a.periodIndex || b.seq - a.seq)[0];
+  // The last one recorded. Counted periods are paid in order, so among them that is also
+  // the newest period; a payment for a bill outside the count moves nothing.
+  const newest = [...payments].sort((a, b) => b.seq - a.seq)[0];
   if (newest === undefined) return null;
   const bill = bills.find((b) => b.periodIndex === newest.periodIndex);
   if (bill === undefined || (bill.status !== "open" && bill.status !== "paid")) return null;
   if (bill.status === "open") return { paymentId: newest.id, reopens: false, goesBack: false };
-  // A settled bill the count never took in: it is owed again and nothing else moves.
-  if (newest.periodIndex >= m.paidPeriods) return { paymentId: newest.id, reopens: true, goesBack: false };
+  // A settled bill the count never took in (after it, or from before its floor): it is
+  // owed again and nothing else moves.
+  if (newest.periodIndex >= m.paidPeriods || (m.kind === "recurring" && newest.periodIndex < m.paidFloor)) {
+    return { paymentId: newest.id, reopens: true, goesBack: false };
+  }
   // A membership of one period: its count is whether its one bill is settled.
   if (m.kind !== "recurring") return { paymentId: newest.id, reopens: true, goesBack: true };
   const view = heldMembershipView(m, today);

@@ -190,7 +190,7 @@ describe('the box names who gets it and who does not', () => {
       ['ask', "1 person · your list doesn't say if they have paid"],
     ]);
     expect(groups[0].detail).toContain('shows as paid until then');
-    expect(groups[1].detail).toContain('"Payment due" since that date');
+    expect(groups[1].detail).toContain('"Payment due" from the month they are in now, never for the months before');
     expect(groups[2].detail).toBe('Your list has no renewal date for them, so their membership starts today.');
     // A type that ends keeps the list's end date, and one that is free has nothing to pay.
     const term = { ...GOLD, name: 'Three months', kind: 'one_time', termCount: 3 };

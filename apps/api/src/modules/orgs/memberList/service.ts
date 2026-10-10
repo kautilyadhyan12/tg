@@ -102,6 +102,7 @@ import { bustAfterRemoval } from "./byHandService.js";
 import { sessionsAuditMeta } from "../pt/changes.js";
 import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type RemovalPlan } from "./removeSelected.js";
 import { dayInTz } from "../../gamification/streak.js";
+import { resumeAfterAway } from "../memberships/heldRepo.js";
 import { heldChips, heldOnListOf, heldPassing, mergeChips, type WordCount } from "../memberships/onList.js";
 
 export interface MemberListDeps {
@@ -1227,6 +1228,13 @@ export async function confirmUpload(
     // row, its id and everything that hangs off it, with `former_at` cleared.
     const revived = await repo.updateEntries(tx, gymId, writing.revive, carries, true);
     expectApplied(revived, writing.revive.length, "revived", uploadId);
+    // Back on the list: what they hold owes from the period they are in now (18a-i).
+    if (writing.revive.length > 0) {
+      const back = await tx<{ id: string }[]>`
+        SELECT id FROM gym_member_list_entries
+        WHERE gym_id = ${gymId} AND former_at IS NULL AND identity_key = ANY(${writing.revive.map((change) => change.identityKey)}::text[])`;
+      await resumeAfterAway(tx, { gymId, entryIds: back.map((row) => row.id), actorUserId: userId, now: at });
+    }
     const updated = await repo.updateEntries(tx, gymId, writing.change, carries, false);
     expectApplied(updated, writing.change.length, "changed", uploadId);
     // Everybody this file holds is the file's now, whoever first added them.

@@ -9,6 +9,7 @@
 // Every refusal is checked by reading the tables, not the reply.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { addDays } from "@app/shared";
 import type { GymMembershipTypesResponse, HeldMembershipsResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -611,6 +612,81 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       // And the run opens nothing for any of the three, that day or a year on.
       const log = { info: () => undefined, error: () => undefined };
       expect(await openDueBills({ sql, log }, { now: new Date("2027-02-20T12:00:00Z"), gymIds: [gymId] })).toEqual({ opened: 0, gyms: 0, failed: 0 });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a past member put back on the list is not billed for the months they were away, however they come back",
+    async () => {
+      const owner = await makeUser("back-owner");
+      const org = await makeOrg(owner.cookies, "Mbl Back Gym");
+      const gymId = org.org.id;
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const at = (iso: string) => ({ sql, now: () => new Date(iso) });
+      const log = { info: () => undefined, error: () => undefined };
+      const run = (iso: string) => openDueBills({ sql, log }, { now: new Date(iso), gymIds: [gymId] });
+      const periods = async (id: string) => (await billsOf(gymId)).filter((b) => b.held_membership_id === id).map((b) => [b.period_index, b.status, b.due_on]);
+      const give = async (name: string, email: string | null, paid: boolean) => {
+        const res = await post(`/v1/orgs/${gymId}/member-list/entries`, { fullName: name, ...(email === null ? {} : { email }) }, owner.cookies);
+        expect(res.statusCode, res.body).toBe(201);
+        const entryId = (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
+        const page = await heldService.giveHeldMembership(at("2026-01-15T12:00:00Z"), owner.userId, gymId, entryId, {
+          requestKey: nextKey(),
+          typeId: gold,
+          startsOn: "2026-01-15",
+          paid,
+          ...(paid ? { method: "cash" as const } : {}),
+        });
+        return { entryId, id: page.memberships[0]?.id ?? "" };
+      };
+      // Maya paid for 15 January to 14 February. Omar never paid January. Both were removed.
+      const maya = await give("Maya Patel", "mbl-back-maya@example.com", true);
+      const omar = await give("Omar Aziz", "mbl-back-omar@example.com", false);
+      for (const p of [maya, omar]) expect((await del(entryUrl(gymId, p.entryId), owner.cookies)).statusCode).toBe(200);
+      // While they are away the run opens nothing, whatever the month.
+      expect(await run("2026-06-16T12:00:00Z")).toEqual({ opened: 0, gyms: 0, failed: 0 });
+
+      // Put back by hand. The routes read the real clock, so the day is read back, not assumed.
+      for (const p of [maya, omar]) expect((await post(`${entryUrl(gymId, p.entryId)}/restore`, {}, owner.cookies)).statusCode).toBe(200);
+      const today = list(await get(heldUrl(gymId, maya.entryId), owner.cookies)).today;
+      const mine = (await periods(maya.id)).filter(([, status]) => status === "open");
+      // ONE bill, for the month she is in now; the months between are never opened.
+      expect(mine).toHaveLength(1);
+      const [first] = mine;
+      expect((first?.[2] as string) <= today).toBe(true);
+      expect((first?.[2] as string) > addDays(today, -32)).toBe(true);
+      expect((await periods(maya.id)).filter(([, status]) => status === "paid")).toEqual([[0, "paid", "2026-01-15"]]);
+      const row = (await rowsOf(gymId)).find((r) => r.id === maya.id);
+      expect(row?.paid_periods).toBe(first?.[0]);
+      // The run that follows opens nothing more for either of them.
+      const after = await openDueBills({ sql, log }, { gymIds: [gymId] });
+      expect(after).toEqual({ opened: 0, gyms: 0, failed: 0 });
+      const page = list(await get(heldUrl(gymId, maya.entryId), owner.cookies)).memberships[0];
+      expect(page?.view.payment).toEqual({ state: "due", since: first?.[2] });
+      expect(page?.billing?.bills.filter((b) => b.state !== "paid")).toHaveLength(1);
+
+      // Omar left owing January: that bill is still owed and is paid first; the months away are not asked.
+      const his = await periods(omar.id);
+      expect(his.filter(([, status]) => status === "open").map(([index]) => index)).toEqual([0, first?.[0]]);
+      const omarPage = list(await get(heldUrl(gymId, omar.entryId), owner.cookies)).memberships[0];
+      expect(omarPage?.billing?.pay).toMatchObject({ periodIndex: 0, dueOn: "2026-01-15" });
+      const paidJan = await post(oneUrl(gymId, omar.entryId, omar.id, "payments"), { requestKey: nextKey(), periodIndex: 0, amountMinor: 4999, method: "cash" }, owner.cookies);
+      expect(paidJan.statusCode, paidJan.body).toBe(200);
+      expect((await rowsOf(gymId)).find((r) => r.id === omar.id)?.paid_periods).toBe(first?.[0]);
+      expect(list(paidJan).memberships[0]?.billing?.pay).toMatchObject({ periodIndex: first?.[0] });
+
+      // One note in the record for each membership that was moved on.
+      const notes = (await auditOf(gymId)).filter((a) => a.action === "org.held_membership_resumed");
+      expect(notes.map((a) => [a.target_id, a.meta["paidBefore"]]).sort()).toEqual([[maya.id, "1"], [omar.id, "0"]].sort());
+
+      // Coming back by being added again with the same address: the same rule.
+      const zoe = await give("Zoe Lin", "mbl-back-zoe@example.com", true);
+      expect((await del(entryUrl(gymId, zoe.entryId), owner.cookies)).statusCode).toBe(200);
+      const again = await post(`/v1/orgs/${gymId}/member-list/entries`, { fullName: "Zoe Lin", email: "mbl-back-zoe@example.com" }, owner.cookies);
+      expect(JSON.parse(again.body)).toMatchObject({ outcome: "revived" });
+      expect((await periods(zoe.id)).filter(([, status]) => status === "open")).toHaveLength(1);
+      expect((await rowsOf(gymId)).find((r) => r.id === zoe.id)?.paid_periods).toBe(first?.[0]);
     },
     TEST_TIMEOUT_MS,
   );

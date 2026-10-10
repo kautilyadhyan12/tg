@@ -163,12 +163,16 @@ describe("a paid-up member on the list is never shown as owing or ended", () => 
 });
 
 describe("what the list's day does not settle", () => {
-  it("a renewal day that has passed is a payment due since that day, never an ended membership", () => {
+  // Kd, RULINGS 2026-10-10: the months between the list's day and now were the gym's other
+  // software's to ask about. The person owes from the period today falls in, on the list's
+  // own day of the month (the 3rd; the 31st is the 30th in September).
+  it("a renewal day that has passed is a payment due since the period today falls in, never for the months before, never an ended membership", () => {
     for (const [dates, today, since] of [
-      [renews("2026-09-03"), "2026-10-04", "2026-09-03"],
+      [renews("2026-09-03"), "2026-10-04", "2026-10-03"],
+      [renews("2026-09-03"), "2026-10-02", "2026-09-03"],
       [renews("2026-10-04"), "2026-10-04", "2026-10-04"],
       [ends("2026-10-03"), "2026-10-04", "2026-10-04"],
-      [renews("2024-10-31"), "2026-10-04", "2024-10-31"],
+      [renews("2024-10-31"), "2026-10-04", "2026-09-30"],
     ] as const) {
       const made = linked(monthly, dates, true, today);
       const view = heldMembershipView(made.membership, today);

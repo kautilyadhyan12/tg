@@ -495,8 +495,8 @@ export type LinkedHeldMembership =
  *  KEPT. "Renews 14 Nov" is the first day not paid for; "Ends 31 Dec" is the last
  *  day covered, so the first day not covered is the day after.
  *
- *  A repeating membership is paid up to that day, and owes from it where it has
- *  passed. Any other kind runs through that day, and whether it is paid is staff's
+ *  A repeating membership is paid up to that day; where that day has passed it owes
+ *  from the period today falls in, never for the periods before it. Any other kind runs through that day, and whether it is paid is staff's
  *  answer (`paid`), as it is where the list has no day at all: such a membership
  *  starts today. A start day is worked back from the list's day and is never after
  *  today, so nobody on the list is given a membership that has not started. */
@@ -566,7 +566,7 @@ export function linkHeldMembership(
   const at = found ?? nearest;
   // No start a hand-given membership could not have either.
   if (at === null || at.startsOn < HELD_START_MIN) return { ok: false, reason: "day_out_of_range" };
-  const membership = {
+  const listed = {
     ...base,
     startsOn: at.startsOn,
     frozenDays: at.frozenDays,
@@ -575,6 +575,11 @@ export function linkHeldMembership(
     // none of them can be taken back.
     paidFloor: free ? 0 : at.periods,
   };
+  // Where the list's day has passed, the periods between it and the one today falls in
+  // were the gym's other software's to ask about, not this app's (Kd, RULINGS 2026-10-10):
+  // the person owes from the period they are in now, as one given by hand does.
+  const current = free ? 0 : periodIndex(listed, today);
+  const membership = current > listed.paidPeriods ? { ...listed, paidPeriods: current, paidFloor: current } : listed;
   return { ok: true, membership, group: free || edge > today ? "settled" : "due" };
 }
 
