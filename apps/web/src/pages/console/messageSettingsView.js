@@ -89,10 +89,10 @@ export const messageName = (kind) => GYM_MESSAGE_KIND_NAMES[kind];
  *  box puts its picker. */
 export function messageWhen(kind, orgType) {
   const words = orgWords(orgType);
-  if (kind === 'welcome') return `Sent when somebody joins your ${words.it} in the app.`;
-  if (kind === 'birthday') return `Sent on a ${words.person}'s birthday, from the date of birth on your Members list. Somebody with no date of birth there gets none.`;
-  if (kind === 'milestone') return `Sent when a ${words.person} reaches a number of visits you tick here.`;
-  return `Sent once when a ${words.person} hasn't checked in for the number of days you pick here.`;
+  if (kind === 'welcome') return `Sent when somebody joins your ${words.it} in the app, within a quarter of an hour.`;
+  if (kind === 'birthday') return `Sent on the morning of a ${words.person}'s birthday, from the date of birth on your Members list. Somebody with no date of birth there gets none.`;
+  if (kind === 'milestone') return `Sent in the morning, once a ${words.person} has reached a number of visits you tick here.`;
+  return `Sent once, in the morning, when a ${words.person} hasn't checked in for the number of days you pick here.`;
 }
 
 /** The two messages that count visits. */

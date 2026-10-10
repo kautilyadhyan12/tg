@@ -42,7 +42,6 @@ const PLACES = {
   country: { path: `/settings#${SETTINGS_SECTION.country}`, may: canManageOrg },
   openingHours: { path: `/settings#${SETTINGS_SECTION.hours}`, may: canManageOrg },
   memberContact: { path: `/settings#${SETTINGS_SECTION.memberContact}`, may: canManageOrg },
-  messages: { path: `/settings#${SETTINGS_SECTION.messages}`, may: canManageOrg },
   bookingRules: { path: `/settings#${SETTINGS_SECTION.bookingRules}`, may: canManageSchedule },
   frontDesk: { path: `/settings#${SETTINGS_SECTION.frontDesk}`, may: canManageOrg },
   leadEmails: { path: `/settings#${SETTINGS_SECTION.leadEmails}`, may: canManageOrg },

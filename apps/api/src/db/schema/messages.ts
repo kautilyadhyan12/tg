@@ -93,6 +93,15 @@ export const gymMemberMessagesOff = pgTable(
   ],
 );
 
+/** The last day, on the gym's own calendar, on which the sender read everybody in the gym
+ *  (ROADMAP 20b-i). Removed when the gym changes its settings. */
+export const gymMessageDays = pgTable("gym_message_days", {
+  gymId: uuid("gym_id")
+    .primaryKey()
+    .references(() => gyms.id, { onDelete: "cascade" }),
+  day: date("day").notNull(),
+});
+
 /** A gym's own settings for one kind of automatic message (ROADMAP 20b-i). The gym's, not
  *  about a person. A kind with no row has its starting values. */
 export const gymMessageSettings = pgTable(

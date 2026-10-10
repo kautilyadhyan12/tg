@@ -17,6 +17,7 @@ import {
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { badWordsIn } from "../posts/badWords.js";
+import { forgetDay } from "./repo.js";
 import type { Limit, MessagesDeps } from "./service.js";
 import * as settingsRepo from "./settingsRepo.js";
 
@@ -95,6 +96,8 @@ export async function setMessageSettings(
     });
     if (changed.length === 0) return;
     await settingsRepo.writeSettingRows(tx, gymId, changed, now);
+    // The next run of the sender reads everybody again, by the new settings.
+    await forgetDay(tx, gymId);
     await insertAudit(tx, {
       actorUserId: staffId,
       gymId,

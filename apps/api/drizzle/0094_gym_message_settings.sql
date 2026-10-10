@@ -17,4 +17,11 @@ CREATE TABLE "gym_message_settings" (
   CONSTRAINT "gym_message_settings_own_line_check" CHECK ("own_line" IS NULL OR length("own_line") BETWEEN 1 AND 140),
   CONSTRAINT "gym_message_settings_days_check" CHECK ("days" IS NULL OR "days" BETWEEN 1 AND 90),
   CONSTRAINT "gym_message_settings_milestones_check" CHECK ("milestones" IS NULL OR (cardinality("milestones") BETWEEN 1 AND 10 AND 1 <= ALL ("milestones")))
+);--> statement-breakpoint
+
+-- The last day, on the gym's own calendar, on which the sender read everybody in the gym.
+-- That read is made once a day; the row is removed when the gym changes its settings.
+CREATE TABLE "gym_message_days" (
+  "gym_id" uuid PRIMARY KEY NOT NULL REFERENCES "gyms" ("id") ON DELETE CASCADE,
+  "day" date NOT NULL
 );

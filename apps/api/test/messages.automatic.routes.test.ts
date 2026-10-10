@@ -174,8 +174,14 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
   };
 
   const log = { info: () => undefined, error: () => undefined };
-  /** The sending step, looking only at these gyms: other tests share the database. */
-  const run = (gyms: readonly Gym[], now: Date = clock) => sendDueMessages({ sql, log }, { now, gymIds: gyms.map((g) => g.id) });
+  /** The sending step as the worker makes it, looking only at these gyms: other tests
+   *  share the database. Everybody in a gym is read at its first run of a day only. */
+  const workerRun = (gyms: readonly Gym[], now: Date = clock) => sendDueMessages({ sql, log }, { now, gymIds: gyms.map((g) => g.id) });
+  /** A run that reads everybody, as the day's first does. */
+  const run = async (gyms: readonly Gym[], now: Date = clock) => {
+    await sql`DELETE FROM gym_message_days WHERE gym_id = ANY(${gyms.map((g) => g.id)}::uuid[])`;
+    return await workerRun(gyms, now);
+  };
   const sentTo = async (gym: Gym): Promise<{ user_id: string; kind: string; occasion: string; body: string }[]> =>
     await sql`
       SELECT user_id, kind, occasion, body FROM gym_member_messages WHERE gym_id = ${gym.id} ORDER BY sent_at, kind, user_id`;
@@ -261,10 +267,12 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       await remove(gym, old);
 
       // Two runs at one instant, then two more.
-      const both = await Promise.all([run([gym, next]), run([gym, next])]);
+      const both = await Promise.all([workerRun([gym, next]), workerRun([gym, next])]);
       expect(both.map((r) => r.sent).reduce((a, b) => a + b, 0)).toBe(3);
-      expect((await run([gym, next], minutes(NOON, 15))).sent).toBe(0);
+      expect((await workerRun([gym, next], minutes(NOON, 15))).sent).toBe(0);
+      // And with everybody read again, twice.
       expect((await run([gym, next], minutes(NOON, 30))).sent).toBe(0);
+      expect((await run([gym, next], minutes(NOON, 45))).sent).toBe(0);
 
       expect(await got(gym)).toEqual([`${maya.userId} birthday`, `${mia.userId} miss_you`].sort());
       expect(await got(next)).toEqual([`${ned.userId} birthday`]);
@@ -548,10 +556,56 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       expect(rows.find((r) => r.kind === "miss_you")?.body).toBe("We haven't seen you at Auto Switch Gym for a while, Mia. We hope to see you soon.\nYour first class back is on us.");
       expect(rows.find((r) => r.kind === "welcome")?.body).toBe("Welcome to Auto Switch Gym, Neo. We're glad you joined. Messages from us will show up here.");
 
-      // Switched back on the same day, the birthday still goes.
+      // Switched back on the same day, the birthday still goes: a save has the worker's
+      // next run read everybody again. Without one it would wait for tomorrow.
+      expect((await workerRun([gym], minutes(NOON, 10))).sent).toBe(0);
       await saved(gym, START);
-      expect((await run([gym], minutes(NOON, 15))).sent).toBe(1);
+      expect((await workerRun([gym], minutes(NOON, 15))).sent).toBe(1);
       expect((await sentTo(gym)).filter((r) => r.user_id === bea.userId).map((r) => r.kind)).toEqual(["birthday"]);
+    },
+    T,
+  );
+
+  it(
+    "everybody is read once a day, at the first run inside the day's hours; later runs that day read only those who just joined",
+    async () => {
+      const gym = await makeGym("Auto Once Gym");
+      await deskOpen(gym, -20, 1);
+      const bea = await member(gym, "Bea Born", { born: "1988-10-09" });
+      const mia = await member(gym, "Mia Missed");
+      await visit(gym, mia, day(-9));
+      const read = async () => (await sql<{ day: string }[]>`SELECT day::text AS day FROM gym_message_days WHERE gym_id = ${gym.id}`).map((r) => r.day);
+
+      // 07:30 in Kolkata: asleep, nobody is read and the day is not marked.
+      expect((await workerRun([gym], new Date("2026-10-09T02:00:00Z"))).sent).toBe(0);
+      expect(await read()).toEqual([]);
+      // 08:04: the day's read. Bea's birthday goes.
+      const morning = new Date("2026-10-09T02:34:00Z");
+      expect((await workerRun([gym], morning)).sent).toBe(1);
+      expect(await read()).toEqual([TODAY]);
+      // Later that day somebody else's date of birth is typed in: not read again today.
+      const late = await member(gym, "Lat Late", { born: "1991-10-09" });
+      expect((await workerRun([gym], minutes(morning, 15))).sent).toBe(0);
+      // Somebody who joins that afternoon is welcomed the same day.
+      const neo = await member(gym, "Neo New", { joinedAt: minutes(NOON, -5) });
+      expect((await workerRun([gym], NOON)).sent).toBe(1);
+      expect(await got(gym)).toEqual([`${bea.userId} birthday`, `${neo.userId} welcome`].sort());
+      // The next morning everybody is read again: Mia has now been away ten days.
+      expect((await workerRun([gym], days(morning, 1))).sent).toBe(1);
+      expect(await read()).toEqual([day(1)]);
+      expect(await got(gym)).toEqual([`${bea.userId} birthday`, `${mia.userId} miss_you`, `${neo.userId} welcome`].sort());
+      expect(late.userId).not.toBe(bea.userId);
+
+      // A run that fails does not mark the day: the next one reads everybody again.
+      const broken = await makeGym("Auto Broken Gym");
+      const bo = await member(broken, "Bo Born", { born: "1989-10-09" });
+      // Its name is too long for a message to hold, so the write is refused.
+      await sql`UPDATE gyms SET name = repeat('x', 490) WHERE id = ${broken.id}`;
+      await expect(workerRun([broken], morning)).rejects.toThrow("member messages failed for 1 of 1 gyms");
+      await sql`UPDATE gyms SET name = 'Auto Broken Gym' WHERE id = ${broken.id}`;
+      expect(await sql`SELECT 1 FROM gym_message_days WHERE gym_id = ${broken.id}`).toHaveLength(0);
+      expect((await workerRun([broken], minutes(morning, 15))).sent).toBe(1);
+      expect(await got(broken)).toEqual([`${bo.userId} birthday`]);
     },
     T,
   );

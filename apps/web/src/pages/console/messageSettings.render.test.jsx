@@ -1,6 +1,6 @@
 // SETTINGS → AUTOMATIC MESSAGES, drawn (ROADMAP 20b-i). Only the network is mocked.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { GYM_MESSAGE_OWN_LINE_WORDS } from '@app/shared';
 
@@ -178,8 +178,8 @@ describe('Automatic messages', () => {
     expect(screen.getAllByRole('switch').every((s) => s.disabled)).toBe(true);
     expect(line('Welcome').disabled).toBe(true);
     expect(save().disabled).toBe(true);
-    expect(within(box('Welcome')).getByText('Sent when somebody joins your studio in the app.')).toBeTruthy();
-    expect(within(box('Birthday')).getByText(/Sent on a client's birthday/)).toBeTruthy();
+    expect(within(box('Welcome')).getByText('Sent when somebody joins your studio in the app, within a quarter of an hour.')).toBeTruthy();
+    expect(within(box('Birthday')).getByText(/Sent on the morning of a client's birthday/)).toBeTruthy();
   });
 });
 

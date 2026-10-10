@@ -88,6 +88,7 @@ describe('where each place is', () => {
       country: 'country',
       hours: 'opening-hours',
       memberContact: 'member-contact',
+      messages: 'automatic-messages',
       bookingRules: 'booking-rules',
       frontDesk: 'check-in-devices',
       leadEmails: 'follow-up-emails',

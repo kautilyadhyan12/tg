@@ -6,6 +6,11 @@
 // instant take turns and the second finds the first's rows. `worker.ts` runs it on a
 // schedule and `tools/member-messages.ts` by hand; a second run writes nothing.
 //
+// Everybody in a gym is read ONCE A DAY, at the first run inside its day's hours: that is
+// when a birthday, a milestone and an absence are found. Every other run reads only those
+// who joined lately, for their Welcome. A change to the gym's settings has the next run
+// read everybody again.
+//
 // Four kinds are sent: Welcome, Birthday, Visit milestone and We miss you. The other four
 // are in the rule and are given no facts here until 20b-ii reads memberships and bills.
 import {
@@ -35,6 +40,8 @@ const LOOK_BACK_DAYS = GYM_MESSAGE_WELCOME_DAYS;
 /** How many of the gym's own check-in days the rule is handed: more than the longest wait
  *  before We miss you. */
 const GYM_VISIT_DAYS = 120;
+
+const awake = (gym: repo.GymNow): boolean => gym.open && gym.live && gym.hour >= GYM_MESSAGE_DAY_STARTS_HOUR && gym.hour < GYM_MESSAGE_DAY_ENDS_HOUR;
 
 function factsFor(gym: repo.GymNow, settings: GymMessageSettings, visitDays: readonly string[], person: repo.MessagePerson): GymMessageFacts {
   return {
@@ -80,20 +87,19 @@ export async function sendDueMessages(deps: SendMessagesDeps, opts: { now?: Date
   return { gyms: gymIds.length, sent };
 }
 
-/** What one gym is due now, from one read of it. */
-async function dueForGym(sql: Sql | TransactionSql, gymId: string, now: Date): Promise<{ gym: repo.GymNow; due: repo.NewMessage[] } | null> {
+/** What one gym is due now, from one read of it. `everybody`: the day's whole read. */
+async function dueForGym(sql: Sql | TransactionSql, gymId: string, now: Date, everybody: boolean): Promise<{ gym: repo.GymNow; due: repo.NewMessage[] } | null> {
   const gym = await repo.gymNow(sql, gymId, now);
   if (gym === null) return null;
-  // The rule holds every message of a gym that is closed, on no plan or asleep: its people
-  // are not read at all.
-  if (!gym.open || !gym.live || gym.hour < GYM_MESSAGE_DAY_STARTS_HOUR || gym.hour >= GYM_MESSAGE_DAY_ENDS_HOUR) return { gym, due: [] };
+  // The rule holds every message of a gym that is closed, on no plan or asleep.
+  if (!awake(gym)) return { gym, due: [] };
   const settings = gymMessageSettingsFrom(await settingRows(sql, gymId));
-  const visitDays = await repo.gymVisitDays(sql, gymId, gym.today, GYM_VISIT_DAYS);
+  const visitDays = everybody ? await repo.gymVisitDays(sql, gymId, gym.today, GYM_VISIT_DAYS) : [];
   const due: repo.NewMessage[] = [];
   // One person may have two stays in the read (removed, then back): what the first
   // is sent, the second must see.
   const sentNow = new Map<string, repo.MessagePerson["sent"]>();
-  for (const person of await repo.peopleForMessages(sql, gymId, now, gym.today, LOOK_BACK_DAYS)) {
+  for (const person of await repo.peopleForMessages(sql, gymId, now, gym.today, LOOK_BACK_DAYS, everybody)) {
     const before = sentNow.get(person.userId) ?? [];
     const { send } = gymMessageDue(factsFor(gym, settings, visitDays, { ...person, sent: [...person.sent, ...before] }));
     if (send === null) continue;
@@ -108,12 +114,21 @@ async function dueForGym(sql: Sql | TransactionSql, gymId: string, now: Date): P
 /** One gym's due messages. Written with the gym's row held, from a read made under it: the
  *  first read only says whether there is anything to hold the row for. */
 async function sendForGym(sql: Sql, gymId: string, now: Date): Promise<number> {
-  const first = await dueForGym(sql, gymId, now);
-  if (first === null || first.due.length === 0) return 0;
-  return await sql.begin(async (tx) => {
-    await lockGym(tx, gymId);
-    const held = await dueForGym(tx, gymId, now);
-    if (held === null) return 0;
-    return repo.insertMessages(tx, held.due, now, GYM_MESSAGE_KEPT_DAYS);
-  });
+  const gym = await repo.gymNow(sql, gymId, now);
+  // A gym that is closed, on no plan or asleep is not read past its own row.
+  if (gym === null || !awake(gym)) return 0;
+  const everybody = !(await repo.dayDone(sql, gymId, gym.today));
+  const first = await dueForGym(sql, gymId, now, everybody);
+  const sent =
+    first === null || first.due.length === 0
+      ? 0
+      : await sql.begin(async (tx) => {
+          await lockGym(tx, gymId);
+          const held = await dueForGym(tx, gymId, now, everybody);
+          if (held === null) return 0;
+          return repo.insertMessages(tx, held.due, now, GYM_MESSAGE_KEPT_DAYS);
+        });
+  // Marked only once the day's messages are written: a run that fails reads everybody again.
+  if (everybody) await repo.markDayDone(sql, gymId, gym.today);
+  return sent;
 }
