@@ -112,7 +112,9 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(
         409,
         "membership_already_held",
-        `They already have ${outcome.typeName}. Cancel that one first, or pick a start date after it ends.`,
+        outcome.ends
+          ? `They already have ${outcome.typeName}. Cancel that one first, or pick a start date after it ends.`
+          : `They already have ${outcome.typeName}. Cancel that one first.`,
       );
     case "request_reused":
       throw new OrgsError(409, "request_reused", "That was already saved for somebody else. Open the form again.");

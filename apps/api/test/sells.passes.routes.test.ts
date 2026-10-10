@@ -521,7 +521,8 @@ d("the two extra passes over what a gym sells (real Postgres, two api instances)
     const later = await give(gym, olivia, gold, plusDays(today, 20));
     expect([later.statusCode, (JSON.parse(later.body) as { message: string }).message]).toEqual([
       409,
-      "They already have Gold Monthly. Cancel that one first, or pick a start date after it ends.",
+      // It renews, so no start date is after it: the sentence offers none.
+      "They already have Gold Monthly. Cancel that one first.",
     ]);
     expect(await running(gym, olivia, gold)).toBe(1);
     // Somebody else's Gold Monthly is no reason to refuse Noah his.
@@ -529,7 +530,11 @@ d("the two extra passes over what a gym sells (real Postgres, two api instances)
 
     // A one-month membership: not a second one over the same days, and the next month is fine.
     expect((await give(gym, olivia, month, today)).statusCode).toBe(201);
-    expect(no(await give(gym, olivia, month, plusDays(today, 10)))).toBe("409 membership_already_held");
+    const inside = await give(gym, olivia, month, plusDays(today, 10));
+    expect([inside.statusCode, (JSON.parse(inside.body) as { message: string }).message]).toEqual([
+      409,
+      "They already have One month. Cancel that one first, or pick a start date after it ends.",
+    ]);
     expect((await give(gym, olivia, month, plusDays(today, 45))).statusCode).toBe(201);
     expect(await running(gym, olivia, month)).toBe(2);
 

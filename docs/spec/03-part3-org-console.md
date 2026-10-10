@@ -3226,7 +3226,9 @@ member list. ONE feature for CLAUDE.md §6: both extra passes run once over 17a�
   class bookings as it loses its sessions: the pack has the class back and the place goes
   to the waitlist, whether or not the person's app ends.
 - One person holds one membership type once at a time: a second that would run over the
-  same days is refused ("They already have Gold Monthly…"). Class packs are not asked.
+  same days is refused ("They already have Gold Monthly. Cancel that one first.", and "or
+  pick a start date after it ends" only where the one they hold has a last day). Class
+  packs are not asked.
 - Two records are not merged while the kept one would hold a type twice, or have two
   personal training sessions at one time; staff are told what to cancel first.
 - A box that ends bookings is confirmed by `ending.mark`, the mark of exactly the bookings

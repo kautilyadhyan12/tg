@@ -256,8 +256,9 @@ export type HeldWriteOutcome =
   | { kind: "membership_not_found" }
   /** The rule refuses this change of the membership as it is today. */
   | { kind: "not_allowed" }
-  /** The person has this type running already. */
-  | { kind: "already_held"; typeName: string };
+  /** The person has this type running already. `ends`: the one they hold has a last day,
+   *  so a start date after it would be taken; a repeating one that renews has none. */
+  | { kind: "already_held"; typeName: string; ends: boolean };
 
 /** The record under the gym's lock and its own: null where it is not this gym's. */
 async function lockedEntry(tx: TransactionSql, gymId: string, entryId: string): Promise<{ past: boolean } | null> {
@@ -335,8 +336,10 @@ export async function giveHeld(
 
     // Asked under the record's lock, so two staff pressing Add at one instant give one.
     const running = (await held(tx, input.gymId, input.entryId, IN_USE, IN_USE_READ)).map(shape);
-    if (running.some((row) => row.typeId === input.typeId && sameTypeTwice(row.membership, m, input.today))) {
-      return { kind: "already_held", typeName: type.name };
+    const clash = running.filter((row) => row.typeId === input.typeId && sameTypeTwice(row.membership, m, input.today));
+    if (clash.length > 0) {
+      const ends = clash.every((row) => heldMembershipView(row.membership, input.today).endsOn !== null);
+      return { kind: "already_held", typeName: type.name, ends };
     }
 
     const [created] = await tx<{ id: string }[]>`
