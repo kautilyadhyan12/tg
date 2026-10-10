@@ -78,53 +78,15 @@ describe('the roles this screen hands out', () => {
     }
   });
 
-  /** T3 C/H-1. The hint promised a studio's trainer something the server refuses:
-   *  `listOrgMembers` throws 403 `trainer_scope_unavailable` unless the org is a
-   *  `gym`, and Studio is offered in the create wizard. The old hint said "Can
-   *  see your member list and your join code" to everybody.
-   *
-   *  **THESE ASSERT THE PROMISE, NOT THE WORDS, and the first draft got that
-   *  wrong.** It asserted the studio hint does not contain "member list" — which
-   *  the honest copy DOES contain, in order to deny it ("they can't see your
-   *  member list yet"). A substring ban would have forced vaguer copy to satisfy
-   *  a test, i.e. the assertion driving the product instead of describing it. So
-   *  the affirmative "CAN see" is what each case is measured on. */
-  it('does NOT promise a STUDIO trainer the member list — the server refuses it', () => {
-    const trainer = staffRoleChoices('studio').find((c) => c.value === 'trainer');
-    expect(trainer.hint).not.toMatch(/can see your member list/i);
-    expect(trainer.hint).toMatch(/can see who came in/i);
-  });
-
-  /** The denial is SAID rather than merely omitted. A studio owner appointing a
-   *  trainer for the roster needs to learn it here, not from the trainer hitting
-   *  a 403 later — :5807's shape from the side where the app stays silent. */
-  it('TELLS a studio owner the client list is not included, in the studio\'s word', () => {
-    const trainer = staffRoleChoices('studio').find((c) => c.value === 'trainer');
-    expect(trainer.hint).toMatch(/can't see your clients in the app/i);
-    expect(trainer.hint).not.toMatch(/member/i);
-  });
-
-  it('DOES promise a GYM trainer who is in the app, which is the case §2.2 grants', () => {
-    const trainer = staffRoleChoices('gym').find((c) => c.value === 'trainer');
-    expect(trainer.hint).toMatch(/can see who's in the app/i);
-  });
-
-  /** The server gives a personal trainer's assistant the one client list, so
-   *  the hint promises exactly that — in the trainer's word. */
-  it("DOES promise a PERSONAL TRAINER's assistant the client list", () => {
-    const trainer = staffRoleChoices('personal_trainer').find((c) => c.value === 'trainer');
-    expect(trainer.hint).toMatch(/can see who's in the app/i);
-    expect(trainer.hint).not.toMatch(/can't see/i);
-  });
-
-  /** An unknown type takes the REFUSING side, so a type added later cannot
-   *  silently promise access the server has not been taught to give. */
-  it('treats an unknown org type as NOT a gym — the refusing sentence, said positively', () => {
-    for (const orgType of [undefined, 'clinic', 'something_new']) {
+  /** The server gives every type's trainer the list of people in the app (4e), so the
+   *  hint makes one promise, and never the old denial. */
+  it.each(['gym', 'studio', 'personal_trainer', undefined, 'something_new'])(
+    'promises the trainer of %s who is in the app and who came in',
+    (orgType) => {
       const trainer = staffRoleChoices(orgType).find((c) => c.value === 'trainer');
-      expect(trainer.hint).toMatch(/can't see your (members|clients) in the app/i);
-    }
-  });
+      expect(trainer.hint).toBe("Can see who's in the app and who came in.");
+    },
+  );
 
   /** **THE MANAGER'S HINT FOLLOWS THE TYPE TOO, and this test used to assert
    *  the opposite** — that the sentence was identical for every org type. It

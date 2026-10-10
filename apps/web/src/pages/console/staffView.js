@@ -65,37 +65,17 @@ export function canManageStaff(privileges) {
  *  it has a route yet. A hint describing the matrix instead of the product
  *  would promise a gym owner powers they are about to go looking for.
  *
- *  **THE TRAINER HINT DEPENDS ON THE ORG TYPE.** "Can see your member list and
- *  your join code" is FALSE for a STUDIO: `listOrgMembers` refuses a trainer
- *  with 403 `trainer_scope_unavailable` unless `orgType` is `gym` or
- *  `personal_trainer`, because §2.3 makes group scoping CORE for studios and
- *  nothing assigns a trainer to a group yet (`gym_staff` has no group column).
- *  Studio is offered in the create wizard, so this is reachable: a studio owner
- *  reads the sentence, appoints a trainer for exactly that, and the trainer
- *  opens Clients and is turned away. **The rule above is what that broke — a
- *  hint naming what the MATRIX grants rather than what this org's trainer gets.**
- *
- *  A PERSONAL TRAINER's assistant gets the client list (there is one list and no
- *  group to scope it to). The word for the people follows the type — a gym has
- *  members, a studio and a trainer have clients — in the promise AND in the
- *  refusal, so one screen never uses two words for the same people.
- *
- *  Taking the org type as an argument rather than reading it: this file is pure,
- *  and an unknown type is treated as NOT a gym — the refusing side — so a type
- *  added later cannot silently promise access it does not have. */
+ *  The trainer's hint is the same for every type (ROADMAP 4e): the server gives a
+ *  studio's coach the list a gym's trainer reads. Only the role's name follows the type. */
 export function staffRoleChoices(orgType) {
   const words = orgWords(orgType);
-  const trainerHint =
-    orgType === 'gym' || orgType === 'personal_trainer'
-      ? "Can see who's in the app and who came in."
-      : `Can see who came in. They can't see your ${words.people} in the app yet.`;
   return [
     {
       value: 'manager',
       label: 'Manager',
       hint: `Can keep your ${words.person} list, invite people and remove ${words.people}.`,
     },
-    { value: 'trainer', label: words.coachCap, hint: trainerHint },
+    { value: 'trainer', label: words.coachCap, hint: "Can see who's in the app and who came in." },
   ];
 }
 

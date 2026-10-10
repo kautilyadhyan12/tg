@@ -99,7 +99,7 @@ merely hides)
 | Capability | owner | manager | trainer |
 |---|---|---|---|
 | Overview, Leaderboard, Reports (view) | ✔ | ✔ | ✔ |
-| Members list + detail | ✔ | ✔ | **assigned/group only** (gym: all) |
+| Members list + detail | ✔ | ✔ | ✔ (every type since 2026-10-10, ROADMAP 4e: a studio's coach reads the people in the app as a gym's trainer does; the owner's ticks decide the rest) |
 | Invite (share code / print poster) | ✔ | ✔ | ✔ |
 | Remove / restore member | ✔ | ✔ | — |
 | Create / rotate / expire codes | ✔ | ✔ | — |

@@ -787,10 +787,11 @@ describe('Invite staff', () => {
     expect([...sent.privileges].sort()).toEqual(ROLE_PRIVILEGES.trainer.filter((p) => !p.startsWith('codes.')).sort());
   });
 
-  it("tells a STUDIO owner their coach cannot see the client list, in the studio's word", async () => {
+  it('tells a STUDIO owner their Coach can see who is in the app, as a gym is told', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, orgType: 'studio' }] } });
     const form = await openInvite();
-    expect(form.getByText(/can't see your clients in the app/i)).toBeTruthy();
+    expect(form.getByText(/Can see who's in the app/i)).toBeTruthy();
+    expect(form.queryByText(/can't see/i)).toBeNull();
     expect(form.getByRole('radio', { name: 'Coach' })).toBeTruthy();
   });
 

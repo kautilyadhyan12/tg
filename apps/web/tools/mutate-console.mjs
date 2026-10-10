@@ -728,18 +728,6 @@ const MUTANTS = [
     to: `          onClick={() => onRemove(true)}${String.fromCharCode(10)}          className="text-xs rounded-lg px-3 py-1.5 self-start sm:self-end"`,
   },
   {
-    // T3 C/H-1. The trainer hint promised a STUDIO's trainer the member list,
-    // which `listOrgMembers` refuses with 403 `trainer_scope_unavailable`. This
-    // mutant makes the hint unconditional again — the shipped defect exactly.
-    id: 'S14',
-    target: 'staffview',
-    suite: STAFF_VIEW_SUITE,
-    why: "FALSE ON SCREEN: a STUDIO owner is told their trainer can see the member list, and the server turns that trainer away — the owner appoints somebody for a job the app has just promised on its behalf",
-    expect: 'does NOT promise a STUDIO trainer the member list',
-    from: "      orgType === 'gym'",
-    to: "      orgType !== null",
-  },
-  {
     // T3 C/H-1's other half, and the S11 class again: the helper can be right
     // while the SCREEN never passes it the org type.
     //

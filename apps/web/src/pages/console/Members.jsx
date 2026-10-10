@@ -5,7 +5,7 @@ import { PtSessionsEndDialog } from '../../components/console/PtSessionsEnding';
 import { ptSessionsAsked } from './ptSessionsEndView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import ScrollJump from '../../components/console/ScrollJump';
-import { orgService, errorText, errorCode } from '../../api/orgsApi';
+import { orgService, errorText } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import { refreshConsoleOrgsAfterChange } from './consoleOrgs';
 import MemberListPanel, { Tick } from './MemberListPanel';
@@ -380,13 +380,8 @@ export default function Members() {
       })
       .catch((err) => {
         if (cancelled) return;
-        // §2.2 gives a trainer the member list for their own group only, and nothing
-        // assigns groups yet, so a studio trainer is held out with a 403 carrying its own
-        // sentence. Printing the empty state would say the gym has no members.
-        const message =
-          errorCode(err) === 'trainer_scope_unavailable'
-            ? errorText(err, "Your role doesn't allow that.")
-            : errorText(err, `We couldn't load the ${words.people}.`);
+        // The server's own sentence; the empty state would say the gym has no members.
+        const message = errorText(err, `We couldn't load the ${words.people}.`);
         setState({ loading: false, error: message, items: [], nextCursor: null });
       });
     return () => {
