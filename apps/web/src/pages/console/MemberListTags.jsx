@@ -15,7 +15,7 @@ import { selectedWords, tagBoxWords, tagDoneLine, tagHolders } from './memberLis
 
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 
-function Sheet({ title, testId, onClose, footer, children }) {
+export function Sheet({ title, testId, onClose, footer, children }) {
   // The page behind holds still while the box is open.
   useEffect(() => {
     const before = document.body.style.overflow;
@@ -64,7 +64,7 @@ function Choice({ pressed, onClick, children, testId }) {
   );
 }
 
-function Refusal({ children }) {
+export function Refusal({ children }) {
   return (
     <p className="c-s14 c-t1 flex gap-2" role="alert">
       <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--warn)' }} />

@@ -131,6 +131,8 @@ d("DPDP data export (real Postgres)", () => {
     await sql`
       INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, expires_at)
       VALUES (${postGymId}, ${userId}, 'welcome', 'joined:fixture', 'Welcome.', current_date, now() + interval '30 days')`;
+    // A kind of message they switched off at that gym (20f-i).
+    await sql`INSERT INTO gym_member_messages_off (gym_id, user_id, kind) VALUES (${postGymId}, ${userId}, 'group')`;
     await sql`
       WITH c AS (
         INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, unit, starts_on, ends_on, who)

@@ -132,6 +132,9 @@ import {
   withKnownStartHereSteps,
   startOrgTrialResponseSchema,
   updateOrgResponseSchema,
+  gymGroupMessageDoneResponseSchema,
+  gymGroupMessagePreviewResponseSchema,
+  gymGroupMessagePreviewSchema,
 } from '@app/shared';
 import authApi from './authApi';
 
@@ -1484,6 +1487,11 @@ export const orgService = {
   previewTagSelected: (gymId, body) =>
     readThrough(memberTagsPreviewResponseSchema, 'who would change', authApi.post(`${tagsUrl(gymId)}/selected/tags-preview`, body)),
   tagSelected: (gymId, body) => readThrough(memberTagsDoneResponseSchema, 'that tag', authApi.post(`${tagsUrl(gymId)}/selected/tags`, body)),
+  // A message to the people selected (20f-i): the box, then the press.
+  previewGroupMessage: (gymId, selection) =>
+    readThrough(gymGroupMessagePreviewResponseSchema, 'who would get it', authApi.post(`${tagsUrl(gymId)}/selected/message-preview`, { selection })),
+  sendGroupMessage: (gymId, body) =>
+    readThrough(gymGroupMessageDoneResponseSchema, 'that message', authApi.post(`${tagsUrl(gymId)}/selected/message`, body)),
   renameGymTag: (gymId, tagId, name) =>
     readThrough(memberGymTagsResponseSchema, "your gym's tags", authApi.patch(`${tagsUrl(gymId)}/tags/${encodeURIComponent(tagId)}`, { name })),
   // `people` is how many people the Delete box named: a tag now on more or fewer is not deleted.
@@ -1940,6 +1948,14 @@ export function inviteChangedPreview(err) {
 export function selectionChanged(err) {
   const parsed = memberListSelectionChangedSchema.safeParse(err?.response?.data);
   return parsed.success ? { count: parsed.data.count, digest: parsed.data.digest } : null;
+}
+
+/** A message refused because who would get it changed: the box as it now stands, or null. */
+export function groupMessagePeopleChanged(err) {
+  const data = err?.response?.data;
+  if (data?.error !== 'group_message_people_changed') return null;
+  const parsed = gymGroupMessagePreviewSchema.safeParse(data.preview);
+  return parsed.success ? parsed.data : null;
 }
 
 /** The box a refused Remove answers with, nothing done: `{ kind, preview }`, kind

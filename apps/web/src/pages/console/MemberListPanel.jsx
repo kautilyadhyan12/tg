@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronRight, Download, Loader2, Mail, Minus, Search, SlidersHorizontal, Tag, Upload, UserMinus, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Download, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -9,6 +9,7 @@ import MemberListInvite from './MemberListInvite';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
 import { MemberTagsManage, MemberTagsSelected } from './MemberListTags';
+import MemberListMessage from './MemberListMessage';
 import MemberListUpload from './MemberListUpload';
 import { staffTag } from './consoleView';
 import {
@@ -343,6 +344,8 @@ export default function MemberListPanel({
   /** The selection the Tags box is open for, as Remove keeps its own. */
   const [taggingFor, setTaggingFor] = useState(null);
   const [managingTags, setManagingTags] = useState(false);
+  /** The selection the Send message box is open for (20f-i). */
+  const [messageFor, setMessageFor] = useState(null);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
   /** How many names were loaded when a change asked for the list again, so the re-read
@@ -670,7 +673,8 @@ export default function MemberListPanel({
 
   /** "12 members", "1 past member". */
   const peopleWords = (k) => `${count(k)} ${current ? '' : 'past '}${k === 1 ? words.person : words.people}`;
-  // The bar's buttons (§18.5): Invite only for current members and a gym that can send;
+  // The bar's buttons (§18.5): Invite and Send message only for current members and a gym
+  // that can send (a past member gets no message);
   // Remove for a gym that can change its list (past members: Remove from app); Download CSV
   // always, a read-only gym included (it changes nobody).
   const barButtons = (
@@ -679,6 +683,12 @@ export default function MemberListPanel({
         <button type="button" onClick={() => setInvitingSelected(true)} data-testid="bar-invite" className="c-btn c-btn-soft c-btn-sm">
           <Mail aria-hidden="true" className="w-4 h-4" />
           Invite to app
+        </button>
+      ) : null}
+      {current && !readOnly ? (
+        <button type="button" onClick={() => setMessageFor(selection)} data-testid="bar-message" className="c-btn c-btn-s c-btn-sm">
+          <MessageSquare aria-hidden="true" className="w-4 h-4" />
+          Send message
         </button>
       ) : null}
       {!readOnly ? (
@@ -887,6 +897,19 @@ export default function MemberListPanel({
             }
           }}
           onClose={() => setTaggingFor(null)}
+        />
+      ) : null}
+
+      {messageFor !== null ? (
+        <MemberListMessage
+          gymId={gymId}
+          selection={messageFor}
+          picked={picked}
+          onSelectionChanged={(fresh) => {
+            selectionMoved(fresh);
+            setMessageFor(null);
+          }}
+          onClose={() => setMessageFor(null)}
         />
       ) : null}
 

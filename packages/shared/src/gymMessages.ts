@@ -23,6 +23,13 @@ export const GYM_MESSAGE_KINDS = [
 export const gymMessageKindSchema = z.enum(GYM_MESSAGE_KINDS);
 export type GymMessageKind = z.infer<typeof gymMessageKindSchema>;
 
+/** A message staff typed for the people they chose (ROADMAP 20f-i). It is no automatic
+ *  kind: the rule below never makes one, and it is not in the day's one automatic message. */
+export const GYM_GROUP_MESSAGE_KIND = "group";
+/** Every kind a member's inbox can hold. */
+export const gymInboxKindSchema = z.enum([...GYM_MESSAGE_KINDS, GYM_GROUP_MESSAGE_KIND]);
+export type GymInboxKind = z.infer<typeof gymInboxKindSchema>;
+
 /** The kinds a person cannot switch off (§16.2: "except a payment notice"). */
 export const GYM_MESSAGE_ALWAYS_ON: readonly GymMessageKind[] = ["payment_overdue"];
 
@@ -272,7 +279,7 @@ export const GYM_COME_BACK_LINES: Record<string, string> = {
 
 export const gymInboxMessageSchema = z.object({
   id: z.string().uuid(),
-  kind: gymMessageKindSchema,
+  kind: gymInboxKindSchema,
   body: z.string().min(1).max(GYM_MESSAGE_BODY_MAX),
   sentAt: instantSchema,
   /** False until the member has opened the inbox with it in. */
@@ -291,6 +298,8 @@ export const gymInboxResponseSchema = z.object({
   /** The gym's phone and email for its members (ROADMAP 20a-iii), since they cannot reply
    *  here. Both null for a paused gym and from an api too old to send them. */
   contact: gymContactSchema.default({ phone: null, email: null }),
+  /** False once the member has switched this gym's messages to groups off (ROADMAP 20f-i). */
+  groupMessages: z.boolean().default(true),
 });
 export type GymInboxResponse = z.infer<typeof gymInboxResponseSchema>;
 

@@ -77,6 +77,9 @@ export const DIRECT_DELETE_TABLES = [
   // A gym's messages to the person in the app (migration 0088; ROADMAP 20a): about the
   // person, deleted at Day 14 and exported.
   "gym_member_messages",
+  // The kinds of message a person switched off at a gym (migration 0092; ROADMAP 20f-i):
+  // about the person, deleted at Day 14 and exported.
+  "gym_member_messages_off",
   // A person's number in a challenge of the gym's own count, typed by staff (0082): about
   // the person, deleted at Day 14 and exported.
   "gym_challenge_scores",
@@ -458,6 +461,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym's tags and who put it on a record (`0083`), on the same footing.
   "gym_member_tags",
   "gym_member_entry_tags",
+  // gym_group_messages.sent_by — which member of staff sent a message to a group (`0092`),
+  // on the same footing: the gym's record; `ON DELETE set null`. Each person's own copy is
+  // a gym_member_messages row, deleted with them.
+  "gym_group_messages",
   "api_cost_events",
   "usage_daily",
   "trace_samples",
