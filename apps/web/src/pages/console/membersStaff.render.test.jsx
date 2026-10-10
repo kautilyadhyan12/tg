@@ -795,9 +795,11 @@ describe('Invite staff', () => {
     expect(form.getByRole('radio', { name: 'Coach' })).toBeTruthy();
   });
 
-  it('tells a GYM owner their trainer CAN see it: the same control, the other answer', async () => {
+  it('tells a GYM owner the same of their Trainer, under the gym’s own name for the role', async () => {
     const form = await openInvite();
     expect(form.getByText(/Can see who's in the app/i)).toBeTruthy();
+    expect(form.getByRole('radio', { name: 'Trainer' })).toBeTruthy();
+    expect(form.queryByRole('radio', { name: 'Coach' })).toBeNull();
   });
 
   it('refuses a too-short entry in words, without asking the server', async () => {

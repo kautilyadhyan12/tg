@@ -18,7 +18,8 @@ import { listOrgMembers, type OrgsDeps } from "../src/modules/orgs/service.js";
 import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
-if (!/localhost|127\.0\.0\.1/.test(url)) {
+const host = URL.canParse(url) ? new URL(url).hostname : "";
+if (host !== "localhost" && host !== "127.0.0.1") {
   console.error("measure-coach-list-cost: DATABASE_URL must be a local database");
   process.exit(2);
 }

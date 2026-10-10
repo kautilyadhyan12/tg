@@ -99,7 +99,7 @@ merely hides)
 | Capability | owner | manager | trainer |
 |---|---|---|---|
 | Overview, Leaderboard, Reports (view) | ✔ | ✔ | ✔ |
-| Members list + detail | ✔ | ✔ | ✔ (every type since 2026-10-10, ROADMAP 4e: a studio's coach reads the people in the app as a gym's trainer does; the owner's ticks decide the rest) |
+| Members list + detail | ✔ | ✔ | ✔ (every type since 2026-10-10, ROADMAP 4e: a studio's coach reads the people in the app as a gym's trainer does: a name, the join date, the group, whether their place is free and whether it is one of the paid places; the owner's ticks decide the rest) |
 | Invite (share code / print poster) | ✔ | ✔ | ✔ |
 | Remove / restore member | ✔ | ✔ | — |
 | Create / rotate / expire codes | ✔ | ✔ | — |
@@ -130,7 +130,7 @@ owner may enable for wellness programs) |
 | Challenges (v1.1) | ✔ | ✔ | off |
 | At-risk list | ✔ | ✔ | ✔ (renamed "Inactive clients") |
 | Groups (named codes) | optional | **core** | **core** (caseloads) |
-| Trainer scoping to group | optional | ✔ | ✔ |
+| Trainer scoping to group | not built, and not the rule since 2026-10-10 (ROADMAP 4e): a trainer or coach with the tick reads everyone in the app, in every type |||
 | Program/plan assignment surfacing | v1.5 | v1.5 core | Phase 2 core |
 | Adherence report per client | — | v1.5 | Phase 2 core |
 | Monthly org report PDF | ✔ | ✔ | ✔ (adherence framing) |
@@ -288,7 +288,7 @@ friendly "first week collecting" state with the checklist beside it |
 | List | **At-risk members** (top 5 of the §3.2 query, "Inactive clients"
 for clinic) | cached 1 h | row = name · last active · lifetime workouts ·
 **[Send nudge]** one-tap (push via member app: "Your gym misses you    💪—
-{org}"; rate-limit 1/member/7d; trainer sees own group only). Empty:
+{org}"; rate-limit 1/member/7d). Empty:
 "Nobody's slipping — nice." Error: retry chip |
 | Side | Activation checklist (until complete, §5.1) · This month's report
 shortcut | `gyms.activation` | disappears forever once done |
