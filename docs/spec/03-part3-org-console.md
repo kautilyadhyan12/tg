@@ -4565,24 +4565,39 @@ switches for the automatic kinds also use; a payment notice can never be a row t
 Off, what they were already sent stays, staff are told, and nothing is written for them.
 
 **Sent messages** *(ADDED 2026-10-10 with 20f-ii; RULINGS that day.)* **The worst thing it
-could do to a real person:** one gym's sent messages, whose words can name a member, read
-by another gym or by staff who may not send one. The first test written has two gyms each
-send a message that names somebody, and every kind of caller asks for both.
+could do to a real person:** one gym's sent messages, whose words can name a member, or the
+names of who got one, read by another gym or by staff who may not send one. The first test
+written has two gyms each send a message that names somebody, and every kind of caller
+asks for the list and for the names, of both.
 
 On Members → Your list a **Sent messages** button (for staff holding `members.confirm`; a
 gym that can change nothing still has it) opens a page of its own,
 `/console/:slug/members/sent-messages`: the messages the gym sent, newest first, twenty at
-a time with Load more. Each shows the words as typed, **Sent to N people**, when on the
-gym's own calendar and clock, and **Sent by** the member of staff's name ("someone no
-longer here" once their account is gone). Who got a message is a count, never names. A gym
-that has sent nothing reads "You haven't sent a message yet", how to send one, and a
-button to its list. The box that sends a message ends with **See sent messages**. Staff
+a time with Load more, under a heading for each day of the gym's calendar (Today,
+Yesterday, then the date). Each is a card: the sender's initials and name ("Someone no
+longer here" once their account is gone), the time on the gym's clock, the words as typed,
+and a **Sent to N people** button. At the top, one line says how many more messages can go
+today, with **Send a message** opening the list (a gym that can change nothing has
+neither). A gym that has sent nothing reads "You haven't sent a message yet", how to send
+one, and a button to its list.
+
+**Who it went to** (Kd, RULINGS 2026-10-10): **Sent to N people** opens a box of names,
+the first 100 and then a count, and a name opens that person's page. They are the people
+who hold a copy of the message at this gym, by the name the gym's list has for them (their
+own name where they are on no record now): somebody removed since is still named;
+somebody whose account is deleted is counted in one line and not named. Staff who can
+read it can already see every one of these people on the Members list.
+`GET …/member-list/messages/:messageId/people` (`readSentMessagePeople`): the same
+privilege and allowance; the message is looked up with its gym and inside its year, so
+another gym's message is not found (404 `group_message_not_found`), and the names are read
+from the gym's own people to their copy, never from the copy outward. The box that sends a message ends with **See sent messages**. Staff
 without the tick who type the address are told to ask the owner, and nothing is asked of
 the server for them.
 
 `GET …/member-list/messages?after=<id>` (`readSentMessages`, `messages/group.ts`): the
 privilege, then the Members list's own read allowance; `after` is the id of the last
-message of the page before, read with its gym, so another gym's id gives nothing.
+message of the page before, read with its gym, so another gym's id gives nothing. The
+answer carries `leftToday`, counted as the send counts it.
 
 **A sent message is kept a year** (`GYM_SENT_MESSAGES_KEPT_DAYS`, 365; Kd, RULINGS
 2026-10-10), and the page says so. The list leaves out a message that old whether or not
