@@ -208,6 +208,9 @@ export const gymMemberBills = pgTable(
     amountMinor: integer("amount_minor").notNull(),
     currency: text("currency").notNull(),
     dueOn: date("due_on").notNull(),
+    /** The days it is for, as they were when it was opened; null for one period. */
+    coversFrom: date("covers_from"),
+    coversTo: date("covers_to"),
     status: text("status").notNull().default("open"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -219,6 +222,10 @@ export const gymMemberBills = pgTable(
     check("gym_member_bills_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_member_bills_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("gym_member_bills_status_check", sql`${t.status} IN ('open','paid','void','refunded')`),
+    check(
+      "gym_member_bills_covers_check",
+      sql`(${t.coversFrom} IS NULL) = (${t.coversTo} IS NULL) AND (${t.coversFrom} IS NULL OR ${t.coversTo} >= ${t.coversFrom})`,
+    ),
     foreignKey({
       name: "gym_member_bills_membership_fk",
       columns: [t.gymId, t.heldMembershipId],

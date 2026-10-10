@@ -402,7 +402,7 @@ export async function giveHeld(
       const [opened] = await insertBills(
         tx,
         input.gymId,
-        [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: type.priceMinor, currency: type.currency, dueOn: due.dueOn }],
+        [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: type.priceMinor, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
         input.now,
       );
       if (opened === undefined) throw new Error("a new membership's bill was not opened");

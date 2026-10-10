@@ -218,6 +218,29 @@ describe('what the bills show', () => {
   });
 });
 
+describe('one day for what is owed', () => {
+  it('the line above the bills prints the day the bill fell due, after a freeze has moved the membership\'s own dates', async () => {
+    // Owing since 4 October, frozen for five days: the membership's rule now says the 9th.
+    const gold = held(1, GOLD, '2026-10-04', false, [
+      [{ type: 'freeze' }, '2026-10-10'],
+      [{ type: 'unfreeze' }, '2026-10-15'],
+    ]);
+    expect(gold.view.payment).toEqual({ state: 'due', since: '2026-10-09' });
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    const view = render(draw());
+    const [row] = await rowsSoon();
+    expect(within(row).getByTestId('held-payment').textContent).toBe('Payment due since 4 October 2026');
+    expect(billsOf(row)[0]).toContain('Was due 4 October 2026');
+    view.unmount();
+
+    // Staff who are sent no bill read the membership's own day, as before.
+    orgService.getHeldMemberships.mockResolvedValue(withoutBills([gold]));
+    render(draw());
+    const [plain] = await rowsSoon();
+    expect(within(plain).getByTestId('held-payment').textContent).toBe('Payment due since 9 October 2026');
+  });
+});
+
 describe('staff without the payments tick', () => {
   it('see what is owed as before, no bill and no Record payment, and are told who can', async () => {
     orgService.getHeldMemberships.mockResolvedValue(withoutBills([held(2, PACK, '2026-10-10', false)]));

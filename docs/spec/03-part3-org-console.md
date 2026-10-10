@@ -3310,7 +3310,9 @@ membership (`gym_member_bills`, one a membership a period); a membership's count
 paid periods (§13.2) is still what its dates are worked out from, and it moves on only
 with the payment that settles the bill of the first unpaid period.
 - **Opened by itself**: when a membership is given, and by an hourly run for every
-  period that has begun since (each gym on its own day). Nothing is opened for a
+  period that has begun since (each gym on its own day). A bill keeps the days it was
+  opened for and the day it fell due: a later freeze moves the membership's dates and
+  never a bill's. Nothing is opened for a
   membership that is cancelled, ended, frozen, free, set to stop at the end of what is
   paid, or a past member's. A bill already owed stays owed after the membership ends,
   so somebody who left without paying is still found.

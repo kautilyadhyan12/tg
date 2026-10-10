@@ -674,22 +674,32 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       }
       expect((await read("2026-01-24T12:00:00Z"))?.view.payment).toEqual({ state: "paid", until: "2026-02-15" });
 
+      // Frozen for five days and running again: every later date moves by five days, and
+      // the bill that was opened for 15 January to 14 February still says those days.
+      const jan = { from: "2026-01-15", to: "2026-02-14" };
+      moved(await heldService.moveHeldMembership(at("2026-01-24T13:00:00Z"), owner.userId, gymId, person, id, { type: "freeze" }));
+      moved(await heldService.moveHeldMembership(at("2026-01-29T13:00:00Z"), owner.userId, gymId, person, id, { type: "unfreeze" }));
+      const thawed = await read("2026-01-29T14:00:00Z");
+      expect(thawed?.view.payment).toEqual({ state: "paid", until: "2026-02-20" });
+      expect(thawed?.billing?.bills.find((bill) => bill.periodIndex === 0)).toMatchObject({ covers: jan, dueOn: "2026-01-15", state: "paid" });
+      expect(thawed?.billing?.pay).toMatchObject({ periodIndex: 1, dueOn: "2026-02-20", covers: { from: "2026-02-20", to: "2026-03-19" } });
+
       // Next month paid early by bank transfer: a bill is opened for it, already paid.
-      expect(await pay("2026-01-25T12:00:00Z", 4999, 1, "bank_transfer")).toBe("ok");
-      const two = await read("2026-01-25T12:00:00Z");
+      expect(await pay("2026-01-29T15:00:00Z", 4999, 1, "bank_transfer")).toBe("ok");
+      const two = await read("2026-01-29T15:00:00Z");
       expect(two?.billing?.bills.map((b) => [b.periodIndex, b.state, b.dueOn, b.covers])).toEqual([
-        [1, "paid", "2026-02-15", { from: "2026-02-15", to: "2026-03-14" }],
-        [0, "paid", "2026-01-15", { from: "2026-01-15", to: "2026-02-14" }],
+        [1, "paid", "2026-02-20", { from: "2026-02-20", to: "2026-03-19" }],
+        [0, "paid", "2026-01-15", jan],
       ]);
       // A period that is not the next one is refused.
-      expect(await pay("2026-01-25T12:00:00Z", 4999, 3)).toContain("held_membership_changed");
-      expect(await pay("2026-01-25T12:00:00Z", 4999, 0)).toContain("held_membership_changed");
+      expect(await pay("2026-01-29T15:00:00Z", 4999, 3)).toContain("held_membership_changed");
+      expect(await pay("2026-01-29T15:00:00Z", 4999, 0)).toContain("held_membership_changed");
 
       // Taking back: only the newest payment, one at a time.
       const [first, second, third] = await paymentsOf(gymId);
       const undo = (paymentId: string) =>
         heldService
-          .undoMemberPayment(at("2026-01-25T13:00:00Z"), owner.userId, gymId, person, id, paymentId)
+          .undoMemberPayment(at("2026-01-29T16:00:00Z"), owner.userId, gymId, person, id, paymentId)
           .then(() => "ok", (err: unknown) => (err instanceof OrgsError ? err.code : "threw"));
       expect(two?.billing?.undo).toEqual({ kind: "payment", paymentId: third?.id });
       expect(await undo(first?.id ?? "")).toBe("held_membership_changed");
@@ -706,10 +716,13 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       // Then the one before it: the second part of January's bill, which is owed again for that part.
       expect(await undo(second?.id ?? "")).toBe("ok");
       expect((await rowsOf(gymId))[0]?.paid_periods).toBe(0);
-      const back = await read("2026-01-25T14:00:00Z");
+      const back = await read("2026-01-29T17:00:00Z");
       expect(back?.billing?.bills.find((b) => b.periodIndex === 0)).toMatchObject({ state: "overdue", paidMinor: 2000 });
       expect(back?.billing?.pay).toMatchObject({ periodIndex: 0, leftMinor: 2999 });
-      expect(back?.view.payment).toEqual({ state: "due", since: "2026-01-15" });
+      // The membership's own rule counts its periods on from the five days frozen; the bill
+      // keeps the day it fell due, and that is the day the page prints (`paymentLine`).
+      expect(back?.view.payment).toEqual({ state: "due", since: "2026-01-20" });
+      expect(back?.billing?.pay).toMatchObject({ dueOn: "2026-01-15" });
       const notes = (await auditOf(gymId)).map((a) => a.action).filter((a) => a.startsWith("org.member_payment") || a === "org.bill_settings_changed");
       expect(notes).toEqual([
         "org.bill_settings_changed",

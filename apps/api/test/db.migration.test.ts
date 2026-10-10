@@ -1721,6 +1721,12 @@ d("0001_init on a real database", () => {
         expect(await refused((sp) => bill(sp, { period: 1, currency: "gbp" }))).toBe("gym_member_bills_currency_check");
         expect(await refused((sp) => bill(sp, { period: 1, status: "overdue" }))).toBe("gym_member_bills_status_check");
         expect(await refused((sp) => bill(sp, { period: -1 }))).toBe("gym_member_bills_period_check");
+        // The days a bill is for: both or neither, and never backwards.
+        const covers = (sp: typeof tx, from: string | null, to: string | null) => sp`
+          INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to)
+          VALUES (${one.gym}, ${one.held}, 5, 4999, 'GBP', '2026-06-15', ${from}::date, ${to}::date)`;
+        expect(await refused((sp) => covers(sp, "2026-06-15", null))).toBe("gym_member_bills_covers_check");
+        expect(await refused((sp) => covers(sp, "2026-06-15", "2026-06-14"))).toBe("gym_member_bills_covers_check");
         // Another gym's membership under this gym's id.
         expect(await refused((sp) => bill(sp, { held: two.held, period: 1 }))).toBe("gym_member_bills_membership_fk");
 

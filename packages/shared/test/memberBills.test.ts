@@ -43,14 +43,16 @@ function moved(m: HeldMembership, event: HeldMembershipEvent, today: string): He
 
 const none = new Set<number>();
 const indexes = (m: HeldMembership, today: string, have: ReadonlySet<number> = none) => billsToOpen(m, today, have).map((b) => b.periodIndex);
+/** Which periods are owed and when each is due; the days each is for have their own test. */
+const owed = (m: HeldMembership, today: string) => billsToOpen(m, today, none).map((b) => ({ periodIndex: b.periodIndex, dueOn: b.dueOn }));
 
 describe("a cancelled membership is never billed again", () => {
   // Given unpaid on 15 Jan 2026: period 0 is 15 Jan – 14 Feb, period 1 from 15 Feb.
   const unpaid = given(monthly, "2026-01-15", false, "2026-01-15");
 
   it("is owed its period while it runs", () => {
-    expect(billsToOpen(unpaid, "2026-01-15", none)).toEqual([{ periodIndex: 0, dueOn: "2026-01-15" }]);
-    expect(billsToOpen(unpaid, "2026-02-15", none)).toEqual([
+    expect(owed(unpaid, "2026-01-15")).toEqual([{ periodIndex: 0, dueOn: "2026-01-15" }]);
+    expect(owed(unpaid, "2026-02-15")).toEqual([
       { periodIndex: 0, dueOn: "2026-01-15" },
       { periodIndex: 1, dueOn: "2026-02-15" },
     ]);
@@ -80,7 +82,7 @@ describe("a cancelled membership is never billed again", () => {
     // Frozen 1 Feb, unfrozen 11 Feb: ten days, so period 1 starts 25 Feb, not 15 Feb.
     const back = moved(frozen, { type: "unfreeze" }, "2026-02-11");
     expect(indexes(back, "2026-02-24")).toEqual([]);
-    expect(billsToOpen(back, "2026-02-25", none)).toEqual([{ periodIndex: 1, dueOn: "2026-02-25" }]);
+    expect(owed(back, "2026-02-25")).toEqual([{ periodIndex: 1, dueOn: "2026-02-25" }]);
   });
 
   it("is owed nothing once a fixed term or a pack is over, paid or not", () => {
@@ -111,12 +113,12 @@ describe("a cancelled membership is never billed again", () => {
   it("asks for the periods before it was given of nobody", () => {
     // Started 15 Oct 2025, given on 20 Jan 2026: today's period is 15 Jan – 14 Feb, the fourth.
     const late = given(monthly, "2025-10-15", false, "2026-01-20");
-    expect(billsToOpen(late, "2026-01-20", none)).toEqual([{ periodIndex: 3, dueOn: "2026-01-15" }]);
+    expect(owed(late, "2026-01-20")).toEqual([{ periodIndex: 3, dueOn: "2026-01-15" }]);
   });
 
   it("opens one before its start day, due on the start day", () => {
     const upcoming = given(monthly, "2026-03-01", false, "2026-02-10");
-    expect(billsToOpen(upcoming, "2026-02-10", none)).toEqual([{ periodIndex: 0, dueOn: "2026-03-01" }]);
+    expect(owed(upcoming, "2026-02-10")).toEqual([{ periodIndex: 0, dueOn: "2026-03-01" }]);
   });
 
   it("opens at most so many in one run, oldest first", () => {
@@ -131,6 +133,11 @@ describe("a cancelled membership is never billed again", () => {
     const m = given(monthly, "2026-01-31", false, "2026-01-31");
     expect(billsToOpen(m, "2026-03-31", none).map((b) => b.dueOn)).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
     expect(billCovers(m, 1)).toEqual({ from: "2026-02-28", to: "2026-03-30" });
+    expect(billsToOpen(m, "2026-03-31", none).map((b) => b.covers)).toEqual([
+      { from: "2026-01-31", to: "2026-02-27" },
+      { from: "2026-02-28", to: "2026-03-30" },
+      { from: "2026-03-31", to: "2026-04-29" },
+    ]);
     expect(billCovers(given(threeMonths, "2026-01-15", false, "2026-01-15"), 0)).toBeNull();
   });
 });
@@ -209,7 +216,12 @@ describe("which period a payment can be taken for", () => {
   const unpaid = given(monthly, "2026-01-15", false, "2026-01-15");
 
   it("is the first period not paid, with what is left of its bill", () => {
-    expect(memberPayTarget(unpaid, 4999, "2026-01-15", [billOf(0)])).toEqual({ periodIndex: 0, leftMinor: 4999, dueOn: "2026-01-15", advances: true });
+    expect(memberPayTarget(unpaid, 4999, "2026-01-15", [billOf(0)])).toEqual({ periodIndex: 0, leftMinor: 4999, dueOn: "2026-01-15", covers: null, advances: true });
+    // The days are the bill's own, as they were when it was opened: a freeze since has not moved them.
+    const kept = { from: "2026-01-15", to: "2026-02-14" };
+    const thawed = moved(moved(unpaid, { type: "freeze" }, "2026-01-20"), { type: "unfreeze" }, "2026-01-30");
+    expect(billCovers(thawed, 0)).toEqual({ from: "2026-01-25", to: "2026-02-24" });
+    expect(memberPayTarget(thawed, 4999, "2026-01-30", [billOf(0, { covers: kept })])?.covers).toEqual(kept);
     expect(memberPayTarget(unpaid, 4999, "2026-01-15", [billOf(0, { paidMinor: 1999 })])?.leftMinor).toBe(3000);
   });
 
@@ -219,6 +231,7 @@ describe("which period a payment can be taken for", () => {
       periodIndex: 1,
       leftMinor: 4999,
       dueOn: "2026-02-15",
+      covers: { from: "2026-02-15", to: "2026-03-14" },
       advances: true,
     });
   });
@@ -237,6 +250,7 @@ describe("which period a payment can be taken for", () => {
       periodIndex: 0,
       leftMinor: 4999,
       dueOn: "2026-01-15",
+      covers: null,
       advances: false,
     });
     expect(memberPayTarget(cancelled, 4999, "2026-03-01", [billOf(0, { status: "paid", paidMinor: 4999 })])).toBeNull();
@@ -250,7 +264,7 @@ describe("which period a payment can be taken for", () => {
     expect(memberPayTarget(unpaid, 4999, "2026-01-20", [], true)).toBeNull();
     // The month they left owing is the first unpaid one: paying it counts, so the bill and
     // the count agree if they are put back on the list.
-    expect(memberPayTarget(unpaid, 4999, "2026-01-20", [billOf(0)], true)).toEqual({ periodIndex: 0, leftMinor: 4999, dueOn: "2026-01-15", advances: true });
+    expect(memberPayTarget(unpaid, 4999, "2026-01-20", [billOf(0)], true)).toEqual({ periodIndex: 0, leftMinor: 4999, dueOn: "2026-01-15", covers: null, advances: true });
   });
 });
 

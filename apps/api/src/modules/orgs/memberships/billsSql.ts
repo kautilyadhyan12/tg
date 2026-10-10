@@ -19,6 +19,8 @@ export interface BillRow {
   amountMinor: number;
   currency: string;
   dueOn: string;
+  /** The days it was opened for; null for a membership of one period. */
+  covers: { from: string; to: string } | null;
   status: MemberBillStatus;
   /** The payments that stand, added up. */
   paidMinor: number;
@@ -31,6 +33,8 @@ interface RawBill {
   amount_minor: number;
   currency: string;
   due_on: string;
+  covers_from: string | null;
+  covers_to: string | null;
   status: string;
   paid_minor: number;
 }
@@ -42,6 +46,7 @@ const bill = (r: RawBill): BillRow => ({
   amountMinor: r.amount_minor,
   currency: r.currency,
   dueOn: r.due_on,
+  covers: r.covers_from === null || r.covers_to === null ? null : { from: r.covers_from, to: r.covers_to },
   // Text under a CHECK: parsed, so a status this build does not know fails here.
   status: memberBillStatusSchema.parse(r.status),
   paidMinor: r.paid_minor,
@@ -52,7 +57,7 @@ export async function billsFor(sql: Sql | TransactionSql, gymId: string, members
   if (membershipIds.length === 0) return [];
   const rows = await sql<RawBill[]>`
     SELECT b.id, b.held_membership_id, b.period_index, b.amount_minor, b.currency,
-           b.due_on::text AS due_on, b.status,
+           b.due_on::text AS due_on, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, b.status,
            COALESCE((SELECT sum(p.amount_minor) FROM gym_member_payments p
                      WHERE p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL), 0)::int AS paid_minor
     FROM gym_member_bills b
@@ -106,6 +111,7 @@ export interface NewBill {
   amountMinor: number;
   currency: string;
   dueOn: string;
+  covers: { from: string; to: string } | null;
 }
 
 /** Opens bills, one statement. A period that already has a bill is left as it is, so two
@@ -117,11 +123,11 @@ export async function insertBills(
   now: Date,
 ): Promise<{ id: string; membershipId: string; periodIndex: number }[]> {
   if (bills.length === 0) return [];
-  const payload = bills.map((b) => ({ m: b.membershipId, i: b.periodIndex, a: b.amountMinor, c: b.currency, d: b.dueOn }));
+  const payload = bills.map((b) => ({ m: b.membershipId, i: b.periodIndex, a: b.amountMinor, c: b.currency, d: b.dueOn, f: b.covers?.from ?? null, t: b.covers?.to ?? null }));
   const rows = await tx<{ id: string; held_membership_id: string; period_index: number }[]>`
-    INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, created_at, updated_at)
-    SELECT ${gymId}, r.m, r.i, r.a, r.c, r.d, ${now}, ${now}
-    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(m uuid, i int, a int, c text, d date)
+    INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to, created_at, updated_at)
+    SELECT ${gymId}, r.m, r.i, r.a, r.c, r.d, r.f, r.t, ${now}, ${now}
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(m uuid, i int, a int, c text, d date, f date, t date)
     ON CONFLICT (held_membership_id, period_index) DO NOTHING
     RETURNING id, held_membership_id, period_index`;
   return rows.map((r) => ({ id: r.id, membershipId: r.held_membership_id, periodIndex: r.period_index }));

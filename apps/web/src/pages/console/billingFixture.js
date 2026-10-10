@@ -33,13 +33,13 @@ export function billingFor(n, given, m, priceMinor, today, by = 'Sam Owner') {
   const facts = [];
   const payments = [];
   for (let i = m.paidFloor; i < m.paidPeriods; i += 1) {
-    facts.push({ periodIndex: i, status: 'paid', amountMinor: priceMinor, paidMinor: priceMinor, dueOn: dueOf(i) });
+    facts.push({ periodIndex: i, status: 'paid', amountMinor: priceMinor, paidMinor: priceMinor, dueOn: dueOf(i), covers: billCovers(given, i) });
     payments.push({ id: paymentId(n, i), periodIndex: i, seq: i + 1 });
   }
   const have = () => new Set(facts.map((f) => f.periodIndex));
   for (const source of [[given, given.startsOn], [m, today]]) {
     for (const due of billsToOpen(source[0], source[1], have())) {
-      if (due.periodIndex >= m.paidPeriods) facts.push({ periodIndex: due.periodIndex, status: 'open', amountMinor: priceMinor, paidMinor: 0, dueOn: due.dueOn });
+      if (due.periodIndex >= m.paidPeriods) facts.push({ periodIndex: due.periodIndex, status: 'open', amountMinor: priceMinor, paidMinor: 0, dueOn: due.dueOn, covers: due.covers });
     }
   }
   const pay = memberPayTarget(m, priceMinor, today, facts);
@@ -50,7 +50,8 @@ export function billingFor(n, given, m, priceMinor, today, by = 'Sam Owner') {
       .map((f) => ({
         id: billId(n, f.periodIndex),
         periodIndex: f.periodIndex,
-        covers: billCovers(m, f.periodIndex),
+        // The days it was opened for: a freeze since has not moved them.
+        covers: f.covers,
         amountMinor: f.amountMinor,
         paidMinor: f.paidMinor,
         dueOn: f.dueOn,
@@ -61,7 +62,7 @@ export function billingFor(n, given, m, priceMinor, today, by = 'Sam Owner') {
     pay:
       pay === null
         ? null
-        : { periodIndex: pay.periodIndex, covers: billCovers(m, pay.periodIndex), leftMinor: pay.leftMinor, dueOn: pay.dueOn, state: memberBillState({ status: 'open', dueOn: pay.dueOn }, today, 0) === 'overdue' ? 'overdue' : 'due' },
+        : { periodIndex: pay.periodIndex, covers: pay.covers, leftMinor: pay.leftMinor, dueOn: pay.dueOn, state: memberBillState({ status: 'open', dueOn: pay.dueOn }, today, 0) === 'overdue' ? 'overdue' : 'due' },
     undo: undo === null ? null : { kind: 'payment', paymentId: undo.paymentId },
   };
 }

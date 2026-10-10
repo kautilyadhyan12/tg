@@ -8,6 +8,9 @@ import { BILLS_OPEN_A_RUN, type MemberBillState, type MemberBillStatus } from ".
 export interface BillToOpen {
   periodIndex: number;
   dueOn: string;
+  /** The days it is for, kept on the bill: a later freeze moves the membership's dates
+   *  and never a bill's. */
+  covers: { from: string; to: string } | null;
 }
 
 /** THE BILLS A MEMBERSHIP IS OWED TODAY AND DOES NOT HAVE. Nothing for one that is
@@ -21,19 +24,19 @@ export function billsToOpen(m: HeldMembership, today: string, have: ReadonlySet<
   const { status } = heldMembershipView(m, today);
   if (status !== "active" && status !== "upcoming") return [];
   if (m.kind !== "recurring") {
-    return m.paidPeriods >= 1 || have.has(0) ? [] : [{ periodIndex: 0, dueOn: m.startsOn }];
+    return m.paidPeriods >= 1 || have.has(0) ? [] : [{ periodIndex: 0, dueOn: m.startsOn, covers: null }];
   }
   if (!m.renews) return [];
   const last = periodIndex(m, today);
   const out: BillToOpen[] = [];
   for (let i = m.paidPeriods; i <= last && out.length < BILLS_OPEN_A_RUN; i += 1) {
-    if (!have.has(i)) out.push({ periodIndex: i, dueOn: periodStart(m, i) });
+    if (!have.has(i)) out.push({ periodIndex: i, dueOn: periodStart(m, i), covers: billCovers(m, i) });
   }
   return out;
 }
 
-/** The days a bill is for: a repeating membership's period; null for any other kind,
- *  whose one bill is for the whole of it. */
+/** The days a bill is for when it is opened: a repeating membership's period as its dates
+ *  stand now; null for any other kind, whose one bill is for the whole of it. */
 export function billCovers(m: HeldMembership, index: number): { from: string; to: string } | null {
   if (m.kind !== "recurring") return null;
   return { from: periodStart(m, index), to: addDays(periodStart(m, index + 1), -1) };
@@ -75,6 +78,8 @@ export interface BillFacts {
   amountMinor: number;
   paidMinor: number;
   dueOn: string;
+  /** The days it was opened for; a rule reads none of the rules above from it. */
+  covers?: { from: string; to: string } | null;
 }
 
 export interface PayTarget {
@@ -82,6 +87,8 @@ export interface PayTarget {
   /** What is left to pay for that period. */
   leftMinor: number;
   dueOn: string;
+  /** The days the period is for: the bill's own where it has one. */
+  covers: { from: string; to: string } | null;
   /** Settling it moves the membership's count of paid periods on by one
    *  (`countAfterPayment` says to what). */
   advances: boolean;
@@ -111,17 +118,17 @@ export function memberPayTarget(
     const over = view.status === "ended" || view.status === "cancelled";
     const first = owed.periodIndex === m.paidPeriods;
     const advances = m.kind === "recurring" ? first && !over && view.can.markPaid !== null : first && m.paidPeriods === 0;
-    return { periodIndex: owed.periodIndex, leftMinor: owed.amountMinor - owed.paidMinor, dueOn: owed.dueOn, advances };
+    return { periodIndex: owed.periodIndex, leftMinor: owed.amountMinor - owed.paidMinor, dueOn: owed.dueOn, covers: owed.covers ?? null, advances };
   }
   if (view.can.markPaid === null) return null;
   const index = m.paidPeriods;
   const bill = bills.find((b) => b.periodIndex === index);
   if (bill === undefined) {
     const dueOn = m.kind === "recurring" ? periodStart(m, index) : m.startsOn;
-    return { periodIndex: index, leftMinor: priceMinor, dueOn, advances: true };
+    return { periodIndex: index, leftMinor: priceMinor, dueOn, covers: billCovers(m, index), advances: true };
   }
   if (bill.status !== "open") return null;
-  return { periodIndex: index, leftMinor: bill.amountMinor - bill.paidMinor, dueOn: bill.dueOn, advances: true };
+  return { periodIndex: index, leftMinor: bill.amountMinor - bill.paidMinor, dueOn: bill.dueOn, covers: bill.covers ?? null, advances: true };
 }
 
 /** The count of paid periods once a payment has settled `target`'s bill: the number to

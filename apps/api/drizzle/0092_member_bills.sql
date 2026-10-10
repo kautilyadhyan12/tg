@@ -20,6 +20,10 @@ CREATE TABLE "gym_member_bills" (
 	"amount_minor" integer NOT NULL,
 	"currency" text NOT NULL,
 	"due_on" date NOT NULL,
+	-- The days it is for, as they were when it was opened: a later freeze moves the
+	-- membership's dates and never a bill's. NULL for a membership of one period.
+	"covers_from" date,
+	"covers_to" date,
 	"status" text DEFAULT 'open' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -31,6 +35,7 @@ CREATE TABLE "gym_member_bills" (
 	CONSTRAINT "gym_member_bills_amount_check" CHECK ("amount_minor" BETWEEN 1 AND 99999999),
 	CONSTRAINT "gym_member_bills_currency_check" CHECK ("currency" ~ '^[A-Z]{3}$'),
 	CONSTRAINT "gym_member_bills_status_check" CHECK ("status" IN ('open','paid','void','refunded')),
+	CONSTRAINT "gym_member_bills_covers_check" CHECK (("covers_from" IS NULL) = ("covers_to" IS NULL) AND ("covers_from" IS NULL OR "covers_to" >= "covers_from")),
 	CONSTRAINT "gym_member_bills_membership_fk" FOREIGN KEY ("gym_id", "held_membership_id")
 		REFERENCES "gym_held_memberships"("gym_id", "id") ON DELETE CASCADE
 );--> statement-breakpoint

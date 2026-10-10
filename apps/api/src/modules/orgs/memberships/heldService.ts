@@ -13,7 +13,6 @@ import {
   BILL_OVERDUE_DAYS_MAX,
   HELD_EARLIER_PAGE,
   MEMBER_LIST_BY_HAND_WORDS,
-  billCovers,
   billSettingsResponseSchema,
   formatMinor,
   heldMembershipView,
@@ -68,7 +67,7 @@ function billingOf(
     bills: bills.slice(0, BILLS_SHOWN).map((b) => ({
       id: b.id,
       periodIndex: b.periodIndex,
-      covers: billCovers(row.membership, b.periodIndex),
+      covers: b.covers,
       amountMinor: b.amountMinor,
       paidMinor: b.paidMinor,
       dueOn: b.dueOn,
@@ -83,7 +82,7 @@ function billingOf(
         ? null
         : {
             periodIndex: pay.periodIndex,
-            covers: billCovers(row.membership, pay.periodIndex),
+            covers: pay.covers,
             leftMinor: pay.leftMinor,
             dueOn: pay.dueOn,
             state: memberBillState({ status: "open", dueOn: pay.dueOn }, ctx.today, ctx.overdueAfterDays) === "overdue" ? "overdue" : "due",

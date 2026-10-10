@@ -89,11 +89,11 @@ export async function recordPayment(
       const [opened] = await insertBills(
         tx,
         input.gymId,
-        [{ membershipId: row.id, periodIndex: target.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: target.dueOn }],
+        [{ membershipId: row.id, periodIndex: target.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: target.dueOn, covers: target.covers }],
         input.now,
       );
       if (opened === undefined) throw new Error("a bill to pay was not opened under the gym's lock");
-      bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: target.dueOn, status: "open", paidMinor: 0 };
+      bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0 };
     }
     const paid = payMemberBill(bill, input.amountMinor);
     if (!paid.ok) return { kind: "not_allowed" };
@@ -309,7 +309,7 @@ function owed(rows: readonly Owing[], billed: ReadonlyMap<string, ReadonlySet<nu
     const membership: HeldMembership = listHeldMembership(row);
     for (const due of billsToOpen(membership, today, billed.get(row.id) ?? NONE)) {
       const list = byGym.get(row.gym_id) ?? [];
-      list.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: row.price_minor, currency: row.currency, dueOn: due.dueOn });
+      list.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: row.price_minor, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
       byGym.set(row.gym_id, list);
     }
   }
