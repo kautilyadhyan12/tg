@@ -66,9 +66,9 @@ describe('each state the server sends has its own word, and no other', () => {
   });
 
   it('Due says when, and Overdue says when it was due', () => {
-    expect(billRow(bill({ dueOn: '2026-11-04' }), 'GBP', TODAY)).toMatchObject({ tag: 'Due', tone: 'plain', when: 'Due 4 November 2026' });
+    expect(billRow(bill({ dueOn: '2026-11-04' }), 'GBP', TODAY)).toMatchObject({ tag: 'Due', tone: 'orange', when: 'Due 4 November 2026' });
     expect(billRow(bill({ dueOn: TODAY }), 'GBP', TODAY)).toMatchObject({ tag: 'Due', when: 'Due today' });
-    expect(billRow(bill({ state: 'overdue' }), 'GBP', TODAY)).toMatchObject({ tag: 'Overdue', tone: 'orange', when: 'Was due 4 October 2026' });
+    expect(billRow(bill({ state: 'overdue' }), 'GBP', TODAY)).toMatchObject({ tag: 'Overdue', tone: 'red', when: 'Was due 4 October 2026' });
   });
 
   it('a part-paid bill says what was paid and what is left, in money', () => {
@@ -82,8 +82,11 @@ describe('each state the server sends has its own word, and no other', () => {
     expect(billDays({ from: '2026-12-15', to: '2027-01-14' })).toBe('15 Dec 2026 – 14 Jan 2027');
     expect(billDays({ from: '2028-02-01', to: '2028-02-29' })).toBe('1 Feb – 29 Feb 2028');
     expect([shortDay('2026-10-01'), shortDay('2026-10-01', false)]).toEqual(['1 Oct 2026', '1 Oct']);
-    expect(billRow(bill({ state: 'void' }), 'GBP', TODAY)).toMatchObject({ tag: 'Cancelled', when: null });
-    expect(billRow(bill({ state: 'refunded' }), 'GBP', TODAY)).toMatchObject({ tag: 'Refunded', when: null });
+    expect(billRow(bill({ state: 'void' }), 'GBP', TODAY)).toMatchObject({ tag: 'Cancelled', tone: 'plain', when: null });
+    expect(billRow(bill({ state: 'refunded' }), 'GBP', TODAY)).toMatchObject({ tag: 'Refunded', tone: 'soft', when: null });
+    // No two states that can stand side by side share a colour.
+    const tones = ['paid', 'due', 'overdue', 'void', 'refunded'].map((state) => billRow(bill({ state }), 'GBP', TODAY).tone);
+    expect(new Set(tones).size).toBe(5);
   });
 });
 

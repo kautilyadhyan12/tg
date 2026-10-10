@@ -76,7 +76,9 @@ import {
 // question, notice or form of the one before stays. An answer is kept with the record it
 // is about and drawn only for that record.
 
-const TAG_TONES = { green: 'c-tag-good', orange: 'c-tag-warn', plain: 'c-tag-plain' };
+const TAG_TONES = { green: 'c-tag-good', orange: 'c-tag-warn', red: 'c-tag-bad', soft: 'c-tag-soft', plain: 'c-tag-plain' };
+/** The same tones as the edge of a bill's box and the colour of a line of words. */
+const TONE_COLOURS = { green: 'var(--good)', orange: 'var(--warn)', red: 'var(--bad)', soft: 'var(--soft-t)', plain: 'var(--raise-line)' };
 const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
@@ -522,7 +524,12 @@ export default function MemberMemberships({
             const pays = acts && payHere && billing.pay !== null && billing.pay.periodIndex === row.periodIndex;
             const notes = [row.when, row.cancelled].filter((line) => line !== null);
             return (
-              <li key={row.id} className="flex flex-col rounded-[12px]" style={{ border: '1px solid var(--raise-line)' }} data-testid="held-bill">
+              <li
+                key={row.id}
+                className="flex flex-col rounded-[12px]"
+                style={{ border: '1px solid var(--raise-line)', borderLeft: `3px solid ${TONE_COLOURS[row.tone]}` }}
+                data-testid="held-bill"
+              >
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
                   <span className="c-s14 c-w6 c-t1 flex-1" style={{ minWidth: 150 }}>
                     {row.days}
@@ -536,7 +543,7 @@ export default function MemberMemberships({
                 {notes.length > 0 || row.left !== null ? (
                   <div className="flex flex-col px-3 pb-2.5">
                     {notes.map((line) => (
-                      <span key={line} className="c-s13 c-t2">
+                      <span key={line} className="c-s13 c-t2" style={row.tone === 'red' ? { color: 'var(--bad)' } : undefined}>
                         {line}
                       </span>
                     ))}
@@ -550,7 +557,8 @@ export default function MemberMemberships({
                 {row.payments.map((p) => (
                   <div key={p.id} className="flex flex-col gap-2 px-3 py-2" style={SPLIT} data-testid="held-bill-payment">
                     <div className={LINE}>
-                      <span className="c-s14 c-w5 c-t1 whitespace-nowrap" style={{ minWidth: 84 }}>
+                      {/* Money in is green; money given back, below, is red. */}
+                      <span className="c-s14 c-w6 whitespace-nowrap" style={{ minWidth: 84, color: 'var(--good)' }}>
                         {p.amount}
                       </span>
                       <span className="c-s13 c-t2 md:flex-1">{p.detail}</span>
@@ -561,8 +569,10 @@ export default function MemberMemberships({
                       ) : null}
                     </div>
                     {p.refunds.map((r) => (
-                      <div key={r.id} className={`${LINE} pl-3`} style={{ borderLeft: '2px solid var(--raise-line)' }} data-testid="held-refund">
-                        <span className="c-s13 c-w5 c-t1 whitespace-nowrap">{r.amount}</span>
+                      <div key={r.id} className={`${LINE} pl-3`} style={{ borderLeft: '2px solid var(--bad)' }} data-testid="held-refund">
+                        <span className="c-s13 c-w6 whitespace-nowrap" style={{ color: 'var(--bad)' }}>
+                          {r.amount}
+                        </span>
                         <span className="c-s13 c-t2 md:flex-1">{r.detail}</span>
                         {acts ? (
                           <button type="button" className={`${SMALL} self-start md:self-auto`} disabled={busy} onClick={() => askUndoRefund(m, p.id, r.id)}>

@@ -29,12 +29,14 @@ export const NO_PAYMENTS_LINE = "You can't record payments. Ask the owner to tur
 /** The ways staff record a payment by hand, for a list to pick from. */
 export const PAYMENT_METHODS = MEMBER_PAYMENT_BY_HAND.map((value) => ({ value, label: MEMBER_PAYMENT_METHOD_WORDS[value] }));
 
+/** Each state has a colour of its own, so a column of bills is read at a glance: paid
+ *  green, owed yellow, overdue red, money given back orange, cancelled grey. */
 const STATE_TAGS = {
   paid: { tag: 'Paid', tone: 'green' },
-  due: { tag: 'Due', tone: 'plain' },
-  overdue: { tag: 'Overdue', tone: 'orange' },
+  due: { tag: 'Due', tone: 'orange' },
+  overdue: { tag: 'Overdue', tone: 'red' },
   void: { tag: 'Cancelled', tone: 'plain' },
-  refunded: { tag: 'Refunded', tone: 'plain' },
+  refunded: { tag: 'Refunded', tone: 'soft' },
 };
 
 /** How many of a membership's bills are drawn before "Show all". */
@@ -78,7 +80,7 @@ export function billRow(bill, currency, today) {
   const amount = formatMinor(bill.amountMinor, currency);
   // Some of what was paid has been given back, and not all: still paid, and said so.
   const partRefunded = bill.state === 'paid' && bill.refundedMinor > 0;
-  const state = partRefunded ? { tag: 'Part refunded', tone: 'plain' } : (STATE_TAGS[bill.state] ?? STATE_TAGS.due);
+  const state = partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (STATE_TAGS[bill.state] ?? STATE_TAGS.due);
   let cancelled = null;
   if (bill.state === 'void') {
     cancelled =
