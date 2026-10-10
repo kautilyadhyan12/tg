@@ -1,4 +1,4 @@
-import { gymInboxResponseSchema, markGymInboxReadResponseSchema } from '@app/shared';
+import { gymGroupMessagesSwitchResponseSchema, gymInboxResponseSchema, markGymInboxReadResponseSchema } from '@app/shared';
 import authApi from './authApi';
 
 // A MEMBER'S INBOX FROM THEIR GYM (spec Part 3 §16.1; ROADMAP 20a). Every answer is read
@@ -24,4 +24,9 @@ export const inboxService = {
   /** Marks as read every message sent up to `upTo`: the `asOf` of the read that was shown. */
   markRead: (gymId, upTo) =>
     readThrough(markGymInboxReadResponseSchema, 'the inbox', authApi.post(`${inboxPath(gymId)}/read`, { upTo })).then((data) => data.unread),
+  /** The member's own switch for this gym's messages to groups; answers how it now stands. */
+  setGroupMessages: (gymId, on) =>
+    readThrough(gymGroupMessagesSwitchResponseSchema, 'that switch', authApi.put(`${inboxPath(gymId)}/group-messages`, { on })).then(
+      (data) => data.groupMessages,
+    ),
 };

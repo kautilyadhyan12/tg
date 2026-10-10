@@ -136,7 +136,7 @@ export const gyms = pgTable(
      *  `gyms_pt_booking_settings_check`: a session reads these, never the class ones. */
     ptOpensDays: integer("pt_opens_days").notNull().default(7),
     ptFreeCancelMinutes: integer("pt_free_cancel_minutes").notNull().default(120),
-    /** Days after its due date an unpaid bill reads Overdue (0092; spec Part 3 §14.2),
+    /** Days after its due date an unpaid bill reads Overdue (0093; spec Part 3 §14.2),
      *  under `gyms_bills_overdue_days_check`. */
     billsOverdueDays: integer("bills_overdue_days").notNull().default(0),
     createdAt: createdAt(),

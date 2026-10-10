@@ -5143,7 +5143,7 @@ d("orgs routes (real Postgres)", () => {
       // still three. `attendance.mark` (16b-ii, `0064`) and `leaderboard.manage`
       // (19a-iii, `0067`) are owner and manager too.
       // `memberships.manage` (17a-i, `0069`) is owner and manager too.
-      // `billing.members` (18a-i, `0092`) is owner and manager too.
+      // `billing.members` (18a-i, `0093`) is owner and manager too.
       "attendance.mark",
       "attendance.read",
       "billing.members",

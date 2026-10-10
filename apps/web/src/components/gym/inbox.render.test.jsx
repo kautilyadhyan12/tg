@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-const svc = { read: vi.fn(), markRead: vi.fn() };
+const svc = { read: vi.fn(), markRead: vi.fn(), setGroupMessages: vi.fn() };
 vi.mock('../../api/inboxApi', () => ({ inboxService: svc }));
 vi.mock('../../api/orgsApi', () => ({
   errorText: (err, fallback) => err?.response?.data?.message ?? fallback,
@@ -44,6 +44,7 @@ const rows = () => within(screen.getByRole('list', { name: 'Messages from Iron H
 beforeEach(() => {
   svc.read.mockReset();
   svc.markRead.mockReset();
+  svc.setGroupMessages.mockReset();
 });
 afterEach(cleanup);
 
@@ -248,5 +249,72 @@ describe('Contact the gym, under the inbox', () => {
     expect(screen.queryByText(/ironhouse/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Contact the gym' }));
     expect(within(screen.getByRole('list', { name: 'How to reach Steel Yard' })).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['tel:2125550123']);
+  });
+});
+
+// THE MEMBER'S OWN SWITCH for the messages a gym sends to many people at once (ROADMAP 20f-i).
+describe("the switch for a gym's messages to groups", () => {
+  const theSwitch = () => screen.getByRole('switch', { name: /News and notices from Iron House/ });
+
+  it('is on until the member switches it off, says what each means, and is set by the server answer', async () => {
+    svc.read.mockResolvedValue(inboxOf([message('m1', 'Closed on Monday.', { kind: 'group' })], { groupMessages: true }));
+    svc.markRead.mockResolvedValue(0);
+    render(<Page />);
+    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('true'));
+    expect(theSwitch().textContent).toBe('News and notices from Iron HouseMessages the gym sends to many people at once, like a closed day or a new class.');
+    // A message to a group is a row like any other, and its line breaks are drawn.
+    expect(rows()).toEqual(['Closed on Monday.New · 2 hours ago']);
+    expect(screen.getByText('Closed on Monday.').style.whiteSpace).toBe('pre-line');
+
+    svc.setGroupMessages.mockResolvedValue(false);
+    fireEvent.click(theSwitch());
+    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('false'));
+    expect(svc.setGroupMessages).toHaveBeenCalledWith('g1', false);
+    expect(theSwitch().textContent).toBe("News and notices from Iron HouseOff. You won't get these. Messages about your own membership still come.");
+    // What was already sent stays.
+    expect(rows()).toEqual(['Closed on Monday.New · 2 hours ago']);
+
+    svc.setGroupMessages.mockResolvedValue(true);
+    fireEvent.click(theSwitch());
+    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('true'));
+    expect(svc.setGroupMessages).toHaveBeenLastCalledWith('g1', true);
+  });
+
+  it('starts off for somebody who switched it off, and on from a server too old to say', async () => {
+    svc.read.mockResolvedValue(inboxOf([], { groupMessages: false }));
+    svc.markRead.mockResolvedValue(0);
+    render(<Page />);
+    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('false'));
+    cleanup();
+    svc.read.mockResolvedValue(inboxOf([]));
+    render(<Page />);
+    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('true'));
+  });
+
+  it('a change that fails says so and leaves the switch as it was; a second press while one is asked asks once', async () => {
+    svc.read.mockResolvedValue(inboxOf([], { groupMessages: true }));
+    svc.markRead.mockResolvedValue(0);
+    render(<Page />);
+    await waitFor(() => expect(theSwitch()).toBeTruthy());
+    let fail;
+    svc.setGroupMessages.mockReturnValue(new Promise((_resolve, reject) => (fail = reject)));
+    fireEvent.click(theSwitch());
+    fireEvent.click(theSwitch());
+    expect(svc.setGroupMessages).toHaveBeenCalledTimes(1);
+    fail(new Error('offline'));
+    expect((await screen.findByRole('alert')).textContent).toBe("We couldn't change that. Please try again.");
+    expect(theSwitch().getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('is in the words of a studio, and is not drawn on a paused inbox', async () => {
+    svc.read.mockResolvedValue(inboxOf([], { groupMessages: true }));
+    svc.markRead.mockResolvedValue(0);
+    render(<Page gym={{ ...GYM, orgType: 'studio' }} />);
+    await waitFor(() => expect(theSwitch().textContent).toContain('Messages the studio sends to many people at once'));
+    cleanup();
+    svc.read.mockResolvedValue(inboxOf([], { status: 'paused' }));
+    render(<Page />);
+    await screen.findByText(/Iron House/);
+    expect(screen.queryByRole('switch')).toBeNull();
   });
 });

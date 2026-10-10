@@ -5,14 +5,18 @@
 import type { Sql } from "postgres";
 import {
   GYM_INBOX_MAX,
+  gymGroupMessagesSwitchResponseSchema,
   gymInboxResponseSchema,
   markGymInboxReadResponseSchema,
   type GymContact,
+  type GymGroupMessagesSwitchRequest,
+  type GymGroupMessagesSwitchResponse,
   type GymInboxResponse,
   type MarkGymInboxReadRequest,
   type MarkGymInboxReadResponse,
 } from "@app/shared";
 import { OrgsError } from "../service.js";
+import * as groupRepo from "./groupRepo.js";
 import * as repo from "./repo.js";
 
 export interface MessagesDeps {
@@ -47,9 +51,10 @@ export async function getInbox(deps: MessagesDeps, userId: string, gymId: string
   if (!(await limit())) return null;
   const head = { gymId, gymName: reader.name, asOf: reader.now.toISOString() };
   if (reader.paused) return gymInboxResponseSchema.parse({ ...head, status: "paused", messages: [], unread: 0 });
-  const [rows, unread] = await Promise.all([
+  const [rows, unread, off] = await Promise.all([
     repo.inboxRows(deps.sql, gymId, userId, reader.now, GYM_INBOX_MAX),
     repo.unreadCount(deps.sql, gymId, userId, reader.now),
+    groupRepo.groupMessagesOff(deps.sql, gymId, userId),
   ]);
   return gymInboxResponseSchema.parse({
     ...head,
@@ -57,6 +62,7 @@ export async function getInbox(deps: MessagesDeps, userId: string, gymId: string
     contact: reader.contact,
     messages: rows.map((row) => ({ id: row.id, kind: row.kind, body: row.body, sentAt: row.sentAt.toISOString(), read: row.read })),
     unread,
+    groupMessages: !off,
   });
 }
 
@@ -70,4 +76,20 @@ export async function markRead(deps: MessagesDeps, userId: string, gymId: string
   const upTo = new Date(Math.min(Date.parse(body.upTo), reader.now.getTime()));
   await repo.markRead(deps.sql, gymId, userId, upTo, reader.now);
   return markGymInboxReadResponseSchema.parse({ unread: await repo.unreadCount(deps.sql, gymId, userId, reader.now) });
+}
+
+/** The member's own switch for this gym's messages to groups (ROADMAP 20f-i). Off, staff
+ *  are told this person gets none and none is written for them; what they were already
+ *  sent stays. Set twice it is set once. */
+export async function setGroupMessages(
+  deps: MessagesDeps,
+  userId: string,
+  gymId: string,
+  body: GymGroupMessagesSwitchRequest,
+  limit: Limit,
+): Promise<GymGroupMessagesSwitchResponse | null> {
+  const reader = await forMember(deps, gymId, userId);
+  if (!(await limit())) return null;
+  await groupRepo.setGroupMessages(deps.sql, gymId, userId, body.on, reader.now);
+  return gymGroupMessagesSwitchResponseSchema.parse({ groupMessages: !(await groupRepo.groupMessagesOff(deps.sql, gymId, userId)) });
 }

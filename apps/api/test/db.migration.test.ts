@@ -1593,16 +1593,16 @@ d("0001_init on a real database", () => {
       });
   });
 
-  /** `0092`'s backfill: whoever holds the list's tick in a stored set gains the payments
+  /** `0093`'s backfill: whoever holds the list's tick in a stored set gains the payments
    *  tick, on staff, on an invitation still waiting and on a gym's own saved role;
    *  nobody without it does, and a row reading its role's defaults is left as it was. */
-  it("0092's backfill gives billing.members to every stored set holding members.confirm, and to no other", async () => {
-    const migration = await readFile(new URL("../drizzle/0092_member_bills.sql", import.meta.url), "utf8");
+  it("0093's backfill gives billing.members to every stored set holding members.confirm, and to no other", async () => {
+    const migration = await readFile(new URL("../drizzle/0093_member_bills.sql", import.meta.url), "utf8");
     const updates = migration
       .split("--> statement-breakpoint")
       .map((s) => s.trim())
       .filter((s) => s.includes("array_append"));
-    if (updates.length !== 3) throw new Error(`0092 no longer contains its three backfill UPDATEs (found ${String(updates.length)})`);
+    if (updates.length !== 3) throw new Error(`0093 no longer contains its three backfill UPDATEs (found ${String(updates.length)})`);
     const holds = ["members.read", "members.confirm"];
     const lacks = ["members.read", "attendance.read"];
 
@@ -1610,15 +1610,15 @@ d("0001_init on a real database", () => {
       .begin(async (tx) => {
         const ids: Record<string, string> = {};
         for (const name of ["owner", "manager", "trainer", "defaults", "desk"]) {
-          const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES (${`zz-0092-${name}`}) RETURNING id`;
-          if (user === undefined) throw new Error("0092 user insert failed");
+          const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES (${`zz-0093-${name}`}) RETURNING id`;
+          if (user === undefined) throw new Error("0093 user insert failed");
           ids[name] = user.id;
         }
         const owner = ids.owner ?? "";
         const [gym] = await tx<{ id: string }[]>`
-          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0092', 'zz 0092', ${owner}) RETURNING id`;
+          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0093', 'zz 0093', ${owner}) RETURNING id`;
         const gymId = gym?.id;
-        if (gymId === undefined) throw new Error("0092 gym insert failed");
+        if (gymId === undefined) throw new Error("0093 gym insert failed");
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${owner}, 'owner', ${holds})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.manager ?? ""}, 'manager', ${lacks})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.trainer ?? ""}, 'trainer', ${holds})`;
@@ -1628,9 +1628,9 @@ d("0001_init on a real database", () => {
           INSERT INTO gym_staff_invites (gym_id, email, role, privileges, created_at, expires_at, state, answered_at)
           VALUES (${gymId}, ${email}, 'manager', ${privileges}, now(), now() + interval '7 days', ${state},
                   ${state === "pending" ? null : tx`now()`})`;
-        await invite("zz-0092-a@example.com", holds, "pending");
-        await invite("zz-0092-b@example.com", lacks, "pending");
-        await invite("zz-0092-c@example.com", holds, "cancelled");
+        await invite("zz-0093-a@example.com", holds, "pending");
+        await invite("zz-0093-b@example.com", lacks, "pending");
+        await invite("zz-0093-c@example.com", holds, "cancelled");
         await tx`INSERT INTO gym_staff_roles (gym_id, name, privileges, created_at) VALUES (${gymId}, 'Front desk', ${holds}, now())`;
         await tx`INSERT INTO gym_staff_roles (gym_id, name, privileges, created_at) VALUES (${gymId}, 'Coach', ${lacks}, now())`;
 
@@ -1642,19 +1642,19 @@ d("0001_init on a real database", () => {
             SELECT u.display_name, s.privileges FROM gym_staff s JOIN users u ON u.id = s.user_id
             WHERE s.gym_id = ${gymId} ORDER BY u.display_name`,
         ).toEqual([
-          { display_name: "zz-0092-defaults", privileges: null },
-          { display_name: "zz-0092-desk", privileges: gained },
-          { display_name: "zz-0092-manager", privileges: lacks },
-          { display_name: "zz-0092-owner", privileges: gained },
-          { display_name: "zz-0092-trainer", privileges: gained },
+          { display_name: "zz-0093-defaults", privileges: null },
+          { display_name: "zz-0093-desk", privileges: gained },
+          { display_name: "zz-0093-manager", privileges: lacks },
+          { display_name: "zz-0093-owner", privileges: gained },
+          { display_name: "zz-0093-trainer", privileges: gained },
         ]);
         expect(
           await tx<{ email: string; privileges: string[] }[]>`
             SELECT email::text AS email, privileges FROM gym_staff_invites WHERE gym_id = ${gymId} ORDER BY email`,
         ).toEqual([
-          { email: "zz-0092-a@example.com", privileges: gained },
-          { email: "zz-0092-b@example.com", privileges: lacks },
-          { email: "zz-0092-c@example.com", privileges: holds },
+          { email: "zz-0093-a@example.com", privileges: gained },
+          { email: "zz-0093-b@example.com", privileges: lacks },
+          { email: "zz-0093-c@example.com", privileges: holds },
         ]);
         expect(
           await tx<{ name: string; privileges: string[] }[]>`
@@ -1663,21 +1663,21 @@ d("0001_init on a real database", () => {
           { name: "Coach", privileges: lacks },
           { name: "Front desk", privileges: gained },
         ]);
-        throw new Error("ROLLBACK-0092-BACKFILL-FIXTURE");
+        throw new Error("ROLLBACK-0093-BACKFILL-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0092-BACKFILL-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0093-BACKFILL-FIXTURE") return;
         throw err;
       });
   });
 
-  it("0092's bills and payments: each CHECK bites, one bill a period, one row a request and a company's id, and they name only their own gym's rows", async () => {
+  it("0093's bills and payments: each CHECK bites, one bill a period, one row a request and a company's id, and they name only their own gym's rows", async () => {
     await sql
       .begin(async (tx) => {
-        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0092-bills') RETURNING id`;
+        const [user] = await tx<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('zz-0093-bills') RETURNING id`;
         if (user === undefined) throw new Error("no user");
         const made: { gym: string; held: string }[] = [];
-        for (const slug of ["zz-0092-a", "zz-0092-b"]) {
+        for (const slug of ["zz-0093-a", "zz-0093-b"]) {
           const [gym] = await tx<{ id: string }[]>`INSERT INTO gyms (slug, name, timezone, owner_user_id) VALUES (${slug}, ${slug}, 'Europe/London', ${user.id}) RETURNING id`;
           if (gym === undefined) throw new Error("no gym");
           const [entry] = await tx<{ id: string }[]>`
@@ -1730,7 +1730,7 @@ d("0001_init on a real database", () => {
         // Another gym's membership under this gym's id.
         expect(await refused((sp) => bill(sp, { held: two.held, period: 1 }))).toBe("gym_member_bills_membership_fk");
 
-        const key = "00000000-0000-4000-8000-000000009200";
+        const key = "00000000-0000-4000-8000-000000009300";
         const payment = (sp: typeof tx, over: Record<string, unknown> = {}) => {
           const p = { gym: one.gym, bill: first.id, amount: 4999, method: "cash", provider: null, providerId: null, key, ...over };
           return sp`
@@ -1739,7 +1739,7 @@ d("0001_init on a real database", () => {
                     ${p.providerId as string | null}, ${p.key}, '2026-01-15')`;
         };
         await payment(tx);
-        const other = "00000000-0000-4000-8000-000000009201";
+        const other = "00000000-0000-4000-8000-000000009301";
         expect(await refused((sp) => payment(sp))).toBe("gym_member_payments_request_uq");
         expect(await refused((sp) => payment(sp, { key: other, amount: 0 }))).toBe("gym_member_payments_amount_check");
         expect(await refused((sp) => payment(sp, { key: other, method: "cheque" }))).toBe("gym_member_payments_method_check");
@@ -1748,10 +1748,10 @@ d("0001_init on a real database", () => {
         expect(await refused((sp) => payment(sp, { key: other, provider: "square", providerId: "p1" }))).toBe("gym_member_payments_provider_check");
         await payment(tx, { key: other, method: "company", provider: "square", providerId: "p1" });
         expect(
-          await refused((sp) => payment(sp, { key: "00000000-0000-4000-8000-000000009202", method: "company", provider: "square", providerId: "p1" })),
+          await refused((sp) => payment(sp, { key: "00000000-0000-4000-8000-000000009302", method: "company", provider: "square", providerId: "p1" })),
         ).toBe("gym_member_payments_provider_uq");
         // This gym's bill under another gym's id.
-        expect(await refused((sp) => payment(sp, { gym: two.gym, key: "00000000-0000-4000-8000-000000009203" }))).toBe("gym_member_payments_bill_fk");
+        expect(await refused((sp) => payment(sp, { gym: two.gym, key: "00000000-0000-4000-8000-000000009303" }))).toBe("gym_member_payments_bill_fk");
         expect(await refused((sp) => sp`UPDATE gyms SET bills_overdue_days = 61 WHERE id = ${one.gym}`)).toBe("gyms_bills_overdue_days_check");
 
         // The membership gone, its bills and their payments go with it.
@@ -1760,10 +1760,10 @@ d("0001_init on a real database", () => {
           SELECT (SELECT count(*)::int FROM gym_member_bills WHERE gym_id = ${one.gym}) AS bills,
                  (SELECT count(*)::int FROM gym_member_payments WHERE gym_id = ${one.gym}) AS payments`;
         expect(left).toEqual({ bills: 0, payments: 0 });
-        throw new Error("ROLLBACK-0092-TABLES-FIXTURE");
+        throw new Error("ROLLBACK-0093-TABLES-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0092-TABLES-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0093-TABLES-FIXTURE") return;
         throw err;
       });
   });

@@ -150,7 +150,7 @@ export const gymHeldMemberships = pgTable(
   },
   (t) => [
     unique("gym_held_memberships_request_uq").on(t.gymId, t.requestKey),
-    // What a bill's key points at, with its gym (0092).
+    // What a bill's key points at, with its gym (0093).
     unique("gym_held_memberships_gym_id_uq").on(t.gymId, t.id),
     check("gym_held_memberships_kind_check", sql`${t.kind} IN ('recurring','one_time','pack','trial')`),
     check("gym_held_memberships_price_check", sql`${t.priceMinor} BETWEEN 0 AND 99999999`),
@@ -194,7 +194,7 @@ export const gymHeldMemberships = pgTable(
 );
 
 /** One bill of a gym's notebook (§14.2; 18a-i): one period of one held membership.
- *  Mirrors `0092_member_bills.sql`. Whether it reads Due or Overdue is worked out by
+ *  Mirrors `0093_member_bills.sql`. Whether it reads Due or Overdue is worked out by
  *  `memberBillState` in `@app/shared`, never stored. */
 export const gymMemberBills = pgTable(
   "gym_member_bills",
@@ -236,7 +236,7 @@ export const gymMemberBills = pgTable(
 );
 
 /** One payment recorded against a bill. `seq` is the order they were recorded in (an
- *  identity column in `0092`); a payment taken back keeps its row, with `undone_at`. */
+ *  identity column in `0093`); a payment taken back keeps its row, with `undone_at`. */
 export const gymMemberPayments = pgTable(
   "gym_member_payments",
   {
