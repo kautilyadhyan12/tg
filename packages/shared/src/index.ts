@@ -55,5 +55,6 @@ export * from "./gymEvents.js";
 export * from "./gymChallenges.js";
 export * from "./startHere.js";
 export * from "./reports.js";
+export * from "./reportsAttendance.js";
 export * from "./gymMessages.js";
 export * from "./gymContact.js";

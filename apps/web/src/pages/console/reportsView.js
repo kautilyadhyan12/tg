@@ -41,18 +41,34 @@ export function stayText(days) {
   return `${String(years)} years ${rest === 1 ? '1 month' : `${String(rest)} months`}`;
 }
 
-const notYet = (report, words) => {
-  const have = report.fullMonths === 0 ? 'none yet' : report.fullMonths === 1 ? '1 so far' : `${String(report.fullMonths)} so far`;
-  return `Not enough data yet. This needs ${String(REPORT_FULL_MONTHS_NEEDED)} full months of your ${words.person} list here; you have ${have}.`;
-};
+const have = (report) => (report.fullMonths === 0 ? 'none yet' : report.fullMonths === 1 ? '1 so far' : `${String(report.fullMonths)} so far`);
 const nobodyRemoved = (words) => `Nobody has been removed from your ${words.person} list yet.`;
 
+// Each box says in its own words what its figure is and why there is none yet: three boxes
+// with one sentence read as one fault said three times.
+const NO_FIGURE = {
+  churn: {
+    nobody_left: (report, words) => `Churn is the share of your ${words.people} who leave in a month. Nobody has been removed from your list yet, so there is none to show.`,
+    nobody_at_start: (report, words) => `You had no ${words.people} at the start of the last 3 full months, so nobody could leave.`,
+    not_enough_data: (report, words) =>
+      `Not enough data yet. Churn compares ${String(REPORT_FULL_MONTHS_NEEDED)} full months of your ${words.person} list; you have ${have(report)}.`,
+  },
+  retention: {
+    nobody_left: (report, words) => `Retention is the share of your ${words.people} you keep each month. It shows once somebody has been removed from your list, so the app knows you record who leaves.`,
+    nobody_at_start: (report, words) => `You had no ${words.people} at the start of the last 3 full months, so there was nobody to keep.`,
+    not_enough_data: (report) => `Not enough data yet. Retention is worked out over the same ${String(REPORT_FULL_MONTHS_NEEDED)} full months as churn; you have ${have(report)}.`,
+  },
+  stay: {
+    nobody_left: (report, words) => `Average stay is how long your ${words.people} had been with you when they left. Nobody has left yet.`,
+    not_enough_data: (report, words) =>
+      `Not enough data yet. Average stay shows after ${String(REPORT_FULL_MONTHS_NEEDED)} full months of your ${words.person} list here; you have ${have(report)}.`,
+  },
+};
+
 /** A share figure's number, or the sentence in its place. */
-function shareTile(figure, report, words) {
+function shareTile(key, figure, report, words) {
   if (figure.state === 'ok') return { value: percentText(figure.percent), line: null };
-  if (figure.state === 'nobody_left') return { value: null, line: nobodyRemoved(words) };
-  if (figure.state === 'nobody_at_start') return { value: null, line: `You had no ${words.people} at the start of the last 3 full months.` };
-  return { value: null, line: notYet(report, words) };
+  return { value: null, line: NO_FIGURE[key][figure.state](report, words) };
 }
 
 /** The line above the figures: where they come from and how fresh the list is. */
@@ -77,8 +93,8 @@ export function memberTiles(report, words) {
     const was = before === null ? null : n(before);
     return was === null ? `${month}, so far` : `${month}, so far · ${monthName(before.month)}: ${count(was)}`;
   };
-  const churn = shareTile(report.churn, report, words);
-  const retention = shareTile(report.retention, report, words);
+  const churn = shareTile('churn', report.churn, report, words);
+  const retention = shareTile('retention', report.retention, report, words);
   const over = report.churnMonths.length > 0 ? monthList(report.churnMonths) : 'the last 3 full months';
   const overShort = report.churnMonths.length > 0 ? `${monthShort(report.churnMonths[0]).slice(0, 3)} to ${monthShort(report.churnMonths[report.churnMonths.length - 1])}` : null;
 
@@ -86,9 +102,9 @@ export function memberTiles(report, words) {
   if (report.averageStay.state === 'ok') {
     stay = { value: stayText(report.averageStay.days), line: null, note: `${people(report.averageStay.leavers)} left in the months shown` };
   } else if (report.averageStay.state === 'nobody_left') {
-    stay = { value: null, line: report.everLeft ? 'Nobody has left in the months shown.' : nobodyRemoved(words), note: null };
+    stay = { value: null, line: report.everLeft ? 'Nobody has left in the months shown.' : NO_FIGURE.stay.nobody_left(report, words), note: null };
   } else {
-    stay = { value: null, line: notYet(report, words), note: null };
+    stay = { value: null, line: NO_FIGURE.stay.not_enough_data(report, words), note: null };
   }
 
   // The list's first people have been with the gym for years: they are not new members.

@@ -97,9 +97,16 @@ describe('the tiles', () => {
 
   it('never print a zero for a gym that has removed nobody: Left, churn, retention and average stay are a sentence', () => {
     const r = report({ everLeft: false, stay: { leavers: 0, totalDays: 0 }, months: facts().months.map((m) => ({ ...m, left: 0, leftOfStart: 0 })) });
-    for (const key of ['left', 'churn', 'retention', 'stay']) {
+    // Each box in its own words: what the figure is, and why there is none.
+    const lines = {
+      left: 'Nobody has been removed from your member list yet.',
+      churn: 'Churn is the share of your members who leave in a month. Nobody has been removed from your list yet, so there is none to show.',
+      retention: 'Retention is the share of your members you keep each month. It shows once somebody has been removed from your list, so the app knows you record who leaves.',
+      stay: 'Average stay is how long your members had been with you when they left. Nobody has left yet.',
+    };
+    for (const [key, line] of Object.entries(lines)) {
       expect(tile(r, key).value, key).toBeNull();
-      expect(tile(r, key).line, key).toBe('Nobody has been removed from your member list yet.');
+      expect(tile(r, key).line, key).toBe(line);
     }
     expect(tile(r, 'active').value).toBe('1,234');
     expect(nobodyRemovedNote(r, GYM)).toContain('import it here each month');
@@ -110,7 +117,7 @@ describe('the tiles', () => {
     const none = report({ firstListedOn: '2026-10-02' });
     const one = report({ firstListedOn: '2026-08-15' });
     const two = report({ firstListedOn: '2026-07-15' });
-    expect(tile(none, 'churn').line).toBe('Not enough data yet. This needs 3 full months of your member list here; you have none yet.');
+    expect(tile(none, 'churn').line).toBe('Not enough data yet. Churn compares 3 full months of your member list; you have none yet.');
     expect(tile(one, 'retention').line).toContain('you have 1 so far.');
     expect(tile(two, 'stay').line).toContain('you have 2 so far.');
     expect(tile(two, 'churn').value).toBeNull();
@@ -121,7 +128,8 @@ describe('the tiles', () => {
   it('say nobody left lately when somebody once did, and nobody at the start when the list was empty then', () => {
     expect(tile(report({ stay: { leavers: 0, totalDays: 0 } }), 'stay').line).toBe('Nobody has left in the months shown.');
     const empty = report({ months: MONTHS.map((month) => ({ month, activeAtStart: 0, joined: 0, left: 0, leftOfStart: 0 })) });
-    expect(tile(empty, 'churn').line).toBe('You had no members at the start of the last 3 full months.');
+    expect(tile(empty, 'churn').line).toBe('You had no members at the start of the last 3 full months, so nobody could leave.');
+    expect(tile(empty, 'retention').line).toBe('You had no members at the start of the last 3 full months, so there was nobody to keep.');
   });
 
   it("use a studio's own word for its people", () => {
@@ -132,10 +140,10 @@ describe('the tiles', () => {
     // Every sentence in place of a figure, too.
     const none = report({ everLeft: false, stay: { leavers: 0, totalDays: 0 } });
     expect(tile(none, 'left', STUDIO).line).toBe('Nobody has been removed from your client list yet.');
-    expect(tile(none, 'stay', STUDIO).line).toBe('Nobody has been removed from your client list yet.');
-    expect(tile(report({ firstListedOn: '2026-08-15' }), 'churn', STUDIO).line).toContain('3 full months of your client list here');
+    expect(tile(none, 'stay', STUDIO).line).toBe('Average stay is how long your clients had been with you when they left. Nobody has left yet.');
+    expect(tile(report({ firstListedOn: '2026-08-15' }), 'churn', STUDIO).line).toContain('3 full months of your client list;');
     const empty = report({ months: MONTHS.map((month) => ({ month, activeAtStart: 0, joined: 0, left: 0, leftOfStart: 0 })) });
-    expect(tile(empty, 'churn', STUDIO).line).toBe('You had no clients at the start of the last 3 full months.');
+    expect(tile(empty, 'churn', STUDIO).line).toBe('You had no clients at the start of the last 3 full months, so nobody could leave.');
     for (const key of ['active', 'new', 'left', 'churn', 'retention', 'stay']) {
       expect(`${tile(r, key, STUDIO).how} ${tile(none, key, STUDIO).line ?? ''}`, key).not.toMatch(/member/i);
     }
