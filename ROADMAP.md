@@ -288,7 +288,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 20e. [ ] **Review and referral messages** (Kd, RULINGS 2026-10-08): two more automatic messages, each a switch. **Review**: once, after a number of visits the gym picks, with the gym's own review link. **Refer a friend**: each member has an invite link to the gym's enquiry form (20c-iv); the lead arrives marked with who sent them, and when they join the gym gives the reward it set (a promo code of 18b, never money from us). Its plan reads Mindbody's and PushPress's referral tools first. After 20b and 18b.
    - 20f. **Messages to a chosen group** (Kd, RULINGS 2026-10-08; spec §16.8), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 20f-i. [x] **Send message, from the Members list** — merged 2026-10-10 (PR #216).
-     - 20f-ii. [ ] **Sent messages**: a list on the console of the group messages a gym has sent: the words, who sent it, when, and to how many. Its plan says how long a sent message is kept (its words can name a member; 20f-i's review, L8).
+     - 20f-ii. [x] **Sent messages** — merged 2026-10-10 (PR #217).
 21. **Reports** (RULINGS 2026-09-22; spec Part 3 §16.5) — it takes in item 12's reports. Opus xhigh (a rule that thresholds, other people's data).
    - 21a. **Members and attendance**, split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 21a-i. [x] **The Reports page, with the members figures** — merged 2026-10-10 (PR #211).
