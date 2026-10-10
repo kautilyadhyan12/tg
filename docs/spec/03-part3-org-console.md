@@ -3219,6 +3219,23 @@ waitlist, on the server · **17d** the member's side · **17e** personal trainin
 `entry_id` on the membership (3b-ii); 17b needs neither and can be built beside the
 member list. ONE feature for CLAUDE.md §6: both extra passes run once over 17a–17f.
 
+**What the two passes changed (17h, 2026-10-10):**
+- A staff route's limit on Classes and Memberships is asked only of the gym's own staff, so
+  nobody else at the gym's address can use it up.
+- A record taken off the list (by hand, ticked, or left out of an import) loses its coming
+  class bookings as it loses its sessions: the pack has the class back and the place goes
+  to the waitlist, whether or not the person's app ends.
+- One person holds one membership type once at a time: a second that would run over the
+  same days is refused ("They already have Gold Monthly…"). Class packs are not asked.
+- Two records are not merged while the kept one would hold a type twice, or have two
+  personal training sessions at one time; staff are told what to cancel first.
+- A box that ends bookings is confirmed by `ending.mark`, the mark of exactly the bookings
+  it counted, sent back as `confirmBookings`; a count is no longer taken.
+- A timetable write reads the clock again once it holds the gym's lock.
+- A gym has one live class of a name, in any capitals.
+- A class's name and description, and a video link, hold nothing hidden; a link's site is a
+  plain name ending in letters; a day's year is 1900 to 2199.
+
 ### 13.8 Where the facts came from (read 2026-09-21)
 
 PushPress help: "Create, Edit & Delete Membership Plans" (recurring, non-recurring,
