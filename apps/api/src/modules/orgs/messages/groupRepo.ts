@@ -91,6 +91,48 @@ export async function insertGroupMessage(tx: TransactionSql, message: NewGroupMe
   return { id, sent: copies.length };
 }
 
+// ── THE LIST OF SENT MESSAGES (20f-ii) ──
+
+export interface SentMessageRow {
+  id: string;
+  body: string;
+  sentAt: Date;
+  people: number;
+  /** Null when that member of staff's account is gone. */
+  sentByName: string | null;
+}
+
+/** This gym's sent messages, newest first, sent after `since`. `after` is the id of the
+ *  last message of the page before; an id that is not this gym's message gives no rows. */
+export async function sentMessages(sql: SqlOrTx, gymId: string, since: Date, after: string | null, limit: number): Promise<SentMessageRow[]> {
+  const rows = await sql<{ id: string; body: string; sent_at: Date; people: number; sent_by_name: string | null }[]>`
+    SELECT g.id, g.body, g.sent_at, g.people,
+           CASE WHEN u.deleted_at IS NULL THEN u.display_name END AS sent_by_name
+    FROM gym_group_messages g
+    LEFT JOIN users u ON u.id = g.sent_by
+    WHERE g.gym_id = ${gymId} AND g.sent_at > ${since}
+      AND (${after}::uuid IS NULL OR (g.sent_at, g.id) < (
+        SELECT p.sent_at, p.id FROM gym_group_messages p WHERE p.gym_id = ${gymId} AND p.id = ${after}::uuid))
+    ORDER BY g.sent_at DESC, g.id DESC
+    LIMIT ${limit}`;
+  return rows.map((row) => ({ id: row.id, body: row.body, sentAt: row.sent_at, people: row.people, sentByName: row.sent_by_name }));
+}
+
+/** Removes every gym's messages sent at or before `before`, each with every person's copy
+ *  of it (the hourly job). Run twice it removes nothing more. */
+export async function forgetGroupMessages(sql: SqlOrTx, before: Date): Promise<{ messages: number; copies: number }> {
+  const rows = await sql<{ messages: number; copies: number }[]>`
+    WITH gone AS (
+      DELETE FROM gym_group_messages WHERE sent_at <= ${before} RETURNING id, gym_id
+    ), copies AS (
+      DELETE FROM gym_member_messages m USING gone
+      WHERE m.gym_id = gone.gym_id AND m.kind = ${GYM_GROUP_MESSAGE_KIND} AND m.occasion = gone.id::text
+      RETURNING m.id
+    )
+    SELECT (SELECT count(*) FROM gone)::int AS messages, (SELECT count(*) FROM copies)::int AS copies`;
+  return rows[0] ?? { messages: 0, copies: 0 };
+}
+
 // ── THE MEMBER'S OWN SWITCH ──
 
 /** Whether this person has switched this gym's group messages off. */

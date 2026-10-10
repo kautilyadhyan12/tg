@@ -32,6 +32,7 @@ import { processInviteResults } from "./modules/orgs/invites/results.js";
 import { devInviteTransport, sendDueInvites } from "./modules/orgs/invites/sender.js";
 import { sendDueLeadEmails } from "./modules/orgs/leads/sender.js";
 import { forgetOldStaffInvites } from "./modules/orgs/staffInvites/repo.js";
+import { forgetOldGroupMessages } from "./modules/orgs/messages/group.js";
 import { sendDueStaffInvites } from "./modules/orgs/staffInvites/sender.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { ORGS_ARCHIVE_JOB, unscheduleArchiveSweep } from "./modules/orgs/archiveSchedule.js";
@@ -652,8 +653,10 @@ const worker = new Worker(
       const gone = await expireStagedMemberListUploads({ sql, log });
       // Staff invitations past their keeping (4a-i), on the same hourly tidy-up.
       const staffInvitesForgotten = await forgetOldStaffInvites(sql, new Date());
+      // Messages to groups past their year (20f-ii), with every copy.
+      const groupMessagesForgotten = await forgetOldGroupMessages(sql, new Date());
       log.info(
-        { ...gone, staffInvitesForgotten, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        { ...gone, staffInvitesForgotten, groupMessagesForgotten: groupMessagesForgotten.messages, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

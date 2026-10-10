@@ -13,6 +13,8 @@ import {
   GYM_GROUP_MESSAGE_PROBLEM_WORDS,
   GYM_GROUP_MESSAGE_WORDS,
   GYM_MESSAGE_KEPT_DAYS,
+  GYM_SENT_MESSAGES_KEPT_DAYS,
+  GYM_SENT_MESSAGES_PAGE,
   groupMessageProblem,
   tidyGroupMessage,
   type GymGroupMessageDone,
@@ -21,7 +23,10 @@ import {
   type GymGroupMessagePreview,
   type GymGroupMessagePreviewRequest,
   type GymGroupMessageSendRequest,
+  type GymSentMessagesPage,
+  type GymSentMessagesQuery,
 } from "@app/shared";
+import type { Sql } from "postgres";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { lockGym } from "../memberList/repo.js";
@@ -165,4 +170,35 @@ export async function sendGroupMessage(
     });
     return { sent: written.sent, kept: plan.kept.map(({ reason, count }) => ({ reason, count })), leftToday: leftOf(sentToday + 1) };
   });
+}
+
+// ── THE LIST OF SENT MESSAGES (20f-ii) ──
+
+/** A message sent at or before this instant is no longer kept. */
+export function sentMessagesKeptSince(now: Date): Date {
+  return new Date(now.getTime() - GYM_SENT_MESSAGES_KEPT_DAYS * 86_400_000);
+}
+
+/** The gym's sent messages, a page at a time, for staff who may send one. A gym on no plan
+ *  reads it. Who got a message is a count, never names. Null when the rate limit has answered. */
+export async function readSentMessages(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  query: GymSentMessagesQuery,
+  limit: () => Promise<boolean>,
+): Promise<GymSentMessagesPage | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const rows = await groupRepo.sentMessages(deps.sql, gymId, sentMessagesKeptSince(deps.now()), query.after ?? null, GYM_SENT_MESSAGES_PAGE + 1);
+  const shown = rows.slice(0, GYM_SENT_MESSAGES_PAGE);
+  return {
+    messages: shown.map((row) => ({ id: row.id, body: row.body, sentByName: row.sentByName, sentAt: row.sentAt.toISOString(), people: row.people })),
+    next: rows.length > GYM_SENT_MESSAGES_PAGE ? (shown[shown.length - 1]?.id ?? null) : null,
+  };
+}
+
+/** The hourly tidy-up: messages past their year go, with every copy. */
+export async function forgetOldGroupMessages(sql: Sql, now: Date): Promise<{ messages: number; copies: number }> {
+  return await groupRepo.forgetGroupMessages(sql, sentMessagesKeptSince(now));
 }
