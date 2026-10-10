@@ -30,8 +30,14 @@ export function DayLine({ report }) {
   const fill = useId();
   const [at, setAt] = useState(null);
   const plot = useClearOutside(at !== null, () => setAt(null));
-  // Nothing to draw: no picture, and the table says the rest.
-  if (!chart.any) return null;
+  // Nothing to draw: a sentence in the picture's place, never an empty box.
+  if (!chart.any) {
+    return (
+      <p className="px-4 md:px-5 pb-4 c-s14 c-t2 m-0" data-testid="day-bars-none">
+        {`Nobody has checked in in the last ${String(chart.points.length)} days.`}
+      </p>
+    );
+  }
   const { points } = chart;
   const W = 700;
   const shape = smoothLine(points, W, CHART_HEIGHT);

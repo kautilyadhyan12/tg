@@ -112,10 +112,10 @@ describe('the attendance figures', () => {
     expect(svc.attendance).toHaveBeenCalledWith('g1');
     expect(['week', 'per-member', 'busiest', 'fill', 'no-shows'].map((k) => tile(k).textContent)).toEqual([
       'Visits this week6Mon 5 Oct to today · 3 people · last week: 1',
-      'Visits a member a week0.52 of 3 members came · 7 Sep to 4 Oct 2026',
+      'Visits a member a week0.52 of the 3 members on your list since 7 Sep came · 7 Sep to 4 Oct 2026',
       'Busiest timeMon 18:005 visits in 5 weeks',
       'How full classes are41.7%5 of 12 places booked · 2 classes',
-      'No-shows33.3%2 of 6 places marked · 2 not marked yet',
+      'No-shows33.3%2 no-shows of 6 places marked · 2 not marked yet',
     ]);
     expect(
       screen.getByText(
@@ -144,7 +144,7 @@ describe('the attendance figures', () => {
     await screen.findByTestId('tile-week');
     const hows = {
       'Visits a member a week':
-        'The 6 visits that the 3 members on your list today made in the last 4 full weeks (7 Sep to 4 Oct 2026), shared between them and the 4 weeks. A visit by someone you have removed is not counted.',
+        'The 6 visits that the 3 members on your list since 7 Sep 2026 made in the last 4 full weeks (7 Sep to 4 Oct 2026), shared between them and the 4 weeks. Anyone added since, and anyone you have removed, is not counted.',
       'Busiest time':
         'Check-ins in the last 5 full weeks (31 Aug to 4 Oct 2026), counted by weekday and hour on your clock. 1 visit staff added on a later day has no time and is left out.',
       'No-shows':
@@ -310,6 +310,24 @@ describe('what a gym has not done yet is never a zero', () => {
     );
     expect(within(tile('no-shows')).getByRole('link', { name: 'Open the calendar' }).getAttribute('href')).toBe('/console/iron-house/classes?view=week');
     expect(tableRows('Classes in the last 8 weeks')[1]).toEqual(['Spin', '2', '8 of 20', '40%', '–']);
+  });
+
+  it('members all added after the weeks counted read a sentence with the date, never 0', async () => {
+    svc.attendance.mockResolvedValue(attendanceReportFrom(facts({ member: { members: 0, visits: 0, visitors: 0 } })));
+    open();
+    await screen.findByTestId('tile-per-member');
+    expect(tile('per-member').textContent).toBe(
+      'Visits a member a weekNobody on your member list today was on it by 7 Sep 2026, when the weeks counted here began.',
+    );
+  });
+
+  it('nobody in the last 28 days: a sentence where the line would be, never an empty box', async () => {
+    svc.attendance.mockResolvedValue(attendanceReportFrom(facts({ days: [], weeks: [{ weekStart: '2026-08-31', visits: 1, people: 1 }] })));
+    open();
+    await screen.findByTestId('tile-week');
+    expect(screen.getByTestId('day-bars-none').textContent).toBe('Nobody has checked in in the last 28 days.');
+    expect(screen.queryByTestId('day-bars')).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Visits day by day' })).getByRole('button', { name: 'Download CSV' })).toBeTruthy();
   });
 
   it('classes with no limit on places have no share, and say why', async () => {

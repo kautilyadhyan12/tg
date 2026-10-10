@@ -4439,11 +4439,13 @@ Worked out when the page opens, in one statement over the gym's list.
 is the number Attendance and Overview show; a person is their record on the list, or their
 app account when the visit has none. Shown: the last 28 days one by one and the last 12
 weeks, Monday to Sunday, from the gym's first check-in on (a day nobody came is a zero;
-nothing earlier is drawn). **Visits a member a week** is the visits of the people on the
-list today over the newest four full weeks, shared between them and those weeks, with how
-many of them came at all. **The busiest hours** are check-ins by weekday and hour on the
-gym's clock over the newest eight full weeks; a visit added on a later day has no time and
-is left out, and hours that tie are all named (past three, none is). Both wait for two
+nothing earlier is drawn). **Visits a member a week** is the visits, over the newest four
+full weeks, of the people on the list today who were on it when those weeks began (somebody
+added since could not have come), shared between them and those weeks, with how many of
+them came at all; a visit that names only a member's app account is that member's. **The busiest hours** are check-ins by weekday and hour on the
+gym's clock over the newest eight full weeks, the weekday and the hour read off one moment;
+a visit added on a later day has no time and is left out, and hours that tie are all named
+(past three, none is). Both wait for two
 full weeks of check-ins and read "Not enough data yet" until then; only whole weeks are
 counted, so every weekday is counted the same number of times. **How full classes are**
 is places booked (booked, came or no-show; never a cancelled booking or the waitlist) over
@@ -4455,7 +4457,9 @@ no classes, reads what feeds each with a button to Attendance or Classes. Each t
 downloads as a CSV of counts. `GET /v1/orgs/:gymId/reports/attendance` (`reports.read`),
 from the same allowance as the members read; the rule is `attendanceReportFrom`
 (`packages/shared/src/reportsAttendance.ts`), the counts `reports/repo.ts`, read from
-`gym_attendance` and the class tables themselves, not the nightly rollup.
+`gym_attendance` and the class tables themselves, not the nightly rollup. Known and left: for
+up to a day after a gym moves its clock west, a visit dated tomorrow on the new clock is in
+no figure.
 
 ### 16.6 Cards
 

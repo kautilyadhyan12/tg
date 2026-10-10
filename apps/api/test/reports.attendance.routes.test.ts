@@ -10,7 +10,7 @@ import postgres from "postgres";
 import { attendanceReportResponseSchema, orgOverviewResponseSchema, type AttendanceReport } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { createMemoryRedis } from "../src/redis.js";
+import { createIoRedis, createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -47,7 +47,9 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies
 
 d("Reports, attendance: whose figures, who reads them, and what they count (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
-  const redis = createMemoryRedis();
+  // The real Redis where the run gives one (test:local does), so the limits are the real script's.
+  const redisUrl = process.env["TEST_REDIS_URL"];
+  const redis = redisUrl === undefined || redisUrl === "" ? createMemoryRedis() : createIoRedis(redisUrl);
   /** The routes' clock: fixed for a dated history, the real one otherwise. */
   let clock: Date | null = null;
   let app: App | undefined;
@@ -118,13 +120,13 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
   };
 
   let personNo = 0;
-  /** A record written straight into the list; `leftAt` makes it a former one. */
-  const listed = async (gymId: string, name: string, opts: { leftAt?: string } = {}): Promise<string> => {
+  /** A record written straight into the list on 1 June, or at `listedAt`; `leftAt` makes it a former one. */
+  const listed = async (gymId: string, name: string, opts: { leftAt?: string; listedAt?: string } = {}): Promise<string> => {
     personNo += 1;
     const rows = await sql<{ id: string }[]>`
       INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, former_at)
       VALUES (${gymId}, ${name}, ${`rep-a-listed-${String(personNo)}@example.com`}, ${String(personNo).padStart(64, "0")}, 'typed',
-              '2026-06-01T09:00:00Z'::timestamptz, ${opts.leftAt ?? null}::timestamptz)
+              ${opts.listedAt ?? "2026-06-01T09:00:00Z"}::timestamptz, ${opts.leftAt ?? null}::timestamptz)
       RETURNING id`;
     const row = rows[0];
     if (row === undefined) throw new Error("no record");
@@ -219,6 +221,7 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
   afterAll(async () => {
     await cleanup();
     await app?.close();
+    await redis.close();
     await sql.end({ timeout: 5 });
   }, HOOK_TIMEOUT_MS);
 
@@ -445,6 +448,145 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
         { weekday: 3, hour: 5, visits: 1 },
         { weekday: 4, hour: 6, visits: 1 },
       ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "visits a member counts only people who were on the list when the weeks began: somebody added since could not have come",
+    async () => {
+      const owner = await makeUser("since-owner");
+      const perMember = async (timezone: string, more: (gym: Gym) => Promise<void>) => {
+        const gym: Gym = { id: await makeGym(owner, `Rep Since ${timezone}`, timezone), timezone, ownerId: owner.userId };
+        // One member, on the list since June, at the gym's noon three days a week from Monday 7 September.
+        const regular = { entryId: await listed(gym.id, "Since Regular") };
+        for (const day of ["07", "09", "11", "14", "16", "18", "21", "23", "25", "28", "30"]) await visit(gym, regular, `2026-09-${day}T06:30:00Z`);
+        await visit(gym, regular, "2026-10-02T06:30:00Z");
+        await more(gym);
+        clock = NOON;
+        try {
+          return (await read(gym.id, owner)).perMember;
+        } finally {
+          clock = null;
+        }
+      };
+      const three = { state: "ok", perWeek: 3, from: "2026-09-07", to: "2026-10-04", weeks: 4, members: 1, visits: 12, visitors: 1 };
+
+      expect(await perMember("Europe/London", () => Promise.resolve())).toEqual(three);
+      // Nine people put on the list yesterday, after the four weeks: the same weeks read the same.
+      expect(
+        await perMember("Europe/London", async (gym) => {
+          for (let i = 1; i <= 9; i += 1) await listed(gym.id, `Since New ${String(i)}`, { listedAt: "2026-10-09T09:00:00Z" });
+        }),
+      ).toEqual(three);
+      // On the list on the weeks' first day counts; the day after does not. 19:00 UTC on Monday the 7th is
+      // still Monday in London and already Tuesday in Delhi.
+      const mondayEvening = async (gym: Gym) => {
+        await listed(gym.id, "Since Monday Evening", { listedAt: "2026-09-07T19:00:00Z" });
+      };
+      expect(await perMember("Europe/London", mondayEvening)).toEqual({ ...three, perWeek: 1.5, members: 2 });
+      expect(await perMember("Asia/Kolkata", mondayEvening)).toEqual(three);
+      // Somebody added since who did come is not in the visits either: the share stays whole.
+      expect(
+        await perMember("Europe/London", async (gym) => {
+          const late = { entryId: await listed(gym.id, "Since Late Comer", { listedAt: "2026-09-20T09:00:00Z" }) };
+          await visit(gym, late, "2026-09-22T06:30:00Z");
+          await visit(gym, late, "2026-09-29T06:30:00Z");
+        }),
+      ).toEqual(three);
+
+      // Everybody added after the weeks began: no figure, and the weeks said.
+      const fresh: Gym = { id: await makeGym(owner, "Rep Since Nobody"), timezone: "Europe/London", ownerId: owner.userId };
+      const newcomer = { entryId: await listed(fresh.id, "Since Newcomer", { listedAt: "2026-09-08T09:00:00Z" }) };
+      await visit(fresh, { userId: owner.userId }, "2026-09-07T06:30:00Z");
+      await visit(fresh, newcomer, "2026-09-10T06:30:00Z");
+      clock = NOON;
+      try {
+        expect((await read(fresh.id, owner)).perMember).toEqual({ state: "no_members", from: "2026-09-07", to: "2026-10-04", weeks: 4 });
+      } finally {
+        clock = null;
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a visit that names only a member's app account is that member's",
+    async () => {
+      const owner = await makeUser("account-owner");
+      const member = await makeUser("account-member");
+      const gone = await makeUser("account-gone");
+      const gym: Gym = { id: await makeGym(owner, "Rep Account"), timezone: "Europe/London", ownerId: owner.userId };
+      const entryId = await listed(gym.id, "Account Member");
+      const goneEntry = await listed(gym.id, "Account Gone");
+      await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gym.id}, ${member.userId}, ${entryId})`;
+      // Somebody who left the app at this gym: their account's visits are nobody's on the list.
+      await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, removed_at) VALUES (${gym.id}, ${gone.userId}, ${goneEntry}, now())`;
+      await visit(gym, { entryId }, "2026-09-07T06:30:00Z");
+      // Written before the record was linked to the account: the account alone.
+      await visit(gym, { userId: member.userId }, "2026-09-15T06:30:00Z");
+      await visit(gym, { userId: member.userId }, "2026-09-22T06:30:00Z");
+      await visit(gym, { userId: gone.userId }, "2026-09-23T06:30:00Z");
+      clock = NOON;
+      try {
+        expect((await read(gym.id, owner)).perMember).toEqual({
+          state: "ok",
+          // 3 visits over 4 weeks between the 2 people on the list.
+          perWeek: 0.4,
+          from: "2026-09-07",
+          to: "2026-10-04",
+          weeks: 4,
+          members: 2,
+          visits: 3,
+          visitors: 1,
+        });
+      } finally {
+        clock = null;
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "after a gym changes its time zone a visit's weekday and hour are still one moment, and the classes counted start at the gym's own midnight",
+    async () => {
+      const owner = await makeUser("moved-owner");
+      const booker = await makeUser("moved-booker");
+      const gym: Gym = { id: await makeGym(owner, "Rep Moved"), timezone: "Europe/London", ownerId: owner.userId };
+      const who = { entryId: await listed(gym.id, "Moved Regular") };
+      const other = { entryId: await listed(gym.id, "Moved Other") };
+      await visit(gym, who, "2026-09-21T17:10:00Z"); // Mon 18:10 in London
+      // 23:30 on Sunday 27 September in London: Monday 04:00 in Delhi.
+      await visit(gym, who, "2026-09-27T22:30:00Z");
+      await visit(gym, other, "2026-09-27T22:31:00Z");
+      const spin = await classType(gym.id, "Moved Spin", 10);
+      // Delhi's midnight as 16 August begins is 18:30 UTC on the 15th: a minute before is left out.
+      await classAt({ ...gym, timezone: "Asia/Kolkata" }, spin, "2026-08-15T18:29:00Z", 10, [[booker, "attended"]]);
+      await classAt({ ...gym, timezone: "Asia/Kolkata" }, spin, "2026-08-15T18:30:00Z", 10, [[booker, "no_show"]]);
+      clock = NOON;
+      try {
+        const london = await read(gym.id, owner);
+        expect(london.hours).toMatchObject({
+          cells: [
+            { weekday: 1, hour: 18, visits: 1 },
+            { weekday: 7, hour: 23, visits: 2 },
+          ],
+        });
+        // London's 16 August begins at 23:00 UTC on the 15th: both classes are before it.
+        expect(london.classes).toEqual({ state: "none_recent", from: "2026-08-16" });
+
+        await sql`UPDATE gyms SET timezone = 'Asia/Kolkata' WHERE id = ${gym.id}`;
+        const delhi = await read(gym.id, owner);
+        expect(delhi.hours).toMatchObject({
+          cells: [
+            { weekday: 1, hour: 4, visits: 2 },
+            { weekday: 1, hour: 22, visits: 1 },
+          ],
+        });
+        expect(delhi.classes).toMatchObject({ state: "ok", from: "2026-08-16", classes: 1, noShows: { state: "ok", percent: 100, noShows: 1, marked: 1, unmarked: 0 } });
+      } finally {
+        clock = null;
+      }
     },
     TEST_TIMEOUT_MS,
   );

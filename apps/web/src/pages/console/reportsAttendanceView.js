@@ -54,15 +54,18 @@ export function visitTiles(report, words, clockFormat) {
     member = {
       value: String(m.perWeek),
       line: null,
-      note: `${count(m.visitors)} of ${count(m.members)} ${m.members === 1 ? words.person : words.people} came · ${span(m.from, m.to)}`,
-      how: `The ${visitsWord(m.visits)} that the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list today made in the last ${String(m.weeks)} full weeks (${span(m.from, m.to)}), shared between them and the ${String(m.weeks)} weeks. A visit by someone you have removed is not counted.`,
+      note: `${count(m.visitors)} of the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list since ${dayShort(m.from)} came · ${span(m.from, m.to)}`,
+      how: `The ${visitsWord(m.visits)} that the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list since ${dayText(m.from)} made in the last ${String(m.weeks)} full weeks (${span(m.from, m.to)}), shared between them and the ${String(m.weeks)} weeks. Anyone added since, and anyone you have removed, is not counted.`,
     };
   } else {
     member = {
       value: null,
-      line: report.perMember.state === 'no_members' ? `Nobody is on your ${words.person} list, so there is nobody to share the visits between.` : memberNotYet(report, words),
+      line:
+        report.perMember.state === 'no_members'
+          ? `Nobody on your ${words.person} list today was on it by ${dayText(report.perMember.from)}, when the weeks counted here began.`
+          : memberNotYet(report, words),
       note: null,
-      how: `Visits by the ${words.people} on your list today in the last full weeks, Monday to Sunday (4 at most), shared between them and those weeks.`,
+      how: `Visits in the last full weeks, Monday to Sunday (4 at most), by the ${words.people} who were on your list when those weeks began, shared between them and those weeks.`,
     };
   }
 
@@ -247,7 +250,7 @@ export function classTiles(report) {
     noShowTile = {
       value: percentText(noShows.percent),
       line: null,
-      note: `${count(noShows.noShows)} of ${placesWord(noShows.marked)} marked${noShows.unmarked > 0 ? ` · ${count(noShows.unmarked)} not marked yet` : ''}`,
+      note: `${noShows.noShows === 1 ? '1 no-show' : `${count(noShows.noShows)} no-shows`} of ${placesWord(noShows.marked)} marked${noShows.unmarked > 0 ? ` · ${count(noShows.unmarked)} not marked yet` : ''}`,
       calendar: false,
     };
   } else if (noShows.state === 'nothing_marked') {

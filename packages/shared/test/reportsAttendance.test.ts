@@ -170,7 +170,16 @@ describe("visits by day and by week", () => {
 describe("visits a member a week", () => {
   const cases: [string, Partial<AttendanceReportFacts>, unknown][] = [
     ["under two whole weeks: not enough", { firstVisitOn: "2026-09-28", member: { members: 50, visits: 80, visitors: 30 } }, { state: "not_enough_data" }],
-    ["nobody on the list: no members to share between", { member: { members: 0, visits: 0, visitors: 0 } }, { state: "no_members" }],
+    [
+      "nobody on the list was on it when the weeks began: no members to share between, and the weeks said",
+      { member: { members: 0, visits: 0, visitors: 0 } },
+      { state: "no_members", from: "2026-09-07", to: "2026-10-04", weeks: 4 },
+    ],
+    [
+      "visits counted and nobody to share them between is still no figure",
+      { member: { members: 0, visits: 12, visitors: 1 } },
+      { state: "no_members", from: "2026-09-07", to: "2026-10-04", weeks: 4 },
+    ],
     [
       "members who never came: a true zero",
       { member: { members: 40, visits: 0, visitors: 0 } },

@@ -53,8 +53,8 @@ describe('the visit tiles', () => {
   it('one of a thing is said as one, and large numbers are grouped', () => {
     const t = tiles();
     expect(t.week).toMatchObject({ value: '15', note: 'Mon 5 Oct to today · 1 person · last week: 1,240' });
-    expect(t['per-member']).toMatchObject({ value: '2.3', note: '1 of 1 member came · 7 Sep to 4 Oct 2026' });
-    expect(t['per-member'].how).toContain('The 9 visits that the 1 member on your list today made in the last 4 full weeks');
+    expect(t['per-member']).toMatchObject({ value: '2.3', note: '1 of the 1 member on your list since 7 Sep came · 7 Sep to 4 Oct 2026' });
+    expect(t['per-member'].how).toContain('The 9 visits that the 1 member on your list since 7 Sep 2026 made in the last 4 full weeks');
     expect(t.busiest).toMatchObject({ value: 'Tue 06:00', note: '40 visits in 4 weeks' });
   });
 
@@ -64,7 +64,7 @@ describe('the visit tiles', () => {
   });
 
   it('nobody on the list, no visit in the weeks counted, and only visits added later each say which', () => {
-    expect(tiles({ member: { members: 0, visits: 0, visitors: 0 } })['per-member'].line).toBe('Nobody is on your member list, so there is nobody to share the visits between.');
+    expect(tiles({ member: { members: 0, visits: 0, visitors: 0 } })['per-member'].line).toBe('Nobody on your member list today was on it by 7 Sep 2026, when the weeks counted here began.');
     expect(tiles({ hours: [] }).busiest.line).toBe('Nobody checked in in the last 4 full weeks.');
     expect(tiles({ hours: [], hoursNoTime: 3 }).busiest.line).toBe(
       'The only visits in the last 4 full weeks were added by staff on a later day, so their time is not known.',
@@ -222,6 +222,13 @@ describe('the tables and their CSVs', () => {
       ['1 of 10', '10%', '1 · 100%'],
     ]);
     expect(classTiles(r).map((t) => t.value)).toEqual(['70%', '100%']);
+  });
+
+  it('one no-show is said as one, and the line cannot be read as "places marked"', () => {
+    const one = report({ classes: { ever: true, types: [{ name: 'Spin', classes: 1, limitedClasses: 1, places: 9, booked: 9, bookings: 9, attended: 5, noShows: 1 }] } });
+    expect(classTiles(one)[1].note).toBe('1 no-show of 6 places marked · 3 not marked yet');
+    const none = report({ classes: { ever: true, types: [{ name: 'Spin', classes: 1, limitedClasses: 1, places: 9, booked: 4, bookings: 4, attended: 4, noShows: 0 }] } });
+    expect(classTiles(none)[1].note).toBe('0 no-shows of 4 places marked');
   });
 
   it('no class that ran: no tiles and no rows', () => {

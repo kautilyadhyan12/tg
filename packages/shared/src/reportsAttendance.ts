@@ -122,7 +122,8 @@ export interface AttendanceReportFacts {
   hours: readonly { weekday: number; hour: number; visits: number }[];
   /** Visits in the hours window that staff added on a later day, so no time is known. */
   hoursNoTime: number;
-  /** People on the list today, and their visits in the member window. */
+  /** People on the list today who were on it when the member window began, and their
+   *  visits in it: somebody added since could not have come. */
   member: { members: number; visits: number; visitors: number };
   /** Whether the gym has set up any class, and the classes that started in the window. */
   classes: { ever: boolean; types: readonly ReportClassCounts[] };
@@ -139,13 +140,16 @@ const perMemberSchema = z.discriminatedUnion("state", [
       from: daySchema,
       to: daySchema,
       weeks: countSchema.min(1),
+      /** On the list today and since `from` or before. */
       members: countSchema.min(1),
       visits: countSchema,
       /** How many of those members came at least once. */
       visitors: countSchema,
     })
     .strict(),
-  z.object({ state: z.enum(["not_enough_data", "no_members"]) }).strict(),
+  /** Enough weeks, and nobody on the list today was on it when they began. */
+  z.object({ state: z.literal("no_members"), from: daySchema, to: daySchema, weeks: countSchema.min(1) }).strict(),
+  z.object({ state: z.literal("not_enough_data") }).strict(),
 ]);
 export type ReportPerMember = z.infer<typeof perMemberSchema>;
 
@@ -344,7 +348,7 @@ export function attendanceReportFrom(facts: AttendanceReportFacts): AttendanceRe
 
   let perMember: ReportPerMember;
   if (windows.member === null) perMember = { state: "not_enough_data" };
-  else if (facts.member.members === 0) perMember = { state: "no_members" };
+  else if (facts.member.members === 0) perMember = { state: "no_members", ...windows.member };
   else {
     perMember = {
       state: "ok",
