@@ -18,6 +18,7 @@ import {
   MEMBER_LIST_SELECTION_CHANGED_WORDS,
   gymGroupMessagePreviewRequestSchema,
   gymGroupMessageSendRequestSchema,
+  gymSentMessageParamsSchema,
   gymSentMessagesQuerySchema,
   memberInvitePeopleQuerySchema,
   memberInvitePreviewQuerySchema,
@@ -797,6 +798,15 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     const page = await groupMessages.readSentMessages(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
     if (page === null) return;
     return reply.status(200).send({ page });
+  });
+
+  // Who one of them went to, by name.
+  app.get("/v1/orgs/:gymId/member-list/messages/:messageId/people", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(gymSentMessageParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const sentTo = await groupMessages.readSentMessagePeople(listDeps, requireUserId(req), params.gymId, params.messageId, readGate(req, reply));
+    if (sentTo === null) return;
+    return reply.status(200).send({ sentTo });
   });
 
   app.patch("/v1/orgs/:gymId/member-list/tags/:tagId", { preHandler: [app.authenticate] }, async (req, reply) => {

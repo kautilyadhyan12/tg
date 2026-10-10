@@ -118,6 +118,40 @@ export async function sentMessages(sql: SqlOrTx, gymId: string, since: Date, aft
   return rows.map((row) => ({ id: row.id, body: row.body, sentAt: row.sent_at, people: row.people, sentByName: row.sent_by_name }));
 }
 
+/** How many people this gym's message was sent to, or null when it is not this gym's
+ *  message or was sent at or before `since`. */
+export async function sentMessagePeopleCount(sql: SqlOrTx, gymId: string, messageId: string, since: Date): Promise<number | null> {
+  const rows = await sql<{ people: number }[]>`
+    SELECT people FROM gym_group_messages WHERE gym_id = ${gymId} AND id = ${messageId} AND sent_at > ${since}`;
+  return rows[0]?.people ?? null;
+}
+
+/** Who holds a copy of this gym's message, by the name the gym's list has for them (their
+ *  own name where they are on no record), in name order: the first `limit`, and how many
+ *  in all. Read from the gym's people to their copy, so it never walks every copy the gym
+ *  has. Somebody whose account is deleted is not named. */
+export async function sentMessagePeople(
+  sql: SqlOrTx,
+  gymId: string,
+  messageId: string,
+  limit: number,
+): Promise<{ people: { entryId: string | null; name: string }[]; named: number }> {
+  const rows = await sql<{ entry_id: string | null; name: string; named: number }[]>`
+    WITH got AS (
+      SELECT DISTINCT ON (m.user_id) m.user_id, e.id AS entry_id,
+             coalesce(nullif(e.full_name, ''), u.display_name) AS name
+      FROM gym_members m
+      JOIN gym_member_messages x
+        ON x.gym_id = m.gym_id AND x.user_id = m.user_id AND x.kind = ${GYM_GROUP_MESSAGE_KIND} AND x.occasion = ${messageId}
+      JOIN users u ON u.id = m.user_id AND u.status = 'active' AND u.deleted_at IS NULL
+      LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = coalesce(m.entry_id, m.removed_entry_id)
+      WHERE m.gym_id = ${gymId}
+      ORDER BY m.user_id, m.joined_at DESC
+    )
+    SELECT entry_id, name, (count(*) OVER ())::int AS named FROM got ORDER BY name, user_id LIMIT ${limit}`;
+  return { people: rows.map((row) => ({ entryId: row.entry_id, name: row.name })), named: rows[0]?.named ?? 0 };
+}
+
 /** Removes every gym's messages sent at or before `before`, each with every person's copy
  *  of it (the hourly job). Run twice it removes nothing more. */
 export async function forgetGroupMessages(sql: SqlOrTx, before: Date): Promise<{ messages: number; copies: number }> {

@@ -11,7 +11,9 @@ import {
   GYM_SENT_MESSAGES_KEPT_DAYS,
   GYM_SENT_MESSAGES_PAGE,
   gymInboxResponseSchema,
+  gymSentMessagePeopleResponseSchema,
   gymSentMessagesResponseSchema,
+  type GymSentMessagePeople,
   type GymSentMessagesPage,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
@@ -174,6 +176,12 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
     expect(res.statusCode, res.body).toBe(200);
     return gymSentMessagesResponseSchema.parse(JSON.parse(res.body)).page;
   };
+  const askPeople = (gym: Gym, who: Cookies, messageId: string) => inject("GET", `/v1/orgs/${gym.id}/member-list/messages/${messageId}/people`, who);
+  const sentTo = async (gym: Gym, messageId: string, who: Person = gym.owner): Promise<GymSentMessagePeople> => {
+    const res = await askPeople(gym, who.cookies, messageId);
+    expect(res.statusCode, res.body).toBe(200);
+    return gymSentMessagePeopleResponseSchema.parse(JSON.parse(res.body)).sentTo;
+  };
   const errorOf = (res: { body: string }): string => (JSON.parse(res.body) as { error: string }).error;
 
   beforeAll(async () => {
@@ -210,10 +218,12 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
       ["Zed, your locker key is at the desk.", "Sentm Iron House Owner", NOON.toISOString(), 2],
     ]);
     expect(irons.next).toBeNull();
+    // One of the day's three is used here, and none next door's count.
+    expect(irons.leftToday).toBe(2);
     const oaks = await list(oak);
     expect(oaks.messages.map((m) => [m.body, m.sentByName, m.people])).toEqual([["Omar's class moved to 7pm on Friday.", "Sentm Oak Studio Owner", 1]]);
-    // Who got it is a count: nobody's name or id is sent but the sender's name. (Zed's name
-    // is in the words staff typed, and nowhere else.)
+    // In the list, who got it is a count: nobody's name or id but the sender's name. (Zed's
+    // name is in the words staff typed, and nowhere else.)
     const raw = JSON.parse((await ask(iron, iron.owner.cookies)).body) as { page: { messages: Record<string, unknown>[] } };
     expect(raw.page.messages.map((m) => Object.keys(m).sort())).toEqual([["body", "id", "people", "sentAt", "sentByName"]]);
     expect(JSON.stringify(raw)).not.toContain("Maya");
@@ -233,20 +243,53 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
       ["a trainer without the tick", trainer.cookies, 403, "forbidden"],
       ["a manager whose ticks were cut down", cutManager.cookies, 403, "forbidden"],
     ];
+    const ironId = irons.messages[0]?.id ?? "";
+    const oakId = oaks.messages[0]?.id ?? "";
     for (const [who, cookies, status] of refusals) {
-      const res = await ask(iron, cookies);
-      expect(res.statusCode, who).toBe(status);
-      expect(res.body, who).not.toContain("locker");
-      expect(res.body, who).not.toContain("Zed");
+      for (const res of [await ask(iron, cookies), await askPeople(iron, cookies, ironId)]) {
+        expect(res.statusCode, who).toBe(status);
+        expect(res.body, who).not.toContain("locker");
+        expect(res.body, who).not.toContain("Zed");
+        expect(res.body, who).not.toContain("Maya");
+      }
     }
+
+    // WHO IT WENT TO, by name: the two people ticked, and nobody else at this gym or next door.
+    const nia = await member(iron, "Nia Unticked");
+    expect(await sentTo(iron, ironId)).toEqual({
+      people: [
+        { entryId: maya.entryId, name: "Maya Rao" },
+        { entryId: zed.entryId, name: "Zed Locker" },
+      ],
+      named: 2,
+      gone: 0,
+    });
+    expect((await sentTo(oak, oakId)).people).toEqual([{ entryId: omar.entryId, name: "Omar Oak" }]);
+    expect(JSON.stringify(await sentTo(iron, ironId, tickedTrainer))).not.toContain(nia.entryId);
+    // One gym's message asked for through the other gym: not found, by either owner, and no name.
+    for (const [gym, who, id] of [
+      [oak, oak.owner, ironId],
+      [iron, iron.owner, oakId],
+    ] as const) {
+      const res = await askPeople(gym, who.cookies, id);
+      expect(res.statusCode).toBe(404);
+      expect(errorOf(res)).toBe("group_message_not_found");
+      expect(res.body).not.toMatch(/Zed|Maya|Omar/);
+    }
+    // A copy at Oak whose occasion is IRON's message id names nobody to Iron, and Iron's
+    // people are not named through it at Oak.
+    await sql`
+      INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at)
+      VALUES (${oak.id}, ${omar.person.userId}, 'group', ${ironId}, 'not this gym', ${NOON}::date, ${NOON}, ${days(NOON, 30)})`;
+    expect((await sentTo(iron, ironId)).people.map((p) => p.name)).toEqual(["Maya Rao", "Zed Locker"]);
+    expect((await askPeople(oak, oak.owner.cookies, ironId)).statusCode).toBe(404);
     expect(errorOf(await ask(iron, stranger.cookies))).toBe(errorOf(await ask(iron, oak.owner.cookies)));
     // A trainer the owner gave the tick reads it.
     expect((await list(iron, tickedTrainer)).messages).toHaveLength(1);
 
     // A page asked for after NEXT DOOR's message: nothing of theirs, and nothing at all.
-    const oakId = oaks.messages[0]?.id ?? "";
     const crossed = await list(iron, iron.owner, oakId);
-    expect(crossed).toEqual({ messages: [], next: null });
+    expect([crossed.messages, crossed.next]).toEqual([[], null]);
     // And next door's owner asking for this gym's page by one of this gym's ids is still a stranger.
     expect((await ask(iron, oak.owner.cookies, irons.messages[0]?.id)).statusCode).toBe(404);
 
@@ -289,7 +332,7 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
     expect(only.messages).toHaveLength(GYM_SENT_MESSAGES_PAGE);
     expect(only.next).toBeNull();
     // A gym that has sent nothing.
-    expect(await list(await makeGym("Sentm Empty"))).toEqual({ messages: [], next: null });
+    expect(await list(await makeGym("Sentm Empty"))).toEqual({ messages: [], next: null, leftToday: 3 });
   });
 
   it("a page mark that is not an id is refused, and one of a message that is gone gives nothing", async () => {
@@ -300,7 +343,47 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
     expect(bad.statusCode).toBe(400);
     const extra = await inject("GET", `/v1/orgs/${gym.id}/member-list/messages?page=2`, gym.owner.cookies);
     expect(extra.statusCode).toBe(400);
-    expect(await list(gym, gym.owner, randomUUID())).toEqual({ messages: [], next: null });
+    const none = await list(gym, gym.owner, randomUUID());
+    expect([none.messages, none.next]).toEqual([[], null]);
+    expect((await askPeople(gym, gym.owner.cookies, "nonsense")).statusCode).toBe(400);
+    expect((await askPeople(gym, gym.owner.cookies, randomUUID())).statusCode).toBe(404);
+  });
+
+  it("who it went to: somebody removed since is still named, a deleted account is counted and not named, and a rejoin is one name", async () => {
+    clock = NOON;
+    const gym = await makeGym("Sentm People");
+    const ada = await member(gym, "Ada Stays");
+    const rex = await member(gym, "Rex Removed");
+    const del = await member(gym, "Del Deleted");
+    const jo = await member(gym, "Jo Rejoined");
+    // In the app on no record: named by their own name.
+    const una = await signedIn("Una Unlisted");
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym.id}, ${una.userId}, ${null}, ${days(NOON, -5)})`;
+    await send(gym, [ada.entryId, rex.entryId, del.entryId, jo.entryId], "The sauna is fixed.");
+    const id = (await list(gym)).messages[0]?.id ?? "";
+    await sql`
+      INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at)
+      VALUES (${gym.id}, ${una.userId}, 'group', ${id}, 'The sauna is fixed.', ${NOON}::date, ${NOON}, ${days(NOON, 30)})`;
+    await sql`UPDATE gym_group_messages SET people = 5 WHERE id = ${id}`;
+    // Since then: Rex is removed from the app, Del deleted their account, Jo left and came back.
+    await sql`UPDATE gym_members SET removed_at = ${NOON}, removed_entry_id = entry_id, entry_id = NULL WHERE gym_id = ${gym.id} AND user_id = ${rex.person.userId}`;
+    await sql`UPDATE users SET deleted_at = ${NOON}, status = 'deleted' WHERE id = ${del.person.userId}`;
+    await sql`UPDATE gym_members SET removed_at = ${NOON}, removed_entry_id = entry_id, entry_id = NULL WHERE gym_id = ${gym.id} AND user_id = ${jo.person.userId}`;
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym.id}, ${jo.person.userId}, ${jo.entryId}, ${days(NOON, 1)})`;
+
+    const got = await sentTo(gym, id);
+    expect(got.people).toEqual([
+      { entryId: ada.entryId, name: "Ada Stays" },
+      { entryId: jo.entryId, name: "Jo Rejoined" },
+      { entryId: rex.entryId, name: "Rex Removed" },
+      { entryId: null, name: "Una Unlisted" },
+    ]);
+    expect([got.named, got.gone]).toEqual([4, 1]);
+    // Past its year the message is not found, and nobody is named.
+    await sql`UPDATE gym_group_messages SET sent_at = ${days(NOON, -GYM_SENT_MESSAGES_KEPT_DAYS)} WHERE id = ${id}`;
+    const old = await askPeople(gym, gym.owner.cookies, id);
+    expect(old.statusCode).toBe(404);
+    expect(old.body).not.toMatch(/Ada|Rex|Jo /);
   });
 
   it("who sent it: their name, and none once their account is gone; a gym on no plan still reads its list", async () => {

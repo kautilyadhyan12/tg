@@ -23,6 +23,7 @@ import {
   type GymGroupMessagePreview,
   type GymGroupMessagePreviewRequest,
   type GymGroupMessageSendRequest,
+  type GymSentMessagePeople,
   type GymSentMessagesPage,
   type GymSentMessagesQuery,
 } from "@app/shared";
@@ -180,7 +181,7 @@ export function sentMessagesKeptSince(now: Date): Date {
 }
 
 /** The gym's sent messages, a page at a time, for staff who may send one. A gym on no plan
- *  reads it. Who got a message is a count, never names. Null when the rate limit has answered. */
+ *  reads it. Who got a message is a count here. Null when the rate limit has answered. */
 export async function readSentMessages(
   deps: MemberListDeps,
   userId: string,
@@ -190,12 +191,37 @@ export async function readSentMessages(
 ): Promise<GymSentMessagesPage | null> {
   await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const rows = await groupRepo.sentMessages(deps.sql, gymId, sentMessagesKeptSince(deps.now()), query.after ?? null, GYM_SENT_MESSAGES_PAGE + 1);
+  const now = deps.now();
+  const gym = await gymNow(deps.sql, gymId, now);
+  if (gym === null) throw gymNotFound();
+  const [rows, sentToday] = await Promise.all([
+    groupRepo.sentMessages(deps.sql, gymId, sentMessagesKeptSince(now), query.after ?? null, GYM_SENT_MESSAGES_PAGE + 1),
+    groupRepo.sentOnDay(deps.sql, gymId, gym.today),
+  ]);
   const shown = rows.slice(0, GYM_SENT_MESSAGES_PAGE);
   return {
     messages: shown.map((row) => ({ id: row.id, body: row.body, sentByName: row.sentByName, sentAt: row.sentAt.toISOString(), people: row.people })),
     next: rows.length > GYM_SENT_MESSAGES_PAGE ? (shown[shown.length - 1]?.id ?? null) : null,
+    leftToday: leftOf(sentToday),
   };
+}
+
+/** WHO ONE SENT MESSAGE WENT TO, by name, for staff who may send one: the people who hold
+ *  a copy of it at this gym. A message of another gym, or one past its year, is not found.
+ *  Null when the rate limit has answered. */
+export async function readSentMessagePeople(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  messageId: string,
+  limit: () => Promise<boolean>,
+): Promise<GymSentMessagePeople | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const sent = await groupRepo.sentMessagePeopleCount(deps.sql, gymId, messageId, sentMessagesKeptSince(deps.now()));
+  if (sent === null) throw new OrgsError(404, "group_message_not_found", "We couldn't find that message. It may have been removed after a year.");
+  const got = await groupRepo.sentMessagePeople(deps.sql, gymId, messageId, GYM_GROUP_MESSAGE_BOX_NAMES_MAX);
+  return { people: got.people, named: got.named, gone: Math.max(0, sent - got.named) };
 }
 
 /** The hourly tidy-up: messages past their year go, with every copy. */

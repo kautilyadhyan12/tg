@@ -195,8 +195,8 @@ export const GYM_SENT_MESSAGES_KEPT_WORDS = "A message is kept here for a year, 
 export const gymSentMessagesQuerySchema = z.object({ after: z.string().uuid().optional() }).strict();
 export type GymSentMessagesQuery = z.infer<typeof gymSentMessagesQuerySchema>;
 
-/** One message as the gym sent it. Who got it is a count, never names. `sentByName` is
- *  null when that member of staff's account is gone. */
+/** One message as the gym sent it. Who got it is a count here; the names are asked for
+ *  one message at a time. `sentByName` is null when that member of staff's account is gone. */
 export const gymSentMessageSchema = z
   .object({
     id: z.string().uuid(),
@@ -213,8 +213,27 @@ export const gymSentMessagesPageSchema = z
     messages: z.array(gymSentMessageSchema).max(GYM_SENT_MESSAGES_PAGE),
     /** The id to ask the next page after, or null when this is the last. */
     next: z.string().uuid().nullable(),
+    /** How many more group messages the gym can send today. */
+    leftToday: z.number().int().min(0).max(GYM_GROUP_MESSAGES_A_DAY),
   })
   .strict();
 export type GymSentMessagesPage = z.infer<typeof gymSentMessagesPageSchema>;
 
 export const gymSentMessagesResponseSchema = z.object({ page: gymSentMessagesPageSchema }).strict();
+
+/** Who one sent message went to. */
+export const gymSentMessageParamsSchema = z.object({ gymId: z.string().uuid(), messageId: z.string().uuid() }).strict();
+
+/** The people one message was sent to, by name: the first of them, and how many in all.
+ *  `entryId` is their record on the gym's list, null when they are on none now. `gone`
+ *  is how many it was sent to who cannot be named any more: their account is deleted. */
+export const gymSentMessagePeopleSchema = z
+  .object({
+    people: z.array(z.object({ entryId: z.string().uuid().nullable(), name: z.string() }).strict()).max(GYM_GROUP_MESSAGE_BOX_NAMES_MAX),
+    named: z.number().int().min(0),
+    gone: z.number().int().min(0),
+  })
+  .strict();
+export type GymSentMessagePeople = z.infer<typeof gymSentMessagePeopleSchema>;
+
+export const gymSentMessagePeopleResponseSchema = z.object({ sentTo: gymSentMessagePeopleSchema }).strict();
