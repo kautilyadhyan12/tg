@@ -171,7 +171,7 @@ d("personal training's list of steps: whose ticks, and what each follows (real P
 
   /** A person's page → Add membership. Its id. */
   const give = async (gym: Gym, entryId: string, typeId: string, startsOn = today(gym)): Promise<string> => {
-    const res = await inject("POST", `${entryUrl(gym, entryId)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), typeId, startsOn, paid: true });
+    const res = await inject("POST", `${entryUrl(gym, entryId)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), typeId, startsOn, paid: true, method: "cash" });
     expect(res.statusCode, res.body).toBe(201);
     const held = (JSON.parse(res.body) as HeldMembershipsResponse).memberships.find((m) => m.typeId === typeId);
     if (held === undefined) throw new Error("the membership did not come back");

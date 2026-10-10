@@ -120,7 +120,7 @@ const calls: [string, () => Promise<unknown>][] = [
         SELECT e.id FROM gym_member_list_entries e
         WHERE e.gym_id = ${gymId} AND e.id NOT IN (${typical}, ${fullest})
         ORDER BY random() LIMIT 1`;
-      return giveHeldMembership(deps, owner, gymId, person[0]?.id ?? "", { requestKey: randomUUID(), typeId, startsOn: today, paid: true });
+      return giveHeldMembership(deps, owner, gymId, person[0]?.id ?? "", { requestKey: randomUUID(), typeId, startsOn: today, paid: true, method: "cash" });
     },
   ],
   [

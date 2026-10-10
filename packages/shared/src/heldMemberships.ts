@@ -30,6 +30,7 @@ import {
   type MembershipTermUnit,
 } from "./memberships.js";
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
+import { memberBillingSchema, memberPaymentByHandSchema } from "./memberBills.js";
 
 export const HELD_MEMBERSHIP_STATUSES = ["active", "frozen", "ended", "cancelled"] as const;
 export const heldMembershipStatusSchema = z.enum(HELD_MEMBERSHIP_STATUSES);
@@ -170,13 +171,13 @@ function term(m: HeldMembership): { count: number; unit: MembershipTermUnit } {
 }
 
 /** The first day of period `index` (0 is the first). */
-function periodStart(m: HeldMembership, index: number): string {
+export function periodStart(m: HeldMembership, index: number): string {
   const t = term(m);
   return addDays(addTerms(m.startsOn, t.count, t.unit, index), m.frozenDays);
 }
 
 /** Which period `day` falls in: 0 for the first, and 0 for a day before it starts. */
-function periodIndex(m: HeldMembership, day: string): number {
+export function periodIndex(m: HeldMembership, day: string): number {
   // The day as it would be had it never been frozen: periods are counted from the start.
   const at = addDays(day, -m.frozenDays);
   if (at <= m.startsOn) return 0;
@@ -611,6 +612,8 @@ export const heldMembershipSchema = z
      *  list's day, so a screen does not print it as the day the person started. */
     fromList: z.boolean(),
     view: heldMembershipViewSchema,
+    /** Its bills and payments (18a-i); null for a reader without the `billing.members` tick. */
+    billing: memberBillingSchema.nullable(),
   })
   .strict();
 export type HeldMembershipItem = z.infer<typeof heldMembershipSchema>;
@@ -665,18 +668,22 @@ export const heldMembershipsResponseSchema = z
     earlierNotShown: z.number().int().min(0),
     types: z.array(heldMembershipTypeChoiceSchema),
     listed: listedMembershipSchema.nullable(),
+    /** Whether this reader may record payments (`billing.members`). */
+    canBill: z.boolean(),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;
 
 /** Give a membership. `requestKey` is made by the screen once a form: the same key
- *  arriving twice gives one membership. */
+ *  arriving twice gives one membership, and one payment where it was paid. */
 export const giveHeldMembershipRequestSchema = z
   .object({
     requestKey: z.string().uuid(),
     typeId: z.string().uuid(),
     startsOn: daySchema,
     paid: z.boolean(),
+    /** How they paid, where `paid` is true and the type has a price (18a-i). */
+    method: memberPaymentByHandSchema.optional(),
   })
   .strict();
 export type GiveHeldMembershipRequest = z.infer<typeof giveHeldMembershipRequestSchema>;

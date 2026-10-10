@@ -181,7 +181,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
   const errorOf = (res: { body: string }) => (JSON.parse(res.body) as { error: string }).error;
 
   const give = (gymId: string, entryId: string, cookies: Cookies, body: Record<string, unknown>) =>
-    post(heldUrl(gymId, entryId), { requestKey: nextKey(), paid: true, ...body }, cookies);
+    post(heldUrl(gymId, entryId), { requestKey: nextKey(), paid: true, method: "cash", ...body }, cookies);
   const given = async (gymId: string, entryId: string, cookies: Cookies, body: Record<string, unknown>) => {
     const res = await give(gymId, entryId, cookies, body);
     expect(res.statusCode, res.body).toBe(201);

@@ -1784,6 +1784,7 @@ export const ORG_PRIVILEGES = [
   "memberships.manage",
   "posts.manage",
   "reports.read",
+  "billing.members",
 ] as const;
 export const orgPrivilegeSchema = z.enum(ORG_PRIVILEGES);
 export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
@@ -1952,7 +1953,12 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *  owner can give it to a trainer. A write tick that also gates its read.
  *
  *  `reports.read` is the console's Reports page (spec Part 3 §16.5, 21a-i): the gym's
- *  figures, counts only. Owner and manager by default; the owner can give it to a trainer. */
+ *  figures, counts only. Owner and manager by default; the owner can give it to a trainer.
+ *
+ *  `billing.members` is the gym's notebook (spec Part 3 §14.2, 18a-i): reading a member's
+ *  bills and payments, recording a payment and taking one back. Owner and manager by
+ *  default; the owner can give it to anyone on staff. Apart from `billing.manage`, which
+ *  is the gym's own plan with us. */
 export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
   owner: [
     "members.read",
@@ -1970,6 +1976,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "memberships.manage",
     "posts.manage",
     "reports.read",
+    "billing.members",
   ],
   manager: [
     "members.read",
@@ -1984,6 +1991,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "memberships.manage",
     "posts.manage",
     "reports.read",
+    "billing.members",
   ],
   trainer: ["members.read", "codes.invite", "attendance.read"],
 };

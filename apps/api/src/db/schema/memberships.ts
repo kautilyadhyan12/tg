@@ -150,6 +150,8 @@ export const gymHeldMemberships = pgTable(
   },
   (t) => [
     unique("gym_held_memberships_request_uq").on(t.gymId, t.requestKey),
+    // What a bill's key points at, with its gym (0092).
+    unique("gym_held_memberships_gym_id_uq").on(t.gymId, t.id),
     check("gym_held_memberships_kind_check", sql`${t.kind} IN ('recurring','one_time','pack','trial')`),
     check("gym_held_memberships_price_check", sql`${t.priceMinor} BETWEEN 0 AND 99999999`),
     check("gym_held_memberships_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
@@ -188,6 +190,83 @@ export const gymHeldMemberships = pgTable(
     }),
     index("gym_held_memberships_entry_idx").on(t.gymId, t.entryId),
     index("gym_held_memberships_type_idx").on(t.gymId, t.membershipTypeId),
+  ],
+);
+
+/** One bill of a gym's notebook (§14.2; 18a-i): one period of one held membership.
+ *  Mirrors `0092_member_bills.sql`. Whether it reads Due or Overdue is worked out by
+ *  `memberBillState` in `@app/shared`, never stored. */
+export const gymMemberBills = pgTable(
+  "gym_member_bills",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    periodIndex: integer("period_index").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    dueOn: date("due_on").notNull(),
+    status: text("status").notNull().default("open"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("gym_member_bills_period_uq").on(t.heldMembershipId, t.periodIndex),
+    unique("gym_member_bills_gym_id_uq").on(t.gymId, t.id),
+    check("gym_member_bills_period_check", sql`${t.periodIndex} BETWEEN 0 AND 100000`),
+    check("gym_member_bills_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
+    check("gym_member_bills_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("gym_member_bills_status_check", sql`${t.status} IN ('open','paid','void','refunded')`),
+    foreignKey({
+      name: "gym_member_bills_membership_fk",
+      columns: [t.gymId, t.heldMembershipId],
+      foreignColumns: [gymHeldMemberships.gymId, gymHeldMemberships.id],
+    }).onDelete("cascade"),
+    index("gym_member_bills_open_idx").on(t.gymId, t.dueOn).where(sql`${t.status} = 'open'`),
+  ],
+);
+
+/** One payment recorded against a bill. `seq` is the order they were recorded in (an
+ *  identity column in `0092`); a payment taken back keeps its row, with `undone_at`. */
+export const gymMemberPayments = pgTable(
+  "gym_member_payments",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    billId: uuid("bill_id").notNull(),
+    seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity().notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    method: text("method").notNull(),
+    provider: text("provider"),
+    providerPaymentId: text("provider_payment_id"),
+    requestKey: uuid("request_key").notNull(),
+    paidOn: date("paid_on").notNull(),
+    recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+    undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("gym_member_payments_request_uq").on(t.gymId, t.requestKey),
+    check("gym_member_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
+    check("gym_member_payments_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("gym_member_payments_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer','link','company')`),
+    check(
+      "gym_member_payments_provider_check",
+      sql`(${t.method} = 'company') = (${t.provider} IS NOT NULL) AND (${t.provider} IS NULL) = (${t.providerPaymentId} IS NULL) AND (${t.provider} IS NULL OR (char_length(${t.provider}) BETWEEN 1 AND 40 AND char_length(${t.providerPaymentId}) BETWEEN 1 AND 200))`,
+    ),
+    foreignKey({
+      name: "gym_member_payments_bill_fk",
+      columns: [t.gymId, t.billId],
+      foreignColumns: [gymMemberBills.gymId, gymMemberBills.id],
+    }).onDelete("cascade"),
+    uniqueIndex("gym_member_payments_provider_uq").on(t.provider, t.providerPaymentId).where(sql`${t.provider} IS NOT NULL`),
+    index("gym_member_payments_bill_idx").on(t.gymId, t.billId),
   ],
 );
 
