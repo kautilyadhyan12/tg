@@ -659,6 +659,13 @@
       "when": 1789171200094,
       "tag": "0094_member_refunds",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1789257600095,
+      "tag": "0095_gym_message_settings",
+      "breakpoints": true
     }
   ]
 }

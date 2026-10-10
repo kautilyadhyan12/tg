@@ -4,6 +4,7 @@ import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/con
 import GymDetailsPanel from '../../components/console/GymDetailsPanel';
 import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
 import MemberContactPanel from '../../components/console/MemberContactPanel';
+import MessageSettingsPanel from '../../components/console/MessageSettingsPanel';
 import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
@@ -15,7 +16,7 @@ import { canManageOrg } from './gymDetailsView';
 import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
 
-// SETTINGS — Part 3 §3.1's sixth nav item: the gym's own details, when it is open, how its members reach it, class
+// SETTINGS — Part 3 §3.1's sixth nav item: the gym's own details, when it is open, how its members reach it, its automatic messages, class
 // bookings, the front desk's devices and the follow-up emails to leads. What the gym
 // sells is the Memberships page (23c-i) and its staff are on Members → Staff (23c-ii).
 //
@@ -178,6 +179,20 @@ export default function Settings() {
             org={org}
             readOnly={readOnly}
             startOpen={linked(section === SETTINGS_SECTION.memberContact)}
+          />
+        </div>
+      ) : null}
+
+      {/* AUTOMATIC MESSAGES (20b-i): the messages the app sends members by itself, on
+          `org.manage` as the server gates them. Keyed per gym for the panels' reason
+          above: it holds a draft. */}
+      {canEditGym ? (
+        <div id={SETTINGS_SECTION.messages} style={{ scrollMarginTop: 16 }}>
+          <MessageSettingsPanel
+            key={`messages-${org.id}`}
+            org={org}
+            readOnly={readOnly}
+            startOpen={linked(section === SETTINGS_SECTION.messages)}
           />
         </div>
       ) : null}

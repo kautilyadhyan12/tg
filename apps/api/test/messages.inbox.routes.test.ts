@@ -9,6 +9,7 @@ import postgres from "postgres";
 import { welcomeMessage, type GymInboxResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { gymsWithPeople } from "../src/modules/orgs/messages/repo.js";
 import { sendDueMessages } from "../src/modules/orgs/messages/send.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
@@ -523,13 +524,13 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
       expect(JSON.stringify(errors)).not.toContain("Maya");
       // Put right, the gym gets its own on the next run and nobody a second.
       await sql`UPDATE gyms SET timezone = 'Asia/Kolkata' WHERE id = ${bad.id}`;
-      expect(await run(gyms, minutes(NOON, 15))).toEqual({ gyms: 1, sent: 1 });
+      expect(await run(gyms, minutes(NOON, 15))).toEqual({ gyms: 3, sent: 1 });
     },
     T,
   );
 
   it(
-    "a gym whose new members all have their Welcome is not looked at again",
+    "a gym whose new members all have their Welcome is sent nothing more until somebody new joins",
     async () => {
       clock = NOON;
       const gym = await makeGym("Inbox Quiet Gym");
@@ -537,8 +538,7 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
       const rex = await joins(gym, "Rex Removed");
       await remove(gym, rex.userId, minutes(NOON, -5));
       expect(await run([gym])).toEqual({ gyms: 1, sent: 1 });
-      expect(await run([gym], minutes(NOON, 15))).toEqual({ gyms: 0, sent: 0 });
-      // Somebody new, and the gym is looked at again.
+      expect(await run([gym], minutes(NOON, 15))).toEqual({ gyms: 1, sent: 0 });
       await joins(gym, "Bo Lee", minutes(NOON, 20));
       expect(await run([gym], minutes(NOON, 30))).toEqual({ gyms: 1, sent: 1 });
     },
@@ -546,17 +546,19 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
   );
 
   it(
-    "the run the worker makes, with no gyms named, welcomes this gym's new member once",
+    "the run the worker makes, with no gyms named, looks at every gym with somebody in it and at no empty one",
     async () => {
-      // Made in 2031, so no other test's gym has a joiner in the days it looks at.
-      const then = new Date("2031-03-04T06:30:00Z");
-      clock = then;
+      // The list is read and nothing is sent from it here: other tests' gyms share the database.
+      clock = NOON;
       const gym = await makeGym("Inbox Whole Run Gym");
-      const maya = await joins(gym, "Maya Rao", minutes(then, -30));
-      const first = await sendDueMessages({ sql, log }, { now: then });
-      expect(first.sent).toBe(1);
-      expect((await sendDueMessages({ sql, log }, { now: minutes(then, 15) })).sent).toBe(0);
-      expect((await sentTo(gym)).map((r) => [r.user_id, r.occasion])).toEqual([[maya.userId, "joined:2031-03-04"]]);
+      const empty = await makeGym("Inbox Empty Gym");
+      const rex = await joins(empty, "Rex Removed");
+      await remove(empty, rex.userId, minutes(NOON, -5));
+      await joins(gym, "Maya Rao");
+      const all = await gymsWithPeople(sql, null);
+      expect(all).toContain(gym.id);
+      expect(all).not.toContain(empty.id);
+      expect(await gymsWithPeople(sql, [empty.id, gym.id])).toEqual([gym.id]);
     },
     T,
   );

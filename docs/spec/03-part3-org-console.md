@@ -4375,6 +4375,54 @@ names each of its own the same way (a trial's and a membership's by the row they
 to). A gym the run cannot read is logged and skipped, the rest are still sent theirs, and
 the run then fails; a gym whose new people all have their Welcome is not looked at.
 
+**Built in 20b-i (2026-10-11; RULINGS 2026-10-10): Birthday, Visit milestone and We miss
+you are sent, the gym has its box and a member their switches.** The other four (a trial's
+two, Membership ending, Payment overdue) are 20b-ii and the class reminder 20b-iii.
+- **The gym's box**, Settings → **Automatic messages** (`org.manage`;
+  `GET` and `PUT /v1/orgs/:gymId/message-settings`; `gym_message_settings`, one row a gym a
+  kind, migration `0095`; a kind with no row has its starting values): for each message a
+  switch, when it is sent, the words a member will read (with **[member's first name]**
+  where the name goes, never a sample name: RULINGS 2026-10-11), and ONE line of the gym's own for
+  that message (140 characters, a message to a group's rule for a web address and an @,
+  15.3's filter), sent on a line of its own under the fixed words. The numbers are picked:
+  visits 10 · 25 · 50 · 100 · 250 · 500 · 1,000, days 7 · 10 · 14 · 21 · 30. One Save.
+- **Found from Sent messages** (Kd, RULINGS 2026-10-11): the page of 16.8 says "The app also
+  sends Welcome, Birthday, Visit milestone and We miss you by itself. Those are not listed
+  here.", with a button, **Automatic messages**, that opens this box, or "The owner can
+  switch them on or off." for staff who cannot open it.
+- **The words** (`automaticMessage`, `packages/shared/src/gymMessages.ts`): "Happy birthday,
+  Maya! From everyone at {gym}." · "That's 50 visits to {gym}, Maya. Well done." · "We
+  haven't seen you at {gym} for a while, Maya. We hope to see you soon."
+- **A visit** is a day the desk or staff checked the person in (the leaderboard's own rule,
+  `countedDays`): two check-ins in one day are one. A milestone is the newest one reached
+  by a visit of today or yesterday, so a visit at night and another before the morning's
+  first run cannot step over it; its occasion is the number (`visits:50`).
+- **We miss you** is due after the gym's days with no visit AND once the gym has checked
+  somebody in on half of those days (rounded up) since the person last came
+  (`missYouGymDays`): a gym that stopped using check-in, or was shut, tells nobody they
+  were missed. Never to the gym's own staff, never to somebody who never came. Its
+  occasion is the last visit's day, so one absence is one message.
+- **A birthday** is read from the date of birth on the record the person holds alone (two
+  accounts on one record have none). It is no birthday when five of the gym's records
+  share that date, when it is 1 January 1970, or when the person would be over 110 or not
+  yet born: those are what an export writes for "not known".
+- **A member's switches**, under their Inbox, shut behind one button, **Choose what {gym}
+  can send you**, with the news switch of 16.8 (Kd, RULINGS 2026-10-11)
+  (`PUT /v1/orgs/:gymId/inbox/switches`;
+  `gym_member_messages_off`): Birthday, Visit milestone, We miss you, for that gym
+  alone. Welcome has none: it is sent once, on joining.
+- **A gym nobody is checked in at** (no check-in in 30 days) reads so on the two messages
+  that count visits, with a button to Attendance.
+- **The sender** runs four times an hour. **Everybody in a gym is read once a day**, at the
+  first run inside the gym's day (from 08:00 on its clock; `gym_message_days` keeps the
+  day): that is when a birthday, a milestone and an absence are found, so they are told in
+  the morning, and a milestone reached later that day the next morning. Every other run
+  reads only who joined in the last three days, for their Welcome. A save of the gym's
+  settings removes the day's mark, so the next run reads everybody again; a run that fails
+  leaves it unmarked. A gym closed, on no plan or asleep is not read past its own row; a
+  gym's row is held only when the first read found something to write, and the write is
+  made from a second read under it.
+
 ### 16.3 Leads
 
 `gym_leads`: name · email · phone · where from · `new` · `contacted` · `on_trial` ·

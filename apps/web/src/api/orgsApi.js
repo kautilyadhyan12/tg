@@ -79,6 +79,7 @@ import {
   notMeInvitationResponseSchema,
   billSettingsResponseSchema,
   classBookingSettingsResponseSchema,
+  gymMessageSettingsResponseSchema,
   classBookingsEndingResponseSchema,
   classSessionBookingsResponseSchema,
   classOnlineAffectedSchema,
@@ -1817,6 +1818,13 @@ export const orgService = {
 
   /** GET and PUT …/booking-settings — the gym's four booking settings (`schedule.manage`),
    *  all four every time. */
+  /** The gym's automatic messages (ROADMAP 20b-i): each one's switch and own line, and the
+   *  two numbers. The save sends all of them every time. */
+  getMessageSettings: (gymId) =>
+    readThrough(gymMessageSettingsResponseSchema, 'your automatic messages', authApi.get(`/v1/orgs/${gymId}/message-settings`)),
+  updateMessageSettings: (gymId, body) =>
+    readThrough(gymMessageSettingsResponseSchema, 'your automatic messages', authApi.put(`/v1/orgs/${gymId}/message-settings`, body)),
+
   getBookingSettings: (gymId) =>
     readThrough(classBookingSettingsResponseSchema, 'your booking settings', authApi.get(`/v1/orgs/${gymId}/booking-settings`)),
   updateBookingSettings: (gymId, body) =>

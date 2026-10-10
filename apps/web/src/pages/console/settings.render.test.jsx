@@ -46,6 +46,18 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
         Promise.resolve({ data: { settings: { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 }, pt: { opensDays: 7, freeCancelMinutes: 120 } } }),
       ),
       updateBookingSettings: vi.fn(),
+      /** Settings' automatic messages box (20b-i) reads on mount too: the starting values. */
+      getMessageSettings: vi.fn(() =>
+        Promise.resolve({
+          data: {
+            messages: ['welcome', 'birthday', 'milestone', 'miss_you'].map((kind) => ({ kind, on: true, ownLine: null })),
+            missYouDays: 10,
+            milestones: [50, 100],
+            checkIn: true,
+          },
+        }),
+      ),
+      updateMessageSettings: vi.fn(),
       /** Settings' check-in devices box (16b-i) reads on mount too: a gym with none. */
       getCheckinDevices: vi.fn(() => Promise.resolve({ data: { devices: [] } })),
       /** Memberships left Settings for a page of its own (23c-i): these two are here so a

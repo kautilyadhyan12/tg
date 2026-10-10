@@ -33,10 +33,13 @@ const nobody: Person = {
   bills: [],
   birthday: null,
   visits: 12,
+  recentVisitDays: 0,
   lastVisitOn: "2026-10-07",
 };
+/** A gym that checked somebody in on every one of the last 400 days. */
+const EVERY_DAY = Array.from({ length: 400 }, (_, back) => new Date(Date.UTC(2026, 9, 9) - back * 86_400_000).toISOString().slice(0, 10));
 const facts = (person: Partial<Person> = {}, over: { gym?: Partial<GymMessageFacts["gym"]>; sent?: GymMessageFacts["sent"] } = {}): GymMessageFacts => ({
-  gym: { open: true, live: true, today: TODAY, hour: 12, on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, ...over.gym },
+  gym: { open: true, live: true, today: TODAY, hour: 12, on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, visitDays: EVERY_DAY, ...over.gym },
   person: { ...nobody, ...person },
   sent: over.sent ?? [],
 });
@@ -50,7 +53,7 @@ const DUE: Record<GymMessageKind, { person: Partial<Person>; occasion: string }>
   // Joined late on the 8th in UTC, which is the 9th on this gym's calendar.
   welcome: { person: { joinedOn: "2026-10-09", joinedUtcOn: "2026-10-08" }, occasion: "joined:2026-10-08" },
   birthday: { person: { birthday: "10-09" }, occasion: "birthday:2026" },
-  milestone: { person: { visits: 50, lastVisitOn: TODAY }, occasion: "visits:50" },
+  milestone: { person: { visits: 50, recentVisitDays: 1, lastVisitOn: TODAY }, occasion: "visits:50" },
   miss_you: { person: { lastVisitOn: "2026-09-29" }, occasion: "absent:2026-09-29" },
 };
 
@@ -183,10 +186,10 @@ describe("the occasions", () => {
   });
 
   it("milestone: on the visit itself, today or yesterday; we miss you: once the gym's days have passed", () => {
-    expect(kinds({ visits: 50, lastVisitOn: "2026-10-08" })).toEqual(["milestone"]);
-    expect(kinds({ visits: 50, lastVisitOn: "2026-10-07" })).toEqual([]);
-    expect(kinds({ visits: 51, lastVisitOn: TODAY })).toEqual([]);
-    expect(kinds({ visits: 100, lastVisitOn: TODAY })).toEqual(["milestone"]);
+    expect(kinds({ visits: 50, recentVisitDays: 1, lastVisitOn: "2026-10-08" })).toEqual(["milestone"]);
+    expect(kinds({ visits: 50, recentVisitDays: 0, lastVisitOn: "2026-10-07" })).toEqual([]);
+    expect(kinds({ visits: 51, recentVisitDays: 1, lastVisitOn: TODAY })).toEqual([]);
+    expect(kinds({ visits: 100, recentVisitDays: 1, lastVisitOn: TODAY })).toEqual(["milestone"]);
     expect(kinds({ lastVisitOn: "2026-09-30" })).toEqual([]);
     expect(kinds({ lastVisitOn: "2026-09-29" })).toEqual(["miss_you"]);
     // Somebody who never came is not missed: there is no absence to count from.
