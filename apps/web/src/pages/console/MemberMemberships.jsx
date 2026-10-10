@@ -27,13 +27,13 @@ import {
   statusTag,
 } from './heldMembershipsView';
 import {
-  BILLS_FOLDED,
   CANCEL_REASONS,
   NO_PAYMENTS_LINE,
   PAYMENT_METHODS,
   REFUND_REASON_CHOICES,
   billRow,
   billToCancel,
+  billsToDraw,
   cancelBillBody,
   cancelBillWords,
   paidWords,
@@ -61,9 +61,12 @@ import {
 // hold the payments tick: what each is for, Paid, Due or Overdue, and the payments
 // recorded against it. Record payment takes an amount and how it was paid; a membership
 // that is over and still owes a bill stays in the list above the fold until it is paid.
-// Beside Record payment is Cancel this bill, for the same bill; each payment has Note a
-// refund, and each refund Undo refund (ROADMAP 18a-ii). Each opens a box that names the
-// person, the amount and what does and does not change.
+// Each bill is a box of its own: its days, amount and tag across the top, its payments
+// in columns under them with Note a refund at the end of each line, a refund indented
+// under its payment with Undo refund, and Record payment and Cancel this bill inside the
+// bill they act on (ROADMAP 18a-ii). What acts on the whole membership (Freeze, Cancel
+// membership) is in one bar under a line. Each press opens a box that names the person,
+// the amount and what does and does not change.
 //
 // Drawn only where there is something to show: a gym with no membership types, and a
 // person who holds none, see no box at all (a gym that keeps its other software uses
@@ -493,57 +496,98 @@ export default function MemberMemberships({
     );
   };
 
-  /** A membership's bills, the newest first; the older ones behind "Show all". */
-  const renderBills = (m) => {
+  /** A membership's bills, each a box of its own, the newest first; the older ones
+   *  behind "Show all". `payHere`: Record payment is drawn inside the bill it is for. */
+  const renderBills = (m, payHere) => {
     const billing = m.billing;
     if (billing === null || billing.bills.length === 0) return null;
     const all = allBills === m.id;
-    const rows = (all ? billing.bills : billing.bills.slice(0, BILLS_FOLDED)).map((bill) => billRow(bill, m.currency, today));
-    const hidden = billing.bills.length - rows.length;
-    // A refund is noted, or taken back, by staff who can change things here, and not
-    // while another box is open under this membership.
+    const drawn = billsToDraw(billing, all);
+    const rows = drawn.bills.map((bill) => billRow(bill, m.currency, today));
+    const hidden = drawn.hidden;
+    // Staff who can change things here act on a bill, and not while another box is open
+    // under this membership.
     const acts = !readOnly && !(open !== null && open.id === m.id);
+    const cancelId = billToCancel(m)?.id ?? null;
+    const SPLIT = { borderTop: '1px solid var(--line)' };
+    // A payment or a refund: columns with its button at the end; on a phone, one under another.
+    const LINE = 'flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3';
     return (
-      <div className="flex flex-col gap-1.5 pt-1" data-testid="held-bills">
-        <span className="c-s13 c-w6 c-t2">Bills</span>
-        <ul className="m-0 p-0 list-none flex flex-col gap-1.5">
-          {rows.map((row) => (
-            <li key={row.id} className="flex flex-col" data-testid="held-bill">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="c-s14 c-t1">{row.title}</span>
-                <span className={`c-tag ${TAG_TONES[row.tone]} whitespace-nowrap`}>{row.tag}</span>
-                {row.when !== null ? <span className="c-s13 c-t2">{row.when}</span> : null}
-              </div>
-              {row.left !== null ? (
-                <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
-                  {row.left}
-                </span>
-              ) : null}
-              {row.cancelled !== null ? <span className="c-s13 c-t2">{row.cancelled}</span> : null}
-              {row.payments.map((p) => (
-                <div key={p.id} className="flex flex-col" data-testid="held-bill-payment">
-                  <div className="flex flex-wrap items-center gap-x-2">
-                    <span className="c-s13 c-t2">{p.line}</span>
-                    {acts && p.refundable ? (
-                      <button type="button" className={LINK} disabled={busy} onClick={() => startRefund(m, p.id)}>
-                        Note a refund
-                      </button>
+      <div className="flex flex-col gap-2 pt-2" data-testid="held-bills">
+        <span className="c-s13 c-w6 c-t2 uppercase" style={{ letterSpacing: '0.04em' }}>
+          Bills
+        </span>
+        <ul className="m-0 p-0 list-none flex flex-col gap-2">
+          {rows.map((row) => {
+            const pays = acts && payHere && billing.pay !== null && billing.pay.periodIndex === row.periodIndex;
+            const notes = [row.when, row.cancelled].filter((line) => line !== null);
+            return (
+              <li key={row.id} className="flex flex-col rounded-[12px]" style={{ border: '1px solid var(--raise-line)' }} data-testid="held-bill">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
+                  <span className="c-s14 c-w6 c-t1 flex-1" style={{ minWidth: 150 }}>
+                    {row.days}
+                  </span>
+                  {/* One piece, so on a phone the amount and its tag wrap together. */}
+                  <span className="flex items-center gap-2">
+                    <span className="c-s14 c-w6 c-t1 whitespace-nowrap">{row.amount}</span>
+                    <span className={`c-tag ${TAG_TONES[row.tone]} whitespace-nowrap`}>{row.tag}</span>
+                  </span>
+                </div>
+                {notes.length > 0 || row.left !== null ? (
+                  <div className="flex flex-col px-3 pb-2.5">
+                    {notes.map((line) => (
+                      <span key={line} className="c-s13 c-t2">
+                        {line}
+                      </span>
+                    ))}
+                    {row.left !== null ? (
+                      <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+                        {row.left}
+                      </span>
                     ) : null}
                   </div>
-                  {p.refunds.map((r) => (
-                    <div key={r.id} className="flex flex-wrap items-center gap-x-2" data-testid="held-refund">
-                      <span className="c-s13 c-t2">{r.line}</span>
-                      {acts ? (
-                        <button type="button" className={LINK} disabled={busy} onClick={() => askUndoRefund(m, p.id, r.id)}>
-                          Undo refund
+                ) : null}
+                {row.payments.map((p) => (
+                  <div key={p.id} className="flex flex-col gap-2 px-3 py-2" style={SPLIT} data-testid="held-bill-payment">
+                    <div className={LINE}>
+                      <span className="c-s14 c-w5 c-t1 whitespace-nowrap" style={{ minWidth: 84 }}>
+                        {p.amount}
+                      </span>
+                      <span className="c-s13 c-t2 md:flex-1">{p.detail}</span>
+                      {acts && p.refundable ? (
+                        <button type="button" className={`${SMALL} self-start md:self-auto`} disabled={busy} onClick={() => startRefund(m, p.id)}>
+                          Note a refund
                         </button>
                       ) : null}
                     </div>
-                  ))}
-                </div>
-              ))}
-            </li>
-          ))}
+                    {p.refunds.map((r) => (
+                      <div key={r.id} className={`${LINE} pl-3`} style={{ borderLeft: '2px solid var(--raise-line)' }} data-testid="held-refund">
+                        <span className="c-s13 c-w5 c-t1 whitespace-nowrap">{r.amount}</span>
+                        <span className="c-s13 c-t2 md:flex-1">{r.detail}</span>
+                        {acts ? (
+                          <button type="button" className={`${SMALL} self-start md:self-auto`} disabled={busy} onClick={() => askUndoRefund(m, p.id, r.id)}>
+                            Undo refund
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {pays ? (
+                  <div className="flex flex-wrap gap-2 px-3 py-2.5" style={SPLIT}>
+                    <button type="button" className={`${MAIN} c-btn-sm`} disabled={busy} onClick={() => startPay(m)}>
+                      {payLabel(m, today)}
+                    </button>
+                    {cancelId === row.id ? (
+                      <button type="button" className={SMALL} disabled={busy} onClick={() => startCancelBill(m)}>
+                        Cancel this bill
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
         {hidden > 0 ? (
           <button type="button" className="c-btn c-btn-link c-btn-sm self-start" onClick={() => setAllBills(m.id)}>
@@ -687,13 +731,17 @@ export default function MemberMemberships({
         {undoWords(m, name).link}
       </button>
     ) : null;
-    // The bill a payment would be taken for can be cancelled instead, a leaver's too.
-    const cancelBillButton =
-      !readOnly && billToCancel(m) !== null ? (
-        <button type="button" className={SMALL} disabled={busy} onClick={() => startCancelBill(m)}>
-          Cancel this bill
+    // Record payment sits inside the bill it is for; where that period has no bill yet
+    // (a payment taken early), it is in the bar with what acts on the whole membership.
+    const payInBill = canPay && m.billing.bills.some((b) => b.periodIndex === m.billing.pay.periodIndex);
+    const payButton =
+      canPay && !payInBill ? (
+        <button type="button" className={SMALL} disabled={busy} onClick={() => startPay(m)}>
+          {payLabel(m, today)}
         </button>
       ) : null;
+    const BAR = 'flex flex-wrap gap-2 pt-3 mt-1';
+    const BAR_LINE = { borderTop: '1px solid var(--line)' };
     return (
       <li key={m.id} className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-membership">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -707,7 +755,7 @@ export default function MemberMemberships({
             {pay.text}
           </span>
         ) : null}
-        {renderBills(m)}
+        {renderBills(m, payInBill)}
         {inUse && !shown.canBill && can.markPaid !== null ? (
           <p className="c-s13 c-t2 m-0" data-testid="held-no-payments">
             {NO_PAYMENTS_LINE}
@@ -725,24 +773,14 @@ export default function MemberMemberships({
           ) : (
             renderAsk(m)
           )
-        ) : !inUse && (canPay || canUndo) ? (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {canPay ? (
-              <button type="button" className={SMALL} disabled={busy} onClick={() => startPay(m)}>
-                {payLabel(m, today)}
-              </button>
-            ) : null}
-            {cancelBillButton}
+        ) : !inUse && (payButton !== null || canUndo) ? (
+          <div className={BAR} style={BAR_LINE}>
+            {payButton}
             {undoLink}
           </div>
-        ) : inUse ? (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {canPay ? (
-              <button type="button" className={SMALL} disabled={busy} onClick={() => startPay(m)}>
-                {payLabel(m, today)}
-              </button>
-            ) : null}
-            {cancelBillButton}
+        ) : inUse && (payButton !== null || can.freeze || can.unfreeze || can.cancel || canUndo) ? (
+          <div className={BAR} style={BAR_LINE}>
+            {payButton}
             {can.freeze ? (
               <button type="button" className={SMALL} disabled={busy} onClick={() => ask('freeze', m)}>
                 Freeze

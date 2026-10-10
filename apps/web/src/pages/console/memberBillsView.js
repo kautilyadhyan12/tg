@@ -37,6 +37,9 @@ const STATE_TAGS = {
   refunded: { tag: 'Refunded', tone: 'plain' },
 };
 
+/** How many of a membership's bills are drawn before "Show all". */
+export const BILLS_FOLDED = 2;
+
 const methodWords = (method) => MEMBER_PAYMENT_METHOD_WORDS[method] ?? 'Paid';
 const byWords = (by) => (by === null ? null : `by ${by}`);
 const joined = (parts) => parts.filter((part) => part !== null).join(' · ');
@@ -45,8 +48,32 @@ const joined = (parts) => parts.filter((part) => part !== null).join(' · ');
 export const CANCEL_REASONS = BILL_CANCEL_REASONS.map((value) => ({ value, label: BILL_CANCEL_REASON_WORDS[value] }));
 export const REFUND_REASON_CHOICES = REFUND_REASONS.map((value) => ({ value, label: REFUND_REASON_WORDS[value] }));
 
-/** One bill as a row: what it is for, its tag, when it is or was due, who cancelled it,
- *  and each payment with the refunds noted against it. */
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2026-10-01" → "1 Oct 2026", or "1 Oct" without its year: a bill's row is narrow. */
+export function shortDay(day, withYear = true) {
+  const [y, m, d] = day.split('-').map(Number);
+  return `${String(d)} ${SHORT_MONTHS[m - 1]}${withYear ? ` ${String(y)}` : ''}`;
+}
+
+/** The days a bill is for, "1 Oct – 31 Oct 2026"; a bill for a whole membership says so. */
+export function billDays(covers) {
+  if (covers === null) return 'Whole membership';
+  const sameYear = covers.from.slice(0, 4) === covers.to.slice(0, 4);
+  return `${shortDay(covers.from, !sameYear)} – ${shortDay(covers.to)}`;
+}
+
+/** The bills a membership's box draws: the newest `BILLS_FOLDED`, or all of them; and
+ *  always the one a payment can be taken for, so what is owed is never folded away. */
+export function billsToDraw(billing, all) {
+  const newest = all ? billing.bills : billing.bills.slice(0, BILLS_FOLDED);
+  const owed = billing.pay === null ? undefined : billing.bills.find((b) => b.periodIndex === billing.pay.periodIndex);
+  const bills = owed === undefined || newest.includes(owed) ? newest : [...newest, owed];
+  return { bills, hidden: billing.bills.length - bills.length };
+}
+
+/** One bill as a box: the days it is for, its amount and tag, when it is or was due, who
+ *  cancelled it, and each payment in columns with the refunds noted against it. */
 export function billRow(bill, currency, today) {
   const amount = formatMinor(bill.amountMinor, currency);
   // Some of what was paid has been given back, and not all: still paid, and said so.
@@ -66,7 +93,9 @@ export function billRow(bill, currency, today) {
   else if (bill.state === 'due') when = bill.dueOn === today ? 'Due today' : `Due ${dayWords(bill.dueOn)}`;
   return {
     id: bill.id,
-    title: bill.covers === null ? amount : `${dayWords(bill.covers.from)} to ${dayWords(bill.covers.to)} · ${amount}`,
+    periodIndex: bill.periodIndex,
+    days: billDays(bill.covers),
+    amount,
     tag: state.tag,
     tone: state.tone,
     when,
@@ -75,17 +104,13 @@ export function billRow(bill, currency, today) {
     cancelled,
     payments: bill.payments.map((p) => ({
       id: p.id,
-      line: joined([formatMinor(p.amountMinor, currency), methodWords(p.method), dayWords(p.paidOn), byWords(p.by)]),
+      amount: formatMinor(p.amountMinor, currency),
+      detail: joined([methodWords(p.method), shortDay(p.paidOn), byWords(p.by)]),
       refundable: p.refundableMinor > 0,
       refunds: p.refunds.map((r) => ({
         id: r.id,
-        line: joined([
-          `${formatMinor(r.amountMinor, currency)} refunded`,
-          methodWords(r.method),
-          dayWords(r.refundedOn),
-          REFUND_REASON_WORDS[r.reason] ?? null,
-          byWords(r.by),
-        ]),
+        amount: `${formatMinor(r.amountMinor, currency)} refunded`,
+        detail: joined([methodWords(r.method), shortDay(r.refundedOn), REFUND_REASON_WORDS[r.reason] ?? null, byWords(r.by)]),
       })),
     })),
   };
@@ -249,8 +274,6 @@ export function undoWords(m, name) {
   };
 }
 
-/** How many of a membership's bills are drawn before "Show all". */
-export const BILLS_FOLDED = 2;
 
 // ── When an unpaid bill reads Overdue (the gym's own number) ─────────────────
 

@@ -113,8 +113,9 @@ describe('each bill reads the word the server sent, under its own membership', (
     const rows = await rowsSoon();
     const goldRow = rows.find((r) => within(r).queryByText('Gold Monthly') !== null);
     const packRow = rows.find((r) => within(r).queryByText('10 classes') !== null);
-    expect(billsOf(goldRow)).toEqual(['4 October 2026 to 3 November 2026 · £49.99Paid£49.99 · Cash · 4 October 2026 · by Sam OwnerNote a refund']);
-    expect(billsOf(packRow)).toEqual(['£90.00OverdueWas due 10 October 2026']);
+    expect(billsOf(goldRow)).toEqual(['4 Oct – 3 Nov 2026£49.99Paid£49.99Cash · 4 Oct 2026 · by Sam OwnerNote a refund']);
+    // The pack's bill holds its own two buttons: they act on that bill.
+    expect(billsOf(packRow)).toEqual(['Whole membership£90.00OverdueWas due 10 October 2026Record paymentCancel this bill']);
     expect(within(goldRow).queryByText('Overdue')).toBeNull();
     expect(within(goldRow).queryByText('Due')).toBeNull();
     expect(within(packRow).queryByText('Paid')).toBeNull();
@@ -158,7 +159,7 @@ describe('what the bills show', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([part]));
     render(draw());
     const [row] = await rowsSoon();
-    expect(billsOf(row)).toEqual(['£90.00OverdueWas due 10 October 2026£40.00 paid · £50.00 left£40.00 · Bank transfer · 12 October 2026']);
+    expect(billsOf(row)).toEqual(['Whole membership£90.00OverdueWas due 10 October 2026£40.00 paid · £50.00 left£40.00Bank transfer · 12 Oct 2026Record payment']);
     fireEvent.click(within(row).getByRole('button', { name: 'Record payment' }));
     expect(within(row).getByLabelText('Amount paid (GBP)').value).toBe('50.00');
     expect(within(row).getByText('£50.00 is left to pay. This only writes it in your records: no money is taken.')).toBeTruthy();
@@ -175,7 +176,7 @@ describe('what the bills show', () => {
     render(draw());
     const [row] = await rowsSoon();
     expect(billsOf(row)).toHaveLength(2);
-    expect(billsOf(row)[0]).toContain('4 October 2026 to 3 November 2026');
+    expect(billsOf(row)[0]).toContain('4 Oct – 3 Nov 2026');
     fireEvent.click(within(row).getByRole('button', { name: 'Show all 4 bills' }));
     expect(billsOf(row)).toHaveLength(4);
     expect(within(row).getByText('3 older bills are not shown.')).toBeTruthy();
@@ -189,7 +190,7 @@ describe('what the bills show', () => {
     const rows = await rowsSoon();
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText('Cancelled')).toBeTruthy();
-    expect(billsOf(rows[0])).toEqual(['4 October 2026 to 3 November 2026 · £49.99OverdueWas due 4 October 2026']);
+    expect(billsOf(rows[0])).toEqual(['4 Oct – 3 Nov 2026£49.99OverdueWas due 4 October 2026Record paymentCancel this bill']);
     // Its bill is paid or cancelled: nothing else can be done to a membership that is over.
     expect(within(rows[0]).getAllByRole('button').map((b) => b.textContent)).toEqual(['Record payment', 'Cancel this bill']);
     expect(screen.getByRole('button', { name: 'Show 1 earlier membership' })).toBeTruthy();
@@ -358,7 +359,7 @@ describe('Cancel this bill', () => {
     expect(await screen.findByText('That £90.00 bill was cancelled. Nothing is owed for it.')).toBeTruthy();
     // Afterwards: the bill reads Cancelled with who and why, the line never says Paid, and no button is left for it.
     const now = (await rowsSoon()).find((r) => within(r).queryByText('10 classes') !== null);
-    expect(billsOf(now)).toEqual(['£90.00CancelledCancelled 20 October 2026 · Not charging for this one · by Sam Owner']);
+    expect(billsOf(now)).toEqual(['Whole membership£90.00CancelledCancelled 20 October 2026 · Not charging for this one · by Sam Owner']);
     expect(within(now).getByTestId('held-payment').textContent).toBe('Nothing to pay');
     expect(within(now).queryByRole('button', { name: 'Cancel this bill' })).toBeNull();
     expect(within(now).queryByRole('button', { name: 'Record payment' })).toBeNull();
@@ -440,7 +441,7 @@ describe('Note a refund', () => {
     // The bill says part went back, with the refund on its own line; the membership's dates and "Paid" line stay.
     const [now] = await rowsSoon();
     expect(billsOf(now)).toEqual([
-      '4 October 2026 to 3 November 2026 · £49.99Part refunded£49.99 · Cash · 4 October 2026 · by Sam OwnerNote a refund£20.00 refunded · Cash · 4 October 2026 · Charged too much · by Sam OwnerUndo refund',
+      '4 Oct – 3 Nov 2026£49.99Part refunded£49.99Cash · 4 Oct 2026 · by Sam OwnerNote a refund£20.00 refundedCash · 4 Oct 2026 · Charged too much · by Sam OwnerUndo refund',
     ]);
     expect(within(now).getByTestId('held-payment').textContent).toBe('Paid · next payment due 4 November 2026');
     // A payment with a refund on it is not offered to be taken back.

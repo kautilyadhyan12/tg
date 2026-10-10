@@ -3352,6 +3352,11 @@ with the payment that settles the bill of the first unpaid period.
 **As built, 18a-ii (2026-10-10; RULINGS that day).** Staff with `billing.members` can
 cancel a bill and note a refund, on a person's page under Memberships, and the Members
 list's Payment reads the bills.
+- **How the bills are drawn**: each bill is a box of its own, its days on the left and its
+  amount and tag on the right; each payment is one line inside its bill, a refund indented
+  under its payment; Record payment and Cancel this bill sit inside the bill they act on,
+  which is always drawn however old it is; what acts on the whole membership (Freeze,
+  Cancel membership) is in one bar under a line.
 - **Cancel this bill** (the trade's "void") is beside Record payment and acts on the same
   bill: the one a payment would be taken for next, and only while nothing is paid on it
   (a part-paid bill has its payment taken back first, or the rest recorded). Bills are

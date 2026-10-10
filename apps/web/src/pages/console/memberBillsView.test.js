@@ -9,8 +9,10 @@ import {
   NO_PAYMENTS_LINE,
   PAYMENT_METHODS,
   REFUND_REASON_CHOICES,
+  billDays,
   billRow,
   billToCancel,
+  billsToDraw,
   canRecordPayments,
   cancelBillBody,
   cancelBillWords,
@@ -26,6 +28,7 @@ import {
   refundDraft,
   refundWords,
   refundedWords,
+  shortDay,
   undoRefundWords,
   undoWords,
 } from './memberBillsView';
@@ -58,8 +61,8 @@ describe('each state the server sends has its own word, and no other', () => {
   it('Paid is Paid, with no due day beside it', () => {
     const row = billRow(bill({ state: 'paid', paidMinor: 4999, payments: [payment()] }), 'GBP', TODAY);
     expect(row).toMatchObject({ tag: 'Paid', tone: 'green', when: null, left: null });
-    expect(row.title).toBe('4 October 2026 to 3 November 2026 · £49.99');
-    expect(row.payments).toEqual([{ id: payment().id, line: '£49.99 · Cash · 4 October 2026 · by Sam Owner', refundable: true, refunds: [] }]);
+    expect([row.days, row.amount]).toEqual(['4 Oct – 3 Nov 2026', '£49.99']);
+    expect(row.payments).toEqual([{ id: payment().id, amount: '£49.99', detail: 'Cash · 4 Oct 2026 · by Sam Owner', refundable: true, refunds: [] }]);
   });
 
   it('Due says when, and Overdue says when it was due', () => {
@@ -71,11 +74,14 @@ describe('each state the server sends has its own word, and no other', () => {
   it('a part-paid bill says what was paid and what is left, in money', () => {
     const part = billRow(bill({ state: 'overdue', paidMinor: 2000, payments: [payment({ amountMinor: 2000, method: 'card_at_desk', by: null })] }), 'GBP', TODAY);
     expect(part.left).toBe('£20.00 paid · £29.99 left');
-    expect(part.payments[0].line).toBe('£20.00 · Card at the desk · 4 October 2026');
+    expect(part.payments[0]).toMatchObject({ amount: '£20.00', detail: 'Card at the desk · 4 Oct 2026' });
   });
 
-  it('a bill for the whole of a membership has no days, and a state from later reads as its word', () => {
-    expect(billRow(bill({ covers: null, amountMinor: 9000 }), 'GBP', TODAY).title).toBe('£90.00');
+  it('a bill for the whole of a membership says so, days across a new year keep both years, and a state from later reads as its word', () => {
+    expect(billRow(bill({ covers: null, amountMinor: 9000 }), 'GBP', TODAY)).toMatchObject({ days: 'Whole membership', amount: '£90.00' });
+    expect(billDays({ from: '2026-12-15', to: '2027-01-14' })).toBe('15 Dec 2026 – 14 Jan 2027');
+    expect(billDays({ from: '2028-02-01', to: '2028-02-29' })).toBe('1 Feb – 29 Feb 2028');
+    expect([shortDay('2026-10-01'), shortDay('2026-10-01', false)]).toEqual(['1 Oct 2026', '1 Oct']);
     expect(billRow(bill({ state: 'void' }), 'GBP', TODAY)).toMatchObject({ tag: 'Cancelled', when: null });
     expect(billRow(bill({ state: 'refunded' }), 'GBP', TODAY)).toMatchObject({ tag: 'Refunded', when: null });
   });
@@ -193,7 +199,7 @@ describe('a cancelled bill and a refunded one say what happened, in their own wo
     const refund = { id: 'r1', amountMinor: 2000, method: 'bank_transfer', refundedOn: '2026-10-12', reason: 'charged_too_much', by: 'Sam Owner' };
     const part = billRow(bill({ state: 'paid', paidMinor: 4999, refundedMinor: 2000, payments: [payment({ refunds: [refund], refundableMinor: 2999 })] }), 'GBP', TODAY);
     expect(part.tag).toBe('Part refunded');
-    expect(part.payments[0]).toMatchObject({ refundable: true, refunds: [{ id: 'r1', line: '£20.00 refunded · Bank transfer · 12 October 2026 · Charged too much · by Sam Owner' }] });
+    expect(part.payments[0]).toMatchObject({ refundable: true, refunds: [{ id: 'r1', amount: '£20.00 refunded', detail: 'Bank transfer · 12 Oct 2026 · Charged too much · by Sam Owner' }] });
     const all = billRow(bill({ state: 'refunded', paidMinor: 4999, refundedMinor: 4999, payments: [payment({ refunds: [{ ...refund, amountMinor: 4999 }], refundableMinor: 0 })] }), 'GBP', TODAY);
     expect([all.tag, all.payments[0].refundable]).toEqual(['Refunded', false]);
     const none = billRow(bill({ state: 'paid', paidMinor: 4999, payments: [payment()] }), 'GBP', TODAY);
@@ -209,6 +215,26 @@ describe('a cancelled bill and a refunded one say what happened, in their own wo
     expect(paymentLine(m({ state: 'paid', until: '2026-11-04' }, '2026-11-04', false), TODAY).text).toBe('Paid · next payment due 4 November 2026');
     // Owing again the month after: owing is said, whatever became of the month before.
     expect(paymentLine(m({ state: 'due', since: '2026-10-04' }, '2026-11-04', true), TODAY).text).toBe('Payment due since 4 October 2026');
+  });
+});
+
+describe('which bills are drawn', () => {
+  const b = (periodIndex, state) => bill({ id: `bill-${String(periodIndex)}`, periodIndex, state });
+  const pay = (periodIndex) => ({ periodIndex, covers: null, leftMinor: 4999, dueOn: '2026-07-04', state: 'overdue' });
+
+  it('the two newest, and the rest behind Show all', () => {
+    const bills = [b(3, 'paid'), b(2, 'paid'), b(1, 'paid'), b(0, 'paid')];
+    expect(billsToDraw({ bills, pay: null }, false)).toEqual({ bills: [bills[0], bills[1]], hidden: 2 });
+    expect(billsToDraw({ bills, pay: null }, true)).toEqual({ bills, hidden: 0 });
+  });
+
+  it('the bill a payment can be taken for is never folded away, however old it is', () => {
+    const bills = [b(3, 'overdue'), b(2, 'overdue'), b(1, 'overdue'), b(0, 'overdue')];
+    expect(billsToDraw({ bills, pay: pay(0) }, false)).toEqual({ bills: [bills[0], bills[1], bills[3]], hidden: 1 });
+    // Already among the newest: drawn once.
+    expect(billsToDraw({ bills, pay: pay(3) }, false)).toEqual({ bills: [bills[0], bills[1]], hidden: 2 });
+    // A payment for a period with no bill yet adds nothing.
+    expect(billsToDraw({ bills, pay: pay(4) }, false).bills).toHaveLength(2);
   });
 });
 
