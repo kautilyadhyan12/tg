@@ -266,6 +266,61 @@ describe("the Renews or ends column", () => {
   });
 });
 
+// 18a-ii: the list's Payment reads the bills. The worst it could do: somebody who left
+// without paying is found by nobody, or somebody who owes nothing is chased.
+describe("a bill left open is Payment due on the list, whatever became of the membership", () => {
+  const today = "2026-10-07";
+  const owing = (list: readonly HeldForList[], owedSince: string | null, listedUnheld: string | null = null) =>
+    heldOnList({ held: list, listedUnheld, today, owedSince });
+  const cancelled = held("Gold Monthly", moved(given(monthly, "2026-08-01", false, "2026-08-01"), { type: "cancel", when: "today" }, "2026-09-03"));
+  const endedPass = held("Day pass", given(dayPass, "2026-07-10", false, "2026-07-10"));
+  const paidUp = held("Gold Monthly", given(monthly, "2026-10-01", true, "2026-10-01"));
+
+  it("a membership cancelled or ended unpaid: Payment due since the bill's own day", () => {
+    expect(owing([cancelled], "2026-08-01")).toMatchObject({ status: "cancelled", payment: { state: "due", since: "2026-08-01" } });
+    const ended = owing([endedPass], "2026-07-10");
+    expect(ended).toMatchObject({ status: "ended", payment: { state: "due", since: "2026-07-10" } });
+    if (ended === null) throw new Error("no row");
+    expect(heldListWords(ended).payment).toBe("Payment due");
+  });
+
+  it("the same people with no bill open say nothing of payment: paid, cancelled by staff or refunded, nobody is chased", () => {
+    expect(owing([cancelled], null)?.payment).toBeNull();
+    expect(owing([endedPass], null)?.payment).toBeNull();
+  });
+
+  it("an old bill beside a membership that is paid up: due, since the old bill's day", () => {
+    expect(owing([paidUp], null)?.payment).toEqual({ state: "paid" });
+    expect(owing([paidUp], "2026-07-10")?.payment).toEqual({ state: "due", since: "2026-07-10" });
+    expect(owing([paidUp, endedPass], "2026-07-10")).toMatchObject({ status: "active", memberships: ["Gold Monthly"], payment: { state: "due", since: "2026-07-10" } });
+  });
+
+  it("the earliest day owed is the one said, whichever way round the two are", () => {
+    const unpaid = held("Gold Monthly", given(monthly, "2026-10-01", false, "2026-10-01"));
+    expect(owing([unpaid], null)?.payment).toEqual({ state: "due", since: "2026-10-01" });
+    expect(owing([unpaid], "2026-07-10")?.payment).toEqual({ state: "due", since: "2026-07-10" });
+    expect(owing([unpaid], "2026-10-05")?.payment).toEqual({ state: "due", since: "2026-10-01" });
+    // Frozen and owing has no day of its own to say: the bill's is said.
+    const frozen = held("Gold Monthly", moved(unpaid.membership, { type: "freeze" }, "2026-10-03"));
+    expect(owing([frozen], null)?.payment).toEqual({ state: "due", since: null });
+    expect(owing([frozen], "2026-10-01")?.payment).toEqual({ state: "due", since: "2026-10-01" });
+  });
+
+  it("a payment whose day has not come, and a free membership, turn due only with a bill open", () => {
+    const later = held("Gold Monthly", given(monthly, "2026-11-01", false, today));
+    expect(owing([later], null)?.payment).toEqual({ state: "later", on: "2026-11-01" });
+    expect(owing([later, endedPass], "2026-07-10")?.payment).toEqual({ state: "due", since: "2026-07-10" });
+    const free = held("Staff", given(freeMonthly, "2026-10-01", false, "2026-10-01"));
+    expect(owing([free], null)?.payment).toEqual({ state: "free" });
+    expect(owing([free, endedPass], "2026-07-10")?.payment).toEqual({ state: "due", since: "2026-07-10" });
+  });
+
+  it("the gym's own words still answer where its list names a membership they never had here", () => {
+    expect(owing([endedPass], "2026-07-10", "Silver")).toBeNull();
+    expect(owing([], "2026-07-10")).toBeNull();
+  });
+});
+
 describe("somebody with nothing in use", () => {
   const today = "2026-10-07";
   const cancelled = held("Gold Monthly", moved(given(monthly, "2026-08-01", true, "2026-08-01"), { type: "cancel", when: "today" }, "2026-09-03"));

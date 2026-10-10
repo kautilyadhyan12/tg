@@ -118,6 +118,14 @@ function paymentOf(inUse: readonly Seen[], today: string): NonNullable<HeldOnLis
   return inUse.some((m) => m.view.payment?.state === "paid") ? { state: "paid" } : { state: "free" };
 }
 
+/** A bill left open is owed whatever the memberships in use say: one from before the
+ *  person was away, or of a membership that is over. The day is the earliest owed. */
+function withOwed(payment: NonNullable<HeldOnList["payment"]>, owedSince: string | null): NonNullable<HeldOnList["payment"]> {
+  if (owedSince === null) return payment;
+  if (payment.state !== "due" || payment.since === null) return { state: "due", since: owedSince };
+  return { state: "due", since: owedSince < payment.since ? owedSince : payment.since };
+}
+
 /** The day a membership that is over finished: the day it was cancelled, which is stored
  *  and counts as it stands; else its last day. A pack used up before its last day finished
  *  on a day nobody stored, so its start day stands in: the earliest it can have been. */
@@ -163,9 +171,18 @@ function names(list: readonly string[]): string[] {
  *     membership; their own page still shows it.
  *  2. Nothing in use and the list names a membership they never had here: the list's words.
  *  3. Nothing in use otherwise: the one that finished last, "Ended" or "Cancelled",
- *     whenever it started (`finishedLast`).
+ *     whenever it started (`finishedLast`), with "Payment due" where a bill of theirs
+ *     is still open.
  *  4. Nothing held at all: the list's words. */
-export function heldOnList(input: { held: readonly HeldForList[]; listedUnheld: string | null; today: string }): HeldOnList | null {
+export function heldOnList(input: {
+  held: readonly HeldForList[];
+  listedUnheld: string | null;
+  today: string;
+  /** The day the oldest bill of theirs still open fell due, where one has (on or before
+   *  `today`), whichever membership it is for: one that is over too. */
+  owedSince?: string | null;
+}): HeldOnList | null {
+  const owedSince = input.owedSince ?? null;
   const seen: Seen[] = input.held.map((m) => ({ ...m, view: heldMembershipFacts(m.membership, input.today) }));
   const inUse = seen.filter((m) => IN_USE_ORDER[m.view.status] !== undefined).sort(nameOrder);
   const first = inUse[0];
@@ -174,13 +191,15 @@ export function heldOnList(input: { held: readonly HeldForList[]; listedUnheld: 
       status: first.view.status,
       memberships: names(inUse.map((m) => m.typeName)).slice(0, HELD_LIVE_MAX),
       day: dayOf(first, input.today),
-      payment: paymentOf(inUse, input.today),
+      payment: withOwed(paymentOf(inUse, input.today), owedSince),
     };
   }
   if (input.listedUnheld !== null) return null;
   const last = [...seen].sort(finishedLast(input.today))[0];
   if (last === undefined) return null;
-  return { status: last.view.status, memberships: [last.typeName], day: dayOf(last, input.today), payment: null };
+  // Every membership is over: nothing to say of payment, unless a bill was left owing.
+  const payment: HeldOnList["payment"] = owedSince === null ? null : { state: "due", since: owedSince };
+  return { status: last.view.status, memberships: [last.typeName], day: dayOf(last, input.today), payment };
 }
 
 /** A row's Membership cell: the first name, and how many more ("Gold Monthly +1"). */

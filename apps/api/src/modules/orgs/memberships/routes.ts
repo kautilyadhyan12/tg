@@ -38,6 +38,8 @@ import {
   billSettingsSchema,
   paidHeldMembershipRequestSchema,
   recordMemberPaymentRequestSchema,
+  cancelMemberBillRequestSchema,
+  noteMemberRefundRequestSchema,
   saveGymMembershipTypeRequestSchema,
   updateGymMembershipTypeRequestSchema,
 } from "@app/shared";
@@ -46,6 +48,8 @@ import { createDualRateLimit } from "../../auth/rateLimit.js";
 import {
   heldMembershipParamsSchema,
   memberPaymentParamsSchema,
+  memberBillParamsSchema,
+  memberRefundParamsSchema,
   memberListEntryParamsSchema,
   membershipTypeParamsSchema,
   orgParamsSchema,
@@ -293,6 +297,41 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     const params = parseOr400(memberPaymentParamsSchema, req.params, req, reply);
     if (params === null) return;
     const list = await held.undoMemberPayment(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.paymentId);
+    return reply.status(200).send(list);
+  });
+
+  // ── Cancel a bill, note a refund (§14.2; 18a-ii): the payments' own allowance ──
+
+  app.post(`${heldUrl}/:membershipId/bills/:billId/cancel`, paymentGuarded, async (req, reply) => {
+    const params = parseOr400(memberBillParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(cancelMemberBillRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await held.cancelMemberBill(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.billId, body);
+    return reply.status(200).send(list);
+  });
+
+  app.post(`${heldUrl}/:membershipId/payments/:paymentId/refunds`, paymentGuarded, async (req, reply) => {
+    const params = parseOr400(memberPaymentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(noteMemberRefundRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await held.noteMemberRefund(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.paymentId, body);
+    return reply.status(200).send(list);
+  });
+
+  app.post(`${heldUrl}/:membershipId/payments/:paymentId/refunds/:refundId/undo`, paymentGuarded, async (req, reply) => {
+    const params = parseOr400(memberRefundParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await held.undoMemberRefund(
+      heldDeps,
+      requireUserId(req),
+      params.gymId,
+      params.entryId,
+      params.membershipId,
+      params.paymentId,
+      params.refundId,
+    );
     return reply.status(200).send(list);
   });
 

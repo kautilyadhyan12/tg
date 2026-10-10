@@ -19,10 +19,13 @@ import {
   heldMembershipView,
   heldMembershipsResponseSchema,
   memberBillState,
+  memberCancelTarget,
   memberPayTarget,
   memberUndoTarget,
+  refundableMinor,
   type BillSettings,
   type BillSettingsResponse,
+  type CancelMemberBillRequest,
   type ClassBookingsEnding,
   type GiveHeldMembershipRequest,
   type HeldMembership,
@@ -31,6 +34,7 @@ import {
   type HeldMembershipView,
   type HeldMembershipsResponse,
   type MemberBilling,
+  type NoteMemberRefundRequest,
   type RecordMemberPaymentRequest,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
@@ -39,7 +43,7 @@ import { endMembershipBookings, membershipBookingsAsk } from "../classes/booking
 import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import * as repo from "./heldRepo.js";
 import * as billsRepo from "./billsRepo.js";
-import { overdueDaysOf, type BillRow, type PaymentRow } from "./billsSql.js";
+import { overdueDaysOf, type BillRow, type PaymentRow, type RefundRow } from "./billsSql.js";
 
 export interface HeldDeps {
   sql: Sql;
@@ -52,18 +56,23 @@ const notFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_L
 const ORDER: Record<HeldMembershipShown, number> = { active: 0, frozen: 0, upcoming: 1, ended: 2, cancelled: 2 };
 
 /** One membership's bills, newest first, and the one payment that can be recorded or
- *  taken back now: what the write will be decided by, worked out by the same rules. */
+ *  taken back now, the one bill that can be cancelled and what each payment can still be
+ *  refunded: what the write will be decided by, worked out by the same rules. */
 function billingOf(
   row: { id: string; priceMinor: number; membership: HeldMembership },
   bills: readonly BillRow[],
   payments: readonly PaymentRow[],
+  refunds: readonly RefundRow[],
   ctx: { today: string; past: boolean; overdueAfterDays: number },
 ): MemberBilling {
   const view = heldMembershipView(row.membership, ctx.today);
   const pay = memberPayTarget(row.membership, row.priceMinor, ctx.today, bills, ctx.past);
+  const cancel = memberCancelTarget(row.membership, row.priceMinor, ctx.today, bills, ctx.past);
+  const cancelBill = cancel === null ? undefined : bills.find((b) => b.periodIndex === cancel.periodIndex);
   const back = ctx.past ? null : memberUndoTarget(row.membership, ctx.today, bills, payments);
-  // A mark with no payment behind it: taken back as it always was.
-  const settledAt = (index: number): boolean => bills.some((b) => b.periodIndex === index && b.status === "paid");
+  // A mark with no payment behind it: taken back as it always was. A period a bill
+  // settled (paid, cancelled or refunded) is not one.
+  const settledAt = (index: number): boolean => bills.some((b) => b.periodIndex === index && b.status !== "open");
   const mark = !ctx.past && back === null && view.can.undoPaid !== null && !settledAt(view.can.undoPaid.paidPeriods) ? view.can.undoPaid : null;
   return {
     bills: bills.slice(0, BILLS_SHOWN).map((b) => ({
@@ -74,9 +83,21 @@ function billingOf(
       paidMinor: b.paidMinor,
       dueOn: b.dueOn,
       state: memberBillState(b, ctx.today, ctx.overdueAfterDays),
+      refundedMinor: b.refundedMinor,
+      cancelled: b.cancelled,
       payments: payments
         .filter((p) => p.billId === b.id)
-        .map((p) => ({ id: p.id, amountMinor: p.amountMinor, method: p.method, paidOn: p.paidOn, by: p.by })),
+        .map((p) => ({
+          id: p.id,
+          amountMinor: p.amountMinor,
+          method: p.method,
+          paidOn: p.paidOn,
+          by: p.by,
+          refunds: refunds
+            .filter((r) => r.paymentId === p.id)
+            .map((r) => ({ id: r.id, amountMinor: r.amountMinor, method: r.method, refundedOn: r.refundedOn, reason: r.reason, by: r.by })),
+          refundableMinor: refundableMinor(b.status, p),
+        })),
     })),
     billsNotShown: Math.max(0, bills.length - BILLS_SHOWN),
     pay:
@@ -89,6 +110,7 @@ function billingOf(
             dueOn: pay.dueOn,
             state: memberBillState({ status: "open", dueOn: pay.dueOn }, ctx.today, ctx.overdueAfterDays) === "overdue" ? "overdue" : "due",
           },
+    cancel: cancelBill === undefined ? null : { billId: cancelBill.id },
     undo: back !== null ? { kind: "payment", paymentId: back.paymentId } : mark !== null ? { kind: "mark", paidPeriods: mark.paidPeriods } : null,
   };
 }
@@ -122,7 +144,13 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const all = [...list.inUse.map(asOfToday), ...list.over]
     .map((row) => ({
       billing: canBill
-        ? billingOf(row, list.bills.filter((b) => b.membershipId === row.id), list.payments.filter((p) => p.membershipId === row.id), ctx)
+        ? billingOf(
+            row,
+            list.bills.filter((b) => b.membershipId === row.id),
+            list.payments.filter((p) => p.membershipId === row.id),
+            list.refunds.filter((r) => r.membershipId === row.id),
+            ctx,
+          )
         : null,
       id: row.id,
       typeId: row.typeId,
@@ -138,6 +166,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       frozenOn: row.membership.frozenOn,
       classesLeft: row.membership.classesLeft,
       fromList: row.fromList,
+      notCharged: list.bills.some((b) => b.membershipId === row.id && b.status === "void" && b.periodIndex === row.membership.paidPeriods - 1),
       view: viewOf(row, list.bills, today),
     }))
     .sort(
@@ -325,10 +354,34 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
       throw new OrgsError(404, "held_membership_not_found", "That membership was not found.");
     case "payment_not_found":
       throw new OrgsError(404, "member_payment_not_found", "That payment was not found.");
+    case "bill_not_found":
+      throw new OrgsError(404, "member_bill_not_found", "That bill was not found.");
+    case "refund_not_found":
+      throw new OrgsError(404, "member_refund_not_found", "That refund was not found.");
     case "past_member":
       throw new OrgsError(409, "past_member", "This is a past member. Put them back on your list first.");
     case "request_reused":
       throw new OrgsError(409, "request_reused", "That form was already used for another payment. Open it again.");
+    case "bill_has_payment":
+      throw new OrgsError(
+        409,
+        "bill_has_payment",
+        "A payment is recorded on this bill. Take it back first (Undo last payment), or record the rest.",
+      );
+    case "refund_not_settled":
+      throw new OrgsError(
+        409,
+        "refund_not_settled",
+        "This bill isn't fully paid, so there is nothing to refund yet. To take a payment back, use Undo last payment.",
+      );
+    case "refund_too_much":
+      throw new OrgsError(
+        409,
+        "refund_too_much",
+        outcome.leftMinor === 0
+          ? "All of that payment has already been refunded."
+          : `That is more than is left of that payment. ${formatMinor(outcome.leftMinor, outcome.currency)} can still be refunded.`,
+      );
     case "too_much":
       throw new OrgsError(
         409,
@@ -384,6 +437,64 @@ export async function undoMemberPayment(
 ): Promise<HeldMembershipsResponse> {
   const { today, now } = await requireBilling(deps, userId, gymId);
   throwOnBillFailure(await billsRepo.undoPayment(deps.sql, { gymId, entryId, membershipId, paymentId, today, actorUserId: userId, now }));
+  return await readOr404(deps, gymId, entryId, today, true);
+}
+
+/** Staff cancel one bill of a membership: the person no longer owes it. */
+export async function cancelMemberBill(
+  deps: HeldDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  billId: string,
+  req: CancelMemberBillRequest,
+): Promise<HeldMembershipsResponse> {
+  const { today, now } = await requireBilling(deps, userId, gymId);
+  throwOnBillFailure(await billsRepo.cancelMemberBill(deps.sql, { gymId, entryId, membershipId, billId, reason: req.reason, today, actorUserId: userId, now }));
+  return await readOr404(deps, gymId, entryId, today, true);
+}
+
+/** Notes that the gym gave money back for one payment. */
+export async function noteMemberRefund(
+  deps: HeldDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  paymentId: string,
+  req: NoteMemberRefundRequest,
+): Promise<HeldMembershipsResponse> {
+  const { today, now } = await requireBilling(deps, userId, gymId);
+  throwOnBillFailure(
+    await billsRepo.noteRefund(deps.sql, {
+      gymId,
+      entryId,
+      membershipId,
+      paymentId,
+      requestKey: req.requestKey,
+      amountMinor: req.amountMinor,
+      method: req.method,
+      reason: req.reason,
+      today,
+      actorUserId: userId,
+      now,
+    }),
+  );
+  return await readOr404(deps, gymId, entryId, today, true);
+}
+
+export async function undoMemberRefund(
+  deps: HeldDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  paymentId: string,
+  refundId: string,
+): Promise<HeldMembershipsResponse> {
+  const { today, now } = await requireBilling(deps, userId, gymId);
+  throwOnBillFailure(await billsRepo.undoRefund(deps.sql, { gymId, entryId, membershipId, paymentId, refundId, actorUserId: userId, now }));
   return await readOr404(deps, gymId, entryId, today, true);
 }
 

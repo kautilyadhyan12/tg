@@ -1,23 +1,35 @@
-// A person's bills and payments, their words (spec Part 3 §14.2; ROADMAP 18a-i).
+// A person's bills and payments, their words (spec Part 3 §14.2; ROADMAP 18a-i and 18a-ii).
 //
 // The worst these words could do: read "Overdue" about a bill that is paid, or send an
 // amount the person did not pay. So the first tests: each state the server sends has its
 // own word and no other, and the amount typed is the amount sent, to the penny.
 import { describe, expect, it } from 'vitest';
 import {
+  CANCEL_REASONS,
   NO_PAYMENTS_LINE,
   PAYMENT_METHODS,
+  REFUND_REASON_CHOICES,
   billRow,
+  billToCancel,
   canRecordPayments,
+  cancelBillBody,
+  cancelBillWords,
   graceChoices,
   graceExample,
   paidWords,
   payLabel,
   paymentBody,
   paymentDraft,
+  paymentOf,
   paymentWords,
+  refundBody,
+  refundDraft,
+  refundWords,
+  refundedWords,
+  undoRefundWords,
   undoWords,
 } from './memberBillsView';
+import { paymentLine } from './heldMembershipsView';
 
 const TODAY = '2026-10-20';
 const bill = (over = {}) => ({
@@ -28,15 +40,17 @@ const bill = (over = {}) => ({
   paidMinor: 0,
   dueOn: '2026-10-04',
   state: 'due',
+  refundedMinor: 0,
+  cancelled: null,
   payments: [],
   ...over,
 });
-const payment = (over = {}) => ({ id: '66666666-6666-4666-8666-000000000001', amountMinor: 4999, method: 'cash', paidOn: '2026-10-04', by: 'Sam Owner', ...over });
+const payment = (over = {}) => ({ id: '66666666-6666-4666-8666-000000000001', amountMinor: 4999, method: 'cash', paidOn: '2026-10-04', by: 'Sam Owner', refunds: [], refundableMinor: 4999, ...over });
 const membership = (over = {}, billing = {}) => ({
   id: '44444444-4444-4444-8444-000000000001',
   typeName: 'Gold Monthly',
   currency: 'GBP',
-  billing: { bills: [bill()], billsNotShown: 0, pay: { periodIndex: 0, covers: bill().covers, leftMinor: 4999, dueOn: '2026-10-04', state: 'due' }, undo: null, ...billing },
+  billing: { bills: [bill()], billsNotShown: 0, pay: { periodIndex: 0, covers: bill().covers, leftMinor: 4999, dueOn: '2026-10-04', state: 'due' }, cancel: null, undo: null, ...billing },
   ...over,
 });
 
@@ -45,7 +59,7 @@ describe('each state the server sends has its own word, and no other', () => {
     const row = billRow(bill({ state: 'paid', paidMinor: 4999, payments: [payment()] }), 'GBP', TODAY);
     expect(row).toMatchObject({ tag: 'Paid', tone: 'green', when: null, left: null });
     expect(row.title).toBe('4 October 2026 to 3 November 2026 · £49.99');
-    expect(row.payments).toEqual([{ id: payment().id, line: '£49.99 · Cash · 4 October 2026 · by Sam Owner' }]);
+    expect(row.payments).toEqual([{ id: payment().id, line: '£49.99 · Cash · 4 October 2026 · by Sam Owner', refundable: true, refunds: [] }]);
   });
 
   it('Due says when, and Overdue says when it was due', () => {
@@ -158,5 +172,120 @@ describe('who may, and the gym\'s own days of grace', () => {
     expect(graceExample(0)).toBe("A bill due on 1 March reads Overdue from 2 March if it isn't paid.");
     expect(graceExample(7)).toBe("A bill due on 1 March reads Overdue from 9 March if it isn't paid.");
     expect(graceExample(30)).toBe("A bill due on 1 March reads Overdue from 1 April if it isn't paid.");
+  });
+});
+
+// ── 18a-ii: a bill staff cancelled, and refunds ─────────────────────────────
+//
+// The worst these words could do: say "Paid" of a month nobody paid for, or send a
+// refund for more than was paid, or for a payment other than the one on screen.
+
+describe('a cancelled bill and a refunded one say what happened, in their own words', () => {
+  it('a bill staff cancelled says when, why and who; one cancelled with its membership says that', () => {
+    const cancelled = billRow(bill({ state: 'void', cancelled: { reason: 'not_charging', on: '2026-10-12', by: 'Sam Owner' } }), 'GBP', TODAY);
+    expect([cancelled.tag, cancelled.cancelled]).toEqual(['Cancelled', 'Cancelled 12 October 2026 · Not charging for this one · by Sam Owner']);
+    expect(billRow(bill({ state: 'void', cancelled: { reason: 'mistake', on: '2026-10-12', by: null } }), 'GBP', TODAY).cancelled).toBe('Cancelled 12 October 2026 · Billed by mistake');
+    expect(billRow(bill({ state: 'void' }), 'GBP', TODAY).cancelled).toBe('Cancelled with the membership');
+    for (const state of ['paid', 'due', 'overdue', 'refunded']) expect(billRow(bill({ state }), 'GBP', TODAY).cancelled, state).toBeNull();
+  });
+
+  it('Refunded only when all of it went back; part of it is "Part refunded", with each refund on its own line', () => {
+    const refund = { id: 'r1', amountMinor: 2000, method: 'bank_transfer', refundedOn: '2026-10-12', reason: 'charged_too_much', by: 'Sam Owner' };
+    const part = billRow(bill({ state: 'paid', paidMinor: 4999, refundedMinor: 2000, payments: [payment({ refunds: [refund], refundableMinor: 2999 })] }), 'GBP', TODAY);
+    expect(part.tag).toBe('Part refunded');
+    expect(part.payments[0]).toMatchObject({ refundable: true, refunds: [{ id: 'r1', line: '£20.00 refunded · Bank transfer · 12 October 2026 · Charged too much · by Sam Owner' }] });
+    const all = billRow(bill({ state: 'refunded', paidMinor: 4999, refundedMinor: 4999, payments: [payment({ refunds: [{ ...refund, amountMinor: 4999 }], refundableMinor: 0 })] }), 'GBP', TODAY);
+    expect([all.tag, all.payments[0].refundable]).toEqual(['Refunded', false]);
+    const none = billRow(bill({ state: 'paid', paidMinor: 4999, payments: [payment()] }), 'GBP', TODAY);
+    expect([none.tag, none.payments[0].refundable, none.payments[0].refunds]).toEqual(['Paid', true, []]);
+  });
+
+  it('a month let off by a cancelled bill never reads Paid on the membership line', () => {
+    const m = (payment, renewsOn, notCharged) => ({ notCharged, view: { renewsOn, payment } });
+    expect(paymentLine(m({ state: 'paid', until: '2026-11-04' }, '2026-11-04', true), TODAY)).toEqual({ text: 'Nothing to pay now · next payment due 4 November 2026', due: false });
+    expect(paymentLine(m({ state: 'paid', until: '2026-11-04' }, null, true), TODAY).text).toBe('Nothing more to pay');
+    expect(paymentLine(m({ state: 'paid', until: null }, null, true), TODAY).text).toBe('Nothing to pay');
+    // Paid for by a payment: as before.
+    expect(paymentLine(m({ state: 'paid', until: '2026-11-04' }, '2026-11-04', false), TODAY).text).toBe('Paid · next payment due 4 November 2026');
+    // Owing again the month after: owing is said, whatever became of the month before.
+    expect(paymentLine(m({ state: 'due', since: '2026-10-04' }, '2026-11-04', true), TODAY).text).toBe('Payment due since 4 October 2026');
+  });
+});
+
+describe('Cancel this bill', () => {
+  const owing = membership({}, { cancel: { billId: bill().id } });
+
+  it('is offered for the bill the server names, and for no other', () => {
+    expect(billToCancel(owing)).toMatchObject({ id: bill().id });
+    expect(billToCancel(membership())).toBeNull();
+    expect(billToCancel(membership({}, { cancel: { billId: 'not-on-the-page' } }))).toBeNull();
+    expect(billToCancel({ billing: null })).toBeNull();
+  });
+
+  it('names the person, the amount and the days, what stops being owed and what stays', () => {
+    expect(cancelBillWords(owing, 'Ada Lovelace', true)).toEqual({
+      question: "Cancel this £49.99 bill for Ada Lovelace's Gold Monthly?",
+      detail:
+        "It is the bill for 4 October 2026 to 3 November 2026. Ada Lovelace will owe nothing for it. Ada Lovelace keeps the membership and its dates. The bill stays in your records, marked Cancelled. This can't be undone.",
+      button: 'Cancel this bill',
+      done: 'That £49.99 bill was cancelled. Nothing is owed for it.',
+    });
+    // A membership that is over, or a fixed term with no days on its bill: nothing said that is not so.
+    const over = membership({}, { bills: [bill({ covers: null })], cancel: { billId: bill().id } });
+    expect(cancelBillWords(over, 'this person', false).detail).toBe("It is the bill. This person will owe nothing for it. The bill stays in your records, marked Cancelled. This can't be undone.");
+  });
+
+  it('wants a reason picked, and sends only that', () => {
+    expect(cancelBillBody({ reason: '' })).toEqual({ problem: 'Pick why you are cancelling it.', body: null });
+    expect(cancelBillBody({ reason: 'mistake' })).toEqual({ problem: null, body: { reason: 'mistake' } });
+    expect(CANCEL_REASONS.map((r) => r.label)).toEqual(['Billed by mistake', 'Not charging for this one', 'Something else']);
+  });
+});
+
+describe('Note a refund', () => {
+  const paid = payment({ refunds: [], refundableMinor: 4999 });
+  const m = membership({}, { bills: [bill({ state: 'paid', paidMinor: 4999, payments: [paid] })], pay: null });
+  const key = () => '99999999-9999-4999-8999-999999999999';
+
+  it('starts at what can still be refunded, for the payment pressed', () => {
+    expect(refundDraft(m, paid, key)).toEqual({ paymentId: paid.id, requestKey: key(), amount: '49.99', method: '', reason: '' });
+    expect(refundDraft(m, { ...paid, refundableMinor: 2999 }, key).amount).toBe('29.99');
+    expect(paymentOf(m, paid.id)).toBe(paid);
+    expect(paymentOf(m, 'another')).toBeNull();
+  });
+
+  it('says which payment, that no money moves, and that the membership is kept', () => {
+    expect(refundWords(m, 'Ada Lovelace', paid, true)).toEqual({
+      title: "Note a refund for Ada Lovelace's Gold Monthly",
+      detail:
+        'This is for the £49.99 paid on 4 October 2026. It only writes the refund in your records: give the money back yourself. Ada Lovelace keeps the membership and its dates: to end it, use Cancel membership.',
+    });
+    const some = refundWords(m, 'Ada Lovelace', { ...paid, refundableMinor: 2999 }, false).detail;
+    expect(some).toBe('This is for the £49.99 paid on 4 October 2026. £29.99 of it can still be refunded. It only writes the refund in your records: give the money back yourself.');
+  });
+
+  it('sends the amount typed, to the penny, and never more than can be refunded', () => {
+    const draft = (over) => ({ ...refundDraft(m, paid, key), method: 'cash', reason: 'paid_twice', ...over });
+    expect(refundBody(m, paid, draft({}))).toEqual({ problem: null, body: { requestKey: key(), amountMinor: 4999, method: 'cash', reason: 'paid_twice' } });
+    expect(refundBody(m, paid, draft({ amount: '20' })).body?.amountMinor).toBe(2000);
+    expect(refundBody(m, paid, draft({ amount: '0.01' })).body?.amountMinor).toBe(1);
+    expect(refundBody(m, paid, draft({ amount: '50.00' }))).toEqual({ problem: 'That is more than can be refunded. £49.99 is the most.', body: null });
+    expect(refundBody(m, { ...paid, refundableMinor: 2999 }, draft({ amount: '30' })).problem).toBe('That is more than can be refunded. £29.99 is the most.');
+    for (const amount of ['', '0', '-5', 'abc', '1.999']) expect(refundBody(m, paid, draft({ amount })).body, amount).toBeNull();
+    expect(refundBody(m, paid, draft({ method: '' })).problem).toBe('Pick how you gave it back.');
+    expect(refundBody(m, paid, draft({ reason: '' })).problem).toBe('Pick why it was refunded.');
+    expect(refundedWords(m, 2000)).toBe('£20.00 noted as refunded.');
+    expect(REFUND_REASON_CHOICES.map((r) => r.label)).toEqual(['Paid twice', 'Charged too much', 'Leaving or cancelled', 'Something else']);
+  });
+
+  it('Undo refund names the refund it takes back', () => {
+    const refund = { id: 'r1', amountMinor: 2000, method: 'cash', refundedOn: '2026-10-12', reason: 'other', by: null };
+    const with1 = membership({}, { bills: [bill({ state: 'paid', paidMinor: 4999, refundedMinor: 2000, payments: [{ ...paid, refunds: [refund] }] })] });
+    expect(undoRefundWords(with1, 'Ada Lovelace', paid.id, 'r1')).toMatchObject({
+      question: "Take back the £20.00 refund noted on 12 October 2026 for Ada Lovelace's Gold Monthly?",
+      button: 'Take it back',
+      done: 'That refund was taken back.',
+    });
+    expect(undoRefundWords(with1, 'Ada Lovelace', paid.id, 'gone').question).toBe("Take back this refund for Ada Lovelace's Gold Monthly?");
   });
 });
