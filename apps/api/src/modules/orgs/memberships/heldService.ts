@@ -108,6 +108,12 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
         "membership_already_over",
         "With that start date this membership would already be over. Pick a later start date.",
       );
+    case "already_held":
+      throw new OrgsError(
+        409,
+        "membership_already_held",
+        `They already have ${outcome.typeName}. Cancel that one first, or pick a start date after it ends.`,
+      );
     case "request_reused":
       throw new OrgsError(409, "request_reused", "That was already saved for somebody else. Open the form again.");
     case "not_allowed":
@@ -168,7 +174,7 @@ export async function moveHeldMembership(
   entryId: string,
   membershipId: string,
   event: HeldMembershipEvent,
-  confirmBookings: number | null = null,
+  confirmBookings: string | null = null,
   confirmPtSessions: string | null = null,
 ): Promise<BookingsAnswer<HeldMembershipsResponse>> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");

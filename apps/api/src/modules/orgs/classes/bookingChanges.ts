@@ -193,16 +193,30 @@ export async function endLeaversBookings(tx: TransactionSql, gymId: string, user
   return { booked: ended.length - waiting, waiting, packClasses };
 }
 
+/** THESE RECORDS HAVE COME OFF THE GYM'S LIST: the class bookings made on them that have
+ *  not started end, their packs have those classes back, and each place goes to the
+ *  class's waitlist. For somebody whose app ends too, `endLeaversBookings` finds nothing
+ *  left; this is what reaches staff who train here and anybody the list cannot say is
+ *  certainly this record's. */
+export async function endRecordsBookings(tx: TransactionSql, gymId: string, entryIds: readonly string[], now: Date): Promise<BookingsEnded> {
+  const ended = await repo.endBookings(tx, gymId, { records: entryIds, now }, now);
+  const packClasses = await giveBack(tx, gymId, ended, now);
+  const freed = [...new Set(ended.filter((b) => b.was === "booked" || b.was === "attended").map((b) => b.sessionId))];
+  await handOverClasses(tx, gymId, freed, now);
+  const waiting = ended.filter((b) => b.was === "waitlisted").length;
+  return { booked: ended.length - waiting, waiting, packClasses };
+}
+
 /** The bookings a change would end, as the 409 that asks first carries them. */
 export interface HasBookings {
   kind: "has_bookings";
   ending: repo.EndingCounts & { people: repo.EndingPersonRow[]; ptSessions?: PtSessionsEnding };
 }
 
-/** What the screen was told a membership's cancel would end: the number of class bookings,
- *  and the mark of the personal training sessions. */
+/** What the screen was told a membership's cancel would end: the mark of the class
+ *  bookings, and the mark of the personal training sessions. */
 export interface MembershipEndConfirmed {
-  bookings: number | null;
+  bookings: string | null;
   ptSessions: string | null;
 }
 
@@ -218,7 +232,7 @@ export async function membershipBookingsAsk(
 ): Promise<HasBookings | null> {
   const counts = await repo.endingCounts(tx, gymId, scope);
   const sessions = await sessionsEndingFor(tx, gymId, { membership: scope.membership, afterDay: scope.afterDay }, scope.now);
-  const classesAnswered = counts.booked === 0 || counts.booked === confirmed.bookings;
+  const classesAnswered = counts.booked === 0 || counts.mark === confirmed.bookings;
   const sessionsAnswered = sessions === null || sessions.mark === confirmed.ptSessions;
   if (classesAnswered && sessionsAnswered) return null;
   return {

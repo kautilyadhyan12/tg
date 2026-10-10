@@ -43,7 +43,7 @@ import { bustEntitlements } from "../../entitlements/service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { acceptAgainForAccounts, markWrongPersonFor, withdrawForAccounts, withdrawForAddress } from "../invites/join.js";
 import { invitationsOf, inviteEntryInTx, readyToSend } from "../invites/service.js";
-import { settle as settleHeldMemberships } from "../memberships/heldRepo.js";
+import { settle as settleHeldMemberships, typeHeldByBoth } from "../memberships/heldRepo.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit, placesFree } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -814,7 +814,22 @@ export async function mergeEntries(
     await repo.moveLeadLinks(tx, gymId, goneId, keepId);
     // What the clock has ended on the kept record is marked first: only a membership
     // still in use there keeps the other record's from-list one from moving.
-    await settleHeldMemberships(tx, gymId, keepId, dayInTz(at, org.timezone), at);
+    const today = dayInTz(at, org.timezone);
+    await settleHeldMemberships(tx, gymId, keepId, today, at);
+    await settleHeldMemberships(tx, gymId, goneId, today, at);
+    // Merged, the person would hold one membership twice or be with two trainers at
+    // once: nothing is written, and staff are told what to sort out first.
+    const twice = await typeHeldByBoth(tx, gymId, goneId, keepId, today);
+    if (twice !== null) {
+      throw new OrgsError(409, "merge_membership_twice", `Both records have ${twice}. Cancel it on one of them first, then merge.`);
+    }
+    if (await repo.ptSessionsOverlap(tx, gymId, goneId, keepId, at)) {
+      throw new OrgsError(
+        409,
+        "merge_sessions_overlap",
+        "Both records have a personal training session booked at the same time. Cancel one of the sessions first, then merge.",
+      );
+    }
     const memberships = await repo.moveHeldMemberships(tx, gymId, goneId, keepId);
     await repo.moveVisitLinks(tx, gymId, goneId, keepId);
     await repo.moveBookingLinks(tx, gymId, goneId, keepId);

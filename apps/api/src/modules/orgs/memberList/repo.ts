@@ -51,7 +51,7 @@ import {
   type MemberListUploadStatus,
   type MemberListUploadSummary,
 } from "@app/shared";
-import { endLeaversBookings } from "../classes/bookingChanges.js";
+import { endLeaversBookings, endRecordsBookings } from "../classes/bookingChanges.js";
 import { endLeaversSessions } from "../pt/changes.js";
 import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
@@ -1413,8 +1413,9 @@ export async function markEntriesFormer(
     SET former_at = ${at}
     WHERE gym_id = ${gymId} AND identity_key = ANY(${identityKeys}::text[]) AND former_at IS NULL
     RETURNING id`;
-  // Their coming personal training sessions end with them (17e-iv-a).
+  // Their coming personal training sessions and class bookings end with them.
   await endLeaversSessions(tx, gymId, rows.map((row) => row.id), at);
+  await endRecordsBookings(tx, gymId, rows.map((row) => row.id), at);
   return rows.length;
 }
 
@@ -2207,9 +2208,12 @@ export async function setEntryFormer(tx: TransactionSql, gymId: string, entryId:
       AND ((${at}::timestamptz IS NULL AND former_at IS NOT NULL)
            OR (${at}::timestamptz IS NOT NULL AND former_at IS NULL))
     RETURNING id`;
-  // Taken off: their coming personal training sessions end with them (17e-iv-a). Put back
-  // brings none of them back.
-  if (at !== null) await endLeaversSessions(tx, gymId, rows.map((row) => row.id), at);
+  // Taken off: their coming personal training sessions and class bookings end with them.
+  // Put back brings none of them back.
+  if (at !== null) {
+    await endLeaversSessions(tx, gymId, rows.map((row) => row.id), at);
+    await endRecordsBookings(tx, gymId, rows.map((row) => row.id), at);
+  }
   return rows.length === 1;
 }
 
@@ -2294,6 +2298,20 @@ export async function moveBookingLinks(tx: TransactionSql, gymId: string, fromEn
     UPDATE gym_event_places SET entry_id = ${toEntryId}
     WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}`;
   return rows.length;
+}
+
+/** Whether the two records each have a personal training session booked that has not
+ *  ended, at times that overlap: merged, the person would be with two trainers at once. */
+export async function ptSessionsOverlap(tx: TransactionSql, gymId: string, entryA: string, entryB: string, now: Date): Promise<boolean> {
+  const rows = await tx`
+    SELECT 1
+    FROM gym_pt_appointments a
+    JOIN gym_pt_appointments b
+      ON b.gym_id = a.gym_id AND b.entry_id = ${entryB} AND b.status = 'booked'
+     AND tstzrange(a.starts_at, a.ends_at) && tstzrange(b.starts_at, b.ends_at)
+    WHERE a.gym_id = ${gymId} AND a.entry_id = ${entryA} AND a.status = 'booked' AND a.ends_at > ${now}
+    LIMIT 1`;
+  return rows.length > 0;
 }
 
 /** Two records joined: the personal-training sessions booked for the one not kept are the
@@ -2587,6 +2605,7 @@ export async function setEntriesFormer(tx: TransactionSql, gymId: string, ids: r
     WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[]) AND former_at IS NULL
     RETURNING id`;
   await endLeaversSessions(tx, gymId, rows.map((row) => row.id), at);
+  await endRecordsBookings(tx, gymId, rows.map((row) => row.id), at);
   return rows.map((row) => row.id);
 }
 

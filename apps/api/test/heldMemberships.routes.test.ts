@@ -396,8 +396,12 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       const reused = await post(heldUrl(gymId, other), body, owner.cookies);
       expect(reused.statusCode).toBe(409);
       expect(errorOf(reused)).toBe("request_reused");
-      // A new key is a second membership: a person may hold more than one.
-      expect((await given(gymId, person, owner.cookies, { typeId, startsOn: today })).memberships).toHaveLength(2);
+      // A new key for the same type is refused: nobody holds one type twice at once.
+      const twice = await give(gymId, person, owner.cookies, { typeId, startsOn: today });
+      expect([twice.statusCode, errorOf(twice)]).toEqual([409, "membership_already_held"]);
+      // Another type is a second membership: a person may hold more than one.
+      const packId = await addType(gymId, owner.cookies, pack());
+      expect((await given(gymId, person, owner.cookies, { typeId: packId, startsOn: today })).memberships).toHaveLength(2);
       const [first] = await rowsOf(gymId);
       if (first === undefined) throw new Error("no row");
 
@@ -553,10 +557,10 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       // Filled to the most one person can have running: the next is refused.
       await sql`
         INSERT INTO gym_held_memberships
-          (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit,
-           starts_on, status, renews)
-        SELECT ${gymId}, ${person}, ${gold}, gen_random_uuid(), 'recurring', 100, 'GBP', 1, 'month',
-               ${today}::date, 'active', true
+          (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, pack_classes, pack_days,
+           classes_left, starts_on, status, renews)
+        SELECT ${gymId}, ${person}, ${gold}, gen_random_uuid(), 'pack', 100, 'GBP', 10, 60, 10,
+               ${today}::date, 'active', false
         FROM generate_series(1, ${HELD_LIVE_MAX - 1})`;
       const full = await give(gymId, person, owner.cookies, { typeId: gold, startsOn: today });
       expect(full.statusCode).toBe(409);

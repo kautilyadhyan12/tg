@@ -681,13 +681,13 @@ d("personal training sessions when a person leaves (real Postgres, two api insta
         VALUES (${gym.id}, ${cls?.id ?? ""}, ${una.userId}, ${una.entryId}, ${gold}, 'booked', gen_random_uuid(), now())`;
 
       const first = await cancelMembership(gym, una.entryId, gold, { when: "today" });
-      const ask = JSON.parse(first.body) as { ending: { booked: number; ptSessions?: PtSessionsEnding } };
+      const ask = JSON.parse(first.body) as { ending: { booked: number; mark: string; ptSessions?: PtSessionsEnding } };
       expect([first.statusCode, ask.ending.booked, ask.ending.ptSessions?.count]).toEqual([409, 1, 1]);
       const mark = ask.ending.ptSessions?.mark;
-      expect((await cancelMembership(gym, una.entryId, gold, { when: "today", confirmBookings: 1 })).statusCode).toBe(409);
+      expect((await cancelMembership(gym, una.entryId, gold, { when: "today", confirmBookings: ask.ending.mark })).statusCode).toBe(409);
       expect((await cancelMembership(gym, una.entryId, gold, { when: "today", confirmPtSessions: mark })).statusCode).toBe(409);
       expect(await stateOf(gym, [session])).toEqual([["booked", false]]);
-      const done = await cancelMembership(gym, una.entryId, gold, { when: "today", confirmBookings: 1, confirmPtSessions: mark });
+      const done = await cancelMembership(gym, una.entryId, gold, { when: "today", confirmBookings: ask.ending.mark, confirmPtSessions: mark });
       expect(done.statusCode, done.body).toBe(200);
       expect(await stateOf(gym, [session])).toEqual([["cancelled", false]]);
       const [booking] = await sql<{ status: string }[]>`SELECT status FROM gym_class_bookings WHERE gym_id = ${gym.id}`;

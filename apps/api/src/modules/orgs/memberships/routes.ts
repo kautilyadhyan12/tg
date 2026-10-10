@@ -47,6 +47,7 @@ import {
   membershipTypeParamsSchema,
   orgParamsSchema,
 } from "../schemas.js";
+import { staffOnly } from "../staffLimit.js";
 import * as held from "./heldService.js";
 import * as service from "./service.js";
 import * as words from "./wordsService.js";
@@ -115,7 +116,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  const guarded = { preHandler: [app.authenticate, limit] };
+  const guarded = { preHandler: [app.authenticate, staffOnly(deps.sql, limit)] };
 
   app.get("/v1/orgs/:gymId/membership-types", guarded, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
@@ -186,7 +187,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  const heldGuarded = { preHandler: [app.authenticate, heldLimit] };
+  const heldGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, heldLimit)] };
   const heldUrl = "/v1/orgs/:gymId/member-list/entries/:entryId/memberships";
 
   app.get(heldUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
