@@ -23,7 +23,13 @@ export function bookingsAsked(err) {
   return parsed.success && parsed.data.booked + parsed.data.waiting > 0 ? parsed.data : null;
 }
 
-/** The number the request sends back as `confirmBookings`. */
+/** What the request sends back as `confirmBookings`: the server's mark of exactly the
+ *  bookings this box named, so a booking made or cancelled since shows the box again. */
+export function endingMark(ending) {
+  return typeof ending?.mark === 'string' && ending.mark !== '' ? ending.mark : null;
+}
+
+/** How many bookings the box is about, booked and waiting together. */
 export function endingTotal(ending) {
   return (ending?.booked ?? 0) + (ending?.waiting ?? 0);
 }

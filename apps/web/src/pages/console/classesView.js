@@ -4,6 +4,8 @@ import {
   CLASS_FILL_HORIZON_DAYS,
   CLASS_SCHEDULE_PREVIEW_DATES,
   CLASS_SLOT_REPLACES_ERROR,
+  isVisibleLines,
+  isVisibleText,
 } from '@app/shared';
 import { onlineProblem, onlineRequest } from './classOnlineView';
 import {
@@ -189,6 +191,10 @@ export function classDraft(type) {
   };
 }
 
+/** A character nobody can see came in with pasted text; the server refuses it. */
+export const HIDDEN_IN_NAME = 'Something hidden was pasted in with the name. Delete it and type it again.';
+export const HIDDEN_IN_DESCRIPTION = 'Something hidden was pasted in with the description. Delete it and type it again.';
+
 /** WHAT IS WRONG WITH THIS FORM, in one sentence a person can act on — or null.
  *
  *  **It mirrors the server's own bounds and does not replace them** (R3.3): the
@@ -199,9 +205,11 @@ export function classProblem(draft) {
   const name = (draft?.name ?? '').trim();
   if (name === '') return 'Give the class a name.';
   if (name.length > 80) return 'That name is too long — 80 letters at most.';
+  if (!isVisibleText(name)) return HIDDEN_IN_NAME;
   if ((draft?.description ?? '').trim().length > 500) {
     return 'That description is too long — 500 letters at most.';
   }
+  if (!isVisibleLines((draft?.description ?? '').trim())) return HIDDEN_IN_DESCRIPTION;
   const fields = runFieldsProblem(draft);
   if (fields !== null) return fields;
   if (!CLASS_COLOURS.includes(draft?.colour)) return 'Pick a colour.';
@@ -416,7 +424,7 @@ export function repeatEditRequest(draft, bounds, confirmReplace = null, confirmB
     startMinute: clockToMinutes(draft.time),
     ...runFieldsRequest(draft),
     ...(Number.isInteger(confirmReplace) && confirmReplace > 0 ? { confirmReplace } : {}),
-    ...(Number.isInteger(confirmBookings) && confirmBookings > 0 ? { confirmBookings } : {}),
+    ...(typeof confirmBookings === 'string' && confirmBookings !== '' ? { confirmBookings } : {}),
   };
 }
 
@@ -784,7 +792,7 @@ export function dayRequest(draft, scope = 'this', confirmReplace = null, confirm
     ...(scope === 'future' && Number.isInteger(confirmReplace) && confirmReplace > 0
       ? { confirmReplace }
       : {}),
-    ...(scope === 'future' && Number.isInteger(confirmBookings) && confirmBookings > 0
+    ...(scope === 'future' && typeof confirmBookings === 'string' && confirmBookings !== ''
       ? { confirmBookings }
       : {}),
   };

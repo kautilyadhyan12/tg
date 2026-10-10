@@ -129,6 +129,7 @@ const BOOKED = {
         classes: 1,
         booked: 2,
         waiting: 1,
+        mark: 'b'.repeat(64),
         people: [
           { id: '00000000-0000-4000-8000-000000000001', name: 'Asha Rao', initials: 'AR', waiting: false, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
           { id: '00000000-0000-4000-8000-000000000002', name: 'Ben Okoro', initials: 'BO', waiting: false, className: 'Sunrise Yoga', localDate: '2026-09-22', localStartMinute: 1080 },
@@ -956,7 +957,7 @@ describe('editing, archiving and restoring a class', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Archive Sunrise Yoga' }));
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Archive class and end 3 bookings' }));
-    await waitFor(() => expect(api.archiveClass).toHaveBeenLastCalledWith('g1', 't1', 3));
+    await waitFor(() => expect(api.archiveClass).toHaveBeenLastCalledWith('g1', 't1', 'b'.repeat(64)));
     expect(await screen.findByRole('button', { name: /Archived classes/ })).toBeTruthy();
   });
 
@@ -970,7 +971,7 @@ describe('editing, archiving and restoring a class', () => {
     expect(await screen.findByText('2 people are booked and 1 is on the waitlist')).toBeTruthy();
     expect(api.stopClassRepeat.mock.calls).toEqual([['g1', 's1']]);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel time slot and end 3 bookings' }));
-    await waitFor(() => expect(api.stopClassRepeat).toHaveBeenLastCalledWith('g1', 's1', 3));
+    await waitFor(() => expect(api.stopClassRepeat).toHaveBeenLastCalledWith('g1', 's1', 'b'.repeat(64)));
     await screen.findByText('No time slots yet.');
   });
 
@@ -993,7 +994,7 @@ describe('editing, archiving and restoring a class', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Move time slot and end 3 bookings' }));
     await waitFor(() => expect(api.updateClassRepeat).toHaveBeenCalledTimes(3));
-    expect(api.updateClassRepeat.mock.calls[2][2]).toMatchObject({ startMinute: 450, confirmBookings: 3 });
+    expect(api.updateClassRepeat.mock.calls[2][2]).toMatchObject({ startMinute: 450, confirmBookings: 'b'.repeat(64) });
   });
 
   it('archives a class and keeps it under Archived classes, by name', async () => {

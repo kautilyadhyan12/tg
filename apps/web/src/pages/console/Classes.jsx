@@ -64,7 +64,7 @@ import {
   updateFromBounds,
   weekdayLine,
 } from './classesView';
-import { bookingsAsked, endingTotal } from './bookingsEndView';
+import { bookingsAsked, endingMark } from './bookingsEndView';
 import { sessionsAsked } from './trainerSessionsView';
 
 // CLASSES — the gym's timetable (Part 3 §13.3). Its words are gym software's
@@ -912,7 +912,7 @@ export default function Classes() {
                         busy={busy !== null}
                         onCancel={() => setEndAsk(null)}
                         onConfirm={() =>
-                          void endOrAsk(archiveKey, () => orgService.archiveClass(gymId, type.id, endingTotal(archiveEnds)))
+                          void endOrAsk(archiveKey, () => orgService.archiveClass(gymId, type.id, endingMark(archiveEnds)))
                         }
                       />
                     ) : asking ? (
@@ -1085,7 +1085,7 @@ export default function Classes() {
                                       cancelLabel="Go back"
                                       onCancel={() => setEndAsk(null)}
                                       onConfirm={() =>
-                                        void saveRepeatEdit(schedule, moveEnds.confirmReplace, endingTotal(moveEnds.ending))
+                                        void saveRepeatEdit(schedule, moveEnds.confirmReplace, endingMark(moveEnds.ending))
                                       }
                                     />
                                   )
@@ -1126,7 +1126,7 @@ export default function Classes() {
                                 busy={busy !== null}
                                 onCancel={() => setEndAsk(null)}
                                 onConfirm={() =>
-                                  void endOrAsk(stopKey, () => orgService.stopClassRepeat(gymId, schedule.id, endingTotal(stopEnds)))
+                                  void endOrAsk(stopKey, () => orgService.stopClassRepeat(gymId, schedule.id, endingMark(stopEnds)))
                                 }
                               />
                             ) : askingThis ? (

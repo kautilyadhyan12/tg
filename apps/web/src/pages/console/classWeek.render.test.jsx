@@ -81,6 +81,7 @@ const BOOKED = {
         classes: 1,
         booked: 2,
         waiting: 1,
+        mark: 'b'.repeat(64),
         people: [
           { id: '00000000-0000-4000-8000-000000000001', name: 'Asha Rao', initials: 'AR', waiting: false, className: 'Spin', localDate: '2026-09-22', localStartMinute: 1080 },
           { id: '00000000-0000-4000-8000-000000000002', name: 'Ben Okoro', initials: 'BO', waiting: false, className: 'Spin', localDate: '2026-09-22', localStartMinute: 1080 },
@@ -474,7 +475,7 @@ describe('one class on one date', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel class and end 3 bookings' }));
-    await waitFor(() => expect(api.cancelClassDay).toHaveBeenLastCalledWith('g1', 'x1', 3));
+    await waitFor(() => expect(api.cancelClassDay).toHaveBeenLastCalledWith('g1', 'x1', 'b'.repeat(64)));
     expect(await screen.findByRole('button', { name: 'Un-cancel' })).toBeTruthy();
   });
 
@@ -503,7 +504,7 @@ describe('one class on one date', () => {
       minutes: 45,
       places: 12,
       coachUserId: 'u8',
-      confirmBookings: 3,
+      confirmBookings: 'b'.repeat(64),
     });
   });
 

@@ -12,6 +12,7 @@ import {
   endingChangeLine,
   endingConfirmLabel,
   endingKeptLine,
+  endingMark,
   endingMore,
   endingPersonLine,
   endingTitle,
@@ -29,7 +30,7 @@ const person = (over = {}) => ({
   localStartMinute: 1080,
   ...over,
 });
-const ending = (over = {}) => ({ classes: 1, booked: 12, waiting: 3, people: [person()], ...over });
+const ending = (over = {}) => ({ classes: 1, booked: 12, waiting: 3, mark: 'c'.repeat(64), people: [person()], ...over });
 const refusal = (data) => ({ response: { status: 409, data } });
 
 describe('the server asking before bookings end', () => {
@@ -46,6 +47,12 @@ describe('the server asking before bookings end', () => {
     expect(endingTotal(ending({ booked: 0, waiting: 2 }))).toBe(2);
     expect(endingMore(ending(), 3)).toBe(12);
     expect(endingMore(ending({ booked: 1, waiting: 0 }), 3)).toBe(0);
+  });
+
+  it("sends back the server's mark of the bookings the box named, never a count", () => {
+    expect(endingMark(ending())).toBe('c'.repeat(64));
+    expect(endingMark(ending({ mark: undefined }))).toBeNull();
+    expect(endingMark(null)).toBeNull();
   });
 });
 
