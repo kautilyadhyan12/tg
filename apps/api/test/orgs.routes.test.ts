@@ -5112,6 +5112,7 @@ d("orgs routes (real Postgres)", () => {
       "members.remove",
       "memberships.manage",
       "posts.manage",
+      "reports.read",
       "schedule.manage",
     ]);
   });

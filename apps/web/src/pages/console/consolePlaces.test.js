@@ -36,6 +36,7 @@ const PLACES = {
   personalTraining: '/console/iron-house/personal-training',
   attendance: '/console/iron-house/attendance',
   leads: '/console/iron-house/leads',
+  addLead: '/console/iron-house/leads?open=add',
   plan: '/console/iron-house#plan',
 };
 
@@ -60,6 +61,7 @@ const NEEDS = {
   personalTraining: null,
   attendance: 'attendance.read',
   leads: 'members.confirm',
+  addLead: 'members.confirm',
   plan: 'billing.manage',
 };
 
@@ -150,6 +152,7 @@ describe('who may open each place', () => {
       personalTraining: 'training',
       attendance: 'attendance',
       leads: 'leads',
+      addLead: 'leads',
     };
     const ticks = ['org.manage', 'staff.manage', 'memberships.manage', 'schedule.manage', 'members.confirm', 'billing.manage', 'attendance.read'];
     for (let mix = 0; mix < 2 ** ticks.length; mix++) {

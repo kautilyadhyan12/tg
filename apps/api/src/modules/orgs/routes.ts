@@ -56,6 +56,7 @@ import { registerStaffInviteRoutes } from "./staffInvites/routes.js";
 import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
 import { registerStartHereRoutes } from "./startHere/routes.js";
+import { registerReportsRoutes } from "./reports/routes.js";
 import * as service from "./service.js";
 import { PT_SESSIONS_ENDING_ERROR, confirmPtSessionsQuerySchema } from "@app/shared";
 import { PtSessionsEndAsk } from "./pt/changes.js";
@@ -177,6 +178,7 @@ export function registerOrgRoutes(
 
   // Overview's "Start here" list: what the gym has set up (ROADMAP 23b).
   registerStartHereRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+  registerReportsRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseOr400(createOrgRequestSchema, req.body, req, reply);

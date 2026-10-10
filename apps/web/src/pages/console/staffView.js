@@ -244,6 +244,12 @@ function privilegeCopy(orgType) {
       hint: `Write posts your ${words.people} read in their app, pin them and remove them.`,
     },
     {
+      // Spec Part 3 §16.5 (21a-i): owner and manager by default.
+      value: 'reports.read',
+      label: 'See reports',
+      hint: `The Reports page: how many ${words.people} you have, who is new, who left, and your leads. Numbers only.`,
+    },
+    {
       // Spec Part 3 §13.3 (17b-i): owner and manager by default. It had no box until
       // 23c-ii, so every manager's panel said they held a permission the screen could
       // not show.

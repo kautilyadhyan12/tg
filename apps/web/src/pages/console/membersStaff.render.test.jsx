@@ -338,7 +338,7 @@ describe('what is sent is exactly what is ticked', () => {
     const sent = orgService.inviteStaff.mock.calls[0][1];
     expect(sent.role).toBe('manager');
     expect([...sent.privileges].sort()).toEqual(
-      ['attendance.mark', 'attendance.read', 'leaderboard.manage', 'members.confirm', 'members.read', 'memberships.manage', 'posts.manage', 'schedule.manage'].sort(),
+      ['attendance.mark', 'attendance.read', 'leaderboard.manage', 'members.confirm', 'members.read', 'memberships.manage', 'posts.manage', 'reports.read', 'schedule.manage'].sort(),
     );
   });
 
@@ -841,6 +841,7 @@ describe('Invite staff', () => {
       'Check people in',
       'Run the leaderboard',
       'Post updates',
+      'See reports',
       'Run classes and personal training',
       'Keep the member list and invite',
       'Remove members',

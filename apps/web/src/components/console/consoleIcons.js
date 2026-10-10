@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarHeart, ClipboardCheck, Dumbbell, LayoutDashboard, Medal, Megaphone, Settings, Tags, Trophy, UserSearch, Users } from 'lucide-react';
+import { BarChart3, CalendarClock, CalendarHeart, ClipboardCheck, Dumbbell, LayoutDashboard, Medal, Megaphone, Settings, Tags, Trophy, UserSearch, Users } from 'lucide-react';
 
 /** Each console page's icon, the same in the menu, the phone's tabs and More. */
 export const PAGE_ICONS = {
@@ -13,5 +13,6 @@ export const PAGE_ICONS = {
   events: CalendarHeart,
   leaderboard: Trophy,
   challenges: Medal,
+  reports: BarChart3,
   settings: Settings,
 };
