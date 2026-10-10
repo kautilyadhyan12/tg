@@ -193,9 +193,30 @@ describe('the attendance figures', () => {
     expect(cells.filter((c) => c.dataset.best === 'yes')).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Wednesday 07:00 to 08:00: 1 visit' }).dataset.level).toBe('1');
     expect(screen.getByTestId('hour-grid').textContent).toContain('QuietBusyNobodyThe busiest');
-    expect(screen.getByTestId('hour-grid-said').textContent).toBe('Check-ins by weekday and hour, 31 Aug to 4 Oct 2026');
-    fireEvent.click(cells[0]);
+    expect(screen.getByTestId('hour-grid-caption').textContent).toBe('Check-ins by weekday and hour, 31 Aug to 4 Oct 2026');
+    // Nothing is picked until a square is pressed; a pressed square stays picked, with a card on it.
+    expect(screen.getByTestId('hour-grid-said').textContent).toBe('Press a square to see that hour.');
+    expect(screen.queryByTestId('hour-grid-card')).toBeNull();
+    fireEvent.click(monday6);
+    expect(screen.getByTestId('hour-grid-said').textContent).toBe('Monday 18:00 to 19:00: 5 visits');
+    expect(screen.getByTestId('hour-grid-card').textContent).toBe('Monday 18:00 to 19:005 visits');
+    expect(monday6.getAttribute('aria-pressed')).toBe('true');
+    expect(monday6.querySelector('[data-part="picked"]')).not.toBeNull();
+    // Pointing at another shows that one; leaving the grid goes back to the one pressed.
+    fireEvent.mouseEnter(cells[0]);
     expect(screen.getByTestId('hour-grid-said').textContent).toBe('Monday 07:00 to 08:00: 0 visits');
+    expect(screen.getByTestId('hour-grid-card').textContent).toBe('Monday 07:00 to 08:00Nobody checked in');
+    expect(screen.getAllByTestId('hour-grid-card')).toHaveLength(1);
+    fireEvent.mouseLeave(cells[0].parentElement.parentElement);
+    expect(screen.getByTestId('hour-grid-said').textContent).toBe('Monday 18:00 to 19:00: 5 visits');
+    // Pressing another picks that one instead; pressing it again picks nothing.
+    fireEvent.click(cells[0]);
+    expect(cells.filter((c) => c.getAttribute('aria-pressed') === 'true')).toEqual([cells[0]]);
+    fireEvent.mouseLeave(cells[0].parentElement.parentElement);
+    fireEvent.click(cells[0]);
+    fireEvent.mouseLeave(cells[0].parentElement.parentElement);
+    expect(screen.getByTestId('hour-grid-said').textContent).toBe('Press a square to see that hour.');
+    expect(screen.queryByTestId('hour-grid-card')).toBeNull();
   });
 
   it("a gym on the 12-hour clock reads its hours that way", async () => {

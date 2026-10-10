@@ -36,7 +36,7 @@ export function DayLine({ report }) {
   });
   return (
     <figure className="flex flex-col gap-3 m-0 px-4 md:px-5 pb-4" data-testid="day-bars">
-      <figcaption className="c-s14 c-t2" data-testid="day-bars-summary">
+      <figcaption className="c-s15 c-w6 c-t1" data-testid="day-bars-summary">
         {chart.summary}
       </figcaption>
       <span className="sr-only" aria-live="polite" data-testid="day-bars-said">
@@ -164,19 +164,31 @@ export function DayLine({ report }) {
 const SHADE = [0, 0.16, 0.34, 0.54, 0.76, 1];
 
 /** Weekday by hour: the stronger the square, the more check-ins in that hour, with the
- *  number on it. On a phone a square is as tall as a finger needs. */
+ *  number on it. A square is a button: pointed at or pressed, it says its hour and visits in
+ *  a card and in the line above. On a phone a square is as tall as a finger needs. */
 export function HourGrid({ report, clockFormat }) {
   const grid = hourGrid(report, clockFormat);
-  const [said, setSaid] = useState(null);
+  // The square under the pointer or the keyboard, and the one that was pressed: a pressed
+  // square stays picked until it is pressed again or another is.
+  const [over, setOver] = useState(null);
+  const [picked, setPicked] = useState(null);
   if (grid === null) return null;
+  const cells = grid.rows.flatMap((row) => row.cells);
+  const shown = cells.find((c) => c.key === (over ?? picked)) ?? null;
   // Every hour is named on a wide screen where they fit; every third on a phone.
   const wide = grid.columns.length <= 16 ? 1 : 2;
+  const last = grid.columns.length - 1;
   return (
     <figure className="flex flex-col gap-3 m-0 px-4 md:px-5 pb-4" data-testid="hour-grid">
-      <figcaption className="c-s14 c-t2" aria-live="polite" data-testid="hour-grid-said">
-        {said ?? grid.caption}
+      <figcaption className="flex flex-col gap-1">
+        <span className="c-s15 c-w6 c-t1" aria-live="polite" data-testid="hour-grid-said">
+          {shown === null ? 'Press a square to see that hour.' : shown.text}
+        </span>
+        <span className="c-s14 c-t2" data-testid="hour-grid-caption">
+          {grid.caption}
+        </span>
       </figcaption>
-      <div className="flex flex-col gap-[3px]" onMouseLeave={() => setSaid(null)}>
+      <div className="flex flex-col gap-[3px]" onMouseLeave={() => setOver(null)}>
         <div className="flex gap-[3px] c-s12 c-t3" aria-hidden="true">
           <span className="shrink-0" style={{ width: SIDE }} />
           {grid.columns.map((col, i) => (
@@ -187,34 +199,63 @@ export function HourGrid({ report, clockFormat }) {
         </div>
         {grid.rows.map((row) => (
           <div key={row.weekday} className="flex items-center gap-[3px]">
-            <span className="c-s12 c-t2 shrink-0" style={{ width: SIDE }} aria-hidden="true">
+            <span className="c-s13 c-t2 shrink-0" style={{ width: SIDE }} aria-hidden="true">
               {row.label}
             </span>
-            {row.cells.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                data-testid="hour-cell"
-                data-visits={c.visits}
-                data-level={c.level}
-                data-best={c.best ? 'yes' : 'no'}
-                aria-label={c.text}
-                className="flex-1 min-w-0 p-0 border-0 cursor-default relative h-11 md:h-9"
-                style={{ borderRadius: 6, background: 'var(--raise)', overflow: 'hidden' }}
-                onMouseEnter={() => setSaid(c.text)}
-                onFocus={() => setSaid(c.text)}
-                onBlur={() => setSaid(null)}
-                onClick={() => setSaid(c.text)}
-              >
-                {c.level > 0 ? <span className="absolute inset-0" style={{ background: 'var(--accent)', opacity: SHADE[c.level] }} /> : null}
-                {c.visits > 0 ? (
-                  <span className="hidden md:flex absolute inset-0 items-center justify-center c-s12 c-w6 c-num" style={{ color: c.level >= 4 ? 'var(--on-accent)' : 'var(--t1)' }}>
-                    {c.visits}
+            {row.cells.map((c, i) => {
+              const on = shown !== null && shown.key === c.key;
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  data-testid="hour-cell"
+                  data-visits={c.visits}
+                  data-level={c.level}
+                  data-best={c.best ? 'yes' : 'no'}
+                  aria-label={c.text}
+                  aria-pressed={picked === c.key}
+                  className="flex-1 min-w-0 p-0 border-0 bg-transparent cursor-pointer relative h-11 md:h-9"
+                  style={{ zIndex: on ? 3 : 'auto' }}
+                  onMouseEnter={() => setOver(c.key)}
+                  onFocus={() => setOver(c.key)}
+                  onBlur={() => setOver(null)}
+                  onClick={() => setPicked((was) => (was === c.key ? null : c.key))}
+                >
+                  <span className="absolute inset-0" style={{ borderRadius: 6, background: 'var(--raise)', overflow: 'hidden' }}>
+                    {c.level > 0 ? <span className="absolute inset-0" style={{ background: 'var(--accent)', opacity: SHADE[c.level] }} /> : null}
                   </span>
-                ) : null}
-                {c.best ? <span aria-hidden="true" className="absolute inset-0" style={{ borderRadius: 6, boxShadow: 'inset 0 0 0 2px var(--t1)' }} /> : null}
-              </button>
-            ))}
+                  {c.visits > 0 ? (
+                    <span className="hidden md:flex absolute inset-0 items-center justify-center c-s13 c-w6 c-num" style={{ color: c.level >= 4 ? 'var(--on-accent)' : 'var(--t1)' }}>
+                      {c.visits}
+                    </span>
+                  ) : null}
+                  {c.best ? <span aria-hidden="true" className="absolute inset-0" style={{ borderRadius: 6, boxShadow: 'inset 0 0 0 2px var(--t1)' }} /> : null}
+                  {on ? (
+                    <>
+                      <span aria-hidden="true" data-part="picked" className="absolute" style={{ inset: -3, borderRadius: 9, boxShadow: '0 0 0 2px var(--t1)' }} />
+                      <span
+                        aria-hidden="true"
+                        data-testid="hour-grid-card"
+                        className="absolute pointer-events-none flex flex-col items-start whitespace-nowrap text-left"
+                        style={{
+                          bottom: 'calc(100% + 8px)',
+                          // Towards either side the card opens inwards, so it never leaves the box.
+                          ...(i < last / 3 ? { left: 0 } : i > (last * 2) / 3 ? { right: 0 } : { left: '50%', transform: 'translateX(-50%)' }),
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          background: 'var(--raise)',
+                          border: '1px solid var(--raise-line)',
+                          boxShadow: 'var(--pop)',
+                        }}
+                      >
+                        <span className="c-s13 c-t2">{c.title}</span>
+                        <span className="c-s15 c-w6 c-t1 c-num">{c.said}</span>
+                      </span>
+                    </>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         ))}
       </div>

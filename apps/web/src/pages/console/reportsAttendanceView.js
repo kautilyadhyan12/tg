@@ -224,6 +224,8 @@ export function hourGrid(report, clockFormat) {
           // 0 is nobody; 1 to 5 from quiet to the busiest hour.
           level: visits === 0 ? 0 : Math.min(HEAT_LEVELS, Math.max(1, Math.ceil((visits / hours.top) * HEAT_LEVELS))),
           best: marked && visits === hours.top,
+          title: hourSpan({ weekday, hour }, clockFormat),
+          said: visits === 0 ? 'Nobody checked in' : visitsWord(visits),
           text: `${hourSpan({ weekday, hour }, clockFormat)}: ${visitsWord(visits)}`,
         };
       }),
