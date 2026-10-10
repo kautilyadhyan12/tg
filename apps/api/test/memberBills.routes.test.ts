@@ -723,10 +723,21 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       // January is what Omar pays first, and it moves no date; then June.
       const omarPage = (await heldService.getHeldMemberships(at(JUNE), owner.userId, gymId, omar.entryId)).memberships[0];
       expect(omarPage?.billing?.pay).toMatchObject({ periodIndex: 0, dueOn: "2026-01-15" });
+      // The line above his bills says the day the OLDEST of them fell due, not June's.
+      expect(omarPage?.view.payment).toEqual({ state: "due", since: "2026-01-15" });
       await heldService.recordMemberPayment(at(JUNE), owner.userId, gymId, omar.entryId, omar.id, { requestKey: nextKey(), periodIndex: 0, amountMinor: 4999, method: "cash" });
       expect(await countOf(omar.id)).toBe(5);
       const then = (await heldService.getHeldMemberships(at(JUNE), owner.userId, gymId, omar.entryId)).memberships[0];
       expect(then?.billing?.pay).toMatchObject({ periodIndex: 5 });
+
+      // A month that has a bill of ANY status was asked for: one cancelled by hand (18a-ii)
+      // is not taken for a month nobody was asked for. Nia's March bill is marked so, and a
+      // run in July leaves her count where it was and opens July alone.
+      await sql`UPDATE gym_member_bills SET status = 'void' WHERE gym_id = ${gymId} AND held_membership_id = ${nia.id} AND period_index = 2`;
+      const july = await run("2026-07-16T12:00:00Z");
+      expect(july.failed).toBe(0);
+      expect(await countOf(nia.id)).toBe(0);
+      expect(await periods(nia.id)).toEqual([[0, "open"], [1, "open"], [2, "void"], [3, "open"], [4, "open"], [5, "open"], [6, "open"]]);
 
       // The record says the days passing moved each count, with nobody's name on it.
       const notes = (await auditOf(gymId)).filter((a) => a.action === "org.held_membership_count_moved");

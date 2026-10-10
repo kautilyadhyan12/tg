@@ -288,16 +288,20 @@ const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => s
     AND ((h.kind = 'recurring' AND h.renews) OR (h.kind <> 'recurring' AND h.paid_periods = 0))
     AND (${gymIds === null ? null : [...gymIds]}::uuid[] IS NULL OR h.gym_id = ANY(${gymIds === null ? null : [...gymIds]}::uuid[]))`;
 
-/** The periods that already have an open bill, by membership: a plain read beside the one
- *  above. Asked inside it, one membership at a time, the same answer took 3.8 s for 8,000
- *  memberships on a table with no statistics yet (`tools/measure-member-bills-cost.ts`).
- *  Only open bills are read: every period from a candidate's first unpaid one on has an
- *  open bill or none, and the unique index is what keeps a period to one bill. */
-async function billedOpen(sql: Sql | TransactionSql, gymIds: readonly string[] | null): Promise<Map<string, Set<number>>> {
+/** The periods that have a bill, of any status, from each running membership's count on:
+ *  what `countAfterGap` and `billsToOpen` ask about. A plain read beside the one above
+ *  (asked inside it, one membership at a time, the same answer took 3.8 s for 8,000
+ *  memberships on a table with no statistics yet: `tools/measure-member-bills-cost.ts`).
+ *  Bills before the count are settled history and are not read, so the read stays the
+ *  size of what is owed however long a gym has been billing. */
+async function billedFromCount(sql: Sql | TransactionSql, gymIds: readonly string[] | null): Promise<Map<string, Set<number>>> {
   const ids = gymIds === null ? null : [...gymIds];
   const rows = await sql<{ held_membership_id: string; period_index: number }[]>`
-    SELECT held_membership_id, period_index FROM gym_member_bills
-    WHERE status = 'open' AND (${ids}::uuid[] IS NULL OR gym_id = ANY(${ids}::uuid[]))`;
+    SELECT b.held_membership_id, b.period_index
+    FROM gym_member_bills b
+    JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+    WHERE h.status = 'active' AND b.period_index >= h.paid_periods
+      AND (${ids}::uuid[] IS NULL OR b.gym_id = ANY(${ids}::uuid[]))`;
   const have = new Map<string, Set<number>>();
   for (const row of rows) {
     const set = have.get(row.held_membership_id);
@@ -356,7 +360,7 @@ export interface OpenBillsDeps {
  *  logged and tried on the next run. `gymIds` is for tests on a shared database. */
 export async function openDueBills(deps: OpenBillsDeps, opts: { now?: Date; gymIds?: readonly string[] } = {}): Promise<{ opened: number; gyms: number; failed: number }> {
   const now = opts.now ?? new Date();
-  const first = owed(await owing(deps.sql, opts.gymIds ?? null), await billedOpen(deps.sql, opts.gymIds ?? null), now);
+  const first = owed(await owing(deps.sql, opts.gymIds ?? null), await billedFromCount(deps.sql, opts.gymIds ?? null), now);
   let opened = 0;
   let gyms = 0;
   let failed = 0;
@@ -364,7 +368,7 @@ export async function openDueBills(deps: OpenBillsDeps, opts: { now?: Date; gymI
     try {
       const made = await deps.sql.begin(async (tx) => {
         await lockGym(tx, gymId);
-        const work = owed(await owing(tx, [gymId]), await billedOpen(tx, [gymId]), now).get(gymId);
+        const work = owed(await owing(tx, [gymId]), await billedFromCount(tx, [gymId]), now).get(gymId);
         if (work === undefined) return 0;
         await writeCountsAfterGap(tx, { gymId, moves: work.counts, today: work.today, now });
         const rows = await insertBills(tx, gymId, work.bills, now);

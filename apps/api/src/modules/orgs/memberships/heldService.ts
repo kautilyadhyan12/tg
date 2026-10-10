@@ -93,13 +93,17 @@ function billingOf(
   };
 }
 
-/** The membership as the rule reads it, with ONE day for what is owed: where the first
- *  unpaid period has a bill, the day that bill fell due. A freeze moves the membership's
- *  own dates and never a bill's, and every reader is sent the same day. */
+/** The membership as the rule reads it, with ONE day for what is owed: the day its OLDEST
+ *  open bill fell due, where it has one at or before the first unpaid period. That is the
+ *  bill a payment is taken for first, so the line above the bills and the oldest bill
+ *  under it say the same day; a freeze moves the membership's own dates and never a
+ *  bill's; and every reader is sent the same day. */
 function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly BillRow[], today: string): HeldMembershipView {
   const view = heldMembershipView(row.membership, today);
   if (view.payment === null || view.payment.state !== "due" || view.payment.since === null) return view;
-  const owed = bills.find((b) => b.membershipId === row.id && b.periodIndex === row.membership.paidPeriods && b.status === "open");
+  const owed = bills
+    .filter((b) => b.membershipId === row.id && b.status === "open" && b.periodIndex <= row.membership.paidPeriods)
+    .sort((a, b) => a.periodIndex - b.periodIndex)[0];
   return owed === undefined ? view : { ...view, payment: { state: "due", since: owed.dueOn } };
 }
 
