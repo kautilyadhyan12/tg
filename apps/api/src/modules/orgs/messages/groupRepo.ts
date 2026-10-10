@@ -1,0 +1,116 @@
+// A MESSAGE TO A CHOSEN GROUP: the only file that reads or writes `gym_group_messages`
+// and `gym_member_messages_off` (spec Part 3 §16.8; ROADMAP 20f-i). Every statement names
+// the gym.
+import { GYM_GROUP_MESSAGE_KIND } from "@app/shared";
+import type { Sql, TransactionSql } from "postgres";
+
+type SqlOrTx = Sql | TransactionSql;
+
+/** One selected record of this gym, with what decides whether its person is sent a message. */
+export interface GroupStateRow {
+  entryId: string;
+  name: string;
+  /** No longer a member: the record is kept, the person is not written to. */
+  former: boolean;
+  /** The live app accounts on this record, at this gym. */
+  userIds: string[];
+  /** One of them has switched this gym's group messages off. */
+  off: boolean;
+}
+
+/** The selected records that are this gym's, in the list's order. An id of another gym's
+ *  record, or of none, is not in the answer. An account counts only while it is in this
+ *  gym now and is not deleted. */
+export async function groupStateOf(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<GroupStateRow[]> {
+  if (entryIds.length === 0) return [];
+  const rows = await sql<{ id: string; name: string; former: boolean; user_ids: string[]; off: boolean }[]>`
+    SELECT e.id, e.full_name AS name, (e.former_at IS NOT NULL) AS former,
+           coalesce(a.user_ids, '{}'::uuid[]) AS user_ids, coalesce(a.off, false) AS off
+    FROM gym_member_list_entries e
+    LEFT JOIN LATERAL (
+      SELECT array_agg(m.user_id ORDER BY m.user_id) AS user_ids,
+             bool_or(EXISTS (
+               SELECT 1 FROM gym_member_messages_off o
+               WHERE o.gym_id = m.gym_id AND o.user_id = m.user_id AND o.kind = ${GYM_GROUP_MESSAGE_KIND}
+             )) AS off
+      FROM gym_members m
+      JOIN users u ON u.id = m.user_id AND u.status = 'active'
+      WHERE m.gym_id = ${gymId} AND m.entry_id = e.id AND m.removed_at IS NULL
+    ) a ON true
+    WHERE e.gym_id = ${gymId} AND e.id = ANY (${[...entryIds]}::uuid[])
+    ORDER BY e.full_name, e.id`;
+  return rows.map((row) => ({ entryId: row.id, name: row.name, former: row.former, userIds: row.user_ids, off: row.off }));
+}
+
+/** How many group messages the gym has sent on this day of its own calendar. */
+export async function sentOnDay(sql: SqlOrTx, gymId: string, gymDay: string): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_group_messages WHERE gym_id = ${gymId} AND gym_day = ${gymDay}::date`;
+  return rows[0]?.n ?? 0;
+}
+
+/** The message already sent from this box, if one was. */
+export async function byKey(sql: SqlOrTx, gymId: string, sendKey: string): Promise<{ id: string; people: number; body: string } | null> {
+  const rows = await sql<{ id: string; people: number; body: string }[]>`
+    SELECT id, people, body FROM gym_group_messages WHERE gym_id = ${gymId} AND send_key = ${sendKey}`;
+  return rows[0] ?? null;
+}
+
+export interface NewGroupMessage {
+  gymId: string;
+  sentBy: string;
+  body: string;
+  gymDay: string;
+  sendKey: string;
+  userIds: readonly string[];
+}
+
+/** Writes the message and one copy for each person, in the caller's transaction. Each copy
+ *  is written only for an account that is in this gym at that instant and is not deleted,
+ *  whatever the list of ids holds. Answers the message's id and how many copies were written. */
+export async function insertGroupMessage(tx: TransactionSql, message: NewGroupMessage, now: Date, keptDays: number): Promise<{ id: string; sent: number }> {
+  const expires = new Date(now.getTime() + keptDays * 86_400_000);
+  const made = await tx<{ id: string }[]>`
+    INSERT INTO gym_group_messages (gym_id, sent_by, body, gym_day, sent_at, people, send_key)
+    VALUES (${message.gymId}, ${message.sentBy}, ${message.body}, ${message.gymDay}::date, ${now}, ${message.userIds.length}, ${message.sendKey})
+    RETURNING id`;
+  const id = made[0]?.id;
+  if (id === undefined) throw new Error("gym_group_messages insert returned no row");
+  const copies = await tx<{ id: string }[]>`
+    INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, gym_day, sent_at, expires_at)
+    SELECT ${message.gymId}, m.user_id, ${GYM_GROUP_MESSAGE_KIND}, ${id}::text, ${message.body}, ${message.gymDay}::date, ${now}, ${expires}
+    FROM unnest(${[...message.userIds]}::uuid[]) AS picked (user_id)
+    JOIN gym_members m ON m.gym_id = ${message.gymId} AND m.user_id = picked.user_id AND m.removed_at IS NULL
+    JOIN users u ON u.id = m.user_id AND u.status = 'active'
+    ON CONFLICT (gym_id, user_id, kind, occasion) DO NOTHING
+    RETURNING id`;
+  // Nobody at all: the caller sends nothing and the transaction is undone.
+  if (copies.length > 0 && copies.length !== message.userIds.length) {
+    await tx`UPDATE gym_group_messages SET people = ${copies.length} WHERE gym_id = ${message.gymId} AND id = ${id}`;
+  }
+  return { id, sent: copies.length };
+}
+
+// ── THE MEMBER'S OWN SWITCH ──
+
+/** Whether this person has switched this gym's group messages off. */
+export async function groupMessagesOff(sql: SqlOrTx, gymId: string, userId: string): Promise<boolean> {
+  const rows = await sql<{ one: number }[]>`
+    SELECT 1 AS one FROM gym_member_messages_off
+    WHERE gym_id = ${gymId} AND user_id = ${userId} AND kind = ${GYM_GROUP_MESSAGE_KIND}`;
+  return rows.length > 0;
+}
+
+/** Sets the person's own switch. Asked twice it is set once. */
+export async function setGroupMessages(sql: SqlOrTx, gymId: string, userId: string, on: boolean, now: Date): Promise<void> {
+  if (on) {
+    await sql`
+      DELETE FROM gym_member_messages_off
+      WHERE gym_id = ${gymId} AND user_id = ${userId} AND kind = ${GYM_GROUP_MESSAGE_KIND}`;
+    return;
+  }
+  await sql`
+    INSERT INTO gym_member_messages_off (gym_id, user_id, kind, created_at)
+    VALUES (${gymId}, ${userId}, ${GYM_GROUP_MESSAGE_KIND}, ${now})
+    ON CONFLICT (gym_id, user_id, kind) DO NOTHING`;
+}

@@ -68,6 +68,17 @@ export function emptyInbox(gymName) {
 /** Said under every inbox, so nothing about it is a surprise. */
 export const INBOX_NOTE = `Messages stay here for ${GYM_MESSAGE_KEPT_DAYS} days. You can't reply to them here.`;
 
+/** The member's own switch for the gym's messages to groups (ROADMAP 20f-i). */
+export function groupSwitch(gym, on) {
+  const it = orgWords(gym.orgType).itToMembers;
+  return {
+    label: `News and notices from ${gym.name}`,
+    line: on
+      ? `Messages the ${it} sends to many people at once, like a closed day or a new class.`
+      : `Off. You won't get these. Messages about your own membership still come.`,
+  };
+}
+
 /** The button under that note: "Contact the gym", in the organisation's own word. */
 export function contactButton(orgType) {
   return `Contact the ${orgWords(orgType).itToMembers}`;

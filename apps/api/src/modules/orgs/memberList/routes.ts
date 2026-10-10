@@ -14,7 +14,10 @@ import {
   MEMBER_LIST_BY_HAND_WORDS,
   MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
   MEMBER_INVITE_WORDS,
+  GYM_GROUP_MESSAGE_WORDS,
   MEMBER_LIST_SELECTION_CHANGED_WORDS,
+  gymGroupMessagePreviewRequestSchema,
+  gymGroupMessageSendRequestSchema,
   memberInvitePeopleQuerySchema,
   memberInvitePreviewQuerySchema,
   memberInviteRequestSchema,
@@ -75,6 +78,7 @@ import * as notes from "./notes.js";
 import * as tags from "./tags.js";
 import * as removal from "./removeSelected.js";
 import { SelectionChanged, selectAll } from "./selection.js";
+import * as groupMessages from "../messages/group.js";
 import * as service from "./service.js";
 
 /** The gym a request's address names, for an allowance counted a gym at a time. One gym
@@ -127,6 +131,9 @@ function requireUserId(req: FastifyRequest): string {
   if (userId === undefined) throw new Error("authenticate preHandler did not run");
   return userId;
 }
+
+/** Group messages one member of staff may press Send on in an hour. */
+export const GROUP_MESSAGE_SENDS_PER_HOUR = 20;
 
 /** Notes and tags one member of staff may write in an hour: 200 people, a few presses each. */
 export const MEMBER_NOTES_WRITES_PER_HOUR = 1200;
@@ -723,6 +730,59 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
       return await reply.status(200).send(answer);
     } catch (err) {
       if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  /** A message to a chosen group (20f-i): a gym sends three a day, so a few presses an hour
+   *  each is plenty; the address is counted a gym at a time. */
+  const groupMessageGate = gate(
+    createDualRateLimit({
+      name: "memberlist_group_message",
+      max: GROUP_MESSAGE_SENDS_PER_HOUR,
+      ipMax: GROUP_MESSAGE_SENDS_PER_HOUR * 4,
+      ipScope: gymInPath,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
+  app.post("/v1/orgs/:gymId/member-list/selected/message-preview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(gymGroupMessagePreviewRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const preview = await groupMessages.previewGroupMessage(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+      if (preview === null) return;
+      return await reply.status(200).send({ preview });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/selected/message", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(gymGroupMessageSendRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const done = await groupMessages.sendGroupMessage(listDeps, requireUserId(req), params.gymId, body, groupMessageGate(req, reply));
+      if (done === null) return;
+      return await reply.status(200).send({ done });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      // Nothing was sent: the box as it now stands, for staff to read again.
+      if (err instanceof groupMessages.GroupPeopleChanged) {
+        return await reply.status(409).send({
+          error: "group_message_people_changed",
+          message: GYM_GROUP_MESSAGE_WORDS.people_changed,
+          preview: err.preview,
+          requestId: req.id,
+        });
+      }
       throw err;
     }
   });

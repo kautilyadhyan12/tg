@@ -3,7 +3,7 @@
 // `registerOrgRoutes`.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
-import { markGymInboxReadRequestSchema } from "@app/shared";
+import { gymGroupMessagesSwitchRequestSchema, markGymInboxReadRequestSchema } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
@@ -43,6 +43,7 @@ export function registerMessageRoutes(app: FastifyInstance, deps: service.Messag
   // A whole gym's members share one address on its wi-fi, hence each explicit `ipMax`.
   const readLimit = limiter("orgs_inbox_read", 600, 6000);
   const markLimit = limiter("orgs_inbox_mark", 300, 6000);
+  const switchLimit = limiter("orgs_inbox_switch", 60, 6000);
 
   // Who is asking first and the limit after it, so a stranger's 404 is never a 429 and
   // never counts against the gym's shared address.
@@ -71,5 +72,16 @@ export function registerMessageRoutes(app: FastifyInstance, deps: service.Messag
     const left = await service.markRead(messagesDeps, requireUserId(req), params.gymId, body, gate(markLimit)(req, reply));
     if (left === null) return;
     return reply.status(200).send(left);
+  });
+
+  // The member's own switch for this gym's messages to groups. Set twice it is set once.
+  app.put("/v1/orgs/:gymId/inbox/group-messages", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(gymGroupMessagesSwitchRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const now = await service.setGroupMessages(messagesDeps, requireUserId(req), params.gymId, body, gate(switchLimit)(req, reply));
+    if (now === null) return;
+    return reply.status(200).send(now);
   });
 }

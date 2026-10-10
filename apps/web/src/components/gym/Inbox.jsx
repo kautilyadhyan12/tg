@@ -1,7 +1,8 @@
 import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Mail, Phone, Pin } from 'lucide-react';
-import { INBOX_NOTE, contactButton, contactSetUp, contactView, emptyInbox, messageRow, pausedInbox, pinnedNote } from './inboxView';
+import { inboxService } from '../../api/inboxApi';
+import { INBOX_NOTE, contactButton, contactSetUp, contactView, emptyInbox, groupSwitch, messageRow, pausedInbox, pinnedNote } from './inboxView';
 
 // THE MEMBER'S INBOX FROM THEIR GYM (spec Part 3 §16.1; ROADMAP 20a): the gym's one pinned
 // note, then its messages, newest first. Opening it tells the server they have been seen;
@@ -70,6 +71,61 @@ function ContactGym({ gym, contact }) {
             </li>
           ))}
         </ul>
+      ) : null}
+    </div>
+  );
+}
+
+// THE MEMBER'S OWN SWITCH (ROADMAP 20f-i) for the messages a gym sends to many people at
+// once. Off, staff are told this person gets none. The whole row is the thing to press.
+function GroupMessagesSwitch({ gym, start }) {
+  const [on, setOn] = useState(start);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const words = groupSwitch(gym, on);
+  const press = async () => {
+    if (busy) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      setOn(await inboxService.setGroupMessages(gym.id, !on));
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        disabled={busy}
+        onClick={() => void press()}
+        className="rounded-xl p-3 min-h-11 flex items-center justify-between gap-3 text-left w-full"
+        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', opacity: busy ? 0.6 : 1 }}
+      >
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-white" style={{ overflowWrap: 'anywhere' }}>
+            {words.label}
+          </span>
+          <span className="block text-xs mt-0.5" style={{ color: MUTED }}>
+            {words.line}
+          </span>
+        </span>
+        <span
+          aria-hidden="true"
+          className="w-12 h-6 rounded-full relative flex-shrink-0 transition-all"
+          style={{ background: on ? 'linear-gradient(135deg, #FF8A1F, #FFB347)' : 'rgba(255,255,255,0.08)' }}
+        >
+          <span className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all" style={{ left: on ? 28 : 4, boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+        </span>
+      </button>
+      {failed ? (
+        <p className="text-xs" role="alert" style={{ color: RED }}>
+          We couldn't change that. Please try again.
+        </p>
       ) : null}
     </div>
   );
@@ -151,7 +207,7 @@ export default function Inbox({ gym, inbox }) {
             >
               <Mail className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: row.isNew ? ORANGE : MUTED }} aria-hidden="true" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm" style={{ color: '#fff', overflowWrap: 'anywhere' }}>
+                <p className="text-sm" style={{ color: '#fff', overflowWrap: 'anywhere', whiteSpace: 'pre-line' }}>
                   {row.body}
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: MUTED }}>
@@ -173,6 +229,7 @@ export default function Inbox({ gym, inbox }) {
       </p>
       {/* Keyed: another gym's page starts with its own button shut. */}
       <ContactGym key={gym.id} gym={gym} contact={read.contact} />
+      <GroupMessagesSwitch key={`switch-${gym.id}`} gym={gym} start={read.groupMessages !== false} />
     </div>
   );
 }

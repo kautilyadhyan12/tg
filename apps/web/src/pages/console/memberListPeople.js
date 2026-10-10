@@ -8,6 +8,9 @@ import {
   MEMBER_LIST_MERGE_FILLS,
   MEMBER_LIST_MERGE_KEEPS_OWN,
   MEMBER_LIST_TICKED_MAX,
+  GYM_GROUP_MESSAGE_WORDS,
+  GYM_MESSAGE_BODY_MAX,
+  groupMessageLength,
   MEMBER_TAGS_MAX_PER_PERSON,
   heldNamesLine,
   turns18On,
@@ -908,4 +911,49 @@ export function tagDoneLine(done) {
   const kept = done.kept.reduce((sum, group) => sum + group.count, 0);
   const did = done.action === 'add' ? `“${done.tag.name}” added to ${people(done.changed)}.` : `“${done.tag.name}” taken off ${people(done.changed)}.`;
   return kept === 0 ? did : `${did} ${n(kept)} didn't change.`;
+}
+
+// ── A MESSAGE TO THE PEOPLE SELECTED (20f-i) ──
+
+/** The box before a message goes: who gets it, its button, one line for each group that
+ *  won't get it, and how many more the gym can send today. */
+export function messageBoxWords(preview) {
+  const k = preview.sendCount;
+  const lines = {
+    not_in_app: 'Not in the app yet. Messages are read in the app.',
+    switched_off: 'Switched your messages off in their app.',
+    shared: "Two app accounts are on this one person's page, so we can't tell whose inbox it is. Open their page to see both.",
+    former: 'No longer a member.',
+    gone: 'No longer on your list.',
+  };
+  const kept = preview.kept.reduce((sum, group) => sum + group.count, 0);
+  const left = preview.leftToday;
+  return {
+    heading: k === 0 ? null : `${people(k)} will get this message`,
+    nobody: 'Nobody you selected can get a message.',
+    button: k === 0 || left === 0 ? null : `Send to ${people(k)}`,
+    keptHeading: kept === 0 ? null : `${people(kept)} won't get it`,
+    kept: preview.kept.map((group) => ({ key: group.reason, count: group.count, people: group.people, line: lines[group.reason] })),
+    // What each reason opens, for staff to set it right (L7): Invite, or the person's page.
+    invite: 'Invite them to the app',
+    today:
+      left === 0
+        ? GYM_GROUP_MESSAGE_WORDS.day_full
+        : left === 1
+          ? 'You can send 1 more message to a group today.'
+          : `You can send ${String(left)} more messages to groups today.`,
+    full: left === 0,
+  };
+}
+
+/** What a press did: "Message sent to 12 people. 2 didn't get it." */
+export function messageDoneLine(done) {
+  const kept = done.kept.reduce((sum, group) => sum + group.count, 0);
+  const did = `Message sent to ${people(done.sent)}.`;
+  return kept === 0 ? did : `${did} ${n(kept)} didn't get it.`;
+}
+
+/** "120 of 500". */
+export function messageCount(typed) {
+  return `${n(groupMessageLength(typed))} of ${n(GYM_MESSAGE_BODY_MAX)}`;
 }
