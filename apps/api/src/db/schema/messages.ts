@@ -3,7 +3,7 @@
 //
 // About the person: deleted with their account (`DIRECT_DELETE_TABLES`) and exported.
 // `gym_group_messages` and `gym_member_messages_off` mirror `0092_group_messages.sql`;
-// `gym_message_settings` mirrors `0094_gym_message_settings.sql`.
+// `gym_message_settings` mirrors `0095_gym_message_settings.sql`.
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "./identity.js";

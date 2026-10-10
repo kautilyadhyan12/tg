@@ -221,6 +221,17 @@ describe("how a row shows the server's App word (spec Part 3 §18.4)", () => {
     expect(rowWords(entry({ endsOn: '2026-08-31', endsOnKind: 'ends' }), TODAY)).toEqual(['Active', 'Gold', 'Ended 31 Aug']);
     expect(rowWords(entry({ endsOn: '2027-01-31', endsOnKind: 'ends' }), TODAY)).toEqual(['Active', 'Gold', 'Ends 31 Jan 2027']);
     expect(rowWords(entry({ formerAt: '2026-09-03T10:00:00.000Z' }), TODAY)).toEqual(['Past member since 3 Sep 2026']);
+    // A past member who left a bill unpaid (18a-ii): the row says so, whatever the gym's file said of payment.
+    const owing = entry({ formerAt: '2026-09-03T10:00:00.000Z', owedSince: '2026-08-01', paymentStatus: 'Paid' });
+    expect(rowCells(owing, TODAY)).toMatchObject({ payment: 'Payment due', owes: true });
+    // Past members are found by the one word: it is sent with the past list and with Select all, and nothing else of the kind is.
+    const pastOwing = { ...EMPTY_FILTERS, records: 'former', paymentStatus: ['Payment due'], status: ['Active'] };
+    expect(entriesQueryString(pastOwing, null)).toBe('records=former&paymentStatus=Payment+due');
+    expect(selectionFilter(pastOwing)).toEqual({ records: 'former', paymentStatus: ['Payment due'] });
+    expect(selectionFilter({ ...EMPTY_FILTERS, records: 'former' })).toEqual({ records: 'former' });
+    // Said once, by the tag the row draws from that; the line of words under the name stays as it was.
+    expect(rowWords(owing, TODAY)).toEqual(['Past member since 3 Sep 2026']);
+    expect(rowCells(entry({ formerAt: '2026-09-03T10:00:00.000Z', owedSince: null, paymentStatus: 'Paid' }), TODAY)).toMatchObject({ payment: 'Paid', owes: false });
   });
 });
 

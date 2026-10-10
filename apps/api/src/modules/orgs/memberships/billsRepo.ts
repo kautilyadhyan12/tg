@@ -1,5 +1,6 @@
-// A gym's notebook: recording a payment, taking one back, and the run that opens the
-// bills that have fallen due (spec Part 3 §14.2; ROADMAP 18a-i).
+// A gym's notebook: recording a payment, taking one back, cancelling a bill, noting a
+// refund, and the run that opens the bills that have fallen due (spec Part 3 §14.2;
+// ROADMAP 18a-i and 18a-ii).
 //
 // Every write takes the gym's row and then the record's, as `heldRepo.ts` does, and
 // asks the rules in `@app/shared` on the rows as they are under those locks: which
@@ -12,17 +13,22 @@ import {
   countAfterGap,
   countAfterPayment,
   countAfterUndo,
+  memberCancelTarget,
   memberPayTarget,
   memberUndoTarget,
   moveHeldMembership,
   payMemberBill,
+  refundMemberPayment,
+  type BillCancelReason,
   type HeldMembership,
+  type MemberPaymentByHand,
   type MemberPaymentMethod,
+  type RefundReason,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { lockGym } from "../memberList/repo.js";
-import { billsFor, insertBills, insertPayment, paymentsFor, setBillStatus, setOverdueDays, type NewBill } from "./billsSql.js";
+import { billsFor, cancelBill, insertBills, insertPayment, insertRefund, paymentsFor, setBillStatus, setOverdueDays, type NewBill } from "./billsSql.js";
 import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
 
 export type BillWriteOutcome =
@@ -30,7 +36,15 @@ export type BillWriteOutcome =
   | { kind: "entry_not_found" }
   | { kind: "membership_not_found" }
   | { kind: "payment_not_found" }
+  | { kind: "bill_not_found" }
+  | { kind: "refund_not_found" }
   | { kind: "past_member" }
+  /** A cancel of a bill that has a payment standing on it. */
+  | { kind: "bill_has_payment" }
+  /** A refund for a payment whose bill is not settled. */
+  | { kind: "refund_not_settled" }
+  /** More than is left of the payment to give back. */
+  | { kind: "refund_too_much"; leftMinor: number; currency: string }
   /** The key of this request already recorded a payment on another membership. */
   | { kind: "request_reused" }
   /** The membership or its bills are not as the screen was shown them. */
@@ -115,7 +129,7 @@ export async function recordPayment(
         input.now,
       );
       if (opened === undefined) throw new Error("a bill to pay was not opened under the gym's lock");
-      bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0 };
+      bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0, refundedMinor: 0, cancelled: null };
     }
 
     const paymentId = await insertPayment(
@@ -237,7 +251,8 @@ export async function undoMark(
     if (!move.ok) return { kind: "not_allowed" };
     if (!move.changed || move.membership.paidPeriods === before) return { kind: "ok" };
     const bills = await billsFor(tx, input.gymId, [row.id]);
-    if (bills.some((b) => b.periodIndex === input.paidPeriods && b.status === "paid")) return { kind: "not_allowed" };
+    // A period settled by a bill (paid, cancelled or refunded) is not a bare mark.
+    if (bills.some((b) => b.periodIndex === input.paidPeriods && b.status !== "open")) return { kind: "not_allowed" };
 
     await writePaidPeriods(tx, input.gymId, input.entryId, row.id, input.paidPeriods, input.now);
     await insertAudit(tx, {
@@ -247,6 +262,216 @@ export async function undoMark(
       targetType: "gym_held_membership",
       targetId: row.id,
       meta: { entryId: input.entryId, type: row.typeName, on: input.today, paidBefore: String(before), paidAfter: String(input.paidPeriods) },
+    });
+    return { kind: "ok" };
+  });
+}
+
+/** Staff cancel one bill: the person no longer owes it. Only the bill a payment would be
+ *  taken for next, with nothing paid on it (`memberCancelTarget`); it settles its period
+ *  as a payment does, so the count of paid periods moves with it. The bill is kept,
+ *  marked. Pressed twice, it is cancelled once. */
+export async function cancelMemberBill(
+  sql: Sql,
+  input: { gymId: string; entryId: string; membershipId: string; billId: string; reason: BillCancelReason; today: string; actorUserId: string; now: Date },
+): Promise<BillWriteOutcome> {
+  return await sql.begin(async (tx): Promise<BillWriteOutcome> => {
+    const entry = await lockedEntry(tx, input.gymId, input.entryId);
+    if (entry === null) return { kind: "entry_not_found" };
+    if (!entry.past) await settle(tx, input.gymId, input.entryId, input.today, input.now);
+    const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
+    if (row === null) return { kind: "membership_not_found" };
+
+    const bills = await billsFor(tx, input.gymId, [row.id]);
+    const bill = bills.find((b) => b.id === input.billId);
+    if (bill === undefined) return { kind: "bill_not_found" };
+    if (bill.status === "void" && bill.cancelled !== null) return { kind: "ok" };
+    if (bill.status === "open" && bill.paidMinor > 0) return { kind: "bill_has_payment" };
+    const target = memberCancelTarget(row.membership, row.priceMinor, input.today, bills, entry.past);
+    if (target === null || target.periodIndex !== bill.periodIndex) return { kind: "not_allowed" };
+    const count = countAfterPayment(row.membership, target, input.today);
+    if (!count.ok) return { kind: "not_allowed" };
+
+    const done = await cancelBill(tx, { gymId: input.gymId, billId: bill.id, reason: input.reason, on: input.today, by: input.actorUserId, now: input.now });
+    if (!done) throw new Error("a bill to cancel was not open under the gym's lock");
+    if (count.paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, count.paidPeriods, input.now);
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.member_bill_cancelled",
+      targetType: "gym_member_bill",
+      targetId: bill.id,
+      meta: {
+        entryId: input.entryId,
+        membershipId: row.id,
+        period: String(bill.periodIndex),
+        amountMinor: String(bill.amountMinor),
+        currency: bill.currency,
+        reason: input.reason,
+        paidBefore: String(row.membership.paidPeriods),
+        paidAfter: String(count.paidPeriods ?? row.membership.paidPeriods),
+      },
+    });
+    return { kind: "ok" };
+  });
+}
+
+/** One payment of one membership, with its bill, under the gym's lock; null where it is
+ *  not that membership's. */
+async function paymentOf(
+  tx: TransactionSql,
+  gymId: string,
+  membershipId: string,
+  paymentId: string,
+): Promise<{ undone: boolean; bill_id: string; amount_minor: number; currency: string; period_index: number } | null> {
+  const [payment] = await tx<{ undone: boolean; bill_id: string; amount_minor: number; currency: string; period_index: number }[]>`
+    SELECT p.undone_at IS NOT NULL AS undone, p.bill_id, p.amount_minor, p.currency, b.period_index
+    FROM gym_member_payments p
+    JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+    WHERE p.gym_id = ${gymId} AND p.id = ${paymentId} AND b.held_membership_id = ${membershipId}`;
+  return payment ?? null;
+}
+
+/** Notes that the gym gave money back for a payment: all of it or part. The app moves no
+ *  money, and nothing else moves either: no date and no count (`refundMemberPayment`).
+ *  The same request twice is one refund; two members of staff at one instant are taken
+ *  one after the other under the gym's lock, so together they never note more than was
+ *  paid. A past member's payment can be refunded too. */
+export async function noteRefund(
+  sql: Sql,
+  input: {
+    gymId: string;
+    entryId: string;
+    membershipId: string;
+    paymentId: string;
+    requestKey: string;
+    amountMinor: number;
+    method: MemberPaymentByHand;
+    reason: RefundReason;
+    today: string;
+    actorUserId: string;
+    now: Date;
+  },
+): Promise<BillWriteOutcome> {
+  return await sql.begin(async (tx): Promise<BillWriteOutcome> => {
+    const entry = await lockedEntry(tx, input.gymId, input.entryId);
+    if (entry === null) return { kind: "entry_not_found" };
+    const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
+    if (row === null) return { kind: "membership_not_found" };
+
+    // The same key with anything else in it, or after its refund was taken back, is not
+    // the same request: it is refused, never answered as noted.
+    const [byKey] = await tx<{ payment_id: string; amount_minor: number; method: string; reason: string; undone: boolean }[]>`
+      SELECT payment_id, amount_minor, method, reason, undone_at IS NOT NULL AS undone
+      FROM gym_member_refunds
+      WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
+    if (byKey !== undefined) {
+      const same =
+        byKey.payment_id === input.paymentId &&
+        byKey.amount_minor === input.amountMinor &&
+        byKey.method === input.method &&
+        byKey.reason === input.reason &&
+        !byKey.undone;
+      return same ? { kind: "ok" } : { kind: "request_reused" };
+    }
+
+    const payment = await paymentOf(tx, input.gymId, row.id, input.paymentId);
+    if (payment === null || payment.undone) return { kind: "payment_not_found" };
+    const bill = (await billsFor(tx, input.gymId, [row.id])).find((b) => b.id === payment.bill_id);
+    const standing = (await paymentsFor(tx, input.gymId, [row.id])).find((p) => p.id === input.paymentId);
+    if (bill === undefined || standing === undefined) return { kind: "payment_not_found" };
+
+    const refund = refundMemberPayment(bill, standing, input.amountMinor);
+    if (!refund.ok) {
+      if (refund.reason === "too_much") return { kind: "refund_too_much", leftMinor: refund.leftMinor, currency: payment.currency };
+      return refund.reason === "not_settled" ? { kind: "refund_not_settled" } : { kind: "not_allowed" };
+    }
+
+    const refundId = await insertRefund(
+      tx,
+      {
+        gymId: input.gymId,
+        paymentId: input.paymentId,
+        amountMinor: input.amountMinor,
+        currency: payment.currency,
+        method: input.method,
+        reason: input.reason,
+        requestKey: input.requestKey,
+        refundedOn: input.today,
+        recordedBy: input.actorUserId,
+      },
+      input.now,
+    );
+    if (refundId === null) throw new Error("a refund was not noted under the gym's lock");
+    if (refund.billStatus === "refunded") await setBillStatus(tx, input.gymId, bill.id, "refunded", input.now);
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.member_refund_noted",
+      targetType: "gym_member_refund",
+      targetId: refundId,
+      meta: {
+        entryId: input.entryId,
+        membershipId: row.id,
+        billId: bill.id,
+        paymentId: input.paymentId,
+        period: String(bill.periodIndex),
+        amountMinor: String(input.amountMinor),
+        currency: payment.currency,
+        method: input.method,
+        reason: input.reason,
+        billRefunded: String(refund.billStatus === "refunded"),
+      },
+    });
+    return { kind: "ok" };
+  });
+}
+
+/** Takes back a refund noted by mistake: its row is kept, marked, and a bill that read
+ *  Refunded reads Paid again. Nothing else moves. */
+export async function undoRefund(
+  sql: Sql,
+  input: { gymId: string; entryId: string; membershipId: string; paymentId: string; refundId: string; actorUserId: string; now: Date },
+): Promise<BillWriteOutcome> {
+  return await sql.begin(async (tx): Promise<BillWriteOutcome> => {
+    const entry = await lockedEntry(tx, input.gymId, input.entryId);
+    if (entry === null) return { kind: "entry_not_found" };
+    const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
+    if (row === null) return { kind: "membership_not_found" };
+    const payment = await paymentOf(tx, input.gymId, row.id, input.paymentId);
+    if (payment === null) return { kind: "payment_not_found" };
+
+    const [refund] = await tx<{ undone: boolean; amount_minor: number; currency: string }[]>`
+      SELECT undone_at IS NOT NULL AS undone, amount_minor, currency
+      FROM gym_member_refunds
+      WHERE gym_id = ${input.gymId} AND id = ${input.refundId} AND payment_id = ${input.paymentId}`;
+    if (refund === undefined) return { kind: "refund_not_found" };
+    if (refund.undone) return { kind: "ok" };
+
+    await tx`
+      UPDATE gym_member_refunds SET undone_at = ${input.now}, undone_by = ${input.actorUserId}
+      WHERE gym_id = ${input.gymId} AND id = ${input.refundId} AND undone_at IS NULL`;
+    // Less than everything paid is now given back: the bill is Paid, not Refunded.
+    await tx`
+      UPDATE gym_member_bills SET status = 'paid', updated_at = ${input.now}
+      WHERE gym_id = ${input.gymId} AND id = ${payment.bill_id} AND status = 'refunded'`;
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.member_refund_undone",
+      targetType: "gym_member_refund",
+      targetId: input.refundId,
+      meta: {
+        entryId: input.entryId,
+        membershipId: row.id,
+        billId: payment.bill_id,
+        paymentId: input.paymentId,
+        amountMinor: String(refund.amount_minor),
+        currency: refund.currency,
+      },
     });
     return { kind: "ok" };
   });

@@ -7,8 +7,9 @@
 // the one rule (`heldOnList` in `@app/shared`) on the gym's own day. Everybody else reads
 // as before.
 import type { Sql, TransactionSql } from "postgres";
-import { HELD_PAYMENT_WORDS, HELD_STATUS_WORDS, heldListWords, heldOnList, type HeldOnList } from "@app/shared";
-import { inUseForList, overForList, type ListHeld } from "./heldRepo.js";
+import { HELD_PAYMENT_WORDS, HELD_STATUS_WORDS, heldListWords, heldOnList, type HeldForList, type HeldOnList } from "@app/shared";
+import { inUseForList, overForList } from "./heldRepo.js";
+import { listBillFacts } from "./billsSql.js";
 
 export interface HeldShown {
   shown: HeldOnList;
@@ -21,7 +22,7 @@ const IN_USE: readonly HeldOnList["status"][] = ["active", "frozen", "upcoming"]
 /** Each record whose columns the app answers, by its id: the records named, or every
  *  current record of the gym (null). `today` is the gym's own day.
  *
- *  Two reads at ONE moment: on the pool they share a read-only snapshot, so a membership
+ *  Its reads at ONE moment: on the pool they share a read-only snapshot, so a membership
  *  cancelled between them is not handed to the rule as both in use and over. Inside a
  *  caller's own transaction they run as they stand: a write there holds the gym's lock,
  *  which every change to a membership takes first. */
@@ -38,29 +39,36 @@ export async function heldOnListOf(
 /** The memberships stored in use say most people's answer by themselves. The second read is
  *  for the rest: the people with nothing stored in use, and the few whose every membership
  *  stored in use the clock has ended since anybody wrote to it, who are judged with the one
- *  stored over that finished last and what the list's own word names. */
+ *  stored over that finished last and what the list's own word names.
+ *
+ *  Payment reads the bills too (18a-ii): a bill still open is owed whichever membership it
+ *  is for, so somebody whose membership ended unpaid is found under "Payment due"; and a
+ *  month staff let off by cancelling its bill reads "Free", never "Paid". */
 async function bothReads(
   sql: Sql | TransactionSql,
   gymId: string,
   today: string,
   entryIds: readonly string[] | null,
 ): Promise<Map<string, HeldShown>> {
-  const byEntry = new Map<string, { noEmail: boolean; held: ListHeld[] }>();
+  const bills = await listBillFacts(sql, gymId, today, entryIds);
+  const owed = bills.owedSince;
+  const byEntry = new Map<string, { noEmail: boolean; held: HeldForList[] }>();
   for (const row of await inUseForList(sql, gymId, entryIds)) {
+    const held: HeldForList = { ...row.held, notCharged: bills.notCharged.has(row.held.id) };
     const mine = byEntry.get(row.entryId);
-    if (mine === undefined) byEntry.set(row.entryId, { noEmail: row.noEmail, held: [row.held] });
-    else mine.held.push(row.held);
+    if (mine === undefined) byEntry.set(row.entryId, { noEmail: row.noEmail, held: [held] });
+    else mine.held.push(held);
   }
   const out = new Map<string, HeldShown>();
   const ended: string[] = [];
   for (const [entryId, mine] of byEntry) {
-    const shown = heldOnList({ held: mine.held, listedUnheld: null, today });
+    const shown = heldOnList({ held: mine.held, listedUnheld: null, today, owedSince: owed.get(entryId) ?? null });
     if (shown !== null && IN_USE.includes(shown.status)) out.set(entryId, { shown, noEmail: mine.noEmail });
     else ended.push(entryId);
   }
   for (const row of await overForList(sql, gymId, entryIds, ended, today)) {
     const held = [...(byEntry.get(row.entryId)?.held ?? []), ...(row.held === null ? [] : [row.held])];
-    const shown = heldOnList({ held, listedUnheld: row.listedUnheld, today });
+    const shown = heldOnList({ held, listedUnheld: row.listedUnheld, today, owedSince: owed.get(row.entryId) ?? null });
     if (shown !== null) out.set(row.entryId, { shown, noEmail: row.noEmail });
   }
   return out;

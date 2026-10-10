@@ -44,7 +44,19 @@ import {
 } from "@app/shared";
 import { insertAudit, insertAudits } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
-import { billsFor, insertBills, insertPayment, overdueDaysOf, paymentsFor, setBillStatus, voidBills, type BillRow, type PaymentRow } from "./billsSql.js";
+import {
+  billsFor,
+  insertBills,
+  insertPayment,
+  overdueDaysOf,
+  paymentsFor,
+  refundsFor,
+  setBillStatus,
+  voidBills,
+  type BillRow,
+  type PaymentRow,
+  type RefundRow,
+} from "./billsSql.js";
 import type { HasBookings, MembershipEndConfirmed } from "../classes/bookingChanges.js";
 import type { MembershipScope } from "../classes/bookingsRepo.js";
 
@@ -180,10 +192,11 @@ export interface HeldList {
   /** What the member list says their membership is; null where it says nothing, and for
    *  a past member. */
   listed: ListedMembership | null;
-  /** The bills of every membership here, the payments that stand, and the gym's own
-   *  number of days before an unpaid bill reads Overdue (18a-i). */
+  /** The bills of every membership here, the payments and refunds that stand, and the
+   *  gym's own number of days before an unpaid bill reads Overdue (18a-i, 18a-ii). */
   bills: BillRow[];
   payments: PaymentRow[];
+  refunds: RefundRow[];
   overdueAfterDays: number;
 }
 
@@ -250,6 +263,7 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       listed,
       bills: await billsFor(tx, gymId, ids),
       payments: await paymentsFor(tx, gymId, ids),
+      refunds: await refundsFor(tx, gymId, ids),
       overdueAfterDays: await overdueDaysOf(tx, gymId),
     };
   });

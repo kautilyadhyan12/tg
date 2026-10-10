@@ -1,11 +1,16 @@
-// A PERSON'S BILLS AND PAYMENTS, their words (spec Part 3 §14.2; ROADMAP 18a-i). Pure, so
-// the tests read every state without a browser. The server works out what each bill reads
-// and which payment can be recorded or taken back (`memberBillRules.ts` in `@app/shared`);
-// this file only puts them into words.
+// A PERSON'S BILLS AND PAYMENTS, their words (spec Part 3 §14.2; ROADMAP 18a-i, 18a-ii).
+// Pure, so the tests read every state without a browser. The server works out what each
+// bill reads, which payment can be recorded or taken back, which bill can be cancelled and
+// what can still be refunded (`memberBillRules.ts` in `@app/shared`); this file only puts
+// them into words.
 import {
+  BILL_CANCEL_REASONS,
+  BILL_CANCEL_REASON_WORDS,
   BILL_OVERDUE_DAYS_MAX,
   MEMBER_PAYMENT_BY_HAND,
   MEMBER_PAYMENT_METHOD_WORDS,
+  REFUND_REASONS,
+  REFUND_REASON_WORDS,
   currencyDecimals,
   formatMinor,
   minorToPriceText,
@@ -24,20 +29,65 @@ export const NO_PAYMENTS_LINE = "You can't record payments. Ask the owner to tur
 /** The ways staff record a payment by hand, for a list to pick from. */
 export const PAYMENT_METHODS = MEMBER_PAYMENT_BY_HAND.map((value) => ({ value, label: MEMBER_PAYMENT_METHOD_WORDS[value] }));
 
+/** Each state has a colour of its own, so a column of bills is read at a glance: paid
+ *  green, owed yellow, overdue red, money given back orange, cancelled grey. */
 const STATE_TAGS = {
   paid: { tag: 'Paid', tone: 'green' },
-  due: { tag: 'Due', tone: 'plain' },
-  overdue: { tag: 'Overdue', tone: 'orange' },
+  due: { tag: 'Due', tone: 'orange' },
+  overdue: { tag: 'Overdue', tone: 'red' },
   void: { tag: 'Cancelled', tone: 'plain' },
-  refunded: { tag: 'Refunded', tone: 'plain' },
+  refunded: { tag: 'Refunded', tone: 'soft' },
 };
 
-const methodWords = (method) => MEMBER_PAYMENT_METHOD_WORDS[method] ?? 'Paid';
+/** How many of a membership's bills are drawn before "Show all". */
+export const BILLS_FOLDED = 2;
 
-/** One bill as a row: what it is for, its tag, when it is or was due, and each payment. */
+const methodWords = (method) => MEMBER_PAYMENT_METHOD_WORDS[method] ?? 'Paid';
+const byWords = (by) => (by === null ? null : `by ${by}`);
+const joined = (parts) => parts.filter((part) => part !== null).join(' · ');
+
+/** Why a bill was cancelled, and why money was given back, for a list to pick from. */
+export const CANCEL_REASONS = BILL_CANCEL_REASONS.map((value) => ({ value, label: BILL_CANCEL_REASON_WORDS[value] }));
+export const REFUND_REASON_CHOICES = REFUND_REASONS.map((value) => ({ value, label: REFUND_REASON_WORDS[value] }));
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2026-10-01" → "1 Oct 2026", or "1 Oct" without its year: a bill's row is narrow. */
+export function shortDay(day, withYear = true) {
+  const [y, m, d] = day.split('-').map(Number);
+  return `${String(d)} ${SHORT_MONTHS[m - 1]}${withYear ? ` ${String(y)}` : ''}`;
+}
+
+/** The days a bill is for, "1 Oct – 31 Oct 2026"; a bill for a whole membership says so. */
+export function billDays(covers) {
+  if (covers === null) return 'Whole membership';
+  const sameYear = covers.from.slice(0, 4) === covers.to.slice(0, 4);
+  return `${shortDay(covers.from, !sameYear)} – ${shortDay(covers.to)}`;
+}
+
+/** The bills a membership's box draws: the newest `BILLS_FOLDED`, or all of them; and
+ *  always the one a payment can be taken for, so what is owed is never folded away. */
+export function billsToDraw(billing, all) {
+  const newest = all ? billing.bills : billing.bills.slice(0, BILLS_FOLDED);
+  const owed = billing.pay === null ? undefined : billing.bills.find((b) => b.periodIndex === billing.pay.periodIndex);
+  const bills = owed === undefined || newest.includes(owed) ? newest : [...newest, owed];
+  return { bills, hidden: billing.bills.length - bills.length };
+}
+
+/** One bill as a box: the days it is for, its amount and tag, when it is or was due, who
+ *  cancelled it, and each payment in columns with the refunds noted against it. */
 export function billRow(bill, currency, today) {
   const amount = formatMinor(bill.amountMinor, currency);
-  const state = STATE_TAGS[bill.state] ?? STATE_TAGS.due;
+  // Some of what was paid has been given back, and not all: still paid, and said so.
+  const partRefunded = bill.state === 'paid' && bill.refundedMinor > 0;
+  const state = partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (STATE_TAGS[bill.state] ?? STATE_TAGS.due);
+  let cancelled = null;
+  if (bill.state === 'void') {
+    cancelled =
+      bill.cancelled === null
+        ? 'Cancelled with the membership'
+        : joined([`Cancelled ${dayWords(bill.cancelled.on)}`, BILL_CANCEL_REASON_WORDS[bill.cancelled.reason] ?? null, byWords(bill.cancelled.by)]);
+  }
   const open = bill.state === 'due' || bill.state === 'overdue';
   const left = bill.amountMinor - bill.paidMinor;
   let when = null;
@@ -45,18 +95,110 @@ export function billRow(bill, currency, today) {
   else if (bill.state === 'due') when = bill.dueOn === today ? 'Due today' : `Due ${dayWords(bill.dueOn)}`;
   return {
     id: bill.id,
-    title: bill.covers === null ? amount : `${dayWords(bill.covers.from)} to ${dayWords(bill.covers.to)} · ${amount}`,
+    periodIndex: bill.periodIndex,
+    days: billDays(bill.covers),
+    amount,
     tag: state.tag,
     tone: state.tone,
     when,
     // Part paid: what is still owed, said in money.
     left: open && bill.paidMinor > 0 ? `${formatMinor(bill.paidMinor, currency)} paid · ${formatMinor(left, currency)} left` : null,
+    cancelled,
     payments: bill.payments.map((p) => ({
       id: p.id,
-      line: [formatMinor(p.amountMinor, currency), methodWords(p.method), dayWords(p.paidOn), p.by === null ? null : `by ${p.by}`]
-        .filter((part) => part !== null)
-        .join(' · '),
+      amount: formatMinor(p.amountMinor, currency),
+      detail: joined([methodWords(p.method), shortDay(p.paidOn), byWords(p.by)]),
+      refundable: p.refundableMinor > 0,
+      refunds: p.refunds.map((r) => ({
+        id: r.id,
+        amount: `${formatMinor(r.amountMinor, currency)} refunded`,
+        detail: joined([methodWords(r.method), shortDay(r.refundedOn), REFUND_REASON_WORDS[r.reason] ?? null, byWords(r.by)]),
+      })),
     })),
+  };
+}
+
+const capital = (name) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+
+/** The bill staff can cancel now, or null: the server says which. */
+export function billToCancel(m) {
+  const id = m.billing?.cancel?.billId ?? null;
+  return id === null ? null : (m.billing.bills.find((b) => b.id === id) ?? null);
+}
+
+/** The box a press of "Cancel this bill" opens: whose bill, what stops being owed and
+ *  what stays as it is. `live`: the membership is in use. */
+export function cancelBillWords(m, name, live) {
+  const bill = billToCancel(m);
+  const amount = formatMinor(bill.amountMinor, m.currency);
+  const days = bill.covers === null ? '' : ` for ${dayWords(bill.covers.from)} to ${dayWords(bill.covers.to)}`;
+  const keeps = live ? ` ${capital(name)} keeps the membership and its dates.` : '';
+  return {
+    question: `Cancel this ${amount} bill for ${name}'s ${m.typeName}?`,
+    detail: `It is the bill${days}. ${capital(name)} will owe nothing for it.${keeps} The bill stays in your records, marked Cancelled. This can't be undone.`,
+    button: 'Cancel this bill',
+    done: `That ${amount} bill was cancelled. Nothing is owed for it.`,
+  };
+}
+
+/** Why the cancel cannot be sent as it stands, or null; and the body it sends. */
+export function cancelBillBody(draft) {
+  return draft.reason === '' ? { problem: 'Pick why you are cancelling it.', body: null } : { problem: null, body: { reason: draft.reason } };
+}
+
+/** One payment of a membership by its id, or null. */
+export function paymentOf(m, paymentId) {
+  return m.billing?.bills.flatMap((b) => b.payments).find((p) => p.id === paymentId) ?? null;
+}
+
+/** The form "Note a refund" opens: the amount starts at what can still be refunded. */
+export function refundDraft(m, payment, newKey) {
+  return { paymentId: payment.id, requestKey: newKey(), amount: minorToPriceText(payment.refundableMinor, m.currency), method: '', reason: '' };
+}
+
+/** What the form says above its fields. `live`: the membership is in use. */
+export function refundWords(m, name, payment, live) {
+  const paid = `${formatMinor(payment.amountMinor, m.currency)} paid on ${dayWords(payment.paidOn)}`;
+  const left = formatMinor(payment.refundableMinor, m.currency);
+  const some = payment.refundableMinor < payment.amountMinor ? ` ${left} of it can still be refunded.` : '';
+  const keeps = live
+    ? ` ${capital(name)} keeps the membership and its dates: to end it, use Cancel membership.`
+    : '';
+  return {
+    title: `Note a refund for ${name}'s ${m.typeName}`,
+    detail: `This is for the ${paid}.${some} It only writes the refund in your records: give the money back yourself.${keeps}`,
+  };
+}
+
+/** Why the form cannot be sent as it stands, or null; and the body it sends. */
+export function refundBody(m, payment, draft) {
+  const amountMinor = priceToMinor(draft.amount, m.currency);
+  if (amountMinor === null || amountMinor <= 0) {
+    const decimals = currencyDecimals(m.currency) ?? 2;
+    return { problem: decimals === 0 ? 'Type the amount you gave back, as a whole number.' : 'Type the amount you gave back, like 20 or 20.50.', body: null };
+  }
+  if (amountMinor > payment.refundableMinor) {
+    return { problem: `That is more than can be refunded. ${formatMinor(payment.refundableMinor, m.currency)} is the most.`, body: null };
+  }
+  if (draft.method === '') return { problem: 'Pick how you gave it back.', body: null };
+  if (draft.reason === '') return { problem: 'Pick why it was refunded.', body: null };
+  return { problem: null, body: { requestKey: draft.requestKey, amountMinor, method: draft.method, reason: draft.reason } };
+}
+
+/** What a noted refund says back. */
+export function refundedWords(m, amountMinor) {
+  return `${formatMinor(amountMinor, m.currency)} noted as refunded.`;
+}
+
+/** The question "Undo refund" asks, for one refund noted against one payment. */
+export function undoRefundWords(m, name, paymentId, refundId) {
+  const refund = paymentOf(m, paymentId)?.refunds.find((r) => r.id === refundId) ?? null;
+  const what = refund === null ? 'this refund' : `the ${formatMinor(refund.amountMinor, m.currency)} refund noted on ${dayWords(refund.refundedOn)}`;
+  return {
+    question: `Take back ${what} for ${name}'s ${m.typeName}?`,
+    detail: 'Use this when a refund was noted by mistake. This only changes your records: no money moves.',
+    button: 'Take it back',
+    done: 'That refund was taken back.',
   };
 }
 
@@ -134,8 +276,6 @@ export function undoWords(m, name) {
   };
 }
 
-/** How many of a membership's bills are drawn before "Show all". */
-export const BILLS_FOLDED = 2;
 
 // ── When an unpaid bill reads Overdue (the gym's own number) ─────────────────
 

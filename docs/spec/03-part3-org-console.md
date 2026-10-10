@@ -3349,8 +3349,64 @@ with the payment that settles the bill of the first unpaid period.
   on the staff form) to read a person's bills and payments, record, undo and change the
   grace period. Staff with the list's tick alone still read Paid or Payment due on the
   person's page, as before, and are told who can record.
-- **Left for 18a-ii**: void a bill, note a refund, and the Members list's Payment filter
-  reading the bills (it still reads the count of paid periods, which a payment moves).
+**As built, 18a-ii (2026-10-10; RULINGS that day).** Staff with `billing.members` can
+cancel a bill and note a refund, on a person's page under Memberships, and the Members
+list's Payment reads the bills.
+- **How the bills are drawn**: each bill is a box of its own, its days on the left and its
+  amount and tag on the right; each payment is one line inside its bill, a refund indented
+  under its payment; Record payment and Cancel this bill sit inside the bill they act on,
+  which is always drawn however old it is; what acts on the whole membership (Freeze,
+  Cancel membership) is in one bar under a line.
+- **Cancel this bill** (the trade's "void") is beside Record payment and acts on the same
+  bill: the one a payment would be taken for next, and only while nothing is paid on it
+  (a part-paid bill has its payment taken back first, or the rest recorded). Bills are
+  cancelled in the order they are paid in. A reason is picked from a list (Billed by
+  mistake · Not charging for this one · Something else), never typed. The bill is kept,
+  marked Cancelled with who, when and why. **It settles its period as a payment does:**
+  the membership's count of paid periods moves on by one, so the person owes nothing
+  for it, keeps its days, and the next period is billed as usual. The membership's line
+  then reads "Nothing to pay now · next payment due …", never "Paid". It cannot be
+  undone. A past member's bill can be cancelled too: the gym lets go of what a leaver
+  owed.
+- **Note a refund** is on each payment of a settled bill: an amount (all or part, never
+  more than is left of that payment), how the gym gave it back (Cash · Card at the desk
+  · Bank transfer) and a reason picked from a list (Paid twice · Charged too much ·
+  Leaving or cancelled · Something else). The app moves no money: the gym gives it back
+  itself and this is its note (`gym_member_refunds`, one row a request). **A refund moves
+  no date and no count** (Kd, RULINGS 2026-10-10): the person keeps the days they paid
+  for, and staff cancel the membership separately to end it. The bill reads "Part
+  refunded" while some of what was paid stands, and Refunded (`refunded`) once all of
+  it has gone back. A leaver's payment can be refunded. Once all of the newest month's
+  money has gone back, the membership's line reads "Refunded · next payment due …" and
+  the Members list reads "Free": never "Paid". Asked again of a bill refunded in full,
+  the server says "All of that payment has already been refunded."
+- **Undo refund** takes back one refund noted by mistake; its row is kept, marked. While a
+  refund stands on a bill, **Undo last payment** is not offered for that bill's payments:
+  the refund is taken back first, so a refund only ever stands on a settled bill.
+- **The Members list's Payment** (§18.2) is "Payment due" wherever a bill of the person's
+  is still open and has fallen due, whichever membership it is for: one that is over
+  too, and one from before they were away beside a membership that is paid. So somebody
+  whose membership ended or was cancelled unpaid is found by the Payment filter, with
+  the day the oldest such bill fell due; the Filter's count, Select all, Invite, the
+  download and the front desk's log read the same answer (`heldOnListOf`). A bill that
+  was paid, cancelled or refunded is not owed. Where nothing is open, the answer is the
+  membership's own, as before, except that a month staff let off by cancelling its bill
+  reads "Free" (nothing to pay), never "Paid", as the person's own page says "Nothing to
+  pay".
+- **A past member who still owes** is on the Past members list as owing: their row
+  carries a "Payment due" tag under the name at every width (`owedSince` on the entry;
+  a past member's row has no Payment column), and that list's Filter has one chip,
+  "Payment due" with its count (`counts.formerOwing`), shown only where somebody owes,
+  which finds them by their open bills, their other two words staying the gym's own. Their page's payment line comes from their open bills alone: due since the oldest,
+  and nothing once none is open, since a past member's memberships are not in use and
+  their own clock says nothing true of money.
+- **A bill owed however long** is always sent to the page (the newest twelve and the one
+  a payment is taken for), so it can be paid or cancelled; a payment on a bill older
+  than those cannot be refunded from the page.
+- **Left as it is, and why**: a person whose record names a membership they never held here (§18.2's rule 2) keeps
+  the gym's own words on the list even with an old bill open; their page shows the bill.
+  Writing off the rest of a part-paid bill, and a refund sent through a payment company
+  (18d), are not built.
 
 ### 14.3 The register
 
@@ -4324,7 +4380,7 @@ you are sent, the gym has its box and a member their switches.** The other four 
 two, Membership ending, Payment overdue) are 20b-ii and the class reminder 20b-iii.
 - **The gym's box**, Settings → **Automatic messages** (`org.manage`;
   `GET` and `PUT /v1/orgs/:gymId/message-settings`; `gym_message_settings`, one row a gym a
-  kind, migration `0094`; a kind with no row has its starting values): for each message a
+  kind, migration `0095`; a kind with no row has its starting values): for each message a
   switch, when it is sent, the words a member will read (with **[member's first name]**
   where the name goes, never a sample name: RULINGS 2026-10-11), and ONE line of the gym's own for
   that message (140 characters, a message to a group's rule for a web address and an @,

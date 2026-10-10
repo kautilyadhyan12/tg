@@ -1,4 +1,4 @@
-// THE RULES OF BILLS AND PAYMENTS — Part 3 §14.2; ROADMAP Stage 2 item 18a-i.
+// THE RULES OF BILLS AND PAYMENTS — Part 3 §14.2; ROADMAP Stage 2 items 18a-i and 18a-ii.
 //
 // Pure: the day is the gym's own, passed in. `memberBills.ts` has how this sits with a
 // membership's count of paid periods.
@@ -137,6 +137,58 @@ export function memberPayTarget(
   return { periodIndex: index, leftMinor: bill.amountMinor - bill.paidMinor, dueOn: bill.dueOn, covers: bill.covers ?? null, advances: true };
 }
 
+/** THE ONE BILL STAFF CAN CANCEL NOW, or null: the bill a payment would be taken for
+ *  (`memberPayTarget`), where it is open and nothing is paid on it. Bills are cancelled in
+ *  the order they are paid in, and a cancelled bill settles its period as a payment does
+ *  (`countAfterPayment`): the person owes nothing for it and keeps its days, so the count
+ *  never stands on a period whose bill can no longer be paid. One with a payment on it is
+ *  not cancelled: the payment is taken back first, or the rest recorded. */
+export function memberCancelTarget(
+  m: HeldMembership,
+  priceMinor: number,
+  today: string,
+  bills: readonly BillFacts[],
+  past = false,
+): PayTarget | null {
+  const target = memberPayTarget(m, priceMinor, today, bills, past);
+  if (target === null) return null;
+  const bill = bills.find((b) => b.periodIndex === target.periodIndex);
+  return bill === undefined || bill.status !== "open" || bill.paidMinor > 0 ? null : target;
+}
+
+export type RefundMemberPayment =
+  | { ok: true; billStatus: "paid" | "refunded" }
+  | { ok: false; reason: "not_settled" | "not_an_amount" }
+  | { ok: false; reason: "too_much"; leftMinor: number };
+
+/** What a refund can still be noted for on one payment: what was paid less the refunds
+ *  that stand against it, and only on a bill that is settled. An open bill's payment is
+ *  taken back (Undo), not refunded. */
+export function refundableMinor(billStatus: MemberBillStatus, payment: { amountMinor: number; refundedMinor: number }): number {
+  return billStatus === "paid" ? Math.max(0, payment.amountMinor - payment.refundedMinor) : 0;
+}
+
+/** ONE REFUND NOTED AGAINST A PAYMENT. More than is left of that payment is refused, so a
+ *  gym's notebook never says it gave back more than it took. The bill reads Refunded once
+ *  everything paid on it has been given back; until then it stays Paid. A refund moves no
+ *  date and no count: the person keeps the days they paid for (Kd, RULINGS 2026-10-10).
+ *
+ *  `bill.paidMinor` and `bill.refundedMinor` are the payments and refunds that stand on
+ *  the whole bill. */
+export function refundMemberPayment(
+  bill: { status: MemberBillStatus; paidMinor: number; refundedMinor: number },
+  payment: { amountMinor: number; refundedMinor: number },
+  amountMinor: number,
+): RefundMemberPayment {
+  // Everything paid on it has gone back already: nothing is left, and that is what is said.
+  if (bill.status === "refunded") return { ok: false, reason: "too_much", leftMinor: 0 };
+  if (bill.status !== "paid") return { ok: false, reason: "not_settled" };
+  if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return { ok: false, reason: "not_an_amount" };
+  const leftMinor = refundableMinor(bill.status, payment);
+  if (amountMinor > leftMinor) return { ok: false, reason: "too_much", leftMinor };
+  return { ok: true, billStatus: bill.refundedMinor + amountMinor >= bill.paidMinor ? "refunded" : "paid" };
+}
+
 /** THE COUNT OF PAID PERIODS, MOVED OVER THE PERIODS NOBODY WAS ASKED FOR (Kd, RULINGS
  *  2026-10-10). A period's bill is opened as the period begins, and only while its person
  *  is on the gym's list. So a period that began before the one today falls in and has NO
@@ -198,6 +250,8 @@ export interface PaymentFacts {
   id: string;
   periodIndex: number;
   seq: number;
+  /** The refunds that stand against it, added up. */
+  refundedMinor?: number;
 }
 
 /** THE ONE PAYMENT THAT CAN BE TAKEN BACK NOW: the newest on the membership, and only
@@ -212,6 +266,9 @@ export function memberUndoTarget(
   // the newest period; a payment for a bill outside the count moves nothing.
   const newest = [...payments].sort((a, b) => b.seq - a.seq)[0];
   if (newest === undefined) return null;
+  // Money noted as given back on that bill: the refund is taken back first, so a refund
+  // only ever stands on a bill that is settled.
+  if (payments.some((p) => p.periodIndex === newest.periodIndex && (p.refundedMinor ?? 0) > 0)) return null;
   const bill = bills.find((b) => b.periodIndex === newest.periodIndex);
   if (bill === undefined || (bill.status !== "open" && bill.status !== "paid")) return null;
   if (bill.status === "open") return { paymentId: newest.id, reopens: false, goesBack: false };

@@ -495,7 +495,7 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
       hasList: true,
       version: 2,
       lastConfirmedAt: new Date().toISOString(),
-      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1, former: 0 },
+      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1, former: 0, formerOwing: 0 },
       statuses: [{ label: "Active", count: 8, inApp: 3, canBeInvited: 5 }],
       // 3a-v-b's three, each with a default so a view built before it still parses.
       membershipTypes: [],
@@ -685,7 +685,7 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
       hasList: true,
       version: 2,
       lastConfirmedAt: new Date().toISOString(),
-      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1, former: 4 },
+      counts: { entries: 10, inApp: 3, canBeInvited: 6, noEmail: 1, former: 4, formerOwing: 1 },
       statuses: [{ label: "Active", count: 8, inApp: 3, canBeInvited: 5 }],
       membershipTypes: [{ label: "Gold", count: 6, inApp: 2, canBeInvited: 4 }],
       paymentStatuses: [{ label: "Overdue", count: 1, inApp: 0, canBeInvited: 1 }],
@@ -796,7 +796,11 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
     // server too old to send it.
     // What the memberships they hold say (23a-i) is null for a person holding none, and
     // for a row from a server too old to send it.
-    expect(memberListEntrySchema.parse(entry)).toEqual({ ...entry, invitation: null, needsReview: false, staff: null, held: null });
+    // What a past member still owes (18a-ii) is null for everybody else, and for a row
+    // from a server too old to send it; a day that is not one is refused.
+    expect(memberListEntrySchema.parse(entry)).toEqual({ ...entry, invitation: null, needsReview: false, staff: null, held: null, owedSince: null });
+    expect(memberListEntrySchema.parse({ ...entry, owedSince: "2026-08-01" }).owedSince).toBe("2026-08-01");
+    expect(memberListEntrySchema.safeParse({ ...entry, owedSince: "1 August" }).success).toBe(false);
     const held = { status: "active" as const, memberships: ["Gold Monthly"], day: { what: "renews" as const, on: "2026-11-06" }, payment: { state: "due" as const, since: null } };
     expect(memberListEntrySchema.parse({ ...entry, held }).held).toEqual(held);
     // A shape the rule never makes is refused, not shown: no names, or a payment it has no word for.

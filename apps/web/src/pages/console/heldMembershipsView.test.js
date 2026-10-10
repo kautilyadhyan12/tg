@@ -46,6 +46,8 @@ function held(type, startsOn, paid, { givenOn = startsOn, moves = [], today = TO
     frozenOn: m.frozenOn,
     classesLeft: m.classesLeft,
     fromList: false,
+    notCharged: false,
+    refundedInFull: false,
     view: heldMembershipView(m, today),
     billing: null,
   });

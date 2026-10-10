@@ -27,15 +27,26 @@ import {
   statusTag,
 } from './heldMembershipsView';
 import {
-  BILLS_FOLDED,
+  CANCEL_REASONS,
   NO_PAYMENTS_LINE,
   PAYMENT_METHODS,
+  REFUND_REASON_CHOICES,
   billRow,
+  billToCancel,
+  billsToDraw,
+  cancelBillBody,
+  cancelBillWords,
   paidWords,
   payLabel,
   paymentBody,
   paymentDraft,
+  paymentOf,
   paymentWords,
+  refundBody,
+  refundDraft,
+  refundWords,
+  refundedWords,
+  undoRefundWords,
   undoWords,
 } from './memberBillsView';
 
@@ -50,6 +61,12 @@ import {
 // hold the payments tick: what each is for, Paid, Due or Overdue, and the payments
 // recorded against it. Record payment takes an amount and how it was paid; a membership
 // that is over and still owes a bill stays in the list above the fold until it is paid.
+// Each bill is a box of its own: its days, amount and tag across the top, its payments
+// in columns under them with Note a refund at the end of each line, a refund indented
+// under its payment with Undo refund, and Record payment and Cancel this bill inside the
+// bill they act on (ROADMAP 18a-ii). What acts on the whole membership (Freeze, Cancel
+// membership) is in one bar under a line. Each press opens a box that names the person,
+// the amount and what does and does not change.
 //
 // Drawn only where there is something to show: a gym with no membership types, and a
 // person who holds none, see no box at all (a gym that keeps its other software uses
@@ -59,11 +76,22 @@ import {
 // question, notice or form of the one before stays. An answer is kept with the record it
 // is about and drawn only for that record.
 
-const TAG_TONES = { green: 'c-tag-good', orange: 'c-tag-warn', plain: 'c-tag-plain' };
+const TAG_TONES = { green: 'c-tag-good', orange: 'c-tag-warn', red: 'c-tag-bad', soft: 'c-tag-soft', plain: 'c-tag-plain' };
+/** The same tones as the edge of a bill's box and the colour of a line of words. */
+const TONE_COLOURS = { green: 'var(--good)', orange: 'var(--warn)', red: 'var(--bad)', soft: 'var(--soft-t)', plain: 'var(--raise-line)' };
 const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 const DANGER = 'c-btn c-btn-danger';
+const LINK = 'c-btn c-btn-link c-btn-sm';
+// A small button's colour says what kind of thing it does: taking a payment is the
+// page's main colour, giving money back its soft one, anything that cancels is red, and
+// the rest (Freeze, Undo) stay plain.
+const PAY = 'c-btn c-btn-p c-btn-sm';
+const REFUND = 'c-btn c-btn-soft c-btn-sm';
+const STOP = 'c-btn c-btn-danger c-btn-sm';
+/** Refusals that mean the page is out of date: it is read again. */
+const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled'];
 
 // `nothingNow`: for somebody with nothing in use, what their row on the list says of the
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
@@ -98,6 +126,10 @@ export default function MemberMemberships({
   const [ending, setEnding] = useState(null);
   /** The Record payment form: { requestKey, amount, method, tried }, for the membership in `open`. */
   const [payForm, setPayForm] = useState(null);
+  /** The Cancel this bill box: { reason, tried }, for the membership in `open`. */
+  const [billForm, setBillForm] = useState(null);
+  /** The Note a refund form: { paymentId, requestKey, amount, method, reason, tried }. */
+  const [refundForm, setRefundForm] = useState(null);
   /** The membership whose bills are all drawn, by its id. */
   const [allBills, setAllBills] = useState(null);
 
@@ -172,6 +204,8 @@ export default function MemberMemberships({
       setForm(null);
       setEnding(null);
       setPayForm(null);
+      setBillForm(null);
+      setRefundForm(null);
       setNotice(said ?? doneWords(what, m));
       // The list behind this page says what the person holds (23a-i): it reads again.
       onChanged?.();
@@ -185,9 +219,11 @@ export default function MemberMemberships({
       setEnding(null);
       setRefusal(errorText(err, "We couldn't save that. Please try again."));
       // Somebody else changed it first: show it as it is now.
-      if (errorCode(err) === 'held_membership_changed' || errorCode(err) === 'membership_type_not_found') {
+      if (STALE_CODES.includes(errorCode(err))) {
         setOpen(null);
         setPayForm(null);
+        setBillForm(null);
+        setRefundForm(null);
         setAttempt((n) => n + 1);
       }
     } finally {
@@ -219,12 +255,192 @@ export default function MemberMemberships({
     setOpen({ what: 'pay', id: m.id });
   };
 
+  const startCancelBill = (m) => {
+    setNotice(null);
+    setRefusal(null);
+    setEnding(null);
+    setBillForm({ reason: '', tried: false });
+    setOpen({ what: 'cancelBill', id: m.id });
+  };
+
+  const startRefund = (m, paymentId) => {
+    const payment = paymentOf(m, paymentId);
+    if (payment === null) return;
+    setNotice(null);
+    setRefusal(null);
+    setEnding(null);
+    setRefundForm({ ...refundDraft(m, payment, newRequestKey), tried: false });
+    setOpen({ what: 'refund', id: m.id });
+  };
+
+  const askUndoRefund = (m, paymentId, refundId) => {
+    setNotice(null);
+    setRefusal(null);
+    setEnding(null);
+    setOpen({ what: 'undoRefund', id: m.id, paymentId, refundId });
+  };
+
   const close = () => {
     setRefusal(null);
     setOpen(null);
     setForm(null);
     setEnding(null);
     setPayForm(null);
+    setBillForm(null);
+    setRefundForm(null);
+  };
+
+  /** Cancel this bill: whose it is, what stops being owed, and why. */
+  const renderCancelBill = (m) => {
+    const bill = billToCancel(m);
+    if (bill === null) return null;
+    const words = cancelBillWords(m, name, isLive(m));
+    const { problem, body } = cancelBillBody(billForm);
+    return (
+      <form
+        noValidate
+        className="rounded-[14px] p-3 flex flex-col gap-3"
+        style={{ background: 'var(--raise)' }}
+        data-testid="held-cancel-bill"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (busy) return;
+          if (body === null) {
+            setBillForm((f) => ({ ...f, tried: true }));
+            return;
+          }
+          void run('cancelBill', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, `bills/${encodeURIComponent(bill.id)}/cancel`, body), words.done);
+        }}
+      >
+        <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+        <p className="c-s14 c-t2 m-0">{words.detail}</p>
+        <label className="c-field">
+          <span className="c-label">Why are you cancelling it?</span>
+          <select className="c-sel" value={billForm.reason} onChange={(e) => setBillForm((f) => ({ ...f, reason: e.target.value }))}>
+            <option value="">Choose one</option>
+            {CANCEL_REASONS.map((reason) => (
+              <option key={reason.value} value={reason.value}>
+                {reason.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {billForm.tried && problem !== null ? (
+          <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
+            {problem}
+          </span>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" className={DANGER} disabled={busy}>
+            {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            {words.button}
+          </button>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+            Keep it
+          </button>
+        </div>
+      </form>
+    );
+  };
+
+  /** Note a refund: the amount, starting at what can be refunded, how and why. */
+  const renderRefund = (m) => {
+    const payment = paymentOf(m, refundForm.paymentId);
+    if (payment === null) return null;
+    const words = refundWords(m, name, payment, isLive(m));
+    const { problem, body } = refundBody(m, payment, refundForm);
+    return (
+      <form
+        noValidate
+        className="rounded-[14px] p-3 flex flex-col gap-3"
+        style={{ background: 'var(--raise)' }}
+        data-testid="held-refund-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (busy) return;
+          if (body === null) {
+            setRefundForm((f) => ({ ...f, tried: true }));
+            return;
+          }
+          void run(
+            'refund',
+            m,
+            () => orgService.changeHeldMembership(gymId, entryId, m.id, `payments/${encodeURIComponent(payment.id)}/refunds`, body),
+            refundedWords(m, body.amountMinor),
+          );
+        }}
+      >
+        <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+        <p className="c-s14 c-t2 m-0">{words.detail}</p>
+        <label className="c-field">
+          <span className="c-label">{`Amount given back (${m.currency})`}</span>
+          <input
+            className="c-input"
+            type="text"
+            inputMode="decimal"
+            value={refundForm.amount}
+            onChange={(e) => setRefundForm((f) => ({ ...f, amount: e.target.value.slice(0, 12) }))}
+          />
+        </label>
+        <label className="c-field">
+          <span className="c-label">How you gave it back</span>
+          <select className="c-sel" value={refundForm.method} onChange={(e) => setRefundForm((f) => ({ ...f, method: e.target.value }))}>
+            <option value="">Choose one</option>
+            {PAYMENT_METHODS.map((method) => (
+              <option key={method.value} value={method.value}>
+                {method.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="c-field">
+          <span className="c-label">Why it was refunded</span>
+          <select className="c-sel" value={refundForm.reason} onChange={(e) => setRefundForm((f) => ({ ...f, reason: e.target.value }))}>
+            <option value="">Choose one</option>
+            {REFUND_REASON_CHOICES.map((reason) => (
+              <option key={reason.value} value={reason.value}>
+                {reason.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {refundForm.tried && problem !== null ? (
+          <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
+            {problem}
+          </span>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" className={MAIN} disabled={busy}>
+            {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
+            Note refund
+          </button>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+            Back
+          </button>
+        </div>
+      </form>
+    );
+  };
+
+  /** Undo refund: one refund noted by mistake is taken back. */
+  const renderUndoRefund = (m) => {
+    const words = undoRefundWords(m, name, open.paymentId, open.refundId);
+    const path = `payments/${encodeURIComponent(open.paymentId)}/refunds/${encodeURIComponent(open.refundId)}/undo`;
+    return (
+      <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="held-ask-undoRefund">
+        <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+        <p className="c-s14 c-t2 m-0">{words.detail}</p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={MAIN} disabled={busy} onClick={() => void run('undoRefund', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, path), words.done)}>
+            {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            {words.button}
+          </button>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
   };
 
   /** Record payment: the amount, starting at what is left, and how it was paid. */
@@ -288,36 +504,106 @@ export default function MemberMemberships({
     );
   };
 
-  /** A membership's bills, the newest first; the older ones behind "Show all". */
-  const renderBills = (m) => {
+  /** A membership's bills, each a box of its own, the newest first; the older ones
+   *  behind "Show all". `payHere`: Record payment is drawn inside the bill it is for. */
+  const renderBills = (m, payHere) => {
     const billing = m.billing;
     if (billing === null || billing.bills.length === 0) return null;
     const all = allBills === m.id;
-    const rows = (all ? billing.bills : billing.bills.slice(0, BILLS_FOLDED)).map((bill) => billRow(bill, m.currency, today));
-    const hidden = billing.bills.length - rows.length;
+    const drawn = billsToDraw(billing, all);
+    const rows = drawn.bills.map((bill) => billRow(bill, m.currency, today));
+    const hidden = drawn.hidden;
+    // Staff who can change things here act on a bill, and not while another box is open
+    // under this membership.
+    const acts = !readOnly && !(open !== null && open.id === m.id);
+    const cancelId = billToCancel(m)?.id ?? null;
+    const SPLIT = { borderTop: '1px solid var(--line)' };
+    // A payment or a refund: columns with its button at the end; on a phone, one under another.
+    const LINE = 'flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3';
     return (
-      <div className="flex flex-col gap-1.5 pt-1" data-testid="held-bills">
-        <span className="c-s13 c-w6 c-t2">Bills</span>
-        <ul className="m-0 p-0 list-none flex flex-col gap-1.5">
-          {rows.map((row) => (
-            <li key={row.id} className="flex flex-col" data-testid="held-bill">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="c-s14 c-t1">{row.title}</span>
-                <span className={`c-tag ${TAG_TONES[row.tone]} whitespace-nowrap`}>{row.tag}</span>
-                {row.when !== null ? <span className="c-s13 c-t2">{row.when}</span> : null}
-              </div>
-              {row.left !== null ? (
-                <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
-                  {row.left}
-                </span>
-              ) : null}
-              {row.payments.map((p) => (
-                <span key={p.id} className="c-s13 c-t2">
-                  {p.line}
-                </span>
-              ))}
-            </li>
-          ))}
+      <div className="flex flex-col gap-2 pt-2" data-testid="held-bills">
+        <span className="c-s13 c-w6 c-t2 uppercase" style={{ letterSpacing: '0.04em' }}>
+          Bills
+        </span>
+        <ul className="m-0 p-0 list-none flex flex-col gap-2">
+          {rows.map((row) => {
+            const pays = acts && payHere && billing.pay !== null && billing.pay.periodIndex === row.periodIndex;
+            const notes = [row.when, row.cancelled].filter((line) => line !== null);
+            return (
+              <li
+                key={row.id}
+                className="flex flex-col rounded-[12px]"
+                style={{ border: '1px solid var(--raise-line)', borderLeft: `3px solid ${TONE_COLOURS[row.tone]}` }}
+                data-testid="held-bill"
+              >
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
+                  <span className="c-s14 c-w6 c-t1 flex-1" style={{ minWidth: 150 }}>
+                    {row.days}
+                  </span>
+                  {/* One piece, so on a phone the amount and its tag wrap together. */}
+                  <span className="flex items-center gap-2">
+                    <span className="c-s14 c-w6 c-t1 whitespace-nowrap">{row.amount}</span>
+                    <span className={`c-tag ${TAG_TONES[row.tone]} whitespace-nowrap`}>{row.tag}</span>
+                  </span>
+                </div>
+                {notes.length > 0 || row.left !== null ? (
+                  <div className="flex flex-col px-3 pb-2.5">
+                    {notes.map((line) => (
+                      <span key={line} className="c-s13 c-t2" style={row.tone === 'red' ? { color: 'var(--bad)' } : undefined}>
+                        {line}
+                      </span>
+                    ))}
+                    {row.left !== null ? (
+                      <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+                        {row.left}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {row.payments.map((p) => (
+                  <div key={p.id} className="flex flex-col gap-2 px-3 py-2" style={SPLIT} data-testid="held-bill-payment">
+                    <div className={LINE}>
+                      {/* Money in is green; money given back, below, is red. */}
+                      <span className="c-s14 c-w6 whitespace-nowrap" style={{ minWidth: 84, color: 'var(--good)' }}>
+                        {p.amount}
+                      </span>
+                      <span className="c-s13 c-t2 md:flex-1">{p.detail}</span>
+                      {acts && p.refundable ? (
+                        <button type="button" className={`${REFUND} self-start md:self-auto`} disabled={busy} onClick={() => startRefund(m, p.id)}>
+                          Note a refund
+                        </button>
+                      ) : null}
+                    </div>
+                    {p.refunds.map((r) => (
+                      <div key={r.id} className={`${LINE} pl-3`} style={{ borderLeft: '2px solid var(--bad)' }} data-testid="held-refund">
+                        <span className="c-s13 c-w6 whitespace-nowrap" style={{ color: 'var(--bad)' }}>
+                          {r.amount}
+                        </span>
+                        <span className="c-s13 c-t2 md:flex-1">{r.detail}</span>
+                        {acts ? (
+                          <button type="button" className={`${SMALL} self-start md:self-auto`} disabled={busy} onClick={() => askUndoRefund(m, p.id, r.id)}>
+                            Undo refund
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {pays ? (
+                  <div className="flex flex-wrap gap-2 px-3 py-2.5" style={SPLIT}>
+                    <button type="button" className={PAY} disabled={busy} onClick={() => startPay(m)}>
+                      {payLabel(m, today)}
+                    </button>
+                    {cancelId === row.id ? (
+                      <button type="button" className={STOP} disabled={busy} onClick={() => startCancelBill(m)}>
+                        Cancel this bill
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
         {hidden > 0 ? (
           <button type="button" className="c-btn c-btn-link c-btn-sm self-start" onClick={() => setAllBills(m.id)}>
@@ -457,10 +743,21 @@ export default function MemberMemberships({
     // A payment recorded by mistake is taken back on a membership that is over too.
     const canUndo = canAct && m.billing !== null && m.billing.undo !== null;
     const undoLink = canUndo ? (
-      <button type="button" className="c-btn c-btn-link c-btn-sm" disabled={busy} onClick={() => ask('undo', m)}>
+      <button type="button" className={LINK} disabled={busy} onClick={() => ask('undo', m)}>
         {undoWords(m, name).link}
       </button>
     ) : null;
+    // Record payment sits inside the bill it is for; where that period has no bill yet
+    // (a payment taken early), it is in the bar with what acts on the whole membership.
+    const payInBill = canPay && m.billing.bills.some((b) => b.periodIndex === m.billing.pay.periodIndex);
+    const payButton =
+      canPay && !payInBill ? (
+        <button type="button" className={PAY} disabled={busy} onClick={() => startPay(m)}>
+          {payLabel(m, today)}
+        </button>
+      ) : null;
+    const BAR = 'flex flex-wrap gap-2 pt-3 mt-1';
+    const BAR_LINE = { borderTop: '1px solid var(--line)' };
     return (
       <li key={m.id} className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-membership">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -474,7 +771,7 @@ export default function MemberMemberships({
             {pay.text}
           </span>
         ) : null}
-        {renderBills(m)}
+        {renderBills(m, payInBill)}
         {inUse && !shown.canBill && can.markPaid !== null ? (
           <p className="c-s13 c-t2 m-0" data-testid="held-no-payments">
             {NO_PAYMENTS_LINE}
@@ -483,25 +780,23 @@ export default function MemberMemberships({
         {asking ? (
           open.what === 'pay' && payForm !== null ? (
             renderPay(m)
+          ) : open.what === 'cancelBill' && billForm !== null ? (
+            renderCancelBill(m)
+          ) : open.what === 'refund' && refundForm !== null ? (
+            renderRefund(m)
+          ) : open.what === 'undoRefund' ? (
+            renderUndoRefund(m)
           ) : (
             renderAsk(m)
           )
-        ) : !inUse && (canPay || canUndo) ? (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {canPay ? (
-              <button type="button" className={SMALL} disabled={busy} onClick={() => startPay(m)}>
-                {payLabel(m, today)}
-              </button>
-            ) : null}
+        ) : !inUse && (payButton !== null || canUndo) ? (
+          <div className={BAR} style={BAR_LINE}>
+            {payButton}
             {undoLink}
           </div>
-        ) : inUse ? (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {canPay ? (
-              <button type="button" className={SMALL} disabled={busy} onClick={() => startPay(m)}>
-                {payLabel(m, today)}
-              </button>
-            ) : null}
+        ) : inUse && (payButton !== null || can.freeze || can.unfreeze || can.cancel || canUndo) ? (
+          <div className={BAR} style={BAR_LINE}>
+            {payButton}
             {can.freeze ? (
               <button type="button" className={SMALL} disabled={busy} onClick={() => ask('freeze', m)}>
                 Freeze
@@ -513,7 +808,7 @@ export default function MemberMemberships({
               </button>
             ) : null}
             {can.cancel ? (
-              <button type="button" className={SMALL} disabled={busy} onClick={() => ask('cancel', m)}>
+              <button type="button" className={STOP} disabled={busy} onClick={() => ask('cancel', m)}>
                 Cancel membership
               </button>
             ) : null}

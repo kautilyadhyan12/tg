@@ -616,6 +616,12 @@ export const heldMembershipSchema = z
     /** Taken from the gym's own list (17a-iii): its start day was worked back from the
      *  list's day, so a screen does not print it as the day the person started. */
     fromList: z.boolean(),
+    /** The newest period counted as paid was settled by a bill staff cancelled, not by a
+     *  payment (18a-ii): the page says nothing is owed for it, never that it was paid. */
+    notCharged: z.boolean(),
+    /** Everything paid for the newest period counted as paid was given back (18a-ii): the
+     *  page says "Refunded" for it, never "Paid". The days are kept (RULINGS 2026-10-10). */
+    refundedInFull: z.boolean(),
     view: heldMembershipViewSchema,
     /** Its bills and payments (18a-i); null for a reader without the `billing.members` tick. */
     billing: memberBillingSchema.nullable(),
