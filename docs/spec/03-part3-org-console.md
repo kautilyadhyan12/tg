@@ -4413,6 +4413,23 @@ for churn and lifetime value — says "not enough data yet", never a made-up num
 (RULINGS 2026-07-15). Worked out when the page opens from indexed rows or §3.2's
 nightly rollups, the cost measured at 2,100 members with a bystander beside it.
 
+**Built by 21a-i (2026-10-10): the page and the members figures.** `reports.read` is a
+tick of its own (owner and manager; the owner can give it to a trainer), and Reports has
+its own line in the menu. A person **starts** on the join date the gym gave, when it is
+earlier than the day they went on the list, and otherwise on that day; they **leave** on
+the day they are removed from the list (a membership that runs out removes nobody: Kd,
+RULINGS 2026-10-10). Somebody removed and put back counts as there the whole time; a
+record deleted for good is not counted. **Churn** is the people on the list as a month
+began who left during it, over the newest three full months taken together; retention is
+the rest of 100; the **average stay** is over those who left in the twelve months shown.
+A full month is one the list was kept for from its first day. Before three of them the
+three figures read "Not enough data yet", and while nobody has ever been removed Left and
+the three read "Nobody has been removed from your member list yet", never a zero: a gym
+that uses only part of the app is told what feeds a figure, with a button to the place
+(RULINGS 2026-10-10). **Leads that became members**: leads marked Joined over all leads,
+by where they heard of the gym. Each table downloads as a CSV of counts, never a name.
+Worked out when the page opens, in one statement over the gym's list. Attendance is 21a-ii.
+
 ### 16.6 Cards
 
 **20a** the inbox and the message rule (its table test first) · **20b** the automatic
