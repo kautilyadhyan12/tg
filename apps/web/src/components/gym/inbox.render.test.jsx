@@ -332,8 +332,8 @@ describe("the switches for a gym's automatic messages", () => {
     await screen.findByRole('heading', { name: 'What Iron House can send you' });
     expect(all()).toEqual([
       ['News and notices from Iron HouseMessages the gym sends to many people at once, like a closed day or a new class.', 'true'],
-      ['Birthday messageA message from Iron House on your birthday.', 'true'],
-      ['Visit milestonesA message when you reach a number of visits, like your 50th.', 'true'],
+      ['BirthdayA message from Iron House on your birthday.', 'true'],
+      ['Visit milestoneA message when you reach a number of visits, like your 50th.', 'true'],
       ["We miss youOff. Iron House won't send you this.", 'false'],
     ]);
     expect(screen.queryByRole('switch', { name: /Welcome/ })).toBeNull();
@@ -343,16 +343,16 @@ describe("the switches for a gym's automatic messages", () => {
     svc.read.mockResolvedValue(inboxOf([]));
     svc.markRead.mockResolvedValue(0);
     render(<Page />);
-    await waitFor(() => expect(one(/Birthday message/).getAttribute('aria-checked')).toBe('true'));
+    await waitFor(() => expect(one(/^Birthday/).getAttribute('aria-checked')).toBe('true'));
     svc.setKindSwitch.mockResolvedValue(['birthday']);
-    fireEvent.click(one(/Birthday message/));
-    await waitFor(() => expect(one(/Birthday message/).getAttribute('aria-checked')).toBe('false'));
+    fireEvent.click(one(/^Birthday/));
+    await waitFor(() => expect(one(/^Birthday/).getAttribute('aria-checked')).toBe('false'));
     expect(svc.setKindSwitch).toHaveBeenCalledWith('g1', 'birthday', false);
-    expect(one(/Visit milestones/).getAttribute('aria-checked')).toBe('true');
+    expect(one(/^Visit milestone/).getAttribute('aria-checked')).toBe('true');
     expect(svc.setGroupMessages).not.toHaveBeenCalled();
     svc.setKindSwitch.mockResolvedValue([]);
-    fireEvent.click(one(/Birthday message/));
-    await waitFor(() => expect(one(/Birthday message/).getAttribute('aria-checked')).toBe('true'));
+    fireEvent.click(one(/^Birthday/));
+    await waitFor(() => expect(one(/^Birthday/).getAttribute('aria-checked')).toBe('true'));
     expect(svc.setKindSwitch).toHaveBeenLastCalledWith('g1', 'birthday', true);
   });
 
@@ -371,10 +371,10 @@ describe("the switches for a gym's automatic messages", () => {
     svc.read.mockResolvedValue(inboxOf([], { off: ['birthday'] }));
     svc.markRead.mockResolvedValue(0);
     const { rerender } = render(<Page />);
-    await waitFor(() => expect(one(/Birthday message/).getAttribute('aria-checked')).toBe('false'));
+    await waitFor(() => expect(one(/^Birthday/).getAttribute('aria-checked')).toBe('false'));
     svc.read.mockResolvedValue(inboxOf([], { gymId: 'g2', gymName: 'Steel Yard', off: [] }));
     rerender(<Page gym={{ id: 'g2', name: 'Steel Yard', latestCheer: null, latestNudge: null }} />);
     await screen.findByRole('heading', { name: 'What Steel Yard can send you' });
-    expect(one(/Birthday message/).getAttribute('aria-checked')).toBe('true');
+    expect(one(/^Birthday/).getAttribute('aria-checked')).toBe('true');
   });
 });
