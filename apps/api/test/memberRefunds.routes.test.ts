@@ -124,8 +124,8 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
     return { userId, email, cookies: cookieMap(login) };
   };
 
-  const makeOrg = async (cookies: Cookies, name: string): Promise<CreatedOrg> => {
-    const res = await post("/v1/orgs", { trainsHere: true, name, city: "Leeds", country: "GB", timezone: "Europe/London" }, cookies);
+  const makeOrg = async (cookies: Cookies, name: string, timezone = "Europe/London"): Promise<CreatedOrg> => {
+    const res = await post("/v1/orgs", { trainsHere: true, name, city: "Leeds", country: "GB", timezone }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const created = JSON.parse(res.body) as CreatedOrg;
     await sql`
@@ -262,6 +262,7 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       const fay = await add("Fay Paid Up", long, true);
       const gus = await add("Gus Old Bill", term, false);
       const ivy = await add("Ivy Past Member", term, false);
+      const jo = await add("Jo Past Paid", gold, true);
       const hal = await add("Hal Next Door", theirTerm, false, next.org.id);
 
       const day20 = at("2026-01-20T12:00:00Z");
@@ -281,8 +282,9 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
         paid: true,
         method: "cash",
       });
-      // Ivy is removed from the list owing.
+      // Ivy is removed from the list owing; Jo is removed having paid.
       expect((await del(entryUrl(gymId, ivy.entryId), owner.cookies)).statusCode).toBe(200);
+      expect((await del(entryUrl(gymId, jo.entryId), owner.cookies)).statusCode).toBe(200);
 
       // 20 March: every "One month" is over. Nobody has pressed anything since.
       const MARCH = new Date("2026-03-20T12:00:00Z");
@@ -307,6 +309,32 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       // A past member and next door's person are not on this list at all.
       expect(page?.entries.map((entry) => entry.entryId)).not.toContain(ivy.entryId);
       expect(page?.entries.map((entry) => entry.entryId)).not.toContain(hal.entryId);
+      for (const entry of page?.entries ?? []) expect(entry.owedSince, entry.fullName).toBeNull();
+
+      // Removed owing, Ivy is still found: on Past members her row owes, since her bill's
+      // day, and the Filter there finds her and nobody who paid.
+      const past = await listService.readEntries(listAt, owner.userId, gymId, { records: "former" }, yes);
+      expect(past?.entries.map((entry) => [entry.fullName, entry.owedSince]).sort()).toEqual([
+        ["Ivy Past Member", "2026-01-15"],
+        ["Jo Past Paid", null],
+      ]);
+      const pastDue = await listService.readEntries(listAt, owner.userId, gymId, { records: "former", paymentStatus: "payment due" }, yes);
+      expect(pastDue?.entries.map((entry) => entry.fullName)).toEqual(["Ivy Past Member"]);
+      // With a status word nobody on Past members carries, she is not found; with none of that kind, she is.
+      const noStatus = await listService.readEntries(listAt, owner.userId, gymId, { records: "former", paymentStatus: "payment due", status: "" }, yes);
+      expect(noStatus?.entries.map((entry) => entry.fullName)).toEqual(["Ivy Past Member"]);
+      const otherStatus = await listService.readEntries(listAt, owner.userId, gymId, { records: "former", paymentStatus: "payment due", status: "frozen" }, yes);
+      expect(otherStatus?.entries).toEqual([]);
+      // Her own page says the same; Jo's, who paid and left in January, says nothing of
+      // money in March, though her membership's own clock has run on.
+      expect(first(await heldService.getHeldMemberships(listAt, owner.userId, gymId, ivy.entryId)).view.payment).toEqual({ state: "due", since: "2026-01-15" });
+      expect(first(await heldService.getHeldMemberships(listAt, owner.userId, gymId, jo.entryId)).view.payment).toBeNull();
+      // Staff let go of what Ivy owed: her page says nothing of money, and she leaves the Filter.
+      const ivyPage = first(await heldService.getHeldMemberships(listAt, owner.userId, gymId, ivy.entryId));
+      await heldService.cancelMemberBill(listAt, owner.userId, gymId, ivy.entryId, ivy.id, ivyPage.billing.cancel?.billId ?? "", { reason: "other" });
+      expect(first(await heldService.getHeldMemberships(listAt, owner.userId, gymId, ivy.entryId)).view.payment).toBeNull();
+      const pastAfter = await listService.readEntries(listAt, owner.userId, gymId, { records: "former", paymentStatus: "payment due" }, yes);
+      expect(pastAfter?.entries).toEqual([]);
 
       // The Filter finds exactly the three, and its count says three.
       const due = await listService.readEntries(listAt, owner.userId, gymId, { paymentStatus: "payment due" }, yes);
@@ -364,10 +392,24 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       // No date and no count moved: the days paid for are kept.
       expect(await countOf(gymId, m.id)).toBe(1);
       expect(part.view).toEqual(m.view);
-      expect(part.notCharged).toBe(false);
+      expect([part.notCharged, part.refundedInFull]).toEqual([false, false]);
+      const onList = async () => {
+        const res = await get(`/v1/orgs/${gymId}/member-list/entries`, owner.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        const rows = (JSON.parse(res.body) as { page: { entries: { entryId: string; held: { payment: unknown } | null }[] } }).page.entries;
+        return rows.find((row) => row.entryId === person)?.held?.payment;
+      };
+      // Part of it back: still paid for, on the list too.
+      expect(await onList()).toEqual({ state: "paid" });
 
-      // The same key carrying another amount is not the same request: refused, nothing written.
-      expect(answer(await post(refundUrl, { ...body, amountMinor: 100 }, owner.cookies))).toEqual([409, "request_reused"]);
+      // The same key carrying another amount, another "how" or another "why" is not the
+      // same request: refused in words that are true of a refund, nothing written or changed.
+      const reused = await post(refundUrl, { ...body, amountMinor: 100 }, owner.cookies);
+      expect(answer(reused)).toEqual([409, "request_reused"]);
+      expect((JSON.parse(reused.body) as { message: string }).message).toBe("That form was already used. Open it again.");
+      expect(answer(await post(refundUrl, { ...body, method: "bank_transfer" }, owner.cookies))).toEqual([409, "request_reused"]);
+      expect(answer(await post(refundUrl, { ...body, reason: "leaving" }, owner.cookies))).toEqual([409, "request_reused"]);
+      expect(await refundsOf(gymId)).toMatchObject([{ amount_minor: 2000, method: "cash", reason: "charged_too_much" }]);
       // A cent more than is left of the payment is refused, and says what is left.
       const over = await post(refundUrl, { ...body, requestKey: nextKey(), amountMinor: 3000 }, owner.cookies);
       expect(answer(over)).toEqual([409, "refund_too_much"]);
@@ -390,8 +432,13 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       expect(await countOf(gymId, m.id)).toBe(1);
       expect(whole.view).toEqual(m.view);
       expect(whole.billing.undo).toBeNull();
-      // Nothing more can be given back.
-      expect(answer(await post(refundUrl, { ...body, requestKey: nextKey(), amountMinor: 1 }, owner.cookies))).toEqual([409, "refund_not_settled"]);
+      // All of it back while the membership is in use: never "Paid", on her page or the list.
+      expect([whole.notCharged, whole.refundedInFull]).toEqual([false, true]);
+      expect(await onList()).toEqual({ state: "free" });
+      // Nothing more can be given back, and the refusal says why in words that are true.
+      const more = await post(refundUrl, { ...body, requestKey: nextKey(), amountMinor: 1 }, owner.cookies);
+      expect(answer(more)).toEqual([409, "refund_too_much"]);
+      expect((JSON.parse(more.body) as { message: string }).message).toBe("All of that payment has already been refunded.");
       expect(await givenBack(gymId)).toBe(4999);
 
       // The first request's key against somebody else's payment is refused and notes nothing.
@@ -721,6 +768,148 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       expect((await post(cancelUrl, cancelBody, ticked.cookies)).statusCode).toBe(200);
       expect(await refundsOf(gymId)).toMatchObject([{ amount_minor: 100, recorded_by: ticked.userId }]);
       expect((await billsOf(gymId)).find((b) => b.id === bill)).toMatchObject({ status: "void", voided_by: ticked.userId });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a bill owed for over a year is still sent to the page, so it can be paid or cancelled, and the page says how many older bills it left out",
+    async () => {
+      const owner = await makeUser("old-owner");
+      const org = await makeOrg(owner.cookies, "Mrf Old Gym");
+      const gymId = org.org.id;
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const at = (iso: string) => ({ sql, now: () => new Date(iso) });
+      const person = await addPerson(gymId, owner.cookies, "Nia Cole");
+      const m = first(await heldService.giveHeldMembership(at("2025-01-15T12:00:00Z"), owner.userId, gymId, person, { requestKey: nextKey(), typeId: gold, startsOn: "2025-01-15", paid: false }));
+      // Fourteen more months, never paid: the run opens one bill as each begins.
+      for (let month = 1; month <= 14; month++) {
+        const day = new Date(Date.UTC(2025, month, 16, 12));
+        expect((await openDueBills({ sql, log: { info: () => undefined, error: () => undefined } }, { now: day, gymIds: [gymId] })).opened, day.toISOString()).toBe(1);
+      }
+      const now = at("2026-03-20T12:00:00Z");
+      const page = first(await heldService.getHeldMemberships(now, owner.userId, gymId, person));
+      // The newest twelve, and January 2025's, which is the one a payment is taken for.
+      expect(page.billing.bills.map((b) => b.periodIndex)).toEqual([14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 0]);
+      expect(page.billing.billsNotShown).toBe(2);
+      expect(page.billing.pay).toMatchObject({ periodIndex: 0, dueOn: "2025-01-15" });
+      const oldest = page.billing.bills.find((b) => b.periodIndex === 0);
+      expect(page.billing.cancel).toEqual({ billId: oldest?.id });
+      // Cancelled from the page as sent: the next oldest takes its place.
+      const next = first(await heldService.cancelMemberBill(now, owner.userId, gymId, person, m.id, oldest?.id ?? "", { reason: "other" }));
+      expect(next.billing.pay).toMatchObject({ periodIndex: 1 });
+      expect(next.billing.bills.map((b) => b.periodIndex)).toContain(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a refund and Undo last payment for one payment at one instant: one of the two lands, never a refund left on a payment taken back",
+    async () => {
+      const owner = await makeUser("race-owner");
+      const manager = await makeUser("race-manager");
+      const org = await makeOrg(owner.cookies, "Mrf Race Gym");
+      const gymId = org.org.id;
+      await staffWith(gymId, manager, "manager", null);
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const landed = { refund: 0, undo: 0 };
+      for (let i = 0; i < 6; i++) {
+        const person = await addPerson(gymId, owner.cookies, `Racer ${["Ada", "Bea", "Cy", "Di", "Ed", "Flo"][i] ?? "X"}`);
+        const today = list(await get(heldUrl(gymId, person), owner.cookies)).today;
+        const m = first(await given(gymId, person, owner.cookies, { typeId: gold, startsOn: today, paid: true }));
+        const payment = m.billing.bills[0]?.payments[0]?.id ?? "";
+        const [refund, undo] = await Promise.all([
+          post(oneUrl(gymId, person, m.id, `payments/${payment}/refunds`), { requestKey: nextKey(), amountMinor: 4999, method: "cash", reason: "other" }, owner.cookies),
+          post(oneUrl(gymId, person, m.id, `payments/${payment}/undo`), {}, manager.cookies),
+        ]);
+        expect([refund.statusCode, undo.statusCode].sort(), `pair ${String(i)}`).not.toEqual([200, 200]);
+        expect([refund.statusCode, undo.statusCode], `pair ${String(i)}`).toContain(200);
+        if (refund.statusCode === 200) landed.refund += 1;
+        else landed.undo += 1;
+        const after = await read(gymId, person, owner.cookies);
+        if (refund.statusCode === 200) {
+          expect(after.billing.bills[0]).toMatchObject({ state: "refunded", paidMinor: 4999, refundedMinor: 4999 });
+        } else {
+          expect(after.billing.bills[0]).toMatchObject({ paidMinor: 0, refundedMinor: 0, payments: [] });
+          expect(["due", "overdue"]).toContain(after.billing.bills[0]?.state);
+        }
+      }
+      expect(landed.refund + landed.undo).toBe(6);
+      // In the whole gym: no refund stands on a payment that was taken back.
+      const orphans = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_member_refunds r
+        JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
+        WHERE r.gym_id = ${gymId} AND r.undone_at IS NULL AND p.undone_at IS NOT NULL`;
+      expect(orphans[0]?.n).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "what is owed is read on the gym's own day: half an hour either side of midnight in Auckland and in Los Angeles",
+    async () => {
+      const owner = await makeUser("zone-owner");
+      const at = (iso: string) => ({ sql, now: () => new Date(iso) });
+      const listAt = (iso: string) => ({ sql, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date(iso) });
+      const yes = () => Promise.resolve(true);
+      // [the gym's zone, an instant at 23:30 on 14 January there, one at 00:30 on the 15th]
+      const zones: [string, string, string][] = [
+        // Auckland is 13 hours ahead: both instants are still 14 January in UTC.
+        ["Pacific/Auckland", "2026-01-14T10:30:00Z", "2026-01-14T11:30:00Z"],
+        // Los Angeles is 8 hours behind: both instants are already 15 January in UTC.
+        ["America/Los_Angeles", "2026-01-15T07:30:00Z", "2026-01-15T08:30:00Z"],
+      ];
+      for (const [zone, before, after] of zones) {
+        const org = await makeOrg(owner.cookies, `Mrf Zone ${zone.split("/")[1] ?? zone}`, zone);
+        const gymId = org.org.id;
+        const gold = await addType(gymId, owner.cookies, monthly());
+        const person = await addPerson(gymId, owner.cookies, "Zoe Lin");
+        // Given days ahead, to start on 15 January, not paid: its bill falls due on the 15th.
+        await heldService.giveHeldMembership(at("2026-01-10T12:00:00Z"), owner.userId, gymId, person, { requestKey: nextKey(), typeId: gold, startsOn: "2026-01-15", paid: false });
+        const payment = async (iso: string) => (await listService.readEntries(listAt(iso), owner.userId, gymId, {}, yes))?.entries.find((entry) => entry.entryId === person)?.held?.payment;
+        expect(await payment(before), `${zone} before midnight`).toEqual({ state: "later", on: "2026-01-15" });
+        expect(await payment(after), `${zone} after midnight`).toEqual({ state: "due", since: "2026-01-15" });
+        const due = async (iso: string) => (await listService.readEntries(listAt(iso), owner.userId, gymId, { paymentStatus: "payment due" }, yes))?.entries.length;
+        expect([await due(before), await due(after)], zone).toEqual([0, 1]);
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "cancelling a bill, noting a refund and taking one back are counted under the payments allowance: 300 an hour a person, and a colleague at the same address is not stopped",
+    async () => {
+      const owner = await makeUser("limit-owner");
+      const manager = await makeUser("limit-manager");
+      const org = await makeOrg(owner.cookies, "Mrf Limit Gym");
+      const gymId = org.org.id;
+      await staffWith(gymId, manager, "manager", null);
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const person = await addPerson(gymId, owner.cookies, "Olivia Brown");
+      const today = list(await get(heldUrl(gymId, person), owner.cookies)).today;
+      const m = first(await given(gymId, person, owner.cookies, { typeId: gold, startsOn: today, paid: true }));
+      const payment = m.billing.bills[0]?.payments[0]?.id ?? "";
+      const desk = "203.0.113.94";
+      // Each asks for something that is not there: nothing is written, and it is still counted.
+      const press = {
+        refund: (cookies: Cookies) => post(oneUrl(gymId, person, m.id, `payments/${NO_SUCH}/refunds`), { requestKey: nextKey(), amountMinor: 1, method: "cash", reason: "other" }, cookies, desk),
+        undo: (cookies: Cookies) => post(oneUrl(gymId, person, m.id, `payments/${payment}/refunds/${NO_SUCH}/undo`), {}, cookies, desk),
+        cancel: (cookies: Cookies) => post(oneUrl(gymId, person, m.id, `bills/${NO_SUCH}/cancel`), { reason: "other" }, cookies, desk),
+      };
+      const kinds = [press.refund, press.undo, press.cancel];
+      let first429 = 0;
+      for (let i = 1; i <= 305 && first429 === 0; i++) {
+        const res = await (kinds[i % 3] ?? press.refund)(owner.cookies);
+        if (res.statusCode === 429) first429 = i;
+        else expect(res.statusCode).toBe(404);
+      }
+      expect(first429).toBe(301);
+      // Once it is used up, each of the three is refused.
+      expect([(await press.refund(owner.cookies)).statusCode, (await press.undo(owner.cookies)).statusCode, (await press.cancel(owner.cookies)).statusCode]).toEqual([429, 429, 429]);
+      // A colleague at the same desk has their own; nobody signed in is told to sign in.
+      expect([(await press.refund(manager.cookies)).statusCode, (await press.undo(manager.cookies)).statusCode, (await press.cancel(manager.cookies)).statusCode]).toEqual([404, 404, 404]);
+      expect((await press.refund({})).statusCode).toBe(401);
+      expect(await refundsOf(gymId)).toHaveLength(0);
     },
     TEST_TIMEOUT_MS,
   );

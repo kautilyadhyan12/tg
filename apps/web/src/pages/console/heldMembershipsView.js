@@ -124,6 +124,11 @@ export function paymentLine(m, today) {
       if (p.until === null) return { text: 'Nothing to pay', due: false };
       return { text: m.view.renewsOn === null ? 'Nothing more to pay' : `Nothing to pay now · next payment due ${dayWords(p.until)}`, due: false };
     }
+    // Everything paid for the newest month was given back (18a-ii): the days are kept,
+    // and the line says what happened to the money.
+    if (m.refundedInFull === true) {
+      return { text: p.until === null || m.view.renewsOn === null ? 'Refunded' : `Refunded · next payment due ${dayWords(p.until)}`, due: false };
+    }
     if (p.until === null) return { text: 'Paid', due: false };
     return { text: m.view.renewsOn === null ? 'Paid to the end' : `Paid · next payment due ${dayWords(p.until)}`, due: false };
   }

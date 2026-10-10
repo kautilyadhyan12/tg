@@ -71,6 +71,7 @@ function held(n, type, startsOn, paid, moves = []) {
     classesLeft: m.classesLeft,
     fromList: false,
     notCharged: false,
+    refundedInFull: false,
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, made.membership, m, type.priceMinor, TODAY),
   };
@@ -450,12 +451,14 @@ describe('Note a refund', () => {
 
   it('a payment refunded in full has no Note a refund; Undo refund asks, names the refund and sends it', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
-    const refunded = { ...gold, billing: withRefund(gold.billing, 4999) };
+    const refunded = { ...gold, refundedInFull: true, billing: withRefund(gold.billing, 4999) };
     orgService.getHeldMemberships.mockResolvedValue(answer([refunded]));
     orgService.changeHeldMembership.mockResolvedValue(answer([gold]));
     render(draw());
     const [row] = await rowsSoon();
     expect(within(row).getByText('Refunded')).toBeTruthy();
+    // All of it went back: the line above the bills never says Paid.
+    expect(within(row).getByTestId('held-payment').textContent).toBe('Refunded · next payment due 4 November 2026');
     expect(within(row).queryByRole('button', { name: 'Note a refund' })).toBeNull();
     fireEvent.click(within(row).getByRole('button', { name: 'Undo refund' }));
     const box = within(within(row).getByTestId('held-ask-undoRefund'));

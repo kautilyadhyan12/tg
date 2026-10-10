@@ -28,6 +28,7 @@ import { createHash } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
 import type { MemberAppView } from "@app/shared";
 import {
+  HELD_PAYMENT_WORDS,
   isLargeMemberListChange,
   MEMBER_FILE_MAX_BYTES,
   MEMBER_FILE_PARSE_TIMEOUT_MS,
@@ -103,6 +104,7 @@ import { sessionsAuditMeta } from "../pt/changes.js";
 import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type RemovalPlan } from "./removeSelected.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { heldChips, heldOnListOf, heldPassing, mergeChips, type WordCount } from "../memberships/onList.js";
+import { listBillFacts, pastOwing } from "../memberships/billsSql.js";
 
 export interface MemberListDeps {
   sql: Sql;
@@ -1535,7 +1537,24 @@ export async function entriesFilter(
   if (words.statuses !== null || words.membershipTypes !== null || words.paymentStatuses !== null) {
     const today = dayInTz(deps.now(), await repo.gymTimeZone(deps.sql, gymId));
     const shown = await heldOnListOf(deps.sql, gymId, today, null);
-    held = { ids: [...shown.keys()], passing: heldPassing(shown, words) };
+    const ids = [...shown.keys()];
+    const passing = heldPassing(shown, words);
+    // A past member who still owes (18a-ii): their Payment word is "Payment due", whatever
+    // the gym's file said; their other two words are still the file's.
+    if (records !== "current") {
+      const due = HELD_PAYMENT_WORDS.due.toLowerCase();
+      for (const person of await pastOwing(deps.sql, gymId, today)) {
+        ids.push(person.entryId);
+        if (
+          (words.paymentStatuses === null || words.paymentStatuses.includes(due)) &&
+          (words.statuses === null || words.statuses.includes(person.status)) &&
+          (words.membershipTypes === null || words.membershipTypes.includes(person.membershipType))
+        ) {
+          passing.push(person.entryId);
+        }
+      }
+    }
+    held = { ids, passing };
   }
   return {
     members,
@@ -1587,13 +1606,21 @@ export async function readEntries(
   const page = await repo.entriesPage(deps.sql, { ...input, cursor, limit: MEMBER_LIST_ENTRIES_PAGE + 1 });
   const shown = page.entries.slice(0, MEMBER_LIST_ENTRIES_PAGE);
   const last = page.entries.length > MEMBER_LIST_ENTRIES_PAGE ? shown[shown.length - 1] : undefined;
-  const [held, invitations, app] = await Promise.all([
+  const today = dayInTz(deps.now(), org.timezone);
+  const [held, pastBills, invitations, app] = await Promise.all([
     // What the memberships these people hold say, for the row's four columns (23a-i).
     heldOnListOf(
       deps.sql,
       gymId,
-      dayInTz(deps.now(), org.timezone),
+      today,
       shown.flatMap((entry) => (entry.formerAt === null ? [entry.entryId] : [])),
+    ),
+    // A past member's memberships are not in use; what they still owe is (18a-ii).
+    listBillFacts(
+      deps.sql,
+      gymId,
+      today,
+      shown.flatMap((entry) => (entry.formerAt === null ? [] : [entry.entryId])),
     ),
     invites.invitationsOf(
       deps.sql,
@@ -1641,6 +1668,7 @@ export async function readEntries(
       paymentStatus: entry.paymentStatus,
       dateOfBirth: entry.dateOfBirth,
       held: held.get(entry.entryId)?.shown ?? null,
+      owedSince: entry.formerAt === null ? null : (pastBills.owedSince.get(entry.entryId) ?? null),
       formerAt: entry.formerAt?.toISOString() ?? null,
       source: entry.source,
       inApp: entry.inApp,

@@ -62,6 +62,7 @@ import { reviewAfterChecked, reviewAfterEdit, reviewAfterMerge, sameReview } fro
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { appOrThrow, type MemberListDeps } from "./service.js";
 import { heldOnListOf, type HeldShown } from "../memberships/onList.js";
+import { listBillFacts } from "../memberships/billsSql.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 
 type Sql = MemberListDeps["sql"];
@@ -96,12 +97,13 @@ async function detailOf(
   );
   const ends = appPeopleIn(reached, entry).map((member) => member.userId);
   const { values } = entry;
-  const [visits, held, app] = await Promise.all([
+  const today = dayInTz(now, await repo.gymTimeZone(sql, gymId));
+  const [visits, held, owedSince, app] = await Promise.all([
     repo.memberVisits(sql, gymId, [...mine.map((member) => member.userId), ...shared]),
     // What their memberships here say, as their row on the list says it (23a-i).
-    entry.formerAt === null
-      ? repo.gymTimeZone(sql, gymId).then((zone) => heldOnListOf(sql, gymId, dayInTz(now, zone), [entry.id]))
-      : Promise.resolve(new Map<string, HeldShown>()),
+    entry.formerAt === null ? heldOnListOf(sql, gymId, today, [entry.id]) : Promise.resolve(new Map<string, HeldShown>()),
+    // A past member's memberships are not in use; what they still owe is (18a-ii).
+    entry.formerAt === null ? Promise.resolve(null) : listBillFacts(sql, gymId, today, [entry.id]).then((bills) => bills.owedSince.get(entry.id) ?? null),
     appViewsOf(
       sql,
       settings,
@@ -125,6 +127,7 @@ async function detailOf(
     paymentStatus: values.paymentStatus,
     dateOfBirth: values.dateOfBirth,
     held: held.get(entry.id)?.shown ?? null,
+    owedSince,
     formerAt: entry.formerAt?.toISOString() ?? null,
     source: entry.source,
     inApp: mine.length > 0 || shared.size > 0,

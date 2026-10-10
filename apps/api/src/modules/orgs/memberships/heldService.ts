@@ -73,9 +73,14 @@ function billingOf(
   // A mark with no payment behind it: taken back as it always was. A period a bill
   // settled (paid, cancelled or refunded) is not one.
   const settledAt = (index: number): boolean => bills.some((b) => b.periodIndex === index && b.status !== "open");
+  // The newest bills, and always the one a payment is taken for, however old: what can be
+  // paid or cancelled is never left off the page.
+  const newest = bills.slice(0, BILLS_SHOWN);
+  const owedBill = pay === null ? undefined : bills.find((b) => b.periodIndex === pay.periodIndex);
+  const sent = owedBill === undefined || newest.includes(owedBill) ? newest : [...newest, owedBill];
   const mark = !ctx.past && back === null && view.can.undoPaid !== null && !settledAt(view.can.undoPaid.paidPeriods) ? view.can.undoPaid : null;
   return {
-    bills: bills.slice(0, BILLS_SHOWN).map((b) => ({
+    bills: sent.map((b) => ({
       id: b.id,
       periodIndex: b.periodIndex,
       covers: b.covers,
@@ -99,7 +104,7 @@ function billingOf(
           refundableMinor: refundableMinor(b.status, p),
         })),
     })),
-    billsNotShown: Math.max(0, bills.length - BILLS_SHOWN),
+    billsNotShown: bills.length - sent.length,
     pay:
       pay === null
         ? null
@@ -119,9 +124,17 @@ function billingOf(
  *  open bill fell due, where it has one at or before the first unpaid period. That is the
  *  bill a payment is taken for first, so the line above the bills and the oldest bill
  *  under it say the same day; a freeze moves the membership's own dates and never a
- *  bill's; and every reader is sent the same day. */
-function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly BillRow[], today: string): HeldMembershipView {
+ *  bill's; and every reader is sent the same day.
+ *
+ *  A past member's memberships are not in use, so their own clock says nothing true of
+ *  money: for them a payment is due where a bill of that membership is still open, since
+ *  its oldest, and nothing is said otherwise. */
+function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly BillRow[], today: string, past: boolean): HeldMembershipView {
   const view = heldMembershipView(row.membership, today);
+  if (past) {
+    const left = bills.filter((b) => b.membershipId === row.id && b.status === "open").sort((a, b) => a.periodIndex - b.periodIndex)[0];
+    return { ...view, payment: left === undefined ? null : { state: "due", since: left.dueOn } };
+  }
   if (view.payment === null || view.payment.state !== "due" || view.payment.since === null) return view;
   const owed = bills
     .filter((b) => b.membershipId === row.id && b.status === "open" && b.periodIndex <= row.membership.paidPeriods)
@@ -167,7 +180,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       classesLeft: row.membership.classesLeft,
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
-      view: viewOf(row, list.bills, today),
+      refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
+      view: viewOf(row, list.bills, today, list.past),
     }))
     .sort(
       (a, b) =>
@@ -361,7 +375,7 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
     case "past_member":
       throw new OrgsError(409, "past_member", "This is a past member. Put them back on your list first.");
     case "request_reused":
-      throw new OrgsError(409, "request_reused", "That form was already used for another payment. Open it again.");
+      throw new OrgsError(409, "request_reused", "That form was already used. Open it again.");
     case "bill_has_payment":
       throw new OrgsError(
         409,

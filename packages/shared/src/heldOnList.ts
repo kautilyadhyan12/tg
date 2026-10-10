@@ -71,8 +71,9 @@ export interface HeldForList {
   typeName: string;
   fromList: boolean;
   membership: HeldMembership;
-  /** Its newest period counted as paid was settled by a bill staff cancelled, not by a
-   *  payment (18a-ii): nothing is owed for it, and it is never read as "Paid". */
+  /** No money is kept for its newest period counted as paid (18a-ii): its bill was
+   *  cancelled by staff, or everything paid on it was refunded. Nothing is owed for it,
+   *  and it is never read as "Paid". */
   notCharged?: boolean;
 }
 
@@ -119,7 +120,8 @@ function paymentOf(inUse: readonly Seen[], today: string): NonNullable<HeldOnLis
   }
   const later = due.filter((day): day is string => day !== null).sort()[0];
   if (later !== undefined) return { state: "later", on: later };
-  // A month staff let off is nothing to pay, as a free membership is: never "Paid".
+  // A month staff let off, or refunded in full, is nothing to pay, as a free membership
+  // is: never "Paid".
   return inUse.some((m) => m.view.payment?.state === "paid" && m.notCharged !== true) ? { state: "paid" } : { state: "free" };
 }
 

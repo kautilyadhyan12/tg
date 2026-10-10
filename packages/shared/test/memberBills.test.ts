@@ -534,11 +534,15 @@ describe("a refund never says more was given back than was paid", () => {
     expect(refundMemberPayment({ ...bill, refundedMinor: 2000 }, b, 2999)).toEqual({ ok: true, billStatus: "refunded" });
   });
 
-  it("nothing is refunded on a bill that is not settled, or already refunded in full", () => {
-    for (const status of ["open", "void", "refunded"] as const) {
+  it("nothing is refunded on a bill that is not settled; one refunded in full says nothing is left, never that it is unpaid", () => {
+    for (const status of ["open", "void"] as const) {
       expect(refundableMinor(status, payment), status).toBe(0);
       expect(refundMemberPayment({ ...bill, status }, payment, 1), status).toEqual({ ok: false, reason: "not_settled" });
     }
+    const gone = { ...payment, refundedMinor: 4999 };
+    expect(refundableMinor("refunded", gone)).toBe(0);
+    expect(refundMemberPayment({ status: "refunded", paidMinor: 4999, refundedMinor: 4999 }, gone, 1)).toEqual({ ok: false, reason: "too_much", leftMinor: 0 });
+    expect(refundMemberPayment({ status: "refunded", paidMinor: 4999, refundedMinor: 4999 }, gone, 4999)).toEqual({ ok: false, reason: "too_much", leftMinor: 0 });
   });
 
   it("refuses an amount that is not one", () => {

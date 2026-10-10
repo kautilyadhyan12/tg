@@ -3376,7 +3376,10 @@ list's Payment reads the bills.
   no date and no count** (Kd, RULINGS 2026-10-10): the person keeps the days they paid
   for, and staff cancel the membership separately to end it. The bill reads "Part
   refunded" while some of what was paid stands, and Refunded (`refunded`) once all of
-  it has gone back. A leaver's payment can be refunded.
+  it has gone back. A leaver's payment can be refunded. Once all of the newest month's
+  money has gone back, the membership's line reads "Refunded · next payment due …" and
+  the Members list reads "Free": never "Paid". Asked again of a bill refunded in full,
+  the server says "All of that payment has already been refunded."
 - **Undo refund** takes back one refund noted by mistake; its row is kept, marked. While a
   refund stands on a bill, **Undo last payment** is not offered for that bill's payments:
   the refund is taken back first, so a refund only ever stands on a settled bill.
@@ -3390,6 +3393,15 @@ list's Payment reads the bills.
   membership's own, as before, except that a month staff let off by cancelling its bill
   reads "Free" (nothing to pay), never "Paid", as the person's own page says "Nothing to
   pay".
+- **A past member who still owes** is on the Past members list as owing: their row's
+  Payment reads "Payment due" (`owedSince` on the entry), and that list's Filter finds
+  them under "Payment due" by their open bills, their other two words staying the gym's
+  own. Their page's payment line comes from their open bills alone: due since the oldest,
+  and nothing once none is open, since a past member's memberships are not in use and
+  their own clock says nothing true of money.
+- **A bill owed however long** is always sent to the page (the newest twelve and the one
+  a payment is taken for), so it can be paid or cancelled; a payment on a bill older
+  than those cannot be refunded from the page.
 - **Left as it is, and why**: a person whose record names a membership they never held here (§18.2's rule 2) keeps
   the gym's own words on the list even with an old bill open; their page shows the bill.
   Writing off the rest of a part-paid bill, and a refund sent through a payment company

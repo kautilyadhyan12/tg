@@ -796,7 +796,11 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
     // server too old to send it.
     // What the memberships they hold say (23a-i) is null for a person holding none, and
     // for a row from a server too old to send it.
-    expect(memberListEntrySchema.parse(entry)).toEqual({ ...entry, invitation: null, needsReview: false, staff: null, held: null });
+    // What a past member still owes (18a-ii) is null for everybody else, and for a row
+    // from a server too old to send it; a day that is not one is refused.
+    expect(memberListEntrySchema.parse(entry)).toEqual({ ...entry, invitation: null, needsReview: false, staff: null, held: null, owedSince: null });
+    expect(memberListEntrySchema.parse({ ...entry, owedSince: "2026-08-01" }).owedSince).toBe("2026-08-01");
+    expect(memberListEntrySchema.safeParse({ ...entry, owedSince: "1 August" }).success).toBe(false);
     const held = { status: "active" as const, memberships: ["Gold Monthly"], day: { what: "renews" as const, on: "2026-11-06" }, payment: { state: "due" as const, since: null } };
     expect(memberListEntrySchema.parse({ ...entry, held }).held).toEqual(held);
     // A shape the rule never makes is refused, not shown: no names, or a payment it has no word for.

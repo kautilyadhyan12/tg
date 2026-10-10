@@ -245,7 +245,15 @@ export function rowCells(entry, today = null) {
   const held = entry.held ?? null;
   if (held === null) {
     const word = (w) => (w === null || w === undefined || w === '' ? null : w);
-    return { status: word(entry.status), membership: word(entry.membershipType), ends: endsWords(entry, today), payment: word(entry.paymentStatus), owes: false };
+    // A past member who left a bill unpaid (18a-ii): the server says since when.
+    const owes = (entry.owedSince ?? null) !== null;
+    return {
+      status: word(entry.status),
+      membership: word(entry.membershipType),
+      ends: endsWords(entry, today),
+      payment: owes ? HELD_PAYMENT_WORDS.due : word(entry.paymentStatus),
+      owes,
+    };
   }
   const pay = held.payment;
   return {
@@ -259,7 +267,9 @@ export function rowCells(entry, today = null) {
 
 /** What the list says about the person in one line, as a phone's row shows it. */
 export function rowWords(entry, today = null, person = 'member') {
-  if (entry.formerAt !== null) return [pastWords(entry, person)].filter((w) => w !== null);
+  if (entry.formerAt !== null) {
+    return [pastWords(entry, person), (entry.owedSince ?? null) !== null ? HELD_PAYMENT_WORDS.due : null].filter((w) => w !== null);
+  }
   const cells = rowCells(entry, today);
   return [cells.status, cells.membership, cells.ends, cells.payment].filter((w) => w !== null && w !== '');
 }

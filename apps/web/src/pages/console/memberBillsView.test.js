@@ -216,6 +216,12 @@ describe('a cancelled bill and a refunded one say what happened, in their own wo
     expect(paymentLine(m({ state: 'paid', until: null }, null, true), TODAY).text).toBe('Nothing to pay');
     // Paid for by a payment: as before.
     expect(paymentLine(m({ state: 'paid', until: '2026-11-04' }, '2026-11-04', false), TODAY).text).toBe('Paid · next payment due 4 November 2026');
+    // All of the newest month's money given back: "Refunded", never "Paid".
+    const back = (payment, renewsOn) => ({ notCharged: false, refundedInFull: true, view: { renewsOn, payment } });
+    expect(paymentLine(back({ state: 'paid', until: '2026-11-04' }, '2026-11-04'), TODAY)).toEqual({ text: 'Refunded · next payment due 4 November 2026', due: false });
+    expect(paymentLine(back({ state: 'paid', until: '2026-11-04' }, null), TODAY).text).toBe('Refunded');
+    expect(paymentLine(back({ state: 'paid', until: null }, null), TODAY).text).toBe('Refunded');
+    expect(paymentLine(back({ state: 'due', since: '2026-10-04' }, '2026-11-04'), TODAY).text).toBe('Payment due since 4 October 2026');
     // Owing again the month after: owing is said, whatever became of the month before.
     expect(paymentLine(m({ state: 'due', since: '2026-10-04' }, '2026-11-04', true), TODAY).text).toBe('Payment due since 4 October 2026');
   });

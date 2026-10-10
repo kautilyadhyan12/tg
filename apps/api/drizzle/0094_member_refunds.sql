@@ -15,6 +15,8 @@ ALTER TABLE "gym_member_bills" ADD CONSTRAINT "gym_member_bills_void_check" CHEC
 
 -- The few bills staff cancelled, for the Members list, which reads them for a whole gym.
 CREATE INDEX "gym_member_bills_staff_void_idx" ON "gym_member_bills" ("gym_id") WHERE "status" = 'void' AND "void_reason" IS NOT NULL;--> statement-breakpoint
+-- And the few refunded in full, read the same way.
+CREATE INDEX "gym_member_bills_refunded_idx" ON "gym_member_bills" ("gym_id") WHERE "status" = 'refunded';--> statement-breakpoint
 
 -- What a refund's key points at, with its gym.
 ALTER TABLE "gym_member_payments" ADD CONSTRAINT "gym_member_payments_gym_id_uq" UNIQUE ("gym_id", "id");--> statement-breakpoint

@@ -362,12 +362,17 @@ export async function noteRefund(
 
     // The same key with anything else in it, or after its refund was taken back, is not
     // the same request: it is refused, never answered as noted.
-    const [byKey] = await tx<{ payment_id: string; amount_minor: number; undone: boolean }[]>`
-      SELECT payment_id, amount_minor, undone_at IS NOT NULL AS undone
+    const [byKey] = await tx<{ payment_id: string; amount_minor: number; method: string; reason: string; undone: boolean }[]>`
+      SELECT payment_id, amount_minor, method, reason, undone_at IS NOT NULL AS undone
       FROM gym_member_refunds
       WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
     if (byKey !== undefined) {
-      const same = byKey.payment_id === input.paymentId && byKey.amount_minor === input.amountMinor && !byKey.undone;
+      const same =
+        byKey.payment_id === input.paymentId &&
+        byKey.amount_minor === input.amountMinor &&
+        byKey.method === input.method &&
+        byKey.reason === input.reason &&
+        !byKey.undone;
       return same ? { kind: "ok" } : { kind: "request_reused" };
     }
 

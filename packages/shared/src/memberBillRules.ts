@@ -180,6 +180,8 @@ export function refundMemberPayment(
   payment: { amountMinor: number; refundedMinor: number },
   amountMinor: number,
 ): RefundMemberPayment {
+  // Everything paid on it has gone back already: nothing is left, and that is what is said.
+  if (bill.status === "refunded") return { ok: false, reason: "too_much", leftMinor: 0 };
   if (bill.status !== "paid") return { ok: false, reason: "not_settled" };
   if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return { ok: false, reason: "not_an_amount" };
   const leftMinor = refundableMinor(bill.status, payment);

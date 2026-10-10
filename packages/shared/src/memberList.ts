@@ -1718,6 +1718,10 @@ export const memberListEntrySchema = z.object({
    *  not the four words above, which stay the gym's own list's. Null for somebody the app
    *  holds no membership for, and for a past member. */
   held: heldOnListSchema.nullable().default(null),
+  /** A PAST member who still owes (18a-ii): the day the oldest bill of theirs still open
+   *  fell due. Their row's Payment reads "Payment due". Null for everybody else; somebody
+   *  on the list says it through `held`. */
+  owedSince: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
   /** When this person was taken off the list, or null while they are on it (§11.1).
    *  A former record admits nobody, is invited by nothing, and is left out of a page
    *  unless it is asked for. */

@@ -177,8 +177,8 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
  *  - `owedSince`: each record with a bill still open that fell due on or before `today`,
  *    and the earliest such day, whichever of its memberships the bill is for (one that
  *    is over too);
- *  - `notCharged`: the memberships whose newest period counted as paid was settled by a
- *    bill staff cancelled, not by a payment. */
+ *  - `notCharged`: the memberships with no money kept for their newest period counted
+ *    as paid: its bill was cancelled by staff, or refunded in full. */
 export async function listBillFacts(
   sql: Sql | TransactionSql,
   gymId: string,
@@ -191,11 +191,11 @@ export async function listBillFacts(
   const rows = await sql<{ entry_id: string; id: string; since: string | null; not_charged: boolean }[]>`
     SELECT h.entry_id, h.id,
            min(b.due_on) FILTER (WHERE b.status = 'open')::text AS since,
-           COALESCE(bool_or(b.status = 'void' AND b.period_index = h.paid_periods - 1), false) AS not_charged
+           COALESCE(bool_or(b.status <> 'open' AND b.period_index = h.paid_periods - 1), false) AS not_charged
     FROM gym_member_bills b
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     WHERE b.gym_id = ${gymId}
-      AND ((b.status = 'open' AND b.due_on <= ${today}::date) OR (b.status = 'void' AND b.void_reason IS NOT NULL))
+      AND ((b.status = 'open' AND b.due_on <= ${today}::date) OR (b.status = 'void' AND b.void_reason IS NOT NULL) OR b.status = 'refunded')
       AND (${ids}::uuid[] IS NULL OR h.entry_id = ANY(${ids}::uuid[]))
     GROUP BY h.entry_id, h.id`;
   for (const row of rows) {
@@ -246,6 +246,26 @@ export async function voidBills(tx: TransactionSql, gymId: string, billIds: read
   await tx`
     UPDATE gym_member_bills SET status = 'void', updated_at = ${now}
     WHERE gym_id = ${gymId} AND id = ANY(${[...billIds]}::uuid[]) AND status = 'open'`;
+}
+
+/** The gym's past members who still owe: a bill of theirs is open and has fallen due on
+ *  or before `today`. With each, the two words of the gym's own list that still describe
+ *  them, folded as the list's filter folds them; their Payment word is "Payment due". */
+export async function pastOwing(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  today: string,
+): Promise<{ entryId: string; status: string; membershipType: string }[]> {
+  const rows = await sql<{ id: string; status: string; membership_type: string }[]>`
+    SELECT e.id, lower(coalesce(e.status, '')) AS status, lower(coalesce(e.membership_type, '')) AS membership_type
+    FROM gym_member_list_entries e
+    WHERE e.gym_id = ${gymId} AND e.former_at IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM gym_member_bills b
+        JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+        WHERE b.gym_id = e.gym_id AND h.entry_id = e.id AND b.status = 'open' AND b.due_on <= ${today}::date
+      )`;
+  return rows.map((r) => ({ entryId: r.id, status: r.status, membershipType: r.membership_type }));
 }
 
 /** Staff cancel one open bill: kept, marked, with who, when and why. False where it was

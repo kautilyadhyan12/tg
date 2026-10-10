@@ -86,6 +86,7 @@ function held(n, type, startsOn, paid, moves = []) {
     classesLeft: m.classesLeft,
     fromList: false,
     notCharged: false,
+    refundedInFull: false,
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, given, m, type.priceMinor, TODAY),
   };
