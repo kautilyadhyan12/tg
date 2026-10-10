@@ -507,9 +507,11 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
           FROM gym_member_messages m JOIN gyms g ON g.id = m.gym_id WHERE m.gym_id IN (${iron.id}, ${oak.id}) ORDER BY 1`
       ).map((r) => r.line),
     });
-    // What the worker's hourly job runs. It has no gym: on this LOCAL database it removes
-    // every gym's messages sent a year before NOON, a click-through gym's included.
-    const first = await hourlyTidyUp({ sql, log: { info: () => undefined } }, NOON);
+    // What the worker's hourly job runs. Its messages part has no gym: on this LOCAL database
+    // it removes every gym's messages sent a year before NOON, a click-through gym's
+    // included. Its staged-uploads part is kept to these two gyms: other test files stage
+    // uploads on this database while this runs.
+    const first = await hourlyTidyUp({ sql, log: { info: () => undefined } }, NOON, [iron.id, oak.id]);
     expect(first.groupMessagesForgotten).toBeGreaterThanOrEqual(3);
     const after = await left();
     expect(after.sent).toEqual(["A minute inside the year", "Oak, last week", "Yesterday"]);

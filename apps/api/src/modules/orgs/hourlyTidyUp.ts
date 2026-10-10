@@ -13,8 +13,10 @@ export interface HourlyTidyUpResult {
   groupMessagesForgotten: number;
 }
 
-export async function hourlyTidyUp(deps: MemberListExpiryDeps, now: Date = new Date()): Promise<HourlyTidyUpResult> {
-  const gone = await expireStagedMemberListUploads(deps, { now });
+/** `uploadsOf` keeps the staged-uploads part to those gyms: for a test, which shares its
+ *  database with other files' staged uploads. The worker passes none. */
+export async function hourlyTidyUp(deps: MemberListExpiryDeps, now: Date = new Date(), uploadsOf?: readonly string[]): Promise<HourlyTidyUpResult> {
+  const gone = await expireStagedMemberListUploads(deps, uploadsOf === undefined ? { now } : { now, gymIds: [...uploadsOf] });
   const staffInvitesForgotten = await forgetOldStaffInvites(deps.sql, now);
   const groupMessages = await forgetOldGroupMessages(deps.sql, now);
   return { ...gone, staffInvitesForgotten, groupMessagesForgotten: groupMessages.messages };
