@@ -5318,6 +5318,21 @@ month 1 and Members "Cancelled".
 **Review**: Risky, so §2.6's round. Reports' two extra passes (item 21 is one feature)
 run once when its last job is built; this job does not run them.
 
+**Built 2026-10-11 (21c-ii), as above, with these differences.** `heldLeftOn` answers
+one formula for both statuses: the membership's `endsOn` where that is on or before
+`today`, else `today`, so a day is never later than today (a gym that moved its clock back
+can hold one cancelled on what is now tomorrow). The words on the page are
+`reportsView.js`'s, not the table's: the Left info line says "On your member list, their
+status is Ended or Cancelled" (the menu calls that page "Members & staff"), and "A status
+from your own file, such as Expired, is not counted" is in that info line as well as in
+the note. The first test holds one more person, a free trial that ran out in July, so
+that three full months each have somebody to count. Breaking the rule alone leaves the
+routes test green, because `bothReads` never asks it about somebody with a membership in
+use; the table goes red, and the routes test goes red when that second guard is broken.
+The count has its own direct check that a removal's day wins and that another gym's
+person moves nothing. Cost, measured: one read of a gym of 2,000 keeps the thread busy
+31.4 ms; its five staff at one moment stall it 102.7 ms (HANDOFF has the table).
+
 #### 16.9.5 Not in these jobs
 
 - **A repeating membership taken from a file, after the file's renewal day moves.** It
