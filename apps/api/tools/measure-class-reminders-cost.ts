@@ -4,7 +4,7 @@
 // reminders already sent. The big gym runs 20 classes of 20 a day, a small one 5 of 12.
 //
 // The sender runs four times an hour and reads, each time, every gym's bookings that start
-// soon enough to be due (16 hours ahead with 2 hours' notice, 38 with 24). Three numbers matter: that read with nothing due; the same for the
+// soon enough to be due (16 hours ahead with 2 hours' notice, 31 with 24). Three numbers matter: that read with nothing due; the same for the
 // big gym alone; and the worst run, an hour when every class of the big gym's day falls due
 // at once. Each as how long it takes and how long its one thread is busy.
 //
@@ -189,9 +189,9 @@ try {
     if (sent.sent !== 0) throw new Error("a run with nothing to send sent something");
   });
 
-  // The worst run: the big gym reminds 24 hours before, and at 18:04 every class of
-  // tomorrow evening falls due at once (17:00 and 18:00 already were; 19:00 and 20:00 are
-  // brought forward from the night to 18:00).
+  // The worst run: the big gym changes to 24 hours, and at 18:04 a day and a half of
+  // reminders fall due at once: today's 19:00 and 20:00 classes, tomorrow's 17:00 and
+  // 18:00, and tomorrow's personal training.
   await sql`INSERT INTO gym_message_settings (gym_id, kind, is_on, hours) VALUES (${big}, 'class_reminder', true, 24)`;
   const evening = new Date("2031-06-10T17:04:00Z");
   const dueThen = await reminders([big], evening);
