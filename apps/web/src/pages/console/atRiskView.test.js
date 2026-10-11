@@ -47,8 +47,8 @@ describe('who may open the page', () => {
 
 describe('the sentences above the list', () => {
   it('the intro says the gym’s own two numbers, in the gym’s own word for its people', () => {
-    expect(atRiskIntro(SETTINGS, 'gym')).toBe('Members who used to come and have stopped: no check-in for 14 days or more, after coming in at least 2 of their last 4 weeks.');
-    expect(atRiskIntro({ quietDays: 7, weeksCame: 1 }, 'studio')).toBe('Clients who used to come and have stopped: no check-in for 7 days or more, after coming in at least 1 of their last 4 weeks.');
+    expect(atRiskIntro(SETTINGS, 'gym')).toBe('Members who used to come and have stopped: they have not come in for 14 days or more, after coming in at least 2 of their last 4 weeks.');
+    expect(atRiskIntro({ quietDays: 7, weeksCame: 1 }, 'studio')).toBe('Clients who used to come and have stopped: they have not come in for 7 days or more, after coming in at least 1 of their last 4 weeks.');
   });
 
   it('the pickers offer exactly the numbers the server takes', () => {
@@ -60,7 +60,8 @@ describe('the sentences above the list', () => {
     expect(atRiskHeadline(list({ total: 1 }), 'gym')).toBe('1 member has stopped coming.');
     expect(atRiskHeadline(list({ total: 1204 }), 'gym')).toBe('1,204 members have stopped coming.');
     expect(atRiskHeadline(list({ total: 3 }), 'studio')).toBe('3 clients have stopped coming.');
-    expect(atRiskHeadline(list(), 'gym')).toBe('Nobody has stopped coming. Every member who was coming regularly has checked in within the last 14 days.');
+    // It says nothing about anybody the list holds back.
+    expect(atRiskHeadline(list(), 'gym')).toBe('Nobody has stopped coming.');
   });
 
   it('a list cut short says so', () => {
@@ -77,7 +78,7 @@ describe('what the gym’s own check-ins allow the list to say', () => {
   it('nobody was ever checked in: the reason, and no list', () => {
     const note = checkinNote(list({ checkin: 'none', firstCheckinOn: null, lastCheckinOn: null }), 'Iron House');
     expect(note).toMatchObject({ kind: 'none', showList: false });
-    expect(note.line).toBe('This list is worked out from check-ins, and nobody has been checked in at Iron House yet. Once people are checked in at the front desk or by staff, anybody who stops coming is listed here.');
+    expect(note.line).toBe('This list is worked out from who comes in, and nobody has been checked in at Iron House yet. Once people are checked in at the front desk or by staff, anybody who stops coming is listed here.');
   });
 
   it('check-in has only just begun: the day the list can start, by the gym’s own number', () => {
@@ -86,16 +87,22 @@ describe('what the gym’s own check-ins allow the list to say', () => {
     expect(note.line).toBe('Check-in started on 7 Oct. This list can show who has stopped coming from 21 Oct, once there are 14 days of check-ins.');
   });
 
-  it('check-in has stopped: said above the list, which is still drawn', () => {
-    const note = checkinNote(list({ checkin: 'stopped', lastCheckinOn: '2026-09-22' }), 'Iron House');
+  it('check-in has stopped: said in days against the gym’s own usual, above a list that has somebody on it', () => {
+    const note = checkinNote(list({ checkin: 'stopped', lastCheckinOn: '2026-10-11', checkinDaysLately: 2, total: 1, people: [person()] }), 'Iron House');
     expect(note).toMatchObject({ kind: 'stopped', showList: true });
-    expect(note.line).toBe('Hardly anybody has been checked in over the last 14 days. The last check-in was on 22 Sep. Anybody who stopped coming in that time is not listed, because the list cannot tell them from everybody else.');
+    expect(note.line).toBe('People were checked in on only 2 of the last 14 days, far fewer than is usual at Iron House. The last check-in was on 11 Oct. Anybody who stopped coming in that time is not listed, because the list cannot tell them from everybody else.');
+  });
+
+  it('check-in has stopped and nobody is listed: the note is the whole answer, and no list is drawn', () => {
+    const note = checkinNote(list({ checkin: 'stopped', lastCheckinOn: '2026-09-22', checkinDaysLately: 0 }), 'Iron House');
+    expect(note).toMatchObject({ kind: 'stopped', showList: false });
+    expect(note.line).toBe('Nobody has been checked in over the last 14 days. The last check-in was on 22 Sep. Anybody who stopped coming in that time is not listed, because the list cannot tell them from everybody else.');
   });
 });
 
 describe('one row', () => {
   it('its two facts', () => {
-    expect(rowFacts(person())).toEqual({ last: 'Last check-in 22 Sep, 20 days ago', regular: 'Came in 3 of their last 4 weeks' });
+    expect(rowFacts(person())).toEqual({ last: 'Last came in 22 Sep, 20 days ago', regular: 'Came in 3 of their last 4 weeks' });
   });
 
   it('a record with no name is still a row', () => {
@@ -152,7 +159,10 @@ describe('one row', () => {
       kind: 'no_app',
       line: "Not in the app, so Stan can't be messaged here. Their phone and email are on their page.",
     });
-    expect(rowAction(person({ app: 'shared', userId: null }), opts).kind).toBe('shared');
+    expect(rowAction(person({ app: 'shared', userId: null }), opts)).toEqual({
+      kind: 'shared',
+      line: 'More than one person uses this record in the app, so a message cannot go to one of them. Their phone and email are on their page.',
+    });
     expect(rowAction(person({ app: 'one', userId: null }), opts).kind).toBe('shared');
   });
 });

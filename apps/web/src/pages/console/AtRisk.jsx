@@ -72,7 +72,7 @@ function Numbers({ gymId, settings, locked, lockedNote, onSaved }) {
       <div className="flex flex-col gap-4 md:flex-row md:items-end">
         <div className="c-field">
           <label className="c-label" htmlFor={quietId}>
-            No check-in for
+            Not come in for
           </label>
           <select id={quietId} className="c-input" style={{ maxWidth: 240 }} value={draft.quietDays} disabled={locked || state.saving} onChange={pick('quietDays')}>
             {QUIET_CHOICES.map((c) => (

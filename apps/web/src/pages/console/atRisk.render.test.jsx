@@ -97,10 +97,10 @@ describe('the list', () => {
     expect(svc.list).toHaveBeenCalledTimes(1);
     expect(svc.list).toHaveBeenCalledWith('g1');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('At risk');
-    expect(screen.getByText('Members who used to come and have stopped: no check-in for 14 days or more, after coming in at least 2 of their last 4 weeks.')).toBeTruthy();
+    expect(screen.getByText('Members who used to come and have stopped: they have not come in for 14 days or more, after coming in at least 2 of their last 4 weeks.')).toBeTruthy();
     expect(screen.getByTestId('at-risk-headline').textContent).toBe('3 members have stopped coming.');
     expect(rows().length).toBe(3);
-    expect(row('Stan Stopped').textContent).toContain('Last check-in 22 Sep, 20 days ago');
+    expect(row('Stan Stopped').textContent).toContain('Last came in 22 Sep, 20 days ago');
     expect(row('Stan Stopped').textContent).toContain('Came in 3 of their last 4 weeks');
   });
 
@@ -113,7 +113,7 @@ describe('the list', () => {
       expect(within(row(name)).getByRole('button', { name: 'Open their page' })).toBeTruthy();
     }
     expect(row('Pat Paper').textContent).toContain("Not in the app, so Pat can't be messaged here.");
-    expect(row('Hal Household').textContent).toContain('Two people use this record in the app');
+    expect(row('Hal Household').textContent).toContain('More than one person uses this record in the app');
 
     fireEvent.click(within(row('Pat Paper')).getByRole('button', { name: 'Open their page' }));
     expect(screen.getByRole('dialog', { name: 'person e-pat' })).toBeTruthy();
@@ -139,7 +139,7 @@ describe('the list', () => {
   it('nobody at risk is a whole sentence, never an empty box', async () => {
     svc.list.mockResolvedValue(answer({ total: 0, people: [] }));
     open();
-    expect((await screen.findByTestId('at-risk-headline')).textContent).toBe('Nobody has stopped coming. Every member who was coming regularly has checked in within the last 14 days.');
+    expect((await screen.findByTestId('at-risk-headline')).textContent).toBe('Nobody has stopped coming.');
     expect(screen.queryAllByTestId('at-risk-row').length).toBe(0);
   });
 });
@@ -257,7 +257,7 @@ describe('the gym’s two numbers', () => {
     await screen.findByTestId('at-risk-headline');
     const save = screen.getByRole('button', { name: 'Save' });
     expect(save.disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText('No check-in for'), { target: { value: '21' } });
+    fireEvent.change(screen.getByLabelText('Not come in for'), { target: { value: '21' } });
     expect(save.disabled).toBe(false);
     expect(screen.getByText('Not saved yet.')).toBeTruthy();
     expect(svc.saveSettings).not.toHaveBeenCalled();
@@ -267,7 +267,7 @@ describe('the gym’s two numbers', () => {
     await screen.findByText('Saved. The list below uses the new numbers.');
     expect(svc.saveSettings).toHaveBeenCalledWith('g1', { quietDays: 21, weeksCame: 2 });
     await waitFor(() => expect(screen.getByTestId('at-risk-headline').textContent).toBe('1 member has stopped coming.'));
-    expect(screen.getByText(/no check-in for 21 days or more/)).toBeTruthy();
+    expect(screen.getByText(/they have not come in for 21 days or more/)).toBeTruthy();
   });
 
   it('a save that fails says so and keeps what was picked', async () => {
@@ -284,7 +284,7 @@ describe('the gym’s two numbers', () => {
     open(TRAINER);
     await screen.findByTestId('at-risk-headline');
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
-    expect(screen.queryByLabelText('No check-in for')).toBeNull();
+    expect(screen.queryByLabelText('Not come in for')).toBeNull();
     expect(screen.getByText('The owner can change how many days and weeks this list uses.')).toBeTruthy();
   });
 });
@@ -307,11 +307,21 @@ describe('a gym that uses only part of the app', () => {
     expect(screen.queryByTestId('at-risk-headline')).toBeNull();
   });
 
+  it('check-in has stopped and nobody is listed: the note alone, never "Nobody has stopped coming"', async () => {
+    svc.list.mockResolvedValue(answer({ checkin: 'stopped', lastCheckinOn: '2026-09-22', checkinDaysLately: 0, total: 0, people: [] }));
+    open();
+    const note = await screen.findByTestId('at-risk-checkin-note');
+    expect(note.textContent).toContain('Nobody has been checked in over the last 14 days. The last check-in was on 22 Sep.');
+    expect(screen.queryByTestId('at-risk-headline')).toBeNull();
+    expect(screen.queryByText(/Nobody has stopped coming/)).toBeNull();
+    expect(screen.queryAllByTestId('at-risk-row').length).toBe(0);
+  });
+
   it('check-in has stopped: said above the list, and staff with no Attendance are told who has', async () => {
-    svc.list.mockResolvedValue(answer({ checkin: 'stopped', lastCheckinOn: '2026-09-22' }));
+    svc.list.mockResolvedValue(answer({ checkin: 'stopped', lastCheckinOn: '2026-09-22', checkinDaysLately: 2 }));
     open(TRAINER);
     const note = await screen.findByTestId('at-risk-checkin-note');
-    expect(note.textContent).toContain('The last check-in was on 22 Sep.');
+    expect(note.textContent).toContain('People were checked in on only 2 of the last 14 days, far fewer than is usual at Iron House. The last check-in was on 22 Sep.');
     expect(within(note).queryByRole('link')).toBeNull();
     expect(note.textContent).toContain('The owner can check people in from Attendance.');
     expect(rows().length).toBe(3);

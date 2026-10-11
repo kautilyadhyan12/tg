@@ -36,19 +36,18 @@ const days = (n) => count(n, 'day', 'days');
 /** The line under the page's name: what puts somebody on the list. */
 export function atRiskIntro(settings, orgType) {
   const words = orgWords(orgType);
-  return `${words.peopleCap} who used to come and have stopped: no check-in for ${days(settings.quietDays)} or more, after coming in at least ${String(settings.weeksCame)} of their last ${String(AT_RISK_WEEKS)} weeks.`;
+  return `${words.peopleCap} who used to come and have stopped: they have not come in for ${days(settings.quietDays)} or more, after coming in at least ${String(settings.weeksCame)} of their last ${String(AT_RISK_WEEKS)} weeks.`;
 }
 
 /** The two pickers' choices, as each option reads. */
 export const QUIET_CHOICES = AT_RISK_QUIET_DAYS.map((n) => ({ value: n, label: days(n) }));
 export const WEEKS_CHOICES = AT_RISK_WEEKS_CAME.map((n) => ({ value: n, label: `${String(n)} of their last ${String(AT_RISK_WEEKS)} weeks` }));
 
-/** The count above the list, or the sentence for an empty one. */
+/** The count above the list, or the sentence for an empty one. It claims nothing about
+ *  anybody the list holds back (away too long, frozen, the staff). */
 export function atRiskHeadline(list, orgType) {
   const words = orgWords(orgType);
-  if (list.total === 0) {
-    return `Nobody has stopped coming. Every ${words.person} who was coming regularly has checked in within the last ${days(list.settings.quietDays)}.`;
-  }
+  if (list.total === 0) return 'Nobody has stopped coming.';
   return list.total === 1 ? `1 ${words.person} has stopped coming.` : `${list.total.toLocaleString('en')} ${words.people} have stopped coming.`;
 }
 
@@ -58,7 +57,7 @@ export function atRiskMore(list) {
   return `Showing the first ${list.people.length.toLocaleString('en')} of ${list.total.toLocaleString('en')}, the most regular first.`;
 }
 
-export const AT_RISK_FOOTNOTE = `Somebody who last checked in more than ${String(AT_RISK_AWAY_MAX_DAYS)} days ago is not listed. Neither is anybody whose membership is frozen or has ended, nor your own staff.`;
+export const AT_RISK_FOOTNOTE = `Coming in means a check-in, or a class or personal training session that staff marked as attended. Somebody who last came in more than ${String(AT_RISK_AWAY_MAX_DAYS)} days ago is not listed. Neither is anybody whose membership is frozen or has ended, nor your own staff.`;
 
 /** What the gym's own check-ins allow the list to say: null when it is simply the list,
  *  or a sentence, whether the list is still drawn under it, and the button's place. */
@@ -68,7 +67,7 @@ export function checkinNote(list, gymName) {
     return {
       kind: 'none',
       showList: false,
-      line: `This list is worked out from check-ins, and nobody has been checked in at ${gymName} yet. Once people are checked in at the front desk or by staff, anybody who stops coming is listed here.`,
+      line: `This list is worked out from who comes in, and nobody has been checked in at ${gymName} yet. Once people are checked in at the front desk or by staff, anybody who stops coming is listed here.`,
     };
   }
   if (list.checkin === 'new' && list.firstCheckinOn !== null) {
@@ -80,10 +79,17 @@ export function checkinNote(list, gymName) {
   }
   if (list.checkin === 'stopped') {
     const last = list.lastCheckinOn === null ? '' : ` The last check-in was on ${shortDay(list.lastCheckinOn)}.`;
+    const lately = typeof list.checkinDaysLately === 'number' ? list.checkinDaysLately : 0;
+    // About DAYS, against this gym's own usual: a gym open three days a week never reads this.
+    const how =
+      lately === 0
+        ? `Nobody has been checked in over the last ${days(quiet)}.`
+        : `People were checked in on only ${String(lately)} of the last ${days(quiet)}, far fewer than is usual at ${gymName}.`;
     return {
       kind: 'stopped',
-      showList: true,
-      line: `Hardly anybody has been checked in over the last ${days(quiet)}.${last} Anybody who stopped coming in that time is not listed, because the list cannot tell them from everybody else.`,
+      // With nobody to list, this note is the whole answer: no "Nobody has stopped coming".
+      showList: list.total > 0,
+      line: `${how}${last} Anybody who stopped coming in that time is not listed, because the list cannot tell them from everybody else.`,
     };
   }
   return null;
@@ -92,7 +98,7 @@ export function checkinNote(list, gymName) {
 /** One row's two lines of facts. */
 export function rowFacts(person) {
   return {
-    last: `Last check-in ${shortDay(person.lastVisitOn)}, ${days(person.daysAway)} ago`,
+    last: `Last came in ${shortDay(person.lastVisitOn)}, ${days(person.daysAway)} ago`,
     regular: `Came in ${String(person.weeksCame)} of their last ${String(AT_RISK_WEEKS)} weeks`,
   };
 }
@@ -164,7 +170,7 @@ export function rowAction(person, { orgType, timezone, readOnly = false, now = D
     return { kind: 'no_app', line: `Not in the app, so ${first} can't be messaged here. Their phone and email are on their page.` };
   }
   if (person.app === 'shared' || person.userId === null) {
-    return { kind: 'shared', line: 'Two people use this record in the app, so a message cannot go to one of them. Their phone and email are on their page.' };
+    return { kind: 'shared', line: 'More than one person uses this record in the app, so a message cannot go to one of them. Their phone and email are on their page.' };
   }
   const own = typeof person.lastMessage?.body === 'string' && person.lastMessage.body !== '' ? quoted(person.lastMessage.body) : null;
   const words = own ?? messageLine(person.lastMessage?.preset);
