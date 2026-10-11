@@ -225,15 +225,17 @@ export function heldOnList(input: HeldInput): HeldOnList | null {
  *  Reports counts them as left on (spec Part 3 §16.9.4); null for everybody else. It is the
  *  day of the very membership `heldOnList` names: the day it was cancelled, or its last
  *  day. A pack used up before its last day ended with its last class (`usedUpOn`), and
- *  that day stands for good, so a month that has closed never changes afterwards; with no
- *  class recorded, `today` stands in until the pack's own last day has passed. Never
- *  later than `today`. */
+ *  that day stands for good, so a month that has closed never changes afterwards. A pack is
+ *  charged when a class is booked, so that class may be still to come: until the day after
+ *  it they have not left, though the list reads "Ended". With no class recorded, `today`
+ *  stands in until the pack's own last day has passed. Never later than `today`. */
 export function heldLeftOn(input: HeldInput): string | null {
   const { last } = answering(input);
   if (last === undefined) return null;
   const { status, endsOn } = last.view;
   const usedUpOn = status === "ended" && last.membership.kind === "pack" && last.membership.classesLeft === 0 ? (last.usedUpOn ?? null) : null;
   const day = usedUpOn !== null && (endsOn === null || usedUpOn < endsOn) ? usedUpOn : endsOn;
+  if (day === usedUpOn && usedUpOn !== null && usedUpOn >= input.today) return null;
   return day !== null && day <= input.today ? day : input.today;
 }
 

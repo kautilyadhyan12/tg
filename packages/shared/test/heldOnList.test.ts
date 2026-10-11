@@ -488,11 +488,15 @@ describe("the day Reports counts somebody as left", () => {
     const pack = (usedUpOn: string | null, over: Partial<HeldMembership> = {}) =>
       held("PT 10", { ...given(tenPack, "2026-09-20", true, "2026-09-20"), classesLeft: 0, ...over }, { usedUpOn });
     const left = (m: HeldForList, on: string) => heldLeftOn({ held: [m], listedUnheld: null, today: on });
-    const days = ["2026-10-12", "2026-10-31", "2026-11-02", "2026-12-18", "2026-12-19", "2027-03-01"];
+    const days = ["2026-10-13", "2026-10-31", "2026-11-02", "2026-12-18", "2026-12-19", "2027-03-01"];
     expect(days.map((on) => left(pack("2026-10-12"), on))).toEqual(days.map(() => "2026-10-12"));
-    // The last class is still to come: a member's day is never later than today.
-    expect(left(pack("2026-10-20"), "2026-10-15")).toBe("2026-10-15");
-    expect(left(pack("2026-10-20"), "2026-11-02")).toBe("2026-10-20");
+    // A pack is charged when a class is booked. While the last class is today or still to
+    // come they have not left, though the list reads "Ended"; from the day after, they
+    // left on the day of that class, and it never moves.
+    const booked = pack("2026-10-20");
+    expect(["2026-10-15", "2026-10-19", "2026-10-20"].map((on) => left(booked, on))).toEqual([null, null, null]);
+    expect(["2026-10-21", "2026-11-02", "2027-01-05"].map((on) => left(booked, on))).toEqual(["2026-10-20", "2026-10-20", "2026-10-20"]);
+    expect(heldOnList({ held: [booked], listedUnheld: null, today: "2026-10-15" })?.status).toBe("ended");
     // A class dated after the pack's own last day does not move the day past it.
     expect(left(pack("2026-12-30"), "2027-01-10")).toBe("2026-12-18");
     // Classes left: the last class says nothing, and it runs to its last day.

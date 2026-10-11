@@ -153,7 +153,7 @@ describe('the tiles', () => {
   it('say that a membership that ended counts as left, wherever a figure counts who left (21c-ii)', () => {
     const r = report();
     expect(tile(r, 'active').how).toBe(
-      'Everyone on your member list today, except members whose membership has ended or been cancelled and who have no new one. A status from your own file, such as Expired, is not counted. Members you have removed are not counted.',
+      'Everyone on your member list today, except members whose membership has ended or been cancelled and who have no new one, unless your member list shows a later end date for them. A status from your own file, such as Expired, is not counted. Members you have removed are not counted.',
     );
     expect(tile(r, 'left').how).toBe(
       'Members removed from your member list in October 2026, and members whose membership ended or was cancelled in October 2026 and who have no new one. On your member list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a member the whole time. Records deleted for good are not counted.',

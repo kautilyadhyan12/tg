@@ -117,7 +117,7 @@ export function memberTiles(report, words) {
       value: count(report.activeNow),
       line: null,
       note: null,
-      how: `Everyone on your ${words.person} list today, except ${words.people} whose membership has ended or been cancelled and who have no new one. A status from your own file, such as Expired, is not counted. ${words.peopleCap} you have removed are not counted.`,
+      how: `Everyone on your ${words.person} list today, except ${words.people} whose membership has ended or been cancelled and who have no new one, unless your ${words.person} list shows a later end date for them. A status from your own file, such as Expired, is not counted. ${words.peopleCap} you have removed are not counted.`,
     },
     {
       key: 'new',
