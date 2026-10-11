@@ -476,7 +476,8 @@ describe('the box of who gets it', () => {
       }),
     });
     fireEvent.click(screen.getByRole('button', { name: 'Renew 3 Months for the people with 3 Month Plan on your member list' }));
-    const box = await screen.findByRole('group', { name: 'Give 3 Months to the people with “3 Month Plan” on your member list?' });
+    const box = await screen.findByRole('group', { name: 'Renew 3 Months for the people with “3 Month Plan” on your member list?' });
+    expect(within(box).getByText('Tick who to renew.')).toBeTruthy();
     expect(within(box).getByText('1 of these people had 3 Months before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.')).toBeTruthy();
     expect(rowsOf(box, 'ask')).toEqual([['Asha Rao', 'Renewal, ends 25 November 2026']]);
     expect(within(box).getByText('7 people already have 3 Months, or had it before.')).toBeTruthy();

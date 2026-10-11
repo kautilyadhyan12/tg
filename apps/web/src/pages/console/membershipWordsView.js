@@ -212,7 +212,9 @@ export function giveGroups(preview) {
       title: `${people(counts.ask)} · your list doesn't say if they have paid`,
       detail: recurring(preview)
         ? 'Your list has no renewal date for them, so their membership starts today.'
-        : 'Where your list has an end date for them they keep it; otherwise it starts today.',
+        : (counts.again ?? 0) === counts.ask
+          ? 'Each gets a new membership that ends on the date shown beside their name.'
+          : 'Where your list has an end date for them they keep it; otherwise it starts today.',
     });
   }
   return groups;
@@ -291,13 +293,19 @@ export function boxWords(preview, ticks, counted = false) {
   const n = givenCount(preview, ticks);
   const { name } = preview.type;
   const same = preview.ownName;
-  const heading = same
-    ? `Give ${name} to the people who have it on your member list?`
-    : `Give ${name} to the people with ${quoted(preview.word)} on your member list?`;
-  if (n > 0) return { heading, button: `Give ${name} to ${people(n)}`, nobody: null };
   const anyone = preview.counts.settled + preview.counts.due + preview.counts.ask > 0;
+  // Everybody who can get it had it before: the box is a renewal, and says so.
+  const renewal = anyone && (preview.counts.again ?? 0) === preview.counts.settled + preview.counts.due + preview.counts.ask;
+  const heading = renewal
+    ? same
+      ? `Renew ${name} for the people who have it on your member list?`
+      : `Renew ${name} for the people with ${quoted(preview.word)} on your member list?`
+    : same
+      ? `Give ${name} to the people who have it on your member list?`
+      : `Give ${name} to the people with ${quoted(preview.word)} on your member list?`;
+  if (n > 0) return { heading, button: renewal ? `Renew ${name} for ${people(n)}` : `Give ${name} to ${people(n)}`, nobody: null };
   if (same || counted) {
-    return { heading, button: null, nobody: anyone ? `Tick who should get ${name}.` : `Nobody on your member list can be given ${name} now.` };
+    return { heading, button: null, nobody: anyone ? (renewal ? `Tick who to renew.` : `Tick who should get ${name}.`) : `Nobody on your member list can be given ${name} now.` };
   }
   return {
     heading,

@@ -158,6 +158,15 @@ describe("the member list's names are part of the gym's one list of memberships"
     expect(renewNote(preview({ type: TERM, counts: counts({ ask: 3 }) }))).toBeNull();
     expect(renewNote(preview({ type: TERM, counts: counts({ ask: 3, again: 0 }) }))).toBeNull();
     expect(renewNote(preview({ type: TERM, counts: counts({ ask: 3, again: 1 }) }))).toBe('1 of these people had 3 Months before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.');
+    // Where everybody in the box is a renewal, the box says Renew from its heading to its button.
+    const all = preview({ type: TERM, word: '3 Month Plan', counts: counts({ ask: 2, has: 1, again: 2 }) });
+    expect(boxWords(all, { settled: false, due: false, ask: false }, true)).toEqual({ heading: 'Renew 3 Months for the people with “3 Month Plan” on your member list?', button: null, nobody: 'Tick who to renew.' });
+    expect(boxWords(all, ALL, true)).toEqual({ heading: 'Renew 3 Months for the people with “3 Month Plan” on your member list?', button: 'Renew 3 Months for 2 people', nobody: null });
+    expect(giveGroups(all)[0].detail).toBe('Each gets a new membership that ends on the date shown beside their name.');
+    // Mixed with somebody new, it stays the usual box.
+    const mixed = preview({ type: TERM, word: '3 Month Plan', counts: counts({ ask: 3, again: 2 }) });
+    expect(boxWords(mixed, ALL, true).button).toBe('Give 3 Months to 3 people');
+    expect(giveGroups(mixed)[0].detail).toBe('Where your list has an end date for them they keep it; otherwise it starts today.');
     expect(renewNote(preview({ type: TERM, counts: counts({ ask: 3, again: 2 }) }))).toBe('2 of these people had 3 Months before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.');
   });
 
