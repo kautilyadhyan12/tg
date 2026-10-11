@@ -6,7 +6,7 @@
 // asks the server for nothing.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ROLE_PRIVILEGES } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -163,6 +163,38 @@ describe('staff who may', () => {
     const rail = within(screen.getByTestId('console-rail'));
     expect(rail.getByText('Members').closest('a').className).not.toContain('c-nav-on');
     expect(rail.getByText('Memberships').closest('a').className).toContain('c-nav-on');
+  });
+
+  it('an address that names one membership and a name from the list opens that box, once, and is tidied', async () => {
+    // What a button on Members or on the import's last screen leads to (`membershipBoxTo`).
+    const Where = () => {
+      const at = useLocation();
+      return <span data-testid="where">{`${at.pathname}${at.search}`}</span>;
+    };
+    orgService.getMine.mockResolvedValue({ data: { orgs: [gym()] } });
+    orgService.previewMembershipLink.mockResolvedValue({
+      data: {
+        today: '2026-10-11',
+        word: '3 Month Plan',
+        type: { id: type().id, name: 'Gold Monthly', kind: 'recurring', priceMinor: 4999, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null },
+        ownName: false,
+        digest: 'a'.repeat(64),
+        counts: { settled: 1, due: 0, ask: 0, has: 0, full: 0, ended: 0, day: 0, again: 0, past: 0 },
+        people: [],
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={[`/console/iron-house/memberships?give=${type().id}&name=3%20Month%20Plan`]}>
+        <Where />
+        <Routes>
+          <Route path="/console/:orgSlug/memberships" element={<ConsoleLayout><Memberships /></ConsoleLayout>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(IRON, { word: '3 Month Plan', typeId: type().id }));
+    expect(await screen.findByRole('group', { name: 'Give Gold Monthly to the people with “3 Month Plan” on your member list?' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/console/iron-house/memberships'));
+    expect(orgService.previewMembershipLink).toHaveBeenCalledTimes(1);
   });
 
   it('a gym with no live plan still sees its list, is told why nothing can be changed, and its buttons are off', async () => {

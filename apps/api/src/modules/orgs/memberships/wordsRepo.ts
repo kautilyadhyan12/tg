@@ -9,29 +9,38 @@ import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import {
   HELD_LIVE_MAX,
+  LINK_DAY_AHEAD_DAYS,
   MEMBER_LIST_STATUS_CHIPS_MAX,
   type HeldMembershipTypeChoice,
   type MembershipLinkGroup,
 } from "@app/shared";
 import { insertAudit } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
-import { inUseByRule, liveTypes, typeChoice } from "./heldRepo.js";
+import { LAST_DAY, inUseByRule, liveTypes, typeChoice } from "./heldRepo.js";
 import { linkDigest, placePeople, type PlacedPerson, type WordPerson } from "./words.js";
 
 export interface WordRow {
   word: string;
   people: number;
-  link: { typeId: string; typeName: string; typeArchived: boolean; waiting: number; ownName: boolean } | null;
+  link: { typeId: string; typeName: string; typeArchived: boolean; waiting: number; again: number; ownName: boolean } | null;
   /** Not linked, and the word is the name of one of the gym's live types. */
-  sameName: { typeId: string; typeName: string; waiting: number } | null;
+  sameName: { typeId: string; typeName: string; waiting: number; again: number } | null;
 }
 
+/** Whether a stored membership aliased `h` is in use on `today`, as the rule's clock says
+ *  (`settle` in `@app/shared`): frozen, or active and not over. A pack with no class left
+ *  is over; a repeating one that renews has no last day. */
+const IN_USE_TODAY = (sql: Sql | TransactionSql, today: string) => sql`
+  (h.status = 'frozen' OR (h.status = 'active'
+     AND NOT (h.kind = 'pack' AND h.classes_left = 0)
+     AND ((h.kind = 'recurring' AND h.renews) OR ${LAST_DAY(sql)} >= ${today}::date)))`;
+
 /** The list's membership words in the list's own order, each with its link, and the
- *  gym's live types. */
-export async function readWords(sql: Sql, gymId: string): Promise<{ words: WordRow[]; types: HeldMembershipTypeChoice[] }> {
+ *  gym's live types. `today` is the gym's own day. */
+export async function readWords(sql: Sql, gymId: string, today: string): Promise<{ words: WordRow[]; types: HeldMembershipTypeChoice[] }> {
   return await sql.begin("isolation level repeatable read read only", async (tx) => {
     const rows = await tx<
-      { word: string; people: number; type_id: string | null; linked: boolean | null; type_name: string | null; archived: boolean | null; own_name: boolean | null; waiting: number }[]
+      { word: string; people: number; type_id: string | null; linked: boolean | null; type_name: string | null; archived: boolean | null; own_name: boolean | null; waiting: number; again: number }[]
     >`
       WITH mine AS MATERIALIZED (
         SELECT membership_type, listed_seq FROM gym_member_list_entries
@@ -59,23 +68,49 @@ export async function readWords(sql: Sql, gymId: string): Promise<{ words: WordR
       -- How many people with each such word have ever held its type. From the type to
       -- its memberships to their records, each step by an index: a join of the whole list
       -- against the gym's memberships took a second straight after 2,100 were given.
-      holding AS MATERIALIZED (
-        SELECT p.key, count(DISTINCT h.entry_id)::int AS holders
+      -- A person at a time first: what became of every membership of that type they held.
+      facts AS MATERIALIZED (
+        SELECT p.key, h.entry_id,
+               bool_or(h.kind = 'recurring') AS recurring,
+               bool_or(h.status = 'cancelled') AS cancelled,
+               bool_or(${IN_USE_TODAY(tx, today)}) AS in_use,
+               max(${LAST_DAY(tx)}) AS last_day,
+               -- The day the list covers: its end day, or the day before its renewal day.
+               min(CASE WHEN e.ends_on_kind = 'renews' THEN e.ends_on - 1 ELSE e.ends_on END) AS covered
         FROM pairs p
         JOIN gym_held_memberships h ON h.gym_id = ${gymId} AND h.membership_type_id = p.type_id
         JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
         WHERE e.former_at IS NULL AND lower(e.membership_type) = p.key
-        GROUP BY p.key
+        GROUP BY p.key, h.entry_id
+      ),
+      holding AS MATERIALIZED (
+        SELECT f.key, count(*)::int AS holders FROM facts f GROUP BY f.key
+      ),
+      -- Whom the box would renew, and nobody it would refuse: every one of theirs is over,
+      -- none cancelled, the list covers a later day (offeredAgain in words.ts), that day
+      -- has not passed and is not further off than a membership can run
+      -- (linkHeldMembership), and they have room for one more.
+      renewing AS MATERIALIZED (
+        SELECT f.key, count(*)::int AS again
+        FROM facts f
+        WHERE NOT f.recurring AND NOT f.cancelled AND NOT f.in_use
+          AND f.covered >= ${today}::date AND f.covered > f.last_day
+          AND f.covered < ${today}::date + ${LINK_DAY_AHEAD_DAYS}::int
+          AND (SELECT count(*) FROM gym_held_memberships h
+               WHERE h.gym_id = ${gymId} AND h.entry_id = f.entry_id AND ${IN_USE_TODAY(tx, today)}) < ${HELD_LIVE_MAX}
+        GROUP BY f.key
       )
       SELECT g.word, g.people, p.type_id, p.linked, t.name AS type_name,
              (t.archived_at IS NOT NULL) AS archived,
              (lower(t.name) = g.key) AS own_name,
              -- The people with the word who have never held that type.
              CASE WHEN p.type_id IS NULL THEN 0
-                  ELSE GREATEST(g.people - coalesce(ho.holders, 0), 0) END AS waiting
+                  ELSE GREATEST(g.people - coalesce(ho.holders, 0), 0) END AS waiting,
+             coalesce(rn.again, 0) AS again
       FROM grouped g
       LEFT JOIN pairs p ON p.key = g.key
       LEFT JOIN holding ho ON ho.key = g.key
+      LEFT JOIN renewing rn ON rn.key = g.key
       LEFT JOIN gym_membership_types t ON t.gym_id = ${gymId} AND t.id = p.type_id
       ORDER BY g.first_seq
       LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}`;
@@ -87,11 +122,11 @@ export async function readWords(sql: Sql, gymId: string): Promise<{ words: WordR
         link:
           row.type_id === null || row.type_name === null || row.linked !== true
             ? null
-            : { typeId: row.type_id, typeName: row.type_name, typeArchived: row.archived === true, waiting: row.waiting, ownName: row.own_name === true },
+            : { typeId: row.type_id, typeName: row.type_name, typeArchived: row.archived === true, waiting: row.waiting, again: row.again, ownName: row.own_name === true },
         sameName:
           row.type_id === null || row.type_name === null || row.linked !== false
             ? null
-            : { typeId: row.type_id, typeName: row.type_name, waiting: row.waiting },
+            : { typeId: row.type_id, typeName: row.type_name, waiting: row.waiting, again: row.again },
       })),
       types: types.map(typeChoice),
     };
@@ -104,6 +139,9 @@ interface PersonRow {
   ends_on: string | null;
   ends_on_kind: string | null;
   held_type: boolean;
+  type_cancelled: boolean;
+  type_in_use: boolean;
+  type_last_day: string | null;
   in_use: number;
 }
 
@@ -134,13 +172,20 @@ async function peopleWithWord(
 ): Promise<WordPerson[]> {
   const rows = await tx<PersonRow[]>`
     SELECT e.id, e.full_name, e.ends_on::text AS ends_on, e.ends_on_kind,
-           EXISTS (
-             SELECT 1 FROM gym_held_memberships h
-             WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.membership_type_id = ${typeId}
-           ) AS held_type,
+           (f.held > 0) AS held_type, f.cancelled AS type_cancelled, f.in_use AS type_in_use,
+           f.last_day::text AS type_last_day,
            (SELECT count(*)::int FROM gym_held_memberships h
             WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status IN ('active','frozen')) AS in_use
     FROM gym_member_list_entries e
+    -- What became of every membership of this type they have held (one row, always).
+    CROSS JOIN LATERAL (
+      SELECT count(*)::int AS held,
+             coalesce(bool_or(h.status = 'cancelled'), false) AS cancelled,
+             coalesce(bool_or(${IN_USE_TODAY(tx, today)}), false) AS in_use,
+             max(${LAST_DAY(tx)}) AS last_day
+      FROM gym_held_memberships h
+      WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.membership_type_id = ${typeId}
+    ) f
     WHERE e.gym_id = ${gymId} AND e.former_at IS NULL AND lower(e.membership_type) = lower(${word})
       AND (${only === null} OR e.id = ANY(${only === null ? [] : [...only]}::uuid[]))
     ORDER BY lower(e.full_name), e.id`;
@@ -151,6 +196,9 @@ async function peopleWithWord(
       endsOn: r.ends_on,
       endsOnKind: kindOf(r.ends_on_kind),
       heldType: r.held_type,
+      typeCancelled: r.type_cancelled,
+      typeInUse: r.type_in_use,
+      typeLastDay: r.type_last_day,
       inUse: r.in_use,
     }),
   );

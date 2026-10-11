@@ -11,7 +11,9 @@ import MemberListRemove from './MemberListRemove';
 import { MemberTagsManage, MemberTagsSelected } from './MemberListTags';
 import MemberListMessage from './MemberListMessage';
 import MemberListUpload from './MemberListUpload';
-import { staffTag } from './consoleView';
+import { staffTag, viewerPrivileges } from './consoleView';
+import { renewalsWaiting } from './membershipWordsView';
+import { canOpenPlace, membershipBoxTo } from './consolePlaces';
 import {
   CHIP_KINDS,
   EMPTY_FILTERS,
@@ -285,6 +287,30 @@ function ReviewSign({ review, words }) {
   );
 }
 
+/** THE SIGN WHILE A RENEWAL WAITS (21c-i; RULINGS 2026-10-11): somebody whose membership
+ *  has ended reads "Ended" in the list though the gym's own list shows a later end date.
+ *  The sign says why, and its button opens the box that renews them. `to` is null for
+ *  somebody who may not open Memberships, who reads who can; `off` in a gym that can
+ *  only read, which is told nothing it cannot do. */
+function RenewalsSign({ sign, to, off }) {
+  return (
+    <section className="c-callout items-start" data-testid="renewals-sign">
+      <span className="c-glow-dot mt-[7px]" aria-hidden="true" />
+      <div className="flex flex-col gap-1 flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="c-s15 c-w6">{off ? sign.titleOff : sign.title}</span>
+          {to !== null && !off ? (
+            <Link to={to} className="c-s14 c-w6 c-lk" data-testid="renewals-renew">
+              {sign.button}
+            </Link>
+          ) : null}
+        </div>
+        <span className="c-s14 c-t2">{to !== null || off ? sign.detail : `${sign.detail} ${sign.ask}`}</span>
+      </div>
+    </section>
+  );
+}
+
 /** THE SIGN WHILE ANY PAIR MAY BE ONE PERSON TWICE (5b-iv-a; RULINGS 2026-09-25): Review opens
  *  the pairs. The app never merges anyone on its own. */
 function DuplicatesSign({ duplicates }) {
@@ -328,6 +354,27 @@ export default function MemberListPanel({
   const [page, setPage] = useState({ loading: true, error: null, entries: [], total: 0, cursor: null });
   const [loadingMore, setLoadingMore] = useState(false);
   const [tick, setTick] = useState(0);
+  // The list's membership names, read for the sign that says a renewal waits. Only for
+  // staff the server gives them to (`members.confirm`); anybody else reads no sign.
+  const [listNames, setListNames] = useState([]);
+  const readsNames = viewerPrivileges(gym).includes('members.confirm');
+  useEffect(() => {
+    if (gymId === null || !readsNames) return undefined;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => orgService.getMembershipWords(gymId))
+      .then((res) => {
+        if (!cancelled) setListNames(res.data.words);
+      })
+      .catch(() => {
+        if (!cancelled) setListNames([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gymId, readsNames, refreshKey, tick]);
+  const renewalSigns = readsNames && typeof gym?.slug === 'string' ? renewalsWaiting(listNames, words) : [];
+  const opensMemberships = canOpenPlace(viewerPrivileges(gym), 'memberships');
   /** undefined: no box open · null: adding somebody · an id: that person's page. */
   const [openId, setOpenId] = useState(undefined);
   const phone = usePhone();
@@ -752,6 +799,9 @@ export default function MemberListPanel({
     <div className={`flex flex-col gap-5 md:gap-6 ${picked > 0 ? 'pb-32 md:pb-0' : ''}`} data-testid="member-list-panel">
       {(list?.review?.count ?? 0) > 0 ? <ReviewSign review={list.review} words={words} /> : null}
       {(list?.duplicates?.count ?? 0) > 0 ? <DuplicatesSign duplicates={list.duplicates} /> : null}
+      {renewalSigns.map((sign) => (
+        <RenewalsSign key={sign.key} sign={sign} to={opensMemberships ? membershipBoxTo(gym.slug, sign.typeId, sign.word) : null} off={readOnly} />
+      ))}
       {/* The toolbar stays at the top of the screen on a computer while the list scrolls, and
           with people selected the bar over them sits in it (Kd, 2026-09-28: at the bottom of
           the list he had to scroll back up to act), as Gmail and HubSpot keep theirs. */}
