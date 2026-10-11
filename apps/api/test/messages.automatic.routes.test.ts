@@ -9,6 +9,7 @@ import postgres from "postgres";
 import type { GymInboxResponse, GymMessageSettingsRequest, GymMessageSettingsResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { markDayDone, settingsStamp } from "../src/modules/orgs/messages/repo.js";
 import { sendDueMessages } from "../src/modules/orgs/messages/send.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
@@ -162,6 +163,13 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
     await sql`
       INSERT INTO gym_attendance (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
       VALUES (${gym.id}, ${who?.userId ?? null}, ${entryId}, ${gym.owner.userId}, ${on}::date, 'staff', ${how}, ${how}, ${`${on}T05:00:00Z`}::timestamptz)`;
+  };
+  /** The member's own "I'm here" tap on that day: a check-in the gym sees on Attendance,
+   *  and one no board counts. */
+  const tap = async (gym: Gym, who: Member, on: string): Promise<void> => {
+    await sql`
+      INSERT INTO gym_attendance (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
+      VALUES (${gym.id}, ${who.userId}, NULL, ${who.userId}, ${on}::date, 'manual', 'hours_unset', 'hours_unset', ${`${on}T05:30:00Z`}::timestamptz)`;
   };
   /** The desk in use: somebody not in the app checked in on each of these days. */
   const deskOpen = async (gym: Gym, from: number, to: number): Promise<void> => {
@@ -327,11 +335,22 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       expect((await run([four])).sent).toBe(4);
 
       // 1 January 1970, the day a computer writes for no date, on 1 January.
+      // One record each, no two alike: the first day of a year in any year, and the last.
       const epoch = await makeGym("Auto Epoch Gym");
-      await member(epoch, "Unix Zero", { born: "1970-01-01" });
-      const newYear = await member(epoch, "New Year", { born: "1971-01-01" });
-      expect((await run([epoch], new Date("2027-01-01T06:30:00Z"))).sent).toBe(1);
-      expect(await got(epoch)).toEqual([`${newYear.userId} birthday`]);
+      for (const born of ["1970-01-01", "2000-01-01", "1980-01-01", "2001-01-01", "1987-01-01"]) await member(epoch, `Born ${born}`, { born });
+      await member(epoch, "Epoch West", { born: "1969-12-31" });
+      const secondOfJan = await member(epoch, "Second Of January", { born: "1987-01-02" });
+      expect((await run([epoch], new Date("2026-12-31T06:30:00Z"))).sent).toBe(0);
+      expect((await run([epoch], new Date("2027-01-01T06:30:00Z"))).sent).toBe(0);
+      expect((await run([epoch], new Date("2027-01-02T06:30:00Z"))).sent).toBe(1);
+      expect(await got(epoch)).toEqual([`${secondOfJan.userId} birthday`]);
+
+      // A date box left at today, and any date that makes the member a child.
+      const young = await makeGym("Auto Young Gym");
+      for (const born of ["2026-10-09", "2025-10-09", "2023-10-09", "2009-10-09"]) await member(young, `Born ${born}`, { born });
+      const adult = await member(young, "Eighteen Today", { born: "2008-10-09" });
+      expect((await run([young])).sent).toBe(1);
+      expect(await got(young)).toEqual([`${adult.userId} birthday`]);
 
       // 29 February, in a year without one, and once only.
       const leap = await makeGym("Auto Leap Gym");
@@ -367,7 +386,7 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
         VALUES (${gym.id}, ${bo.userId}, ${bo.entryId}, ${gym.owner.userId}, ${TODAY}::date, 'staff', 'open_24h', 'open_24h', ${minutes(NOON, -1)})`;
       await visit(gym, maya, TODAY);
       expect((await run([gym])).sent).toBe(1);
-      expect(await sentTo(gym)).toEqual([{ user_id: maya.userId, kind: "milestone", occasion: "visits:50", body: "That's 50 visits to Auto Milestone Gym, Maya. Well done." }]);
+      expect(await sentTo(gym)).toEqual([{ user_id: maya.userId, kind: "milestone", occasion: "visits:50", body: "You've reached 50 visits at Auto Milestone Gym, Maya. Well done." }]);
       expect((await run([gym], minutes(NOON, 15))).sent).toBe(0);
 
       // Bo's 50th is late tomorrow night and the 51st before the next morning's first run.
@@ -389,7 +408,7 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       expect((await run([ten])).sent).toBe(0);
       expect((await saved(ten, { ...START, milestones: [10, 25] })).milestones).toEqual([10, 25]);
       expect((await run([ten])).sent).toBe(1);
-      expect((await sentTo(ten))[0]?.body).toBe("That's 10 visits to Auto Ten Gym, Tia. Well done.");
+      expect((await sentTo(ten))[0]?.body).toBe("You've reached 10 visits at Auto Ten Gym, Tia. Well done.");
     },
     T,
   );
@@ -459,6 +478,85 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
   );
 
   it(
+    "a milestone reached on a day that already had another message is not lost: it goes the next morning",
+    async () => {
+      clock = NOON;
+      const gym = await makeGym("Auto Kept Gym");
+      // The 50th visit is today, and today is her birthday.
+      const bea = await member(gym, "Bea Born", { born: "1988-10-09" });
+      for (let n = 49; n >= 1; n -= 1) await visit(gym, bea, day(-n - 3));
+      await visit(gym, bea, TODAY);
+      expect((await run([gym])).sent).toBe(1);
+      expect((await sentTo(gym)).map((r) => r.kind)).toEqual(["birthday"]);
+      expect((await run([gym], days(NOON, 1))).sent).toBe(1);
+      expect((await sentTo(gym)).map((r) => `${r.kind} ${r.occasion}`).sort()).toEqual(["birthday birthday:2026", "milestone visits:50"]);
+      // And once only.
+      for (const n of [2, 3, 6, 7]) expect((await run([gym], days(NOON, n))).sent, String(n)).toBe(0);
+    },
+    T,
+  );
+
+  it(
+    "we miss you is never for somebody who checks in by their own tap, nor for somebody who stopped coming long ago",
+    async () => {
+      clock = NOON;
+      const gym = await makeGym("Auto Tap Gym");
+      await deskOpen(gym, -30, 0);
+      // Staff checked her in twelve days ago; she has tapped "I'm here" every day since.
+      const tara = await member(gym, "Tara Taps");
+      await visit(gym, tara, day(-12));
+      for (let n = -11; n <= 0; n += 1) await tap(gym, tara, day(n));
+      // Never at the desk: tapped in twelve days ago and not since.
+      const tom = await member(gym, "Tom Tapped");
+      await tap(gym, tom, day(-12));
+      // Last came 400 days ago, and 41: long gone before today.
+      const old = await member(gym, "Old Timer");
+      await visit(gym, old, day(-400));
+      const month = await member(gym, "Past A Month");
+      await visit(gym, month, day(-41));
+      const edge = await member(gym, "Forty Days");
+      await visit(gym, edge, day(-40));
+
+      expect((await run([gym])).sent).toBe(2);
+      expect(await got(gym)).toEqual([`${edge.userId} miss_you`, `${tom.userId} miss_you`].sort());
+      expect((await sentTo(gym)).find((r) => r.user_id === tom.userId)?.occasion).toBe(`absent:${day(-12)}`);
+      // Tara stops tapping: ten days on she is missed, from her last tap.
+      await deskOpen(gym, 1, 10);
+      expect((await run([gym], days(NOON, 9))).sent).toBe(0);
+      expect((await run([gym], days(NOON, 10))).sent).toBe(1);
+      expect((await sentTo(gym)).find((r) => r.user_id === tara.userId)?.occasion).toBe(`absent:${TODAY}`);
+    },
+    T,
+  );
+
+  it(
+    "a save of the settings while the day's read is under way is not undone by the read's own mark",
+    async () => {
+      clock = NOON;
+      const gym = await makeGym("Auto Stamp Gym");
+      const marked = async () => (await sql`SELECT 1 FROM gym_message_days WHERE gym_id = ${gym.id}`).length;
+      // The read begins, then the owner saves, then the read ends: no mark.
+      const before = await settingsStamp(sql, gym.id);
+      await saved(gym, withKind("birthday", { on: false }));
+      expect(await markDayDone(sql, gym.id, TODAY, before)).toBe(false);
+      expect(await marked()).toBe(0);
+      // Two saves in one instant of the test's clock still differ.
+      const one = await settingsStamp(sql, gym.id);
+      await saved(gym, withKind("birthday", { on: true }));
+      const two = await settingsStamp(sql, gym.id);
+      expect(two).not.toBe(one);
+      expect(await markDayDone(sql, gym.id, TODAY, one)).toBe(false);
+      // No save since the read began: marked, and the same save again changes no stamp.
+      expect(await markDayDone(sql, gym.id, TODAY, two)).toBe(true);
+      expect(await marked()).toBe(1);
+      await saved(gym, withKind("birthday", { on: true }));
+      expect(await settingsStamp(sql, gym.id)).toBe(two);
+      expect(await marked()).toBe(1);
+    },
+    T,
+  );
+
+  it(
     "the gym's settings are its own: a stranger, next door's owner and a member read and save nothing, a trainer is refused, and nobody signed in is 401",
     async () => {
       clock = NOON;
@@ -499,6 +597,8 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       // Check-in in the last 30 days is said.
       await deskOpen(gym, -31, -31);
       expect((JSON.parse((await inject("GET", settingsPath(gym), gym.owner.cookies)).body) as GymMessageSettingsResponse).checkIn).toBe(false);
+      await visit(gym, null, day(-2), "added_later");
+      expect((JSON.parse((await inject("GET", settingsPath(gym), gym.owner.cookies)).body) as GymMessageSettingsResponse).checkIn).toBe(false);
       await deskOpen(gym, -29, -29);
       expect((JSON.parse((await inject("GET", settingsPath(gym), gym.owner.cookies)).body) as GymMessageSettingsResponse).checkIn).toBe(true);
 
@@ -523,6 +623,7 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       await refused(withKind("welcome", { ownLine: "Book at ironhouse.com" }), "message_line_link");
       await refused(withKind("welcome", { ownLine: "Follow @ironhouse" }), "message_line_at");
       await refused(withKind("welcome", { ownLine: "x".repeat(141) }), "message_line_too_long");
+      await refused(withKind("welcome", { ownLine: "Don't be a dumbass, wipe the bench." }), "message_line_bad_words");
       await refused({ ...START, messages: START.messages.slice(0, 3) }, "validation_error");
       await refused({ ...START, messages: [...START.messages.slice(0, 3), { kind: "welcome", on: true, ownLine: null }] }, "validation_error");
       await refused({ ...START, messages: [...START.messages.slice(0, 3), { kind: "payment_overdue", on: false, ownLine: null }] }, "validation_error");

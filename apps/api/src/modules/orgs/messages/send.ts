@@ -21,6 +21,7 @@ import {
   automaticMessage,
   gymMessageDue,
   gymMessageSettingsFrom,
+  trustedBirthday,
   type GymMessageFacts,
   type GymMessageSettings,
 } from "@app/shared";
@@ -56,10 +57,11 @@ function factsFor(gym: repo.GymNow, settings: GymMessageSettings, visitDays: rea
       trial: null,
       membershipEndsOn: null,
       bills: [],
-      birthday: person.birthday,
+      birthday: trustedBirthday(person.dateOfBirth, gym.today, person.dateOfBirthShared),
       visits: person.visits,
       recentVisitDays: person.recentVisitDays,
       lastVisitOn: person.lastVisitOn,
+      lastSeenOn: person.lastSeenOn,
     },
     sent: person.sent,
   };
@@ -118,6 +120,8 @@ async function sendForGym(sql: Sql, gymId: string, now: Date): Promise<number> {
   // A gym that is closed, on no plan or asleep is not read past its own row.
   if (gym === null || !awake(gym)) return 0;
   const everybody = !(await repo.dayDone(sql, gymId, gym.today));
+  // Read before the settings are: a save that lands from here on stops the day's mark.
+  const stamp = everybody ? await repo.settingsStamp(sql, gymId) : "";
   const first = await dueForGym(sql, gymId, now, everybody);
   const sent =
     first === null || first.due.length === 0
@@ -128,7 +132,8 @@ async function sendForGym(sql: Sql, gymId: string, now: Date): Promise<number> {
           if (held === null) return 0;
           return repo.insertMessages(tx, held.due, now, GYM_MESSAGE_KEPT_DAYS);
         });
-  // Marked only once the day's messages are written: a run that fails reads everybody again.
-  if (everybody) await repo.markDayDone(sql, gymId, gym.today);
+  // Marked only once the day's messages are written: a run that fails reads everybody
+  // again, and so does one the gym's settings were saved under.
+  if (everybody) await repo.markDayDone(sql, gymId, gym.today, stamp);
   return sent;
 }

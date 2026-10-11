@@ -1,6 +1,7 @@
 import {
   GYM_MESSAGE_CHECK_IN_DAYS,
   GYM_MESSAGE_KIND_NAMES,
+  GYM_MESSAGE_MISS_YOU_LATE_DAYS,
   GYM_MESSAGE_OWN_LINE_MAX,
   GYM_MESSAGE_OWN_LINE_WORDS,
   GYM_MESSAGE_SETTING_KINDS,
@@ -95,10 +96,10 @@ export const messageName = (kind) => GYM_MESSAGE_KIND_NAMES[kind];
  *  box puts its picker. */
 export function messageWhen(kind, orgType) {
   const words = orgWords(orgType);
-  if (kind === 'welcome') return `Sent when somebody joins your ${words.it} in the app, within a quarter of an hour.`;
-  if (kind === 'birthday') return `Sent on the morning of a ${words.person}'s birthday, from the date of birth on your Members list. Somebody with no date of birth there gets none.`;
-  if (kind === 'milestone') return `Sent in the morning, once a ${words.person} has reached a number of visits you tick here.`;
-  return `Sent once, in the morning, when a ${words.person} hasn't checked in for the number of days you pick here.`;
+  if (kind === 'welcome') return `Sent when somebody joins your ${words.it} in the app: within a quarter of an hour by day, and the next morning if they join at night. Not sent to your own staff.`;
+  if (kind === 'birthday') return `Sent on a ${words.person}'s birthday, in the morning, when the date of birth is already on your Members list. Nobody gets one for 1 January or 31 December, or for a date that makes them under 18: lists often hold those when the real date is not known.`;
+  if (kind === 'milestone') return `Sent in the morning, once a ${words.person} has reached a number of visits you tick here. A visit is a day the front desk or staff checked them in.`;
+  return `Sent once, in the morning, when a ${words.person} hasn't checked in for the number of days you pick here. Somebody who stopped coming more than ${String(GYM_MESSAGE_MISS_YOU_LATE_DAYS)} days before that gets none.`;
 }
 
 /** The two messages that count visits. */

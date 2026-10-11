@@ -58,9 +58,12 @@ describe('Automatic messages', () => {
     ]);
     expect(preview('welcome')).toBe("Welcome to Iron House, [member's first name]. We're glad you joined. Messages from us will show up here.");
     expect(preview('birthday')).toBe("Happy birthday, [member's first name]! From everyone at Iron House.");
-    expect(preview('milestone')).toBe("That's 50 visits to Iron House, [member's first name]. Well done.");
+    expect(preview('milestone')).toBe("You've reached 50 visits at Iron House, [member's first name]. Well done.");
     expect(preview('miss_you')).toBe("We haven't seen you at Iron House for a while, [member's first name]. We hope to see you soon.");
-    expect(within(box('Birthday')).getByText(/from the date of birth on your Members list/)).toBeTruthy();
+    expect(within(box('Birthday')).getByText(/when the date of birth is already on your Members list\. Nobody gets one for 1 January or 31 December, or for a date that makes them under 18/)).toBeTruthy();
+    expect(within(box('Welcome')).getByText('Sent when somebody joins your gym in the app: within a quarter of an hour by day, and the next morning if they join at night. Not sent to your own staff.')).toBeTruthy();
+    expect(within(box('We miss you')).getByText(/Somebody who stopped coming more than 30 days before that gets none\./)).toBeTruthy();
+    expect(within(box('Visit milestone')).getByText(/A visit is a day the front desk or staff checked them in\./)).toBeTruthy();
     expect(screen.getByText(/Nobody gets more than one a day, and none is sent at night\./)).toBeTruthy();
     expect(screen.getByText(/Where you see \[member's first name\] below, each member reads their own first name: "Happy birthday, Priya!"/)).toBeTruthy();
     // No name of a person is in any example.
@@ -85,7 +88,7 @@ describe('Automatic messages', () => {
     fireEvent.change(line('We miss you'), { target: { value: '  Your first class back is on us. ' } });
     // The words follow what is typed, before any save.
     expect(preview('miss_you')).toBe("We haven't seen you at Iron House for a while, [member's first name]. We hope to see you soon.\nYour first class back is on us.");
-    expect(preview('milestone')).toBe("That's 10 visits to Iron House, [member's first name]. Well done.");
+    expect(preview('milestone')).toBe("You've reached 10 visits at Iron House, [member's first name]. Well done.");
     expect(screen.getByText('Not saved yet.')).toBeTruthy();
     expect(updateMessageSettings).not.toHaveBeenCalled();
 
@@ -181,8 +184,8 @@ describe('Automatic messages', () => {
     expect(screen.getAllByRole('switch').every((s) => s.disabled)).toBe(true);
     expect(line('Welcome').disabled).toBe(true);
     expect(save().disabled).toBe(true);
-    expect(within(box('Welcome')).getByText('Sent when somebody joins your studio in the app, within a quarter of an hour.')).toBeTruthy();
-    expect(within(box('Birthday')).getByText(/Sent on the morning of a client's birthday/)).toBeTruthy();
+    expect(within(box('Welcome')).getByText(/^Sent when somebody joins your studio in the app: within a quarter of an hour by day/)).toBeTruthy();
+    expect(within(box('Birthday')).getByText(/^Sent on a client's birthday, in the morning/)).toBeTruthy();
   });
 });
 

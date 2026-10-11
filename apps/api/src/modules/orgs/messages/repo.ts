@@ -1,9 +1,9 @@
 // A GYM'S MESSAGES TO A MEMBER: reads and writes `gym_member_messages` (spec Part 3 §16.1;
 // ROADMAP 20a). Every statement names the gym and the person. The copies of a message to a
 // group are written, read back by message and removed in `groupRepo.ts`.
-import { GYM_GROUP_MESSAGE_KIND, type GymMessageKind } from "@app/shared";
+import { GYM_GROUP_MESSAGE_KIND, GYM_MESSAGE_MILESTONE_DAYS, SHARED_BIRTH_DATE_RECORDS, type GymMessageKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
-import { COUNTED_METHODS, countedDays, soloHolders } from "../leaderboard/visits.js";
+import { COUNTED_METHODS, soloHolders, visitsWithOwner } from "../leaderboard/visits.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -172,32 +172,35 @@ export interface MessagePerson {
   staff: boolean;
   /** The kinds they switched off at this gym. */
   off: GymMessageKind[];
-  /** `MM-DD`, or null where the list holds no date of birth to trust. */
-  birthday: string | null;
-  /** Their visit days, the newest, and how many are today or yesterday. */
+  /** The date of birth on the record they hold alone, as the list has it, and whether as
+   *  many of the gym's records share it as mark it a stand-in. The rule decides whether it
+   *  is a birthday (`trustedBirthday`). */
+  dateOfBirth: string | null;
+  dateOfBirthShared: boolean;
+  /** The days the desk or staff checked them in, the newest, and how many are in the last
+   *  `GYM_MESSAGE_MILESTONE_DAYS`. */
   visits: number;
   lastVisitOn: string | null;
   recentVisitDays: number;
+  /** The newest day they checked in by any means, their own "I'm here" tap among them. */
+  lastSeenOn: string | null;
   sent: { kind: GymMessageKind; occasion: string; day: string }[];
 }
-
-/** As many records of one gym with one date of birth as mark it a stand-in an export wrote
- *  for "not known", never a birthday. */
-export const SHARED_BIRTH_DATE_RECORDS = 5;
 
 /** `everybody`: everybody in the gym now, and everybody who joined in the last `days`
  *  whatever became of them since: the rule, not this read, decides who is sent anything.
  *  Without it, only those who joined in the last `days`, with no visit and no birthday
  *  read for them: all a Welcome needs, and the read the sender makes four times an hour.
  *
- *  A visit is its account's, or its record's one live holder's (`soloHolders`); a birthday
- *  is read from the record that one person holds alone, so two accounts on one record have
- *  none. A date of birth is not a birthday when the person would be over 110 or not yet
- *  born, when it is 1 January 1970, or when `SHARED_BIRTH_DATE_RECORDS` of the gym's
- *  records share it. `sent` is the automatic messages only. */
+ *  A visit is its account's, or its record's one live holder's (`soloHolders`). The ones
+ *  the desk or staff made are counted for a milestone; the newest by ANY means, the
+ *  member's own tap among them, says when they were last seen. A date of birth is read
+ *  from the record that one person holds alone, so two accounts on one record have none.
+ *  `sent` is the automatic messages only. */
 export async function peopleForMessages(tx: SqlOrTx, gymId: string, now: Date, today: string, days: number, everybody: boolean): Promise<MessagePerson[]> {
   const nobody = tx`SELECT NULL::uuid AS entry_id, NULL::uuid AS user_id WHERE false`;
-  const noVisits = tx`SELECT NULL::uuid AS owner_id, 0 AS visits, NULL::text AS last_on, 0 AS recent WHERE false`;
+  const noVisits = tx`SELECT NULL::uuid AS owner_id, 0 AS visits, NULL::text AS last_on, 0 AS recent, NULL::text AS seen_on WHERE false`;
+  const counted = tx`v.method IN ${tx([...COUNTED_METHODS])}`;
   const joinedLately = tx`m.joined_at > ${now}::timestamptz - make_interval(days => ${days}::int)`;
   const rows = await tx<
     {
@@ -209,10 +212,12 @@ export async function peopleForMessages(tx: SqlOrTx, gymId: string, now: Date, t
       former: boolean;
       staff: boolean;
       off: GymMessageKind[];
-      birthday: string | null;
+      date_of_birth: string | null;
+      date_of_birth_shared: boolean;
       visits: number;
       last_visit_on: string | null;
       recent_visit_days: number;
+      last_seen_on: string | null;
       sent: MessagePerson["sent"];
     }[]
   >`
@@ -220,10 +225,14 @@ export async function peopleForMessages(tx: SqlOrTx, gymId: string, now: Date, t
     pv AS MATERIALIZED (${
       everybody
         ? tx`
-      SELECT c.owner_id, count(*)::int AS visits, max(c.day)::text AS last_on,
-             (count(*) FILTER (WHERE c.day >= ${today}::date - 1))::int AS recent
-      FROM (${countedDays(tx, gymId, today)}) c
-      GROUP BY c.owner_id`
+      SELECT v.owner_id,
+             (count(DISTINCT v.day) FILTER (WHERE ${counted}))::int AS visits,
+             (max(v.day) FILTER (WHERE ${counted}))::text AS last_on,
+             (count(DISTINCT v.day) FILTER (WHERE ${counted} AND v.day > ${today}::date - ${GYM_MESSAGE_MILESTONE_DAYS}::int))::int AS recent,
+             max(v.day)::text AS seen_on
+      FROM (${visitsWithOwner(tx, gymId)}) v
+      WHERE v.owner_id IS NOT NULL AND v.day <= ${today}::date
+      GROUP BY v.owner_id`
         : noVisits
     }),
     stand_in AS (
@@ -246,12 +255,10 @@ export async function peopleForMessages(tx: SqlOrTx, gymId: string, now: Date, t
              WHERE o.gym_id = g.id AND o.user_id = m.user_id AND o.kind <> ${GYM_GROUP_MESSAGE_KIND}
              ORDER BY o.kind
            ) AS off,
-           CASE WHEN m.removed_at IS NULL AND own.date_of_birth <= ${today}::date
-                     AND own.date_of_birth > ${today}::date - interval '110 years'
-                     AND own.date_of_birth <> DATE '1970-01-01'
-                     AND stand_in.date_of_birth IS NULL
-                THEN to_char(own.date_of_birth, 'MM-DD') END AS birthday,
+           CASE WHEN m.removed_at IS NULL THEN own.date_of_birth::text END AS date_of_birth,
+           (stand_in.date_of_birth IS NOT NULL) AS date_of_birth_shared,
            coalesce(pv.visits, 0) AS visits, pv.last_on AS last_visit_on, coalesce(pv.recent, 0) AS recent_visit_days,
+           pv.seen_on AS last_seen_on,
            coalesce((
              SELECT json_agg(json_build_object('kind', x.kind, 'occasion', x.occasion, 'day', x.gym_day::text))
              FROM gym_member_messages x
@@ -276,10 +283,12 @@ export async function peopleForMessages(tx: SqlOrTx, gymId: string, now: Date, t
     former: row.former,
     staff: row.staff,
     off: row.off,
-    birthday: row.birthday,
+    dateOfBirth: row.date_of_birth,
+    dateOfBirthShared: row.date_of_birth_shared,
     visits: row.visits,
     lastVisitOn: row.last_visit_on,
     recentVisitDays: row.recent_visit_days,
+    lastSeenOn: row.last_seen_on,
     sent: row.sent,
   }));
 }
@@ -290,11 +299,26 @@ export async function dayDone(sql: SqlOrTx, gymId: string, today: string): Promi
   return rows.length > 0;
 }
 
-/** Marks it made. Marked twice, or after a later day was, it changes nothing. */
-export async function markDayDone(sql: SqlOrTx, gymId: string, today: string): Promise<void> {
-  await sql`
-    INSERT INTO gym_message_days (gym_id, day) VALUES (${gymId}, ${today}::date)
-    ON CONFLICT (gym_id) DO UPDATE SET day = EXCLUDED.day WHERE gym_message_days.day < EXCLUDED.day`;
+/** What the gym's settings were when a read began: it changes with every save. */
+export async function settingsStamp(sql: SqlOrTx, gymId: string): Promise<string> {
+  const rows = await sql<{ stamp: string }[]>`
+    SELECT coalesce(max(updated_at)::text, '') AS stamp FROM gym_message_settings WHERE gym_id = ${gymId}`;
+  return rows[0]?.stamp ?? "";
+}
+
+/** Marks the day's read made, unless the gym's settings were saved since it began
+ *  (`stamp`): that save asked for everybody to be read again, and this mark must not undo
+ *  it. With the gym's row held, as the save holds it, so the two take turns. Marked twice,
+ *  or after a later day was, it changes nothing. Answers whether the day is marked. */
+export async function markDayDone(sql: Sql, gymId: string, today: string, stamp: string): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    await tx`SELECT 1 FROM gyms WHERE id = ${gymId} FOR UPDATE`;
+    if ((await settingsStamp(tx, gymId)) !== stamp) return false;
+    await tx`
+      INSERT INTO gym_message_days (gym_id, day) VALUES (${gymId}, ${today}::date)
+      ON CONFLICT (gym_id) DO UPDATE SET day = EXCLUDED.day WHERE gym_message_days.day < EXCLUDED.day`;
+    return true;
+  });
 }
 
 /** Forgets it, so the next run reads the whole gym again: its settings changed. */

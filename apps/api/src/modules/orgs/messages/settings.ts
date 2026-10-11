@@ -73,7 +73,6 @@ export async function setMessageSettings(
       milestones: message.kind === "milestone" ? [...body.milestones].sort((a, b) => a - b) : null,
     };
   });
-  const now = deps.now();
   await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
     const before = new Map((await settingsRepo.settingRows(tx, gymId)).map((row) => [row.kind, row]));
@@ -95,7 +94,7 @@ export async function setMessageSettings(
       );
     });
     if (changed.length === 0) return;
-    await settingsRepo.writeSettingRows(tx, gymId, changed, now);
+    await settingsRepo.writeSettingRows(tx, gymId, changed);
     // The next run of the sender reads everybody again, by the new settings.
     await forgetDay(tx, gymId);
     await insertAudit(tx, {

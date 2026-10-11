@@ -13,8 +13,10 @@ export async function settingRows(sql: SqlOrTx, gymId: string): Promise<GymMessa
   return rows.map((row) => ({ kind: row.kind, on: row.is_on, ownLine: row.own_line, days: row.days, milestones: row.milestones }));
 }
 
-/** Keeps the rows in one statement. Saved twice they are kept once. */
-export async function writeSettingRows(tx: TransactionSql, gymId: string, rows: readonly GymMessageSettingRow[], now: Date): Promise<void> {
+/** Keeps the rows in one statement. Saved twice they are kept once. `updated_at` is the
+ *  database's own clock at the write, never the caller's: the sender reads it to know that
+ *  a save landed while it was reading (`settingsStamp`), and two saves must never share one. */
+export async function writeSettingRows(tx: TransactionSql, gymId: string, rows: readonly GymMessageSettingRow[]): Promise<void> {
   if (rows.length === 0) return;
   const values = rows.map((row) => ({
     gym_id: gymId,
@@ -23,12 +25,13 @@ export async function writeSettingRows(tx: TransactionSql, gymId: string, rows: 
     own_line: row.ownLine,
     days: row.days,
     milestones: row.milestones === null ? null : [...row.milestones],
-    updated_at: now,
   }));
   await tx`
     INSERT INTO gym_message_settings ${tx(values)}
     ON CONFLICT (gym_id, kind) DO UPDATE
-    SET is_on = EXCLUDED.is_on, own_line = EXCLUDED.own_line, days = EXCLUDED.days, milestones = EXCLUDED.milestones, updated_at = EXCLUDED.updated_at`;
+    SET is_on = EXCLUDED.is_on, own_line = EXCLUDED.own_line, days = EXCLUDED.days, milestones = EXCLUDED.milestones`;
+  // The write's own instant, not the transaction's start: no two saves share a stamp.
+  await tx`UPDATE gym_message_settings SET updated_at = clock_timestamp() WHERE gym_id = ${gymId} AND kind = ANY(${rows.map((row) => row.kind)}::text[])`;
 }
 
 /** Today on the gym's own calendar, or null for a gym that is not there. */
@@ -38,11 +41,13 @@ export async function gymToday(sql: SqlOrTx, gymId: string, now: Date): Promise<
   return rows[0]?.today ?? null;
 }
 
-/** Did the desk or staff check anybody in at this gym in the `days` up to `today`? */
+/** Did the desk or staff check anybody in at this gym, at the time, in the `days` up to
+ *  `today`? A visit added on a later day is not one, as the sender's own read has it. */
 export async function checkedInLately(sql: SqlOrTx, gymId: string, today: string, days: number): Promise<boolean> {
   const rows = await sql<{ one: number }[]>`
     SELECT 1 AS one FROM gym_attendance a
     WHERE a.gym_id = ${gymId} AND a.method IN ${sql([...COUNTED_METHODS])}
+      AND a.hours_status <> 'added_later'
       AND a.day <= ${today}::date AND a.day > ${today}::date - ${days}::int
     LIMIT 1`;
   return rows.length > 0;

@@ -9,6 +9,7 @@ import {
   gymMessageDue,
   gymMessageOccasions,
   missYouGymDays,
+  trustedBirthday,
   type GymMessageFacts,
 } from "../src/gymMessages.js";
 import {
@@ -42,6 +43,7 @@ const nobody: Person = {
   visits: 12,
   recentVisitDays: 0,
   lastVisitOn: back(2),
+  lastSeenOn: back(2),
 };
 const facts = (person: Partial<Person>, gym: Partial<GymMessageFacts["gym"]> = {}): GymMessageFacts => ({
   gym: { open: true, live: true, today: TODAY, hour: 12, on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, visitDays: lastDays(60), ...gym },
@@ -54,10 +56,10 @@ describe("we miss you", () => {
   it("waits for the gym's days, and for the gym to have checked somebody in on half of them since", () => {
     expect(missYouGymDays(10)).toBe(5);
     expect(missYouGymDays(7)).toBe(4);
-    expect(occasions({ lastVisitOn: back(10) })).toEqual([`miss_you absent:${back(10)}`]);
-    expect(occasions({ lastVisitOn: back(9) })).toEqual([]);
+    expect(occasions({ lastSeenOn: back(10) })).toEqual([`miss_you absent:${back(10)}`]);
+    expect(occasions({ lastSeenOn: back(9) })).toEqual([]);
     // Every case below: the person last came 12 days ago.
-    const gone = { lastVisitOn: back(12) };
+    const gone = { lastSeenOn: back(12) };
     const table: [string, string[], boolean][] = [
       ["the desk in use every day", lastDays(60), true],
       ["the gym never used check-in after it", [back(12), back(13), back(14)], false],
@@ -74,31 +76,57 @@ describe("we miss you", () => {
   });
 
   it("is never for the gym's own staff, nor for somebody who never came", () => {
-    expect(occasions({ lastVisitOn: back(30), staff: true })).toEqual([]);
-    expect(occasions({ lastVisitOn: null, visits: 0 })).toEqual([]);
+    expect(occasions({ lastSeenOn: back(30), staff: true })).toEqual([]);
+    expect(occasions({ lastSeenOn: null, lastVisitOn: null, visits: 0 })).toEqual([]);
+  });
+
+  it("counts from the last check-in of ANY kind: somebody who taps in themselves every day has not been away", () => {
+    // The desk checked them in twelve days ago; they tapped "I'm here" today.
+    expect(occasions({ lastVisitOn: back(12), lastSeenOn: back(0) })).toEqual([]);
+    expect(occasions({ lastVisitOn: back(12), lastSeenOn: back(3) })).toEqual([]);
+    // Never checked in at the desk, tapped in twelve days ago and not since.
+    expect(occasions({ visits: 0, lastVisitOn: null, lastSeenOn: back(12) })).toEqual([`miss_you absent:${back(12)}`]);
+  });
+
+  it("is only for an absence of a while: nobody who stopped coming long ago is told on the first day", () => {
+    const table: [number, boolean][] = [[10, true], [25, true], [40, true], [41, false], [100, false], [400, false]];
+    for (const [days, due] of table) expect(occasions({ lastSeenOn: back(days) }, { visitDays: lastDays(500) }), String(days)).toEqual(due ? [`miss_you absent:${back(days)}`] : []);
+    // By the gym's own number: 7 days, so up to 37.
+    const seven = { ...GYM_MESSAGE_STARTING_NUMBERS, missYouDays: 7 };
+    expect(occasions({ lastSeenOn: back(37) }, { numbers: seven, visitDays: lastDays(500) })).toHaveLength(1);
+    expect(occasions({ lastSeenOn: back(38) }, { numbers: seven, visitDays: lastDays(500) })).toEqual([]);
   });
 
   it("follows the gym's own number", () => {
     const seven = { ...GYM_MESSAGE_STARTING_NUMBERS, missYouDays: 7 };
-    expect(occasions({ lastVisitOn: back(7) }, { numbers: seven })).toEqual([`miss_you absent:${back(7)}`]);
-    expect(occasions({ lastVisitOn: back(6) }, { numbers: seven })).toEqual([]);
+    expect(occasions({ lastSeenOn: back(7) }, { numbers: seven })).toEqual([`miss_you absent:${back(7)}`]);
+    expect(occasions({ lastSeenOn: back(6) }, { numbers: seven })).toEqual([]);
   });
 });
 
 describe("a visit milestone", () => {
   const at = (visits: number, recentVisitDays: number, lastVisitOn: string = TODAY) => occasions({ visits, recentVisitDays, lastVisitOn });
-  it("is the newest one reached by a visit of today or yesterday", () => {
+  it("is the newest one reached by a visit of the last seven days, and stays due on each of them", () => {
+    // visits, how many of them in the last seven days, the newest.
     const table: [number, number, string, string[]][] = [
       [49, 1, TODAY, []],
       [50, 1, TODAY, ["milestone visits:50"]],
       [50, 1, back(1), ["milestone visits:50"]],
-      [50, 0, back(2), []],
+      // The 50th two days ago, and a birthday took yesterday's one message: still due.
+      [50, 1, back(2), ["milestone visits:50"]],
+      [50, 1, back(6), ["milestone visits:50"]],
+      // A week on it is no longer news.
+      [50, 0, back(7), []],
       // The 50th yesterday and the 51st today.
       [51, 2, TODAY, ["milestone visits:50"]],
       [51, 1, TODAY, []],
       [52, 2, TODAY, []],
+      [56, 7, TODAY, ["milestone visits:50"]],
+      [57, 7, TODAY, []],
       [100, 1, TODAY, ["milestone visits:100"]],
       [101, 2, TODAY, ["milestone visits:100"]],
+      // Somebody already past a number when the gym first uses this is not told of it.
+      [73, 3, TODAY, []],
       [0, 0, TODAY, []],
     ];
     for (const [visits, recent, last, want] of table) expect(at(visits, recent, last), `${String(visits)} ${String(recent)} ${last}`).toEqual(want);
@@ -110,14 +138,57 @@ describe("a visit milestone", () => {
     expect(occasions({ visits: 50, recentVisitDays: 1, lastVisitOn: TODAY }, { numbers })).toEqual([]);
     expect(at(50, Number.NaN)).toEqual([]);
     expect(at(50, -3)).toEqual([]);
-    // More than two recent days cannot be: read as two.
-    expect(at(52, 9)).toEqual([]);
+    // More than seven recent days cannot be: read as seven.
+    expect(at(57, 99)).toEqual([]);
+    expect(at(56, 99)).toEqual(["milestone visits:50"]);
   });
 
   it("one message a day: a birthday goes before a milestone, which goes the next day if it still can", () => {
     const due = gymMessageDue(facts({ visits: 50, recentVisitDays: 1, lastVisitOn: TODAY, birthday: "10-09" }));
     expect(due.send).toEqual({ kind: "birthday", occasion: "birthday:2026" });
     expect(due.held).toEqual([{ kind: "milestone", occasion: "visits:50", reason: "another_today" }]);
+  });
+});
+
+describe("a birthday is read only from a date of birth a person could have", () => {
+  const on = (born: string | null, today = TODAY, shared = false) => trustedBirthday(born, today, shared);
+  it("a real date of birth is its month and day", () => {
+    expect(on("1990-10-09")).toBe("10-09");
+    expect(on("1996-02-29", "2027-02-28")).toBe("02-29");
+    expect(on("1950-06-15")).toBe("06-15");
+    // Eighteen today.
+    expect(on("2008-10-09")).toBe("10-09");
+  });
+
+  // Dates a list holds that are nobody's birthday. Not from the code's own list: what
+  // spreadsheets, computers and forms write, and the ones 20b-i's review sent through.
+  const STAND_INS: [string, string, string][] = [
+    ["the day a computer writes for no date", "1970-01-01", "2027-01-01"],
+    ["that day, written west of Greenwich", "1969-12-31", "2026-12-31"],
+    ["a system that starts in 2000", "2000-01-01", "2027-01-01"],
+    ["one that starts in 1980", "1980-01-01", "2027-01-01"],
+    ["one that starts in 2001", "2001-01-01", "2027-01-01"],
+    ["only the year was known", "1987-01-01", "2027-01-01"],
+    ["the last day of a year, the same way", "1999-12-31", "2026-12-31"],
+    ["a spreadsheet's first day", "1900-01-01", "2027-01-01"],
+    ["the day before it", "1899-12-30", "2026-12-30"],
+    ["a date box left at today", "2026-10-09", "2026-10-09"],
+    ["a record added a year ago with that day's date", "2025-10-09", "2026-10-09"],
+    ["a small child", "2023-10-09", "2026-10-09"],
+    ["seventeen", "2009-10-09", "2026-10-09"],
+    ["eighteen tomorrow", "2008-10-10", "2026-10-09"],
+    ["not yet born", "2027-10-09", "2026-10-09"],
+    ["over 110", "1915-10-09", "2026-10-09"],
+    ["no date at all", "", "2026-10-09"],
+    ["a day that is not one", "1990-02-30", "2026-10-09"],
+  ];
+  it.each(STAND_INS)("%s is no birthday", (_name, born, today) => {
+    expect(on(born, today)).toBeNull();
+  });
+
+  it("a date many of the gym's records share is no birthday, and no date is none", () => {
+    expect(on("1990-10-09", TODAY, true)).toBeNull();
+    expect(on(null)).toBeNull();
   });
 });
 
@@ -129,8 +200,8 @@ describe("the words", () => {
     expect(say("birthday", "birthday:2026", "maya@example.com")).toBe("Happy birthday! From everyone at Iron House.");
     expect(say("miss_you", "absent:2026-09-27", "Maya Rao")).toBe("We haven't seen you at Iron House for a while, Maya. We hope to see you soon.");
     expect(say("miss_you", "absent:2026-09-27", null)).toBe("We haven't seen you at Iron House for a while. We hope to see you soon.");
-    expect(say("milestone", "visits:50", "Maya Rao")).toBe("That's 50 visits to Iron House, Maya. Well done.");
-    expect(say("milestone", "visits:1000", null)).toBe("That's 1,000 visits to Iron House. Well done.");
+    expect(say("milestone", "visits:50", "Maya Rao")).toBe("You've reached 50 visits at Iron House, Maya. Well done.");
+    expect(say("milestone", "visits:1000", null)).toBe("You've reached 1,000 visits at Iron House. Well done.");
     expect(say("welcome", "joined:2026-10-09", "Maya Rao", "Your first class is free.")).toBe(
       "Welcome to Iron House, Maya. We're glad you joined. Messages from us will show up here.\nYour first class is free.",
     );
