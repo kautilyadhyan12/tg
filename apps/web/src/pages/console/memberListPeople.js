@@ -39,8 +39,13 @@ export const EMPTY_FILTERS = {
   paymentStatus: [],
   /** One of the gym's tags, { id, name }, or null (5d-ii): members or past members. */
   tag: null,
+  /** Only the members whose membership has ended or been cancelled (21c-iii). */
+  over: false,
   query: '',
 };
+
+/** The pill for the list the sign atop Members opens. */
+export const OVER_FILTER_WORDS = 'Membership ended or cancelled';
 
 /** A chip's words: the gym's own spelling, or "No status" for the people with none. */
 export function chipText(label, none) {
@@ -68,6 +73,7 @@ export function entriesQueryString(filters, cursor) {
   if (filters.records === 'current') {
     for (const word of filters.app) params.append('app', word);
     for (const { kind } of CHIP_KINDS) for (const word of filters[kind]) params.append(kind, word);
+    if (filters.over) params.append('membership', 'over');
   } else {
     // Past members have one word to be found by: who still owes (18a-ii).
     for (const word of filters.paymentStatus) params.append('paymentStatus', word);
@@ -88,7 +94,7 @@ export function activeFilters(filters, words) {
     // Leaving Past members drops its one word too: on the list it would mean something else.
     return [{ key: 'records', text: `Past ${words.people}`, without: { ...filters, records: 'current', paymentStatus: [] } }, ...owing, ...tag];
   }
-  const out = [];
+  const out = filters.over ? [{ key: 'over', text: OVER_FILTER_WORDS, without: { ...filters, over: false } }] : [];
   for (const { kind, none } of CHIP_KINDS) {
     for (const label of filters[kind]) {
       out.push({ key: `${kind}:${label}`, text: chipText(label, none), without: toggleWord(filters, kind, label) });
@@ -105,10 +111,35 @@ export function activeFilters(filters, words) {
 export function filtersAreEmpty(filters) {
   return (
     filters.tag === null &&
+    !filters.over &&
     filters.app.length === 0 &&
     filters.query.trim() === '' &&
     CHIP_KINDS.every(({ kind }) => filters[kind].length === 0)
   );
+}
+
+/** THE SIGN WHILE ANYBODY'S MEMBERSHIP IS OVER (21c-iii; RULINGS 2026-10-11): they are
+ *  still on the list, and Reports already counts them as having left. `inView`: the list
+ *  under the sign shows only those people, so the sign says what to do with each. A gym
+ *  that can only read is told the fact and shown who. */
+export function overSignWords(n, words, { inView = false, readOnly = false } = {}) {
+  const one = n === 1;
+  const still = `${one ? `This ${words.person} is` : `These ${words.people} are`} still on your ${words.person} list. Reports already counts them as having left.`;
+  const how = `For each ${words.person}, add a new membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first.`;
+  return {
+    title: one ? '1 membership has ended or been cancelled' : `${n.toLocaleString('en')} memberships have ended or been cancelled`,
+    button: inView ? null : readOnly ? 'See who' : one ? 'Review it' : 'Review them',
+    detail: inView && !readOnly ? how : still,
+  };
+}
+
+/** What Keep on list did, said above the list. `name`: the one person a row's button was for. */
+export function keptListedLine(done, words, name = null) {
+  const find = 'You can still find them with Filter, under Status.';
+  const skipped = done.notOver === 0 ? '' : ` ${done.notOver.toLocaleString('en')} ${done.notOver === 1 ? 'was' : 'were'} left as they are: their membership is not over any more.`;
+  if (done.kept === 0) return `Nothing was changed: ${done.notOver === 1 ? "this person's membership is" : "these people's memberships are"} not over any more.`;
+  const who = name !== null && done.kept === 1 ? name : `${done.kept.toLocaleString('en')} ${done.kept === 1 ? words.person : words.people}`;
+  return `${who} ${done.kept === 1 ? 'stays on your list and is' : 'stay on your list and are'} no longer counted here. ${find}${skipped}`;
 }
 
 /** Today in the gym's own time zone, 'YYYY-MM-DD', as the server decides a birthday; the
@@ -369,6 +400,7 @@ export function selectionFilter(filters) {
   if (filters.records === 'current') {
     if (filters.app.length > 0) out.app = [...filters.app];
     for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) out[kind] = [...filters[kind]];
+    if (filters.over) out.membership = 'over';
   } else if (filters.paymentStatus.length > 0) {
     out.paymentStatus = [...filters.paymentStatus];
   }

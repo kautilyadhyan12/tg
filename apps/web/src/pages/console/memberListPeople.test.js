@@ -13,6 +13,9 @@ import {
 import {
   EMPTY_FILTERS,
   HELD_ANSWERS,
+  filtersAreEmpty,
+  keptListedLine,
+  overSignWords,
   activeFilters,
   appAnswers,
   appView,
@@ -126,6 +129,74 @@ describe('the query a filter sends', () => {
 
   it('passes the cursor back as it came', () => {
     expect(serverReads(entriesQueryString(EMPTY_FILTERS, 'opaque:1')).cursor).toBe('opaque:1');
+  });
+});
+
+describe('the members whose membership is over (21c-iii)', () => {
+  const WORDS = { people: 'members', person: 'member' };
+  const over = { ...EMPTY_FILTERS, over: true };
+
+  it('asks the server for only those people, and Select all asks for the same', () => {
+    expect(entriesQueryString(over)).toBe('membership=over');
+    expect(memberListEntriesQuerySchema.safeParse(Object.fromEntries(new URLSearchParams(entriesQueryString(over)))).success).toBe(true);
+    expect(selectionFilter(over)).toEqual({ membership: 'over' });
+    expect(memberListFilterSchema.safeParse(selectionFilter(over)).success).toBe(true);
+    // With a status ticked as well, both are sent.
+    expect(entriesQueryString({ ...over, status: ['Ended'] })).toBe('status=Ended&membership=over');
+    // Past members are never asked for by it.
+    expect(entriesQueryString({ ...over, records: 'former' })).toBe('records=former');
+    expect(selectionFilter({ ...over, records: 'former' })).toEqual({ records: 'former' });
+  });
+
+  it('is a filter: the list is not the whole list, and its pill takes off only itself', () => {
+    expect(filtersAreEmpty(over)).toBe(false);
+    expect(filtersAreEmpty(EMPTY_FILTERS)).toBe(true);
+    const pills = activeFilters({ ...over, status: ['Ended'] }, WORDS);
+    expect(pills.map((p) => p.text)).toEqual(['Membership ended or cancelled', 'Ended']);
+    expect(pills[0].without).toEqual({ ...EMPTY_FILTERS, status: ['Ended'] });
+    expect(activeFilters(EMPTY_FILTERS, WORDS)).toEqual([]);
+  });
+
+  it('the sign reads as a sentence for one and for many, for a studio, and for a gym that can only read', () => {
+    expect(overSignWords(3, WORDS)).toEqual({
+      title: '3 memberships have ended or been cancelled',
+      button: 'Review them',
+      detail: 'These members are still on your member list. Reports already counts them as having left.',
+    });
+    expect(overSignWords(1, WORDS)).toEqual({
+      title: '1 membership has ended or been cancelled',
+      button: 'Review it',
+      detail: 'This member is still on your member list. Reports already counts them as having left.',
+    });
+    expect(overSignWords(1200, { people: 'clients', person: 'client' })).toEqual({
+      title: '1,200 memberships have ended or been cancelled',
+      button: 'Review them',
+      detail: 'These clients are still on your client list. Reports already counts them as having left.',
+    });
+    expect(overSignWords(3, WORDS, { inView: true })).toEqual({
+      title: '3 memberships have ended or been cancelled',
+      button: null,
+      detail: 'For each member, add a new membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first.',
+    });
+    expect(overSignWords(3, WORDS, { readOnly: true }).button).toBe('See who');
+    // Shown who, and told nothing it cannot do.
+    expect(overSignWords(3, WORDS, { inView: true, readOnly: true })).toEqual({
+      title: '3 memberships have ended or been cancelled',
+      button: null,
+      detail: 'These members are still on your member list. Reports already counts them as having left.',
+    });
+  });
+
+  it('Keep on list says who stays, where to find them, and who was left as they are', () => {
+    const find = 'You can still find them with Filter, under Status.';
+    expect(keptListedLine({ kept: 1, notOver: 0 }, WORDS, 'Kit Kept')).toBe(`Kit Kept stays on your list and is no longer counted here. ${find}`);
+    expect(keptListedLine({ kept: 1, notOver: 0 }, WORDS)).toBe(`1 member stays on your list and is no longer counted here. ${find}`);
+    expect(keptListedLine({ kept: 1500, notOver: 0 }, WORDS)).toBe(`1,500 members stay on your list and are no longer counted here. ${find}`);
+    expect(keptListedLine({ kept: 2, notOver: 1 }, WORDS)).toBe(
+      `2 members stay on your list and are no longer counted here. ${find} 1 was left as they are: their membership is not over any more.`,
+    );
+    expect(keptListedLine({ kept: 0, notOver: 1 }, WORDS, 'Kit Kept')).toBe("Nothing was changed: this person's membership is not over any more.");
+    expect(keptListedLine({ kept: 0, notOver: 4 }, WORDS)).toBe("Nothing was changed: these people's memberships are not over any more.");
   });
 });
 

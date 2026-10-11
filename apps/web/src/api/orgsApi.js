@@ -56,6 +56,7 @@ import {
   memberInvitePeopleResponseSchema,
   memberInvitePreviewResponseSchema,
   memberListSelectedAllResponseSchema,
+  memberListKeptListedResponseSchema,
   memberListSelectionChangedSchema,
   memberRemovedSelectedResponseSchema,
   memberRemovePreviewResponseSchema,
@@ -775,16 +776,25 @@ export const orgService = {
 
   /** The Remove box for the people selected on "Your list" or "Past members": who moves
    *  to past members, who loses the app, who doesn't change and why. */
-  previewRemoveSelected: (gymId, selection) =>
+  previewRemoveSelected: (gymId, selection, onlyOver = false) =>
     readThrough(
       memberRemovePreviewResponseSchema,
       'who would be removed',
-      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/remove-preview`, { selection }),
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/remove-preview`, { selection, ...(onlyOver ? { onlyOver: true } : {}) }),
+    ),
+
+  /** "Keep on list" for the people selected among the members whose membership is over
+   *  (21c-iii): the sign atop Members stops counting them. */
+  keepMembersListed: (gymId, selection) =>
+    readThrough(
+      memberListKeptListedResponseSchema,
+      'who was kept on the list',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/keep-listed`, { selection }),
     ),
 
   /** Remove the people selected, as the box showed them (`digest`). A 409 answers with the
    *  box as it is now (`removeRefused`), or a "Select all" that moved (`selectionChanged`). */
-  removeSelected: (gymId, selection, digest, acknowledgeLargeChange) =>
+  removeSelected: (gymId, selection, digest, acknowledgeLargeChange, onlyOver = false) =>
     readThrough(
       memberRemovedSelectedResponseSchema,
       'the removal',
@@ -792,6 +802,8 @@ export const orgService = {
         selection,
         digest,
         ...(acknowledgeLargeChange ? { acknowledgeLargeChange: true } : {}),
+        // Asked from the list of members whose membership is over: nobody else moves.
+        ...(onlyOver ? { onlyOver: true } : {}),
       }),
     ),
 
