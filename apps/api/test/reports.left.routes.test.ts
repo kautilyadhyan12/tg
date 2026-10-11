@@ -18,6 +18,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { heldOnListOf } from "../src/modules/orgs/memberships/onList.js";
+import { readMemberCounts } from "../src/modules/orgs/reports/repo.js";
 import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
@@ -368,6 +369,11 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
       expect(after.thisMonth.left).toBe(3);
       expect(after.averageStay).toEqual({ state: "ok", days: 96, leavers: 5 });
       expect((await membersPage(gym, owner)).entries.find((entry) => entry.entryId === id["Yara Yesterday"])?.held?.status).toBe("active");
+
+      // The count itself: a day handed in for somebody already removed, or for another
+      // gym's person, moves nothing. Rob left on the day he was removed, whatever it says.
+      const counted = (gone: { id: string; on: string }[]) => readMemberCounts(sql, gym, "Europe/London", clock, gone);
+      expect(await counted([{ id: id["Rob Removed"], on: "2026-07-20" }, { id: nell, on: "2026-07-20" }])).toEqual(await counted([]));
     },
     TEST_TIMEOUT_MS,
   );
