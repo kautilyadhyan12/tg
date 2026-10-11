@@ -311,7 +311,7 @@ describe('a gym that uses only part of the app', () => {
     svc.list.mockResolvedValue(answer({ checkin: 'stopped', lastCheckinOn: '2026-09-22', checkinDaysLately: 0, total: 0, people: [] }));
     open();
     const note = await screen.findByTestId('at-risk-checkin-note');
-    expect(note.textContent).toContain('Nobody has been checked in over the last 14 days. The last check-in was on 22 Sep.');
+    expect(note.textContent).toContain('Nobody came in over the last 14 days. The last day anybody came in was 22 Sep.');
     expect(screen.queryByTestId('at-risk-headline')).toBeNull();
     expect(screen.queryByText(/Nobody has stopped coming/)).toBeNull();
     expect(screen.queryAllByTestId('at-risk-row').length).toBe(0);
@@ -321,7 +321,7 @@ describe('a gym that uses only part of the app', () => {
     svc.list.mockResolvedValue(answer({ checkin: 'stopped', lastCheckinOn: '2026-09-22', checkinDaysLately: 2 }));
     open(TRAINER);
     const note = await screen.findByTestId('at-risk-checkin-note');
-    expect(note.textContent).toContain('People were checked in on only 2 of the last 14 days, far fewer than is usual at Iron House. The last check-in was on 22 Sep.');
+    expect(note.textContent).toContain('People came in on only 2 of the last 14 days, far fewer than is usual at Iron House. The last day anybody came in was 22 Sep.');
     expect(within(note).queryByRole('link')).toBeNull();
     expect(note.textContent).toContain('The owner can check people in from Attendance.');
     expect(rows().length).toBe(3);

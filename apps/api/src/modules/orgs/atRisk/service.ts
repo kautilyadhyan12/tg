@@ -4,7 +4,7 @@
 //
 // Each `require…` is asked by the route BEFORE its rate limit, so somebody refused uses up
 // nobody's allowance; the work after it is for a gym whose asker has been checked.
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import {
   AT_RISK_MAX,
   GYM_COME_BACK_WAIT_DAYS,
@@ -66,13 +66,14 @@ export async function requireMessageWriter(deps: AtRiskDeps, userId: string, gym
 }
 
 /** Everybody at risk at this gym now, in the list's order, with what the gym's own
- *  check-ins allow. No message is read here. */
-async function findAtRisk(deps: AtRiskDeps, gymId: string, now: Date): Promise<{ clock: repo.AtRiskClock; people: AtRiskPerson[] }> {
-  const clock = await repo.readClock(deps.sql, gymId, now);
+ *  check-ins allow. No message is read here. Every read is on the connection given: a
+ *  caller holding the gym's row hands over its own transaction, never the pool. */
+async function findAtRisk(sql: Sql | TransactionSql, gymId: string, now: Date): Promise<{ clock: repo.AtRiskClock; people: AtRiskPerson[] }> {
+  const clock = await repo.readClock(sql, gymId, now);
   if (clock === null) throw notFound();
   const { today, settings, gymDays } = clock;
   const found: AtRiskPerson[] = [];
-  for (const person of await repo.readCandidates(deps.sql, gymId, today, settings.quietDays)) {
+  for (const person of await repo.readCandidates(sql, gymId, today, settings.quietDays)) {
     if (person.staff) continue;
     const risk = atRiskOf({ today, quietDays: settings.quietDays, weeksCame: settings.weeksCame, visitDays: person.visitDays, gymDays });
     if (!risk.atRisk) continue;
@@ -90,7 +91,7 @@ async function findAtRisk(deps: AtRiskDeps, gymId: string, now: Date): Promise<{
     });
   }
   const entryIds = found.flatMap((p) => (p.entryId === null ? [] : [p.entryId]));
-  const held = entryIds.length === 0 ? new Map<string, never>() : await heldOnListOf(deps.sql, gymId, today, entryIds);
+  const held = entryIds.length === 0 ? new Map<string, never>() : await heldOnListOf(sql, gymId, today, entryIds);
   const people = found.filter((p) => {
     const shown = p.entryId === null ? undefined : held.get(p.entryId)?.shown;
     return shown === undefined || !NOT_EXPECTED.includes(shown.status);
@@ -102,7 +103,7 @@ async function findAtRisk(deps: AtRiskDeps, gymId: string, now: Date): Promise<{
 /** The list, for a gym whose reader has been checked. */
 export async function getAtRisk(deps: AtRiskDeps, gymId: string): Promise<AtRiskResponse> {
   const now = deps.now();
-  const { clock, people: everybody } = await findAtRisk(deps, gymId, now);
+  const { clock, people: everybody } = await findAtRisk(deps.sql, gymId, now);
   const { today, settings, gymDays } = clock;
   const people = everybody.slice(0, AT_RISK_MAX);
   const messages = await repo.readLastMessages(deps.sql, gymId, people.flatMap((p) => (p.userId === null ? [] : [p.userId])), now);
@@ -180,7 +181,7 @@ export async function sendOwnMessage(deps: AtRiskDeps, staffId: string, gymId: s
     // One sentence for "no such person" and "not your member", as the ready-made line says it.
     if (!(await repo.liveMember(tx, gymId, request.userId))) throw notTheirs();
     // Only somebody the list names now: this is no second way to write to everybody.
-    const { people } = await findAtRisk(deps, gymId, now);
+    const { people } = await findAtRisk(tx, gymId, now);
     if (!people.some((person) => person.userId === request.userId)) {
       throw new OrgsError(409, "member_not_at_risk", `This ${words.person} isn't on your At risk list now, so nothing was sent. To write to them, use Send message on the ${words.peopleCap} page.`);
     }

@@ -90,13 +90,13 @@ describe('what the gym’s own check-ins allow the list to say', () => {
   it('check-in has stopped: said in days against the gym’s own usual, above a list that has somebody on it', () => {
     const note = checkinNote(list({ checkin: 'stopped', lastCheckinOn: '2026-10-11', checkinDaysLately: 2, total: 1, people: [person()] }), 'Iron House');
     expect(note).toMatchObject({ kind: 'stopped', showList: true });
-    expect(note.line).toBe('People were checked in on only 2 of the last 14 days, far fewer than is usual at Iron House. The last check-in was on 11 Oct. Anybody who stopped coming in that time is not listed, because the list cannot tell them from everybody else.');
+    expect(note.line).toBe('People came in on only 2 of the last 14 days, far fewer than is usual at Iron House. The last day anybody came in was 11 Oct. Anybody who stopped coming in that time is not listed, because the list cannot tell them from everybody else.');
   });
 
   it('check-in has stopped and nobody is listed: the note is the whole answer, and no list is drawn', () => {
     const note = checkinNote(list({ checkin: 'stopped', lastCheckinOn: '2026-09-22', checkinDaysLately: 0 }), 'Iron House');
     expect(note).toMatchObject({ kind: 'stopped', showList: false });
-    expect(note.line).toBe('Nobody has been checked in over the last 14 days. The last check-in was on 22 Sep. Anybody who stopped coming in that time is not listed, because the list cannot tell them from everybody else.');
+    expect(note.line).toBe('Nobody came in over the last 14 days. The last day anybody came in was 22 Sep. Anybody who stopped coming in that time is not listed, because the list cannot tell them from everybody else.');
   });
 });
 

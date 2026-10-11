@@ -485,6 +485,44 @@ d("At risk: who is named, to whom, and what the gym's numbers change (real Postg
   );
 
   it(
+    "more written messages and check-ins at one instant than the server has connections all finish",
+    async () => {
+      const gym = await makeGym("Risk Small Pool");
+      await deskOpen(gym, -60, 0);
+      const people: Member[] = [];
+      for (let i = 0; i < 4; i += 1) {
+        const one = await member(gym, `Small Pool ${String(i)}`);
+        await regular(gym, one, 20);
+        people.push(one);
+      }
+      const small = await buildApp(loadConfig({ ...baseEnv, DATABASE_POOL_MAX: "2" }), { redis, orgs: { now: () => clock } });
+      try {
+        await small.ready();
+        const post = (path: string, payload: unknown) =>
+          small.inject({ method: "POST", url: `/v1/orgs/${gym.id}${path}`, remoteAddress: nextIp(), cookies: gym.owner.cookies, headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) });
+        const all = Promise.all([
+          ...people.map((p) => post("/at-risk/messages", { userId: p.userId, body: "We saved your spot.", key: randomUUID() })),
+          ...people.map((p) => post("/attendance/check-in", { entryId: p.entryId })),
+        ]);
+        let timer: NodeJS.Timeout | undefined;
+        const stuck = new Promise<"stuck">((resolve) => {
+          timer = setTimeout(() => {
+            resolve("stuck");
+          }, 30_000);
+        });
+        const done = await Promise.race([all, stuck]);
+        clearTimeout(timer);
+        if (done === "stuck") throw new Error("the requests never finished: a send held the gym's row and waited for a second connection");
+        // Each is answered: sent, or refused because the check-in got there first.
+        for (const res of done) expect([200, 201, 409], res.body).toContain(res.statusCode);
+      } finally {
+        await small.close();
+      }
+    },
+    T,
+  );
+
+  it(
     "the gym's own words go to the one person named and nobody else, once, inside the same wait as a ready-made line, and never past the rules a message to a group keeps",
     async () => {
       const gym = await makeGym("Risk Own Words");

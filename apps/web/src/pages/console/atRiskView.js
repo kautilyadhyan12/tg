@@ -78,13 +78,13 @@ export function checkinNote(list, gymName) {
     };
   }
   if (list.checkin === 'stopped') {
-    const last = list.lastCheckinOn === null ? '' : ` The last check-in was on ${shortDay(list.lastCheckinOn)}.`;
+    const last = list.lastCheckinOn === null ? '' : ` The last day anybody came in was ${shortDay(list.lastCheckinOn)}.`;
     const lately = typeof list.checkinDaysLately === 'number' ? list.checkinDaysLately : 0;
     // About DAYS, against this gym's own usual: a gym open three days a week never reads this.
     const how =
       lately === 0
-        ? `Nobody has been checked in over the last ${days(quiet)}.`
-        : `People were checked in on only ${String(lately)} of the last ${days(quiet)}, far fewer than is usual at ${gymName}.`;
+        ? `Nobody came in over the last ${days(quiet)}.`
+        : `People came in on only ${String(lately)} of the last ${days(quiet)}, far fewer than is usual at ${gymName}.`;
     return {
       kind: 'stopped',
       // With nobody to list, this note is the whole answer: no "Nobody has stopped coming".

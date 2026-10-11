@@ -4775,7 +4775,7 @@ summary email: new, left, at risk, visits against last week, money overdue.
 - **A gym that uses only part of the app**: with no check-in ever, or check-in begun less
   than its number of days ago, the page says so, with a button to Attendance and no list;
   with far fewer days of check-ins lately than is usual THERE it says so, in days
-  ("People were checked in on only 2 of the last 14 days, far fewer than is usual at
+  ("People came in on only 2 of the last 14 days, far fewer than is usual at
   {gym}."), above the list, or alone when nobody is listed. Never "Nobody has stopped
   coming" from a gym that checks nobody in; where it is said, it is that sentence and no
   more. The page's words say "come in", and its last line says what coming in is.
