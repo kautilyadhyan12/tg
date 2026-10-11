@@ -5341,6 +5341,9 @@ who Reports counts as left" has this one exception, and Members has its sign for
 (2) A pack used up before its last day is dated by the last class or personal training
 session charged to it (`packLastClassDays`; `usedUpOn` on `HeldForList`), not by today, so
 a month that has closed does not change; today stands in only where no class is recorded.
+A pack is charged when a class is booked, so that last class may be still to come: until
+the day after it the person has not left (`heldLeftOn` answers null, though the list reads
+"Ended"), and from then they left on the class's day (the re-check, 2026-10-11).
 `heldOnList` and the list's own row are unchanged. (3) The day is never before the day
 the record itself was made (`readMemberCounts`): two records joined can leave an old
 membership on a newer record. Also: the list's read no longer carries the day
