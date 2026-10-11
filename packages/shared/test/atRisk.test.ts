@@ -22,15 +22,15 @@ describe("atRiskOf: the worst thing first, nobody who came lately is named", () 
   it("a visit on any of the last 14 days, today among them, is never at risk, however regular before", () => {
     const before = [20, 22, 27, 29, 34, 36, 41];
     for (let n = 0; n < 14; n += 1) {
-      expect(ask([...before, n]), `a visit ${n} days back`).toEqual({ atRisk: false, why: "came_lately" });
+      expect(ask([...before, n]), `a visit ${String(n)} days back`).toEqual({ atRisk: false, why: "came_lately" });
     }
   });
 
   it("the first day they are named is the gym's own number of days after their last visit", () => {
     for (const quietDays of AT_RISK_QUIET_DAYS) {
       const visits = (last: number) => [last, last + 8, last + 15];
-      expect(ask(visits(quietDays - 1), { quietDays }).atRisk, `${quietDays - 1} days at ${quietDays}`).toBe(false);
-      expect(ask(visits(quietDays), { quietDays }), `${quietDays} days at ${quietDays}`).toEqual({
+      expect(ask(visits(quietDays - 1), { quietDays }).atRisk, `${String(quietDays - 1)} days at ${String(quietDays)}`).toBe(false);
+      expect(ask(visits(quietDays), { quietDays }), `${String(quietDays)} days at ${String(quietDays)}`).toEqual({
         atRisk: true,
         lastVisitOn: back(quietDays),
         daysAway: quietDays,
@@ -64,7 +64,7 @@ describe("atRiskOf: how regular they were, over the four weeks that ended on the
   ];
   for (const c of cases) {
     for (const weeksCame of AT_RISK_WEEKS_CAME) {
-      it(`${c.name}: ${c.weeks} of 4, asked for ${weeksCame}`, () => {
+      it(`${c.name}: ${String(c.weeks)} of 4, asked for ${String(weeksCame)}`, () => {
         const got = ask(c.visits, { weeksCame });
         if (c.weeks >= weeksCame) expect(got).toEqual({ atRisk: true, lastVisitOn: back(20), daysAway: 20, weeksCame: c.weeks });
         else expect(got).toEqual({ atRisk: false, why: "not_regular" });
@@ -96,8 +96,8 @@ describe("atRiskOf: who is never named", () => {
       const need = atRiskGymDays(quietDays);
       const days = (n: number) => Array.from({ length: n }, (_, i) => back(i));
       const visits = [quietDays + 5, quietDays + 12];
-      expect(ask(visits, { quietDays, gymDays: days(need - 1) }), `${need - 1} gym days at ${quietDays}`).toEqual({ atRisk: false, why: "gym_quiet" });
-      expect(ask(visits, { quietDays, gymDays: days(need) }).atRisk, `${need} gym days at ${quietDays}`).toBe(true);
+      expect(ask(visits, { quietDays, gymDays: days(need - 1) }), `${String(need - 1)} gym days at ${String(quietDays)}`).toEqual({ atRisk: false, why: "gym_quiet" });
+      expect(ask(visits, { quietDays, gymDays: days(need) }).atRisk, `${String(need)} gym days at ${String(quietDays)}`).toBe(true);
     }
     expect(AT_RISK_QUIET_DAYS.map(atRiskGymDays)).toEqual([4, 5, 7, 11, 15]);
   });
