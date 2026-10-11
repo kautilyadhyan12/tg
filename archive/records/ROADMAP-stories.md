@@ -382,3 +382,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **21c-i, as it stood when it was built (merged 2026-10-11, PR #220):**
 
      - 21c-i. [ ] **A later date on the gym's list gives the next term** (§16.9.3): somebody whose membership from the gym's file has ended, and whose newer file gives a later date, is offered it again in the Memberships box, on staff's press; never a repeating one, one staff cancelled, or one still running. Risky.
+
+**21c-ii, as it stood when it was built (merged 2026-10-11, PR #223):**
+
+     - 21c-ii. [ ] **Reports counts a membership that ended as left** (§16.9.4): whoever the Members list reads as Ended or Cancelled counts as left from that day, by itself, nobody removed; a file's own status word is never read. Risky. After 21c-i.

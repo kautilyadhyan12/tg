@@ -12,6 +12,9 @@ import {
   type LeadSource,
   type MembersReportResponse,
 } from "@app/shared";
+import { dayInTz } from "../../gamification/streak.js";
+import { leftOnOf } from "../memberships/onList.js";
+import { renewedByTheList } from "../memberships/wordsRepo.js";
 import { requirePrivilege } from "../service.js";
 import * as repo from "./repo.js";
 
@@ -26,9 +29,30 @@ export async function requireReportsReader(deps: ReportsDeps, userId: string, gy
   return { timezone: org.timezone };
 }
 
-/** The members figures for a gym whose reader has been checked. */
+/** The members figures for a gym whose reader has been checked.
+ *
+ *  Who has left is the people taken off the list and the people the Members list reads as
+ *  "Ended" or "Cancelled" today, asked of that list's own rule (`leftOnOf`). Somebody
+ *  whose membership ended and whom the gym's list now gives a later date is still a member:
+ *  the gym renewed them in its own software, and the Memberships page is waiting for the
+ *  press that renews them here (21c-i). Once the day the list covered has passed with
+ *  nothing pressed, that day is the day they left, so the month their membership here ended
+ *  in reads as it closed. The reads share one snapshot: a membership given
+ *  between them would otherwise count its person as left and as a member at once. */
 export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { timezone: string }): Promise<MembersReportResponse> {
-  const counts = await repo.readMemberCounts(deps.sql, gymId, org.timezone, deps.now());
+  const now = deps.now();
+  const today = dayInTz(now, org.timezone);
+  const counts = await deps.sql.begin("isolation level repeatable read read only", async (tx) => {
+    const left = await leftOnOf(tx, gymId, today);
+    for (const kept of left.size > 0 ? await renewedByTheList(tx, gymId, today) : []) {
+      const day = left.get(kept.entryId);
+      if (day === undefined) continue;
+      if (kept.waiting) left.delete(kept.entryId);
+      else if (kept.covered < today && kept.covered > day) left.set(kept.entryId, kept.covered);
+    }
+    const gone = [...left].map(([id, on]) => ({ id, on }));
+    return await repo.readMemberCounts(tx, gymId, org.timezone, today, gone);
+  });
   const leadRows = await repo.readLeadCounts(deps.sql, gymId);
   const leads: { source: LeadSource; leads: number; joined: number }[] = [];
   for (const row of leadRows) {
