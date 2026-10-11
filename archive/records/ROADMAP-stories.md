@@ -390,3 +390,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **20b-iii, as it stood when it was built (merged 2026-10-11, PR #224):**
 
      - 20b-iii. [ ] **Class reminder** (RULINGS 2026-10-08): so long before a booked class or session, the time the gym's to change.
+
+**21c-iii, as it stood when it was built (merged 2026-10-12, PR #225):**
+
+     - 21c-iii. [ ] **Tidy up members whose membership is over** (Kd, RULINGS 2026-10-11; after 21c-ii): a sign atop Members, "3 memberships have ended or been cancelled · Review them", opens the list showing only those people; staff move them to Past members all in one go or one by one, or renew them; nothing is ever removed by itself, and the sign goes when nobody is left.
