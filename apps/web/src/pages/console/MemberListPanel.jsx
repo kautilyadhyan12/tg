@@ -1307,7 +1307,7 @@ export default function MemberListPanel({
       {/* The last person dealt with: the list says so, with the way back to everybody. */}
       {overDone ? (
         <div className="flex flex-col items-start gap-2" data-testid="over-done">
-          <p className="c-s14 c-t2 m-0">{`Nobody is left to review. No ${words.person} on your list has a membership that has ended or been cancelled.`}</p>
+          <p className="c-s14 c-t2 m-0">{`Nobody is left to review. ${words.peopleCap} who still owe a payment, and ${words.people} you kept on your list, are not shown here.`}</p>
           <button type="button" onClick={clearAll} className="c-btn c-btn-s c-btn-lg">
             {`Show all ${words.people}`}
           </button>

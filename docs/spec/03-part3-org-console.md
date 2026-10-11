@@ -5459,7 +5459,7 @@ is how it is built, on the safe side (RULINGS 2026-10-12, asked of Kd).
 | The list | the same Members list, showing only those people, with the pill "Membership ended or cancelled" |
 | Under each row | **Renew** · **Remove** · **Keep on list**: three small buttons in one line under the name (`c-btn-xs`), never wider than the Name column |
 | The bar, with people ticked | its usual buttons, and **Keep on list** |
-| When nobody is left | "Nobody is left to review. No member on your list has a membership that has ended or been cancelled." · **Show all members** |
+| When nobody is left | "Nobody is left to review. Members who still owe a payment, and members you kept on your list, are not shown here." · **Show all members** |
 
 - **Renew** opens that person's page with the Add membership form open and the
   membership they had already picked, where the gym still sells it.

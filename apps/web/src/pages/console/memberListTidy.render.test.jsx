@@ -303,7 +303,7 @@ describe('tidying up members whose membership is over', () => {
     );
     fireEvent.click(rowOf('Cal Cancelled').getByTestId('over-keep'));
     const done = within(await screen.findByTestId('over-done'));
-    expect(done.getByText('Nobody is left to review. No member on your list has a membership that has ended or been cancelled.')).toBeTruthy();
+    expect(done.getByText('Nobody is left to review. Members who still owe a payment, and members you kept on your list, are not shown here.')).toBeTruthy();
     expect(screen.queryByText('No members match.')).toBeNull();
     await waitFor(() => expect(screen.queryByTestId('over-sign')).toBeNull());
     fireEvent.click(done.getByRole('button', { name: 'Show all members' }));
