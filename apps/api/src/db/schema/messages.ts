@@ -2,9 +2,10 @@
 // `0088_gym_member_messages.sql`, which is the record.
 //
 // About the person: deleted with their account (`DIRECT_DELETE_TABLES`) and exported.
-// `gym_group_messages` and `gym_member_messages_off` mirror `0092_group_messages.sql`.
+// `gym_group_messages` and `gym_member_messages_off` mirror `0092_group_messages.sql`;
+// `gym_message_settings` mirrors `0095_gym_message_settings.sql`.
 import { sql } from "drizzle-orm";
-import { check, date, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "./identity.js";
 import { gyms } from "./tenancy.js";
 
@@ -88,6 +89,46 @@ export const gymMemberMessagesOff = pgTable(
     check(
       "gym_member_messages_off_kind_check",
       sql`${t.kind} IN ('membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','group')`,
+    ),
+  ],
+);
+
+/** The last day, on the gym's own calendar, on which the sender read everybody in the gym
+ *  (ROADMAP 20b-i). Removed when the gym changes its settings. */
+export const gymMessageDays = pgTable("gym_message_days", {
+  gymId: uuid("gym_id")
+    .primaryKey()
+    .references(() => gyms.id, { onDelete: "cascade" }),
+  day: date("day").notNull(),
+});
+
+/** A gym's own settings for one kind of automatic message (ROADMAP 20b-i). The gym's, not
+ *  about a person. A kind with no row has its starting values. */
+export const gymMessageSettings = pgTable(
+  "gym_message_settings",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    isOn: boolean("is_on").notNull().default(true),
+    /** The gym's one line of its own under this kind's fixed words. */
+    ownLine: text("own_line"),
+    days: integer("days"),
+    milestones: integer("milestones").array(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_message_settings_pk", columns: [t.gymId, t.kind] }),
+    check(
+      "gym_message_settings_kind_check",
+      sql`${t.kind} IN ('payment_overdue','membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you')`,
+    ),
+    check("gym_message_settings_own_line_check", sql`${t.ownLine} IS NULL OR length(${t.ownLine}) BETWEEN 1 AND 140`),
+    check("gym_message_settings_days_check", sql`${t.days} IS NULL OR ${t.days} BETWEEN 1 AND 90`),
+    check(
+      "gym_message_settings_milestones_check",
+      sql`${t.milestones} IS NULL OR (cardinality(${t.milestones}) BETWEEN 1 AND 10 AND 1 <= ALL (${t.milestones}))`,
     ),
   ],
 );

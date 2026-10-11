@@ -1,4 +1,4 @@
-import { GYM_COME_BACK_LINES, GYM_MESSAGE_KEPT_DAYS, GYM_PINNED_NOTE_DAYS, gymContactTel, orgWords } from '@app/shared';
+import { GYM_COME_BACK_LINES, GYM_MESSAGE_KEPT_DAYS, GYM_MESSAGE_KIND_NAMES, GYM_PINNED_NOTE_DAYS, gymContactTel, orgWords } from '@app/shared';
 import { cheerLine } from '../../utils/cheerPresets';
 import { cheerAge } from './gymMembershipView';
 import { placeFor } from '../../pages/console/consolePlaces';
@@ -77,6 +77,23 @@ export function groupSwitch(gym, on) {
       ? `Messages the ${it} sends to many people at once, like a closed day or a new class.`
       : `Off. You won't get these. Messages about your own membership still come.`,
   };
+}
+
+/** The member's own switches for the gym's automatic messages (ROADMAP 20b-i), one a kind
+ *  they can switch off. `off`: the kinds the server says are off. */
+export function kindSwitches(gym, off) {
+  const isOff = (kind) => Array.isArray(off) && off.includes(kind);
+  const row = (kind, label, line) => ({ kind, label, on: !isOff(kind), line: isOff(kind) ? `Off. ${gym.name} won't send you this.` : line });
+  return [
+    row('birthday', GYM_MESSAGE_KIND_NAMES.birthday, `A message from ${gym.name} on your birthday.`),
+    row('milestone', GYM_MESSAGE_KIND_NAMES.milestone, 'A message when you reach a number of visits, like your 50th.'),
+    row('miss_you', GYM_MESSAGE_KIND_NAMES.miss_you, "A message if you haven't been in for a while."),
+  ];
+}
+
+/** The button that opens the switches. */
+export function switchesHeading(gym) {
+  return `Choose what ${gym.name} can send you`;
 }
 
 /** The button under that note: "Contact the gym", in the organisation's own word. */

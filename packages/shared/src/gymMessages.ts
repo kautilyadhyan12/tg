@@ -6,6 +6,7 @@
 // and writes what this returns, one row an occasion.
 import { z } from "zod";
 import { gymContactSchema } from "./gymContact.js";
+import { underAgeOn } from "./memberInvites.js";
 import { instantSchema } from "./time.js";
 
 /** Every kind of automatic message, in the order one is picked when several are due on
@@ -52,8 +53,24 @@ export const GYM_MESSAGE_DAY_STARTS_HOUR = 8;
 export const GYM_MESSAGE_DAY_ENDS_HOUR = 21;
 /** A Welcome still goes this many days after joining (a join at night waits for morning). */
 export const GYM_MESSAGE_WELCOME_DAYS = 3;
+/** A visit milestone stays due while the visit that reached it is one of the last this
+ *  many days: a day that already had another message does not lose it. */
+export const GYM_MESSAGE_MILESTONE_DAYS = 7;
+/** We miss you is sent only while the absence is no more than this many days past the
+ *  gym's own number: on the first day a gym uses it, nobody who left long ago is told. */
+export const GYM_MESSAGE_MISS_YOU_LATE_DAYS = 30;
+/** As many records of one gym with one date of birth as mark it a stand-in an export wrote
+ *  for "not known", never a birthday. */
+export const SHARED_BIRTH_DATE_RECORDS = 5;
 /** A trial check-in still goes one day late. */
 export const GYM_MESSAGE_CHECK_IN_LATE_DAYS = 1;
+
+/** We miss you waits until the gym has checked somebody in on this many days since the
+ *  person's last visit: half the gym's days, rounded up. A gym that stopped using check-in,
+ *  or was shut for those days, has not seen anybody, so nobody there is told they were missed. */
+export function missYouGymDays(missYouDays: number): number {
+  return Math.ceil(missYouDays / 2);
+}
 
 /** The numbers a gym can change (20b); these are the starting values of §16.2. */
 export interface GymMessageNumbers {
@@ -115,6 +132,8 @@ export interface GymMessageFacts {
     hour: number;
     on: Record<GymMessageKind, boolean>;
     numbers: GymMessageNumbers;
+    /** The days the desk or staff checked anybody in, up to today. */
+    visitDays: readonly string[];
   };
   person: {
     /** A live member of the gym in the app, with an account that is not deleted. */
@@ -135,9 +154,15 @@ export interface GymMessageFacts {
     bills: readonly { id: string; dueOn: string; paid: boolean }[];
     /** `MM-DD`. */
     birthday: string | null;
-    /** Every visit they have made. */
+    /** The days the desk or staff checked them in, one a day. */
     visits: number;
+    /** How many of those days are in the last `GYM_MESSAGE_MILESTONE_DAYS`, today among them. */
+    recentVisitDays: number;
+    /** The newest of those days. */
     lastVisitOn: string | null;
+    /** The newest day they checked in by ANY means, their own "I'm here" tap among them:
+     *  somebody who taps in every day has not been away. */
+    lastSeenOn: string | null;
   };
   /** What they were already sent by this gym: every row of today, and every row of an
    *  occasion that could come up again. */
@@ -180,6 +205,28 @@ function isBirthday(birthday: string, today: string): boolean {
   return birthday === "02-29" && monthDay === "02-28" && !isLeap(Number(today.slice(0, 4)));
 }
 
+/** The `MM-DD` to greet somebody on, from the date of birth on the gym's list, or null
+ *  where that date cannot be trusted as a birthday. A real birthday that looks like a
+ *  stand-in gets no message, which is the safe side. Left out, by its shape first:
+ *  - a date `shared` by `SHARED_BIRTH_DATE_RECORDS` of the gym's records: what an export
+ *    writes for "not known";
+ *  - any 1 January: what a list holds when only the year or an age was known, and the
+ *    first day of many systems' calendars (1970, 1980, 2000, 2001);
+ *  - 31 December: 1 January as an export made west of Greenwich writes it;
+ *  - a date that makes the person under 18, today's and a later one among them: a form
+ *    whose date box starts at today, and nobody under 18 is invited to a gym;
+ *  - a date over 110 years back: a spreadsheet's first day (1900). */
+export function trustedBirthday(dateOfBirth: string | null, today: string, shared: boolean): string | null {
+  if (dateOfBirth === null || shared) return null;
+  const age = daysBetween(dateOfBirth, today);
+  if (age === null || age < 0) return null;
+  const monthDay = dateOfBirth.slice(5);
+  if (monthDay === "01-01" || monthDay === "12-31") return null;
+  if (underAgeOn(dateOfBirth, today)) return null;
+  if (Number(today.slice(0, 4)) - Number(dateOfBirth.slice(0, 4)) > 110) return null;
+  return monthDay;
+}
+
 /** What there is an occasion for today, whatever else is true, in the order of
  *  `GYM_MESSAGE_KINDS`. A fact that cannot be read gives no occasion. */
 export function gymMessageOccasions(facts: GymMessageFacts): GymMessageOccasion[] {
@@ -218,10 +265,23 @@ export function gymMessageOccasions(facts: GymMessageFacts): GymMessageOccasion[
 
   if (person.birthday !== null && isBirthday(person.birthday, today)) found.push({ kind: "birthday", occasion: `birthday:${today.slice(0, 4)}` });
 
+  // The newest milestone reached by a visit of the last few days. It stays due on each of
+  // them, so a day that had another message, or a night, does not lose it; once sent, its
+  // number is its occasion and it is not sent again.
   const sinceVisit = daysBetween(person.lastVisitOn, today);
-  if (sinceVisit !== null && sinceVisit >= 0) {
-    if (sinceVisit <= 1 && numbers.milestones.includes(person.visits)) found.push({ kind: "milestone", occasion: `visits:${String(person.visits)}` });
-    if (sinceVisit >= numbers.missYouDays) found.push({ kind: "miss_you", occasion: `absent:${String(person.lastVisitOn)}` });
+  if (sinceVisit !== null && sinceVisit >= 0 && sinceVisit < GYM_MESSAGE_MILESTONE_DAYS) {
+    const recent = Number.isInteger(person.recentVisitDays) ? Math.min(Math.max(person.recentVisitDays, 0), GYM_MESSAGE_MILESTONE_DAYS) : 0;
+    const reached = numbers.milestones.filter((m) => m <= person.visits && m > person.visits - recent);
+    if (reached.length > 0) found.push({ kind: "milestone", occasion: `visits:${String(Math.max(...reached))}` });
+  }
+
+  // Away is counted from the last check-in of any kind, and only for a while: somebody who
+  // stopped coming long before the gym used this is not told on its first day.
+  const sinceSeen = daysBetween(person.lastSeenOn, today);
+  if (!person.staff && sinceSeen !== null && sinceSeen >= numbers.missYouDays && sinceSeen <= numbers.missYouDays + GYM_MESSAGE_MISS_YOU_LATE_DAYS) {
+    const lastSeenOn = person.lastSeenOn ?? "";
+    const gymDaysSince = new Set(gym.visitDays.filter((day) => dayNumber(day) !== null && day > lastSeenOn && day <= today)).size;
+    if (gymDaysSince >= missYouGymDays(numbers.missYouDays)) found.push({ kind: "miss_you", occasion: `absent:${lastSeenOn}` });
   }
 
   return found.sort((a, b) => GYM_MESSAGE_KINDS.indexOf(a.kind) - GYM_MESSAGE_KINDS.indexOf(b.kind));
@@ -272,6 +332,30 @@ export function welcomeMessage(gymName: string, displayName: string | null): str
   return (name === null ? `Welcome to ${gym}.` : `Welcome to ${gym}, ${name}.`) + " We're glad you joined. Messages from us will show up here.";
 }
 
+/** The fixed words of each kind this app sends, before the gym's own line. Null for a kind
+ *  that has no words yet, and for a milestone whose occasion names no number. */
+function fixedWords(send: GymMessageOccasion, gym: string, displayName: string | null): string | null {
+  if (send.kind === "welcome") return welcomeMessage(gym, displayName);
+  const name = greetingName(displayName);
+  if (send.kind === "birthday") return (name === null ? "Happy birthday!" : `Happy birthday, ${name}!`) + ` From everyone at ${gym}.`;
+  if (send.kind === "miss_you") return `We haven't seen you at ${gym} for a while${name === null ? "" : `, ${name}`}. We hope to see you soon.`;
+  if (send.kind === "milestone") {
+    const visits = /^visits:([1-9][0-9]{0,5})$/.exec(send.occasion)?.[1];
+    if (visits === undefined) return null;
+    return `You've reached ${Number(visits).toLocaleString("en")} visits at ${gym}${name === null ? "" : `, ${name}`}. Well done.`;
+  }
+  return null;
+}
+
+/** A message as sent: the fixed words, then the gym's own line for that kind on a line of
+ *  its own. Null for a kind with no words yet: nothing is sent for it. */
+export function automaticMessage(send: GymMessageOccasion, gymName: string, displayName: string | null, ownLine: string | null): string | null {
+  const fixed = fixedWords(send, gymName.trim(), displayName);
+  if (fixed === null) return null;
+  const line = (ownLine ?? "").trim();
+  return line === "" ? fixed : [fixed, line].join("\n");
+}
+
 /** The four come-back lines a gym can send (Kd's, 2026-09-07), as the member reads them. */
 export const GYM_COME_BACK_LINES: Record<string, string> = {
   miss_you: "We miss you — hope to see you soon.",
@@ -310,6 +394,8 @@ export const gymInboxResponseSchema = z.object({
   contact: gymContactSchema.default({ phone: null, email: null }),
   /** False once the member has switched this gym's messages to groups off (ROADMAP 20f-i). */
   groupMessages: z.boolean().default(true),
+  /** The automatic kinds the member has switched off for this gym (ROADMAP 20b-i). */
+  off: z.array(gymMessageKindSchema).default([]),
 });
 export type GymInboxResponse = z.infer<typeof gymInboxResponseSchema>;
 

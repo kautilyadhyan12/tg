@@ -3,11 +3,12 @@
 // `registerOrgRoutes`.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
-import { gymGroupMessagesSwitchRequestSchema, markGymInboxReadRequestSchema } from "@app/shared";
+import { gymGroupMessagesSwitchRequestSchema, gymMessageSettingsRequestSchema, gymMessageSwitchRequestSchema, markGymInboxReadRequestSchema } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
 import * as service from "./service.js";
+import * as settings from "./settings.js";
 
 function parseOr400<S extends z.ZodTypeAny>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
   const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
@@ -81,6 +82,50 @@ export function registerMessageRoutes(app: FastifyInstance, deps: service.Messag
     const body = parseOr400(gymGroupMessagesSwitchRequestSchema, req.body, req, reply);
     if (body === null) return;
     const now = await service.setGroupMessages(messagesDeps, requireUserId(req), params.gymId, body, gate(switchLimit)(req, reply));
+    if (now === null) return;
+    return reply.status(200).send(now);
+  });
+
+  // The member's own switch for one kind of automatic message. Set twice it is set once.
+  app.put("/v1/orgs/:gymId/inbox/switches", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(gymMessageSwitchRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const now = await service.setKindSwitch(messagesDeps, requireUserId(req), params.gymId, body, gate(switchLimit)(req, reply));
+    if (now === null) return;
+    return reply.status(200).send(now);
+  });
+
+  // ── THE GYM'S OWN SETTINGS, FOR STAFF HOLDING `org.manage` ──
+
+  // Set now and then; a front desk's staff share an address. Counted a gym at a time, so
+  // one gym's staff cannot use up another's there.
+  const settingsLimit = createDualRateLimit({
+    name: "orgs_message_settings",
+    max: 120,
+    ipMax: 600,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    ipScope: (req) => orgParamsSchema.safeParse(req.params).data?.gymId ?? null,
+    redis: deps.redis,
+  });
+
+  app.get("/v1/orgs/:gymId/message-settings", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const now = await settings.getMessageSettings(messagesDeps, requireUserId(req), params.gymId, gate(settingsLimit)(req, reply));
+    if (now === null) return;
+    return reply.status(200).send(now);
+  });
+
+  // PUT: every kind and both numbers, every time. Saved twice it is saved once.
+  app.put("/v1/orgs/:gymId/message-settings", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(gymMessageSettingsRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const now = await settings.setMessageSettings(messagesDeps, requireUserId(req), params.gymId, body, gate(settingsLimit)(req, reply));
     if (now === null) return;
     return reply.status(200).send(now);
   });

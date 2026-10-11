@@ -122,7 +122,7 @@ try {
   });
   await measure("the job four days on: nobody is new", async () => {
     const sent = await sendDueMessages({ sql, log }, { now: new Date(NOW.getTime() + 4 * 86_400_000), gymIds });
-    if (sent.sent !== 0 || sent.gyms !== 0) throw new Error("a later run looked at a gym");
+    if (sent.sent !== 0) throw new Error("a later run sent something");
   });
 
   // One member's inbox filled to what a read carries.
