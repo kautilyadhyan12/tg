@@ -30,7 +30,7 @@ import {
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 import PlaceLink from './PlaceLink';
 
-// AUTOMATIC MESSAGES (ROADMAP 20b-i, 20b-ii; spec Part 3 §16.2): the messages the app sends
+// AUTOMATIC MESSAGES (ROADMAP 20b-i, 20b-ii, 20b-iii; spec Part 3 §16.2): the messages the app sends
 // a gym's members by itself. Each has a switch, the words a member will read, and one line
 // of the gym's own; most have a number the gym picks. Everything waits for one Save.
 
@@ -85,7 +85,7 @@ function Message({ kind, org, draft, edit, locked, use, attendanceTo }) {
             </span>
           </p>
           <p className="text-sm mt-1 m-0" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            {messageWhen(kind, org.orgType, use)}
+            {messageWhen(kind, org.orgType, { ...use, classReminderHours: draft.classReminderHours })}
           </p>
         </div>
         <Switch on={on} disabled={locked} label={`Send the ${messageName(kind)} message`} onPress={() => edit((was) => ({ ...was, on: { ...was.on, [kind]: !on } }))} />
@@ -241,8 +241,10 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
       priceList: data.priceList !== false,
       payments: data.payments !== false,
       billsOverdueDays: data.billsOverdueDays ?? 0,
+      bookings: data.bookings !== false,
+      clockFormat: org.clockFormat,
     });
-  }, []);
+  }, [org.clockFormat]);
 
   const load = useCallback(
     (isLive = () => true) =>
@@ -275,6 +277,8 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
 
   const changed = kept !== null && draft !== null && messageDraftChanged(draft, kept);
   const canSave = changed && messageDraftFine(draft) && !saving && !readOnly;
+  // What stops a save, said where Save is: the row it is in and its reason.
+  const blockedKind = changed ? MESSAGE_KINDS.find((kind) => messageProblem(kind, draft) !== null) : undefined;
 
   const save = async (event) => {
     event.preventDefault();
@@ -315,30 +319,36 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
             <Message key={kind} kind={kind} org={org} draft={draft} edit={edit} locked={readOnly || saving} use={use} attendanceTo={attendanceTo} />
           ))}
 
-          {saveError !== null ? <ConsoleFailed message={saveError} /> : null}
-
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={!canSave}
-              className="rounded-xl px-5 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
-              style={{
-                background: canSave ? 'linear-gradient(135deg,#FF8A1F,#FFB347)' : 'rgba(255,255,255,0.08)',
-                color: canSave ? '#0A0908' : 'rgba(255,255,255,0.35)',
-              }}
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              {saving ? 'Saving…' : 'Save changes'}
-            </button>
-            {saved ? (
-              <span className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                Saved. It holds from the next message sent.
-              </span>
-            ) : changed ? (
-              <span className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                Not saved yet.
-              </span>
+          <div className={`flex flex-col gap-2 ${changed || saving || saved ? 'c-save-stuck' : ''}`} data-testid="message-settings-save">
+            {saveError !== null ? <ConsoleFailed message={saveError} /> : null}
+            {blockedKind !== undefined ? (
+              <p className="text-sm m-0" role="alert" style={{ color: '#ef4444' }}>
+                {messageName(blockedKind)}: {messageProblem(blockedKind, draft)}
+              </p>
             ) : null}
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={!canSave}
+                className="rounded-xl px-5 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
+                style={{
+                  background: canSave ? 'linear-gradient(135deg,#FF8A1F,#FFB347)' : 'rgba(255,255,255,0.08)',
+                  color: canSave ? '#0A0908' : 'rgba(255,255,255,0.35)',
+                }}
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+              {saved ? (
+                <span className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                  Saved. It holds from the next message sent.
+                </span>
+              ) : changed ? (
+                <span className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                  Not saved yet.
+                </span>
+              ) : null}
+            </div>
           </div>
         </form>
       )}

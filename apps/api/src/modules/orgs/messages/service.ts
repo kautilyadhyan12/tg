@@ -4,7 +4,10 @@
 // member of that gym: everybody else is answered 404, as for a gym that is not there.
 import type { Sql } from "postgres";
 import {
+  GYM_GROUP_MESSAGE_KIND,
   GYM_INBOX_MAX,
+  GYM_MESSAGE_MEMBER_SWITCH_GROUPS,
+  type GymInboxKind,
   gymGroupMessagesSwitchResponseSchema,
   gymInboxResponseSchema,
   gymMessageSwitchResponseSchema,
@@ -99,9 +102,11 @@ export async function setGroupMessages(
   return gymGroupMessagesSwitchResponseSchema.parse({ groupMessages: !(await groupRepo.groupMessagesOff(deps.sql, gymId, userId)) });
 }
 
-/** The member's own switch for one kind of this gym's automatic messages (ROADMAP 20b-i).
- *  Off, the sender's rule holds that kind for them; what they were already sent stays. Set
- *  twice it is set once. Answers every kind they have off here. */
+/** The member's own switch for one kind of this gym's automatic messages (ROADMAP 20b-i),
+ *  or for one of the two groups a member is shown (20b-iii): the `news` group takes the
+ *  gym's messages to many people at once with it. Off, the sender's rule holds those kinds
+ *  for them; what they were already sent stays. Set twice it is set once. Answers every
+ *  kind they have off here, and how the messages to many people stand. */
 export async function setKindSwitch(
   deps: MessagesDeps,
   userId: string,
@@ -111,6 +116,11 @@ export async function setKindSwitch(
 ): Promise<GymMessageSwitchResponse | null> {
   const reader = await forMember(deps, gymId, userId);
   if (!(await limit())) return null;
-  await groupRepo.setKindSwitch(deps.sql, gymId, userId, body.kind, body.on, reader.now);
-  return gymMessageSwitchResponseSchema.parse({ off: await groupRepo.kindsOff(deps.sql, gymId, userId) });
+  const kinds: readonly GymInboxKind[] =
+    "kind" in body ? [body.kind] : body.group === "news" ? [...GYM_MESSAGE_MEMBER_SWITCH_GROUPS.news, GYM_GROUP_MESSAGE_KIND] : GYM_MESSAGE_MEMBER_SWITCH_GROUPS.membership;
+  await groupRepo.setKindSwitches(deps.sql, gymId, userId, kinds, body.on, reader.now);
+  return gymMessageSwitchResponseSchema.parse({
+    off: await groupRepo.kindsOff(deps.sql, gymId, userId),
+    groupMessages: !(await groupRepo.groupMessagesOff(deps.sql, gymId, userId)),
+  });
 }

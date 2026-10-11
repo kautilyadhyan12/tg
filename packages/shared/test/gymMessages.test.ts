@@ -49,8 +49,12 @@ const facts = (person: Partial<Person> = {}, over: { gym?: Partial<GymMessageFac
   sent: over.sent ?? [],
 });
 
+/** The kinds the day rule makes. A class reminder is `classReminderDue`s, a booking at a time. */
+type DayKind = Exclude<GymMessageKind, "class_reminder">;
+const DAY_KINDS = GYM_MESSAGE_KINDS.filter((kind): kind is DayKind => kind !== "class_reminder");
+
 /** One person for each kind, for whom that kind and no other has its occasion today. */
-const DUE: Record<GymMessageKind, { person: Partial<Person>; occasion: string; endsOn?: string }> = {
+const DUE: Record<DayKind, { person: Partial<Person>; occasion: string; endsOn?: string }> = {
   payment_overdue: { person: { bills: [{ id: "b1", dueOn: "2026-10-06", paid: false }] }, occasion: "bill:b1" },
   membership_ending: { person: { ending: { id: "m1", startsOn: "2026-07-17", endsOn: "2026-10-16", what: "membership" } }, occasion: "ends:m1", endsOn: "2026-10-16" },
   trial_ending: { person: { trial: { id: "t1", startsOn: "2026-09-28", endsOn: "2026-10-11", next: false } }, occasion: "trial:t1", endsOn: "2026-10-11" },
@@ -63,13 +67,13 @@ const DUE: Record<GymMessageKind, { person: Partial<Person>; occasion: string; e
 };
 
 /** The occasion the rule answers for a kind's own person. */
-const occasionOf = (kind: GymMessageKind) => {
+const occasionOf = (kind: DayKind) => {
   const { occasion, endsOn } = DUE[kind];
   return endsOn === undefined ? { kind, occasion } : { kind, occasion, endsOn };
 };
 
 /** Each reason not to send, as a change to the facts of a person who would be sent `kind`. */
-const HELD: Record<GymMessageHeldReason, (kind: GymMessageKind, occasion: string) => { person?: Partial<Person>; gym?: Partial<GymMessageFacts["gym"]>; sent?: GymMessageFacts["sent"] }> = {
+const HELD: Record<GymMessageHeldReason, (kind: DayKind, occasion: string) => { person?: Partial<Person>; gym?: Partial<GymMessageFacts["gym"]>; sent?: GymMessageFacts["sent"] }> = {
   gym_lapsed: () => ({ gym: { live: false } }),
   removed: () => ({ person: { member: false } }),
   former: () => ({ person: { former: true } }),
@@ -83,13 +87,13 @@ const HELD: Record<GymMessageHeldReason, (kind: GymMessageKind, occasion: string
 describe("the message rule", () => {
   it("each kind has its occasion, and is sent, for its own person and for nobody else's", () => {
     expect(gymMessageDue(facts())).toEqual({ send: null, held: [] });
-    for (const kind of GYM_MESSAGE_KINDS) {
+    for (const kind of DAY_KINDS) {
       const due = gymMessageDue(facts(DUE[kind].person));
       expect(due, kind).toEqual({ send: occasionOf(kind), held: [] });
     }
   });
 
-  describe.each(GYM_MESSAGE_KINDS)("%s", (kind) => {
+  describe.each(DAY_KINDS)("%s", (kind) => {
     it.each(GYM_MESSAGE_HELD_REASONS)("is not sent: %s", (reason) => {
       const change = HELD[reason](kind, DUE[kind].occasion);
       const due = gymMessageDue(facts({ ...DUE[kind].person, ...change.person }, { ...(change.gym === undefined ? {} : { gym: change.gym }), ...(change.sent === undefined ? {} : { sent: change.sent }) }));
@@ -104,11 +108,11 @@ describe("the message rule", () => {
   });
 
   it("a closed gym sends nothing, as a gym on no plan does", () => {
-    for (const kind of GYM_MESSAGE_KINDS) expect(gymMessageDue(facts(DUE[kind].person, { gym: { open: false } })).send, kind).toBeNull();
+    for (const kind of DAY_KINDS) expect(gymMessageDue(facts(DUE[kind].person, { gym: { open: false } })).send, kind).toBeNull();
   });
 
   it("run again with what it sent, it sends nothing", () => {
-    for (const kind of GYM_MESSAGE_KINDS) {
+    for (const kind of DAY_KINDS) {
       const first = gymMessageDue(facts(DUE[kind].person));
       if (first.send === null) throw new Error(`${kind} was not sent`);
       const again = gymMessageDue(facts(DUE[kind].person, { sent: [{ ...first.send, day: TODAY }] }));
@@ -358,7 +362,7 @@ describe("the words and the shapes", () => {
     const say = (send: Parameters<typeof automaticMessage>[0], name: string | null = "Maya Rao", line: string | null = null) => automaticMessage(send, " Iron House ", name, line);
     expect(say({ kind: "trial_check_in", occasion: "trial:t1" })).toBe("Hi Maya, how's your trial at Iron House going? If you need anything, just let us know.");
     expect(say({ kind: "trial_check_in", occasion: "trial:t1" }, "maya@example.com")).toBe("How's your trial at Iron House going? If you need anything, just let us know.");
-    expect(say({ kind: "trial_ending", occasion: "trial:t1", endsOn: "2026-10-11" })).toBe("Hi Maya, your trial at Iron House ends on 11 October. Want to keep coming? Talk to us about a membership.");
+    expect(say({ kind: "trial_ending", occasion: "trial:t1", endsOn: "2026-10-11" })).toBe("Hi Maya, your trial at Iron House ends on 11 October. If you'd like to keep coming, we'd be happy to help you choose a membership.");
     expect(say({ kind: "membership_ending", occasion: "ends:m1", endsOn: "2026-11-05" }, null)).toBe("Your membership at Iron House ends on 5 November. We'd love to keep you with us. Just let us know if you'd like to renew.");
     expect(say({ kind: "payment_overdue", occasion: "bill:b1" }, "Maya Rao", "Call 555 0100.")).toBe("Hi Maya, your payment to Iron House is overdue. Please get in touch so we can sort it out.\nCall 555 0100.");
     // A class pack may run out of classes first: its day is the last it can be used. Somebody who asked to stop is not asked to stay.

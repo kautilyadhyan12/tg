@@ -8,8 +8,7 @@ import {
   contactSetUp,
   contactView,
   emptyInbox,
-  groupSwitch,
-  kindSwitches,
+  memberSwitches,
   messageRow,
   pausedInbox,
   pinnedNote,
@@ -141,11 +140,12 @@ function SwitchRow({ words, on, change }) {
   );
 }
 
-// THE MEMBER'S OWN SWITCHES for this gym: its messages to many people at once (ROADMAP
-// 20f-i), then each automatic message a member can switch off (20b-i). Off, the gym's
-// staff are told this person gets none, and the sender writes them none. They are shut
-// behind one button until it is pressed, so the Inbox shows its messages first (Kd's
-// click-through of 20b-i).
+// THE MEMBER'S OWN SWITCHES for this gym, two of them (Kd's click-through of 20b-iii):
+// what is about their own membership and bookings, and the gym's news and greetings, its
+// messages to many people at once among them (ROADMAP 20f-i). Off, the gym's staff are
+// told this person gets none, and the sender writes them none. They are shut behind one
+// button until it is pressed, so the Inbox shows its messages first (Kd's click-through
+// of 20b-i).
 function MessageSwitches({ gym, startGroup, startOff }) {
   const [open, setOpen] = useState(false);
   const [group, setGroup] = useState(startGroup);
@@ -166,9 +166,17 @@ function MessageSwitches({ gym, startGroup, startOff }) {
       </button>
       {open ? (
         <div id={panelId} className="flex flex-col gap-2 w-full">
-          <SwitchRow words={groupSwitch(gym, group)} on={group} change={async (on) => setGroup(await inboxService.setGroupMessages(gym.id, on))} />
-          {kindSwitches(gym, off).map((row) => (
-            <SwitchRow key={row.kind} words={row} on={row.on} change={async (on) => setOff(await inboxService.setKindSwitch(gym.id, row.kind, on))} />
+          {memberSwitches(gym, off, group).map((row) => (
+            <SwitchRow
+              key={row.group}
+              words={row}
+              on={row.on}
+              change={async (on) => {
+                const now = await inboxService.setSwitchGroup(gym.id, row.group, on);
+                setOff(now.off);
+                setGroup(now.groupMessages);
+              }}
+            />
           ))}
         </div>
       ) : null}

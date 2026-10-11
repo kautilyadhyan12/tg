@@ -4340,7 +4340,8 @@ joining) · **Trial check-in** (day 2 of a trial membership) · **Trial ending**
 before) · **We miss you** (no visit for 10 days; once for each absence) · **Membership
 ending** (7 days before) · **Payment overdue** (once a bill reads Overdue on the person's
 page by the gym's own grace period of §14.2, and never sooner than 3 days after its due
-date: 20b-ii, RULINGS 2026-10-11) · **Birthday** · **Milestone** (the 50th visit, the 100th). Fixed words with the gym's
+date: 20b-ii, RULINGS 2026-10-11) · **Birthday** · **Milestone** (the 50th visit, the 100th) · **Class reminder** (2 hours before a
+booked class or personal training session: 20b-iii, RULINGS 2026-10-08 and 2026-10-11). Fixed words with the gym's
 name and the person's first name; the gym may add ONE line of its own — 140
 characters, no links, no `@`, held by 15.3's filter. One worker decides what is due,
 by ONE pure rule over (the gym's switches and numbers, the person's record, visits,
@@ -4490,8 +4491,8 @@ in this order: Welcome · Trial check-in · Trial ending · Membership ending ·
   membership began.
 - **The words** (`automaticMessage`; made friendlier at Kd's click-through, RULINGS
   2026-10-11): "Hi Maya, how's your trial at {gym} going? If you need anything, just let
-  us know." · "Hi Maya, your trial at {gym} ends on 14 October. Want to keep coming? Talk
-  to us about a membership." · "Hi Maya, your membership at {gym} ends on 14 October.
+  us know." · "Hi Maya, your trial at {gym} ends on 14 October. If you'd like to keep
+  coming, we'd be happy to help you choose a membership." (softened at 20b-iii's click-through: the first words read as an order) · "Hi Maya, your membership at {gym} ends on 14 October.
   We'd love to keep you with us. Just let us know if you'd like to renew." · "Hi Maya,
   your payment to {gym} is overdue. Please get in touch so we can sort it out." Without
   a first name each starts at "Your" or "How's". A class pack reads "your class pack at
@@ -4517,6 +4518,70 @@ in this order: Welcome · Trial check-in · Trial ending · Membership ending ·
   overdue has none.
 - **When they are found:** in the day's whole read of the gym, with birthdays and
   absences, so each goes in the morning.
+
+**Built in 20b-iii (2026-10-11; RULINGS 2026-10-08, 2026-10-11): the Class reminder is sent.**
+A ninth kind, `class_reminder`, with its row in the gym's box after Payment overdue and a
+member's own switch. Migration `0096`: the kind in the three lists of kinds, `hours` on
+`gym_message_settings`, and an index on personal training sessions by gym and start.
+- **What it is about:** a class booking that holds a place (`booked`: not waiting, not
+  cancelled, not already marked) in a class that is still on, or a personal training
+  session that is still booked. A class booking is its account's; a session is its
+  record's, so it is a person's only where they hold the record alone (`soloHolders`).
+- **The rule** is `classReminderDue` (`packages/shared/src/gymClassReminders.ts`), pure, a
+  booking at a time, on the gym's own clock, with its table test over every reason not to
+  send: the gym closed or on no plan · the person removed, former or deleted · the gym's
+  switch · the person's switch · not booked · the class cancelled · a fact that cannot be
+  read · already started · too early · booked after the reminder's time · already sent ·
+  night. It is NOT one of the day's: it goes whatever else the person was sent that day,
+  and the day's one message still goes after a reminder.
+- **When:** from the gym's number of hours before the start (1 · 2 · 3 · 12 · 24, 2 to
+  start; `classReminderHours`) up to the start. None is sent at night (21:00 to 08:00), so
+  a time that falls then is moved (`classReminderFrom`; round one, H1 and L1; the row says
+  all three): from 21:00 on, to 18:00 that same evening; in the small hours, to 08:00 that morning where the class
+  is still at least an hour after it (09:00 or later), and otherwise to 18:00 the evening
+  before. So 24 hours before Friday's 07:30 class goes on Thursday at 08:00, and 2 hours
+  before a 06:00 class goes the evening before.
+- **Somebody who gets their place late** (books, or claims one from the waitlist): the
+  notice that counts is the first they were in time for (`classReminderNotices`): the gym's
+  own, and, where that is more than 2 hours, 2 hours (`GYM_MESSAGE_REMINDER_LATE_HOURS`).
+  In time means before that long ahead of the start, or before the reminder's own first
+  minute where that is later. So booked at 19:00 for tomorrow's 09:30 is reminded at 08:00;
+  booked at 19:00 for tomorrow's 06:00 is reminded that evening; with 24 hours picked,
+  booked 20 hours before is reminded 2 hours before; and a gym that raises its hours loses
+  nobody. Somebody who got their place inside the last notice gets none: they have only
+  just been told when it is.
+- **The sender** reads, at each of its four runs an hour, the gym's bookings that can be
+  due: those starting within `classReminderLookAheadHours` (16 hours for 1, 2 or 3 picked,
+  19 for 12, 31 for 24; an hour of each is for the night the clocks go back)
+  (`messages/reminders.ts`, `remindersRepo.ts`), and writes with the gym's row held from a
+  second read under it. It looks up, among what was already sent, only the reminders that
+  would otherwise go now. A trainer whose own record a session is booked on is not reminded
+  of themself.
+- **Once:** its occasion is the booking and its start (`class:<id>:<day>:<minute>`,
+  `session:…`), so a second run writes nothing, and a class the gym moves after its
+  reminder is reminded of again at its new time.
+- **The words** (`automaticMessage`): "Hi Maya, you're booked for Yoga today at 6:00 PM at
+  {gym}. See you there." · an online class: "… today at 6:00 PM with {gym}. It's an online
+  class." · "Hi Maya, you have a personal training session with Sam tomorrow at 7:00 AM at
+  {gym}. See you there." The day reads today, tomorrow, or "on Friday 16 October"; the
+  time is on the gym's own clock (12 or 24 hour). The box shows **[the class's name]** and
+  **[its day and time]** where they go.
+- **A gym with nothing to book** (no class on its calendar from today, no trainer who
+  offers personal training, no session to come: `bookings` on the settings read) is told
+  on the row, with a button to Classes, or who can add one.
+- **A gym that fails** at its day's read still has its reminders sent, and the other way
+  round (`sendInTurn`); it is logged once.
+- **A member is shown two switches, not eight** (Kd's click-through, RULINGS 2026-10-11):
+  **About your membership and bookings** (Trial ending, Membership ending, Class reminder)
+  and **News and greetings from {gym}** (the messages to many people of 16.8, Trial
+  check-in, Birthday, Visit milestone, We miss you); each says in a sentence what is in it.
+  A switch is on only while everything in it is; with only part of it off (one kind set by
+  the older call) it reads "Some of these are off. Press to get them all." A press sets the
+  whole group in one statement (`PUT …/inbox/switches` with `group`: `membership` or `news`;
+  `GYM_MESSAGE_MEMBER_SWITCH_GROUPS`). The route still takes one `kind`, and the table still
+  keeps a row a kind. A payment notice has no switch, as before.
+- **Save in the gym's box stays in view** once something in it changed, and "Saved.", a
+  save that failed, and the row and reason that stop a save are said there (`c-save-stuck`).
 
 ### 16.3 Leads
 

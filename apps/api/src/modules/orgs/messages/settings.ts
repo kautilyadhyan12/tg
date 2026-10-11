@@ -21,6 +21,7 @@ import { insertAudit, lockOrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { badWordsIn } from "../posts/badWords.js";
 import { gymMoney, priceListUse } from "./membershipsRepo.js";
+import { hasBookings } from "./remindersRepo.js";
 import { forgetDay } from "./repo.js";
 import type { Limit, MessagesDeps } from "./service.js";
 import * as settingsRepo from "./settingsRepo.js";
@@ -38,11 +39,12 @@ async function readSettings(deps: MessagesDeps, gymId: string): Promise<GymMessa
   const now = deps.now();
   const today = await settingsRepo.gymToday(deps.sql, gymId, now);
   if (today === null) throw notFound();
-  const [rows, checkIn, list, money] = await Promise.all([
+  const [rows, checkIn, list, money, bookings] = await Promise.all([
     settingsRepo.settingRows(deps.sql, gymId),
     settingsRepo.checkedInLately(deps.sql, gymId, today, GYM_MESSAGE_CHECK_IN_DAYS),
     priceListUse(deps.sql, gymId),
     gymMoney(deps.sql, gymId, today),
+    hasBookings(deps.sql, gymId, today),
   ]);
   const settings = gymMessageSettingsFrom(rows);
   return gymMessageSettingsResponseSchema.parse({
@@ -57,6 +59,8 @@ async function readSettings(deps: MessagesDeps, gymId: string): Promise<GymMessa
     priceList: list.priceList,
     payments: money.takesPayments,
     billsOverdueDays: money.billsOverdueAfterDays,
+    classReminderHours: settings.numbers.classReminderHours,
+    bookings,
   });
 }
 
@@ -98,10 +102,12 @@ export async function setMessageSettings(
       trialEndingDays: body.trialEndingDays ?? kept.trialEndingDays,
       membershipEndingDays: body.membershipEndingDays ?? kept.membershipEndingDays,
     };
+    const classReminderHours = body.classReminderHours ?? kept.classReminderHours;
     const rows: GymMessageSettingRow[] = checked.map((message) => ({
       ...message,
       days: daysOf(message.kind, numbers),
       milestones: message.kind === "milestone" ? [...body.milestones].sort((a, b) => a - b) : null,
+      hours: message.kind === "class_reminder" ? classReminderHours : null,
     }));
     const start = gymMessageSettingsFrom([]);
     const changed = rows.filter((row) => {
@@ -112,11 +118,13 @@ export async function setMessageSettings(
         ownLine: null,
         days: daysOf(row.kind, start.numbers),
         milestones: row.kind === "milestone" ? start.numbers.milestones : null,
+        hours: row.kind === "class_reminder" ? start.numbers.classReminderHours : null,
       };
       return (
         wasRow.on !== row.on ||
         wasRow.ownLine !== row.ownLine ||
         wasRow.days !== row.days ||
+        wasRow.hours !== row.hours ||
         (wasRow.milestones ?? []).join(",") !== (row.milestones ?? []).join(",")
       );
     });

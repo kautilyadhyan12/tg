@@ -1,7 +1,7 @@
 // A GYM'S MESSAGES TO A MEMBER: reads and writes `gym_member_messages` (spec Part 3 §16.1;
 // ROADMAP 20a). Every statement names the gym and the person. The copies of a message to a
 // group are written, read back by message and removed in `groupRepo.ts`.
-import { GYM_GROUP_MESSAGE_KIND, GYM_MESSAGE_MILESTONE_DAYS, SHARED_BIRTH_DATE_RECORDS, type GymMessageKind } from "@app/shared";
+import { GYM_GROUP_MESSAGE_KIND, GYM_MESSAGE_MILESTONE_DAYS, SHARED_BIRTH_DATE_RECORDS, type GymClockFormat, type GymMessageKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { COUNTED_METHODS, soloHolders, visitsWithOwner } from "../leaderboard/visits.js";
 
@@ -126,20 +126,25 @@ export interface GymNow {
   name: string;
   open: boolean;
   live: boolean;
-  /** Today, and the hour, on the gym's own clock. */
+  /** Today, the hour and the minute of the day, on the gym's own clock. */
   today: string;
   hour: number;
+  minute: number;
+  /** The clock the gym's times are said on. */
+  clockFormat: GymClockFormat;
 }
 
 export async function gymNow(tx: SqlOrTx, gymId: string, now: Date): Promise<GymNow | null> {
-  const rows = await tx<{ name: string; open: boolean; live: boolean; today: string; hour: number }[]>`
+  const rows = await tx<{ name: string; open: boolean; live: boolean; today: string; hour: number; minute: number; clockFormat: GymClockFormat }[]>`
     SELECT g.name, g.status = 'active' AS open,
            EXISTS (
              SELECT 1 FROM subscriptions s
              WHERE s.owner_type = 'gym' AND s.owner_id = g.id AND s.status IN ('trialing','active','past_due')
            ) AS live,
            (${now}::timestamptz AT TIME ZONE g.timezone)::date::text AS today,
-           extract(hour FROM ${now}::timestamptz AT TIME ZONE g.timezone)::int AS hour
+           extract(hour FROM ${now}::timestamptz AT TIME ZONE g.timezone)::int AS hour,
+           (extract(hour FROM ${now}::timestamptz AT TIME ZONE g.timezone) * 60 + extract(minute FROM ${now}::timestamptz AT TIME ZONE g.timezone))::int AS minute,
+           g.clock_format AS "clockFormat"
     FROM gyms g WHERE g.id = ${gymId}`;
   return rows[0] ?? null;
 }
@@ -196,7 +201,8 @@ export interface MessagePerson {
  *  the desk or staff made are counted for a milestone; the newest by ANY means, the
  *  member's own tap among them, says when they were last seen. A date of birth is read
  *  from the record that one person holds alone, so two accounts on one record have none.
- *  `sent` is the automatic messages only. */
+ *  `sent` is the day's automatic messages only: a class reminder is no more one of them
+ *  than a message to a group is (`reminders.ts` reads its own). */
 export async function peopleForMessages(tx: SqlOrTx, gymId: string, now: Date, today: string, days: number, everybody: boolean): Promise<MessagePerson[]> {
   const nobody = tx`SELECT NULL::uuid AS entry_id, NULL::uuid AS user_id WHERE false`;
   const noVisits = tx`SELECT NULL::uuid AS owner_id, 0 AS visits, NULL::text AS last_on, 0 AS recent, NULL::text AS seen_on WHERE false`;
@@ -267,7 +273,7 @@ export async function peopleForMessages(tx: SqlOrTx, gymId: string, now: Date, t
            coalesce((
              SELECT json_agg(json_build_object('kind', x.kind, 'occasion', x.occasion, 'day', x.gym_day::text))
              FROM gym_member_messages x
-             WHERE x.gym_id = g.id AND x.user_id = m.user_id AND x.kind <> ${GYM_GROUP_MESSAGE_KIND}
+             WHERE x.gym_id = g.id AND x.user_id = m.user_id AND x.kind NOT IN (${GYM_GROUP_MESSAGE_KIND}, 'class_reminder')
            ), '[]'::json) AS sent
     FROM gyms g
     JOIN gym_members m ON m.gym_id = g.id

@@ -2341,7 +2341,7 @@ d("0001_init on a real database", () => {
         expect(await put(message({ user_id: bo }))).toBe("ok");
         expect(await put(message({ gym_id: theirs }))).toBe("ok");
         expect(await put(message({ occasion: "joined:2026-11-20" }))).toBe("ok");
-        for (const kind of ["payment_overdue", "membership_ending", "trial_ending", "trial_check_in", "birthday", "milestone", "miss_you"]) {
+        for (const kind of ["payment_overdue", "membership_ending", "trial_ending", "trial_check_in", "birthday", "milestone", "miss_you", "class_reminder"]) {
           expect(await put(message({ kind })), kind).toBe("ok");
         }
         expect(await put(message({ kind: "advert", occasion: "x" })), "a kind that is not one").toBe("gym_member_messages_kind_check");
@@ -2350,12 +2350,12 @@ d("0001_init on a real database", () => {
         expect(await put(message({ occasion: "y", body: "x".repeat(501) })), "too many words").toBe("gym_member_messages_body_check");
         expect(await put(message({ occasion: "y", expires_at: "2026-10-09T06:30:00Z" })), "gone as it is sent").toBe("gym_member_messages_expires_check");
         const count = async (): Promise<number> => (await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_member_messages WHERE gym_id IN (${mine}, ${theirs})`)[0]?.n ?? -1;
-        expect(await count()).toBe(11);
+        expect(await count()).toBe(12);
         // A person's messages go with their account, and a gym's with the gym.
         await tx`DELETE FROM users WHERE id = ${bo}`;
-        expect(await count()).toBe(10);
+        expect(await count()).toBe(11);
         await tx`DELETE FROM gyms WHERE id = ${theirs}`;
-        expect(await count()).toBe(9);
+        expect(await count()).toBe(10);
         throw new Error("ROLLBACK-0088-FIXTURE");
       })
       .catch((err: unknown) => {

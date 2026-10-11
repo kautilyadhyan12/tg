@@ -10,6 +10,9 @@
 // when a birthday, a milestone, an absence, a trial's day, a membership's last days and an
 // overdue bill are found. Every other run reads only those who joined lately, for their
 // Welcome. A change to the gym's settings has the next run read everybody again.
+//
+// A class reminder is not one of the day's: every run reads the gym's bookings that start
+// soon (`reminders.ts`), and a reminder goes whatever else the person was sent that day.
 import {
   GYM_MESSAGE_DAY_ENDS_HOUR,
   GYM_MESSAGE_DAY_STARTS_HOUR,
@@ -28,13 +31,19 @@ import {
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { lockGym } from "../memberList/repo.js";
+import { remindersForGym } from "./reminders.js";
 import { NO_GYM_MONEY, gymMoney, membershipFactsByPerson, type GymMoney } from "./membershipsRepo.js";
 import * as repo from "./repo.js";
 import { settingRows } from "./settingsRepo.js";
 
+/** One of a gym's two steps: answers how many messages it wrote. */
+export type SendStep = (sql: Sql, gymId: string, now: Date) => Promise<number>;
+
 export interface SendMessagesDeps {
   sql: Sql;
   log: { info: (obj: object, msg: string) => void; error: (obj: object, msg: string) => void };
+  /** For a test that has one step fail: the day's messages, or the class reminders. */
+  steps?: { day?: SendStep; reminders?: SendStep };
 }
 
 /** How far back the read looks for joiners who have since left, in days of 24 hours; the
@@ -77,6 +86,24 @@ function factsFor(gym: repo.GymNow, settings: GymMessageSettings, day: DayRead, 
   };
 }
 
+/** Runs one gym's steps each in its own turn: one that fails does not stop the next, so a
+ *  gym whose day cannot be read still has its reminders sent, and the other way round.
+ *  Answers what they sent, and the first failure where there was one. */
+export async function sendInTurn(steps: readonly (() => Promise<number>)[]): Promise<{ sent: number; failed: boolean; first: unknown }> {
+  let sent = 0;
+  let failed = false;
+  let first: unknown = null;
+  for (const step of steps) {
+    try {
+      sent += await step();
+    } catch (err) {
+      if (!failed) first = err;
+      failed = true;
+    }
+  }
+  return { sent, failed, first };
+}
+
 /** Sends every automatic message that is due now. A gym that fails is logged and the
  *  rest still get theirs; the run then throws, so the job shows failed. `gymIds` is for
  *  tests on a shared database. */
@@ -86,11 +113,14 @@ export async function sendDueMessages(deps: SendMessagesDeps, opts: { now?: Date
   let sent = 0;
   const failed: string[] = [];
   for (const gymId of gymIds) {
-    try {
-      sent += await sendForGym(deps.sql, gymId, now);
-    } catch (err) {
+    // A gym that fails at both of its steps is logged once.
+    const day = deps.steps?.day ?? sendForGym;
+    const reminders = deps.steps?.reminders ?? sendRemindersForGym;
+    const gym = await sendInTurn([() => day(deps.sql, gymId, now), () => reminders(deps.sql, gymId, now)]);
+    sent += gym.sent;
+    if (gym.failed) {
       failed.push(gymId);
-      deps.log.error({ event: "member_messages.gym_failed", gymId, errName: err instanceof Error ? err.name : typeof err }, "member messages failed for a gym");
+      deps.log.error({ event: "member_messages.gym_failed", gymId, errName: gym.first instanceof Error ? gym.first.name : typeof gym.first }, "member messages failed for a gym");
     }
   }
   // Counts only: who was sent what is in the table, never in a log.
@@ -158,4 +188,15 @@ async function sendForGym(sql: Sql, gymId: string, now: Date): Promise<number> {
   // again, and so does one the gym's settings were saved under.
   if (everybody) await repo.markDayDone(sql, gymId, gym.today, stamp);
   return sent;
+}
+
+/** One gym's class reminders. Written with the gym's row held, from a read made under it,
+ *  so two runs at one instant take turns and the second finds the first's rows. */
+async function sendRemindersForGym(sql: Sql, gymId: string, now: Date): Promise<number> {
+  const first = await remindersForGym(sql, gymId, now);
+  if (first.length === 0) return 0;
+  return await sql.begin(async (tx) => {
+    await lockGym(tx, gymId);
+    return repo.insertMessages(tx, await remindersForGym(tx, gymId, now), now, GYM_MESSAGE_KEPT_DAYS);
+  });
 }
