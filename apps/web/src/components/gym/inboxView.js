@@ -79,12 +79,15 @@ export function groupSwitch(gym, on) {
   };
 }
 
-/** The member's own switches for the gym's automatic messages (ROADMAP 20b-i), one a kind
- *  they can switch off. `off`: the kinds the server says are off. */
+/** The member's own switches for the gym's automatic messages (ROADMAP 20b-i, 20b-ii), one a
+ *  kind they can switch off. `off`: the kinds the server says are off. */
 export function kindSwitches(gym, off) {
   const isOff = (kind) => Array.isArray(off) && off.includes(kind);
   const row = (kind, label, line) => ({ kind, label, on: !isOff(kind), line: isOff(kind) ? `Off. ${gym.name} won't send you this.` : line });
   return [
+    row('trial_check_in', GYM_MESSAGE_KIND_NAMES.trial_check_in, 'A message a day or two into a trial, asking how it is going.'),
+    row('trial_ending', GYM_MESSAGE_KIND_NAMES.trial_ending, 'A message shortly before a trial of yours ends.'),
+    row('membership_ending', GYM_MESSAGE_KIND_NAMES.membership_ending, 'A message shortly before a membership of yours ends.'),
     row('birthday', GYM_MESSAGE_KIND_NAMES.birthday, `A message from ${gym.name} on your birthday.`),
     row('milestone', GYM_MESSAGE_KIND_NAMES.milestone, 'A message when you reach a number of visits, like your 50th.'),
     row('miss_you', GYM_MESSAGE_KIND_NAMES.miss_you, "A message if you haven't been in for a while."),

@@ -141,7 +141,7 @@ describe('the Sent messages page', () => {
     orgService.getSentMessages.mockResolvedValue(answer([]));
     draw();
     const card = await screen.findByTestId('sent-automatic');
-    expect(card.textContent).toContain('The app also sends Welcome, Birthday, Visit milestone and We miss you by itself. Those are not listed here.');
+    expect(card.textContent).toContain('The app also sends 8 messages by itself, like Welcome, Membership ending and Birthday. Those are not listed here.');
     expect(within(card).getByRole('link', { name: 'Automatic messages' }).getAttribute('href')).toBe('/console/iron-house/settings#automatic-messages');
   });
 
