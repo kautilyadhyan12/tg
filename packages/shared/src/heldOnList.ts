@@ -234,9 +234,13 @@ export function heldLeftOn(input: HeldInput): string | null {
   if (last === undefined) return null;
   const { status, endsOn } = last.view;
   const usedUpOn = status === "ended" && last.membership.kind === "pack" && last.membership.classesLeft === 0 ? (last.usedUpOn ?? null) : null;
-  const day = usedUpOn !== null && (endsOn === null || usedUpOn < endsOn) ? usedUpOn : endsOn;
-  if (day === usedUpOn && usedUpOn !== null && usedUpOn >= input.today) return null;
-  return day !== null && day <= input.today ? day : input.today;
+  if (usedUpOn !== null) {
+    // The last class, or the pack's own last day where that comes first: a day that is
+    // stored, so it never moves. While it is today or still to come they have not left.
+    const day = endsOn !== null && endsOn < usedUpOn ? endsOn : usedUpOn;
+    return day >= input.today ? null : day;
+  }
+  return endsOn !== null && endsOn <= input.today ? endsOn : input.today;
 }
 
 /** A row's Membership cell: the first name, and how many more ("Gold Monthly +1"). */

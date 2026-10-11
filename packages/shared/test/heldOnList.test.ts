@@ -497,8 +497,11 @@ describe("the day Reports counts somebody as left", () => {
     expect(["2026-10-15", "2026-10-19", "2026-10-20"].map((on) => left(booked, on))).toEqual([null, null, null]);
     expect(["2026-10-21", "2026-11-02", "2027-01-05"].map((on) => left(booked, on))).toEqual(["2026-10-20", "2026-10-20", "2026-10-20"]);
     expect(heldOnList({ held: [booked], listedUnheld: null, today: "2026-10-15" })?.status).toBe("ended");
-    // A class dated after the pack's own last day does not move the day past it.
-    expect(left(pack("2026-12-30"), "2027-01-10")).toBe("2026-12-18");
+    // A class dated after the pack's own last day does not move the day past it, and the
+    // day does not move with today while that last day is still to come.
+    const late = pack("2026-12-30");
+    expect(["2026-11-02", "2026-12-18"].map((on) => left(late, on))).toEqual([null, null]);
+    expect(["2026-12-19", "2027-01-10"].map((on) => left(late, on))).toEqual(["2026-12-18", "2026-12-18"]);
     // Classes left: the last class says nothing, and it runs to its last day.
     expect(left(pack("2026-10-12", { classesLeft: 3 }), "2026-11-02")).toBeNull();
     expect(left(pack("2026-10-12", { classesLeft: 3 }), "2026-12-19")).toBe("2026-12-18");
