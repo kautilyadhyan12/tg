@@ -378,3 +378,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **21c, as first written (split 2026-10-11 into 21c-i and 21c-ii; its waiting time is dropped by the plan, spec Part 3 §16.9.1):**
 
    - 21c. [ ] **Somebody whose membership ended counts as left** (Kd, RULINGS 2026-10-10; Folder A, after 18a): for people who hold a membership in the app, Reports counts them as left once it has ended with no new one for a waiting time (30 days to start, the gym's to change); the Members list shows the same person as "Membership ended"; nobody is removed by it. Its plan reads Mindbody's and PushPress's pages first.
+
+**21c-i, as it stood when it was built (merged 2026-10-11, PR #220):**
+
+     - 21c-i. [ ] **A later date on the gym's list gives the next term** (§16.9.3): somebody whose membership from the gym's file has ended, and whose newer file gives a later date, is offered it again in the Memberships box, on staff's press; never a repeating one, one staff cancelled, or one still running. Risky.
