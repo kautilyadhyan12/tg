@@ -272,7 +272,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 20a-ii. [x] **The menu shows when a message is waiting** — merged 2026-10-09 (PR #209).
    - 20a-iii. [x] **Contact the gym** — merged 2026-10-09 (PR #210).
    - 20b. **The automatic messages and their switches** (Settings → Automatic messages; spec §16.2), split 2026-10-10 in three (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
-     - 20b-i. [ ] **Birthday, Visit milestone and We miss you, with the gym's switches and a member's own**: the gym's box in Settings (each message on or off, its number, one line of its own), the member's switches under their Inbox.
+     - 20b-i. [x] **Birthday, Visit milestone and We miss you, with the gym's switches and a member's own** — merged 2026-10-11 (PR #219).
      - 20b-ii. [ ] **Trial check-in, Trial ending, Membership ending and Payment overdue**: the four that read a person's membership and 18a's bills; each joins the gym's box, and the first three the member's switches.
      - 20b-iii. [ ] **Class reminder** (RULINGS 2026-10-08): so long before a booked class or session, the time the gym's to change.
    - 20c. **Leads** (split 2026-09-25 in three, RULINGS that day): the small list, and three follow-up EMAILS through 3b-i's checks, caps and unsubscribe.

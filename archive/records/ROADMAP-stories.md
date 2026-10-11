@@ -369,3 +369,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **20b, as first written (split 2026-10-10 into 20b-i, 20b-ii and 20b-iii):**
 
    - 20b. [ ] **The eight automatic messages and their switches** (Settings → Messages; every number the gym's; the gym's ONE own line, no links): Welcome · Trial check-in · Trial ending · We miss you · Membership ending · Payment overdue (after 18a) · Birthday · Milestone. **And a ninth (RULINGS 2026-10-08): Class reminder**, so long before a booked class or session, the time the gym's to change.
+
+**20b-i, as it stood when it was built (merged 2026-10-11, PR #219):**
+
+     - 20b-i. [ ] **Birthday, Visit milestone and We miss you, with the gym's switches and a member's own**: the gym's box in Settings (each message on or off, its number, one line of its own), the member's switches under their Inbox.
