@@ -203,9 +203,10 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
     trialCheckInDay: 2,
     trialEndingDays: 2,
     membershipEndingDays: 7,
+    classReminderHours: 2,
   };
-  /** What the box is told of a gym that checks nobody in, sells nothing and takes no payment. */
-  const UNUSED = { checkIn: false, trialOnList: false, priceList: false, payments: false, billsOverdueDays: 0 };
+  /** What the box is told of a gym that checks nobody in, sells nothing, takes no payment and has nothing to book. */
+  const UNUSED = { checkIn: false, trialOnList: false, priceList: false, payments: false, billsOverdueDays: 0, bookings: false };
   const withKind = (kind: string, change: { on?: boolean; ownLine?: string | null }, over: Partial<GymMessageSettingsRequest> = {}): GymMessageSettingsRequest => ({
     ...START,
     ...over,
@@ -737,9 +738,9 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       expect(await sql`SELECT 1 FROM gym_member_messages_off WHERE gym_id = ${gym.id}`).toHaveLength(0);
 
       // Off twice is off once; it is said in her inbox for this gym and not the other.
-      expect(JSON.parse((await switchOff(gym, maya, "birthday")).body)).toEqual({ off: ["birthday"] });
-      expect(JSON.parse((await switchOff(gym, maya, "birthday")).body)).toEqual({ off: ["birthday"] });
-      expect(JSON.parse((await switchOff(gym, maya, "miss_you")).body)).toEqual({ off: ["birthday", "miss_you"] });
+      expect(JSON.parse((await switchOff(gym, maya, "birthday")).body)).toEqual({ off: ["birthday"], groupMessages: true });
+      expect(JSON.parse((await switchOff(gym, maya, "birthday")).body)).toEqual({ off: ["birthday"], groupMessages: true });
+      expect(JSON.parse((await switchOff(gym, maya, "miss_you")).body)).toEqual({ off: ["birthday", "miss_you"], groupMessages: true });
       expect((await inbox(gym, maya)).off).toEqual(["birthday", "miss_you"]);
       expect((await inbox(other, maya)).off).toEqual([]);
       expect((await inbox(gym, maya)).groupMessages).toBe(true);
@@ -749,7 +750,7 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       expect(await got(gym)).toEqual([]);
       expect(await got(other)).toEqual([`${maya.userId} birthday`]);
       // Back on, it goes.
-      expect(JSON.parse((await switchOff(gym, maya, "birthday", true)).body)).toEqual({ off: ["miss_you"] });
+      expect(JSON.parse((await switchOff(gym, maya, "birthday", true)).body)).toEqual({ off: ["miss_you"], groupMessages: true });
       expect((await run([gym, other], minutes(NOON, 15))).sent).toBe(1);
       expect(await got(gym)).toEqual([`${maya.userId} birthday`]);
     },

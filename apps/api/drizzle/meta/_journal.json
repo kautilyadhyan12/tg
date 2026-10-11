@@ -671,7 +671,14 @@
       "idx": 95,
       "version": "7",
       "when": 1789344000096,
-      "tag": "0096_member_tidy",
+      "tag": "0096_class_reminder",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1789430400097,
+      "tag": "0097_member_tidy",
       "breakpoints": true
     }
   ]

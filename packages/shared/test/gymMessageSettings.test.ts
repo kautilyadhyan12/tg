@@ -13,6 +13,7 @@ import {
   type GymMessageFacts,
 } from "../src/gymMessages.js";
 import {
+  GYM_MESSAGE_MEMBER_SWITCH_GROUPS,
   GYM_MESSAGE_MEMBER_SWITCH_KINDS,
   GYM_MESSAGE_OWN_LINE_MAX,
   GYM_MESSAGE_SETTING_KINDS,
@@ -254,42 +255,46 @@ describe("what is kept, and the shapes", () => {
   it("a gym with no rows has the starting values; its rows change only their own kind", () => {
     expect(gymMessageSettingsFrom([])).toEqual({ on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, ownLines: {} });
     const set = gymMessageSettingsFrom([
-      { kind: "birthday", on: false, ownLine: "Cake at the desk", days: null, milestones: null },
-      { kind: "miss_you", on: true, ownLine: null, days: 21, milestones: null },
-      { kind: "milestone", on: true, ownLine: " ", days: null, milestones: [100, 10] },
-      { kind: "trial_check_in", on: true, ownLine: null, days: 3, milestones: null },
-      { kind: "trial_ending", on: false, ownLine: null, days: 1, milestones: null },
-      { kind: "membership_ending", on: true, ownLine: null, days: 14, milestones: null },
-      { kind: "payment_overdue", on: false, ownLine: null, days: 9, milestones: null },
+      { kind: "birthday", on: false, ownLine: "Cake at the desk", days: null, milestones: null, hours: null },
+      { kind: "miss_you", on: true, ownLine: null, days: 21, milestones: null, hours: null },
+      { kind: "milestone", on: true, ownLine: " ", days: null, milestones: [100, 10], hours: null },
+      { kind: "trial_check_in", on: true, ownLine: null, days: 3, milestones: null, hours: null },
+      { kind: "trial_ending", on: false, ownLine: null, days: 1, milestones: null, hours: null },
+      { kind: "membership_ending", on: true, ownLine: null, days: 14, milestones: null, hours: null },
+      { kind: "payment_overdue", on: false, ownLine: null, days: 9, milestones: null, hours: null },
+      { kind: "class_reminder", on: true, ownLine: null, days: null, milestones: null, hours: 24 },
     ]);
     expect(set.on).toEqual({ ...GYM_MESSAGE_STARTING_ON, birthday: false, trial_ending: false, payment_overdue: false });
     // A payment notice has no number of its own: it goes by the gym's grace period for bills.
-    expect(set.numbers).toEqual({ trialCheckInDay: 3, trialEndingDays: 1, missYouDays: 21, membershipEndingDays: 14, milestones: [10, 100] });
+    expect(set.numbers).toEqual({ trialCheckInDay: 3, trialEndingDays: 1, missYouDays: 21, membershipEndingDays: 14, milestones: [10, 100], classReminderHours: 24 });
     expect(set.ownLines).toEqual({ birthday: "Cake at the desk" });
   });
 
   it("a number that is not one is left at its start", () => {
     const set = gymMessageSettingsFrom([
-      { kind: "miss_you", on: true, ownLine: null, days: 0, milestones: null },
-      { kind: "milestone", on: true, ownLine: null, days: 5, milestones: [50, -1] },
-      { kind: "welcome", on: true, ownLine: null, days: 3, milestones: [1] },
-      { kind: "trial_check_in", on: true, ownLine: null, days: 0, milestones: null },
-      { kind: "trial_ending", on: true, ownLine: null, days: 1.5, milestones: null },
-      { kind: "membership_ending", on: true, ownLine: null, days: null, milestones: [7] },
+      { kind: "miss_you", on: true, ownLine: null, days: 0, milestones: null, hours: null },
+      { kind: "milestone", on: true, ownLine: null, days: 5, milestones: [50, -1], hours: null },
+      { kind: "welcome", on: true, ownLine: null, days: 3, milestones: [1], hours: null },
+      { kind: "trial_check_in", on: true, ownLine: null, days: 0, milestones: null, hours: null },
+      { kind: "trial_ending", on: true, ownLine: null, days: 1.5, milestones: null, hours: null },
+      { kind: "membership_ending", on: true, ownLine: null, days: null, milestones: [7], hours: null },
+      { kind: "class_reminder", on: true, ownLine: null, days: 24, milestones: null, hours: 0 },
+      { kind: "birthday", on: true, ownLine: null, days: null, milestones: null, hours: 12 },
     ]);
     expect(set.numbers).toEqual(GYM_MESSAGE_STARTING_NUMBERS);
   });
 
   it("a save names every kind once and only numbers on offer; a member's switch only a kind with one", () => {
     const messages = GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: true, ownLine: null }));
-    const ok = { messages, missYouDays: 14, milestones: [25, 250], trialCheckInDay: 3, trialEndingDays: 1, membershipEndingDays: 30 };
-    expect(messages.map((m) => m.kind)).toEqual(["welcome", "trial_check_in", "trial_ending", "membership_ending", "payment_overdue", "birthday", "milestone", "miss_you"]);
+    const ok = { messages, missYouDays: 14, milestones: [25, 250], trialCheckInDay: 3, trialEndingDays: 1, membershipEndingDays: 30, classReminderHours: 12 };
+    expect(messages.map((m) => m.kind)).toEqual(["welcome", "trial_check_in", "trial_ending", "membership_ending", "payment_overdue", "class_reminder", "birthday", "milestone", "miss_you"]);
     expect(gymMessageSettingsRequestSchema.safeParse(ok).success).toBe(true);
     const bad = [
       { ...ok, missYouDays: 12 },
       { ...ok, trialCheckInDay: 1 },
       { ...ok, trialEndingDays: 5 },
       { ...ok, membershipEndingDays: 10 },
+      { ...ok, classReminderHours: 4 },
       { ...ok, paymentOverdueDays: 3 },
       { ...ok, messages: [] },
       { ...ok, milestones: [25, 25] },
@@ -304,8 +309,16 @@ describe("what is kept, and the shapes", () => {
     const older = { messages: messages.filter((m) => ["welcome", "birthday", "milestone", "miss_you"].includes(m.kind)), missYouDays: 14, milestones: [25, 250] };
     expect(gymMessageSettingsRequestSchema.parse(older)).toEqual(older);
     for (const kind of GYM_MESSAGE_MEMBER_SWITCH_KINDS) expect(gymMessageSwitchRequestSchema.safeParse({ kind, on: false }).success).toBe(true);
-    expect([...GYM_MESSAGE_MEMBER_SWITCH_KINDS]).toEqual(["trial_check_in", "trial_ending", "membership_ending", "birthday", "milestone", "miss_you"]);
+    expect([...GYM_MESSAGE_MEMBER_SWITCH_KINDS]).toEqual(["trial_check_in", "trial_ending", "membership_ending", "class_reminder", "birthday", "milestone", "miss_you"]);
     for (const kind of ["welcome", "payment_overdue", "group", "x"]) expect(gymMessageSwitchRequestSchema.safeParse({ kind, on: false }).success, kind).toBe(false);
+    // The two switches a member is shown: every kind with a switch is in one group, and in one only.
+    const grouped = [...GYM_MESSAGE_MEMBER_SWITCH_GROUPS.membership, ...GYM_MESSAGE_MEMBER_SWITCH_GROUPS.news];
+    expect([...grouped].sort()).toEqual([...GYM_MESSAGE_MEMBER_SWITCH_KINDS].sort());
+    expect(new Set(grouped).size).toBe(grouped.length);
+    for (const group of ["membership", "news"]) expect(gymMessageSwitchRequestSchema.safeParse({ group, on: false }).success, group).toBe(true);
+    for (const body of [{ group: "payments", on: false }, { group: "news" }, { group: "news", kind: "birthday", on: true }, { on: true }]) {
+      expect(gymMessageSwitchRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(false);
+    }
   });
 
   it("an inbox from an older server, with no switches in it, reads as none off", () => {
