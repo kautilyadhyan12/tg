@@ -4875,6 +4875,23 @@ nothing until it ends. Measured for 2,100 people with the one word, before and a
 the thread busy 1.9 and 2.1 ms for the page's read, 23.0 and 24.6 ms for the box, 33.3
 and 31.3 ms for the press; the box's whole time 46.8 and 103.8 ms (the database's).
 
+**Changed at Kd's click-through, the same day (RULINGS 2026-10-11; CLAUDE.md §4, "A person
+finishes the task from the screen alone").** The task starts at the import, not on
+Memberships, and nothing there said a press was still needed. So: **the import's last
+screen says what is still to do about memberships**, a sentence and a button each, the
+renewals first ("Still to do · 2 members' 3 Months has ended, and your member list now
+shows a later end date for them. · Renew their memberships"), and people new on the list
+with a name already set up ("Give them 3 Months"); a name that is not set up is never
+nagged about there, since a gym may keep its memberships in other software. Somebody who
+may not open Memberships reads "The owner can do this on the Memberships page." The
+button opens Memberships with that box already open (`?give=<type>&name=<name>`, taken
+off the address once it has). **A box about a membership opens in that membership's own
+row, and what the press did is said in that row**, not under the whole list. **A box in
+which everybody is a renewal** is headed "Renew 3 Months for 2 people?", says why under
+its heading, and opens with its people ticked (the list's own later date is what says
+they renewed), so one question and one button are left; a box that also holds people who
+never had it stays as 17a-iii made it, nobody ticked. No server change.
+
 
 **Size: Risky** (it gives people memberships, which open "Payment due"; other people's
 data). Recommended Opus xhigh; if Kd's setting is high, say so in the plan's last line and

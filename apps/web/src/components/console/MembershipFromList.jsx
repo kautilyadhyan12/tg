@@ -6,6 +6,7 @@ import {
   againWords,
   archivedLine,
   asksPaid,
+  boxLabels,
   boxProblem,
   boxWords,
   chooserWords,
@@ -16,6 +17,7 @@ import {
   nameLine,
   packNote,
   paidQuestion,
+  renewLead,
   renewNote,
   startTicks,
   tieButton,
@@ -92,8 +94,9 @@ function Names({ preview, group }) {
 }
 
 /** Who gets the membership and who does not, before anybody is given it. `counted` is
- *  whether the list's name already counts as this type. */
-export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
+ *  whether the list's name already counts as this type. `inRow`: drawn inside its
+ *  membership type's own row, where it was opened from. */
+export function GiveBox({ preview, counted, busy, error, inRow = false, onGive, onCancel }) {
   const [ticks, setTicks] = useState(() => startTicks(preview));
   const [paid, setPaid] = useState(null);
   const [pressed, setPressed] = useState(false);
@@ -104,10 +107,13 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
   const question = paidQuestion(preview);
   const pack = packNote(preview);
   const renew = renewNote(preview);
+  const lead = renewLead(preview);
+  const labels = boxLabels(preview);
+  const Heading = inRow ? 'h3' : 'h2';
   const id = (name) => `membership-give-${name}-${preview.type.id}`;
   const boxRef = useRef(null);
 
-  // The box opens under the whole list of memberships: bring it to whoever opened it.
+  // The box may open a long way from the button that opened it: bring it into view.
   useEffect(() => {
     const box = boxRef.current;
     if (box && typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'nearest' });
@@ -118,14 +124,17 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
       ref={boxRef}
       role="group"
       aria-label={words.heading}
-      className="c-card p-5 md:p-6 flex flex-col gap-5"
-      style={{ borderColor: 'var(--accent)' }}
+      className={inRow ? 'rounded-[14px] p-4 md:p-5 flex flex-col gap-5' : 'c-card p-5 md:p-6 flex flex-col gap-5'}
+      style={inRow ? { background: 'var(--raise)', border: '1px solid var(--accent)' } : { borderColor: 'var(--accent)' }}
     >
-      <h2 className="c-h2">{words.heading}</h2>
+      <div className="flex flex-col gap-2">
+        <Heading className="c-h2">{words.heading}</Heading>
+        {lead !== null ? <p className="c-s14 c-t2 m-0">{lead}</p> : null}
+      </div>
 
       {groups.length > 0 ? (
         <div className="flex flex-col gap-3">
-          <p className="c-th m-0">Who gets it</p>
+          <p className="c-th m-0">{labels.gets}</p>
           {groups.map((g) => (
             <div key={g.key} className="flex flex-col gap-1">
               <label className="flex items-start gap-3 min-h-11 c-s15 c-t1">
@@ -138,7 +147,7 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
                 />
                 <span className="flex flex-col">
                   <span className="c-w6">{g.title}</span>
-                  <span className="c-s14 c-t2">{g.detail}</span>
+                  {g.detail !== null ? <span className="c-s14 c-t2">{g.detail}</span> : null}
                 </span>
               </label>
               <div className="pl-[30px]">
@@ -179,7 +188,7 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
 
       {out.length > 0 ? (
         <div className="flex flex-col gap-2">
-          <p className="c-th m-0">Who doesn&apos;t</p>
+          <p className="c-th m-0">{labels.not}</p>
           {out.map((line) => (
             <div key={line.key} className="flex flex-col gap-1">
               <p className="c-s14 c-t2 m-0">{line.text}</p>

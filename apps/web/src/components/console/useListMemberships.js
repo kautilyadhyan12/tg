@@ -15,6 +15,8 @@ export function useListMemberships(gymId, types) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
+  // The membership type the last press was about: what it did is said under that type's row.
+  const [at, setAt] = useState(null);
 
   const load = useCallback(
     (isLive = () => true) =>
@@ -44,6 +46,7 @@ export function useListMemberships(gymId, types) {
     setBusy(true);
     setError(null);
     setDone(null);
+    setAt(typeId);
     try {
       const res = await orgService.previewMembershipLink(gymId, { word, typeId });
       setPreview(res.data);
@@ -91,6 +94,8 @@ export function useListMemberships(gymId, types) {
     setBusy(true);
     setError(null);
     setDone(null);
+    // A name whose type was archived has no row of that type on the page.
+    setAt(word.link === null || word.link === undefined || word.link.typeArchived ? null : word.link.typeId);
     try {
       const res = await orgService.unlinkMembershipWord(gymId, { word: word.word });
       setWords(res.data.words);
@@ -110,5 +115,5 @@ export function useListMemberships(gymId, types) {
     setError(null);
   };
 
-  return { words, preview, busy, error, done, open, give, undo, closeBox };
+  return { words, preview, busy, error, done, at, open, give, undo, closeBox };
 }

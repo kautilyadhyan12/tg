@@ -185,15 +185,28 @@ export function groupNames(preview, group, shown) {
 const recurring = (preview) => preview.type.kind === 'recurring';
 const free = (preview) => preview.type.priceMinor === 0;
 
+/** Whether everybody the box can give the membership to held it before and is being
+ *  renewed: the box then says Renew, from its heading to its button. */
+export function isRenewal(preview) {
+  const { counts } = preview;
+  const can = counts.settled + counts.due + counts.ask;
+  return can > 0 && (counts.again ?? 0) === can;
+}
+
 /** The groups that get the membership, each with a tick: who they are and what each
  *  will read afterwards. Only groups with somebody in them. */
 export function giveGroups(preview) {
   const { counts } = preview;
+  const renewal = isRenewal(preview);
   const groups = [];
   if (counts.settled > 0) {
     groups.push({
       key: 'settled',
-      title: free(preview) ? `${people(counts.settled)} · nothing to pay` : `${people(counts.settled)} · paid up`,
+      title: renewal
+        ? `${people(counts.settled)} to renew · nothing to pay`
+        : free(preview)
+          ? `${people(counts.settled)} · nothing to pay`
+          : `${people(counts.settled)} · paid up`,
       detail: free(preview)
         ? `${preview.type.name} is free, so there is nothing to pay.`
         : 'Their renewal date in your list is still to come. Each keeps that date, and shows as paid until then.',
@@ -209,11 +222,12 @@ export function giveGroups(preview) {
   if (counts.ask > 0) {
     groups.push({
       key: 'ask',
-      title: `${people(counts.ask)} · your list doesn't say if they have paid`,
+      title: renewal ? `${people(counts.ask)} to renew` : `${people(counts.ask)} · your list doesn't say if they have paid`,
       detail: recurring(preview)
         ? 'Your list has no renewal date for them, so their membership starts today.'
-        : (counts.again ?? 0) === counts.ask
-          ? 'Each gets a new membership that ends on the date shown beside their name.'
+        : renewal
+          ? // Said once, under the box's heading.
+            null
           : 'Where your list has an end date for them they keep it; otherwise it starts today.',
     });
   }
@@ -257,11 +271,25 @@ export function paidQuestion(preview) {
   };
 }
 
-/** Somebody in the box had the membership before and it ended: why they are offered it
- *  again, or null. */
+/** The box's own labels over the people who get it and the people who do not. */
+export function boxLabels(preview) {
+  return isRenewal(preview) ? { gets: 'Who is renewed', not: "Who isn't" } : { gets: 'Who gets it', not: "Who doesn't" };
+}
+
+/** Under a renewal's heading: why these people, and what each gets. Null for any other box. */
+export function renewLead(preview) {
+  if (!isRenewal(preview)) return null;
+  const { name } = preview.type;
+  return preview.counts.again === 1
+    ? `This person's ${name} has ended, and your member list now shows a later end date for them. They get a new ${name} up to that date.`
+    : `Their ${name} has ended, and your member list now shows a later end date for them. Each gets a new ${name} up to the date beside their name.`;
+}
+
+/** Somebody in a box of new people had the membership before and it ended: why they are
+ *  offered it again, or null. A renewal's own box says it under its heading. */
 export function renewNote(preview) {
   const again = preview.counts.again ?? 0;
-  if (again === 0) return null;
+  if (again === 0 || isRenewal(preview)) return null;
   const { name } = preview.type;
   return again === 1
     ? `1 of these people had ${name} before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.`
@@ -281,7 +309,8 @@ export function packNote(preview) {
  *  who can get it is ticked. Where some already have it, the rest may have been left out
  *  on purpose: nobody is ticked, and staff tick who they mean. */
 export function startTicks(preview) {
-  const on = preview.counts.has === 0;
+  // A renewal is ticked too: the list's own later date is what says they renewed.
+  const on = preview.counts.has === 0 || isRenewal(preview);
   return { settled: on, due: on, ask: on };
 }
 
@@ -295,11 +324,9 @@ export function boxWords(preview, ticks, counted = false) {
   const same = preview.ownName;
   const anyone = preview.counts.settled + preview.counts.due + preview.counts.ask > 0;
   // Everybody who can get it had it before: the box is a renewal, and says so.
-  const renewal = anyone && (preview.counts.again ?? 0) === preview.counts.settled + preview.counts.due + preview.counts.ask;
+  const renewal = isRenewal(preview);
   const heading = renewal
-    ? same
-      ? `Renew ${name} for the people who have it on your member list?`
-      : `Renew ${name} for the people with ${quoted(preview.word)} on your member list?`
+    ? `Renew ${name} for ${people(preview.counts.again)}?`
     : same
       ? `Give ${name} to the people who have it on your member list?`
       : `Give ${name} to the people with ${quoted(preview.word)} on your member list?`;
@@ -331,6 +358,45 @@ export function linkBody(preview, ticks, paid) {
     digest: preview.digest,
     paid: asksPaid(preview, ticks) ? paid : null,
   };
+}
+
+/** After an import: what is left to do about the memberships the gym has set up, a
+ *  sentence and a button each, the renewals first. `words` are the list's membership
+ *  names as the server reads them now; `peopleWords` the gym's own word for its people.
+ *  Each step opens the box for that name on the Memberships page. */
+export function afterImportSteps(words, peopleWords) {
+  const steps = [];
+  const who = (n) => (n === 1 ? `1 ${peopleWords.person}` : `${n.toLocaleString('en')} ${peopleWords.people}`);
+  const tied = words.flatMap((w) => {
+    if (w.link !== null) return w.link.typeArchived ? [] : [{ w, typeId: w.link.typeId, typeName: w.link.typeName, own: w.link.ownName, waiting: w.link.waiting, again: w.link.again ?? 0 }];
+    return w.sameName === null ? [] : [{ w, typeId: w.sameName.typeId, typeName: w.sameName.typeName, own: true, waiting: w.sameName.waiting, again: w.sameName.again ?? 0 }];
+  });
+  for (const t of tied) {
+    if (t.again === 0) continue;
+    steps.push({
+      key: `renew-${t.typeId}-${t.w.word}`,
+      typeId: t.typeId,
+      word: t.w.word,
+      text:
+        t.again === 1
+          ? `1 ${peopleWords.person}'s ${t.typeName} has ended, and your ${peopleWords.person} list now shows a later end date for them.`
+          : `${t.again.toLocaleString('en')} ${peopleWords.people}' ${t.typeName} has ended, and your ${peopleWords.person} list now shows a later end date for them.`,
+      button: t.again === 1 ? 'Renew their membership' : 'Renew their memberships',
+    });
+  }
+  for (const t of tied) {
+    if (t.waiting === 0) continue;
+    steps.push({
+      key: `give-${t.typeId}-${t.w.word}`,
+      typeId: t.typeId,
+      word: t.w.word,
+      text: t.own
+        ? `${who(t.waiting)} ${t.waiting === 1 ? 'has' : 'have'} ${t.typeName} on your ${peopleWords.person} list, but it is not on their ${t.waiting === 1 ? 'page' : 'pages'} yet.`
+        : `${who(t.waiting)} ${t.waiting === 1 ? 'has' : 'have'} ${quoted(t.w.word)} on your ${peopleWords.person} list and ${t.waiting === 1 ? 'has' : 'have'} not been given ${t.typeName} yet.`,
+      button: `Give them ${t.typeName}`,
+    });
+  }
+  return steps;
 }
 
 /** What the press did, said back in one line. */

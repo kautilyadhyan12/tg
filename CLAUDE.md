@@ -204,6 +204,28 @@ fault was between pages. Every job that adds or changes a screen follows all fou
 - Before the job is called done the terminal walks it in the real browser as a gym made that
   day, from Overview to the new thing and back, pressing every button it added.
 
+**A person finishes the task from the screen alone (Kd, RULINGS 2026-10-11).** The app is
+used by people, not by the terminal that built it: staff do not know what the terminal
+knows. 21c-i shipped a row and a box that were tested hard and that nobody could find: Kd
+imported a file, read "Ended" beside people the file had just renewed, and thought he had
+broken it. Every job that adds or changes something a person DOES follows all five.
+- Name the task in the person's own words ("I import this month's file and my renewed
+  members are active") and do ALL of it in the real browser, from the page where the task
+  starts to its end, as somebody who has never seen the app, reading only the screen. Not
+  only the page the job touched.
+- Wherever they would have to know something the screen does not say (which page is next,
+  why a row reads as it does, that a press is still needed), the screen is missing a
+  sentence or a button, and the job adds it. Where the next step is on another page, the
+  page they are on says so, and its button opens the exact place, already on the right
+  thing.
+- A box opens under the thing that was pressed, and what happened is said in that same
+  place, in one sentence, when it is done.
+- Ask only what the app cannot know, once, in the step the person is in. What the app can
+  work out is already filled in or ticked.
+- The click-through is the proof. Kd's sheet names the task, the file or person to use and
+  what he should end up seeing. Every line that has to tell him which page to go to or
+  what to press next, because the screen does not, is a fault fixed before he is asked.
+
 **The console's look (Kd, RULINGS 2026-09-26).** Every console page follows spec Part 3
 §17: colours by name from `apps/web/src/components/console/console.css`, never written
 into a page; its `c-` building blocks; Archivo; both looks. A new console page, or a new

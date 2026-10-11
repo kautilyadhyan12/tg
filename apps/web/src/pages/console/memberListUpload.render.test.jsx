@@ -23,6 +23,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       confirmMemberList: vi.fn(),
       getMemberListMissing: vi.fn(),
       getMemberListLeavers: vi.fn(),
+      getMembershipWords: vi.fn(),
     },
   };
 });
@@ -1162,6 +1163,66 @@ describe('Import and its refusals', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('with a renewal waiting, the last screen says so and its button opens the box on Memberships', async () => {
+    const TERM = '55555555-5555-4555-8555-555555555555';
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ list: list({ changed: 3, unchanged: 27 }), mode: 'add' }) } });
+    onClose = vi.fn();
+    onImported = vi.fn();
+    const gym = { name: 'Iron House Gym', slug: 'iron-house', orgType: 'gym', staffRole: 'owner' };
+    render(
+      <MemoryRouter>
+        <MemberListUpload gymId={GYM} gym={gym} words={WORDS} readOnly={false} onClose={onClose} onImported={onImported} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste rows' }));
+    fireEvent.change(screen.getByLabelText('Paste your rows'), { target: { value: 'Name\tEmail\nAda\tada@members.example' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await screen.findByRole('heading', { name: 'Review' });
+    tickPermission();
+    orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer({ applied: list({ changed: 3, unchanged: 27 }) }) } });
+    orgService.getMembershipWords.mockResolvedValueOnce({
+      data: { words: [{ word: '3 Month Plan', people: 3, link: { typeId: TERM, typeName: '3 Months', typeArchived: false, waiting: 0, again: 2, ownName: false }, sameName: null }], types: [] },
+    });
+    fireEvent.click(importButton());
+    const done = within(await screen.findByTestId('member-import-done'));
+    expect(done.getByText('Your list is updated')).toBeTruthy();
+    const next = within(await screen.findByTestId('member-import-next'));
+    expect(next.getByText('Still to do')).toBeTruthy();
+    expect(next.getByText("2 members' 3 Months has ended, and your member list now shows a later end date for them.")).toBeTruthy();
+    const button = next.getByRole('link', { name: 'Renew their memberships' });
+    expect(button.getAttribute('href')).toBe(`/console/iron-house/memberships?give=${TERM}&name=3%20Month%20Plan`);
+    expect(orgService.getMembershipWords).toHaveBeenCalledWith(GYM);
+    // Its own button is the main one; Done still closes.
+    expect(done.getByRole('button', { name: 'Done' }).className).toContain('c-btn-s');
+  });
+
+  it('somebody who may not open Memberships reads who can, with no button; with nothing waiting nothing is added', async () => {
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ list: list({ changed: 3, unchanged: 27 }), mode: 'add' }) } });
+    onClose = vi.fn();
+    onImported = vi.fn();
+    // A trainer holds neither the price-list tick nor the owner's role.
+    const gym = { name: 'Iron House Gym', slug: 'iron-house', orgType: 'gym', staffRole: 'trainer', privileges: ['members.confirm'] };
+    render(
+      <MemoryRouter>
+        <MemberListUpload gymId={GYM} gym={gym} words={WORDS} readOnly={false} onClose={onClose} onImported={onImported} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste rows' }));
+    fireEvent.change(screen.getByLabelText('Paste your rows'), { target: { value: 'Name\tEmail\nAda\tada@members.example' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await screen.findByRole('heading', { name: 'Review' });
+    tickPermission();
+    orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer({ applied: list({ changed: 3, unchanged: 27 }) }) } });
+    orgService.getMembershipWords.mockResolvedValueOnce({
+      data: { words: [{ word: '3 Month Plan', people: 3, link: { typeId: '55555555-5555-4555-8555-555555555555', typeName: '3 Months', typeArchived: false, waiting: 0, again: 1, ownName: false }, sameName: null }], types: [] },
+    });
+    fireEvent.click(importButton());
+    const next = within(await screen.findByTestId('member-import-next'));
+    expect(next.getByText("1 member's 3 Months has ended, and your member list now shows a later end date for them.")).toBeTruthy();
+    expect(next.getByText('The owner can do this on the Memberships page.')).toBeTruthy();
+    expect(next.queryByRole('link')).toBeNull();
+  });
+
   it('an update says what changed', async () => {
     await reviewWith(preview({ list: list({ new: 3, changed: 6, unchanged: 30 }), mode: 'add' }));
     tickPermission();
@@ -1172,6 +1233,9 @@ describe('Import and its refusals', () => {
     const done = within(await screen.findByTestId('member-import-done'));
     expect(done.getByText('Your list is updated')).toBeTruthy();
     expect(done.getByText('3 new · 6 updated · 2 marked as past members')).toBeTruthy();
+    // Nothing waits (the names could not even be read): no "Still to do", and Done is the main button.
+    expect(screen.queryByTestId('member-import-next')).toBeNull();
+    expect(done.getByRole('button', { name: 'Done' }).className).toContain('c-btn-p');
   });
 
   it('a 409 hand_edits asks the second tick, and sends it', async () => {
