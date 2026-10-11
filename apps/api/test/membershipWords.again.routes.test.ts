@@ -7,7 +7,7 @@
 // clock does to one. Every claim about who was given what is read from the tables.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { addDays } from "@app/shared";
+import { HELD_LIVE_MAX, addDays } from "@app/shared";
 import type {
   GymMembershipTypesResponse,
   HeldMembershipsResponse,
@@ -221,6 +221,8 @@ d("a later date on the gym's list gives the next term: who is offered it again (
       const frozen = await addPerson(gymId, owner.cookies, "Fay Frozen", on("Term"));
       // A "lifetime" end date, further off than a membership can run: the box refuses the date.
       const lifetime = await addPerson(gymId, owner.cookies, "Liam Lifetime", on("Term"));
+      // As many memberships running as one person can have: the box has no room for another.
+      const full = await addPerson(gymId, owner.cookies, "Finn Full", on("Term"));
       const passed = await addPerson(gymId, owner.cookies, "Pia Passed", on("Term"));
       const gone = await addPerson(gymId, owner.cookies, "Gus Gone", on("Term"));
       const packUsed = await addPerson(gymId, owner.cookies, "Una Usedup", on("Pack"));
@@ -229,13 +231,18 @@ d("a later date on the gym's list gives the next term: who is offered it again (
       // A repeating one staff stopped at the end of what was paid, now over.
       const stopped = await addPerson(gymId, owner.cookies, "Sid Stopped", { membershipType: "Gold", endsOn: soon, endsOnKind: "renews" });
       const repeating = await addPerson(gymId, owner.cookies, "Rob Repeating", { membershipType: "Gold", endsOn: soon, endsOnKind: "renews" });
-      expect(await link(gymId, owner.cookies, "Term", term)).toBe(10);
+      expect(await link(gymId, owner.cookies, "Term", term)).toBe(11);
       expect(await link(gymId, owner.cookies, "Pack", pack)).toBe(3);
       expect(await link(gymId, owner.cookies, "Gold", gold)).toBe(2);
 
       // Forty days pass for everybody but Ruth: each of those memberships ended 30 days ago.
       const lastDay = addDays(today, -30);
-      for (const id of [renewed, unchanged, cancelled, twice, passed, gone, packOver, repeating, lifetime, stopped]) await daysPass(gymId, id, 40);
+      for (const id of [renewed, unchanged, cancelled, twice, passed, gone, packOver, repeating, lifetime, stopped, full]) await daysPass(gymId, id, 40);
+      await listNowSays(gymId, full, later);
+      for (let i = 0; i < HELD_LIVE_MAX; i += 1) {
+        const pass = await post(heldUrl(gymId, full), { requestKey: nextKey(), typeId: pack, startsOn: today, paid: true, method: "cash" }, owner.cookies);
+        expect(pass.statusCode, pass.body).toBe(201);
+      }
       // Fay's still runs, frozen today, and her list already shows a later date.
       await sql`UPDATE gym_held_memberships SET status = 'frozen', frozen_on = ${today}::date WHERE gym_id = ${gymId} AND entry_id = ${frozen}`;
       await listNowSays(gymId, frozen, later);
@@ -293,6 +300,7 @@ d("a later date on the gym's list gives the next term: who is offered it again (
         twice: groupOf(box, twice),
         frozen: groupOf(box, frozen),
         lifetime: groupOf(box, lifetime),
+        full: groupOf(box, full),
         passed: groupOf(box, passed),
         gone: groupOf(box, gone),
       }).toEqual({
@@ -305,10 +313,11 @@ d("a later date on the gym's list gives the next term: who is offered it again (
         twice: "has",
         frozen: "has",
         lifetime: "day again",
+        full: "full again",
         passed: "ended again",
         gone: null,
       });
-      expect(box.counts).toEqual({ settled: 0, due: 0, ask: 2, has: 6, full: 0, ended: 1, day: 1, again: 1, past: 1 });
+      expect(box.counts).toEqual({ settled: 0, due: 0, ask: 2, has: 6, full: 1, ended: 1, day: 1, again: 1, past: 1 });
       // The row's number is the box's: the people it can give it to again, and not the
       // two it names as renewals and refuses for their date.
       expect((await wordOf(gymId, owner.cookies, "Term")).link?.again).toBe(box.counts.again);
@@ -348,7 +357,7 @@ d("a later date on the gym's list gives the next term: who is offered it again (
       expect((JSON.parse(again.body) as { error: string }).error).toBe("membership_link_done");
       expect(await countOf(gymId)).toBe(before + 2);
       const after = await previewOf(gymId, owner.cookies, "Term", term);
-      expect(after.counts).toEqual({ settled: 0, due: 0, ask: 0, has: 8, full: 0, ended: 1, day: 1, again: 0, past: 1 });
+      expect(after.counts).toEqual({ settled: 0, due: 0, ask: 0, has: 8, full: 1, ended: 1, day: 1, again: 0, past: 1 });
       expect((JSON.parse((await press(gymId, owner.cookies, "Term", term, after.digest)).body) as MembershipLinkResponse).given).toBe(0);
       expect(await countOf(gymId)).toBe(before + 2);
       expect((await wordOf(gymId, owner.cookies, "Term")).link).toMatchObject({ waiting: 0, again: 0 });

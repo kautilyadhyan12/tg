@@ -398,6 +398,8 @@ export function renewalsWaiting(words, peopleWords) {
         typeId: t.typeId,
         word: t.w.word,
         title: one ? '1 membership can be renewed' : `${t.again.toLocaleString('en')} memberships can be renewed`,
+        // For a gym that can only read: the fact, and nothing it cannot do.
+        titleOff: one ? '1 membership has ended' : `${t.again.toLocaleString('en')} memberships have ended`,
         detail: t.waiting === 0 ? ended : `${ended} The same box also lists ${who(t.waiting)} who ${t.waiting === 1 ? 'has' : 'have'} never had ${t.typeName}.`,
         button: t.waiting > 0 ? 'See who can get it' : one ? 'Renew their membership' : 'Renew their memberships',
         ask: `The owner can renew ${one ? 'it' : 'them'} on the Memberships page.`,

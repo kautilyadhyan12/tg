@@ -260,6 +260,7 @@ describe("the member list's names are part of the gym's one list of memberships"
         typeId: TERM_ID,
         word: '3 Month Plan',
         title: '2 memberships can be renewed',
+        titleOff: '2 memberships have ended',
         detail: "These members' 3 Months memberships have ended, and your member list shows a later end date for them.",
         button: 'Renew their memberships',
         ask: 'The owner can renew them on the Memberships page.',
@@ -267,6 +268,7 @@ describe("the member list's names are part of the gym's one list of memberships"
     ]);
     expect(renewalsWaiting([linked({ again: 1 })], WORDS)[0]).toMatchObject({
       title: '1 membership can be renewed',
+      titleOff: '1 membership has ended',
       detail: "This member's 3 Months membership has ended, and your member list shows a later end date for them.",
       button: 'Renew their membership',
       ask: 'The owner can renew it on the Memberships page.',

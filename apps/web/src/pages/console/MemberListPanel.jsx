@@ -298,7 +298,7 @@ function RenewalsSign({ sign, to, off }) {
       <span className="c-glow-dot mt-[7px]" aria-hidden="true" />
       <div className="flex flex-col gap-1 flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="c-s15 c-w6">{sign.title}</span>
+          <span className="c-s15 c-w6">{off ? sign.titleOff : sign.title}</span>
           {to !== null && !off ? (
             <Link to={to} className="c-s14 c-w6 c-lk" data-testid="renewals-renew">
               {sign.button}

@@ -160,6 +160,8 @@ describe('the sign while a renewal waits', () => {
       </MemoryRouter>,
     );
     const sign = within(await screen.findByTestId('renewals-sign'));
+    expect(sign.getByText('2 memberships have ended')).toBeTruthy();
+    expect(sign.queryByText(/can be renewed/)).toBeNull();
     expect(sign.getByText("These members' 3 Months memberships have ended, and your member list shows a later end date for them.")).toBeTruthy();
     expect(sign.queryByRole('link')).toBeNull();
   });
