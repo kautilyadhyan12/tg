@@ -33,10 +33,14 @@ const nobody: Person = {
   bills: [],
   birthday: null,
   visits: 12,
+  recentVisitDays: 0,
   lastVisitOn: "2026-10-07",
+  lastSeenOn: "2026-10-07",
 };
+/** A gym that checked somebody in on every one of the last 400 days. */
+const EVERY_DAY = Array.from({ length: 400 }, (_, back) => new Date(Date.UTC(2026, 9, 9) - back * 86_400_000).toISOString().slice(0, 10));
 const facts = (person: Partial<Person> = {}, over: { gym?: Partial<GymMessageFacts["gym"]>; sent?: GymMessageFacts["sent"] } = {}): GymMessageFacts => ({
-  gym: { open: true, live: true, today: TODAY, hour: 12, on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, ...over.gym },
+  gym: { open: true, live: true, today: TODAY, hour: 12, on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, visitDays: EVERY_DAY, ...over.gym },
   person: { ...nobody, ...person },
   sent: over.sent ?? [],
 });
@@ -50,8 +54,8 @@ const DUE: Record<GymMessageKind, { person: Partial<Person>; occasion: string }>
   // Joined late on the 8th in UTC, which is the 9th on this gym's calendar.
   welcome: { person: { joinedOn: "2026-10-09", joinedUtcOn: "2026-10-08" }, occasion: "joined:2026-10-08" },
   birthday: { person: { birthday: "10-09" }, occasion: "birthday:2026" },
-  milestone: { person: { visits: 50, lastVisitOn: TODAY }, occasion: "visits:50" },
-  miss_you: { person: { lastVisitOn: "2026-09-29" }, occasion: "absent:2026-09-29" },
+  milestone: { person: { visits: 50, recentVisitDays: 1, lastVisitOn: TODAY }, occasion: "visits:50" },
+  miss_you: { person: { lastVisitOn: "2026-09-29", lastSeenOn: "2026-09-29" }, occasion: "absent:2026-09-29" },
 };
 
 /** Each reason not to send, as a change to the facts of a person who would be sent `kind`. */
@@ -177,26 +181,26 @@ describe("the occasions", () => {
   it("birthday: on the day, once a year; 29 February is kept on the 28th in a short year", () => {
     expect(kinds({ birthday: "10-10" })).toEqual([]);
     expect(gymMessageOccasions(facts({ birthday: "10-09" }))).toEqual([{ kind: "birthday", occasion: "birthday:2026" }]);
-    expect(kinds({ birthday: "02-29", lastVisitOn: null }, "2027-02-28")).toEqual(["birthday"]);
-    expect(kinds({ birthday: "02-29", lastVisitOn: null }, "2028-02-28")).toEqual([]);
-    expect(kinds({ birthday: "02-29", lastVisitOn: null }, "2028-02-29")).toEqual(["birthday"]);
+    expect(kinds({ birthday: "02-29", lastVisitOn: null, lastSeenOn: null }, "2027-02-28")).toEqual(["birthday"]);
+    expect(kinds({ birthday: "02-29", lastVisitOn: null, lastSeenOn: null }, "2028-02-28")).toEqual([]);
+    expect(kinds({ birthday: "02-29", lastVisitOn: null, lastSeenOn: null }, "2028-02-29")).toEqual(["birthday"]);
   });
 
   it("milestone: on the visit itself, today or yesterday; we miss you: once the gym's days have passed", () => {
-    expect(kinds({ visits: 50, lastVisitOn: "2026-10-08" })).toEqual(["milestone"]);
-    expect(kinds({ visits: 50, lastVisitOn: "2026-10-07" })).toEqual([]);
-    expect(kinds({ visits: 51, lastVisitOn: TODAY })).toEqual([]);
-    expect(kinds({ visits: 100, lastVisitOn: TODAY })).toEqual(["milestone"]);
-    expect(kinds({ lastVisitOn: "2026-09-30" })).toEqual([]);
-    expect(kinds({ lastVisitOn: "2026-09-29" })).toEqual(["miss_you"]);
+    expect(kinds({ visits: 50, recentVisitDays: 1, lastVisitOn: "2026-10-08" })).toEqual(["milestone"]);
+    expect(kinds({ visits: 50, recentVisitDays: 0, lastVisitOn: "2026-10-07" })).toEqual([]);
+    expect(kinds({ visits: 51, recentVisitDays: 1, lastVisitOn: TODAY })).toEqual([]);
+    expect(kinds({ visits: 100, recentVisitDays: 1, lastVisitOn: TODAY })).toEqual(["milestone"]);
+    expect(kinds({ lastSeenOn: "2026-09-30" })).toEqual([]);
+    expect(kinds({ lastSeenOn: "2026-09-29" })).toEqual(["miss_you"]);
     // Somebody who never came is not missed: there is no absence to count from.
-    expect(kinds({ visits: 0, lastVisitOn: null })).toEqual([]);
-    // One absence is one occasion, however long it lasts.
-    expect(gymMessageOccasions(facts({ lastVisitOn: "2026-06-01" }))).toEqual([{ kind: "miss_you", occasion: "absent:2026-06-01" }]);
+    expect(kinds({ visits: 0, lastVisitOn: null, lastSeenOn: null })).toEqual([]);
+    // One absence is one occasion, named by the day they were last seen.
+    expect(gymMessageOccasions(facts({ lastSeenOn: "2026-09-10" }))).toEqual([{ kind: "miss_you", occasion: "absent:2026-09-10" }]);
   });
 
   it("a day that is not a day gives no occasion, never a wrong one", () => {
-    expect(kinds({ joinedOn: "2026-13-45", membershipEndsOn: "soon", lastVisitOn: "2026-02-30", trial: { startsOn: "x", endsOn: "y" }, bills: [{ id: "b", dueOn: "", paid: false }] })).toEqual([]);
+    expect(kinds({ joinedOn: "2026-13-45", membershipEndsOn: "soon", lastVisitOn: "2026-02-30", lastSeenOn: "2026-02-30", trial: { startsOn: "x", endsOn: "y" }, bills: [{ id: "b", dueOn: "", paid: false }] })).toEqual([]);
     expect(kinds(DUE.welcome.person, "not-a-day")).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@
 // and `gym_member_messages_off` (spec Part 3 §16.8; ROADMAP 20f-i). It also writes each
 // person's copy into `gym_member_messages`, reads who holds one and removes the copies with
 // their message (20f-ii). Every statement names the gym.
-import { GYM_GROUP_MESSAGE_KIND } from "@app/shared";
+import { GYM_GROUP_MESSAGE_KIND, type GymInboxKind, type GymMessageKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -181,14 +181,28 @@ export async function groupMessagesOff(sql: SqlOrTx, gymId: string, userId: stri
 
 /** Sets the person's own switch. Asked twice it is set once. */
 export async function setGroupMessages(sql: SqlOrTx, gymId: string, userId: string, on: boolean, now: Date): Promise<void> {
+  await setKindSwitch(sql, gymId, userId, GYM_GROUP_MESSAGE_KIND, on, now);
+}
+
+/** Sets the person's own switch for one kind at this gym. Asked twice it is set once. */
+export async function setKindSwitch(sql: SqlOrTx, gymId: string, userId: string, kind: GymInboxKind, on: boolean, now: Date): Promise<void> {
   if (on) {
     await sql`
       DELETE FROM gym_member_messages_off
-      WHERE gym_id = ${gymId} AND user_id = ${userId} AND kind = ${GYM_GROUP_MESSAGE_KIND}`;
+      WHERE gym_id = ${gymId} AND user_id = ${userId} AND kind = ${kind}`;
     return;
   }
   await sql`
     INSERT INTO gym_member_messages_off (gym_id, user_id, kind, created_at)
-    VALUES (${gymId}, ${userId}, ${GYM_GROUP_MESSAGE_KIND}, ${now})
+    VALUES (${gymId}, ${userId}, ${kind}, ${now})
     ON CONFLICT (gym_id, user_id, kind) DO NOTHING`;
+}
+
+/** The automatic kinds the person has switched off at this gym. */
+export async function kindsOff(sql: SqlOrTx, gymId: string, userId: string): Promise<GymMessageKind[]> {
+  const rows = await sql<{ kind: GymMessageKind }[]>`
+    SELECT kind FROM gym_member_messages_off
+    WHERE gym_id = ${gymId} AND user_id = ${userId} AND kind <> ${GYM_GROUP_MESSAGE_KIND}
+    ORDER BY kind`;
+  return rows.map((row) => row.kind);
 }

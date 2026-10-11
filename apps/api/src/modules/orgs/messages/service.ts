@@ -7,11 +7,14 @@ import {
   GYM_INBOX_MAX,
   gymGroupMessagesSwitchResponseSchema,
   gymInboxResponseSchema,
+  gymMessageSwitchResponseSchema,
   markGymInboxReadResponseSchema,
   type GymContact,
   type GymGroupMessagesSwitchRequest,
   type GymGroupMessagesSwitchResponse,
   type GymInboxResponse,
+  type GymMessageSwitchRequest,
+  type GymMessageSwitchResponse,
   type MarkGymInboxReadRequest,
   type MarkGymInboxReadResponse,
 } from "@app/shared";
@@ -51,10 +54,11 @@ export async function getInbox(deps: MessagesDeps, userId: string, gymId: string
   if (!(await limit())) return null;
   const head = { gymId, gymName: reader.name, asOf: reader.now.toISOString() };
   if (reader.paused) return gymInboxResponseSchema.parse({ ...head, status: "paused", messages: [], unread: 0 });
-  const [rows, unread, off] = await Promise.all([
+  const [rows, unread, off, kindsOff] = await Promise.all([
     repo.inboxRows(deps.sql, gymId, userId, reader.now, GYM_INBOX_MAX),
     repo.unreadCount(deps.sql, gymId, userId, reader.now),
     groupRepo.groupMessagesOff(deps.sql, gymId, userId),
+    groupRepo.kindsOff(deps.sql, gymId, userId),
   ]);
   return gymInboxResponseSchema.parse({
     ...head,
@@ -63,6 +67,7 @@ export async function getInbox(deps: MessagesDeps, userId: string, gymId: string
     messages: rows.map((row) => ({ id: row.id, kind: row.kind, body: row.body, sentAt: row.sentAt.toISOString(), read: row.read })),
     unread,
     groupMessages: !off,
+    off: kindsOff,
   });
 }
 
@@ -92,4 +97,20 @@ export async function setGroupMessages(
   if (!(await limit())) return null;
   await groupRepo.setGroupMessages(deps.sql, gymId, userId, body.on, reader.now);
   return gymGroupMessagesSwitchResponseSchema.parse({ groupMessages: !(await groupRepo.groupMessagesOff(deps.sql, gymId, userId)) });
+}
+
+/** The member's own switch for one kind of this gym's automatic messages (ROADMAP 20b-i).
+ *  Off, the sender's rule holds that kind for them; what they were already sent stays. Set
+ *  twice it is set once. Answers every kind they have off here. */
+export async function setKindSwitch(
+  deps: MessagesDeps,
+  userId: string,
+  gymId: string,
+  body: GymMessageSwitchRequest,
+  limit: Limit,
+): Promise<GymMessageSwitchResponse | null> {
+  const reader = await forMember(deps, gymId, userId);
+  if (!(await limit())) return null;
+  await groupRepo.setKindSwitch(deps.sql, gymId, userId, body.kind, body.on, reader.now);
+  return gymMessageSwitchResponseSchema.parse({ off: await groupRepo.kindsOff(deps.sql, gymId, userId) });
 }

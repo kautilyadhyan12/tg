@@ -3,11 +3,14 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Loader2, MessageSquare, User, Users } from 'lucide-react';
 import { GYM_SENT_MESSAGES_KEPT_WORDS, MEMBER_NOTE_NO_AUTHOR_WORDS, orgWords } from '@app/shared';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import PlaceLink from '../../components/console/PlaceLink';
 import ScrollJump from '../../components/console/ScrollJump';
 import { orgService, errorText } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import { canRemoveMembers, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly } from './billingView';
+import { placeFor } from './consolePlaces';
+import { SENT_AUTOMATIC_ASK, SENT_AUTOMATIC_NOTE } from './messageSettingsView';
 import MemberListPerson from './MemberListPerson';
 import { Refusal, Sheet } from './MemberListTags';
 import { initialsOf, sentByDay, sentGoneWords, sentTime, sentToWords, sentTodayWords } from './memberListPeople';
@@ -222,6 +225,22 @@ export default function MembersSentMessages() {
           <Link to={back} className="c-btn c-btn-s c-btn-lg self-start">
             {`Back to ${words.people}`}
           </Link>
+        </section>
+      ) : null}
+
+      {/* The messages the app sends by itself are not on this list: said here, with the
+          button to their box in Settings, or who can for somebody who cannot open it
+          (Kd's click-through of 20b-i). */}
+      {may ? (
+        <section className="c-card px-4 py-3.5 md:px-5 flex flex-wrap items-center gap-x-4 gap-y-3" data-testid="sent-automatic">
+          <p className="c-s15 c-t1 m-0 flex-1 min-w-[220px]">{SENT_AUTOMATIC_NOTE}</p>
+          {placeFor(org.slug, privileges, 'messages') === null ? (
+            <span className="c-s14 c-t2">{SENT_AUTOMATIC_ASK}</span>
+          ) : (
+            <PlaceLink to={placeFor(org.slug, privileges, 'messages')} className="c-btn c-btn-soft c-btn-lg">
+              Automatic messages
+            </PlaceLink>
+          )}
         </section>
       ) : null}
 

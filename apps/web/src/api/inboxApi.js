@@ -1,4 +1,4 @@
-import { gymGroupMessagesSwitchResponseSchema, gymInboxResponseSchema, markGymInboxReadResponseSchema } from '@app/shared';
+import { gymGroupMessagesSwitchResponseSchema, gymInboxResponseSchema, gymMessageSwitchResponseSchema, markGymInboxReadResponseSchema } from '@app/shared';
 import authApi from './authApi';
 
 // A MEMBER'S INBOX FROM THEIR GYM (spec Part 3 §16.1; ROADMAP 20a). Every answer is read
@@ -29,4 +29,7 @@ export const inboxService = {
     readThrough(gymGroupMessagesSwitchResponseSchema, 'that switch', authApi.put(`${inboxPath(gymId)}/group-messages`, { on })).then(
       (data) => data.groupMessages,
     ),
+  /** The member's own switch for one kind of automatic message; answers every kind now off. */
+  setKindSwitch: (gymId, kind, on) =>
+    readThrough(gymMessageSwitchResponseSchema, 'that switch', authApi.put(`${inboxPath(gymId)}/switches`, { kind, on })).then((data) => data.off),
 };
