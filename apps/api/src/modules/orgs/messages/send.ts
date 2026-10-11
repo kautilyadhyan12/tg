@@ -81,6 +81,24 @@ function factsFor(gym: repo.GymNow, settings: GymMessageSettings, day: DayRead, 
   };
 }
 
+/** Runs one gym's steps each in its own turn: one that fails does not stop the next, so a
+ *  gym whose day cannot be read still has its reminders sent, and the other way round.
+ *  Answers what they sent, and the first failure where there was one. */
+export async function sendInTurn(steps: readonly (() => Promise<number>)[]): Promise<{ sent: number; failed: boolean; first: unknown }> {
+  let sent = 0;
+  let failed = false;
+  let first: unknown = null;
+  for (const step of steps) {
+    try {
+      sent += await step();
+    } catch (err) {
+      if (!failed) first = err;
+      failed = true;
+    }
+  }
+  return { sent, failed, first };
+}
+
 /** Sends every automatic message that is due now. A gym that fails is logged and the
  *  rest still get theirs; the run then throws, so the job shows failed. `gymIds` is for
  *  tests on a shared database. */
@@ -90,18 +108,13 @@ export async function sendDueMessages(deps: SendMessagesDeps, opts: { now?: Date
   let sent = 0;
   const failed: string[] = [];
   for (const gymId of gymIds) {
-    // Each in its own turn: a gym whose day cannot be read still has its reminders sent.
-    // A gym that fails at both is logged once.
-    let gymFailed = false;
-    for (const send of [sendForGym, sendRemindersForGym]) {
-      try {
-        sent += await send(deps.sql, gymId, now);
-      } catch (err) {
-        if (!gymFailed) deps.log.error({ event: "member_messages.gym_failed", gymId, errName: err instanceof Error ? err.name : typeof err }, "member messages failed for a gym");
-        gymFailed = true;
-      }
+    // A gym that fails at both of its steps is logged once.
+    const gym = await sendInTurn([() => sendForGym(deps.sql, gymId, now), () => sendRemindersForGym(deps.sql, gymId, now)]);
+    sent += gym.sent;
+    if (gym.failed) {
+      failed.push(gymId);
+      deps.log.error({ event: "member_messages.gym_failed", gymId, errName: gym.first instanceof Error ? gym.first.name : typeof gym.first }, "member messages failed for a gym");
     }
-    if (gymFailed) failed.push(gymId);
   }
   // Counts only: who was sent what is in the table, never in a log.
   if (sent > 0) deps.log.info({ event: "member_messages.sent", gyms: gymIds.length, sent }, "member messages sent");

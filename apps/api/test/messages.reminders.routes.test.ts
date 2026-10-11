@@ -70,6 +70,7 @@ d("the class reminder (real Postgres)", () => {
     await sql`DELETE FROM gym_trainers WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_class_bookings WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_schedules WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_class_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${mine})`;
@@ -114,9 +115,9 @@ d("the class reminder (real Postgres)", () => {
     owner: Person;
   }
   /** A gym in London on a plan, with no price list: anybody in its app can book. */
-  const makeGym = async (name: string): Promise<Gym> => {
+  const makeGym = async (name: string, timezone = "Europe/London"): Promise<Gym> => {
     const owner = await signedIn(`${name} Owner`);
-    const res = await inject("POST", "/v1/orgs", owner.cookies, { trainsHere: false, name, city: "Leeds", country: "GB", timezone: "Europe/London" });
+    const res = await inject("POST", "/v1/orgs", owner.cookies, { trainsHere: false, name, city: "Leeds", country: "GB", timezone });
     expect(res.statusCode, res.body).toBe(201);
     const id = (JSON.parse(res.body) as { org: { id: string } }).org.id;
     await sql`
@@ -273,6 +274,8 @@ d("the class reminder (real Postgres)", () => {
       const spin = await classAt(gym, "Spin", TODAY, 18, 0, 1);
       const bo = await member(gym, "Bo Has The Place");
       await book(gym, bo, spin);
+      // Spin is an online class, set by the calendar's own route.
+      expect((await inject("PUT", `/v1/orgs/${gym.id}/class-sessions/${spin}/online`, gym.owner.cookies, { online: true, onlineLink: null })).statusCode).toBe(200);
       const wim = await member(gym, "Wim Waits");
       await book(gym, wim, spin, "waitlisted");
 
@@ -332,8 +335,29 @@ d("the class reminder (real Postgres)", () => {
       expect((await inject("POST", `/v1/orgs/${gym.id}/member-pt/sessions/${umas}/cancel`, uma.cookies, { lateOk: false })).statusCode).toBe(200);
       const hal = await member(gym, "Hal Household");
       const hana = await member(gym, "Hana Household", hal.entryId);
-      const shared = await inject("POST", `/v1/orgs/${gym.id}/pt/appointments`, gym.owner.cookies, { requestKey: randomUUID(), trainerId: sam.userId, entryId: hal.entryId, localDate: TODAY, startMinute: 19 * 60, minutes: 60 });
-      expect(shared.statusCode, shared.body).toBe(200);
+      const staffBooks = async (trainer: Person, entryId: string, hour: number): Promise<string> => {
+        const res = await inject("POST", `/v1/orgs/${gym.id}/pt/appointments`, gym.owner.cookies, { requestKey: randomUUID(), trainerId: trainer.userId, entryId, localDate: TODAY, startMinute: hour * 60, minutes: 60 });
+        expect(res.statusCode, res.body).toBe(200);
+        const rows = await sql<{ id: string }[]>`
+          SELECT id FROM gym_pt_appointments WHERE gym_id = ${gym.id} AND trainer_user_id = ${trainer.userId} AND entry_id = ${entryId} AND status = 'booked' ORDER BY created_at DESC LIMIT 1`;
+        return rows[0]?.id ?? "";
+      };
+      await staffBooks(sam, hal.entryId, 19);
+      // Sam's own record booked with Sam: nobody is reminded of a session with themself.
+      const samsRecord = await record(gym, "Sam Trainer");
+      await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym.id}, ${sam.userId}, ${samsRecord}, '2026-01-01T00:00:00Z')`;
+      await staffBooks(sam, samsRecord, 17);
+      // With Tess: Pia's record is a former one, Dee's account is deleted, and staff cancel Vic's.
+      const tess = await trainerWith(gym, "Tess Trainer");
+      const pia = await member(gym, "Pia Former With A Session");
+      await bookSession(gym, pia, tess, 18);
+      await sql`UPDATE gym_member_list_entries SET former_at = ${clock} WHERE id = ${pia.entryId}`;
+      const dee = await member(gym, "Dee Deleted With A Session");
+      await bookSession(gym, dee, tess, 19);
+      await sql`UPDATE users SET status = 'deleted' WHERE id = ${dee.userId}`;
+      const vic = await member(gym, "Vic Cancelled By Staff");
+      const vics = await staffBooks(tess, vic.entryId, 17);
+      expect((await inject("POST", `/v1/orgs/${gym.id}/pt/appointments/${vics}/cancel`, gym.owner.cookies, { lateOk: false, giveBack: false })).statusCode).toBe(200);
 
       // Next door, a gym with the reminder switched off, and a gym on no plan.
       const ned = await member(next, "Ned Next Door");
@@ -349,7 +373,7 @@ d("the class reminder (real Postgres)", () => {
       const lea = await member(gym, "Lea Late");
       await book(gym, lea, yoga);
 
-      const people = { maya, cal, bo, wim, gia, ben, rex, mo, rem, fay, del, olga, eve, tia, uma, hal, hana, lea, ned, quinn, pam, sam };
+      const people = { maya, cal, bo, wim, gia, ben, rex, mo, rem, fay, del, olga, eve, tia, uma, hal, hana, lea, ned, quinn, pam, sam, tess, pia, dee, vic };
       const gyms = [gym, next, quiet, lapsed];
 
       // 15:49: nobody yet.
@@ -360,7 +384,7 @@ d("the class reminder (real Postgres)", () => {
       expect(both[0].sent + both[1].sent).toBe(4);
       expect((await run(gyms, at(TODAY, 16, 19))).sent).toBe(0);
       const first = [
-        "bo: Hi Bo, you're booked for Spin today at 18:00 at Remind Iron House. See you there.",
+        "bo: Hi Bo, you're booked for Spin today at 18:00 with Remind Iron House. It's an online class.",
         "maya: Hi Maya, you're booked for Yoga today at 18:00 at Remind Iron House. See you there.",
         "tia: Hi Tia, you have a personal training session with Sam today at 18:00 at Remind Iron House. See you there.",
       ];
@@ -384,6 +408,67 @@ d("the class reminder (real Postgres)", () => {
       for (const when of [at(TODAY, 19, 4), at(TODAY, 20, 49), at(TODAY, 23, 4), at(TOMORROW, 5, 4), at(TOMORROW, 8, 4)]) expect((await run(gyms, when)).sent, when.toISOString()).toBe(0);
       expect(await got(gym, people)).toEqual(third);
       expect(await got(next, people)).toHaveLength(1);
+    },
+    T,
+  );
+
+  it(
+    "an evening booking for the next morning is reminded, and a gym far from London, with a class from its own calendar, says its own day and time",
+    async () => {
+      // Booked at 19:00 for tomorrow's 09:30 and 06:00 classes, with the 2 hours a gym starts on.
+      const gym = await makeGym("Remind Evening Booking");
+      const ann = await member(gym, "Ann Evening");
+      clock = at(TODAY, 19);
+      await book(gym, ann, await classAt(gym, "Morning Yoga", TOMORROW, 9, 30));
+      await book(gym, ann, await classAt(gym, "Dawn Spin", TOMORROW, 6));
+      // The 06:00 class that same evening: nothing can go later. The 09:30 class at 08:00.
+      expect((await run([gym], at(TODAY, 19, 4))).sent).toBe(1);
+      for (const when of [at(TODAY, 20, 49), at(TOMORROW, 5, 4), at(TOMORROW, 7, 34)]) expect((await run([gym], when)).sent, when.toISOString()).toBe(0);
+      expect((await run([gym], at(TOMORROW, 8, 4))).sent).toBe(1);
+      expect((await run([gym], at(TOMORROW, 9, 19))).sent).toBe(0);
+      expect((await sentBy(gym)).map((row) => row.body)).toEqual([
+        "Hi Ann, you're booked for Dawn Spin tomorrow at 06:00 at Remind Evening Booking. See you there.",
+        "Hi Ann, you're booked for Morning Yoga today at 09:30 at Remind Evening Booking. See you there.",
+      ]);
+
+      // 24 hours picked, and she books 20 hours before: reminded 2 hours before, not at once and not never.
+      const long = await makeGym("Remind Day Before");
+      await saved(long, reminder({}, { classReminderHours: 24 }));
+      const bea = await member(long, "Bea Books Late");
+      clock = at(TODAY, 21);
+      await book(long, bea, await classAt(long, "Tea Time Yoga", TOMORROW, 17));
+      for (const when of [at(TOMORROW, 8, 4), at(TOMORROW, 14, 49)]) expect((await run([long], when)).sent, when.toISOString()).toBe(0);
+      expect((await run([long], at(TOMORROW, 15, 4))).sent).toBe(1);
+
+      // Honolulu, ten hours behind UTC: its 7 October runs into the 8th in UTC. A class every
+      // day at 18:00 and one at 00:30, made by the calendar's own routes at 09:00 there.
+      const hst = (day: string, hour: number, minute = 0): Date => new Date(new Date(`${day}T00:00:00Z`).getTime() + ((hour + 10) * 60 + minute) * 60_000);
+      const far = await makeGym("Remind Honolulu", "Pacific/Honolulu");
+      clock = hst(TODAY, 9);
+      const classOn = async (name: string, startMinute: number, day: string): Promise<string> => {
+        const made = await inject("POST", `/v1/orgs/${far.id}/classes`, far.owner.cookies, { name, minutes: 45, places: 20, colour: "blue" });
+        expect(made.statusCode, made.body).toBe(201);
+        const typeId = (await sql<{ id: string }[]>`SELECT id FROM gym_class_types WHERE gym_id = ${far.id} AND name = ${name}`)[0]?.id ?? "";
+        const slot = await inject("POST", `/v1/orgs/${far.id}/classes/${typeId}/repeats`, far.owner.cookies, { weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute, startsOn: TODAY, minutes: 45, places: 20, coachUserId: null });
+        expect(slot.statusCode, slot.body).toBe(201);
+        const rows = await sql<{ id: string }[]>`
+          SELECT id FROM gym_class_sessions WHERE gym_id = ${far.id} AND class_type_id = ${typeId} AND local_date = ${day}::date AND local_start_minute = ${startMinute}`;
+        expect(rows, `${name} on ${day}`).toHaveLength(1);
+        return rows[0]?.id ?? "";
+      };
+      const kai = await member(far, "Kai Far Away");
+      await book(far, kai, await classOn("Sunset Yoga", 18 * 60, TODAY));
+      await book(far, kai, await classOn("Midnight Stretch", 30, TOMORROW));
+      expect((await run([far], hst(TODAY, 15, 49))).sent).toBe(0);
+      expect((await run([far], hst(TODAY, 16, 4))).sent).toBe(1);
+      // 00:30 less 2 hours is 22:30, the night: from 18:00 that same evening.
+      expect((await run([far], hst(TODAY, 17, 49))).sent).toBe(0);
+      expect((await run([far], hst(TODAY, 18, 4))).sent).toBe(1);
+      expect((await run([far], hst(TODAY, 20, 49))).sent).toBe(0);
+      expect((await sentBy(far)).map((row) => row.body)).toEqual([
+        "Hi Kai, you're booked for Sunset Yoga today at 18:00 at Remind Honolulu. See you there.",
+        "Hi Kai, you're booked for Midnight Stretch tomorrow at 00:30 at Remind Honolulu. See you there.",
+      ]);
     },
     T,
   );

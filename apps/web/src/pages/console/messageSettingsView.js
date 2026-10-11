@@ -8,7 +8,10 @@ import {
   GYM_MESSAGE_OVERDUE_LATE_DAYS,
   GYM_MESSAGE_OVERDUE_WAIT_DAYS,
   GYM_MESSAGE_PAYMENTS_DAYS,
+  GYM_MESSAGE_DAY_ENDS_HOUR,
+  GYM_MESSAGE_DAY_STARTS_HOUR,
   GYM_MESSAGE_REMINDER_EVENING_HOUR,
+  GYM_MESSAGE_REMINDER_LATE_HOURS,
   GYM_MESSAGE_REMINDER_HOURS_CHOICES,
   GYM_MESSAGE_STARTING_NUMBERS,
   GYM_MESSAGE_TRIAL_CHECK_IN_CHOICES,
@@ -170,8 +173,14 @@ export function messageWhen(kind, orgType, use = {}) {
     return `Sent in the morning, ${overdueAfter(use.billsOverdueDays)}: by then the bill reads Overdue on a ${words.person}'s page, and it never goes sooner than ${String(GYM_MESSAGE_OVERDUE_WAIT_DAYS)} days after. One message covers every bill of theirs that is overdue that morning. Never for a bill that is paid, cancelled or refunded, a membership that is frozen, cancelled or over, a membership taken from your own list with no payment recorded for it here, or a bill more than ${String(GYM_MESSAGE_OVERDUE_LATE_DAYS)} days past that day. No amount is shown. A ${words.person} cannot switch this one off.`;
   }
   if (kind === 'class_reminder') {
-    const evening = reminderClock(GYM_MESSAGE_REMINDER_EVENING_HOUR * 60, use.clockFormat === '12h' ? '12h' : '24h');
-    return `Sent before a class or a personal training session a ${words.person} has booked, as long before it starts as you pick here. It names the class and its time, like "Yoga today at ${reminderClock(18 * 60, use.clockFormat === '12h' ? '12h' : '24h')}"; for personal training it names the trainer. Where that time falls at night, it is sent from ${evening} the evening before. Nobody on a waitlist gets it, and nobody who booked after that time. It is sent as well as any other message that day.`;
+    const at = (hour) => reminderClock(hour * 60, use.clockFormat === '12h' ? '12h' : '24h');
+    const hours = Number.isInteger(use.classReminderHours) ? use.classReminderHours : GYM_MESSAGE_STARTING_NUMBERS.classReminderHours;
+    const late = GYM_MESSAGE_REMINDER_LATE_HOURS;
+    const lateBooking =
+      hours > late
+        ? `Somebody who books, or gets a place from the waitlist, closer to the start than that is reminded ${String(late)} hours before instead; in the last ${String(late)} hours, they get none.`
+        : `Somebody who books, or gets a place from the waitlist, in the last ${hours === 1 ? 'hour' : `${String(hours)} hours`} before it starts gets none.`;
+    return `Sent before a class or a personal training session a ${words.person} has booked, as long before it starts as you pick here. It names the class and its time, like "Yoga today at ${at(18)}"; for personal training it names the trainer. None is sent at night, between ${at(GYM_MESSAGE_DAY_ENDS_HOUR)} and ${at(GYM_MESSAGE_DAY_STARTS_HOUR)}: one whose time falls then goes at ${at(GYM_MESSAGE_DAY_STARTS_HOUR)} that morning, or from ${at(GYM_MESSAGE_REMINDER_EVENING_HOUR)} the evening before for a class before ${at(GYM_MESSAGE_DAY_STARTS_HOUR + 1)}. ${lateBooking} Nobody still waiting for a place gets it. It is sent as well as any other message that day.`;
   }
   if (kind === 'welcome') return `Sent when somebody joins your ${words.it} in the app: within a quarter of an hour by day, and the next morning if they join at night. Not sent to your own staff.`;
   if (kind === 'birthday') return `Sent on a ${words.person}'s birthday, in the morning, when the date of birth is already on your Members list. Nobody gets one for 1 January or 31 December, or for a date that makes them under 18: lists often hold those when the real date is not known.`;

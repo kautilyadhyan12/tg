@@ -4535,12 +4535,28 @@ member's own switch. Migration `0096`: the kind in the three lists of kinds, `ho
   night. It is NOT one of the day's: it goes whatever else the person was sent that day,
   and the day's one message still goes after a reminder.
 - **When:** from the gym's number of hours before the start (1 · 2 · 3 · 12 · 24, 2 to
-  start; `classReminderHours`) up to the start. Where that time falls in the night (21:00
-  to 08:00) it goes from 18:00 the evening before (`classReminderFrom`), and in the morning
-  if that was missed. Somebody who got their place after the reminder's time gets none:
-  they have only just been told when it is. The sender reads, at each of its four runs an
-  hour, the gym's bookings that start in the next 48 hours (`messages/reminders.ts`,
-  `remindersRepo.ts`), and writes with the gym's row held from a second read under it.
+  start; `classReminderHours`) up to the start. None is sent at night (21:00 to 08:00), so
+  a time that falls then is moved (`classReminderFrom`; round one, H1 and L1): from 21:00
+  on, to 18:00 that same evening; in the small hours, to 08:00 that morning where the class
+  is still at least an hour after it (09:00 or later), and otherwise to 18:00 the evening
+  before. So 24 hours before Friday's 07:30 class goes on Thursday at 08:00, and 2 hours
+  before a 06:00 class goes the evening before.
+- **Somebody who gets their place late** (books, or claims one from the waitlist): the
+  notice that counts is the first they were in time for (`classReminderNotices`): the gym's
+  own, and, where that is more than 2 hours, 2 hours (`GYM_MESSAGE_REMINDER_LATE_HOURS`).
+  In time means before that long ahead of the start, or before the reminder's own first
+  minute where that is later. So booked at 19:00 for tomorrow's 09:30 is reminded at 08:00;
+  booked at 19:00 for tomorrow's 06:00 is reminded that evening; with 24 hours picked,
+  booked 20 hours before is reminded 2 hours before; and a gym that raises its hours loses
+  nobody. Somebody who got their place inside the last notice gets none: they have only
+  just been told when it is.
+- **The sender** reads, at each of its four runs an hour, the gym's bookings that can be
+  due: those starting within `classReminderLookAheadHours` (16 hours for 1, 2 or 3 picked,
+  19 for 12, 31 for 24; an hour of each is for the night the clocks go back)
+  (`messages/reminders.ts`, `remindersRepo.ts`), and writes with the gym's row held from a
+  second read under it. It looks up, among what was already sent, only the reminders that
+  would otherwise go now. A trainer whose own record a session is booked on is not reminded
+  of themself.
 - **Once:** its occasion is the booking and its start (`class:<id>:<day>:<minute>`,
   `session:…`), so a second run writes nothing, and a class the gym moves after its
   reminder is reminded of again at its new time.
@@ -4554,17 +4570,18 @@ member's own switch. Migration `0096`: the kind in the three lists of kinds, `ho
   offers personal training, no session to come: `bookings` on the settings read) is told
   on the row, with a button to Classes, or who can add one.
 - **A gym that fails** at its day's read still has its reminders sent, and the other way
-  round; it is logged once.
+  round (`sendInTurn`); it is logged once.
 - **A member is shown two switches, not eight** (Kd's click-through, RULINGS 2026-10-11):
   **About your membership and bookings** (Trial ending, Membership ending, Class reminder)
   and **News and greetings from {gym}** (the messages to many people of 16.8, Trial
   check-in, Birthday, Visit milestone, We miss you); each says in a sentence what is in it.
-  A switch is on only while everything in it is, and a press sets the whole group in one
-  statement (`PUT …/inbox/switches` with `group`: `membership` or `news`;
+  A switch is on only while everything in it is; with only part of it off (one kind set by
+  the older call) it reads "Some of these are off. Press to get them all." A press sets the
+  whole group in one statement (`PUT …/inbox/switches` with `group`: `membership` or `news`;
   `GYM_MESSAGE_MEMBER_SWITCH_GROUPS`). The route still takes one `kind`, and the table still
   keeps a row a kind. A payment notice has no switch, as before.
-- **Save in the gym's box stays in view** once something in it changed, and "Saved." is
-  said there (`c-save-stuck`).
+- **Save in the gym's box stays in view** once something in it changed, and "Saved.", a
+  save that failed, and the row and reason that stop a save are said there (`c-save-stuck`).
 
 ### 16.3 Leads
 

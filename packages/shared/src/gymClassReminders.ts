@@ -12,17 +12,25 @@ import type { GymClockFormat } from "./orgs.js";
 
 /** How long before it starts a reminder goes, in hours: picked, never typed. */
 export const GYM_MESSAGE_REMINDER_HOURS_CHOICES = [1, 2, 3, 12, 24] as const;
-/** A reminder whose time falls in the night goes from this hour of the evening before. */
+/** A reminder whose time falls late in the evening, or before an early class, goes from
+ *  this hour of the evening. */
 export const GYM_MESSAGE_REMINDER_EVENING_HOUR = 18;
+/** A reminder whose time falls in the small hours waits for the morning's first hour where
+ *  the class is still at least this many minutes after it. */
+export const GYM_MESSAGE_REMINDER_MORNING_MINUTES = 60;
+/** Somebody who got their place closer to the start than the gym's own number of hours is
+ *  reminded this many hours before instead, where the gym's number is longer. */
+export const GYM_MESSAGE_REMINDER_LATE_HOURS = 2;
 /** The longest a reminder's number of hours can be. */
 export const GYM_MESSAGE_REMINDER_LOOK_AHEAD_HOURS = 48;
-/** The most a reminder is brought forward from the night: 08:00 back to 18:00 the evening before. */
-export const GYM_MESSAGE_REMINDER_NIGHT_HOURS = 24 - GYM_MESSAGE_REMINDER_EVENING_HOUR + GYM_MESSAGE_DAY_STARTS_HOUR;
 /** How far ahead the sender reads bookings, in hours, for a gym that reminds `hours`
- *  before: nothing that starts later can be due yet. */
+ *  before: nothing that starts later can be due yet. A reminder is brought forward by six
+ *  hours at most from the late evening (23:59 to 18:00), and to 18:00 the evening before
+ *  only for a class before 09:00 (fifteen hours at most); and one hour more, for the night
+ *  the clocks go back, when the gym's clock and the real hours differ by one. */
 export function classReminderLookAheadHours(hours: number): number {
   const notice = Number.isInteger(hours) && hours >= 1 ? Math.min(hours, GYM_MESSAGE_REMINDER_LOOK_AHEAD_HOURS) : 1;
-  return notice + GYM_MESSAGE_REMINDER_NIGHT_HOURS;
+  return Math.max(notice + (24 - GYM_MESSAGE_REMINDER_EVENING_HOUR), 24 - GYM_MESSAGE_REMINDER_EVENING_HOUR + GYM_MESSAGE_DAY_STARTS_HOUR + GYM_MESSAGE_REMINDER_MORNING_MINUTES / 60) + 1;
 }
 
 export type ClassReminderWhat = "class" | "session";
@@ -104,23 +112,40 @@ export function classReminderOccasion(booking: Pick<ClassReminderFacts["booking"
   return `${booking.what}:${booking.id}:${booking.day}:${String(booking.startMinute)}`;
 }
 
-/** The first minute a reminder may go, as a count of minutes: `hours` before the start, or,
- *  where that falls in the night, the evening before it. Null for a start or a number that
- *  cannot be read. */
+/** The first minute a reminder may go, as a count of minutes, for a notice of `hours`:
+ *  that long before the start, by day. Where that falls in the night it is moved to a time
+ *  somebody is awake at:
+ *  - late in the evening (21:00 on): 18:00 that same evening;
+ *  - in the small hours, with the class at least an hour after 08:00: 08:00 that morning;
+ *  - in the small hours before an early class: 18:00 the evening before.
+ *  Null for a start or a number that cannot be read. */
 export function classReminderFrom(day: string, startMinute: number, hours: number): number | null {
   const start = clockMinutes(day, startMinute);
   if (start === null || !Number.isInteger(hours) || hours < 1 || hours > GYM_MESSAGE_REMINDER_LOOK_AHEAD_HOURS) return null;
-  const ideal = start - hours * 60;
-  const dayOf = Math.floor(ideal / DAY_MINUTES);
-  const minuteOf = ideal - dayOf * DAY_MINUTES;
+  const plain = start - hours * 60;
+  const dayOf = Math.floor(plain / DAY_MINUTES);
+  const minuteOf = plain - dayOf * DAY_MINUTES;
   const evening = GYM_MESSAGE_REMINDER_EVENING_HOUR * 60;
+  const morning = dayOf * DAY_MINUTES + GYM_MESSAGE_DAY_STARTS_HOUR * 60;
   if (minuteOf >= GYM_MESSAGE_DAY_ENDS_HOUR * 60) return dayOf * DAY_MINUTES + evening;
-  if (minuteOf < GYM_MESSAGE_DAY_STARTS_HOUR * 60) return (dayOf - 1) * DAY_MINUTES + evening;
-  return ideal;
+  if (minuteOf >= GYM_MESSAGE_DAY_STARTS_HOUR * 60) return plain;
+  if (start >= morning + GYM_MESSAGE_REMINDER_MORNING_MINUTES) return morning;
+  return (dayOf - 1) * DAY_MINUTES + evening;
+}
+
+/** The notices a gym that picked `hours` reminds by, the gym's own first: somebody who got
+ *  their place too late for it is reminded `GYM_MESSAGE_REMINDER_LATE_HOURS` before instead. */
+export function classReminderNotices(hours: number): number[] {
+  return hours > GYM_MESSAGE_REMINDER_LATE_HOURS ? [hours, GYM_MESSAGE_REMINDER_LATE_HOURS] : [hours];
 }
 
 /** THE RULE: is this booking reminded of now? Run again with what it sent, it sends nothing.
- *  A fact that cannot be read sends nothing. */
+ *  A fact that cannot be read sends nothing.
+ *
+ *  Its time is the first notice the person got their place in time for: before that long
+ *  ahead of the start, or before the reminder's own first minute where that is later.
+ *  Somebody who got their place inside the last notice has only just been told when it is,
+ *  and gets none. */
 export function classReminderDue(facts: ClassReminderFacts): ClassReminderDue {
   const { gym, person, booking } = facts;
   const held = (reason: ClassReminderHeldReason): ClassReminderDue => ({ send: false, reason });
@@ -133,13 +158,19 @@ export function classReminderDue(facts: ClassReminderFacts): ClassReminderDue {
   if (booking.classStatus !== "scheduled") return held("class_cancelled");
   const now = clockMinutes(gym.today, gym.minute);
   const start = clockMinutes(booking.day, booking.startMinute);
-  const from = classReminderFrom(booking.day, booking.startMinute, gym.hours);
   const bookedAt = clockMinutes(booking.bookedDay, booking.bookedMinute);
-  if (now === null || start === null || from === null || bookedAt === null) return held("unreadable");
+  if (now === null || start === null || bookedAt === null || classReminderFrom(booking.day, booking.startMinute, gym.hours) === null) return held("unreadable");
   if (now >= start) return held("started");
+  let from: number | null = null;
+  for (const hours of classReminderNotices(gym.hours)) {
+    const first = classReminderFrom(booking.day, booking.startMinute, hours);
+    if (first !== null && bookedAt <= Math.max(first, start - hours * 60)) {
+      from = first;
+      break;
+    }
+  }
+  if (from === null) return held("booked_late");
   if (now < from) return held("too_early");
-  // Somebody who booked after its reminder's time has only just been told when it is.
-  if (bookedAt > from) return held("booked_late");
   const occasion = classReminderOccasion(booking);
   if (facts.sent.includes(occasion)) return held("already_sent");
   if (gym.minute < GYM_MESSAGE_DAY_STARTS_HOUR * 60 || gym.minute >= GYM_MESSAGE_DAY_ENDS_HOUR * 60) return held("night");

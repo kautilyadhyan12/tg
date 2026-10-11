@@ -75,8 +75,13 @@ export const INBOX_NOTE = `Messages stay here for ${GYM_MESSAGE_KEPT_DAYS} days.
 export function memberSwitches(gym, off, groupMessages) {
   const isOff = (kind) => Array.isArray(off) && off.includes(kind);
   const it = orgWords(gym.orgType).itToMembers;
-  const membershipOn = GYM_MESSAGE_MEMBER_SWITCH_GROUPS.membership.every((kind) => !isOff(kind));
-  const newsOn = groupMessages !== false && GYM_MESSAGE_MEMBER_SWITCH_GROUPS.news.every((kind) => !isOff(kind));
+  const membership = GYM_MESSAGE_MEMBER_SWITCH_GROUPS.membership.map((kind) => !isOff(kind));
+  const news = [groupMessages !== false, ...GYM_MESSAGE_MEMBER_SWITCH_GROUPS.news.map((kind) => !isOff(kind))];
+  const membershipOn = membership.every(Boolean);
+  const newsOn = news.every(Boolean);
+  // Only part of a group off (set one kind at a time, before there were two switches): the
+  // switch reads off, and says that some still come.
+  const SOME = 'Some of these are off. Press to get them all.';
   return [
     {
       group: 'membership',
@@ -84,7 +89,9 @@ export function memberSwitches(gym, off, groupMessages) {
       on: membershipOn,
       line: membershipOn
         ? 'A message before a trial or a membership of yours ends, and a reminder before a class or a personal training session you booked.'
-        : `Off. ${gym.name} won't send you these. A message about a payment you owe is still sent.`,
+        : membership.some(Boolean)
+          ? SOME
+          : `Off. ${gym.name} won't send you these. A message about a payment you owe is still sent.`,
     },
     {
       group: 'news',
@@ -92,7 +99,9 @@ export function memberSwitches(gym, off, groupMessages) {
       on: newsOn,
       line: newsOn
         ? `Messages the ${it} sends to many people at once, like a closed day or a new class, and its greetings: how your trial is going, your birthday, a number of visits you reach, and a note if you haven't been in for a while.`
-        : `Off. You won't get these. Messages about your own membership and bookings still come if that switch is on.`,
+        : news.some(Boolean)
+          ? SOME
+          : `Off. You won't get these. Messages about your own membership and bookings still come if that switch is on.`,
     },
   ];
 }

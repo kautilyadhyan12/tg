@@ -319,6 +319,8 @@ describe("the member's two switches", () => {
       [{ off: ['birthday'] }, 'true', 'false'],
       [{ groupMessages: false }, 'true', 'false'],
       [{ off: ['trial_ending', 'miss_you'], groupMessages: false }, 'false', 'false'],
+      // The news alone back on by the older call, the greetings still off.
+      [{ off: ['trial_check_in', 'birthday', 'milestone', 'miss_you'], groupMessages: true }, 'true', 'false'],
       // A server too old to say anything: both on.
       [{}, 'true', 'true'],
     ];
@@ -334,6 +336,9 @@ describe("the member's two switches", () => {
     render(<Page />);
     await openSwitches();
     await waitFor(() => expect(news().getAttribute('aria-checked')).toBe('false'));
+    // Only part of it is off, so it does not say she gets none of them.
+    expect(news().textContent).toBe('News and greetings from Iron HouseSome of these are off. Press to get them all.');
+    expect(membership().textContent).toBe(MEMBERSHIP_ON);
     svc.setSwitchGroup.mockResolvedValue({ off: [], groupMessages: true });
     fireEvent.click(news());
     await waitFor(() => expect(news().getAttribute('aria-checked')).toBe('true'));

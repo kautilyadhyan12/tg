@@ -271,7 +271,10 @@ describe('the class reminder', () => {
     await loaded();
     expect(preview('class_reminder')).toBe("Hi [member's first name], you're booked for [the class's name] [its day and time] at Iron House. See you there.");
     const row = within(box('Class reminder'));
-    expect(row.getByText(/^Sent before a class or a personal training session a member has booked, as long before it starts as you pick here\. It names the class and its time, like "Yoga today at 18:00"; for personal training it names the trainer\. Where that time falls at night, it is sent from 18:00 the evening before\. Nobody on a waitlist gets it, and nobody who booked after that time\. It is sent as well as any other message that day\.$/)).toBeTruthy();
+    const WHEN =
+      'Sent before a class or a personal training session a member has booked, as long before it starts as you pick here. It names the class and its time, like "Yoga today at 18:00"; for personal training it names the trainer. None is sent at night, between 21:00 and 08:00: one whose time falls then goes at 08:00 that morning, or from 18:00 the evening before for a class before 09:00. ';
+    const REST = ' Nobody still waiting for a place gets it. It is sent as well as any other message that day.';
+    expect(row.getByText(`${WHEN}Somebody who books, or gets a place from the waitlist, in the last 2 hours before it starts gets none.${REST}`)).toBeTruthy();
     const pick = row.getByLabelText('Hours before it starts');
     expect(pick.value).toBe('2');
     expect([...pick.options].map((o) => o.textContent)).toEqual(['1 hour', '2 hours', '3 hours', '12 hours', '24 hours']);
@@ -279,7 +282,11 @@ describe('the class reminder', () => {
     // Nothing is sent before Save.
     // Save is at the end of nine rows: it stays in view only once something changed.
     expect(screen.getByTestId('message-settings-save').className).not.toContain('c-save-stuck');
+    // What a late booking gets follows the hours picked, as the sender's rule has it.
+    fireEvent.change(pick, { target: { value: '1' } });
+    expect(row.getByText(`${WHEN}Somebody who books, or gets a place from the waitlist, in the last hour before it starts gets none.${REST}`)).toBeTruthy();
     fireEvent.change(pick, { target: { value: '24' } });
+    expect(row.getByText(`${WHEN}Somebody who books, or gets a place from the waitlist, closer to the start than that is reminded 2 hours before instead; in the last 2 hours, they get none.${REST}`)).toBeTruthy();
     expect(updateMessageSettings).not.toHaveBeenCalled();
     expect(screen.getByText('Not saved yet.')).toBeTruthy();
     expect(screen.getByTestId('message-settings-save').className).toContain('c-save-stuck');
@@ -296,7 +303,25 @@ describe('the class reminder', () => {
     getMessageSettings.mockResolvedValue({ data: START });
     draw({ ...ORG, clockFormat: '12h' });
     await loaded();
-    expect(within(box('Class reminder')).getByText(/like "Yoga today at 6:00 PM".*sent from 6:00 PM the evening before/)).toBeTruthy();
+    expect(within(box('Class reminder')).getByText(/like "Yoga today at 6:00 PM".*between 9:00 PM and 8:00 AM: one whose time falls then goes at 8:00 AM that morning, or from 6:00 PM the evening before for a class before 9:00 AM\./)).toBeTruthy();
+  });
+
+  it('what stops a save, and a save that failed, are said where Save is', async () => {
+    getMessageSettings.mockResolvedValue({ data: START });
+    draw();
+    await loaded();
+    const bar = () => within(screen.getByTestId('message-settings-save'));
+    expect(bar().queryByRole('alert')).toBeNull();
+    // A web address in the first row's line: Save is greyed, and its row says which and why.
+    fireEvent.change(line('Welcome'), { target: { value: 'See www.ironhouse.com' } });
+    expect(save().disabled).toBe(true);
+    expect(bar().getByRole('alert').textContent).toBe(`Welcome: ${GYM_MESSAGE_OWN_LINE_WORDS.link}`);
+    fireEvent.change(line('Welcome'), { target: { value: 'See you at the desk.' } });
+    expect(bar().queryByRole('alert')).toBeNull();
+    updateMessageSettings.mockRejectedValue({ response: { data: { message: 'This organisation is read-only right now.' } } });
+    fireEvent.click(save());
+    expect(await bar().findByText('This organisation is read-only right now.')).toBeTruthy();
+    expect(screen.getByTestId('message-settings-save').className).toContain('c-save-stuck');
   });
 
   it('a gym with nothing to book is told nobody will get it, with a button to Classes, or who can add one', async () => {

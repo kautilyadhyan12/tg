@@ -8,6 +8,7 @@ import {
   classReminderDue,
   classReminderFrom,
   classReminderLookAheadHours,
+  classReminderNotices,
   classReminderOccasion,
   reminderClock,
   reminderWhen,
@@ -113,6 +114,8 @@ describe("the class reminder's rule", () => {
       [1, "2026-10-14", 16 * 60 + 59, false],
       [1, "2026-10-14", 17 * 60, true],
       [3, "2026-10-14", 15 * 60, true],
+      // 12 hours before 18:00 is 06:00, the night: it waits for 08:00 that morning.
+      [12, "2026-10-14", 7 * 60 + 59, false],
       [12, "2026-10-14", 8 * 60, true],
       [24, "2026-10-13", 17 * 60 + 59, false],
       [24, "2026-10-13", 18 * 60, true],
@@ -122,8 +125,8 @@ describe("the class reminder's rule", () => {
     for (const [hours, today, minute, sent] of table) expect(classReminderDue(facts({ gym: { hours, today, minute } })).send, `${String(hours)}h at ${today} ${String(minute)}`).toBe(sent);
   });
 
-  it("a reminder whose time falls in the night goes from 18:00 the evening before, and in the morning if that was missed", () => {
-    // An 06:00 class on the 15th with 2 hours' notice: 04:00 is the night.
+  it("a reminder whose time falls in the night is moved to a time somebody is awake at: 08:00 that morning, or 18:00 the evening before an early class", () => {
+    // An 06:00 class on the 15th with 2 hours' notice: 04:00 is the night, and 08:00 is too late.
     const early = { day: "2026-10-15", startMinute: 6 * 60 };
     expect(classReminderFrom("2026-10-15", 6 * 60, 2)).toBe(classReminderFrom("2026-10-14", 20 * 60, 2));
     expect(reasonOf(facts({ booking: early, gym: { minute: 17 * 60 + 59 } }))).toBe("too_early");
@@ -131,9 +134,11 @@ describe("the class reminder's rule", () => {
     expect(reasonOf(facts({ booking: early, gym: { minute: 20 * 60 + 59 } }))).toBe("sent");
     expect(reasonOf(facts({ booking: early, gym: { minute: 21 * 60 } }))).toBe("night");
     expect(reasonOf(facts({ booking: early, gym: { today: "2026-10-15", minute: 5 * 60 } }))).toBe("night");
-    // A 09:00 class: 07:00 is the night too. Missed in the evening, it still goes at 08:00.
+    // An 08:59 class is the last that is told the evening before; a 09:00 class is told at 08:00.
+    expect(reasonOf(facts({ booking: { day: "2026-10-15", startMinute: 8 * 60 + 59 }, gym: { minute: 18 * 60 } }))).toBe("sent");
     const nine = { day: "2026-10-15", startMinute: 9 * 60 };
-    expect(reasonOf(facts({ booking: nine, gym: { minute: 18 * 60 } }))).toBe("sent");
+    expect(reasonOf(facts({ booking: nine, gym: { minute: 18 * 60 } }))).toBe("too_early");
+    expect(reasonOf(facts({ booking: nine, gym: { today: "2026-10-15", minute: 7 * 60 + 59 } }))).toBe("too_early");
     expect(reasonOf(facts({ booking: nine, gym: { today: "2026-10-15", minute: 8 * 60 } }))).toBe("sent");
     expect(reasonOf(facts({ booking: nine, gym: { today: "2026-10-15", minute: 9 * 60 } }))).toBe("started");
     // A 23:30 class with 2 hours' notice: 21:30 is the night, so from 18:00 that same evening.
@@ -141,33 +146,79 @@ describe("the class reminder's rule", () => {
     expect(reasonOf(facts({ booking: late, gym: { minute: 17 * 60 + 45 } }))).toBe("too_early");
     expect(reasonOf(facts({ booking: late, gym: { minute: 18 * 60 } }))).toBe("sent");
     // A 10:00 class is told at 08:00, the first minute of the day.
-    expect(classReminderFrom("2026-10-15", 10 * 60, 2)).toBe(classReminderFrom("2026-10-15", 8 * 60 + 60, 1));
-    // Every hour of the day and every number on offer: a reminder's first minute is by day,
-    // before the start, and never more than the notice and one night before it.
-    for (const hours of GYM_MESSAGE_REMINDER_HOURS_CHOICES) {
+    expect(classReminderFrom("2026-10-15", 10 * 60, 2)).toBe(classReminderFrom("2026-10-15", 9 * 60, 1));
+    // 24 hours before Friday's 07:30 class is Thursday 07:30: told on Thursday at 08:00, not on Wednesday evening.
+    const friday = { day: "2026-10-16", startMinute: 7 * 60 + 30 };
+    expect(reasonOf(facts({ booking: friday, gym: { hours: 24, today: "2026-10-14", minute: 18 * 60 + 4 } }))).toBe("too_early");
+    expect(reasonOf(facts({ booking: friday, gym: { hours: 24, today: "2026-10-15", minute: 7 * 60 + 59 } }))).toBe("too_early");
+    expect(reasonOf(facts({ booking: friday, gym: { hours: 24, today: "2026-10-15", minute: 8 * 60 } }))).toBe("sent");
+    // 12 hours before a 19:00 class is 07:00: told at 08:00 that day, eleven hours before.
+    const evening = { day: "2026-10-15", startMinute: 19 * 60 };
+    expect(reasonOf(facts({ booking: evening, gym: { hours: 12, minute: 18 * 60 } }))).toBe("too_early");
+    expect(reasonOf(facts({ booking: evening, gym: { hours: 12, today: "2026-10-15", minute: 8 * 60 } }))).toBe("sent");
+    // Every quarter hour of the day and every notice there is: a reminder's first minute is by
+    // day and before the start; it is later than its notice only where it waited for 08:00,
+    // and then the class is still an hour off; and it is inside what the sender reads.
+    for (const hours of new Set([...GYM_MESSAGE_REMINDER_HOURS_CHOICES].flatMap((h) => classReminderNotices(h)))) {
       for (let startMinute = 0; startMinute < 1440; startMinute += 15) {
         const from = classReminderFrom("2026-10-15", startMinute, hours);
-        const start = classReminderFrom("2026-10-15", 12 * 60, 1);
-        if (from === null || start === null) throw new Error("not read");
-        const startAt = start - 11 * 60 + startMinute;
+        const noon = classReminderFrom("2026-10-15", 13 * 60, 1);
+        if (from === null || noon === null) throw new Error("not read");
+        const startAt = noon - 12 * 60 + startMinute;
         const minuteOfDay = ((from % 1440) + 1440) % 1440;
-        expect(minuteOfDay >= 8 * 60 && minuteOfDay < 21 * 60, `${String(hours)}h ${String(startMinute)} by day`).toBe(true);
-        expect(from <= startAt - hours * 60, `${String(hours)}h ${String(startMinute)} no later than its notice`).toBe(true);
-        // So nothing that starts further off than the sender reads can be due.
-        expect(startAt - from <= classReminderLookAheadHours(hours) * 60, `${String(hours)}h ${String(startMinute)} inside what the sender reads`).toBe(true);
+        const name = `${String(hours)}h ${String(startMinute)}`;
+        expect(minuteOfDay >= 8 * 60 && minuteOfDay < 21 * 60, `${name} by day`).toBe(true);
+        expect(from < startAt, `${name} before the start`).toBe(true);
+        if (from > startAt - hours * 60) expect(minuteOfDay === 8 * 60 && startAt - from >= 60, `${name} later than its notice only at 08:00, an hour ahead`).toBe(true);
+        // The sender reads one hour more than this, for the night the clocks go back.
+        expect(startAt - from <= (classReminderLookAheadHours(hours) - 1) * 60, `${name} inside what the sender reads`).toBe(true);
       }
     }
+    expect(GYM_MESSAGE_REMINDER_HOURS_CHOICES.map((h) => classReminderLookAheadHours(h))).toEqual([16, 16, 16, 19, 31]);
   });
 
-  it("somebody who booked after the reminder's time gets none; somebody who booked before it does", () => {
-    const booked = (bookedDay: string, bookedMinute: number) => reasonOf(facts({ booking: { bookedDay, bookedMinute } }));
-    expect(booked("2026-10-14", 16 * 60)).toBe("sent");
-    expect(booked("2026-10-14", 16 * 60 + 1)).toBe("booked_late");
-    expect(booked("2026-10-14", 17 * 60 + 30)).toBe("booked_late");
-    // An 06:00 class: booked at 19:00 the evening before, after its reminder's time.
-    const early = { day: "2026-10-15", startMinute: 6 * 60 };
-    expect(reasonOf(facts({ booking: { ...early, bookedDay: "2026-10-14", bookedMinute: 19 * 60 }, gym: { minute: 19 * 60 + 4 } }))).toBe("booked_late");
-    expect(reasonOf(facts({ booking: { ...early, bookedDay: "2026-10-14", bookedMinute: 17 * 60 }, gym: { minute: 19 * 60 + 4 } }))).toBe("sent");
+  it("somebody who books the evening before a morning class is reminded: at 08:00 where there is time, that same evening before an early class", () => {
+    // Booked at 19:00 for tomorrow's 09:30 class, with 2 hours' notice.
+    const morning = { day: "2026-10-15", startMinute: 9 * 60 + 30, bookedDay: "2026-10-14", bookedMinute: 19 * 60 };
+    expect(reasonOf(facts({ booking: morning, gym: { minute: 19 * 60 + 4 } }))).toBe("too_early");
+    expect(reasonOf(facts({ booking: morning, gym: { today: "2026-10-15", minute: 7 * 60 + 34 } }))).toBe("too_early");
+    expect(reasonOf(facts({ booking: morning, gym: { today: "2026-10-15", minute: 8 * 60 + 4 } }))).toBe("sent");
+    // Booked at 19:00 for tomorrow's 06:00 class: nothing can go later, so it goes that evening.
+    const early = { day: "2026-10-15", startMinute: 6 * 60, bookedDay: "2026-10-14", bookedMinute: 19 * 60 };
+    expect(reasonOf(facts({ booking: early, gym: { minute: 19 * 60 + 4 } }))).toBe("sent");
+    expect(reasonOf(facts({ booking: { ...early, bookedMinute: 17 * 60 }, gym: { minute: 19 * 60 + 4 } }))).toBe("sent");
+    // Booked at 04:30 for the 06:00 class, inside its 2 hours: none.
+    expect(reasonOf(facts({ booking: { ...early, bookedDay: "2026-10-15", bookedMinute: 4 * 60 + 30 }, gym: { today: "2026-10-15", minute: 5 * 60 } }))).toBe("booked_late");
+    // 12 hours before an 18:00 class is 06:00, told at 08:00: booked at 07:00 that day, she is still told at 08:00.
+    expect(reasonOf(facts({ booking: { bookedDay: "2026-10-14", bookedMinute: 7 * 60 }, gym: { hours: 12, minute: 8 * 60 } }))).toBe("sent");
+  });
+
+  it("somebody who gets a place inside the gym's own notice is reminded 2 hours before instead, and nobody who gets one inside the last notice", () => {
+    expect(GYM_MESSAGE_REMINDER_HOURS_CHOICES.map((h) => classReminderNotices(h))).toEqual([[1], [2], [2 + 1, 2], [12, 2], [24, 2]]);
+    const booked = (hours: number, bookedDay: string, bookedMinute: number, minute: number, today = "2026-10-14") => reasonOf(facts({ gym: { hours, today, minute }, booking: { bookedDay, bookedMinute } }));
+    // 2 hours, the 18:00 class: its only notice.
+    expect(booked(2, "2026-10-14", 16 * 60, 16 * 60 + 15)).toBe("sent");
+    expect(booked(2, "2026-10-14", 16 * 60 + 1, 16 * 60 + 15)).toBe("booked_late");
+    expect(booked(2, "2026-10-14", 17 * 60 + 30, 17 * 60 + 34)).toBe("booked_late");
+    // 1 hour: 59 minutes before is too late, an hour before is not.
+    expect(booked(1, "2026-10-14", 17 * 60 + 1, 17 * 60 + 4)).toBe("booked_late");
+    expect(booked(1, "2026-10-14", 17 * 60, 17 * 60 + 4)).toBe("sent");
+    // 24 hours, booked 20 hours before: reminded at 16:00, 2 hours before, and not straight away.
+    expect(booked(24, "2026-10-13", 22 * 60, 9 * 60)).toBe("too_early");
+    expect(booked(24, "2026-10-13", 22 * 60, 15 * 60 + 59)).toBe("too_early");
+    expect(booked(24, "2026-10-13", 22 * 60, 16 * 60)).toBe("sent");
+    expect(booked(24, "2026-10-14", 16 * 60 + 30, 16 * 60 + 34)).toBe("booked_late");
+    // 3 hours, booked two and a half before: 2 hours before.
+    expect(booked(3, "2026-10-14", 15 * 60 + 30, 15 * 60 + 34)).toBe("too_early");
+    expect(booked(3, "2026-10-14", 15 * 60 + 30, 16 * 60 + 4)).toBe("sent");
+    // 24 hours, Friday's 07:30 class, booked on Thursday at 19:00: that evening, as a 2-hour gym would.
+    const friday = { day: "2026-10-16", startMinute: 7 * 60 + 30, bookedDay: "2026-10-15", bookedMinute: 19 * 60 };
+    expect(reasonOf(facts({ booking: friday, gym: { hours: 24, today: "2026-10-15", minute: 19 * 60 + 4 } }))).toBe("sent");
+    // A gym that raises its hours after somebody booked: they are still reminded, 2 hours before.
+    expect(booked(2, "2026-10-13", 22 * 60, 16 * 60)).toBe("sent");
+    expect(booked(24, "2026-10-13", 22 * 60, 16 * 60)).toBe("sent");
+    // Reminded by one notice, the other sends nothing more.
+    expect(reasonOf(facts({ gym: { hours: 24, minute: 16 * 60 }, booking: { bookedDay: "2026-10-13", bookedMinute: 22 * 60 }, sent: [OCCASION] }))).toBe("already_sent");
   });
 
   it("a class the gym moves has a new occasion, so its new time is said too", () => {

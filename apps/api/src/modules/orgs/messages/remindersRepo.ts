@@ -94,6 +94,8 @@ export async function bookingsStartingSoon(sql: SqlOrTx, gymId: string, now: Dat
     JOIN gym_member_list_entries e ON e.gym_id = a.gym_id AND e.id = a.entry_id
     LEFT JOIN users tu ON tu.id = a.trainer_user_id
     WHERE a.gym_id = ${gymId} AND a.starts_at > ${now} AND a.starts_at <= ${until}
+      -- A trainer whose own record a session is booked on is not reminded of themself.
+      AND solo.user_id IS DISTINCT FROM a.trainer_user_id
     ORDER BY day, start_minute, id`;
   return rows.map((row) => ({
     what: row.what,
