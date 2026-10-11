@@ -23,7 +23,9 @@ export type MemberCounts = z.infer<typeof countsRowSchema>;
  *  A person starts on the join date the gym gave, when it is earlier than the day they
  *  went on the list, and otherwise on that day; they leave on the day they came off, or,
  *  still on the list, on the day in `gone`: the day their last membership here ended or
- *  was cancelled (21c-ii), which the caller reads from the Members list's own rule. A
+ *  was cancelled (21c-ii), which the caller reads from the Members list's own rule, and
+ *  never a day before the record itself was made (two records joined can leave an old
+ *  membership on a newer record). `today` is the gym's own day, the caller's one. A
  *  month's "at its start" is everybody who had started before its first day, had not left
  *  before it, and was on the list before the month ended: a list imported in September
  *  with last year's join dates fills no month before September, when nobody on it could
@@ -32,13 +34,12 @@ export async function readMemberCounts(
   sql: Sql | TransactionSql,
   gymId: string,
   timezone: string,
-  now: Date,
+  today: string,
   gone: readonly { id: string; on: string }[],
 ): Promise<MemberCounts> {
   const rows = await sql<Record<string, unknown>[]>`
     WITH clock AS (
-      SELECT (${now}::timestamptz AT TIME ZONE ${timezone})::date AS today,
-             date_trunc('month', ${now}::timestamptz AT TIME ZONE ${timezone})::date AS this_month
+      SELECT ${today}::date AS today, date_trunc('month', ${today}::date)::date AS this_month
     ),
     gone AS (
       SELECT g.id, g.left_on
@@ -49,7 +50,9 @@ export async function readMemberCounts(
              (e.created_at AT TIME ZONE ${timezone})::date AS listed_on,
              (e.former_at AT TIME ZONE ${timezone})::date AS removed_on,
              -- Taken off the list wins: that record's membership days are not asked for.
-             COALESCE((e.former_at AT TIME ZONE ${timezone})::date, g.left_on) AS left_on
+             COALESCE((e.former_at AT TIME ZONE ${timezone})::date,
+                      -- GREATEST skips a NULL: nobody without a day is given their listing day.
+                      CASE WHEN g.left_on IS NOT NULL THEN GREATEST(g.left_on, (e.created_at AT TIME ZONE ${timezone})::date) END) AS left_on
       FROM gym_member_list_entries e
       LEFT JOIN gone g ON g.id = e.id
       WHERE e.gym_id = ${gymId}

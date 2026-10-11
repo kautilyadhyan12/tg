@@ -112,7 +112,7 @@ describe('the members figures', () => {
       'Retention94.7%a month, Jul to Sep 202694.7% stayed5.3% left',
       'Average stay11 months4 people left in the months shown',
     ]);
-    expect(screen.getByText('These figures come from your member list. Someone was last added or removed on 3 Oct 2026.')).toBeTruthy();
+    expect(screen.getByText('These figures come from your member list and the memberships you give in the app. Someone was last added or removed on 3 Oct 2026.')).toBeTruthy();
     expect(tableRows('Members, month by month')).toEqual([
       ['Month', 'Members at start', 'New', 'Left', 'Churn'],
       ['Oct 2026 (so far)', '11', '1', '1', '–'],
@@ -178,7 +178,7 @@ describe('the members figures', () => {
     fireEvent.click(button);
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(tile('churn').textContent).toContain(
-      'Of the members on your list at the start of July, August and September, the share who left during that month, the three months taken together.',
+      'Of your members at the start of July, August and September, the share who left during that month, the three months taken together.',
     );
     // Only that one opened.
     expect(tile('retention').textContent).toBe('Retention94.7%a month, Jul to Sep 202694.7% stayed5.3% left');

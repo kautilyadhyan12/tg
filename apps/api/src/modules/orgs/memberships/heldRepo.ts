@@ -889,6 +889,26 @@ export const LAST_DAY = (sql: Sql | TransactionSql) => sql`
                      WHEN h.term_unit = 'day' THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END
     ))::date + h.frozen_days - 1)`;
 
+/** For each pack named: the gym's day of the last class or personal training session
+ *  charged to it; a pack with none recorded is not in the answer. A plain read. */
+export async function packLastClassDays(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<Map<string, string>> {
+  if (membershipIds.length === 0) return new Map();
+  const rows = await sql<{ id: string; day: string }[]>`
+    SELECT c.id, to_char(max(c.day), 'YYYY-MM-DD') AS day
+    FROM (
+      SELECT k.held_membership_id AS id, s.local_date AS day
+      FROM gym_class_bookings k
+      JOIN gym_class_sessions s ON s.gym_id = k.gym_id AND s.id = k.session_id
+      WHERE k.gym_id = ${gymId} AND k.pack_charged AND k.held_membership_id = ANY(${[...membershipIds]}::uuid[])
+      UNION ALL
+      SELECT a.held_membership_id, a.local_date
+      FROM gym_pt_appointments a
+      WHERE a.gym_id = ${gymId} AND a.pack_charged AND a.held_membership_id = ANY(${[...membershipIds]}::uuid[])
+    ) c
+    GROUP BY c.id`;
+  return new Map(rows.map((row) => [row.id, row.day]));
+}
+
 export interface OverForList {
   entryId: string;
   /** The record has no address: what a chip's "can be invited" count needs. */

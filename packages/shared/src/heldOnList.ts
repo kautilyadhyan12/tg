@@ -75,6 +75,9 @@ export interface HeldForList {
    *  cancelled by staff, or everything paid on it was refunded. Nothing is owed for it,
    *  and it is never read as "Paid". */
   notCharged?: boolean;
+  /** For a pack with no class left: the day of the last class charged to it, where one is
+   *  recorded. Only `heldLeftOn` reads it. */
+  usedUpOn?: string | null;
 }
 
 type Seen = HeldForList & { view: HeldMembershipFacts };
@@ -221,13 +224,17 @@ export function heldOnList(input: HeldInput): HeldOnList | null {
 /** The day somebody the list reads as "Ended" or "Cancelled" stopped being a member, which
  *  Reports counts them as left on (spec Part 3 §16.9.4); null for everybody else. It is the
  *  day of the very membership `heldOnList` names: the day it was cancelled, or its last
- *  day. A pack used up before its last day ended on a day nobody stored, so `today` stands
- *  in until that last day has passed. Never later than `today`. */
+ *  day. A pack used up before its last day ended with its last class (`usedUpOn`), and
+ *  that day stands for good, so a month that has closed never changes afterwards; with no
+ *  class recorded, `today` stands in until the pack's own last day has passed. Never
+ *  later than `today`. */
 export function heldLeftOn(input: HeldInput): string | null {
   const { last } = answering(input);
   if (last === undefined) return null;
-  const { endsOn } = last.view;
-  return endsOn !== null && endsOn <= input.today ? endsOn : input.today;
+  const { status, endsOn } = last.view;
+  const usedUpOn = status === "ended" && last.membership.kind === "pack" && last.membership.classesLeft === 0 ? (last.usedUpOn ?? null) : null;
+  const day = usedUpOn !== null && (endsOn === null || usedUpOn < endsOn) ? usedUpOn : endsOn;
+  return day !== null && day <= input.today ? day : input.today;
 }
 
 /** A row's Membership cell: the first name, and how many more ("Gold Monthly +1"). */

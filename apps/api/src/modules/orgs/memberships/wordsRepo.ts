@@ -35,6 +35,58 @@ const IN_USE_TODAY = (sql: Sql | TransactionSql, today: string) => sql`
      AND NOT (h.kind = 'pack' AND h.classes_left = 0)
      AND ((h.kind = 'recurring' AND h.renews) OR ${LAST_DAY(sql)} >= ${today}::date)))`;
 
+/** The type each word goes with: the one it is linked to, or, for a word with no link,
+ *  the live type of the very same name (one a gym, whatever its capitals). */
+const PAIRS = (tx: TransactionSql, gymId: string) => tx`
+        SELECT l.word_key AS key, l.membership_type_id AS type_id, true AS linked
+        FROM gym_membership_word_links l WHERE l.gym_id = ${gymId}
+        UNION ALL
+        SELECT lower(t.name), t.id, false
+        FROM gym_membership_types t
+        WHERE t.gym_id = ${gymId} AND t.archived_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM gym_membership_word_links l WHERE l.gym_id = ${gymId} AND l.word_key = lower(t.name))`;
+
+/** A person at a time, over `pairs`: what became of every membership they held of the
+ *  type their list's word goes with. From the type to its memberships to their records,
+ *  each step by an index: a join of the whole list against the gym's memberships took a
+ *  second straight after 2,100 were given. `covered` is the day the list covers: its end
+ *  day, or the day before its renewal day. */
+const FACTS = (tx: TransactionSql, gymId: string, today: string) => tx`
+        SELECT p.key, h.entry_id,
+               bool_or(h.kind = 'recurring') AS recurring,
+               bool_or(h.status = 'cancelled') AS cancelled,
+               bool_or(${IN_USE_TODAY(tx, today)}) AS in_use,
+               max(${LAST_DAY(tx)}) AS last_day,
+               min(CASE WHEN e.ends_on_kind = 'renews' THEN e.ends_on - 1 ELSE e.ends_on END) AS covered
+        FROM pairs p
+        JOIN gym_held_memberships h ON h.gym_id = ${gymId} AND h.membership_type_id = p.type_id
+        JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+        WHERE e.former_at IS NULL AND lower(e.membership_type) = p.key
+        GROUP BY p.key, h.entry_id`;
+
+/** Over `facts f`: whom the box would renew, and nobody it would refuse. Every one of
+ *  theirs is over, none cancelled, the list covers a later day (`offeredAgain` in
+ *  words.ts), that day has not passed and is not further off than a membership can run
+ *  (`linkHeldMembership`), and they have room for one more. */
+const RENEWED_BY_THE_LIST = (tx: TransactionSql, gymId: string, today: string) => tx`
+        NOT f.recurring AND NOT f.cancelled AND NOT f.in_use
+          AND f.covered >= ${today}::date AND f.covered > f.last_day
+          AND f.covered < ${today}::date + ${LINK_DAY_AHEAD_DAYS}::int
+          AND (SELECT count(*) FROM gym_held_memberships h
+               WHERE h.gym_id = ${gymId} AND h.entry_id = f.entry_id AND ${IN_USE_TODAY(tx, today)}) < ${HELD_LIVE_MAX}`;
+
+/** The current records the Memberships page offers a renewal to today (21c-i): the people
+ *  its rows count as "can be renewed", by the same SQL. Reports reads it (21c-ii): somebody
+ *  the gym's newest list says is paid up has not left. */
+export async function renewalsWaiting(tx: TransactionSql, gymId: string, today: string): Promise<string[]> {
+  const rows = await tx<{ entry_id: string }[]>`
+      WITH pairs AS MATERIALIZED (${PAIRS(tx, gymId)}),
+      facts AS MATERIALIZED (${FACTS(tx, gymId, today)})
+      SELECT DISTINCT f.entry_id FROM facts f WHERE ${RENEWED_BY_THE_LIST(tx, gymId, today)}`;
+  return rows.map((row) => row.entry_id);
+}
+
 /** The list's membership words in the list's own order, each with its link, and the
  *  gym's live types. `today` is the gym's own day. */
 export async function readWords(sql: Sql, gymId: string, today: string): Promise<{ words: WordRow[]; types: HeldMembershipTypeChoice[] }> {
@@ -53,51 +105,16 @@ export async function readWords(sql: Sql, gymId: string, today: string): Promise
                min(listed_seq) AS first_seq
         FROM mine GROUP BY lower(membership_type)
       ),
-      -- The type each word goes with: the one it is linked to, or, for a word with no
-      -- link, the live type of the very same name (one a gym, whatever its capitals).
-      pairs AS MATERIALIZED (
-        SELECT l.word_key AS key, l.membership_type_id AS type_id, true AS linked
-        FROM gym_membership_word_links l WHERE l.gym_id = ${gymId}
-        UNION ALL
-        SELECT lower(t.name), t.id, false
-        FROM gym_membership_types t
-        WHERE t.gym_id = ${gymId} AND t.archived_at IS NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM gym_membership_word_links l WHERE l.gym_id = ${gymId} AND l.word_key = lower(t.name))
-      ),
-      -- How many people with each such word have ever held its type. From the type to
-      -- its memberships to their records, each step by an index: a join of the whole list
-      -- against the gym's memberships took a second straight after 2,100 were given.
-      -- A person at a time first: what became of every membership of that type they held.
-      facts AS MATERIALIZED (
-        SELECT p.key, h.entry_id,
-               bool_or(h.kind = 'recurring') AS recurring,
-               bool_or(h.status = 'cancelled') AS cancelled,
-               bool_or(${IN_USE_TODAY(tx, today)}) AS in_use,
-               max(${LAST_DAY(tx)}) AS last_day,
-               -- The day the list covers: its end day, or the day before its renewal day.
-               min(CASE WHEN e.ends_on_kind = 'renews' THEN e.ends_on - 1 ELSE e.ends_on END) AS covered
-        FROM pairs p
-        JOIN gym_held_memberships h ON h.gym_id = ${gymId} AND h.membership_type_id = p.type_id
-        JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
-        WHERE e.former_at IS NULL AND lower(e.membership_type) = p.key
-        GROUP BY p.key, h.entry_id
-      ),
+      pairs AS MATERIALIZED (${PAIRS(tx, gymId)}),
+      facts AS MATERIALIZED (${FACTS(tx, gymId, today)}),
+      -- How many people with each such word have ever held its type.
       holding AS MATERIALIZED (
         SELECT f.key, count(*)::int AS holders FROM facts f GROUP BY f.key
       ),
-      -- Whom the box would renew, and nobody it would refuse: every one of theirs is over,
-      -- none cancelled, the list covers a later day (offeredAgain in words.ts), that day
-      -- has not passed and is not further off than a membership can run
-      -- (linkHeldMembership), and they have room for one more.
       renewing AS MATERIALIZED (
         SELECT f.key, count(*)::int AS again
         FROM facts f
-        WHERE NOT f.recurring AND NOT f.cancelled AND NOT f.in_use
-          AND f.covered >= ${today}::date AND f.covered > f.last_day
-          AND f.covered < ${today}::date + ${LINK_DAY_AHEAD_DAYS}::int
-          AND (SELECT count(*) FROM gym_held_memberships h
-               WHERE h.gym_id = ${gymId} AND h.entry_id = f.entry_id AND ${IN_USE_TODAY(tx, today)}) < ${HELD_LIVE_MAX}
+        WHERE ${RENEWED_BY_THE_LIST(tx, gymId, today)}
         GROUP BY f.key
       )
       SELECT g.word, g.people, p.type_id, p.linked, t.name AS type_name,

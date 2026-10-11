@@ -483,7 +483,31 @@ describe("the day Reports counts somebody as left", () => {
     expect([left("2026-10-14"), left("2026-10-15"), left("2026-10-16"), left("2026-12-25")]).toEqual([null, null, "2026-10-15", "2026-10-15"]);
   });
 
-  it("a pack with no class left: the day moves with today until its last day, then stays", () => {
+  it("a pack with no class left is dated by its last class, and that day never moves", () => {
+    // Ten classes from 20 September, the last of them taken on 12 October; its own last day is 18 December.
+    const pack = (usedUpOn: string | null, over: Partial<HeldMembership> = {}) =>
+      held("PT 10", { ...given(tenPack, "2026-09-20", true, "2026-09-20"), classesLeft: 0, ...over }, { usedUpOn });
+    const left = (m: HeldForList, on: string) => heldLeftOn({ held: [m], listedUnheld: null, today: on });
+    const days = ["2026-10-12", "2026-10-31", "2026-11-02", "2026-12-18", "2026-12-19", "2027-03-01"];
+    expect(days.map((on) => left(pack("2026-10-12"), on))).toEqual(days.map(() => "2026-10-12"));
+    // The last class is still to come: a member's day is never later than today.
+    expect(left(pack("2026-10-20"), "2026-10-15")).toBe("2026-10-15");
+    expect(left(pack("2026-10-20"), "2026-11-02")).toBe("2026-10-20");
+    // A class dated after the pack's own last day does not move the day past it.
+    expect(left(pack("2026-12-30"), "2027-01-10")).toBe("2026-12-18");
+    // Classes left: the last class says nothing, and it runs to its last day.
+    expect(left(pack("2026-10-12", { classesLeft: 3 }), "2026-11-02")).toBeNull();
+    expect(left(pack("2026-10-12", { classesLeft: 3 }), "2026-12-19")).toBe("2026-12-18");
+    // Cancelled by staff after the last class: the day it was cancelled, which is stored.
+    const cancelled = held("PT 10", { ...moved(given(tenPack, "2026-09-20", true, "2026-09-20"), { type: "cancel", when: "today" }, "2026-10-14"), classesLeft: 0 }, { usedUpOn: "2026-10-12" });
+    expect(left(cancelled, "2026-11-02")).toBe("2026-10-14");
+    // The list's own row is not changed by it.
+    expect(heldOnList({ held: [pack("2026-10-12")], listedUnheld: null, today: "2026-11-02" })).toEqual(
+      heldOnList({ held: [pack(null)], listedUnheld: null, today: "2026-11-02" }),
+    );
+  });
+
+  it("a pack with no class left and no class recorded: the day moves with today until its last day, then stays", () => {
     const pack = usedUp("2026-09-20");
     const left = (on: string) => heldLeftOn({ held: [pack], listedUnheld: null, today: on });
     // Ninety days from 20 September: its last day is 18 December.

@@ -2,7 +2,7 @@
 // (DATABASE_URL-gated). ROADMAP Stage 2 item 21c-ii; spec Part 3 §16.9.4.
 //
 // The first test is the worst thing this job could do to a real person: a paying member
-// counted as left, so the owner believes they have gone. Fifteen people by name hold every
+// counted as left, so the owner believes they have gone. Eighteen people by name hold every
 // kind of membership a gym gives, each given, frozen, cancelled or removed by the real
 // route on its own day; every figure asserted is worked out by hand beside it.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -17,7 +17,8 @@ import {
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { heldOnListOf } from "../src/modules/orgs/memberships/onList.js";
+import { leftOnOf } from "../src/modules/orgs/memberships/onList.js";
+import { renewalsWaiting } from "../src/modules/orgs/memberships/wordsRepo.js";
 import { readMemberCounts } from "../src/modules/orgs/reports/repo.js";
 import { createMemoryRedis } from "../src/redis.js";
 
@@ -94,6 +95,9 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
     const mine = sql`
       SELECT id FROM gyms
       WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'rpl-t-%@example.com')`;
+    await sql`DELETE FROM gym_class_bookings WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${mine})`;
@@ -148,12 +152,18 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
 
   let personNo = 0;
   /** A record written straight into the list on its own day, as months of use would leave it. */
-  const listed = async (gymId: string, name: string, listedAt: string, words: { status?: string; membershipType?: string } = {}): Promise<string> => {
+  const listed = async (
+    gymId: string,
+    name: string,
+    listedAt: string,
+    words: { status?: string; membershipType?: string; endsOn?: string } = {},
+  ): Promise<string> => {
     personNo += 1;
     const rows = await sql<{ id: string }[]>`
-      INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, status, membership_type)
+      INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, status, membership_type, ends_on, ends_on_kind)
       VALUES (${gymId}, ${name}, ${`rpl-t-listed-${String(personNo)}@example.com`}, ${String(personNo).padStart(64, "0")}, 'typed',
-              ${listedAt}::timestamptz, ${words.status ?? null}, ${words.membershipType ?? null})
+              ${listedAt}::timestamptz, ${words.status ?? null}, ${words.membershipType ?? null},
+              ${words.endsOn ?? null}::date, ${words.endsOn === undefined ? null : "ends"})
       RETURNING id`;
     const id = rows[0]?.id;
     if (id === undefined) throw new Error("no record written");
@@ -234,10 +244,19 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
         "Paula Paid", "Owen Overdue", "Freya Frozen", "Nia Nextweek", "Rhea Renewed", "Tom Today", "Yara Yesterday", "Cal Cancelled",
         "Stella Stopped", "Percy Pack", "Rob Removed", "Una Unheld", "Ned Never", "Jude July",
       ] as const;
-      const id = {} as Record<(typeof names)[number] | "Eli Expired", string>;
+      const id = {} as Record<(typeof names)[number] | "Eli Expired" | "Rena Renewed" | "Lena Listdate" | "Mona Merged", string>;
       for (const name of names) id[name] = await listed(gym, name, BEGAN, name === "Una Unheld" ? { membershipType: "Platinum" } : {});
       // On the gym's own file as "Expired", and never given a membership here.
       id["Eli Expired"] = await listed(gym, "Eli Expired", BEGAN, { status: "Expired" });
+      // The gym's own file names "1 Month" for these two, the very name of the type here.
+      // Rena's newest file says she is paid up to 24 November: the gym renewed her in its
+      // other software, and nobody has pressed Renew here yet. Lena's file still says 24
+      // September, the day her membership here ended.
+      id["Rena Renewed"] = await listed(gym, "Rena Renewed", BEGAN, { status: "Active", membershipType: "1 Month", endsOn: "2026-11-24" });
+      id["Lena Listdate"] = await listed(gym, "Lena Listdate", BEGAN, { membershipType: "1 Month", endsOn: "2026-09-24" });
+      // A record made on 10 September that carries a membership from the spring, as two
+      // records joined into the newer one leave it.
+      id["Mona Merged"] = await listed(gym, "Mona Merged", "2026-09-10T09:00:00Z");
       const nell = await listed(nextDoor, "Nell Nextdoor", BEGAN);
       await listed(nextDoor, "Nora Nextdoor", BEGAN);
 
@@ -259,12 +278,20 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
       at("2026-08-20T10:00:00Z");
       // Stopped at the end of what was paid: its last day is 4 September.
       await move(gym, owner, id["Stella Stopped"], stellas, "cancel", { when: "period_end" });
+      at("2026-08-25T10:00:00Z");
+      // Both to 24 September.
+      await give(gym, owner, id["Rena Renewed"], types.oneMonth, "2026-08-25", true);
+      await give(gym, owner, id["Lena Listdate"], types.oneMonth, "2026-08-25", true);
       at("2026-09-01T10:00:00Z");
       const freyas = await give(gym, owner, id["Freya Frozen"], types.gold, "2026-09-01", true);
       const cals = await give(gym, owner, id["Cal Cancelled"], types.gold, "2026-09-01", true);
       await give(gym, owner, id["Rob Removed"], types.gold, "2026-09-01", true);
       // Next door's leaver: 1 Month to 30 September.
       await give(nextDoor, nextDoorOwner, nell, nextDoorMonth, "2026-09-01", true);
+      at("2026-09-10T10:00:00Z");
+      // Given, then dated as the older record had it: 10 February to 9 March.
+      const monas = await give(gym, owner, id["Mona Merged"], types.oneMonth, "2026-09-10", true);
+      await sql`UPDATE gym_held_memberships SET starts_on = '2026-02-10' WHERE gym_id = ${gym} AND id = ${monas}`;
       at("2026-09-15T10:00:00Z");
       // Last day 14 October: yesterday.
       await give(gym, owner, id["Yara Yesterday"], types.oneMonth, "2026-09-15", true);
@@ -273,9 +300,21 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
       await give(gym, owner, id["Tom Today"], types.oneMonth, "2026-09-16", true);
       at("2026-09-20T10:00:00Z");
       await move(gym, owner, id["Freya Frozen"], freyas, "freeze");
-      // Ten classes to use by 18 November, and every one of them used.
+      // Ten classes to use by 18 November, and every one of them used: the last on 12 October.
       const percys = await give(gym, owner, id["Percy Pack"], types.tenClasses, "2026-09-20", true);
       await sql`UPDATE gym_held_memberships SET classes_left = 0 WHERE gym_id = ${gym} AND id = ${percys}`;
+      await sql`
+        WITH kind AS (
+          INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym)
+          VALUES (${gym}, 'Spin', 45, 12, 'blue', false) RETURNING id
+        ), class AS (
+          INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
+          SELECT ${gym}, kind.id, d::date, 18 * 60, (d::date + time '18:00') AT TIME ZONE 'Europe/London', 45, 12, 'scheduled'
+          FROM kind, unnest(ARRAY['2026-10-08', '2026-10-12']) AS d RETURNING id
+        )
+        INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, held_membership_id, status, pack_charged, request_key, booked_at)
+        SELECT ${gym}, class.id, ${owner.userId}, ${id["Percy Pack"]}, ${percys}, 'attended', true, gen_random_uuid(), '2026-10-01T09:00:00Z'
+        FROM class`;
       at("2026-10-01T10:00:00Z");
       await give(gym, owner, id["Paula Paid"], types.gold, "2026-10-01", true);
       await give(gym, owner, id["Rhea Renewed"], types.oneMonth, "2026-10-01", true);
@@ -289,43 +328,51 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
       at("2026-10-15T11:00:00Z");
       await give(gym, owner, id["Nia Nextweek"], types.threeMonths, "2026-10-22", false);
 
-      // Left, with the day: Jude 16 July · Stella 4 September · Cal 3 October · Rob 5 October
-      // (removed) · Yara 14 October · Percy today (no day was stored for his last class).
-      // Members: Paula, Owen, Freya, Nia, Rhea, Tom, Eli, Una and Ned. Nine.
+      // Left, with the day: Jude 16 July · Stella 4 September · Mona 10 September (the day
+      // her record was made, never the spring before it) · Lena 24 September · Cal 3 October
+      // · Rob 5 October (removed) · Percy 12 October (his last class) · Yara 14 October.
+      // Members: Paula, Owen, Freya, Nia, Rhea, Tom, Eli, Una, Ned and Rena. Ten.
       const expected: MembersReport = {
         timezone: "Europe/London",
         today: "2026-10-15",
         // The list itself last changed when Rob was removed; a membership ending is not a change to it.
         listChangedOn: "2026-10-05",
-        activeNow: 9,
+        activeNow: 10,
         everLeft: true,
         fullMonths: 3,
         thisMonth: { month: "2026-10", joined: 0, left: 4 },
         churnMonths: ["2026-07", "2026-08", "2026-09"],
-        // Of 15 + 14 + 14 as July, August and September began, 1 + 0 + 1 left.
-        churn: { state: "ok", percent: 4.7 },
-        retention: { state: "ok", percent: 95.3 },
-        // From 10 June: 36 + 86 + 115 + 117 + 126 + 127 days between the six.
-        averageStay: { state: "ok", days: 101, leavers: 6 },
+        // Of 17 + 16 + 16 as July, August and September began, 1 + 0 + 2 left.
+        churn: { state: "ok", percent: 6.1 },
+        retention: { state: "ok", percent: 93.9 },
+        // From 10 June: 36 + 86 + 106 + 115 + 117 + 124 + 126 days, and none for Mona, between the eight.
+        averageStay: { state: "ok", days: 89, leavers: 8 },
         months: [
           { month: "2026-06", full: false, activeAtStart: null, joined: null, left: 0, churnPercent: null },
-          { month: "2026-07", full: true, activeAtStart: 15, joined: 0, left: 1, churnPercent: 6.7 },
-          { month: "2026-08", full: true, activeAtStart: 14, joined: 0, left: 0, churnPercent: 0 },
-          // Rhea's 1 Month ended on 9 September; she holds a new one, so September never lost her.
-          { month: "2026-09", full: true, activeAtStart: 14, joined: 0, left: 1, churnPercent: 7.1 },
-          { month: "2026-10", full: false, activeAtStart: 13, joined: 0, left: 4, churnPercent: null },
+          { month: "2026-07", full: true, activeAtStart: 17, joined: 0, left: 1, churnPercent: 5.9 },
+          { month: "2026-08", full: true, activeAtStart: 16, joined: 0, left: 0, churnPercent: 0 },
+          // Rhea's 1 Month ended on 9 September; she holds a new one, so September never lost
+          // her. Rena's ended on the 24th and her file says she is paid up: not lost either.
+          // Mona joined and left inside the month, so she is in Left and never in churn.
+          { month: "2026-09", full: true, activeAtStart: 16, joined: 1, left: 3, churnPercent: 12.5 },
+          { month: "2026-10", full: false, activeAtStart: 14, joined: 0, left: 4, churnPercent: null },
         ],
         leads: { total: 0, joined: 0, percent: null, sources: [] },
       };
       expect(await read(gym, owner)).toEqual(expected);
 
       // The two pages agree, person by person: whoever Members reads as Ended or Cancelled
-      // from a membership given here is exactly who Reports stopped counting.
+      // from a membership given here is who Reports stopped counting, but for Rena, whose
+      // renewal is waiting on the Memberships page.
       const page = await membersPage(gym, owner);
       const nameOf = new Map(page.entries.map((entry) => [entry.entryId, entry.fullName]));
       const over = page.entries.filter((entry) => entry.held?.status === "ended" || entry.held?.status === "cancelled");
-      expect(over.map((entry) => entry.fullName).sort()).toEqual(["Cal Cancelled", "Jude July", "Percy Pack", "Stella Stopped", "Yara Yesterday"]);
-      expect(page.entries.length - over.length).toBe(expected.activeNow);
+      expect(over.map((entry) => entry.fullName).sort()).toEqual([
+        "Cal Cancelled", "Jude July", "Lena Listdate", "Mona Merged", "Percy Pack", "Rena Renewed", "Stella Stopped", "Yara Yesterday",
+      ]);
+      const waiting = await sql.begin((tx) => renewalsWaiting(tx, gym, "2026-10-15"));
+      expect(waiting.map((entryId) => nameOf.get(entryId))).toEqual(["Rena Renewed"]);
+      expect(page.entries.length - over.length + waiting.length).toBe(expected.activeNow);
       const row = (name: keyof typeof id) => page.entries.find((entry) => entry.entryId === id[name]);
       expect(row("Tom Today")?.held?.status).toBe("active");
       expect(row("Owen Overdue")?.held).toMatchObject({ status: "active", payment: { state: "due" } });
@@ -334,17 +381,19 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
       // The gym's own words answer for these two, and its words are never read as "left".
       expect(row("Una Unheld")).toMatchObject({ held: null, membershipType: "Platinum" });
       expect(row("Eli Expired")).toMatchObject({ held: null, status: "Expired" });
-      // And the day each is counted from, read from the list's own rule.
+      // And the day each membership finished, read from the list's own rule: the count
+      // then leaves Rena out, and holds Mona to the day her record was made.
       const leftOn: Record<string, string> = {};
-      for (const [entryId, held] of await heldOnListOf(sql, gym, "2026-10-15", null)) {
-        if (held.leftOn !== null) leftOn[nameOf.get(entryId) ?? entryId] = held.leftOn;
-      }
+      for (const [entryId, day] of await sql.begin((tx) => leftOnOf(tx, gym, "2026-10-15"))) leftOn[nameOf.get(entryId) ?? entryId] = day;
       expect(leftOn).toEqual({
+        "Mona Merged": "2026-03-09",
         "Jude July": "2026-07-16",
         "Stella Stopped": "2026-09-04",
+        "Lena Listdate": "2026-09-24",
+        "Rena Renewed": "2026-09-24",
         "Cal Cancelled": "2026-10-03",
+        "Percy Pack": "2026-10-12",
         "Yara Yesterday": "2026-10-14",
-        "Percy Pack": "2026-10-15",
       });
 
       // Next door reads its own leaver and none of these; London read none of next door's.
@@ -365,15 +414,27 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
       // A new membership makes Yara a member again, and October never lost her.
       await give(gym, owner, id["Yara Yesterday"], types.oneMonth, "2026-10-15", true);
       const after = await read(gym, owner);
-      expect(after.activeNow).toBe(10);
+      expect(after.activeNow).toBe(11);
       expect(after.thisMonth.left).toBe(3);
-      expect(after.averageStay).toEqual({ state: "ok", days: 96, leavers: 5 });
+      expect(after.averageStay).toEqual({ state: "ok", days: 83, leavers: 7 });
       expect((await membersPage(gym, owner)).entries.find((entry) => entry.entryId === id["Yara Yesterday"])?.held?.status).toBe("active");
 
       // The count itself: a day handed in for somebody already removed, or for another
       // gym's person, moves nothing. Rob left on the day he was removed, whatever it says.
-      const counted = (gone: { id: string; on: string }[]) => readMemberCounts(sql, gym, "Europe/London", clock, gone);
+      const counted = (gone: { id: string; on: string }[]) => readMemberCounts(sql, gym, "Europe/London", "2026-10-15", gone);
       expect(await counted([{ id: id["Rob Removed"], on: "2026-07-20" }, { id: nell, on: "2026-07-20" }])).toEqual(await counted([]));
+
+      // A month that has closed stays as it closed. October, read on 2 November and again on
+      // 20 November, after the last day of Percy's pack (18 November) has passed: Cal, Rob
+      // and Percy, then Tom on the 15th and Rhea on the 31st. Yara's new month runs into
+      // November, and Rena's file still says she is paid up.
+      const october = { month: "2026-10", full: true, activeAtStart: 14, joined: 0, left: 5, churnPercent: 35.7 };
+      for (const moment of ["2026-11-02T11:00:00Z", "2026-11-20T11:00:00Z"]) {
+        at(moment);
+        const later = await read(gym, owner);
+        expect(later.months.find((m) => m.month === "2026-10"), moment).toEqual(october);
+        expect(later.months.find((m) => m.month === "2026-09"), moment).toEqual(expected.months[3]);
+      }
     },
     TEST_TIMEOUT_MS,
   );

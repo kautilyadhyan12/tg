@@ -8,7 +8,6 @@ import { heldChips, heldPassing, mergeChips, type AskedWords, type HeldShown, ty
 const shown = (over: Partial<HeldOnList> = {}, noEmail = false): HeldShown => ({
   shown: { status: "active", memberships: ["Gold Monthly"], day: null, payment: { state: "paid" }, ...over },
   noEmail,
-  leftOn: null,
 });
 
 const people = new Map<string, HeldShown>([

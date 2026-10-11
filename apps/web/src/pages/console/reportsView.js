@@ -74,7 +74,7 @@ function shareTile(key, figure, report, words) {
 /** The line above the figures: where they come from and how fresh the list is. */
 export function listLine(report, words) {
   if (report.listChangedOn === null) return null;
-  return `These figures come from your ${words.person} list. Someone was last added or removed on ${dayText(report.listChangedOn)}.`;
+  return `These figures come from your ${words.person} list and the memberships you give in the app. Someone was last added or removed on ${dayText(report.listChangedOn)}.`;
 }
 
 /** Shown once, under the tiles, while nobody has ever left. */
@@ -117,7 +117,7 @@ export function memberTiles(report, words) {
       value: count(report.activeNow),
       line: null,
       note: null,
-      how: `Everyone on your ${words.person} list today, except ${words.people} whose membership has ended or been cancelled and who have no new one. ${words.peopleCap} you have removed are not counted.`,
+      how: `Everyone on your ${words.person} list today, except ${words.people} whose membership has ended or been cancelled and who have no new one. A status from your own file, such as Expired, is not counted. ${words.peopleCap} you have removed are not counted.`,
     },
     {
       key: 'new',
@@ -133,7 +133,7 @@ export function memberTiles(report, words) {
       value: report.everLeft ? count(report.thisMonth.left) : null,
       line: report.everLeft ? null : nobodyRemoved(words),
       note: report.everLeft ? soFar((m) => m.left) : null,
-      how: `${words.peopleCap} removed from your ${words.person} list in ${month}, and ${words.people} whose membership ended or was cancelled in ${month} and who have no new one. On your ${words.person} list, their status is Ended or Cancelled. A status from your own file, such as Expired, is not counted. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
+      how: `${words.peopleCap} removed from your ${words.person} list in ${month}, and ${words.people} whose membership ended or was cancelled in ${month} and who have no new one. On your ${words.person} list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
     },
     {
       key: 'churn',
@@ -141,7 +141,7 @@ export function memberTiles(report, words) {
       value: churn.value,
       line: churn.line,
       note: churn.value !== null && overShort !== null ? `a month, ${overShort}` : null,
-      how: `Of the ${words.people} on your list at the start of ${over}, the share who left during that month, the three months taken together. Someone who joined and left inside one month is not counted.`,
+      how: `Of your ${words.people} at the start of ${over}, the share who left during that month, the three months taken together. Someone who joined and left inside one month is not counted.`,
     },
     {
       key: 'retention',
