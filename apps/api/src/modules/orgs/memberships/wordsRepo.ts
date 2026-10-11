@@ -9,6 +9,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import {
   HELD_LIVE_MAX,
+  LINK_DAY_AHEAD_DAYS,
   MEMBER_LIST_STATUS_CHIPS_MAX,
   type HeldMembershipTypeChoice,
   type MembershipLinkGroup,
@@ -82,13 +83,21 @@ export async function readWords(sql: Sql, gymId: string, today: string): Promise
         WHERE e.former_at IS NULL AND lower(e.membership_type) = p.key
         GROUP BY p.key, h.entry_id
       ),
-      -- again: every one of theirs is over, none cancelled, and the list now covers a
-      -- later day (offeredAgain in words.ts is the rule; the box is exact).
       holding AS MATERIALIZED (
-        SELECT f.key, count(*)::int AS holders,
-               (count(*) FILTER (WHERE NOT f.recurring AND NOT f.cancelled AND NOT f.in_use
-                                   AND f.covered >= ${today}::date AND f.covered > f.last_day))::int AS again
+        SELECT f.key, count(*)::int AS holders FROM facts f GROUP BY f.key
+      ),
+      -- Whom the box would renew, and nobody it would refuse: every one of theirs is over,
+      -- none cancelled, the list covers a later day (offeredAgain in words.ts), that day
+      -- has not passed and is not further off than a membership can run
+      -- (linkHeldMembership), and they have room for one more.
+      renewing AS MATERIALIZED (
+        SELECT f.key, count(*)::int AS again
         FROM facts f
+        WHERE NOT f.recurring AND NOT f.cancelled AND NOT f.in_use
+          AND f.covered >= ${today}::date AND f.covered > f.last_day
+          AND f.covered < ${today}::date + ${LINK_DAY_AHEAD_DAYS}::int
+          AND (SELECT count(*) FROM gym_held_memberships h
+               WHERE h.gym_id = ${gymId} AND h.entry_id = f.entry_id AND ${IN_USE_TODAY(tx, today)}) < ${HELD_LIVE_MAX}
         GROUP BY f.key
       )
       SELECT g.word, g.people, p.type_id, p.linked, t.name AS type_name,
@@ -97,10 +106,11 @@ export async function readWords(sql: Sql, gymId: string, today: string): Promise
              -- The people with the word who have never held that type.
              CASE WHEN p.type_id IS NULL THEN 0
                   ELSE GREATEST(g.people - coalesce(ho.holders, 0), 0) END AS waiting,
-             coalesce(ho.again, 0) AS again
+             coalesce(rn.again, 0) AS again
       FROM grouped g
       LEFT JOIN pairs p ON p.key = g.key
       LEFT JOIN holding ho ON ho.key = g.key
+      LEFT JOIN renewing rn ON rn.key = g.key
       LEFT JOIN gym_membership_types t ON t.gym_id = ${gymId} AND t.id = p.type_id
       ORDER BY g.first_seq
       LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}`;
