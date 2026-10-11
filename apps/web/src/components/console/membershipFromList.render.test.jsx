@@ -468,7 +468,7 @@ describe('the box of who gets it', () => {
     const OTHER = type(4, { name: 'Zumba Pass' });
     const plan = (again) => name({ word: '3 Month Plan', people: 8, link: { typeId: TERM.id, typeName: '3 Months', typeArchived: false, waiting: 0, again, ownName: false } });
     await open([TERM, OTHER], [plan(2)]);
-    expect(await screen.findByText("On your member list this is “3 Month Plan” · 8 people. 2 people's 3 Months has ended, and your member list now shows a later end date for them. You can renew it.")).toBeTruthy();
+    expect(await screen.findByText("On your member list this is “3 Month Plan” · 8 people. 2 people's 3 Months memberships have ended, and your member list shows a later end date for them. You can renew them.")).toBeTruthy();
     orgService.previewMembershipLink.mockResolvedValue({
       data: previewOf(TERM, {
         word: '3 Month Plan',
@@ -482,13 +482,13 @@ describe('the box of who gets it', () => {
     const row = () => screen.getByText('3 Months', { selector: 'span' }).closest('li');
     expect(row().contains(box)).toBe(true);
     expect(screen.getByText('Zumba Pass', { selector: 'span' }).closest('li').contains(box)).toBe(false);
-    expect(within(box).getByText('Their 3 Months has ended, and your member list now shows a later end date for them. Each gets a new 3 Months up to the date beside their name.')).toBeTruthy();
+    expect(within(box).getByText('Their 3 Months memberships have ended, and your member list shows a later end date for them. Each gets a new 3 Months up to the date beside their name.')).toBeTruthy();
     expect(within(box).getByText('Who is renewed')).toBeTruthy();
     expect(rowsOf(box, 'ask')).toEqual([
       ['Asha Rao', 'Renewal, ends 25 November 2026'],
       ['Ben Cole', 'Renewal, ends 25 November 2026'],
     ]);
-    expect(within(box).getByText('6 people already have 3 Months, or had it before.')).toBeTruthy();
+    expect(within(box).getByText('6 people are not renewed: they still have 3 Months, staff cancelled it, or your member list shows no later end date for them.')).toBeTruthy();
     // The list's own later date says they renewed: they are ticked, and one question is left.
     expect(within(box).getByRole('checkbox', { name: /2 people to renew/ }).checked).toBe(true);
     expect(orgService.linkMembershipWord).not.toHaveBeenCalled();
@@ -506,7 +506,7 @@ describe('the box of who gets it', () => {
     const said = await screen.findByText("2 people now have 3 Months. You can see it on each person's page.");
     expect(row().contains(said)).toBe(true);
     expect(screen.queryByRole('group', { name: 'Renew 3 Months for 2 people?' })).toBeNull();
-    expect(screen.queryByText(/You can renew it/)).toBeNull();
+    expect(screen.queryByText(/You can renew/)).toBeNull();
   });
 
   it('a button on another page leads here with one box to open: it opens once, under its row', async () => {
@@ -529,6 +529,14 @@ describe('the box of who gets it', () => {
     expect(onBoxOpened).toHaveBeenCalledTimes(1);
   });
 
+  it('a gym that can only read is not told it can renew, and its button is off', async () => {
+    const TERM = type(3, { name: '3 Months', kind: 'one_time', termCount: 3 });
+    await open([TERM], [name({ word: '3 Month Plan', people: 8, link: { typeId: TERM.id, typeName: '3 Months', typeArchived: false, waiting: 0, again: 2, ownName: false } })], { readOnly: true });
+    expect(await screen.findByText("On your member list this is “3 Month Plan” · 8 people. 2 people's 3 Months memberships have ended, and your member list shows a later end date for them.")).toBeTruthy();
+    expect(screen.queryByText(/You can renew/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Renew 3 Months for the people with 3 Month Plan on your member list' }).disabled).toBe(true);
+  });
+
   it('an address for a membership that is not on the page, or a gym that can only read, opens no box', async () => {
     const TERM = type(3, { name: '3 Months', kind: 'one_time', termCount: 3 });
     orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [TERM] }) });
@@ -537,10 +545,18 @@ describe('the box of who gets it', () => {
     render(<MembershipTypesPanel org={ORG} readOnly={false} openBox={{ typeId: '99999999-9999-4999-8999-999999999999', word: '3 Month Plan' }} onBoxOpened={onBoxOpened} />);
     await waitFor(() => expect(onBoxOpened).toHaveBeenCalledTimes(1));
     expect(orgService.previewMembershipLink).not.toHaveBeenCalled();
+    // Said in a sentence, never left blank.
+    expect((await screen.findByRole('alert')).textContent).toBe('That membership is not on this page now.');
+    cleanup();
+    // A name longer than a list can hold is no name on it either.
+    render(<MembershipTypesPanel org={ORG} readOnly={false} openBox={{ typeId: TERM.id, word: 'x'.repeat(41) }} onBoxOpened={vi.fn()} />);
+    expect((await screen.findByRole('alert')).textContent).toBe('That membership is not on this page now.');
+    expect(orgService.previewMembershipLink).not.toHaveBeenCalled();
     cleanup();
     render(<MembershipTypesPanel org={ORG} readOnly openBox={{ typeId: TERM.id, word: '3 Month Plan' }} onBoxOpened={onBoxOpened} />);
     await waitFor(() => expect(onBoxOpened).toHaveBeenCalledTimes(2));
     expect(orgService.previewMembershipLink).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('with nobody ticked the name can still be counted as the type, to give later', async () => {

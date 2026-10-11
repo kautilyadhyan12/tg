@@ -1188,7 +1188,7 @@ describe('Import and its refusals', () => {
     expect(done.getByText('Your list is updated')).toBeTruthy();
     const next = within(await screen.findByTestId('member-import-next'));
     expect(next.getByText('Still to do')).toBeTruthy();
-    expect(next.getByText("2 members' 3 Months has ended, and your member list now shows a later end date for them.")).toBeTruthy();
+    expect(next.getByText("2 members' 3 Months memberships have ended, and your member list shows a later end date for them.")).toBeTruthy();
     const button = next.getByRole('link', { name: 'Renew their memberships' });
     expect(button.getAttribute('href')).toBe(`/console/iron-house/memberships?give=${TERM}&name=3%20Month%20Plan`);
     expect(orgService.getMembershipWords).toHaveBeenCalledWith(GYM);
@@ -1218,8 +1218,8 @@ describe('Import and its refusals', () => {
     });
     fireEvent.click(importButton());
     const next = within(await screen.findByTestId('member-import-next'));
-    expect(next.getByText("1 member's 3 Months has ended, and your member list now shows a later end date for them.")).toBeTruthy();
-    expect(next.getByText('The owner can do this on the Memberships page.')).toBeTruthy();
+    expect(next.getByText("1 member's 3 Months membership has ended, and your member list shows a later end date for them.")).toBeTruthy();
+    expect(next.getByText('The owner can renew it on the Memberships page.')).toBeTruthy();
     expect(next.queryByRole('link')).toBeNull();
   });
 

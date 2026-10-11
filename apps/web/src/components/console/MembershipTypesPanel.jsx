@@ -32,6 +32,7 @@ import {
   typesSummary,
   withChoice,
 } from '../../pages/console/membershipTypesView';
+import { MEMBER_LIST_MAX_STATUS_CHARS } from '@app/shared';
 import { formWordsFor, notSetUp, typeTies, withSetUpCount } from '../../pages/console/membershipWordsView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from './ConsoleStates';
 import BillSettingsCard from './BillSettingsCard';
@@ -595,7 +596,11 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   useEffect(() => {
     if (openBox === null || led.current || list === null) return;
     led.current = true;
-    if (!readOnly && list.types.some((t) => t.id === openBox.typeId)) void openFromList(openBox.word, openBox.typeId);
+    // An address somebody kept or made by hand may name a membership that has gone, or
+    // no name the list could hold: said in a sentence, never left blank.
+    const found = list.types.some((t) => t.id === openBox.typeId) && openBox.word.length <= MEMBER_LIST_MAX_STATUS_CHARS;
+    if (!readOnly && found) void openFromList(openBox.word, openBox.typeId);
+    else if (!readOnly) void Promise.resolve().then(() => setActionError('That membership is not on this page now.'));
     onBoxOpened?.();
     // Once: `led` holds it, whatever the page draws again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -761,7 +766,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                     readOnly={readOnly}
                     busy={anyBusy}
                     formOpen={locked}
-                    ties={typeTies(type, fromList.words)}
+                    ties={typeTies(type, fromList.words, !readOnly)}
                     form={formAt === 'row' && draft.id === type.id ? inRow(form) : null}
                     box={boxRow === type.id ? giveBox(true) : null}
                     note={noteRow === type.id ? { error: fromList.error, done: fromList.done } : null}

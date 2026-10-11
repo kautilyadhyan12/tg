@@ -11,6 +11,10 @@
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg'
 //   corepack pnpm --filter api exec tsx tools/measure-membership-words-cost.ts [--people=10000]
 //
+// --renew measures 21c-i instead: everybody held a one-time membership from the list that
+// has ended, and the list gives half of them a later end date. The words read (which
+// Members and the import's last screen now make too), the box, and the press that renews.
+//
 // LOCAL DATABASES ONLY: it writes a gym, its list and their memberships, and removes them.
 import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
@@ -26,6 +30,7 @@ if (!/localhost|127\.0\.0\.1/.test(url)) {
 const sql = postgres(url, { prepare: false, max: 4 });
 const peopleArg = process.argv.find((a) => a.startsWith("--people="));
 const PEOPLE = peopleArg === undefined ? 2100 : Number(peopleArg.slice("--people=".length));
+const RENEW = process.argv.includes("--renew");
 const RUNS = 7;
 const PLAN = "zz_words_cost";
 const PREFIX = "words-cost-";
@@ -59,10 +64,10 @@ async function seed(today: string): Promise<{ gymId: string; owner: string; type
   const typeId = randomUUID();
   await sql`
     INSERT INTO gym_membership_types (id, gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
-    VALUES (${typeId}, ${gymId}, 'Gold Monthly', 'recurring', 4999, 'GBP', 1, 'month', 'all_classes')`;
+    VALUES (${typeId}, ${gymId}, 'Gold Monthly', ${RENEW ? "one_time" : "recurring"}, 4999, 'GBP', 1, 'month', 'all_classes')`;
   const records = Array.from({ length: PEOPLE }, (_, i) => {
     const id = randomUUID();
-    const dated = i % 4 !== 3;
+    const dated = RENEW || i % 4 !== 3;
     return {
       id,
       gym_id: gymId,
@@ -72,8 +77,8 @@ async function seed(today: string): Promise<{ gymId: string; owner: string; type
       source: "typed",
       membership_type: i % 3 === 0 ? "GOLD" : "Gold",
       // Renewal days spread over a month ahead, and a quarter of them a month behind.
-      ends_on: dated ? addDays(today, i % 4 === 2 ? -(1 + (i % 28)) : 1 + (i % 28)) : null,
-      ends_on_kind: dated ? "renews" : null,
+      ends_on: RENEW ? addDays(today, 10) : dated ? addDays(today, i % 4 === 2 ? -(1 + (i % 28)) : 1 + (i % 28)) : null,
+      ends_on_kind: RENEW ? "ends" : dated ? "renews" : null,
     };
   });
   for (let i = 0; i < records.length; i += 1000) await sql`INSERT INTO gym_member_list_entries ${sql(records.slice(i, i + 1000))}`;
@@ -97,15 +102,33 @@ const deps = { sql, now: () => new Date() };
 const today = new Date().toISOString().slice(0, 10);
 const { gymId, owner, typeId } = await seed(today);
 const mhz = await import("node:os").then((os) => os.cpus()[0]?.speed ?? 0);
+if (RENEW) {
+  // Last month everybody got it from the list. Forty days on it has ended for all of them,
+  // and the list gives every second person a later end date.
+  const given = await previewMembershipLink(deps, owner, gymId, { word: "Gold", typeId });
+  await linkMembershipWord(deps, owner, gymId, { word: "Gold", typeId, groups: { settled: true, due: true, ask: true }, digest: given.digest, paid: true });
+  await sql`UPDATE gym_held_memberships SET starts_on = starts_on - 40 WHERE gym_id = ${gymId}`;
+  await sql`
+    UPDATE gym_member_list_entries
+    SET ends_on = CASE WHEN listed_seq % 2 = 0 THEN ${addDays(today, 45)}::date ELSE ${addDays(today, -30)}::date END
+    WHERE gym_id = ${gymId}`;
+  await sql`VACUUM ANALYZE gym_held_memberships`;
+}
 const first = await previewMembershipLink(deps, owner, gymId, { word: "Gold", typeId });
+const TO_GIVE = first.counts.settled + first.counts.due + first.counts.ask;
 console.log(
-  `one gym: ${String(PEOPLE)} people, all with the one word; paid up ${String(first.counts.settled)}, due ${String(first.counts.due)}, to ask ${String(first.counts.ask)}; cpu ${String(mhz)} MHz; ${String(RUNS)} runs each`,
+  `one gym: ${String(PEOPLE)} people, all with the one word; paid up ${String(first.counts.settled)}, due ${String(first.counts.due)}, to ask ${String(first.counts.ask)}, of them renewals ${String(first.counts.again)}; cpu ${String(mhz)} MHz; ${String(RUNS)} runs each`,
 );
 // The box as it stands before anybody is given anything: every timed link starts from it.
 const digest = first.digest;
 
 /** Take the link's work back, so each run gives everybody their membership afresh. */
 async function undo(): Promise<void> {
+  if (RENEW) {
+    // Only the renewals go: each started today, and the ones before them stay ended.
+    await sql`DELETE FROM gym_held_memberships WHERE gym_id = ${gymId} AND starts_on >= ${addDays(today, -1)}::date`;
+    return;
+  }
   await sql`DELETE FROM gym_held_memberships WHERE gym_id = ${gymId}`;
   await sql`DELETE FROM gym_membership_word_links WHERE gym_id = ${gymId}`;
 }
@@ -116,10 +139,10 @@ const calls: [string, () => Promise<unknown>, (() => Promise<void>) | null][] = 
   ["read the list's words", () => getMembershipWords(deps, owner, gymId), null],
   ["the box: who would get it", () => previewMembershipLink(deps, owner, gymId, { word: "Gold", typeId }), null],
   [
-    `link: give it to ${String(PEOPLE)} people`,
+    RENEW ? `renew: ${String(TO_GIVE)} of ${String(PEOPLE)} people` : `link: give it to ${String(PEOPLE)} people`,
     async () => {
       const done = await linkMembershipWord(deps, owner, gymId, { word: "Gold", typeId, groups: { settled: true, due: true, ask: true }, digest, paid: true });
-      if (done.given !== PEOPLE) throw new Error(`gave ${String(done.given)} of ${String(PEOPLE)}`);
+      if (done.given !== TO_GIVE) throw new Error(`gave ${String(done.given)} of ${String(TO_GIVE)}`);
     },
     undo,
   ],

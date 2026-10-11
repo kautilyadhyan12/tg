@@ -37,19 +37,18 @@ export function archivedLine(w) {
  *    - the list's own use of this type's very name, said only while somebody with it
  *      has never had the membership.
  *  `give` is whether anybody with the name can be given the type: somebody who has never
- *  had it, or somebody whose membership ended and whose list now shows a later end date
+ *  had it, or somebody whose membership ended and whose list shows a later end date
  *  (`renew` is true where those are the only ones). `first` is true where
  *  nobody with it has: the people are offered it outright. Otherwise some were given it
  *  and some were not, perhaps on purpose, so the row states the numbers and offers a
  *  look at who can get it, never a prompt to give. */
-export function typeTies(type, words) {
+export function typeTies(type, words, canGive = true) {
   const ties = [];
   const never = (waiting) => `${String(waiting)} of them ${waiting === 1 ? 'has' : 'have'} never had it`;
-  // Somebody whose membership ended, and whose list now shows a later end date.
+  // Somebody whose membership ended, and whose list shows a later end date. A gym that can
+  // only read is not told it can renew.
   const renewals = (again) =>
-    again === 1
-      ? ` 1 person's ${type.name} has ended, and your member list now shows a later end date for them. You can renew it.`
-      : ` ${String(again)} people's ${type.name} has ended, and your member list now shows a later end date for them. You can renew it.`;
+    ` ${endedLine(again === 1 ? "1 person's" : `${String(again)} people's`, type.name, again !== 1, 'member')}${canGive ? (again === 1 ? ' You can renew it.' : ' You can renew them.') : ''}`;
   const ownName = (w, waiting, again) => ({
     word: w,
     text:
@@ -238,7 +237,15 @@ export function giveGroups(preview) {
 export function leftOut(preview) {
   const { counts, type } = preview;
   const lines = [];
-  if (counts.has > 0) lines.push({ key: 'has', text: `${people(counts.has)} already ${counts.has === 1 ? 'has' : 'have'} ${type.name}, or had it before.` });
+  if (counts.has > 0) {
+    lines.push({
+      key: 'has',
+      // In a box of renewals the people being renewed had it before too: say what is different.
+      text: isRenewal(preview)
+        ? `${people(counts.has)} ${counts.has === 1 ? 'is' : 'are'} not renewed: they still have ${type.name}, staff cancelled it, or your member list shows no later end date for them.`
+        : `${people(counts.has)} already ${counts.has === 1 ? 'has' : 'have'} ${type.name}, or had it before.`,
+    });
+  }
   if (counts.ended > 0) lines.push({ key: 'ended', text: `${people(counts.ended)}: your list says their membership has ended.` });
   if (counts.full > 0) lines.push({ key: 'full', text: `${people(counts.full)} already ${counts.full === 1 ? 'has' : 'have'} as many memberships running as one person can.` });
   if (counts.day > 0) lines.push({ key: 'day', text: `${people(counts.day)}: the date in your list can't be used. Add their membership on their own page.` });
@@ -281,8 +288,8 @@ export function renewLead(preview) {
   if (!isRenewal(preview)) return null;
   const { name } = preview.type;
   return preview.counts.again === 1
-    ? `This person's ${name} has ended, and your member list now shows a later end date for them. They get a new ${name} up to that date.`
-    : `Their ${name} has ended, and your member list now shows a later end date for them. Each gets a new ${name} up to the date beside their name.`;
+    ? `This person's ${name} membership has ended, and your member list shows a later end date for them. They get a new ${name} up to that date.`
+    : `Their ${name} memberships have ended, and your member list shows a later end date for them. Each gets a new ${name} up to the date beside their name.`;
 }
 
 /** Somebody in a box of new people had the membership before and it ended: why they are
@@ -292,8 +299,8 @@ export function renewNote(preview) {
   if (again === 0 || isRenewal(preview)) return null;
   const { name } = preview.type;
   return again === 1
-    ? `1 of these people had ${name} before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.`
-    : `${String(again)} of these people had ${name} before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.`;
+    ? `1 of these people had ${name} before and it has ended. Your member list shows a later end date for them, so this renews it up to that date.`
+    : `${String(again)} of these people had ${name} before and it has ended. Your member list shows a later end date for them, so this renews it up to that date.`;
 }
 
 /** A pack's classes are not on the list: said before it is given. */
@@ -369,54 +376,71 @@ function tiedNames(words) {
   });
 }
 
+/** "2 members' 3 Months memberships have ended, and your member list shows a later end
+ *  date for them." `whose` is who they are ("2 members'", "These members'"). */
+function endedLine(whose, typeName, many, listOf) {
+  return `${whose} ${typeName} ${many ? 'memberships have' : 'membership has'} ended, and your ${listOf} list shows a later end date for them.`;
+}
+
 /** The sign atop Members while a renewal waits: somebody whose membership has ended and
  *  whose list shows a later end date reads "Ended" there, and this says why, with the
- *  button that renews them. One a membership. Somebody who never had the membership is
- *  not named here: they may have been left out on purpose. */
+ *  button that renews them. One a membership. Where the same box also holds people who
+ *  never had the membership, the sign says so and its button says what the box is. */
 export function renewalsWaiting(words, peopleWords) {
+  const who = (n) => (n === 1 ? `1 ${peopleWords.person}` : `${n.toLocaleString('en')} ${peopleWords.people}`);
   return tiedNames(words)
     .filter((t) => t.again > 0)
-    .map((t) => ({
-      key: `renew-${t.typeId}-${t.w.word}`,
-      typeId: t.typeId,
-      word: t.w.word,
-      title: t.again === 1 ? `1 ${peopleWords.person} can be renewed` : `${t.again.toLocaleString('en')} ${peopleWords.people} can be renewed`,
-      detail: `Their ${t.typeName} has ended, and your ${peopleWords.person} list shows a later end date for them.`,
-      button: t.again === 1 ? 'Renew their membership' : 'Renew their memberships',
-    }));
+    .map((t) => {
+      const one = t.again === 1;
+      const ended = endedLine(one ? `This ${peopleWords.person}'s` : `These ${peopleWords.people}'`, t.typeName, !one, peopleWords.person);
+      return {
+        key: `renew-${t.typeId}-${t.w.word}`,
+        typeId: t.typeId,
+        word: t.w.word,
+        title: one ? '1 membership can be renewed' : `${t.again.toLocaleString('en')} memberships can be renewed`,
+        detail: t.waiting === 0 ? ended : `${ended} The same box also lists ${who(t.waiting)} who ${t.waiting === 1 ? 'has' : 'have'} never had ${t.typeName}.`,
+        button: t.waiting > 0 ? 'See who can get it' : one ? 'Renew their membership' : 'Renew their memberships',
+        ask: `The owner can renew ${one ? 'it' : 'them'} on the Memberships page.`,
+      };
+    });
 }
 
 /** After an import: what is left to do about the memberships the gym has set up, a
  *  sentence and a button each, the renewals first. `words` are the list's membership
  *  names as the server reads them now; `peopleWords` the gym's own word for its people.
- *  Each step opens the box for that name on the Memberships page. */
+ *  Each step opens the box for that name on the Memberships page, so a name with both
+ *  renewals and people who never had it is ONE step. `ask` is who can, for somebody who
+ *  may not open that page. */
 export function afterImportSteps(words, peopleWords) {
-  const steps = [];
   const who = (n) => (n === 1 ? `1 ${peopleWords.person}` : `${n.toLocaleString('en')} ${peopleWords.people}`);
+  const never = (t) =>
+    t.own
+      ? `${who(t.waiting)} ${t.waiting === 1 ? 'has' : 'have'} ${t.typeName} on your ${peopleWords.person} list, but it is not on their ${t.waiting === 1 ? 'page' : 'pages'} yet.`
+      : `${who(t.waiting)} ${t.waiting === 1 ? 'has' : 'have'} ${quoted(t.w.word)} on your ${peopleWords.person} list and ${t.waiting === 1 ? 'has' : 'have'} not been given ${t.typeName} yet.`;
   const tied = tiedNames(words);
+  const steps = [];
   for (const t of tied) {
     if (t.again === 0) continue;
+    const one = t.again === 1;
+    const ended = endedLine(one ? `1 ${peopleWords.person}'s` : `${t.again.toLocaleString('en')} ${peopleWords.people}'`, t.typeName, !one, peopleWords.person);
     steps.push({
       key: `renew-${t.typeId}-${t.w.word}`,
       typeId: t.typeId,
       word: t.w.word,
-      text:
-        t.again === 1
-          ? `1 ${peopleWords.person}'s ${t.typeName} has ended, and your ${peopleWords.person} list now shows a later end date for them.`
-          : `${t.again.toLocaleString('en')} ${peopleWords.people}' ${t.typeName} has ended, and your ${peopleWords.person} list now shows a later end date for them.`,
-      button: t.again === 1 ? 'Renew their membership' : 'Renew their memberships',
+      text: t.waiting === 0 ? ended : `${ended} ${never(t)}`,
+      button: t.waiting > 0 ? 'See who can get it' : one ? 'Renew their membership' : 'Renew their memberships',
+      ask: t.waiting > 0 ? 'The owner can do both on the Memberships page.' : `The owner can renew ${one ? 'it' : 'them'} on the Memberships page.`,
     });
   }
   for (const t of tied) {
-    if (t.waiting === 0) continue;
+    if (t.waiting === 0 || t.again > 0) continue;
     steps.push({
       key: `give-${t.typeId}-${t.w.word}`,
       typeId: t.typeId,
       word: t.w.word,
-      text: t.own
-        ? `${who(t.waiting)} ${t.waiting === 1 ? 'has' : 'have'} ${t.typeName} on your ${peopleWords.person} list, but it is not on their ${t.waiting === 1 ? 'page' : 'pages'} yet.`
-        : `${who(t.waiting)} ${t.waiting === 1 ? 'has' : 'have'} ${quoted(t.w.word)} on your ${peopleWords.person} list and ${t.waiting === 1 ? 'has' : 'have'} not been given ${t.typeName} yet.`,
+      text: never(t),
       button: `Give them ${t.typeName}`,
+      ask: 'The owner can give it to them on the Memberships page.',
     });
   }
   return steps;

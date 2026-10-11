@@ -1419,7 +1419,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                     {step.button}
                   </PlaceLink>
                 ) : (
-                  <p className="c-s14 c-t2 m-0">The owner can do this on the Memberships page.</p>
+                  <p className="c-s14 c-t2 m-0">{step.ask}</p>
                 )}
               </div>
             ))}

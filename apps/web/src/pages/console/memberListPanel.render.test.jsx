@@ -128,8 +128,8 @@ describe('the sign while a renewal waits', () => {
     orgService.getMembershipWords.mockResolvedValue(names(2));
     drawFor(OWNER);
     const sign = within(await screen.findByTestId('renewals-sign'));
-    expect(sign.getByText('2 members can be renewed')).toBeTruthy();
-    expect(sign.getByText('Their 3 Months has ended, and your member list shows a later end date for them.')).toBeTruthy();
+    expect(sign.getByText('2 memberships can be renewed')).toBeTruthy();
+    expect(sign.getByText("These members' 3 Months memberships have ended, and your member list shows a later end date for them.")).toBeTruthy();
     const button = sign.getByRole('link', { name: 'Renew their memberships' });
     expect(button.getAttribute('href')).toBe(`/console/iron-house/memberships?give=${TERM}&name=3%20Month%20Plan`);
     expect(orgService.getMembershipWords).toHaveBeenCalledWith(GYM);
@@ -147,9 +147,29 @@ describe('the sign while a renewal waits', () => {
     orgService.getMembershipWords.mockResolvedValue(names(1));
     drawFor({ ...OWNER, staffRole: 'trainer', privileges: ['members.confirm'] });
     const sign = within(await screen.findByTestId('renewals-sign'));
-    expect(sign.getByText('1 member can be renewed')).toBeTruthy();
-    expect(sign.getByText('Their 3 Months has ended, and your member list shows a later end date for them. The owner can do this on the Memberships page.')).toBeTruthy();
+    expect(sign.getByText('1 membership can be renewed')).toBeTruthy();
+    expect(sign.getByText("This member's 3 Months membership has ended, and your member list shows a later end date for them. The owner can renew it on the Memberships page.")).toBeTruthy();
     expect(sign.queryByRole('link')).toBeNull();
+  });
+
+  it('a gym that can only read sees why they read Ended, and no button it cannot use', async () => {
+    orgService.getMembershipWords.mockResolvedValue(names(2));
+    render(
+      <MemoryRouter>
+        <MemberListPanel gymId={GYM} gym={OWNER} words={WORDS} readOnly refreshKey={0} />
+      </MemoryRouter>,
+    );
+    const sign = within(await screen.findByTestId('renewals-sign'));
+    expect(sign.getByText("These members' 3 Months memberships have ended, and your member list shows a later end date for them.")).toBeTruthy();
+    expect(sign.queryByRole('link')).toBeNull();
+  });
+
+  it('where the box also holds people who never had it, the sign says so and its button says what the box is', async () => {
+    orgService.getMembershipWords.mockResolvedValue(names(2, 1));
+    drawFor(OWNER);
+    const sign = within(await screen.findByTestId('renewals-sign'));
+    expect(sign.getByText("These members' 3 Months memberships have ended, and your member list shows a later end date for them. The same box also lists 1 member who has never had 3 Months.")).toBeTruthy();
+    expect(sign.getByRole('link', { name: 'See who can get it' })).toBeTruthy();
   });
 
   it('staff the server does not give the names to are never asked for them, and a refused read draws nothing', async () => {
