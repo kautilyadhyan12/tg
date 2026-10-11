@@ -230,17 +230,27 @@ export function heldOnList(input: HeldInput): HeldOnList | null {
  *  it they have not left, though the list reads "Ended". With no class recorded, `today`
  *  stands in until the pack's own last day has passed. Never later than `today`. */
 export function heldLeftOn(input: HeldInput): string | null {
+  return heldLeft(input)?.on ?? null;
+}
+
+/** `heldLeftOn`'s day with the membership it is the day of (`HeldForList.id`). */
+export function heldLeft(input: HeldInput): { on: string; heldId: string } | null {
   const { last } = answering(input);
   if (last === undefined) return null;
+  const on = leftOnOf(last, input.today);
+  return on === null ? null : { on, heldId: last.id };
+}
+
+function leftOnOf(last: Seen, today: string): string | null {
   const { status, endsOn } = last.view;
   const usedUpOn = status === "ended" && last.membership.kind === "pack" && last.membership.classesLeft === 0 ? (last.usedUpOn ?? null) : null;
   if (usedUpOn !== null) {
     // The last class, or the pack's own last day where that comes first: a day that is
     // stored, so it never moves. While it is today or still to come they have not left.
     const day = endsOn !== null && endsOn < usedUpOn ? endsOn : usedUpOn;
-    return day >= input.today ? null : day;
+    return day >= today ? null : day;
   }
-  return endsOn !== null && endsOn <= input.today ? endsOn : input.today;
+  return endsOn !== null && endsOn <= today ? endsOn : today;
 }
 
 /** A row's Membership cell: the first name, and how many more ("Gold Monthly +1"). */

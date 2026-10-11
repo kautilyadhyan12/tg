@@ -87,6 +87,8 @@ const KEPT_LINES = {
   not_in_app: () => "Not in the app, so there's nothing to remove.",
   in_file: () =>
     "Keep the app for now: someone in this file has the same email or phone, so we can't tell yet whose it is. You can remove them from the app afterwards.",
+  not_over: () => 'Stay on your list: they have a membership now, or one waiting to be renewed.',
+  payment_due: () => 'Stay on your list: a payment is still due from them. Record it or cancel the bill on their page first.',
   gone: (words, door) => (door === 'app' ? 'No longer in the app.' : 'No longer on your list.'),
 };
 

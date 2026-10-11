@@ -39,8 +39,17 @@ export const EMPTY_FILTERS = {
   paymentStatus: [],
   /** One of the gym's tags, { id, name }, or null (5d-ii): members or past members. */
   tag: null,
+  /** Only the members whose membership has ended or been cancelled (21c-iii). */
+  over: false,
+  /** Only the members left off that list because they still owe a payment. */
+  overOwing: false,
   query: '',
 };
+
+/** The pill for the list the sign atop Members opens. */
+export const OVER_FILTER_WORDS = 'Membership ended or cancelled';
+/** The pill for the people the sign holds back because they owe. */
+export const OVER_OWING_FILTER_WORDS = 'Membership over, payment due';
 
 /** A chip's words: the gym's own spelling, or "No status" for the people with none. */
 export function chipText(label, none) {
@@ -68,6 +77,8 @@ export function entriesQueryString(filters, cursor) {
   if (filters.records === 'current') {
     for (const word of filters.app) params.append('app', word);
     for (const { kind } of CHIP_KINDS) for (const word of filters[kind]) params.append(kind, word);
+    if (filters.over) params.append('membership', 'over');
+    else if (filters.overOwing) params.append('membership', 'over_owing');
   } else {
     // Past members have one word to be found by: who still owes (18a-ii).
     for (const word of filters.paymentStatus) params.append('paymentStatus', word);
@@ -88,7 +99,11 @@ export function activeFilters(filters, words) {
     // Leaving Past members drops its one word too: on the list it would mean something else.
     return [{ key: 'records', text: `Past ${words.people}`, without: { ...filters, records: 'current', paymentStatus: [] } }, ...owing, ...tag];
   }
-  const out = [];
+  const out = filters.over
+    ? [{ key: 'over', text: OVER_FILTER_WORDS, without: { ...filters, over: false } }]
+    : filters.overOwing
+      ? [{ key: 'overOwing', text: OVER_OWING_FILTER_WORDS, without: { ...filters, overOwing: false } }]
+      : [];
   for (const { kind, none } of CHIP_KINDS) {
     for (const label of filters[kind]) {
       out.push({ key: `${kind}:${label}`, text: chipText(label, none), without: toggleWord(filters, kind, label) });
@@ -105,10 +120,70 @@ export function activeFilters(filters, words) {
 export function filtersAreEmpty(filters) {
   return (
     filters.tag === null &&
+    !filters.over &&
+    !filters.overOwing &&
     filters.app.length === 0 &&
     filters.query.trim() === '' &&
     CHIP_KINDS.every(({ kind }) => filters[kind].length === 0)
   );
+}
+
+/** THE SIGN WHILE ANYBODY'S MEMBERSHIP IS OVER (21c-iii; RULINGS 2026-10-11): they are
+ *  still on the list, and Reports already counts them as having left. `inView`: the list
+ *  under the sign shows only those people, so the sign says what to do with each. A gym
+ *  that can only read is told the fact and shown who.
+ *
+ *  `owing`: how many more are over and still owe a payment. They are held back from the
+ *  list until the payment is recorded or the bill cancelled, and the sign says so, with a
+ *  button that shows them (`owingInView`: the list under the sign shows them now). With
+ *  nobody else to review, the sign is about them alone. */
+export function overSignWords(n, words, { inView = false, readOnly = false, owing = 0, owingInView = false } = {}) {
+  const people = (k) => `${k.toLocaleString('en')} ${k === 1 ? words.person : words.people}`;
+  const owingButton = owing === 0 || owingInView ? null : owing === 1 ? `Show this ${words.person}` : `Show these ${words.people}`;
+  const first = 'Record the payment or cancel the bill on their page first.';
+  if (n === 0) {
+    return {
+      title: `${people(owing)} with a membership that is over still ${owing === 1 ? 'owes' : 'owe'} a payment`,
+      button: null,
+      detail: readOnly
+        ? `They are still on your ${words.person} list.`
+        : `${first} After that you can renew them, remove them from your list, or keep them on it, here.`,
+      owingLine: null,
+      owingButton,
+    };
+  }
+  const one = n === 1;
+  const still = `${one ? `This ${words.person} is` : `These ${words.people} are`} still on your ${words.person} list. Reports already counts them as having left.`;
+  const how = `For each ${words.person}, renew their membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first.`;
+  return {
+    title: one ? '1 membership has ended or been cancelled' : `${n.toLocaleString('en')} memberships have ended or been cancelled`,
+    button: inView ? null : readOnly ? 'See who' : one ? 'Review it' : 'Review them',
+    detail: inView && !readOnly ? how : still,
+    owingLine:
+      owing === 0
+        ? null
+        : owingInView
+          ? `The list below shows the ${people(owing)} whose membership is over and who still ${owing === 1 ? 'owes' : 'owe'} a payment.${readOnly ? '' : ` ${first}`}`
+          : `${owing.toLocaleString('en')} more ${owing === 1 ? `${words.person} has a membership that is over and still owes` : `${words.people} have a membership that is over and still owe`} a payment, so ${owing === 1 ? 'is' : 'are'} not counted above.${readOnly ? '' : ` ${first}`}`,
+    owingButton,
+  };
+}
+
+/** What Keep on list did, said above the list. `name`: the one person a row's button was
+ *  for. `already`: kept before this press; `notOver`: removed, renewed or owing since. */
+export function keptListedLine(done, words, name = null) {
+  const n = (k) => k.toLocaleString('en');
+  const already = done.already ?? 0;
+  const parts = [];
+  if (done.kept === 0) parts.push('Nothing was changed.');
+  else {
+    const who = name !== null && done.kept === 1 ? name : `${n(done.kept)} ${done.kept === 1 ? words.person : words.people}`;
+    parts.push(`${who} ${done.kept === 1 ? 'stays on your list and is' : 'stay on your list and are'} no longer counted here. You can still find them with Filter, under Status.`);
+  }
+  // Somebody else got there first, or the person has changed since the page was read.
+  if (already > 0) parts.push(`${n(already)} ${already === 1 ? 'was' : 'were'} already kept on your list.`);
+  if (done.notOver > 0) parts.push(`${n(done.notOver)} ${done.notOver === 1 ? 'is' : 'are'} no longer on this list.`);
+  return parts.join(' ');
 }
 
 /** Today in the gym's own time zone, 'YYYY-MM-DD', as the server decides a birthday; the
@@ -369,6 +444,8 @@ export function selectionFilter(filters) {
   if (filters.records === 'current') {
     if (filters.app.length > 0) out.app = [...filters.app];
     for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) out[kind] = [...filters[kind]];
+    if (filters.over) out.membership = 'over';
+    else if (filters.overOwing) out.membership = 'over_owing';
   } else if (filters.paymentStatus.length > 0) {
     out.paymentStatus = [...filters.paymentStatus];
   }

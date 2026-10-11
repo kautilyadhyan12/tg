@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronRight, Download, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Upload, UserMinus, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { HELD_PAYMENT_WORDS, MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -27,6 +27,8 @@ import {
   gymToday,
   inviteQueryString,
   isTicked,
+  keptListedLine,
+  overSignWords,
   pastSince,
   pageTickState,
   reviewSignWords,
@@ -311,6 +313,40 @@ function RenewalsSign({ sign, to, off }) {
   );
 }
 
+/** THE SIGN WHILE ANYBODY'S MEMBERSHIP IS OVER (21c-iii; RULINGS 2026-10-11): they are
+ *  still on the list, and nothing is done to anybody by itself. Its button shows only
+ *  those people in the list below; once it has, the sign says what can be done with each. */
+function OverSign({ sign, onReview, onShowOwing }) {
+  return (
+    <section className="c-callout items-start" data-testid="over-sign">
+      <span className="c-glow-dot mt-[7px]" aria-hidden="true" />
+      <div className="flex flex-col gap-1 flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="c-s15 c-w6">{sign.title}</span>
+          {sign.button !== null ? (
+            <button type="button" onClick={onReview} className="c-btn c-btn-link c-s14 c-w6" data-testid="over-review">
+              {sign.button}
+            </button>
+          ) : null}
+        </div>
+        <span className="c-s14 c-t2">{sign.detail}</span>
+        {/* The people held back because they owe (Kd, 2026-10-12): said, so nobody
+            wonders where they went, with the button that shows them. */}
+        {sign.owingLine !== null || sign.owingButton !== null ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="over-owing">
+            {sign.owingLine !== null ? <span className="c-s14 c-t2">{sign.owingLine}</span> : null}
+            {sign.owingButton !== null ? (
+              <button type="button" onClick={onShowOwing} className="c-btn c-btn-link c-s14 c-w6" data-testid="over-owing-show">
+                {sign.owingButton}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 /** THE SIGN WHILE ANY PAIR MAY BE ONE PERSON TWICE (5b-iv-a; RULINGS 2026-09-25): Review opens
  *  the pairs. The app never merges anyone on its own. */
 function DuplicatesSign({ duplicates }) {
@@ -395,6 +431,19 @@ export default function MemberListPanel({
   /** The people the Remove box was opened for: it keeps them after the list behind clears
    *  its selection, so the box can say what was done. */
   const [removeFor, setRemoveFor] = useState(null);
+  /** The box was opened from the list of members whose membership is over (21c-iii):
+   *  nobody whose membership is not over is moved, whoever was selected. */
+  const [removeOver, setRemoveOver] = useState(false);
+  /** Keep on list is being sent; and what it did, said above the list. */
+  const [keeping, setKeeping] = useState(false);
+  const [tidyNote, setTidyNote] = useState(null);
+  // The line is above the list, which may be off the screen when a row far down is pressed.
+  const tidyNoteRef = useRef(null);
+  useEffect(() => {
+    if (tidyNote !== null) tidyNoteRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [tidyNote]);
+  /** The person whose page was opened by a row's Renew, with the Add membership form open. */
+  const [addFor, setAddFor] = useState(null);
   /** The gym's tags with their counts (5d-ii); none until they are read. */
   const [gymTags, setGymTags] = useState([]);
   const [tagsTick, setTagsTick] = useState(0);
@@ -527,6 +576,7 @@ export default function MemberListPanel({
 
   const change = (next) => {
     setPage((p) => ({ ...p, loading: true }));
+    setTidyNote(null);
     setFilters(next);
   };
 
@@ -644,11 +694,59 @@ export default function MemberListPanel({
   const matchWord = filtersAreEmpty(filters) ? '' : ' that match';
   // The Remove box reads and presses for the people selected now; a "Select all" that moved
   // gives a new selection, and so a new read.
-  const loadRemove = useCallback(() => orgService.previewRemoveSelected(gymId, removeFor).then((res) => res.data.preview), [gymId, removeFor]);
-  const pressRemove = useCallback(
-    (digest, large) => orgService.removeSelected(gymId, removeFor, digest, large).then((res) => res.data.removed),
-    [gymId, removeFor],
+  const loadRemove = useCallback(
+    () => (removeOver ? orgService.previewRemoveSelected(gymId, removeFor, true) : orgService.previewRemoveSelected(gymId, removeFor)).then((res) => res.data.preview),
+    [gymId, removeFor, removeOver],
   );
+  const pressRemove = useCallback(
+    (digest, large) =>
+      (removeOver ? orgService.removeSelected(gymId, removeFor, digest, large, true) : orgService.removeSelected(gymId, removeFor, digest, large)).then((res) => res.data.removed),
+    [gymId, removeFor, removeOver],
+  );
+  // ── Members whose membership is over (21c-iii) ──
+  const overView = filters.records === 'current' && filters.over;
+  const overCount = list?.over?.count ?? 0;
+  const reviewOver = () => {
+    setTyped('');
+    change({ ...EMPTY_FILTERS, over: true });
+  };
+  const owingCount = list?.over?.owing ?? 0;
+  const owingView = filters.records === 'current' && filters.overOwing;
+  const showOwing = () => {
+    setTyped('');
+    change({ ...EMPTY_FILTERS, overOwing: true });
+  };
+  /** Remove for `chosen`: from the list of members whose membership is over, only those
+   *  whose membership still is. */
+  const openRemove = (chosen) => {
+    setTidyNote(null);
+    setRemoveOver(overView);
+    setRemoveFor(chosen);
+  };
+  /** Keep on list for `chosen`; `name` when it is one row's own button. */
+  const keepOnList = async (chosen, name = null) => {
+    if (keeping || chosen === null) return;
+    setKeeping(true);
+    setTidyNote(null);
+    setSelNote(null);
+    try {
+      const res = await orgService.keepMembersListed(gymId, chosen);
+      setTidyNote(keptListedLine(res.data.done, words, name));
+      setSel({ for: filters, ticked: NOBODY, all: null });
+      keepLoaded.current = page.entries.length;
+      setTick((n) => n + 1);
+    } catch (err) {
+      const fresh = selectionChanged(err);
+      if (fresh !== null) {
+        selectionMoved(fresh);
+        setTidyNote(`The ${words.people} you selected have changed, so nothing was done. ${count(fresh.count)} are selected now.`);
+      } else {
+        setTidyNote(errorText(err, "We couldn't keep them on your list. Please try again."));
+      }
+    } finally {
+      setKeeping(false);
+    }
+  };
   const removeMoved = useCallback(
     (fresh) => {
       selectionMoved(fresh);
@@ -724,6 +822,10 @@ export default function MemberListPanel({
     );
   }
 
+  // The list of members whose membership is over, with nobody left on it and nothing else
+  // narrowing it.
+  const overDone = !page.loading && page.error === null && page.entries.length === 0 && overView && shown.length === 1 && filters.query.trim() === '';
+
   const totalWords = !current
     ? `${count(page.total)} past ${page.total === 1 ? words.person : words.people}`
     : `${count(page.total)} ${page.total === 1 ? words.person : words.people}${empty ? '' : ' match'}`;
@@ -749,9 +851,15 @@ export default function MemberListPanel({
         </button>
       ) : null}
       {!readOnly ? (
-        <button type="button" onClick={() => setRemoveFor(selection)} data-testid="bar-remove" className="c-btn c-btn-danger c-btn-sm">
+        <button type="button" onClick={() => openRemove(selection)} data-testid="bar-remove" className="c-btn c-btn-danger c-btn-sm">
           <UserMinus aria-hidden="true" className="w-4 h-4" />
           {current ? 'Remove' : 'Remove from app'}
+        </button>
+      ) : null}
+      {overView && !readOnly ? (
+        <button type="button" onClick={() => void keepOnList(selection)} disabled={keeping} data-testid="bar-keep" className="c-btn c-btn-s c-btn-sm">
+          {keeping ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <ListChecks aria-hidden="true" className="w-4 h-4" />}
+          Keep on list
         </button>
       ) : null}
       {!readOnly ? (
@@ -802,6 +910,13 @@ export default function MemberListPanel({
       {renewalSigns.map((sign) => (
         <RenewalsSign key={sign.key} sign={sign} to={opensMemberships ? membershipBoxTo(gym.slug, sign.typeId, sign.word) : null} off={readOnly} />
       ))}
+      {overCount > 0 || owingCount > 0 ? (
+        <OverSign
+          sign={overSignWords(overCount, words, { inView: overView, readOnly, owing: owingCount, owingInView: owingView })}
+          onReview={reviewOver}
+          onShowOwing={showOwing}
+        />
+      ) : null}
       {/* The toolbar stays at the top of the screen on a computer while the list scrolls, and
           with people selected the bar over them sits in it (Kd, 2026-09-28: at the bottom of
           the list he had to scroll back up to act), as Gmail and HubSpot keep theirs. */}
@@ -1048,6 +1163,12 @@ export default function MemberListPanel({
         />
       ) : null}
 
+      {tidyNote !== null ? (
+        <p className="c-s14 c-t1" role="status" data-testid="tidy-note" ref={tidyNoteRef}>
+          {tidyNote}
+        </p>
+      ) : null}
+
       {page.loading ? <ConsoleLoading label="Loading your list…" newLook /> : null}
 
       {page.error !== null ? <ConsoleFailed message={page.error} onRetry={() => setTick((n) => n + 1)} newLook /> : null}
@@ -1085,9 +1206,10 @@ export default function MemberListPanel({
               return (
                 <li
                   key={e.entryId}
-                  className={`flex items-start md:items-center pl-1 ${i > 0 ? 'border-t' : 'md:border-t'} ${rowPicked(e.entryId) ? 'c-picked' : ''}`}
+                  className={`flex flex-col ${i > 0 ? 'border-t' : 'md:border-t'} ${rowPicked(e.entryId) ? 'c-picked' : ''}`}
                   style={{ borderColor: 'var(--line)' }}
                 >
+                  <div className="flex items-start md:items-center pl-1">
                   <span className="pt-1 md:pt-0">
                     <Tick state={rowPicked(e.entryId) ? 'on' : 'off'} label={`Select ${e.fullName || 'this person'}`} onClick={() => tickRow(e.entryId)} />
                   </span>
@@ -1146,6 +1268,45 @@ export default function MemberListPanel({
                     </span>
                     <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3 self-center" style={{ gridArea: 'go' }} />
                   </button>
+                  </div>
+                  {/* One by one (21c-iii): what can be done with this person, under their
+                      own row. With people ticked, the bar's buttons act on those instead. */}
+                  {overView && !readOnly && picked === 0 ? (
+                    <div className="flex flex-wrap gap-1 pl-12 pr-4 pb-3.5 md:pb-3" data-testid="over-actions">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTidyNote(null);
+                          setAddFor(e.entryId);
+                          setOpenId(e.entryId);
+                        }}
+                        aria-label={`Renew ${e.fullName || 'this person'}'s membership`}
+                        data-testid="over-add"
+                        className="c-btn c-btn-soft c-btn-xs"
+                      >
+                        Renew
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openRemove({ kind: 'ticked', entryIds: [e.entryId] })}
+                        aria-label={`Remove ${e.fullName || 'this person'}`}
+                        data-testid="over-remove"
+                        className="c-btn c-btn-danger c-btn-xs"
+                      >
+                        Remove
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void keepOnList({ kind: 'ticked', entryIds: [e.entryId] }, e.fullName || null)}
+                        disabled={keeping}
+                        aria-label={`Keep ${e.fullName || 'this person'} on your list`}
+                        data-testid="over-keep"
+                        className="c-btn c-btn-s c-btn-xs"
+                      >
+                        Keep on list
+                      </button>
+                    </div>
+                  ) : null}
                 </li>
               );
             })}
@@ -1164,8 +1325,17 @@ export default function MemberListPanel({
         </div>
       ) : null}
 
-      {!page.loading && page.error === null && page.entries.length === 0 ? (
+      {!page.loading && page.error === null && page.entries.length === 0 && !overDone ? (
         <p className="c-s14 c-t2">{current ? `No ${words.people} match.` : `No past ${words.people} match.`}</p>
+      ) : null}
+      {/* The last person dealt with: the list says so, with the way back to everybody. */}
+      {overDone ? (
+        <div className="flex flex-col items-start gap-2" data-testid="over-done">
+          <p className="c-s14 c-t2 m-0">{`Nobody is left to review. ${words.peopleCap} who still owe a payment, and ${words.people} you kept on your list, are not shown here.`}</p>
+          <button type="button" onClick={clearAll} className="c-btn c-btn-s c-btn-lg">
+            {`Show all ${words.people}`}
+          </button>
+        </div>
       ) : null}
 
       {!page.loading && page.cursor !== null ? (
@@ -1185,8 +1355,10 @@ export default function MemberListPanel({
           list={list}
           words={words}
           readOnly={readOnly}
+          addMembership={addFor !== null && addFor === openId}
           onClose={() => {
             setOpenId(undefined);
+            setAddFor(null);
             // Their page can add a tag or take one off: the counts, and a list shown by a tag.
             setTagsTick((n) => n + 1);
             if (filters.tag !== null) {

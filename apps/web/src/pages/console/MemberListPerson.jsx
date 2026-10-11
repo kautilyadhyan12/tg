@@ -426,7 +426,7 @@ function MergePreview({ keep, remove, fields, person }) {
 // offered (the server refuses it too), as the In the app sheet hides its Remove.
 // `pair` ({ otherId, why }) opens the panel on a possible duplicate (5b-iv-a): the two records
 // side by side at once, with Different people beside Merge.
-export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, onClose, onChanged }) {
+export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, addMembership = false, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fields = list?.fields ?? [];
@@ -1338,6 +1338,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           nothingNow={nothingNow}
           managesTypes={canManageMemberships(viewerPrivileges(gym))}
           membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
+          addNow={addMembership}
         />
         <MemberNotes key={`notes-${p.entryId}`} gymId={gymId} entryId={p.entryId} name={p.fullName} readOnly={readOnly} timeZone={gym?.timezone ?? null} />
         {membership.length > 0 ? (

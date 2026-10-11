@@ -12,6 +12,7 @@ import {
   HELD_PAYMENT_WORDS,
   HELD_STATUS_WORDS,
   giveHeldMembership,
+  heldLeft,
   heldLeftOn,
   heldListWords,
   heldMembershipView,
@@ -468,6 +469,12 @@ describe("the day Reports counts somebody as left", () => {
         expect(heldLeftOn(input), what).toBe(day);
         const status = heldOnList(input)?.status;
         expect(heldLeftOn(input) !== null, what).toBe(status === "ended" || status === "cancelled");
+        // The membership the day belongs to is the one the row names (21c-iii: Keep on
+        // list is kept with it).
+        const left = heldLeft(input);
+        expect(left?.on ?? null, what).toBe(day);
+        const named = order.find((m) => m.id === left?.heldId);
+        expect(named?.typeName, what).toBe(day === null ? undefined : heldOnList(input)?.memberships[0]);
       }
     }
   });
