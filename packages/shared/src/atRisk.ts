@@ -76,7 +76,8 @@ export function atRiskOf(input: AtRiskInput): AtRisk {
     if (back < AT_RISK_WEEKS * 7) weeks.add(Math.floor(back / 7));
   }
   if (weeks.size < weeksCame) return { atRisk: false, why: "not_regular" };
-  const gymDays = new Set(input.gymDays.filter((day) => isDay(day) && day > last && day <= today));
+  // The cheap comparisons first: a gym open every day has a long list of days.
+  const gymDays = new Set(input.gymDays.filter((day) => typeof day === "string" && day > last && day <= today && isDay(day)));
   if (gymDays.size < atRiskGymDays(quietDays)) return { atRisk: false, why: "gym_quiet" };
   return { atRisk: true, lastVisitOn: last, daysAway, weeksCame: weeks.size };
 }

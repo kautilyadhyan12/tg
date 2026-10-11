@@ -86,19 +86,49 @@ export interface AtRiskCandidate {
  *  to leave out. */
 export async function readCandidates(sql: SqlOrTx, gymId: string, today: string, quietDays: number): Promise<AtRiskCandidate[]> {
   const rows = await sql<Record<string, unknown>[]>`
-    WITH v AS MATERIALIZED (
-      SELECT COALESCE(a.entry_id, m.entry_id) AS entry_id,
-             CASE WHEN COALESCE(a.entry_id, m.entry_id) IS NULL THEN a.user_id END AS user_id,
-             a.day
+    -- Each person's newest visit first, with no sort: a big gym's visits are many and the
+    -- people who have gone quiet few. Only their days are then read, by the visits' own
+    -- indexes on a record and on an account. A person is ONE id throughout, their record's
+    -- or else their account's, so every join here is an equality.
+    WITH last AS MATERIALIZED (
+      SELECT a.entry_id AS raw_entry, a.user_id AS raw_user, max(a.day) AS last_on
       FROM gym_attendance a
-      LEFT JOIN gym_members m ON a.entry_id IS NULL AND m.gym_id = a.gym_id AND m.user_id = a.user_id AND m.removed_at IS NULL
       WHERE a.gym_id = ${gymId} AND a.day > ${today}::date - ${AT_RISK_READ_DAYS}::int
+      GROUP BY a.entry_id, a.user_id
+    ),
+    who AS MATERIALIZED (
+      SELECT COALESCE(l.raw_entry, m.entry_id, l.raw_user) AS pid,
+             COALESCE(l.raw_entry, m.entry_id) IS NOT NULL AS on_list,
+             l.raw_entry, l.raw_user, l.last_on
+      FROM last l
+      LEFT JOIN gym_members m ON l.raw_entry IS NULL AND m.gym_id = ${gymId} AND m.user_id = l.raw_user AND m.removed_at IS NULL
+    ),
+    gone AS MATERIALIZED (
+      SELECT w.pid, w.on_list, w.raw_entry, w.raw_user
+      FROM who w
+      JOIN (
+        SELECT k.pid FROM who k
+        GROUP BY k.pid
+        HAVING max(k.last_on) <= ${today}::date - ${quietDays}::int
+      ) q ON q.pid = w.pid
+    ),
+    days AS (
+      SELECT g.pid, a.day
+      FROM (SELECT DISTINCT pid, raw_entry FROM gone WHERE raw_entry IS NOT NULL) g
+      JOIN gym_attendance a ON a.gym_id = ${gymId} AND a.entry_id = g.raw_entry
+                           AND a.day > ${today}::date - ${AT_RISK_READ_DAYS}::int
+      UNION
+      SELECT g.pid, a.day
+      FROM (SELECT DISTINCT pid, raw_user FROM gone WHERE raw_entry IS NULL) g
+      JOIN gym_attendance a ON a.gym_id = ${gymId} AND a.user_id = g.raw_user AND a.entry_id IS NULL
+                           AND a.day > ${today}::date - ${AT_RISK_READ_DAYS}::int
     ),
     quiet AS (
-      SELECT v.entry_id, v.user_id, array_agg(DISTINCT to_char(v.day, 'YYYY-MM-DD')) AS days
-      FROM v
-      GROUP BY v.entry_id, v.user_id
-      HAVING max(v.day) <= ${today}::date - ${quietDays}::int
+      SELECT CASE WHEN p.on_list THEN p.pid END AS entry_id,
+             CASE WHEN NOT p.on_list THEN p.pid END AS user_id,
+             d.days
+      FROM (SELECT pid, bool_or(on_list) AS on_list FROM gone GROUP BY pid) p
+      JOIN (SELECT pid, array_agg(to_char(day, 'YYYY-MM-DD')) AS days FROM days GROUP BY pid) d ON d.pid = p.pid
     )
     SELECT q.entry_id, q.user_id, q.days,
            COALESCE(NULLIF(btrim(e.full_name), ''), h.first_name, au.display_name, '') AS name,
