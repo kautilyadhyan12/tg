@@ -10,6 +10,9 @@
 // when a birthday, a milestone, an absence, a trial's day, a membership's last days and an
 // overdue bill are found. Every other run reads only those who joined lately, for their
 // Welcome. A change to the gym's settings has the next run read everybody again.
+//
+// A class reminder is not one of the day's: every run reads the gym's bookings that start
+// soon (`reminders.ts`), and a reminder goes whatever else the person was sent that day.
 import {
   GYM_MESSAGE_DAY_ENDS_HOUR,
   GYM_MESSAGE_DAY_STARTS_HOUR,
@@ -28,6 +31,7 @@ import {
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { lockGym } from "../memberList/repo.js";
+import { remindersForGym } from "./reminders.js";
 import { NO_GYM_MONEY, gymMoney, membershipFactsByPerson, type GymMoney } from "./membershipsRepo.js";
 import * as repo from "./repo.js";
 import { settingRows } from "./settingsRepo.js";
@@ -86,12 +90,18 @@ export async function sendDueMessages(deps: SendMessagesDeps, opts: { now?: Date
   let sent = 0;
   const failed: string[] = [];
   for (const gymId of gymIds) {
-    try {
-      sent += await sendForGym(deps.sql, gymId, now);
-    } catch (err) {
-      failed.push(gymId);
-      deps.log.error({ event: "member_messages.gym_failed", gymId, errName: err instanceof Error ? err.name : typeof err }, "member messages failed for a gym");
+    // Each in its own turn: a gym whose day cannot be read still has its reminders sent.
+    // A gym that fails at both is logged once.
+    let gymFailed = false;
+    for (const send of [sendForGym, sendRemindersForGym]) {
+      try {
+        sent += await send(deps.sql, gymId, now);
+      } catch (err) {
+        if (!gymFailed) deps.log.error({ event: "member_messages.gym_failed", gymId, errName: err instanceof Error ? err.name : typeof err }, "member messages failed for a gym");
+        gymFailed = true;
+      }
     }
+    if (gymFailed) failed.push(gymId);
   }
   // Counts only: who was sent what is in the table, never in a log.
   if (sent > 0) deps.log.info({ event: "member_messages.sent", gyms: gymIds.length, sent }, "member messages sent");
@@ -158,4 +168,15 @@ async function sendForGym(sql: Sql, gymId: string, now: Date): Promise<number> {
   // again, and so does one the gym's settings were saved under.
   if (everybody) await repo.markDayDone(sql, gymId, gym.today, stamp);
   return sent;
+}
+
+/** One gym's class reminders. Written with the gym's row held, from a read made under it,
+ *  so two runs at one instant take turns and the second finds the first's rows. */
+async function sendRemindersForGym(sql: Sql, gymId: string, now: Date): Promise<number> {
+  const first = await remindersForGym(sql, gymId, now);
+  if (first.length === 0) return 0;
+  return await sql.begin(async (tx) => {
+    await lockGym(tx, gymId);
+    return repo.insertMessages(tx, await remindersForGym(tx, gymId, now), now, GYM_MESSAGE_KEPT_DAYS);
+  });
 }

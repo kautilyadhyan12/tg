@@ -203,9 +203,10 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
     trialCheckInDay: 2,
     trialEndingDays: 2,
     membershipEndingDays: 7,
+    classReminderHours: 2,
   };
-  /** What the box is told of a gym that checks nobody in, sells nothing and takes no payment. */
-  const UNUSED = { checkIn: false, trialOnList: false, priceList: false, payments: false, billsOverdueDays: 0 };
+  /** What the box is told of a gym that checks nobody in, sells nothing, takes no payment and has nothing to book. */
+  const UNUSED = { checkIn: false, trialOnList: false, priceList: false, payments: false, billsOverdueDays: 0, bookings: false };
   const withKind = (kind: string, change: { on?: boolean; ownLine?: string | null }, over: Partial<GymMessageSettingsRequest> = {}): GymMessageSettingsRequest => ({
     ...START,
     ...over,

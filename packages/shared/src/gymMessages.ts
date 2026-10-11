@@ -12,7 +12,8 @@ import { instantSchema } from "./time.js";
 /** Every kind of automatic message, in the order one is picked when several are due on
  *  one day: the one that cannot wait a day first. A birthday is only today; a Welcome is
  *  the gym's first word and has three days; a trial's check-in has two. An ending and a
- *  payment notice are still due tomorrow, and a come-back is last. */
+ *  payment notice are still due tomorrow, and a come-back is last. A class reminder is
+ *  never one of the day's: `classReminderDue` decides it, a booking at a time. */
 export const GYM_MESSAGE_KINDS = [
   "birthday",
   "welcome",
@@ -22,6 +23,7 @@ export const GYM_MESSAGE_KINDS = [
   "payment_overdue",
   "milestone",
   "miss_you",
+  "class_reminder",
 ] as const;
 export const gymMessageKindSchema = z.enum(GYM_MESSAGE_KINDS);
 export type GymMessageKind = z.infer<typeof gymMessageKindSchema>;
@@ -105,6 +107,8 @@ export interface GymMessageNumbers {
   membershipEndingDays: number;
   /** Milestone: on each of these visits. */
   milestones: readonly number[];
+  /** Class reminder: this many hours before a booked class or session starts. */
+  classReminderHours: number;
 }
 export const GYM_MESSAGE_STARTING_NUMBERS: GymMessageNumbers = {
   trialCheckInDay: 2,
@@ -112,6 +116,7 @@ export const GYM_MESSAGE_STARTING_NUMBERS: GymMessageNumbers = {
   missYouDays: 10,
   membershipEndingDays: 7,
   milestones: [50, 100],
+  classReminderHours: 2,
 };
 /** Every kind is on until a gym switches it off (20b). */
 export const GYM_MESSAGE_STARTING_ON: Record<GymMessageKind, boolean> = {
@@ -123,6 +128,7 @@ export const GYM_MESSAGE_STARTING_ON: Record<GymMessageKind, boolean> = {
   birthday: true,
   milestone: true,
   miss_you: true,
+  class_reminder: true,
 };
 
 /** Why a message that has an occasion is not sent now. */
@@ -209,6 +215,16 @@ export interface GymMessageOccasion {
   endsOn?: string;
   /** What is ending, where it is no ordinary membership. */
   what?: GymMessageEnding;
+  /** What a class reminder is about. */
+  reminder?: GymMessageReminder;
+}
+/** What a class reminder names: the class, or a personal training session and its trainer;
+ *  when it is, as `reminderWhen` says it; and whether it is an online class. */
+export interface GymMessageReminder {
+  what: "class" | "session";
+  title: string | null;
+  when: string;
+  online: boolean;
 }
 export interface GymMessageDue {
   /** The one message to send now, or none. */
@@ -219,6 +235,9 @@ export interface GymMessageDue {
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** A calendar day as a count of days, or null for anything that is not a real day. */
+export function gymMessageDayNumber(day: string | null): number | null {
+  return dayNumber(day);
+}
 function dayNumber(day: string | null): number | null {
   if (day === null || !DAY.test(day)) return null;
   const ms = Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10)));
@@ -367,7 +386,8 @@ function heldReason(occasion: GymMessageOccasion, facts: GymMessageFacts, picked
   if (!gym.on[occasion.kind]) return "gym_off";
   if (person.off.includes(occasion.kind) && !GYM_MESSAGE_ALWAYS_ON.includes(occasion.kind)) return "person_off";
   if (sent.some((row) => row.kind === occasion.kind && row.occasion === occasion.occasion)) return "already_sent";
-  if (picked || sent.some((row) => row.day === gym.today)) return "another_today";
+  // A class reminder is not the day's one message: it goes on top of it.
+  if (picked || sent.some((row) => row.day === gym.today && row.kind !== "class_reminder")) return "another_today";
   const hour = Number.isInteger(gym.hour) ? gym.hour : -1;
   if (hour < GYM_MESSAGE_DAY_STARTS_HOUR || hour >= GYM_MESSAGE_DAY_ENDS_HOUR) return "night";
   return null;
@@ -421,6 +441,18 @@ function fixedWords(send: GymMessageOccasion, gym: string, displayName: string |
   // The four about a membership open as a person would: "Hi Maya, your …".
   const hi = (rest: string): string => (name === null ? rest.charAt(0).toUpperCase() + rest.slice(1) : `Hi ${name}, ${rest}`);
   if (send.kind === "trial_check_in") return hi(`how's your trial at ${gym} going? If you need anything, just let us know.`);
+  if (send.kind === "class_reminder") {
+    const about = send.reminder;
+    if (about === undefined || about.when.trim() === "") return null;
+    const title = (about.title ?? "").trim();
+    if (about.what === "session") {
+      const trainer = greetingName(title);
+      return hi(`you have a personal training session${trainer === null ? "" : ` with ${trainer}`} ${about.when} at ${gym}. See you there.`);
+    }
+    if (title === "") return null;
+    if (about.online) return hi(`you're booked for ${title} ${about.when} with ${gym}. It's an online class.`);
+    return hi(`you're booked for ${title} ${about.when} at ${gym}. See you there.`);
+  }
   if (send.kind === "payment_overdue") return hi(`your payment to ${gym} is overdue. Please get in touch so we can sort it out.`);
   if (send.kind === "trial_ending" || send.kind === "membership_ending") {
     const day = dayInWords(send.endsOn ?? null);

@@ -116,6 +116,7 @@ export const gymPtAppointments = pgTable(
     ),
     index("gym_pt_appointments_trainer_idx").on(t.gymId, t.trainerUserId, t.startsAt),
     index("gym_pt_appointments_entry_idx").on(t.gymId, t.entryId, t.startsAt).where(sql`${t.entryId} IS NOT NULL`),
+    index("gym_pt_appointments_gym_starts_idx").on(t.gymId, t.startsAt),
     index("gym_pt_appointments_held_idx").on(t.heldMembershipId).where(sql`${t.heldMembershipId} IS NOT NULL`),
   ],
 );

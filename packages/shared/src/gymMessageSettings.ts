@@ -2,6 +2,7 @@
 // §16.2; ROADMAP 20b-i, 20b-ii). The gym sets, for each kind: on or off, its number, and one
 // line of its own. A member switches a kind off for one gym.
 import { z } from "zod";
+import { GYM_MESSAGE_REMINDER_HOURS_CHOICES, GYM_MESSAGE_REMINDER_LOOK_AHEAD_HOURS } from "./gymClassReminders.js";
 import { groupMessageProblem, tidyGroupMessage } from "./gymGroupMessages.js";
 import {
   GYM_MESSAGE_KINDS,
@@ -21,6 +22,7 @@ export const GYM_MESSAGE_SETTING_KINDS = [
   "trial_ending",
   "membership_ending",
   "payment_overdue",
+  "class_reminder",
   "birthday",
   "milestone",
   "miss_you",
@@ -30,7 +32,7 @@ export type GymMessageSettingKind = z.infer<typeof gymMessageSettingKindSchema>;
 
 /** The kinds a member can switch off for one gym. Welcome has no switch: it is sent once,
  *  on joining, before anybody could reach one. A payment notice has none either (§16.2). */
-export const GYM_MESSAGE_MEMBER_SWITCH_KINDS = ["trial_check_in", "trial_ending", "membership_ending", "birthday", "milestone", "miss_you"] as const satisfies readonly GymMessageKind[];
+export const GYM_MESSAGE_MEMBER_SWITCH_KINDS = ["trial_check_in", "trial_ending", "membership_ending", "class_reminder", "birthday", "milestone", "miss_you"] as const satisfies readonly GymMessageKind[];
 export const gymMessageMemberSwitchKindSchema = z.enum(GYM_MESSAGE_MEMBER_SWITCH_KINDS);
 export type GymMessageMemberSwitchKind = z.infer<typeof gymMessageMemberSwitchKindSchema>;
 
@@ -86,6 +88,8 @@ export interface GymMessageSettingRow {
   ownLine: string | null;
   days: number | null;
   milestones: readonly number[] | null;
+  /** The class reminder's number. */
+  hours: number | null;
 }
 
 export interface GymMessageSettings {
@@ -109,6 +113,7 @@ export function gymMessageSettingsFrom(rows: readonly GymMessageSettingRow[]): G
     if (row.kind === "trial_check_in" && positive(row.days)) numbers.trialCheckInDay = row.days;
     if (row.kind === "trial_ending" && positive(row.days)) numbers.trialEndingDays = row.days;
     if (row.kind === "membership_ending" && positive(row.days)) numbers.membershipEndingDays = row.days;
+    if (row.kind === "class_reminder" && positive(row.hours) && row.hours <= GYM_MESSAGE_REMINDER_LOOK_AHEAD_HOURS) numbers.classReminderHours = row.hours;
     if (row.kind === "milestone" && row.milestones !== null && row.milestones.length > 0 && row.milestones.every(positive)) {
       numbers.milestones = [...row.milestones].sort((a, b) => a - b);
     }
@@ -154,6 +159,7 @@ export const gymMessageSettingsRequestSchema = z
     trialCheckInDay: oneOf(GYM_MESSAGE_TRIAL_CHECK_IN_CHOICES).optional(),
     trialEndingDays: oneOf(GYM_MESSAGE_TRIAL_ENDING_CHOICES).optional(),
     membershipEndingDays: oneOf(GYM_MESSAGE_MEMBERSHIP_ENDING_CHOICES).optional(),
+    classReminderHours: oneOf(GYM_MESSAGE_REMINDER_HOURS_CHOICES).optional(),
   })
   .strict();
 export type GymMessageSettingsRequest = z.infer<typeof gymMessageSettingsRequestSchema>;
@@ -180,6 +186,10 @@ export const gymMessageSettingsResponseSchema = z.object({
   /** The gym's grace period for a bill, as the Bills box keeps it. The box works out the
    *  day the notice goes from it with `paymentNoticeAfterDays`, as the sender does. */
   billsOverdueDays: z.number().int().min(0),
+  classReminderHours: z.number().int().min(1),
+  /** The gym has a class on its calendar from today on, or a trainer who offers personal
+   *  training. With neither nobody has a booking, so the class reminder is sent to nobody. */
+  bookings: z.boolean(),
 });
 export type GymMessageSettingsResponse = z.infer<typeof gymMessageSettingsResponseSchema>;
 /** How far back `checkIn` looks. */
@@ -199,6 +209,7 @@ export const GYM_MESSAGE_KIND_NAMES: Record<GymMessageSettingKind, string> = {
   trial_ending: "Trial ending",
   membership_ending: "Membership ending",
   payment_overdue: "Payment overdue",
+  class_reminder: "Class reminder",
   birthday: "Birthday",
   milestone: "Visit milestone",
   miss_you: "We miss you",

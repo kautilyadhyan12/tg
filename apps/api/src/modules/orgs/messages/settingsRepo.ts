@@ -8,9 +8,9 @@ type SqlOrTx = Sql | TransactionSql;
 
 /** The gym's rows, one a kind it has ever saved. A kind with none has its starting values. */
 export async function settingRows(sql: SqlOrTx, gymId: string): Promise<GymMessageSettingRow[]> {
-  const rows = await sql<{ kind: GymMessageKind; is_on: boolean; own_line: string | null; days: number | null; milestones: number[] | null }[]>`
-    SELECT kind, is_on, own_line, days, milestones FROM gym_message_settings WHERE gym_id = ${gymId} ORDER BY kind`;
-  return rows.map((row) => ({ kind: row.kind, on: row.is_on, ownLine: row.own_line, days: row.days, milestones: row.milestones }));
+  const rows = await sql<{ kind: GymMessageKind; is_on: boolean; own_line: string | null; days: number | null; milestones: number[] | null; hours: number | null }[]>`
+    SELECT kind, is_on, own_line, days, milestones, hours FROM gym_message_settings WHERE gym_id = ${gymId} ORDER BY kind`;
+  return rows.map((row) => ({ kind: row.kind, on: row.is_on, ownLine: row.own_line, days: row.days, milestones: row.milestones, hours: row.hours }));
 }
 
 /** Keeps the rows in one statement. Saved twice they are kept once. `updated_at` is the
@@ -25,11 +25,12 @@ export async function writeSettingRows(tx: TransactionSql, gymId: string, rows: 
     own_line: row.ownLine,
     days: row.days,
     milestones: row.milestones === null ? null : [...row.milestones],
+    hours: row.hours,
   }));
   await tx`
     INSERT INTO gym_message_settings ${tx(values)}
     ON CONFLICT (gym_id, kind) DO UPDATE
-    SET is_on = EXCLUDED.is_on, own_line = EXCLUDED.own_line, days = EXCLUDED.days, milestones = EXCLUDED.milestones`;
+    SET is_on = EXCLUDED.is_on, own_line = EXCLUDED.own_line, days = EXCLUDED.days, milestones = EXCLUDED.milestones, hours = EXCLUDED.hours`;
   // The write's own instant, not the transaction's start: no two saves share a stamp.
   await tx`UPDATE gym_message_settings SET updated_at = clock_timestamp() WHERE gym_id = ${gymId} AND kind = ANY(${rows.map((row) => row.kind)}::text[])`;
 }
