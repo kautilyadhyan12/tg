@@ -4901,6 +4901,25 @@ itself once they are renewed. Never for people who have not had the membership, 
 have been left out on purpose; never for staff the server does not give the list's names
 to. It costs one more read of those names whenever Members is read.
 
+**After round one of the review (2026-10-11).** The row's number, the sign and the import's
+step count only people the box can renew: never a list date more than five years off (a
+"lifetime" 2099) nor somebody with 20 memberships running, whom the box refuses. The
+sentences as they stand: "2 people's 3 Months memberships have ended, and your member list
+shows a later end date for them. You can renew them." on the row (no "You can renew" in a
+gym that can only read) · "Still to do · 2 members' 3 Months memberships have ended, and
+your member list shows a later end date for them. · Renew their memberships" on the
+import's last screen · "2 memberships can be renewed" on Members. No sentence says "now":
+a date set once and never moved counts too, where the membership was given by hand. A
+name with renewals and people who never had it is one step and one sign, which says both
+and whose button is "See who can get it"; that box has one tick for all of them. In a
+box of renewals the others read "1 person is not renewed: they still have 3 Months, staff
+cancelled it, or your member list shows no later end date for them." Somebody who may not
+open Memberships reads "The owner can renew them on the Memberships page." A kept or
+hand-made address that names no membership on the page says "That membership is not on
+this page now." The renewal measured (`--renew`; 2,100 people, 1,050 to renew): the
+names read 51.1 ms, the thread busy 4.4 ms · the box 82.1 ms, busy 28.0 ms · the press
+282.7 ms, busy 33.8 ms.
+
 
 **Size: Risky** (it gives people memberships, which open "Payment due"; other people's
 data). Recommended Opus xhigh; if Kd's setting is high, say so in the plan's last line and
