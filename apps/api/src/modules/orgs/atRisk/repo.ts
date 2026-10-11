@@ -1,5 +1,8 @@
 // The At risk page's reads (spec Part 3 §16.4; ROADMAP 20d-i). Every read names the gym
 // in its WHERE. They gather; `atRiskOf` in `@app/shared` decides.
+//
+// A day somebody CAME is a check-in of any kind, or a day staff marked them as there
+// without one: a class place marked Came, a personal training session marked attended.
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import { AT_RISK_READ_DAYS, GYM_COME_BACK_WAIT_DAYS, type AtRiskSettings } from "@app/shared";
@@ -7,10 +10,27 @@ import { lastOnePersonMessages } from "../messages/groupRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
+/** The days, of those read, staff marked somebody as there without a check-in:
+ *  (entry_id, user_id, day). A class place names its account and, where it has one, the
+ *  record; a personal training session names the record. */
+function markedAttended(sql: SqlOrTx, gymId: string, today: string) {
+  // The starts are indexed; a class's own day is at most a day either side of its instant.
+  const from = sql`${today}::date - ${AT_RISK_READ_DAYS}::int`;
+  const fromInstant = sql`(${today}::date - ${AT_RISK_READ_DAYS + 2}::int)::timestamp AT TIME ZONE 'UTC'`;
+  return sql`
+    SELECT b.entry_id, b.user_id, s.local_date AS day
+    FROM gym_class_sessions s
+    JOIN gym_class_bookings b ON b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = 'attended'
+    WHERE s.gym_id = ${gymId} AND s.starts_at > ${fromInstant} AND s.local_date > ${from}
+    UNION ALL
+    SELECT p.entry_id, NULL::uuid AS user_id, p.local_date AS day
+    FROM gym_pt_appointments p
+    WHERE p.gym_id = ${gymId} AND p.status = 'attended' AND p.entry_id IS NOT NULL
+      AND p.starts_at > ${fromInstant} AND p.local_date > ${from}`;
+}
+
+const gymRowSchema = z.object({ today: z.string(), quiet_days: z.number().int(), weeks_came: z.number().int() });
 const clockSchema = z.object({
-  today: z.string(),
-  quiet_days: z.number().int(),
-  weeks_came: z.number().int(),
   first_checkin_on: z.string().nullable(),
   last_checkin_on: z.string().nullable(),
   gym_days: z.array(z.string()),
@@ -25,33 +45,37 @@ export interface AtRiskClock {
   gymDays: string[];
 }
 
-/** The gym's own day, its two numbers, and the days it checked anybody in. Null when
- *  there is no such gym. */
+/** The gym's own day, its two numbers, and the days anybody came. Null when there is no
+ *  such gym. */
 export async function readClock(sql: SqlOrTx, gymId: string, now: Date): Promise<AtRiskClock | null> {
+  const gyms = await sql<Record<string, unknown>[]>`
+    SELECT to_char((${now}::timestamptz AT TIME ZONE g.timezone)::date, 'YYYY-MM-DD') AS today,
+           g.at_risk_quiet_days AS quiet_days, g.at_risk_weeks_came AS weeks_came
+    FROM gyms g WHERE g.id = ${gymId}`;
+  if (gyms[0] === undefined) return null;
+  const gym = gymRowSchema.parse(gyms[0]);
   const rows = await sql<Record<string, unknown>[]>`
-    WITH g AS (
-      SELECT g.id, (${now}::timestamptz AT TIME ZONE g.timezone)::date AS today,
-             g.at_risk_quiet_days, g.at_risk_weeks_came
-      FROM gyms g WHERE g.id = ${gymId}
-    )
-    SELECT to_char(g.today, 'YYYY-MM-DD') AS today,
-           g.at_risk_quiet_days AS quiet_days, g.at_risk_weeks_came AS weeks_came,
-           (SELECT to_char(min(a.day), 'YYYY-MM-DD') FROM gym_attendance a WHERE a.gym_id = g.id) AS first_checkin_on,
-           (SELECT to_char(max(a.day), 'YYYY-MM-DD') FROM gym_attendance a WHERE a.gym_id = g.id AND a.day <= g.today) AS last_checkin_on,
+    WITH marked AS MATERIALIZED (SELECT DISTINCT x.day FROM (${markedAttended(sql, gymId, gym.today)}) x)
+    SELECT (SELECT to_char(min(a.day), 'YYYY-MM-DD') FROM gym_attendance a WHERE a.gym_id = ${gymId}) AS first_checkin_on,
+           (SELECT to_char(max(a.day), 'YYYY-MM-DD') FROM gym_attendance a WHERE a.gym_id = ${gymId} AND a.day <= ${gym.today}::date) AS last_checkin_on,
            ARRAY(
              SELECT to_char(d.day, 'YYYY-MM-DD')
-             FROM (SELECT g.today - n AS day FROM generate_series(0, ${AT_RISK_READ_DAYS}::int) AS n) d
-             WHERE EXISTS (SELECT 1 FROM gym_attendance a WHERE a.gym_id = g.id AND a.day = d.day)
+             FROM (SELECT ${gym.today}::date - n AS day FROM generate_series(0, ${AT_RISK_READ_DAYS}::int) AS n) d
+             WHERE EXISTS (SELECT 1 FROM gym_attendance a WHERE a.gym_id = ${gymId} AND a.day = d.day)
+                OR EXISTS (SELECT 1 FROM marked m WHERE m.day = d.day)
              ORDER BY d.day
-           ) AS gym_days
-    FROM g`;
-  if (rows[0] === undefined) return null;
+           ) AS gym_days`;
   const row = clockSchema.parse(rows[0]);
+  // A gym that marks its classes and scans nobody began, and was last seen, by those days.
+  const firstDay = row.gym_days[0] ?? null;
+  const lastDay = row.gym_days[row.gym_days.length - 1] ?? null;
+  const earliest = [row.first_checkin_on, firstDay].flatMap((d) => (d === null ? [] : [d])).sort()[0] ?? null;
+  const latest = [row.last_checkin_on, lastDay].flatMap((d) => (d === null ? [] : [d])).sort().reverse()[0] ?? null;
   return {
-    today: row.today,
-    settings: { quietDays: row.quiet_days, weeksCame: row.weeks_came },
-    firstCheckinOn: row.first_checkin_on,
-    lastCheckinOn: row.last_checkin_on,
+    today: gym.today,
+    settings: { quietDays: gym.quiet_days, weeksCame: gym.weeks_came },
+    firstCheckinOn: earliest,
+    lastCheckinOn: latest,
     gymDays: row.gym_days,
   };
 }
@@ -91,10 +115,15 @@ export async function readCandidates(sql: SqlOrTx, gymId: string, today: string,
     -- people who have gone quiet few. Only their days are then read, by the visits' own
     -- indexes on a record and on an account. A person is ONE id throughout, their record's
     -- or else their account's, so every join here is an equality.
-    WITH last AS MATERIALIZED (
+    WITH marked AS MATERIALIZED (${markedAttended(sql, gymId, today)}),
+    last AS MATERIALIZED (
       SELECT a.entry_id AS raw_entry, a.user_id AS raw_user, max(a.day) AS last_on
-      FROM gym_attendance a
-      WHERE a.gym_id = ${gymId} AND a.day > ${today}::date - ${AT_RISK_READ_DAYS}::int
+      FROM (
+        SELECT v.entry_id, v.user_id, v.day FROM gym_attendance v
+        WHERE v.gym_id = ${gymId} AND v.day > ${today}::date - ${AT_RISK_READ_DAYS}::int
+        UNION ALL
+        SELECT m.entry_id, m.user_id, m.day FROM marked m
+      ) a
       GROUP BY a.entry_id, a.user_id
     ),
     who AS MATERIALIZED (
@@ -123,6 +152,14 @@ export async function readCandidates(sql: SqlOrTx, gymId: string, today: string,
       FROM (SELECT DISTINCT pid, raw_user FROM gone WHERE raw_entry IS NULL) g
       JOIN gym_attendance a ON a.gym_id = ${gymId} AND a.user_id = g.raw_user AND a.entry_id IS NULL
                            AND a.day > ${today}::date - ${AT_RISK_READ_DAYS}::int
+      UNION
+      SELECT g.pid, m.day
+      FROM (SELECT DISTINCT pid, raw_entry FROM gone WHERE raw_entry IS NOT NULL) g
+      JOIN marked m ON m.entry_id = g.raw_entry
+      UNION
+      SELECT g.pid, m.day
+      FROM (SELECT DISTINCT pid, raw_user FROM gone WHERE raw_entry IS NULL) g
+      JOIN marked m ON m.user_id = g.raw_user AND m.entry_id IS NULL
     ),
     quiet AS (
       SELECT CASE WHEN p.on_list THEN p.pid END AS entry_id,

@@ -58,6 +58,25 @@ export async function byKey(sql: SqlOrTx, gymId: string, sendKey: string): Promi
   return rows[0] ?? null;
 }
 
+/** The message already sent from this box, with when, whether it was written to one
+ *  person, and the accounts that hold a copy. */
+export async function sentByKey(
+  sql: SqlOrTx,
+  gymId: string,
+  sendKey: string,
+): Promise<{ id: string; body: string; sentAt: Date; onePerson: boolean; userIds: string[] } | null> {
+  const rows = await sql<{ id: string; body: string; sent_at: Date; one_person: boolean; user_ids: string[] }[]>`
+    SELECT g.id, g.body, g.sent_at, g.one_person,
+           ARRAY(
+             SELECT c.user_id FROM gym_member_messages c
+             WHERE c.gym_id = g.gym_id AND c.kind = ${GYM_GROUP_MESSAGE_KIND} AND c.occasion = g.id::text
+           ) AS user_ids
+    FROM gym_group_messages g
+    WHERE g.gym_id = ${gymId} AND g.send_key = ${sendKey}`;
+  const row = rows[0];
+  return row === undefined ? null : { id: row.id, body: row.body, sentAt: row.sent_at, onePerson: row.one_person, userIds: row.user_ids };
+}
+
 export interface NewGroupMessage {
   gymId: string;
   sentBy: string;

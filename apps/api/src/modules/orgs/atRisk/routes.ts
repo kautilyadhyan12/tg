@@ -1,5 +1,7 @@
 // The At risk page's routes (ROADMAP 20d-i): authenticate, the asker's own ceiling,
-// Zod-parse, who may, the limit, then the work. The service owns the authorisation.
+// Zod-parse, who may, the limit, then the work. The service owns the authorisation, and
+// every limit that counts an address is asked AFTER it: a refused ask leaves the gym's
+// address alone.
 //
 //   GET /v1/orgs/:gymId/at-risk            who has stopped coming (`members.read`)
 //   PUT /v1/orgs/:gymId/at-risk/settings   the gym's two numbers (`org.manage`)
@@ -82,24 +84,30 @@ export function registerAtRiskRoutes(app: FastifyInstance, deps: { sql: Sql; red
     return reply.status(200).send(await service.getAtRisk(atRiskDeps, params.data.gymId));
   });
 
-  app.put("/v1/orgs/:gymId/at-risk/settings", { preHandler: [app.authenticate, askerLimit, saveLimit] }, async (req, reply) => {
+  app.put("/v1/orgs/:gymId/at-risk/settings", { preHandler: [app.authenticate, askerLimit] }, async (req, reply) => {
     const params = orgParamsSchema.safeParse(req.params);
     if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
     const body = atRiskSettingsSchema.safeParse(req.body);
     if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
     const userId = req.authUser?.id;
     if (userId === undefined) throw new Error("authenticate preHandler did not run");
+    await service.requireSettingsWriter(atRiskDeps, userId, params.data.gymId);
+    await saveLimit(req, reply);
+    if (reply.sent) return reply;
     return reply.status(200).send(await service.setSettings(atRiskDeps, userId, params.data.gymId, body.data));
   });
 
   // Sent twice from one box it is sent once: the body carries the box's own key.
-  app.post("/v1/orgs/:gymId/at-risk/messages", { preHandler: [app.authenticate, askerLimit, messageLimit] }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/at-risk/messages", { preHandler: [app.authenticate, askerLimit] }, async (req, reply) => {
     const params = orgParamsSchema.safeParse(req.params);
     if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
     const body = atRiskMessageRequestSchema.safeParse(req.body);
     if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
     const userId = req.authUser?.id;
     if (userId === undefined) throw new Error("authenticate preHandler did not run");
-    return reply.status(201).send(await service.sendOwnMessage(atRiskDeps, userId, params.data.gymId, body.data));
+    const org = await service.requireMessageWriter(atRiskDeps, userId, params.data.gymId);
+    await messageLimit(req, reply);
+    if (reply.sent) return reply;
+    return reply.status(201).send(await service.sendOwnMessage(atRiskDeps, userId, params.data.gymId, org, body.data));
   });
 }
