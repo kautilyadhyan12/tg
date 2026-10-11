@@ -225,14 +225,19 @@ export async function peopleForMessages(tx: SqlOrTx, gymId: string, now: Date, t
     pv AS MATERIALIZED (${
       everybody
         ? tx`
-      SELECT v.owner_id,
-             (count(DISTINCT v.day) FILTER (WHERE ${counted}))::int AS visits,
-             (max(v.day) FILTER (WHERE ${counted}))::text AS last_on,
-             (count(DISTINCT v.day) FILTER (WHERE ${counted} AND v.day > ${today}::date - ${GYM_MESSAGE_MILESTONE_DAYS}::int))::int AS recent,
-             max(v.day)::text AS seen_on
-      FROM (${visitsWithOwner(tx, gymId)}) v
-      WHERE v.owner_id IS NOT NULL AND v.day <= ${today}::date
-      GROUP BY v.owner_id`
+      SELECT d.owner_id,
+             (count(*) FILTER (WHERE d.counted))::int AS visits,
+             (max(d.day) FILTER (WHERE d.counted))::text AS last_on,
+             (count(*) FILTER (WHERE d.counted AND d.day > ${today}::date - ${GYM_MESSAGE_MILESTONE_DAYS}::int))::int AS recent,
+             max(d.day)::text AS seen_on
+      FROM (
+        -- One row a person a day, and whether the desk or staff checked them in on it.
+        SELECT v.owner_id, v.day, bool_or(${counted}) AS counted
+        FROM (${visitsWithOwner(tx, gymId)}) v
+        WHERE v.owner_id IS NOT NULL AND v.day <= ${today}::date
+        GROUP BY v.owner_id, v.day
+      ) d
+      GROUP BY d.owner_id`
         : noVisits
     }),
     stand_in AS (

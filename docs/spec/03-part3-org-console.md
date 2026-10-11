@@ -4391,35 +4391,48 @@ two, Membership ending, Payment overdue) are 20b-ii and the class reminder 20b-i
   here.", with a button, **Automatic messages**, that opens this box, or "The owner can
   switch them on or off." for staff who cannot open it.
 - **The words** (`automaticMessage`, `packages/shared/src/gymMessages.ts`): "Happy birthday,
-  Maya! From everyone at {gym}." · "That's 50 visits to {gym}, Maya. Well done." · "We
-  haven't seen you at {gym} for a while, Maya. We hope to see you soon."
-- **A visit** is a day the desk or staff checked the person in (the leaderboard's own rule,
-  `countedDays`): two check-ins in one day are one. A milestone is the newest one reached
-  by a visit of today or yesterday, so a visit at night and another before the morning's
-  first run cannot step over it; its occasion is the number (`visits:50`).
-- **We miss you** is due after the gym's days with no visit AND once the gym has checked
-  somebody in on half of those days (rounded up) since the person last came
-  (`missYouGymDays`): a gym that stopped using check-in, or was shut, tells nobody they
-  were missed. Never to the gym's own staff, never to somebody who never came. Its
-  occasion is the last visit's day, so one absence is one message.
+  Maya! From everyone at {gym}." · "You've reached 50 visits at {gym}, Maya. Well done." ·
+  "We haven't seen you at {gym} for a while, Maya. We hope to see you soon."
+- **A visit**, for a milestone, is a day the desk or staff checked the person in (the
+  leaderboard's own methods): two check-ins in one day are one. A milestone is the newest
+  ticked number reached by a visit of the last 7 days (`GYM_MESSAGE_MILESTONE_DAYS`) and
+  stays due on each of them, so a night, or a day that already had another message, does
+  not lose it; its occasion is the number (`visits:50`), so it is sent once. Somebody
+  already past a number when the gym first uses this is not told of it.
+- **We miss you** counts from the person's last check-in by ANY means, their own "I'm
+  here" tap among them (round one, H1: somebody who taps in every day has not been away).
+  It is due after the gym's days AND once the gym's desk or staff have checked somebody in
+  on half of those days (rounded up) since (`missYouGymDays`): a gym that stopped using
+  check-in, or was shut, tells nobody they were missed. Only while the absence is no more
+  than 30 days past the gym's number (`GYM_MESSAGE_MISS_YOU_LATE_DAYS`), so nobody who
+  stopped coming long ago is told on the first day. Never to the gym's own staff, never to
+  somebody who never came. Its occasion is the last day they were seen, so one absence is
+  one message.
 - **A birthday** is read from the date of birth on the record the person holds alone (two
-  accounts on one record have none). It is no birthday when five of the gym's records
-  share that date, when it is 1 January 1970, or when the person would be over 110 or not
-  yet born: those are what an export writes for "not known".
+  accounts on one record have none), by one pure rule, `trustedBirthday`. It is no
+  birthday when five of the gym's records share that date; on any 1 January or 31
+  December (what a list holds when only a year was known, a system's first day, and that
+  day written west of Greenwich); when it makes the person under 18, today's date and a
+  later one among them (nobody under 18 is invited, and a form's date box starts at
+  today); or over 110 years back. A real birthday that looks like one of these gets no
+  message, which is the safe side; the box says so.
 - **A member's switches**, under their Inbox, shut behind one button, **Choose what {gym}
   can send you**, with the news switch of 16.8 (Kd, RULINGS 2026-10-11)
   (`PUT /v1/orgs/:gymId/inbox/switches`;
   `gym_member_messages_off`): Birthday, Visit milestone, We miss you, for that gym
   alone. Welcome has none: it is sent once, on joining.
-- **A gym nobody is checked in at** (no check-in in 30 days) reads so on the two messages
-  that count visits, with a button to Attendance.
+- **A gym nobody is checked in at** (no check-in by the desk or staff in 30 days, a visit
+  added on a later day not counted, as in the sender's own read) reads so on the two
+  messages that count visits, with a button to Attendance.
 - **The sender** runs four times an hour. **Everybody in a gym is read once a day**, at the
   first run inside the gym's day (from 08:00 on its clock; `gym_message_days` keeps the
   day): that is when a birthday, a milestone and an absence are found, so they are told in
   the morning, and a milestone reached later that day the next morning. Every other run
   reads only who joined in the last three days, for their Welcome. A save of the gym's
   settings removes the day's mark, so the next run reads everybody again; a run that fails
-  leaves it unmarked. A gym closed, on no plan or asleep is not read past its own row; a
+  leaves it unmarked, and so does a read the settings were saved under (the mark is
+  written with the gym's row held, and only if `gym_message_settings`'s newest
+  `updated_at`, the database's own clock, is what it was when the read began). A gym closed, on no plan or asleep is not read past its own row; a
   gym's row is held only when the first read found something to write, and the write is
   made from a second read under it.
 
