@@ -18,7 +18,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { leftOnOf } from "../src/modules/orgs/memberships/onList.js";
-import { renewalsWaiting } from "../src/modules/orgs/memberships/wordsRepo.js";
+import { renewedByTheList } from "../src/modules/orgs/memberships/wordsRepo.js";
 import { readMemberCounts } from "../src/modules/orgs/reports/repo.js";
 import { createMemoryRedis } from "../src/redis.js";
 
@@ -370,8 +370,8 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
       expect(over.map((entry) => entry.fullName).sort()).toEqual([
         "Cal Cancelled", "Jude July", "Lena Listdate", "Mona Merged", "Percy Pack", "Rena Renewed", "Stella Stopped", "Yara Yesterday",
       ]);
-      const waiting = await sql.begin((tx) => renewalsWaiting(tx, gym, "2026-10-15"));
-      expect(waiting.map((entryId) => nameOf.get(entryId))).toEqual(["Rena Renewed"]);
+      const waiting = await sql.begin((tx) => renewedByTheList(tx, gym, "2026-10-15"));
+      expect(waiting.map((kept) => [nameOf.get(kept.entryId), kept.covered, kept.waiting])).toEqual([["Rena Renewed", "2026-11-24", true]]);
       expect(page.entries.length - over.length + waiting.length).toBe(expected.activeNow);
       const row = (name: keyof typeof id) => page.entries.find((entry) => entry.entryId === id[name]);
       expect(row("Tom Today")?.held?.status).toBe("active");
@@ -435,6 +435,15 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
         expect(later.months.find((m) => m.month === "2026-10"), moment).toEqual(october);
         expect(later.months.find((m) => m.month === "2026-09"), moment).toEqual(expected.months[3]);
       }
+      // Nobody ever pressed Renew for Rena, and the day her file covered, 24 November, has
+      // passed: she left in November, with Yara on the 14th. September and October still
+      // read as they closed. November began with nine: Paula, Owen, Freya, Nia, Yara, Eli,
+      // Una, Ned and Rena.
+      at("2026-12-02T11:00:00Z");
+      const december = await read(gym, owner);
+      expect(december.months.find((m) => m.month === "2026-09")).toEqual(expected.months[3]);
+      expect(december.months.find((m) => m.month === "2026-10")).toEqual(october);
+      expect(december.months.find((m) => m.month === "2026-11")).toMatchObject({ activeAtStart: 9, left: 2 });
     },
     TEST_TIMEOUT_MS,
   );

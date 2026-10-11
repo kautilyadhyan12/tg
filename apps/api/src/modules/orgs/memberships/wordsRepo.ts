@@ -76,15 +76,22 @@ const RENEWED_BY_THE_LIST = (tx: TransactionSql, gymId: string, today: string) =
           AND (SELECT count(*) FROM gym_held_memberships h
                WHERE h.gym_id = ${gymId} AND h.entry_id = f.entry_id AND ${IN_USE_TODAY(tx, today)}) < ${HELD_LIVE_MAX}`;
 
-/** The current records the Memberships page offers a renewal to today (21c-i): the people
- *  its rows count as "can be renewed", by the same SQL. Reports reads it (21c-ii): somebody
- *  the gym's newest list says is paid up has not left. */
-export async function renewalsWaiting(tx: TransactionSql, gymId: string, today: string): Promise<string[]> {
-  const rows = await tx<{ entry_id: string }[]>`
+/** The current records whose every membership of their list's type is over, none
+ *  cancelled, and whose list covers a LATER day than any of them ran to: the gym kept them
+ *  on in its own software. `covered` is that day. `waiting`: the Memberships page offers
+ *  them a renewal today (21c-i), by the same SQL as its rows' "can be renewed". Reports
+ *  reads it (21c-ii): while they wait they have not left, and once the covered day has
+ *  passed with nothing pressed, that is the day they left. */
+export async function renewedByTheList(tx: TransactionSql, gymId: string, today: string): Promise<{ entryId: string; covered: string; waiting: boolean }[]> {
+  const rows = await tx<{ entry_id: string; covered: string; waiting: boolean }[]>`
       WITH pairs AS MATERIALIZED (${PAIRS(tx, gymId)}),
       facts AS MATERIALIZED (${FACTS(tx, gymId, today)})
-      SELECT DISTINCT f.entry_id FROM facts f WHERE ${RENEWED_BY_THE_LIST(tx, gymId, today)}`;
-  return rows.map((row) => row.entry_id);
+      SELECT f.entry_id, to_char(max(f.covered), 'YYYY-MM-DD') AS covered,
+             bool_or(${RENEWED_BY_THE_LIST(tx, gymId, today)}) AS waiting
+      FROM facts f
+      WHERE NOT f.recurring AND NOT f.cancelled AND NOT f.in_use AND f.covered > f.last_day
+      GROUP BY f.entry_id`;
+  return rows.map((row) => ({ entryId: row.entry_id, covered: row.covered, waiting: row.waiting }));
 }
 
 /** The list's membership words in the list's own order, each with its link, and the

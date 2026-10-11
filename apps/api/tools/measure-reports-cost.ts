@@ -116,6 +116,12 @@ async function giveMemberships(gymId: string): Promise<void> {
            'active', 1, p.n % 3 <> 0
     FROM (SELECT e.id, row_number() OVER (ORDER BY e.id) AS n
           FROM gym_member_list_entries e WHERE e.gym_id = ${gymId} AND e.former_at IS NULL) p`;
+  // The gym's own file names that membership for the people whose one is over, with no later
+  // date, so the read of who is waiting to be renewed has every one of them to look at.
+  await sql`
+    UPDATE gym_member_list_entries e SET membership_type = '1 Month'
+    WHERE e.gym_id = ${gymId} AND EXISTS (
+      SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.kind = 'one_time')`;
 }
 
 await cleanup();
