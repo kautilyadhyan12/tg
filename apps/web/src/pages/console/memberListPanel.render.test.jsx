@@ -5,6 +5,7 @@
 // shown under a newer one.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { memberListEntriesPageSchema, memberListViewSchema, MEMBER_INVITE_EMAIL_REASON_WORDS, MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
 
 // The person's Memberships box (17a-ii) has its own tests in `memberMemberships.render.test.jsx`.
@@ -24,6 +25,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       changeMemberListEntry: vi.fn(),
       getInvitePreview: vi.fn(),
       inviteMemberListEntry: vi.fn(),
+      getMembershipWords: vi.fn(),
     },
   };
 });
@@ -106,6 +108,63 @@ beforeEach(() => {
 });
 
 afterEach(() => cleanup());
+
+// 21c-i: somebody who skipped the import's "Still to do" still reads why two people say
+// "Ended", and has the button, on the page where they look next.
+describe('the sign while a renewal waits', () => {
+  const TERM = '55555555-5555-4555-8555-555555555555';
+  const names = (again, waiting = 0) => ({
+    data: { words: [{ word: '3 Month Plan', people: 3, link: { typeId: TERM, typeName: '3 Months', typeArchived: false, waiting, again, ownName: false }, sameName: null }], types: [] },
+  });
+  const drawFor = (gym) =>
+    render(
+      <MemoryRouter>
+        <MemberListPanel gymId={GYM} gym={gym} words={WORDS} readOnly={false} refreshKey={0} />
+      </MemoryRouter>,
+    );
+  const OWNER = { name: 'Iron House', slug: 'iron-house', orgType: 'gym', staffRole: 'owner' };
+
+  it('says who can be renewed and why, and its button opens that box on Memberships', async () => {
+    orgService.getMembershipWords.mockResolvedValue(names(2));
+    drawFor(OWNER);
+    const sign = within(await screen.findByTestId('renewals-sign'));
+    expect(sign.getByText('2 members can be renewed')).toBeTruthy();
+    expect(sign.getByText('Their 3 Months has ended, and your member list shows a later end date for them.')).toBeTruthy();
+    const button = sign.getByRole('link', { name: 'Renew their memberships' });
+    expect(button.getAttribute('href')).toBe(`/console/iron-house/memberships?give=${TERM}&name=3%20Month%20Plan`);
+    expect(orgService.getMembershipWords).toHaveBeenCalledWith(GYM);
+  });
+
+  it('with nothing to renew there is no sign, even where people have never had the membership', async () => {
+    orgService.getMembershipWords.mockResolvedValue(names(0, 5));
+    drawFor(OWNER);
+    await screen.findAllByTestId('list-row');
+    await waitFor(() => expect(orgService.getMembershipWords).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('renewals-sign')).toBeNull();
+  });
+
+  it('somebody who may not open Memberships reads who can, with no button', async () => {
+    orgService.getMembershipWords.mockResolvedValue(names(1));
+    drawFor({ ...OWNER, staffRole: 'trainer', privileges: ['members.confirm'] });
+    const sign = within(await screen.findByTestId('renewals-sign'));
+    expect(sign.getByText('1 member can be renewed')).toBeTruthy();
+    expect(sign.getByText('Their 3 Months has ended, and your member list shows a later end date for them. The owner can do this on the Memberships page.')).toBeTruthy();
+    expect(sign.queryByRole('link')).toBeNull();
+  });
+
+  it('staff the server does not give the names to are never asked for them, and a refused read draws nothing', async () => {
+    drawFor({ ...OWNER, staffRole: 'trainer', privileges: [] });
+    await screen.findAllByTestId('list-row');
+    expect(orgService.getMembershipWords).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('renewals-sign')).toBeNull();
+    cleanup();
+    orgService.getMembershipWords.mockRejectedValue({ response: { status: 403, data: { error: 'forbidden' } } });
+    drawFor(OWNER);
+    await screen.findAllByTestId('list-row');
+    await waitFor(() => expect(orgService.getMembershipWords).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('renewals-sign')).toBeNull();
+  });
+});
 
 // 5b-v-c's worst thing (spec Part 3 §18.10): staff open one person, then another, and the
 // first one's late answer lands on the second one's page, or a button acts on the first.

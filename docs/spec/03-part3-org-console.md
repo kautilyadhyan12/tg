@@ -4892,6 +4892,15 @@ its heading, and opens with its people ticked (the list's own later date is what
 they renewed), so one question and one button are left; a box that also holds people who
 never had it stays as 17a-iii made it, nobody ticked. No server change.
 
+**And for somebody who skips it** (Kd, the same click-through: "what if some one skips it
+and just press done"): **a sign atop the Members list while a renewal waits**, beside the
+Review and Duplicates signs and drawn as they are: "2 members can be renewed · Renew
+their memberships", and under it "Their 3 Months has ended, and your member list shows a
+later end date for them." Its button opens the same box. One sign a membership, gone by
+itself once they are renewed. Never for people who have not had the membership, who may
+have been left out on purpose; never for staff the server does not give the list's names
+to. It costs one more read of those names whenever Members is read.
+
 
 **Size: Risky** (it gives people memberships, which open "Payment due"; other people's
 data). Recommended Opus xhigh; if Kd's setting is high, say so in the plan's last line and

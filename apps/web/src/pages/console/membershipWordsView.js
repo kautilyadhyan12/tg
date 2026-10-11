@@ -360,6 +360,32 @@ export function linkBody(preview, ticks, paid) {
   };
 }
 
+/** The list's names that count as a live membership type, each with that type and how
+ *  many of its people wait: never having had it, or with a later date on the list. */
+function tiedNames(words) {
+  return words.flatMap((w) => {
+    if (w.link !== null) return w.link.typeArchived ? [] : [{ w, typeId: w.link.typeId, typeName: w.link.typeName, own: w.link.ownName, waiting: w.link.waiting, again: w.link.again ?? 0 }];
+    return w.sameName === null ? [] : [{ w, typeId: w.sameName.typeId, typeName: w.sameName.typeName, own: true, waiting: w.sameName.waiting, again: w.sameName.again ?? 0 }];
+  });
+}
+
+/** The sign atop Members while a renewal waits: somebody whose membership has ended and
+ *  whose list shows a later end date reads "Ended" there, and this says why, with the
+ *  button that renews them. One a membership. Somebody who never had the membership is
+ *  not named here: they may have been left out on purpose. */
+export function renewalsWaiting(words, peopleWords) {
+  return tiedNames(words)
+    .filter((t) => t.again > 0)
+    .map((t) => ({
+      key: `renew-${t.typeId}-${t.w.word}`,
+      typeId: t.typeId,
+      word: t.w.word,
+      title: t.again === 1 ? `1 ${peopleWords.person} can be renewed` : `${t.again.toLocaleString('en')} ${peopleWords.people} can be renewed`,
+      detail: `Their ${t.typeName} has ended, and your ${peopleWords.person} list shows a later end date for them.`,
+      button: t.again === 1 ? 'Renew their membership' : 'Renew their memberships',
+    }));
+}
+
 /** After an import: what is left to do about the memberships the gym has set up, a
  *  sentence and a button each, the renewals first. `words` are the list's membership
  *  names as the server reads them now; `peopleWords` the gym's own word for its people.
@@ -367,10 +393,7 @@ export function linkBody(preview, ticks, paid) {
 export function afterImportSteps(words, peopleWords) {
   const steps = [];
   const who = (n) => (n === 1 ? `1 ${peopleWords.person}` : `${n.toLocaleString('en')} ${peopleWords.people}`);
-  const tied = words.flatMap((w) => {
-    if (w.link !== null) return w.link.typeArchived ? [] : [{ w, typeId: w.link.typeId, typeName: w.link.typeName, own: w.link.ownName, waiting: w.link.waiting, again: w.link.again ?? 0 }];
-    return w.sameName === null ? [] : [{ w, typeId: w.sameName.typeId, typeName: w.sameName.typeName, own: true, waiting: w.sameName.waiting, again: w.sameName.again ?? 0 }];
-  });
+  const tied = tiedNames(words);
   for (const t of tied) {
     if (t.again === 0) continue;
     steps.push({

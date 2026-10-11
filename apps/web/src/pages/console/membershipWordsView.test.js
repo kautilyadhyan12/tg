@@ -26,6 +26,7 @@ import {
   renewNote,
   personNote,
   renewLead,
+  renewalsWaiting,
   startTicks,
   tieButton,
   typeTies,
@@ -213,6 +214,34 @@ describe("the member list's names are part of the gym's one list of memberships"
     expect(both[2].text).toBe('1 member has Gold Monthly on your member list, but it is not on their page yet.');
     // A studio's own word for its people.
     expect(afterImportSteps([linked({ again: 2 })], { person: 'client', people: 'clients' })[0].text).toBe("2 clients' 3 Months has ended, and your client list now shows a later end date for them.");
+  });
+
+  it('the sign atop Members names only renewals that wait, one a membership, in the gym\'s own word for its people', () => {
+    const TERM_ID = '22222222-2222-4222-8222-000000000003';
+    const WORDS = { person: 'member', people: 'members' };
+    const linked = (over) => name({ word: '3 Month Plan', people: 8, link: { typeId: TERM_ID, typeName: '3 Months', typeArchived: false, waiting: 0, again: 0, ownName: false, ...over } });
+    expect(renewalsWaiting([], WORDS)).toEqual([]);
+    expect(renewalsWaiting([linked({})], WORDS)).toEqual([]);
+    // People who never had it may have been left out on purpose: no standing sign for them.
+    expect(renewalsWaiting([linked({ waiting: 5 })], WORDS)).toEqual([]);
+    expect(renewalsWaiting([name({ word: 'Silver' })], WORDS)).toEqual([]);
+    expect(renewalsWaiting([linked({ typeArchived: true, again: 2 })], WORDS)).toEqual([]);
+    expect(renewalsWaiting([linked({ waiting: 5, again: 2 })], WORDS)).toEqual([
+      {
+        key: `renew-${TERM_ID}-3 Month Plan`,
+        typeId: TERM_ID,
+        word: '3 Month Plan',
+        title: '2 members can be renewed',
+        detail: 'Their 3 Months has ended, and your member list shows a later end date for them.',
+        button: 'Renew their memberships',
+      },
+    ]);
+    expect(renewalsWaiting([linked({ again: 1 })], WORDS)[0]).toMatchObject({ title: '1 member can be renewed', button: 'Renew their membership' });
+    const own = name({ word: 'Gold Monthly', people: 4, sameName: { typeId: GOLD.id, typeName: 'Gold Monthly', waiting: 0, again: 3 } });
+    expect(renewalsWaiting([linked({ again: 2 }), own], { person: 'client', people: 'clients' }).map((s) => `${s.title}. ${s.detail}`)).toEqual([
+      '2 clients can be renewed. Their 3 Months has ended, and your client list shows a later end date for them.',
+      '3 clients can be renewed. Their Gold Monthly has ended, and your client list shows a later end date for them.',
+    ]);
   });
 
   it('Set up asks whether it is one of the memberships above or a new one, and the form opens with its name', () => {
