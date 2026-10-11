@@ -60,7 +60,7 @@ export const gymGroupMessages = pgTable(
     gymDay: date("gym_day").notNull(),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
     people: integer("people").notNull(),
-    /** Written to one person from the At risk list (0097): not one of the day's messages
+    /** Written to one person from the At risk list (0098): not one of the day's messages
      *  to groups. */
     onePerson: boolean("one_person").notNull().default(false),
     /** Made once for the box it was sent from: the same press again sends nothing more. */

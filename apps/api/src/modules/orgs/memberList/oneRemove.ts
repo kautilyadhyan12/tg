@@ -18,6 +18,7 @@
 import type { TransactionSql } from "postgres";
 import { withdrawForAccounts, withdrawForAddress } from "../invites/join.js";
 import type { InviteSettings } from "../invites/settings.js";
+import { keepLeftDays } from "../memberships/over.js";
 import { requireSessionsConfirmed, sessionsAuditMeta } from "../pt/changes.js";
 import { insertAudit } from "../repo.js";
 import * as repo from "./repo.js";
@@ -80,6 +81,8 @@ export async function removeRecordIn(
   }
   // Their coming personal training sessions end with the record: named first (it throws).
   const sessions = await requireSessionsConfirmed(tx, gymId, { entryIds: [entry.id] }, at, facts.confirmPtSessions ?? null);
+  // Somebody whose membership was already over keeps that day for Reports (21c-iii).
+  await keepLeftDays(tx, gymId, [entry.id], at);
   const moved = await repo.setEntryFormer(tx, gymId, entry.id, at);
   if (!moved) return { kind: "already_removed", version: (await repo.listState(tx, gymId))?.version ?? 0 };
   // The members this record reached were on the list, so they have been listed.

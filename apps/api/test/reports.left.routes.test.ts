@@ -17,7 +17,7 @@ import {
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { leftOnOf } from "../src/modules/orgs/memberships/onList.js";
+import { heldWithLeftOf } from "../src/modules/orgs/memberships/onList.js";
 import { renewedByTheList } from "../src/modules/orgs/memberships/wordsRepo.js";
 import { readMemberCounts } from "../src/modules/orgs/reports/repo.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -401,7 +401,8 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
       // And the day each membership finished, read from the list's own rule: the count
       // then leaves Rena out, and holds Mona to the day her record was made.
       const leftOn: Record<string, string> = {};
-      for (const [entryId, day] of await sql.begin((tx) => leftOnOf(tx, gym, "2026-10-15"))) leftOn[nameOf.get(entryId) ?? entryId] = day;
+      const { left } = await sql.begin((tx) => heldWithLeftOf(tx, gym, "2026-10-15", null));
+      for (const [entryId, gone] of left) leftOn[nameOf.get(entryId) ?? entryId] = gone.on;
       expect(leftOn).toEqual({
         "Mona Merged": "2026-03-09",
         "Jude July": "2026-07-16",

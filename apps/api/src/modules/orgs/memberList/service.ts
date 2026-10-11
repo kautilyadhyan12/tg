@@ -104,6 +104,8 @@ import { sessionsAuditMeta } from "../pt/changes.js";
 import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type RemovalPlan } from "./removeSelected.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { heldChips, heldOnListOf, heldPassing, mergeChips, type WordCount } from "../memberships/onList.js";
+import { keepLeftDays } from "../memberships/over.js";
+import { heldAndTidyOf, overOwingIdsOf, tidyIdsOf } from "./tidy.js";
 import { listBillFacts, pastOwing } from "../memberships/billsSql.js";
 
 export interface MemberListDeps {
@@ -1245,7 +1247,10 @@ export async function confirmUpload(
       carries,
     });
     expectApplied(await repo.writeReviews(tx, gymId, reviews), reviews.length, "reviewed", uploadId);
-    // MARKED FORMER WITH THE INSTANT THEY CAME OFF, never deleted (§11.1).
+    // MARKED FORMER WITH THE INSTANT THEY CAME OFF, never deleted (§11.1). Those whose
+    // membership here was already over keep that day for Reports (21c-iii).
+    const goneKeys = reconciled.gone.map((person) => person.identityKey);
+    await keepLeftDays(tx, gymId, await repo.entryIdsByIdentityKeys(tx, gymId, goneKeys), at);
     const removed = await repo.markEntriesFormer(tx, gymId, reconciled.gone.map((person) => person.identityKey), at);
     expectApplied(removed, reconciled.gone.length, "removed", uploadId);
 
@@ -1423,13 +1428,14 @@ export async function readList(
   const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const today = dayInTz(deps.now(), org.timezone);
-  const [state, members, fields, held, owing] = await Promise.all([
+  const [state, members, fields, { held, tidy, owing: overOwing }, owing] = await Promise.all([
     repo.listState(deps.sql, gymId),
     repo.membersAgainstList(deps.sql, gymId),
     repo.listFields(deps.sql, gymId),
     // The people who hold a membership here: their chips are counted by the app's own
-    // words, on the gym's own day (23a-i).
-    heldOnListOf(deps.sql, gymId, today, null),
+    // words, on the gym's own day (23a-i). With them, at the same moment, the people
+    // whose membership is over, for the sign (21c-iii).
+    heldAndTidyOf(deps.sql, gymId, today),
     // The past members who still owe, for the one chip Past members has (18a-ii).
     pastOwing(deps.sql, gymId, today),
   ]);
@@ -1465,6 +1471,7 @@ export async function readList(
     appWords: app.counts,
     review,
     duplicates,
+    over: { count: tidy.length, owing: overOwing.length },
   };
 }
 
@@ -1575,6 +1582,12 @@ export async function entriesFilter(
       appIds,
       // The tag is read with this gym: another gym's tag is on nobody here.
       tagIds: query.tag === undefined ? null : await entryIdsWithTag(deps.sql, gymId, query.tag),
+      // The people the sign counts (21c-iii), or the people left off it because they owe,
+      // by the rule the sign's own numbers come from.
+      overIds:
+        query.membership === undefined
+          ? null
+          : await (query.membership === "over" ? tidyIdsOf : overOwingIdsOf)(deps.sql, gymId, dayInTz(deps.now(), await repo.gymTimeZone(deps.sql, gymId))),
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
     },
   };

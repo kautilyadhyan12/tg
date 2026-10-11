@@ -27,7 +27,9 @@ import {
   type MemberRosterRemoveRequest,
 } from "@app/shared";
 import type { TransactionSql } from "postgres";
+import { dayInTz } from "../../gamification/streak.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
+import { keepLeftDays, overNow } from "../memberships/over.js";
 import { sessionsAuditMeta, sessionsEndingFor } from "../pt/changes.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { bustAfterRemoval } from "./byHandService.js";
@@ -66,7 +68,7 @@ const byNameThenId = (a: MemberRemovePerson, b: MemberRemovePerson): number => {
  *  that many may have more, so "every one of them selected" is never taken from it. */
 const SHARED_CONTACT_READ_MAX = 20;
 
-const KEPT_ORDER: readonly MemberRemoveKeptReason[] = ["staff", "own_record", "shared_email", "in_file", "same_record", "not_in_app", "gone"];
+const KEPT_ORDER: readonly MemberRemoveKeptReason[] = ["not_over", "payment_due", "staff", "own_record", "shared_email", "in_file", "same_record", "not_in_app", "gone"];
 
 /** The box's digest: what the press would do, and nothing else — the records moved, and
  *  each person losing the app with the record they are removed with. */
@@ -135,25 +137,38 @@ const keep = (kept: Map<MemberRemoveKeptReason, MemberRemovePerson[]>, reason: M
  *  ticked; removing them one by one ends the app on the last). The owner, staff and a
  *  complimentary place never lose it here. Anyone else a moved record's email or phone
  *  reaches is named as keeping the app, with why. `members` must hold everyone the
- *  selected records reach. */
+ *  selected records reach.
+ *
+ *  `notOverIds` (21c-iii): asked from the list of members whose membership is over, the
+ *  current records among those selected whose membership is NOT over now; `owingIds`,
+ *  those whose membership is over with a bill still open. Neither moves, nobody loses the
+ *  app with them, and each is named as staying, with why. */
 export function recordRemovalPlan(input: {
   gymId: string;
   selectedIds: readonly string[];
   records: readonly RecordBrief[];
   members: readonly repo.MemberAgainstList[];
   scale: { listCurrent: number; seats: number };
+  notOverIds?: readonly string[];
+  owingIds?: readonly string[];
 }): RemovalPlan {
   const found = new Map(input.records.map((record) => [record.id, record]));
-  const current = new Set(input.records.filter((record) => !record.former).map((record) => record.id));
-  const past = new Set(input.records.filter((record) => record.former).map((record) => record.id));
+  const owing = new Set(input.owingIds ?? []);
+  const spared = new Set([...(input.notOverIds ?? []), ...owing]);
+  const records = input.records.filter((record) => record.former || !spared.has(record.id));
+  const current = new Set(records.filter((record) => !record.former).map((record) => record.id));
+  const past = new Set(records.filter((record) => record.former).map((record) => record.id));
   const kept = new Map<MemberRemoveKeptReason, MemberRemovePerson[]>();
   const asked = [...new Set(input.selectedIds)];
   for (const id of asked) {
     if (!found.has(id)) keep(kept, "gone", { name: "", entryId: id, userId: null });
   }
-  const move = input.records.filter((record) => !record.former).map((record) => ({ name: record.fullName, entryId: record.id, userId: null }));
-  const emails = new Set(input.records.filter((record) => !record.former && record.email !== null).map((record) => (record.email ?? "").toLowerCase()));
-  const phones = new Set(input.records.filter((record) => !record.former && record.phone !== null).map((record) => record.phone ?? ""));
+  for (const record of input.records) {
+    if (!record.former && spared.has(record.id)) keep(kept, owing.has(record.id) ? "payment_due" : "not_over", { name: record.fullName, entryId: record.id, userId: null });
+  }
+  const move = records.filter((record) => !record.former).map((record) => ({ name: record.fullName, entryId: record.id, userId: null }));
+  const emails = new Set(records.filter((record) => !record.former && record.email !== null).map((record) => (record.email ?? "").toLowerCase()));
+  const phones = new Set(records.filter((record) => !record.former && record.phone !== null).map((record) => record.phone ?? ""));
 
   const ends: { person: MemberRemovePerson; removedWith: string | null }[] = [];
   const pastReached = new Set<string>();
@@ -373,10 +388,26 @@ export async function withPtSessions(sql: repo.SqlOrTx, gymId: string, plan: Rem
   return { ...plan, preview: { ...plan.preview, ptSessions: ending, digest: digestWithSessions(plan.preview.digest, ending.mark) } };
 }
 
-/** The plan for these records, read on `sql` (the pool, or the press's transaction). */
-async function recordPlanOn(sql: repo.SqlOrTx, gymId: string, ids: readonly string[], now: Date): Promise<RemovalPlan> {
+/** Of these records, those the sign's list does not hold now: `notOver`, anybody with a
+ *  membership in use or still to start, with a renewal waiting, or with nothing held here;
+ *  `owing`, anybody whose membership is over with a bill still open. */
+async function notTidyAmong(sql: repo.SqlOrTx, gymId: string, ids: readonly string[], now: Date): Promise<{ notOver: string[]; owing: string[] }> {
+  const today = dayInTz(now, await repo.gymTimeZone(sql, gymId));
+  const over = await overNow(sql, gymId, today, ids);
+  return { notOver: ids.filter((id) => !over.has(id)), owing: ids.filter((id) => over.get(id)?.owes === true) };
+}
+
+/** The plan for these records, read on `sql` (the pool, or the press's transaction).
+ *  `onlyOver`: asked from the list of members whose membership is over. */
+async function recordPlanOn(sql: repo.SqlOrTx, gymId: string, ids: readonly string[], now: Date, onlyOver: boolean): Promise<RemovalPlan> {
+  const stay = onlyOver ? await notTidyAmong(sql, gymId, ids, now) : { notOver: [], owing: [] };
   const { records, members, scale } = await recordInputsOn(sql, gymId, ids);
-  return await withPtSessions(sql, gymId, recordRemovalPlan({ gymId, selectedIds: ids, records, members, scale }), now);
+  return await withPtSessions(
+    sql,
+    gymId,
+    recordRemovalPlan({ gymId, selectedIds: ids, records, members, scale, notOverIds: stay.notOver, owingIds: stay.owing }),
+    now,
+  );
 }
 
 /** An import's leavers box, read on `sql` before the file is applied. */
@@ -466,6 +497,8 @@ async function press(
     }
     if (plan.preview.large !== null && input.acknowledgeLargeChange !== true) return { kind: "large_change", preview: plan.preview };
 
+    // Those whose membership was already over keep that day for Reports (21c-iii).
+    await keepLeftDays(tx, gymId, plan.moveIds, at);
     const moved = await repo.setEntriesFormer(tx, gymId, plan.moveIds, at);
     // Under the lock the set cannot move between the rule and the write, so a difference
     // is a fault of ours and nothing is committed.
@@ -532,7 +565,7 @@ export async function previewRemoveSelected(
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const ids = await selectedIds(deps, gymId, request.selection);
-  const plan = await recordPlanOn(deps.sql, gymId, ids, deps.now());
+  const plan = await recordPlanOn(deps.sql, gymId, ids, deps.now(), request.onlyOver === true);
   requireForPlan(plan, privileges);
   return plan.preview;
 }
@@ -550,7 +583,7 @@ export async function removeSelected(
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return { kind: "rate_limited" };
   const ids = await selectedIds(deps, gymId, input.selection);
-  return await press(deps, userId, gymId, input, (tx, at) => recordPlanOn(tx, gymId, ids, at), privileges);
+  return await press(deps, userId, gymId, input, (tx, at) => recordPlanOn(tx, gymId, ids, at, input.onlyOver === true), privileges);
 }
 
 // ── "In the app" ──

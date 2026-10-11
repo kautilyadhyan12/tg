@@ -37,6 +37,8 @@ import {
   memberListReviewQuerySchema,
   memberListDuplicatesQuerySchema,
   memberListNotDuplicatesRequestSchema,
+  MEMBER_TIDY_PRESSES_PER_HOUR,
+  memberListKeepListedRequestSchema,
   memberListRemovePreviewRequestSchema,
   memberListRemoveSelectedRequestSchema,
   memberListRemoveUnlistedRequestSchema,
@@ -79,6 +81,7 @@ import * as exporter from "./exportCsv.js";
 import * as notes from "./notes.js";
 import * as tags from "./tags.js";
 import * as removal from "./removeSelected.js";
+import { keepListed } from "./tidy.js";
 import { SelectionChanged, selectAll } from "./selection.js";
 import * as groupMessages from "../messages/group.js";
 import * as service from "./service.js";
@@ -1006,6 +1009,23 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     }),
   );
 
+  /** Tidying up one person at a time (21c-iii): the Remove box, Remove and Keep on list
+   *  asked from the list of members whose membership is over. Its own allowance, so a
+   *  tidy-up spends none of the list's reads on its boxes; the address is counted a gym at
+   *  a time. A request that leaves `onlyOver` out is the ordinary Remove, on its own
+   *  smaller allowance. */
+  const tidyGate = gate(
+    createDualRateLimit({
+      name: "memberlist_tidy",
+      max: MEMBER_TIDY_PRESSES_PER_HOUR,
+      ipMax: MEMBER_TIDY_PRESSES_PER_HOUR * 4,
+      ipScope: gymInPath,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
   /** The press's answer: done, or nothing done and the box as it is now. */
   const sendRemoval = (req: FastifyRequest, reply: FastifyReply, answer: removal.RemoveSelectedAnswer): FastifyReply | undefined => {
     switch (answer.kind) {
@@ -1027,7 +1047,8 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     const body = parseOr400(memberListRemovePreviewRequestSchema, req.body, req, reply);
     if (body === null) return;
     try {
-      const preview = await removal.previewRemoveSelected(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+      const limit = body.onlyOver === true ? tidyGate(req, reply) : readGate(req, reply);
+      const preview = await removal.previewRemoveSelected(listDeps, requireUserId(req), params.gymId, body, limit);
       if (preview === null) return;
       return await reply.status(200).send({ preview });
     } catch (err) {
@@ -1044,12 +1065,30 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     if (body === null) return;
     let answer: removal.RemoveSelectedAnswer;
     try {
-      answer = await removal.removeSelected(listDeps, requireUserId(req), params.gymId, body, removeSelectedGate(req, reply));
+      const limit = body.onlyOver === true ? tidyGate(req, reply) : removeSelectedGate(req, reply);
+      answer = await removal.removeSelected(listDeps, requireUserId(req), params.gymId, body, limit);
     } catch (err) {
       if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
       throw err;
     }
     return sendRemoval(req, reply, answer);
+  });
+
+  /** "Keep on list" for the people selected among those whose membership is over
+   *  (21c-iii): the sign atop Members stops counting them. */
+  app.post("/v1/orgs/:gymId/member-list/selected/keep-listed", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListKeepListedRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const done = await keepListed(listDeps, requireUserId(req), params.gymId, body, tidyGate(req, reply));
+      if (done === null) return;
+      return await reply.status(200).send({ done });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
   });
 
   /** The box for the people ticked on "In the app". */

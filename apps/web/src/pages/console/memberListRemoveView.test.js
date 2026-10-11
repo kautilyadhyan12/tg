@@ -151,6 +151,14 @@ describe("who doesn't change", () => {
     ]);
     expect(removeKept(preview({ kept: [{ reason: 'gone', people: [p('', 3)] }] }), GYM, 'app').groups[0].line).toBe('No longer in the app.');
     expect(removeKept(preview(), GYM, 'list').heading).toBeNull();
+    // Selected among the members whose membership is over, and not over any more (21c-iii).
+    const stay = removeKept(preview({ kept: [{ reason: 'not_over', people: [p('Paula Paid', 4)] }] }), GYM, 'list');
+    expect(stay.heading).toBe("1 won't change");
+    expect(stay.groups[0]).toMatchObject({ line: 'Stay on your list: they have a membership now, or one waiting to be renewed.', count: 1 });
+    expect(stay.groups[0].people.map((who) => who.name)).toEqual(['Paula Paid']);
+    // Over, with a bill still open: they stay, and the line says what to do first.
+    const owes = removeKept(preview({ kept: [{ reason: 'payment_due', people: [p('Una Unpaid', 5)] }] }), GYM, 'list');
+    expect(owes.groups[0]).toMatchObject({ line: 'Stay on your list: a payment is still due from them. Record it or cancel the bill on their page first.', count: 1 });
   });
 });
 

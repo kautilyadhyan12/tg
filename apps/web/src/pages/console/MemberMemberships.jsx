@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
@@ -99,6 +99,9 @@ const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bi
 // `managesTypes`: whether this member of staff may open the Memberships page; a sentence
 // names it only for somebody who can, and `membershipsTo` is the page's address for the
 // button under that sentence (null: no button).
+/** The Add membership form as it opens: the gym's one type already picked, from today. */
+const addForm = (types, today) => ({ requestKey: newRequestKey(), typeId: types.length === 1 ? types[0].id : '', startsOn: today, paid: false, method: '' });
+
 export default function MemberMemberships({
   gymId,
   entryId,
@@ -109,6 +112,7 @@ export default function MemberMemberships({
   nothingNow = null,
   managesTypes = true,
   membershipsTo = null,
+  addNow = false,
 }) {
   /** The answer on screen, and the record it is about: never shown under another. */
   const [held, setHeld] = useState(null);
@@ -132,6 +136,7 @@ export default function MemberMemberships({
   const [refundForm, setRefundForm] = useState(null);
   /** The membership whose bills are all drawn, by its id. */
   const [allBills, setAllBills] = useState(null);
+  const addedNow = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -149,6 +154,24 @@ export default function MemberMemberships({
   }, [gymId, entryId, attempt]);
 
   const shown = held !== null && held.entryId === entryId ? held : null;
+  // Opened by "Add membership" on the Members list's own row (21c-iii): the form is open
+  // already, once, when their memberships have loaded.
+  const addsNow = addNow && !readOnly && shown !== null && !shown.past;
+  useEffect(() => {
+    if (!addsNow || addedNow.current) return;
+    addedNow.current = true;
+    // The membership that ended last is picked already, where the gym still sells it:
+    // staff change it only if the person is taking something else.
+    const lastDayOf = (m) => m.view.endsOn ?? m.startsOn;
+    const had = shown.memberships
+      .filter((m) => !isLive(m))
+      .sort((a, b) => (lastDayOf(a) < lastDayOf(b) ? 1 : lastDayOf(a) > lastDayOf(b) ? -1 : 0))
+      .slice(0, 1)
+      .find((m) => shown.types.some((t) => t.id === m.typeId));
+    const form = addForm(shown.types, shown.today);
+    setForm(had === undefined || form.typeId !== '' ? form : { ...form, typeId: had.typeId });
+    setOpen({ what: 'add' });
+  }, [addsNow, shown]);
   // What their list says their membership is, where they do not hold it here.
   const listed = shown === null ? null : listedRow(shown.listed, name, managesTypes);
   // A box that sends staff to Memberships reads again when they come back to this tab, so
@@ -243,9 +266,10 @@ export default function MemberMemberships({
   const startAdd = () => {
     setNotice(null);
     setRefusal(null);
-    setForm({ requestKey: newRequestKey(), typeId: types.length === 1 ? types[0].id : '', startsOn: today, paid: false, method: '' });
+    setForm(addForm(types, today));
     setOpen({ what: 'add' });
   };
+
 
   const startPay = (m) => {
     setNotice(null);
