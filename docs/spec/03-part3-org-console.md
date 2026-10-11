@@ -4338,8 +4338,9 @@ they train at reads the line with a button to the Settings box.
 Each a switch in Settings → Messages, each number the gym's to change: **Welcome** (on
 joining) · **Trial check-in** (day 2 of a trial membership) · **Trial ending** (2 days
 before) · **We miss you** (no visit for 10 days; once for each absence) · **Membership
-ending** (7 days before) · **Payment overdue** (3 days after a bill's due date, §14.2)
-· **Birthday** · **Milestone** (the 50th visit, the 100th). Fixed words with the gym's
+ending** (7 days before) · **Payment overdue** (the morning a bill reads Overdue on the
+person's page, by the gym's own grace period of §14.2; it was "3 days after a bill's due
+date" until 20b-ii, RULINGS 2026-10-11) · **Birthday** · **Milestone** (the 50th visit, the 100th). Fixed words with the gym's
 name and the person's first name; the gym may add ONE line of its own — 140
 characters, no links, no `@`, held by 15.3's filter. One worker decides what is due,
 by ONE pure rule over (the gym's switches and numbers, the person's record, visits,
@@ -4377,7 +4378,7 @@ the run then fails; a gym whose new people all have their Welcome is not looked 
 
 **Built in 20b-i (2026-10-11; RULINGS 2026-10-10): Birthday, Visit milestone and We miss
 you are sent, the gym has its box and a member their switches.** The other four (a trial's
-two, Membership ending, Payment overdue) are 20b-ii and the class reminder 20b-iii.
+two, Membership ending, Payment overdue) are 20b-ii, below, and the class reminder 20b-iii.
 - **The gym's box**, Settings → **Automatic messages** (`org.manage`;
   `GET` and `PUT /v1/orgs/:gymId/message-settings`; `gym_message_settings`, one row a gym a
   kind, migration `0095`; a kind with no row has its starting values): for each message a
@@ -4435,6 +4436,60 @@ two, Membership ending, Payment overdue) are 20b-ii and the class reminder 20b-i
   `updated_at`, the database's own clock, is what it was when the read began). A gym closed, on no plan or asleep is not read past its own row; a
   gym's row is held only when the first read found something to write, and the write is
   made from a second read under it.
+
+**Built in 20b-ii (2026-10-11; RULINGS that day): Trial check-in, Trial ending, Membership
+ending and Payment overdue are sent.** All eight kinds now have their row in the gym's box,
+in this order: Welcome · Trial check-in · Trial ending · Membership ending · Payment overdue
+· Birthday · Visit milestone · We miss you. No migration: the numbers are `days` in
+`gym_message_settings`.
+- **Whose membership it is.** A membership and its bills belong to a record on the gym's
+  list. They are a person's only where that person is a live member in the app who holds
+  the record alone (`soloHolders`): a record two accounts share is nobody's, a past member's
+  is not read, and somebody on the list with no app has nobody to tell
+  (`messages/membershipsRepo.ts`).
+- **What the rule is told** is worked out by one pure function, `membershipMessageFacts`
+  (`packages/shared/src/gymMessageMemberships.ts`), from the memberships as
+  `heldMembershipFacts` reads them on the gym's day. Only a membership that is RUNNING that
+  day is read for anything: not one frozen, cancelled, over or still to start.
+- **Payment overdue** is for an OPEN bill (not paid, not cancelled by staff, not refunded)
+  of a running membership that has a price. It goes the morning the bill reads Overdue on
+  the person's page: more than the gym's grace period (`gyms.bills_overdue_days`, the Bills
+  box on Memberships) after its due date, so the message and the page agree; it has no
+  number of its own. Only while it has read Overdue for 30 days at most
+  (`GYM_MESSAGE_OVERDUE_LATE_DAYS`), so an old bill is not news on the first day. **Only at
+  a gym that recorded a payment in the app in the last 45 days**
+  (`GYM_MESSAGE_PAYMENTS_DAYS`): a gym that takes its money somewhere else has bills here
+  that nobody marks paid, and its members owe it nothing. One notice a bill
+  (`bill:<id>`). No amount is in the words. The gym can switch it off; a member cannot.
+- **Trial check-in** goes on the day of the trial the gym picks (2 · 3 · 4 · 5 · 7, the
+  first day being day 1), or a day late. **Trial ending** goes so many days before the
+  trial's last day (1 · 2 · 3), not to somebody who already has another membership in use
+  (running, frozen or still to start), and only for a trial at least twice as long as the
+  notice. A trial is one whether it is free or has a price. Both are named by the trial's
+  own row (`trial:<id>`), so a freeze that moves its last day makes no second message.
+- **Membership ending** goes so many days before the last day (3 · 7 · 14 · 30) of a
+  running membership that is no trial and has a last day: one time, a class pack, or a
+  repeating one set to stop. Never one that renews by itself. Not where another membership
+  of theirs that is no trial is in use and runs past that day (they renewed already), and
+  only for one at least twice as long as the notice, so a day pass or a week's pass is not
+  "ending" on the day it began. Named by its row (`ends:<id>`).
+- **The words** (`automaticMessage`): "How is your trial at {gym} going, Maya? If you have
+  any questions, just ask us." · "Your trial at {gym} ends on 14 October, Maya. Ask us
+  about a membership to keep coming." · "Your membership at {gym} ends on 14 October,
+  Maya. Ask us if you'd like to renew." · "Your payment to {gym} is overdue, Maya. Please
+  speak to us to sort it out." A last day is written day then month, no year. The box
+  shows **[its last day]** where it goes.
+- **A gym that does not use this part** is told on the row, with a button to where it is
+  set up (who can, for staff who cannot open it): no trial on the price list (the two trial
+  rows; Memberships), an empty price list (Membership ending and Payment overdue;
+  Memberships), no payment recorded in 45 days (Payment overdue; Members, since a payment
+  is recorded on a person's page). The Payment overdue row says the gym's grace period in
+  words and has a button to the Bills box. The settings read carries `trialOnList`,
+  `priceList`, `payments` and `billsOverdueDays` for this.
+- **A member's switches** gain Trial check-in, Trial ending and Membership ending. Payment
+  overdue has none.
+- **When they are found:** in the day's whole read of the gym, with birthdays and
+  absences, so each goes in the morning.
 
 ### 16.3 Leads
 

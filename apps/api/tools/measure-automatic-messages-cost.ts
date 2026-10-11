@@ -1,6 +1,8 @@
-// What the automatic messages cost at full size (ROADMAP 20b-i; CLAUDE.md §4 "Cost at
-// full size"). One gym of 2,000 beside 19 gyms of 200, everybody on the list with a date
+// What the automatic messages cost at full size (ROADMAP 20b-i, 20b-ii; CLAUDE.md §4 "Cost
+// at full size"). One gym of 2,000 beside 19 gyms of 200, everybody on the list with a date
 // of birth, a year of check-ins every other day, and 20 messages already sent each.
+// Everybody holds a monthly membership a year old with its twelve bills: eleven paid, and
+// this month's still open for one person in four.
 //
 // The sender runs four times an hour. Three numbers matter: the usual run, which reads
 // only who joined lately; the day's first run for a gym, which reads everybody in it; and
@@ -15,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
+import { gymMoney, membershipFactsByPerson } from "../src/modules/orgs/messages/membershipsRepo.js";
 import { sendDueMessages } from "../src/modules/orgs/messages/send.js";
 import { getMessageSettings } from "../src/modules/orgs/messages/settings.js";
 
@@ -41,6 +44,10 @@ async function cleanup(): Promise<void> {
   await sql`DELETE FROM subscriptions WHERE plan_id IN (SELECT id FROM plans WHERE code = ${PLAN})`;
   await sql`DELETE FROM gym_member_messages WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_attendance WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_member_payments WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_member_bills WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_members WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_staff WHERE gym_id IN (${gyms})`;
@@ -95,6 +102,27 @@ try {
              ${NOW}::timestamptz - (k * 15 + 20) * interval '1 day', ${NOW}::timestamptz - (k * 15 - 10) * interval '1 day'
       FROM gym_members m CROSS JOIN generate_series(1, 20) AS k
       WHERE m.gym_id = ${gymId}`;
+    // A monthly membership each, begun eleven months ago on one of 28 days, so this
+    // month's period began up to 27 days back; twelve bills each, this month's open for
+    // one in four, and a payment for every bill that is paid.
+    const typeId = randomUUID();
+    await sql`
+      INSERT INTO gym_membership_types (id, gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
+      VALUES (${typeId}, ${gymId}, 'Monthly', 'recurring', 4999, 'GBP', 1, 'month', 'all_classes')`;
+    await sql`
+      INSERT INTO gym_held_memberships (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, paid_periods, renews)
+      SELECT ${gymId}, m.entry_id, ${typeId}, gen_random_uuid(), 'recurring', 4999, 'GBP', 1, 'month',
+             ((${TODAY}::date - (m.n % 28)::int) - interval '11 months')::date, CASE WHEN m.n % 4 = 0 THEN 11 ELSE 12 END, true
+      FROM (SELECT entry_id, row_number() OVER (ORDER BY user_id) AS n FROM gym_members WHERE gym_id = ${gymId}) m`;
+    await sql`
+      INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, status)
+      SELECT ${gymId}, h.id, k, 4999, 'GBP', (h.starts_on + k * interval '1 month')::date, CASE WHEN k < h.paid_periods THEN 'paid' ELSE 'open' END
+      FROM gym_held_memberships h CROSS JOIN generate_series(0, 11) AS k
+      WHERE h.gym_id = ${gymId}`;
+    await sql`
+      INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by)
+      SELECT ${gymId}, b.id, 4999, 'GBP', 'cash', gen_random_uuid(), b.due_on, ${owner}
+      FROM gym_member_bills b WHERE b.gym_id = ${gymId} AND b.status = 'paid'`;
     return gymId;
   };
 
@@ -102,10 +130,15 @@ try {
   for (let g = 0; g < SMALL_GYMS; g++) small.push(await makeGym(SMALL));
   const big = await makeGym(BIG);
   const gymIds = [...small, big];
-  for (const table of ["gym_members", "users", "gyms", "gym_attendance", "gym_member_list_entries", "gym_member_messages"]) await sql`ANALYZE ${sql(table)}`;
-  const counted = await sql<{ visits: number; messages: number }[]>`
+  for (const table of ["gym_members", "users", "gyms", "gym_attendance", "gym_member_list_entries", "gym_member_messages", "gym_held_memberships", "gym_member_bills", "gym_member_payments"]) {
+    await sql`ANALYZE ${sql(table)}`;
+  }
+  const counted = await sql<{ visits: number; messages: number; bills: number; open: number; payments: number }[]>`
     SELECT (SELECT count(*)::int FROM gym_attendance WHERE gym_id = ANY(${gymIds}::uuid[])) AS visits,
-           (SELECT count(*)::int FROM gym_member_messages WHERE gym_id = ANY(${gymIds}::uuid[])) AS messages`;
+           (SELECT count(*)::int FROM gym_member_messages WHERE gym_id = ANY(${gymIds}::uuid[])) AS messages,
+           (SELECT count(*)::int FROM gym_member_bills WHERE gym_id = ANY(${gymIds}::uuid[])) AS bills,
+           (SELECT count(*)::int FROM gym_member_bills WHERE gym_id = ANY(${gymIds}::uuid[]) AND status = 'open') AS open,
+           (SELECT count(*)::int FROM gym_member_payments WHERE gym_id = ANY(${gymIds}::uuid[])) AS payments`;
 
   const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
   const fmt = (ms: number): string => `${ms.toFixed(1)} ms`;
@@ -138,7 +171,7 @@ try {
 
   const cpu = os.cpus()[0];
   console.log(
-    `measure-automatic-messages-cost: ${String(SMALL_GYMS)} gyms of ${String(SMALL)} and one of ${String(BIG)} · ${String(counted[0]?.visits ?? 0)} check-ins · ${String(counted[0]?.messages ?? 0)} messages already sent · ${cpu?.model ?? "?"} at ${String(cpu?.speed ?? 0)} MHz · ${String(RUNS)} runs each`,
+    `measure-automatic-messages-cost: ${String(SMALL_GYMS)} gyms of ${String(SMALL)} and one of ${String(BIG)} · ${String(counted[0]?.visits ?? 0)} check-ins · ${String(counted[0]?.messages ?? 0)} messages already sent · ${String(counted[0]?.bills ?? 0)} bills (${String(counted[0]?.open ?? 0)} open) · ${String(counted[0]?.payments ?? 0)} payments · ${cpu?.model ?? "?"} at ${String(cpu?.speed ?? 0)} MHz · ${String(RUNS)} runs each`,
   );
 
   const log = { info: () => undefined, error: () => undefined };
@@ -152,7 +185,9 @@ try {
     await nothing(ids);
   };
   const first = await sendDueMessages({ sql, log }, { now: NOW, gymIds });
-  console.log(`  the first run sent ${String(first.sent)} (that day's birthdays and milestones)`);
+  const kinds = await sql<{ kind: string; n: number }[]>`
+    SELECT kind, count(*)::int AS n FROM gym_member_messages WHERE gym_id = ANY(${gymIds}::uuid[]) AND gym_day = ${TODAY}::date GROUP BY kind ORDER BY kind`;
+  console.log(`  the first run sent ${String(first.sent)}: ${kinds.map((k) => `${k.kind} ${String(k.n)}`).join(", ")}`);
   await measure("the usual run, four times an hour: all 20 gyms, nobody new", () => nothing(gymIds));
   await measure(`the day's first run, everybody read: one gym of ${String(SMALL)}`, wholeDay(small.slice(0, 1)), 10);
   await measure(`the day's first run, everybody read: the gym of ${String(BIG)}`, wholeDay([big]), 5);
@@ -162,10 +197,19 @@ try {
     if (sent.sent !== 0) throw new Error("a night run sent something");
   });
 
+  await measure(`the read of memberships and bills alone: the gym of ${String(BIG)}`, async () => {
+    const [facts, money] = [await membershipFactsByPerson(sql, big, TODAY), await gymMoney(sql, big, TODAY)];
+    if (facts.size !== BIG || !money.takesPayments) throw new Error(`the membership read is wrong: ${String(facts.size)} people`);
+  });
+  await measure(`the read of memberships and bills alone: one gym of ${String(SMALL)}`, async () => {
+    const facts = await membershipFactsByPerson(sql, small[0] ?? "", TODAY);
+    if (facts.size !== SMALL) throw new Error("the membership read is wrong");
+  });
+
   const deps = { sql, now: () => NOW };
   await measure(`the Settings box read: the gym of ${String(BIG)}`, async () => {
     const got = await getMessageSettings(deps, owner, big, () => Promise.resolve(true));
-    if (got === null || !got.checkIn) throw new Error("the settings read is wrong");
+    if (got === null || !got.checkIn || !got.payments || !got.priceList) throw new Error("the settings read is wrong");
   });
 
   // The worst run. Twelve days on, with the big gym's desk still in use by somebody not in
