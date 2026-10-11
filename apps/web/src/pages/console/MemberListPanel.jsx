@@ -1243,7 +1243,7 @@ export default function MemberListPanel({
                   {/* One by one (21c-iii): what can be done with this person, under their
                       own row. With people ticked, the bar's buttons act on those instead. */}
                   {overView && !readOnly && picked === 0 ? (
-                    <div className="flex flex-wrap gap-2 pl-12 pr-4 pb-3.5 md:pb-3" data-testid="over-actions">
+                    <div className="grid grid-cols-2 md:grid-cols-[repeat(3,168px)] gap-2 pl-12 pr-4 pb-3.5 md:pb-3" data-testid="over-actions">
                       <button
                         type="button"
                         onClick={() => {
@@ -1253,7 +1253,7 @@ export default function MemberListPanel({
                         }}
                         aria-label={`Add a membership for ${e.fullName || 'this person'}`}
                         data-testid="over-add"
-                        className="c-btn c-btn-soft c-btn-sm min-h-11 md:min-h-0"
+                        className="c-btn c-btn-soft c-btn-sm min-h-11 md:min-h-0 col-span-2 md:col-span-1 w-full justify-center"
                       >
                         <Plus aria-hidden="true" className="w-4 h-4" />
                         Add membership
@@ -1263,7 +1263,7 @@ export default function MemberListPanel({
                         onClick={() => openRemove({ kind: 'ticked', entryIds: [e.entryId] })}
                         aria-label={`Remove ${e.fullName || 'this person'}`}
                         data-testid="over-remove"
-                        className="c-btn c-btn-danger c-btn-sm min-h-11 md:min-h-0"
+                        className="c-btn c-btn-danger c-btn-sm min-h-11 md:min-h-0 w-full justify-center"
                       >
                         <UserMinus aria-hidden="true" className="w-4 h-4" />
                         Remove
@@ -1274,7 +1274,7 @@ export default function MemberListPanel({
                         disabled={keeping}
                         aria-label={`Keep ${e.fullName || 'this person'} on your list`}
                         data-testid="over-keep"
-                        className="c-btn c-btn-s c-btn-sm min-h-11 md:min-h-0"
+                        className="c-btn c-btn-s c-btn-sm min-h-11 md:min-h-0 w-full justify-center"
                       >
                         <ListChecks aria-hidden="true" className="w-4 h-4" />
                         Keep on list
