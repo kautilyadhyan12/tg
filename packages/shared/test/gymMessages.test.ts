@@ -238,7 +238,7 @@ describe("the occasions", () => {
     // Length in days → how many days before its last day it is first told, for 1, 2, 3, 7, 14 and 30 days' notice.
     const table: [string, number, number[]][] = [
       ["a day pass", 1, [0, 0, 0, 0, 0, 0]],
-      ["two days", 2, [1, 1, 1, 1, 1, 1]],
+      ["two days", 2, [0, 0, 0, 0, 0, 0]],
       ["a three-day trial", 3, [1, 1, 1, 1, 1, 1]],
       ["a week", 7, [1, 2, 3, 3, 3, 3]],
       ["two weeks", 14, [1, 2, 3, 7, 7, 7]],
@@ -261,8 +261,8 @@ describe("the occasions", () => {
         }
         const first = firsts[i] ?? 0;
         expect(told, `${what}, ${String(days)} days`).toEqual(first === 0 ? [] : Array.from({ length: first + 1 }, (_, k) => first - k));
-        // Never told on the day it began, unless it is two days long.
-        if (length > 2) expect(told.includes(length - 1), what).toBe(false);
+        // Never told on the day it began.
+        expect(told.includes(length - 1), what).toBe(false);
       });
     }
     expect([endingNoticeDays(30, 0), endingNoticeDays(30, 1.5), endingNoticeDays(Number.NaN, 7)]).toEqual([0, 0, 0]);

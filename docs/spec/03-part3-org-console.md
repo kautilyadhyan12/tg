@@ -4486,8 +4486,8 @@ in this order: Welcome · Trial check-in · Trial ending · Membership ending ·
 - **A short one is told halfway through** (`endingNoticeDays`): where a trial or a
   membership is shorter than twice the notice, the notice is half its length, rounded
   down (a month with 30 days picked is told 15 days before; a week's pass with 7 picked,
-  3 days before), and a day pass never. So no ending is said on the day a membership of
-  three days or more began.
+  3 days before), and a pass of one or two days never. So no ending is said on the day a
+  membership began.
 - **The words** (`automaticMessage`; made friendlier at Kd's click-through, RULINGS
   2026-10-11): "Hi Maya, how's your trial at {gym} going? If you need anything, just let
   us know." · "Hi Maya, your trial at {gym} ends on 14 October. Want to keep coming? Talk

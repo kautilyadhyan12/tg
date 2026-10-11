@@ -266,9 +266,10 @@ export function trustedBirthday(dateOfBirth: string | null, today: string, share
 /** How many days before its last day a membership of `length` days is told it is ending,
  *  where the gym picked `days`: that many, or half its length where it is shorter than
  *  twice the notice (a month with 30 days picked is told 15 days before), so a week's pass
- *  with a week's notice is not told on the day it began. 0: never (a day pass). */
+ *  with a week's notice is not told on the day it began. 0: never (a pass of a day or two,
+ *  whose only day before its last is its first). */
 export function endingNoticeDays(length: number, days: number): number {
-  if (!Number.isInteger(length) || !Number.isInteger(days) || days < 1 || length < 2) return 0;
+  if (!Number.isInteger(length) || !Number.isInteger(days) || days < 1 || length < 3) return 0;
   return Math.min(days, Math.floor(length / 2));
 }
 
