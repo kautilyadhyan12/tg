@@ -5,7 +5,8 @@ import {
   AT_RISK_WEEKS_CAME,
   addDays,
   atRiskCheckin,
-  atRiskGymDays,
+  atRiskDaysLately,
+  atRiskGymKeptOn,
   atRiskOf,
   atRiskOrder,
   atRiskSettingsSchema,
@@ -15,6 +16,20 @@ const TODAY = "2026-10-12";
 const back = (n: number): string => addDays(TODAY, -n);
 /** A gym that checked somebody in every day of the last 200. */
 const EVERY_DAY = Array.from({ length: 200 }, (_, i) => back(i));
+/** Monday is 1, Sunday is 7. 12 October 2026, today here, is a Monday. */
+const weekday = (n: number): number => ((((1 - n) % 7) + 7 - 1) % 7) + 1;
+/** Real opening patterns, each by the weekdays the gym checks people in on. */
+const TIMETABLES: { name: string; open: number[] }[] = [
+  { name: "every day", open: [1, 2, 3, 4, 5, 6, 7] },
+  { name: "closed on Sundays", open: [1, 2, 3, 4, 5, 6] },
+  { name: "weekdays only", open: [1, 2, 3, 4, 5] },
+  { name: "Monday, Wednesday and Friday", open: [1, 3, 5] },
+  { name: "Tuesday and Thursday", open: [2, 4] },
+  { name: "weekends only", open: [6, 7] },
+  { name: "one class day a week, Saturday", open: [6] },
+];
+/** The days back, of the last 200, such a gym was open. */
+const openDays = (open: number[]): number[] => Array.from({ length: 200 }, (_, i) => i).filter((n) => open.includes(weekday(n)));
 const ask = (visitsBack: number[], over: Partial<Parameters<typeof atRiskOf>[0]> = {}) =>
   atRiskOf({ today: TODAY, quietDays: 14, weeksCame: 2, visitDays: visitsBack.map(back), gymDays: EVERY_DAY, ...over });
 
@@ -83,7 +98,7 @@ describe("atRiskOf: who is never named", () => {
     expect(ask([AT_RISK_AWAY_MAX_DAYS + 1, AT_RISK_AWAY_MAX_DAYS + 8])).toEqual({ atRisk: false, why: "away_too_long" });
   });
 
-  it("anybody at a gym that checked nobody in since: it was shut, or stopped using check-in", () => {
+  it("anybody at a gym that recorded nobody since: it was shut, or stopped using check-in", () => {
     const upTo = (n: number) => EVERY_DAY.filter((day) => day <= back(n));
     expect(ask([20, 27], { gymDays: upTo(20) })).toEqual({ atRisk: false, why: "gym_quiet" });
     expect(ask([20, 27], { gymDays: [] })).toEqual({ atRisk: false, why: "gym_quiet" });
@@ -91,20 +106,40 @@ describe("atRiskOf: who is never named", () => {
     expect(ask([20, 27], { gymDays: [back(20)] })).toEqual({ atRisk: false, why: "gym_quiet" });
   });
 
-  it("the gym must have checked somebody in on half of its number of days since, rounded up", () => {
-    for (const quietDays of AT_RISK_QUIET_DAYS) {
-      const need = atRiskGymDays(quietDays);
-      const days = (n: number) => Array.from({ length: n }, (_, i) => back(i));
-      const visits = [quietDays + 5, quietDays + 12];
-      expect(ask(visits, { quietDays, gymDays: days(need - 1) }), `${String(need - 1)} gym days at ${String(quietDays)}`).toEqual({ atRisk: false, why: "gym_quiet" });
-      expect(ask(visits, { quietDays, gymDays: days(need) }).atRisk, `${String(need)} gym days at ${String(quietDays)}`).toBe(true);
-    }
-    expect(AT_RISK_QUIET_DAYS.map(atRiskGymDays)).toEqual([4, 5, 7, 11, 15]);
+  for (const table of TIMETABLES) {
+    it(`a gym open ${table.name}: a regular who stops is named, and nobody is while the gym itself was shut`, () => {
+      const open = openDays(table.open);
+      // The regular came on the gym's newest open day 14 or more back, and on one a week or more before it.
+      const last = open.find((n) => n >= 14) ?? 0;
+      const visits = [last, open.find((n) => n >= last + 7) ?? last];
+      const gymDays = open.map(back);
+      const got = ask(visits, { gymDays });
+      expect(got.atRisk, JSON.stringify(got)).toBe(true);
+      // Shut since their last visit: not theirs to answer for.
+      expect(ask(visits, { gymDays: open.filter((n) => n >= last).map(back) })).toEqual({ atRisk: false, why: "gym_quiet" });
+      // Open on under half of its usual days since: still not.
+      const since = open.filter((n) => n < last);
+      const usual = open.filter((n) => n >= last && n < last + 28).length;
+      const half = Math.ceil((usual * last) / 56);
+      const withSince = (count: number) => [...open.filter((n) => n >= last), ...since.slice(0, count)].map(back);
+      if (half > 1) expect(ask(visits, { gymDays: withSince(half - 1) }), `${String(half - 1)} days since`).toEqual({ atRisk: false, why: "gym_quiet" });
+      expect(ask(visits, { gymDays: withSince(Math.min(half, since.length)) }).atRisk, `${String(half)} days since`).toBe(true);
+    });
+  }
+
+  it("at a gym open every day, ten of the twenty days since is half its rhythm and nine is not", () => {
+    const before = EVERY_DAY.filter((day) => day <= back(20));
+    const since = (count: number) => Array.from({ length: count }, (_, i) => back(i));
+    expect(ask([20, 27], { gymDays: [...before, ...since(9)] })).toEqual({ atRisk: false, why: "gym_quiet" });
+    expect(ask([20, 27], { gymDays: [...before, ...since(10)] }).atRisk).toBe(true);
+    expect(atRiskGymKeptOn([...before, ...since(10)], back(20), TODAY)).toEqual({ since: 10, before: 28, keptOn: true });
   });
 
-  it("gym days after today, the same day twice, and days that are not days are not counted", () => {
-    const gymDays = [back(-1), back(-2), back(-3), back(1), back(1), back(1), back(1), back(1), "soon", "2026-02-30", back(2), back(3)];
-    expect(ask([20, 27], { gymDays })).toEqual({ atRisk: false, why: "gym_quiet" });
+  it("gym days after today, the same day many times, and days that are not days are not counted", () => {
+    const before = EVERY_DAY.filter((day) => day <= back(20));
+    const junk = [back(-1), back(-2), back(-3), ...Array.from({ length: 8 }, () => back(1)), "soon", "2026-02-30", back(2), back(3)];
+    expect(atRiskGymKeptOn([...before, ...junk], back(20), TODAY)).toEqual({ since: 3, before: 28, keptOn: false });
+    expect(ask([20, 27], { gymDays: [...before, ...junk] })).toEqual({ atRisk: false, why: "gym_quiet" });
   });
 
   it("anything unreadable is no decision", () => {
@@ -134,11 +169,26 @@ describe("atRiskCheckin: what the page says about the gym's own check-ins", () =
     expect(read(14, [0, 1, 2, 3, 4, 5, 6, 7])).toBe("in_use");
   });
 
-  it("too few days with a check-in lately", () => {
-    expect(read(100, [0, 1, 2, 3, 4, 5])).toBe("stopped");
-    expect(read(100, [0, 1, 2, 3, 4, 5, 6])).toBe("in_use");
-    expect(read(100, [14, 15, 16, 17, 18, 19, 20, 21])).toBe("stopped");
+  for (const table of TIMETABLES) {
+    it(`a gym open ${table.name} is in use, by every number of days it may pick`, () => {
+      for (const quietDays of AT_RISK_QUIET_DAYS) expect(read(199, openDays(table.open), quietDays), `${String(quietDays)} days`).toBe("in_use");
+    });
+  }
+
+  it("far fewer days with a check-in lately than is usual at this gym", () => {
+    const older = Array.from({ length: 80 }, (_, i) => i + 14);
+    // Open every day before; six of the last fourteen is under half, seven is half.
+    expect(read(100, [...older, 0, 1, 2, 3, 4, 5])).toBe("stopped");
+    expect(read(100, [...older, 0, 1, 2, 3, 4, 5, 6])).toBe("in_use");
+    // The desk was used until fourteen days ago and not since.
+    expect(read(100, older)).toBe("stopped");
     expect(read(100, [])).toBe("stopped");
+  });
+
+  it("how many of the last days anybody came", () => {
+    expect(atRiskDaysLately([0, 1, 2, 13, 14, 15, -1].map(back), TODAY, 14)).toBe(4);
+    expect(atRiskDaysLately([], TODAY, 14)).toBe(0);
+    expect(atRiskDaysLately([back(1)], "today", 14)).toBe(0);
   });
 });
 

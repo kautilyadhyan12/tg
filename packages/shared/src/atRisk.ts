@@ -33,11 +33,26 @@ function isDay(day: unknown): day is string {
   return typeof day === "string" && DAY.test(day) && addDays(day, 0) === day;
 }
 
-/** On how many of the days since somebody's last visit the gym must have checked anybody
- *  in, for their absence to be read as theirs: a gym that was shut, or stopped using
- *  check-in, has nobody at risk. Half the gym's number, rounded up. */
-export function atRiskGymDays(quietDays: number): number {
-  return Math.ceil(quietDays / 2);
+/** Did the gym go on recording who came, from the day after `from` up to `today`?
+ *
+ *  Judged against the gym's OWN rhythm, never the calendar: the days somebody came in that
+ *  stretch, a week, are at least half of the days a week in the four weeks that ended on
+ *  `from`. So a gym open Monday, Wednesday and Friday, or at weekends only, is in use; a
+ *  gym that was shut for most of the stretch, or stopped recording, is not, and no absence
+ *  in it is read as anybody's own. With no day at all in the stretch the answer is no. */
+export function atRiskGymKeptOn(gymDays: readonly string[], from: string, today: string): { since: number; before: number; keptOn: boolean } {
+  const span = daysBetween(from, today);
+  const beforeFrom = addDays(from, -AT_RISK_WEEKS * 7);
+  const since = new Set<string>();
+  const before = new Set<string>();
+  // The cheap comparisons first: a gym open every day has a long list of days.
+  for (const day of gymDays) {
+    if (typeof day !== "string" || day > today || day <= beforeFrom || !isDay(day)) continue;
+    if (day > from) since.add(day);
+    else before.add(day);
+  }
+  const keptOn = since.size > 0 && since.size * 2 * AT_RISK_WEEKS * 7 >= before.size * span;
+  return { since: since.size, before: before.size, keptOn };
 }
 
 export interface AtRiskInput {
@@ -45,9 +60,10 @@ export interface AtRiskInput {
   today: string;
   quietDays: number;
   weeksCame: number;
-  /** Every day this person was checked in, by any means, in any order. */
+  /** Every day this person came, by any means, in any order: a check-in of any kind, or a
+   *  class place or personal training session staff marked as attended. */
   visitDays: readonly string[];
-  /** Every day the gym checked anybody in. */
+  /** Every day anybody came, by the same means. */
   gymDays: readonly string[];
 }
 
@@ -59,7 +75,7 @@ export type AtRisk =
  *
  *  Yes when their last visit is `quietDays` or more back and no more than
  *  `AT_RISK_AWAY_MAX_DAYS`, they came in `weeksCame` or more of the four weeks that ended
- *  on that visit, and the gym has checked somebody in on enough days since. A visit dated
+ *  on that visit, and the gym went on recording who came since (`atRiskGymKeptOn`). A visit dated
  *  after today (a gym that moved its clock) is a visit: they came. Anything unreadable is
  *  no decision, never a name on the list. */
 export function atRiskOf(input: AtRiskInput): AtRisk {
@@ -79,25 +95,26 @@ export function atRiskOf(input: AtRiskInput): AtRisk {
     if (back < AT_RISK_WEEKS * 7) weeks.add(Math.floor(back / 7));
   }
   if (weeks.size < weeksCame) return { atRisk: false, why: "not_regular" };
-  // The cheap comparisons first: a gym open every day has a long list of days.
-  const gymDays = new Set(input.gymDays.filter((day) => typeof day === "string" && day > last && day <= today && isDay(day)));
-  if (gymDays.size < atRiskGymDays(quietDays)) return { atRisk: false, why: "gym_quiet" };
+  if (!atRiskGymKeptOn(input.gymDays, last, today).keptOn) return { atRisk: false, why: "gym_quiet" };
   return { atRisk: true, lastVisitOn: last, daysAway, weeksCame: weeks.size };
 }
 
 /** Whether the list can be read yet, from the gym's own check-ins.
  *  `none`: nobody was ever checked in · `new`: check-in began too lately for anybody to
- *  have come and stopped · `stopped`: too few days with a check-in lately, so nobody who
- *  stopped in that time is listed · `in_use`. */
+ *  have come and stopped · `stopped`: far fewer days with a check-in lately than is usual
+ *  at this gym, so nobody who stopped in that time is listed · `in_use`. */
 export const atRiskCheckinSchema = z.enum(["none", "new", "stopped", "in_use"]);
 export type AtRiskCheckin = z.infer<typeof atRiskCheckinSchema>;
 
 export function atRiskCheckin(input: { today: string; quietDays: number; firstCheckinOn: string | null; gymDays: readonly string[] }): AtRiskCheckin {
   if (input.firstCheckinOn === null || !isDay(input.firstCheckinOn) || !isDay(input.today)) return "none";
   if (daysBetween(input.firstCheckinOn, input.today) < input.quietDays) return "new";
-  const from = addDays(input.today, -input.quietDays);
-  const lately = new Set(input.gymDays.filter((day) => isDay(day) && day > from && day <= input.today));
-  return lately.size < atRiskGymDays(input.quietDays) ? "stopped" : "in_use";
+  return atRiskGymKeptOn(input.gymDays, addDays(input.today, -input.quietDays), input.today).keptOn ? "in_use" : "stopped";
+}
+
+/** On how many of the gym's last `quietDays` days anybody came. */
+export function atRiskDaysLately(gymDays: readonly string[], today: string, quietDays: number): number {
+  return isDay(today) ? atRiskGymKeptOn(gymDays, addDays(today, -quietDays), today).since : 0;
 }
 
 // ── THE WIRE ──
@@ -147,6 +164,8 @@ export const atRiskResponseSchema = z.object({
   checkin: atRiskCheckinSchema,
   firstCheckinOn: daySchema.nullable(),
   lastCheckinOn: daySchema.nullable(),
+  /** On how many of the last `settings.quietDays` days anybody came. */
+  checkinDaysLately: z.number().int().min(0).default(0),
   /** Everybody at risk, and the first `AT_RISK_MAX` of them. */
   total: z.number().int().min(0),
   people: z.array(atRiskPersonSchema).max(AT_RISK_MAX),
