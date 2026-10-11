@@ -5,6 +5,16 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
 
+## 2026-10-11 · Rule book: typecheck and lint remember their last run (no job; an advising terminal in Folder A, branch `checks-remember`)
+
+- **Why:** Kd asked why a job takes hours and which step could go without harm (RULINGS 2026-10-11). No ROADMAP line, no code changed, the order of work unchanged.
+- **Changed:** CLAUDE.md §5 only. Remembering commands for the api's and shared's typecheck and lint and the web's lint, for use while a job is built; the plain ones stay the last run before every push, and GitHub's run is as it was.
+- **Measured** (this laptop, on battery, every run exit 0): api lint 199.9 s plain, 5.4 s remembered · api typecheck 133.9 s, 17.2 s · shared typecheck 17.8 s, 4.0 s · shared lint 47.1 s on its first run, 8.2 s · web lint of the console folders 99.6 s on its first run, 6.0 s. `git status` saw none of the kept files.
+- **Where a job's time goes** (19 building terminals since 9 October; `apps/api/.cost/job-shape.mjs` and `terminals-scan.py`): 162 commands and 111 minutes of commands a job, typecheck in 14 of them and lint in 13.6; a pull request open a median 129 minutes; 50 round-one reviews since 4 October held 0 Critical and 84 High.
+- **Not measured:** a remembering run after a real edit (only with nothing changed), and the saving over a whole job. The next two jobs can show both.
+- **Open:** nothing built waits on this.
+
+
 ## 2026-10-11 · 20b-ii (Folder B): Trial check-in, Trial ending, Membership ending and Payment overdue (branch `automatic-messages-memberships`)
 
 - **Why this job:** next in Folder B after 20b-i. **Risky** (it sends words about a person's membership and money to real people, from other people's data). Kd: *"go"* (RULINGS 2026-10-11). No migration, no package, no cost. **Built at Opus 5.5 high** (the record); xhigh was recommended, said in the plan before his go.
