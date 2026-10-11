@@ -366,3 +366,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **18a-ii, as it stood when it was built (merged 2026-10-11, PR #218):**
 
      - 18a-ii. [ ] **Void a bill, note a refund, and the Members list's Payment filter reads the bills**, so somebody who never paid for a membership that has since ended is found on the list too (their page already shows the bill). After 18a-i.
+
+**21c, as first written (split 2026-10-11 into 21c-i and 21c-ii; its waiting time is dropped by the plan, spec Part 3 §16.9.1):**
+
+   - 21c. [ ] **Somebody whose membership ended counts as left** (Kd, RULINGS 2026-10-10; Folder A, after 18a): for people who hold a membership in the app, Reports counts them as left once it has ended with no new one for a waiting time (30 days to start, the gym's to change); the Members list shows the same person as "Membership ended"; nobody is removed by it. Its plan reads Mindbody's and PushPress's pages first.

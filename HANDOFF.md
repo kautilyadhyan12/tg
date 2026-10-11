@@ -5,6 +5,17 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
 
+## 2026-10-11 · 21c PLANNED, nothing built (Folder A): somebody whose membership ended counts as left
+
+- **What this terminal did:** Kd said "build the next thing"; the next Folder A job is 21c (ROADMAP's order; the entry below says 16d, which comes after it). He asked whether it follows other gym software, what happens for a gym that uploads files, and then for a plan *"so that high effort can follow it and not make mistakes"*. **No code, no branch, nothing sent to GitHub.**
+- **The plan is spec Part 3 §16.9**, and 21c is two jobs in ROADMAP: **21c-i** (a later date on the gym's list gives the next term, §16.9.3) then **21c-ii** (Reports counts a membership that ended as left, §16.9.4). Each has its ten-line plan for Kd, its rule as a table, the files to change one by one, the tests in order, the breaks, the cost run and the click-through. Both Risky, no migration, no package.
+- **Three decisions, Kd: *"go"* (§16.9.1; RULINGS 2026-10-11):** no waiting time (it replaces the 30 days of RULINGS 2026-10-10) · every kind of membership counts, a trial too · a later date in a file is offered in the box, never applied by the upload. His go was to the decisions; each job still shows its ten-line plan and waits for his go before code.
+- **What was found in the code, and why 21c-i comes first:** no upload ever changes a membership, and a person who has held a type is never offered it again, so a gym that linked "3 Months" from its file and renews people in its other software reads "Ended" for them. Counting "Ended" as left before that is closed would count paying members as gone.
+- **Read on the web, as search summaries only (the pages would not open):** Mindbody marks "Expired" at once; Glofox counts as churned "a member at the beginning of the period and not at the end"; Gymdesk counts cancellations by month; PushPress's page 404. How any of them counts a trial or a class pack is unverified.
+- **For the building terminal, first steps:** these record files are changed and NOT committed, on purpose: `docs/spec/03-part3-org-console.md`, `ROADMAP.md`, `RULINGS.md`, `HANDOFF.md`, `archive/records/ROADMAP-stories.md` (and `FOLDER.md`, which git ignores). Make the job's branch from where the folder stands, commit those five with an explicit file list as its first commit, then take `master` in. The four changed pictures under `apps/web/public/images/dashboard` were there before this terminal and are not its work: leave them.
+- **Effort:** the first plan here was written at Opus 5.5 high (the record) and missed two things, found on a re-check at xhigh: the file gap above, and which kinds of membership count. §16.9 is the corrected plan.
+- **Also written:** one known-defect sentence at the end of ROADMAP Stage 1 item 10 (a repeating membership from a file keeps reading Payment due after a later file moves its day).
+
 ## 2026-10-10 · 18a-ii (Folder A): cancel a bill, note a refund, and the list's Payment reads the bills (branch `void-refund-bills`)
 
 - **Why this job:** next in Folder A after 18a-i. **Risky** (money, other people's data). Kd: *"go"* (RULINGS 2026-10-10). Migration `0094`; no package; no cost. **Built at Opus 5.5 high** (the record); xhigh was recommended, said in the plan. The plan's claim that Gymdesk and PushPress keep a membership running after a refund was not read first and could not be confirmed; Kd was told (RULINGS).

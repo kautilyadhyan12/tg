@@ -180,6 +180,11 @@ who opened a gym last week and has never seen this app.
   changes people, a box names who will change and who won't, with the reason in one line
   each (a few names, then "and N more", See all).
 - One name for one thing, the same on every screen; the spec keeps the word list.
+- Standard and professional (Kd, RULINGS 2026-10-11). Every line a job adds is read aloud
+  before it is built, as somebody who has never opened the app: a short whole sentence, the
+  word gym software already uses for the thing ("Renew", "Expired", "Payment due"), who it
+  is about and what to do next. Never a sentence that needs another page to be understood
+  ("than the membership they had here"), never the terminal's shorthand, never slang.
 - Standard patterns first: tick boxes and one action bar to act on many people, as Gmail and
   HubSpot do; nothing happens to anyone who was not ticked.
 - The words and layout are the terminal's own judgement, never Kd's to approve (he is a
