@@ -7,6 +7,10 @@ import {
   GYM_MESSAGE_KINDS,
   GYM_MESSAGE_STARTING_NUMBERS,
   GYM_MESSAGE_STARTING_ON,
+  automaticMessage,
+  endingNoticeDays,
+  paymentNoticeAfterDays,
+  dayInWords,
   greetingName,
   gymInboxResponseSchema,
   gymMessageDue,
@@ -29,7 +33,7 @@ const nobody: Person = {
   joinedOn: "2026-01-05",
   joinedUtcOn: "2026-01-05",
   trial: null,
-  membershipEndsOn: null,
+  ending: null,
   bills: [],
   birthday: null,
   visits: 12,
@@ -40,22 +44,28 @@ const nobody: Person = {
 /** A gym that checked somebody in on every one of the last 400 days. */
 const EVERY_DAY = Array.from({ length: 400 }, (_, back) => new Date(Date.UTC(2026, 9, 9) - back * 86_400_000).toISOString().slice(0, 10));
 const facts = (person: Partial<Person> = {}, over: { gym?: Partial<GymMessageFacts["gym"]>; sent?: GymMessageFacts["sent"] } = {}): GymMessageFacts => ({
-  gym: { open: true, live: true, today: TODAY, hour: 12, on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, visitDays: EVERY_DAY, ...over.gym },
+  gym: { open: true, live: true, today: TODAY, hour: 12, on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, visitDays: EVERY_DAY, billsOverdueAfterDays: 0, takesPayments: true, ...over.gym },
   person: { ...nobody, ...person },
   sent: over.sent ?? [],
 });
 
 /** One person for each kind, for whom that kind and no other has its occasion today. */
-const DUE: Record<GymMessageKind, { person: Partial<Person>; occasion: string }> = {
+const DUE: Record<GymMessageKind, { person: Partial<Person>; occasion: string; endsOn?: string }> = {
   payment_overdue: { person: { bills: [{ id: "b1", dueOn: "2026-10-06", paid: false }] }, occasion: "bill:b1" },
-  membership_ending: { person: { membershipEndsOn: "2026-10-16" }, occasion: "ends:2026-10-16" },
-  trial_ending: { person: { trial: { startsOn: "2026-09-28", endsOn: "2026-10-11" } }, occasion: "trial:2026-09-28" },
-  trial_check_in: { person: { trial: { startsOn: "2026-10-08", endsOn: "2026-10-21" } }, occasion: "trial:2026-10-08" },
+  membership_ending: { person: { ending: { id: "m1", startsOn: "2026-07-17", endsOn: "2026-10-16", what: "membership" } }, occasion: "ends:m1", endsOn: "2026-10-16" },
+  trial_ending: { person: { trial: { id: "t1", startsOn: "2026-09-28", endsOn: "2026-10-11", next: false } }, occasion: "trial:t1", endsOn: "2026-10-11" },
+  trial_check_in: { person: { trial: { id: "t2", startsOn: "2026-10-08", endsOn: "2026-10-21", next: false } }, occasion: "trial:t2" },
   // Joined late on the 8th in UTC, which is the 9th on this gym's calendar.
   welcome: { person: { joinedOn: "2026-10-09", joinedUtcOn: "2026-10-08" }, occasion: "joined:2026-10-08" },
   birthday: { person: { birthday: "10-09" }, occasion: "birthday:2026" },
   milestone: { person: { visits: 50, recentVisitDays: 1, lastVisitOn: TODAY }, occasion: "visits:50" },
   miss_you: { person: { lastVisitOn: "2026-09-29", lastSeenOn: "2026-09-29" }, occasion: "absent:2026-09-29" },
+};
+
+/** The occasion the rule answers for a kind's own person. */
+const occasionOf = (kind: GymMessageKind) => {
+  const { occasion, endsOn } = DUE[kind];
+  return endsOn === undefined ? { kind, occasion } : { kind, occasion, endsOn };
 };
 
 /** Each reason not to send, as a change to the facts of a person who would be sent `kind`. */
@@ -75,7 +85,7 @@ describe("the message rule", () => {
     expect(gymMessageDue(facts())).toEqual({ send: null, held: [] });
     for (const kind of GYM_MESSAGE_KINDS) {
       const due = gymMessageDue(facts(DUE[kind].person));
-      expect(due, kind).toEqual({ send: { kind, occasion: DUE[kind].occasion }, held: [] });
+      expect(due, kind).toEqual({ send: occasionOf(kind), held: [] });
     }
   });
 
@@ -85,11 +95,11 @@ describe("the message rule", () => {
       const due = gymMessageDue(facts({ ...DUE[kind].person, ...change.person }, { ...(change.gym === undefined ? {} : { gym: change.gym }), ...(change.sent === undefined ? {} : { sent: change.sent }) }));
       // A payment notice is the one kind a person cannot switch off.
       if (kind === "payment_overdue" && reason === "person_off") {
-        expect(due.send).toEqual({ kind, occasion: DUE[kind].occasion });
+        expect(due.send).toEqual(occasionOf(kind));
         return;
       }
       expect(due.send).toBeNull();
-      expect(due.held).toEqual([{ kind, occasion: DUE[kind].occasion, reason }]);
+      expect(due.held).toEqual([{ ...occasionOf(kind), reason }]);
     });
   });
 
@@ -106,17 +116,32 @@ describe("the message rule", () => {
     }
   });
 
-  it("one message a day: with several due, the first in the order goes and the rest wait", () => {
+  it("one message a day: the one that cannot wait goes first, and the rest go on the mornings after", () => {
+    // Joined yesterday evening, her birthday today, a bill three days late.
     const person = { ...DUE.payment_overdue.person, ...DUE.birthday.person, ...DUE.welcome.person };
     const due = gymMessageDue(facts(person));
-    expect(due.send).toEqual({ kind: "payment_overdue", occasion: "bill:b1" });
+    expect(due.send).toEqual({ kind: "birthday", occasion: "birthday:2026" });
     expect(due.held).toEqual([
       { kind: "welcome", occasion: "joined:2026-10-08", reason: "another_today" },
-      { kind: "birthday", occasion: "birthday:2026", reason: "another_today" },
+      { kind: "payment_overdue", occasion: "bill:b1", reason: "another_today" },
     ]);
-    // The next day the bill's notice is not sent again, and Welcome goes.
-    const next = gymMessageDue(facts({ ...person, birthday: null }, { gym: { today: "2026-10-10" }, sent: [{ kind: "payment_overdue", occasion: "bill:b1", day: TODAY }] }));
+    // The next morning the Welcome, the gym's first word about itself; the notice the morning after.
+    const sent1 = [{ kind: "birthday" as const, occasion: "birthday:2026", day: TODAY }];
+    const next = gymMessageDue(facts(person, { gym: { today: "2026-10-10" }, sent: sent1 }));
     expect(next.send).toEqual({ kind: "welcome", occasion: "joined:2026-10-08" });
+    const sent2 = [...sent1, { kind: "welcome" as const, occasion: "joined:2026-10-08", day: "2026-10-10" }];
+    expect(gymMessageDue(facts(person, { gym: { today: "2026-10-11" }, sent: sent2 })).send).toEqual({ kind: "payment_overdue", occasion: "bill:b1" });
+  });
+
+  it("somebody who joined last night is welcomed before they are told they owe, and a birthday is never lost to a notice", () => {
+    const owes = { bills: [{ id: "b1", dueOn: "2026-10-01", paid: false }] };
+    expect(gymMessageDue(facts({ ...owes, ...DUE.welcome.person })).send?.kind).toBe("welcome");
+    expect(gymMessageDue(facts({ ...owes, ...DUE.birthday.person })).send?.kind).toBe("birthday");
+    // Every kind that is still due tomorrow waits behind one that is not.
+    for (const kind of ["trial_ending", "membership_ending", "payment_overdue", "milestone", "miss_you"] as const) {
+      expect(gymMessageDue(facts({ ...DUE[kind].person, ...DUE.birthday.person })).send?.kind, kind).toBe("birthday");
+    }
+    expect(gymMessageDue(facts({ ...DUE.trial_check_in.person, ...DUE.payment_overdue.person })).send?.kind).toBe("trial_check_in");
   });
 
   it("the hours: nothing before 08:00 or from 21:00 on the gym's clock", () => {
@@ -130,23 +155,121 @@ describe("the message rule", () => {
 describe("the occasions", () => {
   const kinds = (person: Partial<Person>, today = TODAY) => gymMessageOccasions(facts(person, { gym: { today } })).map((o) => o.kind);
 
-  it("payment overdue: never for a paid bill, and not before the gym's days are up", () => {
-    expect(kinds({ bills: [{ id: "b1", dueOn: "2026-09-01", paid: true }] })).toEqual([]);
-    expect(kinds({ bills: [{ id: "b1", dueOn: "2026-10-07", paid: false }] })).toEqual([]);
-    expect(kinds({ bills: [{ id: "b1", dueOn: "2026-10-06", paid: false }] })).toEqual(["payment_overdue"]);
-    // Each bill is its own occasion.
-    expect(gymMessageOccasions(facts({ bills: [{ id: "b1", dueOn: "2026-10-01", paid: false }, { id: "b2", dueOn: "2026-10-02", paid: false }] })).map((o) => o.occasion)).toEqual(["bill:b1", "bill:b2"]);
+  it("payment overdue: once the bill reads Overdue and never sooner than three days after its due date, for 30 days, never for a paid bill or a gym that records no payments", () => {
+    const bill = (dueOn: string, paid = false) => ({ id: "b1", dueOn, paid });
+    const due = (dueOn: string, gym: Partial<GymMessageFacts["gym"]> = {}, paid = false) =>
+      gymMessageOccasions(facts({ bills: [bill(dueOn, paid)] }, { gym })).map((o) => o.kind);
+    // No grace: the bill reads Overdue the day after, and the notice waits for the third day.
+    expect(due(TODAY)).toEqual([]);
+    expect(due("2026-10-08")).toEqual([]);
+    expect(due("2026-10-07")).toEqual([]);
+    expect(due("2026-10-06")).toEqual(["payment_overdue"]);
+    expect(due("2026-09-01", {}, true)).toEqual([]);
+    // Seven days' grace: overdue from the eighth day, as the person's page reads it.
+    expect(due("2026-10-02", { billsOverdueAfterDays: 7 })).toEqual([]);
+    expect(due("2026-10-01", { billsOverdueAfterDays: 7 })).toEqual(["payment_overdue"]);
+    // On 30 mornings at most: an old bill is not news on the first day a gym uses this.
+    expect(due("2026-09-07")).toEqual(["payment_overdue"]);
+    expect(due("2026-09-06")).toEqual([]);
+    expect(due("2026-09-02", { billsOverdueAfterDays: 7 })).toEqual(["payment_overdue"]);
+    expect(due("2026-09-01", { billsOverdueAfterDays: 7 })).toEqual([]);
+    // A gym that records no payments in the app tells nobody they owe it.
+    expect(due("2026-10-01", { takesPayments: false })).toEqual([]);
+    // A grace period that is no number is no decision.
+    expect(due("2026-10-01", { billsOverdueAfterDays: Number.NaN })).toEqual([]);
+    expect(due("2026-10-01", { billsOverdueAfterDays: -1 })).toEqual([]);
+    expect(due("2026-10-01", { billsOverdueAfterDays: 1.5 })).toEqual([]);
+  });
+
+  it("the day a notice goes, for every grace period a gym can pick: never before the bill reads Overdue, never before the third day", () => {
+    // Grace → days after the due date. The Bills box says "reads Overdue from" grace + 1 days after.
+    const table: [number, number][] = [[0, 3], [1, 3], [2, 3], [3, 4], [5, 6], [7, 8], [14, 15], [30, 31], [60, 61]];
+    for (const [grace, after] of table) {
+      expect(paymentNoticeAfterDays(grace), String(grace)).toBe(after);
+      expect(after > grace, String(grace)).toBe(true);
+      // The rule sends on that day and not the day before. Bill due 1 September.
+      const on = (late: number) => {
+        const today = new Date(Date.UTC(2026, 8, 1) + late * 86_400_000).toISOString().slice(0, 10);
+        return gymMessageOccasions(facts({ bills: [{ id: "b1", dueOn: "2026-09-01", paid: false }], lastVisitOn: null, lastSeenOn: null }, { gym: { today, billsOverdueAfterDays: grace } })).length;
+      };
+      expect([on(after - 1), on(after)], String(grace)).toEqual([0, 1]);
+    }
+    expect([paymentNoticeAfterDays(-1), paymentNoticeAfterDays(1.5), paymentNoticeAfterDays(Number.NaN)]).toEqual([null, null, null]);
+  });
+
+  it("one notice is for every bill overdue that morning; a bill that falls overdue later gets its own", () => {
+    const bills = [
+      { id: "b2", dueOn: "2026-10-02", paid: false },
+      { id: "b1", dueOn: "2026-10-01", paid: false },
+    ];
+    // The oldest names the notice.
+    expect(gymMessageOccasions(facts({ bills }))).toEqual([{ kind: "payment_overdue", occasion: "bill:b1" }]);
+    const sent = [{ kind: "payment_overdue" as const, occasion: "bill:b1", day: TODAY }];
+    // The next mornings: the other bill was overdue when the notice went, so it is told.
+    for (const today of ["2026-10-10", "2026-10-15", "2026-10-30"]) expect(gymMessageOccasions(facts({ bills, lastVisitOn: null, lastSeenOn: null }, { gym: { today }, sent })), today).toEqual([]);
+    // Next month's bill was not overdue then: it has its own, once it is.
+    const next = [...bills, { id: "b3", dueOn: "2026-11-01", paid: false }];
+    const at = (today: string, rows = sent) => gymMessageOccasions(facts({ bills: next, lastVisitOn: null, lastSeenOn: null }, { gym: { today }, sent: rows })).map((o) => o.occasion);
+    expect(at("2026-11-03")).toEqual([]);
+    expect(at("2026-11-04")).toEqual(["bill:b3"]);
+    expect(at("2026-11-05", [...sent, { kind: "payment_overdue", occasion: "bill:b3", day: "2026-11-04" }])).toEqual([]);
+    // A notice sent the day BEFORE a bill's own first day does not cover it.
+    const early = [{ kind: "payment_overdue" as const, occasion: "bill:b1", day: "2026-10-04" }];
+    expect(gymMessageOccasions(facts({ bills: [bills[0] ?? { id: "", dueOn: "", paid: true }] }, { gym: { today: "2026-10-05" }, sent: early })).map((o) => o.occasion)).toEqual(["bill:b2"]);
+    // Another kind sent that day covers no bill.
+    expect(gymMessageOccasions(facts({ bills }, { sent: [{ kind: "birthday", occasion: "birthday:2026", day: TODAY }] })).map((o) => o.occasion)).toEqual(["bill:b1"]);
   });
 
   it("membership ending: within the gym's days of the last day, and not after it", () => {
-    expect(kinds({ membershipEndsOn: "2026-10-17" })).toEqual([]);
-    expect(kinds({ membershipEndsOn: "2026-10-16" })).toEqual(["membership_ending"]);
-    expect(kinds({ membershipEndsOn: TODAY })).toEqual(["membership_ending"]);
-    expect(kinds({ membershipEndsOn: "2026-10-08" })).toEqual([]);
+    const ending = (startsOn: string, endsOn: string, today = TODAY) => kinds({ ending: { id: "m1", startsOn, endsOn, what: "membership" } }, today);
+    expect(ending("2026-01-01", "2026-10-17")).toEqual([]);
+    expect(ending("2026-01-01", "2026-10-16")).toEqual(["membership_ending"]);
+    expect(ending("2026-01-01", TODAY)).toEqual(["membership_ending"]);
+    expect(ending("2026-01-01", "2026-10-08")).toEqual([]);
+    // A day pass is never "ending".
+    expect(ending(TODAY, TODAY)).toEqual([]);
+    // Named by its row: a freeze that moves the last day makes no second occasion.
+    expect(gymMessageOccasions(facts({ ending: { id: "m1", startsOn: "2026-01-01", endsOn: "2026-10-12", what: "membership" } }))).toEqual([{ kind: "membership_ending", occasion: "ends:m1", endsOn: "2026-10-12" }]);
+    // What is ending rides with the occasion, for the words.
+    expect(gymMessageOccasions(facts({ ending: { id: "m1", startsOn: "2026-01-01", endsOn: "2026-10-12", what: "pack" } }))).toEqual([{ kind: "membership_ending", occasion: "ends:m1", endsOn: "2026-10-12", what: "pack" }]);
+  });
+
+  it("an ending for every notice a gym can pick against every common length: the notice, or half the length where that is shorter, never on the first day", () => {
+    // Length in days → how many days before its last day it is first told, for 1, 2, 3, 7, 14 and 30 days' notice.
+    const table: [string, number, number[]][] = [
+      ["a day pass", 1, [0, 0, 0, 0, 0, 0]],
+      ["two days", 2, [0, 0, 0, 0, 0, 0]],
+      ["a three-day trial", 3, [1, 1, 1, 1, 1, 1]],
+      ["a week", 7, [1, 2, 3, 3, 3, 3]],
+      ["two weeks", 14, [1, 2, 3, 7, 7, 7]],
+      ["a month, or a 30-day pack", 30, [1, 2, 3, 7, 14, 15]],
+      ["a 45-day pack", 45, [1, 2, 3, 7, 14, 22]],
+      ["three months", 90, [1, 2, 3, 7, 14, 30]],
+      ["a year", 365, [1, 2, 3, 7, 14, 30]],
+    ];
+    const NOTICES = [1, 2, 3, 7, 14, 30];
+    const dayAt = (n: number) => new Date(Date.UTC(2026, 0, 1) + n * 86_400_000).toISOString().slice(0, 10);
+    for (const [what, length, firsts] of table) {
+      expect(NOTICES.map((days) => endingNoticeDays(length, days)), what).toEqual(firsts);
+      // And the rule itself, a morning at a time over the whole membership.
+      NOTICES.forEach((days, i) => {
+        const told: number[] = [];
+        for (let n = 0; n < length; n += 1) {
+          const person = { ending: { id: "m1", startsOn: dayAt(0), endsOn: dayAt(length - 1), what: "membership" as const }, joinedOn: null, lastVisitOn: null, lastSeenOn: null };
+          const found = gymMessageOccasions(facts(person, { gym: { today: dayAt(n), numbers: { ...GYM_MESSAGE_STARTING_NUMBERS, membershipEndingDays: days } } }));
+          if (found.length > 0) told.push(length - 1 - n);
+        }
+        const first = firsts[i] ?? 0;
+        expect(told, `${what}, ${String(days)} days`).toEqual(first === 0 ? [] : Array.from({ length: first + 1 }, (_, k) => first - k));
+        // Never told on the day it began.
+        expect(told.includes(length - 1), what).toBe(false);
+      });
+    }
+    expect([endingNoticeDays(30, 0), endingNoticeDays(30, 1.5), endingNoticeDays(Number.NaN, 7)]).toEqual([0, 0, 0]);
   });
 
   it("a trial: the check-in on day 2 or a day late, the ending in its last days, neither outside it", () => {
-    const trial = (startsOn: string, endsOn: string) => kinds({ trial: { startsOn, endsOn } });
+    const trial = (startsOn: string, endsOn: string, next = false) => kinds({ trial: { id: "t1", startsOn, endsOn, next } });
     expect(trial(TODAY, "2026-10-22")).toEqual([]);
     expect(trial("2026-10-08", "2026-10-21")).toEqual(["trial_check_in"]);
     expect(trial("2026-10-07", "2026-10-20")).toEqual(["trial_check_in"]);
@@ -155,8 +278,17 @@ describe("the occasions", () => {
     expect(trial("2026-09-28", "2026-10-12")).toEqual([]);
     expect(trial("2026-09-20", "2026-10-08")).toEqual([]);
     expect(trial("2026-10-10", "2026-10-23")).toEqual([]);
-    // A three-day trial: both are due on day 2, and the ending is first.
-    expect(trial("2026-10-08", "2026-10-10")).toEqual(["trial_ending", "trial_check_in"]);
+    // A three-day trial is told a day before its last, not two: both are due on day 2, and the check-in is first.
+    expect(trial("2026-10-08", "2026-10-10")).toEqual(["trial_check_in", "trial_ending"]);
+    expect(trial(TODAY, "2026-10-11")).toEqual([]);
+    // Another membership is already theirs: the trial's end is no news, the check-in still goes.
+    expect(trial("2026-09-28", "2026-10-11", true)).toEqual([]);
+    expect(trial("2026-10-08", "2026-10-21", true)).toEqual(["trial_check_in"]);
+    // Both are named by the trial's own row.
+    expect(gymMessageOccasions(facts({ trial: { id: "t9", startsOn: "2026-10-07", endsOn: "2026-10-10", next: false } }))).toEqual([
+      { kind: "trial_check_in", occasion: "trial:t9" },
+      { kind: "trial_ending", occasion: "trial:t9", endsOn: "2026-10-10" },
+    ]);
   });
 
   it("welcome: for three days from joining, never for the gym's own staff", () => {
@@ -200,7 +332,17 @@ describe("the occasions", () => {
   });
 
   it("a day that is not a day gives no occasion, never a wrong one", () => {
-    expect(kinds({ joinedOn: "2026-13-45", membershipEndsOn: "soon", lastVisitOn: "2026-02-30", lastSeenOn: "2026-02-30", trial: { startsOn: "x", endsOn: "y" }, bills: [{ id: "b", dueOn: "", paid: false }] })).toEqual([]);
+    expect(
+      kinds({
+        joinedOn: "2026-13-45",
+        ending: { id: "m", startsOn: "2026-01-01", endsOn: "soon", what: "membership" },
+        lastVisitOn: "2026-02-30",
+        lastSeenOn: "2026-02-30",
+        trial: { id: "t", startsOn: "x", endsOn: "y", next: false },
+        bills: [{ id: "b", dueOn: "", paid: false }],
+      }),
+    ).toEqual([]);
+    expect(kinds({ ending: { id: "m", startsOn: "2026-02-30", endsOn: "2026-10-12", what: "membership" } })).toEqual([]);
     expect(kinds(DUE.welcome.person, "not-a-day")).toEqual([]);
   });
 });
@@ -210,6 +352,25 @@ describe("the words and the shapes", () => {
     expect(welcomeMessage("Iron House", "Maya Rao")).toBe("Welcome to Iron House, Maya. We're glad you joined. Messages from us will show up here.");
     expect(welcomeMessage(" Iron House ", "maya@example.com")).toBe("Welcome to Iron House. We're glad you joined. Messages from us will show up here.");
     expect([greetingName(null), greetingName("  "), greetingName("12345"), greetingName("x".repeat(41)), greetingName("Zoë  Quinn")]).toEqual([null, null, null, null, "Zoë"]);
+  });
+
+  it("the four membership messages: fixed words, the last day in words, and nothing where the day is missing", () => {
+    const say = (send: Parameters<typeof automaticMessage>[0], name: string | null = "Maya Rao", line: string | null = null) => automaticMessage(send, " Iron House ", name, line);
+    expect(say({ kind: "trial_check_in", occasion: "trial:t1" })).toBe("Hi Maya, how's your trial at Iron House going? If you need anything, just let us know.");
+    expect(say({ kind: "trial_check_in", occasion: "trial:t1" }, "maya@example.com")).toBe("How's your trial at Iron House going? If you need anything, just let us know.");
+    expect(say({ kind: "trial_ending", occasion: "trial:t1", endsOn: "2026-10-11" })).toBe("Hi Maya, your trial at Iron House ends on 11 October. Want to keep coming? Talk to us about a membership.");
+    expect(say({ kind: "membership_ending", occasion: "ends:m1", endsOn: "2026-11-05" }, null)).toBe("Your membership at Iron House ends on 5 November. We'd love to keep you with us. Just let us know if you'd like to renew.");
+    expect(say({ kind: "payment_overdue", occasion: "bill:b1" }, "Maya Rao", "Call 555 0100.")).toBe("Hi Maya, your payment to Iron House is overdue. Please get in touch so we can sort it out.\nCall 555 0100.");
+    // A class pack may run out of classes first: its day is the last it can be used. Somebody who asked to stop is not asked to stay.
+    expect(say({ kind: "membership_ending", occasion: "ends:m1", endsOn: "2026-11-05", what: "pack" })).toBe("Hi Maya, your class pack at Iron House can be used until 5 November. Just let us know if you'd like another one.");
+    expect(say({ kind: "membership_ending", occasion: "ends:m1", endsOn: "2026-11-05", what: "stopping" })).toBe("Hi Maya, your membership at Iron House ends on 5 November.");
+    expect(say({ kind: "membership_ending", occasion: "ends:m1", endsOn: "2026-11-05", what: "stopping" }, null)).toBe("Your membership at Iron House ends on 5 November.");
+    // No amount is ever in the words.
+    expect(say({ kind: "payment_overdue", occasion: "bill:b1" })).not.toMatch(/[0-9$£€₹]/);
+    // An ending with no day, or a day that is not one, has no words and is not sent.
+    expect(say({ kind: "trial_ending", occasion: "trial:t1" })).toBeNull();
+    expect(say({ kind: "membership_ending", occasion: "ends:m1", endsOn: "2026-02-30" })).toBeNull();
+    expect([dayInWords("2026-01-01"), dayInWords("2028-02-29"), dayInWords("2026-12-31"), dayInWords("2026-13-01"), dayInWords(null)]).toEqual(["1 January", "29 February", "31 December", null, null]);
   });
 
   it("the inbox reply and the read mark hold their shapes", () => {

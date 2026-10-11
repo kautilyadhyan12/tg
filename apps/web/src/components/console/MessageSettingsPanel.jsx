@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useState } from 'react';
-import { GYM_MESSAGE_MILESTONE_CHOICES, GYM_MESSAGE_MISS_YOU_CHOICES, GYM_MESSAGE_OWN_LINE_MAX } from '@app/shared';
+import { GYM_MESSAGE_MILESTONE_CHOICES, GYM_MESSAGE_OWN_LINE_MAX } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -8,10 +8,14 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 import {
   MESSAGE_KINDS,
   NO_CHECK_IN_ASK,
+  OVERDUE_DAYS_ASK,
+  OVERDUE_DAYS_NOTE,
+  dayPicker,
   lineCount,
   messageDraft,
   messageDraftChanged,
   messageDraftFine,
+  messageMissing,
   messageName,
   messagePreview,
   messageProblem,
@@ -26,9 +30,9 @@ import {
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 import PlaceLink from './PlaceLink';
 
-// AUTOMATIC MESSAGES (ROADMAP 20b-i; spec Part 3 §16.2): the messages the app sends a
-// gym's members by itself. Each has a switch, the words a member will read, and one line
-// of the gym's own; two have a number the gym picks. Everything waits for one Save.
+// AUTOMATIC MESSAGES (ROADMAP 20b-i, 20b-ii; spec Part 3 §16.2): the messages the app sends
+// a gym's members by itself. Each has a switch, the words a member will read, and one line
+// of the gym's own; most have a number the gym picks. Everything waits for one Save.
 
 const inputStyle = {
   background: '#0A0908',
@@ -61,10 +65,15 @@ function Switch({ on, onPress, disabled, label }) {
   );
 }
 
-function Message({ kind, org, draft, edit, locked, checkIn, attendanceTo }) {
+const noteStyle = { background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.25)' };
+
+function Message({ kind, org, draft, edit, locked, use, attendanceTo }) {
   const lineId = useId();
   const on = draft.on[kind];
   const problem = messageProblem(kind, draft);
+  const picker = dayPicker(kind);
+  const missing = messageMissing(kind, org.orgType, use);
+  const privileges = viewerPrivileges(org);
   return (
     <fieldset className="rounded-xl p-4 m-0 min-w-0 flex flex-col gap-3" style={cardStyle} aria-label={messageName(kind)}>
       <div className="flex items-start justify-between gap-3">
@@ -76,7 +85,7 @@ function Message({ kind, org, draft, edit, locked, checkIn, attendanceTo }) {
             </span>
           </p>
           <p className="text-sm mt-1 m-0" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            {messageWhen(kind, org.orgType)}
+            {messageWhen(kind, org.orgType, use)}
           </p>
         </div>
         <Switch on={on} disabled={locked} label={`Send the ${messageName(kind)} message`} onPress={() => edit((was) => ({ ...was, on: { ...was.on, [kind]: !on } }))} />
@@ -102,28 +111,57 @@ function Message({ kind, org, draft, edit, locked, checkIn, attendanceTo }) {
         </div>
       ) : null}
 
-      {kind === 'miss_you' ? (
+      {picker !== null ? (
         <label className="flex flex-wrap items-center gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
-          No check-in for
+          {picker.before}
           <select
-            aria-label="Days without a check-in"
-            value={draft.missYouDays}
+            aria-label={picker.label}
+            value={draft[picker.field]}
             disabled={locked}
-            onChange={(e) => edit((was) => ({ ...was, missYouDays: Number(e.target.value) }))}
+            onChange={(e) => edit((was) => ({ ...was, [picker.field]: Number(e.target.value) }))}
             className="rounded-xl px-3 py-3 text-base sm:text-sm"
             style={inputStyle}
           >
-            {GYM_MESSAGE_MISS_YOU_CHOICES.map((days) => (
-              <option key={days} value={days}>
-                {days} days
+            {picker.choices.map((n) => (
+              <option key={n} value={n}>
+                {picker.option(n)}
               </option>
             ))}
           </select>
+          {picker.after}
         </label>
       ) : null}
 
-      {needsCheckIn(kind) && !checkIn ? (
-        <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.25)' }}>
+      {kind === 'payment_overdue' && missing?.place !== 'memberships' ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm m-0" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            {placeFor(org.slug, privileges, 'memberships') === null ? OVERDUE_DAYS_ASK : OVERDUE_DAYS_NOTE}
+          </p>
+          <PlaceLink to={placeFor(org.slug, privileges, 'memberships')} guard>
+            Open the Bills box
+          </PlaceLink>
+        </div>
+      ) : null}
+
+      {missing !== null ? (
+        <div className="rounded-xl p-3 flex flex-col gap-2" style={noteStyle} data-testid={`missing-${kind}`}>
+          <p className="text-sm m-0" style={{ color: 'rgba(255,255,255,0.85)' }}>
+            {missing.note}
+          </p>
+          {placeFor(org.slug, privileges, missing.place) === null ? (
+            <p className="text-sm m-0" style={{ color: 'rgba(255,255,255,0.55)' }}>
+              {missing.ask}
+            </p>
+          ) : (
+            <PlaceLink to={placeFor(org.slug, privileges, missing.place)} guard>
+              {missing.button}
+            </PlaceLink>
+          )}
+        </div>
+      ) : null}
+
+      {needsCheckIn(kind) && use.checkIn !== true ? (
+        <div className="rounded-xl p-3 flex flex-col gap-2" style={noteStyle}>
           <p className="text-sm m-0" style={{ color: 'rgba(255,255,255,0.85)' }}>
             {noCheckInNote(org.orgType)}
           </p>
@@ -186,7 +224,8 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
   const gymId = org.id;
   const [kept, setKept] = useState(null);
   const [draft, setDraft] = useState(null);
-  const [checkIn, setCheckIn] = useState(true);
+  // What the server said of the gym's use of check-in, its price list and its payments.
+  const [use, setUse] = useState({ checkIn: true });
   const [loadError, setLoadError] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -196,7 +235,13 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
     const now = messageDraft(data);
     setKept(now);
     setDraft(now);
-    setCheckIn(data.checkIn === true);
+    setUse({
+      checkIn: data.checkIn === true,
+      trialOnList: data.trialOnList !== false,
+      priceList: data.priceList !== false,
+      payments: data.payments !== false,
+      billsOverdueDays: data.billsOverdueDays ?? 0,
+    });
   }, []);
 
   const load = useCallback(
@@ -267,7 +312,7 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
           </p>
 
           {MESSAGE_KINDS.map((kind) => (
-            <Message key={kind} kind={kind} org={org} draft={draft} edit={edit} locked={readOnly || saving} checkIn={checkIn} attendanceTo={attendanceTo} />
+            <Message key={kind} kind={kind} org={org} draft={draft} edit={edit} locked={readOnly || saving} use={use} attendanceTo={attendanceTo} />
           ))}
 
           {saveError !== null ? <ConsoleFailed message={saveError} /> : null}

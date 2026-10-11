@@ -343,11 +343,16 @@ describe("the switches for a gym's automatic messages", () => {
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(all()).toEqual([
       ['News and notices from Iron HouseMessages the gym sends to many people at once, like a closed day or a new class.', 'true'],
+      ['Trial check-inA message a few days into a trial, asking how it is going.', 'true'],
+      ['Trial endingA message shortly before a trial of yours ends.', 'true'],
+      ['Membership endingA message shortly before a membership of yours ends.', 'true'],
       ['BirthdayA message from Iron House on your birthday.', 'true'],
       ['Visit milestoneA message when you reach a number of visits, like your 50th.', 'true'],
       ["We miss youOff. Iron House won't send you this.", 'false'],
     ]);
     expect(screen.queryByRole('switch', { name: /Welcome/ })).toBeNull();
+    // A payment notice is the gym's to switch off, never the member's.
+    expect(screen.queryByRole('switch', { name: /Payment/ })).toBeNull();
   });
 
   it('a press sends that kind and the new setting, and the switches follow the server answer', async () => {

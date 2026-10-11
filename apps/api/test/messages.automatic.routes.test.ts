@@ -6,7 +6,7 @@
 // twice. That is the first test below.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import type { GymInboxResponse, GymMessageSettingsRequest, GymMessageSettingsResponse } from "@app/shared";
+import { GYM_MESSAGE_SETTING_KINDS, type GymInboxResponse, type GymMessageSettingsRequest, type GymMessageSettingsResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { markDayDone, settingsStamp } from "../src/modules/orgs/messages/repo.js";
@@ -197,15 +197,15 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
 
   const settingsPath = (gym: Gym) => `/v1/orgs/${gym.id}/message-settings`;
   const START: GymMessageSettingsRequest = {
-    messages: [
-      { kind: "welcome", on: true, ownLine: null },
-      { kind: "birthday", on: true, ownLine: null },
-      { kind: "milestone", on: true, ownLine: null },
-      { kind: "miss_you", on: true, ownLine: null },
-    ],
+    messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: true, ownLine: null })),
     missYouDays: 10,
     milestones: [50, 100],
+    trialCheckInDay: 2,
+    trialEndingDays: 2,
+    membershipEndingDays: 7,
   };
+  /** What the box is told of a gym that checks nobody in, sells nothing and takes no payment. */
+  const UNUSED = { checkIn: false, trialOnList: false, priceList: false, payments: false, billsOverdueDays: 0 };
   const withKind = (kind: string, change: { on?: boolean; ownLine?: string | null }, over: Partial<GymMessageSettingsRequest> = {}): GymMessageSettingsRequest => ({
     ...START,
     ...over,
@@ -585,12 +585,12 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
 
       // The starting values, read by the owner and by a manager who holds the tick.
       const start = JSON.parse((await inject("GET", settingsPath(gym), manager.cookies)).body) as GymMessageSettingsResponse;
-      expect(start).toEqual({ ...START, checkIn: false });
+      expect(start).toEqual({ ...START, ...UNUSED });
       // Saved, it is this gym's and not next door's; saved again it is one audit note.
-      expect(await saved(gym, body)).toEqual({ ...body, checkIn: false });
+      expect(await saved(gym, body)).toEqual({ ...body, ...UNUSED });
       expect((await save(gym, body, manager)).statusCode).toBe(200);
       const nextNow = JSON.parse((await inject("GET", settingsPath(next), next.owner.cookies)).body) as GymMessageSettingsResponse;
-      expect(nextNow).toEqual({ ...START, checkIn: false });
+      expect(nextNow).toEqual({ ...START, ...UNUSED });
       const notes = await sql<{ meta: unknown }[]>`SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.message_settings_changed'`;
       expect(notes).toHaveLength(1);
       expect(JSON.stringify(notes)).not.toContain("Cake");
@@ -624,9 +624,9 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       await refused(withKind("welcome", { ownLine: "Follow @ironhouse" }), "message_line_at");
       await refused(withKind("welcome", { ownLine: "x".repeat(141) }), "message_line_too_long");
       await refused(withKind("welcome", { ownLine: "Don't be a dumbass, wipe the bench." }), "message_line_bad_words");
-      await refused({ ...START, messages: START.messages.slice(0, 3) }, "validation_error");
-      await refused({ ...START, messages: [...START.messages.slice(0, 3), { kind: "welcome", on: true, ownLine: null }] }, "validation_error");
-      await refused({ ...START, messages: [...START.messages.slice(0, 3), { kind: "payment_overdue", on: false, ownLine: null }] }, "validation_error");
+      await refused({ ...START, messages: [] }, "validation_error");
+      await refused({ ...START, messages: [...START.messages.slice(0, 7), { kind: "welcome", on: true, ownLine: null }] }, "validation_error");
+      await refused({ ...START, messages: [...START.messages.slice(0, 7), { kind: "group", on: false, ownLine: null }] }, "validation_error");
       await refused({ ...START, missYouDays: 1 }, "validation_error");
       await refused({ ...START, milestones: [] }, "validation_error");
       await refused({ ...START, milestones: [51] }, "validation_error");
@@ -635,10 +635,10 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
 
       // 140 characters, an emoji counted as one, and two lines made one.
       const line = `${"x".repeat(139)}🎂`;
-      expect((await saved(gym, withKind("birthday", { ownLine: line }))).messages[1]?.ownLine).toBe(line);
-      expect((await saved(gym, withKind("birthday", { ownLine: "  Cake at the desk.\nCome and get it.  " }))).messages[1]?.ownLine).toBe("Cake at the desk. Come and get it.");
+      expect((await saved(gym, withKind("birthday", { ownLine: line }))).messages.find((m) => m.kind === "birthday")?.ownLine).toBe(line);
+      expect((await saved(gym, withKind("birthday", { ownLine: "  Cake at the desk.\nCome and get it.  " }))).messages.find((m) => m.kind === "birthday")?.ownLine).toBe("Cake at the desk. Come and get it.");
       // Emptied, it is no line.
-      expect((await saved(gym, withKind("birthday", { ownLine: "   " }))).messages[1]?.ownLine).toBeNull();
+      expect((await saved(gym, withKind("birthday", { ownLine: "   " }))).messages.find((m) => m.kind === "birthday")?.ownLine).toBeNull();
     },
     T,
   );

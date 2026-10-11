@@ -59,6 +59,7 @@ export * from "./startHere.js";
 export * from "./reports.js";
 export * from "./reportsAttendance.js";
 export * from "./gymMessages.js";
+export * from "./gymMessageMemberships.js";
 export * from "./gymGroupMessages.js";
 export * from "./gymMessageSettings.js";
 export * from "./gymContact.js";
