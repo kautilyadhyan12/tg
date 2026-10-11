@@ -28,9 +28,11 @@ export function tidyIdsFrom(over: ReadonlyMap<string, LeftWith>, kept: ReadonlyM
   return [...over].flatMap(([id, left]) => (!canBeTidied(left) || kept.get(id) === left.heldId ? [] : [id]));
 }
 
-/** Of the people who are over, those left off the sign's list because they still owe. Pure. */
-export function owingIdsFrom(over: ReadonlyMap<string, LeftWith>): string[] {
-  return [...over].flatMap(([id, left]) => (left.owes ? [id] : []));
+/** Of the people who are over, those left off the sign's list because they still owe: the
+ *  people who come onto it once the bill is settled. Nobody kept on the list with this very
+ *  membership is among them, since settling would not bring them back. Pure. */
+export function owingIdsFrom(over: ReadonlyMap<string, LeftWith>, kept: ReadonlyMap<string, string>): string[] {
+  return [...over].flatMap(([id, left]) => (left.owes && kept.get(id) !== left.heldId ? [id] : []));
 }
 
 /** The list's rows for every current record, the people the sign counts and the people
@@ -38,13 +40,16 @@ export function owingIdsFrom(over: ReadonlyMap<string, LeftWith>): string[] {
 export async function heldAndTidyOf(sql: Sql, gymId: string, today: string): Promise<{ held: Map<string, HeldShown>; tidy: string[]; owing: string[] }> {
   return await sql.begin("isolation level repeatable read read only", async (tx) => {
     const { held, over } = await heldAndOverIn(tx, gymId, today, null);
-    return { held, tidy: over.size === 0 ? [] : tidyIdsFrom(over, await repo.keptListed(tx, gymId)), owing: owingIdsFrom(over) };
+    if (over.size === 0) return { held, tidy: [], owing: [] };
+    const kept = await repo.keptListed(tx, gymId);
+    return { held, tidy: tidyIdsFrom(over, kept), owing: owingIdsFrom(over, kept) };
   });
 }
 
 /** The people left off the sign's list because they still owe. */
 export async function overOwingIdsOf(sql: Sql | TransactionSql, gymId: string, today: string): Promise<string[]> {
-  return owingIdsFrom(await overNow(sql, gymId, today, null));
+  const over = await overNow(sql, gymId, today, null);
+  return over.size === 0 ? [] : owingIdsFrom(over, await repo.keptListed(sql, gymId));
 }
 
 /** The people the sign counts. */

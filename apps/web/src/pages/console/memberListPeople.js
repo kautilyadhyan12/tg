@@ -162,7 +162,9 @@ export function overSignWords(n, words, { inView = false, readOnly = false, owin
     owingLine:
       owing === 0
         ? null
-        : `${owing.toLocaleString('en')} more ${owing === 1 ? `${words.person} has a membership that is over and still owes` : `${words.people} have a membership that is over and still owe`} a payment, so they are not in this list.${readOnly ? '' : ` ${first}`}`,
+        : owingInView
+          ? `The list below shows the ${people(owing)} whose membership is over and who still ${owing === 1 ? 'owes' : 'owe'} a payment.${readOnly ? '' : ` ${first}`}`
+          : `${owing.toLocaleString('en')} more ${owing === 1 ? `${words.person} has a membership that is over and still owes` : `${words.people} have a membership that is over and still owe`} a payment, so ${owing === 1 ? 'is' : 'are'} not counted above.${readOnly ? '' : ` ${first}`}`,
     owingButton,
   };
 }

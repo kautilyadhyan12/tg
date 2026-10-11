@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { MemberRemovePreview } from "@app/shared";
 import { recordRemovalPlan, type RecordBrief } from "../src/modules/orgs/memberList/removeSelected.js";
 import type { MemberAgainstList } from "../src/modules/orgs/memberList/repo.js";
-import { tidyIdsFrom } from "../src/modules/orgs/memberList/tidy.js";
+import { owingIdsFrom, tidyIdsFrom } from "../src/modules/orgs/memberList/tidy.js";
 
 const GYM = "00000000-0000-4000-8000-000000000001";
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -137,5 +137,12 @@ describe("who the sign counts", () => {
     const owing = new Map([...over, [id(4), { on: "2026-08-31", heldId: id(104), owes: true }]]);
     expect(tidyIdsFrom(owing, new Map())).toEqual([id(1), id(2), id(3)]);
     expect(tidyIdsFrom(owing, new Map([[id(4), id(104)]]))).toEqual([id(1), id(2), id(3)]);
+    // The sign's line counts her as held back; not once she is kept with that very
+    // membership, since paying would not bring her onto the list; kept with an earlier
+    // one, she is counted. Nobody who owes nothing is ever in it.
+    expect(owingIdsFrom(owing, new Map())).toEqual([id(4)]);
+    expect(owingIdsFrom(owing, new Map([[id(4), id(104)]]))).toEqual([]);
+    expect(owingIdsFrom(owing, new Map([[id(4), id(999)], [id(1), id(101)]]))).toEqual([id(4)]);
+    expect(owingIdsFrom(over, new Map())).toEqual([]);
   });
 });

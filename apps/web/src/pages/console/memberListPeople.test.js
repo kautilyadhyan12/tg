@@ -194,17 +194,27 @@ describe('the members whose membership is over (21c-iii)', () => {
     expect(overSignWords(3, WORDS, { owing: 2 })).toMatchObject({
       title: '3 memberships have ended or been cancelled',
       button: 'Review them',
-      owingLine: `2 more members have a membership that is over and still owe a payment, so they are not in this list. ${first}`,
+      owingLine: `2 more members have a membership that is over and still owe a payment, so are not counted above. ${first}`,
       owingButton: 'Show these members',
     });
     expect(overSignWords(3, WORDS, { owing: 1 })).toMatchObject({
-      owingLine: `1 more member has a membership that is over and still owes a payment, so they are not in this list. ${first}`,
+      owingLine: `1 more member has a membership that is over and still owes a payment, so is not counted above. ${first}`,
       owingButton: 'Show this member',
     });
     // Nobody owes: nothing is said of it.
     expect(overSignWords(3, WORDS)).toMatchObject({ owingLine: null, owingButton: null });
     // Their own list is on screen: the button has done its job.
-    expect(overSignWords(3, WORDS, { owing: 2, owingInView: true }).owingButton).toBeNull();
+    expect(overSignWords(3, WORDS, { owing: 2, owingInView: true })).toMatchObject({
+      owingButton: null,
+      owingLine: `The list below shows the 2 members whose membership is over and who still owe a payment. ${first}`,
+    });
+    expect(overSignWords(3, WORDS, { owing: 1, owingInView: true, readOnly: true }).owingLine).toBe(
+      'The list below shows the 1 member whose membership is over and who still owes a payment.',
+    );
+    // The sign's own list is shown: they are still not counted above, and the line says only that.
+    expect(overSignWords(3, WORDS, { owing: 2, inView: true }).owingLine).toBe(
+      `2 more members have a membership that is over and still owe a payment, so are not counted above. ${first}`,
+    );
     // Nobody else to review: the sign is about them alone, and says what to do first.
     expect(overSignWords(0, WORDS, { owing: 2 })).toEqual({
       title: '2 members with a membership that is over still owe a payment',
@@ -221,7 +231,7 @@ describe('the members whose membership is over (21c-iii)', () => {
     // A gym that can only read is told the fact, and nothing it cannot do.
     expect(overSignWords(0, WORDS, { owing: 2, readOnly: true }).detail).toBe('They are still on your member list.');
     expect(overSignWords(3, WORDS, { owing: 2, readOnly: true }).owingLine).toBe(
-      '2 more members have a membership that is over and still owe a payment, so they are not in this list.',
+      '2 more members have a membership that is over and still owe a payment, so are not counted above.',
     );
   });
 
