@@ -380,14 +380,16 @@ function fixedWords(send: GymMessageOccasion, gym: string, displayName: string |
   if (send.kind === "birthday") return (name === null ? "Happy birthday!" : `Happy birthday, ${name}!`) + ` From everyone at ${gym}.`;
   const who = name === null ? "" : `, ${name}`;
   if (send.kind === "miss_you") return `We haven't seen you at ${gym} for a while${who}. We hope to see you soon.`;
-  if (send.kind === "trial_check_in") return `How is your trial at ${gym} going${who}? If you have any questions, just ask us.`;
-  if (send.kind === "payment_overdue") return `Your payment to ${gym} is overdue${who}. Please speak to us to sort it out.`;
+  // The four about a membership open as a person would: "Hi Maya, your …".
+  const hi = (rest: string): string => (name === null ? rest.charAt(0).toUpperCase() + rest.slice(1) : `Hi ${name}, ${rest}`);
+  if (send.kind === "trial_check_in") return hi(`how's your trial at ${gym} going? If you need anything, just let us know.`);
+  if (send.kind === "payment_overdue") return hi(`your payment to ${gym} is overdue. Please get in touch so we can sort it out.`);
   if (send.kind === "trial_ending" || send.kind === "membership_ending") {
     const day = dayInWords(send.endsOn ?? null);
     if (day === null) return null;
     return send.kind === "trial_ending"
-      ? `Your trial at ${gym} ends on ${day}${who}. Ask us about a membership to keep coming.`
-      : `Your membership at ${gym} ends on ${day}${who}. Ask us if you'd like to renew.`;
+      ? hi(`your trial at ${gym} ends on ${day}. Want to keep coming? Talk to us about a membership.`)
+      : hi(`your membership at ${gym} ends on ${day}. We'd love to keep you with us. Just let us know if you'd like to renew.`);
   }
   const visits = /^visits:([1-9][0-9]{0,5})$/.exec(send.occasion)?.[1];
   if (visits === undefined) return null;

@@ -54,10 +54,10 @@ describe('Automatic messages', () => {
     draw();
     await screen.findByText('All 8 on');
     expect(screen.getAllByRole('switch').map((s) => [s.getAttribute('aria-label'), s.getAttribute('aria-checked')])).toEqual(NAMES.map((name) => [`Send the ${name} message`, 'true']));
-    expect(preview('trial_check_in')).toBe("How is your trial at Iron House going, [member's first name]? If you have any questions, just ask us.");
-    expect(preview('trial_ending')).toBe("Your trial at Iron House ends on [its last day], [member's first name]. Ask us about a membership to keep coming.");
-    expect(preview('membership_ending')).toBe("Your membership at Iron House ends on [its last day], [member's first name]. Ask us if you'd like to renew.");
-    expect(preview('payment_overdue')).toBe("Your payment to Iron House is overdue, [member's first name]. Please speak to us to sort it out.");
+    expect(preview('trial_check_in')).toBe("Hi [member's first name], how's your trial at Iron House going? If you need anything, just let us know.");
+    expect(preview('trial_ending')).toBe("Hi [member's first name], your trial at Iron House ends on [its last day]. Want to keep coming? Talk to us about a membership.");
+    expect(preview('membership_ending')).toBe("Hi [member's first name], your membership at Iron House ends on [its last day]. We'd love to keep you with us. Just let us know if you'd like to renew.");
+    expect(preview('payment_overdue')).toBe("Hi [member's first name], your payment to Iron House is overdue. Please get in touch so we can sort it out.");
     // No date and no amount of money stands in any example.
     expect(KINDS.map(preview).join(' ')).not.toMatch(/January|2026|[$£€₹]/);
     expect(within(box('Trial check-in')).getByLabelText('Day of the trial').value).toBe('2');

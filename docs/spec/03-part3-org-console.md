@@ -4473,11 +4473,13 @@ in this order: Welcome · Trial check-in · Trial ending · Membership ending ·
   of theirs that is no trial is in use and runs past that day (they renewed already), and
   only for one at least twice as long as the notice, so a day pass or a week's pass is not
   "ending" on the day it began. Named by its row (`ends:<id>`).
-- **The words** (`automaticMessage`): "How is your trial at {gym} going, Maya? If you have
-  any questions, just ask us." · "Your trial at {gym} ends on 14 October, Maya. Ask us
-  about a membership to keep coming." · "Your membership at {gym} ends on 14 October,
-  Maya. Ask us if you'd like to renew." · "Your payment to {gym} is overdue, Maya. Please
-  speak to us to sort it out." A last day is written day then month, no year. The box
+- **The words** (`automaticMessage`; made friendlier at Kd's click-through, RULINGS
+  2026-10-11): "Hi Maya, how's your trial at {gym} going? If you need anything, just let
+  us know." · "Hi Maya, your trial at {gym} ends on 14 October. Want to keep coming? Talk
+  to us about a membership." · "Hi Maya, your membership at {gym} ends on 14 October.
+  We'd love to keep you with us. Just let us know if you'd like to renew." · "Hi Maya,
+  your payment to {gym} is overdue. Please get in touch so we can sort it out." Without
+  a first name each starts at "Your" or "How's". A last day is written day then month, no year. The box
   shows **[its last day]** where it goes.
 - **A gym that does not use this part** is told on the row, with a button to where it is
   set up (who can, for staff who cannot open it): no trial on the price list (the two trial
