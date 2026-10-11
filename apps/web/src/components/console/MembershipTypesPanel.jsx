@@ -32,6 +32,7 @@ import {
   typesSummary,
   withChoice,
 } from '../../pages/console/membershipTypesView';
+import { MEMBER_LIST_MAX_STATUS_CHARS } from '@app/shared';
 import { formWordsFor, notSetUp, typeTies, withSetUpCount } from '../../pages/console/membershipWordsView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from './ConsoleStates';
 import BillSettingsCard from './BillSettingsCard';
@@ -403,8 +404,25 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
   );
 }
 
-/** `form`: this type's own form while it is being changed, or null. */
-function TypeRow({ type, readOnly, busy, formOpen, ties, form, onEdit, onArchive, onGive, onUndo }) {
+/** What the last press on one row did, or why it failed, said in that row. */
+function RowNote({ error, done }) {
+  const ref = useRef(null);
+  const shown = error ?? done;
+  useEffect(() => {
+    const box = ref.current;
+    if (shown && box && typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'nearest' });
+  }, [shown]);
+  if (!shown) return null;
+  return (
+    <p ref={ref} className="c-s15 m-0" style={error ? BAD : { color: 'var(--good)' }} role={error ? 'alert' : 'status'}>
+      {shown}
+    </p>
+  );
+}
+
+/** `form`: this type's own form while it is being changed, or null. `box`: the box of
+ *  who gets this type, while it is open. `note`: what the last press about this type did. */
+function TypeRow({ type, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
   const [asking, setAsking] = useState(false);
   return (
     <li className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>
@@ -442,6 +460,8 @@ function TypeRow({ type, readOnly, busy, formOpen, ties, form, onEdit, onArchive
         )}
       </div>
       <TypeTies type={type} ties={ties} off={readOnly || busy || formOpen} busy={busy} onGive={onGive} onUndo={onUndo} />
+      {box}
+      {note !== null ? <RowNote error={note.error} done={note.done} /> : null}
       {asking ? (
         <ConfirmInline
           question={`Archive ${type.name}? It leaves your list of what you sell. Nothing is deleted, and you can put it back.`}
@@ -491,7 +511,9 @@ function Notes({ error, listError, done }) {
   );
 }
 
-export default function MembershipTypesPanel({ org, readOnly }) {
+/** `openBox`: a name from the member list and the type it counts as, whose box opens as
+ *  the page does (a button on another page led here); `onBoxOpened` is told once it has. */
+export default function MembershipTypesPanel({ org, readOnly, openBox = null, onBoxOpened }) {
   const gymId = org.id;
   const [list, setList] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -567,6 +589,41 @@ export default function MembershipTypesPanel({ org, readOnly }) {
 
   const fromList = useListMemberships(gymId, list?.types);
   const anyBusy = busy || fromList.busy;
+
+  // A button on another page led here for one membership: open its box, once.
+  const led = useRef(false);
+  const openFromList = fromList.open;
+  useEffect(() => {
+    if (openBox === null || led.current || list === null) return;
+    led.current = true;
+    // An address somebody kept or made by hand may name a membership that has gone, or
+    // no name the list could hold: said in a sentence, never left blank.
+    const found = list.types.some((t) => t.id === openBox.typeId) && openBox.word.length <= MEMBER_LIST_MAX_STATUS_CHARS;
+    if (!readOnly && found) void openFromList(openBox.word, openBox.typeId);
+    else if (!readOnly) void Promise.resolve().then(() => setActionError('That membership is not on this page now.'));
+    onBoxOpened?.();
+    // Once: `led` holds it, whatever the page draws again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openBox, list, readOnly]);
+
+  // The box, and what the last press did, belong to one membership type: both are drawn
+  // in that type's row while it is on the page, and under the list otherwise.
+  const liveIds = (list?.types ?? []).map((t) => t.id);
+  const boxRow = fromList.preview !== null && liveIds.includes(fromList.preview.type.id) ? fromList.preview.type.id : null;
+  const noteRow = fromList.preview === null && fromList.at !== null && liveIds.includes(fromList.at) ? fromList.at : null;
+  const giveBox = (inRow) =>
+    fromList.preview === null ? null : (
+      <GiveBox
+        key={`${fromList.preview.word}-${fromList.preview.type.id}-${JSON.stringify(fromList.preview.counts)}`}
+        preview={fromList.preview}
+        counted={fromList.words.some((w) => w.word === fromList.preview.word && w.link !== null && w.link.typeId === fromList.preview.type.id)}
+        busy={fromList.busy}
+        error={fromList.error}
+        inRow={inRow}
+        onGive={(body) => void fromList.give(body)}
+        onCancel={fromList.closeBox}
+      />
+    );
   // One thing at a time: a form, a "Set up" question or the box of who gets it.
   const locked = draft !== null || choosing !== null || fromList.preview !== null;
 
@@ -709,8 +766,10 @@ export default function MembershipTypesPanel({ org, readOnly }) {
                     readOnly={readOnly}
                     busy={anyBusy}
                     formOpen={locked}
-                    ties={typeTies(type, fromList.words)}
+                    ties={typeTies(type, fromList.words, !readOnly)}
                     form={formAt === 'row' && draft.id === type.id ? inRow(form) : null}
+                    box={boxRow === type.id ? giveBox(true) : null}
+                    note={noteRow === type.id ? { error: fromList.error, done: fromList.done } : null}
                     onGive={(word, t) => void fromList.open(word.word, t.id)}
                     onUndo={(word) => void fromList.undo(word)}
                     onEdit={(t) => startDraft(draftFromType(t))}
@@ -748,23 +807,15 @@ export default function MembershipTypesPanel({ org, readOnly }) {
             onUndo={(word) => void fromList.undo(word)}
           />
 
-          {fromList.preview !== null ? (
-            <GiveBox
-              key={`${fromList.preview.word}-${fromList.preview.type.id}-${JSON.stringify(fromList.preview.counts)}`}
-              preview={fromList.preview}
-              counted={fromList.words.some((w) => w.word === fromList.preview.word && w.link !== null && w.link.typeId === fromList.preview.type.id)}
-              busy={fromList.busy}
-              error={fromList.error}
-              onGive={(body) => void fromList.give(body)}
-              onCancel={fromList.closeBox}
-            />
-          ) : null}
+          {/* A box whose type has left the page since it opened is still drawn. */}
+          {fromList.preview !== null && boxRow === null ? giveBox(false) : null}
 
-          {/* A refused save is said in the form, beside its button. */}
+          {/* A refused save is said in the form, beside its button; what a press about one
+              membership did is said in that membership's row. */}
           <Notes
             error={formOpen ? null : actionError}
-            listError={fromList.preview === null ? fromList.error : null}
-            done={fromList.done}
+            listError={fromList.preview === null && noteRow === null ? fromList.error : null}
+            done={noteRow === null ? fromList.done : null}
           />
 
           {list.archivedTotal > 0 ? (

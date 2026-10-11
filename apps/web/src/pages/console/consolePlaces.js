@@ -97,6 +97,14 @@ export function trainerWeekTo(orgSlug, trainerId) {
   return typeof trainerId === 'string' && trainerId !== '' ? `${to}?trainer=${encodeURIComponent(trainerId)}` : to;
 }
 
+/** Memberships with the box already open for one of the member list's names and the
+ *  membership type it counts as. */
+export function membershipBoxTo(orgSlug, typeId, word) {
+  const to = placeTo(orgSlug, 'memberships');
+  if (to === null || typeof typeId !== 'string' || typeId === '' || typeof word !== 'string' || word === '') return null;
+  return `${to}?give=${encodeURIComponent(typeId)}&name=${encodeURIComponent(word)}`;
+}
+
 /** The address a button uses, or null when this person cannot open the place: the
  *  sentence then says who can, and has no button. */
 export function placeFor(orgSlug, privileges, place) {

@@ -874,6 +874,21 @@ export async function inUseForList(
   return rows.map((row) => ({ entryId: row.entry_id, noEmail: row.no_email, held: listHeld(row) }));
 }
 
+/** A stored membership's last day, for a row aliased `h`, as the rule works it out
+ *  (`lastDay` in `@app/shared`): the start, so many terms on, plus the days frozen, less
+ *  one. A repeating one counts the periods it is paid for; any other kind has one. Postgres
+ *  adds months and years as the rule does (31 Jan and a month is 28 Feb).
+ *  `memberships.overForList.test.ts` and `membershipWords.again.routes.test.ts` hold the
+ *  two together. */
+export const LAST_DAY = (sql: Sql | TransactionSql) => sql`
+  ((h.starts_on + make_interval(
+      years  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'year'  THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END,
+      months => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'month' THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END,
+      weeks  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'week'  THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END,
+      days   => CASE WHEN h.kind = 'pack' THEN h.pack_days
+                     WHEN h.term_unit = 'day' THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END
+    ))::date + h.frozen_days - 1)`;
+
 export interface OverForList {
   entryId: string;
   /** The record has no address: what a chip's "can be invited" count needs. */
@@ -954,18 +969,9 @@ export async function overForList(
           -- One that renews has no last day; the rule falls back on its start day.
           WHEN h.kind = 'recurring' AND h.renews THEN h.starts_on
           ELSE (
+            -- A repeating one that will not renew runs to the end of what is paid.
             SELECT CASE WHEN d.last_day <= ${today}::date THEN d.last_day ELSE h.starts_on END
-            FROM (
-              SELECT (h.starts_on + make_interval(
-                       years  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'year'  THEN h.term_count * n.periods ELSE 0 END,
-                       months => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'month' THEN h.term_count * n.periods ELSE 0 END,
-                       weeks  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'week'  THEN h.term_count * n.periods ELSE 0 END,
-                       days   => CASE WHEN h.kind = 'pack' THEN h.pack_days
-                                      WHEN h.term_unit = 'day' THEN h.term_count * n.periods ELSE 0 END
-                     ))::date + h.frozen_days - 1 AS last_day
-              -- A repeating one that will not renew runs to the end of what is paid.
-              FROM (SELECT CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END AS periods) n
-            ) d
+            FROM (SELECT ${LAST_DAY(sql)} AS last_day) d
           )
         END DESC,
         (h.kind = 'pack') ASC,

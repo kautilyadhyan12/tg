@@ -4785,6 +4785,471 @@ read and its write) · a member's inbox after 21 such sends 4.5 ms · a gym of 2
 are on no record cannot be ticked (Put on the list first) · no phone notification until
 the phone app has push.
 
+### 16.9 Somebody whose membership ended counts as left (ROADMAP 21c-i, 21c-ii)
+
+*(A PLAN, written 2026-10-11 by a planning terminal on Kd's words: "write the plan properly
+for both job so that high effort can follow it and not make mistakes". NOTHING HERE IS
+BUILT. Each job's terminal reads this whole section before it writes its ten-line plan to
+Kd. Where the code it finds is not what this section says, it stops and tells Kd in one
+line. It does not work round it, and it does not add anything this section does not name.)*
+
+**Read first, 2026-10-11, as a web search summarised each page (the pages themselves would
+not open in the terminal, so none of this is a quote):** Mindbody, "Member statuses": a
+client whose membership option has run out reads "Expired" by itself, at once, and
+"Terminated" is a contract staff ended · Glofox, "How to Use the Lost Members Report": it
+lists every client with a Cancelled or an Expired membership, and its Members report counts
+as churned "a member at the beginning of the period and not at the end" · Gymdesk, "Member
+growth reporting": churn each month from that month's cancellations · PushPress's churn
+page answered 404. None was found to wait a number of days before counting somebody as
+left. **Not read, so unverified:** how any of them counts a trial, a class pack or a day pass.
+
+#### 16.9.1 The three decisions both jobs stand on
+
+Kd's word on them is a RULINGS line dated 2026-10-11 or later. **A terminal that finds no
+such line asks him for it in its ten-line plan, before any code.**
+
+1. **No waiting time.** RULINGS 2026-10-10 said somebody counts as left 30 days after
+   their membership ended, the number the gym's to change. This plan drops the wait and
+   its setting: a person counts as left from the day the membership finished. Why: the
+   Members list already reads "Ended" the day after a membership's last day, so the two
+   pages agree with no second word; and with a wait the newest month would always read
+   too low, since most of a month's leavers are still inside their 30 days when it closes.
+   **If Kd keeps the 30 days, 21c-ii is planned again; it is not built from §16.9.4.**
+2. **Every kind of membership counts**, a trial, a class pack and a one-time membership as
+   a repeating one does. The rule is one sentence: whoever the Members list reads as Ended
+   or Cancelled is who Reports counts as left. Its cost, said to Kd: somebody whose free
+   trial ends without joining counts as a person who left. Churn is softened by a rule
+   Reports already has: it counts only people who were there when a month began, so a trial
+   or a day pass that starts and ends inside one month never moves the churn figure.
+3. **A later date in the gym's file is offered, never applied by itself.** An upload
+   changes nobody's membership, as today. The Memberships page's box ("See who can get
+   it") offers the next term to the people whose file now gives a later date, and staff
+   press. It cannot be automatic: for a membership with a price the box has to ask
+   "Have these people paid?", which a file does not say (RULINGS 2026-10-04).
+
+#### 16.9.2 What the code does today (checked 2026-10-11)
+
+- **A gym's own status word means nothing to the app.** "Lapsed", "On hold", "Inactive",
+  "Expired": each is kept as written, shown on the row and offered in the Filter
+  (`cleanStatus`, `apps/api/src/modules/orgs/memberList/fields.ts`: "The app attaches no
+  meaning to any of them"). Neither job changes that. No list of words is added anywhere.
+- **Reports counts somebody as left only when they come off the list** (`former_at`):
+  `readMemberCounts`, `apps/api/src/modules/orgs/reports/repo.ts`, the `people` part.
+- **The Members list already says when a membership is over.** `heldOnList`
+  (`packages/shared/src/heldOnList.ts`) is the ONE rule for a row's four columns, and its
+  case 3 reads "Ended" or "Cancelled" with the day for somebody with nothing in use.
+  `heldOnListOf` (`apps/api/src/modules/orgs/memberships/onList.ts`) runs it for one gym's
+  records; the list, its Filter, its counts, the download and the desk all read that.
+- **A repeating membership never ends for being unpaid.** It ends only when staff cancel
+  it, or stop it at the end of what is paid (`renews` false). Unpaid, it reads "Payment
+  due" and the person is a member. So neither job touches a repeating membership.
+- **A membership taken from the gym's file is given once, by staff's press, and never
+  again** (17a-iii). `peopleWithWord` in `memberships/wordsRepo.ts` sets `held_type` for
+  anybody with ANY membership of that type, whatever became of it, and `placePeople` in
+  `memberships/words.ts` puts them in the group `has`, which is given nothing. No upload
+  writes to `gym_held_memberships` (the only statement in `memberList/repo.ts` that does
+  moves memberships when two records are joined). So: a gym links "3 Months" from its
+  file, the person's three months end, the gym renews them in its other software and
+  uploads the new file with a later end date. The record's `ends_on` moves; the membership
+  in the app stays ended; the row reads "Ended"; and the box offers them nothing. That is
+  the gap 21c-i closes, and why it is built before 21c-ii counts "Ended" as left.
+- **The last-day arithmetic already exists twice, and is held together by a test**: the
+  pure rule (`lastDay`, `settle` in `packages/shared/src/heldMemberships.ts`) and its SQL
+  twin inside `overForList`'s ORDER BY (`memberships/heldRepo.ts`), bound by
+  `apps/api/test/memberships.overForList.test.ts`. 21c-i reuses that SQL; it writes no third.
+
+#### 16.9.3 Job one, 21c-i: a later date on the gym's list gives the next term
+
+**Built 2026-10-11 as planned below, with these differences.** The words are not the
+plan's: Kd asked for words a stranger understands, standard and professional (RULINGS
+2026-10-11; CLAUDE.md §4). The row reads "2 people's 3 Months has ended, and your member
+list now shows a later end date for them. You can renew it.", its button "Renew
+memberships" where only renewals wait; a renewal's row in the box reads "Renewal, ends
+9 December 2026"; and where everybody the box can give it to is a renewal, the box says
+Renew from its heading to its button ("Renew 3 Months for 2 people"; "Tick who to
+renew."). The rule is `offeredAgain` in `memberships/words.ts`; the SQL last day is
+`LAST_DAY` in `heldRepo.ts`, used by `overForList` and by the two reads here. A break
+that stayed green named a missing case, now in the first test: somebody renewed early,
+whose membership still runs while the list already shows a later date, is offered
+nothing until it ends. Measured for 2,100 people with the one word, before and after:
+the thread busy 1.9 and 2.1 ms for the page's read, 23.0 and 24.6 ms for the box, 33.3
+and 31.3 ms for the press; the box's whole time 46.8 and 103.8 ms (the database's).
+
+**Changed at Kd's click-through, the same day (RULINGS 2026-10-11; CLAUDE.md §4, "A person
+finishes the task from the screen alone").** The task starts at the import, not on
+Memberships, and nothing there said a press was still needed. So: **the import's last
+screen says what is still to do about memberships**, a sentence and a button each, the
+renewals first ("Still to do · 2 members' 3 Months has ended, and your member list now
+shows a later end date for them. · Renew their memberships"), and people new on the list
+with a name already set up ("Give them 3 Months"); a name that is not set up is never
+nagged about there, since a gym may keep its memberships in other software. Somebody who
+may not open Memberships reads "The owner can do this on the Memberships page." The
+button opens Memberships with that box already open (`?give=<type>&name=<name>`, taken
+off the address once it has). **A box about a membership opens in that membership's own
+row, and what the press did is said in that row**, not under the whole list. **A box in
+which everybody is a renewal** is headed "Renew 3 Months for 2 people?", says why under
+its heading, and opens with its people ticked (the list's own later date is what says
+they renewed), so one question and one button are left; a box that also holds people who
+never had it stays as 17a-iii made it, nobody ticked. No server change.
+
+**And for somebody who skips it** (Kd, the same click-through: "what if some one skips it
+and just press done"): **a sign atop the Members list while a renewal waits**, beside the
+Review and Duplicates signs and drawn as they are: "2 members can be renewed · Renew
+their memberships", and under it "Their 3 Months has ended, and your member list shows a
+later end date for them." Its button opens the same box. One sign a membership, gone by
+itself once they are renewed. Never for people who have not had the membership, who may
+have been left out on purpose; never for staff the server does not give the list's names
+to. It costs one more read of those names whenever Members is read.
+
+**After round one of the review (2026-10-11).** The row's number, the sign and the import's
+step count only people the box can renew: never a list date more than five years off (a
+"lifetime" 2099) nor somebody with 20 memberships running, whom the box refuses. The
+sentences as they stand: "2 people's 3 Months memberships have ended, and your member list
+shows a later end date for them. You can renew them." on the row (no "You can renew" in a
+gym that can only read) · "Still to do · 2 members' 3 Months memberships have ended, and
+your member list shows a later end date for them. · Renew their memberships" on the
+import's last screen · "2 memberships can be renewed" on Members. No sentence says "now":
+a date set once and never moved counts too, where the membership was given by hand. A
+name with renewals and people who never had it is one step and one sign, which says both
+and whose button is "See who can get it"; that box has one tick for all of them. In a
+box of renewals the others read "1 person is not renewed: they still have 3 Months, staff
+cancelled it, or your member list shows no later end date for them." Somebody who may not
+open Memberships reads "The owner can renew them on the Memberships page." A kept or
+hand-made address that names no membership on the page says "That membership is not on
+this page now." The renewal measured (`--renew`; 2,100 people, 1,050 to renew): the
+names read 51.1 ms, the thread busy 4.4 ms · the box 82.1 ms, busy 28.0 ms · the press
+282.7 ms, busy 33.8 ms.
+
+
+**Size: Risky** (it gives people memberships, which open "Payment due"; other people's
+data). Recommended Opus xhigh; if Kd's setting is high, say so in the plan's last line and
+build on his word. No migration. No new package. No cost. One branch, one pull request.
+
+**The plan to give Kd (ten lines; the terminal may tighten the words, not the content):**
+
+1. What a gym sees: on Memberships, a type's row says "5 of them have a later date on your
+   list than the membership they had here", with See who can get it.
+2. The box names those people with their new end date, in the group that gets it, and
+   says they had it before. Staff press, and each gets the next term.
+3. It never offers a repeating membership again, one staff cancelled here, or one to
+   somebody who still has that membership running.
+4. An upload still changes nobody's membership by itself: the box asks whether they have
+   paid, as it does today.
+5. On the server: the box's rule and the row's number learn the one new case. No new
+   table, no new package, no cost.
+6. The worst thing this job could do to a real person: hand a membership back to somebody
+   staff cancelled, or give one person the same membership twice, so they are let in or
+   chased for money wrongly. That is the first test.
+7. Other tests: every class of case in a table, a real second file through the real
+   import, the row's number against the box's, and three deliberate breaks of the rule.
+8. Cost measured for the Memberships page, the box and the press at 20 gyms of 200 and
+   one of 2,000.
+9. Size: Risky. Model: Opus xhigh recommended (it gives memberships to other people).
+
+**The rule, for one person who carries the word and one type.** Today a person who has
+ever held the type is `has`. The one new case is row 7.
+
+| # | The person | Today | After 21c-i |
+|---|---|---|---|
+| 1 | never held the type | as `linkHeldMembership` says | the same |
+| 2 | holds one of the type in use (running, frozen or still to start) | `has` | `has` |
+| 3 | any membership of the type of theirs was cancelled by staff, whenever | `has` | `has` |
+| 4 | the type is repeating | `has` | `has` |
+| 5 | every one of theirs is over, none cancelled, and the list gives them no day | `has` | `has` |
+| 6 | as 5, and the list's day covers no later a day than the latest last day of theirs | `has` | `has` |
+| 7 | as 5, and the list's day covers a LATER day than the latest last day of theirs | `has` | **goes on through the checks a new person meets**: `full` at 20 in use, else whatever `linkHeldMembership` says (`ask`, `settled`, `ended`, `day`), marked `again` |
+
+- **"The day the list covers"** is `ends_on` where the gym's heading called it an end, and
+  the day before `ends_on` where it called it a renewal (`ends_on_kind = 'renews'`).
+- **"The latest last day of theirs"** is the greatest last day among ALL their memberships
+  of that type: start, plus the term (a pack's days), plus the days frozen, less one. A
+  pack used up early keeps that stored last day: a person whose pack ran out of classes
+  and whose file still gives the old date is row 6 and gets nothing.
+- "Later" is strictly later. Equal is row 6. This one comparison is what stops a second
+  press giving a second membership, and it is the first thing the breaks attack.
+- Row 3 keeps 17a-iii's rule ("a cancelled one is not handed back"): cancelling is the
+  gym's own act here, and a file does not undo it. Staff can still give one by hand.
+- Row 7 with a file day that has already passed lands in `ended`, as a new person's does.
+
+**On the server, file by file.**
+
+1. `packages/shared/src/membershipWords.ts`. Three additions, all to `.strict()` shapes:
+   `again: z.number().int().min(0)` inside `link` and inside `sameName` of
+   `membershipWordSchema` (how many people with the word are row 7 by the row's own
+   count) · `again: z.boolean()` on `membershipLinkPersonSchema` · `again:
+   z.number().int().min(0)` in the preview's `countsSchema` (how many of the people in
+   `settled`, `due` and `ask` are marked `again`). **Before pushing, grep `apps/api/test`
+   and `apps/web/src` for every exact `toEqual` or fixture of these three shapes and add
+   the field** (18a-ii's lesson: GitHub's full run failed on four such checks).
+2. `memberships/heldRepo.ts`. Take the last-day expression out of `overForList`'s ORDER BY
+   into ONE exported SQL fragment for a row aliased `h` (the `make_interval` sum, plus
+   `h.frozen_days`, less one, with the periods a repeating one is paid for and 1 for any
+   other kind). `overForList` uses the fragment and changes in no other way;
+   `memberships.overForList.test.ts` passes untouched.
+3. `memberships/wordsRepo.ts`, `peopleWithWord`. Beside `held_type`, three facts about the
+   person's memberships OF THAT TYPE, in the same statement: `type_cancelled` (any has
+   `status = 'cancelled'`) · `type_in_use` (any is frozen, or is stored active and not
+   over: not a pack with `classes_left = 0`, and either a repeating one that renews or
+   its last day on or after `today`) · `type_last_day` (the greatest last day, as text;
+   null where they hold none). The last day comes from step 2's fragment and nowhere else.
+4. `memberships/words.ts`. `WordPerson` gains `typeCancelled`, `typeInUse`, `typeLastDay`.
+   `placePeople` works out `again` exactly as the table says (the type's `kind` is not
+   `recurring`; `heldType`; not `typeCancelled`; not `typeInUse`; `endsOn` and
+   `typeLastDay` not null; the day the list covers `>` `typeLastDay`, compared as
+   'YYYY-MM-DD' text). `heldType && !again` returns `has` as today; otherwise the code runs
+   on as it does for a new person. `PlacedPerson` gains `again`. `linkDigest` is not
+   changed: it already holds each given person's list day.
+5. `memberships/wordsRepo.ts`, `readWords`. It takes the gym's `today`. The `holding` part
+   counts, beside `holders`, the people who are row 7 by SQL: the pair's type is not
+   repeating · not cancelled · not in use · `ends_on` not null · the day the list covers
+   is on or after `today` and later than the greatest last day. Same join order as today
+   (type, to its memberships, to their records: the comment there says why), grouped a
+   person first, then a word. `again` rides on `link` and on `sameName`.
+6. `memberships/wordsService.ts`. Thread `today` (`dayInTz(deps.now(), org.timezone)`)
+   into every call of `words(...)`; `shown` sends `again`; the preview's counts send
+   `again`. `linkWord`'s INSERT is not changed: a row-7 person is given a row exactly as a
+   new person is, with `from_list` true.
+7. Nothing else. Not the upload, not the confirm, not `heldOnList`, not the bills, not the
+   routes' order or limits (they stay as 17a-iii left them, `members.confirm`).
+
+**On the screen** (`apps/web/src/pages/console/membershipWordsView.js`, and
+`components/console/MembershipFromList.jsx` only where the view cannot say it; the words
+are the terminal's to judge against CLAUDE.md §4's screen rule, these are the starting ones):
+
+- `typeTies`: a row's line gains, where `again > 0`, "5 have a later date on your list
+  than the membership they had here." (1: "1 has"), and `give` is true where `waiting > 0`
+  OR `again > 0`. The same for a word that is the type's own name and for `sameName`
+  (today those two show nothing at `waiting === 0`). `first`, the button's label and
+  everything else stay.
+- The box: in the group a person is given in, a line while `counts.again > 0`: "5 of
+  these people had {type} before. Your list now gives them a later date, so they get it
+  again." Their own row already shows the new date (`personNote`). Nothing else moves.
+- Walked in headless Edge before it is called done, at 1366 x 700 and 390 x 844, as a
+  gym made that day through the real routes: Overview → Memberships → the row → the box →
+  Give → the person's page → Members (CLAUDE.md §4, "No maze between pages").
+
+**Tests, in this order.**
+
+1. **The worst thing, written first**: `apps/api/test/membershipWords.again.routes.test.ts`
+   (new), real Postgres, the real routes, the test's own clock at one fixed day. One gym
+   with a one-time type and a pack linked to two words, a repeating type linked to a
+   third, and a second gym. People, by name: never held it · holds one running · ended,
+   and the list now gives a later date · ended, the list's date unchanged · cancelled by
+   staff, the list now later · the repeating type, the list now later · ended and later,
+   but holds a second of the type running · pack with no class left, last day ahead, the
+   list unchanged · pack past its last day, the list later · ended, the list later but
+   that day already past · a past member · the same word in the other gym. Assert the
+   preview's groups and `again` person by person; press; assert exactly who holds a new
+   row and that nobody holds two in use; the same press again answers 409
+   `membership_link_done` and writes nothing; a fresh preview and press give nobody
+   anything more. The stranger, the missing tick and the signed-out cases are already in
+   `membershipWords.routes.test.ts` and stay green.
+2. **The table**: `apps/api/test/membershipWords.place.test.ts` (new), pure, over rows 1
+   to 7 for each kind (one time, pack, trial, repeating), a heading that says "renews"
+   and one that says "ends", the day equal and one day either side, the last day of a
+   month, and a person at 20 in use.
+3. **The SQL facts against the rule**: in the routes file, memberships of every shape (each
+   term unit, a month's end, days frozen, a pack used up, a repeating one stopped at the
+   end of what is paid, one still to start): `type_in_use` and `type_last_day` equal what
+   `heldMembershipFacts` says of the same rows on the same day.
+4. **The row's number equals the box's**: for the gym of test 1, `again` on the word equals
+   the preview's `counts.again` plus the row-7 people the box refused as `ended`, `full`
+   or `day` on that day (none, in that gym, but for the one whose list day has passed:
+   the row leaves that person out too).
+5. **The second month, through the real import** (memory: "run the second month"): a file
+   with an end date, Import, the type linked and given; the clock moved past that date;
+   the same people in a second file with a later date, Import; then the words read, the
+   preview and the press. After it the person's row on the Members list reads Active.
+6. Web: `membershipWordsView.test.js` for the new lines and `give`, and the box's render
+   test. Then `eslint` and the test run of every package touched (shared, api, web).
+
+**Deliberate breaks, by hand, on the ONE rule "who is given it again", each shown RED in
+test 1 with the output pasted, each file put back** (commit first: memory "commit before a
+break run"): drop the cancelled check · make "later" into "later or equal" · drop the
+in-use check. A fourth if one stays green: let a repeating type through.
+
+**Cost at full size**, with `apps/api/tools/measure-membership-words-cost.ts`, before and
+after, on mains (check the clock): the Memberships page's read, the box and the press, for
+20 gyms of 200 and one of 2,000 where every person has held the type and half are row 7.
+The numbers that matter are how long the thread is busy and the longest stall. `readWords`
+once took a second on a wrong join; if its busy time grows by more than a few
+milliseconds at 2,000, say so to Kd with the fix before review.
+
+**Click-through for Kd.** A gym cannot reach row 7 by clicking alone (a membership has to
+end first), so the terminal seeds, on the LOCAL database only, one gym with a one-time
+type and three people whose membership from the list ended last week. Kd uploads a file
+that gives two of them a later date and reads: the row's new line with "2" · the box with
+those two and their dates, the third in the line "1 person already has 3 Months, or had
+it before." · Give · both read
+Active on Members and on their pages · the row's line gone · the box opened again offers
+nobody.
+
+**Review**: Risky, so the round of CLAUDE.md §2.6 by Kd's fresh terminal, run on the real
+Postgres and Redis. The two extra passes: this job changes item 17's linking after its
+passes ran (17h), so its commits are named in the files for item 18's passes, which read
+the same membership tables (the terminal's call, Kd's to overrule).
+
+#### 16.9.4 Job two, 21c-ii: Reports counts a membership that ended as left
+
+**Size: Risky** (a rule that decides something about a person; other people's data).
+Recommended Opus xhigh; if Kd's setting is high, say so and build on his word. After
+21c-i has merged. No migration. No new package. No cost. No setting. The reply's shape
+does not change: `membersReportSchema` keeps every field as it is.
+
+**The plan to give Kd (ten lines):**
+
+1. What a gym sees on Reports: somebody whose last membership here ended or was cancelled,
+   with no new one, counts as left from that day. Active now, Left, churn, retention and
+   average stay follow, and each figure's info line says so.
+2. It happens by itself. Nobody presses anything, and nobody is taken off the list or
+   out of the app.
+3. The Members list does not change: it already shows these people as Ended or
+   Cancelled, and Reports now counts exactly those people.
+4. Never counted: anybody with a membership running, frozen or still to start; anybody
+   who owes on a repeating membership; and anybody the gym only has its own file's words
+   for ("Expired", "Lapsed"), who still leaves only when the gym removes them.
+5. A new membership later makes them a member again, and Reports then shows them as
+   never having left, as it already does for somebody removed and put back.
+6. On the server: Reports asks the Members list's own rule who is over, so the two pages
+   cannot disagree. No new table.
+7. The worst thing this job could do to a real person: count a paying member as left, so
+   the owner believes they have gone. That is the first test.
+8. Other tests: a table of every class of case, midnight in two time zones, a gym with no
+   memberships in the app reading exactly as before, three deliberate breaks, and the
+   cost of Reports measured at 20 gyms of 200 and one of 2,000.
+9. Size: Risky. Model: Opus xhigh recommended.
+
+**The rule.** For a record on the list today (a past member is already counted by the day
+they were removed, and that day wins):
+
+| The Members list's row for them (`heldOnList`) | Reports |
+|---|---|
+| Active, Frozen or Not started (anything in use, owing or not) | a member |
+| the gym's own words (case 2 or 4: nothing held here, or the list names a membership they never held here) | a member, as today |
+| Ended | left on the membership's last day; for a pack used up before its last day, which stores no day, left TODAY (the day moves until the pack's own last day passes, then stays there) |
+| Cancelled | left on the day it was cancelled |
+
+The day they left is a day they were not a member at the START of the next month and are
+counted among that month's leavers: a membership whose last day is 30 September leaves in
+September and is not "at the start" of October. On its last day itself the person is
+still a member. A new membership makes them a member again and the earlier ending is no
+longer counted in any month ("counts as there the whole time", as for put back).
+
+**On the server, file by file.**
+
+1. `packages/shared/src/heldOnList.ts`. `heldOnList` keeps its inputs and its answer
+   exactly. Beside it, export `heldLeftOn(input)` with the SAME input type, answering
+   `string | null`: null wherever `heldOnList` answers null or a status in use; else the
+   day from the table above, worked out from the very membership `heldOnList` names (the
+   one `finishedLast` picks). Both functions call one inner function so the choice of
+   that membership is written once. For "Ended": its `endsOn` where that is on or before
+   `today`, else `today`. For "Cancelled": its `endsOn` (the cancel day), else `today`.
+   `heldOnListSchema` is NOT changed (it is a wire shape; the list's replies stay as they
+   are).
+2. `memberships/onList.ts`. `HeldShown` (an interface inside the api, not a wire shape)
+   gains `leftOn: string | null`; `bothReads` fills it from `heldLeftOn` in its second
+   loop with the same `held`, `listedUnheld`, `today` and `owedSince` it gives
+   `heldOnList`, and null in its first loop. Grep the api tests for exact `toEqual` on
+   what `heldOnListOf` returns and add the field.
+3. `reports/repo.ts`, `readMemberCounts`. It takes `Sql | TransactionSql` and a fifth
+   argument, `gone: readonly { id: string; on: string }[]`. A new part,
+   `gone AS (SELECT * FROM unnest(${ids}::uuid[], ${days}::date[]) AS g(id, left_on))`,
+   LEFT JOINed to the entries in `people` on `g.id = e.id`. `people` keeps the removal
+   day as `removed_on` and sets `left_on` to `COALESCE(removed_on, g.left_on)`. Every
+   count reads `left_on` as today, **except** `list_changed_on`, which reads
+   `removed_on`: its sentence on the page is about the list being changed.
+4. `reports/service.ts`, `getMembersReport`. One `now`; `today = dayInTz(now,
+   org.timezone)` (`../../gamification/streak.js`); then ONE transaction,
+   `sql.begin("isolation level repeatable read read only", ...)`, in which it calls
+   `heldOnListOf(tx, gymId, today, null)`, keeps the entries whose `leftOn` is not null,
+   and passes them to `readMemberCounts(tx, ...)`. The leads read stays as it is.
+5. `packages/shared/src/reports.ts`: comments only (`everLeft`, `left`, `leftOfStart` now
+   also mean a membership that ended). `membersReportFrom` is not changed.
+6. Nothing else. Not the attendance read, not the list's words or its Filter, not seats,
+   invites or check-in (16d is the job that decides who a desk lets in).
+
+**On the screen** (`apps/web/src/pages/console/reportsView.js`; words for a gym, a studio
+and a trainer come from `words` as they do now; these are the starting words):
+
+| Where | Today | After |
+|---|---|---|
+| Active now, its info | "Everyone on your member list today. Members you have removed are not counted." | "Everyone on your member list today, apart from members whose last membership here has ended or been cancelled. Members you have removed are not counted." |
+| Left this month, its info | "Members removed from your member list in October. Someone you removed and later put back counts as a member the whole time. …" | "Members removed from your member list in October, and members whose last membership here ended or was cancelled in October with no new one (Members shows them as Ended or Cancelled). Someone put back, or given a new membership later, counts as a member the whole time. Records deleted for good are not counted." |
+| Average stay, its info | "… from their join date to the day they were removed." | "… to the day they were removed or their membership ended." |
+| While nobody has left (`nobodyRemoved`, and the three `nobody_left` lines) | "Nobody has been removed from your member list yet." | "Nobody has left yet: nobody has been removed from your member list, and no membership has ended." (each of the three reworded to match) |
+| The note under the figures while nobody has left | "… count members you remove from your list or mark as left in an import. If you keep your list in other software, import it here each month to keep these true." | add, after the first sentence: "A membership you give here counts too, from the day it ends. A status from your own file, such as Expired, is not read." |
+
+No new button, tile, chip or column. Walked in headless Edge at both sizes as a gym made
+that day: Overview → Reports (the figures and each info line) → Members (the same people
+read Ended or Cancelled) → a person's page → back.
+
+**Tests, in this order.**
+
+1. **The worst thing, written first**: `apps/api/test/reports.left.routes.test.ts` (new),
+   real Postgres, the real route, the test's clock at one fixed day, two gyms. People, by
+   name: a paid repeating member · a repeating member two months overdue · frozen · a
+   membership starting next week · one that ended last month and a new one running now ·
+   one whose last day is TODAY · one whose last day was yesterday · cancelled by staff on
+   the 3rd · a repeating one stopped at the end of what was paid, last month · a pack with
+   no class left and its last day next month · removed from the list on the 5th while
+   holding a running membership · on the list from a file with the status "Expired" and
+   no membership here · a membership here that ended, and the list naming one they never
+   held here · never held anything · the neighbouring gym's leaver. Assert `activeNow`,
+   `thisMonth.left` and each month's `left`, `activeAtStart` and `leftOfStart` as exact
+   numbers worked out by hand in the test, so every person above is on one side or the
+   other by name.
+2. **The table**: `packages/shared/test/heldOnList.test.ts`, `heldLeftOn` over every class
+   `heldOnList` has (its four cases; each status; two over, to prove the one that
+   finished last is the one dated; a pack used up early and one past its day; `listedUnheld`
+   set; an open bill, which must change nothing), and for every case asserting the pair:
+   `heldLeftOn` is not null exactly when `heldOnList` says ended or cancelled.
+3. **The two pages agree**: in the routes file, the people the Members list's own route
+   returns with status "Ended" or "Cancelled" from the app's rule are exactly the people
+   Reports stopped counting (compare ids from `heldOnListOf` with the hand-worked sets).
+4. **The gym's own day**: Auckland and Los Angeles, half an hour either side of midnight:
+   a membership whose last day is today there is a member; half an hour later, left.
+5. **A gym with no memberships in the app reads exactly as before**:
+   `reports.members.routes.test.ts` passes untouched (it seeds none).
+6. Web: `reportsView.test.js` and `reports.render.test.jsx` for the new words; then
+   `eslint` and the test run of every package touched.
+
+**Deliberate breaks, on the ONE rule "who counts as left", each RED in test 1 with the
+output pasted, each file put back**: `heldLeftOn` answers a day for somebody with a
+membership in use · the service passes nobody to the count · the count takes the
+membership's day before the removal's (the COALESCE the other way round).
+
+**Cost at full size**, with `apps/api/tools/measure-reports-cost.ts` taught to give every
+current person a membership, a third of them over (it seeds none today): the members read
+before and after, for a gym of 200, the gym of 2,000 with 6,000 past records, and all 21
+at one moment; time, how long the thread is busy, and the longest stall. Known before
+building, from 18a-ii's run: everything the list works out for the 2,000 took 68.5 ms,
+the thread busy 50.0 ms. Reports now pays that once a page open. State the number; if the
+busy time at 2,000 passes 100 ms, tell Kd with a fix before review (the fix: break the
+rule's loop into turns, as `placeInTurns` does).
+
+**Click-through for Kd**: a gym with five people on the LOCAL servers, seeded so one
+membership ended last month. He reads Reports (Active now 4, Left last month 1), opens
+Members (that person "Ended"), gives them a membership on their page, reads Reports again
+(Active now 5, nobody left), cancels another person's membership and reads Left this
+month 1 and Members "Cancelled".
+
+**Review**: Risky, so §2.6's round. Reports' two extra passes (item 21 is one feature)
+run once when its last job is built; this job does not run them.
+
+#### 16.9.5 Not in these jobs
+
+- **A repeating membership taken from a file, after the file's renewal day moves.** It
+  reads "Payment due" from the period today falls in (RULINGS 2026-10-10), whatever a later
+  file says, until staff record the payment here. It is never counted as left, so 21c is
+  not wrong about it; whether a later file should settle it is a money question for Kd
+  (ROADMAP Stage 1 item 10 holds the line).
+- **Nothing tells staff after an import that the box has people to offer.** The row on
+  Memberships is where they read it, as it is for new people with a linked name today.
+- **Attendance's "visits a member a week"** still counts everybody "on your list since"
+  the weeks began, as its own words say; 21d visits every part of Reports.
+- A trial counted apart from members · the day a used-up pack's last class was taken ·
+  a waiting time (dropped, §16.9.1).
+
 ## 17. The console's look
 
 Kd, 2026-09-26: the LOOK of every console page redesigned — layout, sizes, fonts, text

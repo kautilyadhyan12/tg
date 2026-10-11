@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import MembershipTypesPanel from '../../components/console/MembershipTypesPanel';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -14,6 +14,22 @@ import { viewerPrivileges } from './consoleView';
 export default function Memberships() {
   const { orgSlug } = useParams();
   const { loading, error, org, notFound, reload } = useConsoleOrg(orgSlug);
+  // A button on another page can lead here with one membership's box to open
+  // (`membershipBoxTo`): the address is tidied once the box has opened.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const give = searchParams.get('give');
+  const name = searchParams.get('name');
+  const openBox = give !== null && give !== '' && name !== null && name !== '' ? { typeId: give, word: name } : null;
+  const boxOpened = () =>
+    setSearchParams(
+      (was) => {
+        const params = new URLSearchParams(was);
+        params.delete('give');
+        params.delete('name');
+        return params;
+      },
+      { replace: true },
+    );
 
   if (loading) {
     return (
@@ -59,5 +75,5 @@ export default function Memberships() {
   }
 
   // Keyed on the gym: the address is one route for every gym, and the page holds a form.
-  return <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={consoleIsReadOnly(org)} />;
+  return <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={consoleIsReadOnly(org)} openBox={openBox} onBoxOpened={boxOpened} />;
 }

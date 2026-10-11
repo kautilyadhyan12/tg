@@ -67,6 +67,10 @@ import {
 } from './memberListView';
 import { goneWords, gymToday } from './memberListPeople';
 import SentencePlace from '../../components/console/SentencePlace';
+import PlaceLink from '../../components/console/PlaceLink';
+import { afterImportSteps } from './membershipWordsView';
+import { canOpenPlace, membershipBoxTo } from './consolePlaces';
+import { viewerPrivileges } from './consoleView';
 import MemberListImportLeavers from './MemberListImportLeavers';
 import MemberListMissing from './MemberListMissing';
 
@@ -572,6 +576,9 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
+  // The list's membership names as they stand once the import is in: what is still to
+  // do about them is said on the last screen, each with its button.
+  const [after, setAfter] = useState([]);
 
   // The page behind stays still, and the box takes the keyboard's focus.
   useEffect(() => {
@@ -737,6 +744,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
     setWhy(null);
     setError(null);
     setDone(null);
+    setAfter([]);
     if (clearPaste) setPaste('');
   };
 
@@ -772,6 +780,11 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
     setDone(confirmed);
     setStage('done');
     onImported?.();
+    // Somebody who may not open a member's page is refused the names, and reads no steps.
+    Promise.resolve()
+      .then(() => orgService.getMembershipWords(gymId))
+      .then((res) => setAfter(res.data.words))
+      .catch(() => setAfter([]));
   };
 
   /** A refused Import: the numbers it carries go on screen, with its sentence. */
@@ -1383,6 +1396,8 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
     );
   } else {
     const said = doneWords(done, words);
+    const steps = typeof gym?.slug === 'string' ? afterImportSteps(after, words) : [];
+    const mayOpen = canOpenPlace(viewerPrivileges(gym), 'memberships');
     body = (
       <div className="text-center pt-6 pb-2" data-testid="member-import-done">
         <span className="inline-flex items-center justify-center w-[76px] h-[76px] rounded-full" style={{ background: 'var(--good-bg)', color: 'var(--good)' }}>
@@ -1393,11 +1408,29 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
         </h3>
         {said.detail ? <p className="c-s15 c-t2 mt-1">{said.detail}</p> : null}
         {!done.alreadyConfirmed ? <p className="c-s14 c-t2 mt-1">Nobody has been emailed yet.</p> : null}
+        {steps.length > 0 ? (
+          <div className="flex flex-col gap-3 mt-6 text-left" data-testid="member-import-next">
+            <p className="c-th m-0">Still to do</p>
+            {steps.map((step) => (
+              <div key={step.key} className="c-callout flex-col items-start">
+                <p className="c-s15 m-0">{step.text}</p>
+                {mayOpen ? (
+                  <PlaceLink to={membershipBoxTo(gym.slug, step.typeId, step.word)} className="c-btn c-btn-p">
+                    {step.button}
+                  </PlaceLink>
+                ) : (
+                  <p className="c-s14 c-t2 m-0">{step.ask}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-2.5 mt-6">
           <button type="button" onClick={() => startOver(true)} className="c-btn c-btn-s c-btn-lg">
             Import another
           </button>
-          <button type="button" onClick={onClose} className="c-btn c-btn-p c-btn-lg">
+          {/* With something still to do, its own button is the main one. */}
+          <button type="button" onClick={onClose} className={steps.length > 0 ? 'c-btn c-btn-s c-btn-lg' : 'c-btn c-btn-p c-btn-lg'}>
             Done
           </button>
         </div>

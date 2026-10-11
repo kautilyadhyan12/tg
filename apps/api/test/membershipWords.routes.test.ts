@@ -278,7 +278,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       const preview = await previewOf(gymId, owner.cookies, "gold", gold);
       expect(preview.word).toBe("Gold");
       expect(preview.ownName).toBe(false);
-      expect(preview.counts).toEqual({ settled: 3, due: 0, ask: 1, has: 0, full: 0, ended: 0, day: 0, past: 0 });
+      expect(preview.counts).toEqual({ settled: 3, due: 0, ask: 1, has: 0, full: 0, ended: 0, day: 0, again: 0, past: 0 });
       expect(preview.people.map((p) => p.fullName).sort()).toEqual(["Emma Wilson", "Noah Patel", "Olivia Brown", "Yara Ahead"]);
       // The day each row prints is the list's own day, however far ahead it is.
       const rowDay = (id: string) => preview.people.find((p) => p.entryId === id)?.renewsOn;
@@ -321,7 +321,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       expect(emma?.view.payment?.state).toBe("paid");
 
       const words = wordsOf(await get(wordsUrl(gymId), owner.cookies)).words;
-      expect(words.find((w) => w.word === "Gold")).toEqual({ word: "Gold", people: 4, link: { typeId: gold, typeName: "Gold Monthly", typeArchived: false, waiting: 0, ownName: false }, sameName: null });
+      expect(words.find((w) => w.word === "Gold")).toEqual({ word: "Gold", people: 4, link: { typeId: gold, typeName: "Gold Monthly", typeArchived: false, waiting: 0, again: 0, ownName: false }, sameName: null });
       expect(words.find((w) => w.word === "Gold Plus")).toEqual({ word: "Gold Plus", people: 1, link: null, sameName: null });
       // A name on the list that IS one of the gym's types is said to be it, with how many
       // people do not hold it: a screen never asks which type "Gold Monthly" is.
@@ -329,11 +329,11 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
         word: "Gold Monthly",
         people: 1,
         link: null,
-        sameName: { typeId: gold, typeName: "Gold Monthly", waiting: 1 },
+        sameName: { typeId: gold, typeName: "Gold Monthly", waiting: 1, again: 0 },
       });
       const sameId = otherIds[others.indexOf("Gold Monthly")] ?? "";
       expect((await given(gymId, sameId, owner.cookies, { typeId: gold, startsOn: today })).memberships).toHaveLength(1);
-      expect(wordsOf(await get(wordsUrl(gymId), owner.cookies)).words.find((w) => w.word === "Gold Monthly")?.sameName).toEqual({ typeId: gold, typeName: "Gold Monthly", waiting: 0 });
+      expect(wordsOf(await get(wordsUrl(gymId), owner.cookies)).words.find((w) => w.word === "Gold Monthly")?.sameName).toEqual({ typeId: gold, typeName: "Gold Monthly", waiting: 0, again: 0 });
     },
     TEST_TIMEOUT_MS,
   );
@@ -416,7 +416,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
       expect((await del(entryUrl(gymId, gone), owner.cookies)).statusCode).toBe(200);
 
       const preview = await previewOf(gymId, owner.cookies, "Gold", gold);
-      expect(preview.counts).toEqual({ settled: 1, due: 1, ask: 1, has: 1, full: 0, ended: 0, day: 0, past: 1 });
+      expect(preview.counts).toEqual({ settled: 1, due: 1, ask: 1, has: 1, full: 0, ended: 0, day: 0, again: 0, past: 1 });
       const of = (id: string) => preview.people.find((p) => p.entryId === id);
       expect(of(paidUp)).toMatchObject({ group: "settled", renewsOn: addDays(today, 9), since: null });
       // Their renewal day passed 31 days ago: they owe from the month they are in now, the one
