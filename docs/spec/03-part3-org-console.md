@@ -4536,8 +4536,8 @@ member's own switch. Migration `0096`: the kind in the three lists of kinds, `ho
   and the day's one message still goes after a reminder.
 - **When:** from the gym's number of hours before the start (1 · 2 · 3 · 12 · 24, 2 to
   start; `classReminderHours`) up to the start. None is sent at night (21:00 to 08:00), so
-  a time that falls then is moved (`classReminderFrom`; round one, H1 and L1): from 21:00
-  on, to 18:00 that same evening; in the small hours, to 08:00 that morning where the class
+  a time that falls then is moved (`classReminderFrom`; round one, H1 and L1; the row says
+  all three): from 21:00 on, to 18:00 that same evening; in the small hours, to 08:00 that morning where the class
   is still at least an hour after it (09:00 or later), and otherwise to 18:00 the evening
   before. So 24 hours before Friday's 07:30 class goes on Thursday at 08:00, and 2 hours
   before a 06:00 class goes the evening before.

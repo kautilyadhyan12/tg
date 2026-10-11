@@ -474,6 +474,43 @@ d("the class reminder (real Postgres)", () => {
   );
 
   it(
+    "the sender's two halves each take their own turn: the day's read failing still sends the reminder, and the reminders failing still sends the Welcome",
+    async () => {
+      const broken = async (): Promise<number> => await Promise.reject(new TypeError("this half cannot be read"));
+      const errors: object[] = [];
+      const loud = { info: () => undefined, error: (obj: object) => void errors.push(obj) };
+      // Each gym: somebody who joined at 10:00 today, and booked the 13:00 class.
+      const joinsAndBooks = async (name: string): Promise<Gym> => {
+        const gym = await makeGym(name);
+        const nia = await member(gym, "Nia New");
+        await sql`UPDATE gym_members SET joined_at = ${at(TODAY, 10)} WHERE gym_id = ${gym.id} AND user_id = ${nia.userId}`;
+        clock = at(TODAY, 10, 5);
+        await book(gym, nia, await classAt(gym, "Lunch Spin", TODAY, 13));
+        return gym;
+      };
+      const kinds = async (gym: Gym): Promise<string[]> => (await sentBy(gym)).map((row) => row.kind).sort();
+
+      const dayFails = await joinsAndBooks("Remind Day Fails");
+      await expect(sendDueMessages({ sql, log: loud, steps: { day: broken } }, { now: at(TODAY, 11, 4), gymIds: [dayFails.id] })).rejects.toThrow("member messages failed for 1 of 1 gyms");
+      expect(await kinds(dayFails)).toEqual(["class_reminder"]);
+
+      const remindersFail = await joinsAndBooks("Remind Reminders Fail");
+      await expect(sendDueMessages({ sql, log: loud, steps: { reminders: broken } }, { now: at(TODAY, 11, 4), gymIds: [remindersFail.id] })).rejects.toThrow("member messages failed for 1 of 1 gyms");
+      expect(await kinds(remindersFail)).toEqual(["welcome"]);
+      // Each failing gym is logged once, by its id and the error's name alone.
+      expect(errors).toEqual([
+        { event: "member_messages.gym_failed", gymId: dayFails.id, errName: "TypeError" },
+        { event: "member_messages.gym_failed", gymId: remindersFail.id, errName: "TypeError" },
+      ]);
+      // The next run, with nothing broken, sends each gym what it was owed and nothing twice.
+      expect((await run([dayFails, remindersFail], at(TODAY, 11, 19))).sent).toBe(2);
+      expect(await kinds(dayFails)).toEqual(["class_reminder", "welcome"]);
+      expect(await kinds(remindersFail)).toEqual(["class_reminder", "welcome"]);
+    },
+    T,
+  );
+
+  it(
     "a reminder goes on a day another automatic message went, and the day's message still goes after a reminder",
     async () => {
       const gym = await makeGym("Remind Same Day");

@@ -348,7 +348,7 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
                   Not saved yet.
                 </span>
               ) : null}
-              </div>
+            </div>
           </div>
         </form>
       )}

@@ -36,9 +36,14 @@ import { NO_GYM_MONEY, gymMoney, membershipFactsByPerson, type GymMoney } from "
 import * as repo from "./repo.js";
 import { settingRows } from "./settingsRepo.js";
 
+/** One of a gym's two steps: answers how many messages it wrote. */
+export type SendStep = (sql: Sql, gymId: string, now: Date) => Promise<number>;
+
 export interface SendMessagesDeps {
   sql: Sql;
   log: { info: (obj: object, msg: string) => void; error: (obj: object, msg: string) => void };
+  /** For a test that has one step fail: the day's messages, or the class reminders. */
+  steps?: { day?: SendStep; reminders?: SendStep };
 }
 
 /** How far back the read looks for joiners who have since left, in days of 24 hours; the
@@ -109,7 +114,9 @@ export async function sendDueMessages(deps: SendMessagesDeps, opts: { now?: Date
   const failed: string[] = [];
   for (const gymId of gymIds) {
     // A gym that fails at both of its steps is logged once.
-    const gym = await sendInTurn([() => sendForGym(deps.sql, gymId, now), () => sendRemindersForGym(deps.sql, gymId, now)]);
+    const day = deps.steps?.day ?? sendForGym;
+    const reminders = deps.steps?.reminders ?? sendRemindersForGym;
+    const gym = await sendInTurn([() => day(deps.sql, gymId, now), () => reminders(deps.sql, gymId, now)]);
     sent += gym.sent;
     if (gym.failed) {
       failed.push(gymId);

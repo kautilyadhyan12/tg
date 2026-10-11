@@ -272,7 +272,7 @@ describe('the class reminder', () => {
     expect(preview('class_reminder')).toBe("Hi [member's first name], you're booked for [the class's name] [its day and time] at Iron House. See you there.");
     const row = within(box('Class reminder'));
     const WHEN =
-      'Sent before a class or a personal training session a member has booked, as long before it starts as you pick here. It names the class and its time, like "Yoga today at 18:00"; for personal training it names the trainer. None is sent at night, between 21:00 and 08:00: one whose time falls then goes at 08:00 that morning, or from 18:00 the evening before for a class before 09:00. ';
+      'Sent before a class or a personal training session a member has booked, as long before it starts as you pick here. It names the class and its time, like "Yoga today at 18:00"; for personal training it names the trainer. None is sent at night, between 21:00 and 08:00. One whose time falls late in the evening goes at 18:00 that evening; one whose time falls after midnight goes at 08:00 that morning, or at 18:00 the evening before for a class before 09:00. ';
     const REST = ' Nobody still waiting for a place gets it. It is sent as well as any other message that day.';
     expect(row.getByText(`${WHEN}Somebody who books, or gets a place from the waitlist, in the last 2 hours before it starts gets none.${REST}`)).toBeTruthy();
     const pick = row.getByLabelText('Hours before it starts');
@@ -303,7 +303,7 @@ describe('the class reminder', () => {
     getMessageSettings.mockResolvedValue({ data: START });
     draw({ ...ORG, clockFormat: '12h' });
     await loaded();
-    expect(within(box('Class reminder')).getByText(/like "Yoga today at 6:00 PM".*between 9:00 PM and 8:00 AM: one whose time falls then goes at 8:00 AM that morning, or from 6:00 PM the evening before for a class before 9:00 AM\./)).toBeTruthy();
+    expect(within(box('Class reminder')).getByText(/like "Yoga today at 6:00 PM".*between 9:00 PM and 8:00 AM\. One whose time falls late in the evening goes at 6:00 PM that evening; one whose time falls after midnight goes at 8:00 AM that morning, or at 6:00 PM the evening before for a class before 9:00 AM\./)).toBeTruthy();
   });
 
   it('what stops a save, and a save that failed, are said where Save is', async () => {
