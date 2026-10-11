@@ -4748,9 +4748,18 @@ summary email: new, left, at risk, visits against last week, money overdue.
   (`PUT …/at-risk/settings`; `gyms.at_risk_quiet_days`, `gyms.at_risk_weeks_came`,
   migration `0097`); other staff read who can change them.
 - **One press** on a row opens a box under it with the four come-back lines of 16.1's
-  pinned note (`GYM_COME_BACK_LINES`); Send writes one (`POST …/members/:userId/nudge`,
-  as before: once in 7 days a person a gym) and the row says what was sent and the day
-  another may go. It is offered only where ONE live app account holds the record. Somebody
+  pinned note (`GYM_COME_BACK_LINES`) and, for staff holding `members.confirm`, **Write
+  your own message**. Send writes a ready-made line (`POST …/members/:userId/nudge`) or
+  the gym's own words (`POST …/at-risk/messages`, with the box's own key, so a second
+  press sends nothing more), and the row says what was sent and the day another may go.
+  **One come-back message to a person, of either kind, then 3 days**
+  (`GYM_COME_BACK_WAIT_DAYS`; it was 7 until Kd's click-through, RULINGS 2026-10-12),
+  asked with the gym's row held (`comeBackTooSoon`). The gym's own words are checked as a
+  message to a group's are (16.8: 500 characters, no web address, no @, 15.3's filter) and
+  kept as one (`gym_group_messages.one_person`, migration `0097`): the member reads them in
+  their Inbox for 30 days, Sent messages lists them, and they are not one of the day's
+  three messages to groups. They are not sent to somebody who switched the gym's messages
+  off (a ready-made line still is). It is offered only where ONE live app account holds the record. Somebody
   with no app, or a record two accounts share, reads why, with a button that opens their
   own page, where their phone and email are.
 - **A gym that uses only part of the app**: with no check-in ever, or check-in begun less

@@ -1,4 +1,4 @@
-import { atRiskResponseSchema, atRiskSettingsResponseSchema, sendGymNudgeResponseSchema } from '@app/shared';
+import { atRiskMessageResponseSchema, atRiskResponseSchema, atRiskSettingsResponseSchema, sendGymNudgeResponseSchema } from '@app/shared';
 import authApi from './authApi';
 
 // THE CONSOLE'S AT RISK PAGE (spec Part 3 §16.4; ROADMAP 20d-i): for staff holding
@@ -29,11 +29,19 @@ export const atRiskService = {
     return parsed.data.settings;
   },
   /** One of the four come-back lines, to one person in the app. Not sent twice: a second
-   *  inside seven days is refused by the server. */
+   *  inside the wait is refused by the server. */
   sendMessage: async (gymId, userId, preset) => {
     const res = await authApi.post(`${gymPath(gymId)}/members/${encodeURIComponent(userId)}/nudge`, { preset });
     const parsed = sendGymNudgeResponseSchema.safeParse(res.data);
     if (!parsed.success) throw contractError('that message');
     return parsed.data.nudge;
+  },
+  /** The gym's own words to one person in the app. `key` is the box's own, so the same
+   *  box pressed twice sends once. */
+  sendOwnMessage: async (gymId, userId, body, key) => {
+    const res = await authApi.post(`${gymPath(gymId)}/at-risk/messages`, { userId, body, key });
+    const parsed = atRiskMessageResponseSchema.safeParse(res.data);
+    if (!parsed.success) throw contractError('that message');
+    return parsed.data.message;
   },
 };

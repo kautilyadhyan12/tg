@@ -8,6 +8,10 @@ import {
   atRiskIntro,
   atRiskMore,
   canSeeAtRisk,
+  canWriteOwn,
+  messageBoxNote,
+  ownWordsLeft,
+  quoted,
   checkinNote,
   dayAt,
   rowAction,
@@ -114,7 +118,29 @@ describe('one row', () => {
     expect(rowAction({ ...sent, lastMessage: { preset: 'new_line', sentAt: '2026-10-10T09:00:00Z' } }, opts).line).toBe('A message was sent on 10 Oct. You can send another from 17 Oct.');
   });
 
-  it('once the 7 days have passed the button is back, with the day of the earlier one', () => {
+  it('the gym’s own words are quoted on the row as a ready-made line is, a long message by its start', () => {
+    const own = person({ lastMessage: { preset: null, body: 'Hi Stan, we saved your Tuesday spot.', sentAt: '2026-10-10T09:00:00Z' }, messageableAt: '2026-10-13T09:00:00Z' });
+    expect(rowAction(own, opts)).toEqual({ kind: 'sent', line: 'Sent “Hi Stan, we saved your Tuesday spot.” on 10 Oct. You can send another from 13 Oct.' });
+    const long = 'word '.repeat(60);
+    expect(quoted(long).length).toBeLessThanOrEqual(118);
+    expect(quoted(long).endsWith('…')).toBe(true);
+    expect(quoted('  two\n lines  ')).toBe('two lines');
+  });
+
+  it('who may write their own words, what the box says, and how many characters are left', () => {
+    expect(canWriteOwn(['members.read', 'members.confirm'])).toBe(true);
+    expect(canWriteOwn(['members.read'])).toBe(false);
+    expect(messageBoxNote('Stan')).toBe("Pick one message for Stan. They see it in their Inbox in the app. They can't reply to it.");
+    expect(messageBoxNote('Stan', true)).toBe("Pick one message for Stan, or write your own. They see it in their Inbox in the app. They can't reply to it.");
+    expect(ownWordsLeft('')).toEqual({ left: 500, ok: false, line: '500 characters left' });
+    expect(ownWordsLeft('   ')).toMatchObject({ ok: false });
+    expect(ownWordsLeft('Hi Stan')).toEqual({ left: 493, ok: true, line: '493 characters left' });
+    expect(ownWordsLeft('x'.repeat(503))).toEqual({ left: -3, ok: false, line: '3 characters too many' });
+    expect(ownWordsLeft('x'.repeat(499)).line).toBe('1 character left');
+    expect(ownWordsLeft('x'.repeat(501)).line).toBe('1 character too many');
+  });
+
+  it('once the wait has passed the button is back, with the day of the earlier one', () => {
     const old = person({ lastMessage: { preset: 'door_open', sentAt: '2026-10-01T09:00:00Z' }, messageableAt: null });
     expect(rowAction(old, opts)).toEqual({ kind: 'send', disabled: false, earlier: 'Last message sent on 1 Oct.' });
     const passed = person({ lastMessage: { preset: 'door_open', sentAt: '2026-10-05T09:00:00Z' }, messageableAt: '2026-10-12T09:00:00Z' });

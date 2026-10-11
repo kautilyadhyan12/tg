@@ -4,8 +4,11 @@ import {
   AT_RISK_WEEKS,
   AT_RISK_WEEKS_CAME,
   GYM_COME_BACK_LINES,
+  GYM_COME_BACK_WAIT_DAYS,
+  GYM_MESSAGE_BODY_MAX,
+  GYM_MESSAGE_KEPT_DAYS,
   GYM_NUDGE_PRESETS,
-  GYM_PINNED_NOTE_DAYS,
+  gymMessageLength,
   addDays,
   orgWords,
 } from '@app/shared';
@@ -113,8 +116,31 @@ export function messageLine(preset) {
 }
 
 /** Said in the box before a message is sent. */
-export function messageBoxNote(first) {
-  return `Pick one message for ${first}. They see it at the top of their Inbox in the app for ${String(GYM_PINNED_NOTE_DAYS)} days. They can't reply to it.`;
+export function messageBoxNote(first, canWrite = false) {
+  return `Pick one message for ${first}${canWrite ? ', or write your own' : ''}. They see it in their Inbox in the app. They can't reply to it.`;
+}
+
+/** Who may write their own words to a member: whoever may send a message from Members. */
+export function canWriteOwn(privileges) {
+  return Array.isArray(privileges) && privileges.includes('members.confirm');
+}
+
+/** The choice under the four ready-made lines. */
+export const OWN_CHOICE = 'own';
+export const OWN_LABEL = 'Write your own message';
+export const OWN_RULES = `Up to ${String(GYM_MESSAGE_BODY_MAX)} characters. No web links and no @. It stays in their Inbox for ${String(GYM_MESSAGE_KEPT_DAYS)} days.`;
+
+/** How many characters are left, as the server counts them, and whether it can be sent. */
+export function ownWordsLeft(text) {
+  const used = gymMessageLength(typeof text === 'string' ? text.trim() : '');
+  const left = GYM_MESSAGE_BODY_MAX - used;
+  return { left, ok: used > 0 && left >= 0, line: left >= 0 ? `${count(left, 'character', 'characters')} left` : `${count(-left, 'character', 'characters')} too many` };
+}
+
+/** A message as a row quotes it: the whole of a short one, the start of a long one. */
+export function quoted(words) {
+  const text = typeof words === 'string' ? words.replace(/\s+/g, ' ').trim() : '';
+  return text.length <= 120 ? text : `${text.slice(0, 117).trimEnd()}…`;
 }
 
 /** A moment as a day on the gym's own calendar: "19 Oct". Null when it cannot be read. */
@@ -140,7 +166,8 @@ export function rowAction(person, { orgType, timezone, readOnly = false, now = D
   if (person.app === 'shared' || person.userId === null) {
     return { kind: 'shared', line: 'Two people use this record in the app, so a message cannot go to one of them. Their phone and email are on their page.' };
   }
-  const words = messageLine(person.lastMessage?.preset);
+  const own = typeof person.lastMessage?.body === 'string' && person.lastMessage.body !== '' ? quoted(person.lastMessage.body) : null;
+  const words = own ?? messageLine(person.lastMessage?.preset);
   const sentOn = person.lastMessage === null ? null : dayAt(person.lastMessage.sentAt, timezone);
   const wait = person.messageableAt === null ? Number.NaN : Date.parse(person.messageableAt);
   if (Number.isFinite(wait) && wait > now) {
@@ -148,7 +175,7 @@ export function rowAction(person, { orgType, timezone, readOnly = false, now = D
     const said = words === null ? 'A message was sent' : `Sent “${words}”`;
     return {
       kind: 'sent',
-      line: `${said}${sentOn === null ? '' : ` on ${sentOn}`}. You can send another${again === null ? ` in ${String(GYM_PINNED_NOTE_DAYS)} days` : ` from ${again}`}.`,
+      line: `${said}${sentOn === null ? '' : ` on ${sentOn}`}. You can send another${again === null ? ` in ${String(GYM_COME_BACK_WAIT_DAYS)} days` : ` from ${again}`}.`,
     };
   }
   return {

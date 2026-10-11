@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-const svc = { list: vi.fn(), saveSettings: vi.fn(), sendMessage: vi.fn() };
+const svc = { list: vi.fn(), saveSettings: vi.fn(), sendMessage: vi.fn(), sendOwnMessage: vi.fn() };
 const orgApi = { getMine: vi.fn(), getMemberList: vi.fn() };
 vi.mock('../../api/atRiskApi', () => ({ atRiskService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -152,8 +152,8 @@ describe('sending a come-back message', () => {
     const stan = row('Stan Stopped');
     fireEvent.click(within(stan).getByRole('button', { name: 'Send a message' }));
     const box = within(stan).getByRole('group', { name: 'Message to Stan Stopped' });
-    expect(box.textContent).toContain("Pick one message for Stan. They see it at the top of their Inbox in the app for 7 days. They can't reply to it.");
-    expect(within(box).getAllByRole('radio').length).toBe(4);
+    expect(box.textContent).toContain("Pick one message for Stan, or write your own. They see it in their Inbox in the app. They can't reply to it.");
+    expect(within(box).getAllByRole('radio').length).toBe(5);
     expect(svc.sendMessage).not.toHaveBeenCalled();
 
     fireEvent.click(within(box).getByRole('radio', { name: "The door's always open when you're ready." }));
@@ -168,6 +168,57 @@ describe('sending a come-back message', () => {
     await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(within(row('Stan Stopped')).queryByRole('button', { name: 'Send a message' })).toBeNull());
     expect(within(row('Stan Stopped')).queryByRole('group')).toBeNull();
+  });
+
+  it('the gym’s own words: a box to write in, not sent while empty or too long, sent once to that person, and said in the row', async () => {
+    svc.sendOwnMessage.mockResolvedValue({ body: 'Hi Stan, we saved your Tuesday spot.', sentAt: '2026-10-12T10:00:00.000Z' });
+    open();
+    await screen.findByTestId('at-risk-headline');
+    const stan = row('Stan Stopped');
+    fireEvent.click(within(stan).getByRole('button', { name: 'Send a message' }));
+    expect(within(stan).queryByLabelText('Your message to Stan')).toBeNull();
+    fireEvent.click(within(stan).getByRole('radio', { name: 'Write your own message' }));
+    const words = within(stan).getByLabelText('Your message to Stan');
+    const send = within(stan).getByRole('button', { name: 'Send to Stan' });
+    expect(send.disabled).toBe(true);
+    expect(stan.textContent).toContain('Up to 500 characters. No web links and no @. It stays in their Inbox for 30 days. 500 characters left.');
+    fireEvent.change(words, { target: { value: 'x'.repeat(501) } });
+    expect(send.disabled).toBe(true);
+    expect(stan.textContent).toContain('1 character too many.');
+    fireEvent.change(words, { target: { value: '  Hi Stan, we saved your Tuesday spot.  ' } });
+    expect(send.disabled).toBe(false);
+    expect(svc.sendOwnMessage).not.toHaveBeenCalled();
+
+    fireEvent.click(send);
+    await waitFor(() => expect(within(row('Stan Stopped')).getByRole('status').textContent).toBe('Sent to Stan: “Hi Stan, we saved your Tuesday spot.”'));
+    expect(svc.sendOwnMessage).toHaveBeenCalledTimes(1);
+    const [gymId, userId, body, key] = svc.sendOwnMessage.mock.calls[0];
+    expect([gymId, userId, body]).toEqual(['g1', 'u-stan', '  Hi Stan, we saved your Tuesday spot.  ']);
+    expect(key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(svc.sendMessage).not.toHaveBeenCalled();
+    expect(within(row('Stan Stopped')).queryByRole('group')).toBeNull();
+  });
+
+  it('words the server refuses are said under the box, which stays open with what was typed', async () => {
+    svc.sendOwnMessage.mockRejectedValue({ response: { status: 400, data: { message: "A message can't have a web address in it. Take the link out and try again. If it isn't a link, put a space after the full stop." } } });
+    open();
+    await screen.findByTestId('at-risk-headline');
+    const stan = row('Stan Stopped');
+    fireEvent.click(within(stan).getByRole('button', { name: 'Send a message' }));
+    fireEvent.click(within(stan).getByRole('radio', { name: 'Write your own message' }));
+    fireEvent.change(within(stan).getByLabelText('Your message to Stan'), { target: { value: 'See www.gym.com' } });
+    fireEvent.click(within(stan).getByRole('button', { name: 'Send to Stan' }));
+    expect((await within(stan).findByRole('alert')).textContent).toContain("A message can't have a web address in it.");
+    expect(within(stan).getByLabelText('Your message to Stan').value).toBe('See www.gym.com');
+  });
+
+  it('staff who may not write to members are offered the four ready-made lines only', async () => {
+    open(TRAINER);
+    await screen.findByTestId('at-risk-headline');
+    fireEvent.click(within(row('Stan Stopped')).getByRole('button', { name: 'Send a message' }));
+    expect(within(row('Stan Stopped')).getAllByRole('radio').length).toBe(4);
+    expect(within(row('Stan Stopped')).queryByRole('radio', { name: 'Write your own message' })).toBeNull();
+    expect(row('Stan Stopped').textContent).toContain("Pick one message for Stan. They see it in their Inbox in the app. They can't reply to it.");
   });
 
   it('Cancel sends nothing and leaves the row as it was', async () => {

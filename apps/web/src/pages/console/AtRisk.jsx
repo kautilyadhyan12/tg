@@ -15,15 +15,21 @@ import { Refusal } from './MemberListTags';
 import {
   AT_RISK_FOOTNOTE,
   MESSAGE_CHOICES,
+  OWN_CHOICE,
+  OWN_LABEL,
+  OWN_RULES,
   QUIET_CHOICES,
   WEEKS_CHOICES,
   atRiskHeadline,
   atRiskIntro,
   atRiskMore,
   canSeeAtRisk,
+  canWriteOwn,
   checkinNote,
   messageBoxNote,
   messageLine,
+  ownWordsLeft,
+  quoted,
   rowAction,
   rowFacts,
   shownName,
@@ -35,6 +41,7 @@ import {
 // somebody without the tick is told, and nothing is asked for them.
 
 const PAGE = 25;
+const newKey = () => globalThis.crypto.randomUUID();
 
 /** The gym's two numbers: two pickers and one Save, for whoever runs the gym. */
 function Numbers({ gymId, settings, locked, lockedNote, onSaved }) {
@@ -103,21 +110,31 @@ function Numbers({ gymId, settings, locked, lockedNote, onSaved }) {
 }
 
 /** One person: their name (which opens their page), the two facts, and what can be done. */
-function Row({ person, org, readOnly, onOpenPerson, onSent }) {
+function Row({ person, org, readOnly, canWrite, onOpenPerson, onSent }) {
   const name = shownName(person, org.orgType);
   const facts = rowFacts(person);
   const action = rowAction(person, { orgType: org.orgType, timezone: org.timezone, readOnly });
   const [open, setOpen] = useState(false);
   const [preset, setPreset] = useState(MESSAGE_CHOICES[0]?.preset ?? null);
   const [state, setState] = useState({ sending: false, error: null, sent: null });
+  /** The gym's own words, and the box's own key: the same box pressed twice sends once. */
+  const [own, setOwn] = useState('');
+  const [key, setKey] = useState(newKey);
   const groupName = useId();
+  const ownId = useId();
+  const writing = preset === OWN_CHOICE;
+  const left = ownWordsLeft(own);
 
   const send = async () => {
-    if (preset === null || person.userId === null) return;
+    if (preset === null || person.userId === null || (writing && !left.ok)) return;
     setState({ sending: true, error: null, sent: null });
     try {
-      const nudge = await atRiskService.sendMessage(org.id, person.userId, preset);
-      setState({ sending: false, error: null, sent: nudge.preset });
+      const words = writing
+        ? (await atRiskService.sendOwnMessage(org.id, person.userId, own, key)).body
+        : messageLine((await atRiskService.sendMessage(org.id, person.userId, preset)).preset);
+      setState({ sending: false, error: null, sent: words ?? 'your message' });
+      setOwn('');
+      setKey(newKey());
       setOpen(false);
       onSent();
     } catch (err) {
@@ -151,7 +168,7 @@ function Row({ person, org, readOnly, onOpenPerson, onSent }) {
 
       {state.sent !== null ? (
         <p className="c-s14 c-t1 c-w6" role="status">
-          {`Sent to ${name.first}: “${messageLine(state.sent) ?? 'your message'}”`}
+          {`Sent to ${name.first}: “${quoted(state.sent)}”`}
         </p>
       ) : null}
       {action.kind === 'sent' && state.sent === null ? <p className="c-s14 c-t2">{action.line}</p> : null}
@@ -171,7 +188,7 @@ function Row({ person, org, readOnly, onOpenPerson, onSent }) {
       {open && action.kind === 'send' ? (
         <fieldset className="flex flex-col gap-3 p-4" style={{ border: '1px solid var(--line)', borderRadius: 12 }}>
           <legend className="c-label px-1">{`Message to ${name.full}`}</legend>
-          <p className="c-s14 c-t2">{messageBoxNote(name.first)}</p>
+          <p className="c-s14 c-t2">{messageBoxNote(name.first, canWrite)}</p>
           <div className="flex flex-col">
             {MESSAGE_CHOICES.map((choice) => (
               <label key={choice.preset} className="flex items-center gap-3 c-s15 c-t1" style={{ minHeight: 44 }}>
@@ -179,9 +196,35 @@ function Row({ person, org, readOnly, onOpenPerson, onSent }) {
                 {choice.text}
               </label>
             ))}
+            {canWrite ? (
+              <label className="flex items-center gap-3 c-s15 c-t1" style={{ minHeight: 44 }}>
+                <input type="radio" name={groupName} value={OWN_CHOICE} checked={writing} disabled={state.sending} onChange={() => setPreset(OWN_CHOICE)} />
+                {OWN_LABEL}
+              </label>
+            ) : null}
           </div>
+          {writing ? (
+            <div className="c-field">
+              <label className="c-label" htmlFor={ownId}>
+                {`Your message to ${name.first}`}
+              </label>
+              <textarea
+                id={ownId}
+                className="c-input"
+                style={{ height: 'auto', minHeight: 112, padding: '12px 14px', lineHeight: '22px' }}
+                rows={4}
+                value={own}
+                disabled={state.sending}
+                onChange={(e) => {
+                  setOwn(e.target.value);
+                  setState((was) => ({ ...was, error: null }));
+                }}
+              />
+              <p className="c-s13 c-t3">{`${OWN_RULES} ${left.line}.`}</p>
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={state.sending || preset === null} onClick={() => void send()}>
+            <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={state.sending || preset === null || (writing && !left.ok)} onClick={() => void send()}>
               {state.sending ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               {state.sending ? 'Sending…' : `Send to ${name.first}`}
             </button>
@@ -327,7 +370,7 @@ export default function AtRisk() {
               {list.people.length > 0 ? (
                 <ul className="list-none m-0 p-0">
                   {list.people.slice(0, shown).map((person) => (
-                    <Row key={person.entryId ?? person.userId ?? person.name} person={person} org={org} readOnly={readOnly} onOpenPerson={openPerson} onSent={() => void load()} />
+                    <Row key={person.entryId ?? person.userId ?? person.name} person={person} org={org} readOnly={readOnly} canWrite={canWriteOwn(privileges)} onOpenPerson={openPerson} onSent={() => void load()} />
                   ))}
                 </ul>
               ) : null}
