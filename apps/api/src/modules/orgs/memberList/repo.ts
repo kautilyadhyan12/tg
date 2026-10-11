@@ -1356,6 +1356,7 @@ export async function updateEntries(
         date_of_birth  = CASE WHEN ${carries.dateOfBirth} THEN r.date_of_birth ELSE e.date_of_birth END,
         extra          = e.extra || r.extra,
         former_at      = CASE WHEN ${revive} THEN NULL ELSE e.former_at END,
+        membership_ended_on = CASE WHEN ${revive} THEN NULL ELSE e.membership_ended_on END,
         hand_edited    = (
           SELECT coalesce(array_agg(name), '{}'::text[])
           FROM unnest(e.hand_edited) AS name
@@ -1747,6 +1748,8 @@ export interface EntriesPageInput {
   appIds: readonly string[] | null;
   /** Only these records (the ones holding the tag asked for, 5d-ii), or null for no filter. */
   tagIds: readonly string[] | null;
+  /** Only these records (the people whose membership is over, 21c-iii), or null for no filter. */
+  overIds: readonly string[] | null;
   /** The people whose three kinds of word the app answers (23a-i: they hold a membership
    *  here), and which of them pass the word filters asked, by the app's own words. Null
    *  where no word filter is asked. */
@@ -1770,6 +1773,7 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
   const invitedInclude = input.invitation?.include ?? true;
   const appIds = input.appIds === null ? null : [...input.appIds];
   const tagIds = input.tagIds === null ? null : [...input.tagIds];
+  const overIds = input.overIds === null ? null : [...input.overIds];
   const heldIds = [...(input.held?.ids ?? [])];
   const heldPassing = [...(input.held?.passing ?? [])];
   return sql`
@@ -1806,7 +1810,8 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
              OR (${invitedInclude}::boolean AND e.id = ANY(${invitedIds}::uuid[]))
              OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
         AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))
-        AND (${tagIds}::uuid[] IS NULL OR e.id = ANY(${tagIds}::uuid[]))`;
+        AND (${tagIds}::uuid[] IS NULL OR e.id = ANY(${tagIds}::uuid[]))
+        AND (${overIds}::uuid[] IS NULL OR (e.former_at IS NULL AND e.id = ANY(${overIds}::uuid[])))`;
 }
 
 /** Every record the filter chooses, in the list's order: who "Select all" selects. */
@@ -2192,7 +2197,8 @@ export async function writeEntry(
         hand_edited     = ${[...write.handEdited]}::text[],
         needs_review    = ${[...write.review.needsReview]}::text[],
         review_checked  = ${[...write.review.reviewChecked]}::text[],
-        former_at       = ${write.formerAt}
+        former_at       = ${write.formerAt},
+        membership_ended_on = CASE WHEN ${write.formerAt}::timestamptz IS NULL THEN NULL ELSE membership_ended_on END
     WHERE gym_id = ${gymId} AND id = ${entryId}
     RETURNING id`;
   if (rows.length !== 1) throw new Error(`writing member-list entry ${entryId} moved ${String(rows.length)} rows`);
@@ -2203,7 +2209,9 @@ export async function writeEntry(
 export async function setEntryFormer(tx: TransactionSql, gymId: string, entryId: string, at: Date | null): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_member_list_entries
-    SET former_at = ${at}
+    SET former_at = ${at},
+        -- Put back: the day Reports counted them as left on goes with it.
+        membership_ended_on = CASE WHEN ${at}::timestamptz IS NULL THEN NULL ELSE membership_ended_on END
     WHERE gym_id = ${gymId} AND id = ${entryId}
       AND ((${at}::timestamptz IS NULL AND former_at IS NOT NULL)
            OR (${at}::timestamptz IS NOT NULL AND former_at IS NULL))
@@ -2593,6 +2601,49 @@ export async function entriesBrief(
     FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[])`;
   return rows.map((row) => ({ id: row.id, fullName: row.full_name, email: row.email, phone: row.phone_e164, former: row.former }));
+}
+
+/** For records about to be moved to past members (21c-iii): the day each one's last
+ *  membership here had already ended or been cancelled. Current records only. */
+export async function setMembershipEndedOn(tx: TransactionSql, gymId: string, rows: readonly { id: string; on: string }[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx`
+    UPDATE gym_member_list_entries e
+    SET membership_ended_on = r.left_on
+    FROM unnest(${rows.map((row) => row.id)}::uuid[], ${rows.map((row) => row.on)}::date[]) AS r(id, left_on)
+    WHERE e.gym_id = ${gymId} AND e.id = r.id AND e.former_at IS NULL`;
+}
+
+/** The ids of the current records with these identity keys. */
+export async function entryIdsByIdentityKeys(tx: TransactionSql, gymId: string, identityKeys: readonly string[]): Promise<string[]> {
+  if (identityKeys.length === 0) return [];
+  const rows = await tx<{ id: string }[]>`
+    SELECT id FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND identity_key = ANY(${[...identityKeys]}::text[]) AND former_at IS NULL`;
+  return rows.map((row) => row.id);
+}
+
+/** The current records staff chose to keep on the list, each with the membership that
+ *  was over when they did (21c-iii). */
+export async function keptListed(sql: SqlOrTx, gymId: string): Promise<Map<string, string>> {
+  const rows = await sql<{ id: string; held_id: string }[]>`
+    SELECT id, kept_listed_held_id AS held_id
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND former_at IS NULL AND kept_listed_held_id IS NOT NULL`;
+  return new Map(rows.map((row) => [row.id, row.held_id]));
+}
+
+/** "Keep on list": each record with the membership that is over now. Answers the ids written. */
+export async function setKeptListed(tx: TransactionSql, gymId: string, rows: readonly { id: string; heldId: string }[]): Promise<string[]> {
+  if (rows.length === 0) return [];
+  const done = await tx<{ id: string }[]>`
+    UPDATE gym_member_list_entries e
+    SET kept_listed_held_id = r.held_id
+    FROM unnest(${rows.map((row) => row.id)}::uuid[], ${rows.map((row) => row.heldId)}::uuid[]) AS r(id, held_id)
+    WHERE e.gym_id = ${gymId} AND e.id = r.id AND e.former_at IS NULL
+      AND EXISTS (SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = ${gymId} AND h.id = r.held_id AND h.entry_id = e.id)
+    RETURNING e.id`;
+  return done.map((row) => row.id);
 }
 
 /** Records taken off the list together, as `setEntryFormer` takes one: those still

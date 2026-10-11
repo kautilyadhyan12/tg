@@ -161,6 +161,14 @@ export const gymMemberListEntries = pgTable(
      *  exactly what makes a returning person the SAME record: the next upload that
      *  holds them clears this column instead of inserting somebody new. */
     formerAt: timestamp("former_at", { withTimezone: true }),
+    /** For a past member: the day their last membership here ended or was cancelled, where
+     *  it had before they were moved (21c-iii). Reports counts them as left on it. NULL
+     *  while they are on the list. */
+    membershipEndedOn: date("membership_ended_on"),
+    /** Staff pressed "Keep on list" while this membership was the one read as Ended or
+     *  Cancelled (21c-iii): the Members sign leaves them out until another one is. The
+     *  migration holds its reference to `gym_held_memberships`. */
+    keptListedHeldId: uuid("kept_listed_held_id"),
     /** WHICH FIELDS STAFF EDITED BY HAND SINCE THE LAST UPLOAD — names only, never
      *  values (§11.4). A standard field by its own name, one of the gym's own
      *  columns as `extra:<key>`.

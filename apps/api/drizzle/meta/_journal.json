@@ -666,6 +666,13 @@
       "when": 1789257600095,
       "tag": "0095_gym_message_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1789344000096,
+      "tag": "0096_member_tidy",
+      "breakpoints": true
     }
   ]
 }

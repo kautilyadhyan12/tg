@@ -7,7 +7,7 @@
 // the one rule (`heldOnList` in `@app/shared`) on the gym's own day. Everybody else reads
 // as before.
 import type { Sql, TransactionSql } from "postgres";
-import { HELD_PAYMENT_WORDS, HELD_STATUS_WORDS, heldLeftOn, heldListWords, heldOnList, type HeldForList, type HeldOnList } from "@app/shared";
+import { HELD_PAYMENT_WORDS, HELD_STATUS_WORDS, heldLeft, heldListWords, heldOnList, type HeldForList, type HeldOnList } from "@app/shared";
 import { inUseForList, overForList, packLastClassDays } from "./heldRepo.js";
 import { listBillFacts } from "./billsSql.js";
 
@@ -36,13 +36,25 @@ export async function heldOnListOf(
   return await sql.begin("isolation level repeatable read read only", (tx) => bothReads(tx, gymId, today, entryIds, null));
 }
 
-/** For Reports (21c-ii; spec Part 3 §16.9.4): each current record the list reads as "Ended"
- *  or "Cancelled", with the day they stopped being a member (`heldLeftOn`). Read inside the
- *  caller's snapshot, with the same reads and the same rule as the list's own rows. */
-export async function leftOnOf(tx: TransactionSql, gymId: string, today: string): Promise<Map<string, string>> {
-  const left = new Map<string, string>();
-  await bothReads(tx, gymId, today, null, left);
-  return left;
+/** The day somebody stopped being a member, and the membership it is the day of. */
+export interface LeftWith {
+  on: string;
+  heldId: string;
+}
+
+/** The list's rows, and with them each record it reads as "Ended" or "Cancelled" with the
+ *  day they stopped being a member (`heldLeft`; 21c-ii, spec Part 3 §16.9.4). Read inside
+ *  the caller's snapshot, with the same reads and the same rule as the list's own rows.
+ *  `memberships/over.ts` is its one reader: it knows whose renewal is waiting. */
+export async function heldWithLeftOf(
+  tx: TransactionSql,
+  gymId: string,
+  today: string,
+  entryIds: readonly string[] | null,
+): Promise<{ held: Map<string, HeldShown>; left: Map<string, LeftWith> }> {
+  const left = new Map<string, LeftWith>();
+  const held = await bothReads(tx, gymId, today, entryIds, left);
+  return { held, left };
 }
 
 /** The memberships stored in use say most people's answer by themselves. The second read is
@@ -59,7 +71,7 @@ async function bothReads(
   today: string,
   entryIds: readonly string[] | null,
   /** Filled with the day each person the list reads as over left on, where asked. */
-  left: Map<string, string> | null,
+  left: Map<string, LeftWith> | null,
 ): Promise<Map<string, HeldShown>> {
   const bills = await listBillFacts(sql, gymId, today, entryIds);
   const owed = bills.owedSince;
@@ -91,8 +103,8 @@ async function bothReads(
   const lastClass = await packLastClassDays(sql, gymId, usedUp);
   for (const person of over) {
     const held = person.held.map((m) => ({ ...m, usedUpOn: lastClass.get(m.id) ?? null }));
-    const day = heldLeftOn({ held, listedUnheld: person.listedUnheld, today });
-    if (day !== null) left.set(person.entryId, day);
+    const gone = heldLeft({ held, listedUnheld: person.listedUnheld, today });
+    if (gone !== null) left.set(person.entryId, gone);
   }
   return out;
 }
