@@ -4730,14 +4730,19 @@ summary email: new, left, at risk, visits against last week, money overdue.
   holds `members.read` (`GET /v1/orgs/:gymId/at-risk`). Overview says how many there are,
   with a button to it, and says nothing while there is nobody.
 - **The rule** is `atRiskOf` (`packages/shared/src/atRisk.ts`), pure, a person at a time.
-  Somebody is at risk when their last check-in, by ANY means (the desk's scan, staff's
-  Check in, a visit staff added later, their own tap), is the gym's number of days back or
-  more (7 · 10 · 14 · 21 · 30; 14 to start) and no more than 90; they came in at least the
-  gym's number (1 to 4; 2 to start) of **the four weeks that ended on that last visit**
-  (the 28 days up to it, in sevens), so nobody leaves the list only because days pass; and
-  the gym checked somebody in on at least half of its number of days since (rounded up),
-  so a gym that was shut, or stopped using check-in, names nobody. A visit dated after
-  today is a visit. Anything unreadable is no decision.
+  **A day somebody came** is a check-in by ANY means (the desk's scan, staff's Check in,
+  a visit staff added later, their own tap) or a day staff marked them as there without
+  one: a class place marked Came, a personal training session marked attended (round one,
+  H3; a no-show, a booking and a cancelled place are not). Somebody is at risk when the
+  last day they came is the gym's number of days back or more (7 · 10 · 14 · 21 · 30; 14
+  to start) and no more than 90; they came in at least the gym's number (1 to 4; 2 to
+  start) of **the four weeks that ended on that day** (the 28 days up to it, in sevens),
+  so nobody leaves the list only because days pass; and **the gym went on recording who
+  came** since (`atRiskGymKeptOn`): the days anybody came since, a week, are at least half
+  of the days a week in the four weeks before. That is the gym's OWN rhythm, never the
+  calendar (round one, H1): a gym open Monday, Wednesday and Friday, or at weekends only,
+  is in use; a gym that was shut, or stopped recording, names nobody for that time. A
+  visit dated after today is a visit. Anything unreadable is no decision.
 - **Who is read**: a record on the gym's list, with the visits that name it and those of
   the app accounts that hold it; and somebody in the app with no record. **Never listed**:
   a past member, somebody removed from the app with no record, the owner and the gym's
@@ -4759,13 +4764,21 @@ summary email: new, left, at risk, visits against last week, money overdue.
   kept as one (`gym_group_messages.one_person`, migration `0097`): the member reads them in
   their Inbox for 30 days, Sent messages lists them, and they are not one of the day's
   three messages to groups. They are not sent to somebody who switched the gym's messages
-  off (a ready-made line still is). It is offered only where ONE live app account holds the record. Somebody
-  with no app, or a record two accounts share, reads why, with a button that opens their
-  own page, where their phone and email are.
+  off (a ready-made line still is), **nor to anybody the list does not name at that
+  moment** (`member_not_at_risk`: this is no second way to write to everybody; the
+  ready-made line keeps its older reach). A box's key is that box's: pressed twice it sends
+  once and answers when it went, and for another person it is refused
+  (`message_key_used`). A message is offered only where ONE live app account holds the
+  record. Somebody with no app, or a record more than one account uses, reads why, with a
+  button that opens their own page, where their phone and email are. Each limit that counts
+  the gym's address is asked after the staff check, so a refused ask leaves it alone.
 - **A gym that uses only part of the app**: with no check-in ever, or check-in begun less
   than its number of days ago, the page says so, with a button to Attendance and no list;
-  with hardly any check-in lately it says so above the list. Never "Nobody has stopped
-  coming" from a gym that checks nobody in.
+  with far fewer days of check-ins lately than is usual THERE it says so, in days
+  ("People were checked in on only 2 of the last 14 days, far fewer than is usual at
+  {gym}."), above the list, or alone when nobody is listed. Never "Nobody has stopped
+  coming" from a gym that checks nobody in; where it is said, it is that sentence and no
+  more. The page's words say "come in", and its last line says what coming in is.
 - **Left as it was**: the older list of three quiet days that Overview's answer still
   carries (`getGymSlippingAway`); no screen draws it.
 
