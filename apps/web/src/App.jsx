@@ -56,6 +56,7 @@ import ConsoleUpdates  from './pages/console/Updates';
 import ConsoleEvents   from './pages/console/Events';
 import ConsoleChallenges from './pages/console/Challenges';
 import ConsoleReports  from './pages/console/Reports';
+import ConsoleAtRisk   from './pages/console/AtRisk';
 import ConsoleSettings from './pages/console/Settings';
 import ConsoleMore     from './pages/console/More';
 
@@ -338,6 +339,13 @@ export default function App() {
             <Route path="/console/:orgSlug/reports" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleReports /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* AT RISK (20d-i): who has stopped coming. The nav draws it for `members.read`; the
+                server is the enforcement. */}
+            <Route path="/console/:orgSlug/at-risk" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleAtRisk /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={

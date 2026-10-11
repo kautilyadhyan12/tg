@@ -8,6 +8,7 @@ import { canManageChallenges } from './challengesView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManagePosts } from '../../components/gym/postsView';
 import { canReadReports } from './reportsView';
+import { canSeeAtRisk } from './atRiskView';
 
 /** Settings holds sections gated on two permissions (the gym's details: `org.manage`;
  *  Booking rules: `schedule.manage`), so its page is drawn for whoever holds either.
@@ -48,6 +49,9 @@ export function consoleMenu(orgSlug, privileges, orgType) {
       label: 'Attendance',
       phone: 'tab',
     },
+    // Who has stopped coming (20d-i): looked at every week, so a line of its own, under
+    // the check-ins it is worked out from.
+    canSeeAtRisk(privileges) && { key: 'at-risk', to: `${base}/at-risk`, end: false, label: 'At risk', phone: 'more' },
     canManageSchedule(privileges) && { key: 'classes', to: `${base}/classes`, end: false, label: 'Classes', phone: 'tab' },
     // Every member of staff: their own hours and sessions, or everybody's for whoever
     // runs the timetable.
