@@ -7,7 +7,11 @@
 // answers nobody. Then the big gym's five staff at one moment, and all 20 gyms at once.
 //
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_b'
-//   corepack pnpm --filter api exec tsx tools/measure-reports-cost.ts [--people=2000]
+//   corepack pnpm --filter api exec tsx tools/measure-reports-cost.ts [--people=2000] [--memberships]
+//
+// --memberships (21c-ii): everybody on a list holds a membership given in the app, and for
+// one in three it is over, on a day spread across the last five months, so the report asks
+// the Members list's rule about every one of them and counts a third as left.
 //
 // LOCAL DATABASES ONLY: it writes gyms, their lists and leads, and removes them.
 import { createHash, randomUUID } from "node:crypto";
@@ -30,6 +34,9 @@ const LEADS = 1000;
 const OTHER_GYMS = 19;
 const OTHER_PEOPLE = 200;
 const RUNS = 20;
+const MEMBERSHIPS = process.argv.includes("--memberships");
+/** Of the people on a list, how many hold a membership that is over. */
+const overOf = (people: number): number => (MEMBERSHIPS ? Math.floor(people / 3) : 0);
 const PREFIX = "reports-cost-";
 if (!Number.isInteger(PEOPLE) || PEOPLE < 1) {
   console.error("measure-reports-cost: --people= takes a whole number, 1 or more");
@@ -39,6 +46,8 @@ if (!Number.isInteger(PEOPLE) || PEOPLE < 1) {
 async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
   await sql`DELETE FROM gym_leads WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_staff WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
@@ -83,7 +92,36 @@ async function makeGym(people: number, formerEach: number, leads: number): Promi
     status: i % 4 === 0 ? "joined" : "new",
   }));
   for (let i = 0; i < leadRows.length; i += 1000) await sql`INSERT INTO gym_leads ${sql(leadRows.slice(i, i + 1000))}`;
+  if (MEMBERSHIPS) await giveMemberships(gymId);
   return { gymId, owner };
+}
+
+/** Two in three of the people on the list hold a monthly membership that is paid and
+ *  running; the third held one month that ended between 10 and 160 days ago. */
+async function giveMemberships(gymId: string): Promise<void> {
+  const gold = randomUUID();
+  const month = randomUUID();
+  await sql`
+    INSERT INTO gym_membership_types (id, gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
+    VALUES (${gold}, ${gymId}, 'Gold Monthly', 'recurring', 4500, 'GBP', 1, 'month', 'all_classes'),
+           (${month}, ${gymId}, '1 Month', 'one_time', 4999, 'GBP', 1, 'month', 'all_classes')`;
+  await sql`
+    INSERT INTO gym_held_memberships
+      (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews)
+    SELECT ${gymId}, p.id,
+           CASE WHEN p.n % 3 = 0 THEN ${month}::uuid ELSE ${gold}::uuid END, gen_random_uuid(),
+           CASE WHEN p.n % 3 = 0 THEN 'one_time' ELSE 'recurring' END,
+           CASE WHEN p.n % 3 = 0 THEN 4999 ELSE 4500 END, 'GBP', 1, 'month',
+           CASE WHEN p.n % 3 = 0 THEN current_date - 42 - (p.n % 150)::int ELSE current_date - 10 END,
+           'active', 1, p.n % 3 <> 0
+    FROM (SELECT e.id, row_number() OVER (ORDER BY e.id) AS n
+          FROM gym_member_list_entries e WHERE e.gym_id = ${gymId} AND e.former_at IS NULL) p`;
+  // The gym's own file names that membership for the people whose one is over, with no later
+  // date, so the read of who is waiting to be renewed has every one of them to look at.
+  await sql`
+    UPDATE gym_member_list_entries e SET membership_type = '1 Month'
+    WHERE e.gym_id = ${gymId} AND EXISTS (
+      SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.kind = 'one_time')`;
 }
 
 await cleanup();
@@ -94,11 +132,13 @@ try {
   for (let i = 0; i < OTHER_GYMS; i++) others.push(await makeGym(OTHER_PEOPLE, FORMER_EACH, 100));
   await sql`ANALYZE gym_member_list_entries`;
   await sql`ANALYZE gym_leads`;
+  await sql`ANALYZE gym_held_memberships`;
 
   const deps: ReportsDeps = { sql, now: () => now };
-  const read = async (gym: { gymId: string; owner: string }, expectActive: number): Promise<number> => {
+  const read = async (gym: { gymId: string; owner: string }, people: number): Promise<number> => {
+    const expectActive = people - overOf(people);
     const { report } = await getMembersReport(deps, gym.gymId, await requireReportsReader(deps, gym.owner, gym.gymId));
-    if (report.activeNow !== expectActive) throw new Error(`expected ${String(expectActive)} on the list, read ${String(report.activeNow)}`);
+    if (report.activeNow !== expectActive) throw new Error(`expected ${String(expectActive)} members now, read ${String(report.activeNow)}`);
     return JSON.stringify(report).length;
   };
 
@@ -134,6 +174,7 @@ try {
   console.log(
     `one gym of ${String(PEOPLE)} on its list, ${String(PEOPLE * FORMER_EACH)} former records and ${String(LEADS)} leads, beside ${String(OTHER_GYMS)} gyms of ${String(OTHER_PEOPLE)}`,
   );
+  if (MEMBERSHIPS) console.log(`everybody holds a membership; for ${String(overOf(PEOPLE))} of the ${String(PEOPLE)} it is over, and they are counted as left`);
   console.log(`  the answer is ${String(await read(big, PEOPLE))} characters`);
   await measure("the big gym's report, one read", () => read(big, PEOPLE));
   await measure("its 5 staff at the same moment", () => Promise.all(Array.from({ length: 5 }, () => read(big, PEOPLE))));

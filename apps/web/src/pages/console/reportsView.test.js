@@ -99,9 +99,9 @@ describe('the tiles', () => {
     const r = report({ everLeft: false, stay: { leavers: 0, totalDays: 0 }, months: facts().months.map((m) => ({ ...m, left: 0, leftOfStart: 0 })) });
     // Each box in its own words: what the figure is, and why there is none.
     const lines = {
-      left: 'Nobody has been removed from your member list yet.',
-      churn: 'Churn is the share of your members who leave in a month. Nobody has been removed from your list yet, so there is none to show.',
-      retention: 'Retention is the share of your members you keep each month. It shows once somebody has been removed from your list, so the app knows you record who leaves.',
+      left: 'Nobody has left yet: nobody has been removed from your member list, and no membership has ended or been cancelled.',
+      churn: 'Churn is the share of your members who leave in a month. Nobody has left yet, so there is none to show.',
+      retention: 'Retention is the share of your members you keep each month. It shows once somebody has left, so the app knows you record who leaves.',
       stay: 'Average stay is how long your members had been with you when they left. Nobody has left yet.',
     };
     for (const [key, line] of Object.entries(lines)) {
@@ -135,18 +135,37 @@ describe('the tiles', () => {
   it("use a studio's own word for its people", () => {
     const r = report();
     expect(tile(r, 'active', STUDIO).label).toBe('Clients now');
-    expect(listLine(r, STUDIO)).toBe('These figures come from your client list. Someone was last added or removed on 3 Oct 2026.');
+    expect(listLine(r, STUDIO)).toBe('These figures come from your client list and the memberships you give in the app. Someone was last added or removed on 3 Oct 2026.');
     expect(nobodyRemovedNote(r, STUDIO)).toBeNull();
     // Every sentence in place of a figure, too.
     const none = report({ everLeft: false, stay: { leavers: 0, totalDays: 0 } });
-    expect(tile(none, 'left', STUDIO).line).toBe('Nobody has been removed from your client list yet.');
+    expect(tile(none, 'left', STUDIO).line).toBe('Nobody has left yet: nobody has been removed from your client list, and no membership has ended or been cancelled.');
     expect(tile(none, 'stay', STUDIO).line).toBe('Average stay is how long your clients had been with you when they left. Nobody has left yet.');
     expect(tile(report({ firstListedOn: '2026-08-15' }), 'churn', STUDIO).line).toContain('3 full months of your client list;');
     const empty = report({ months: MONTHS.map((month) => ({ month, activeAtStart: 0, joined: 0, left: 0, leftOfStart: 0 })) });
     expect(tile(empty, 'churn', STUDIO).line).toBe('You had no clients at the start of the last 3 full months, so nobody could leave.');
     for (const key of ['active', 'new', 'left', 'churn', 'retention', 'stay']) {
-      expect(`${tile(r, key, STUDIO).how} ${tile(none, key, STUDIO).line ?? ''}`, key).not.toMatch(/member/i);
+      // "Membership" is the one name for what a studio sells too; its people are never "members".
+      expect(`${tile(r, key, STUDIO).how} ${tile(none, key, STUDIO).line ?? ''}`, key).not.toMatch(/\bmembers?\b/i);
     }
+  });
+
+  it('say that a membership that ended counts as left, wherever a figure counts who left (21c-ii)', () => {
+    const r = report();
+    expect(tile(r, 'active').how).toBe(
+      'Everyone on your member list today, except members whose membership has ended or been cancelled and who have no new one, unless your member list shows a later end date for them. A status from your own file, such as Expired, is not counted. Members you have removed are not counted.',
+    );
+    expect(tile(r, 'left').how).toBe(
+      'Members removed from your member list in October 2026, and members whose membership ended or was cancelled in October 2026 and who have no new one. On your member list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a member the whole time. Records deleted for good are not counted.',
+    );
+    expect(tile(r, 'stay').how).toContain('from their join date to the day they were removed or their membership ended.');
+    // Somebody Ended is still on the list and is not counted, so churn does not say "on your list".
+    expect(tile(r, 'churn').how).toContain('Of your members at the start of July, August and September, the share who left');
+    expect(tile(r, 'left', STUDIO).how).toContain('On your client list, their status is Ended or Cancelled.');
+    const none = report({ everLeft: false, stay: { leavers: 0, totalDays: 0 } });
+    expect(nobodyRemovedNote(none, GYM)).toBe(
+      'Left, churn, retention and average stay count members you remove from your list or mark as left in an import, and members whose membership given in the app ends or is cancelled. A status from your own file, such as Expired, is not counted. If you keep your list in other software, import it here each month to keep these true.',
+    );
   });
 });
 

@@ -26,9 +26,10 @@ export interface ReportMonthCounts {
   activeAtStart: number;
   /** Started in the month. */
   joined: number;
-  /** Came off the list in the month. */
+  /** Left in the month: came off the list, or their last membership here ended or was
+   *  cancelled with no new one (21c-ii). */
   left: number;
-  /** Came off in the month having been on the list when it began. */
+  /** Left in the month having been a member when it began. */
   leftOfStart: number;
 }
 
@@ -41,11 +42,12 @@ export interface MembersReportFacts {
   /** The gym's day somebody was last added or taken off. */
   listChangedOn: string | null;
   activeNow: number;
-  /** Whether anybody has ever come off the list and is still kept as a former record. */
+  /** Whether anybody has ever left: come off the list and still kept as a former record,
+   *  or still on it with every membership given here over. */
   everLeft: boolean;
   /** `REPORT_MONTHS` of them, oldest first, the month in progress last. */
   months: readonly ReportMonthCounts[];
-  /** Those who came off in the months shown: how many, and their days on the list together. */
+  /** Those who left in the months shown: how many, and their days as a member together. */
   stay: { leavers: number; totalDays: number };
   leads: readonly { source: LeadSource; leads: number; joined: number }[];
 }
@@ -72,7 +74,7 @@ export const membersReportSchema = z
     today: daySchema,
     listChangedOn: daySchema.nullable(),
     activeNow: countSchema,
-    /** False while nobody has ever come off the list: Left and what is worked out from it
+    /** False while nobody has ever left: Left and what is worked out from it
      *  are then said in words, never as a zero. */
     everLeft: z.boolean(),
     /** Full months the list has been kept, and whether that is enough for churn. */
