@@ -386,3 +386,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **21c-ii, as it stood when it was built (merged 2026-10-11, PR #223):**
 
      - 21c-ii. [ ] **Reports counts a membership that ended as left** (§16.9.4): whoever the Members list reads as Ended or Cancelled counts as left from that day, by itself, nobody removed; a file's own status word is never read. Risky. After 21c-i.
+
+**20b-iii, as it stood when it was built (merged 2026-10-11, PR #224):**
+
+     - 20b-iii. [ ] **Class reminder** (RULINGS 2026-10-08): so long before a booked class or session, the time the gym's to change.
