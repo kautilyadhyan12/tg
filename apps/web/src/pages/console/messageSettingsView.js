@@ -235,7 +235,7 @@ export function messageSettingsSummary(kept) {
 /** Said above the messages: what these are, where they go, and what a member controls. */
 export function messageSettingsNote(orgType) {
   const words = orgWords(orgType);
-  return `The app sends these to your ${words.people} by itself. Each lands in their Inbox in the app. Nobody gets more than one a day, apart from a class reminder, and none is sent at night. A ${words.person} can switch any of them off for themselves, except Welcome and Payment overdue. Where you see ${NAME_PLACE} below, each ${words.person} reads their own first name: "Happy birthday, Priya!"`;
+  return `The app sends these to your ${words.people} by itself. Each lands in their Inbox in the app. Nobody gets more than one a day, apart from a class reminder, and none is sent at night. A ${words.person} can switch them off for themselves, except Welcome and Payment overdue. Where you see ${NAME_PLACE} below, each ${words.person} reads their own first name: "Happy birthday, Priya!"`;
 }
 
 /** Said on the Sent messages page, which lists only what staff typed: the app sends these

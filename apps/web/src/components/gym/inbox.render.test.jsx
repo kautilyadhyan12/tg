@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-const svc = { read: vi.fn(), markRead: vi.fn(), setGroupMessages: vi.fn(), setKindSwitch: vi.fn() };
+const svc = { read: vi.fn(), markRead: vi.fn(), setSwitchGroup: vi.fn() };
 vi.mock('../../api/inboxApi', () => ({ inboxService: svc }));
 vi.mock('../../api/orgsApi', () => ({
   errorText: (err, fallback) => err?.response?.data?.message ?? fallback,
@@ -46,8 +46,7 @@ const rows = () => within(screen.getByRole('list', { name: 'Messages from Iron H
 beforeEach(() => {
   svc.read.mockReset();
   svc.markRead.mockReset();
-  svc.setGroupMessages.mockReset();
-  svc.setKindSwitch.mockReset();
+  svc.setSwitchGroup.mockReset();
 });
 afterEach(cleanup);
 
@@ -255,85 +254,19 @@ describe('Contact the gym, under the inbox', () => {
   });
 });
 
-// THE MEMBER'S OWN SWITCH for the messages a gym sends to many people at once (ROADMAP 20f-i).
-describe("the switch for a gym's messages to groups", () => {
-  const theSwitch = () => screen.getByRole('switch', { name: /News and notices from Iron House/ });
-
-  it('is on until the member switches it off, says what each means, and is set by the server answer', async () => {
-    svc.read.mockResolvedValue(inboxOf([message('m1', 'Closed on Monday.', { kind: 'group' })], { groupMessages: true }));
-    svc.markRead.mockResolvedValue(0);
-    render(<Page />);
-    await openSwitches();
-    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('true'));
-    expect(theSwitch().textContent).toBe('News and notices from Iron HouseMessages the gym sends to many people at once, like a closed day or a new class.');
-    // A message to a group is a row like any other, and its line breaks are drawn.
-    expect(rows()).toEqual(['Closed on Monday.New · 2 hours ago']);
-    expect(screen.getByText('Closed on Monday.').style.whiteSpace).toBe('pre-line');
-
-    svc.setGroupMessages.mockResolvedValue(false);
-    fireEvent.click(theSwitch());
-    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('false'));
-    expect(svc.setGroupMessages).toHaveBeenCalledWith('g1', false);
-    expect(theSwitch().textContent).toBe("News and notices from Iron HouseOff. You won't get these. Messages about your own membership still come.");
-    // What was already sent stays.
-    expect(rows()).toEqual(['Closed on Monday.New · 2 hours ago']);
-
-    svc.setGroupMessages.mockResolvedValue(true);
-    fireEvent.click(theSwitch());
-    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('true'));
-    expect(svc.setGroupMessages).toHaveBeenLastCalledWith('g1', true);
-  });
-
-  it('starts off for somebody who switched it off, and on from a server too old to say', async () => {
-    svc.read.mockResolvedValue(inboxOf([], { groupMessages: false }));
-    svc.markRead.mockResolvedValue(0);
-    render(<Page />);
-    await openSwitches();
-    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('false'));
-    cleanup();
-    svc.read.mockResolvedValue(inboxOf([]));
-    render(<Page />);
-    await openSwitches();
-    await waitFor(() => expect(theSwitch().getAttribute('aria-checked')).toBe('true'));
-  });
-
-  it('a change that fails says so and leaves the switch as it was; a second press while one is asked asks once', async () => {
-    svc.read.mockResolvedValue(inboxOf([], { groupMessages: true }));
-    svc.markRead.mockResolvedValue(0);
-    render(<Page />);
-    await openSwitches();
-    await waitFor(() => expect(theSwitch()).toBeTruthy());
-    let fail;
-    svc.setGroupMessages.mockReturnValue(new Promise((_resolve, reject) => (fail = reject)));
-    fireEvent.click(theSwitch());
-    fireEvent.click(theSwitch());
-    expect(svc.setGroupMessages).toHaveBeenCalledTimes(1);
-    fail(new Error('offline'));
-    expect((await screen.findByRole('alert')).textContent).toBe("We couldn't change that. Please try again.");
-    expect(theSwitch().getAttribute('aria-checked')).toBe('true');
-  });
-
-  it('is in the words of a studio, and is not drawn on a paused inbox', async () => {
-    svc.read.mockResolvedValue(inboxOf([], { groupMessages: true }));
-    svc.markRead.mockResolvedValue(0);
-    render(<Page gym={{ ...GYM, orgType: 'studio' }} />);
-    await openSwitches();
-    await waitFor(() => expect(theSwitch().textContent).toContain('Messages the studio sends to many people at once'));
-    cleanup();
-    svc.read.mockResolvedValue(inboxOf([], { status: 'paused' }));
-    render(<Page />);
-    await screen.findByText(/Iron House/);
-    expect(screen.queryByRole('switch')).toBeNull();
-  });
-});
-
-// THE MEMBER'S OWN SWITCHES for the automatic messages (ROADMAP 20b-i).
-describe("the switches for a gym's automatic messages", () => {
+// THE MEMBER'S TWO SWITCHES for one gym (ROADMAP 20f-i, 20b-i; two since Kd's click-through
+// of 20b-iii): what is about their own membership and bookings, and the gym's news and
+// greetings.
+describe("the member's two switches", () => {
   const all = () => screen.getAllByRole('switch').map((s) => [s.textContent, s.getAttribute('aria-checked')]);
-  const one = (name) => screen.getByRole('switch', { name });
+  const membership = () => screen.getByRole('switch', { name: /^About your membership and bookings/ });
+  const news = () => screen.getByRole('switch', { name: /^News and greetings from Iron House/ });
+  const MEMBERSHIP_ON = 'About your membership and bookingsA message before a trial or a membership of yours ends, and a reminder before a class or a personal training session you booked.';
+  const NEWS_ON =
+    "News and greetings from Iron HouseMessages the gym sends to many people at once, like a closed day or a new class, and its greetings: how your trial is going, your birthday, a number of visits you reach, and a note if you haven't been in for a while.";
 
-  it('shut behind one button until it is pressed; then one for each kind a member can switch off, with the news switch, and none for Welcome', async () => {
-    svc.read.mockResolvedValue(inboxOf([], { off: ['miss_you'] }));
+  it('shut behind one button until it is pressed; then two, each saying what is in it, and none for Welcome or a payment', async () => {
+    svc.read.mockResolvedValue(inboxOf([message('m1', 'Closed on Monday.', { kind: 'group' })], { groupMessages: true }));
     svc.markRead.mockResolvedValue(0);
     render(<Page />);
     const button = await screen.findByRole('button', { name: 'Choose what Iron House can send you' });
@@ -342,48 +275,99 @@ describe("the switches for a gym's automatic messages", () => {
     fireEvent.click(button);
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(all()).toEqual([
-      ['News and notices from Iron HouseMessages the gym sends to many people at once, like a closed day or a new class.', 'true'],
-      ['Trial check-inA message a few days into a trial, asking how it is going.', 'true'],
-      ['Trial endingA message shortly before a trial of yours ends.', 'true'],
-      ['Membership endingA message shortly before a membership of yours ends.', 'true'],
-      ['Class reminderA message before a class or a personal training session you booked.', 'true'],
-      ['BirthdayA message from Iron House on your birthday.', 'true'],
-      ['Visit milestoneA message when you reach a number of visits, like your 50th.', 'true'],
-      ["We miss youOff. Iron House won't send you this.", 'false'],
+      [MEMBERSHIP_ON, 'true'],
+      [NEWS_ON, 'true'],
     ]);
     expect(screen.queryByRole('switch', { name: /Welcome/ })).toBeNull();
-    // A payment notice is the gym's to switch off, never the member's.
-    expect(screen.queryByRole('switch', { name: /Payment/ })).toBeNull();
+    // A message to a group is a row like any other, and its line breaks are drawn.
+    expect(rows()).toEqual(['Closed on Monday.New · 2 hours ago']);
+    expect(screen.getByText('Closed on Monday.').style.whiteSpace).toBe('pre-line');
   });
 
-  it('a press sends that kind and the new setting, and the switches follow the server answer', async () => {
+  it('a press sends the whole group and the new setting, and both switches follow the server answer', async () => {
+    svc.read.mockResolvedValue(inboxOf([message('m1', 'Closed on Monday.', { kind: 'group' })]));
+    svc.markRead.mockResolvedValue(0);
+    render(<Page />);
+    await openSwitches();
+    await waitFor(() => expect(membership().getAttribute('aria-checked')).toBe('true'));
+
+    svc.setSwitchGroup.mockResolvedValue({ off: ['trial_ending', 'membership_ending', 'class_reminder'], groupMessages: true });
+    fireEvent.click(membership());
+    await waitFor(() => expect(membership().getAttribute('aria-checked')).toBe('false'));
+    expect(svc.setSwitchGroup).toHaveBeenCalledWith('g1', 'membership', false);
+    expect(membership().textContent).toBe("About your membership and bookingsOff. Iron House won't send you these. A message about a payment you owe is still sent.");
+    expect(news().getAttribute('aria-checked')).toBe('true');
+
+    svc.setSwitchGroup.mockResolvedValue({ off: ['trial_ending', 'membership_ending', 'class_reminder', 'trial_check_in', 'birthday', 'milestone', 'miss_you'], groupMessages: false });
+    fireEvent.click(news());
+    await waitFor(() => expect(news().getAttribute('aria-checked')).toBe('false'));
+    expect(svc.setSwitchGroup).toHaveBeenLastCalledWith('g1', 'news', false);
+    expect(news().textContent).toBe("News and greetings from Iron HouseOff. You won't get these. Messages about your own membership and bookings still come if that switch is on.");
+    // What was already sent stays.
+    expect(rows()).toEqual(['Closed on Monday.New · 2 hours ago']);
+
+    svc.setSwitchGroup.mockResolvedValue({ off: ['trial_check_in', 'birthday', 'milestone', 'miss_you'], groupMessages: false });
+    fireEvent.click(membership());
+    await waitFor(() => expect(membership().getAttribute('aria-checked')).toBe('true'));
+    expect(svc.setSwitchGroup).toHaveBeenLastCalledWith('g1', 'membership', true);
+    expect(news().getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('a switch is on only while everything in it is: one kind off, or the news off, reads Off, and a press switches the whole group on', async () => {
+    const cases = [
+      [{ off: ['class_reminder'] }, 'false', 'true'],
+      [{ off: ['birthday'] }, 'true', 'false'],
+      [{ groupMessages: false }, 'true', 'false'],
+      [{ off: ['trial_ending', 'miss_you'], groupMessages: false }, 'false', 'false'],
+      // A server too old to say anything: both on.
+      [{}, 'true', 'true'],
+    ];
+    for (const [over, wantMembership, wantNews] of cases) {
+      svc.read.mockResolvedValue(inboxOf([], over));
+      svc.markRead.mockResolvedValue(0);
+      render(<Page />);
+      await openSwitches();
+      await waitFor(() => expect([membership().getAttribute('aria-checked'), news().getAttribute('aria-checked')], JSON.stringify(over)).toEqual([wantMembership, wantNews]));
+      cleanup();
+    }
+    svc.read.mockResolvedValue(inboxOf([], { off: ['birthday'] }));
+    render(<Page />);
+    await openSwitches();
+    await waitFor(() => expect(news().getAttribute('aria-checked')).toBe('false'));
+    svc.setSwitchGroup.mockResolvedValue({ off: [], groupMessages: true });
+    fireEvent.click(news());
+    await waitFor(() => expect(news().getAttribute('aria-checked')).toBe('true'));
+    expect(svc.setSwitchGroup).toHaveBeenCalledWith('g1', 'news', true);
+  });
+
+  it('a change that fails says so under its own switch and leaves it as it was; a second press while one is asked asks once', async () => {
     svc.read.mockResolvedValue(inboxOf([]));
     svc.markRead.mockResolvedValue(0);
     render(<Page />);
     await openSwitches();
-    await waitFor(() => expect(one(/^Birthday/).getAttribute('aria-checked')).toBe('true'));
-    svc.setKindSwitch.mockResolvedValue(['birthday']);
-    fireEvent.click(one(/^Birthday/));
-    await waitFor(() => expect(one(/^Birthday/).getAttribute('aria-checked')).toBe('false'));
-    expect(svc.setKindSwitch).toHaveBeenCalledWith('g1', 'birthday', false);
-    expect(one(/^Visit milestone/).getAttribute('aria-checked')).toBe('true');
-    expect(svc.setGroupMessages).not.toHaveBeenCalled();
-    svc.setKindSwitch.mockResolvedValue([]);
-    fireEvent.click(one(/^Birthday/));
-    await waitFor(() => expect(one(/^Birthday/).getAttribute('aria-checked')).toBe('true'));
-    expect(svc.setKindSwitch).toHaveBeenLastCalledWith('g1', 'birthday', true);
-  });
-
-  it('a change that fails says so under its own switch and leaves it as it was', async () => {
-    svc.read.mockResolvedValue(inboxOf([]));
-    svc.markRead.mockResolvedValue(0);
-    render(<Page />);
-    await openSwitches();
-    await waitFor(() => expect(one(/We miss you/)).toBeTruthy());
-    svc.setKindSwitch.mockRejectedValue(new Error('offline'));
-    fireEvent.click(one(/We miss you/));
+    await waitFor(() => expect(news()).toBeTruthy());
+    let fail;
+    svc.setSwitchGroup.mockReturnValue(new Promise((_resolve, reject) => (fail = reject)));
+    fireEvent.click(news());
+    fireEvent.click(news());
+    expect(svc.setSwitchGroup).toHaveBeenCalledTimes(1);
+    fail(new Error('offline'));
     expect((await screen.findByRole('alert')).textContent).toBe("We couldn't change that. Please try again.");
-    expect(one(/We miss you/).getAttribute('aria-checked')).toBe('true');
+    expect(news().getAttribute('aria-checked')).toBe('true');
+    expect(membership().getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('is in the words of a studio, and is not drawn on a paused inbox', async () => {
+    svc.read.mockResolvedValue(inboxOf([], { groupMessages: true }));
+    svc.markRead.mockResolvedValue(0);
+    render(<Page gym={{ ...GYM, orgType: 'studio' }} />);
+    await openSwitches();
+    await waitFor(() => expect(news().textContent).toContain('Messages the studio sends to many people at once'));
+    cleanup();
+    svc.read.mockResolvedValue(inboxOf([], { status: 'paused' }));
+    render(<Page />);
+    await screen.findByText(/Iron House/);
+    expect(screen.queryByRole('switch')).toBeNull();
   });
 
   it("another gym's page starts from its own switches", async () => {
@@ -391,10 +375,10 @@ describe("the switches for a gym's automatic messages", () => {
     svc.markRead.mockResolvedValue(0);
     const { rerender } = render(<Page />);
     await openSwitches();
-    await waitFor(() => expect(one(/^Birthday/).getAttribute('aria-checked')).toBe('false'));
+    await waitFor(() => expect(news().getAttribute('aria-checked')).toBe('false'));
     svc.read.mockResolvedValue(inboxOf([], { gymId: 'g2', gymName: 'Steel Yard', off: [] }));
     rerender(<Page gym={{ id: 'g2', name: 'Steel Yard', latestCheer: null, latestNudge: null }} />);
     await openSwitches('Steel Yard');
-    expect(one(/^Birthday/).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('switch', { name: /^News and greetings from Steel Yard/ }).getAttribute('aria-checked')).toBe('true');
   });
 });

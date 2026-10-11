@@ -457,7 +457,7 @@ function fixedWords(send: GymMessageOccasion, gym: string, displayName: string |
   if (send.kind === "trial_ending" || send.kind === "membership_ending") {
     const day = dayInWords(send.endsOn ?? null);
     if (day === null) return null;
-    if (send.kind === "trial_ending") return hi(`your trial at ${gym} ends on ${day}. Want to keep coming? Talk to us about a membership.`);
+    if (send.kind === "trial_ending") return hi(`your trial at ${gym} ends on ${day}. If you'd like to keep coming, we'd be happy to help you choose a membership.`);
     // A pack may run out of classes before its last day, so its day is the last it can be used.
     if (send.what === "pack") return hi(`your class pack at ${gym} can be used until ${day}. Just let us know if you'd like another one.`);
     // Somebody who asked to stop is told the day, and not asked to stay.

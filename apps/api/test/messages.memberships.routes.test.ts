@@ -425,7 +425,7 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
       expect((await run([gym])).sent).toBe(2);
       expect(await got(gym)).toEqual([`${amy.userId} trial_check_in`, `${ben.userId} trial_ending`].sort());
       expect(await said(gym, amy, "trial_check_in")).toBe("Hi Amy, how's your trial at Trial Gym going? If you need anything, just let us know.");
-      expect(await said(gym, ben, "trial_ending")).toBe(`Hi Ben, your trial at Trial Gym ends on ${String(dayInWords(day(1)))}. Want to keep coming? Talk to us about a membership.`);
+      expect(await said(gym, ben, "trial_ending")).toBe(`Hi Ben, your trial at Trial Gym ends on ${String(dayInWords(day(1)))}. If you'd like to keep coming, we'd be happy to help you choose a membership.`);
       expect((await sentTo(gym)).map((r) => r.occasion).sort()).toEqual([`trial:${amyTrial}`, `trial:${benTrial}`].sort());
 
       // The next morning Fi is on day two; nobody is asked or told twice.

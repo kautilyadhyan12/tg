@@ -195,10 +195,28 @@ export type GymMessageSettingsResponse = z.infer<typeof gymMessageSettingsRespon
 /** How far back `checkIn` looks. */
 export const GYM_MESSAGE_CHECK_IN_DAYS = 30;
 
-/** A member's own switch for one kind at one gym. */
-export const gymMessageSwitchRequestSchema = z.object({ kind: gymMessageMemberSwitchKindSchema, on: z.boolean() }).strict();
+/** The two switches a member is shown (Kd, RULINGS 2026-10-11): what is about their own
+ *  membership and bookings, and the gym's news and greetings. Every kind a member can switch
+ *  off is in one of them; the gym's messages to many people at once go with `news`. */
+export const GYM_MESSAGE_MEMBER_SWITCH_GROUPS = {
+  membership: ["trial_ending", "membership_ending", "class_reminder"],
+  news: ["trial_check_in", "birthday", "milestone", "miss_you"],
+} as const satisfies Record<string, readonly GymMessageMemberSwitchKind[]>;
+export const gymMessageMemberSwitchGroupSchema = z.enum(["membership", "news"]);
+export type GymMessageMemberSwitchGroup = z.infer<typeof gymMessageMemberSwitchGroupSchema>;
+
+/** A member's own switch at one gym: for one kind, or for a whole group at once. */
+export const gymMessageSwitchRequestSchema = z.union([
+  z.object({ kind: gymMessageMemberSwitchKindSchema, on: z.boolean() }).strict(),
+  z.object({ group: gymMessageMemberSwitchGroupSchema, on: z.boolean() }).strict(),
+]);
 export type GymMessageSwitchRequest = z.infer<typeof gymMessageSwitchRequestSchema>;
-export const gymMessageSwitchResponseSchema = z.object({ off: z.array(gymMessageKindSchema).max(GYM_MESSAGE_KINDS.length) });
+export const gymMessageSwitchResponseSchema = z.object({
+  off: z.array(gymMessageKindSchema).max(GYM_MESSAGE_KINDS.length),
+  /** False once the gym's messages to many people at once are off for them. Not said by an
+   *  api older than the two groups. */
+  groupMessages: z.boolean().optional(),
+});
 export type GymMessageSwitchResponse = z.infer<typeof gymMessageSwitchResponseSchema>;
 
 // ── THE WORDS BOTH SCREENS USE, SO ONE KIND HAS ONE NAME ──

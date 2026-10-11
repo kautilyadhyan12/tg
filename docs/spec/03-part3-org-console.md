@@ -4491,8 +4491,8 @@ in this order: Welcome · Trial check-in · Trial ending · Membership ending ·
   membership began.
 - **The words** (`automaticMessage`; made friendlier at Kd's click-through, RULINGS
   2026-10-11): "Hi Maya, how's your trial at {gym} going? If you need anything, just let
-  us know." · "Hi Maya, your trial at {gym} ends on 14 October. Want to keep coming? Talk
-  to us about a membership." · "Hi Maya, your membership at {gym} ends on 14 October.
+  us know." · "Hi Maya, your trial at {gym} ends on 14 October. If you'd like to keep
+  coming, we'd be happy to help you choose a membership." (softened at 20b-iii's click-through: the first words read as an order) · "Hi Maya, your membership at {gym} ends on 14 October.
   We'd love to keep you with us. Just let us know if you'd like to renew." · "Hi Maya,
   your payment to {gym} is overdue. Please get in touch so we can sort it out." Without
   a first name each starts at "Your" or "How's". A class pack reads "your class pack at
@@ -4555,6 +4555,16 @@ member's own switch. Migration `0096`: the kind in the three lists of kinds, `ho
   on the row, with a button to Classes, or who can add one.
 - **A gym that fails** at its day's read still has its reminders sent, and the other way
   round; it is logged once.
+- **A member is shown two switches, not eight** (Kd's click-through, RULINGS 2026-10-11):
+  **About your membership and bookings** (Trial ending, Membership ending, Class reminder)
+  and **News and greetings from {gym}** (the messages to many people of 16.8, Trial
+  check-in, Birthday, Visit milestone, We miss you); each says in a sentence what is in it.
+  A switch is on only while everything in it is, and a press sets the whole group in one
+  statement (`PUT …/inbox/switches` with `group`: `membership` or `news`;
+  `GYM_MESSAGE_MEMBER_SWITCH_GROUPS`). The route still takes one `kind`, and the table still
+  keeps a row a kind. A payment notice has no switch, as before.
+- **Save in the gym's box stays in view** once something in it changed, and "Saved." is
+  said there (`c-save-stuck`).
 
 ### 16.3 Leads
 

@@ -29,6 +29,13 @@ export const inboxService = {
     readThrough(gymGroupMessagesSwitchResponseSchema, 'that switch', authApi.put(`${inboxPath(gymId)}/group-messages`, { on })).then(
       (data) => data.groupMessages,
     ),
+  /** One of the member's two switches (`membership` or `news`); answers every kind now off
+   *  and whether the gym's messages to many people still come. */
+  setSwitchGroup: (gymId, group, on) =>
+    readThrough(gymMessageSwitchResponseSchema, 'that switch', authApi.put(`${inboxPath(gymId)}/switches`, { group, on })).then((data) => ({
+      off: data.off,
+      groupMessages: data.groupMessages !== false,
+    })),
   /** The member's own switch for one kind of automatic message; answers every kind now off. */
   setKindSwitch: (gymId, kind, on) =>
     readThrough(gymMessageSwitchResponseSchema, 'that switch', authApi.put(`${inboxPath(gymId)}/switches`, { kind, on })).then((data) => data.off),

@@ -362,7 +362,7 @@ describe("the words and the shapes", () => {
     const say = (send: Parameters<typeof automaticMessage>[0], name: string | null = "Maya Rao", line: string | null = null) => automaticMessage(send, " Iron House ", name, line);
     expect(say({ kind: "trial_check_in", occasion: "trial:t1" })).toBe("Hi Maya, how's your trial at Iron House going? If you need anything, just let us know.");
     expect(say({ kind: "trial_check_in", occasion: "trial:t1" }, "maya@example.com")).toBe("How's your trial at Iron House going? If you need anything, just let us know.");
-    expect(say({ kind: "trial_ending", occasion: "trial:t1", endsOn: "2026-10-11" })).toBe("Hi Maya, your trial at Iron House ends on 11 October. Want to keep coming? Talk to us about a membership.");
+    expect(say({ kind: "trial_ending", occasion: "trial:t1", endsOn: "2026-10-11" })).toBe("Hi Maya, your trial at Iron House ends on 11 October. If you'd like to keep coming, we'd be happy to help you choose a membership.");
     expect(say({ kind: "membership_ending", occasion: "ends:m1", endsOn: "2026-11-05" }, null)).toBe("Your membership at Iron House ends on 5 November. We'd love to keep you with us. Just let us know if you'd like to renew.");
     expect(say({ kind: "payment_overdue", occasion: "bill:b1" }, "Maya Rao", "Call 555 0100.")).toBe("Hi Maya, your payment to Iron House is overdue. Please get in touch so we can sort it out.\nCall 555 0100.");
     // A class pack may run out of classes first: its day is the last it can be used. Somebody who asked to stop is not asked to stay.

@@ -463,9 +463,29 @@ d("the class reminder (real Postgres)", () => {
       expect(inbox.messages.map((m) => [m.kind, m.read])).toEqual([["class_reminder", false]]);
       expect(inbox.unread).toBe(1);
       const off = await inject("PUT", `/v1/orgs/${gym.id}/inbox/switches`, maya.cookies, { kind: "class_reminder", on: false });
-      expect(JSON.parse(off.body)).toEqual({ off: ["class_reminder"] });
+      expect(JSON.parse(off.body)).toEqual({ off: ["class_reminder"], groupMessages: true });
       const on = await inject("PUT", `/v1/orgs/${gym.id}/inbox/switches`, maya.cookies, { kind: "class_reminder", on: true });
-      expect(JSON.parse(on.body)).toEqual({ off: [] });
+      expect(JSON.parse(on.body)).toEqual({ off: [], groupMessages: true });
+
+      // The two switches she is shown: each sets its whole group at once, and only its own.
+      const group = async (who: Person, name: string, isOn: boolean) => await inject("PUT", `/v1/orgs/${gym.id}/inbox/switches`, who.cookies, { group: name, on: isOn });
+      expect(JSON.parse((await group(maya, "membership", false)).body)).toEqual({ off: ["class_reminder", "membership_ending", "trial_ending"], groupMessages: true });
+      expect(JSON.parse((await group(maya, "membership", false)).body)).toEqual({ off: ["class_reminder", "membership_ending", "trial_ending"], groupMessages: true });
+      expect(JSON.parse((await group(maya, "news", false)).body)).toEqual({ off: ["birthday", "class_reminder", "membership_ending", "milestone", "miss_you", "trial_check_in", "trial_ending"], groupMessages: false });
+      const shown = JSON.parse((await inject("GET", `/v1/orgs/${gym.id}/inbox`, maya.cookies)).body) as GymInboxResponse;
+      expect([shown.off.length, shown.groupMessages]).toEqual([7, false]);
+      // Her membership switch off: no reminder of a second class, tomorrow at 18:30, that she booked this morning.
+      await sql`
+        INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, status, request_key, created_at, booked_at)
+        VALUES (${gym.id}, ${await classAt(gym, "Evening Spin", TOMORROW, 18, 30)}, ${maya.userId}, ${maya.entryId}, 'booked', gen_random_uuid(), ${at(TODAY, 9)}, ${at(TODAY, 9)})`;
+      expect((await run([gym], at(TODAY, 18, 34))).sent).toBe(0);
+      expect(JSON.parse((await group(maya, "membership", true)).body)).toEqual({ off: ["birthday", "milestone", "miss_you", "trial_check_in"], groupMessages: false });
+      expect(JSON.parse((await group(maya, "news", true)).body)).toEqual({ off: [], groupMessages: true });
+      // Switched on again, the reminder she was owed goes.
+      expect((await run([gym], at(TODAY, 18, 49))).sent).toBe(1);
+      for (const body of [{ group: "payments", on: false }, { group: "news" }, { group: "news", kind: "birthday", on: false }]) {
+        expect((await inject("PUT", `/v1/orgs/${gym.id}/inbox/switches`, maya.cookies, body)).statusCode, JSON.stringify(body)).toBe(400);
+      }
 
       // Next door's owner, a member and nobody are refused the box.
       const stranger = await makeGym("Remind Stranger");
@@ -474,8 +494,10 @@ d("the class reminder (real Postgres)", () => {
       expect((await save(gym, reminder({ on: false }), maya)).statusCode).toBe(404);
       expect((await inject("GET", settingsPath(gym), {})).statusCode).toBe(401);
       expect((await settings(gym)).messages.find((m) => m.kind === "class_reminder")?.on).toBe(true);
-      // A member of another gym cannot switch this gym's reminder.
+      // A member of another gym cannot switch this gym's reminder, nor a group of them.
       expect((await inject("PUT", `/v1/orgs/${gym.id}/inbox/switches`, stranger.owner.cookies, { kind: "class_reminder", on: false })).statusCode).toBe(404);
+      expect((await inject("PUT", `/v1/orgs/${gym.id}/inbox/switches`, stranger.owner.cookies, { group: "news", on: false })).statusCode).toBe(404);
+      expect(await sql`SELECT 1 FROM gym_member_messages_off WHERE gym_id = ${gym.id}`).toHaveLength(0);
     },
     T,
   );

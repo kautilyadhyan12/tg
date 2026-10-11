@@ -1,4 +1,4 @@
-import { GYM_COME_BACK_LINES, GYM_MESSAGE_KEPT_DAYS, GYM_MESSAGE_KIND_NAMES, GYM_PINNED_NOTE_DAYS, gymContactTel, orgWords } from '@app/shared';
+import { GYM_COME_BACK_LINES, GYM_MESSAGE_KEPT_DAYS, GYM_MESSAGE_MEMBER_SWITCH_GROUPS, GYM_PINNED_NOTE_DAYS, gymContactTel, orgWords } from '@app/shared';
 import { cheerLine } from '../../utils/cheerPresets';
 import { cheerAge } from './gymMembershipView';
 import { placeFor } from '../../pages/console/consolePlaces';
@@ -68,30 +68,32 @@ export function emptyInbox(gymName) {
 /** Said under every inbox, so nothing about it is a surprise. */
 export const INBOX_NOTE = `Messages stay here for ${GYM_MESSAGE_KEPT_DAYS} days. You can't reply to them here.`;
 
-/** The member's own switch for the gym's messages to groups (ROADMAP 20f-i). */
-export function groupSwitch(gym, on) {
-  const it = orgWords(gym.orgType).itToMembers;
-  return {
-    label: `News and notices from ${gym.name}`,
-    line: on
-      ? `Messages the ${it} sends to many people at once, like a closed day or a new class.`
-      : `Off. You won't get these. Messages about your own membership still come.`,
-  };
-}
-
-/** The member's own switches for the gym's automatic messages (ROADMAP 20b-i, 20b-ii), one a
- *  kind they can switch off. `off`: the kinds the server says are off. */
-export function kindSwitches(gym, off) {
+/** The member's two switches for one gym (Kd, RULINGS 2026-10-11: eight were too many):
+ *  what is about their own membership and bookings, and the gym's news and greetings. A
+ *  switch is on only while everything in it is: `off` is the automatic kinds the server
+ *  says are off, `groupMessages` whether the gym's messages to many people still come. */
+export function memberSwitches(gym, off, groupMessages) {
   const isOff = (kind) => Array.isArray(off) && off.includes(kind);
-  const row = (kind, label, line) => ({ kind, label, on: !isOff(kind), line: isOff(kind) ? `Off. ${gym.name} won't send you this.` : line });
+  const it = orgWords(gym.orgType).itToMembers;
+  const membershipOn = GYM_MESSAGE_MEMBER_SWITCH_GROUPS.membership.every((kind) => !isOff(kind));
+  const newsOn = groupMessages !== false && GYM_MESSAGE_MEMBER_SWITCH_GROUPS.news.every((kind) => !isOff(kind));
   return [
-    row('trial_check_in', GYM_MESSAGE_KIND_NAMES.trial_check_in, 'A message a few days into a trial, asking how it is going.'),
-    row('trial_ending', GYM_MESSAGE_KIND_NAMES.trial_ending, 'A message shortly before a trial of yours ends.'),
-    row('membership_ending', GYM_MESSAGE_KIND_NAMES.membership_ending, 'A message shortly before a membership of yours ends.'),
-    row('class_reminder', GYM_MESSAGE_KIND_NAMES.class_reminder, 'A message before a class or a personal training session you booked.'),
-    row('birthday', GYM_MESSAGE_KIND_NAMES.birthday, `A message from ${gym.name} on your birthday.`),
-    row('milestone', GYM_MESSAGE_KIND_NAMES.milestone, 'A message when you reach a number of visits, like your 50th.'),
-    row('miss_you', GYM_MESSAGE_KIND_NAMES.miss_you, "A message if you haven't been in for a while."),
+    {
+      group: 'membership',
+      label: 'About your membership and bookings',
+      on: membershipOn,
+      line: membershipOn
+        ? 'A message before a trial or a membership of yours ends, and a reminder before a class or a personal training session you booked.'
+        : `Off. ${gym.name} won't send you these. A message about a payment you owe is still sent.`,
+    },
+    {
+      group: 'news',
+      label: `News and greetings from ${gym.name}`,
+      on: newsOn,
+      line: newsOn
+        ? `Messages the ${it} sends to many people at once, like a closed day or a new class, and its greetings: how your trial is going, your birthday, a number of visits you reach, and a note if you haven't been in for a while.`
+        : `Off. You won't get these. Messages about your own membership and bookings still come if that switch is on.`,
+    },
   ];
 }
 

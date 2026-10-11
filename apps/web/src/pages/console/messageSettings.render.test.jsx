@@ -56,7 +56,7 @@ describe('Automatic messages', () => {
     await screen.findByText('All 9 on');
     expect(screen.getAllByRole('switch').map((s) => [s.getAttribute('aria-label'), s.getAttribute('aria-checked')])).toEqual(NAMES.map((name) => [`Send the ${name} message`, 'true']));
     expect(preview('trial_check_in')).toBe("Hi [member's first name], how's your trial at Iron House going? If you need anything, just let us know.");
-    expect(preview('trial_ending')).toBe("Hi [member's first name], your trial at Iron House ends on [its last day]. Want to keep coming? Talk to us about a membership.");
+    expect(preview('trial_ending')).toBe("Hi [member's first name], your trial at Iron House ends on [its last day]. If you'd like to keep coming, we'd be happy to help you choose a membership.");
     expect(preview('membership_ending')).toBe("Hi [member's first name], your membership at Iron House ends on [its last day]. We'd love to keep you with us. Just let us know if you'd like to renew.");
     expect(preview('payment_overdue')).toBe("Hi [member's first name], your payment to Iron House is overdue. Please get in touch so we can sort it out.");
     // No date and no amount of money stands in any example.
@@ -70,7 +70,7 @@ describe('Automatic messages', () => {
     expect(within(box('Trial ending')).getByText(/A trial shorter than twice the notice you pick here is told halfway through instead\./)).toBeTruthy();
     expect(within(box('Payment overdue')).getByText(/No amount is shown\. A member cannot switch this one off\./)).toBeTruthy();
     expect(within(box('Membership ending')).getByText(/A membership that renews by itself has no last day\./)).toBeTruthy();
-    expect(screen.getByText(/A member can switch any of them off for themselves, except Welcome and Payment overdue\./)).toBeTruthy();
+    expect(screen.getByText(/A member can switch them off for themselves, except Welcome and Payment overdue\./)).toBeTruthy();
     // Nothing is missing at this gym, so no row says nobody will get it.
     expect(screen.queryByText(/nobody will get (this|it) yet/)).toBeNull();
     expect(preview('welcome')).toBe("Welcome to Iron House, [member's first name]. We're glad you joined. Messages from us will show up here.");

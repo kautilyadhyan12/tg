@@ -13,6 +13,7 @@ import {
   type GymMessageFacts,
 } from "../src/gymMessages.js";
 import {
+  GYM_MESSAGE_MEMBER_SWITCH_GROUPS,
   GYM_MESSAGE_MEMBER_SWITCH_KINDS,
   GYM_MESSAGE_OWN_LINE_MAX,
   GYM_MESSAGE_SETTING_KINDS,
@@ -310,6 +311,14 @@ describe("what is kept, and the shapes", () => {
     for (const kind of GYM_MESSAGE_MEMBER_SWITCH_KINDS) expect(gymMessageSwitchRequestSchema.safeParse({ kind, on: false }).success).toBe(true);
     expect([...GYM_MESSAGE_MEMBER_SWITCH_KINDS]).toEqual(["trial_check_in", "trial_ending", "membership_ending", "class_reminder", "birthday", "milestone", "miss_you"]);
     for (const kind of ["welcome", "payment_overdue", "group", "x"]) expect(gymMessageSwitchRequestSchema.safeParse({ kind, on: false }).success, kind).toBe(false);
+    // The two switches a member is shown: every kind with a switch is in one group, and in one only.
+    const grouped = [...GYM_MESSAGE_MEMBER_SWITCH_GROUPS.membership, ...GYM_MESSAGE_MEMBER_SWITCH_GROUPS.news];
+    expect([...grouped].sort()).toEqual([...GYM_MESSAGE_MEMBER_SWITCH_KINDS].sort());
+    expect(new Set(grouped).size).toBe(grouped.length);
+    for (const group of ["membership", "news"]) expect(gymMessageSwitchRequestSchema.safeParse({ group, on: false }).success, group).toBe(true);
+    for (const body of [{ group: "payments", on: false }, { group: "news" }, { group: "news", kind: "birthday", on: true }, { on: true }]) {
+      expect(gymMessageSwitchRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(false);
+    }
   });
 
   it("an inbox from an older server, with no switches in it, reads as none off", () => {
