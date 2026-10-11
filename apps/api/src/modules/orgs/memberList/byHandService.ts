@@ -62,7 +62,6 @@ import { reviewAfterChecked, reviewAfterEdit, reviewAfterMerge, sameReview } fro
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { appOrThrow, type MemberListDeps } from "./service.js";
 import { heldOnListOf, type HeldShown } from "../memberships/onList.js";
-import { keepLeftDays } from "../memberships/over.js";
 import { listBillFacts } from "../memberships/billsSql.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 
@@ -696,7 +695,6 @@ async function setOnListIn(
   const { userId, gymId, entryId, on, at } = input;
   const stored = await repo.entryFor(tx, gymId, entryId);
   if (stored === null) throw notFound();
-  if (!on && stored.formerAt === null) await keepLeftDays(tx, gymId, [entryId], at);
   const moved = await repo.setEntryFormer(tx, gymId, entryId, on ? null : at);
   if (!moved) return { outcome: on ? "already_on_list" : "already_taken_off", entryId, version: await listVersion(tx, gymId) };
   // The members this record reached were on the list (taking off) or are now

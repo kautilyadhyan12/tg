@@ -224,6 +224,8 @@ export const gymMemberListEntries = pgTable(
     // The gym's list in its own order, which every preview and every confirm reads
     // whole: an ordered index scan instead of a sort of up to ten thousand rows.
     index("gym_member_list_entries_gym_seq_idx").on(t.gymId, t.listedSeq),
+    // A membership deleted looks for the records kept on the list with it (0097).
+    index("gym_member_list_entries_kept_listed_idx").on(t.keptListedHeldId).where(sql`${t.keptListedHeldId} IS NOT NULL`),
     // The Members sign and the menu's dot count only these, so the count reads the few.
     index("gym_member_list_entries_needs_review_idx")
       .on(t.gymId, t.listedSeq)

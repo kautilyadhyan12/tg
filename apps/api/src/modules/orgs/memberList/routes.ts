@@ -1009,9 +1009,11 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     }),
   );
 
-  /** Tidying up one person at a time (21c-iii): Remove and Keep on list pressed from the
-   *  list of members whose membership is over, a press a person. Its own allowance, wide
-   *  enough for a gym's first tidy-up; the address is counted a gym at a time. */
+  /** Tidying up one person at a time (21c-iii): the Remove box, Remove and Keep on list
+   *  asked from the list of members whose membership is over. Its own allowance, so a
+   *  tidy-up spends none of the list's reads on its boxes; the address is counted a gym at
+   *  a time. A request that leaves `onlyOver` out is the ordinary Remove, on its own
+   *  smaller allowance. */
   const tidyGate = gate(
     createDualRateLimit({
       name: "memberlist_tidy",
@@ -1045,7 +1047,8 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     const body = parseOr400(memberListRemovePreviewRequestSchema, req.body, req, reply);
     if (body === null) return;
     try {
-      const preview = await removal.previewRemoveSelected(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+      const limit = body.onlyOver === true ? tidyGate(req, reply) : readGate(req, reply);
+      const preview = await removal.previewRemoveSelected(listDeps, requireUserId(req), params.gymId, body, limit);
       if (preview === null) return;
       return await reply.status(200).send({ preview });
     } catch (err) {

@@ -187,16 +187,24 @@ describe('the members whose membership is over (21c-iii)', () => {
     });
   });
 
-  it('Keep on list says who stays, where to find them, and who was left as they are', () => {
+  it('Keep on list says who stays and where to find them, and says truly why anybody was left as they are', () => {
     const find = 'You can still find them with Filter, under Status.';
-    expect(keptListedLine({ kept: 1, notOver: 0 }, WORDS, 'Kit Kept')).toBe(`Kit Kept stays on your list and is no longer counted here. ${find}`);
-    expect(keptListedLine({ kept: 1, notOver: 0 }, WORDS)).toBe(`1 member stays on your list and is no longer counted here. ${find}`);
-    expect(keptListedLine({ kept: 1500, notOver: 0 }, WORDS)).toBe(`1,500 members stay on your list and are no longer counted here. ${find}`);
-    expect(keptListedLine({ kept: 2, notOver: 1 }, WORDS)).toBe(
-      `2 members stay on your list and are no longer counted here. ${find} 1 was left as they are: their membership is not over any more.`,
+    const done = (kept, already, notOver) => ({ kept, already, notOver });
+    expect(keptListedLine(done(1, 0, 0), WORDS, 'Kit Kept')).toBe(`Kit Kept stays on your list and is no longer counted here. ${find}`);
+    expect(keptListedLine(done(1, 0, 0), WORDS)).toBe(`1 member stays on your list and is no longer counted here. ${find}`);
+    expect(keptListedLine(done(1500, 0, 0), WORDS)).toBe(`1,500 members stay on your list and are no longer counted here. ${find}`);
+    // A colleague got there first: kept already, which is never "not over any more".
+    expect(keptListedLine(done(0, 1, 0), WORDS, 'Kit Kept')).toBe('Nothing was changed. 1 was already kept on your list.');
+    expect(keptListedLine(done(0, 3, 0), WORDS)).toBe('Nothing was changed. 3 were already kept on your list.');
+    // Removed, renewed or owing since the page was read: no longer on this list, whichever it was.
+    expect(keptListedLine(done(0, 0, 1), WORDS, 'Kit Kept')).toBe('Nothing was changed. 1 is no longer on this list.');
+    expect(keptListedLine(done(0, 0, 4), WORDS)).toBe('Nothing was changed. 4 are no longer on this list.');
+    expect(keptListedLine(done(2, 1, 3), WORDS)).toBe(
+      `2 members stay on your list and are no longer counted here. ${find} 1 was already kept on your list. 3 are no longer on this list.`,
     );
-    expect(keptListedLine({ kept: 0, notOver: 1 }, WORDS, 'Kit Kept')).toBe("Nothing was changed: this person's membership is not over any more.");
-    expect(keptListedLine({ kept: 0, notOver: 4 }, WORDS)).toBe("Nothing was changed: these people's memberships are not over any more.");
+    // An answer from before the server said who was kept already still reads.
+    expect(keptListedLine({ kept: 1, notOver: 0 }, WORDS, 'Kit Kept')).toBe(`Kit Kept stays on your list and is no longer counted here. ${find}`);
+    expect(keptListedLine(done(0, 1, 0), WORDS)).not.toMatch(/not over/);
   });
 });
 

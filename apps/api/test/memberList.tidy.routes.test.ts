@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
   memberListEntriesPageSchema,
+  MEMBER_TIDY_PRESSES_PER_HOUR,
   memberListKeptListedResponseSchema,
   memberListMissingResponseSchema,
   memberListLeaversResponseSchema,
@@ -279,7 +280,7 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
       const BEGAN = "2026-06-10T09:00:00Z";
       const names = [
         "Paula Paid", "Owen Overdue", "Freya Frozen", "Nia Nextweek", "Ned Never", "Bea Booked",
-        "Yara Yesterday", "Cal Cancelled", "Jude July", "Stella Stopped", "Kit Kept",
+        "Yara Yesterday", "Cal Cancelled", "Jude July", "Stella Stopped", "Kit Kept", "Una Unpaid",
       ] as const;
       const id = {} as Record<(typeof names)[number] | "Eli Expired" | "Rena Renewed", string>;
       for (const name of names) id[name] = await listed(gym, name, BEGAN);
@@ -298,6 +299,8 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
       at("2026-08-01T10:00:00Z");
       // Paid for August and nothing since: he owes, and is still a member.
       await give(gym, owner, id["Owen Overdue"], types.gold, "2026-08-01", true);
+      // A month to 31 August, never paid: it is over, and its bill is still open.
+      await give(gym, owner, id["Una Unpaid"], types.oneMonth, "2026-08-01", false);
       at("2026-08-05T10:00:00Z");
       const stellas = await give(gym, owner, id["Stella Stopped"], types.gold, "2026-08-05", true);
       at("2026-08-10T10:00:00Z");
@@ -343,12 +346,15 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
       await give(gym, owner, id["Nia Nextweek"], types.threeMonths, "2026-10-22", false);
 
       // The sign and its list: the five whose membership is over, and nobody else. Not
-      // Rena (her renewal waits), not Bea (a class to come), not Eli (the file's word).
+      // Rena (her renewal waits), not Bea (a class to come), not Eli (the file's word),
+      // not Una (she still owes: staff settle that on her page first).
       const OVER = ["Cal Cancelled", "Jude July", "Kit Kept", "Stella Stopped", "Yara Yesterday"];
       expect(await signOf(gym, owner)).toBe(5);
       expect(await overNames(gym, owner)).toEqual(OVER);
-      // Reports counts the same five as left: thirteen on the list, eight members now.
+      // Reports counts the five and Una as left: fourteen on the list, eight members now.
       expect((await report(gym, owner)).activeNow).toBe(8);
+      const unas = (await pageOf(gym, owner)).entries.find((entry) => entry.entryId === id["Una Unpaid"]);
+      expect(unas?.held).toMatchObject({ status: "ended", payment: { state: "due" } });
       expect(await signOf(nextDoor, nextDoorOwner)).toBe(1);
       expect(await overNames(nextDoor, nextDoorOwner)).toEqual(["Nell Nextdoor"]);
 
@@ -364,12 +370,20 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
 
       // KEEP ON LIST. Kit stays and the sign stops counting him; pressed again it changes
       // nothing; pressed for a paying member, or for another gym's person, it writes nothing.
-      expect(await keep(gym, owner, ticked([id["Kit Kept"]]))).toEqual({ kept: 1, notOver: 0 });
+      expect(await keep(gym, owner, ticked([id["Kit Kept"]]))).toEqual({ kept: 1, already: 0, notOver: 0 });
       expect(await signOf(gym, owner)).toBe(4);
       expect(await overNames(gym, owner)).toEqual(OVER.filter((name) => name !== "Kit Kept"));
-      expect(await keep(gym, owner, ticked([id["Kit Kept"]]))).toEqual({ kept: 0, notOver: 1 });
-      expect(await keep(gym, owner, ticked([id["Paula Paid"], id["Rena Renewed"], id["Bea Booked"], id["Eli Expired"], nell]))).toEqual({ kept: 0, notOver: 5 });
-      expect(await keep(nextDoor, nextDoorOwner, ticked([id["Yara Yesterday"]]))).toEqual({ kept: 0, notOver: 1 });
+      // Pressed again (a colleague got there first): told he was kept already, never that
+      // his membership is not over.
+      expect(await keep(gym, owner, ticked([id["Kit Kept"]]))).toEqual({ kept: 0, already: 1, notOver: 0 });
+      expect(
+        await keep(gym, owner, ticked([id["Paula Paid"], id["Rena Renewed"], id["Bea Booked"], id["Eli Expired"], id["Una Unpaid"], nell, id["Kit Kept"]])),
+      ).toEqual({ kept: 0, already: 1, notOver: 6 });
+      expect(await keep(nextDoor, nextDoorOwner, ticked([id["Yara Yesterday"]]))).toEqual({ kept: 0, already: 0, notOver: 1 });
+      // One row in the gym's own record of who did what, naming Kit's record.
+      const audit = await sql<{ target_id: string; actor: string }[]>`
+        SELECT target_id, actor_user_id::text AS actor FROM audit_log WHERE gym_id = ${gym} AND action = 'org.member_list_entry_kept_listed'`;
+      expect(audit.map((row) => [row.target_id, row.actor])).toEqual([[id["Kit Kept"], owner.userId]]);
       const keptRows = await sql<{ full_name: string; held: string }[]>`
         SELECT full_name, kept_listed_held_id::text AS held FROM gym_member_list_entries
         WHERE gym_id IN (${gym}, ${nextDoor}) AND kept_listed_held_id IS NOT NULL`;
@@ -402,6 +416,8 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
       expect(keptFor(box, "not_over")).toEqual([
         "Bea Booked", "Eli Expired", "Freya Frozen", "Ned Never", "Nia Nextweek", "Owen Overdue", "Paula Paid", "Rena Renewed", "Yara Yesterday",
       ]);
+      // Una's membership is over and she still owes: she stays, and the box says why.
+      expect(keptFor(box, "payment_due")).toEqual(["Una Unpaid"]);
       expect(box.kept.find((group) => group.reason === "gone")?.people.map((person) => person.entryId)).toEqual([nell]);
       // Stella is given a membership while that box is open: the press moves nobody and
       // answers with the box as it is now, Stella among the people who stay.
@@ -422,7 +438,8 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
 
       // Everybody else is where they were, reading as they did.
       const page = await pageOf(gym, owner);
-      expect(page.total).toBe(11);
+      expect(page.total).toBe(12);
+      expect(page.entries.find((entry) => entry.entryId === id["Una Unpaid"])?.held?.status).toBe("ended");
       const status = (name: keyof typeof id) => page.entries.find((entry) => entry.entryId === id[name])?.held?.status ?? null;
       expect(
         (["Paula Paid", "Owen Overdue", "Freya Frozen", "Nia Nextweek", "Yara Yesterday", "Stella Stopped", "Rena Renewed", "Bea Booked", "Kit Kept", "Eli Expired", "Ned Never"] as const).map(
@@ -466,6 +483,94 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
   );
 
   it(
+    "two staff at one instant: a membership given while Remove is pressed from the sign's list never leaves a past member holding it, and Keep with Remove ends as one or the other",
+    async () => {
+      const owner = await makeUser("race-owner");
+      const gym = await makeGym(owner, "Tidy Race");
+      const oneMonth = await addType(gym, owner, ONE_MONTH);
+      const BEGAN = "2026-06-10T09:00:00Z";
+      const ids: string[] = [];
+      for (let n = 0; n < 8; n++) ids.push(await listed(gym, `Racer ${String(n)}`, BEGAN));
+      at("2026-07-01T10:00:00Z");
+      for (const entryId of ids) await give(gym, owner, entryId, oneMonth, "2026-07-01", true);
+      at("2026-10-15T11:00:00Z");
+      expect(await signOf(gym, owner)).toBe(8);
+
+      // Six people: the box is made, then the press and a new membership land together.
+      const outcomes: string[] = [];
+      for (const entryId of ids.slice(0, 6)) {
+        const selection = ticked([entryId]);
+        const box = await boxOf(gym, owner, { selection, onlyOver: true });
+        const [pressed, given] = await Promise.all([
+          press(gym, owner, { selection, digest: box.digest, onlyOver: true }),
+          post(heldUrl(gym, entryId), { requestKey: nextKey(), typeId: oneMonth, startsOn: "2026-10-15", paid: true, method: "cash" }, owner.cookies),
+        ]);
+        outcomes.push(`${String(pressed.statusCode)}/${String(given.statusCode)}`);
+        // One of them won, never both: removed and the membership refused, or given and nobody removed.
+        expect(["200/409", "409/201"], outcomes.join(" ")).toContain(`${String(pressed.statusCode)}/${String(given.statusCode)}`);
+      }
+      const wrong = await sql<{ full_name: string }[]>`
+        SELECT e.full_name FROM gym_member_list_entries e
+        WHERE e.gym_id = ${gym} AND e.former_at IS NOT NULL AND EXISTS (
+          SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.starts_on = '2026-10-15')`;
+      expect(wrong, outcomes.join(" ")).toEqual([]);
+
+      // Keep and Remove for one person at one instant: both answer, and the row is a past
+      // member with its day kept, or a kept member of the list; never half of each.
+      const both = ids[6] ?? "";
+      const selection = ticked([both]);
+      const box = await boxOf(gym, owner, { selection, onlyOver: true });
+      const [kept, removed] = await Promise.all([
+        post(`${listUrl(gym)}/selected/keep-listed`, { selection }, owner.cookies),
+        press(gym, owner, { selection, digest: box.digest, onlyOver: true }),
+      ]);
+      expect([kept.statusCode, removed.statusCode]).toEqual([200, 200]);
+      const [row] = await sql<{ former: boolean; ended: string | null }[]>`
+        SELECT (former_at IS NOT NULL) AS former, membership_ended_on::text AS ended FROM gym_member_list_entries WHERE gym_id = ${gym} AND id = ${both}`;
+      expect(row).toEqual({ former: true, ended: "2026-07-31" });
+      // The eighth was touched by nobody.
+      expect(await overNames(gym, owner)).toContain("Racer 7");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "tidying has its own allowance: a person's 600 in an hour, and an address counted a gym at a time, so one gym's staff never spend another's",
+    async () => {
+      const ownerA = await makeUser("limit-owner-a");
+      const ownerB = await makeUser("limit-owner-b");
+      const ownerC = await makeUser("limit-owner-c");
+      const gymA = await makeGym(ownerA, "Tidy Limit A");
+      const gymB = await makeGym(ownerB, "Tidy Limit B");
+      const gymC = await makeGym(ownerC, "Tidy Limit C");
+      const person = { a: await listed(gymA, "Limit A", "2026-06-10T09:00:00Z"), b: await listed(gymB, "Limit B", "2026-06-10T09:00:00Z"), c: await listed(gymC, "Limit C", "2026-06-10T09:00:00Z") };
+      // Three front desks behind ONE address.
+      const DESK = "10.77.0.9";
+      const from = (path: string, payload: unknown, who: User) =>
+        api().inject({ method: "POST", url: path, remoteAddress: DESK, cookies: who.cookies, headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) });
+      const keepAt = (gymId: string, who: User, entryId: string) => from(`${listUrl(gymId)}/selected/keep-listed`, { selection: ticked([entryId]) }, who);
+      const boxAt = (gymId: string, who: User, entryId: string, onlyOver: boolean) =>
+        from(`${listUrl(gymId)}/selected/remove-preview`, onlyOver ? { selection: ticked([entryId]), onlyOver: true } : { selection: ticked([entryId]) }, who);
+
+      expect((await keepAt(gymA, ownerA, person.a)).statusCode).toBe(200);
+      // A's owner has used the hour's presses (counted into the store, not pressed 600 times).
+      for (let n = 1; n < MEMBER_TIDY_PRESSES_PER_HOUR; n++) await redis.incrWithTtl(`rl:memberlist_tidy:id:${ownerA.userId}`, 3600);
+      expect((await keepAt(gymA, ownerA, person.a)).statusCode).toBe(429);
+      // The box asked from the sign's list is on the same allowance; the ordinary box is not.
+      expect((await boxAt(gymA, ownerA, person.a, true)).statusCode).toBe(429);
+      expect((await boxAt(gymA, ownerA, person.a, false)).statusCode).toBe(200);
+      // B's owner, at the same address, is not slowed by A's.
+      expect((await keepAt(gymB, ownerB, person.b)).statusCode).toBe(200);
+      // The address is counted a gym at a time: B's desk used up, C's desk beside it is not.
+      for (let n = 1; n < MEMBER_TIDY_PRESSES_PER_HOUR * 4; n++) await redis.incrWithTtl(`rl:memberlist_tidy:ip:${gymB}:${DESK}`, 3600);
+      expect((await keepAt(gymB, ownerB, person.b)).statusCode).toBe(429);
+      expect((await boxAt(gymB, ownerB, person.b, true)).statusCode).toBe(429);
+      expect((await keepAt(gymC, ownerC, person.c)).statusCode).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "Reports keeps the day a membership ended for somebody moved to Past members later, by each of the ways a person is moved; put back, they read as before",
     async () => {
       const owner = await makeUser("reports-owner");
@@ -474,7 +579,7 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
       const gold = await addType(gym, owner, GOLD);
 
       // The list comes from a file, so a later file knows the same people again.
-      const people = ["Ada", "Bo", "Cy", "Di", "Eve", "Fay"] as const;
+      const people = ["Ada", "Bo", "Cy", "Di", "Eve", "Fay", "Gus", "Hal"] as const;
       const fileOf = (who: readonly string[]) =>
         Buffer.from(["Full Name,Email", ...who.map((name) => `${name} Tidy,tdy-t-file-${name.toLowerCase()}@example.com`)].join("\r\n"), "utf8").toString("base64");
       at("2026-06-10T09:00:00Z");
@@ -493,7 +598,12 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
 
       // Four months of July, each over on the 31st; Eve pays every month; Fay holds nothing.
       at("2026-07-01T10:00:00Z");
-      for (const name of ["Ada", "Bo", "Cy", "Di"] as const) await give(gym, owner, id[name], oneMonth, "2026-07-01", true);
+      for (const name of ["Ada", "Bo", "Cy", "Di", "Gus", "Hal"] as const) await give(gym, owner, id[name], oneMonth, "2026-07-01", true);
+      // Gus and Hal are in the app, each with their own record.
+      const inApp = { Gus: await makeUser("reports-gus"), Hal: await makeUser("reports-hal") };
+      for (const name of ["Gus", "Hal"] as const) {
+        await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym}, ${inApp[name].userId}, ${id[name]}, '2026-07-01T10:00:00Z')`;
+      }
       await give(gym, owner, id.Eve, gold, "2026-07-01", true);
 
       at("2026-10-15T11:00:00Z");
@@ -501,12 +611,20 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
       expect(before.activeNow).toBe(2);
       expect(before.months.map((m) => [m.month, m.activeAtStart, m.left])).toEqual([
         ["2026-06", null, 0],
-        ["2026-07", 6, 4],
+        ["2026-07", 8, 6],
         ["2026-08", 2, 0],
         ["2026-09", 2, 0],
         ["2026-10", 2, 0],
       ]);
-      expect(await signOf(gym, owner)).toBe(4);
+      expect(await signOf(gym, owner)).toBe(6);
+      // Gus: Remove on his own row of "In the app". Hal: Remove on the people ticked there.
+      const gone = await send("DELETE", `/v1/orgs/${gym}/members/${inApp.Gus.userId}`, owner.cookies);
+      expect(gone.statusCode, gone.body).toBe(200);
+      const rosterBox = await post(`/v1/orgs/${gym}/members/selected/remove-preview`, { userIds: [inApp.Hal.userId] }, owner.cookies);
+      expect(rosterBox.statusCode, rosterBox.body).toBe(200);
+      const rosterDigest = memberRemovePreviewResponseSchema.parse(JSON.parse(rosterBox.body)).preview.digest;
+      const rosterGone = await post(`/v1/orgs/${gym}/members/selected/remove`, { userIds: [inApp.Hal.userId], digest: rosterDigest }, owner.cookies);
+      expect(rosterGone.statusCode, rosterGone.body).toBe(200);
 
       // Ada: Remove from the sign's list. Cy: the ordinary Remove on people ticked.
       for (const [name, onlyOver] of [["Ada", true], ["Cy", false]] as const) {
@@ -551,10 +669,13 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
         Di: [true, "2026-07-31"],
         Eve: [true, null],
         Fay: [false, null],
+        Gus: [true, "2026-07-31"],
+        Hal: [true, "2026-07-31"],
       });
       const after = await report(gym, owner);
       expect(after.activeNow).toBe(1);
-      // The months that had closed read exactly as they closed.
+      // The months that had closed read exactly as they closed, whichever of the six ways
+      // each person was moved by.
       expect(after.months.slice(0, 4)).toEqual(before.months.slice(0, 4));
       expect(after.months[4]).toMatchObject({ month: "2026-10", activeAtStart: 2, left: 1 });
       expect(after.thisMonth.left).toBe(1);
@@ -570,6 +691,26 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
       const again = await report(gym, owner);
       expect(again.activeNow).toBe(1);
       expect(again.months.slice(0, 4)).toEqual(before.months.slice(0, 4));
+
+      // The other two ways somebody comes back clear the stored day too: Bo in a file
+      // that adds him again, Cy added again by hand.
+      const bringBack = await post(`${listUrl(gym)}/uploads`, { contentBase64: fileOf(["Bo"]), mode: "add" }, owner.cookies);
+      expect(bringBack.statusCode, bringBack.body).toBe(201);
+      const backUpload = memberListPreviewResponseSchema.parse(JSON.parse(bringBack.body)).preview.uploadId;
+      const backDone = await post(`${listUrl(gym)}/uploads/${backUpload}/confirm`, { permissionConfirmed: true }, owner.cookies);
+      expect(backDone.statusCode, backDone.body).toBe(200);
+      const byHand = await post(`${listUrl(gym)}/entries`, { fullName: "Cy Tidy", email: "tdy-t-file-cy@example.com" }, owner.cookies);
+      expect(byHand.statusCode, byHand.body).toBeLessThan(300);
+      const now = await days();
+      expect([now["Bo"], now["Cy"]]).toEqual([[false, null], [false, null]]);
+      // So Bo, given a new membership and removed while it runs, left today, not in July.
+      await give(gym, owner, id.Bo, gold, "2026-10-15", true);
+      const boGone = await send("DELETE", `${listUrl(gym)}/entries/${id.Bo}`, owner.cookies);
+      expect(boGone.statusCode, boGone.body).toBe(200);
+      expect((await days())["Bo"]).toEqual([true, null]);
+      const last = await report(gym, owner);
+      // July lost Ada, Cy, Di, Gus and Hal; Bo counts as there until today.
+      expect(last.months.map((m) => [m.month, m.left])).toEqual([["2026-06", 0], ["2026-07", 5], ["2026-08", 0], ["2026-09", 0], ["2026-10", 2]]);
     },
     TEST_TIMEOUT_MS,
   );

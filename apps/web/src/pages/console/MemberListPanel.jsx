@@ -425,6 +425,11 @@ export default function MemberListPanel({
   /** Keep on list is being sent; and what it did, said above the list. */
   const [keeping, setKeeping] = useState(false);
   const [tidyNote, setTidyNote] = useState(null);
+  // The line is above the list, which may be off the screen when a row far down is pressed.
+  const tidyNoteRef = useRef(null);
+  useEffect(() => {
+    if (tidyNote !== null) tidyNoteRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [tidyNote]);
   /** The person whose page was opened by a row's Renew, with the Add membership form open. */
   const [addFor, setAddFor] = useState(null);
   /** The gym's tags with their counts (5d-ii); none until they are read. */
@@ -1135,7 +1140,7 @@ export default function MemberListPanel({
       ) : null}
 
       {tidyNote !== null ? (
-        <p className="c-s14 c-t1" role="status" data-testid="tidy-note">
+        <p className="c-s14 c-t1" role="status" data-testid="tidy-note" ref={tidyNoteRef}>
           {tidyNote}
         </p>
       ) : null}

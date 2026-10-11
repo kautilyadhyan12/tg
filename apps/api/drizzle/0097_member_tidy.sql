@@ -11,4 +11,7 @@
 -- until another membership of theirs is the one that reads so.
 ALTER TABLE "gym_member_list_entries"
   ADD COLUMN "membership_ended_on" date,
-  ADD COLUMN "kept_listed_held_id" uuid REFERENCES "gym_held_memberships" ("id") ON DELETE SET NULL;
+  ADD COLUMN "kept_listed_held_id" uuid REFERENCES "gym_held_memberships" ("id") ON DELETE SET NULL;--> statement-breakpoint
+
+-- A membership deleted looks for the records kept with it: few rows hold one.
+CREATE INDEX "gym_member_list_entries_kept_listed_idx" ON "gym_member_list_entries" ("kept_listed_held_id") WHERE "kept_listed_held_id" IS NOT NULL;

@@ -4,23 +4,28 @@
 // them to Past members, renew them, or keep them on the list. Nothing is done by itself.
 //
 // Who the sign counts is who Reports counts as left among the people still on the list
-// (`memberships/over.ts`), apart from anybody staff chose to keep: kept with the membership
-// that was over then, so a later membership that ends is counted again.
+// (`memberships/over.ts`), apart from two kinds of people. Anybody who still owes on a
+// bill: staff settle or cancel it on their page first, so nobody who owes is swept away
+// with the rest. And anybody staff chose to keep: kept with the membership that was over
+// then, so a later membership that ends is counted again.
 import type { Sql, TransactionSql } from "postgres";
 import type { MemberListKeepListedRequest, MemberListKeptListed } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import type { HeldShown, LeftWith } from "../memberships/onList.js";
 import { heldAndOverIn, overNow } from "../memberships/over.js";
-import { insertAudit } from "../repo.js";
+import { insertAudits } from "../repo.js";
 import { requireWritablePrivilege } from "../service.js";
 import * as repo from "./repo.js";
 import { selectedIds } from "./selection.js";
 import type { MemberListDeps } from "./service.js";
 
-/** Of the people who are over, those the sign counts: everybody not kept on the list with
- *  this very membership. Pure. */
+/** Whether the sign's list can hold this person at all: over, and owing nothing. */
+export const canBeTidied = (left: LeftWith | undefined): left is LeftWith => left !== undefined && !left.owes;
+
+/** Of the people who are over, those the sign counts: nobody who still owes, and nobody
+ *  kept on the list with this very membership. Pure. */
 export function tidyIdsFrom(over: ReadonlyMap<string, LeftWith>, kept: ReadonlyMap<string, string>): string[] {
-  return [...over].flatMap(([id, left]) => (kept.get(id) === left.heldId ? [] : [id]));
+  return [...over].flatMap(([id, left]) => (!canBeTidied(left) || kept.get(id) === left.heldId ? [] : [id]));
 }
 
 /** The list's rows for every current record, and the people the sign counts, read at one
@@ -38,10 +43,11 @@ export async function tidyIdsOf(sql: Sql | TransactionSql, gymId: string, today:
   return over.size === 0 ? [] : tidyIdsFrom(over, await repo.keptListed(sql, gymId));
 }
 
-/** "KEEP ON LIST" for the people selected. Under the gym's lock, each of them whose
- *  membership is over now is kept with that membership; anybody else selected is left as
- *  they are and counted in `notOver`. Pressed twice, the second press changes nothing.
- *  Null when the rate limit has answered. */
+/** "KEEP ON LIST" for the people selected. Under the gym's lock, each of them the sign's
+ *  list can hold is kept with the membership that is over now. Somebody kept already is
+ *  counted in `already`; anybody else selected (removed, given a membership, owing, another
+ *  gym's) in `notOver`. Pressed twice, the second press changes nothing. Null when the
+ *  rate limit has answered. */
 export async function keepListed(
   deps: MemberListDeps,
   userId: string,
@@ -58,21 +64,18 @@ export async function keepListed(
     await repo.lockGym(tx, gymId);
     const over = await overNow(tx, gymId, today, ids);
     const had = await repo.keptListed(tx, gymId);
-    const fresh = [...over].flatMap(([id, left]) => (had.get(id) === left.heldId ? [] : [{ id, heldId: left.heldId }]));
+    const mine = [...over].filter(([, left]) => canBeTidied(left));
+    const fresh = mine.flatMap(([id, left]) => (had.get(id) === left.heldId ? [] : [{ id, heldId: left.heldId }]));
+    const already = mine.length - fresh.length;
     const written = await repo.setKeptListed(tx, gymId, fresh);
     if (written.length !== fresh.length) {
       throw new Error(`keep-on-list wrote ${String(written.length)} records where the rule chose ${String(fresh.length)}`);
     }
-    if (written.length > 0) {
-      await insertAudit(tx, {
-        actorUserId: userId,
-        gymId,
-        action: "org.member_list_kept_listed",
-        targetType: "member_list",
-        targetId: gymId,
-        meta: { kept: String(written.length) },
-      });
-    }
-    return { kept: written.length, notOver: ids.length - written.length };
+    // A row a record, as Remove writes: who took whom off the sign.
+    await insertAudits(
+      tx,
+      written.map((id) => ({ actorUserId: userId, gymId, action: "org.member_list_entry_kept_listed", targetType: "member_list_entry", targetId: id, meta: {} })),
+    );
+    return { kept: written.length, already, notOver: ids.length - written.length - already };
   });
 }

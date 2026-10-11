@@ -51,8 +51,8 @@ describe("the worst thing: selected among the people whose membership is over, n
   const yara = record(3, "Yara Yesterday", { email: "yara@example.com" });
   const all = [cal, paula, yara];
   const inApp = [on(1, cal), on(2, paula), on(3, yara)];
-  const plan = (notOverIds: readonly string[] | undefined, members: MemberAgainstList[] = inApp, records: RecordBrief[] = all) =>
-    recordRemovalPlan({ gymId: GYM, selectedIds: records.map((r) => r.id), records, members, scale: SCALE, ...(notOverIds === undefined ? {} : { notOverIds }) });
+  const plan = (notOverIds: readonly string[] | undefined, members: MemberAgainstList[] = inApp, records: RecordBrief[] = all, owingIds: readonly string[] = []) =>
+    recordRemovalPlan({ gymId: GYM, selectedIds: records.map((r) => r.id), records, members, scale: SCALE, ...(notOverIds === undefined ? {} : { notOverIds }), owingIds });
 
   it("a paying member and somebody renewed since stay on the list and in the app, and are named; the one still over moves", () => {
     const out = plan([paula.id, yara.id]);
@@ -96,6 +96,18 @@ describe("the worst thing: selected among the people whose membership is over, n
     expect(keptOf(one.preview, "shared_email")).toEqual(["M Park"]);
   });
 
+  it("somebody whose membership is over with a bill still open stays too, under a reason of their own", () => {
+    const out = plan([paula.id], inApp, all, [yara.id]);
+    expect(out.moveIds).toEqual([cal.id]);
+    expect(out.endApp.map((p) => p.removedWith)).toEqual([cal.id]);
+    expect(keptOf(out.preview, "not_over")).toEqual(["Paula Paid"]);
+    expect(keptOf(out.preview, "payment_due")).toEqual(["Yara Yesterday"]);
+    // Named in both lists by a fault of the caller's, she owes: one line, and she stays.
+    const twice = plan([yara.id], inApp, all, [yara.id]);
+    expect([keptOf(twice.preview, "not_over"), keptOf(twice.preview, "payment_due")]).toEqual([[], ["Yara Yesterday"]]);
+    expect(twice.moveIds.sort()).toEqual([cal.id, paula.id].sort());
+  });
+
   it("the box's digest moves with who moves, so a press on an older box does nothing", () => {
     const digests = new Set([plan(undefined), plan([]), plan([paula.id]), plan([paula.id, yara.id]), plan([cal.id, paula.id, yara.id])].map((p) => p.preview.digest));
     // Not asked and asked with everybody over are the same box; the rest differ.
@@ -106,9 +118,9 @@ describe("the worst thing: selected among the people whose membership is over, n
 
 describe("who the sign counts", () => {
   const over = new Map([
-    [id(1), { on: "2026-10-03", heldId: id(101) }],
-    [id(2), { on: "2026-07-16", heldId: id(102) }],
-    [id(3), { on: "2026-10-14", heldId: id(103) }],
+    [id(1), { on: "2026-10-03", heldId: id(101), owes: false }],
+    [id(2), { on: "2026-07-16", heldId: id(102), owes: false }],
+    [id(3), { on: "2026-10-14", heldId: id(103), owes: false }],
   ]);
 
   it("everybody who is over, apart from anybody kept on the list with that very membership", () => {
@@ -121,5 +133,9 @@ describe("who the sign counts", () => {
     ];
     for (const [what, kept, counted] of cases) expect(tidyIdsFrom(over, new Map(kept)), what).toEqual(counted);
     expect(tidyIdsFrom(new Map(), new Map([[id(1), id(101)]]))).toEqual([]);
+    // Somebody who still owes is never counted, kept or not.
+    const owing = new Map([...over, [id(4), { on: "2026-08-31", heldId: id(104), owes: true }]]);
+    expect(tidyIdsFrom(owing, new Map())).toEqual([id(1), id(2), id(3)]);
+    expect(tidyIdsFrom(owing, new Map([[id(4), id(104)]]))).toEqual([id(1), id(2), id(3)]);
   });
 });

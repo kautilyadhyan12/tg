@@ -224,7 +224,7 @@ describe('tidying up members whose membership is over', () => {
 
   it('Keep on list under a row keeps that one person, says so above the list, and reads the list again', async () => {
     await review();
-    orgService.keepMembersListed.mockResolvedValue({ data: { done: { kept: 1, notOver: 0 } } });
+    orgService.keepMembersListed.mockResolvedValue({ data: { done: { kept: 1, already: 0, notOver: 0 } } });
     orgService.getMemberList.mockResolvedValue({ data: { list: viewWith(2) } });
     orgService.getMemberListEntries.mockResolvedValue(pageOf([cal, yara]));
     fireEvent.click(rowOf('Jude July').getByTestId('over-keep'));
@@ -248,18 +248,28 @@ describe('tidying up members whose membership is over', () => {
     fireEvent.click(screen.getByTestId('select-everyone'));
     await waitFor(() => expect(orgService.selectAllMembers).toHaveBeenCalledWith(GYM, { membership: 'over' }));
     await screen.findByText('All 120 members that match are selected.');
-    orgService.keepMembersListed.mockResolvedValue({ data: { done: { kept: 118, notOver: 2 } } });
+    orgService.keepMembersListed.mockResolvedValue({ data: { done: { kept: 117, already: 1, notOver: 2 } } });
     fireEvent.click(within(screen.getByTestId('sel-bar')).getByTestId('bar-keep'));
     const everyone = { kind: 'all', filter: { membership: 'over' }, count: 120, digest: DIGEST };
     await waitFor(() => expect(orgService.keepMembersListed).toHaveBeenCalledWith(GYM, everyone));
     expect((await screen.findByTestId('tidy-note')).textContent).toBe(
-      '118 members stay on your list and are no longer counted here. You can still find them with Filter, under Status. 2 were left as they are: their membership is not over any more.',
+      '117 members stay on your list and are no longer counted here. You can still find them with Filter, under Status. 1 was already kept on your list. 2 are no longer on this list.',
     );
     // The bar has no Keep on list on the whole list.
     fireEvent.click(screen.getByRole('button', { name: 'Stop showing only Membership ended or cancelled' }));
     await screen.findByText('Paula Paid');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Paula Paid' }));
     expect(within(screen.getByTestId('sel-bar')).queryByTestId('bar-keep')).toBeNull();
+  });
+
+  it('a colleague kept them first: the line says so, and never that their membership is not over', async () => {
+    await review();
+    orgService.keepMembersListed.mockResolvedValue({ data: { done: { kept: 0, already: 1, notOver: 0 } } });
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([cal, yara]));
+    fireEvent.click(rowOf('Jude July').getByTestId('over-keep'));
+    expect((await screen.findByTestId('tidy-note')).textContent).toBe('Nothing was changed. 1 was already kept on your list.');
+    // The list is read again all the same, so the row a colleague dealt with goes.
+    await waitFor(() => expect(screen.queryByText('Jude July')).toBeNull());
   });
 
   it('a Select all that moved keeps nobody and says so', async () => {
@@ -286,7 +296,7 @@ describe('tidying up members whose membership is over', () => {
       Promise.resolve(new URLSearchParams(query).get('membership') === 'over' ? pageOf([cal]) : pageOf([cal, paula], 40)),
     );
     await review();
-    orgService.keepMembersListed.mockResolvedValue({ data: { done: { kept: 1, notOver: 0 } } });
+    orgService.keepMembersListed.mockResolvedValue({ data: { done: { kept: 1, already: 0, notOver: 0 } } });
     orgService.getMemberList.mockResolvedValue({ data: { list: viewWith(0) } });
     orgService.getMemberListEntries.mockImplementation((gymId, query) =>
       Promise.resolve(new URLSearchParams(query).get('membership') === 'over' ? pageOf([]) : pageOf([cal, paula], 40)),

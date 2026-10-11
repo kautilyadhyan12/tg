@@ -1696,7 +1696,8 @@ export const memberListViewSchema = z.object({
   duplicates: memberListDuplicatesSignSchema.default({ count: 0 }),
   /** The current members whose last membership here has ended or been cancelled, whom
    *  Reports already counts as left (21c-iii), for the Members sign. Left out: anybody
-   *  whose renewal is waiting, and anybody staff chose to keep on the list. */
+   *  whose renewal is waiting, anybody who still owes on a bill, and anybody staff chose
+   *  to keep on the list. */
   over: memberListOverSignSchema.default({ count: 0 }),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
@@ -1944,8 +1945,10 @@ export type MemberRemovePerson = z.infer<typeof memberRemovePersonSchema>;
  *  - `in_file`: an import's leaver whose email or phone is also on someone in the file, so
  *    the list can't yet say whose record they are: their app is left alone;
  *  - `not_over`: selected among the members whose membership is over (`onlyOver`), and
- *    since given a membership, or with a renewal waiting: they stay on the list. */
-export const memberRemoveKeptReasonSchema = z.enum(["staff", "own_record", "shared_email", "same_record", "not_in_app", "gone", "in_file", "not_over"]);
+ *    since given a membership, or with a renewal waiting: they stay on the list;
+ *  - `payment_due`: selected the same way, their membership over with a bill still open:
+ *    they stay on the list until it is settled or cancelled. */
+export const memberRemoveKeptReasonSchema = z.enum(["staff", "own_record", "shared_email", "same_record", "not_in_app", "gone", "in_file", "not_over", "payment_due"]);
 export type MemberRemoveKeptReason = z.infer<typeof memberRemoveKeptReasonSchema>;
 
 /** A big removal needs its own tick: more than 10 and more than 10 % of the list (records moving)
@@ -2048,19 +2051,22 @@ export const memberListRemoveSelectedRequestSchema = z
   .strict();
 export type MemberListRemoveSelectedRequest = z.infer<typeof memberListRemoveSelectedRequestSchema>;
 
-/** Remove and Keep on list pressed from the list of members whose membership is over, for
- *  one member of staff in an hour: a press a person, in a gym's first tidy-up. */
-export const MEMBER_TIDY_PRESSES_PER_HOUR = 300;
+/** The Remove box, Remove and Keep on list asked from the list of members whose membership
+ *  is over, for one member of staff in an hour: a box and a press a person removed, so
+ *  300 people one by one. */
+export const MEMBER_TIDY_PRESSES_PER_HOUR = 600;
 
 /** "Keep on list" for the people selected among those whose membership is over (21c-iii):
  *  the Members sign stops counting them until their membership changes. */
 export const memberListKeepListedRequestSchema = z.object({ selection: memberListSelectionSchema }).strict();
 export type MemberListKeepListedRequest = z.infer<typeof memberListKeepListedRequestSchema>;
 
-/** `kept`: how many of them are now left out of the sign. `notOver`: how many were
- *  selected and are not counted by it any more (given a membership, removed, or kept
- *  already), so nothing was changed for them. */
-export const memberListKeptListedSchema = z.object({ kept: z.number().int().min(0), notOver: z.number().int().min(0) }).strict();
+/** `kept`: how many of them are now left out of the sign. `already`: how many were kept
+ *  already. `notOver`: how many are not on the sign's list any more (removed, given a
+ *  membership, owing, or nobody of this gym's). Nothing was changed for the last two. */
+export const memberListKeptListedSchema = z
+  .object({ kept: z.number().int().min(0), already: z.number().int().min(0), notOver: z.number().int().min(0) })
+  .strict();
 export type MemberListKeptListed = z.infer<typeof memberListKeptListedSchema>;
 export const memberListKeptListedResponseSchema = z.object({ done: memberListKeptListedSchema }).strict();
 

@@ -133,13 +133,21 @@ export function overSignWords(n, words, { inView = false, readOnly = false } = {
   };
 }
 
-/** What Keep on list did, said above the list. `name`: the one person a row's button was for. */
+/** What Keep on list did, said above the list. `name`: the one person a row's button was
+ *  for. `already`: kept before this press; `notOver`: removed, renewed or owing since. */
 export function keptListedLine(done, words, name = null) {
-  const find = 'You can still find them with Filter, under Status.';
-  const skipped = done.notOver === 0 ? '' : ` ${done.notOver.toLocaleString('en')} ${done.notOver === 1 ? 'was' : 'were'} left as they are: their membership is not over any more.`;
-  if (done.kept === 0) return `Nothing was changed: ${done.notOver === 1 ? "this person's membership is" : "these people's memberships are"} not over any more.`;
-  const who = name !== null && done.kept === 1 ? name : `${done.kept.toLocaleString('en')} ${done.kept === 1 ? words.person : words.people}`;
-  return `${who} ${done.kept === 1 ? 'stays on your list and is' : 'stay on your list and are'} no longer counted here. ${find}${skipped}`;
+  const n = (k) => k.toLocaleString('en');
+  const already = done.already ?? 0;
+  const parts = [];
+  if (done.kept === 0) parts.push('Nothing was changed.');
+  else {
+    const who = name !== null && done.kept === 1 ? name : `${n(done.kept)} ${done.kept === 1 ? words.person : words.people}`;
+    parts.push(`${who} ${done.kept === 1 ? 'stays on your list and is' : 'stay on your list and are'} no longer counted here. You can still find them with Filter, under Status.`);
+  }
+  // Somebody else got there first, or the person has changed since the page was read.
+  if (already > 0) parts.push(`${n(already)} ${already === 1 ? 'was' : 'were'} already kept on your list.`);
+  if (done.notOver > 0) parts.push(`${n(done.notOver)} ${done.notOver === 1 ? 'is' : 'are'} no longer on this list.`);
+  return parts.join(' ');
 }
 
 /** Today in the gym's own time zone, 'YYYY-MM-DD', as the server decides a birthday; the

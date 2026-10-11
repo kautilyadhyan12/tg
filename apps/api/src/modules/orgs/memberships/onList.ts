@@ -40,6 +40,8 @@ export async function heldOnListOf(
 export interface LeftWith {
   on: string;
   heldId: string;
+  /** A bill of theirs is still open and its day has come. */
+  owes: boolean;
 }
 
 /** The list's rows, and with them each record it reads as "Ended" or "Cancelled" with the
@@ -104,7 +106,7 @@ async function bothReads(
   for (const person of over) {
     const held = person.held.map((m) => ({ ...m, usedUpOn: lastClass.get(m.id) ?? null }));
     const gone = heldLeft({ held, listedUnheld: person.listedUnheld, today });
-    if (gone !== null) left.set(person.entryId, gone);
+    if (gone !== null) left.set(person.entryId, { ...gone, owes: owed.get(person.entryId) != null });
   }
   return out;
 }

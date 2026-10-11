@@ -481,6 +481,15 @@ describe('adding a membership', () => {
     expect(screen.queryByTestId('held-add')).toBeNull();
     view.unmount();
 
+    // Two that are over: the one that ended last is the one picked, whichever the server lists first.
+    const earlier = held(3, GOLD, '2026-03-01', true, [[{ type: 'cancel', when: 'today' }, '2026-04-01']]);
+    for (const order of [[cancelled, earlier], [earlier, cancelled]]) {
+      orgService.getHeldMemberships.mockResolvedValue(answer(order));
+      const two = render(draw(ADA, 'Ada Lovelace', { addNow: true }));
+      expect(within(await screen.findByTestId('held-add')).getByRole('combobox').value).toBe(PACK.id);
+      two.unmount();
+    }
+
     // Somebody with a membership in use, or a type the gym no longer sells: nothing is picked for them.
     orgService.getHeldMemberships.mockResolvedValue(answer([cancelled], false, { types: [GOLD, typeOf(3, { name: 'Silver' })] }));
     const other = render(draw(ADA, 'Ada Lovelace', { addNow: true }));

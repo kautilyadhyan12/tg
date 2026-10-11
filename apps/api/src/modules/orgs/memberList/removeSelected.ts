@@ -68,7 +68,7 @@ const byNameThenId = (a: MemberRemovePerson, b: MemberRemovePerson): number => {
  *  that many may have more, so "every one of them selected" is never taken from it. */
 const SHARED_CONTACT_READ_MAX = 20;
 
-const KEPT_ORDER: readonly MemberRemoveKeptReason[] = ["not_over", "staff", "own_record", "shared_email", "in_file", "same_record", "not_in_app", "gone"];
+const KEPT_ORDER: readonly MemberRemoveKeptReason[] = ["not_over", "payment_due", "staff", "own_record", "shared_email", "in_file", "same_record", "not_in_app", "gone"];
 
 /** The box's digest: what the press would do, and nothing else — the records moved, and
  *  each person losing the app with the record they are removed with. */
@@ -140,8 +140,9 @@ const keep = (kept: Map<MemberRemoveKeptReason, MemberRemovePerson[]>, reason: M
  *  selected records reach.
  *
  *  `notOverIds` (21c-iii): asked from the list of members whose membership is over, the
- *  current records among those selected whose membership is NOT over now. They do not
- *  move, nobody loses the app with them, and each is named as staying. */
+ *  current records among those selected whose membership is NOT over now; `owingIds`,
+ *  those whose membership is over with a bill still open. Neither moves, nobody loses the
+ *  app with them, and each is named as staying, with why. */
 export function recordRemovalPlan(input: {
   gymId: string;
   selectedIds: readonly string[];
@@ -149,9 +150,11 @@ export function recordRemovalPlan(input: {
   members: readonly repo.MemberAgainstList[];
   scale: { listCurrent: number; seats: number };
   notOverIds?: readonly string[];
+  owingIds?: readonly string[];
 }): RemovalPlan {
   const found = new Map(input.records.map((record) => [record.id, record]));
-  const spared = new Set(input.notOverIds ?? []);
+  const owing = new Set(input.owingIds ?? []);
+  const spared = new Set([...(input.notOverIds ?? []), ...owing]);
   const records = input.records.filter((record) => record.former || !spared.has(record.id));
   const current = new Set(records.filter((record) => !record.former).map((record) => record.id));
   const past = new Set(records.filter((record) => record.former).map((record) => record.id));
@@ -161,7 +164,7 @@ export function recordRemovalPlan(input: {
     if (!found.has(id)) keep(kept, "gone", { name: "", entryId: id, userId: null });
   }
   for (const record of input.records) {
-    if (!record.former && spared.has(record.id)) keep(kept, "not_over", { name: record.fullName, entryId: record.id, userId: null });
+    if (!record.former && spared.has(record.id)) keep(kept, owing.has(record.id) ? "payment_due" : "not_over", { name: record.fullName, entryId: record.id, userId: null });
   }
   const move = records.filter((record) => !record.former).map((record) => ({ name: record.fullName, entryId: record.id, userId: null }));
   const emails = new Set(records.filter((record) => !record.former && record.email !== null).map((record) => (record.email ?? "").toLowerCase()));
@@ -385,20 +388,26 @@ export async function withPtSessions(sql: repo.SqlOrTx, gymId: string, plan: Rem
   return { ...plan, preview: { ...plan.preview, ptSessions: ending, digest: digestWithSessions(plan.preview.digest, ending.mark) } };
 }
 
-/** Of these records, those whose membership is not over now: anybody with a membership in
- *  use or still to start, with a renewal waiting, or with nothing held here. */
-async function notOverAmong(sql: repo.SqlOrTx, gymId: string, ids: readonly string[], now: Date): Promise<string[]> {
+/** Of these records, those the sign's list does not hold now: `notOver`, anybody with a
+ *  membership in use or still to start, with a renewal waiting, or with nothing held here;
+ *  `owing`, anybody whose membership is over with a bill still open. */
+async function notTidyAmong(sql: repo.SqlOrTx, gymId: string, ids: readonly string[], now: Date): Promise<{ notOver: string[]; owing: string[] }> {
   const today = dayInTz(now, await repo.gymTimeZone(sql, gymId));
   const over = await overNow(sql, gymId, today, ids);
-  return ids.filter((id) => !over.has(id));
+  return { notOver: ids.filter((id) => !over.has(id)), owing: ids.filter((id) => over.get(id)?.owes === true) };
 }
 
 /** The plan for these records, read on `sql` (the pool, or the press's transaction).
  *  `onlyOver`: asked from the list of members whose membership is over. */
 async function recordPlanOn(sql: repo.SqlOrTx, gymId: string, ids: readonly string[], now: Date, onlyOver: boolean): Promise<RemovalPlan> {
-  const notOverIds = onlyOver ? await notOverAmong(sql, gymId, ids, now) : [];
+  const stay = onlyOver ? await notTidyAmong(sql, gymId, ids, now) : { notOver: [], owing: [] };
   const { records, members, scale } = await recordInputsOn(sql, gymId, ids);
-  return await withPtSessions(sql, gymId, recordRemovalPlan({ gymId, selectedIds: ids, records, members, scale, notOverIds }), now);
+  return await withPtSessions(
+    sql,
+    gymId,
+    recordRemovalPlan({ gymId, selectedIds: ids, records, members, scale, notOverIds: stay.notOver, owingIds: stay.owing }),
+    now,
+  );
 }
 
 /** An import's leavers box, read on `sql` before the file is applied. */
