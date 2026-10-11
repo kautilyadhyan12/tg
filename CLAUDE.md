@@ -282,6 +282,13 @@ corepack pnpm --filter @app/shared exec tsc --noEmit
 corepack pnpm --filter @app/engine test
 corepack pnpm --filter web test
 
+# WHILE A JOB IS BEING BUILT, typecheck and lint remember their last run (see below):
+corepack pnpm --filter api exec tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc.tsbuildinfo
+corepack pnpm --filter api exec eslint src test tools --cache --cache-location node_modules/.cache/eslint/
+corepack pnpm --filter @app/shared exec tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc.tsbuildinfo
+corepack pnpm --filter @app/shared exec eslint src test --cache --cache-location node_modules/.cache/eslint/
+corepack pnpm --filter web exec eslint <the folders you changed> --cache --cache-location node_modules/.cache/eslint/
+
 # database-backed api tests, once per machine restart:
 docker compose -f infra/docker-compose.dev.yml up -d postgres redis
 corepack pnpm --filter api test:local            # or test:local -t "name" / a file path
@@ -295,6 +302,16 @@ grep -rnE 'Date\.now|new Date\(|Math\.random|performance\.now|setTimeout|setInte
 # secrets
 gitleaks protect --staged --no-banner
 ```
+
+**Typecheck and lint, while building and before a push** (Kd, RULINGS 2026-10-11). The
+plain commands start from zero: measured that day on battery, the api's lint took 199.9 s
+and its typecheck 133.9 s, and a job ran each about 14 times. The remembering ones re-read
+only what changed: 5.4 s and 17.2 s when nothing had. So while a job is being built, run
+the remembering ones. **The last typecheck and lint before every push are the plain ones,
+from zero**, and GitHub's always are: a remembered lint does not re-read a file nobody
+touched, so a fault that a change elsewhere causes in it shows only in a plain run. What
+they keep is under each package's `node_modules/.cache`, which git ignores; delete that
+folder if a remembered result ever looks wrong.
 
 Dev servers: api from `apps/api` with `DATABASE_URL` pointing at the LOCAL database
 (Folder A's `apps/api/.env` points at Kd's real Neon data; never run sweeps or seeds
