@@ -160,7 +160,11 @@ export default function MemberMemberships({
   useEffect(() => {
     if (!addsNow || addedNow.current) return;
     addedNow.current = true;
-    setForm(addForm(shown.types, shown.today));
+    // The membership they had is picked already, where the gym still sells it: staff
+    // change it only if the person is taking something else.
+    const had = shown.memberships.find((m) => !isLive(m) && shown.types.some((t) => t.id === m.typeId));
+    const form = addForm(shown.types, shown.today);
+    setForm(had === undefined || form.typeId !== '' ? form : { ...form, typeId: had.typeId });
     setOpen({ what: 'add' });
   }, [addsNow, shown]);
   // What their list says their membership is, where they do not hold it here.

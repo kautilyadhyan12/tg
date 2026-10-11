@@ -177,7 +177,9 @@ describe('tidying up members whose membership is over', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Paula Paid' }));
     fireEvent.click(within(screen.getByTestId('sel-bar')).getByTestId('bar-remove'));
     await screen.findByTestId('remove-box');
-    expect(orgService.previewRemoveSelected).toHaveBeenLastCalledWith(GYM, { kind: 'ticked', entryIds: [paula.entryId] }, false);
+    expect(orgService.previewRemoveSelected).toHaveBeenLastCalledWith(GYM, { kind: 'ticked', entryIds: [paula.entryId] });
+    fireEvent.click(screen.getByText('Press remove'));
+    await waitFor(() => expect(orgService.removeSelected).toHaveBeenLastCalledWith(GYM, { kind: 'ticked', entryIds: [paula.entryId] }, 'd'.repeat(64), false));
   });
 
   it('the sign says how many, and Review them shows only those people, each with the three things staff can do', async () => {

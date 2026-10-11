@@ -4867,7 +4867,7 @@ read and its write) · a member's inbox after 21 such sends 4.5 ms · a gym of 2
 are on no record cannot be ticked (Put on the list first) · no phone notification until
 the phone app has push.
 
-### 16.9 Somebody whose membership ended counts as left (ROADMAP 21c-i, 21c-ii)
+### 16.9 Somebody whose membership ended counts as left (ROADMAP 21c-i, 21c-ii, 21c-iii)
 
 *(A PLAN, written 2026-10-11 by a planning terminal on Kd's words: "write the plan properly
 for both job so that high effort can follow it and not make mistakes". NOTHING HERE IS
@@ -5365,6 +5365,59 @@ one moment stall it 104 to 150 ms (HANDOFF has the table).
   the weeks began, as its own words say; 21d visits every part of Reports.
 - A trial counted apart from members · the day a used-up pack's last class was taken ·
   a waiting time (dropped, §16.9.1).
+
+#### 16.9.6 Job three, 21c-iii: tidy up members whose membership is over
+
+*(Built 2026-10-11. Kd, at 21c-ii's click-through, asked for a sign atop Members so a gym
+can keep its list clean, "in one go also one by one"; and to its plan: "go, yes to keep on
+list". RULINGS 2026-10-11.)*
+
+**Who the sign counts.** The current members Reports counts as left (§16.9.4): the Members
+list reads them as Ended or Cancelled from a membership given here. One answer serves
+Reports, the sign, its list and its Remove (`overNow`, `memberships/over.ts`). Never
+counted: anybody with a membership in use, owing, frozen or still to start; anybody whose
+renewal is waiting on the Memberships page (they are in that sign); a class pack whose last
+booked class is still to come; anybody the gym has only its own file's word for. Also left
+out: anybody staff chose to keep on the list (below).
+
+**The screen** (Members & staff, Your list):
+
+| Where | Words |
+|---|---|
+| The sign | "3 memberships have ended or been cancelled" · **Review them** ("Review it" for one; "See who" in a gym that can only read) · "These members are still on your member list. Reports already counts them as having left." |
+| The sign, once its list is shown | "For each member, add a new membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first." |
+| The list | the same Members list, showing only those people, with the pill "Membership ended or cancelled" |
+| Under each row | **Add membership** · **Remove** · **Keep on list** |
+| The bar, with people ticked | its usual buttons, and **Keep on list** |
+| When nobody is left | "Nobody is left to review. No member on your list has a membership that has ended or been cancelled." · **Show all members** |
+
+- **Add membership** opens that person's page with the Add membership form open and the
+  membership they had already picked, where the gym still sells it. It is the name of the
+  form it opens; the plan's word was "Renew".
+- **Remove** is the Remove that exists: the box names who moves to Past members and who
+  loses the app, and nobody moves before its red button. Asked from this list
+  (`onlyOver`), the server moves only people whose membership is over when the box is made
+  and again, under the gym's lock, when it is pressed; anybody else selected is named as
+  staying ("Stay on your list: they have a membership now, or one waiting to be renewed.").
+- **Keep on list** changes nothing about the person. The sign stops counting them, kept
+  with the membership that is over now (`kept_listed_held_id`), so a later membership of
+  theirs that ends is counted again. Reports still counts them as left. They are still
+  found with Filter, under Status.
+- Nothing is ever done by itself, and nobody is deleted.
+
+**Reports keeps the day.** Somebody whose membership was already over when they are moved
+to Past members left on that earlier day, not the day Remove was pressed: the step that
+moves them stores it (`membership_ended_on`, migration 0096), by every way a person is
+moved (Remove on the people selected, Remove on a person's page, an import's leavers), and
+Put back clears it. A month that has closed reads the same before and after a tidy-up.
+Somebody removed while their membership was in use left on the day they were removed, as
+before.
+
+**Routes.** `GET /member-list` answers `over.count` · `GET /member-list/entries` and a
+"Select all" take `membership=over` · `POST /member-list/selected/remove-preview` and
+`/remove` take `onlyOver: true` · `POST /member-list/selected/keep-listed`. Remove and
+Keep on list pressed from this list have their own allowance, 300 an hour for one member of
+staff, the address counted a gym at a time.
 
 ## 17. The console's look
 

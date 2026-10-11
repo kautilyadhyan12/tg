@@ -324,7 +324,7 @@ function OverSign({ sign, onReview }) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="c-s15 c-w6">{sign.title}</span>
           {sign.button !== null ? (
-            <button type="button" onClick={onReview} className="c-btn-link c-s14 c-w6" data-testid="over-review">
+            <button type="button" onClick={onReview} className="c-btn c-btn-link c-s14 c-w6" data-testid="over-review">
               {sign.button}
             </button>
           ) : null}
@@ -678,11 +678,12 @@ export default function MemberListPanel({
   // The Remove box reads and presses for the people selected now; a "Select all" that moved
   // gives a new selection, and so a new read.
   const loadRemove = useCallback(
-    () => orgService.previewRemoveSelected(gymId, removeFor, removeOver).then((res) => res.data.preview),
+    () => (removeOver ? orgService.previewRemoveSelected(gymId, removeFor, true) : orgService.previewRemoveSelected(gymId, removeFor)).then((res) => res.data.preview),
     [gymId, removeFor, removeOver],
   );
   const pressRemove = useCallback(
-    (digest, large) => orgService.removeSelected(gymId, removeFor, digest, large, removeOver).then((res) => res.data.removed),
+    (digest, large) =>
+      (removeOver ? orgService.removeSelected(gymId, removeFor, digest, large, true) : orgService.removeSelected(gymId, removeFor, digest, large)).then((res) => res.data.removed),
     [gymId, removeFor, removeOver],
   );
   // ── Members whose membership is over (21c-iii) ──

@@ -465,6 +465,39 @@ describe('what the box draws', () => {
 });
 
 describe('adding a membership', () => {
+  // 21c-iii: "Add membership" on the Members list's own row opens the person's page with
+  // the form open, and the membership they had already picked.
+  it('opened by the list’s own button, the form is open already with the membership they had picked; nothing is sent until staff press', async () => {
+    const cancelled = held(2, PACK, '2026-06-01', true, [[{ type: 'cancel', when: 'today' }, '2026-07-01']]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([cancelled]));
+    const view = render(draw(ADA, 'Ada Lovelace', { addNow: true }));
+    const form = within(await screen.findByTestId('held-add'));
+    expect(form.getByText('Add a membership for Ada Lovelace')).toBeTruthy();
+    expect(form.getByRole('combobox').value).toBe(PACK.id);
+    expect(form.getByRole('button', { name: 'Add membership' }).disabled).toBe(false);
+    expect(orgService.giveHeldMembership).not.toHaveBeenCalled();
+    // Back closes it, and it does not open by itself again.
+    fireEvent.click(form.getByRole('button', { name: 'Back' }));
+    expect(screen.queryByTestId('held-add')).toBeNull();
+    view.unmount();
+
+    // Somebody with a membership in use, or a type the gym no longer sells: nothing is picked for them.
+    orgService.getHeldMemberships.mockResolvedValue(answer([cancelled], false, { types: [GOLD, typeOf(3, { name: 'Silver' })] }));
+    const other = render(draw(ADA, 'Ada Lovelace', { addNow: true }));
+    expect(within(await screen.findByTestId('held-add')).getByRole('combobox').value).toBe('');
+    other.unmount();
+
+    // A gym that can only read, and a page opened the ordinary way: no form by itself.
+    orgService.getHeldMemberships.mockResolvedValue(answer([cancelled]));
+    const readOnly = render(draw(ADA, 'Ada Lovelace', { addNow: true, readOnly: true }));
+    await (await boxSoon()).findByRole('button', { name: 'Show 1 earlier membership' });
+    expect(screen.queryByTestId('held-add')).toBeNull();
+    readOnly.unmount();
+    render(draw(ADA, 'Ada Lovelace'));
+    await (await boxSoon()).findByRole('button', { name: 'Add membership' });
+    expect(screen.queryByTestId('held-add')).toBeNull();
+  });
+
   it('shows what the dates will be before it is added, and sends the type, the day and the tick once', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([]));
     orgService.giveHeldMembership.mockRejectedValueOnce(refusal(500, { error: 'internal', message: 'Something went wrong.' }));
