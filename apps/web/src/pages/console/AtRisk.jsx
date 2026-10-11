@@ -202,8 +202,7 @@ export default function AtRisk() {
   const { orgSlug } = useParams();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
   const gymId = org?.id ?? null;
-  const privileges = viewerPrivileges(org);
-  const may = canSeeAtRisk(privileges);
+  const may = canSeeAtRisk(viewerPrivileges(org));
   // Each answer carries the gym it was asked for, so another gym's people are never drawn.
   const [state, setState] = useState({ gymId: null, error: null, refused: false, list: null });
   const [shown, setShown] = useState(PAGE);
@@ -262,6 +261,7 @@ export default function AtRisk() {
     );
   }
 
+  const privileges = viewerPrivileges(org);
   const words = orgWords(org.orgType);
   const readOnly = consoleIsReadOnly(org);
   const mine = state.gymId === gymId ? state : { gymId, error: null, refused: false, list: null };

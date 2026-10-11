@@ -43,6 +43,8 @@ function openableToday(privileges) {
     ...(has('memberships.manage') ? [`${BASE}/memberships`] : []),
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
+    // At risk (20d-i): its own page, for whoever may see the gym's people.
+    ...(has('members.read') ? [`${BASE}/at-risk`] : []),
     ...(has('schedule.manage') ? [`${BASE}/classes`] : []),
     // Personal training (17e-i) is every member of staff's: their own hours and sessions.
     `${BASE}/personal-training`,

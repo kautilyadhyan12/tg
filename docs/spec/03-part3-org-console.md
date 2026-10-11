@@ -4725,6 +4725,41 @@ It reads visits (§12), so a gym with no check-in in use is told the list needs 
 It takes the place of "slipping away" (ROADMAP Stage 2 item 2). The owner's weekly
 summary email: new, left, at risk, visits against last week, money overdue.
 
+**Built in 20d-i (2026-10-12; RULINGS that day): the list.** The summary email is 20d-ii.
+- **The page**, **At risk**, has its own line in the menu under Attendance, for whoever
+  holds `members.read` (`GET /v1/orgs/:gymId/at-risk`). Overview says how many there are,
+  with a button to it, and says nothing while there is nobody.
+- **The rule** is `atRiskOf` (`packages/shared/src/atRisk.ts`), pure, a person at a time.
+  Somebody is at risk when their last check-in, by ANY means (the desk's scan, staff's
+  Check in, a visit staff added later, their own tap), is the gym's number of days back or
+  more (7 · 10 · 14 · 21 · 30; 14 to start) and no more than 90; they came in at least the
+  gym's number (1 to 4; 2 to start) of **the four weeks that ended on that last visit**
+  (the 28 days up to it, in sevens), so nobody leaves the list only because days pass; and
+  the gym checked somebody in on at least half of its number of days since (rounded up),
+  so a gym that was shut, or stopped using check-in, names nobody. A visit dated after
+  today is a visit. Anything unreadable is no decision.
+- **Who is read**: a record on the gym's list, with the visits that name it and those of
+  the app accounts that hold it; and somebody in the app with no record. **Never listed**:
+  a past member, somebody removed from the app with no record, the owner and the gym's
+  staff, anybody the Members list reads as Frozen, Ended or Cancelled (`heldOnListOf`:
+  one answer on both pages), and anybody away more than 90 days. Most regular first, then
+  who stopped most lately; the first 200, with the count of all.
+- **The gym's two numbers** are on the page, saved by `org.manage` at a gym on a plan
+  (`PUT …/at-risk/settings`; `gyms.at_risk_quiet_days`, `gyms.at_risk_weeks_came`,
+  migration `0097`); other staff read who can change them.
+- **One press** on a row opens a box under it with the four come-back lines of 16.1's
+  pinned note (`GYM_COME_BACK_LINES`); Send writes one (`POST …/members/:userId/nudge`,
+  as before: once in 7 days a person a gym) and the row says what was sent and the day
+  another may go. It is offered only where ONE live app account holds the record. Somebody
+  with no app, or a record two accounts share, reads why, with a button that opens their
+  own page, where their phone and email are.
+- **A gym that uses only part of the app**: with no check-in ever, or check-in begun less
+  than its number of days ago, the page says so, with a button to Attendance and no list;
+  with hardly any check-in lately it says so above the list. Never "Nobody has stopped
+  coming" from a gym that checks nobody in.
+- **Left as it was**: the older list of three quiet days that Overview's answer still
+  carries (`getGymSlippingAway`); no screen draws it.
+
 ### 16.5 Reports
 
 One Reports page (`reports.read`: owner and manager), every figure with the info
