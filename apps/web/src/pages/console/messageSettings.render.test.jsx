@@ -277,14 +277,19 @@ describe('the class reminder', () => {
     expect([...pick.options].map((o) => o.textContent)).toEqual(['1 hour', '2 hours', '3 hours', '12 hours', '24 hours']);
     expect(screen.queryByTestId('missing-class_reminder')).toBeNull();
     // Nothing is sent before Save.
+    // Save is at the end of nine rows: it stays in view only once something changed.
+    expect(screen.getByTestId('message-settings-save').className).not.toContain('c-save-stuck');
     fireEvent.change(pick, { target: { value: '24' } });
     expect(updateMessageSettings).not.toHaveBeenCalled();
     expect(screen.getByText('Not saved yet.')).toBeTruthy();
+    expect(screen.getByTestId('message-settings-save').className).toContain('c-save-stuck');
     updateMessageSettings.mockResolvedValue({ data: { ...START, classReminderHours: 24 } });
     fireEvent.click(save());
     await screen.findByText('Saved. It holds from the next message sent.');
     expect(updateMessageSettings).toHaveBeenCalledWith('g1', { messages: START.messages, ...NUMBERS, classReminderHours: 24 });
     expect(within(box('Class reminder')).getByLabelText('Hours before it starts').value).toBe('24');
+    // "Saved." is said where Save was pressed.
+    expect(screen.getByTestId('message-settings-save').className).toContain('c-save-stuck');
   });
 
   it('says its times on the gym\'s own clock', async () => {

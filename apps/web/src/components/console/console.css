@@ -827,6 +827,23 @@
   padding-left: 16px;
   border-bottom: 0;
 }
+/* A long form's Save, once something in it has changed: it stays at the bottom of the
+   screen while the form scrolls, above the phone's tab bar, so nobody has to travel to the
+   end of the form to press it (Kd, 2026-10-11). */
+.c-save-stuck {
+  position: sticky;
+  bottom: 64px;
+  z-index: 15;
+  background: var(--page);
+  border-top: 1px solid var(--line);
+  margin: 0 -8px;
+  padding: 12px 8px;
+}
+@media (min-width: 768px) {
+  .c-save-stuck {
+    bottom: 0;
+  }
+}
 
 /* Back to top and Go to the bottom (`ScrollJump`): two round buttons at the bottom right,
    over the phone's tab bar, and over its selection bar when that shows. */

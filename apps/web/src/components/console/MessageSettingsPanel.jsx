@@ -319,7 +319,7 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
 
           {saveError !== null ? <ConsoleFailed message={saveError} /> : null}
 
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 ${changed || saving || saved ? 'c-save-stuck' : ''}`} data-testid="message-settings-save">
             <button
               type="submit"
               disabled={!canSave}
