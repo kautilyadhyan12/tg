@@ -3,6 +3,7 @@
 // step 3); the repo enforces tenancy in every WHERE and the routes stay thin.
 import type { Sql } from "postgres";
 import {
+  GYM_COME_BACK_WAIT_DAYS,
   GYM_CONTACT_WORDS,
   GYM_POSTAL_ADDRESS_MAX_CHARS,
   cleanGymContactEmail,
@@ -3325,7 +3326,7 @@ export async function sendOrgNudge(
       throw new OrgsError(
         409,
         "nudge_already_sent",
-        `This ${orgWords(org.orgType).person} has already been sent a message in the last 7 days.`,
+        `This ${orgWords(org.orgType).person} has already been sent a message in the last ${String(GYM_COME_BACK_WAIT_DAYS)} days.`,
       );
     case "sent":
       return sendGymNudgeResponseSchema.parse({

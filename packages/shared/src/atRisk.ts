@@ -1,0 +1,188 @@
+// The console's At risk page (spec Part 3 §16.4; ROADMAP 20d-i): the people on a gym's
+// list who used to come and have stopped.
+//
+// `atRiskOf` is the one rule: pure, a person at a time. The server gathers what it reads
+// and decides nothing itself.
+import { z } from "zod";
+import { addDays, daysBetween } from "./heldMemberships.js";
+import { GYM_MESSAGE_BODY_MAX } from "./gymMessages.js";
+
+/** No visit for this many days: the numbers a gym may pick, and the one it starts on. */
+export const AT_RISK_QUIET_DAYS = [7, 10, 14, 21, 30] as const;
+export const AT_RISK_QUIET_DAYS_DEFAULT = 14;
+/** The weeks looked at before somebody stopped: the 28 days that end on their last visit. */
+export const AT_RISK_WEEKS = 4;
+/** They came in at least this many of those weeks: what a gym may pick, and where it starts. */
+export const AT_RISK_WEEKS_CAME = [1, 2, 3, 4] as const;
+export const AT_RISK_WEEKS_CAME_DEFAULT = 2;
+/** Somebody away longer than this is no longer listed. */
+export const AT_RISK_AWAY_MAX_DAYS = 90;
+/** How far back a person's visits are read: the longest absence and the weeks before it. */
+export const AT_RISK_READ_DAYS = AT_RISK_AWAY_MAX_DAYS + AT_RISK_WEEKS * 7;
+/** A gym may send one person a come-back message, ready-made or its own, once in this
+ *  many days (Kd, RULINGS 2026-10-12; it was 7). */
+export const GYM_COME_BACK_WAIT_DAYS = 3;
+/** How many people one read lists, the most regular first. */
+export const AT_RISK_MAX = 200;
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const daySchema = z.string().regex(DAY);
+
+/** A day that is one: "2026-02-30" is not. */
+function isDay(day: unknown): day is string {
+  return typeof day === "string" && DAY.test(day) && addDays(day, 0) === day;
+}
+
+/** Did the gym go on recording who came, from the day after `from` up to `today`?
+ *
+ *  Judged against the gym's OWN rhythm, never the calendar: the days somebody came in that
+ *  stretch, a week, are at least half of the days a week in the four weeks that ended on
+ *  `from`. So a gym open Monday, Wednesday and Friday, or at weekends only, is in use; a
+ *  gym that was shut for most of the stretch, or stopped recording, is not, and no absence
+ *  in it is read as anybody's own. With no day at all in the stretch the answer is no. */
+export function atRiskGymKeptOn(gymDays: readonly string[], from: string, today: string): { since: number; before: number; keptOn: boolean } {
+  const span = daysBetween(from, today);
+  const beforeFrom = addDays(from, -AT_RISK_WEEKS * 7);
+  const since = new Set<string>();
+  const before = new Set<string>();
+  // The cheap comparisons first: a gym open every day has a long list of days.
+  for (const day of gymDays) {
+    if (typeof day !== "string" || day > today || day <= beforeFrom || !isDay(day)) continue;
+    if (day > from) since.add(day);
+    else before.add(day);
+  }
+  const keptOn = since.size > 0 && since.size * 2 * AT_RISK_WEEKS * 7 >= before.size * span;
+  return { since: since.size, before: before.size, keptOn };
+}
+
+export interface AtRiskInput {
+  /** Today on the gym's own calendar. */
+  today: string;
+  quietDays: number;
+  weeksCame: number;
+  /** Every day this person came, by any means, in any order: a check-in of any kind, or a
+   *  class place or personal training session staff marked as attended. */
+  visitDays: readonly string[];
+  /** Every day anybody came, by the same means. */
+  gymDays: readonly string[];
+}
+
+export type AtRisk =
+  | { atRisk: true; lastVisitOn: string; daysAway: number; weeksCame: number }
+  | { atRisk: false; why: "unreadable" | "never_came" | "came_lately" | "away_too_long" | "not_regular" | "gym_quiet" };
+
+/** Has this person stopped coming?
+ *
+ *  Yes when their last visit is `quietDays` or more back and no more than
+ *  `AT_RISK_AWAY_MAX_DAYS`, they came in `weeksCame` or more of the four weeks that ended
+ *  on that visit, and the gym went on recording who came since (`atRiskGymKeptOn`). A visit dated
+ *  after today (a gym that moved its clock) is a visit: they came. Anything unreadable is
+ *  no decision, never a name on the list. */
+export function atRiskOf(input: AtRiskInput): AtRisk {
+  const { today, quietDays, weeksCame } = input;
+  if (!isDay(today) || !Number.isInteger(quietDays) || quietDays < 1 || !Number.isInteger(weeksCame) || weeksCame < 1 || weeksCame > AT_RISK_WEEKS) {
+    return { atRisk: false, why: "unreadable" };
+  }
+  if (!input.visitDays.every(isDay)) return { atRisk: false, why: "unreadable" };
+  if (input.visitDays.length === 0) return { atRisk: false, why: "never_came" };
+  const last = input.visitDays.reduce((a, b) => (a > b ? a : b));
+  const daysAway = daysBetween(last, today);
+  if (daysAway < quietDays) return { atRisk: false, why: "came_lately" };
+  if (daysAway > AT_RISK_AWAY_MAX_DAYS) return { atRisk: false, why: "away_too_long" };
+  const weeks = new Set<number>();
+  for (const day of input.visitDays) {
+    const back = daysBetween(day, last);
+    if (back < AT_RISK_WEEKS * 7) weeks.add(Math.floor(back / 7));
+  }
+  if (weeks.size < weeksCame) return { atRisk: false, why: "not_regular" };
+  if (!atRiskGymKeptOn(input.gymDays, last, today).keptOn) return { atRisk: false, why: "gym_quiet" };
+  return { atRisk: true, lastVisitOn: last, daysAway, weeksCame: weeks.size };
+}
+
+/** Whether the list can be read yet, from the gym's own check-ins.
+ *  `none`: nobody was ever checked in · `new`: check-in began too lately for anybody to
+ *  have come and stopped · `stopped`: far fewer days with a check-in lately than is usual
+ *  at this gym, so nobody who stopped in that time is listed · `in_use`. */
+export const atRiskCheckinSchema = z.enum(["none", "new", "stopped", "in_use"]);
+export type AtRiskCheckin = z.infer<typeof atRiskCheckinSchema>;
+
+export function atRiskCheckin(input: { today: string; quietDays: number; firstCheckinOn: string | null; gymDays: readonly string[] }): AtRiskCheckin {
+  if (input.firstCheckinOn === null || !isDay(input.firstCheckinOn) || !isDay(input.today)) return "none";
+  if (daysBetween(input.firstCheckinOn, input.today) < input.quietDays) return "new";
+  return atRiskGymKeptOn(input.gymDays, addDays(input.today, -input.quietDays), input.today).keptOn ? "in_use" : "stopped";
+}
+
+/** On how many of the gym's last `quietDays` days anybody came. */
+export function atRiskDaysLately(gymDays: readonly string[], today: string, quietDays: number): number {
+  return isDay(today) ? atRiskGymKeptOn(gymDays, addDays(today, -quietDays), today).since : 0;
+}
+
+// ── THE WIRE ──
+
+export const atRiskSettingsSchema = z
+  .object({
+    quietDays: z.number().int().refine((n) => AT_RISK_QUIET_DAYS.some((d) => d === n)),
+    weeksCame: z.number().int().refine((n) => AT_RISK_WEEKS_CAME.some((w) => w === n)),
+  })
+  .strict();
+export type AtRiskSettings = z.infer<typeof atRiskSettingsSchema>;
+
+/** Who a message can go to: the one app account that holds the record. */
+export const atRiskAppSchema = z.enum(["one", "none", "shared"]);
+
+/** One of the ready-made lines (`preset`), or the gym's own words (`body`). */
+export const atRiskLastMessageSchema = z.object({ preset: z.string().nullable(), body: z.string().nullable(), sentAt: z.string() }).strict();
+
+/** The gym's own words to one person. `key` is made once for a box, so a second press of
+ *  it sends nothing more. The words are checked as a message to a group's are. */
+export const atRiskMessageRequestSchema = z
+  .object({ userId: z.string().uuid(), body: z.string().min(1).max(GYM_MESSAGE_BODY_MAX * 4), key: z.string().uuid() })
+  .strict();
+export type AtRiskMessageRequest = z.infer<typeof atRiskMessageRequestSchema>;
+export const atRiskMessageResponseSchema = z.object({ message: z.object({ body: z.string(), sentAt: z.string() }).strict() }).strict();
+export type AtRiskMessageResponse = z.infer<typeof atRiskMessageResponseSchema>;
+
+export const atRiskPersonSchema = z.object({
+  /** The record on the gym's list, when they have one. */
+  entryId: z.string().uuid().nullable(),
+  /** The app account a message goes to, when exactly one holds the record. */
+  userId: z.string().uuid().nullable(),
+  app: atRiskAppSchema,
+  name: z.string(),
+  lastVisitOn: daySchema,
+  daysAway: z.number().int().min(0),
+  weeksCame: z.number().int().min(1).max(AT_RISK_WEEKS),
+  /** The gym's newest come-back message to them, and when another may go (null: now). */
+  lastMessage: atRiskLastMessageSchema.nullable(),
+  messageableAt: z.string().nullable(),
+});
+export type AtRiskPerson = z.infer<typeof atRiskPersonSchema>;
+
+export const atRiskResponseSchema = z.object({
+  settings: atRiskSettingsSchema,
+  today: daySchema,
+  checkin: atRiskCheckinSchema,
+  firstCheckinOn: daySchema.nullable(),
+  lastCheckinOn: daySchema.nullable(),
+  /** On how many of the last `settings.quietDays` days anybody came. */
+  checkinDaysLately: z.number().int().min(0).default(0),
+  /** Everybody at risk, and the first `AT_RISK_MAX` of them. */
+  total: z.number().int().min(0),
+  people: z.array(atRiskPersonSchema).max(AT_RISK_MAX),
+});
+export type AtRiskResponse = z.infer<typeof atRiskResponseSchema>;
+
+export const atRiskSettingsResponseSchema = z.object({ settings: atRiskSettingsSchema });
+export type AtRiskSettingsResponse = z.infer<typeof atRiskSettingsResponseSchema>;
+
+/** The list's order: who came most regularly first, then who stopped most lately, then by
+ *  name, so a reload never reshuffles it. */
+export function atRiskOrder(a: Pick<AtRiskPerson, "weeksCame" | "daysAway" | "name" | "entryId" | "userId">, b: Pick<AtRiskPerson, "weeksCame" | "daysAway" | "name" | "entryId" | "userId">): number {
+  if (a.weeksCame !== b.weeksCame) return b.weeksCame - a.weeksCame;
+  if (a.daysAway !== b.daysAway) return a.daysAway - b.daysAway;
+  const names = a.name.localeCompare(b.name, "en");
+  if (names !== 0) return names;
+  const ka = a.entryId ?? a.userId ?? "";
+  const kb = b.entryId ?? b.userId ?? "";
+  return ka < kb ? -1 : ka > kb ? 1 : 0;
+}

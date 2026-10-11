@@ -384,17 +384,18 @@ d("the slipping-away list and the nudge (real Postgres)", () => {
 
   /** JUST OUTSIDE THE ROLLING CAP AND UNAMBIGUOUSLY INSIDE ONE A DAY WIDER.
    *
-   *  The cap is seven days; this is seven and a half. **A whole eight would be
+   *  The cap is `GYM_COME_BACK_WAIT_DAYS`, three days since 20d-i (it was seven: Kd,
+   *  RULINGS 2026-10-12); this is three and a half. **A whole four would be
    *  outside both the true window and a widened one, which is exactly how O287
    *  and O288 survived their first run** — a boundary fixture has to sit in the
    *  gap between the rule and the mutation, not beyond both. */
-  const JUST_PAST_CAP_DAYS = 7.5;
+  const JUST_PAST_CAP_DAYS = 3.5;
 
-  /** JUST INSIDE IT. Six days is inside seven and inside eight, so this half of
+  /** JUST INSIDE IT. Two days is inside three and inside four, so this half of
    *  the pair does not distinguish the two — the half above is what does. It is
    *  here because a guard whose only tested failure is "it did not fire" is
    *  satisfied by a door that is simply shut (:7104's PG1). */
-  const INSIDE_CAP_DAYS = 6;
+  const INSIDE_CAP_DAYS = 2;
 
   /** The nudge's own audit rows, filtered by ACTION — joining a member writes
    *  its own rows into the same gym, so an unfiltered count would pass on

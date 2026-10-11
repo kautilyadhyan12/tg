@@ -6,6 +6,7 @@ import JoinCodesPanel from '../../components/console/JoinCodesPanel';
 import BringMembersInCard from '../../components/console/BringMembersInCard';
 import OverviewNumbers from '../../components/console/OverviewNumbers';
 import StartHereCard from '../../components/console/StartHereCard';
+import AtRiskLine from '../../components/console/AtRiskLine';
 import TrialCard from '../../components/console/TrialCard';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { codesRetired, orgService, errorText, isRetryable } from '../../api/orgsApi';
@@ -468,6 +469,10 @@ export default function Overview() {
           onCheered={reloadOverview}
         />
       ) : null}
+
+      {/* WHO HAS STOPPED COMING (20d-i): the count and a button to the At risk list. It
+          reads for itself and draws nothing when there is nobody to act on. */}
+      <AtRiskLine gymId={org.id} orgSlug={orgSlug} orgType={org.orgType} privileges={viewerPrivileges(org)} />
 
       {/* ── The join code pane, on its own outcome ─────────────────────── */}
       {codes.loading ? <ConsoleLoading label="Loading…" /> : null}

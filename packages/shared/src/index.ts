@@ -62,5 +62,6 @@ export * from "./gymMessages.js";
 export * from "./gymMessageMemberships.js";
 export * from "./gymClassReminders.js";
 export * from "./gymGroupMessages.js";
+export * from "./atRisk.js";
 export * from "./gymMessageSettings.js";
 export * from "./gymContact.js";

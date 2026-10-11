@@ -394,3 +394,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **21c-iii, as it stood when it was built (merged 2026-10-12, PR #225):**
 
      - 21c-iii. [ ] **Tidy up members whose membership is over** (Kd, RULINGS 2026-10-11; after 21c-ii): a sign atop Members, "3 memberships have ended or been cancelled · Review them", opens the list showing only those people; staff move them to Past members all in one go or one by one, or renew them; nothing is ever removed by itself, and the sign goes when nobody is left.
+
+**20d-i, as it stood when it was built (merged 2026-10-12, PR #226):**
+
+     - 20d-i. [ ] **The At risk list**: a line in the menu, At risk, naming who used to come and has stopped (no check-in for 14 days after coming in 2 of their last 4 weeks, both the gym's to change), each with their last check-in and one press to send a come-back message.

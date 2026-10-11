@@ -20,6 +20,7 @@ import { reworkInstants as reworkEventInstants } from "./events/repo.js";
 import { reworkTimeOffInstants } from "./pt/repo.js";
 import { endTrainersSessions, endedAuditMeta, requireSessionsConfirmed } from "./pt/changes.js";
 import { streaks, visitsWithOwner } from "./leaderboard/visits.js";
+import { comeBackTooSoon } from "./atRisk/repo.js";
 import {
   ATTENDANCE_PAGE_LIMIT,
   ATTENDANCE_SUMMARY_LIMIT,
@@ -37,6 +38,7 @@ import {
   ON_A_ROLL_MIN_WEEKS,
   OVERVIEW_MONTH_DAYS,
   OVERVIEW_WEEKS,
+  GYM_COME_BACK_WAIT_DAYS,
   SLIPPING_AWAY_ENGAGED_DAYS,
   SLIPPING_AWAY_LIMIT,
   SLIPPING_AWAY_MIN_HISTORY_DAYS,
@@ -5588,10 +5590,10 @@ export async function getGymSlippingAway(
            -- The interval is added to the ROW'S OWN created_at rather than
            -- computed from now(), so the answer is the instant the window
            -- actually reopens and not a duration a screen must add to something.
-           (SELECT max(n.created_at) + interval '7 days'
+           (SELECT max(n.created_at) + make_interval(days => ${GYM_COME_BACK_WAIT_DAYS}::int)
               FROM gym_nudges n
              WHERE n.gym_id = ${input.gymId} AND n.user_id = q.user_id
-               AND n.created_at > now() - interval '7 days') AS nudgeable_at
+               AND n.created_at > now() - make_interval(days => ${GYM_COME_BACK_WAIT_DAYS}::int)) AS nudgeable_at
     FROM quiet q
     JOIN users u ON u.id = q.user_id
     -- FOUR KEYS, because the first three can tie and an unstable ORDER BY makes
@@ -5709,13 +5711,9 @@ export async function sendGymNudge(
     //
     // **`now()` IS THE TRANSACTION'S CLOCK**, so a send and its guard cannot
     // straddle the boundary.
-    const recent = await tx<{ one: number }[]>`
-      SELECT 1 AS one
-      FROM gym_nudges n
-      WHERE n.gym_id = ${input.gymId} AND n.user_id = ${input.userId}
-        AND n.created_at > now() - interval '7 days'
-      LIMIT 1`;
-    if (recent.length > 0) return { kind: "too_soon" };
+    // Since 20d-i the wait is `GYM_COME_BACK_WAIT_DAYS` (3; Kd, RULINGS 2026-10-12) and the
+    // gym's own written message to this person counts with the ready-made lines.
+    if (await comeBackTooSoon(tx, input.gymId, input.userId)) return { kind: "too_soon" };
 
     const inserted = await tx<{ preset: string; created_at: Date }[]>`
       INSERT INTO gym_nudges (gym_id, user_id, sent_by_user_id, preset)

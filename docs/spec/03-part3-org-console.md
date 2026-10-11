@@ -4725,6 +4725,63 @@ It reads visits (§12), so a gym with no check-in in use is told the list needs 
 It takes the place of "slipping away" (ROADMAP Stage 2 item 2). The owner's weekly
 summary email: new, left, at risk, visits against last week, money overdue.
 
+**Built in 20d-i (2026-10-12; RULINGS that day): the list.** The summary email is 20d-ii.
+- **The page**, **At risk**, has its own line in the menu under Attendance, for whoever
+  holds `members.read` (`GET /v1/orgs/:gymId/at-risk`). Overview says how many there are,
+  with a button to it, and says nothing while there is nobody.
+- **The rule** is `atRiskOf` (`packages/shared/src/atRisk.ts`), pure, a person at a time.
+  **A day somebody came** is a check-in by ANY means (the desk's scan, staff's Check in,
+  a visit staff added later, their own tap) or a day staff marked them as there without
+  one: a class place marked Came, a personal training session marked attended (round one,
+  H3; a no-show, a booking and a cancelled place are not). Somebody is at risk when the
+  last day they came is the gym's number of days back or more (7 · 10 · 14 · 21 · 30; 14
+  to start) and no more than 90; they came in at least the gym's number (1 to 4; 2 to
+  start) of **the four weeks that ended on that day** (the 28 days up to it, in sevens),
+  so nobody leaves the list only because days pass; and **the gym went on recording who
+  came** since (`atRiskGymKeptOn`): the days anybody came since, a week, are at least half
+  of the days a week in the four weeks before. That is the gym's OWN rhythm, never the
+  calendar (round one, H1): a gym open Monday, Wednesday and Friday, or at weekends only,
+  is in use; a gym that was shut, or stopped recording, names nobody for that time. A
+  visit dated after today is a visit. Anything unreadable is no decision.
+- **Who is read**: a record on the gym's list, with the visits that name it and those of
+  the app accounts that hold it; and somebody in the app with no record. **Never listed**:
+  a past member, somebody removed from the app with no record, the owner and the gym's
+  staff, anybody the Members list reads as Frozen, Ended or Cancelled (`heldOnListOf`:
+  one answer on both pages), and anybody away more than 90 days. Most regular first, then
+  who stopped most lately; the first 200, with the count of all.
+- **The gym's two numbers** are on the page, saved by `org.manage` at a gym on a plan
+  (`PUT …/at-risk/settings`; `gyms.at_risk_quiet_days`, `gyms.at_risk_weeks_came`,
+  migration `0098`); other staff read who can change them.
+- **One press** on a row opens a box under it with the four come-back lines of 16.1's
+  pinned note (`GYM_COME_BACK_LINES`) and, for staff holding `members.confirm`, **Write
+  your own message**. Send writes a ready-made line (`POST …/members/:userId/nudge`) or
+  the gym's own words (`POST …/at-risk/messages`, with the box's own key, so a second
+  press sends nothing more), and the row says what was sent and the day another may go.
+  **One come-back message to a person, of either kind, then 3 days**
+  (`GYM_COME_BACK_WAIT_DAYS`; it was 7 until Kd's click-through, RULINGS 2026-10-12),
+  asked with the gym's row held (`comeBackTooSoon`). The gym's own words are checked as a
+  message to a group's are (16.8: 500 characters, no web address, no @, 15.3's filter) and
+  kept as one (`gym_group_messages.one_person`, migration `0098`): the member reads them in
+  their Inbox for 30 days, Sent messages lists them, and they are not one of the day's
+  three messages to groups. They are not sent to somebody who switched the gym's messages
+  off (a ready-made line still is), **nor to anybody the list does not name at that
+  moment** (`member_not_at_risk`: this is no second way to write to everybody; the
+  ready-made line keeps its older reach). A box's key is that box's: pressed twice it sends
+  once and answers when it went, and for another person it is refused
+  (`message_key_used`). A message is offered only where ONE live app account holds the
+  record. Somebody with no app, or a record more than one account uses, reads why, with a
+  button that opens their own page, where their phone and email are. Each limit that counts
+  the gym's address is asked after the staff check, so a refused ask leaves it alone.
+- **A gym that uses only part of the app**: with no check-in ever, or check-in begun less
+  than its number of days ago, the page says so, with a button to Attendance and no list;
+  with far fewer days of check-ins lately than is usual THERE it says so, in days
+  ("People came in on only 2 of the last 14 days, far fewer than is usual at
+  {gym}."), above the list, or alone when nobody is listed. Never "Nobody has stopped
+  coming" from a gym that checks nobody in; where it is said, it is that sentence and no
+  more. The page's words say "come in", and its last line says what coming in is.
+- **Left as it was**: the older list of three quiet days that Overview's answer still
+  carries (`getGymSlippingAway`); no screen draws it.
+
 ### 16.5 Reports
 
 One Reports page (`reports.read`: owner and manager), every figure with the info
