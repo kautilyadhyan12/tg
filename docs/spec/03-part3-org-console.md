@@ -4799,6 +4799,22 @@ such line asks him for it in its ten-line plan, before any code.**
 
 #### 16.9.3 Job one, 21c-i: a later date on the gym's list gives the next term
 
+**Built 2026-10-11 as planned below, with these differences.** The words are not the
+plan's: Kd asked for words a stranger understands, standard and professional (RULINGS
+2026-10-11; CLAUDE.md §4). The row reads "2 people's 3 Months has ended, and your member
+list now shows a later end date for them. You can renew it.", its button "Renew
+memberships" where only renewals wait; a renewal's row in the box reads "Renewal, ends
+9 December 2026"; and where everybody the box can give it to is a renewal, the box says
+Renew from its heading to its button ("Renew 3 Months for 2 people"; "Tick who to
+renew."). The rule is `offeredAgain` in `memberships/words.ts`; the SQL last day is
+`LAST_DAY` in `heldRepo.ts`, used by `overForList` and by the two reads here. A break
+that stayed green named a missing case, now in the first test: somebody renewed early,
+whose membership still runs while the list already shows a later date, is offered
+nothing until it ends. Measured for 2,100 people with the one word, before and after:
+the thread busy 1.9 and 2.1 ms for the page's read, 23.0 and 24.6 ms for the box, 33.3
+and 31.3 ms for the press; the box's whole time 46.8 and 103.8 ms (the database's).
+
+
 **Size: Risky** (it gives people memberships, which open "Payment due"; other people's
 data). Recommended Opus xhigh; if Kd's setting is high, say so in the plan's last line and
 build on his word. No migration. No new package. No cost. One branch, one pull request.
