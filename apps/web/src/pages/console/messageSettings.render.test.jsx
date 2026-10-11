@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { GYM_MESSAGE_OWN_LINE_WORDS } from '@app/shared';
+import { GYM_MESSAGE_OWN_LINE_WORDS, memberBillState, paymentNoticeAfterDays } from '@app/shared';
 
 const getMessageSettings = vi.fn();
 const updateMessageSettings = vi.fn();
@@ -63,7 +63,10 @@ describe('Automatic messages', () => {
     expect(within(box('Trial check-in')).getByLabelText('Day of the trial').value).toBe('2');
     expect(within(box('Trial ending')).getByLabelText('Days before a trial ends').value).toBe('2');
     expect(within(box('Membership ending')).getByLabelText('Days before a membership ends').value).toBe('7');
-    expect(within(box('Payment overdue')).getByText(/the morning it reads Overdue on a member's page: the day after its due date\. Never for a bill that is paid, cancelled or refunded/)).toBeTruthy();
+    expect(within(box('Payment overdue')).getByText(/^Sent in the morning, 3 days after its due date: by then the bill reads Overdue on a member's page, and it never goes sooner than 3 days after\. One message covers every bill of theirs that is overdue that morning\./)).toBeTruthy();
+    expect(within(box('Payment overdue')).getByText(/Never for a bill that is paid, cancelled or refunded, a membership that is frozen, cancelled or over, a membership taken from your own list with no payment recorded for it here, or a bill more than 30 days past that day\./)).toBeTruthy();
+    expect(within(box('Membership ending')).getByText(/One shorter than twice the notice you pick here is told halfway through instead: a month with 30 days picked is told 15 days before\./)).toBeTruthy();
+    expect(within(box('Trial ending')).getByText(/A trial shorter than twice the notice you pick here is told halfway through instead\./)).toBeTruthy();
     expect(within(box('Payment overdue')).getByText(/No amount is shown\. A member cannot switch this one off\./)).toBeTruthy();
     expect(within(box('Membership ending')).getByText(/A membership that renews by itself has no last day\./)).toBeTruthy();
     expect(screen.getByText(/A member can switch any of them off for themselves, except Welcome and Payment overdue\./)).toBeTruthy();
@@ -175,7 +178,7 @@ describe('Automatic messages', () => {
   });
 
   it('a gym with no trial, no price list or no payment recorded is told on the rows that need one, with a button to where it is set up, or who can', async () => {
-    const noTrial = 'There is no trial on your price list, so nobody will get this yet. Add a trial on Memberships, and give it to a member on their page.';
+    const noTrial = 'There is no trial on your price list and nobody is on one, so nobody will get this yet. Add a trial on Memberships, and give it to a member on their page.';
     const noList = 'Your price list is empty, so no member has a membership in the app and nobody will get this yet.';
     const noPayments = /^No payment has been recorded in the app in the last 45 days, so nobody will get this yet\. It is only sent while you record payments here, on a member's page: otherwise people who paid you somewhere else would be told they owe./;
     const missing = (kind) => screen.queryByTestId(`missing-${kind}`);
@@ -205,8 +208,9 @@ describe('Automatic messages', () => {
     fireEvent.click(within(missing('payment_overdue')).getByRole('button', { name: 'Open Members' }));
     expect(within(missing('payment_overdue')).getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/members');
     // The gym's own grace period is said, with a button to the box that changes it.
-    expect(within(box('Payment overdue')).getByText(/reads Overdue on a member's page: 7 days after its due date\./)).toBeTruthy();
-    expect(within(box('Payment overdue')).getByText('You change this in the Bills box on Memberships.')).toBeTruthy();
+    // Seven days' grace: the bill reads Overdue on the eighth day after, as the Bills box says.
+    expect(within(box('Payment overdue')).getByText(/^Sent in the morning, 8 days after its due date: by then the bill reads Overdue/)).toBeTruthy();
+    expect(within(box('Payment overdue')).getByText('It follows the grace period you set in the Bills box on Memberships.')).toBeTruthy();
     fireEvent.click(within(box('Payment overdue')).getByRole('button', { name: 'Open the Bills box' }));
     expect(within(box('Payment overdue')).getAllByRole('link', { name: 'Leave this page' }).map((a) => a.getAttribute('href'))).toContain('/console/iron-house/memberships');
 
@@ -273,7 +277,16 @@ describe('the box\'s own rules', () => {
     for (const field of ['trialCheckInDay', 'trialEndingDays', 'membershipEndingDays']) expect(view.messageDraftChanged({ ...kept, [field]: 3 }, kept), field).toBe(true);
     // A reply with no numbers in it starts at the app's own.
     expect(view.messageDraft({ messages: [] })).toMatchObject({ trialCheckInDay: 2, trialEndingDays: 2, membershipEndingDays: 7, missYouDays: 10 });
-    expect([view.overdueAfter(0), view.overdueAfter(1), view.overdueAfter(7), view.overdueAfter(undefined)]).toEqual(['the day after its due date', '1 day after its due date', '7 days after its due date', 'the day after its due date']);
+    // The row's day is the sender's own, for every grace period the Bills box offers: on that
+    // day the bill already reads Overdue on the person's page, and it is never before the third.
+    for (const grace of [0, 1, 2, 3, 5, 7, 14, 30, 60]) {
+      const after = paymentNoticeAfterDays(grace);
+      expect(view.overdueAfter(grace), String(grace)).toBe(`${String(after)} days after its due date`);
+      const day = (n) => new Date(Date.UTC(2026, 2, 1) + n * 86_400_000).toISOString().slice(0, 10);
+      expect(memberBillState({ status: 'open', dueOn: day(0) }, day(after), grace), String(grace)).toBe('overdue');
+      expect(after >= 3 && after > grace, String(grace)).toBe(true);
+    }
+    expect([view.overdueAfter(0), view.overdueAfter(7), view.overdueAfter(undefined)]).toEqual(['3 days after its due date', '8 days after its due date', '3 days after its due date']);
     expect(view.messageSettingsSummary(kept)).toBe('7 of 8 on');
     expect(view.messageSettingsSummary(view.messageDraft(START))).toBe('All 8 on');
     expect(view.messageDraftChanged(kept, kept)).toBe(false);

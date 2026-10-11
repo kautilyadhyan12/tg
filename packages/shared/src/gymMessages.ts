@@ -10,14 +10,16 @@ import { underAgeOn } from "./memberInvites.js";
 import { instantSchema } from "./time.js";
 
 /** Every kind of automatic message, in the order one is picked when several are due on
- *  one day: money and dates that will pass first, a come-back last. */
+ *  one day: the one that cannot wait a day first. A birthday is only today; a Welcome is
+ *  the gym's first word and has three days; a trial's check-in has two. An ending and a
+ *  payment notice are still due tomorrow, and a come-back is last. */
 export const GYM_MESSAGE_KINDS = [
-  "payment_overdue",
-  "membership_ending",
-  "trial_ending",
-  "trial_check_in",
-  "welcome",
   "birthday",
+  "welcome",
+  "trial_check_in",
+  "trial_ending",
+  "membership_ending",
+  "payment_overdue",
   "milestone",
   "miss_you",
 ] as const;
@@ -64,9 +66,21 @@ export const GYM_MESSAGE_MISS_YOU_LATE_DAYS = 30;
 export const SHARED_BIRTH_DATE_RECORDS = 5;
 /** A trial check-in still goes one day late. */
 export const GYM_MESSAGE_CHECK_IN_LATE_DAYS = 1;
-/** Payment overdue is sent only while the bill has read Overdue for no more than this many
- *  days: on the first day a gym uses it, nobody is told of a bill from long ago. */
+/** A payment notice never goes sooner than this many days after a bill's due date, however
+ *  short the gym's grace period: staff record a bank transfer, or money handed over at the
+ *  desk, a day or two later. */
+export const GYM_MESSAGE_OVERDUE_WAIT_DAYS = 3;
+/** Payment overdue is sent only on the first this many days it could be: on the first day
+ *  a gym uses it, nobody is told of a bill from long ago. */
 export const GYM_MESSAGE_OVERDUE_LATE_DAYS = 30;
+/** How many days after a bill's due date its payment notice goes: the first day it reads
+ *  Overdue on the person's page (more than the gym's grace period after it, as
+ *  `memberBillState` has it), and never sooner than `GYM_MESSAGE_OVERDUE_WAIT_DAYS`. Null
+ *  for a grace period that is no number of days. The Settings box says this same number. */
+export function paymentNoticeAfterDays(graceDays: number): number | null {
+  if (!Number.isInteger(graceDays) || graceDays < 0) return null;
+  return Math.max(graceDays + 1, GYM_MESSAGE_OVERDUE_WAIT_DAYS);
+}
 /** Payment overdue is sent only by a gym that recorded a payment in the app in the last
  *  this many days. A gym that takes its money somewhere else has bills here that nobody
  *  marks paid, and its members owe it nothing. */
@@ -162,8 +176,9 @@ export interface GymMessageFacts {
      *  carry on with, so the trial's end is no news. */
     trial: { id: string; startsOn: string; endsOn: string; next: boolean } | null;
     /** A membership they are using today that is not a trial, has a last day, and has
-     *  nothing of theirs running on after it. */
-    ending: { id: string; startsOn: string; endsOn: string } | null;
+     *  nothing of its sort running on after it. `what`: a class pack, a repeating membership
+     *  set to stop, or any other membership. */
+    ending: { id: string; startsOn: string; endsOn: string; what: GymMessageEnding } | null;
     /** The bills of the memberships they are using today (`membershipMessageFacts`). */
     bills: readonly { id: string; dueOn: string; paid: boolean }[];
     /** `MM-DD`. */
@@ -183,12 +198,17 @@ export interface GymMessageFacts {
   sent: readonly { kind: GymMessageKind; occasion: string; day: string }[];
 }
 
+/** What is ending: the words differ. Somebody who asked to stop is not asked to renew. */
+export type GymMessageEnding = "membership" | "pack" | "stopping";
+
 export interface GymMessageOccasion {
   kind: GymMessageKind;
   /** One message is ever sent for (gym, person, kind, occasion). */
   occasion: string;
   /** The last day the words name, for a trial or a membership that is ending. */
   endsOn?: string;
+  /** What is ending, where it is no ordinary membership. */
+  what?: GymMessageEnding;
 }
 export interface GymMessageDue {
   /** The one message to send now, or none. */
@@ -243,14 +263,22 @@ export function trustedBirthday(dateOfBirth: string | null, today: string, share
   return monthDay;
 }
 
-/** Is `today` one of the last `days` before a membership's last day, that day among them?
- *  Only for one at least twice as long as the notice: a week's pass with a week's notice
- *  would be told it is ending on the day it began. */
+/** How many days before its last day a membership of `length` days is told it is ending,
+ *  where the gym picked `days`: that many, or half its length where it is shorter than
+ *  twice the notice (a month with 30 days picked is told 15 days before), so a week's pass
+ *  with a week's notice is not told on the day it began. 0: never (a day pass). */
+export function endingNoticeDays(length: number, days: number): number {
+  if (!Number.isInteger(length) || !Number.isInteger(days) || days < 1 || length < 2) return 0;
+  return Math.min(days, Math.floor(length / 2));
+}
+
+/** Is `today` one of the last days before a membership's last day, that day among them? */
 function endingSoon(m: { startsOn: string; endsOn: string }, today: string, days: number): boolean {
   const left = daysBetween(today, m.endsOn);
   const length = daysBetween(m.startsOn, m.endsOn);
-  if (left === null || length === null || !Number.isInteger(days) || days < 1) return false;
-  return left >= 0 && left <= days && length + 1 >= 2 * days;
+  if (left === null || length === null) return false;
+  const notice = endingNoticeDays(length + 1, days);
+  return notice >= 1 && left >= 0 && left <= notice;
 }
 
 /** What there is an occasion for today, whatever else is true, in the order of
@@ -262,19 +290,28 @@ export function gymMessageOccasions(facts: GymMessageFacts): GymMessageOccasion[
   const found: GymMessageOccasion[] = [];
 
   // A bill that reads Overdue on the person's page today, and has for a while at most.
-  const grace = gym.billsOverdueAfterDays;
-  if (gym.takesPayments && Number.isInteger(grace) && grace >= 0) {
-    for (const bill of person.bills) {
-      const late = daysBetween(bill.dueOn, today);
-      if (!bill.paid && late !== null && late > grace && late <= grace + GYM_MESSAGE_OVERDUE_LATE_DAYS) {
-        found.push({ kind: "payment_overdue", occasion: `bill:${bill.id}` });
-      }
-    }
+  // One notice is for every bill of theirs overdue that morning: a bill is told once a
+  // notice has been sent on or after the first day its own could go.
+  const wait = paymentNoticeAfterDays(gym.billsOverdueAfterDays);
+  const todayNumber = dayNumber(today) ?? 0;
+  if (gym.takesPayments && wait !== null) {
+    const untold = person.bills
+      .flatMap((bill) => {
+        const late = daysBetween(bill.dueOn, today);
+        if (bill.paid || late === null || late < wait || late >= wait + GYM_MESSAGE_OVERDUE_LATE_DAYS) return [];
+        const firstDay = todayNumber - (late - wait);
+        const told = facts.sent.some((row) => row.kind === "payment_overdue" && (dayNumber(row.day) ?? Number.NEGATIVE_INFINITY) >= firstDay);
+        return told ? [] : [{ id: bill.id, late }];
+      })
+      .sort((a, b) => (a.late === b.late ? a.id.localeCompare(b.id) : b.late - a.late));
+    const oldest = untold[0];
+    if (oldest !== undefined) found.push({ kind: "payment_overdue", occasion: `bill:${oldest.id}` });
   }
 
   // An occasion is named by the row it belongs to, never by a day a freeze can move.
   if (person.ending !== null && endingSoon(person.ending, today, numbers.membershipEndingDays)) {
-    found.push({ kind: "membership_ending", occasion: `ends:${person.ending.id}`, endsOn: person.ending.endsOn });
+    const { id, endsOn, what } = person.ending;
+    found.push({ kind: "membership_ending", occasion: `ends:${id}`, endsOn, ...(what === "membership" ? {} : { what }) });
   }
 
   if (person.trial !== null) {
@@ -387,9 +424,12 @@ function fixedWords(send: GymMessageOccasion, gym: string, displayName: string |
   if (send.kind === "trial_ending" || send.kind === "membership_ending") {
     const day = dayInWords(send.endsOn ?? null);
     if (day === null) return null;
-    return send.kind === "trial_ending"
-      ? hi(`your trial at ${gym} ends on ${day}. Want to keep coming? Talk to us about a membership.`)
-      : hi(`your membership at ${gym} ends on ${day}. We'd love to keep you with us. Just let us know if you'd like to renew.`);
+    if (send.kind === "trial_ending") return hi(`your trial at ${gym} ends on ${day}. Want to keep coming? Talk to us about a membership.`);
+    // A pack may run out of classes before its last day, so its day is the last it can be used.
+    if (send.what === "pack") return hi(`your class pack at ${gym} can be used until ${day}. Just let us know if you'd like another one.`);
+    // Somebody who asked to stop is told the day, and not asked to stay.
+    if (send.what === "stopping") return hi(`your membership at ${gym} ends on ${day}.`);
+    return hi(`your membership at ${gym} ends on ${day}. We'd love to keep you with us. Just let us know if you'd like to renew.`);
   }
   const visits = /^visits:([1-9][0-9]{0,5})$/.exec(send.occasion)?.[1];
   if (visits === undefined) return null;

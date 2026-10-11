@@ -6,6 +6,7 @@ import {
   GYM_MESSAGE_MISS_YOU_CHOICES,
   GYM_MESSAGE_MISS_YOU_LATE_DAYS,
   GYM_MESSAGE_OVERDUE_LATE_DAYS,
+  GYM_MESSAGE_OVERDUE_WAIT_DAYS,
   GYM_MESSAGE_PAYMENTS_DAYS,
   GYM_MESSAGE_STARTING_NUMBERS,
   GYM_MESSAGE_TRIAL_CHECK_IN_CHOICES,
@@ -18,6 +19,7 @@ import {
   gymMessageLength,
   orgWords,
   ownLineProblem,
+  paymentNoticeAfterDays,
   tidyOwnLine,
 } from '@app/shared';
 
@@ -128,10 +130,12 @@ export function lineCount(draft, kind) {
 
 export const messageName = (kind) => GYM_MESSAGE_KIND_NAMES[kind];
 
-/** How long after its due date a bill reads Overdue, as the Bills box on Memberships has it. */
+/** How long after a bill's due date its notice goes, by the sender's own rule
+ *  (`paymentNoticeAfterDays`): the first day the bill reads Overdue with the gym's grace
+ *  period, and never sooner than three days after. */
 export function overdueAfter(billsOverdueDays) {
-  const days = Number.isInteger(billsOverdueDays) && billsOverdueDays > 0 ? billsOverdueDays : 0;
-  return days === 0 ? 'the day after its due date' : `${String(days)} ${days === 1 ? 'day' : 'days'} after its due date`;
+  const days = paymentNoticeAfterDays(Number.isInteger(billsOverdueDays) ? billsOverdueDays : 0) ?? GYM_MESSAGE_OVERDUE_WAIT_DAYS;
+  return `${String(days)} days after its due date`;
 }
 
 /** When each message is sent, said under its name. One with a number ends where the box
@@ -139,12 +143,12 @@ export function overdueAfter(billsOverdueDays) {
 export function messageWhen(kind, orgType, use = {}) {
   const words = orgWords(orgType);
   if (kind === 'trial_check_in') return `Sent once, in the morning, to a ${words.person} on a trial from your price list, on the day of the trial you pick here.`;
-  if (kind === 'trial_ending') return `Sent once, in the morning, shortly before a ${words.person}'s trial ends. Nobody who already has a membership to carry on with gets it, and nobody on a trial too short for the notice you pick here.`;
+  if (kind === 'trial_ending') return `Sent once, in the morning, shortly before a ${words.person}'s trial ends. A trial shorter than twice the notice you pick here is told halfway through instead. Nobody who already has a membership to carry on with gets it.`;
   if (kind === 'membership_ending') {
-    return `Sent once, in the morning, before a membership's last day: one with an end date, a class pack, or a repeating one set to stop. A membership that renews by itself has no last day. Nobody who already has their next one gets it.`;
+    return `Sent once, in the morning, before a membership's last day: one with an end date, a class pack, or a repeating one set to stop. One shorter than twice the notice you pick here is told halfway through instead: a month with 30 days picked is told 15 days before. A membership that renews by itself has no last day. Nobody who already has their next one gets it.`;
   }
   if (kind === 'payment_overdue') {
-    return `Sent once a bill, the morning it reads Overdue on a ${words.person}'s page: ${overdueAfter(use.billsOverdueDays)}. Never for a bill that is paid, cancelled or refunded, a membership that is frozen or cancelled, or a bill overdue for more than ${String(GYM_MESSAGE_OVERDUE_LATE_DAYS)} days. No amount is shown. A ${words.person} cannot switch this one off.`;
+    return `Sent in the morning, ${overdueAfter(use.billsOverdueDays)}: by then the bill reads Overdue on a ${words.person}'s page, and it never goes sooner than ${String(GYM_MESSAGE_OVERDUE_WAIT_DAYS)} days after. One message covers every bill of theirs that is overdue that morning. Never for a bill that is paid, cancelled or refunded, a membership that is frozen, cancelled or over, a membership taken from your own list with no payment recorded for it here, or a bill more than ${String(GYM_MESSAGE_OVERDUE_LATE_DAYS)} days past that day. No amount is shown. A ${words.person} cannot switch this one off.`;
   }
   if (kind === 'welcome') return `Sent when somebody joins your ${words.it} in the app: within a quarter of an hour by day, and the next morning if they join at night. Not sent to your own staff.`;
   if (kind === 'birthday') return `Sent on a ${words.person}'s birthday, in the morning, when the date of birth is already on your Members list. Nobody gets one for 1 January or 31 December, or for a date that makes them under 18: lists often hold those when the real date is not known.`;
@@ -153,8 +157,8 @@ export function messageWhen(kind, orgType, use = {}) {
 }
 
 /** Where the days before a bill reads Overdue are changed, said under Payment overdue. */
-export const OVERDUE_DAYS_NOTE = 'You change this in the Bills box on Memberships.';
-export const OVERDUE_DAYS_ASK = 'Staff who can change the price list set it in the Bills box on Memberships.';
+export const OVERDUE_DAYS_NOTE = 'It follows the grace period you set in the Bills box on Memberships.';
+export const OVERDUE_DAYS_ASK = 'It follows the grace period in the Bills box on Memberships, which staff who can change the price list set.';
 
 /** What a message needs from the gym that the gym does not have yet, so nobody will get it:
  *  the sentence, the place whose button opens where to set it up, that button's words, and
@@ -163,7 +167,7 @@ export function messageMissing(kind, orgType, use) {
   const words = orgWords(orgType);
   const priceList = { place: 'memberships', button: 'Open Memberships', ask: 'Staff who can change the price list add one on Memberships.' };
   if ((kind === 'trial_check_in' || kind === 'trial_ending') && use?.trialOnList === false) {
-    return { ...priceList, note: `There is no trial on your price list, so nobody will get this yet. Add a trial on Memberships, and give it to a ${words.person} on their page.` };
+    return { ...priceList, note: `There is no trial on your price list and nobody is on one, so nobody will get this yet. Add a trial on Memberships, and give it to a ${words.person} on their page.` };
   }
   if ((kind === 'membership_ending' || kind === 'payment_overdue') && use?.priceList === false) {
     return { ...priceList, note: `Your price list is empty, so no ${words.person} has a membership in the app and nobody will get this yet.` };

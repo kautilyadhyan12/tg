@@ -290,17 +290,19 @@ describe("what is kept, and the shapes", () => {
       { ...ok, trialCheckInDay: 1 },
       { ...ok, trialEndingDays: 5 },
       { ...ok, membershipEndingDays: 10 },
-      { messages, missYouDays: 14, milestones: [25, 250] },
       { ...ok, paymentOverdueDays: 3 },
+      { ...ok, messages: [] },
       { ...ok, milestones: [25, 25] },
       { ...ok, milestones: [] },
       { ...ok, milestones: [60] },
-      { ...ok, messages: messages.slice(1) },
       { ...ok, messages: [...messages.slice(1), messages[1]] },
       { ...ok, messages: messages.map((m) => ({ ...m, days: 3 })) },
       { ...ok, extra: true },
     ];
     for (const body of bad) expect(gymMessageSettingsRequestSchema.safeParse(body).success, JSON.stringify(body).slice(0, 80)).toBe(false);
+    // A page loaded before the four new kinds: the four it knows and its two numbers. Its save still holds.
+    const older = { messages: messages.filter((m) => ["welcome", "birthday", "milestone", "miss_you"].includes(m.kind)), missYouDays: 14, milestones: [25, 250] };
+    expect(gymMessageSettingsRequestSchema.parse(older)).toEqual(older);
     for (const kind of GYM_MESSAGE_MEMBER_SWITCH_KINDS) expect(gymMessageSwitchRequestSchema.safeParse({ kind, on: false }).success).toBe(true);
     expect([...GYM_MESSAGE_MEMBER_SWITCH_KINDS]).toEqual(["trial_check_in", "trial_ending", "membership_ending", "birthday", "milestone", "miss_you"]);
     for (const kind of ["welcome", "payment_overdue", "group", "x"]) expect(gymMessageSwitchRequestSchema.safeParse({ kind, on: false }).success, kind).toBe(false);

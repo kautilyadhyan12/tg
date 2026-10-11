@@ -343,7 +343,7 @@ describe("the switches for a gym's automatic messages", () => {
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(all()).toEqual([
       ['News and notices from Iron HouseMessages the gym sends to many people at once, like a closed day or a new class.', 'true'],
-      ['Trial check-inA message a day or two into a trial, asking how it is going.', 'true'],
+      ['Trial check-inA message a few days into a trial, asking how it is going.', 'true'],
       ['Trial endingA message shortly before a trial of yours ends.', 'true'],
       ['Membership endingA message shortly before a membership of yours ends.', 'true'],
       ['BirthdayA message from Iron House on your birthday.', 'true'],

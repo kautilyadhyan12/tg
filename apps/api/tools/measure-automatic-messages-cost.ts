@@ -34,6 +34,8 @@ const BIG = 2000;
 const RUNS = 20;
 const PREFIX = "auto-cost-";
 const PLAN = "zz_auto_cost";
+/** How far back the sender reads a bill's due date with no grace period: 3 + 30 days. */
+const BILL_DAYS = 33;
 /** Noon in London, where every gym here is: daytime, so the job sends. */
 const NOW = new Date("2031-06-10T11:00:00Z");
 const TODAY = "2031-06-10";
@@ -198,13 +200,28 @@ try {
   });
 
   await measure(`the read of memberships and bills alone: the gym of ${String(BIG)}`, async () => {
-    const [facts, money] = [await membershipFactsByPerson(sql, big, TODAY), await gymMoney(sql, big, TODAY)];
+    const [facts, money] = [await membershipFactsByPerson(sql, big, TODAY, BILL_DAYS), await gymMoney(sql, big, TODAY)];
     if (facts.size !== BIG || !money.takesPayments) throw new Error(`the membership read is wrong: ${String(facts.size)} people`);
   });
   await measure(`the read of memberships and bills alone: one gym of ${String(SMALL)}`, async () => {
-    const facts = await membershipFactsByPerson(sql, small[0] ?? "", TODAY);
+    const facts = await membershipFactsByPerson(sql, small[0] ?? "", TODAY, BILL_DAYS);
     if (facts.size !== SMALL) throw new Error("the membership read is wrong");
   });
+
+  // A gym whose bills nobody settles: three more years of open bills on every membership of
+  // the big gym. The read looks no further back than a notice can go, so it does not grow.
+  await sql`
+    INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, status)
+    SELECT ${big}, h.id, 100 + k, 4999, 'GBP', (h.starts_on - (k + 1) * interval '1 month')::date, 'open'
+    FROM gym_held_memberships h CROSS JOIN generate_series(0, 35) AS k
+    WHERE h.gym_id = ${big}`;
+  await sql`ANALYZE gym_member_bills`;
+  const unsettled = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_member_bills WHERE gym_id = ${big} AND status = 'open'`;
+  await measure(`the same read with ${String(unsettled[0]?.n ?? 0)} open bills nobody settled: the gym of ${String(BIG)}`, async () => {
+    const facts = await membershipFactsByPerson(sql, big, TODAY, BILL_DAYS);
+    if (facts.size !== BIG) throw new Error("the membership read is wrong");
+  });
+  await sql`DELETE FROM gym_member_bills WHERE gym_id = ${big} AND period_index >= 100`;
 
   const deps = { sql, now: () => NOW };
   await measure(`the Settings box read: the gym of ${String(BIG)}`, async () => {

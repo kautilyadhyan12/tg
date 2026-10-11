@@ -85,7 +85,7 @@ export function kindSwitches(gym, off) {
   const isOff = (kind) => Array.isArray(off) && off.includes(kind);
   const row = (kind, label, line) => ({ kind, label, on: !isOff(kind), line: isOff(kind) ? `Off. ${gym.name} won't send you this.` : line });
   return [
-    row('trial_check_in', GYM_MESSAGE_KIND_NAMES.trial_check_in, 'A message a day or two into a trial, asking how it is going.'),
+    row('trial_check_in', GYM_MESSAGE_KIND_NAMES.trial_check_in, 'A message a few days into a trial, asking how it is going.'),
     row('trial_ending', GYM_MESSAGE_KIND_NAMES.trial_ending, 'A message shortly before a trial of yours ends.'),
     row('membership_ending', GYM_MESSAGE_KIND_NAMES.membership_ending, 'A message shortly before a membership of yours ends.'),
     row('birthday', GYM_MESSAGE_KIND_NAMES.birthday, `A message from ${gym.name} on your birthday.`),

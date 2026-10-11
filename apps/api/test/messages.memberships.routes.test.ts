@@ -4,7 +4,8 @@
 //
 // The worst thing this job could do to a real person: "Your payment is overdue" reaching
 // somebody who owes nothing: they paid, their bill was cancelled or refunded, they left,
-// or the record is one they share. That is the first test below.
+// the record is one they share, or their gym takes their money somewhere else. That is the
+// first test below.
 //
 // The membership routes, the settings and the sender share one clock here (`clock`). It
 // starts each test at noon of the real today on the gym's calendar; a run of the sender
@@ -330,17 +331,31 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
       await pay(next, nia.entryId, nia.membershipId, 3000);
       const eli = await owing(elsewhere, "Eli Elsewhere");
       expect((await sql`SELECT 1 FROM gym_member_bills WHERE gym_id = ${elsewhere.id} AND status = 'open'`).length).toBe(1);
+      // A gym that keeps its members' money in other software and sells a day pass for cash at
+      // the desk: memberships taken from its own list, their bills opened here and never paid here.
+      const mixed = await makeGym("Money Mixed");
+      const listed = [];
+      for (const name of ["Lia Listed", "Len Listed", "Lus Listed"]) listed.push(await owing(mixed, name));
+      await sql`UPDATE gym_held_memberships SET from_list = true WHERE gym_id = ${mixed.id}`;
+      const desk = await owing(mixed, "Dee Desk");
+      await pay(mixed, desk.entryId, desk.membershipId, 3000);
+      // One of the listed then pays part of a bill in the app: that membership is billed here now.
+      const lou = await owing(mixed, "Lou Listed Paying");
+      await sql`UPDATE gym_held_memberships SET from_list = true WHERE id = ${lou.membershipId}`;
+      await pay(mixed, lou.entryId, lou.membershipId, 1000);
+      expect((await settings(mixed)).payments).toBe(true);
 
       // The member cannot switch a payment notice off.
       expect((await switchOff(gym, olly, "payment_overdue")).statusCode).toBe(400);
 
-      const all = [gym, next, elsewhere];
+      const all = [gym, next, elsewhere, mixed];
       clock = noon(0);
       await sql`DELETE FROM gym_message_days WHERE gym_id = ANY(${all.map((g) => g.id)}::uuid[])`;
       const opts = { now: clock, gymIds: all.map((g) => g.id) };
       const both = await Promise.all([sendDueMessages({ sql, log }, opts), sendDueMessages({ sql, log }, opts)]);
-      expect(both.map((r) => r.sent).reduce((a, b) => a + b, 0)).toBe(4);
+      expect(both.map((r) => r.sent).reduce((a, b) => a + b, 0)).toBe(5);
       expect((await run(all)).sent).toBe(0);
+      expect(await got(mixed)).toEqual([`${lou.userId} payment_overdue`]);
 
       expect(await got(gym)).toEqual([`${olly.userId} payment_overdue`, `${pia.userId} payment_overdue`, `${mona.userId} payment_overdue`].sort());
       expect(await got(next)).toEqual([`${ned.userId} payment_overdue`]);
@@ -348,11 +363,13 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
       expect(await said(gym, olly, "payment_overdue")).toBe("Hi Olly, your payment to Money Iron House is overdue. Please get in touch so we can sort it out.");
       expect((await sentTo(gym)).map((r) => r.occasion).sort()).toEqual([`bill:${(await billOf(gym, olly.membershipId)).id}`, `bill:${(await billOf(gym, pia.membershipId)).id}`, `bill:${monaBill.id}`].sort());
 
-      // The next morning: Tess's bill is a day late and she is told; nobody is told twice.
-      expect((await run(all, 1)).sent).toBe(1);
-      expect((await got(gym)).filter((line) => line.startsWith(tess.userId))).toEqual([`${tess.userId} payment_overdue`]);
+      // Tess's bill reads Overdue the next morning; her notice waits for the third day. Nobody is told twice.
+      expect((await run(all, 1)).sent).toBe(0);
       expect((await run(all, 2)).sent).toBe(0);
-      for (const who of [pat, cal, ruth, fred, cam, rex, fay, del, shared, second, eli, nia]) {
+      expect((await run(all, 3)).sent).toBe(1);
+      expect((await got(gym)).filter((line) => line.startsWith(tess.userId))).toEqual([`${tess.userId} payment_overdue`]);
+      expect((await run(all, 4)).sent).toBe(0);
+      for (const who of [pat, cal, ruth, fred, cam, rex, fay, del, shared, second, eli, nia, desk, ...listed]) {
         expect(await sql`SELECT 1 FROM gym_member_messages WHERE user_id = ${who.userId}`, who.userId).toHaveLength(0);
       }
     },
@@ -461,21 +478,34 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
   );
 
   it(
-    "one message a day: a payment notice first, the ending the next morning; and the gym's switch stops a kind for everybody",
+    "one message a day: the Welcome before a notice, an ending before a notice; two unpaid bills are one notice; and the gym's switch stops a kind for everybody",
     async () => {
       const gym = await makeGym("Order Gym");
-      // Unpaid thirty days that end in four: a bill 25 days late, and an ending.
-      const both = await member(gym, "Bo Both");
-      await give(gym, both.entryId, gym.types.thirty, -25);
       const payer = await member(gym, "Paid Up");
       await give(gym, payer.entryId, gym.types.thirty, 0, true);
+      // Unpaid thirty days that end in four: an ending, and a bill 25 days late.
+      const both = await member(gym, "Bo Both");
+      await give(gym, both.entryId, gym.types.thirty, -25);
+      // Joined last night, with thirty days begun four days ago and not paid yet.
+      const nia = await member(gym, "Nia New");
+      await sql`UPDATE gym_members SET joined_at = ${new Date(noon(0).getTime() - 14 * 3_600_000)} WHERE gym_id = ${gym.id} AND user_id = ${nia.userId}`;
+      await give(gym, nia.entryId, gym.types.thirty, -4);
+      // A membership and a thirty-day begun a week ago, both unpaid: two bills overdue at once.
+      const eve = await member(gym, "Eve Two Bills");
+      await give(gym, eve.entryId, gym.types.thirty, -7);
+      await give(gym, eve.entryId, gym.types.monthly, -6);
+      expect(await sql`SELECT 1 FROM gym_member_bills b JOIN gym_held_memberships h ON h.id = b.held_membership_id WHERE h.entry_id = ${eve.entryId} AND b.status = 'open'`).toHaveLength(2);
 
-      expect((await run([gym])).sent).toBe(1);
-      expect(await got(gym)).toEqual([`${both.userId} payment_overdue`]);
-      // The same day: the notice was today's one message.
+      expect((await run([gym])).sent).toBe(3);
+      expect(await got(gym)).toEqual([`${both.userId} membership_ending`, `${eve.userId} payment_overdue`, `${nia.userId} welcome`].sort());
+      // The same day: each has had today's one message.
       expect((await run([gym])).sent).toBe(0);
-      expect((await run([gym], 1)).sent).toBe(1);
-      expect(await got(gym)).toEqual([`${both.userId} membership_ending`, `${both.userId} payment_overdue`]);
+      // The next morning: the notices that waited. Eve's second bill was overdue when hers went: no second notice.
+      expect((await run([gym], 1)).sent).toBe(2);
+      expect(await got(gym)).toEqual(
+        [`${both.userId} membership_ending`, `${both.userId} payment_overdue`, `${eve.userId} payment_overdue`, `${nia.userId} payment_overdue`, `${nia.userId} welcome`].sort(),
+      );
+      expect((await run([gym], 2)).sent).toBe(0);
 
       // A gym that switched the payment notice off: the ending goes, and no notice after it.
       clock = noon(0);
@@ -497,6 +527,43 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
   );
 
   it(
+    "a membership shorter than twice the notice is told halfway through; a class pack carries on only a pack and reads as a pack; somebody who asked to stop is not asked to stay",
+    async () => {
+      const gym = await makeGym("Short Gym");
+      const packType = await addType(gym.id, gym.owner, type({ name: "Ten classes", kind: "pack", priceMinor: 9000, termCount: null, termUnit: null, packClasses: 10, packDays: 30 }));
+      await saved(gym, { ...START, membershipEndingDays: 30 });
+      // Thirty days with 30 days' notice: told fifteen days before the last day, not never.
+      const half = await member(gym, "Hal Half");
+      await give(gym, half.entryId, gym.types.thirty, -14, true);
+      // Thirty days ending in fifteen, and a pack bought last week that runs on: the pack is not their next membership.
+      const oz = await member(gym, "Oz Pack Too");
+      await give(gym, oz.entryId, gym.types.thirty, -14, true);
+      await give(gym, oz.entryId, packType, -7, true);
+      // A pack alone, in its last fifteen days.
+      const pam = await member(gym, "Pam Pack");
+      await give(gym, pam.entryId, packType, -20, true);
+      // A monthly set to stop at the end of what is paid.
+      const lee = await member(gym, "Lee Leaving");
+      const leeId = await give(gym, lee.entryId, gym.types.monthly, -20, true);
+      await act(gym, lee.entryId, leeId, "cancel", { when: "period_end" });
+
+      // The pack and the monthly are inside their last fifteen days already. Hal and Oz have
+      // sixteen days left that morning, and are told the next, with fifteen.
+      expect((await run([gym], -1)).sent).toBe(2);
+      expect(await got(gym)).toEqual([`${lee.userId} membership_ending`, `${pam.userId} membership_ending`].sort());
+      expect((await run([gym])).sent).toBe(2);
+      const day15 = String(dayInWords(day(15)));
+      expect(await said(gym, half, "membership_ending")).toBe(`Hi Hal, your membership at Short Gym ends on ${day15}. We'd love to keep you with us. Just let us know if you'd like to renew.`);
+      expect(await said(gym, oz, "membership_ending")).toBe(`Hi Oz, your membership at Short Gym ends on ${day15}. We'd love to keep you with us. Just let us know if you'd like to renew.`);
+      expect(await said(gym, pam, "membership_ending")).toBe(`Hi Pam, your class pack at Short Gym can be used until ${String(dayInWords(day(9)))}. Just let us know if you'd like another one.`);
+      const leeSaid = await said(gym, lee, "membership_ending");
+      expect(leeSaid).toMatch(/^Hi Lee, your membership at Short Gym ends on \d{1,2} [A-Z][a-z]+\.$/);
+      expect((await run([gym], 1)).sent).toBe(0);
+    },
+    T,
+  );
+
+  it(
     "the gym's box: the three numbers are kept, only numbers on offer are taken, and it is told what the gym uses",
     async () => {
       const bare = await makeGym("Bare Gym", false);
@@ -508,9 +575,23 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
       expect(await settings(bare)).toMatchObject({ trialOnList: false, priceList: true, payments: false });
       const trialId = await addType(bare.id, bare.owner, TRIAL);
       expect(await settings(bare)).toMatchObject({ trialOnList: true, priceList: true });
-      // An archived trial is not on the list.
+      // An archived trial nobody is on is not on the list.
       expect((await inject("DELETE", `/v1/orgs/${bare.id}/membership-types/${trialId}`, bare.owner.cookies)).statusCode).toBe(200);
       expect(await settings(bare)).toMatchObject({ trialOnList: false, priceList: true });
+
+      // Archiving a type ends nobody's membership: while somebody is still on it the box does
+      // not say nobody will get the message, and they are sent it.
+      const kept = await makeGym("Archived Gym");
+      const amy = await member(kept, "Amy On Trial");
+      await give(kept, amy.entryId, kept.types.trial, -1);
+      const ben = await member(kept, "Ben On Thirty");
+      await give(kept, ben.entryId, kept.types.thirty, -25, true);
+      for (const typeId of Object.values(kept.types)) expect((await inject("DELETE", `/v1/orgs/${kept.id}/membership-types/${typeId}`, kept.owner.cookies)).statusCode).toBe(200);
+      expect((await sql`SELECT 1 FROM gym_membership_types WHERE gym_id = ${kept.id} AND archived_at IS NULL`).length).toBe(0);
+      expect(await settings(kept)).toMatchObject({ trialOnList: true, priceList: true });
+      expect((await run([kept])).sent).toBe(2);
+      expect(await got(kept)).toEqual([`${amy.userId} trial_check_in`, `${ben.userId} membership_ending`].sort());
+      clock = noon(0);
 
       // A payment recorded today; one taken back is no payment.
       const gym = await makeGym("Box Gym");
@@ -528,10 +609,17 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
       await sql`UPDATE gym_member_payments SET paid_on = ${day(-44)}::date WHERE gym_id = ${gym.id} AND undone_at IS NULL`;
       expect((await settings(gym)).payments).toBe(true);
 
-      const kept = await saved(gym, { ...withKind("trial_ending", { on: false, ownLine: "Ask about our joining offer." }), trialCheckInDay: 3, trialEndingDays: 1, membershipEndingDays: 14 });
-      expect(kept).toMatchObject({ trialCheckInDay: 3, trialEndingDays: 1, membershipEndingDays: 14 });
-      expect(kept.messages.find((m) => m.kind === "trial_ending")).toEqual({ kind: "trial_ending", on: false, ownLine: "Ask about our joining offer." });
-      expect(await sql`SELECT kind, days FROM gym_message_settings WHERE gym_id = ${gym.id} ORDER BY kind`).toEqual([
+      const now = await saved(gym, { ...withKind("trial_ending", { on: false, ownLine: "Ask about our joining offer." }), trialCheckInDay: 3, trialEndingDays: 1, membershipEndingDays: 14 });
+      expect(now).toMatchObject({ trialCheckInDay: 3, trialEndingDays: 1, membershipEndingDays: 14 });
+      expect(now.messages.find((m) => m.kind === "trial_ending")).toEqual({ kind: "trial_ending", on: false, ownLine: "Ask about our joining offer." });
+      // A page loaded before the four new kinds saves the four it knows and its two numbers:
+      // it is taken, and what it did not send is kept as it was.
+      const older = { messages: START.messages.filter((m) => ["welcome", "birthday", "milestone", "miss_you"].includes(m.kind)).map((m) => (m.kind === "birthday" ? { ...m, on: false } : m)), missYouDays: 14, milestones: [50, 100] };
+      const after = JSON.parse((await save(gym, older)).body) as GymMessageSettingsResponse;
+      expect(after).toMatchObject({ trialCheckInDay: 3, trialEndingDays: 1, membershipEndingDays: 14, missYouDays: 14 });
+      expect(after.messages.find((m) => m.kind === "trial_ending")).toEqual({ kind: "trial_ending", on: false, ownLine: "Ask about our joining offer." });
+      expect(after.messages.find((m) => m.kind === "birthday")?.on).toBe(false);
+      expect(await sql`SELECT kind, days FROM gym_message_settings WHERE gym_id = ${gym.id} AND kind IN ('membership_ending', 'trial_check_in', 'trial_ending') ORDER BY kind`).toEqual([
         { kind: "membership_ending", days: 14 },
         { kind: "trial_check_in", days: 3 },
         { kind: "trial_ending", days: 1 },

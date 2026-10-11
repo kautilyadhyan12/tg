@@ -139,18 +139,21 @@ export const GYM_MESSAGE_DAYS_OF = {
 export const gymMessageSettingSchema = z.object({ kind: gymMessageSettingKindSchema, on: z.boolean(), ownLine: ownLineSchema }).strict();
 export type GymMessageSetting = z.infer<typeof gymMessageSettingSchema>;
 
-/** Save: every kind the gym sets, each once, and every number, every time. */
+/** Save: the kinds the page knows, each once, and its numbers. A kind left out keeps what
+ *  it has, and so does a number left out: a page loaded before 20b-ii sends four kinds and
+ *  two numbers, and its save still holds. */
 export const gymMessageSettingsRequestSchema = z
   .object({
     messages: z
       .array(gymMessageSettingSchema)
-      .length(GYM_MESSAGE_SETTING_KINDS.length)
+      .min(1)
+      .max(GYM_MESSAGE_SETTING_KINDS.length)
       .refine((list) => new Set(list.map((m) => m.kind)).size === list.length, { message: "twice" }),
     missYouDays: missYouDaysSchema,
     milestones: milestonesSchema,
-    trialCheckInDay: oneOf(GYM_MESSAGE_TRIAL_CHECK_IN_CHOICES),
-    trialEndingDays: oneOf(GYM_MESSAGE_TRIAL_ENDING_CHOICES),
-    membershipEndingDays: oneOf(GYM_MESSAGE_MEMBERSHIP_ENDING_CHOICES),
+    trialCheckInDay: oneOf(GYM_MESSAGE_TRIAL_CHECK_IN_CHOICES).optional(),
+    trialEndingDays: oneOf(GYM_MESSAGE_TRIAL_ENDING_CHOICES).optional(),
+    membershipEndingDays: oneOf(GYM_MESSAGE_MEMBERSHIP_ENDING_CHOICES).optional(),
   })
   .strict();
 export type GymMessageSettingsRequest = z.infer<typeof gymMessageSettingsRequestSchema>;
@@ -165,17 +168,17 @@ export const gymMessageSettingsResponseSchema = z.object({
   trialCheckInDay: z.number().int().min(1),
   trialEndingDays: z.number().int().min(1),
   membershipEndingDays: z.number().int().min(1),
-  /** The gym's price list has a trial on it. Without one nobody is on a trial, so the two
-   *  trial messages are sent to nobody. */
+  /** The gym's price list has a trial on it, or somebody still holds one. With neither
+   *  nobody is on a trial, so the two trial messages are sent to nobody. */
   trialOnList: z.boolean(),
-  /** The gym's price list has anything on it. Without it nobody holds a membership in the
-   *  app, so Membership ending and Payment overdue are sent to nobody. */
+  /** The gym's price list has anything on it, or somebody still holds a membership. With
+   *  neither, Membership ending and Payment overdue are sent to nobody. */
   priceList: z.boolean(),
   /** A payment was recorded in the app in the last `GYM_MESSAGE_PAYMENTS_DAYS`. Without
    *  one Payment overdue is sent to nobody. */
   payments: z.boolean(),
-  /** The gym's grace period: a bill reads Overdue this many days after its due date, and
-   *  Payment overdue goes the morning it does. */
+  /** The gym's grace period for a bill, as the Bills box keeps it. The box works out the
+   *  day the notice goes from it with `paymentNoticeAfterDays`, as the sender does. */
   billsOverdueDays: z.number().int().min(0),
 });
 export type GymMessageSettingsResponse = z.infer<typeof gymMessageSettingsResponseSchema>;

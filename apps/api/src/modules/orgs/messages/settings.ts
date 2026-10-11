@@ -67,9 +67,9 @@ export async function getMessageSettings(deps: MessagesDeps, staffId: string, gy
   return await readSettings(deps, gymId);
 }
 
-/** Saves all of them. They are read at each run of the sender, so they hold from the next
- *  one; nothing already sent is touched. The audit note names the kinds that changed and
- *  never a line's words. */
+/** Saves the kinds sent. They are read at each run of the sender, so they hold from the
+ *  next one; nothing already sent is touched. A kind or a number the page did not send
+ *  keeps what it has. The audit note names the kinds that changed and never a line's words. */
 export async function setMessageSettings(
   deps: MessagesDeps,
   staffId: string,
@@ -79,23 +79,30 @@ export async function setMessageSettings(
 ): Promise<GymMessageSettingsResponse | null> {
   await requireWritablePrivilege(deps, gymId, staffId, "org.manage");
   if (!(await limit())) return null;
-  const rows: GymMessageSettingRow[] = body.messages.map((message) => {
+  const checked = body.messages.map((message) => {
     const line = tidyOwnLine(message.ownLine ?? "");
     const problem = ownLineProblem(line);
     if (problem !== null) throw new OrgsError(400, `message_line_${problem}`, GYM_MESSAGE_OWN_LINE_WORDS[problem]);
     const words = badWordsIn(line);
     if (words.length > 0) throw new OrgsError(400, "message_line_bad_words", ownLineBadWords(words));
-    return {
-      kind: message.kind,
-      on: message.on,
-      ownLine: line === "" ? null : line,
-      days: daysOf(message.kind, body),
-      milestones: message.kind === "milestone" ? [...body.milestones].sort((a, b) => a - b) : null,
-    };
+    return { kind: message.kind, on: message.on, ownLine: line === "" ? null : line };
   });
   await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
-    const before = new Map((await settingsRepo.settingRows(tx, gymId)).map((row) => [row.kind, row]));
+    const beforeRows = await settingsRepo.settingRows(tx, gymId);
+    const before = new Map(beforeRows.map((row) => [row.kind, row]));
+    const kept = gymMessageSettingsFrom(beforeRows).numbers;
+    const numbers = {
+      missYouDays: body.missYouDays,
+      trialCheckInDay: body.trialCheckInDay ?? kept.trialCheckInDay,
+      trialEndingDays: body.trialEndingDays ?? kept.trialEndingDays,
+      membershipEndingDays: body.membershipEndingDays ?? kept.membershipEndingDays,
+    };
+    const rows: GymMessageSettingRow[] = checked.map((message) => ({
+      ...message,
+      days: daysOf(message.kind, numbers),
+      milestones: message.kind === "milestone" ? [...body.milestones].sort((a, b) => a - b) : null,
+    }));
     const start = gymMessageSettingsFrom([]);
     const changed = rows.filter((row) => {
       const was = before.get(row.kind);

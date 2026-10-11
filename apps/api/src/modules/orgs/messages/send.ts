@@ -14,11 +14,13 @@ import {
   GYM_MESSAGE_DAY_ENDS_HOUR,
   GYM_MESSAGE_DAY_STARTS_HOUR,
   GYM_MESSAGE_KEPT_DAYS,
+  GYM_MESSAGE_OVERDUE_LATE_DAYS,
   GYM_MESSAGE_WELCOME_DAYS,
   NO_MEMBERSHIP_FACTS,
   automaticMessage,
   gymMessageDue,
   gymMessageSettingsFrom,
+  paymentNoticeAfterDays,
   trustedBirthday,
   type GymMessageFacts,
   type GymMessageSettings,
@@ -97,6 +99,18 @@ export async function sendDueMessages(deps: SendMessagesDeps, opts: { now?: Date
   return { gyms: gymIds.length, sent };
 }
 
+async function dayRead(sql: Sql | TransactionSql, gymId: string, today: string, settings: GymMessageSettings): Promise<DayRead> {
+  const money = await gymMoney(sql, gymId, today);
+  const wait = paymentNoticeAfterDays(money.billsOverdueAfterDays);
+  // No bill is read where no notice can go.
+  const billDays = money.takesPayments && settings.on.payment_overdue && wait !== null ? wait + GYM_MESSAGE_OVERDUE_LATE_DAYS : null;
+  return {
+    visitDays: await repo.gymVisitDays(sql, gymId, today, GYM_VISIT_DAYS),
+    money,
+    memberships: await membershipFactsByPerson(sql, gymId, today, billDays),
+  };
+}
+
 /** What one gym is due now, from one read of it. `everybody`: the day's whole read. */
 async function dueForGym(sql: Sql | TransactionSql, gymId: string, now: Date, everybody: boolean): Promise<{ gym: repo.GymNow; due: repo.NewMessage[] } | null> {
   const gym = await repo.gymNow(sql, gymId, now);
@@ -104,13 +118,7 @@ async function dueForGym(sql: Sql | TransactionSql, gymId: string, now: Date, ev
   // The rule holds every message of a gym that is closed, on no plan or asleep.
   if (!awake(gym)) return { gym, due: [] };
   const settings = gymMessageSettingsFrom(await settingRows(sql, gymId));
-  const day: DayRead = everybody
-    ? {
-        visitDays: await repo.gymVisitDays(sql, gymId, gym.today, GYM_VISIT_DAYS),
-        money: await gymMoney(sql, gymId, gym.today),
-        memberships: await membershipFactsByPerson(sql, gymId, gym.today),
-      }
-    : NO_DAY_READ;
+  const day = everybody ? await dayRead(sql, gymId, gym.today, settings) : NO_DAY_READ;
   const due: repo.NewMessage[] = [];
   // One person may have two stays in the read (removed, then back): what the first
   // is sent, the second must see.

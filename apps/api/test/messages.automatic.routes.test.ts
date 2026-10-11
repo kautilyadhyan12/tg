@@ -624,7 +624,7 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       await refused(withKind("welcome", { ownLine: "Follow @ironhouse" }), "message_line_at");
       await refused(withKind("welcome", { ownLine: "x".repeat(141) }), "message_line_too_long");
       await refused(withKind("welcome", { ownLine: "Don't be a dumbass, wipe the bench." }), "message_line_bad_words");
-      await refused({ ...START, messages: START.messages.slice(0, 7) }, "validation_error");
+      await refused({ ...START, messages: [] }, "validation_error");
       await refused({ ...START, messages: [...START.messages.slice(0, 7), { kind: "welcome", on: true, ownLine: null }] }, "validation_error");
       await refused({ ...START, messages: [...START.messages.slice(0, 7), { kind: "group", on: false, ownLine: null }] }, "validation_error");
       await refused({ ...START, missYouDays: 1 }, "validation_error");
