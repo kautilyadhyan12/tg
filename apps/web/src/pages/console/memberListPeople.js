@@ -125,7 +125,7 @@ export function filtersAreEmpty(filters) {
 export function overSignWords(n, words, { inView = false, readOnly = false } = {}) {
   const one = n === 1;
   const still = `${one ? `This ${words.person} is` : `These ${words.people} are`} still on your ${words.person} list. Reports already counts them as having left.`;
-  const how = `For each ${words.person}, add a new membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first.`;
+  const how = `For each ${words.person}, renew their membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first.`;
   return {
     title: one ? '1 membership has ended or been cancelled' : `${n.toLocaleString('en')} memberships have ended or been cancelled`,
     button: inView ? null : readOnly ? 'See who' : one ? 'Review it' : 'Review them',

@@ -176,7 +176,7 @@ describe('the members whose membership is over (21c-iii)', () => {
     expect(overSignWords(3, WORDS, { inView: true })).toEqual({
       title: '3 memberships have ended or been cancelled',
       button: null,
-      detail: 'For each member, add a new membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first.',
+      detail: 'For each member, renew their membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first.',
     });
     expect(overSignWords(3, WORDS, { readOnly: true }).button).toBe('See who');
     // Shown who, and told nothing it cannot do.

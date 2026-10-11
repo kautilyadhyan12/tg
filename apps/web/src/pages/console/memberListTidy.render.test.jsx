@@ -1,5 +1,5 @@
 // Tidying up members whose membership is over, on the Members list (ROADMAP 21c-iii;
-// RULINGS 2026-10-11): the sign, the list it opens, and Add membership, Remove and Keep on
+// RULINGS 2026-10-11): the sign, the list it opens, and Renew, Remove and Keep on
 // list for one person or for the people ticked. The worst thing, first: a Remove pressed
 // from that list that could move somebody whose membership is not over.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -198,10 +198,10 @@ describe('tidying up members whose membership is over', () => {
     // The sign stays, and now says what to do; its button has done its job.
     expect(sign().queryByTestId('over-review')).toBeNull();
     expect(
-      sign().getByText('For each member, add a new membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first.'),
+      sign().getByText('For each member, renew their membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first.'),
     ).toBeTruthy();
     for (const name of ['Cal Cancelled', 'Jude July', 'Yara Yesterday']) {
-      expect(rowOf(name).getByRole('button', { name: `Add a membership for ${name}` }).textContent).toBe('Add membership');
+      expect(rowOf(name).getByRole('button', { name: `Renew ${name}'s membership` }).textContent).toBe('Renew');
       expect(rowOf(name).getByRole('button', { name: `Remove ${name}` }).textContent).toBe('Remove');
       expect(rowOf(name).getByRole('button', { name: `Keep ${name} on your list` }).textContent).toBe('Keep on list');
     }
@@ -270,7 +270,7 @@ describe('tidying up members whose membership is over', () => {
     expect((await screen.findByTestId('tidy-note')).textContent).toBe('The members you selected have changed, so nothing was done. 2 are selected now.');
   });
 
-  it('Add membership opens that person’s page with the form open, and a row’s own press opens it without', async () => {
+  it('Renew opens that person’s page with the Add membership form open, and a row’s own press opens it without', async () => {
     await review();
     fireEvent.click(rowOf('Yara Yesterday').getByTestId('over-add'));
     const page = await screen.findByTestId('person-page');

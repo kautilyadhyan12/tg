@@ -5450,15 +5450,14 @@ out: anybody staff chose to keep on the list (below).
 | Where | Words |
 |---|---|
 | The sign | "3 memberships have ended or been cancelled" · **Review them** ("Review it" for one; "See who" in a gym that can only read) · "These members are still on your member list. Reports already counts them as having left." |
-| The sign, once its list is shown | "For each member, add a new membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first." |
+| The sign, once its list is shown | "For each member, renew their membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first." |
 | The list | the same Members list, showing only those people, with the pill "Membership ended or cancelled" |
-| Under each row | **Add membership** · **Remove** · **Keep on list** |
+| Under each row | **Renew** · **Remove** · **Keep on list**: three small buttons in one line under the name (`c-btn-xs`), never wider than the Name column |
 | The bar, with people ticked | its usual buttons, and **Keep on list** |
 | When nobody is left | "Nobody is left to review. No member on your list has a membership that has ended or been cancelled." · **Show all members** |
 
-- **Add membership** opens that person's page with the Add membership form open and the
-  membership they had already picked, where the gym still sells it. It is the name of the
-  form it opens; the plan's word was "Renew".
+- **Renew** opens that person's page with the Add membership form open and the
+  membership they had already picked, where the gym still sells it.
 - **Remove** is the Remove that exists: the box names who moves to Past members and who
   loses the app, and nobody moves before its red button. Asked from this list
   (`onlyOver`), the server moves only people whose membership is over when the box is made

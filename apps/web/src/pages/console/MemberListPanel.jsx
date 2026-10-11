@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronRight, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Plus, Search, SlidersHorizontal, Tag, Upload, UserMinus, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { HELD_PAYMENT_WORDS, MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -425,7 +425,7 @@ export default function MemberListPanel({
   /** Keep on list is being sent; and what it did, said above the list. */
   const [keeping, setKeeping] = useState(false);
   const [tidyNote, setTidyNote] = useState(null);
-  /** The person whose page was opened by a row's Add membership, with the form open. */
+  /** The person whose page was opened by a row's Renew, with the Add membership form open. */
   const [addFor, setAddFor] = useState(null);
   /** The gym's tags with their counts (5d-ii); none until they are read. */
   const [gymTags, setGymTags] = useState([]);
@@ -1243,7 +1243,7 @@ export default function MemberListPanel({
                   {/* One by one (21c-iii): what can be done with this person, under their
                       own row. With people ticked, the bar's buttons act on those instead. */}
                   {overView && !readOnly && picked === 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-[repeat(3,168px)] gap-2 pl-12 pr-4 pb-3.5 md:pb-3" data-testid="over-actions">
+                    <div className="flex flex-wrap gap-1 pl-12 pr-4 pb-3.5 md:pb-3" data-testid="over-actions">
                       <button
                         type="button"
                         onClick={() => {
@@ -1251,21 +1251,19 @@ export default function MemberListPanel({
                           setAddFor(e.entryId);
                           setOpenId(e.entryId);
                         }}
-                        aria-label={`Add a membership for ${e.fullName || 'this person'}`}
+                        aria-label={`Renew ${e.fullName || 'this person'}'s membership`}
                         data-testid="over-add"
-                        className="c-btn c-btn-soft c-btn-sm min-h-11 md:min-h-0 col-span-2 md:col-span-1 w-full justify-center"
+                        className="c-btn c-btn-soft c-btn-xs"
                       >
-                        <Plus aria-hidden="true" className="w-4 h-4" />
-                        Add membership
+                        Renew
                       </button>
                       <button
                         type="button"
                         onClick={() => openRemove({ kind: 'ticked', entryIds: [e.entryId] })}
                         aria-label={`Remove ${e.fullName || 'this person'}`}
                         data-testid="over-remove"
-                        className="c-btn c-btn-danger c-btn-sm min-h-11 md:min-h-0 w-full justify-center"
+                        className="c-btn c-btn-danger c-btn-xs"
                       >
-                        <UserMinus aria-hidden="true" className="w-4 h-4" />
                         Remove
                       </button>
                       <button
@@ -1274,9 +1272,8 @@ export default function MemberListPanel({
                         disabled={keeping}
                         aria-label={`Keep ${e.fullName || 'this person'} on your list`}
                         data-testid="over-keep"
-                        className="c-btn c-btn-s c-btn-sm min-h-11 md:min-h-0 w-full justify-center"
+                        className="c-btn c-btn-s c-btn-xs"
                       >
-                        <ListChecks aria-hidden="true" className="w-4 h-4" />
                         Keep on list
                       </button>
                     </div>
