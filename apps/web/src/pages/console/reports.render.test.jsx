@@ -135,9 +135,9 @@ describe('the members figures', () => {
     await screen.findByTestId('tile-active');
     // Each box in its own words: what the figure is, and why there is none.
     const lines = {
-      left: 'Nobody has been removed from your member list yet.',
-      churn: 'Churn is the share of your members who leave in a month. Nobody has been removed from your list yet, so there is none to show.',
-      retention: 'Retention is the share of your members you keep each month. It shows once somebody has been removed from your list, so the app knows you record who leaves.',
+      left: 'Nobody has left yet: nobody has been removed from your member list, and no membership has ended or been cancelled.',
+      churn: 'Churn is the share of your members who leave in a month. Nobody has left yet, so there is none to show.',
+      retention: 'Retention is the share of your members you keep each month. It shows once somebody has left, so the app knows you record who leaves.',
       stay: 'Average stay is how long your members had been with you when they left. Nobody has left yet.',
     };
     for (const [key, line] of Object.entries(lines)) {

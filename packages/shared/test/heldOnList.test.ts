@@ -12,6 +12,7 @@ import {
   HELD_PAYMENT_WORDS,
   HELD_STATUS_WORDS,
   giveHeldMembership,
+  heldLeftOn,
   heldListWords,
   heldMembershipView,
   heldOnList,
@@ -415,5 +416,77 @@ describe("the words the Filter, the counts and the download use", () => {
     const notYet = on([held("Annual", given(yearly, "2026-10-20", false, today))], today);
     if (notYet === null) throw new Error("nothing shown");
     expect(heldListWords(notYet)).toEqual({ status: "Not started", memberships: ["Annual"], payment: "Not due yet" });
+  });
+});
+
+// Reports counts a person as left from this day (ROADMAP 21c-ii; spec Part 3 §16.9.4).
+describe("the day Reports counts somebody as left", () => {
+  const today = "2026-10-15";
+  const ended = (name: string, type: HeldMembershipTerms, startsOn: string) => held(name, given(type, startsOn, true, startsOn));
+  const cancelledOn = (name: string, type: HeldMembershipTerms, startsOn: string, day: string) =>
+    held(name, moved(given(type, startsOn, true, startsOn), { type: "cancel", when: "today" }, day));
+  const usedUp = (startsOn: string) => held("PT 10", { ...given(tenPack, startsOn, true, startsOn), classesLeft: 0 });
+  const running = held("Gold Monthly", given(monthly, "2026-10-01", true, "2026-10-01"));
+  const overdue = held("Gold Monthly", given(monthly, "2026-08-01", true, "2026-08-01"));
+  const frozen = held("Gold Monthly", moved(given(monthly, "2026-09-01", true, "2026-09-01"), { type: "freeze" }, "2026-09-20"));
+  const toStart = held("Annual", given(yearly, "2026-10-22", false, today));
+  const stopped = held("Gold Monthly", moved(given(monthly, "2026-08-05", true, "2026-08-05"), { type: "cancel", when: "period_end" }, "2026-08-20"));
+  const lastDayToday = ended("One month", { ...threeMonths, termCount: 1 }, "2026-09-16");
+  const lastDayYesterday = ended("One month", { ...threeMonths, termCount: 1 }, "2026-09-15");
+  const trialOver = held("Free week", given(freeWeek, "2026-07-10", false, "2026-07-10"));
+
+  // [who, what they hold, what the gym's list names that they never held, the day they left]
+  const cases: [string, HeldForList[], string | null, string | null][] = [
+    ["nothing held: the gym's own words", [], null, null],
+    ["nothing held, and the list names a membership", [], "Gold", null],
+    ["running and paid", [running], null, null],
+    ["running and two months overdue", [overdue], null, null],
+    ["frozen", [frozen], null, null],
+    ["still to start", [toStart], null, null],
+    ["on its last day", [lastDayToday], null, null],
+    ["an earlier one over and a new one running", [ended("Three months", threeMonths, "2026-06-01"), running], null, null],
+    ["an earlier one cancelled and a new one still to start", [cancelledOn("Gold Monthly", monthly, "2026-06-01", "2026-09-05"), toStart], null, null],
+    ["over, but the list names a membership they never held here", [lastDayYesterday], "Platinum", null],
+    ["the day after its last day", [lastDayYesterday], null, "2026-10-14"],
+    ["a free trial that ran out", [trialOver], null, "2026-07-16"],
+    ["cancelled by staff: the day it was cancelled", [cancelledOn("Gold Monthly", monthly, "2026-09-01", "2026-10-03")], null, "2026-10-03"],
+    ["stopped at the end of what was paid: its last day", [stopped], null, "2026-09-04"],
+    // No day was stored for a pack's last class, so today stands in until its own last day passes.
+    ["a pack used up with its last day still ahead", [usedUp("2026-09-20")], null, today],
+    ["a pack used up, its last day gone", [usedUp("2026-06-01")], null, "2026-08-29"],
+    ["a pack never used up, its last day gone", [ended("PT 10", tenPack, "2026-06-01")], null, "2026-08-29"],
+    ["two over: the one that finished last is the one dated", [ended("Three months", threeMonths, "2026-06-01"), cancelledOn("Gold Monthly", monthly, "2026-08-01", "2026-10-02")], null, "2026-10-02"],
+    ["two over, the cancelled one first: the later last day", [cancelledOn("Gold Monthly", monthly, "2026-06-01", "2026-07-05"), lastDayYesterday], null, "2026-10-14"],
+    // A gym that moved its clock back can hold one cancelled on what is now tomorrow.
+    ["cancelled on a day after today: never later than today", [cancelledOn("Gold Monthly", monthly, "2026-09-01", "2026-10-16")], null, today],
+  ];
+
+  it("is the day of the membership the list names, for exactly the people it reads as Ended or Cancelled", () => {
+    for (const [what, list, listedUnheld, day] of cases) {
+      for (const order of [list, [...list].reverse()]) {
+        const input = { held: order, listedUnheld, today };
+        expect(heldLeftOn(input), what).toBe(day);
+        const status = heldOnList(input)?.status;
+        expect(heldLeftOn(input) !== null, what).toBe(status === "ended" || status === "cancelled");
+      }
+    }
+  });
+
+  it("a bill left open changes nothing: owing is not leaving, and leaving is not paying", () => {
+    for (const [what, list, listedUnheld, day] of cases) {
+      expect(heldLeftOn({ held: list, listedUnheld, today, owedSince: "2026-09-01" }), what).toBe(day);
+    }
+  });
+
+  it("the day before, the day and the day after a last day", () => {
+    const left = (on: string) => heldLeftOn({ held: [lastDayToday], listedUnheld: null, today: on });
+    expect([left("2026-10-14"), left("2026-10-15"), left("2026-10-16"), left("2026-12-25")]).toEqual([null, null, "2026-10-15", "2026-10-15"]);
+  });
+
+  it("a pack with no class left: the day moves with today until its last day, then stays", () => {
+    const pack = usedUp("2026-09-20");
+    const left = (on: string) => heldLeftOn({ held: [pack], listedUnheld: null, today: on });
+    // Ninety days from 20 September: its last day is 18 December.
+    expect([left("2026-10-15"), left("2026-12-18"), left("2026-12-19"), left("2027-03-01")]).toEqual(["2026-10-15", "2026-12-18", "2026-12-18", "2026-12-18"]);
   });
 });

@@ -1,7 +1,7 @@
 // The Reports page's reads (ROADMAP 21a-i, 21a-ii): counts of the gym's member list, its
 // leads, its visits and its classes.
 // Every read names the gym in the WHERE and returns counts, never a person.
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import { REPORT_MONTHS, type AttendanceWindows, type ReportClassCounts } from "@app/shared";
 
@@ -21,22 +21,37 @@ export type MemberCounts = z.infer<typeof countsRowSchema>;
 /** The gym's list counted month by month on the gym's own calendar, in one pass.
  *
  *  A person starts on the join date the gym gave, when it is earlier than the day they
- *  went on the list, and otherwise on that day; they leave on the day they came off. A
+ *  went on the list, and otherwise on that day; they leave on the day they came off, or,
+ *  still on the list, on the day in `gone`: the day their last membership here ended or
+ *  was cancelled (21c-ii), which the caller reads from the Members list's own rule. A
  *  month's "at its start" is everybody who had started before its first day, had not left
  *  before it, and was on the list before the month ended: a list imported in September
  *  with last year's join dates fills no month before September, when nobody on it could
  *  have been seen to leave. */
-export async function readMemberCounts(sql: Sql, gymId: string, timezone: string, now: Date): Promise<MemberCounts> {
+export async function readMemberCounts(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  timezone: string,
+  now: Date,
+  gone: readonly { id: string; on: string }[],
+): Promise<MemberCounts> {
   const rows = await sql<Record<string, unknown>[]>`
     WITH clock AS (
       SELECT (${now}::timestamptz AT TIME ZONE ${timezone})::date AS today,
              date_trunc('month', ${now}::timestamptz AT TIME ZONE ${timezone})::date AS this_month
     ),
+    gone AS (
+      SELECT g.id, g.left_on
+      FROM unnest(${gone.map((g) => g.id)}::uuid[], ${gone.map((g) => g.on)}::date[]) AS g(id, left_on)
+    ),
     people AS MATERIALIZED (
       SELECT LEAST(e.joined_on, (e.created_at AT TIME ZONE ${timezone})::date) AS started,
              (e.created_at AT TIME ZONE ${timezone})::date AS listed_on,
-             (e.former_at AT TIME ZONE ${timezone})::date AS left_on
+             (e.former_at AT TIME ZONE ${timezone})::date AS removed_on,
+             -- Taken off the list wins: that record's membership days are not asked for.
+             COALESCE((e.former_at AT TIME ZONE ${timezone})::date, g.left_on) AS left_on
       FROM gym_member_list_entries e
+      LEFT JOIN gone g ON g.id = e.id
       WHERE e.gym_id = ${gymId}
     ),
     months AS (
@@ -68,7 +83,7 @@ export async function readMemberCounts(sql: Sql, gymId: string, timezone: string
       (SELECT count(*)::int FROM people WHERE left_on IS NULL) AS active_now,
       EXISTS (SELECT 1 FROM people WHERE left_on IS NOT NULL) AS ever_left,
       (SELECT to_char(min(listed_on), 'YYYY-MM-DD') FROM people) AS first_listed_on,
-      (SELECT to_char(GREATEST(max(listed_on), max(left_on)), 'YYYY-MM-DD') FROM people) AS list_changed_on,
+      (SELECT to_char(GREATEST(max(listed_on), max(removed_on)), 'YYYY-MM-DD') FROM people) AS list_changed_on,
       (SELECT count(*)::int FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_leavers,
       (SELECT COALESCE(sum(GREATEST(p.left_on - p.started, 0)), 0)::float8
        FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_days

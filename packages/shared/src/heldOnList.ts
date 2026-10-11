@@ -166,6 +166,25 @@ function names(list: readonly string[]): string[] {
   });
 }
 
+interface HeldInput {
+  held: readonly HeldForList[];
+  listedUnheld: string | null;
+  today: string;
+  /** The day the oldest bill of theirs still open fell due, where one has (on or before
+   *  `today`), whichever membership it is for: one that is over too. */
+  owedSince?: string | null;
+}
+
+/** Which of a person's memberships answers for them: the ones in use, first-named first;
+ *  or, with none in use, the one that finished last; or neither, where the gym's own
+ *  words show instead. */
+function answering(input: HeldInput): { inUse: readonly Seen[]; last: Seen | undefined } {
+  const seen: Seen[] = input.held.map((m) => ({ ...m, view: heldMembershipFacts(m.membership, input.today) }));
+  const inUse = seen.filter((m) => IN_USE_ORDER[m.view.status] !== undefined).sort(nameOrder);
+  if (inUse.length > 0 || input.listedUnheld !== null) return { inUse, last: undefined };
+  return { inUse, last: [...seen].sort(finishedLast(input.today))[0] };
+}
+
 /** What the list's four columns show for somebody who holds, or has held, memberships
  *  here; null where the gym's own words show instead.
  *
@@ -181,17 +200,9 @@ function names(list: readonly string[]): string[] {
  *     whenever it started (`finishedLast`), with "Payment due" where a bill of theirs
  *     is still open.
  *  4. Nothing held at all: the list's words. */
-export function heldOnList(input: {
-  held: readonly HeldForList[];
-  listedUnheld: string | null;
-  today: string;
-  /** The day the oldest bill of theirs still open fell due, where one has (on or before
-   *  `today`), whichever membership it is for: one that is over too. */
-  owedSince?: string | null;
-}): HeldOnList | null {
+export function heldOnList(input: HeldInput): HeldOnList | null {
   const owedSince = input.owedSince ?? null;
-  const seen: Seen[] = input.held.map((m) => ({ ...m, view: heldMembershipFacts(m.membership, input.today) }));
-  const inUse = seen.filter((m) => IN_USE_ORDER[m.view.status] !== undefined).sort(nameOrder);
+  const { inUse, last } = answering(input);
   const first = inUse[0];
   if (first !== undefined) {
     return {
@@ -201,12 +212,22 @@ export function heldOnList(input: {
       payment: withOwed(paymentOf(inUse, input.today), owedSince),
     };
   }
-  if (input.listedUnheld !== null) return null;
-  const last = [...seen].sort(finishedLast(input.today))[0];
   if (last === undefined) return null;
   // Every membership is over: nothing to say of payment, unless a bill was left owing.
   const payment: HeldOnList["payment"] = owedSince === null ? null : { state: "due", since: owedSince };
   return { status: last.view.status, memberships: [last.typeName], day: dayOf(last, input.today), payment };
+}
+
+/** The day somebody the list reads as "Ended" or "Cancelled" stopped being a member, which
+ *  Reports counts them as left on (spec Part 3 §16.9.4); null for everybody else. It is the
+ *  day of the very membership `heldOnList` names: the day it was cancelled, or its last
+ *  day. A pack used up before its last day ended on a day nobody stored, so `today` stands
+ *  in until that last day has passed. Never later than `today`. */
+export function heldLeftOn(input: HeldInput): string | null {
+  const { last } = answering(input);
+  if (last === undefined) return null;
+  const { endsOn } = last.view;
+  return endsOn !== null && endsOn <= input.today ? endsOn : input.today;
 }
 
 /** A row's Membership cell: the first name, and how many more ("Gold Monthly +1"). */

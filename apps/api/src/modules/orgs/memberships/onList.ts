@@ -7,7 +7,7 @@
 // the one rule (`heldOnList` in `@app/shared`) on the gym's own day. Everybody else reads
 // as before.
 import type { Sql, TransactionSql } from "postgres";
-import { HELD_PAYMENT_WORDS, HELD_STATUS_WORDS, heldListWords, heldOnList, type HeldForList, type HeldOnList } from "@app/shared";
+import { HELD_PAYMENT_WORDS, HELD_STATUS_WORDS, heldLeftOn, heldListWords, heldOnList, type HeldForList, type HeldOnList } from "@app/shared";
 import { inUseForList, overForList } from "./heldRepo.js";
 import { listBillFacts } from "./billsSql.js";
 
@@ -15,6 +15,8 @@ export interface HeldShown {
   shown: HeldOnList;
   /** The record has no address. */
   noEmail: boolean;
+  /** The day Reports counts them as left on: set where `shown` is "Ended" or "Cancelled". */
+  leftOn: string | null;
 }
 
 const IN_USE: readonly HeldOnList["status"][] = ["active", "frozen", "upcoming"];
@@ -63,13 +65,14 @@ async function bothReads(
   const ended: string[] = [];
   for (const [entryId, mine] of byEntry) {
     const shown = heldOnList({ held: mine.held, listedUnheld: null, today, owedSince: owed.get(entryId) ?? null });
-    if (shown !== null && IN_USE.includes(shown.status)) out.set(entryId, { shown, noEmail: mine.noEmail });
+    if (shown !== null && IN_USE.includes(shown.status)) out.set(entryId, { shown, noEmail: mine.noEmail, leftOn: null });
     else ended.push(entryId);
   }
   for (const row of await overForList(sql, gymId, entryIds, ended, today)) {
     const held = [...(byEntry.get(row.entryId)?.held ?? []), ...(row.held === null ? [] : [row.held])];
-    const shown = heldOnList({ held, listedUnheld: row.listedUnheld, today, owedSince: owed.get(row.entryId) ?? null });
-    if (shown !== null) out.set(row.entryId, { shown, noEmail: row.noEmail });
+    const judged = { held, listedUnheld: row.listedUnheld, today, owedSince: owed.get(row.entryId) ?? null };
+    const shown = heldOnList(judged);
+    if (shown !== null) out.set(row.entryId, { shown, noEmail: row.noEmail, leftOn: heldLeftOn(judged) });
   }
   return out;
 }

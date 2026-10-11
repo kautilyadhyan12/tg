@@ -42,19 +42,19 @@ export function stayText(days) {
 }
 
 const have = (report) => (report.fullMonths === 0 ? 'none yet' : report.fullMonths === 1 ? '1 so far' : `${String(report.fullMonths)} so far`);
-const nobodyRemoved = (words) => `Nobody has been removed from your ${words.person} list yet.`;
+const nobodyRemoved = (words) => `Nobody has left yet: nobody has been removed from your ${words.person} list, and no membership has ended or been cancelled.`;
 
 // Each box says in its own words what its figure is and why there is none yet: three boxes
 // with one sentence read as one fault said three times.
 const NO_FIGURE = {
   churn: {
-    nobody_left: (report, words) => `Churn is the share of your ${words.people} who leave in a month. Nobody has been removed from your list yet, so there is none to show.`,
+    nobody_left: (report, words) => `Churn is the share of your ${words.people} who leave in a month. Nobody has left yet, so there is none to show.`,
     nobody_at_start: (report, words) => `You had no ${words.people} at the start of the last 3 full months, so nobody could leave.`,
     not_enough_data: (report, words) =>
       `Not enough data yet. Churn compares ${String(REPORT_FULL_MONTHS_NEEDED)} full months of your ${words.person} list; you have ${have(report)}.`,
   },
   retention: {
-    nobody_left: (report, words) => `Retention is the share of your ${words.people} you keep each month. It shows once somebody has been removed from your list, so the app knows you record who leaves.`,
+    nobody_left: (report, words) => `Retention is the share of your ${words.people} you keep each month. It shows once somebody has left, so the app knows you record who leaves.`,
     nobody_at_start: (report, words) => `You had no ${words.people} at the start of the last 3 full months, so there was nobody to keep.`,
     not_enough_data: (report) => `Not enough data yet. Retention is worked out over the same ${String(REPORT_FULL_MONTHS_NEEDED)} full months as churn; you have ${have(report)}.`,
   },
@@ -77,10 +77,10 @@ export function listLine(report, words) {
   return `These figures come from your ${words.person} list. Someone was last added or removed on ${dayText(report.listChangedOn)}.`;
 }
 
-/** Shown once, under the tiles, while nobody has ever come off the list. */
+/** Shown once, under the tiles, while nobody has ever left. */
 export function nobodyRemovedNote(report, words) {
   if (report.everLeft || report.listChangedOn === null) return null;
-  return `Left, churn, retention and average stay count ${words.people} you remove from your list or mark as left in an import. If you keep your list in other software, import it here each month to keep these true.`;
+  return `Left, churn, retention and average stay count ${words.people} you remove from your list or mark as left in an import, and ${words.people} whose membership given in the app ends or is cancelled. A status from your own file, such as Expired, is not counted. If you keep your list in other software, import it here each month to keep these true.`;
 }
 
 /** The six tiles, in order: `value` is the big number, or null with `line` saying why
@@ -117,7 +117,7 @@ export function memberTiles(report, words) {
       value: count(report.activeNow),
       line: null,
       note: null,
-      how: `Everyone on your ${words.person} list today. ${words.peopleCap} you have removed are not counted.`,
+      how: `Everyone on your ${words.person} list today, except ${words.people} whose membership has ended or been cancelled and who have no new one. ${words.peopleCap} you have removed are not counted.`,
     },
     {
       key: 'new',
@@ -133,7 +133,7 @@ export function memberTiles(report, words) {
       value: report.everLeft ? count(report.thisMonth.left) : null,
       line: report.everLeft ? null : nobodyRemoved(words),
       note: report.everLeft ? soFar((m) => m.left) : null,
-      how: `${words.peopleCap} removed from your ${words.person} list in ${month}. Someone you removed and later put back counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
+      how: `${words.peopleCap} removed from your ${words.person} list in ${month}, and ${words.people} whose membership ended or was cancelled in ${month} and who have no new one. On ${words.peopleCap}, their status is Ended or Cancelled. A status from your own file, such as Expired, is not counted. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
     },
     {
       key: 'churn',
@@ -157,7 +157,7 @@ export function memberTiles(report, words) {
       value: stay.value,
       line: stay.line,
       note: stay.note,
-      how: `How long the ${words.people} who left in the months shown below had been with you on average, from their join date to the day they were removed.`,
+      how: `How long the ${words.people} who left in the months shown below had been with you on average, from their join date to the day they were removed or their membership ended.`,
     },
   ];
 }

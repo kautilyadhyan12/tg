@@ -12,6 +12,8 @@ import {
   type LeadSource,
   type MembersReportResponse,
 } from "@app/shared";
+import { dayInTz } from "../../gamification/streak.js";
+import { heldOnListOf } from "../memberships/onList.js";
 import { requirePrivilege } from "../service.js";
 import * as repo from "./repo.js";
 
@@ -26,9 +28,22 @@ export async function requireReportsReader(deps: ReportsDeps, userId: string, gy
   return { timezone: org.timezone };
 }
 
-/** The members figures for a gym whose reader has been checked. */
+/** The members figures for a gym whose reader has been checked.
+ *
+ *  Who has left is the people taken off the list and the people the Members list reads as
+ *  "Ended" or "Cancelled" today, asked of that list's own rule (`heldOnListOf`) so the two
+ *  pages count the same people. Both reads share one snapshot: a membership given between
+ *  them would otherwise count its person as left and as a member at once. */
 export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { timezone: string }): Promise<MembersReportResponse> {
-  const counts = await repo.readMemberCounts(deps.sql, gymId, org.timezone, deps.now());
+  const now = deps.now();
+  const today = dayInTz(now, org.timezone);
+  const counts = await deps.sql.begin("isolation level repeatable read read only", async (tx) => {
+    const gone: { id: string; on: string }[] = [];
+    for (const [id, held] of await heldOnListOf(tx, gymId, today, null)) {
+      if (held.leftOn !== null) gone.push({ id, on: held.leftOn });
+    }
+    return await repo.readMemberCounts(tx, gymId, org.timezone, now, gone);
+  });
   const leadRows = await repo.readLeadCounts(deps.sql, gymId);
   const leads: { source: LeadSource; leads: number; joined: number }[] = [];
   for (const row of leadRows) {
