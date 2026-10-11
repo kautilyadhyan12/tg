@@ -20,6 +20,7 @@ import {
   notSetUp,
   packNote,
   paidQuestion,
+  renewNote,
   personNote,
   startTicks,
   tieButton,
@@ -80,15 +81,15 @@ describe("the member list's names are part of the gym's one list of memberships"
     expect(typeTies(GOLD, [name(), name({ word: 'Silver' })])).toEqual([]);
     expect(typeTies(SILVER, [counted({})])).toEqual([]);
     const all = counted({});
-    expect(typeTies(GOLD, [all])).toEqual([{ word: all, text: 'On your member list this is “Gold” · 42 people.', give: false, first: false, undo: true, own: false }]);
+    expect(typeTies(GOLD, [all])).toEqual([{ word: all, text: 'On your member list this is “Gold” · 42 people.', give: false, renew: false, first: false, undo: true, own: false }]);
     // Some were given it and some were not, perhaps on purpose: the numbers, and a look at who can get it.
     const some = counted({ waiting: 3 });
-    expect(typeTies(GOLD, [some])).toEqual([{ word: some, text: 'On your member list this is “Gold” · 42 people. 3 of them have never had it.', give: true, first: false, undo: true, own: false }]);
+    expect(typeTies(GOLD, [some])).toEqual([{ word: some, text: 'On your member list this is “Gold” · 42 people. 3 of them have never had it.', give: true, renew: false, first: false, undo: true, own: false }]);
     expect(tieButton(GOLD, typeTies(GOLD, [some])[0])).toEqual({ label: 'See who can get it', aria: 'See who with Gold on your member list can get Gold Monthly', main: false });
     expect(typeTies(GOLD, [counted({ waiting: 1 })])[0].text).toBe('On your member list this is “Gold” · 42 people. 1 of them has never had it.');
     // Nobody with the name has had it: they are offered it outright.
     const none = counted({ waiting: 42 });
-    expect(typeTies(GOLD, [none])).toEqual([{ word: none, text: 'On your member list this is “Gold” · 42 people. They have never had it.', give: true, first: true, undo: true, own: false }]);
+    expect(typeTies(GOLD, [none])).toEqual([{ word: none, text: 'On your member list this is “Gold” · 42 people. They have never had it.', give: true, renew: false, first: true, undo: true, own: false }]);
     expect(tieButton(GOLD, typeTies(GOLD, [none])[0])).toEqual({ label: 'Give it to them', aria: 'Give Gold Monthly to the people with Gold on your member list', main: true });
     // Two names can be one type.
     expect(typeTies(GOLD, [all, counted({}), name({ word: 'Gold (old)', link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 0, ownName: false } })])).toHaveLength(3);
@@ -106,12 +107,12 @@ describe("the member list's names are part of the gym's one list of memberships"
     // Kd's click-through: "Gold Monthly" on the list beside a type called Gold Monthly.
     expect(typeTies(GOLD, [own(0)])).toEqual([]);
     const two = own(2);
-    expect(typeTies(GOLD, [two])).toEqual([{ word: two, text: 'On your member list 3 people have Gold Monthly. 2 of them have never had it here.', give: true, first: false, undo: false, own: true }]);
+    expect(typeTies(GOLD, [two])).toEqual([{ word: two, text: 'On your member list 3 people have Gold Monthly. 2 of them have never had it here.', give: true, renew: false, first: false, undo: false, own: true }]);
     expect(tieButton(GOLD, typeTies(GOLD, [two])[0])).toEqual({ label: 'See who can get it', aria: 'See who on your member list can get Gold Monthly', main: false });
     expect(typeTies(GOLD, [own(1)])[0].text).toBe('On your member list 3 people have Gold Monthly. 1 of them has never had it here.');
     // None of them has it: offered outright.
     const three = own(3);
-    expect(typeTies(GOLD, [three])).toEqual([{ word: three, text: '3 people on your member list have Gold Monthly, but it is not on their pages yet.', give: true, first: true, undo: false, own: true }]);
+    expect(typeTies(GOLD, [three])).toEqual([{ word: three, text: '3 people on your member list have Gold Monthly, but it is not on their pages yet.', give: true, renew: false, first: true, undo: false, own: true }]);
     expect(tieButton(GOLD, typeTies(GOLD, [three])[0])).toEqual({ label: 'Give it to them', aria: 'Give Gold Monthly to the people on your member list', main: true });
     const one = name({ word: 'Gold Monthly', people: 1, sameName: { typeId: GOLD.id, typeName: 'Gold Monthly', waiting: 1 } });
     expect(typeTies(GOLD, [one])[0].text).toBe('1 person on your member list has Gold Monthly, but it is not on their page yet.');
@@ -119,11 +120,45 @@ describe("the member list's names are part of the gym's one list of memberships"
     // Whether a name is the type's own is the server's answer (`ownName`): the screen never
     // folds two names itself, so letters the two would fold differently cannot part them.
     const held = name({ word: 'GOLD MONTHLY', people: 3, link: { typeId: GOLD.id, typeName: 'Gold Monthly', typeArchived: false, waiting: 1, ownName: true } });
-    expect(typeTies(GOLD, [held])).toEqual([{ word: held, text: 'On your member list 3 people have Gold Monthly. 1 of them has never had it here.', give: true, first: false, undo: false, own: true }]);
+    expect(typeTies(GOLD, [held])).toEqual([{ word: held, text: 'On your member list 3 people have Gold Monthly. 1 of them has never had it here.', give: true, renew: false, first: false, undo: false, own: true }]);
     // The same spelling the server does NOT call the type's own is a name staff tied to it.
     const tied = { ...held, link: { ...held.link, ownName: false } };
     expect(typeTies(GOLD, [tied])[0]).toMatchObject({ undo: true, own: false, text: 'On your member list this is “GOLD MONTHLY” · 3 people. 1 of them has never had it.' });
     expect(typeTies(GOLD, [{ ...held, link: { ...held.link, waiting: 0 } }])).toEqual([]);
+  });
+
+  it('a membership that ended and has a later end date on the list can be renewed from its row', () => {
+    const TERM = { ...GOLD, id: '22222222-2222-4222-8222-000000000003', name: '3 Months', kind: 'one_time', termCount: 3 };
+    const term = (over) => name({ word: '3 Month Plan', people: 8, link: { typeId: TERM.id, typeName: '3 Months', typeArchived: false, waiting: 0, again: 0, ownName: false, ...over } });
+    // Nobody waits: the row offers nothing.
+    expect(typeTies(TERM, [term({})])[0]).toMatchObject({ give: false, renew: false });
+    // Only renewals wait: the row says so in a whole sentence, and its button renews.
+    const two = typeTies(TERM, [term({ again: 2 })])[0];
+    expect(two.text).toBe("On your member list this is “3 Month Plan” · 8 people. 2 people's 3 Months has ended, and your member list now shows a later end date for them. You can renew it.");
+    expect(two).toMatchObject({ give: true, renew: true, first: false });
+    expect(tieButton(TERM, two)).toEqual({ label: 'Renew memberships', aria: 'Renew 3 Months for the people with 3 Month Plan on your member list', main: false });
+    expect(typeTies(TERM, [term({ again: 1 })])[0].text).toBe("On your member list this is “3 Month Plan” · 8 people. 1 person's 3 Months has ended, and your member list now shows a later end date for them. You can renew it.");
+    // Some never had it too: both are said, and the button is the usual one.
+    const both = typeTies(TERM, [term({ waiting: 3, again: 2 })])[0];
+    expect(both.text).toBe("On your member list this is “3 Month Plan” · 8 people. 3 of them have never had it. 2 people's 3 Months has ended, and your member list now shows a later end date for them. You can renew it.");
+    expect(tieButton(TERM, both).label).toBe('See who can get it');
+    // The type's own name on the list: a row appears for the renewals alone.
+    const ownTerm = name({ word: '3 Months', people: 5, sameName: { typeId: TERM.id, typeName: '3 Months', waiting: 0, again: 1 } });
+    const row = typeTies(TERM, [ownTerm])[0];
+    expect(row.text).toBe("On your member list 5 people have 3 Months. 1 person's 3 Months has ended, and your member list now shows a later end date for them. You can renew it.");
+    expect(tieButton(TERM, row)).toEqual({ label: 'Renew memberships', aria: 'Renew 3 Months for the people on your member list', main: false });
+    // A reply from before the server sent the number reads as none.
+    expect(typeTies(TERM, [name({ word: '3 Months', people: 5, sameName: { typeId: TERM.id, typeName: '3 Months', waiting: 0 } })])).toEqual([]);
+  });
+
+  it('in the box a renewal is named as one, and the box says why those people are offered it again', () => {
+    const TERM = { ...GOLD, name: '3 Months', kind: 'one_time', termCount: 3 };
+    expect(personNote(person(1, 'ask', { endsOn: '2026-11-25', again: true }))).toBe('renewal, ends 25 November 2026');
+    expect(personNote(person(2, 'ask', { endsOn: '2026-11-25', again: false }))).toBe('ends 25 November 2026');
+    expect(renewNote(preview({ type: TERM, counts: counts({ ask: 3 }) }))).toBeNull();
+    expect(renewNote(preview({ type: TERM, counts: counts({ ask: 3, again: 0 }) }))).toBeNull();
+    expect(renewNote(preview({ type: TERM, counts: counts({ ask: 3, again: 1 }) }))).toBe('1 of these people had 3 Months before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.');
+    expect(renewNote(preview({ type: TERM, counts: counts({ ask: 3, again: 2 }) }))).toBe('2 of these people had 3 Months before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.');
   });
 
   it('Set up asks whether it is one of the memberships above or a new one, and the form opens with its name', () => {

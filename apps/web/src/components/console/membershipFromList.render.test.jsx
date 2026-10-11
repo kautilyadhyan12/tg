@@ -463,6 +463,28 @@ describe('the box of who gets it', () => {
     );
   });
 
+  it('a membership that ended and has a later end date on the list: the row offers to renew it, and the box names the renewal', async () => {
+    const TERM = type(3, { name: '3 Months', kind: 'one_time', termCount: 3 });
+    const plan = (again) => name({ word: '3 Month Plan', people: 8, link: { typeId: TERM.id, typeName: '3 Months', typeArchived: false, waiting: 0, again, ownName: false } });
+    await open([TERM], [plan(1)]);
+    expect(await screen.findByText("On your member list this is “3 Month Plan” · 8 people. 1 person's 3 Months has ended, and your member list now shows a later end date for them. You can renew it.")).toBeTruthy();
+    orgService.previewMembershipLink.mockResolvedValue({
+      data: previewOf(TERM, {
+        word: '3 Month Plan',
+        counts: { settled: 0, due: 0, ask: 1, has: 7, full: 0, ended: 0, day: 0, again: 1, past: 0 },
+        people: [person(1, 'Asha Rao', 'ask', { endsOn: '2026-11-25', again: true }), person(2, 'Ben Cole', 'has')],
+      }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Renew 3 Months for the people with 3 Month Plan on your member list' }));
+    const box = await screen.findByRole('group', { name: 'Give 3 Months to the people with “3 Month Plan” on your member list?' });
+    expect(within(box).getByText('1 of these people had 3 Months before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.')).toBeTruthy();
+    expect(rowsOf(box, 'ask')).toEqual([['Asha Rao', 'Renewal, ends 25 November 2026']]);
+    expect(within(box).getByText('7 people already have 3 Months, or had it before.')).toBeTruthy();
+    // Some already have it, so nobody is ticked until staff tick them.
+    for (const tick of within(box).getAllByRole('checkbox')) expect(tick.checked).toBe(false);
+    expect(orgService.linkMembershipWord).not.toHaveBeenCalled();
+  });
+
   it('with nobody ticked the name can still be counted as the type, to give later', async () => {
     await open([GOLD], [name()]);
     const box = await openBox();

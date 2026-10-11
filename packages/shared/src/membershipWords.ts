@@ -18,7 +18,9 @@ const wordSchema = z.string().min(1).max(MEMBER_LIST_MAX_STATUS_CHARS).refine(ha
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/);
 
 /** One membership word on the gym's list, and the type it is linked to. `waiting` is
- *  how many people with the word have never held that type. */
+ *  how many people with the word have never held that type. `again` is how many have
+ *  held it, hold none of it now, and are given a later day by the list than the last
+ *  day of any they held (21c-i): the box offers those the next term. */
 export const membershipWordSchema = z
   .object({
     word: wordSchema,
@@ -29,6 +31,7 @@ export const membershipWordSchema = z
         typeName: z.string(),
         typeArchived: z.boolean(),
         waiting: z.number().int().min(0),
+        again: z.number().int().min(0),
         /** The word is that type's own name, as the server folds both. */
         ownName: z.boolean(),
       })
@@ -39,7 +42,7 @@ export const membershipWordSchema = z
      *  have never held it. A screen offers it without asking which type the word is, and
      *  shows nothing where everybody has it. */
     sameName: z
-      .object({ typeId: z.string().uuid(), typeName: z.string(), waiting: z.number().int().min(0) })
+      .object({ typeId: z.string().uuid(), typeName: z.string(), waiting: z.number().int().min(0), again: z.number().int().min(0) })
       .strict()
       .nullable(),
   })
@@ -74,6 +77,8 @@ export const membershipLinkPersonSchema = z
     group: membershipLinkGroupSchema,
     /** The list gave a day for this person. */
     dated: z.boolean(),
+    /** They held the type before, and the list now gives them a later day. */
+    again: z.boolean(),
     renewsOn: daySchema.nullable(),
     endsOn: daySchema.nullable(),
     since: daySchema.nullable(),
@@ -90,6 +95,8 @@ const countsSchema = z
     full: z.number().int().min(0),
     ended: z.number().int().min(0),
     day: z.number().int().min(0),
+    /** How many of `settled`, `due` and `ask` held the type before. */
+    again: z.number().int().min(0),
     /** Past members who carry the word: not on the list now, so never given it. */
     past: z.number().int().min(0),
   })

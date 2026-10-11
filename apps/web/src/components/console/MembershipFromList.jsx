@@ -16,6 +16,7 @@ import {
   nameLine,
   packNote,
   paidQuestion,
+  renewNote,
   startTicks,
   tieButton,
   undoWords,
@@ -102,6 +103,7 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
   const out = leftOut(preview);
   const question = paidQuestion(preview);
   const pack = packNote(preview);
+  const renew = renewNote(preview);
   const id = (name) => `membership-give-${name}-${preview.type.id}`;
   const boxRef = useRef(null);
 
@@ -170,6 +172,7 @@ export function GiveBox({ preview, counted, busy, error, onGive, onCancel }) {
               ) : null}
             </div>
           ))}
+          {renew !== null ? <p className="c-s14 c-t2 m-0">{renew}</p> : null}
           {pack !== null ? <p className="c-s14 c-t2 m-0">{pack}</p> : null}
         </div>
       ) : null}

@@ -36,20 +36,30 @@ export function archivedLine(w) {
  *      which can be undone;
  *    - the list's own use of this type's very name, said only while somebody with it
  *      has never had the membership.
- *  `give` is whether anybody with the name has never had the type. `first` is true where
+ *  `give` is whether anybody with the name can be given the type: somebody who has never
+ *  had it, or somebody whose membership ended and whose list now shows a later end date
+ *  (`renew` is true where those are the only ones). `first` is true where
  *  nobody with it has: the people are offered it outright. Otherwise some were given it
  *  and some were not, perhaps on purpose, so the row states the numbers and offers a
  *  look at who can get it, never a prompt to give. */
 export function typeTies(type, words) {
   const ties = [];
   const never = (waiting) => `${String(waiting)} of them ${waiting === 1 ? 'has' : 'have'} never had it`;
-  const ownName = (w, waiting) => ({
+  // Somebody whose membership ended, and whose list now shows a later end date.
+  const renewals = (again) =>
+    again === 1
+      ? ` 1 person's ${type.name} has ended, and your member list now shows a later end date for them. You can renew it.`
+      : ` ${String(again)} people's ${type.name} has ended, and your member list now shows a later end date for them. You can renew it.`;
+  const ownName = (w, waiting, again) => ({
     word: w,
     text:
-      waiting === w.people
+      (waiting === w.people
         ? `${people(w.people)} on your member list ${w.people === 1 ? 'has' : 'have'} ${type.name}, but it is not on their ${w.people === 1 ? 'page' : 'pages'} yet.`
-        : `On your member list ${people(w.people)} ${w.people === 1 ? 'has' : 'have'} ${type.name}. ${never(waiting)} here.`,
+        : waiting === 0
+          ? `On your member list ${people(w.people)} ${w.people === 1 ? 'has' : 'have'} ${type.name}.`
+          : `On your member list ${people(w.people)} ${w.people === 1 ? 'has' : 'have'} ${type.name}. ${never(waiting)} here.`) + (again > 0 ? renewals(again) : ''),
     give: true,
+    renew: waiting === 0,
     first: waiting === w.people,
     undo: false,
     own: true,
@@ -58,22 +68,24 @@ export function typeTies(type, words) {
     if (w.link !== null) {
       if (w.link.typeArchived || w.link.typeId !== type.id) continue;
       const { waiting } = w.link;
+      const again = w.link.again ?? 0;
       // The server says whether the name is the type's own: it folds both, the screen never does.
       if (w.link.ownName) {
-        if (waiting > 0) ties.push(ownName(w, waiting));
+        if (waiting > 0 || again > 0) ties.push(ownName(w, waiting, again));
         continue;
       }
       const is = `On your member list this is ${quoted(w.word)} · ${people(w.people)}.`;
       ties.push({
         word: w,
-        text: waiting === 0 ? is : waiting === w.people ? `${is} They have never had it.` : `${is} ${never(waiting)}.`,
-        give: waiting > 0,
+        text: (waiting === 0 ? is : waiting === w.people ? `${is} They have never had it.` : `${is} ${never(waiting)}.`) + (again > 0 ? renewals(again) : ''),
+        give: waiting > 0 || again > 0,
+        renew: waiting === 0 && again > 0,
         first: waiting === w.people,
         undo: true,
         own: false,
       });
-    } else if (w.sameName !== null && w.sameName.typeId === type.id && w.sameName.waiting > 0) {
-      ties.push(ownName(w, w.sameName.waiting));
+    } else if (w.sameName !== null && w.sameName.typeId === type.id && (w.sameName.waiting > 0 || (w.sameName.again ?? 0) > 0)) {
+      ties.push(ownName(w, w.sameName.waiting, w.sameName.again ?? 0));
     }
   }
   return ties;
@@ -82,9 +94,10 @@ export function typeTies(type, words) {
 /** The button on a type's row that opens the box for one of the list's names. */
 export function tieButton(type, tie) {
   const who = tie.own ? 'on your member list' : `with ${tie.word.word} on your member list`;
-  return tie.first
-    ? { label: 'Give it to them', aria: `Give ${type.name} to the people ${who}`, main: true }
-    : { label: 'See who can get it', aria: `See who ${who} can get ${type.name}`, main: false };
+  if (tie.first) return { label: 'Give it to them', aria: `Give ${type.name} to the people ${who}`, main: true };
+  // Only renewals wait: the button says so.
+  if (tie.renew === true) return { label: 'Renew memberships', aria: `Renew ${type.name} for the people ${who}`, main: false };
+  return { label: 'See who can get it', aria: `See who ${who} can get ${type.name}`, main: false };
 }
 
 /** The closed section's line, with how many of the list's names wait to be set up. */
@@ -140,7 +153,9 @@ export function personNote(person) {
     case 'ask':
       if (person.group === 'ask' && !person.dated) return 'starts today';
       if (person.renewsOn !== null) return `renews ${dayWords(person.renewsOn)}`;
-      return person.endsOn === null ? '' : `ends ${dayWords(person.endsOn)}`;
+      if (person.endsOn === null) return '';
+      // Somebody who had it before: their new end date, said as a renewal.
+      return person.again === true ? `renewal, ends ${dayWords(person.endsOn)}` : `ends ${dayWords(person.endsOn)}`;
     case 'due':
       return person.since === null ? '' : `due since ${dayWords(person.since)}`;
     case 'ended':
@@ -238,6 +253,17 @@ export function paidQuestion(preview) {
     yes: 'Yes, they have paid',
     no: 'No, not yet',
   };
+}
+
+/** Somebody in the box had the membership before and it ended: why they are offered it
+ *  again, or null. */
+export function renewNote(preview) {
+  const again = preview.counts.again ?? 0;
+  if (again === 0) return null;
+  const { name } = preview.type;
+  return again === 1
+    ? `1 of these people had ${name} before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.`
+    : `${String(again)} of these people had ${name} before and it has ended. Your member list now shows a later end date for them, so this renews it up to that date.`;
 }
 
 /** A pack's classes are not on the list: said before it is given. */

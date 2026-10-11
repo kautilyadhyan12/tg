@@ -37,14 +37,14 @@ const wordNotFound = () =>
 const typeNotFound = () =>
   new OrgsError(409, "membership_type_not_found", "That membership type is no longer on your price list. Pick another.");
 
-async function words(deps: WordsDeps, gymId: string): Promise<MembershipWordsResponse> {
-  return membershipWordsResponseSchema.parse(await repo.readWords(deps.sql, gymId));
+async function words(deps: WordsDeps, gymId: string, timezone: string): Promise<MembershipWordsResponse> {
+  return membershipWordsResponseSchema.parse(await repo.readWords(deps.sql, gymId, dayInTz(deps.now(), timezone)));
 }
 
 /** One person as the box shows them: the days their membership would read. */
 function shown(placed: PlacedPerson, today: string): MembershipLinkPerson {
   const { person, group, membership } = placed;
-  const base = { entryId: person.entryId, fullName: person.fullName, group, dated: person.endsOn !== null };
+  const base = { entryId: person.entryId, fullName: person.fullName, group, dated: person.endsOn !== null, again: placed.again };
   if (membership === null) {
     // The last day the list gave them: "Renews 3 Aug" covers up to the day before.
     const last =
@@ -66,8 +66,8 @@ function shown(placed: PlacedPerson, today: string): MembershipLinkPerson {
 }
 
 export async function getMembershipWords(deps: WordsDeps, userId: string, gymId: string): Promise<MembershipWordsResponse> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
-  return await words(deps, gymId);
+  const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  return await words(deps, gymId, org.timezone);
 }
 
 export async function previewMembershipLink(
@@ -97,6 +97,7 @@ export async function previewMembershipLink(
       full: count("full"),
       ended: count("ended"),
       day: count("day"),
+      again: preview.placed.filter((p) => p.again && p.membership !== null).length,
       past: preview.past,
     },
     // The first of each group by name; the counts above are of everybody.
@@ -128,7 +129,7 @@ export async function linkMembershipWord(
   });
   switch (outcome.kind) {
     case "ok":
-      return membershipLinkResponseSchema.parse({ given: outcome.given, list: await words(deps, gymId) });
+      return membershipLinkResponseSchema.parse({ given: outcome.given, list: await words(deps, gymId, org.timezone) });
     case "word_not_found":
       throw wordNotFound();
     case "type_not_found":
@@ -166,7 +167,7 @@ export async function unlinkMembershipWord(
   gymId: string,
   req: MembershipUnlinkRequest,
 ): Promise<MembershipWordsResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   await repo.unlinkWord(deps.sql, { gymId, word: req.word, actorUserId: userId });
-  return await words(deps, gymId);
+  return await words(deps, gymId, org.timezone);
 }

@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import {
   HELD_LIVE_MAX,
+  addDays,
   linkHeldMembership,
   type HeldMembership,
   type HeldMembershipTerms,
@@ -19,6 +20,12 @@ export interface WordPerson {
   endsOnKind: "ends" | "renews" | null;
   /** Holds, or has held, the type the word is being linked to. */
   heldType: boolean;
+  /** Of the memberships of that type they have held: staff cancelled one · one is in use
+   *  today (running, frozen or still to start) · the latest last day among them, null
+   *  where they have held none. */
+  typeCancelled: boolean;
+  typeInUse: boolean;
+  typeLastDay: string | null;
   /** How many memberships they have in use today. */
   inUse: number;
 }
@@ -28,6 +35,20 @@ export interface PlacedPerson {
   group: MembershipLinkGroup;
   /** The membership they would be given; null for the groups that are given none. */
   membership: HeldMembership | null;
+  /** They held the type before and the list now gives them a later day. */
+  again: boolean;
+}
+
+/** Whether somebody who has held the type is offered its next term (21c-i; spec Part 3
+ *  §16.9.3): every one of theirs is over, staff cancelled none, and the list now covers a
+ *  day LATER than the last day of any of them. Never a repeating type, which ends only
+ *  when staff stop it. An unchanged list day is not later, so a second press gives nobody
+ *  a second. */
+export function offeredAgain(person: WordPerson, type: Pick<HeldMembershipTerms, "kind">): boolean {
+  if (!person.heldType || type.kind === "recurring" || person.typeCancelled || person.typeInUse) return false;
+  if (person.endsOn === null || person.typeLastDay === null) return false;
+  const covered = person.endsOnKind === "renews" ? addDays(person.endsOn, -1) : person.endsOn;
+  return covered > person.typeLastDay;
 }
 
 /** Each person's group, and the membership the list's own day gives them. `paid` is
@@ -39,12 +60,13 @@ export function placePeople(
   today: string,
 ): PlacedPerson[] {
   return people.map((person): PlacedPerson => {
+    const again = offeredAgain(person, type);
     // Never a second one of the same type: pressing Link again gives nobody two.
-    if (person.heldType) return { person, group: "has", membership: null };
-    if (person.inUse >= HELD_LIVE_MAX) return { person, group: "full", membership: null };
+    if (person.heldType && !again) return { person, group: "has", membership: null, again: false };
+    if (person.inUse >= HELD_LIVE_MAX) return { person, group: "full", membership: null, again };
     const made = linkHeldMembership(type, { endsOn: person.endsOn, endsOnKind: person.endsOnKind }, paid, today);
-    if (!made.ok) return { person, group: made.reason === "ended_in_list" ? "ended" : "day", membership: null };
-    return { person, group: made.group, membership: made.membership };
+    if (!made.ok) return { person, group: made.reason === "ended_in_list" ? "ended" : "day", membership: null, again };
+    return { person, group: made.group, membership: made.membership, again };
   });
 }
 
