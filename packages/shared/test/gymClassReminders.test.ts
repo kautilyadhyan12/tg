@@ -7,6 +7,7 @@ import {
   GYM_MESSAGE_REMINDER_HOURS_CHOICES,
   classReminderDue,
   classReminderFrom,
+  classReminderLookAheadHours,
   classReminderOccasion,
   reminderClock,
   reminderWhen,
@@ -152,7 +153,8 @@ describe("the class reminder's rule", () => {
         const minuteOfDay = ((from % 1440) + 1440) % 1440;
         expect(minuteOfDay >= 8 * 60 && minuteOfDay < 21 * 60, `${String(hours)}h ${String(startMinute)} by day`).toBe(true);
         expect(from <= startAt - hours * 60, `${String(hours)}h ${String(startMinute)} no later than its notice`).toBe(true);
-        expect(startAt - from <= hours * 60 + 14 * 60, `${String(hours)}h ${String(startMinute)} no earlier than a night before`).toBe(true);
+        // So nothing that starts further off than the sender reads can be due.
+        expect(startAt - from <= classReminderLookAheadHours(hours) * 60, `${String(hours)}h ${String(startMinute)} inside what the sender reads`).toBe(true);
       }
     }
   });

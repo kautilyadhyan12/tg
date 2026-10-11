@@ -8,6 +8,8 @@ import {
   GYM_MESSAGE_OVERDUE_LATE_DAYS,
   GYM_MESSAGE_OVERDUE_WAIT_DAYS,
   GYM_MESSAGE_PAYMENTS_DAYS,
+  GYM_MESSAGE_REMINDER_EVENING_HOUR,
+  GYM_MESSAGE_REMINDER_HOURS_CHOICES,
   GYM_MESSAGE_STARTING_NUMBERS,
   GYM_MESSAGE_TRIAL_CHECK_IN_CHOICES,
   GYM_MESSAGE_TRIAL_ENDING_CHOICES,
@@ -20,10 +22,11 @@ import {
   orgWords,
   ownLineProblem,
   paymentNoticeAfterDays,
+  reminderClock,
   tidyOwnLine,
 } from '@app/shared';
 
-// SETTINGS → AUTOMATIC MESSAGES (ROADMAP 20b-i, 20b-ii). Pure: the box draws what these return.
+// SETTINGS → AUTOMATIC MESSAGES (ROADMAP 20b-i, 20b-ii, 20b-iii). Pure: the box draws what these return.
 // The rule for a gym's own line and the words of each message are the server's own, from
 // `@app/shared`, so the box shows what a member will read and refuses what the server would.
 
@@ -40,8 +43,14 @@ export const DAY_PLACE = '[its last day]';
 /** A day the words are made with, taken out again. */
 const DAY_TOKEN = '2026-01-31';
 
-/** The messages with a number of days the gym picks: the field it is kept in, what the
- *  picker offers, and how the box reads it. */
+/** Where a class's name and its day and time go in "What they'll read". */
+export const CLASS_PLACE = "[the class's name]";
+export const WHEN_PLACE = '[its day and time]';
+const CLASS_TOKEN = 'Classnameplace';
+const WHEN_TOKEN = 'Whenitisplace';
+
+/** The messages with a number the gym picks, of days or of hours: the field it is kept in,
+ *  what the picker offers, and how the box reads it. */
 const DAY_PICKERS = {
   trial_check_in: { choices: GYM_MESSAGE_TRIAL_CHECK_IN_CHOICES, before: 'On', label: 'Day of the trial', option: (n) => `day ${String(n)}`, after: 'of their trial' },
   trial_ending: { choices: GYM_MESSAGE_TRIAL_ENDING_CHOICES, before: '', label: 'Days before a trial ends', option: (n) => (n === 1 ? '1 day' : `${String(n)} days`), after: 'before its last day' },
@@ -53,13 +62,21 @@ const DAY_PICKERS = {
     after: 'before its last day',
   },
   miss_you: { choices: GYM_MESSAGE_MISS_YOU_CHOICES, before: 'No check-in for', label: 'Days without a check-in', option: (n) => `${String(n)} days`, after: '' },
+  class_reminder: {
+    choices: GYM_MESSAGE_REMINDER_HOURS_CHOICES,
+    before: '',
+    label: 'Hours before it starts',
+    option: (n) => (n === 1 ? '1 hour' : `${String(n)} hours`),
+    after: 'before it starts',
+    field: 'classReminderHours',
+  },
 };
 /** The picker one message has, with the field of the draft it changes; null for a message
  *  with none. */
 export function dayPicker(kind) {
-  return Object.hasOwn(DAY_PICKERS, kind) ? { ...DAY_PICKERS[kind], field: GYM_MESSAGE_DAYS_OF[kind] } : null;
+  return Object.hasOwn(DAY_PICKERS, kind) ? { field: GYM_MESSAGE_DAYS_OF[kind], ...DAY_PICKERS[kind] } : null;
 }
-const DAY_FIELDS = Object.values(GYM_MESSAGE_DAYS_OF);
+const DAY_FIELDS = [...Object.values(GYM_MESSAGE_DAYS_OF), DAY_PICKERS.class_reminder.field];
 
 /** The box's fields, from what the server holds. */
 export function messageDraft(settings) {
@@ -114,12 +131,14 @@ export function toggleMilestone(milestones, visits) {
 }
 
 /** The message as a member will read it, with `NAME_PLACE` where their own first name
- *  goes and `DAY_PLACE` where a last day does, and the gym's own line under it. */
+ *  goes, `DAY_PLACE` where a last day does, and `CLASS_PLACE` and `WHEN_PLACE` where a
+ *  reminder names its class and time; the gym's own line under it. */
 export function messagePreview(kind, gymName, draft) {
   const occasion = kind === 'milestone' ? `visits:${String(draft.milestones[0] ?? 50)}` : 'example';
-  const words = automaticMessage({ kind, occasion, endsOn: DAY_TOKEN }, gymName, NAME_TOKEN, null) ?? '';
+  const reminder = { what: 'class', title: CLASS_TOKEN, when: WHEN_TOKEN, online: false };
+  const words = automaticMessage({ kind, occasion, endsOn: DAY_TOKEN, reminder }, gymName, NAME_TOKEN, null) ?? '';
   const line = tidyOwnLine(draft.lines[kind]);
-  const shown = words.split(NAME_TOKEN).join(NAME_PLACE).split(dayInWords(DAY_TOKEN)).join(DAY_PLACE);
+  const shown = words.split(NAME_TOKEN).join(NAME_PLACE).split(dayInWords(DAY_TOKEN)).join(DAY_PLACE).split(CLASS_TOKEN).join(CLASS_PLACE).split(WHEN_TOKEN).join(WHEN_PLACE);
   return [shown, ...(line === '' ? [] : [line])].join('\n');
 }
 
@@ -150,6 +169,10 @@ export function messageWhen(kind, orgType, use = {}) {
   if (kind === 'payment_overdue') {
     return `Sent in the morning, ${overdueAfter(use.billsOverdueDays)}: by then the bill reads Overdue on a ${words.person}'s page, and it never goes sooner than ${String(GYM_MESSAGE_OVERDUE_WAIT_DAYS)} days after. One message covers every bill of theirs that is overdue that morning. Never for a bill that is paid, cancelled or refunded, a membership that is frozen, cancelled or over, a membership taken from your own list with no payment recorded for it here, or a bill more than ${String(GYM_MESSAGE_OVERDUE_LATE_DAYS)} days past that day. No amount is shown. A ${words.person} cannot switch this one off.`;
   }
+  if (kind === 'class_reminder') {
+    const evening = reminderClock(GYM_MESSAGE_REMINDER_EVENING_HOUR * 60, use.clockFormat === '12h' ? '12h' : '24h');
+    return `Sent before a class or a personal training session a ${words.person} has booked, as long before it starts as you pick here. It names the class and its time, like "Yoga today at ${reminderClock(18 * 60, use.clockFormat === '12h' ? '12h' : '24h')}"; for personal training it names the trainer. Where that time falls at night, it is sent from ${evening} the evening before. Nobody on a waitlist gets it, and nobody who booked after that time. It is sent as well as any other message that day.`;
+  }
   if (kind === 'welcome') return `Sent when somebody joins your ${words.it} in the app: within a quarter of an hour by day, and the next morning if they join at night. Not sent to your own staff.`;
   if (kind === 'birthday') return `Sent on a ${words.person}'s birthday, in the morning, when the date of birth is already on your Members list. Nobody gets one for 1 January or 31 December, or for a date that makes them under 18: lists often hold those when the real date is not known.`;
   if (kind === 'milestone') return `Sent in the morning, once a ${words.person} has reached a number of visits you tick here. A visit is a day the front desk or staff checked them in.`;
@@ -171,6 +194,14 @@ export function messageMissing(kind, orgType, use) {
   }
   if ((kind === 'membership_ending' || kind === 'payment_overdue') && use?.priceList === false) {
     return { ...priceList, note: `Your price list is empty, so no ${words.person} has a membership in the app and nobody will get this yet.` };
+  }
+  if (kind === 'class_reminder' && use?.bookings === false) {
+    return {
+      place: 'classes',
+      button: 'Open Classes',
+      ask: 'Staff who can change the timetable add classes on Classes.',
+      note: `There is no class on your calendar and no trainer offers personal training, so no ${words.person} has a booking and nobody will get this yet.`,
+    };
   }
   if (kind === 'payment_overdue' && use?.payments === false) {
     return {
@@ -204,7 +235,7 @@ export function messageSettingsSummary(kept) {
 /** Said above the messages: what these are, where they go, and what a member controls. */
 export function messageSettingsNote(orgType) {
   const words = orgWords(orgType);
-  return `The app sends these to your ${words.people} by itself. Each lands in their Inbox in the app. Nobody gets more than one a day, and none is sent at night. A ${words.person} can switch any of them off for themselves, except Welcome and Payment overdue. Where you see ${NAME_PLACE} below, each ${words.person} reads their own first name: "Happy birthday, Priya!"`;
+  return `The app sends these to your ${words.people} by itself. Each lands in their Inbox in the app. Nobody gets more than one a day, apart from a class reminder, and none is sent at night. A ${words.person} can switch any of them off for themselves, except Welcome and Payment overdue. Where you see ${NAME_PLACE} below, each ${words.person} reads their own first name: "Happy birthday, Priya!"`;
 }
 
 /** Said on the Sent messages page, which lists only what staff typed: the app sends these

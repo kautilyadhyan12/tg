@@ -346,6 +346,7 @@ describe("the switches for a gym's automatic messages", () => {
       ['Trial check-inA message a few days into a trial, asking how it is going.', 'true'],
       ['Trial endingA message shortly before a trial of yours ends.', 'true'],
       ['Membership endingA message shortly before a membership of yours ends.', 'true'],
+      ['Class reminderA message before a class or a personal training session you booked.', 'true'],
       ['BirthdayA message from Iron House on your birthday.', 'true'],
       ['Visit milestoneA message when you reach a number of visits, like your 50th.', 'true'],
       ["We miss youOff. Iron House won't send you this.", 'false'],

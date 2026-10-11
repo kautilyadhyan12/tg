@@ -88,6 +88,7 @@ export function kindSwitches(gym, off) {
     row('trial_check_in', GYM_MESSAGE_KIND_NAMES.trial_check_in, 'A message a few days into a trial, asking how it is going.'),
     row('trial_ending', GYM_MESSAGE_KIND_NAMES.trial_ending, 'A message shortly before a trial of yours ends.'),
     row('membership_ending', GYM_MESSAGE_KIND_NAMES.membership_ending, 'A message shortly before a membership of yours ends.'),
+    row('class_reminder', GYM_MESSAGE_KIND_NAMES.class_reminder, 'A message before a class or a personal training session you booked.'),
     row('birthday', GYM_MESSAGE_KIND_NAMES.birthday, `A message from ${gym.name} on your birthday.`),
     row('milestone', GYM_MESSAGE_KIND_NAMES.milestone, 'A message when you reach a number of visits, like your 50th.'),
     row('miss_you', GYM_MESSAGE_KIND_NAMES.miss_you, "A message if you haven't been in for a while."),

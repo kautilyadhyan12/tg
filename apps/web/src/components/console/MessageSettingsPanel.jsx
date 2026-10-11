@@ -30,7 +30,7 @@ import {
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 import PlaceLink from './PlaceLink';
 
-// AUTOMATIC MESSAGES (ROADMAP 20b-i, 20b-ii; spec Part 3 §16.2): the messages the app sends
+// AUTOMATIC MESSAGES (ROADMAP 20b-i, 20b-ii, 20b-iii; spec Part 3 §16.2): the messages the app sends
 // a gym's members by itself. Each has a switch, the words a member will read, and one line
 // of the gym's own; most have a number the gym picks. Everything waits for one Save.
 
@@ -241,8 +241,10 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
       priceList: data.priceList !== false,
       payments: data.payments !== false,
       billsOverdueDays: data.billsOverdueDays ?? 0,
+      bookings: data.bookings !== false,
+      clockFormat: org.clockFormat,
     });
-  }, []);
+  }, [org.clockFormat]);
 
   const load = useCallback(
     (isLive = () => true) =>

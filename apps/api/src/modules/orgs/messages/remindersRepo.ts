@@ -114,14 +114,16 @@ export async function bookingsStartingSoon(sql: SqlOrTx, gymId: string, now: Dat
   }));
 }
 
-/** The reminders these people were already sent by this gym, by person: read by the
- *  occasions' own index, for the few people with a booking soon. */
-export async function remindersSent(sql: SqlOrTx, gymId: string, userIds: readonly string[]): Promise<Map<string, string[]>> {
+/** Of these reminders, the ones this gym already sent, by person: read by the occasions'
+ *  own index, and only for the ones that would otherwise go now. */
+export async function remindersSent(sql: SqlOrTx, gymId: string, wanted: readonly { userId: string; occasion: string }[]): Promise<Map<string, string[]>> {
   const sent = new Map<string, string[]>();
-  if (userIds.length === 0) return sent;
+  if (wanted.length === 0) return sent;
   const rows = await sql<{ user_id: string; occasion: string }[]>`
     SELECT user_id, occasion FROM gym_member_messages
-    WHERE gym_id = ${gymId} AND user_id = ANY(${[...userIds]}::uuid[]) AND kind = 'class_reminder'`;
+    WHERE gym_id = ${gymId} AND kind = 'class_reminder'
+      AND user_id = ANY(${[...new Set(wanted.map((w) => w.userId))]}::uuid[])
+      AND occasion = ANY(${[...new Set(wanted.map((w) => w.occasion))]}::text[])`;
   for (const row of rows) sent.set(row.user_id, [...(sent.get(row.user_id) ?? []), row.occasion]);
   return sent;
 }

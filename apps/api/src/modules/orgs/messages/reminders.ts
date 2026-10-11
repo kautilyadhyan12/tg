@@ -6,9 +6,9 @@
 import {
   GYM_MESSAGE_DAY_ENDS_HOUR,
   GYM_MESSAGE_DAY_STARTS_HOUR,
-  GYM_MESSAGE_REMINDER_LOOK_AHEAD_HOURS,
   automaticMessage,
   classReminderDue,
+  classReminderLookAheadHours,
   gymMessageSettingsFrom,
   reminderWhen,
 } from "@app/shared";
@@ -24,17 +24,26 @@ export async function remindersForGym(sql: Sql | TransactionSql, gymId: string, 
   if (gym === null || !gym.open || !gym.live || gym.hour < GYM_MESSAGE_DAY_STARTS_HOUR || gym.hour >= GYM_MESSAGE_DAY_ENDS_HOUR) return [];
   const settings = gymMessageSettingsFrom(await settingRows(sql, gymId));
   if (!settings.on.class_reminder) return [];
-  const bookings = await remindersRepo.bookingsStartingSoon(sql, gymId, now, GYM_MESSAGE_REMINDER_LOOK_AHEAD_HOURS);
-  if (bookings.length === 0) return [];
-  const sent = await remindersRepo.remindersSent(sql, gymId, [...new Set(bookings.map((b) => b.userId))]);
-  const due: repo.NewMessage[] = [];
-  for (const b of bookings) {
-    const answer = classReminderDue({
-      gym: { open: gym.open, live: gym.live, on: settings.on.class_reminder, hours: settings.numbers.classReminderHours, today: gym.today, minute: gym.minute },
+  const hours = settings.numbers.classReminderHours;
+  const bookings = await remindersRepo.bookingsStartingSoon(sql, gymId, now, classReminderLookAheadHours(hours));
+  const answerFor = (b: remindersRepo.ReminderBooking, sent: readonly string[]) =>
+    classReminderDue({
+      gym: { open: gym.open, live: gym.live, on: settings.on.class_reminder, hours, today: gym.today, minute: gym.minute },
       person: { member: b.member, former: b.former, off: b.off },
       booking: { what: b.what, id: b.id, status: b.status, classStatus: b.classStatus, day: b.day, startMinute: b.startMinute, bookedDay: b.bookedDay, bookedMinute: b.bookedMinute },
-      sent: sent.get(b.userId) ?? [],
+      sent,
     });
+  // Asked first as if nothing had been sent: only what would go now is looked up in what
+  // was sent, so most runs, with nothing due, read no message at all.
+  const wanted = bookings.flatMap((b) => {
+    const answer = answerFor(b, []);
+    return answer.send ? [{ booking: b, userId: b.userId, occasion: answer.occasion }] : [];
+  });
+  if (wanted.length === 0) return [];
+  const sent = await remindersRepo.remindersSent(sql, gymId, wanted);
+  const due: repo.NewMessage[] = [];
+  for (const { booking: b } of wanted) {
+    const answer = answerFor(b, sent.get(b.userId) ?? []);
     if (!answer.send) continue;
     const when = reminderWhen(gym.today, b.day, b.startMinute, gym.clockFormat);
     if (when === null) continue;

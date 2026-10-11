@@ -4340,7 +4340,8 @@ joining) · **Trial check-in** (day 2 of a trial membership) · **Trial ending**
 before) · **We miss you** (no visit for 10 days; once for each absence) · **Membership
 ending** (7 days before) · **Payment overdue** (once a bill reads Overdue on the person's
 page by the gym's own grace period of §14.2, and never sooner than 3 days after its due
-date: 20b-ii, RULINGS 2026-10-11) · **Birthday** · **Milestone** (the 50th visit, the 100th). Fixed words with the gym's
+date: 20b-ii, RULINGS 2026-10-11) · **Birthday** · **Milestone** (the 50th visit, the 100th) · **Class reminder** (2 hours before a
+booked class or personal training session: 20b-iii, RULINGS 2026-10-08 and 2026-10-11). Fixed words with the gym's
 name and the person's first name; the gym may add ONE line of its own — 140
 characters, no links, no `@`, held by 15.3's filter. One worker decides what is due,
 by ONE pure rule over (the gym's switches and numbers, the person's record, visits,
@@ -4517,6 +4518,43 @@ in this order: Welcome · Trial check-in · Trial ending · Membership ending ·
   overdue has none.
 - **When they are found:** in the day's whole read of the gym, with birthdays and
   absences, so each goes in the morning.
+
+**Built in 20b-iii (2026-10-11; RULINGS 2026-10-08, 2026-10-11): the Class reminder is sent.**
+A ninth kind, `class_reminder`, with its row in the gym's box after Payment overdue and a
+member's own switch. Migration `0096`: the kind in the three lists of kinds, `hours` on
+`gym_message_settings`, and an index on personal training sessions by gym and start.
+- **What it is about:** a class booking that holds a place (`booked`: not waiting, not
+  cancelled, not already marked) in a class that is still on, or a personal training
+  session that is still booked. A class booking is its account's; a session is its
+  record's, so it is a person's only where they hold the record alone (`soloHolders`).
+- **The rule** is `classReminderDue` (`packages/shared/src/gymClassReminders.ts`), pure, a
+  booking at a time, on the gym's own clock, with its table test over every reason not to
+  send: the gym closed or on no plan · the person removed, former or deleted · the gym's
+  switch · the person's switch · not booked · the class cancelled · a fact that cannot be
+  read · already started · too early · booked after the reminder's time · already sent ·
+  night. It is NOT one of the day's: it goes whatever else the person was sent that day,
+  and the day's one message still goes after a reminder.
+- **When:** from the gym's number of hours before the start (1 · 2 · 3 · 12 · 24, 2 to
+  start; `classReminderHours`) up to the start. Where that time falls in the night (21:00
+  to 08:00) it goes from 18:00 the evening before (`classReminderFrom`), and in the morning
+  if that was missed. Somebody who got their place after the reminder's time gets none:
+  they have only just been told when it is. The sender reads, at each of its four runs an
+  hour, the gym's bookings that start in the next 48 hours (`messages/reminders.ts`,
+  `remindersRepo.ts`), and writes with the gym's row held from a second read under it.
+- **Once:** its occasion is the booking and its start (`class:<id>:<day>:<minute>`,
+  `session:…`), so a second run writes nothing, and a class the gym moves after its
+  reminder is reminded of again at its new time.
+- **The words** (`automaticMessage`): "Hi Maya, you're booked for Yoga today at 6:00 PM at
+  {gym}. See you there." · an online class: "… today at 6:00 PM with {gym}. It's an online
+  class." · "Hi Maya, you have a personal training session with Sam tomorrow at 7:00 AM at
+  {gym}. See you there." The day reads today, tomorrow, or "on Friday 16 October"; the
+  time is on the gym's own clock (12 or 24 hour). The box shows **[the class's name]** and
+  **[its day and time]** where they go.
+- **A gym with nothing to book** (no class on its calendar from today, no trainer who
+  offers personal training, no session to come: `bookings` on the settings read) is told
+  on the row, with a button to Classes, or who can add one.
+- **A gym that fails** at its day's read still has its reminders sent, and the other way
+  round; it is logged once.
 
 ### 16.3 Leads
 

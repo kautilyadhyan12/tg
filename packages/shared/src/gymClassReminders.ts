@@ -14,9 +14,16 @@ import type { GymClockFormat } from "./orgs.js";
 export const GYM_MESSAGE_REMINDER_HOURS_CHOICES = [1, 2, 3, 12, 24] as const;
 /** A reminder whose time falls in the night goes from this hour of the evening before. */
 export const GYM_MESSAGE_REMINDER_EVENING_HOUR = 18;
-/** How far ahead the sender reads bookings, in hours: the longest notice, and the night
- *  and the evening a reminder can be brought forward by. */
+/** The longest a reminder's number of hours can be. */
 export const GYM_MESSAGE_REMINDER_LOOK_AHEAD_HOURS = 48;
+/** The most a reminder is brought forward from the night: 08:00 back to 18:00 the evening before. */
+export const GYM_MESSAGE_REMINDER_NIGHT_HOURS = 24 - GYM_MESSAGE_REMINDER_EVENING_HOUR + GYM_MESSAGE_DAY_STARTS_HOUR;
+/** How far ahead the sender reads bookings, in hours, for a gym that reminds `hours`
+ *  before: nothing that starts later can be due yet. */
+export function classReminderLookAheadHours(hours: number): number {
+  const notice = Number.isInteger(hours) && hours >= 1 ? Math.min(hours, GYM_MESSAGE_REMINDER_LOOK_AHEAD_HOURS) : 1;
+  return notice + GYM_MESSAGE_REMINDER_NIGHT_HOURS;
+}
 
 export type ClassReminderWhat = "class" | "session";
 
