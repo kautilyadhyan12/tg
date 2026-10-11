@@ -208,7 +208,7 @@ fault was between pages. Every job that adds or changes a screen follows all fou
 used by people, not by the terminal that built it: staff do not know what the terminal
 knows. 21c-i shipped a row and a box that were tested hard and that nobody could find: Kd
 imported a file, read "Ended" beside people the file had just renewed, and thought he had
-broken it. Every job that adds or changes something a person DOES follows all five.
+broken it. Every job that adds or changes something a person DOES follows all six.
 - Name the task in the person's own words ("I import this month's file and my renewed
   members are active") and do ALL of it in the real browser, from the page where the task
   starts to its end, as somebody who has never seen the app, reading only the screen. Not
@@ -218,6 +218,10 @@ broken it. Every job that adds or changes something a person DOES follows all fi
   sentence or a button, and the job adds it. Where the next step is on another page, the
   page they are on says so, and its button opens the exact place, already on the right
   thing.
+- At every step where the person can leave (Done, Cancel, close, back), leave, and check
+  that the page they land on still says what is left to do, with its button. Walking only
+  the way the screen points is not the test: 21c-i's last screen said "Still to do", and
+  somebody who pressed Done instead read "Ended" on Members with no reason, until Kd asked.
 - A box opens under the thing that was pressed, and what happened is said in that same
   place, in one sentence, when it is done.
 - Ask only what the app cannot know, once, in the step the person is in. What the app can
