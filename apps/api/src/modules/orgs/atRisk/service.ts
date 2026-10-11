@@ -4,6 +4,16 @@
 import type { Sql } from "postgres";
 import {
   AT_RISK_MAX,
+  GYM_COME_BACK_WAIT_DAYS,
+  GYM_GROUP_MESSAGE_PROBLEM_WORDS,
+  GYM_GROUP_MESSAGE_WORDS,
+  GYM_MESSAGE_KEPT_DAYS,
+  atRiskMessageResponseSchema,
+  groupMessageProblem,
+  orgWords,
+  tidyGroupMessage,
+  type AtRiskMessageRequest,
+  type AtRiskMessageResponse,
   atRiskCheckin,
   atRiskOf,
   atRiskOrder,
@@ -16,6 +26,9 @@ import {
   type HeldMembershipShown,
 } from "@app/shared";
 import { heldOnListOf } from "../memberships/onList.js";
+import * as groupRepo from "../messages/groupRepo.js";
+import { gymNow } from "../messages/repo.js";
+import { badWordsIn } from "../posts/badWords.js";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import * as repo from "./repo.js";
@@ -72,7 +85,7 @@ export async function getAtRisk(deps: AtRiskDeps, gymId: string): Promise<AtRisk
   for (const person of people) {
     const last = person.userId === null ? undefined : messages.get(person.userId);
     if (last === undefined) continue;
-    person.lastMessage = { preset: last.preset, sentAt: last.sentAt.toISOString() };
+    person.lastMessage = { preset: last.preset, body: last.body, sentAt: last.sentAt.toISOString() };
     person.messageableAt = last.messageableAt === null ? null : last.messageableAt.toISOString();
   }
   return atRiskResponseSchema.parse({
@@ -105,4 +118,54 @@ export async function setSettings(deps: AtRiskDeps, staffId: string, gymId: stri
     });
   });
   return atRiskSettingsResponseSchema.parse({ settings });
+}
+
+/** The gym's own words to ONE person in its app, from the At risk list.
+ *
+ *  Whoever may write to members (`members.confirm`, as a message to a group) at a gym on a
+ *  plan. The words are checked as a group's are. It is kept as a sent message is, so the
+ *  member reads it in their Inbox and Sent messages lists it, and it is not one of the
+ *  day's three messages to groups. It goes only to a live member who has not switched the
+ *  gym's messages off, and only when no come-back message, ready-made or written, went to
+ *  them inside the wait. The same box pressed twice sends once. */
+export async function sendOwnMessage(deps: AtRiskDeps, staffId: string, gymId: string, request: AtRiskMessageRequest): Promise<AtRiskMessageResponse> {
+  const { org } = await requireWritablePrivilege(deps, gymId, staffId, "members.confirm");
+  const words = orgWords(org.orgType);
+  const body = tidyGroupMessage(request.body);
+  const problem = groupMessageProblem(body);
+  if (problem !== null) throw new OrgsError(400, `group_message_${problem}`, GYM_GROUP_MESSAGE_PROBLEM_WORDS[problem]);
+  const bad = badWordsIn(body);
+  if (bad.length > 0) throw new OrgsError(400, "group_message_bad_words", GYM_GROUP_MESSAGE_WORDS.bad_words(bad));
+  return await deps.sql.begin(async (tx): Promise<AtRiskMessageResponse> => {
+    // The gym's row: a removal, a switch and another send wait, so the wait is read once.
+    await lockOrgRow(tx, gymId);
+    const now = deps.now();
+    const gym = await gymNow(tx, gymId, now);
+    if (gym === null) throw notFound();
+    const before = await groupRepo.byKey(tx, gymId, request.key);
+    if (before !== null) {
+      // The same press again. With other words it is another message, and it has not gone.
+      if (before.body !== body) throw new OrgsError(409, "group_message_earlier_sent", GYM_GROUP_MESSAGE_WORDS.earlier_sent(before.people));
+      return atRiskMessageResponseSchema.parse({ message: { body, sentAt: now.toISOString() } });
+    }
+    const member = await repo.liveMember(tx, gymId, request.userId);
+    // One sentence for "no such person" and "not your member", as the ready-made line says it.
+    if (!member) throw new OrgsError(404, "member_not_found", `That person isn't a ${words.person} of this ${words.it}.`);
+    if (await groupRepo.groupMessagesOff(tx, gymId, request.userId)) {
+      throw new OrgsError(409, "member_messages_off", `This ${words.person} has switched off messages from your ${words.it}, so your own message can't be sent. You can still send one of the ready-made lines.`);
+    }
+    if (await repo.comeBackTooSoon(tx, gymId, request.userId)) {
+      throw new OrgsError(409, "nudge_already_sent", `This ${words.person} has already been sent a message in the last ${String(GYM_COME_BACK_WAIT_DAYS)} days.`);
+    }
+    const written = await groupRepo.insertGroupMessage(
+      tx,
+      { gymId, sentBy: staffId, body, gymDay: gym.today, sendKey: request.key, userIds: [request.userId], onePerson: true },
+      now,
+      GYM_MESSAGE_KEPT_DAYS,
+    );
+    if (written.sent === 0) throw new OrgsError(404, "member_not_found", `That person isn't a ${words.person} of this ${words.it}.`);
+    // The words are in the message's own row, never in the audit log.
+    await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.at_risk_message_sent", targetType: "user", targetId: request.userId, meta: { message: written.id } });
+    return atRiskMessageResponseSchema.parse({ message: { body, sentAt: now.toISOString() } });
+  });
 }

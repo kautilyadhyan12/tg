@@ -2,7 +2,8 @@
 // in its WHERE. They gather; `atRiskOf` in `@app/shared` decides.
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
-import { AT_RISK_READ_DAYS, type AtRiskSettings } from "@app/shared";
+import { AT_RISK_READ_DAYS, GYM_COME_BACK_WAIT_DAYS, type AtRiskSettings } from "@app/shared";
+import { lastOnePersonMessages } from "../messages/groupRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -158,25 +159,53 @@ export async function readCandidates(sql: SqlOrTx, gymId: string, today: string,
 }
 
 export interface LastMessage {
-  preset: string;
+  /** One of the ready-made lines, or null with the gym's own words in `body`. */
+  preset: string | null;
+  body: string | null;
   sentAt: Date;
   /** When the gym may send them another; null when it may now. */
   messageableAt: Date | null;
 }
 
-/** The gym's newest come-back message to each of the accounts named, and when the next
- *  may go: the seven days `sendGymNudge` holds. */
+/** The gym's newest come-back message to each of the accounts named, ready-made or its
+ *  own words, and when the next may go: `GYM_COME_BACK_WAIT_DAYS` after it. */
 export async function readLastMessages(sql: SqlOrTx, gymId: string, userIds: readonly string[], now: Date): Promise<Map<string, LastMessage>> {
   const out = new Map<string, LastMessage>();
   if (userIds.length === 0) return out;
-  const rows = await sql<{ user_id: string; preset: string; created_at: Date; messageable_at: Date | null }[]>`
-    SELECT DISTINCT ON (n.user_id) n.user_id, n.preset, n.created_at,
-           CASE WHEN n.created_at > ${now}::timestamptz - interval '7 days' THEN n.created_at + interval '7 days' END AS messageable_at
+  const wait = GYM_COME_BACK_WAIT_DAYS * 86_400_000;
+  const put = (userId: string, message: { preset: string | null; body: string | null; sentAt: Date }): void => {
+    const held = out.get(userId);
+    if (held !== undefined && held.sentAt.getTime() >= message.sentAt.getTime()) return;
+    const again = new Date(message.sentAt.getTime() + wait);
+    out.set(userId, { ...message, messageableAt: again.getTime() > now.getTime() ? again : null });
+  };
+  const lines = await sql<{ user_id: string; preset: string; created_at: Date }[]>`
+    SELECT DISTINCT ON (n.user_id) n.user_id, n.preset, n.created_at
     FROM gym_nudges n
     WHERE n.gym_id = ${gymId} AND n.user_id = ANY(${[...userIds]}::uuid[])
     ORDER BY n.user_id, n.created_at DESC`;
-  for (const row of rows) out.set(row.user_id, { preset: row.preset, sentAt: row.created_at, messageableAt: row.messageable_at });
+  for (const row of lines) put(row.user_id, { preset: row.preset, body: null, sentAt: row.created_at });
+  for (const [userId, written] of await lastOnePersonMessages(sql, gymId, userIds)) put(userId, { preset: null, body: written.body, sentAt: written.sentAt });
   return out;
+}
+
+/** Has this gym sent this account a come-back message, ready-made or its own, inside the
+ *  wait? Asked with the gym's row held, on the transaction's own clock. */
+export async function comeBackTooSoon(tx: TransactionSql, gymId: string, userId: string): Promise<boolean> {
+  const rows = await tx<{ soon: boolean }[]>`
+    SELECT (
+      EXISTS (
+        SELECT 1 FROM gym_nudges n
+        WHERE n.gym_id = ${gymId} AND n.user_id = ${userId}
+          AND n.created_at > now() - make_interval(days => ${GYM_COME_BACK_WAIT_DAYS}::int)
+      ) OR EXISTS (
+        SELECT 1 FROM gym_group_messages g
+        JOIN gym_member_messages c ON c.gym_id = g.gym_id AND c.kind = 'group' AND c.occasion = g.id::text
+        WHERE g.gym_id = ${gymId} AND g.one_person AND c.user_id = ${userId}
+          AND g.sent_at > now() - make_interval(days => ${GYM_COME_BACK_WAIT_DAYS}::int)
+      )
+    ) AS soon`;
+  return rows[0]?.soon === true;
 }
 
 export async function writeSettings(tx: TransactionSql, gymId: string, settings: AtRiskSettings): Promise<AtRiskSettings | null> {
@@ -186,4 +215,14 @@ export async function writeSettings(tx: TransactionSql, gymId: string, settings:
   if (was === undefined) return null;
   await tx`UPDATE gyms SET at_risk_quiet_days = ${settings.quietDays}, at_risk_weeks_came = ${settings.weeksCame} WHERE id = ${gymId}`;
   return { quietDays: was.quiet_days, weeksCame: was.weeks_came };
+}
+
+/** Is this account in this gym's app now, and not deleted? The ready-made line's own test
+ *  (`sendGymNudge`), with the account's status. */
+export async function liveMember(tx: TransactionSql, gymId: string, userId: string): Promise<boolean> {
+  const rows = await tx<{ one: number }[]>`
+    SELECT 1 AS one
+    FROM gym_members m JOIN users u ON u.id = m.user_id AND u.status = 'active'
+    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL AND m.complimentary = false`;
+  return rows.length > 0;
 }

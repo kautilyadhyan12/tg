@@ -5,7 +5,7 @@
 // and decides nothing itself.
 import { z } from "zod";
 import { addDays, daysBetween } from "./heldMemberships.js";
-import { gymNudgeSchema } from "./orgs.js";
+import { GYM_MESSAGE_BODY_MAX } from "./gymMessages.js";
 
 /** No visit for this many days: the numbers a gym may pick, and the one it starts on. */
 export const AT_RISK_QUIET_DAYS = [7, 10, 14, 21, 30] as const;
@@ -19,6 +19,9 @@ export const AT_RISK_WEEKS_CAME_DEFAULT = 2;
 export const AT_RISK_AWAY_MAX_DAYS = 90;
 /** How far back a person's visits are read: the longest absence and the weeks before it. */
 export const AT_RISK_READ_DAYS = AT_RISK_AWAY_MAX_DAYS + AT_RISK_WEEKS * 7;
+/** A gym may send one person a come-back message, ready-made or its own, once in this
+ *  many days (Kd, RULINGS 2026-10-12; it was 7). */
+export const GYM_COME_BACK_WAIT_DAYS = 3;
 /** How many people one read lists, the most regular first. */
 export const AT_RISK_MAX = 200;
 
@@ -110,6 +113,18 @@ export type AtRiskSettings = z.infer<typeof atRiskSettingsSchema>;
 /** Who a message can go to: the one app account that holds the record. */
 export const atRiskAppSchema = z.enum(["one", "none", "shared"]);
 
+/** One of the ready-made lines (`preset`), or the gym's own words (`body`). */
+export const atRiskLastMessageSchema = z.object({ preset: z.string().nullable(), body: z.string().nullable(), sentAt: z.string() }).strict();
+
+/** The gym's own words to one person. `key` is made once for a box, so a second press of
+ *  it sends nothing more. The words are checked as a message to a group's are. */
+export const atRiskMessageRequestSchema = z
+  .object({ userId: z.string().uuid(), body: z.string().min(1).max(GYM_MESSAGE_BODY_MAX * 4), key: z.string().uuid() })
+  .strict();
+export type AtRiskMessageRequest = z.infer<typeof atRiskMessageRequestSchema>;
+export const atRiskMessageResponseSchema = z.object({ message: z.object({ body: z.string(), sentAt: z.string() }).strict() }).strict();
+export type AtRiskMessageResponse = z.infer<typeof atRiskMessageResponseSchema>;
+
 export const atRiskPersonSchema = z.object({
   /** The record on the gym's list, when they have one. */
   entryId: z.string().uuid().nullable(),
@@ -121,7 +136,7 @@ export const atRiskPersonSchema = z.object({
   daysAway: z.number().int().min(0),
   weeksCame: z.number().int().min(1).max(AT_RISK_WEEKS),
   /** The gym's newest come-back message to them, and when another may go (null: now). */
-  lastMessage: gymNudgeSchema.nullable(),
+  lastMessage: atRiskLastMessageSchema.nullable(),
   messageableAt: z.string().nullable(),
 });
 export type AtRiskPerson = z.infer<typeof atRiskPersonSchema>;

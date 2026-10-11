@@ -9,7 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { AT_RISK_AWAY_MAX_DAYS, atRiskResponseSchema, type AtRiskResponse } from "@app/shared";
+import { AT_RISK_AWAY_MAX_DAYS, GYM_COME_BACK_WAIT_DAYS, atRiskResponseSchema, type AtRiskResponse, type GymInboxResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -78,6 +78,9 @@ d("At risk: who is named, to whom, and what the gym's numbers change (real Postg
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'atrisk-t-%@example.com'`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_nudges WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_member_messages WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_member_messages_off WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_group_messages WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_attendance WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_checkin_devices WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_payments WHERE gym_id IN (${mine})`;
@@ -429,7 +432,7 @@ d("At risk: who is named, to whom, and what the gym's numbers change (real Postg
       await regular(gym, stan, 20);
       const old = await member(gym, "Olda Old Message");
       await regular(gym, old, 20);
-      await sql`INSERT INTO gym_nudges (gym_id, user_id, sent_by_user_id, preset, created_at) VALUES (${gym.id}, ${old.userId}, ${gym.owner.userId}, 'door_open', now() - interval '9 days')`;
+      await sql`INSERT INTO gym_nudges (gym_id, user_id, sent_by_user_id, preset, created_at) VALUES (${gym.id}, ${old.userId}, ${gym.owner.userId}, 'door_open', now() - interval '84 hours')`;
 
       const sent = await inject("POST", `/v1/orgs/${gym.id}/members/${stan.userId}/nudge`, gym.owner.cookies, { preset: "miss_you" });
       expect(sent.statusCode, sent.body).toBe(201);
@@ -438,12 +441,112 @@ d("At risk: who is named, to whom, and what the gym's numbers change (real Postg
       const row = list.people.find((p) => p.name === "Stan Sent");
       expect(row?.lastMessage?.preset).toBe("miss_you");
       const again = Date.parse(row?.messageableAt ?? "");
-      expect(again - Date.parse(row?.lastMessage?.sentAt ?? "")).toBe(7 * 86_400_000);
+      expect(GYM_COME_BACK_WAIT_DAYS).toBe(3);
+      expect(again - Date.parse(row?.lastMessage?.sentAt ?? "")).toBe(3 * 86_400_000);
       const older = list.people.find((p) => p.name === "Olda Old Message");
       expect(older?.lastMessage?.preset).toBe("door_open");
       expect(older?.messageableAt).toBeNull();
 
       expect((await inject("POST", `/v1/orgs/${gym.id}/members/${stan.userId}/nudge`, gym.owner.cookies, { preset: "door_open" })).statusCode).toBe(409);
+    },
+    T,
+  );
+
+  it(
+    "the gym's own words go to the one person named and nobody else, once, inside the same wait as a ready-made line, and never past the rules a message to a group keeps",
+    async () => {
+      const gym = await makeGym("Risk Own Words");
+      const next = await makeGym("Risk Own Words Next Door");
+      await deskOpen(gym, -60, 0);
+      const stan = await member(gym, "Stan Written", true);
+      await regular(gym, stan, 20);
+      const omar = await member(gym, "Omar Other", true);
+      await regular(gym, omar, 20);
+      const nina = await member(next, "Nina Next Door", true);
+      const url = (g: Gym) => `${listUrl(g)}/messages`;
+      const write = async (g: Gym, userId: string, body: string, who: Person = g.owner, key: string = randomUUID()) => await inject("POST", url(g), who.cookies, { userId, body, key });
+      const inboxOf = async (g: Gym, who: Person): Promise<string[]> => {
+        const res = await inject("GET", `/v1/orgs/${g.id}/inbox`, who.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return (JSON.parse(res.body) as GymInboxResponse).messages.map((m) => m.body);
+      };
+      const WORDS = "Hi Stan, we saved your Tuesday spot. Come back when you can.";
+
+      // Refused before anything is written: the words, the person, the asker.
+      for (const [body, code] of [["   ", "group_message_empty"], ["See www.example.com", "group_message_link"], ["Write to me @stan", "group_message_at"]] as const) {
+        const res = await write(gym, stan.userId, body);
+        expect(res.statusCode, body).toBe(400);
+        expect((JSON.parse(res.body) as { error: string }).error).toBe(code);
+      }
+      expect((await write(gym, nina.userId, WORDS)).statusCode).toBe(404);
+      expect((await write(gym, randomUUID(), WORDS)).statusCode).toBe(404);
+      expect((await write(gym, stan.userId, WORDS, next.owner)).statusCode).toBe(404);
+      expect((await write(gym, stan.userId, WORDS, omar)).statusCode).toBe(404);
+      expect((await inject("POST", url(gym), {}, { userId: stan.userId, body: WORDS, key: randomUUID() })).statusCode).toBe(401);
+      const trainer = await onStaff(gym, "Tia Words Trainer", "trainer");
+      expect((await write(gym, stan.userId, WORDS, trainer)).statusCode).toBe(403);
+      expect((await inject("POST", url(gym), gym.owner.cookies, { userId: stan.userId, body: WORDS })).statusCode).toBe(400);
+      expect((await sql`SELECT 1 FROM gym_group_messages WHERE gym_id IN (${gym.id}, ${next.id})`).length).toBe(0);
+
+      // Sent: Stan reads it, Omar and next door's Nina do not, and the same press again sends nothing more.
+      const key = randomUUID();
+      const sent = await write(gym, stan.userId, `  ${WORDS}  `, gym.owner, key);
+      expect(sent.statusCode, sent.body).toBe(201);
+      expect((JSON.parse(sent.body) as { message: { body: string } }).message.body).toBe(WORDS);
+      expect((await write(gym, stan.userId, WORDS, gym.owner, key)).statusCode).toBe(201);
+      expect(await inboxOf(gym, stan)).toEqual([WORDS]);
+      expect(await inboxOf(gym, omar)).toEqual([]);
+      expect(await inboxOf(next, nina)).toEqual([]);
+      const kept = await sql<{ people: number; one_person: boolean }[]>`SELECT people, one_person FROM gym_group_messages WHERE gym_id = ${gym.id}`;
+      expect(kept.map((r) => ({ ...r }))).toEqual([{ people: 1, one_person: true }]);
+      // The words are in no audit line.
+      const audits = await sql<{ meta: unknown }[]>`SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.at_risk_message_sent'`;
+      expect(audits.length).toBe(1);
+      expect(JSON.stringify(audits)).not.toContain("Tuesday");
+
+      // The row says so, and the wait holds for both kinds of message.
+      const row = (await read(gym)).people.find((p) => p.name === "Stan Written");
+      expect(row?.lastMessage).toMatchObject({ preset: null, body: WORDS });
+      expect(Date.parse(row?.messageableAt ?? "") - Date.parse(row?.lastMessage?.sentAt ?? "")).toBe(3 * 86_400_000);
+      expect((await write(gym, stan.userId, "A second one.")).statusCode).toBe(409);
+      const line = await inject("POST", `/v1/orgs/${gym.id}/members/${stan.userId}/nudge`, gym.owner.cookies, { preset: "miss_you" });
+      expect(line.statusCode).toBe(409);
+      // And the other way round: a ready-made line stops the gym's own words.
+      expect((await inject("POST", `/v1/orgs/${gym.id}/members/${omar.userId}/nudge`, gym.owner.cookies, { preset: "miss_you" })).statusCode).toBe(201);
+      const afterLine = await write(gym, omar.userId, "Hi Omar.");
+      expect(afterLine.statusCode).toBe(409);
+      expect((JSON.parse(afterLine.body) as { error: string }).error).toBe("nudge_already_sent");
+
+      // Three and a half days on, both may go again; two days on, neither.
+      const back = async (days: number) => {
+        await sql`UPDATE gym_group_messages SET sent_at = now() - (${days}::numeric * interval '1 day') WHERE gym_id = ${gym.id}`;
+        await sql`UPDATE gym_nudges SET created_at = now() - (${days}::numeric * interval '1 day') WHERE gym_id = ${gym.id}`;
+      };
+      await back(2);
+      expect((await write(gym, stan.userId, "Too soon.")).statusCode).toBe(409);
+      await back(3.5);
+      expect((await write(gym, omar.userId, "Hi Omar, good to have you back any day.")).statusCode).toBe(201);
+      expect((await inject("POST", `/v1/orgs/${gym.id}/members/${stan.userId}/nudge`, gym.owner.cookies, { preset: "door_open" })).statusCode).toBe(201);
+
+      // Written to one person, it is not one of the day's three messages to groups.
+      expect((await sql`SELECT 1 FROM gym_group_messages WHERE gym_id = ${gym.id} AND one_person`).length).toBe(2);
+      const sentList = await inject("GET", `/v1/orgs/${gym.id}/member-list/messages`, gym.owner.cookies);
+      expect(sentList.statusCode, sentList.body).toBe(200);
+      expect((JSON.parse(sentList.body) as { page: { leftToday: number } }).page.leftToday).toBe(3);
+
+      // Somebody who switched the gym's messages off is not written to, and is told why.
+      const quiet = await member(gym, "Quinn Switched Off", true);
+      await regular(gym, quiet, 20);
+      expect((await inject("PUT", `/v1/orgs/${gym.id}/inbox/group-messages`, quiet.cookies, { on: false })).statusCode).toBe(200);
+      const off = await write(gym, quiet.userId, "Hi Quinn.");
+      expect(off.statusCode).toBe(409);
+      expect((JSON.parse(off.body) as { error: string }).error).toBe("member_messages_off");
+      expect(await inboxOf(gym, quiet)).toEqual([]);
+
+      // A gym on no plan writes to nobody.
+      const lapsed = await makeGym("Risk Words No Plan", false);
+      const lee = await member(lapsed, "Lee Lapsed Gym");
+      expect((await write(lapsed, lee.userId, WORDS)).statusCode).toBe(409);
     },
     T,
   );

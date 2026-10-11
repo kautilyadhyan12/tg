@@ -3,12 +3,13 @@
 //
 //   GET /v1/orgs/:gymId/at-risk            who has stopped coming (`members.read`)
 //   PUT /v1/orgs/:gymId/at-risk/settings   the gym's two numbers (`org.manage`)
+//   POST /v1/orgs/:gymId/at-risk/messages  the gym's own words to one person (`members.confirm`)
 //
-// The message itself is the come-back line the server already sends:
+// A ready-made line is the come-back line the server already sends:
 // POST /v1/orgs/:gymId/members/:userId/nudge.
 import type { FastifyInstance } from "fastify";
 import type { Sql } from "postgres";
-import { atRiskSettingsSchema } from "@app/shared";
+import { atRiskMessageRequestSchema, atRiskSettingsSchema } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
@@ -52,6 +53,17 @@ export function registerAtRiskRoutes(app: FastifyInstance, deps: { sql: Sql; red
     redis: deps.redis,
   });
 
+  /** The ready-made line's own numbers: far above a list worked down in one sitting. */
+  const messageLimit = createDualRateLimit({
+    name: "orgs_at_risk_message",
+    max: 60,
+    ipMax: 600,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    ipScope: (req) => gymOf(req.params),
+    redis: deps.redis,
+  });
+
   const refused = (issues: readonly { path: PropertyKey[]; code: string }[], requestId: string) => ({
     error: "validation_error",
     // Issue paths and codes only, never the offending value.
@@ -78,5 +90,16 @@ export function registerAtRiskRoutes(app: FastifyInstance, deps: { sql: Sql; red
     const userId = req.authUser?.id;
     if (userId === undefined) throw new Error("authenticate preHandler did not run");
     return reply.status(200).send(await service.setSettings(atRiskDeps, userId, params.data.gymId, body.data));
+  });
+
+  // Sent twice from one box it is sent once: the body carries the box's own key.
+  app.post("/v1/orgs/:gymId/at-risk/messages", { preHandler: [app.authenticate, askerLimit, messageLimit] }, async (req, reply) => {
+    const params = orgParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const body = atRiskMessageRequestSchema.safeParse(req.body);
+    if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
+    const userId = req.authUser?.id;
+    if (userId === undefined) throw new Error("authenticate preHandler did not run");
+    return reply.status(201).send(await service.sendOwnMessage(atRiskDeps, userId, params.data.gymId, body.data));
   });
 }

@@ -43,10 +43,11 @@ export async function groupStateOf(sql: SqlOrTx, gymId: string, entryIds: readon
   return rows.map((row) => ({ entryId: row.id, name: row.name, former: row.former, userIds: row.user_ids, off: row.off }));
 }
 
-/** How many group messages the gym has sent on this day of its own calendar. */
+/** How many group messages the gym has sent on this day of its own calendar. A message
+ *  written to one person from the At risk list is not one of them. */
 export async function sentOnDay(sql: SqlOrTx, gymId: string, gymDay: string): Promise<number> {
   const rows = await sql<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM gym_group_messages WHERE gym_id = ${gymId} AND gym_day = ${gymDay}::date`;
+    SELECT count(*)::int AS n FROM gym_group_messages WHERE gym_id = ${gymId} AND gym_day = ${gymDay}::date AND NOT one_person`;
   return rows[0]?.n ?? 0;
 }
 
@@ -64,6 +65,22 @@ export interface NewGroupMessage {
   gymDay: string;
   sendKey: string;
   userIds: readonly string[];
+  /** Written to one person from the At risk list. */
+  onePerson?: boolean;
+}
+
+/** The newest message this gym wrote to each of these accounts alone, by the account. */
+export async function lastOnePersonMessages(sql: SqlOrTx, gymId: string, userIds: readonly string[]): Promise<Map<string, { body: string; sentAt: Date }>> {
+  const out = new Map<string, { body: string; sentAt: Date }>();
+  if (userIds.length === 0) return out;
+  const rows = await sql<{ user_id: string; body: string; sent_at: Date }[]>`
+    SELECT DISTINCT ON (c.user_id) c.user_id, g.body, g.sent_at
+    FROM gym_group_messages g
+    JOIN gym_member_messages c ON c.gym_id = g.gym_id AND c.kind = ${GYM_GROUP_MESSAGE_KIND} AND c.occasion = g.id::text
+    WHERE g.gym_id = ${gymId} AND g.one_person AND c.user_id = ANY (${[...userIds]}::uuid[])
+    ORDER BY c.user_id, g.sent_at DESC`;
+  for (const row of rows) out.set(row.user_id, { body: row.body, sentAt: row.sent_at });
+  return out;
 }
 
 /** Writes the message and one copy for each person, in the caller's transaction. Each copy
@@ -72,8 +89,8 @@ export interface NewGroupMessage {
 export async function insertGroupMessage(tx: TransactionSql, message: NewGroupMessage, now: Date, keptDays: number): Promise<{ id: string; sent: number }> {
   const expires = new Date(now.getTime() + keptDays * 86_400_000);
   const made = await tx<{ id: string }[]>`
-    INSERT INTO gym_group_messages (gym_id, sent_by, body, gym_day, sent_at, people, send_key)
-    VALUES (${message.gymId}, ${message.sentBy}, ${message.body}, ${message.gymDay}::date, ${now}, ${message.userIds.length}, ${message.sendKey})
+    INSERT INTO gym_group_messages (gym_id, sent_by, body, gym_day, sent_at, people, send_key, one_person)
+    VALUES (${message.gymId}, ${message.sentBy}, ${message.body}, ${message.gymDay}::date, ${now}, ${message.userIds.length}, ${message.sendKey}, ${message.onePerson === true})
     RETURNING id`;
   const id = made[0]?.id;
   if (id === undefined) throw new Error("gym_group_messages insert returned no row");
