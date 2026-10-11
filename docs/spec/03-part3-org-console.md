@@ -5443,7 +5443,12 @@ Reports, the sign, its list and its Remove (`overNow`, `memberships/over.ts`). N
 counted: anybody with a membership in use, owing, frozen or still to start; anybody whose
 renewal is waiting on the Memberships page (they are in that sign); a class pack whose last
 booked class is still to come; anybody the gym has only its own file's word for. Also left
-out: anybody staff chose to keep on the list (below).
+out, though Reports counts them as left: anybody staff chose to keep on the list (below),
+and anybody whose membership is over with a bill still open (their row reads "Ended ·
+Payment due"; staff record the payment or cancel the bill on their page, and they are on
+the sign from then). "Owing" in the plan Kd said go to was read at first as a repeating
+membership still running; round one of the review read it as anybody who owes, and that
+is how it is built, on the safe side (RULINGS 2026-10-12, asked of Kd).
 
 **The screen** (Members & staff, Your list):
 
@@ -5462,26 +5467,37 @@ out: anybody staff chose to keep on the list (below).
   loses the app, and nobody moves before its red button. Asked from this list
   (`onlyOver`), the server moves only people whose membership is over when the box is made
   and again, under the gym's lock, when it is pressed; anybody else selected is named as
-  staying ("Stay on your list: they have a membership now, or one waiting to be renewed.").
+  staying ("Stay on your list: they have a membership now, or one waiting to be renewed.",
+  or "Stay on your list: a payment is still due from them. Record it or cancel the bill on
+  their page first.").
 - **Keep on list** changes nothing about the person. The sign stops counting them, kept
   with the membership that is over now (`kept_listed_held_id`), so a later membership of
   theirs that ends is counted again. Reports still counts them as left. They are still
-  found with Filter, under Status.
+  found with Filter, under Status. The line above the list says who was kept, who had been
+  kept already (a colleague got there first) and who is no longer on this list, each as its
+  own sentence; the gym's record of who did what holds a row a person kept.
 - Nothing is ever done by itself, and nobody is deleted.
 
 **Reports keeps the day.** Somebody whose membership was already over when they are moved
 to Past members left on that earlier day, not the day Remove was pressed: the step that
 moves them stores it (`membership_ended_on`, migration 0097), by every way a person is
-moved (Remove on the people selected, Remove on a person's page, an import's leavers), and
-Put back clears it. A month that has closed reads the same before and after a tidy-up.
+moved (Remove on the people selected, from the sign's list or the whole list; Remove on a
+person's page; Remove on "In the app", for one person or the people ticked; an import's
+leavers), and every way back clears it (Put back, a file that adds them again, added
+again by hand). A month that has closed reads the same before and after a tidy-up.
 Somebody removed while their membership was in use left on the day they were removed, as
 before.
 
 **Routes.** `GET /member-list` answers `over.count` · `GET /member-list/entries` and a
 "Select all" take `membership=over` · `POST /member-list/selected/remove-preview` and
 `/remove` take `onlyOver: true` · `POST /member-list/selected/keep-listed`. Remove and
-Keep on list pressed from this list have their own allowance, 300 an hour for one member of
-staff, the address counted a gym at a time.
+Keep on list asked from this list, and the Remove box asked from it, have their own
+allowance: 600 an hour for one member of staff (a box and a press a person, so 300 people
+removed one by one), the address counted a gym at a time. The list itself is read again
+after each press, on the list's own read allowance of 600 an hour for one member of staff:
+seen in the browser, one press is followed by five reads, three of them on that allowance,
+so about 200 people an hour can be dealt with one by one. Past that, staff tick people
+and act on them together, as the sign says.
 
 ## 17. The console's look
 
