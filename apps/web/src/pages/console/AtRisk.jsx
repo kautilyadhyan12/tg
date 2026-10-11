@@ -128,11 +128,11 @@ function Row({ person, org, readOnly, onOpenPerson, onSent }) {
   };
 
   return (
-    <li className="c-row flex-col items-stretch gap-3" data-testid="at-risk-row">
+    <li className="flex flex-col gap-3 p-4" style={{ borderTop: '1px solid var(--line)' }} data-testid="at-risk-row">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-col gap-1 min-w-0">
           {person.entryId !== null ? (
-            <button type="button" className="c-btn-link c-s16 c-w6 self-start text-left" onClick={() => onOpenPerson(person.entryId)} aria-label={`Open ${name.full}'s page`}>
+            <button type="button" className="c-btn-link c-s16 c-w6 self-start text-left inline-flex items-center" style={{ minHeight: 44, height: 'auto' }} onClick={() => onOpenPerson(person.entryId)} aria-label={`Open ${name.full}'s page`}>
               {name.full}
             </button>
           ) : (
@@ -325,7 +325,7 @@ export default function AtRisk() {
                 {atRiskHeadline(list, org.orgType)}
               </p>
               {list.people.length > 0 ? (
-                <ul className="list-none m-0 p-0" style={{ borderTop: '1px solid var(--line)' }}>
+                <ul className="list-none m-0 p-0">
                   {list.people.slice(0, shown).map((person) => (
                     <Row key={person.entryId ?? person.userId ?? person.name} person={person} org={org} readOnly={readOnly} onOpenPerson={openPerson} onSent={() => void load()} />
                   ))}
