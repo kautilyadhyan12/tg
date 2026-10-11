@@ -133,7 +133,7 @@ export function memberTiles(report, words) {
       value: report.everLeft ? count(report.thisMonth.left) : null,
       line: report.everLeft ? null : nobodyRemoved(words),
       note: report.everLeft ? soFar((m) => m.left) : null,
-      how: `${words.peopleCap} removed from your ${words.person} list in ${month}, and ${words.people} whose membership ended or was cancelled in ${month} and who have no new one. On ${words.peopleCap}, their status is Ended or Cancelled. A status from your own file, such as Expired, is not counted. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
+      how: `${words.peopleCap} removed from your ${words.person} list in ${month}, and ${words.people} whose membership ended or was cancelled in ${month} and who have no new one. On your ${words.person} list, their status is Ended or Cancelled. A status from your own file, such as Expired, is not counted. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
     },
     {
       key: 'churn',

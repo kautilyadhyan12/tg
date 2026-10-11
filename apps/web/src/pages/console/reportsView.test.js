@@ -156,10 +156,10 @@ describe('the tiles', () => {
       'Everyone on your member list today, except members whose membership has ended or been cancelled and who have no new one. Members you have removed are not counted.',
     );
     expect(tile(r, 'left').how).toBe(
-      'Members removed from your member list in October 2026, and members whose membership ended or was cancelled in October 2026 and who have no new one. On Members, their status is Ended or Cancelled. A status from your own file, such as Expired, is not counted. Someone you put back, or gave a new membership later, counts as a member the whole time. Records deleted for good are not counted.',
+      'Members removed from your member list in October 2026, and members whose membership ended or was cancelled in October 2026 and who have no new one. On your member list, their status is Ended or Cancelled. A status from your own file, such as Expired, is not counted. Someone you put back, or gave a new membership later, counts as a member the whole time. Records deleted for good are not counted.',
     );
     expect(tile(r, 'stay').how).toContain('from their join date to the day they were removed or their membership ended.');
-    expect(tile(r, 'left', STUDIO).how).toContain('On Clients, their status is Ended or Cancelled.');
+    expect(tile(r, 'left', STUDIO).how).toContain('On your client list, their status is Ended or Cancelled.');
     const none = report({ everLeft: false, stay: { leavers: 0, totalDays: 0 } });
     expect(nobodyRemovedNote(none, GYM)).toBe(
       'Left, churn, retention and average stay count members you remove from your list or mark as left in an import, and members whose membership given in the app ends or is cancelled. A status from your own file, such as Expired, is not counted. If you keep your list in other software, import it here each month to keep these true.',
