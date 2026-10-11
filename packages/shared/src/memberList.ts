@@ -1657,7 +1657,10 @@ export type MemberAppView = z.infer<typeof memberAppViewSchema>;
 export const memberAppWordCountSchema = z.object({ word: memberAppFilterSchema, count: z.number().int().min(0) }).strict();
 export type MemberAppWordCount = z.infer<typeof memberAppWordCountSchema>;
 
-export const memberListOverSignSchema = z.object({ count: z.number().int().min(0) }).strict();
+/** `count`: the people the sign's list holds. `owing`: the people whose membership is over
+ *  too and who still owe on a bill, left off that list until it is settled or cancelled;
+ *  the sign says how many they are, so nobody wonders where they went. */
+export const memberListOverSignSchema = z.object({ count: z.number().int().min(0), owing: z.number().int().min(0).default(0) }).strict();
 
 /** THE LIST AS IT STANDS. A gym that has never confirmed one answers `hasList:
  *  false` with everything at zero rather than a 404: "you have no list yet" is a
@@ -1698,7 +1701,7 @@ export const memberListViewSchema = z.object({
    *  Reports already counts as left (21c-iii), for the Members sign. Left out: anybody
    *  whose renewal is waiting, anybody who still owes on a bill, and anybody staff chose
    *  to keep on the list. */
-  over: memberListOverSignSchema.default({ count: 0 }),
+  over: memberListOverSignSchema.default({ count: 0, owing: 0 }),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 
@@ -1820,8 +1823,9 @@ export const memberListEntriesQuerySchema = z
     /** Only the people who hold this one of the gym's tags (5d-ii; §18.13). */
     tag: z.string().uuid().optional(),
     /** `over`: only the people the Members sign counts (21c-iii), whose last membership
-     *  here has ended or been cancelled; current members only. */
-    membership: z.literal("over").optional(),
+     *  here has ended or been cancelled. `over_owing`: only the people left off it because
+     *  they still owe on a bill. Current members only. */
+    membership: z.enum(["over", "over_owing"]).optional(),
     query: z.string().max(MEMBER_LIST_QUERY_MAX_CHARS).optional(),
     cursor: z.string().max(512).optional(),
   })

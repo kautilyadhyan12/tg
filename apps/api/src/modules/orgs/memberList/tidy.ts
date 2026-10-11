@@ -28,13 +28,23 @@ export function tidyIdsFrom(over: ReadonlyMap<string, LeftWith>, kept: ReadonlyM
   return [...over].flatMap(([id, left]) => (!canBeTidied(left) || kept.get(id) === left.heldId ? [] : [id]));
 }
 
-/** The list's rows for every current record, and the people the sign counts, read at one
- *  moment. `today` is the gym's own day. */
-export async function heldAndTidyOf(sql: Sql, gymId: string, today: string): Promise<{ held: Map<string, HeldShown>; tidy: string[] }> {
+/** Of the people who are over, those left off the sign's list because they still owe. Pure. */
+export function owingIdsFrom(over: ReadonlyMap<string, LeftWith>): string[] {
+  return [...over].flatMap(([id, left]) => (left.owes ? [id] : []));
+}
+
+/** The list's rows for every current record, the people the sign counts and the people
+ *  left off it because they owe, read at one moment. `today` is the gym's own day. */
+export async function heldAndTidyOf(sql: Sql, gymId: string, today: string): Promise<{ held: Map<string, HeldShown>; tidy: string[]; owing: string[] }> {
   return await sql.begin("isolation level repeatable read read only", async (tx) => {
     const { held, over } = await heldAndOverIn(tx, gymId, today, null);
-    return { held, tidy: over.size === 0 ? [] : tidyIdsFrom(over, await repo.keptListed(tx, gymId)) };
+    return { held, tidy: over.size === 0 ? [] : tidyIdsFrom(over, await repo.keptListed(tx, gymId)), owing: owingIdsFrom(over) };
   });
+}
+
+/** The people left off the sign's list because they still owe. */
+export async function overOwingIdsOf(sql: Sql | TransactionSql, gymId: string, today: string): Promise<string[]> {
+  return owingIdsFrom(await overNow(sql, gymId, today, null));
 }
 
 /** The people the sign counts. */

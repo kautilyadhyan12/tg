@@ -5446,9 +5446,9 @@ booked class is still to come; anybody the gym has only its own file's word for.
 out, though Reports counts them as left: anybody staff chose to keep on the list (below),
 and anybody whose membership is over with a bill still open (their row reads "Ended ·
 Payment due"; staff record the payment or cancel the bill on their page, and they are on
-the sign from then). "Owing" in the plan Kd said go to was read at first as a repeating
-membership still running; round one of the review read it as anybody who owes, and that
-is how it is built, on the safe side (RULINGS 2026-10-12, asked of Kd).
+the sign from then). Kd, 2026-10-12, shown both readings of the plan's word "owing":
+"i agree there should be indication of it though other wise staff will get confused". So
+they are held back, and the sign says so (below).
 
 **The screen** (Members & staff, Your list):
 
@@ -5456,6 +5456,8 @@ is how it is built, on the safe side (RULINGS 2026-10-12, asked of Kd).
 |---|---|
 | The sign | "3 memberships have ended or been cancelled" · **Review them** ("Review it" for one; "See who" in a gym that can only read) · "These members are still on your member list. Reports already counts them as having left." |
 | The sign, once its list is shown | "For each member, renew their membership, remove them from your list, or keep them on it. To do the same for several at once, tick them first." |
+| The sign, while anybody is held back because they owe | one more line: "1 more member has a membership that is over and still owes a payment, so they are not in this list. Record the payment or cancel the bill on their page first." · **Show this member** ("Show these members"), which shows exactly them in the list, with the pill "Membership over, payment due" and no buttons under their rows: a row opens the person's page, where the bill is |
+| The sign, when they are the only ones | "2 members with a membership that is over still owe a payment" · "Record the payment or cancel the bill on their page first. After that you can renew them, remove them from your list, or keep them on it, here." · **Show these members** |
 | The list | the same Members list, showing only those people, with the pill "Membership ended or cancelled" |
 | Under each row | **Renew** · **Remove** · **Keep on list**: three small buttons in one line under the name (`c-btn-xs`), never wider than the Name column |
 | The bar, with people ticked | its usual buttons, and **Keep on list** |
@@ -5488,8 +5490,8 @@ again by hand). A month that has closed reads the same before and after a tidy-u
 Somebody removed while their membership was in use left on the day they were removed, as
 before.
 
-**Routes.** `GET /member-list` answers `over.count` · `GET /member-list/entries` and a
-"Select all" take `membership=over` · `POST /member-list/selected/remove-preview` and
+**Routes.** `GET /member-list` answers `over.count` and `over.owing` · `GET /member-list/entries` and a
+"Select all" take `membership=over` or `membership=over_owing` · `POST /member-list/selected/remove-preview` and
 `/remove` take `onlyOver: true` · `POST /member-list/selected/keep-listed`. Remove and
 Keep on list asked from this list, and the Remove box asked from it, have their own
 allowance: 600 an hour for one member of staff (a box and a press a person, so 300 people

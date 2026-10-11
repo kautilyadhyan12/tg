@@ -192,12 +192,13 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
     expect(res.statusCode, res.body).toBe(200);
   };
 
-  /** The sign's number. */
-  const signOf = async (gymId: string, who: User): Promise<number> => {
+  const signBoth = async (gymId: string, who: User): Promise<{ count: number; owing: number }> => {
     const res = await get(listUrl(gymId), who.cookies);
     expect(res.statusCode, res.body).toBe(200);
-    return memberListViewResponseSchema.parse(JSON.parse(res.body)).list.over.count;
+    return memberListViewResponseSchema.parse(JSON.parse(res.body)).list.over;
   };
+  /** The sign's number. */
+  const signOf = async (gymId: string, who: User): Promise<number> => (await signBoth(gymId, who)).count;
   const pageOf = async (gymId: string, who: User, query = "") => {
     const res = await get(`${listUrl(gymId)}/entries${query}`, who.cookies);
     expect(res.statusCode, res.body).toBe(200);
@@ -355,6 +356,15 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
       expect((await report(gym, owner)).activeNow).toBe(8);
       const unas = (await pageOf(gym, owner)).entries.find((entry) => entry.entryId === id["Una Unpaid"]);
       expect(unas?.held).toMatchObject({ status: "ended", payment: { state: "due" } });
+      // The sign says she is there, and its second list shows exactly her: never Owen, who
+      // owes on a membership still running, and nobody else's gym.
+      expect(await signBoth(gym, owner)).toEqual({ count: 5, owing: 1 });
+      expect((await pageOf(gym, owner, "?membership=over_owing")).entries.map((entry) => entry.fullName)).toEqual(["Una Unpaid"]);
+      expect(await signBoth(nextDoor, nextDoorOwner)).toEqual({ count: 1, owing: 0 });
+      expect((await pageOf(nextDoor, nextDoorOwner, "?membership=over_owing")).entries).toEqual([]);
+      for (const who of [stranger, nextDoorOwner]) {
+        expect((await get(`${listUrl(gym)}/entries?membership=over_owing`, who.cookies)).statusCode).toBe(404);
+      }
       expect(await signOf(nextDoor, nextDoorOwner)).toBe(1);
       expect(await overNames(nextDoor, nextDoorOwner)).toEqual(["Nell Nextdoor"]);
 
@@ -478,6 +488,18 @@ d("Tidying up members whose membership is over (real Postgres)", () => {
       at("2026-11-20T11:00:00Z");
       expect(await overNames(gym, owner)).toEqual(["Bea Booked", "Kit Kept", "Yara Yesterday"]);
       expect(await signOf(gym, owner)).toBe(3);
+      // Una's bill is cancelled by staff: she owes nothing, and is on the sign's own list.
+      const unasPage = await get(heldUrl(gym, id["Una Unpaid"]), owner.cookies);
+      expect(unasPage.statusCode, unasPage.body).toBe(200);
+      const unasOne = (JSON.parse(unasPage.body) as HeldMembershipsResponse).memberships[0];
+      const letOff = await post(
+        `${heldUrl(gym, id["Una Unpaid"])}/${unasOne?.id ?? ""}/bills/${unasOne?.billing?.bills[0]?.id ?? ""}/cancel`,
+        { reason: "not_charging" },
+        owner.cookies,
+      );
+      expect(letOff.statusCode, letOff.body).toBe(200);
+      expect(await signBoth(gym, owner)).toEqual({ count: 4, owing: 0 });
+      expect(await overNames(gym, owner)).toEqual(["Bea Booked", "Kit Kept", "Una Unpaid", "Yara Yesterday"]);
     },
     TEST_TIMEOUT_MS,
   );

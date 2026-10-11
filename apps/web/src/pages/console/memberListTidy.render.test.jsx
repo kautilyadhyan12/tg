@@ -64,7 +64,7 @@ const WORDS = { people: 'members', person: 'member', peopleCap: 'Members', it: '
 const GYM_ROW = { id: GYM, name: 'Iron House Gym', slug: 'iron-house', timezone: 'Europe/London' };
 const DIGEST = 'a'.repeat(64);
 
-const viewWith = (over) =>
+const viewWith = (over, owing = 0) =>
   memberListViewSchema.parse({
     hasList: true,
     version: 3,
@@ -78,7 +78,7 @@ const viewWith = (over) =>
     paymentStatuses: [],
     fields: [],
     appWords: [{ word: 'not_in_app', count: 40 }],
-    over: { count: over },
+    over: { count: over, owing },
   });
 
 let n = 0;
@@ -309,6 +309,44 @@ describe('tidying up members whose membership is over', () => {
     fireEvent.click(done.getByRole('button', { name: 'Show all members' }));
     await screen.findByText('Paula Paid');
     expect(screen.queryByTestId('showing')).toBeNull();
+  });
+
+  it('people who still owe are held back, and the sign says so with a button that shows exactly them', async () => {
+    const una = entry('Una Unpaid', { status: 'ended', memberships: ['1 Month'], day: { what: 'ended', on: '2026-08-31' }, payment: { state: 'due', since: '2026-08-01' } });
+    orgService.getMemberList.mockResolvedValue({ data: { list: viewWith(3, 1) } });
+    orgService.getMemberListEntries.mockImplementation((gymId, query) => {
+      const asked = new URLSearchParams(query).get('membership');
+      return Promise.resolve(asked === 'over_owing' ? pageOf([una]) : asked === 'over' ? pageOf([cal, jude, yara]) : pageOf([cal, jude, paula, una, yara], 40));
+    });
+    draw();
+    await screen.findByText('Paula Paid');
+    const held = within(screen.getByTestId('over-owing'));
+    expect(
+      held.getByText(
+        '1 more member has a membership that is over and still owes a payment, so they are not in this list. Record the payment or cancel the bill on their page first.',
+      ),
+    ).toBeTruthy();
+    fireEvent.click(held.getByRole('button', { name: 'Show this member' }));
+    await waitFor(() => expect(screen.queryByText('Paula Paid')).toBeNull());
+    await screen.findByText('Una Unpaid');
+    expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'membership=over_owing');
+    expect(within(screen.getByTestId('showing')).getByText('Membership over, payment due')).toBeTruthy();
+    // Her row opens her page, where the bill is; no Remove or Keep on list under it.
+    expect(screen.queryAllByTestId('over-actions')).toEqual([]);
+    expect(screen.queryByTestId('over-owing-show')).toBeNull();
+    // The sign's own list is still one press away.
+    fireEvent.click(sign().getByRole('button', { name: 'Review them' }));
+    await screen.findAllByTestId('over-actions');
+    expect(screen.queryByText('Una Unpaid')).toBeNull();
+    cleanup();
+
+    // Nobody else to review: the sign is still there, about them alone.
+    orgService.getMemberList.mockResolvedValue({ data: { list: viewWith(0, 2) } });
+    draw();
+    await screen.findByText('Paula Paid');
+    expect(sign().getByText('2 members with a membership that is over still owe a payment')).toBeTruthy();
+    expect(sign().queryByTestId('over-review')).toBeNull();
+    expect(sign().getByRole('button', { name: 'Show these members' })).toBeTruthy();
   });
 
   it('a gym that can only read is shown who, and no button that changes anybody', async () => {

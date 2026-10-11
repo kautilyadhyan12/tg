@@ -105,7 +105,7 @@ import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type Removal
 import { dayInTz } from "../../gamification/streak.js";
 import { heldChips, heldOnListOf, heldPassing, mergeChips, type WordCount } from "../memberships/onList.js";
 import { keepLeftDays } from "../memberships/over.js";
-import { heldAndTidyOf, tidyIdsOf } from "./tidy.js";
+import { heldAndTidyOf, overOwingIdsOf, tidyIdsOf } from "./tidy.js";
 import { listBillFacts, pastOwing } from "../memberships/billsSql.js";
 
 export interface MemberListDeps {
@@ -1428,7 +1428,7 @@ export async function readList(
   const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const today = dayInTz(deps.now(), org.timezone);
-  const [state, members, fields, { held, tidy }, owing] = await Promise.all([
+  const [state, members, fields, { held, tidy, owing: overOwing }, owing] = await Promise.all([
     repo.listState(deps.sql, gymId),
     repo.membersAgainstList(deps.sql, gymId),
     repo.listFields(deps.sql, gymId),
@@ -1471,7 +1471,7 @@ export async function readList(
     appWords: app.counts,
     review,
     duplicates,
-    over: { count: tidy.length },
+    over: { count: tidy.length, owing: overOwing.length },
   };
 }
 
@@ -1582,9 +1582,12 @@ export async function entriesFilter(
       appIds,
       // The tag is read with this gym: another gym's tag is on nobody here.
       tagIds: query.tag === undefined ? null : await entryIdsWithTag(deps.sql, gymId, query.tag),
-      // The people the sign counts (21c-iii), by the rule the sign's own number comes from.
+      // The people the sign counts (21c-iii), or the people left off it because they owe,
+      // by the rule the sign's own numbers come from.
       overIds:
-        query.membership === undefined ? null : await tidyIdsOf(deps.sql, gymId, dayInTz(deps.now(), await repo.gymTimeZone(deps.sql, gymId))),
+        query.membership === undefined
+          ? null
+          : await (query.membership === "over" ? tidyIdsOf : overOwingIdsOf)(deps.sql, gymId, dayInTz(deps.now(), await repo.gymTimeZone(deps.sql, gymId))),
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
     },
   };

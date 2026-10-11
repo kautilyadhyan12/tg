@@ -316,7 +316,7 @@ function RenewalsSign({ sign, to, off }) {
 /** THE SIGN WHILE ANYBODY'S MEMBERSHIP IS OVER (21c-iii; RULINGS 2026-10-11): they are
  *  still on the list, and nothing is done to anybody by itself. Its button shows only
  *  those people in the list below; once it has, the sign says what can be done with each. */
-function OverSign({ sign, onReview }) {
+function OverSign({ sign, onReview, onShowOwing }) {
   return (
     <section className="c-callout items-start" data-testid="over-sign">
       <span className="c-glow-dot mt-[7px]" aria-hidden="true" />
@@ -330,6 +330,18 @@ function OverSign({ sign, onReview }) {
           ) : null}
         </div>
         <span className="c-s14 c-t2">{sign.detail}</span>
+        {/* The people held back because they owe (Kd, 2026-10-12): said, so nobody
+            wonders where they went, with the button that shows them. */}
+        {sign.owingLine !== null || sign.owingButton !== null ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="over-owing">
+            {sign.owingLine !== null ? <span className="c-s14 c-t2">{sign.owingLine}</span> : null}
+            {sign.owingButton !== null ? (
+              <button type="button" onClick={onShowOwing} className="c-btn c-btn-link c-s14 c-w6" data-testid="over-owing-show">
+                {sign.owingButton}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -698,6 +710,12 @@ export default function MemberListPanel({
     setTyped('');
     change({ ...EMPTY_FILTERS, over: true });
   };
+  const owingCount = list?.over?.owing ?? 0;
+  const owingView = filters.records === 'current' && filters.overOwing;
+  const showOwing = () => {
+    setTyped('');
+    change({ ...EMPTY_FILTERS, overOwing: true });
+  };
   /** Remove for `chosen`: from the list of members whose membership is over, only those
    *  whose membership still is. */
   const openRemove = (chosen) => {
@@ -892,7 +910,13 @@ export default function MemberListPanel({
       {renewalSigns.map((sign) => (
         <RenewalsSign key={sign.key} sign={sign} to={opensMemberships ? membershipBoxTo(gym.slug, sign.typeId, sign.word) : null} off={readOnly} />
       ))}
-      {overCount > 0 ? <OverSign sign={overSignWords(overCount, words, { inView: overView, readOnly })} onReview={reviewOver} /> : null}
+      {overCount > 0 || owingCount > 0 ? (
+        <OverSign
+          sign={overSignWords(overCount, words, { inView: overView, readOnly, owing: owingCount, owingInView: owingView })}
+          onReview={reviewOver}
+          onShowOwing={showOwing}
+        />
+      ) : null}
       {/* The toolbar stays at the top of the screen on a computer while the list scrolls, and
           with people selected the bar over them sits in it (Kd, 2026-09-28: at the bottom of
           the list he had to scroll back up to act), as Gmail and HubSpot keep theirs. */}
