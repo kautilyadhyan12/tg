@@ -1,4 +1,4 @@
-// THE AUTOMATIC MESSAGES ARE SENT (spec Part 3 §16.2; ROADMAP 20a, 20b-i).
+// THE AUTOMATIC MESSAGES ARE SENT (spec Part 3 §16.2; ROADMAP 20a, 20b-i, 20b-ii).
 //
 // `gymMessageDue` in `@app/shared` decides; this gathers what it reads and writes what it
 // returns, a gym at a time. A gym is read first with nothing held; only a gym with
@@ -7,26 +7,26 @@
 // schedule and `tools/member-messages.ts` by hand; a second run writes nothing.
 //
 // Everybody in a gym is read ONCE A DAY, at the first run inside its day's hours: that is
-// when a birthday, a milestone and an absence are found. Every other run reads only those
-// who joined lately, for their Welcome. A change to the gym's settings has the next run
-// read everybody again.
-//
-// Four kinds are sent: Welcome, Birthday, Visit milestone and We miss you. The other four
-// are in the rule and are given no facts here until 20b-ii reads memberships and bills.
+// when a birthday, a milestone, an absence, a trial's day, a membership's last days and an
+// overdue bill are found. Every other run reads only those who joined lately, for their
+// Welcome. A change to the gym's settings has the next run read everybody again.
 import {
   GYM_MESSAGE_DAY_ENDS_HOUR,
   GYM_MESSAGE_DAY_STARTS_HOUR,
   GYM_MESSAGE_KEPT_DAYS,
   GYM_MESSAGE_WELCOME_DAYS,
+  NO_MEMBERSHIP_FACTS,
   automaticMessage,
   gymMessageDue,
   gymMessageSettingsFrom,
   trustedBirthday,
   type GymMessageFacts,
   type GymMessageSettings,
+  type MembershipMessageFacts,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { lockGym } from "../memberList/repo.js";
+import { NO_GYM_MONEY, gymMoney, membershipFactsByPerson, type GymMoney } from "./membershipsRepo.js";
 import * as repo from "./repo.js";
 import { settingRows } from "./settingsRepo.js";
 
@@ -44,9 +44,19 @@ const GYM_VISIT_DAYS = 120;
 
 const awake = (gym: repo.GymNow): boolean => gym.open && gym.live && gym.hour >= GYM_MESSAGE_DAY_STARTS_HOUR && gym.hour < GYM_MESSAGE_DAY_ENDS_HOUR;
 
-function factsFor(gym: repo.GymNow, settings: GymMessageSettings, visitDays: readonly string[], person: repo.MessagePerson): GymMessageFacts {
+/** What the day's whole read of a gym adds to its people: the gym's own check-in days,
+ *  what it does about money, and each person's memberships and bills. */
+interface DayRead {
+  visitDays: readonly string[];
+  money: GymMoney;
+  memberships: ReadonlyMap<string, MembershipMessageFacts>;
+}
+/** Every other run: nobody has a visit, a membership or a bill read for them. */
+const NO_DAY_READ: DayRead = { visitDays: [], money: NO_GYM_MONEY, memberships: new Map() };
+
+function factsFor(gym: repo.GymNow, settings: GymMessageSettings, day: DayRead, person: repo.MessagePerson): GymMessageFacts {
   return {
-    gym: { open: gym.open, live: gym.live, today: gym.today, hour: gym.hour, on: settings.on, numbers: settings.numbers, visitDays },
+    gym: { open: gym.open, live: gym.live, today: gym.today, hour: gym.hour, on: settings.on, numbers: settings.numbers, visitDays: day.visitDays, ...day.money },
     person: {
       member: person.member,
       former: person.former,
@@ -54,9 +64,7 @@ function factsFor(gym: repo.GymNow, settings: GymMessageSettings, visitDays: rea
       off: person.off,
       joinedOn: person.joinedOn,
       joinedUtcOn: person.joinedUtcOn,
-      trial: null,
-      membershipEndsOn: null,
-      bills: [],
+      ...(day.memberships.get(person.userId) ?? NO_MEMBERSHIP_FACTS),
       birthday: trustedBirthday(person.dateOfBirth, gym.today, person.dateOfBirthShared),
       visits: person.visits,
       recentVisitDays: person.recentVisitDays,
@@ -96,19 +104,25 @@ async function dueForGym(sql: Sql | TransactionSql, gymId: string, now: Date, ev
   // The rule holds every message of a gym that is closed, on no plan or asleep.
   if (!awake(gym)) return { gym, due: [] };
   const settings = gymMessageSettingsFrom(await settingRows(sql, gymId));
-  const visitDays = everybody ? await repo.gymVisitDays(sql, gymId, gym.today, GYM_VISIT_DAYS) : [];
+  const day: DayRead = everybody
+    ? {
+        visitDays: await repo.gymVisitDays(sql, gymId, gym.today, GYM_VISIT_DAYS),
+        money: await gymMoney(sql, gymId, gym.today),
+        memberships: await membershipFactsByPerson(sql, gymId, gym.today),
+      }
+    : NO_DAY_READ;
   const due: repo.NewMessage[] = [];
   // One person may have two stays in the read (removed, then back): what the first
   // is sent, the second must see.
   const sentNow = new Map<string, repo.MessagePerson["sent"]>();
   for (const person of await repo.peopleForMessages(sql, gymId, now, gym.today, LOOK_BACK_DAYS, everybody)) {
     const before = sentNow.get(person.userId) ?? [];
-    const { send } = gymMessageDue(factsFor(gym, settings, visitDays, { ...person, sent: [...person.sent, ...before] }));
+    const { send } = gymMessageDue(factsFor(gym, settings, day, { ...person, sent: [...person.sent, ...before] }));
     if (send === null) continue;
     const body = automaticMessage(send, gym.name, person.displayName, settings.ownLines[send.kind] ?? null);
     if (body === null) continue;
     due.push({ gymId, userId: person.userId, kind: send.kind, occasion: send.occasion, body, gymDay: gym.today });
-    sentNow.set(person.userId, [...before, { ...send, day: gym.today }]);
+    sentNow.set(person.userId, [...before, { kind: send.kind, occasion: send.occasion, day: gym.today }]);
   }
   return { gym, due };
 }

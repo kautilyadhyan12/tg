@@ -1,8 +1,9 @@
 // A GYM'S SETTINGS FOR ITS AUTOMATIC MESSAGES, for staff holding `org.manage` (spec Part 3
-// §16.2; ROADMAP 20b-i). Gates in CLAUDE.md §4's order: privilege (and a live plan, for the
+// §16.2; ROADMAP 20b-i, 20b-ii). Gates in CLAUDE.md §4's order: privilege (and a live plan, for the
 // save), then the rate limit, then the work.
 import {
   GYM_MESSAGE_CHECK_IN_DAYS,
+  GYM_MESSAGE_DAYS_OF,
   GYM_MESSAGE_OWN_LINE_WORDS,
   GYM_MESSAGE_SETTING_KINDS,
   gymMessageSettingsFrom,
@@ -10,6 +11,8 @@ import {
   ownLineBadWords,
   ownLineProblem,
   tidyOwnLine,
+  type GymMessageKind,
+  type GymMessageNumbers,
   type GymMessageSettingRow,
   type GymMessageSettingsRequest,
   type GymMessageSettingsResponse,
@@ -17,19 +20,29 @@ import {
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { badWordsIn } from "../posts/badWords.js";
+import { gymMoney, priceListUse } from "./membershipsRepo.js";
 import { forgetDay } from "./repo.js";
 import type { Limit, MessagesDeps } from "./service.js";
 import * as settingsRepo from "./settingsRepo.js";
 
 const notFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisation not found.");
 
+/** The number of days a kind keeps in its row, from the numbers named; null for a kind
+ *  with none. */
+function daysOf(kind: GymMessageKind, numbers: Pick<GymMessageNumbers, "trialCheckInDay" | "trialEndingDays" | "membershipEndingDays" | "missYouDays">): number | null {
+  if (kind === "trial_check_in" || kind === "trial_ending" || kind === "membership_ending" || kind === "miss_you") return numbers[GYM_MESSAGE_DAYS_OF[kind]];
+  return null;
+}
+
 async function readSettings(deps: MessagesDeps, gymId: string): Promise<GymMessageSettingsResponse> {
   const now = deps.now();
   const today = await settingsRepo.gymToday(deps.sql, gymId, now);
   if (today === null) throw notFound();
-  const [rows, checkIn] = await Promise.all([
+  const [rows, checkIn, list, money] = await Promise.all([
     settingsRepo.settingRows(deps.sql, gymId),
     settingsRepo.checkedInLately(deps.sql, gymId, today, GYM_MESSAGE_CHECK_IN_DAYS),
+    priceListUse(deps.sql, gymId),
+    gymMoney(deps.sql, gymId, today),
   ]);
   const settings = gymMessageSettingsFrom(rows);
   return gymMessageSettingsResponseSchema.parse({
@@ -37,6 +50,13 @@ async function readSettings(deps: MessagesDeps, gymId: string): Promise<GymMessa
     missYouDays: settings.numbers.missYouDays,
     milestones: settings.numbers.milestones,
     checkIn,
+    trialCheckInDay: settings.numbers.trialCheckInDay,
+    trialEndingDays: settings.numbers.trialEndingDays,
+    membershipEndingDays: settings.numbers.membershipEndingDays,
+    trialOnList: list.trialOnList,
+    priceList: list.priceList,
+    payments: money.takesPayments,
+    billsOverdueDays: money.billsOverdueAfterDays,
   });
 }
 
@@ -69,7 +89,7 @@ export async function setMessageSettings(
       kind: message.kind,
       on: message.on,
       ownLine: line === "" ? null : line,
-      days: message.kind === "miss_you" ? body.missYouDays : null,
+      days: daysOf(message.kind, body),
       milestones: message.kind === "milestone" ? [...body.milestones].sort((a, b) => a - b) : null,
     };
   });
@@ -83,7 +103,7 @@ export async function setMessageSettings(
         kind: row.kind,
         on: start.on[row.kind],
         ownLine: null,
-        days: row.kind === "miss_you" ? start.numbers.missYouDays : null,
+        days: daysOf(row.kind, start.numbers),
         milestones: row.kind === "milestone" ? start.numbers.milestones : null,
       };
       return (

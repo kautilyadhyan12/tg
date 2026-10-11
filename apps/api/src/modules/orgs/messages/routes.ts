@@ -119,7 +119,7 @@ export function registerMessageRoutes(app: FastifyInstance, deps: service.Messag
     return reply.status(200).send(now);
   });
 
-  // PUT: every kind and both numbers, every time. Saved twice it is saved once.
+  // PUT: every kind and every number, every time. Saved twice it is saved once.
   app.put("/v1/orgs/:gymId/message-settings", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
