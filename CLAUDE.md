@@ -11,9 +11,9 @@ on 2026-09-07 when Kd ruled the old process too slow; the old playbook is kept a
 2. `RULINGS.md` — Kd's decisions, one line each. They override any chat's judgement.
 3. `ROADMAP.md` — the ordered work list. Your task is the next unticked item unless Kd says otherwise.
 4. `HANDOFF.md` — the newest entry, to see where the last terminal stopped.
-5. `FOLDER.md` at the root of the folder you are in — it says which folder this is (A or
-   B), which list of jobs it builds, and its own database, Redis number and ports (§8).
-   It is not in git; each folder has its own.
+5. `FOLDER.md` at the root of the folder you are in — it says which folder this is (a web
+   folder, a feature folder or an exercise folder), which list of jobs it builds, and its
+   own database, Redis number and ports (§8). It is not in git; each folder has its own.
 6. The spec section your task touches, in `docs/spec/` (nine files; §-references in
    RULINGS point there). The spec says what to build; RULINGS wins where they differ.
 
@@ -90,6 +90,10 @@ line, next to the model and effort. When in doubt, the bigger size.
    - A terminal whose whole message is `Review <file>` or `Re-check <file>` is the
      reviewer: it reads that file, does what it says, writes where it says, and touches
      nothing else in the folder. `reviews/` is ignored by git and never committed.
+   - An exercise made on the line (§4, "Exercises") is checked by the line's own tests and
+     Kd's own test; the fresh-terminal review is once for a whole FAMILY of exercises,
+     never for each one (RULINGS 2026-10-12). The engine and the tools are reviewed as any
+     job.
 7. **Commit and open a pull request to `master`**; CI must be green; delete the branch
    after the merge. Small commits, explicit file lists (`git add <files>`, never
    `git add -A`). `master` takes pull requests only: GitHub refuses a direct push,
@@ -123,6 +127,8 @@ line, next to the model and effort. When in doubt, the bigger size.
 - A hazard is raised together with its solutions and a recommendation, never alone.
 - His words: "terminal", not "chat"; "job", not "card". When a step needs a word of the
   trade ("merge", "pull request", "branch"), say what it means in the same sentence.
+  "Feature folder" and "exercise folder", never "Phone 1" or "Camera 1"; "the selfie
+  camera", never "the front camera" (RULINGS 2026-10-12).
 - Never remove, hide or shrink a feature on your own judgement. "Switched off" is not
   "deleted". A missing backend is a reason to build it, never to trim the screen.
 
@@ -131,7 +137,8 @@ line, next to the model and effort. When in doubt, the bigger size.
 **TypeScript.** `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` and
 the rest of the shared config. No `any`, no `@ts-ignore`, no non-null `!` in `apps/api`
 or `packages/engine`, no `as` outside adapter files. The web app is JavaScript and
-stays so; new web code follows its existing patterns.
+stays so; new web code follows its existing patterns. The phone app (`apps/mobile`) is
+TypeScript, held to the same rules as `apps/api`.
 
 **Parse, don't trust.** Every external input (HTTP body, query, params, webhooks, env,
 queue jobs, AI and vision responses, files) crosses the boundary through a Zod schema
@@ -147,8 +154,9 @@ in `packages/shared`.
   a worker fetches the authoritative object. Idempotency keys on sync and every
   payment-adjacent POST; every queue handler safe to run twice.
 - Secrets never in code, logs, error responses or client bundles. Gitleaks in CI.
-- Auth: httpOnly cookies only; hashes never reversible; one-time codes and tokens stored
-  as hashes with expiry and single use; per-IP and per-identifier rate limits on every
+- Auth: in the browser, httpOnly cookies only; on the phone, the phone's own key store,
+  never plain storage (RULINGS 2026-10-12); hashes never reversible; one-time codes and
+  tokens stored as hashes with expiry and single use; per-IP and per-identifier rate limits on every
   entry point; responses never reveal whether an account exists.
 - Never log passwords, tokens, cookies, raw payloads or keypoints with identity.
 - SQL only through Drizzle or parameterised `sql` values; no string-built SQL.
@@ -235,6 +243,28 @@ broken it. Every job that adds or changes something a person DOES follows all si
 into a page; its `c-` building blocks; Archivo; both looks. A new console page, or a new
 box on a page already restyled, is built in the new look. A restyle (ROADMAP R2–R8) keeps
 every button, field, message and permission its page has.
+
+**The phone app (Kd, RULINGS 2026-10-12; spec Part 6 §16).** A member feature is built
+for the phone, never the browser. Every screen rule above holds there, with "a gym" read
+as "a member" and "the real browser" as "the real phone": the terminal walks the whole
+task on Kd's phone, on its own folder's copy of the app, before he is asked. One look,
+drawn once (ROADMAP Stage 5 item 11): colours and building blocks by name, never written
+into a screen. What a person DOES (a workout, a meal, a weigh-in, a run) is kept on the
+phone until the server has it, and its route is safe to call twice; a lost connection
+never signs anybody out and never loses it. Before a web feature is rebuilt, read the web
+version, tell Kd plainly what you would do better, and get his yes for anything that
+changes what it does; never drop one.
+
+**Exercises (Kd, RULINGS 2026-10-12; spec Part 2 §11).** An exercise is data, made on the
+line: Kd names it and gives one or two good-form links; the videos are measured on his
+laptop and never go to git. ONE pose model, the one the phone runs, measures everything,
+and the numbers that set a rule are the app's own engine's, never a second copy of the
+maths. Every common mistake of an exercise, from proper sources, is either checked by the
+camera or marked "the camera cannot see this from here": a green tick has a check behind
+it. An exercise is done when its own video counts what a person counts by eye, each
+mistake clip fires its mistake, every other exercise's video counts nothing unexplained,
+its generated clip passes its own rules, and Kd has done it on the phone from the
+Library. Accuracy is a number shown to him, never a promise.
 
 **Tests.** Route tests via `fastify.inject` covering the happy path, a validation failure
 and the cross-tenant denial. Database-backed tests run against the local Postgres
@@ -430,3 +460,22 @@ Redis number and ports; the two lists are in ROADMAP Stage 2's header.
 - Each folder runs only its own servers, on its own ports, against its own database
   and Redis number; the Docker containers are shared and started once.
 - `FOLDER.md` and `reviews/` are ignored by git: they are the folder's own.
+
+**Since 2026-10-12 (RULINGS that day; ROADMAP Stage 2's header and Stage 5).** The gym's
+web part is built on a borrowed laptop in three web folders (A, B, C) until about
+2026-10-17. Kd's own laptop builds the phone app and the exercises in FOUR folders, two
+running at a time, all checkouts of the one repository:
+
+| Folder | Path | Builds (ROADMAP Stage 5) |
+|---|---|---|
+| Feature folder 1 | `D:\Projects\ai-home-gym` | items 10 to 21: getting into the app, and the member's gym |
+| Feature folder 2 | `D:\Projects\ai-home-gym-b` | items 30 to 38: the member's own day |
+| Exercise folder 1 | `D:\Projects\ai-home-gym-ex1` | items 50 to 55: the camera and the form rules |
+| Exercise folder 2 | `D:\Projects\ai-home-gym-ex2` | items 60 to 65: the Exercise Library and the Workout section |
+
+Everything above holds between them: a terminal takes the first unticked job of ITS
+folder's list whose needs are met, jobs merge ONE at a time, and a second migration is
+renumbered. `master` itself is open in feature folder 1 only, so the other three start a
+job with `git fetch` and a fresh branch from `origin/master`. Each folder's `FOLDER.md`
+names its database, Redis number and ports, and its own copy of the app on Kd's one
+phone. When the borrowed laptop goes back, what is left of the web gets a fifth folder.
