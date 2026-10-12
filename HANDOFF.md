@@ -16,6 +16,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **From the review:** a weight goal's target is the plan's, never the typed one: the lowest healthy weight where the target is under it, and "set a new target weight" where it is on the wrong side or already met.
 - **Seen, older than this job:** `db.migration.test.ts` "0033's member-list CHECKs bite…" took 4.4 s alone against its 5 s and timed out beside other files (ROADMAP Stage 1 item 10).
 - **Cost:** it reads one person's own rows, never a list of people; nothing measured at gym size.
+- **For item 31 (Today):** a weight goal never reads "reached"; once the weight meets the target it asks for a new target weight, as the rings do. A removal sent twice reads 404 the second time: already gone.
+- **Merged** 2026-10-12, pull request #233, round closed (`reviews/30a-4-verdict.md`).
 - **Next:** 30b, the starter set from the setup answers. Item 31 (Today) waits for feature folder 1's items 10 to 12, and must not offer a kind the server refuses.
 
 ## 2026-10-12 · The phone app and the exercises: the plan, and four folders on Kd's own laptop (no job; a planning terminal, branch `phone-and-exercise-plan`)

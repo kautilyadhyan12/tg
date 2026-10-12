@@ -405,7 +405,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 **Feature folder 2 — `D:\Projects\ai-home-gym-b`: the member's own day.**
 
 30. **Goals, server side** (Stage 1's 5a; split 2026-10-12). It needs no phone, so it is this folder's first job.
-    - 30a. [ ] **Keep, change, remove and measure a goal.** Ten kinds the server can measure today; running goals wait for item 37, "master an exercise" and a harder version for item 36, a hold time (plank) for the exercise folders' holds, mobility sessions for a way to record one.
+    - 30a. [x] **Keep, change, remove and measure a goal** — merged 2026-10-12 (PR #233).
     - 30b. [ ] **The starter set from the setup answers**: the app's own goals for a new person, each one changeable and removable, under 30a's health rule.
 31. [ ] **Today** (Stage 1's 5b): rings, the streak with its freezes, level and XP, this week, recent workouts, goals, and the Recommended box (7a-ii) with each option as it is built.
 32. [ ] **Food**: search, add by measure, the rings and a person's own numbers, change a logged food, saved dishes with rename and delete. Its database needs the food table loaded first.
