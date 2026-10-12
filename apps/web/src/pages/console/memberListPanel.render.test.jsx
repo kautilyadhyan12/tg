@@ -660,3 +660,21 @@ describe('a row says what the person holds in the app (23a-i)', () => {
     expect(within(ashaRow).getByTestId('row-pay').textContent).toBe('Paid');
   });
 });
+
+// 20d-ii: Overview's "See who" beside Payment due opens the list already showing them.
+describe('opened from Overview on who has a payment due', () => {
+  it('asks only for them, says so on the Showing line, and tells the page once', async () => {
+    const onStartTaken = vi.fn();
+    draw({ startPaymentDue: true, onStartTaken });
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'paymentStatus=Payment+due'));
+    expect(orgService.getMemberListEntries).not.toHaveBeenCalledWith(GYM, '');
+    expect(within(await screen.findByTestId('showing')).getByRole('button', { name: 'Stop showing only Payment due' })).toBeTruthy();
+    expect(onStartTaken).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens on everybody when not asked', async () => {
+    draw();
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, ''));
+    expect(screen.queryByTestId('showing')).toBeNull();
+  });
+});

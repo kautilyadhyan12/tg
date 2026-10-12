@@ -26,6 +26,7 @@ import {
 } from './consoleView';
 import { canMakeRoomNow, consoleIsReadOnly, memberMeterText, readOnlyNote, seatMeter } from './billingView';
 import { shortWhen } from './memberListPeople';
+import { PAYMENT_DUE_SHOW } from './weekView';
 import { canManageStaff } from './staffView';
 import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 import ApplicationsQueue from './ApplicationsQueue';
@@ -478,6 +479,21 @@ export default function Members() {
     }
   };
 
+  // Overview's Last 7 days box opens the list showing who has a payment due (`?show=`), once.
+  const [startPaymentDue, setStartPaymentDue] = useState(() => searchParams.get('show') === PAYMENT_DUE_SHOW);
+  const showing = searchParams.get('show');
+  useEffect(() => {
+    if (showing === null) return;
+    setSearchParams(
+      (was) => {
+        const params = new URLSearchParams(was);
+        params.delete('show');
+        return params;
+      },
+      { replace: true },
+    );
+  }, [showing, setSearchParams]);
+
   // Overview's Start here list opens Import, Add or Invite staff here (`?open=`), once.
   const opening = searchParams.get('open');
   useEffect(() => {
@@ -659,6 +675,8 @@ export default function Members() {
           sentMessagesTo={viewerPrivileges(org).includes('members.confirm') ? `/console/${orgSlug}/members/sent-messages` : null}
           action={action}
           onActionTaken={clearAction}
+          startPaymentDue={startPaymentDue}
+          onStartTaken={() => setStartPaymentDue(false)}
           emptyExtra={
             <AlreadyInApp
               items={state.items}

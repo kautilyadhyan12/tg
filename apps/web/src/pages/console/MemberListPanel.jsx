@@ -382,10 +382,20 @@ export default function MemberListPanel({
   onRosterChanged = () => undefined,
   canRemove = false,
   sentMessagesTo = null,
+  startPaymentDue = false,
+  onStartTaken = () => undefined,
 }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  // Overview's "See who" beside Payment due opens the list already showing them (20d-ii).
+  const [filters, setFilters] = useState(() => (startPaymentDue ? { ...EMPTY_FILTERS, paymentStatus: [HELD_PAYMENT_WORDS.due] } : EMPTY_FILTERS));
+  // Said once, when the list is first drawn: the filter is the list's own from then on.
+  const started = useRef(startPaymentDue);
+  useEffect(() => {
+    if (!started.current) return;
+    started.current = false;
+    onStartTaken();
+  }, [onStartTaken]);
   const [typed, setTyped] = useState('');
   const [page, setPage] = useState({ loading: true, error: null, entries: [], total: 0, cursor: null });
   const [loadingMore, setLoadingMore] = useState(false);
