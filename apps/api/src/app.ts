@@ -77,6 +77,8 @@ export interface BuildAppOverrides {
   /** orgs: tests inject a deterministic byte source to drive the join-code and
    *  slug collision retries; unset uses node:crypto. */
   orgs?: OrgRouteOverrides;
+  /** goals: the day a goal's period is counted around. The plan and the streak read the real clock. */
+  goals?: { now?: () => Date };
   /** Tests read what Sentry would be sent through a transport that records it;
    *  unset, the SDK sends to SENTRY_DSN. */
   sentryTransport?: Sentry.NodeOptions["transport"];
@@ -318,7 +320,7 @@ export async function buildApp(
   registerPrivacyRoutes(app, { sql, redis });
   registerExerciseRoutes(app, { sql });
   registerGamificationRoutes(app, { sql });
-  registerGoalRoutes(app, { sql, ...(overrides.orgs?.now === undefined ? {} : { now: overrides.orgs.now }) });
+  registerGoalRoutes(app, { sql, ...(overrides.goals?.now === undefined ? {} : { now: overrides.goals.now }) });
   registerCoachRoutes(app, { sql, redis, config }, overrides.coach ?? {});
   registerEntitlementRoutes(app, { sql, redis });
   registerNutritionRoutes(app, { sql, redis, config, reportError }, overrides.nutrition ?? {});

@@ -96,6 +96,8 @@ export const putGoalRequestSchema = z
   });
 export type PutGoalRequest = z.infer<typeof putGoalRequestSchema>;
 
+/** DELETE answers 204 when the goal is removed and 404 when the caller has no goal with
+ *  this id, so a removal sent again after a lost reply reads 404: already gone, done. */
 export const goalIdParamsSchema = z.object({ id: z.string().uuid() }).strict();
 
 /** Why a goal is not measured for this person today. The goal is kept, never removed. */

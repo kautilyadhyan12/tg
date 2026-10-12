@@ -27,6 +27,7 @@ const facts = (over: Partial<GoalFacts> = {}): GoalFacts => ({
   streak: 0,
   weightKg: 70,
   targetWeightKg: 65,
+  healthyFloorKg: null,
   planReady: true,
   rings: { kcal: 1800, proteinG: 120 },
   ...over,
@@ -62,6 +63,48 @@ describe("THE WORST THING: nobody the plan may not cut is given a weight to lose
     // A stored target is not read either: the rings' number wins.
     const m = measureGoal({ kind: "calories_within", period: "day", target: 900, exerciseId: null }, facts({ rings: { kcal: 1901, proteinG: 110 } }));
     expect(m.target).toBe(1901);
+  });
+});
+
+describe("THE WORST THING, by the target: a weight goal never shows a target the plan refuses", () => {
+  const goal = { kind: "weight" as const, period: null, target: null, exerciseId: null };
+  const GAIN: GoalRules = { ...FREE, weightGoal: "gain" };
+
+  it("a target under the lowest healthy weight is shown as that weight, never the typed one", () => {
+    const m = measureGoal(goal, facts({ targetWeightKg: 40, healthyFloorKg: 50.4 }));
+    expect(m).toMatchObject({ direction: "at_most", target: 50.4, current: 70, reached: false, needs: null });
+    // Already at or under the lowest healthy weight: nothing to lose, and no number.
+    for (const weightKg of [50.4, 48]) {
+      expect(measureGoal(goal, facts({ weightKg, targetWeightKg: 40, healthyFloorKg: 50.4 }))).toMatchObject({
+        target: null,
+        reached: null,
+        needs: "target_weight",
+      });
+    }
+    // A target at or over the healthy weight is the person's own.
+    expect(measureGoal(goal, facts({ targetWeightKg: 55, healthyFloorKg: null })).target).toBe(55);
+  });
+
+  const wrongSide: [string, Partial<GoalFacts>][] = [
+    ["lose, 70 kg, target 83", { targetWeightKg: 83 }],
+    ["lose, 70 kg, target 70", { targetWeightKg: 70 }],
+    ["gain, 70 kg, target 65 kept from a loss", { targetWeightKg: 65, rules: GAIN }],
+    ["gain, 70 kg, target 70", { targetWeightKg: 70, rules: GAIN }],
+  ];
+  it.each(wrongSide)("%s: never reached, and a new target is asked for", (_name, over) => {
+    expect(measureGoal(goal, facts(over))).toMatchObject({ target: null, current: 70, reached: null, needs: "target_weight", held: null });
+  });
+
+  it.each(wrongSide)("%s: the food goals ask for a new target weight too, not for setup", (_name, over) => {
+    for (const kind of ["calories_within", "protein"] as const) {
+      const m = measureGoal({ kind, period: "day", target: null, exerciseId: null }, facts({ ...over, rings: null }));
+      expect(m).toMatchObject({ target: null, reached: null, needs: "target_weight" });
+    }
+  });
+
+  it("with setup unfinished the food goals ask for setup", () => {
+    const m = measureGoal({ kind: "protein", period: "day", target: null, exerciseId: null }, facts({ targetWeightKg: 83, rings: null, planReady: false }));
+    expect(m.needs).toBe("plan");
   });
 });
 
@@ -201,12 +244,13 @@ describe("how each kind is measured", () => {
     const goal = { kind: "weight" as const, period: null, target: null, exerciseId: null };
     const lose = (weightKg: number | null) => measureGoal(goal, facts({ weightKg }));
     expect(lose(70)).toMatchObject({ unit: "kg", direction: "at_most", target: 65, current: 70, reached: false, window: null });
-    expect(lose(65)).toMatchObject({ reached: true });
+    // The weight has met the target: the plan asks for a new one, and so does the goal.
+    expect(lose(65)).toMatchObject({ target: null, reached: null, needs: "target_weight" });
     expect(lose(null)).toMatchObject({ current: null, reached: null });
 
     const gain = (weightKg: number) => measureGoal(goal, facts({ weightKg, targetWeightKg: 75, rules: { ...FREE, weightGoal: "gain" } }));
     expect(gain(70)).toMatchObject({ direction: "at_least", target: 75, reached: false });
-    expect(gain(75.5)).toMatchObject({ reached: true });
+    expect(gain(75.5)).toMatchObject({ target: null, reached: null, needs: "target_weight" });
 
     const steady = measureGoal(goal, facts({ rules: { ...FREE, weightGoal: "maintain" } }));
     expect(steady).toMatchObject({ direction: "steady", target: null, current: 70, reached: null, needs: null });

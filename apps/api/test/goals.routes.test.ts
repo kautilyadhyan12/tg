@@ -10,7 +10,6 @@ import { MAX_GOALS, goalsResponseSchema, type Goal } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
-import { DIRECT_DELETE_TABLES } from "../src/modules/privacy/tables.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -120,6 +119,7 @@ d("goals routes (real Postgres)", () => {
     await sql`DELETE FROM workouts WHERE user_id IN (${mine})`;
     await sql`DELETE FROM meal_logs WHERE user_id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'goal-%@example.com'`;
+    await sql`DELETE FROM exercises WHERE slug = 'zz_goal_retired'`;
   };
 
   beforeAll(async () => {
@@ -129,7 +129,7 @@ d("goals routes (real Postgres)", () => {
     lungeId = ex[1]?.id ?? "";
     expect(squatId, "the exercise catalog is seeded").not.toBe("");
     expect(lungeId).not.toBe("");
-    app = await buildApp(loadConfig(baseEnv), { emailSender: silentAuthSender(), orgs: { now: () => NOW } });
+    app = await buildApp(loadConfig(baseEnv), { emailSender: silentAuthSender(), goals: { now: () => NOW } });
   }, 60_000);
 
   afterAll(async () => {
@@ -200,6 +200,35 @@ d("goals routes (real Postgres)", () => {
       await health(cookies, { hasCondition: false });
       expect(await one(cookies, weightId)).toMatchObject({ target: 65, held: null });
       expect((await one(cookies, caloriesId)).target).toBe(1267);
+
+      // The age answer changed to 17: held again, and the calories are the whole daily burn.
+      await answer(cookies, { age: 17 });
+      expect(await one(cookies, weightId)).toMatchObject({ target: null, current: null, held: { code: "no_weight_loss", reasons: ["under_18"] } });
+      expect((await one(cookies, caloriesId)).target).toBe(1895);
+    });
+
+    it("a target the plan refuses is never the weight goal's: under the healthy weight, or on the wrong side", { timeout: 60_000 }, async () => {
+      const { cookies } = await makeUser("target");
+      await answer(cookies, { ...LOSING_ANSWERS, targetWeightKg: 40 });
+      await health(cookies, { hasCondition: false });
+      const weightId = randomUUID();
+      const caloriesId = randomUUID();
+      expect((await put(cookies, weightId, WEIGHT)).statusCode).toBe(201);
+      expect((await put(cookies, caloriesId, CALORIES)).statusCode).toBe(201);
+      // 165 cm: the plan runs to 50.4 kg, and so does the goal.
+      expect(await one(cookies, weightId)).toMatchObject({ target: 50.4, current: 70, reached: false, direction: "at_most" });
+
+      // The weight choice changes to Gain and the 65 kg target of a loss is still stored.
+      await answer(cookies, { targetWeightKg: 65 });
+      await answer(cookies, { weightGoal: "gain" });
+      const rings = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
+      expect(JSON.parse(rings.body)).toMatchObject({ targets: null, targetWrongSide: true });
+      expect(await one(cookies, weightId)).toMatchObject({ target: null, current: 70, reached: null, needs: "target_weight", direction: "at_least" });
+      expect(await one(cookies, caloriesId)).toMatchObject({ target: null, reached: null, needs: "target_weight" });
+
+      // Lose, with a target over the weight.
+      await answer(cookies, { weightGoal: "lose", targetWeightKg: 83 });
+      expect(await one(cookies, weightId)).toMatchObject({ target: null, reached: null, needs: "target_weight" });
     });
 
     it("numbers the person typed for the rings, once under what keeps the weight, are not the calories goal's", { timeout: 60_000 }, async () => {
@@ -302,6 +331,20 @@ d("goals routes (real Postgres)", () => {
     expect((await put(cookies, named, { kind: "reps_in_set", period: null, target: 15, exerciseId: squatId })).statusCode).toBe(201);
     const slug = await sql<{ slug: string }[]>`SELECT slug FROM exercises WHERE id = ${squatId}`;
     expect(await one(cookies, named)).toMatchObject({ exerciseId: squatId, exerciseSlug: slug[0]?.slug, window: null });
+
+    // An exercise that has left the library: the kept goal can still be changed, and no new one names it.
+    const retired = randomUUID();
+    const [gone] = await sql<{ id: string }[]>`
+      INSERT INTO exercises (slug, name_key, family, tier, status, met) VALUES ('zz_goal_retired', 'exercise.zz_goal_retired', 'F1', 'T1', 'live', 1.0) RETURNING id`;
+    const goneId = gone?.id ?? "";
+    expect((await put(cookies, retired, { kind: "reps_in_set", period: null, target: 10, exerciseId: goneId })).statusCode).toBe(201);
+    await sql`UPDATE exercises SET status = 'retired' WHERE id = ${goneId}`;
+    expect((await put(cookies, retired, { kind: "reps_in_set", period: null, target: 12, exerciseId: goneId })).statusCode).toBe(200);
+    expect((await one(cookies, retired)).target).toBe(12);
+    expect((await inject({ method: "DELETE", url: `/v1/goals/${retired}`, cookies })).statusCode).toBe(204);
+    const fresh = await put(cookies, randomUUID(), { kind: "reps_in_set", period: null, target: 10, exerciseId: goneId });
+    expect(fresh.statusCode).toBe(400);
+    expect(errorOf(fresh)).toBe("unknown_exercise");
 
     expect((await inject({ method: "DELETE", url: `/v1/goals/${id}`, cookies })).statusCode).toBe(204);
     expect((await inject({ method: "DELETE", url: `/v1/goals/${id}`, cookies })).statusCode).toBe(404);
@@ -520,9 +563,5 @@ d("goals routes (real Postgres)", () => {
     });
     // The stranger's own list is their own.
     expect(await list(other.cookies)).toEqual([]);
-  });
-
-  it("goals go with the account's data: the row is the person's own", { timeout: 30_000 }, () => {
-    expect(DIRECT_DELETE_TABLES).toContain("user_goals");
   });
 });

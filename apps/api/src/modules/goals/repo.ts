@@ -59,14 +59,15 @@ export async function countGoals(tx: TransactionSql, userId: string): Promise<nu
   return Number(r?.n ?? 0);
 }
 
-/** Whoever holds this id, if anybody: the id is the phone's own, so it may be a stranger's. */
-export async function goalHolder(
+/** The person's own goal with this id, locked. */
+export async function ownGoal(
   tx: TransactionSql,
+  userId: string,
   id: string,
-): Promise<{ userId: string; kind: string; exerciseId: string | null } | null> {
-  const [r] = await tx<{ user_id: string; kind: string; exercise_id: string | null }[]>`
-    SELECT user_id, kind, exercise_id FROM user_goals WHERE id = ${id} FOR UPDATE`;
-  return r === undefined ? null : { userId: r.user_id, kind: r.kind, exerciseId: r.exercise_id };
+): Promise<{ kind: string; exerciseId: string | null } | null> {
+  const [r] = await tx<{ kind: string; exercise_id: string | null }[]>`
+    SELECT kind, exercise_id FROM user_goals WHERE id = ${id} AND user_id = ${userId} FOR UPDATE`;
+  return r === undefined ? null : { kind: r.kind, exerciseId: r.exercise_id };
 }
 
 export interface GoalWrite {
@@ -94,7 +95,7 @@ export async function deleteGoal(sql: Sql, userId: string, id: string): Promise<
   return rows.length > 0;
 }
 
-/** The id clashed with a row another request wrote in the same instant. */
+/** The id is held already: by somebody else, or by a request of the same instant. */
 export function isGoalIdClash(err: unknown): boolean {
   return isUnique(err, "user_goals_pkey");
 }

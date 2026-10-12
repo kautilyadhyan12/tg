@@ -86,6 +86,8 @@ export interface GoalFacts {
   streak: number;
   weightKg: number | null;
   targetWeightKg: number | null;
+  /** The lowest healthy weight, where the plan says the target is under it; else null. */
+  healthyFloorKg: number | null;
   /** Setup's answers are complete enough for a plan. */
   planReady: boolean;
   /** The rings' own numbers, or null while the plan cannot give them. */
@@ -103,6 +105,25 @@ export type MeasuredGoal = Pick<Goal, "unit" | "direction" | "target" | "current
 
 const within = (day: string, w: DayWindow): boolean => day >= w.start && day <= w.end;
 
+/** The weight a "lose" goal runs to: the person's target, or the lowest healthy weight
+ *  where the target is under it, as the plan does. Null: nothing to lose. */
+function loseTargetKg(facts: GoalFacts): number | null {
+  const floor = facts.healthyFloorKg;
+  if (facts.targetWeightKg === null || floor === null || facts.targetWeightKg >= floor) return facts.targetWeightKg;
+  return facts.weightKg !== null && facts.weightKg <= floor ? null : floor;
+}
+
+/** The target is on the wrong side of the weight for the choice, or the weight has met
+ *  it: the plan and the rings then ask for a new target, and so does every goal. */
+function needsNewTargetWeight(facts: GoalFacts): boolean {
+  const aim = facts.rules.weightGoal;
+  if (aim === null || aim === "maintain") return false;
+  const target = aim === "lose" ? loseTargetKg(facts) : facts.targetWeightKg;
+  if (target === null) return true;
+  if (facts.weightKg === null) return false;
+  return aim === "lose" ? target >= facts.weightKg : target <= facts.weightKg;
+}
+
 export function measureGoal(goal: StoredGoal, facts: GoalFacts): MeasuredGoal {
   const unit = GOAL_KIND_RULES[goal.kind].unit;
   const window = goal.period === null ? null : goalWindow(goal.period, facts.today);
@@ -119,6 +140,8 @@ export function measureGoal(goal: StoredGoal, facts: GoalFacts): MeasuredGoal {
     current,
     reached: target === null ? null : current >= target,
   });
+  // Why the rings have no number: setup is unfinished, or it is finished and the target weight is stale.
+  const ringsNeed = facts.planReady && needsNewTargetWeight(facts) ? "target_weight" : "plan";
   const inWindow = <T extends { day: string }>(days: readonly T[]): T[] =>
     window === null ? [] : days.filter((d) => within(d.day, window));
 
@@ -138,11 +161,11 @@ export function measureGoal(goal: StoredGoal, facts: GoalFacts): MeasuredGoal {
     case "reps_in_set":
       return atLeast(goal.exerciseId === null ? 0 : (facts.bestReps.get(goal.exerciseId) ?? 0), goal.target);
     case "protein": {
-      if (facts.rings === null) return { ...base, direction: "at_least", target: null, current: null, reached: null, needs: "plan" };
+      if (facts.rings === null) return { ...base, direction: "at_least", target: null, current: null, reached: null, needs: ringsNeed };
       return atLeast(Math.round(inWindow(facts.mealDays).reduce((sum, d) => sum + d.proteinG, 0)), facts.rings.proteinG);
     }
     case "calories_within": {
-      if (facts.rings === null) return { ...base, direction: "at_most", target: null, current: null, reached: null, needs: "plan" };
+      if (facts.rings === null) return { ...base, direction: "at_most", target: null, current: null, reached: null, needs: ringsNeed };
       const logged = inWindow(facts.mealDays);
       const current = logged.reduce((sum, d) => sum + d.kcal, 0);
       // A day with nothing logged is not a day kept within calories.
@@ -154,10 +177,12 @@ export function measureGoal(goal: StoredGoal, facts: GoalFacts): MeasuredGoal {
       if (!facts.planReady || aim === null) return { ...base, direction: "steady", target: null, current, reached: null, needs: "plan" };
       if (aim === "maintain") return { ...base, direction: "steady", target: null, current, reached: null };
       const direction = aim === "lose" ? "at_most" : "at_least";
-      const target = facts.targetWeightKg;
-      if (target === null) return { ...base, direction, target: null, current, reached: null, needs: "target_weight" };
-      const reached = current === null ? null : aim === "lose" ? current <= target : current >= target;
-      return { ...base, direction, target, current, reached };
+      const target = aim === "lose" ? loseTargetKg(facts) : facts.targetWeightKg;
+      if (target === null || needsNewTargetWeight(facts)) {
+        return { ...base, direction, target: null, current, reached: null, needs: "target_weight" };
+      }
+      // Past this line the weight has not met the target, or is not known.
+      return { ...base, direction, target, current, reached: current === null ? null : false };
     }
   }
 }

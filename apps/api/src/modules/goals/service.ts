@@ -99,6 +99,7 @@ async function measured(deps: GoalsDeps, userId: string, rows: readonly repo.Goa
     streak,
     weightKg: read.answers.weightKg ?? null,
     targetWeightKg: read.answers.targetWeightKg ?? null,
+    healthyFloorKg: read.plan.plan?.flags.flatMap((f) => (f.code === "target_below_healthy_weight" ? [f.floorKg] : []))[0] ?? null,
     planReady: read.plan.plan !== null,
     rings: rings === null ? null : { kcal: rings.kcal, proteinG: rings.proteinG },
   };
@@ -139,9 +140,6 @@ export async function putGoal(
   body: PutGoalRequest,
 ): Promise<{ created: boolean; goal: Goal }> {
   const { sql } = deps;
-  if (body.exerciseId !== null && !(await repo.liveExerciseExists(sql, body.exerciseId))) {
-    throw new GoalsError(400, "unknown_exercise", "That exercise is not in the library.");
-  }
   // The same rule the read runs: a goal that would be held today is not taken.
   const held = goalHeld(body.kind, rulesOf(await getUserPlanAndCutRules(sql, userId, null)));
   if (held !== null) throw new GoalsError(409, "goal_held", HELD_MESSAGE[held.code]);
@@ -150,10 +148,8 @@ export async function putGoal(
   try {
     created = await sql.begin(async (tx) => {
       await repo.lockGoalsOf(tx, userId);
-      const holder = await repo.goalHolder(tx, id);
+      const holder = await repo.ownGoal(tx, userId, id);
       if (holder !== null) {
-        // Somebody else's goal reads as no goal at all.
-        if (holder.userId !== userId) throw new GoalsError(404, "not_found", "Goal not found.");
         if (holder.kind !== body.kind || holder.exerciseId !== body.exerciseId) {
           throw new GoalsError(409, "goal_kind_fixed", "A goal keeps its kind. Remove it and add the one you want.");
         }
@@ -163,6 +159,11 @@ export async function putGoal(
       if ((await repo.countGoals(tx, userId)) >= MAX_GOALS) {
         throw new GoalsError(409, "goal_limit", `You can keep up to ${String(MAX_GOALS)} goals. Remove one to add another.`);
       }
+      // Asked only of a new goal: a kept one is still changeable after its exercise leaves the library.
+      if (body.exerciseId !== null && !(await repo.liveExerciseExists(tx, body.exerciseId))) {
+        throw new GoalsError(400, "unknown_exercise", "That exercise is not in the library.");
+      }
+      // An id somebody else holds fails on the key, and reads as no goal at all.
       await repo.insertGoal(tx, userId, id, body);
       return true;
     });
