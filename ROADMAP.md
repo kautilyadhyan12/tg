@@ -290,7 +290,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 20c-vii. [x] **Delete many leads at once** — merged 2026-10-02 (PR #151).
    - 20d. **At risk, and the owner's weekly summary** (it takes the place of item 2's "slipping away"; spec §16.4), split 2026-10-12 in two (too big for one terminal; RULINGS that day):
      - 20d-i. [x] **The At risk list** — merged 2026-10-12 (PR #226).
-     - 20d-ii. [ ] **The weekly summary, as a box on Overview** (Kd, RULINGS 2026-10-12: a notice in the console, not an email): Last 7 days — new, left, at risk, visits against the 7 days before, payments due, each with a button to its page.
+     - 20d-ii. [x] **The weekly summary, as a box on Overview** — merged 2026-10-12 (PR #229).
      - 20d-iii. [ ] **The weekly summary by email** (kept from 20d-ii, RULINGS 2026-10-12; later, once the gyms are enough to pay for the email service): the same figures to the owner each Monday, a switch, an unsubscribe link. Risky. Not on a folder's list until Kd places it.
    - 20e. [ ] **Review and referral messages** (Kd, RULINGS 2026-10-08): two more automatic messages, each a switch. **Review**: once, after a number of visits the gym picks, with the gym's own review link. **Refer a friend**: each member has an invite link to the gym's enquiry form (20c-iv); the lead arrives marked with who sent them, and when they join the gym gives the reward it set (a promo code of 18b, never money from us). Its plan reads Mindbody's and PushPress's referral tools first. After 20b and 18b.
    - 20f. **Messages to a chosen group** (Kd, RULINGS 2026-10-08; spec §16.8), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
