@@ -1,0 +1,244 @@
+// THE SELL PAGE'S WORDS AND SUMS (ROADMAP 18b-i; spec Part 3 §14.3).
+import { describe, expect, it } from 'vitest';
+import { ROLE_PRIVILEGES } from '@app/shared';
+import {
+  HIDDEN_TEXT,
+  canManageProducts,
+  canOpenSell,
+  canSell,
+  canSellMemberships,
+  draftFromProduct,
+  emptyProductDraft,
+  membershipSoldWords,
+  personOption,
+  productBody,
+  productOption,
+  productProblems,
+  productRow,
+  purchaseLine,
+  quantityMax,
+  saleProblem,
+  saleSummary,
+  soldWords,
+  takingsNotes,
+  takingsRows,
+  takingsWords,
+  taxBody,
+  taxDraft,
+  taxLine,
+  taxModes,
+  undoSaleQuestion,
+} from './sellView';
+
+const water = (over = {}) => ({ id: 'p1', name: 'Water', priceMinor: 199, currency: 'USD', taxed: true, stock: null, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
+const NO_TAX = { bp: 0, included: false };
+const TEXAS = { bp: 825, included: false };
+const UK = { bp: 2000, included: true };
+const sale = (over = {}) => ({
+  id: 's1',
+  itemName: 'Water',
+  quantity: 2,
+  unitPriceMinor: 199,
+  netMinor: 398,
+  taxMinor: 33,
+  totalMinor: 431,
+  taxBp: 825,
+  taxIncluded: false,
+  currency: 'USD',
+  method: 'cash',
+  soldOn: '2026-10-12',
+  soldAt: '2026-10-12T14:05:00.000Z',
+  by: 'Sam Desk',
+  person: { entryId: 'e1', name: 'Maya Patel' },
+  undone: false,
+  canUndo: true,
+  ...over,
+});
+const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, other: 0, refundedMinor: 0, ...over });
+const page = (over = {}) => ({ currency: 'USD', sales: [], payments: [], salesNotShown: 0, paymentsNotShown: 0, totals: totals(), ...over });
+
+describe('who may', () => {
+  it('each tick opens its own half, and either opens the page', () => {
+    expect(canSell(['billing.members'])).toBe(true);
+    expect(canSell(['memberships.manage'])).toBe(false);
+    expect(canManageProducts(['memberships.manage'])).toBe(true);
+    expect(canManageProducts(['billing.members'])).toBe(false);
+    expect(canOpenSell(['billing.members'])).toBe(true);
+    expect(canOpenSell(['memberships.manage'])).toBe(true);
+    expect(canOpenSell(['members.read', 'members.confirm'])).toBe(false);
+    expect(canOpenSell(null)).toBe(false);
+    expect(canOpenSell(undefined)).toBe(false);
+  });
+  it('a membership is sold here only by somebody who may also open the person’s page', () => {
+    expect(canSellMemberships(['billing.members'])).toBe(false);
+    expect(canSellMemberships(['billing.members', 'members.confirm'])).toBe(true);
+    expect(canSellMemberships(['members.confirm'])).toBe(false);
+  });
+  it('an owner and a manager have the page, a trainer does not', () => {
+    expect(canOpenSell(ROLE_PRIVILEGES.owner)).toBe(true);
+    expect(canOpenSell(ROLE_PRIVILEGES.manager)).toBe(true);
+    expect(canOpenSell(ROLE_PRIVILEGES.trainer)).toBe(false);
+  });
+});
+
+describe('the sale as it is shown', () => {
+  it('a product in the picker says its price and what is left', () => {
+    expect(productOption(water())).toBe('Water · $1.99');
+    expect(productOption(water({ stock: 8 }))).toBe('Water · $1.99 · 8 left');
+    expect(productOption(water({ stock: 0 }))).toBe('Water · $1.99 · out of stock');
+    expect(productOption(water({ currency: 'GBP' }))).toBe('Water · £1.99');
+  });
+  it('how many one sale can hold', () => {
+    expect(quantityMax(null)).toBe(99);
+    expect(quantityMax(water())).toBe(99);
+    expect(quantityMax(water({ stock: 4 }))).toBe(4);
+    expect(quantityMax(water({ stock: 500 }))).toBe(99);
+  });
+  it('no tax: one line, the total', () => {
+    expect(saleSummary(water(), 2, NO_TAX)).toEqual({ totalMinor: 398, total: '$3.98', lines: [{ label: 'Total', value: '$3.98', strong: true }] });
+  });
+  it('tax on top: the price, the tax on a line of its own, then the total', () => {
+    expect(saleSummary(water(), 2, TEXAS)).toEqual({
+      totalMinor: 431,
+      total: '$4.31',
+      lines: [
+        { label: 'Price', value: '$3.98' },
+        { label: 'Tax (8.25%)', value: '$0.33' },
+        { label: 'Total', value: '$4.31', strong: true },
+      ],
+    });
+  });
+  it('tax inside the price: the total is the price, and the tax is said under it', () => {
+    expect(saleSummary(water({ currency: 'GBP' }), 1, UK)).toEqual({
+      totalMinor: 199,
+      total: '£1.99',
+      lines: [
+        { label: 'Total', value: '£1.99', strong: true },
+        { label: 'Includes tax (20%)', value: '£0.33' },
+      ],
+    });
+  });
+  it('a product the gym does not tax shows no tax line, whatever the rate', () => {
+    expect(saleSummary(water({ taxed: false }), 1, TEXAS).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
+    expect(saleSummary(water({ taxed: false }), 1, UK).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
+  });
+  it('nothing to add up with no product, or a number that is not one', () => {
+    expect(saleSummary(null, 1, NO_TAX)).toBeNull();
+    expect(saleSummary(water(), 0, NO_TAX)).toBeNull();
+    expect(saleSummary(water(), 100, NO_TAX)).toBeNull();
+  });
+  it('why the button is off', () => {
+    const ok = { product: water({ stock: 3 }), quantity: 2, who: 'walkin', person: null };
+    expect(saleProblem(ok)).toBeNull();
+    expect(saleProblem({ ...ok, product: null })).toBe('Pick a product.');
+    expect(saleProblem({ ...ok, product: water({ stock: 0 }) })).toBe('Water is out of stock. Change its stock count under Products if you have more.');
+    expect(saleProblem({ ...ok, quantity: Number.NaN })).toBe('Enter how many, 1 or more.');
+    expect(saleProblem({ ...ok, quantity: 0 })).toBe('Enter how many, 1 or more.');
+    expect(saleProblem({ ...ok, quantity: 4 })).toBe('Only 3 left in stock.');
+    expect(saleProblem({ ...ok, product: water(), quantity: 100 })).toBe('One sale can hold up to 99.');
+    expect(saleProblem({ ...ok, who: 'member' })).toBe('Find and pick the member, or choose Walk-in.');
+    expect(saleProblem({ ...ok, who: 'member', person: { entryId: 'e1', name: 'Maya' } })).toBeNull();
+  });
+  it('what is said once it is sold', () => {
+    expect(soldWords(sale())).toBe('Sold: 2 × Water to Maya Patel. $4.31, cash.');
+    expect(soldWords(sale({ person: null, method: 'card_at_desk', quantity: 1, totalMinor: 215 }))).toBe('Sold: 1 × Water to a walk-in. $2.15, card at the desk.');
+    const month = { name: '1 Month', priceMinor: 4999, currency: 'USD' };
+    expect(membershipSoldWords(month, 'Maya Patel', 'bank_transfer')).toBe('1 Month given to Maya Patel and recorded as paid. $49.99, bank transfer.');
+    expect(membershipSoldWords({ ...month, name: 'Free trial', priceMinor: 0 }, 'Maya Patel', 'cash')).toBe('Free trial given to Maya Patel. Nothing to pay.');
+  });
+  it('a person the search found', () => {
+    expect(personOption({ name: 'Maya Patel', email: null, memberNumber: null, past: false })).toBe('Maya Patel');
+    expect(personOption({ name: 'Maya Patel', email: 'maya@example.com', memberNumber: '1042', past: true })).toBe('Maya Patel · No. 1042 · maya@example.com · Past member');
+  });
+});
+
+describe('today', () => {
+  it('says nothing was taken, or how much and how', () => {
+    expect(takingsWords(page())).toBe('Nothing taken yet today.');
+    expect(takingsWords(page({ totals: totals({ count: 1, totalMinor: 199, cash: 199 }) }))).toBe('Taken today: $1.99 from 1 sale. Cash $1.99.');
+    expect(takingsWords(page({ totals: totals({ count: 3, payments: 1, totalMinor: 5596, cash: 398, card_at_desk: 4999, bank_transfer: 199 }) }))).toBe(
+      'Taken today: $55.96 from 3 sales and 1 membership payment. Cash $3.98 · Card at the desk $49.99 · Bank transfer $1.99.',
+    );
+    expect(takingsWords(page({ currency: 'GBP', totals: totals({ payments: 2, totalMinor: 9000, other: 9000 }) }))).toBe('Taken today: £90.00 from 2 membership payments. Paid online £90.00.');
+  });
+  it('the smaller lines are each said only where they are true', () => {
+    expect(takingsNotes(page())).toEqual([]);
+    expect(takingsNotes(page({ salesNotShown: 2, paymentsNotShown: 1, totals: totals({ taxMinor: 33, refundedMinor: 1000 }) }))).toEqual([
+      '$0.33 of the product sales is tax.',
+      'Refunds noted today: $10.00. They are not taken off the total above.',
+      'The list shows the newest. 3 earlier ones are counted in the total and not listed.',
+    ]);
+    expect(takingsNotes(page({ salesNotShown: 1 }))).toEqual(['The list shows the newest. 1 earlier one is counted in the total and not listed.']);
+  });
+  it('product sales and membership payments are one list, newest first, on the gym’s own clock', () => {
+    const payment = { id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'card_at_desk', paidAt: '2026-10-12T15:30:00.000Z', by: null, person: { entryId: 'e2', name: 'Omar Diaz' } };
+    const rows = takingsRows(page({ sales: [sale(), sale({ id: 's0', soldAt: '2026-10-12T09:00:00.000Z', person: null, by: null, undone: true, canUndo: false })], payments: [payment] }), 'America/Chicago', '12h');
+    expect(rows.map((r) => [r.kind, r.title, r.amount, r.facts, r.canUndo, r.undone])).toEqual([
+      ['payment', '1 Month (membership)', '$49.99', 'Omar Diaz · Card at the desk · 10:30 AM', false, false],
+      ['sale', '2 × Water', '$4.31', 'Maya Patel · Cash · 9:05 AM · by Sam Desk', true, false],
+      ['sale', '2 × Water', '$4.31', 'Walk-in · Cash · 4:00 AM', false, true],
+    ]);
+    expect(takingsRows(page({ sales: [sale()], payments: null }), 'Europe/London', '24h').map((r) => r.facts)).toEqual(['Maya Patel · Cash · 15:05 · by Sam Desk']);
+  });
+  it('the Undo box says what goes and who gives the money back', () => {
+    expect(undoSaleQuestion(sale())).toBe("Undo this sale? 2 × Water, $4.31. It will no longer count in today's total. If you took the money, give it back yourself.");
+  });
+  it('a purchase on a person’s page', () => {
+    expect(purchaseLine(sale())).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Cash · $0.33 tax', undone: false });
+    expect(purchaseLine(sale({ taxMinor: 0, method: 'bank_transfer', undone: true }))).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Bank transfer', undone: true });
+  });
+});
+
+describe('products and tax', () => {
+  it('a form is checked box by box', () => {
+    const good = { ...emptyProductDraft(), name: 'Water', price: '1.99' };
+    expect(productProblems(good, 'USD')).toEqual({});
+    expect(productProblems({ ...good, name: '  ' }, 'USD')).toEqual({ name: 'Give the product a name.' });
+    expect(productProblems({ ...good, name: 'x'.repeat(81) }, 'USD')).toEqual({ name: 'Keep the name to 80 characters.' });
+    expect(productProblems({ ...good, name: `Water${String.fromCharCode(0x200b)}` }, 'USD')).toEqual({ name: HIDDEN_TEXT });
+    expect(productProblems({ ...good, name: `Wa${String.fromCharCode(10)}ter` }, 'USD')).toEqual({ name: HIDDEN_TEXT });
+    for (const price of ['', '0', '0.00', '1,99', '1.999', '-1', 'free']) {
+      expect(productProblems({ ...good, price }, 'USD')).toEqual({ price: 'Enter the price as a number above 0, like 9.99.' });
+    }
+    expect(productProblems({ ...good, counts: true, stock: '' }, 'USD')).toEqual({ stock: 'Enter how many you have, from 0 to 100,000.' });
+    expect(productProblems({ ...good, counts: true, stock: '2.5' }, 'USD')).toEqual({ stock: 'Enter how many you have, from 0 to 100,000.' });
+    expect(productProblems({ ...good, counts: true, stock: '100001' }, 'USD')).toEqual({ stock: 'Enter how many you have, from 0 to 100,000.' });
+    expect(productProblems({ ...good, counts: true, stock: '0' }, 'USD')).toEqual({});
+  });
+  it('the form as the server takes it, new and changed', () => {
+    expect(productBody({ ...emptyProductDraft(), name: ' Water ', price: '1.99' }, 'USD')).toEqual({ name: 'Water', priceMinor: 199, taxed: true, stock: null });
+    const draft = draftFromProduct(water({ stock: 8, taxed: false }));
+    expect(draft).toEqual({ id: 'p1', name: 'Water', price: '1.99', taxed: false, counts: true, stock: '8', updatedAt: '2026-10-12T10:00:00.000Z' });
+    expect(productBody({ ...draft, stock: '12' }, 'USD')).toEqual({ name: 'Water', priceMinor: 199, taxed: false, stock: 12, updatedAt: '2026-10-12T10:00:00.000Z' });
+  });
+  it('a product in the list says its price, its tax only where the gym charges one, and its stock', () => {
+    expect(productRow(water(), NO_TAX)).toBe('$1.99 · stock not counted');
+    expect(productRow(water({ stock: 8 }), TEXAS)).toBe('$1.99 · plus tax · 8 in stock');
+    expect(productRow(water({ stock: 0, currency: 'GBP' }), UK)).toBe('£1.99 · tax included · out of stock');
+    expect(productRow(water({ taxed: false }), TEXAS)).toBe('$1.99 · no tax · stock not counted');
+  });
+  it('the tax form', () => {
+    expect(taxDraft(TEXAS)).toEqual({ rate: '8.25', mode: 'added' });
+    expect(taxDraft(UK)).toEqual({ rate: '20', mode: 'included' });
+    expect(taxBody({ rate: '8.25', mode: 'added' })).toEqual({ ok: true, body: { bp: 825, included: false } });
+    expect(taxBody({ rate: ' 20 ', mode: 'included' })).toEqual({ ok: true, body: { bp: 2000, included: true } });
+    expect(taxBody({ rate: '', mode: 'added' })).toEqual({ ok: true, body: { bp: 0, included: false } });
+    for (const rate of ['8,25', '31', '8.255', '-1', 'ten']) {
+      expect(taxBody({ rate, mode: 'added' })).toEqual({ ok: false, problem: 'Enter the tax rate as a number from 0 to 30, like 8.25. Use 0 for no tax.' });
+    }
+  });
+  it('what the gym’s tax is, in one sentence', () => {
+    expect(taxLine(NO_TAX)).toBe('No tax is charged on what you sell here.');
+    expect(taxLine(TEXAS)).toBe('8.25% tax is added on top of the price of each taxed product.');
+    expect(taxLine(UK)).toBe('Your prices include 20% tax. Each sale shows how much of it is tax.');
+  });
+  it('the two ways are explained in the gym’s own money, with sums that are true', () => {
+    expect(taxModes('GBP').map((m) => [m.value, m.label, m.hint])).toEqual([
+      ['added', 'Added on top of the price', 'At 10% tax, a product priced £10.00 costs the customer £11.00. Usual in the United States and Canada.'],
+      ['included', 'Already included in the price', 'At 10% tax, a product priced £10.00 costs the customer £10.00, and £0.91 of it is tax. Usual where VAT or GST is charged.'],
+    ]);
+    // The example's own numbers, by the rule the server uses.
+    expect(saleSummary(water({ priceMinor: 1000 }), 1, { bp: 1000, included: false }).totalMinor).toBe(1100);
+    expect(saleSummary(water({ priceMinor: 1000 }), 1, { bp: 1000, included: true }).lines[1]).toEqual({ label: 'Includes tax (10%)', value: '$0.91' });
+  });
+});

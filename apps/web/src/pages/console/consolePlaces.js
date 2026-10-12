@@ -5,6 +5,7 @@ import { canManageSchedule } from './classesView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManageBilling } from './billingView';
 import { canReadAttendance } from './attendanceView';
+import { canOpenSell } from './sellView';
 
 // WHERE EACH PLACE IN THE CONSOLE IS, AND WHO MAY OPEN IT (ROADMAP 23d). A sentence that
 // sends somebody to another page carries a button that opens that exact place, with its
@@ -47,6 +48,7 @@ const PLACES = {
   frontDesk: { path: `/settings#${SETTINGS_SECTION.frontDesk}`, may: canManageOrg },
   leadEmails: { path: `/settings#${SETTINGS_SECTION.leadEmails}`, may: canManageOrg },
   memberships: { path: '/memberships', may: canManageMemberships },
+  sell: { path: '/sell', may: canOpenSell },
   members: { path: '/members', may: onStaff },
   importMembers: { path: '/members?open=import', may: onStaff },
   addMember: { path: '/members?open=add', may: onStaff },

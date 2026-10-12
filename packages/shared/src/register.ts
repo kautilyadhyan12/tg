@@ -10,6 +10,7 @@
 import { z } from "zod";
 import { memberPaymentByHandSchema, memberPaymentMethodSchema } from "./memberBills.js";
 import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
+import { VISIBLE_TEXT } from "./visibleText.js";
 
 export const PRODUCT_NAME_MAX = 80;
 /** How many products a gym can have on sale at once. */
@@ -101,13 +102,8 @@ const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(MEMBERSHIP_PRICE_MINOR_MAX);
 const currencySchema = z.string().regex(/^[A-Z]{3}$/);
 const taxBpSchema = z.number().int().min(0).max(SALES_TAX_BP_MAX);
-/** Trimmed, one line: a product's name is printed on a receipt (18g). */
-const productNameSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(PRODUCT_NAME_MAX)
-  .regex(/^[^\r\n\t]*$/);
+/** Trimmed, one line, nothing hidden: a product's name is printed on a receipt (18g). */
+const productNameSchema = z.string().trim().min(1).max(PRODUCT_NAME_MAX).regex(VISIBLE_TEXT);
 const stockSchema = z.number().int().min(0).max(PRODUCT_STOCK_MAX);
 
 export const gymProductSchema = z
