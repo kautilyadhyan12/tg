@@ -3437,6 +3437,10 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
   in the United States and Canada, included elsewhere) and can change it. The tax is a
   line of its own on the sale and is kept on its row with the rate. It is charged on
   products; a membership's bill carries no tax yet (ROADMAP 18b-iii).
+- **Once a sale is recorded** the box shows "Sale recorded", what was sold and one button,
+  New sale; the form is gone until it is pressed, so a second press cannot sell again, and
+  the new form has no product picked (Kd's click-through, RULINGS 2026-10-12). Today's list
+  draws its newest 10 rows, with Show all.
 - **Undo sale**: the same day only, by whoever may sell. The row is kept, marked, counted
   in nothing, and what it took from the stock count goes back.
 - **A membership** is sold from the same box by giving it as paid (§14.2): the notebook's

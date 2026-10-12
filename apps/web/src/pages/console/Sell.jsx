@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { Loader2, Search } from 'lucide-react';
+import { CheckCircle2, Loader2, Search } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -40,6 +40,8 @@ import {
 
 const LINE = { borderTop: '1px solid var(--line)' };
 const newKey = () => globalThis.crypto.randomUUID();
+/** How many of today's rows are drawn before "Show all". The total above counts every one. */
+const TAKINGS_FOLDED = 10;
 
 /** Who is buying: a walk-in, or a member found by name. `mustPick`: a membership has to be
  *  somebody's. */
@@ -141,6 +143,28 @@ function WhoPicker({ gymId, who, setWho, person, setPerson, mustPick, disabled, 
   );
 }
 
+/** WHAT THE BOX SHOWS ONCE A SALE IS RECORDED (Kd's click-through, RULINGS 2026-10-12): the
+ *  form is gone, so a second press cannot sell again, and the next sale starts with its
+ *  own button. */
+function SaleRecorded({ words, note, onNew, children }) {
+  return (
+    <div className="flex flex-col gap-3" role="status" data-testid="sale-done">
+      <p className="c-s16 c-w7 c-t1 m-0 flex items-center gap-2">
+        <CheckCircle2 aria-hidden="true" className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--good)' }} />
+        Sale recorded
+      </p>
+      <p className="c-s15 c-t1 m-0">{words}</p>
+      <p className="c-s14 c-t2 m-0">{note}</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="c-btn c-btn-p c-btn-lg" onClick={onNew}>
+          New sale
+        </button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function PayPicker({ method, setMethod, disabled }) {
   const id = useId();
   return (
@@ -192,6 +216,7 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
       const sold = answer.register.sales.find((s) => s.id === answer.saleId);
       setState({ busy: false, error: null, done: sold === undefined ? 'Sold.' : soldWords(sold) });
       setKey(newKey());
+      setProductId('');
       setQuantityText('1');
       setWho('walkin');
       setPerson(null);
@@ -205,6 +230,10 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
       }
     }
   };
+
+  if (state.done !== null) {
+    return <SaleRecorded words={state.done} note="It is in today's list below. To take it back, press Undo sale on its row." onNew={() => setState({ busy: false, error: null, done: null })} />;
+  }
 
   if (page.products.length === 0) {
     return (
@@ -302,11 +331,6 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
         {problem !== null && productId !== '' ? <p className="c-s14 c-t2 m-0">{problem}</p> : null}
         <p className="c-s13 c-t3 m-0">{SALE_HINT}</p>
       </div>
-      {state.done !== null ? (
-        <p className="c-s15 c-t1 c-w6 m-0" role="status" data-testid="sale-done">
-          {state.done}
-        </p>
-      ) : null}
       {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
     </div>
   );
@@ -341,6 +365,17 @@ function MembershipSale({ gymId, page, locked, firstPerson, addMemberTo, members
         <p className="c-s15 c-t2 m-0">You have no membership types yet. Add what you sell, such as a monthly membership or a day pass, and it appears here.</p>
         {membershipsTo !== null ? <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink> : <p className="c-s14 c-t3 m-0">The owner can add membership types.</p>}
       </div>
+    );
+  }
+
+  if (state.done !== null) {
+    const bought = state.done.person;
+    return (
+      <SaleRecorded words={state.done.words} note="It is in today's list below. To undo or refund it, open the member's page." onNew={() => setState({ busy: false, error: null, done: null })}>
+        <button type="button" className="c-btn c-btn-s c-btn-lg" onClick={() => onOpenPerson(bought.entryId)}>
+          {`Open ${bought.name}'s page`}
+        </button>
+      </SaleRecorded>
     );
   }
 
@@ -403,14 +438,6 @@ function MembershipSale({ gymId, page, locked, firstPerson, addMemberTo, members
         {problem !== null && (typeId !== '' || person !== null) ? <p className="c-s14 c-t2 m-0">{problem}</p> : null}
         {!free ? <p className="c-s13 c-t3 m-0">{SALE_HINT}</p> : null}
       </div>
-      {state.done !== null ? (
-        <div className="flex flex-col gap-2" role="status" data-testid="sale-done">
-          <p className="c-s15 c-t1 c-w6 m-0">{state.done.words}</p>
-          <button type="button" className="c-btn c-btn-s c-btn-sm self-start" onClick={() => onOpenPerson(state.done.person.entryId)}>
-            {`Open ${state.done.person.name}'s page`}
-          </button>
-        </div>
-      ) : null}
       {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
     </div>
   );
@@ -422,6 +449,8 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const [asking, setAsking] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
   const hasPayments = rows.some((r) => r.kind === 'payment');
+  const [all, setAll] = useState(false);
+  const shown = all ? rows : rows.slice(0, TAKINGS_FOLDED);
 
   const undo = async (sale) => {
     setState({ busy: true, error: null, done: null });
@@ -455,7 +484,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
       </div>
       {rows.length > 0 ? (
         <ul className="list-none m-0 p-0">
-          {rows.map((row) => (
+          {shown.map((row) => (
             <li key={row.key} className="flex flex-col gap-2 p-4" style={LINE} data-testid="takings-row">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div className="flex flex-col min-w-0">
@@ -484,6 +513,13 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
             </li>
           ))}
         </ul>
+      ) : null}
+      {rows.length > TAKINGS_FOLDED ? (
+        <div className="p-4" style={LINE}>
+          <button type="button" className="c-btn c-btn-s c-btn-lg w-full md:w-auto" aria-expanded={all} onClick={() => setAll((was) => !was)}>
+            {all ? `Show only the newest ${String(TAKINGS_FOLDED)}` : `Show all ${String(rows.length)}`}
+          </button>
+        </div>
       ) : null}
       {hasPayments ? (
         <p className="px-4 py-3 c-s13 c-t3 m-0" style={LINE}>

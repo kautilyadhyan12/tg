@@ -159,11 +159,23 @@ describe('a product sale', () => {
     expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), productId: 'p-water', quantity: 2, entryId: null, method: 'card_at_desk', totalMinor: 431 });
     finish({ saleId: 's1', register: withSale(sale({ method: 'card_at_desk' })) });
 
-    expect((await within(newSale()).findByTestId('sale-done')).textContent).toBe('Sold: 2 × Water to a walk-in. $4.31, card at the desk.');
+    const done = await within(newSale()).findByTestId('sale-done');
+    expect(done.textContent).toBe("Sale recordedSold: 2 × Water to a walk-in. $4.31, card at the desk.It is in today's list below. To take it back, press Undo sale on its row.New sale");
+    // The form is gone: there is nothing to press a second time by mistake.
+    expect(within(newSale()).queryByRole('button', { name: /^Take payment/ })).toBeNull();
+    expect(screen.queryByLabelText('Product')).toBeNull();
     expect(within(today()).getByTestId('takings-line').textContent).toBe('Taken today: $4.31 from 1 sale. Cash $4.31.');
     expect(within(today()).getAllByTestId('takings-row').map((r) => r.textContent)).toEqual([expect.stringContaining('2 × Water · $4.31')]);
-    // The form is ready for the next sale, with a key of its own.
+    // New sale brings back an empty form: no product picked, so nothing can be sold yet.
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'New sale' }));
+    expect(within(newSale()).queryByTestId('sale-done')).toBeNull();
+    expect(screen.getByLabelText('Product').value).toBe('');
     expect(screen.getByLabelText('How many').value).toBe('1');
+    expect(takeButton().disabled).toBe(true);
+    fireEvent.click(takeButton());
+    expect(svc.sell).toHaveBeenCalledTimes(1);
+    // The next sale has a key of its own.
+    pick('Product', 'p-water');
     fireEvent.click(takeButton());
     await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(2));
     expect(svc.sell.mock.calls[1][1].requestKey).not.toBe(body.requestKey);
@@ -257,6 +269,19 @@ describe('today', () => {
     expect(within(after).queryByRole('button', { name: /Undo sale/ })).toBeNull();
   });
 
+  it('a long day shows its newest ten rows, with one button for the rest; the total counts every one', async () => {
+    const many = Array.from({ length: 23 }, (_, n) => sale({ id: `s${String(n)}`, quantity: 1, totalMinor: 215, taxMinor: 16, soldAt: `2026-10-12T14:${String(59 - n).padStart(2, '0')}:00.000Z` }));
+    svc.get.mockResolvedValue(page({ sales: many, totals: totals({ count: 23, totalMinor: 23 * 215, taxMinor: 23 * 16, cash: 23 * 215 }) }));
+    open();
+    await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row');
+    expect(within(today()).getAllByTestId('takings-row')).toHaveLength(10);
+    expect(within(today()).getByTestId('takings-line').textContent).toBe('Taken today: $49.45 from 23 sales. Cash $49.45.');
+    fireEvent.click(within(today()).getByRole('button', { name: 'Show all 23' }));
+    expect(within(today()).getAllByTestId('takings-row')).toHaveLength(23);
+    fireEvent.click(within(today()).getByRole('button', { name: 'Show only the newest 10' }));
+    expect(within(today()).getAllByTestId('takings-row')).toHaveLength(10);
+  });
+
   it('a membership payment is in the list with no Undo, and says where it is undone; a name opens their page', async () => {
     const payment = { id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'card_at_desk', paidAt: '2026-10-12T15:30:00.000Z', by: 'Sam Desk', person: { entryId: 'e-maya', name: 'Maya Patel' } };
     svc.get.mockResolvedValue(page({ payments: [payment], totals: totals({ payments: 1, totalMinor: 4999, card_at_desk: 4999 }) }));
@@ -290,7 +315,10 @@ describe('a membership', () => {
     await waitFor(() => expect(orgApi.giveHeldMembership).toHaveBeenCalledTimes(1));
     expect(orgApi.giveHeldMembership).toHaveBeenCalledWith('g1', 'e-maya', { requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: 't-month', startsOn: '2026-10-12', paid: true, method: 'bank_transfer' });
     const done = await within(newSale()).findByTestId('sale-done');
+    expect(done.textContent).toContain('Sale recorded');
     expect(done.textContent).toContain('1 Month given to Maya Patel and recorded as paid. $49.99, bank transfer.');
+    expect(done.textContent).toContain("To undo or refund it, open the member's page.");
+    expect(within(newSale()).queryByRole('button', { name: /^Take payment/ })).toBeNull();
     // The takings are read again, so the payment is in today's list.
     expect(svc.get).toHaveBeenCalledTimes(2);
     fireEvent.click(within(done).getByRole('button', { name: "Open Maya Patel's page" }));
