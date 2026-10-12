@@ -245,7 +245,7 @@ d("Overview's Last 7 days box: whose figures, to whom, and that each is its own 
     members: { joined: 2, left: 2 },
     atRisk: { count: 1 },
     visits: { thisWeek: 9, weekBefore: 8 },
-    paymentDue: { count: 2 },
+    paymentDue: { count: 2, past: 0 },
   };
 
   beforeAll(async () => {
@@ -282,14 +282,40 @@ d("Overview's Last 7 days box: whose figures, to whom, and that each is its own 
       // Each figure is its own page's.
       expect(mine.atRisk?.count).toBe(await atRiskTotal(gym));
       expect(mine.paymentDue?.count).toBe(await paymentDueChip(gym));
-      const counted = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_attendance WHERE gym_id = ${gym.id} AND day >= ${day(-7)}::date AND day <= ${day(-1)}::date`;
-      expect(mine.visits?.thisWeek).toBe(counted[0]?.n);
+      const attendance = await inject("GET", `/v1/orgs/${gym.id}/reports/attendance`, gym.owner.cookies);
+      expect(attendance.statusCode, attendance.body).toBe(200);
+      const days = (JSON.parse(attendance.body) as { report: { days: { day: string; visits: number }[] } }).report.days;
+      const visitsIn = (from: string, to: string): number => days.filter((x) => x.day >= from && x.day <= to).reduce((sum, x) => sum + x.visits, 0);
+      expect(mine.visits).toEqual({ thisWeek: visitsIn(day(-7), day(-1)), weekBefore: visitsIn(day(-14), day(-8)) });
+      // Reports counts by the month: with Tia and Tod taken away again, everything that
+      // happened in the months these days touch happened in these days.
+      await sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${gym.id} AND full_name IN ('Tia Today', 'Tod Today', 'Eli Eight', 'Olga Older')`;
+      const reports = await inject("GET", `/v1/orgs/${gym.id}/reports/members`, gym.owner.cookies);
+      expect(reports.statusCode, reports.body).toBe(200);
+      const months = (JSON.parse(reports.body) as { report: { months: { month: string; joined: number | null; left: number }[] } }).report.months.filter((m) => m.month >= day(-7).slice(0, 7));
+      expect(months.length).toBeGreaterThan(0);
+      expect((await read(gym)).members).toEqual({ joined: months.reduce((sum, m) => sum + (m.joined ?? 0), 0), left: months.reduce((sum, m) => sum + m.left, 0) });
+      expect(mine.members).toEqual((await read(gym)).members);
 
       // A manager reads all of it. A trainer may open At risk and Attendance, and neither
       // Reports nor the Members list's payments.
       expect(await read(gym, await onStaff(gym, "Week Manager", "manager"))).toEqual(mine);
       const trainer = await read(gym, await onStaff(gym, "Week Trainer", "trainer"));
       expect(trainer).toEqual({ from: day(-7), to: day(-1), members: null, atRisk: BUSY.atRisk, visits: BUSY.visits, paymentDue: null });
+
+      // One tick, one part: each figure is behind its own page's tick and no other.
+      const NONE = { from: day(-7), to: day(-1), members: null, atRisk: null, visits: null, paymentDue: null };
+      const oneTick: [string, Partial<GymWeek>][] = [
+        ["reports.read", { members: BUSY.members }],
+        ["members.read", { atRisk: BUSY.atRisk }],
+        ["attendance.read", { visits: BUSY.visits }],
+        ["members.confirm", { paymentDue: BUSY.paymentDue }],
+      ];
+      for (const [tick, part] of oneTick) {
+        const one = await signedIn(`Week ${tick}`);
+        await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${one.userId}, 'manager', ${sql.array([tick])})`;
+        expect(await read(gym, one), tick).toEqual({ ...NONE, ...part });
+      }
 
       // Staff whose ticks were all taken away read no figure at all.
       const bare = await signedIn("Week Bare");
@@ -343,7 +369,7 @@ d("Overview's Last 7 days box: whose figures, to whom, and that each is its own 
       // A gym that has billed somebody and is owed nothing reads a true nought.
       const settled = await makeGym("Week Settled");
       await give(settled, await record(settled, "Pat Paid", 200), await thirtyDays(settled), -5, true);
-      expect((await read(settled)).paymentDue).toEqual({ count: 0 });
+      expect((await read(settled)).paymentDue).toEqual({ count: 0, past: 0 });
       expect(await paymentDueChip(settled)).toBe(0);
     },
     T,
@@ -365,6 +391,68 @@ d("Overview's Last 7 days box: whose figures, to whom, and that each is its own 
       for (let i = 0; i < 2400; i += 1) await redis.incrWithTtl(ipKey(gym), 3600);
       expect((await inject("GET", weekUrl(gym), gym.owner.cookies, undefined, desk)).statusCode).toBe(429);
       expect((await inject("GET", weekUrl(next), next.owner.cookies, undefined, desk)).statusCode).toBe(200);
+    },
+    T,
+  );
+
+  it(
+    "the payment row never says nobody while somebody may owe: the gym's own payment words, and a past member with an open bill",
+    async () => {
+      // The gym's file says three people owe, in its own words; the app bills one person,
+      // who paid. The app cannot say nobody owes.
+      const words = await makeGym("Week Own Words");
+      const typeId = await thirtyDays(words);
+      await record(words, "Ona Overdue", 200, "Overdue");
+      await record(words, "Otto Overdue", 200, "Overdue");
+      await record(words, "Uma Unpaid", 200, "Unpaid");
+      await give(words, await record(words, "Pat Paid", 200), typeId, -5, true);
+      expect((await read(words)).paymentDue).toBeNull();
+
+      // Somebody given an unpaid membership, then moved to past members, still owes.
+      const past = await makeGym("Week Past Owing");
+      const pastType = await thirtyDays(past);
+      const leaver = await record(past, "Lee Left Owing", 200);
+      await give(past, leaver, pastType, -5, false);
+      expect((await read(past)).paymentDue).toEqual({ count: 1, past: 0 });
+      await takeOff(leaver, 1);
+      expect((await read(past)).paymentDue).toEqual({ count: 0, past: 1 });
+      const list = await inject("GET", `/v1/orgs/${past.id}/member-list`, past.owner.cookies);
+      expect((JSON.parse(list.body) as { list: { counts: { formerOwing: number } } }).list.counts.formerOwing).toBe(1);
+      // With somebody current owing too, the row carries both.
+      await give(past, await record(past, "Cy Current Owing", 200), pastType, -5, false);
+      expect((await read(past)).paymentDue).toEqual({ count: 1, past: 1 });
+    },
+    T,
+  );
+
+  it(
+    "a gym that stopped checking people in is told nothing about who is at risk",
+    async () => {
+      const gym = await makeGym("Week Stopped");
+      await deskOpen(gym, -60, -30);
+      const stan = await record(gym, "Stan Stopped", 200);
+      for (const n of [-35, -42, -49]) await visit(gym, stan, n);
+      const week = await read(gym);
+      expect(week.atRisk).toBeNull();
+      expect(week.visits).toEqual({ thisWeek: 0, weekBefore: 0 });
+    },
+    T,
+  );
+
+  it(
+    "one person's own allowance, and anybody's asks, are counted against that person alone",
+    async () => {
+      const gym = await makeGym("Week Person Limit");
+      const manager = await onStaff(gym, "Week Limit Manager", "manager");
+      for (let i = 0; i < 240; i += 1) await redis.incrWithTtl(`rl:orgs_week:id:${gym.owner.userId}`, 3600);
+      expect((await inject("GET", weekUrl(gym), gym.owner.cookies)).statusCode).toBe(429);
+      expect((await inject("GET", weekUrl(gym), manager.cookies)).statusCode).toBe(200);
+      // Somebody who is nobody here is answered 404 until their own asks run out.
+      const stranger = await signedIn("Week Asks Stranger");
+      expect((await inject("GET", weekUrl(gym), stranger.cookies)).statusCode).toBe(404);
+      for (let i = 0; i < 600; i += 1) await redis.incrWithTtl(`rl:orgs_week_asks:id:${stranger.userId}`, 3600);
+      expect((await inject("GET", weekUrl(gym), stranger.cookies)).statusCode).toBe(429);
+      expect((await inject("GET", weekUrl(gym), manager.cookies)).statusCode).toBe(200);
     },
     T,
   );

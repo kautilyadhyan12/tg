@@ -17,7 +17,7 @@ const WEEK = {
   members: { joined: 2, left: 1 },
   atRisk: { count: 3 },
   visits: { thisWeek: 212, weekBefore: 187 },
-  paymentDue: { count: 2 },
+  paymentDue: { count: 2, past: 0 },
 };
 const draw = (gymId = GYM) =>
   render(
@@ -72,6 +72,21 @@ describe("Overview's Last 7 days box", () => {
     await Promise.resolve();
     expect(screen.queryByTestId('last-7-days')).toBeNull();
     expect(document.body.textContent).toBe('');
+  });
+
+  it('a past member who still owes has a button of their own, and nobody owing has none', async () => {
+    svc.get.mockResolvedValue({ ...WEEK, paymentDue: { count: 2, past: 1 } });
+    const first = draw();
+    const line = within(await screen.findByTestId('last-7-days-payment-due'));
+    expect(line.getByText('Today. 1 past member has a payment due too.')).toBeTruthy();
+    expect(line.getByRole('link', { name: 'See who' }).getAttribute('href')).toBe('/console/iron-house/members?show=payment-due');
+    expect(line.getByRole('link', { name: 'See past members' }).getAttribute('href')).toBe('/console/iron-house/members?show=past-payment-due');
+    first.unmount();
+    svc.get.mockResolvedValue({ ...WEEK, paymentDue: { count: 0, past: 0 } });
+    draw();
+    const none = within(await screen.findByTestId('last-7-days-payment-due'));
+    expect(none.getByText('Nobody has a payment due')).toBeTruthy();
+    expect(none.queryByRole('link')).toBeNull();
   });
 
   it("never draws one gym's figures under another gym", async () => {

@@ -47,22 +47,29 @@ export async function readWeekVisits(
   return { thisWeek: row.this_week, weekBefore: row.week_before, firstVisitOn: row.first_visit_on };
 }
 
-const paymentRowSchema = z.object({ own_word: count, any_bill: z.boolean() });
+const paymentRowSchema = z.object({ own_word: count, other_words: count, any_bill: z.boolean() });
 
 /** What the Members list's "Payment due" chip adds to the people the app answers for: the
  *  current records whose own word from the gym's file is that one, folded as the chip
- *  folds it. And whether the gym has ever billed anybody here. */
+ *  folds it. With it, how many of those records carry any OTHER payment word of the gym's
+ *  own ("Overdue", "Unpaid", "Paid": the app cannot tell which of them owe), and whether
+ *  the gym has ever billed anybody here. */
 export async function readPaymentDue(
   tx: TransactionSql,
   gymId: string,
   heldIds: readonly string[],
-): Promise<{ ownWord: number; anyBill: boolean }> {
+): Promise<{ ownWord: number; otherWords: number; anyBill: boolean }> {
   const rows = await tx<Record<string, unknown>[]>`
     SELECT (SELECT count(*)::int FROM gym_member_list_entries e
             WHERE e.gym_id = ${gymId} AND e.former_at IS NULL
               AND lower(coalesce(e.payment_status, '')) = ${HELD_PAYMENT_WORDS.due.toLowerCase()}
               AND e.id <> ALL(${[...heldIds]}::uuid[])) AS own_word,
+           (SELECT count(*)::int FROM gym_member_list_entries e
+            WHERE e.gym_id = ${gymId} AND e.former_at IS NULL
+              AND coalesce(e.payment_status, '') <> ''
+              AND lower(e.payment_status) <> ${HELD_PAYMENT_WORDS.due.toLowerCase()}
+              AND e.id <> ALL(${[...heldIds]}::uuid[])) AS other_words,
            EXISTS (SELECT 1 FROM gym_member_bills b WHERE b.gym_id = ${gymId}) AS any_bill`;
   const row = paymentRowSchema.parse(rows[0]);
-  return { ownWord: row.own_word, anyBill: row.any_bill };
+  return { ownWord: row.own_word, otherWords: row.other_words, anyBill: row.any_bill };
 }

@@ -4,8 +4,10 @@ import { shortDay } from './atRiskView';
 // THE WORDS OF OVERVIEW'S "LAST 7 DAYS" BOX (spec Part 3 §16.4; ROADMAP 20d-ii). Every
 // line the box says is made here, from what the server sent; the box only draws them.
 
-/** Members opened already showing the people with a payment due (`Members.jsx` reads it). */
+/** Members opened already showing the people with a payment due, or the past members who
+ *  still owe (`Members.jsx` reads them). */
 export const PAYMENT_DUE_SHOW = 'payment-due';
+export const PAST_PAYMENT_DUE_SHOW = 'past-payment-due';
 
 const n = (count) => count.toLocaleString('en');
 
@@ -28,8 +30,7 @@ export function weekRows(week, orgSlug, orgType) {
       label: words.peopleCap,
       value: `${n(joined)} new · ${n(left)} left`,
       note: null,
-      to: `${base}/reports`,
-      button: 'Open Reports',
+      links: [{ to: `${base}/reports`, button: 'Open Reports' }],
     });
   }
   if (week.atRisk !== null) {
@@ -39,8 +40,7 @@ export function weekRows(week, orgSlug, orgType) {
       label: 'At risk',
       value: count === 0 ? 'Nobody has stopped coming' : `${people(count)} ${count === 1 ? 'has' : 'have'} stopped coming`,
       note: 'Today',
-      to: `${base}/at-risk`,
-      button: count === 0 ? 'Open At risk' : 'See who',
+      links: [{ to: `${base}/at-risk`, button: count === 0 ? 'Open At risk' : 'See who' }],
     });
   }
   if (week.visits !== null) {
@@ -50,20 +50,23 @@ export function weekRows(week, orgSlug, orgType) {
       label: 'Visits',
       value: thisWeek === 1 ? '1 visit' : `${n(thisWeek)} visits`,
       note: weekBefore === null ? null : `${n(weekBefore)} in the 7 days before`,
-      to: `${base}/attendance`,
-      button: 'Open Attendance',
+      links: [{ to: `${base}/attendance`, button: 'Open Attendance' }],
     });
   }
   if (week.paymentDue !== null) {
-    const { count } = week.paymentDue;
+    const { count, past } = week.paymentDue;
+    const owe = (k, who) => `${who} ${k === 1 ? 'has' : 'have'} a payment due`;
+    const pastPeople = past === 1 ? `1 past ${words.person}` : `${n(past)} past ${words.people}`;
+    const current = { to: `${base}/members?show=${PAYMENT_DUE_SHOW}`, button: 'See who' };
+    const former = { to: `${base}/members?show=${PAST_PAYMENT_DUE_SHOW}`, button: `See past ${words.people}` };
     rows.push({
       key: 'payment-due',
       label: 'Payment due',
-      value: count === 0 ? 'Nobody has a payment due' : `${people(count)} ${count === 1 ? 'has' : 'have'} a payment due`,
-      note: 'Today',
+      value: count > 0 ? owe(count, people(count)) : past > 0 ? owe(past, pastPeople) : 'Nobody has a payment due',
+      // Both kinds owing: the second is said under the first.
+      note: count > 0 && past > 0 ? `Today. ${owe(past, pastPeople)} too.` : 'Today',
       // With nobody owing there is nobody to see.
-      to: count === 0 ? null : `${base}/members?show=${PAYMENT_DUE_SHOW}`,
-      button: count === 0 ? null : 'See who',
+      links: [...(count > 0 ? [current] : []), ...(past > 0 ? [count > 0 ? former : { ...former, button: 'See who' }] : [])],
     });
   }
   return rows;

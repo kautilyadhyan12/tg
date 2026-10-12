@@ -53,8 +53,11 @@ export const gymWeekSchema = z
     /** Rows of the Attendance page. `weekBefore` is null where check-in began too lately
      *  for a fair comparison. */
     visits: z.object({ thisWeek: countSchema, weekBefore: countSchema.nullable() }).strict().nullable(),
-    /** The people the Members list reads as "Payment due", today. */
-    paymentDue: z.object({ count: countSchema }).strict().nullable(),
+    /** Today: `count`, the people the Members list reads as "Payment due"; `past`, the past
+     *  members who still owe, as its Past members chip counts them. Null where the app
+     *  cannot say: a gym that bills nobody here, or whose own list names people the app
+     *  does not bill with a payment word of its own. */
+    paymentDue: z.object({ count: countSchema, past: countSchema }).strict().nullable(),
   })
   .strict();
 export type GymWeek = z.infer<typeof gymWeekSchema>;

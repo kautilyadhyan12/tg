@@ -665,11 +665,16 @@ describe('a row says what the person holds in the app (23a-i)', () => {
 describe('opened from Overview on who has a payment due', () => {
   it('asks only for them, says so on the Showing line, and tells the page once', async () => {
     const onStartTaken = vi.fn();
-    draw({ startPaymentDue: true, onStartTaken });
+    draw({ startShow: 'payment-due', onStartTaken });
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'paymentStatus=Payment+due'));
     expect(orgService.getMemberListEntries).not.toHaveBeenCalledWith(GYM, '');
     expect(within(await screen.findByTestId('showing')).getByRole('button', { name: 'Stop showing only Payment due' })).toBeTruthy();
     expect(onStartTaken).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens on the past members who still owe when asked for them', async () => {
+    draw({ startShow: 'past-payment-due' });
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'records=former&paymentStatus=Payment+due'));
   });
 
   it('opens on everybody when not asked', async () => {

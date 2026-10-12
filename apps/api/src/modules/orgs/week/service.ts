@@ -10,6 +10,7 @@ import type { Sql } from "postgres";
 import { HELD_PAYMENT_WORDS, gymWeekCanCompare, gymWeekResponseSchema, gymWeekWindow, heldListWords, type GymWeek, type GymWeekResponse, type OrgPrivilege } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { countAtRisk } from "../atRisk/service.js";
+import { pastOwing } from "../memberships/billsSql.js";
 import { heldAndOverIn } from "../memberships/over.js";
 import { requireStaff } from "../service.js";
 import * as repo from "./repo.js";
@@ -53,8 +54,12 @@ export async function getWeek(deps: WeekDeps, gymId: string, reader: WeekReader)
       if (may("members.confirm")) {
         const answered = [...held.values()].filter(({ shown }) => heldListWords(shown).payment === HELD_PAYMENT_WORDS.due).length;
         const own = await repo.readPaymentDue(tx, gymId, [...held.keys()]);
-        // A gym that takes no payments here and names nobody as owing is told nothing.
-        if (own.anyBill || answered + own.ownWord > 0) week.paymentDue = { count: answered + own.ownWord };
+        // The past members who still owe: the Members list's Past members chip.
+        const past = (await pastOwing(tx, gymId, today)).length;
+        const count = answered + own.ownWord;
+        // Somebody owing is always said. "Nobody" is said only where the app knows: the
+        // gym bills here, and its own list gives nobody it does not bill a payment word.
+        if (count + past > 0 || (own.anyBill && own.otherWords === 0)) week.paymentDue = { count, past };
       }
     });
   }

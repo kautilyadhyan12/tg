@@ -68,10 +68,14 @@ export default function LastSevenDays({ gymId, orgSlug, orgType }) {
                   </p>
                 ) : null}
               </div>
-              {row.to !== null ? (
-                <Link to={row.to} className={BUTTON} style={PLAIN_STYLE}>
-                  {row.button}
-                </Link>
+              {row.links.length > 0 ? (
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-shrink-0">
+                  {row.links.map((link) => (
+                    <Link key={link.to} to={link.to} className={BUTTON} style={PLAIN_STYLE}>
+                      {link.button}
+                    </Link>
+                  ))}
+                </div>
               ) : null}
             </li>
           ))}

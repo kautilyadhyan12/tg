@@ -4723,7 +4723,8 @@ The console lists members whose visits have dropped — came in at least 2 of th
 with their last visit and one tap to send a cheer (RULINGS 2026-09-02, 2026-09-05).
 It reads visits (§12), so a gym with no check-in in use is told the list needs one.
 It takes the place of "slipping away" (ROADMAP Stage 2 item 2). The owner's weekly
-summary email: new, left, at risk, visits against last week, money overdue.
+summary is a box on Overview (20d-ii, below): new, left, at risk, visits against the 7 days
+before, payments due. The same by email is ROADMAP 20d-iii.
 
 **Built in 20d-i (2026-10-12; RULINGS that day): the list.** The weekly summary is 20d-ii, below.
 - **The page**, **At risk**, has its own line in the menu under Attendance, for whoever
@@ -4802,8 +4803,14 @@ later.
   or has stopped · Visits before the first check-in, and the comparison where check-in
   began inside the seven days before · Payment due at a gym that has billed nobody and
   whose list names nobody as owing. With no part there is no box.
+- **Payment due never says "nobody" where the app cannot know** (round one): the row
+  also counts the past members who still owe (`pastOwing`, the Members list's Past members
+  chip) and says them ("1 past member has a payment due"), with its own button; and a gym
+  whose own list gives anybody the app does not bill a payment word of its own ("Overdue",
+  "Unpaid") is told a count when there is one and nothing otherwise.
 - **See who beside Payment due** opens Members already showing them
-  (`/members?show=payment-due`, read once and taken off the address).
+  (`/members?show=payment-due`; for past members `?show=past-payment-due`), read once and
+  taken off the address.
 
 ### 16.5 Reports
 

@@ -1,5 +1,5 @@
-// Overview's "Last 7 days" box (ROADMAP 20d-ii): authenticate, the asker's own ceiling,
-// Zod-parse, who may, the limit, then the read. The service owns the authorisation, and the
+// Overview's "Last 7 days" box (ROADMAP 20d-ii): authenticate, the asker's own ceiling
+// (both before the handler), then Zod-parse, who may, the limit, and the read. The service owns the authorisation, and the
 // limit that counts an address is asked AFTER it: a refused ask leaves the gym's address
 // alone.
 //

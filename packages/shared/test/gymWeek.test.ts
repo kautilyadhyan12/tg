@@ -27,5 +27,7 @@ describe("Overview's Last 7 days box: the days it counts", () => {
     expect(gymWeekResponseSchema.safeParse({ week: { ...week, names: ["Maya"] } }).success).toBe(false);
     expect(gymWeekResponseSchema.safeParse({ week: { ...week, atRisk: { count: -1 } } }).success).toBe(false);
     expect(gymWeekResponseSchema.safeParse({ week: { ...week, atRisk: { count: 2, people: [] } } }).success).toBe(false);
+    expect(gymWeekResponseSchema.safeParse({ week: { ...week, paymentDue: { count: 1, past: 2 } } }).success).toBe(true);
+    expect(gymWeekResponseSchema.safeParse({ week: { ...week, paymentDue: { count: 1 } } }).success).toBe(false);
   });
 });

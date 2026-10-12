@@ -7,7 +7,7 @@ const WEEK = {
   members: { joined: 2, left: 1 },
   atRisk: { count: 3 },
   visits: { thisWeek: 1204, weekBefore: 1187 },
-  paymentDue: { count: 2 },
+  paymentDue: { count: 2, past: 0 },
 };
 const rows = (over = {}, orgType = 'gym') => weekRows({ ...WEEK, ...over }, 'iron-house', orgType);
 const row = (key, over, orgType) => rows(over, orgType).find((r) => r.key === key);
@@ -20,10 +20,10 @@ describe("Overview's Last 7 days box: its words", () => {
 
   it('draws the four rows in order, each with the page that holds the detail', () => {
     expect(rows()).toEqual([
-      { key: 'members', label: 'Members', value: '2 new · 1 left', note: null, to: '/console/iron-house/reports', button: 'Open Reports' },
-      { key: 'at-risk', label: 'At risk', value: '3 members have stopped coming', note: 'Today', to: '/console/iron-house/at-risk', button: 'See who' },
-      { key: 'visits', label: 'Visits', value: '1,204 visits', note: '1,187 in the 7 days before', to: '/console/iron-house/attendance', button: 'Open Attendance' },
-      { key: 'payment-due', label: 'Payment due', value: '2 members have a payment due', note: 'Today', to: '/console/iron-house/members?show=payment-due', button: 'See who' },
+      { key: 'members', label: 'Members', value: '2 new · 1 left', note: null, links: [{ to: '/console/iron-house/reports', button: 'Open Reports' }] },
+      { key: 'at-risk', label: 'At risk', value: '3 members have stopped coming', note: 'Today', links: [{ to: '/console/iron-house/at-risk', button: 'See who' }] },
+      { key: 'visits', label: 'Visits', value: '1,204 visits', note: '1,187 in the 7 days before', links: [{ to: '/console/iron-house/attendance', button: 'Open Attendance' }] },
+      { key: 'payment-due', label: 'Payment due', value: '2 members have a payment due', note: 'Today', links: [{ to: '/console/iron-house/members?show=payment-due', button: 'See who' }] },
     ]);
   });
 
@@ -34,16 +34,31 @@ describe("Overview's Last 7 days box: its words", () => {
 
   it('says one person as one person, and a studio and a trainer have clients', () => {
     expect(row('at-risk', { atRisk: { count: 1 } }).value).toBe('1 member has stopped coming');
-    expect(row('payment-due', { paymentDue: { count: 1 } }).value).toBe('1 member has a payment due');
+    expect(row('payment-due', { paymentDue: { count: 1, past: 0 } }).value).toBe('1 member has a payment due');
     expect(row('visits', { visits: { thisWeek: 1, weekBefore: 0 } })).toMatchObject({ value: '1 visit', note: '0 in the 7 days before' });
     expect(row('members', {}, 'studio').label).toBe('Clients');
     expect(row('at-risk', {}, 'personal_trainer').value).toBe('3 clients have stopped coming');
   });
 
   it('a true nought is said in words, and offers nobody to see', () => {
-    expect(row('at-risk', { atRisk: { count: 0 } })).toMatchObject({ value: 'Nobody has stopped coming', button: 'Open At risk' });
-    expect(row('payment-due', { paymentDue: { count: 0 } })).toMatchObject({ value: 'Nobody has a payment due', to: null, button: null });
+    expect(row('at-risk', { atRisk: { count: 0 } })).toMatchObject({ value: 'Nobody has stopped coming', links: [{ to: '/console/iron-house/at-risk', button: 'Open At risk' }] });
+    expect(row('payment-due', { paymentDue: { count: 0, past: 0 } })).toMatchObject({ value: 'Nobody has a payment due', note: 'Today', links: [] });
     expect(row('members', { members: { joined: 0, left: 0 } }).value).toBe('0 new · 0 left');
+  });
+
+  it('never says nobody while a past member still owes, and says both where both owe', () => {
+    const past = { to: '/console/iron-house/members?show=past-payment-due' };
+    expect(row('payment-due', { paymentDue: { count: 0, past: 1 } })).toMatchObject({ value: '1 past member has a payment due', note: 'Today', links: [{ ...past, button: 'See who' }] });
+    expect(row('payment-due', { paymentDue: { count: 0, past: 3 } }).value).toBe('3 past members have a payment due');
+    expect(row('payment-due', { paymentDue: { count: 2, past: 1 } })).toMatchObject({
+      value: '2 members have a payment due',
+      note: 'Today. 1 past member has a payment due too.',
+      links: [
+        { to: '/console/iron-house/members?show=payment-due', button: 'See who' },
+        { ...past, button: 'See past members' },
+      ],
+    });
+    expect(row('payment-due', { paymentDue: { count: 1, past: 2 } }, 'studio')).toMatchObject({ note: 'Today. 2 past clients have a payment due too.', links: [{ button: 'See who' }, { button: 'See past clients' }] });
   });
 
   it('makes no comparison where there is none', () => {

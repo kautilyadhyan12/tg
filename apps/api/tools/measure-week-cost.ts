@@ -1,5 +1,5 @@
 // What Overview's "Last 7 days" box costs to read (ROADMAP 20d-ii; CLAUDE.md §4 "Cost at
-// full size"). The At risk tool's gyms (`measure-week-cost.ts`): one of 2,000 people
+// full size"). The At risk tool's gyms (`measure-at-risk-cost.ts`): one of 2,000 people
 // on its list (--people= for another size) with three former records for each and a year
 // of check-ins three days a week, beside 19 gyms of 200. Here everybody also holds a
 // monthly membership, one in five of them unpaid, and one that was cancelled.
