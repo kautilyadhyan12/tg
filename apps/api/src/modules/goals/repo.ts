@@ -91,23 +91,30 @@ export async function starterDue(sql: SqlOrTx, userId: string): Promise<boolean>
   return rows.length > 0;
 }
 
-/** Marks the starter goals given. False: they already were, by this person's other request. */
-export async function claimStarter(tx: TransactionSql, userId: string): Promise<boolean> {
+/** The same question with the account row held, as a save of setup's answers holds it:
+ *  the answers cannot change until the set is in. False: this person's other request gave it. */
+export async function lockStarterDue(tx: TransactionSql, userId: string): Promise<boolean> {
   const rows = await tx`
-    UPDATE users SET starter_goals_at = now()
-    WHERE id = ${userId} AND status = 'active' AND starter_goals_at IS NULL
-    RETURNING id`;
+    SELECT 1 FROM users u
+    WHERE u.id = ${userId} AND u.status = 'active' AND u.starter_goals_at IS NULL
+      AND EXISTS (SELECT 1 FROM user_fitness_profiles p WHERE p.user_id = u.id AND p.onboarding_completed)
+    FOR NO KEY UPDATE OF u`;
   return rows.length > 0;
 }
 
-/** One of the app's own goals. A goal of that kind and period the person already keeps
- *  stays theirs, and nothing is added. The clock time keeps the set in its order. */
+export async function markStarterGiven(tx: TransactionSql, userId: string): Promise<void> {
+  await tx`UPDATE users SET starter_goals_at = now() WHERE id = ${userId}`;
+}
+
+/** One of the app's own goals. A goal of that kind, period and exercise the person already
+ *  keeps stays theirs, and nothing is added. The clock time keeps the set in its order. */
 export async function insertStarterGoal(tx: TransactionSql, userId: string, v: GoalWrite): Promise<boolean> {
   const rows = await tx`
     INSERT INTO user_goals (id, user_id, kind, period, target, exercise_id, set_by, created_at, updated_at)
     VALUES (gen_random_uuid(), ${userId}, ${v.kind}, ${v.period}, ${v.target}, ${v.exerciseId}, 'app',
             clock_timestamp(), clock_timestamp())
-    ON CONFLICT DO NOTHING
+    ON CONFLICT ("user_id", "kind", coalesce("period", ''), coalesce("exercise_id", '00000000-0000-0000-0000-000000000000'::uuid))
+    DO NOTHING
     RETURNING id`;
   return rows.length > 0;
 }

@@ -179,6 +179,37 @@ d("starter goals (real Postgres)", () => {
     });
   });
 
+  describe("THE WORST THING, with an answer missing: nothing is given until the plan can be worked out", () => {
+    const markOf = async (userId: string): Promise<Date | null> => {
+      const [row] = await sql<{ starter_goals_at: Date | null }[]>`SELECT starter_goals_at FROM users WHERE id = ${userId}`;
+      return row?.starter_goals_at ?? null;
+    };
+
+    it("a 16-year-old whose age is cleared after Finish: no goals and no mark; age back, the set with no weight goal", { timeout: 60_000 }, async () => {
+      const { cookies, userId } = await finished("teen-blank", { ...LOSING_ANSWERS, age: 16 });
+      await answer(cookies, { age: null });
+      expect(await list(cookies)).toEqual([]);
+      expect(await markOf(userId)).toBeNull();
+
+      await answer(cookies, { age: 16 });
+      const goals = await list(cookies);
+      expect(kinds(goals)).toEqual(["training_days", "active_minutes", "calories_within", "protein"]);
+      expect(await markOf(userId)).not.toBeNull();
+    });
+
+    it("any other missing answer waits the same way, and the whole set comes once it is back", { timeout: 60_000 }, async () => {
+      const { cookies, userId } = await finished("days-blank");
+      await answer(cookies, { trainingDays: null });
+      expect(await list(cookies)).toEqual([]);
+      expect(await markOf(userId)).toBeNull();
+
+      await answer(cookies, { trainingDays: 4 });
+      const goals = await list(cookies);
+      expect(kinds(goals)).toEqual(["training_days", "active_minutes", "calories_within", "protein", "weight"]);
+      expect(of(goals, "active_minutes").target).toBe(180);
+    });
+  });
+
   describe("the set", () => {
     it("an adult losing weight: five goals, set by the app, each with the person's own number", { timeout: 60_000 }, async () => {
       const { cookies } = await finished("adult");
@@ -228,8 +259,20 @@ d("starter goals (real Postgres)", () => {
       const { cookies, userId } = await finished("race");
       const all = await Promise.all([1, 2, 3, 4, 5].map(() => list(cookies)));
       for (const goals of all) expect(goals).toHaveLength(5);
-      const [row] = await sql<{ n: string }[]>`SELECT count(*) AS n FROM user_goals WHERE user_id = ${userId}`;
-      expect(Number(row?.n)).toBe(5);
+      const count = async (): Promise<number> => {
+        const [row] = await sql<{ n: string }[]>`SELECT count(*) AS n FROM user_goals WHERE user_id = ${userId}`;
+        return Number(row?.n);
+      };
+      expect(await count()).toBe(5);
+      const [mark] = await sql<{ at: Date | null }[]>`SELECT starter_goals_at AS at FROM users WHERE id = ${userId}`;
+      expect(mark?.at).not.toBeNull();
+
+      // The mark, not the one-of-each index, is what stops a second set: a removed goal's place is free.
+      const [first] = all[0] ?? [];
+      if (first === undefined) throw new Error("the race gave no goals");
+      expect((await remove(cookies, first.id)).statusCode).toBe(204);
+      for (const goals of await Promise.all([1, 2, 3, 4, 5].map(() => list(cookies)))) expect(goals).toHaveLength(4);
+      expect(await count()).toBe(4);
     });
 
     it("a goal the person removed stays removed, even after setup is done again", { timeout: 60_000 }, async () => {
@@ -290,6 +333,31 @@ d("starter goals (real Postgres)", () => {
       expect(goals).toHaveLength(MAX_GOALS);
       expect(kinds(goals.filter((g) => g.setBy === "app"))).toEqual(["training_days", "active_minutes"]);
       expect(await list(user.cookies)).toHaveLength(MAX_GOALS);
+    });
+  });
+
+  describe("the most goals, with a goal added at the same instant as the first read", () => {
+    it("one short of the most: the add and the read together never pass it", { timeout: 60_000 }, async () => {
+      for (const round of [1, 2, 3]) {
+        const user = await makeUser(`brim-${String(round)}`);
+        await answer(user.cookies, LOSING_ANSWERS);
+        await health(user.cookies, NO_CONDITION);
+        const kept = MAX_GOALS - 1;
+        await sql`
+          INSERT INTO user_goals (id, user_id, kind, period, target, exercise_id)
+          SELECT gen_random_uuid(), ${user.userId}, 'reps_in_set', NULL, 10, id
+          FROM exercises WHERE status = 'live' ORDER BY slug LIMIT ${kept}`;
+        await answer(user.cookies, FINISH);
+
+        const body = { kind: "streak", period: null, target: 7, exerciseId: null };
+        const [added] = await Promise.all([
+          inject({ method: "PUT", url: `/v1/goals/${randomUUID()}`, body, cookies: user.cookies }),
+          inject({ method: "GET", url: "/v1/goals", cookies: user.cookies }),
+        ]);
+        expect([201, 409], `round ${String(round)}`).toContain(added.statusCode);
+        const [row] = await sql<{ n: string }[]>`SELECT count(*) AS n FROM user_goals WHERE user_id = ${user.userId}`;
+        expect(Number(row?.n), `round ${String(round)}`).toBe(MAX_GOALS);
+      }
     });
   });
 

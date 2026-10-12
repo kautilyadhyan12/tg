@@ -14,9 +14,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Left out** (RULINGS 2026-10-13): calories burned (joins at item 36, noted on its line), gym visits, streak, food-logged days.
 - **Verified here** on `aihg_b`: `goals.starter.unit.test.ts` 29 of 29, `goals.starter.routes.test.ts` 19 of 19, 30a's two files 95 of 95; `db.migration`, the two privacy files and `users.onboarding.routes` 134 of 134; api typecheck and lint clean (remembering runs).
 - **Deliberate breaks of the health rule, each red, then put back:** the set ignores "held" (15 failed) · it forgets why the plan may not cut (13 failed) · the service hands it no health answers (5 failed, the route tests alone).
-- **Cost:** one person's own rows; one more single-row read on each read of goals. Nothing reads a list of people.
+- **Cost:** one person's own rows; one more single-row read on each read and each change of a goal, and the plan read once more while the set is still to give (unverified: not timed). Nothing reads a list of people.
 - **For item 31 (Today):** the starter goals arrive in the set's order; a changed one reads `setBy: "user"`.
-- **Open:** round one is written (`reviews/30b-1-review.md`). Not ticked: the tick rides the merge. **Next:** item 31 waits for feature folder 1's items 10 to 12; item 32's server parts and item 36's plan builder (6a) need no phone.
+- **Round one:** one High, four Lows, three test notes, all fixed. The High: with the age blank after Finish, a 16-year-old was given a weight goal (held once the age was back). Now nothing is given or marked until the plan can be worked out; the answers are read inside the lock. Began as two failing tests. **Open:** the re-check is written (`reviews/30b-3-recheck.md`), for the SAME reviewer terminal. Not ticked: the tick rides the merge. **Next:** item 31 waits for feature folder 1's items 10 to 12; item 32's server parts and item 36's plan builder (6a) need no phone.
 
 ## 2026-10-12 · 30a (feature folder 2): goals on the server (branch `goals-server`)
 

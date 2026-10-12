@@ -127,14 +127,18 @@ async function measured(deps: GoalsDeps, userId: string, rows: readonly repo.Goa
 async function giveStarterGoals(deps: GoalsDeps, userId: string): Promise<void> {
   const { sql } = deps;
   if (!(await repo.starterDue(sql, userId))) return;
-  const read = await getUserPlanAndCutRules(sql, userId, null);
-  const goals = starterGoals(
-    { trainingDays: read.answers.trainingDays ?? null, sessionMinutes: read.answers.sessionMinutes ?? null },
-    rulesOf(read),
-  );
   await sql.begin(async (tx) => {
     await repo.lockGoalsOf(tx, userId);
-    if (!(await repo.claimStarter(tx, userId))) return;
+    if (!(await repo.lockStarterDue(tx, userId))) return;
+    const read = await getUserPlanAndCutRules(tx, userId, null);
+    // With an answer missing the health rule cannot be read (a blank age is nobody's
+    // under-18), so nothing is given or marked: the whole set comes once the plan is ready.
+    if (read.plan.plan === null) return;
+    const goals = starterGoals(
+      { trainingDays: read.answers.trainingDays ?? null, sessionMinutes: read.answers.sessionMinutes ?? null },
+      rulesOf(read),
+    );
+    await repo.markStarterGiven(tx, userId);
     let room = MAX_GOALS - (await repo.countGoals(tx, userId));
     for (const goal of goals) {
       if (room <= 0) break;
