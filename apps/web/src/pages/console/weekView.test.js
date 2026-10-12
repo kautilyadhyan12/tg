@@ -46,8 +46,7 @@ describe("Overview's Last 7 days box: its words", () => {
     expect(row('members', { members: { joined: 0, left: 0 } }).value).toBe('0 new · 0 left');
   });
 
-  it('says only who left while the list itself is new, and no comparison where there is none', () => {
-    expect(row('members', { members: { joined: null, left: 0 } }).value).toBe('0 left');
+  it('makes no comparison where there is none', () => {
     expect(row('visits', { visits: { thisWeek: 40, weekBefore: null } })).toMatchObject({ value: '40 visits', note: null });
   });
 });

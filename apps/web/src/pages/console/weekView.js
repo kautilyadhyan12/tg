@@ -26,8 +26,7 @@ export function weekRows(week, orgSlug, orgType) {
     rows.push({
       key: 'members',
       label: words.peopleCap,
-      // The list's first people are not new members: only who left is said then.
-      value: joined === null ? `${n(left)} left` : `${n(joined)} new · ${n(left)} left`,
+      value: `${n(joined)} new · ${n(left)} left`,
       note: null,
       to: `${base}/reports`,
       button: 'Open Reports',

@@ -46,8 +46,9 @@ export async function getWeek(deps: WeekDeps, gymId: string, reader: WeekReader)
       if (may("reports.read")) {
         const gone = [...over].map(([id, left]) => ({ id, on: left.on }));
         const members = await repo.readWeekMembers(tx, gymId, reader.timezone, window, gone);
-        // The list's first people are not new members (Reports' rule for its first month).
-        if (members !== null) week.members = { joined: members.firstListedOn >= window.from ? null : members.joined, left: members.left };
+        // A list begun in these days has no whole week yet, and its first people are not
+        // new members (Reports' rule for its first month).
+        if (members !== null && members.firstListedOn < window.from) week.members = { joined: members.joined, left: members.left };
       }
       if (may("members.confirm")) {
         const answered = [...held.values()].filter(({ shown }) => heldListWords(shown).payment === HELD_PAYMENT_WORDS.due).length;

@@ -45,9 +45,9 @@ export const gymWeekSchema = z
   .object({
     from: daySchema,
     to: daySchema,
-    /** As Reports counts them. `joined` is null while the list itself began in these days:
-     *  its first people are not new members. */
-    members: z.object({ joined: countSchema.nullable(), left: countSchema }).strict().nullable(),
+    /** As Reports counts them. Null while the list itself began in these days: its first
+     *  people are not new members, and it has no whole week yet. */
+    members: z.object({ joined: countSchema, left: countSchema }).strict().nullable(),
     /** The At risk page's own count, today. */
     atRisk: z.object({ count: countSchema }).strict().nullable(),
     /** Rows of the Attendance page. `weekBefore` is null where check-in began too lately

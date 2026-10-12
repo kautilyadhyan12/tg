@@ -318,7 +318,7 @@ d("Overview's Last 7 days box: whose figures, to whom, and that each is its own 
       const fresh = await makeGym("Week Fresh");
       expect(await read(fresh)).toEqual({ from: day(-7), to: day(-1), members: null, atRisk: null, visits: null, paymentDue: null });
 
-      // Its list began inside the week: the first people are not new members. Its
+      // Its list began inside the week: it has no whole week yet. Its
       // check-in began ten days ago: the week before cannot be compared, and nobody can
       // have come and stopped yet.
       const young = await makeGym("Week Young");
@@ -326,7 +326,11 @@ d("Overview's Last 7 days box: whose figures, to whom, and that each is its own 
       await record(young, "First Two", 2);
       await deskOpen(young, -10, 0, 3);
       const week = await read(young);
-      expect(week.members).toEqual({ joined: null, left: 0 });
+      expect(week.members).toBeNull();
+      // Five days on, the list began eight days ago: its first people are not new, and the
+      // one added a day after them is.
+      await sql`UPDATE gym_member_list_entries SET created_at = created_at - interval '5 days' WHERE gym_id = ${young.id}`;
+      expect((await read(young)).members).toEqual({ joined: 1, left: 0 });
       expect(week.visits).toEqual({ thisWeek: 7, weekBefore: null });
       expect(week.atRisk).toBeNull();
       expect(week.paymentDue).toBeNull();
