@@ -196,8 +196,8 @@ export async function saveRules(tx: TransactionSql, gymId: string, rules: Checki
 }
 
 /** Which of the accounts and records named are the gym's own staff: its owner, anybody on
- *  its staff, and the records such an account holds (every record for null). Never stopped
- *  at the desk. */
+ *  its staff, and the records such an account holds or that carry its address (every such
+ *  record for null). Never stopped at the desk. */
 export async function staffAmong(
   sql: SqlOrTx,
   gymId: string,
@@ -219,7 +219,14 @@ export async function staffAmong(
     SELECT s.user_id, m.entry_id
     FROM staff s
     JOIN gym_members m ON m.gym_id = ${gymId} AND m.user_id = s.user_id AND m.removed_at IS NULL AND m.entry_id IS NOT NULL
-    WHERE ${entryIds}::uuid[] IS NULL OR m.entry_id = ANY(${entryIds}::uuid[])`;
+    WHERE ${entryIds}::uuid[] IS NULL OR m.entry_id = ANY(${entryIds}::uuid[])
+    UNION ALL
+    -- The record on a staff account's own address, as a pass names it.
+    SELECT s.user_id, e.id
+    FROM staff s
+    JOIN users u ON u.id = s.user_id
+    JOIN gym_member_list_entries e ON e.gym_id = ${gymId} AND e.former_at IS NULL AND e.email = u.email
+    WHERE ${entryIds}::uuid[] IS NULL OR e.id = ANY(${entryIds}::uuid[])`;
   for (const row of rows) {
     if (row.entry_id === null) out.userIds.add(row.user_id);
     else out.entryIds.add(row.entry_id);
