@@ -368,9 +368,6 @@ function DuplicatesSign({ duplicates }) {
   );
 }
 
-// `onRosterChanged` tells the Members screen that the list moved, so "Using the app",
-// whose "not on your list" marks read the list, is read again. `action` is the header's
-// Import or Add member, pressed; `onActionTaken` clears it.
 /** The filter the list opens on when Overview's Last 7 days box sent staff here. */
 function startFilters(show) {
   if (show === PAYMENT_DUE_SHOW) return { ...EMPTY_FILTERS, paymentStatus: [HELD_PAYMENT_WORDS.due] };
@@ -378,6 +375,9 @@ function startFilters(show) {
   return EMPTY_FILTERS;
 }
 
+// `onRosterChanged` tells the Members screen that the list moved, so "Using the app",
+// whose "not on your list" marks read the list, is read again. `action` is the header's
+// Import or Add member, pressed; `onActionTaken` clears it.
 export default function MemberListPanel({
   gymId,
   gym,
