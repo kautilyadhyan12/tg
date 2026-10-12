@@ -27,6 +27,12 @@ the formal video-derived threshold protocol, §8.2 gains the dead-ONNX
 cleanup item. Companion document: **Part 2B — The Trust Layer** (calories,
 meal-photo portions, recommendations, predictions).
 
+**AMENDED 2026-10-12 (RULINGS that day; §11 below).** How an exercise is made is Kd's
+own way now: he names it and gives one or two good-form links, and records nothing
+himself. §9.1's 3 to 5 videos and self-recorded fault clips, §7.3's six self-recorded
+traces and §10's cadence are replaced by §11, which also says what the code held that
+day and which tools come first. Where this Part differs from §11, §11 wins.
+
 ---
 
 ## 0. What this document locks in place
@@ -1133,6 +1139,175 @@ engine · sync payload byte-matches §2.4.
 complete and green · beta telemetry week clean · camera-hint copy + all
 message keys in EN (HI/AS keys may lag but must exist) · §6 risk note
 either resolved or surfaced as honest in-app copy.
+
+---
+
+## 11. The exercise line (planned 2026-10-12; Kd, RULINGS that day; ROADMAP Stage 5 items 50 to 65)
+
+Written by a planning terminal that read the engine, the web's workout pages and Kd's
+own video folder that day. No code. Where §7.3, §9.1, §10 or Part 6 §3 differ from this
+section, this section wins. Exercise folder 1 builds the camera and the form rules
+(items 50 to 55); exercise folder 2 builds the Exercise Library and the Workout section
+(items 60 to 65).
+
+### 11.1 What the code holds today (read 2026-10-12, spot-checked, not run)
+
+- **The camera counts 3 of the 58:** squat, chair squat, jump squat. Only rep mode A
+  (`alternating_threshold`) is built: `compile.ts` refuses a hold, alternating sides,
+  cadence, `tracking: "timer"` and the floor reference. There is no airborne check, so
+  jump squat is a knee angle of 160/130 and nothing asks that the feet left the floor.
+- **One rule can reach the screen.** A frame-scoped rule gives the live cue; a per-rep
+  rule is only counted in the set's summary and is shown nowhere (`faults.ts`,
+  `evaluateFrame` skips it). The three definitions hold one frame-scoped rule, squat's
+  `trunk_lean`. Chair squat and jump squat hold one per-rep, front-view knee rule each,
+  under a camera hint that says side-on, so they give no advice and "Good Form" shows
+  whenever no cue is live. Squat's `shallow_depth` cannot fire on a rep that counted.
+- **What the web feeds the engine:** at most 15 frames a second (`FEED_INTERVAL_MS` 67),
+  image landmarks only (`worldLandmarks` are read nowhere), one pose, and nothing picks
+  which person is the user; the person check is not an identity check. Follow-along is
+  not built. A workout in progress lives in memory only.
+- **Three sizes of the pose model in three places:** the web runs `full`, Kd's video
+  tools `heavy`, the archived `feed_video.py` `lite`; the person check's 0.923 was
+  measured on `lite`.
+- **The voice** picks its line by a keyword in the cue's text (`voice.js`), so the cue
+  "Cannot see your legs clearly — step back…" is spoken as "Keep your chest up".
+- **The exercise list is in three places**, joined by slug: `exerciseCatalog.ts`,
+  `exerciseContent.ts`, and the `exercises` table with muscles, equipment and difficulty
+  NULL. The web bundles its definitions and never asks `/v1/exercise-definitions`. A GIF
+  is found by the exercise's display name; the GIFs are 259 MB with no licence record.
+- **A workout:** no weight anywhere; the 22 timed exercises are given "12 reps"; the
+  typed name is saved nowhere; saved workouts read the old backend; the summary shows no
+  set; the records are three for a whole workout and none for an exercise; the
+  difficulty stars are sent nowhere.
+- **Tools in the repo:** `packages/engine/scripts` (`measure-pose`, `measure-rest`,
+  `validate-trace`, `bench`, `lint-defs`), the web's trace recorder
+  (`VITE_TRACE_RECORD`), ten traces. No tool turns a video into a trace without the old
+  Python server.
+
+What is right and stays: exercises are data; the engine is pure and the same code can
+run on the laptop, in the tests and on the phone (I1 to I3); golden traces gate every
+change; the workout save is safe to send twice.
+
+### 11.2 The tools, built before any new exercise
+
+1. **A video to a trace.** One command for every exercise: a video file in, a trace out
+   (§7.1's format, with the world landmarks beside the image ones), made with the SAME
+   model file and settings the phone runs (tool 5 decides them). Python with MediaPipe is
+   on Kd's laptop already and may stay the extractor; nothing but landmarks comes from it.
+2. **Measured by the app's own engine.** The trace is replayed through `@app/engine`
+   (§7), and the numbers that set a rule are the engine's own signals, never a second
+   copy of the maths. Kd's `analyze*.py` measure angles their own way: a cross-check,
+   never the source.
+3. **Pictures a terminal can look at.** A terminal cannot watch a video. The tool writes
+   still frames with the skeleton, the signals and the engine's decision drawn on them,
+   at the bottom of each rep and at each fired rule, and a chart of the signals over time.
+4. **The cross-check.** Every exercise's definition is replayed on every other
+   exercise's trace. A count there is a named twin (a chair squat is a squat) or a fault
+   to fix.
+5. **The camera test on Kd's phone** (item 51; Part 6 §3.2's bars, on an ordinary recent
+   phone): each candidate's speed, heat, battery and memory over 20 minutes, and a video
+   file run through the phone's own path and compared with tool 1's trace.
+6. **The clip line** (item 62): the original shortened, the generated clip made small
+   (one shape, 16:9, no sound), a still picture cut from it, and the clip run through
+   tools 1 and 2: it must count its reps with no fault.
+7. **One exercise list on the server** (item 60): name, muscles, equipment, how it is
+   counted (camera · by hand · timed), where the phone goes, its clip, steps and
+   mistakes, sent with the definitions.
+8. **The engine's missing parts** (item 52; §11.5).
+
+### 11.3 How one exercise is made (Kd's rules)
+
+1. Kd says the name.
+2. The terminal says where the phone goes and which way the person faces, and whether
+   the selfie camera can count it and judge it. If it cannot, the exercise gets the clip,
+   the steps and counting by hand, and the Library says so.
+3. Kd gives one or two good-form links. The terminal looks for a coach's "common
+   mistakes" clip of the same exercise. A free-to-use clip is used first where one exists.
+4. The videos stay on his laptop and never go to git. Tools 1 to 3 measure them.
+5. The terminal reads proper sources on the form (NSCA, ACSM, ACE, published studies;
+   never a random article) and lists EVERY common mistake. Each is either checked by the
+   camera or marked "the camera cannot see this from here".
+6. The exercise is written as data: how it is counted, its rules, its words, each number
+   traced to a measurement or a source.
+7. The checks of §11.6.
+8. The terminal writes the picture prompt (his character, male or female, with the
+   equipment) and the Google Flow prompt. Kd makes the clip. The clip passes tool 6.
+9. Kd's test, the real path: pick it in the Library, add it to a workout, do it in front
+   of the selfie camera.
+
+### 11.4 The order of exercises, and what the camera cannot do
+
+The first seven (item 54): squat, chair squat and jump squat, which the engine has, then
+bicep curl, bicycle crunch, barbell bench press and dumbbell bench press; Kd's folder
+holds videos for six of the seven. Then the rest of the 58, family by family (§5), so
+each kind of counting is built once. Then common gym exercises (barbell, dumbbell, cable,
+machine), then Pilates and studio, then others. He names them as it goes.
+
+Before any work on an exercise the terminal answers two questions: can a phone standing
+2 to 3 metres away count it, and can it judge it? Where equipment hides the body, the
+movement is too small, or the person faces away, the honest answer is the clip, the
+steps and counting by hand. Some are only timed (meditation), with no form check.
+
+The two exercise folders take different families, so two terminals never write one
+definition. A definition is one file, found by the tools without a hand-kept index.
+
+### 11.5 The engine on the phone
+
+The terminal's own choices. Each is kept only if a measurement on clips says it is
+better, and the number is shown to Kd.
+
+- **One model everywhere**, chosen by tool 5. Every threshold is measured with it.
+- **A leaning phone.** The adapter passes the phone's gravity reading with the frames,
+  and the engine works in gravity-aligned coordinates. The engine stays pure: gravity is
+  an input, like the frame.
+- **Steadier points.** A one-euro filter on the landmarks is measured against today's
+  7-frame mean on the fast clips. Today only the rep metric is smoothed.
+- **World landmarks.** Joint angles from them are measured against the image ones across
+  camera angles, and used only where steadier.
+- **The rate:** as many frames a second as the phone holds steady in tool 5. The
+  engine's frame counts (3 down, 2 up, 8 standing, 10 for the view) become times.
+- **One person.** More than one pose is asked for, the person who starts the set is
+  followed, and counting pauses, never counts, while they are hidden (Kd's busy gym).
+- **Every rule can speak.** A per-rep rule reaches the screen at the rep's end; a spoken
+  line belongs to its rule's own key, never to a keyword; a rep that fails to count says
+  why ("not counted: go lower").
+- **Set-up is checked, not ticked:** the whole body in view, the distance, the light,
+  the phone's lean, the view the definition asks for. The set arms when it passes.
+- **The screen is for somebody 2 to 3 metres from a phone:** the count and the colour
+  carry it, the voice says the rest, a short sound marks each counted rep. Its look is
+  shown to Kd as pictures first (item 53).
+- **The kinds still to build:** hold, alternating sides, cadence, timed only, the
+  airborne check, the floor reference (§3.5, §3.6), and Stage 4 item 6's faults.
+
+### 11.6 The checks, and the review
+
+An exercise leaves the line when: (a) its own good-form trace counts exactly what a
+person counts by eye, with no fault; (b) each mistake clip fires its mistake; (c) the
+cross-check is clean; (d) §7.6's fuzz and performance gates hold; (e) its generated clip
+passes tool 6; (f) Kd has done it on the phone from the Library. Accuracy is told to him
+as those numbers, never as a promise.
+
+The tools and the engine are jobs like any other, reviewed as CLAUDE.md §2 says. An
+exercise is checked by (a) to (f), and a fresh terminal reviews a whole FAMILY of
+exercises at once, never each one (RULINGS 2026-10-12).
+
+### 11.7 Kd's own folder, outside git
+
+`D:\vidoe referene` (his spelling), made 2026-09-28 to 2026-10-01: `tools/analyze.py`
+(bicycle crunch), `analyze_squat.py`, `analyze_curl.py` (which takes `--bad`, a wrong-way
+clip, so a rule's number sits between right and wrong), `pose_landmarker_heavy.task`;
+`character/male` and `character/female`; and for each exercise a reference video, a
+`reference_profile.json` and a `VEO_PROMPT.md` (a start picture, then Google Flow, Veo
+3.1, frames to video, 16:9, 8 seconds, then checked and looped). Six exercises have
+material: squat, chair squat, bicep curl, bicycle crunch, barbell bench press, dumbbell
+bench press.
+
+A terminal reads that folder and never changes it unasked. A video never goes to git. A
+trace is body points only (§7.1) and may; so may a definition and a tool.
+
+The web's camera page reads this same engine. Until Kd says the web's five workout pages
+may go, an engine change keeps their tests green; the terminal asks him when the phone's
+Workout section has passed his test.
 
 ---
 
