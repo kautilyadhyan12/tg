@@ -74,6 +74,12 @@ describe('who is sent to staff today', () => {
     });
   });
 
+  it('one other person is said as one', () => {
+    const five = [1, 2, 3, 4, 5].map((n) => person(n));
+    expect(previewWords(preview(6, five), false).rest).toBe('The other 1 is checked in as now.');
+    expect(previewWords(preview(6, five), true).rest).toBe('The other 1 would be checked in as now.');
+  });
+
   it('everybody stopped says so', () => {
     const two = [person(1, 'no_membership'), person(2, 'no_membership')];
     expect(previewWords(preview(2, two), true).rest).toBe('Nobody on your list would be checked in at the front desk.');

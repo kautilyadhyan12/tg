@@ -104,13 +104,19 @@ function Today({ preview, changed, attendanceTo }) {
         </p>
       ) : null}
       {preview.data.stopped > 0 ? (
-        <p className="text-sm m-0" style={softStyle}>
-          At the desk they read &ldquo;Please see a member of staff&rdquo;, with no name and no reason. Your staff can still check them in on{' '}
-          <Link to={attendanceTo} className="font-semibold underline" style={{ color: '#FFB347' }}>
-            Attendance
+        <>
+          <p className="text-sm m-0" style={softStyle}>
+            At the desk they read &ldquo;Please see a member of staff&rdquo;, with no name and no reason. Your staff can still check them in on
+            the Attendance page, which says why. Your own staff are always checked in.
+          </p>
+          <Link
+            to={attendanceTo}
+            className="self-start rounded-xl px-3.5 text-sm font-semibold inline-flex items-center min-h-11"
+            style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
+          >
+            Open Attendance
           </Link>
-          , which says why. Your own staff are always checked in.
-        </p>
+        </>
       ) : null}
     </div>
   );

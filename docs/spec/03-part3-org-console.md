@@ -2231,6 +2231,34 @@ person as their record, or their account when the visit has no record. The table
 never a member · another gym's person × first scan · same period · next period ·
 outside hours × the pass fresh · old · used · garbled.
 
+**Who a gym's desk lets in, as built (16d; RULINGS 2026-10-02 and 2026-10-12).** Settings
+has a box, **Who can check in** (`org.manage`, beside Check-in devices), with two choices
+that wait for one Save: whom the front desk checks in, **Everyone on your list** (where
+every gym starts) or **Only people with a current membership**; and what it does with
+**someone with an overdue payment**, **Check them in** (the start) or **Send them to
+staff**. They are two columns on the gym (`checkin_who`, `checkin_overdue`, migration
+`0099`) and ONE pure rule, `checkinStop` in `@app/shared` (`checkinRules.ts`), which the
+desk's scan, staff's search and the box all read:
+- It reads what the app holds and never a word of the gym's file: the status the Members
+  list itself gives the person (`heldOnList`), and their bills. A current membership is one
+  running today. One frozen, ended, cancelled or still to start is not, and neither is
+  holding nothing in the app, whatever the file says.
+- A payment is overdue on the day its bill reads Overdue on the person's page
+  (`memberBillState`): a bill still open, and the gym's own days of grace passed. A
+  payment a membership says is due with no bill of ours open stops nobody.
+- The gym's owner and staff are never stopped. A read that fails stops nobody, with a log
+  (`checkin.rules_unread`). A gym that never changed its choices reads nothing extra.
+- A stopped person's pass or key tag answers `see_staff` with the gym's name and nothing
+  else: "Please see a member of staff", no name, no reason, the low sound. No visit is
+  written and a pass is not used up. Staff's own check-in is never stopped, and somebody
+  staff let in this period reads "Already checked in" at the desk.
+- Staff's search on Attendance says, under the name, why the desk would stop the person
+  (`stopped` on each person found), and Check in works as before.
+- Before Save the box names who the choices would send to staff today, each with why (the
+  first three, "and N more", See all), and how many would be checked in as now
+  (`GET …/checkin-rules/preview`, up to 500 by name); Save waits for that answer. A save
+  is noted in `audit_log` (`org.checkin_rules_changed`), once for the same choices.
+
 ### 12.5 Staff check-in, and the live log
 
 The console's Attendance page gains a search and **Check in** for signed-in staff with

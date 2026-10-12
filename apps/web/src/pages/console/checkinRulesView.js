@@ -80,7 +80,7 @@ export function previewWords(preview, changed) {
     rest:
       others === 0
         ? `Nobody on your list ${changed ? 'would be' : 'is'} checked in at the front desk.`
-        : `The other ${String(others)} ${changed ? 'would be' : 'are'} checked in as now.`,
+        : `The other ${String(others)} ${changed ? 'would be' : others === 1 ? 'is' : 'are'} checked in as now.`,
   };
 }
 

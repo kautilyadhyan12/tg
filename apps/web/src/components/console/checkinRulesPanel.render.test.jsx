@@ -114,7 +114,7 @@ describe('picking who can check in', () => {
     expect(within(box).getByText('The other 8 would be checked in as now.')).toBeTruthy();
     // What the person at the desk reads, and where staff go.
     expect(within(box).getByText(/Please see a member of staff/)).toBeTruthy();
-    expect(within(box).getByRole('link', { name: 'Attendance' }).getAttribute('href')).toBe('/console/iron-house/attendance');
+    expect(within(box).getByRole('link', { name: 'Open Attendance' }).getAttribute('href')).toBe('/console/iron-house/attendance');
     // Nothing was saved by picking.
     expect(orgService.updateCheckinRules).not.toHaveBeenCalled();
     expect(saveButton().disabled).toBe(false);
