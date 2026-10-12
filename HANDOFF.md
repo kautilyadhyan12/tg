@@ -5,6 +5,18 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
 
+## 2026-10-12 · 30a (feature folder 2): goals on the server (branch `goals-server`)
+
+- **Built, no screen:** `GET /v1/goals`, `PUT /v1/goals/:id` (add or change; the id is the phone's own, so twice is one goal), `DELETE /v1/goals/:id`. Table `user_goals` (migration `0099`), in "download my data" and account deletion.
+- **Ten kinds, each measured on every read** in the person's own time zone: training days, streak, gym visits, calories burned, active minutes, reps in a set, weight, within calories, protein, days with food logged. Weeks run Monday to Sunday.
+- **One number, one place:** calories and protein read the rings' answer (`targetsForPlan`), weight reads setup's choice and target. No typed copy.
+- **The health rule** (`goalHeld`, `modules/goals/measure.ts`), run on add and on every read: a weight to lose is held for under 18, a yes on the health question or Safe mode; Safe mode holds the effort goals. A held goal is kept and shows no number.
+- **Not as planned:** a plank hold waits. No app sends a hold time today (the web sends none; 0 of 70 local sets hold one), so it would sit at zero.
+- **Verified here:** `goals.unit.test.ts` and `goals.routes.test.ts`, 85 of 85 on `aihg_b`; three deliberate breaks of the health rule, each red; api and shared typecheck and lint clean.
+- **Seen, older than this job:** `db.migration.test.ts` "0033's member-list CHECKs bite…" took 4.4 s alone against its 5 s and timed out beside other files (ROADMAP Stage 1 item 10).
+- **Cost:** it reads one person's own rows, never a list of people; nothing measured at gym size.
+- **Next:** 30b, the starter set from the setup answers. Item 31 (Today) waits for feature folder 1's items 10 to 12, and must not offer a kind the server refuses.
+
 ## 2026-10-12 · The phone app and the exercises: the plan, and four folders on Kd's own laptop (no job; a planning terminal, branch `phone-and-exercise-plan`)
 
 - **Decided** (RULINGS 2026-10-12, seven lines of that day): every member feature except the chatbot goes to the phone; the exercises are a side of their own; four folders on Kd's laptop, two at a time; Google's closed test waits for the complete build; Apple sign-in comes with the iPhone version. Kd: *"I AGREE"*.
