@@ -112,6 +112,8 @@ d("DPDP data export (real Postgres)", () => {
     // The rings' own numbers (7a-iv-e): the person's own daily targets.
     await sql`INSERT INTO user_nutrition_targets (user_id, source, kcal, protein_g, carbs_g, fat_g)
               VALUES (${userId}, 'own', 2100, 150, 200, 70)`;
+    // A goal of their own (30a).
+    await sql`INSERT INTO user_goals (id, user_id, kind, period, target) VALUES (gen_random_uuid(), ${userId}, 'training_days', 'week', 3)`;
     // A reaction to a gym's post (19b-i): the person's own tap.
     await sql`INSERT INTO gym_post_reactions (gym_id, post_id, user_id, reaction) VALUES (${postGymId}, ${postId}, ${userId}, 'like')`;
     // A report of a post and a gym's stop on their posting (19b-ii-a): about the person.

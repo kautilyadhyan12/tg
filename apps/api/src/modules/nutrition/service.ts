@@ -33,8 +33,8 @@ import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
 import * as repo from "./repo.js";
 import { ESTIMATE_CANONICAL_PREFIX, estimateFood, priceScannedFood, type ScanLookups, type ScanPrice } from "./scanMatch.js";
 import type {
-  ConfirmMealRequest, ManualMealRequest, MealEditItem, MealEditPreviewRequest, MealPreview, NutritionTargetsResponse,
-  OwnTargetsHeld, PatchMealRequest, PreviewMealRequest, PutNutritionTargetsRequest,
+  ConfirmMealRequest, ManualMealRequest, MealEditItem, MealEditPreviewRequest, MealPreview, NoDeficitReason, NutritionTargetsResponse,
+  OwnTargetsHeld, PatchMealRequest, PlanResponse, PreviewMealRequest, PutNutritionTargetsRequest,
 } from "./schemas.js";
 import {
   MEAL_VISION_MODELS,
@@ -542,7 +542,7 @@ const totals = (items: readonly MealItem[]) => ({
 /** Daily calorie + macro targets for the signed-in user (R3.1: derived
  *  server-side from stored profile data, never from anything the client sends).
  *  Returns targets OR the list of details still missing — never a default. */
-export async function getTargets(deps: NutritionDeps, userId: string): Promise<NutritionTargetsResponse> {
+export async function getTargets(deps: Pick<NutritionDeps, "sql">, userId: string): Promise<NutritionTargetsResponse> {
   // The rings' numbers ARE the plan's (ROADMAP 4a-iii), unless the person has
   // picked their own (7a-iv-e). No time zone is sent: it only dates the finish,
   // which the rings do not show, so the stored zone serves. targetsFromPlan
@@ -553,6 +553,16 @@ export async function getTargets(deps: NutritionDeps, userId: string): Promise<N
     repo.getRingTargets(deps.sql, userId),
   ]);
   return targetsFromPlan(planResult, pick, noCutReasons);
+}
+
+/** The rings' answer for a plan the caller has already read (goals read it once for the
+ *  rings' numbers and for their own rules). The same resolution as `getTargets`. */
+export async function targetsForPlan(
+  deps: Pick<NutritionDeps, "sql">,
+  userId: string,
+  read: { plan: PlanResponse; noCutReasons: readonly NoDeficitReason[] },
+): Promise<NutritionTargetsResponse> {
+  return targetsFromPlan(read.plan, await repo.getRingTargets(deps.sql, userId), read.noCutReasons);
 }
 
 /** The switch over the rings, saved (ROADMAP 7a-iv-e): the app's plan, or the
