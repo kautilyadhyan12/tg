@@ -1,0 +1,30 @@
+{
+  "name": "mobile",
+  "version": "0.0.1",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "phone": "node scripts/phone.mjs",
+    "start": "node scripts/phone.mjs --start",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test index.ts app.config.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@app/shared": "workspace:*",
+    "expo": "57.0.25",
+    "expo-constants": "57.0.19",
+    "expo-dev-client": "57.0.19",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
+  },
+  "devDependencies": {
+    "@app/config": "workspace:*",
+    "@types/react": "19.2.2",
+    "eslint": "^9.18.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^2.1.8"
+  }
+}

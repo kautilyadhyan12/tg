@@ -12,6 +12,7 @@
         "tools/**",
         "scripts/**",
         "eslint.config.js",
+        "eslint.config.mjs",
         "tsconfig.json",
         "package.json"
       ]
