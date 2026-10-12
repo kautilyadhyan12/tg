@@ -12,7 +12,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **One number, one place:** calories and protein read the rings' answer (`targetsForPlan`), weight reads setup's choice and target. No typed copy.
 - **The health rule** (`goalHeld`, `modules/goals/measure.ts`), run on add and on every read: a weight to lose is held for under 18, a yes on the health question or Safe mode; Safe mode holds the effort goals. A held goal is kept and shows no number.
 - **Not as planned:** a plank hold waits. No app sends a hold time today (the web sends none; 0 of 70 local sets hold one), so it would sit at zero.
-- **Verified here:** `goals.unit.test.ts` and `goals.routes.test.ts`, 85 of 85 on `aihg_b`; three deliberate breaks of the health rule, each red; api and shared typecheck and lint clean.
+- **Verified here:** `goals.unit.test.ts` and `goals.routes.test.ts`, 95 of 95 on `aihg_b` after the review's fixes; four deliberate breaks of the health rule, each red; api and shared typecheck and lint clean.
+- **From the review:** a weight goal's target is the plan's, never the typed one: the lowest healthy weight where the target is under it, and "set a new target weight" where it is on the wrong side or already met.
 - **Seen, older than this job:** `db.migration.test.ts` "0033's member-list CHECKs bite…" took 4.4 s alone against its 5 s and timed out beside other files (ROADMAP Stage 1 item 10).
 - **Cost:** it reads one person's own rows, never a list of people; nothing measured at gym size.
 - **Next:** 30b, the starter set from the setup answers. Item 31 (Today) waits for feature folder 1's items 10 to 12, and must not offer a kind the server refuses.
