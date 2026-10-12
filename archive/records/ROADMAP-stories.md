@@ -402,3 +402,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **20d-ii, as it stood when it was built (merged 2026-10-12, PR #229):**
 
      - 20d-ii. [ ] **The weekly summary, as a box on Overview** (Kd, RULINGS 2026-10-12: a notice in the console, not an email): Last 7 days — new, left, at risk, visits against the 7 days before, payments due, each with a button to its page.
+
+**30a, as it stood when it was built (merged 2026-10-13, PR #233):**
+
+    - 30a. [ ] **Keep, change, remove and measure a goal.** Ten kinds the server can measure today; running goals wait for item 37, "master an exercise" and a harder version for item 36, a hold time (plank) for the exercise folders' holds, mobility sessions for a way to record one.

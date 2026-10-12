@@ -28,6 +28,8 @@ import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
 import { registerGamificationRoutes } from "./modules/gamification/routes.js";
+import { registerGoalRoutes } from "./modules/goals/routes.js";
+import { GoalsError } from "./modules/goals/service.js";
 import { registerCoachRoutes, type CoachRouteOverrides } from "./modules/coach/routes.js";
 import { CoachError } from "./modules/coach/service.js";
 import { registerEntitlementRoutes } from "./modules/entitlements/routes.js";
@@ -75,6 +77,8 @@ export interface BuildAppOverrides {
   /** orgs: tests inject a deterministic byte source to drive the join-code and
    *  slug collision retries; unset uses node:crypto. */
   orgs?: OrgRouteOverrides;
+  /** goals: the day a goal's period is counted around. The plan and the streak read the real clock. */
+  goals?: { now?: () => Date };
   /** Tests read what Sentry would be sent through a transport that records it;
    *  unset, the SDK sends to SENTRY_DSN. */
   sentryTransport?: Sentry.NodeOptions["transport"];
@@ -215,6 +219,7 @@ export async function buildApp(
     const clientSafe =
       err instanceof AuthError ||
       err instanceof UsersError ||
+      err instanceof GoalsError ||
       err instanceof CoachError ||
       err instanceof NutritionError ||
       err instanceof GeoError ||
@@ -315,6 +320,7 @@ export async function buildApp(
   registerPrivacyRoutes(app, { sql, redis });
   registerExerciseRoutes(app, { sql });
   registerGamificationRoutes(app, { sql });
+  registerGoalRoutes(app, { sql, ...(overrides.goals?.now === undefined ? {} : { now: overrides.goals.now }) });
   registerCoachRoutes(app, { sql, redis, config }, overrides.coach ?? {});
   registerEntitlementRoutes(app, { sql, redis });
   registerNutritionRoutes(app, { sql, redis, config, reportError }, overrides.nutrition ?? {});

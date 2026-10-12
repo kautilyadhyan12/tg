@@ -66,3 +66,4 @@ export * from "./atRisk.js";
 export * from "./gymWeek.js";
 export * from "./gymMessageSettings.js";
 export * from "./gymContact.js";
+export * from "./goals.js";
