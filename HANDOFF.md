@@ -5,6 +5,19 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
 
+## 2026-10-13 · 30b (feature folder 2): the app's starter goals (branch `starter-goals`)
+
+- **Built, no screen:** on the first read of `GET /v1/goals` after setup is finished the app adds its own goals, marked `setBy: "app"`: training days a week, active minutes a week (days × session length), within calories, protein, weight. Pure rule: `starterGoals` (`modules/goals/starter.ts`). **Risky**; built at Opus 5.5 high (the record), xhigh was recommended and said.
+- **The health rule:** a goal 30a's `goalHeld` would hold today is not given: no weight to lose under 18, with a yes on the health question or in Safe mode; no active minutes in Safe mode.
+- **Given once:** the mark is `users.starter_goals_at` (migration `0100`), on the account so it outlives "Reset onboarding". A removed goal stays removed; a goal of that kind the person already keeps stays theirs; never past the 30-goal limit.
+- **Not as the plan's words:** the set is given at the first read of goals, not inside the Finish request. A person sees the same thing, and somebody who finished setup before this job gets it the same way.
+- **Left out** (RULINGS 2026-10-13): calories burned (joins at item 36, noted on its line), gym visits, streak, food-logged days.
+- **Verified here** on `aihg_b`: `goals.starter.unit.test.ts` 29 of 29, `goals.starter.routes.test.ts` 19 of 19, 30a's two files 95 of 95; `db.migration`, the two privacy files and `users.onboarding.routes` 134 of 134; api typecheck and lint clean (remembering runs).
+- **Deliberate breaks of the health rule, each red, then put back:** the set ignores "held" (15 failed) · it forgets why the plan may not cut (13 failed) · the service hands it no health answers (5 failed, the route tests alone).
+- **Cost:** one person's own rows; one more single-row read on each read of goals. Nothing reads a list of people.
+- **For item 31 (Today):** the starter goals arrive in the set's order; a changed one reads `setBy: "user"`.
+- **Open:** round one is written (`reviews/30b-1-review.md`). Not ticked: the tick rides the merge. **Next:** item 31 waits for feature folder 1's items 10 to 12; item 32's server parts and item 36's plan builder (6a) need no phone.
+
 ## 2026-10-12 · 30a (feature folder 2): goals on the server (branch `goals-server`)
 
 - **Built, no screen:** `GET /v1/goals`, `PUT /v1/goals/:id` (add or change; the id is the phone's own, so twice is one goal), `DELETE /v1/goals/:id`. Table `user_goals` (migration `0099`), in "download my data" and account deletion.

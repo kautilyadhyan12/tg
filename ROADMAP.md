@@ -412,7 +412,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 33. [ ] **A meal photo with the phone's camera, and barcode scan** (item 5; Stage 4 item 8).
 34. [ ] **More food**: more than the macros (7a-v), more foods (7a-i-b), meal suggestions (7a), your own diet plan (7c), your week in food (7d).
 35. [ ] **Progress**: the charts, the workout calendar, body measurements and weigh-ins, badges; then weekly challenges and predictions on the new server (dead on the web; spec Part 2B §5).
-36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64.
+36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13).
 37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes.
 38. [ ] **Reminders** for workouts, meals and streaks (the six switches the web drew and never saved); the global board last, once Kd has answered RULINGS 2026-10-02's open question.
 
