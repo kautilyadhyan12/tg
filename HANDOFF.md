@@ -5,6 +5,15 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
 
+## 2026-10-12 · The borrowed laptop: three web folders there, the phone app here (no job; an advising terminal in Folder A, branch `three-folders-plan`)
+
+- Kd's cousin lent him a 32 GB laptop until about 2026-10-17. It builds the gym's web part in three folders under `C:\Projects-dhyan` (A money, B messages and reports, C new); the lists are in ROADMAP Stage 2's header, "Three folders on the borrowed laptop". RULINGS 2026-10-12.
+- Kd's own laptop takes no web job in those days. Its two folders become the phone app's; their lists and notes are NOT written yet (Kd: set up later the same day).
+- That laptop is set up from a kit (`D:\Projects\dhyan-laptop-kit` on Kd's laptop, carried on a pendrive): the project cloned from GitHub, a `FOLDER.md` for each folder, databases `aihg`, `aihg_b` and `aihg_c`, the terminals' notes. Folder C's addresses are `127.0.0.2:3002` and `127.0.0.2:5175`. No password or key of Kd's is there, so the Square jobs, 19b-iii and Stage 4 items 1 and 4 are not built there.
+- Also in this pull request, word for word from Folder B's `FOLDER.md`, where they waited for 20d-ii: the two rulings of the night of 2026-10-12 (the local Postgres's `synchronous_commit`; GitHub runs the plain checks) and CLAUDE.md §5's paragraph. 20d-ii no longer has to write them.
+- Giving it back: the kit's `RETURN.md` (everything pushed, the notes carried back and merged, the sign-outs, the folder and the programs removed). What is left then returns to Kd's own folders.
+- The lock on `master` does not demand an up-to-date branch (read 2026-10-12: its `strict` setting is false), so GitHub lets a branch merge without the newest `master` and "one at a time" (CLAUDE.md §8) is held by the terminals alone. With five folders merging, switching it on was offered to Kd and is not decided.
+
 ## 2026-10-12 · 20d-i (Folder B): the At risk list (branch `at-risk`)
 
 - **Why this job:** next in Folder B after 20b-iii. 20d is split in two; this is the list, 20d-ii is the owner's weekly summary email. **Risky** (other people's data; a rule that decides who is named; one press sends a message). Kd: *"go"* (RULINGS 2026-10-12). One migration, `0098` (`gyms.at_risk_quiet_days`, `gyms.at_risk_weeks_came`); no package, no cost. **Built at Opus 5.5 high** (the record); xhigh was recommended and said before his go.
