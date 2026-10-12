@@ -51,6 +51,7 @@ export * from "./gymPage.js";
 export * from "./robotCheck.js";
 export * from "./staffInvites.js";
 export * from "./checkin.js";
+export * from "./checkinRules.js";
 export * from "./leaderboard.js";
 export * from "./posts.js";
 export * from "./gymEvents.js";
