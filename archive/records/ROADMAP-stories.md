@@ -398,3 +398,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **20d-i, as it stood when it was built (merged 2026-10-12, PR #226):**
 
      - 20d-i. [ ] **The At risk list**: a line in the menu, At risk, naming who used to come and has stopped (no check-in for 14 days after coming in 2 of their last 4 weeks, both the gym's to change), each with their last check-in and one press to send a come-back message.
+
+**20d-ii, as it stood when it was built (merged 2026-10-12, PR #229):**
+
+     - 20d-ii. [ ] **The weekly summary, as a box on Overview** (Kd, RULINGS 2026-10-12: a notice in the console, not an email): Last 7 days — new, left, at risk, visits against the 7 days before, payments due, each with a button to its page.

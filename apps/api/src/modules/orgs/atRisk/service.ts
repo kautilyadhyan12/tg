@@ -125,6 +125,15 @@ export async function getAtRisk(deps: AtRiskDeps, gymId: string): Promise<AtRisk
   });
 }
 
+/** How many people the list names now, for Overview's Last 7 days box. Null where the
+ *  page itself would not be showing a list: check-in never used, only just begun, or
+ *  stopped. A nought there would read as "nobody has stopped coming". */
+export async function countAtRisk(sql: Sql, gymId: string, now: Date): Promise<number | null> {
+  const { clock, people } = await findAtRisk(sql, gymId, now);
+  const checkin = atRiskCheckin({ today: clock.today, quietDays: clock.settings.quietDays, firstCheckinOn: clock.firstCheckinOn, gymDays: clock.gymDays });
+  return checkin === "in_use" ? people.length : null;
+}
+
 /** The gym's two numbers, for a gym whose writer has been checked. Saved twice it is saved
  *  once. */
 export async function setSettings(deps: AtRiskDeps, staffId: string, gymId: string, settings: AtRiskSettings): Promise<AtRiskSettingsResponse> {

@@ -6,7 +6,7 @@ import JoinCodesPanel from '../../components/console/JoinCodesPanel';
 import BringMembersInCard from '../../components/console/BringMembersInCard';
 import OverviewNumbers from '../../components/console/OverviewNumbers';
 import StartHereCard from '../../components/console/StartHereCard';
-import AtRiskLine from '../../components/console/AtRiskLine';
+import LastSevenDays from '../../components/console/LastSevenDays';
 import TrialCard from '../../components/console/TrialCard';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { codesRetired, orgService, errorText, isRetryable } from '../../api/orgsApi';
@@ -470,9 +470,10 @@ export default function Overview() {
         />
       ) : null}
 
-      {/* WHO HAS STOPPED COMING (20d-i): the count and a button to the At risk list. It
-          reads for itself and draws nothing when there is nobody to act on. */}
-      <AtRiskLine gymId={org.id} orgSlug={orgSlug} orgType={org.orgType} privileges={viewerPrivileges(org)} />
+      {/* THE LAST 7 DAYS (20d-ii): new and left, at risk, visits and payments due, each
+          with a button to its page. It reads for itself, and the server sends each part
+          only to staff who may open that page. */}
+      <LastSevenDays gymId={org.id} orgSlug={orgSlug} orgType={org.orgType} />
 
       {/* ── The join code pane, on its own outcome ─────────────────────── */}
       {codes.loading ? <ConsoleLoading label="Loading…" /> : null}
