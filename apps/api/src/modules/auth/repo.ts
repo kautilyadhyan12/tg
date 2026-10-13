@@ -481,9 +481,25 @@ export async function reissueAfterLostReply(
       RETURNING id`;
     const newId = rows[0]?.id;
     if (newId === undefined) throw new Error("refresh token re-issue insert returned no row");
-    await tx`UPDATE refresh_tokens SET replaced_by = ${newId} WHERE id = ${input.oldId}`;
+    await tx`
+      UPDATE refresh_tokens SET replaced_by = ${newId}
+      WHERE id = ${input.oldId} AND user_id = ${input.userId}`;
     return true;
   });
+}
+
+/** True where the token that replaced this one was ended by a newer phone sign-in: the
+ *  phone holding this one never received that token, and is told why all the same. */
+export async function successorSignedInElsewhere(
+  sql: Sql,
+  input: { tokenId: string; userId: string },
+): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    SELECT successor.id FROM refresh_tokens AS old
+    JOIN refresh_tokens AS successor ON successor.id = old.replaced_by AND successor.user_id = old.user_id
+    WHERE old.id = ${input.tokenId} AND old.user_id = ${input.userId}
+      AND successor.revoked_reason = 'signed_in_elsewhere'`;
+  return rows.length > 0;
 }
 
 /** Reuse detection (Part 4 §3.1: "reuse of a revoked member kills the family"). */

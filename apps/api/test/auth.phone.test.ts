@@ -160,6 +160,20 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     expect(errorOf(await phoneRefresh(oldPhone.refreshToken)).error).toBe(SIGNED_IN_ELSEWHERE.error);
   });
 
+  it("an old phone whose last refresh reply was lost is told why too", { timeout: 30_000 }, async () => {
+    const email = "phone12a-lostthenout@example.com";
+    const oldPhone = await phoneSignIn(email);
+    const lost = tokensIn(await phoneRefresh(oldPhone.refreshToken));
+    const newPhone = await phoneSignIn(email);
+    // Inside the minute, the old phone sends the token it still holds: no way back in.
+    const refused = await phoneRefresh(oldPhone.refreshToken);
+    expect(refused.statusCode).toBe(401);
+    expect(errorOf(refused).error).toBe(SIGNED_IN_ELSEWHERE.error);
+    expect(errorOf(await phoneRefresh(lost.refreshToken)).error).toBe(SIGNED_IN_ELSEWHERE.error);
+    tokensIn(await phoneRefresh(newPhone.refreshToken));
+    expect(await livePhoneFamilies(await userIdOf(email))).toHaveLength(1);
+  });
+
   it("a phone sign-in never signs a browser out, and a browser sign-in never signs a phone out", { timeout: 30_000 }, async () => {
     const email = "phone12a-browser@example.com";
     const browserBefore = await browserSignIn(email);

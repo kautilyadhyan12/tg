@@ -431,6 +431,9 @@ export async function refresh(
   if (row.revokedAt !== null) {
     const tokens = await afterLostReply();
     if (tokens !== null) return tokens;
+    if (row.client === "phone" && (await repo.successorSignedInElsewhere(deps.sql, { tokenId: row.id, userId: row.userId }))) {
+      throw signedInElsewhere();
+    }
     // Reuse of a rotated-out/revoked member: the family is compromised —
     // kill it all (Part 4 §3.1).
     await repo.revokeFamily(deps.sql, row.userId, row.familyId);
