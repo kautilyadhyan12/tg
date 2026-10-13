@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { INVITATION_WORDS, orgWords, yourPlanWords } from '@app/shared';
+import { INVITATION_WORDS, orgWords, waiverReadyToSign, yourPlanWords } from '@app/shared';
 import { AlertTriangle, CheckCircle2, Info, Loader2, Mail } from 'lucide-react';
 import OrgVisibilitySheet from './OrgVisibilitySheet';
-import { errorText, orgService } from '../../api/orgsApi';
+import WaiverSign from './WaiverSign';
+import { errorCode, errorText, orgService } from '../../api/orgsApi';
 
 // One invitation to one gym (Part 3 §10.2): who invited you, what the gym can see,
 // and under it the ONE tap — Join. No thanks tells the gym; a declined invitation
 // keeps its Join while the gym's list still holds the person (RULINGS 2026-09-23).
 // "Not me" tells the gym its address reached the wrong person (gap A); a person who
 // pays for their own plan is told what the gym gives and what their plan still adds
-// (gap D).
+// (gap D). Where the gym has a waiver (3e-i) it is read and signed here, above Join, and
+// Join waits for the name and the tick.
 //
 // `onAnswered({ kind, invitationId })` once the server has answered: `joined`,
 // `declined` or `not_me`.
@@ -23,6 +25,10 @@ export default function InvitationCard({ invitation, onAnswered }) {
   const [mistake, setMistake] = useState(false);
   const collapsed = notMe && !mistake;
   const [joined, setJoined] = useState(null);
+  // The waiver the gym asks for, as last read: the gym can change it while this is open.
+  const [waiver, setWaiver] = useState(invitation.waiver ?? null);
+  const [signedName, setSignedName] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const { gym } = invitation;
   const words = orgWords(gym.orgType);
   const planWords = invitation.yourPlan && invitation.canTakeMembers ? yourPlanWords(gym.name, invitation.yourPlan) : null;
@@ -32,7 +38,7 @@ export default function InvitationCard({ invitation, onAnswered }) {
     setError(null);
     try {
       if (kind === 'join') {
-        const res = await orgService.acceptInvitation(invitation.id);
+        const res = await orgService.acceptInvitation(invitation.id, waiver === null ? null : { id: waiver.id, name: signedName });
         setJoined(res.data.gym);
         onAnswered?.({ kind: 'joined', invitationId: invitation.id });
       } else if (kind === 'not_me') {
@@ -47,6 +53,16 @@ export default function InvitationCard({ invitation, onAnswered }) {
       }
     } catch (err) {
       setError(errorText(err, "We couldn't reach the server. Please try again."));
+      // The gym wrote or changed its waiver after this card was read: show its words now.
+      if (kind === 'join' && ['waiver_needed', 'waiver_changed'].includes(errorCode(err))) {
+        setAgreed(false);
+        try {
+          const fresh = await orgService.getInvitations();
+          setWaiver(fresh.data.invitations.find((other) => other.id === invitation.id)?.waiver ?? null);
+        } catch {
+          // The sentence above stands; Join asks the server again.
+        }
+      }
     } finally {
       setBusy(null);
     }
@@ -135,13 +151,25 @@ export default function InvitationCard({ invitation, onAnswered }) {
         </div>
       ) : null}
 
+      {!collapsed && invitation.canTakeMembers && waiver !== null ? (
+        <WaiverSign
+          gymName={gym.name}
+          waiver={waiver}
+          name={signedName}
+          onName={setSignedName}
+          agreed={agreed}
+          onAgreed={setAgreed}
+          disabled={busy !== null}
+        />
+      ) : null}
+
       {!collapsed && (invitation.canTakeMembers || state === 'pending') ? (
         <div className="flex flex-wrap items-center gap-3">
           {invitation.canTakeMembers ? (
             <button
               type="button"
               onClick={() => answer('join')}
-              disabled={busy !== null}
+              disabled={busy !== null || (waiver !== null && !waiverReadyToSign(signedName, agreed))}
               className="rounded-xl px-6 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
               style={{ background: '#FF8A1F', color: '#0A0908', minHeight: 44 }}
             >
@@ -160,6 +188,11 @@ export default function InvitationCard({ invitation, onAnswered }) {
               {busy === 'decline' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               No thanks
             </button>
+          ) : null}
+          {invitation.canTakeMembers && waiver !== null && !waiverReadyToSign(signedName, agreed) ? (
+            <span className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
+              To join, type your full name and tick the box.
+            </span>
           ) : null}
         </div>
       ) : null}

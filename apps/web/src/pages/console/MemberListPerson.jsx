@@ -42,6 +42,7 @@ import SentencePlace from '../../components/console/SentencePlace';
 import PostalAddressBox from '../../components/console/PostalAddressBox';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
+import { waiverLineParts, waiverNotInAppLine } from './waiverView';
 import {
   DAY_FIELDS,
   HELD_ANSWERS,
@@ -71,6 +72,7 @@ import {
   compareRecords,
   mergePreview,
   underAgeWhen,
+  noteDay,
   whenWords,
   inviteBlockedWords,
 } from './memberListPeople';
@@ -427,6 +429,21 @@ function MergePreview({ keep, remove, fields, person }) {
 // offered (the server refuses it too), as the In the app sheet hides its Remove.
 // `pair` ({ otherId, why }) opens the panel on a possible duplicate (5b-iv-a): the two records
 // side by side at once, with Different people beside Merge.
+/** Whether one of the record's people in the app has signed the gym's waiver: the state as
+ *  a coloured label, so it is seen at a glance, then the day and the name they typed. */
+const WAIVER_TAG = { good: 'c-tag-good', warn: 'c-tag-warn', plain: 'c-tag-plain' };
+
+function WaiverLine({ member, timeZone }) {
+  // The day is the gym's own, as a note's is.
+  const parts = waiverLineParts(member, (iso) => noteDay(iso, timeZone));
+  return (
+    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1.5 c-s13 c-t2" data-testid="waiver-line">
+      <span className={`c-tag ${WAIVER_TAG[parts.tone]}`}>{parts.label}</span>
+      {parts.rest === '' ? null : <span>{parts.rest}</span>}
+    </span>
+  );
+}
+
 export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, addMembership = false, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
@@ -1375,6 +1392,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                     {m.visits === 1 ? '1 visit' : `${String(m.visits)} visits`}
                     {m.lastVisitOn !== null ? ` · last ${dayWords(m.lastVisitOn)}` : ''}
                   </span>
+                  {/* The gym's waiver (3e-i): whether this person in the app has signed the
+                      words the gym asks for today, and the name they typed. */}
+                  {p.waiverInUse ? (
+                    <WaiverLine member={m} timeZone={gym?.timezone ?? null} />
+                  ) : null}
                 </div>
                 {canRemove && p.formerAt === null && !m.sharedEmail ? (
                   <button
@@ -1391,6 +1413,15 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 ) : null}
               </div>
             ))}
+          </section>
+        ) : null}
+        {p.waiverInUse && p.members.length === 0 && p.formerAt === null ? (
+          // Nobody in the app uses this record, so nobody can have signed for it (3e-i).
+          <section className="c-card px-4 py-3 md:px-5 md:py-4">
+            <h3 className="c-h2 mb-1">Waiver</h3>
+            <p className="c-s14 c-t2 m-0" data-testid="waiver-line">
+              {waiverNotInAppLine(p.fullName)}
+            </p>
           </section>
         ) : null}
         {byHand.length > 0 ? (

@@ -715,6 +715,13 @@
       "when": 1789776000102,
       "tag": "0102_register",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1789862400103,
+      "tag": "0103_gym_waiver",
+      "breakpoints": true
     }
   ]
 }

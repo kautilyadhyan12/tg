@@ -5,6 +5,7 @@ import { Building2, Loader2 } from 'lucide-react';
 import { useGymInbox } from '../hooks/useGymInbox';
 import { useMyGyms } from '../hooks/useMyGyms';
 import GymHoursNote from '../components/gym/GymHoursNote';
+import GymWaiverNote from '../components/gym/GymWaiverNote';
 import AttendancePanel from '../components/gym/AttendancePanel';
 import { cheerNote, myOrgsWords } from '../components/gym/gymMembershipView';
 import Challenges from '../components/gym/Challenges';
@@ -237,6 +238,9 @@ export default function MyGyms() {
                     No read of its own either — `latestCheer` is a field of the
                     `/v1/orgs/mine` row this screen already holds. */}
                 <CheerNote latestCheer={gym.latestCheer} />
+                {/* The gym's waiver, where it asks for one and this person has not signed its
+                    words as they are today (3e-i). */}
+                <GymWaiverNote gym={gym} />
                 {/* The same reader ~~the member's dashboard card and~~ the
                     owner's Settings panel uses, so no two screens can disagree
                     about when a gym is open. **STRUCK 2026-09-04:** `:33091`

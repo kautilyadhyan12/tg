@@ -6,7 +6,7 @@
 // Authenticate, then the rate limit, then the handler; there is no privilege to hold,
 // since the caller's own proved address is the whole credential.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { invitationParamsSchema } from "@app/shared";
+import { acceptInvitationBodySchema, invitationParamsSchema } from "@app/shared";
 import type { Sql } from "postgres";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
@@ -72,7 +72,16 @@ export function registerInvitationRoutes(
   app.post("/v1/orgs/invitations/:invitationId/accept", { preHandler: [app.authenticate, answerLimit] }, async (req, reply) => {
     const invitationId = invitationIdOf(req, reply);
     if (invitationId === null) return;
-    return reply.status(200).send(await acceptInvitation(joinDeps, callerOf(req), invitationId));
+    // A Join with no body is a Join at a gym with no waiver.
+    const body = acceptInvitationBodySchema.safeParse(req.body ?? {});
+    if (!body.success) {
+      return reply.status(400).send({
+        error: "validation_error",
+        message: body.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.code}`).join("; "),
+        requestId: req.id,
+      });
+    }
+    return reply.status(200).send(await acceptInvitation(joinDeps, callerOf(req), invitationId, body.data));
   });
 
   app.post("/v1/orgs/invitations/:invitationId/decline", { preHandler: [app.authenticate, answerLimit] }, async (req, reply) => {
