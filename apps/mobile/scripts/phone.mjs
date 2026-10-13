@@ -52,6 +52,7 @@ if (!process.argv.includes("--start")) {
   // phone alone and one part at a time: a plain build wants more memory than a
   // 16 GB laptop has spare beside its other work (measured 2026-10-12).
   const abi = read("adb", ["shell", "getprop", "ro.product.cpu.abi"]).text.trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(abi)) stop(`The phone did not say which chip it has (it answered "${abi}").`);
   run("corepack", ["pnpm", "exec", "expo", "prebuild", "--platform", "android", "--no-install"]);
   run(
     windows ? String.raw`.\gradlew.bat` : "./gradlew",
