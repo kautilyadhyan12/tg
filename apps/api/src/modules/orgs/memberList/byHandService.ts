@@ -48,6 +48,7 @@ import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit, placesFree } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { appViewsOf } from "./appViews.js";
+import { signaturesOf, waiverInUse, type SignatureRow } from "../waiver/repo.js";
 import { appPeopleIn, removeRecordIn } from "./oneRemove.js";
 import { currentRecordOf, pastRecordOf } from "./whose.js";
 import { applyTyped, changedFields, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
@@ -98,8 +99,12 @@ async function detailOf(
   const ends = appPeopleIn(reached, entry).map((member) => member.userId);
   const { values } = entry;
   const today = dayInTz(now, await repo.gymTimeZone(sql, gymId));
+  const shownIds = [...mine.map((member) => member.userId), ...shared];
+  // The waiver the gym asks for today, and which of this record's people signed it.
+  const waiver = await waiverInUse(sql, gymId);
+  const signatures = waiver === null ? new Map<string, SignatureRow>() : await signaturesOf(sql, gymId, waiver.id, shownIds);
   const [visits, held, owedSince, app] = await Promise.all([
-    repo.memberVisits(sql, gymId, [...mine.map((member) => member.userId), ...shared]),
+    repo.memberVisits(sql, gymId, shownIds),
     // What their memberships here say, as their row on the list says it (23a-i).
     entry.formerAt === null ? heldOnListOf(sql, gymId, today, [entry.id]) : Promise.resolve(new Map<string, HeldShown>()),
     // A past member's memberships are not in use; what they still owe is (18a-ii).
@@ -148,7 +153,9 @@ async function detailOf(
       visits: row.visits,
       lastVisitOn: row.lastVisitOn,
       sharedEmail: shared.has(row.userId),
+      waiverSigned: ((signed) => (signed === undefined ? null : { name: signed.name, at: signed.at.toISOString() }))(signatures.get(row.userId)),
     })),
+    waiverInUse: waiver !== null,
   };
 }
 

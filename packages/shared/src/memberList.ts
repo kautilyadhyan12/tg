@@ -16,6 +16,7 @@ import {
 } from "./memberInvites.js";
 import { heldOnListSchema } from "./heldOnList.js";
 import { ptSessionsEndingSchema } from "./ptSessionsEnding.js";
+import { waiverSignedSchema } from "./waiver.js";
 
 // ---------------------------------------------------------------------------
 // Limits (§9.9)
@@ -2368,6 +2369,9 @@ export const memberListEntryMemberSchema = z
      *  can't say which record is theirs: no "Not {name}?", and removing this record
      *  leaves their app as it is. */
     sharedEmail: z.boolean().default(false),
+    /** Their signature of the waiver the gym asks for today (3e-i), or null: not signed,
+     *  or the gym asks for none. */
+    waiverSigned: waiverSignedSchema.nullable().default(null),
   })
   .strict();
 export type MemberListEntryMember = z.infer<typeof memberListEntryMemberSchema>;
@@ -2387,6 +2391,8 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   /** What an import found wrong on this record, each until staff fix that field or press
    *  It's correct (5b-v-d-iv). */
   review: z.array(memberListReviewLineSchema).max(MEMBER_LIST_MAX_REVIEW_ITEMS).default([]),
+  /** The gym asks people to sign a waiver today (3e-i). */
+  waiverInUse: z.boolean().default(false),
 });
 export type MemberListEntryDetail = z.infer<typeof memberListEntryDetailSchema>;
 

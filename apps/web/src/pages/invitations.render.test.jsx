@@ -112,7 +112,8 @@ describe("You're invited", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Join' }));
     expect(await screen.findByText("You're in Iron House.")).toBeTruthy();
     expect(orgService.acceptInvitation).toHaveBeenCalledTimes(1);
-    expect(orgService.acceptInvitation).toHaveBeenCalledWith(IRON.id);
+    // A gym with no waiver: Join carries no signature.
+    expect(orgService.acceptInvitation).toHaveBeenCalledWith(IRON.id, null);
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByText('SET UP YOUR PROFILE')).toBeTruthy();

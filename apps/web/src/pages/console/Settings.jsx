@@ -8,6 +8,7 @@ import MessageSettingsPanel from '../../components/console/MessageSettingsPanel'
 import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import CheckinRulesPanel from '../../components/console/CheckinRulesPanel';
+import WaiverPanel from '../../components/console/WaiverPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
@@ -16,6 +17,7 @@ import { canManageSchedule } from './classesView';
 import { canManageOrg } from './gymDetailsView';
 import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
+import { membersPageName } from './consoleMenu';
 
 // SETTINGS — Part 3 §3.1's sixth nav item: the gym's own details, when it is open, how its members reach it, its automatic messages, class
 // bookings, the front desk's devices and the follow-up emails to leads. What the gym
@@ -233,6 +235,10 @@ export default function Settings() {
           server gates it. Keyed per gym for the panels' reason above: it holds choices
           not saved yet. */}
       {canEditGym ? <CheckinRulesPanel key={`checkin-rules-${org.id}`} org={org} readOnly={readOnly} attendanceTo={placeTo(orgSlug, 'attendance') ?? '../attendance'} /> : null}
+
+      {/* WAIVER (3e-i): the gym's own waiver, signed in the app, on `org.manage` as the server
+          gates it. Keyed per gym for the panels' reason above: it holds words not saved yet. */}
+      {canEditGym ? <WaiverPanel key={`waiver-${org.id}`} org={org} readOnly={readOnly} membersTo={placeTo(orgSlug, 'members') ?? '../members'} membersName={membersPageName(privileges, org.orgType)} /> : null}
 
       {/* FOLLOW-UP EMAILS TO LEADS (20c-v): the owner's "Send them for me", on the
           privilege the server gates it with. Keyed per gym for the panels' reason above:

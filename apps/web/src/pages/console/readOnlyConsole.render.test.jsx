@@ -87,6 +87,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       /** Settings' check-in devices box (16b-i) reads on mount too: a gym with none. */
       getCheckinDevices: vi.fn(() => Promise.resolve({ data: { devices: [] } })),
       /** Who can check in (16d) reads on mount too: a gym that never changed it. */
+      // Settings' Waiver box (3e-i): a gym that has written none.
+      getGymWaiver: vi.fn(() => Promise.resolve({ data: { waiver: null, inUse: false, people: 0, signed: 0 } })),
       getCheckinRules: vi.fn(() => Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in' }, overdueAfterDays: 0 } })),
       previewCheckinRules: vi.fn(() =>
         Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in' }, listed: 0, stopped: 0, notListed: 0, people: [] } }),
@@ -1030,9 +1032,9 @@ describe('a step already open when the gym lapses', () => {
  *  sentence unconditionally would satisfy the lapsed half alone (:7104's PG1). */
 describe('every Settings panel that greys a control explains itself, in its own section', () => {
   // Staff left Settings for Members → Staff (23c-ii); its own cases are "the staff list" above.
-  const GREYING_SECTIONS = ['gym details', "when we're open", 'how members reach you', 'automatic messages', 'check-in devices', 'who can check in', 'follow-up emails to leads'];
+  const GREYING_SECTIONS = ['gym details', "when we're open", 'how members reach you', 'automatic messages', 'check-in devices', 'who can check in', 'waiver', 'follow-up emails to leads'];
 
-  it('draws exactly these seven sections and no eighth one nobody is checking', async () => {
+  it('draws exactly these eight sections and no ninth one nobody is checking', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
     renderConsole(Settings, '/console/iron-house/settings');
     await screen.findByTestId('console-banner');

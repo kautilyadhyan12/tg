@@ -4,6 +4,7 @@ import { z } from "zod";
 import { meteredWindowSchema, type MeteredWindow } from "./entitlements.js";
 import { orgTypeSchema } from "./orgs.js";
 import { orgWords } from "./orgWords.js";
+import { waiverToReadSchema } from "./waiver.js";
 
 const planMeterSchema = z.object({ limit: z.number().int().nonnegative(), window: meteredWindowSchema }).strict();
 
@@ -100,6 +101,8 @@ export const myInvitationSchema = z
     notMe: z.boolean().default(false),
     /** Null unless the person pays for a plan of their own and the gym can take them. */
     yourPlan: yourPlanSchema.nullable().default(null),
+    /** The waiver the gym asks a person to agree to before Join (3e-i), or null. */
+    waiver: waiverToReadSchema.nullable().default(null),
   })
   .strict();
 export type MyInvitation = z.infer<typeof myInvitationSchema>;
@@ -142,7 +145,7 @@ export const notMeInvitationResponseSchema = z.object({ state: z.literal("declin
 export type NotMeInvitationResponse = z.infer<typeof notMeInvitationResponseSchema>;
 
 /** Why Join or No thanks was refused. */
-export type InvitationRefusal = "no_invitation" | "address_not_proved" | "gym_full" | "gym_not_taking_members" | "already_member";
+export type InvitationRefusal = "no_invitation" | "address_not_proved" | "gym_full" | "gym_not_taking_members" | "already_member" | "waiver_needed" | "waiver_changed";
 
 /** The sentences a refusal is answered with. None says anything about another address
  *  or why a gym cannot take members (a stranger must not learn which gyms stopped
