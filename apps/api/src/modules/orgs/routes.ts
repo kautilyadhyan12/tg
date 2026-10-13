@@ -58,6 +58,7 @@ import { registerMemberListRoutes } from "./memberList/routes.js";
 import { registerStartHereRoutes } from "./startHere/routes.js";
 import { registerReportsRoutes } from "./reports/routes.js";
 import { registerAtRiskRoutes } from "./atRisk/routes.js";
+import { registerWeekRoutes } from "./week/routes.js";
 import * as service from "./service.js";
 import { PT_SESSIONS_ENDING_ERROR, confirmPtSessionsQuerySchema } from "@app/shared";
 import { PtSessionsEndAsk } from "./pt/changes.js";
@@ -181,6 +182,7 @@ export function registerOrgRoutes(
   registerStartHereRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerReportsRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerAtRiskRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+  registerWeekRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseOr400(createOrgRequestSchema, req.body, req, reply);

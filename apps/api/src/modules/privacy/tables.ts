@@ -60,6 +60,9 @@ export const DIRECT_DELETE_TABLES = [
   // person's own eating targets are their own data on `user_fitness_profiles`'
   // footing — deleted at Day 14 and exported.
   "user_nutrition_targets",
+  // A person's goals (migration 0099; ROADMAP Stage 5 item 30a): their own, deleted at
+  // Day 14 and exported.
+  "user_goals",
   // A member's reactions to their gym's posts (migration 0071; ROADMAP 19b-i): the
   // person's own taps, deleted at Day 14 and exported.
   "gym_post_reactions",

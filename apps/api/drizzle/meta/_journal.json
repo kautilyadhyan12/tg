@@ -692,7 +692,14 @@
       "idx": 98,
       "version": "7",
       "when": 1789516800099,
-      "tag": "0099_checkin_rules",
+      "tag": "0099_user_goals",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1789603200100,
+      "tag": "0100_checkin_rules",
       "breakpoints": true
     }
   ]

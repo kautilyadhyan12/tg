@@ -16,7 +16,7 @@ import type { GamificationMe } from "@app/shared";
 
 // Part of this module's service interface (R7.1) — other modules import the
 // tz helper from here, never from the internal streak.ts (T3 P2.3 nit).
-export { safeTimeZone } from "./streak.js";
+export { dayInTz, safeTimeZone } from "./streak.js";
 
 export interface GamificationDeps {
   sql: Sql;

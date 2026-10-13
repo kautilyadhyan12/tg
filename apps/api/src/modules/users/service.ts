@@ -89,7 +89,7 @@ export async function getUserPlanAndCutRules(
   sql: Sql,
   userId: string,
   requestedTimeZone: string | null,
-): Promise<{ plan: PlanResponse; noCutReasons: readonly NoDeficitReason[] }> {
+): Promise<{ plan: PlanResponse; noCutReasons: readonly NoDeficitReason[]; answers: PlanAnswers }> {
   const { plan, answers } = await planWithAnswersOf(
     sql,
     userId,
@@ -98,7 +98,8 @@ export async function getUserPlanAndCutRules(
   );
   const noCutReasons =
     answers.age === undefined ? [] : noDeficitReasons({ age: answers.age, health: answers.health ?? null });
-  return { plan, noCutReasons };
+  // The answers too, for a reader that needs the weight choice or Safe mode beside the plan (goals).
+  return { plan, noCutReasons, answers };
 }
 
 /** THE flag every plan route reads (ROADMAP 3b): the stored screening as the

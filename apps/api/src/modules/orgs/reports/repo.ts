@@ -18,6 +18,35 @@ const countsRowSchema = z.object({
 });
 export type MemberCounts = z.infer<typeof countsRowSchema>;
 
+/** Everybody the gym's list has held, as two WITH parts, `gone` and `people`: for each
+ *  person the day they started, the day they went on the list, and the day they left.
+ *  One rule for every count of who is new and who has left (Reports, and Overview's Last
+ *  7 days box), so two pages never give two answers. */
+export function listPeople(sql: Sql | TransactionSql, gymId: string, timezone: string, gone: readonly { id: string; on: string }[]) {
+  return sql`
+    gone AS (
+      SELECT g.id, g.left_on
+      FROM unnest(${gone.map((g) => g.id)}::uuid[], ${gone.map((g) => g.on)}::date[]) AS g(id, left_on)
+    ),
+    people AS MATERIALIZED (
+      SELECT LEAST(e.joined_on, (e.created_at AT TIME ZONE ${timezone})::date) AS started,
+             (e.created_at AT TIME ZONE ${timezone})::date AS listed_on,
+             (e.former_at AT TIME ZONE ${timezone})::date AS removed_on,
+             -- Taken off the list wins, or the day their membership was already over by
+             -- then. LEAST skips a NULL: no such day is the day they came off.
+             COALESCE(CASE WHEN e.former_at IS NOT NULL THEN
+                        LEAST((e.former_at AT TIME ZONE ${timezone})::date,
+                              CASE WHEN e.membership_ended_on IS NOT NULL
+                                   THEN GREATEST(e.membership_ended_on, (e.created_at AT TIME ZONE ${timezone})::date) END)
+                      END,
+                      -- GREATEST skips a NULL: nobody without a day is given their listing day.
+                      CASE WHEN g.left_on IS NOT NULL THEN GREATEST(g.left_on, (e.created_at AT TIME ZONE ${timezone})::date) END) AS left_on
+      FROM gym_member_list_entries e
+      LEFT JOIN gone g ON g.id = e.id
+      WHERE e.gym_id = ${gymId}
+    )`;
+}
+
 /** The gym's list counted month by month on the gym's own calendar, in one pass.
  *
  *  A person starts on the join date the gym gave, when it is earlier than the day they
@@ -43,27 +72,7 @@ export async function readMemberCounts(
     WITH clock AS (
       SELECT ${today}::date AS today, date_trunc('month', ${today}::date)::date AS this_month
     ),
-    gone AS (
-      SELECT g.id, g.left_on
-      FROM unnest(${gone.map((g) => g.id)}::uuid[], ${gone.map((g) => g.on)}::date[]) AS g(id, left_on)
-    ),
-    people AS MATERIALIZED (
-      SELECT LEAST(e.joined_on, (e.created_at AT TIME ZONE ${timezone})::date) AS started,
-             (e.created_at AT TIME ZONE ${timezone})::date AS listed_on,
-             (e.former_at AT TIME ZONE ${timezone})::date AS removed_on,
-             -- Taken off the list wins, or the day their membership was already over by
-             -- then. LEAST skips a NULL: no such day is the day they came off.
-             COALESCE(CASE WHEN e.former_at IS NOT NULL THEN
-                        LEAST((e.former_at AT TIME ZONE ${timezone})::date,
-                              CASE WHEN e.membership_ended_on IS NOT NULL
-                                   THEN GREATEST(e.membership_ended_on, (e.created_at AT TIME ZONE ${timezone})::date) END)
-                      END,
-                      -- GREATEST skips a NULL: nobody without a day is given their listing day.
-                      CASE WHEN g.left_on IS NOT NULL THEN GREATEST(g.left_on, (e.created_at AT TIME ZONE ${timezone})::date) END) AS left_on
-      FROM gym_member_list_entries e
-      LEFT JOIN gone g ON g.id = e.id
-      WHERE e.gym_id = ${gymId}
-    ),
+    ${listPeople(sql, gymId, timezone, gone)},
     months AS (
       SELECT (c.this_month - make_interval(months => n))::date AS first_day,
              (c.this_month - make_interval(months => n - 1))::date AS next_first
