@@ -186,7 +186,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 16b-i. [x] **The front desk** — merged 2026-10-02 (PR #157).
    - 16b-ii. [x] **Staff check-in and the live log** — merged 2026-10-03 (PR #159).
    - 16c. [x] **The member's side** — merged 2026-10-03 (PR #161).
-   - 16d. [ ] **Who can check in** (RULINGS 2026-10-02): a Check-in setting the gym picks — everyone on the list (the starting value) or only people with a current membership, and a payment overdue let in or sent to staff — read from the app's own memberships and bills, never a file's words; a person stopped reads "Please see a member of staff" at the desk, and staff can still check them in. After 18a; Opus xhigh.
+   - 16d. [x] **Who can check in** — merged 2026-10-13 (PR #230).
    - 16e. [x] **The two extra passes' fixes** over check-in — merged 2026-10-03 (PR #162).
    - 16f. [x] **The desk reads a pass in poor light, and has a sound for each answer** — merged 2026-10-04 (PR #164).
 
