@@ -589,6 +589,30 @@ The terminal's own choices, each a job's to better with a reason.
 - **Walked on the real phone.** Before Kd is asked to click through, the terminal walks
   the whole task on the phone itself (CLAUDE.md §4), and says what it saw.
 
+### 16.3a The look, as drawn (item 11a, 2026-10-13)
+
+- **Where:** `docs/design/phone/pages/`, one file a screen, dark (`Name.src.html`; the
+  light look is the same file with `t-dark` changed to `t-light`), and
+  `docs/design/phone/shared/`: `helmet.html` (every colour and building block),
+  `tabbar.html`, `icons.json` (Lucide's line icons). `python build.py <out folder>` makes
+  both looks. The design canvas: https://claude.ai/artifact/Q8H9SQHG7bMfmp9sJRMPCQ (Kd's).
+  Pictures: `D:\Projects\ai-home-gym-design\4-phone\shots\` on his laptop.
+- **Drawn:** Today, Workout, Food, Gym, Gym for a person with no gym, Me, a box that opens
+  from the bottom, and one screen with the no-internet line, "Waiting to send", an empty
+  box and a failed box; then the building blocks and the twelve rules (`Rules.src.html`).
+  What each tab HOLDS is its own job's to settle (items 12 to 21, 31 to 38, 60 to 65);
+  these fix how it looks.
+- **The console's colours by the same names** (Part 3 §17.3), with four more: `--bar` and
+  `--bar-line` (the tab bar, which follows the look, where the console's menu stays
+  dark), `--tab` (a tab's name) and `--track` (the empty part of a ring or bar). The tab
+  you are on is `--soft-t` on a `--soft` pill, never plain orange text, which is too pale
+  on white.
+- **Sizes:** big number 44 · screen title 28 · box title 18 · a row's name 16 · words 15 ·
+  labels 14 · small 13 · tab names 12. A main button 48 tall, a row 56 or more, nothing
+  pressed under 44; 16 at the sides, 20 between boxes, 16 inside one.
+- 11b builds this in `apps/mobile` and measures every text pair's contrast there, as
+  `consoleCss.test.js` does for the console.
+
 ### 16.4 The order
 
 ROADMAP Stage 5: feature folder 1, items 10 to 21 · feature folder 2, items 30 to 38.

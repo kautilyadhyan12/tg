@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A box that opens from the bottom, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" data-fixed-h="844" class="screen t-dark" style="width: 390px; height: %H%px">
+<main class="main" aria-hidden="true">
+<div class="between">
+<h1 class="h1">Food</h1>
+<span class="s15 w6">Today</span>
+</div>
+<label class="search"><!--I:search:18--><input class="input" type="search" value="oats" aria-label="Search food"></label>
+<div class="card rows">
+<div class="row"><div class="col grow"><span class="s16 w6">Oats with milk</span><span class="s14 t2">Our list</span></div><span class="s15 t2 num">310 kcal a bowl</span></div>
+<div class="row"><div class="col grow"><span class="s16 w6">Oats, dry</span><span class="s14 t2">USDA</span></div><span class="s15 t2 num">150 kcal a cup</span></div>
+<div class="row"><div class="col grow"><span class="s16 w6">Oat biscuits</span><span class="s14 t2">Packaged product</span></div><span class="s15 t2 num">70 kcal each</span></div>
+</div>
+</main>
+<div class="scrim"></div>
+<section class="sheet" role="dialog" aria-modal="true" aria-labelledby="box-title">
+<span class="grab"></span>
+<div class="between" style="align-items: flex-start">
+<div class="col" style="gap: 2px"><h2 id="box-title" class="h2">Oats with milk</h2><span class="s14 t2">Add to Breakfast</span></div>
+<button type="button" class="icon-btn" aria-label="Close" style="margin: -8px -8px 0 0"><!--I:x:20--></button>
+</div>
+<div class="field">
+<span class="label">Amount</span>
+<div style="display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 8px; align-items: center">
+<button type="button" class="btn btn-s" aria-label="Less" style="padding: 0"><!--I:minus:18--></button>
+<div class="input num w6" style="display: flex; align-items: center; justify-content: center; font-size: 18px">1</div>
+<button type="button" class="btn btn-s" aria-label="More" style="padding: 0"><!--I:plus:18--></button>
+</div>
+</div>
+<div class="field">
+<span class="label">Measure</span>
+<button type="button" class="sel"><span>Bowl · 250 ml</span><span class="t3" style="display: flex"><!--I:down:18--></span></button>
+</div>
+<div class="between" style="padding: 12px 14px; border-radius: 12px; background: var(--raise)">
+<span class="s15 t2">Comes to</span>
+<span class="s16 w7 num">310 kcal</span>
+</div>
+<button type="button" class="btn btn-p btn-wide">Add to Breakfast</button>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

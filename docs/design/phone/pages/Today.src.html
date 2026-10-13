@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Today, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="screen t-dark" style="width: 390px; height: %H%px">
+<main class="main">
+
+<div class="col" style="gap: 2px">
+<p class="sub">Good morning, Maya</p>
+<h1 class="h1">Today</h1>
+</div>
+
+<section class="card pad" aria-labelledby="t-workout">
+<div class="between">
+<span class="s14 w6 t2">Today’s workout</span>
+<span class="tag tag-plain"><!--I:clock:14-->About 40 min</span>
+</div>
+<div class="col" style="gap: 4px">
+<h2 id="t-workout" class="h2">Legs and core</h2>
+<p class="s15 t2">Squat, chair squat, bicycle crunch and 3 more</p>
+</div>
+<button type="button" class="btn btn-p btn-wide"><!--I:play:18-->Start workout</button>
+<a href="#workout" class="s15 w6" style="align-self: center; min-height: 44px; display: flex; align-items: center">Pick a different workout</a>
+</section>
+
+<section class="card pad" aria-labelledby="t-streak">
+<div class="between">
+<div class="hrow">
+<span class="dot dot-soft"><!--I:flame:22--></span>
+<div class="col">
+<span class="mid num">12 days</span>
+<span id="t-streak" class="s14 t2">Your streak</span>
+</div>
+</div>
+<span class="tag tag-plain"><!--I:snow:14-->2 freezes left</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px">
+<div class="day day-done"><i><!--I:check:16--></i>Mon</div>
+<div class="day day-now"><i>13</i>Tue</div>
+<div class="day"><i>14</i>Wed</div>
+<div class="day"><i>15</i>Thu</div>
+<div class="day"><i>16</i>Fri</div>
+<div class="day"><i>17</i>Sat</div>
+<div class="day"><i>18</i>Sun</div>
+</div>
+<p class="s14 t2">1 of 7 days active this week</p>
+</section>
+
+<section class="card pad" aria-labelledby="t-food">
+<div class="between">
+<h2 id="t-food" class="h2">Food today</h2>
+<a href="#food" class="s15 w6" style="min-height: 44px; display: flex; align-items: center">Open Food</a>
+</div>
+<div class="hrow" style="gap: 20px">
+<div class="ring" style="width: 116px; height: 116px">
+<svg width="116" height="116" viewBox="0 0 116 116" aria-hidden="true"><circle class="trk" cx="58" cy="58" r="50"></circle><circle cx="58" cy="58" r="50" stroke="var(--cl-orange)" stroke-dasharray="212 315"></circle></svg>
+<div class="col" style="align-items: center"><span class="mid num">680</span><span class="s13 t2">kcal left</span></div>
+</div>
+<div class="col grow" style="gap: 12px">
+<div class="col" style="gap: 6px"><div class="between s14"><span class="w6">Protein</span><span class="t2 num">86 of 140 g</span></div><div class="bar"><span style="width: 61%; background: var(--cl-blue)"></span></div></div>
+<div class="col" style="gap: 6px"><div class="between s14"><span class="w6">Carbs</span><span class="t2 num">160 of 240 g</span></div><div class="bar"><span style="width: 67%; background: var(--cl-green)"></span></div></div>
+<div class="col" style="gap: 6px"><div class="between s14"><span class="w6">Fat</span><span class="t2 num">48 of 70 g</span></div><div class="bar"><span style="width: 69%; background: var(--cl-purple)"></span></div></div>
+</div>
+</div>
+<button type="button" class="btn btn-soft btn-wide"><!--I:plus:18-->Add a meal</button>
+</section>
+
+<section class="card pad" aria-labelledby="t-level">
+<div class="between">
+<h2 id="t-level" class="h2">Level 7</h2>
+<span class="s14 t2 num">1,240 of 1,500 XP</span>
+</div>
+<div class="bar" style="height: 8px"><span style="width: 83%"></span></div>
+<p class="s14 t2">260 XP to Level 8</p>
+</section>
+
+<section class="card" aria-labelledby="t-goals">
+<div class="between" style="padding: 16px 16px 4px">
+<h2 id="t-goals" class="h2">Goals</h2>
+<a href="#goals" class="s15 w6" style="min-height: 44px; display: flex; align-items: center">See all</a>
+</div>
+<div class="rows">
+<a href="#goal-1" class="row" style="align-items: flex-start; padding: 12px 16px"><div class="col grow" style="gap: 8px"><div class="between"><span class="s16 w6">Work out 4 days a week</span><span class="s14 t2 num">1 of 4</span></div><div class="bar"><span style="width: 25%"></span></div></div></a>
+<a href="#goal-2" class="row" style="align-items: flex-start; padding: 12px 16px"><div class="col grow" style="gap: 8px"><div class="between"><span class="s16 w6">Reach 72 kg</span><span class="s14 t2 num">74.5 kg now</span></div><div class="bar"><span style="width: 58%"></span></div></div></a>
+</div>
+</section>
+
+<section class="card" aria-labelledby="t-recent">
+<div style="padding: 16px 16px 8px"><h2 id="t-recent" class="h2">Recent workouts</h2></div>
+<div class="rows">
+<a href="#w-1" class="row"><div class="col grow"><span class="s16 w6">Upper body</span><span class="s14 t2">Mon 12 Oct · 38 min</span></div><span class="go"><!--I:go:18--></span></a>
+<a href="#w-2" class="row"><div class="col grow"><span class="s16 w6">Legs and core</span><span class="s14 t2">Sat 10 Oct · 42 min</span></div><span class="go"><!--I:go:18--></span></a>
+<a href="#w-3" class="row"><div class="col grow"><span class="s16 w6">Run</span><span class="s14 t2">Fri 9 Oct · 3.2 km · 21 min</span></div><span class="go"><!--I:go:18--></span></a>
+</div>
+</section>
+
+</main>
+<!--TABBAR:today-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

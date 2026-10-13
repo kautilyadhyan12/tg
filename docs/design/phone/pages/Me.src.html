@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Me, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="screen t-dark" style="width: 390px; height: %H%px">
+<main class="main">
+
+<h1 class="h1">Me</h1>
+
+<a href="#profile" class="card hrow" style="padding: 16px; color: var(--t1)">
+<span class="dot dot-soft s16 w7" style="width: 52px; height: 52px; border-radius: 50%">MR</span>
+<div class="col grow"><span class="h2 ell">Maya Rao</span><span class="s14 t2 ell">Level 7 · maya.rao@gmail.com</span></div>
+<span class="t3" style="display: flex"><!--I:go:18--></span>
+</a>
+
+<nav aria-label="Your progress" class="card rows">
+<a href="#progress" class="row"><span class="lead"><!--I:chart:22--></span><span class="s16 w6 grow">Progress</span><span class="go"><!--I:go:18--></span></a>
+<a href="#goals" class="row"><span class="lead"><!--I:target:22--></span><span class="s16 w6 grow">Goals</span><span class="s14 t2">2 goals</span><span class="go"><!--I:go:18--></span></a>
+<a href="#badges" class="row"><span class="lead"><!--I:trophy:22--></span><span class="s16 w6 grow">Badges</span><span class="s14 t2">5 of 20</span><span class="go"><!--I:go:18--></span></a>
+</nav>
+
+<div class="col" style="gap: 10px">
+<h2 class="s14 w6 t2">Settings</h2>
+<nav aria-label="Settings" class="card rows">
+<a href="#fitness" class="row"><span class="lead"><!--I:heart:22--></span><span class="s16 w6 grow">Fitness and health</span><span class="go"><!--I:go:18--></span></a>
+<a href="#units" class="row"><span class="lead"><!--I:ruler:22--></span><span class="s16 w6 grow">Units</span><span class="s14 t2">kg · cm</span><span class="go"><!--I:go:18--></span></a>
+<a href="#notifications" class="row"><span class="lead"><!--I:bell:22--></span><span class="s16 w6 grow">Notifications</span><span class="go"><!--I:go:18--></span></a>
+<a href="#gym-sees" class="row"><span class="lead"><!--I:shield:22--></span><span class="s16 w6 grow">What a gym can see</span><span class="go"><!--I:go:18--></span></a>
+<div class="row"><span class="lead"><!--I:eyeoff:22--></span><span class="s16 w6 grow">Hide me on leaderboards</span><button type="button" role="switch" aria-checked="false" aria-label="Hide me on leaderboards" class="switch"></button></div>
+</nav>
+</div>
+
+<div class="col" style="gap: 10px">
+<h2 class="s14 w6 t2">Appearance</h2>
+<div role="radiogroup" aria-label="Appearance" class="seg">
+<button type="button" role="radio" data-look="light" aria-checked="false"><!--I:sun:16-->Light</button>
+<button type="button" role="radio" data-look="dark" aria-checked="true"><!--I:moon:16-->Dark</button>
+<button type="button" role="radio" data-look="auto" aria-checked="false"><!--I:phone:16-->Auto</button>
+</div>
+<span class="hint">Auto follows your phone’s own light or dark setting.</span>
+</div>
+
+<div class="col" style="gap: 10px">
+<h2 class="s14 w6 t2">Account</h2>
+<nav aria-label="Account" class="card rows">
+<a href="#email" class="row"><span class="lead"><!--I:mail:22--></span><span class="s16 w6 grow">Change email</span><span class="go"><!--I:go:18--></span></a>
+<a href="#export" class="row"><span class="lead"><!--I:download:22--></span><span class="s16 w6 grow">Download my data</span><span class="go"><!--I:go:18--></span></a>
+<a href="#delete" class="row" style="color: var(--bad)"><span style="display: flex"><!--I:trash:22--></span><span class="s16 w6 grow">Delete account</span></a>
+</nav>
+<button type="button" class="btn btn-s btn-wide"><!--I:logout:18-->Sign out</button>
+</div>
+
+</main>
+<!--TABBAR:me-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

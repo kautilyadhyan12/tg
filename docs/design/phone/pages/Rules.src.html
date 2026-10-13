@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rules for every phone screen, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<style>
+.rule{display:grid;grid-template-columns:44px minmax(0,1fr);gap:14px;padding:18px 20px}
+.rule + .rule{border-top:1px solid var(--line)}
+.rule b{width:36px;height:36px;border-radius:50%;background:var(--soft);color:var(--soft-t);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700}
+</style>
+<div data-root="1" class="screen t-dark" style="width: 840px; height: %H%px">
+<main style="box-sizing: border-box; padding: 40px; display: flex; flex-direction: column; gap: 28px">
+
+<div class="col" style="gap: 6px">
+<h1 class="h1">Rules for every phone screen</h1>
+<p class="sub">The console’s twelve rules, said for a member holding a phone.</p>
+</div>
+
+<div class="card col">
+<div class="rule"><b>1</b><div class="col" style="gap: 4px"><h2 class="h2">One screen, one job</h2><p class="s15 t2">The title, top left, says where you are. A screen has one main button.</p></div></div>
+<div class="rule"><b>2</b><div class="col" style="gap: 4px"><h2 class="h2">Five tabs, always there</h2><p class="s15 t2">Today · Workout · Food · Gym · Me. Everything in the app is under one of them. A screen opened from a tab has a back arrow, top left.</p></div></div>
+<div class="rule"><b>3</b><div class="col" style="gap: 4px"><h2 class="h2">The key number is the biggest thing</h2><p class="s15 t2">What you check most is big and bold. Its label is small and calm.</p></div></div>
+<div class="rule"><b>4</b><div class="col" style="gap: 4px"><h2 class="h2">Orange means “press here”</h2><p class="s15 t2">One solid orange button in a box at most. A second action is pale orange; the rest are outlined.</p></div></div>
+<div class="rule"><b>5</b><div class="col" style="gap: 4px"><h2 class="h2">Colour always has a meaning</h2><p class="s15 t2">Green is good, amber is “look at this”, red is a problem. Always with a word, never colour alone.</p></div></div>
+<div class="rule"><b>6</b><div class="col" style="gap: 4px"><h2 class="h2">One font, a fixed set of sizes</h2><p class="s15 t2">Archivo everywhere, in seven sizes. Text grows when the phone’s own text size is set bigger, and nothing is cut off.</p></div></div>
+<div class="rule"><b>7</b><div class="col" style="gap: 4px"><h2 class="h2">The same gaps everywhere</h2><p class="s15 t2">16 at the sides of the screen, 20 between boxes, 16 inside a box.</p></div></div>
+<div class="rule"><b>8</b><div class="col" style="gap: 4px"><h2 class="h2">Big enough for a thumb</h2><p class="s15 t2">A main button is 48 tall and a row 56. Nothing you press is under 44. Pick from a list or a calendar instead of typing.</p></div></div>
+<div class="rule"><b>9</b><div class="col" style="gap: 4px"><h2 class="h2">One pattern for pop-ups</h2><p class="s15 t2">A question or a choice opens from the bottom, under your thumb. A person or a thing opens as a full screen with a back arrow.</p></div></div>
+<div class="rule"><b>10</b><div class="col" style="gap: 4px"><h2 class="h2">Nothing is lost without internet</h2><p class="s15 t2">A workout, a meal, a weigh-in or a run is kept on the phone and sent when the internet is back. A line at the top says so, and nobody is signed out.</p></div></div>
+<div class="rule"><b>11</b><div class="col" style="gap: 4px"><h2 class="h2">Every screen in both looks</h2><p class="s15 t2">Dark and light, switched on Me, with Auto following the phone.</p></div></div>
+<div class="rule"><b>12</b><div class="col" style="gap: 4px"><h2 class="h2">A member’s words</h2><p class="s15 t2">Say it the way a gym’s front desk would. An empty screen says what to do next, with its button.</p></div></div>
+</div>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":840,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

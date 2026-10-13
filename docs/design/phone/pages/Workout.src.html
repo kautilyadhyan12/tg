@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workout, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="screen t-dark" style="width: 390px; height: %H%px">
+<main class="main">
+
+<h1 class="h1">Workout</h1>
+
+<section class="card pad" aria-labelledby="w-today">
+<div class="between">
+<span class="s14 w6 t2">Today · Tuesday</span>
+<span class="tag tag-plain"><!--I:clock:14-->About 40 min</span>
+</div>
+<div class="col" style="gap: 4px">
+<h2 id="w-today" class="h2">Legs and core</h2>
+<p class="s15 t2">6 exercises · the camera counts 4 of them</p>
+</div>
+<button type="button" class="btn btn-p btn-wide"><!--I:play:18-->Start workout</button>
+</section>
+
+<nav aria-label="Workout" class="card rows">
+<a href="#build" class="row"><span class="dot"><!--I:plus:20--></span><div class="col grow"><span class="s16 w6">Build a workout</span><span class="s14 t2">Pick the exercises, sets and rest</span></div><span class="go"><!--I:go:18--></span></a>
+<a href="#library" class="row"><span class="dot"><!--I:book:20--></span><div class="col grow"><span class="s16 w6">Exercise Library</span><span class="s14 t2">58 exercises</span></div><span class="go"><!--I:go:18--></span></a>
+<a href="#saved" class="row"><span class="dot"><!--I:heart:20--></span><div class="col grow"><span class="s16 w6">Saved workouts</span><span class="s14 t2">3 saved</span></div><span class="go"><!--I:go:18--></span></a>
+<a href="#running" class="row"><span class="dot"><!--I:pin:20--></span><div class="col grow"><span class="s16 w6">Running</span><span class="s14 t2">Record a run with GPS</span></div><span class="go"><!--I:go:18--></span></a>
+<a href="#history" class="row"><span class="dot"><!--I:calendar:20--></span><div class="col grow"><span class="s16 w6">History</span><span class="s14 t2">Every workout you’ve done</span></div><span class="go"><!--I:go:18--></span></a>
+</nav>
+
+<section class="card" aria-labelledby="w-week">
+<div class="between" style="padding: 16px 16px 4px">
+<h2 id="w-week" class="h2">This week’s plan</h2>
+<a href="#plan" class="s15 w6" style="min-height: 44px; display: flex; align-items: center">Change</a>
+</div>
+<div class="rows">
+<div class="row"><span class="s14 w6 t3" style="width: 36px">Mon</span><span class="s16 w6 grow">Upper body</span><span class="tag tag-good"><!--I:check:14-->Done</span></div>
+<div class="row"><span class="s14 w6" style="width: 36px">Tue</span><span class="s16 w6 grow">Legs and core</span><span class="tag tag-soft">Today</span></div>
+<div class="row"><span class="s14 w6 t3" style="width: 36px">Wed</span><span class="s16 t2 grow">Rest day</span></div>
+<div class="row"><span class="s14 w6 t3" style="width: 36px">Thu</span><span class="s16 w6 grow">Run · 3 km</span></div>
+<div class="row"><span class="s14 w6 t3" style="width: 36px">Fri</span><span class="s16 w6 grow">Upper body</span></div>
+<div class="row"><span class="s14 w6 t3" style="width: 36px">Sat</span><span class="s16 w6 grow">Legs and core</span></div>
+<div class="row"><span class="s14 w6 t3" style="width: 36px">Sun</span><span class="s16 t2 grow">Rest day</span></div>
+</div>
+</section>
+
+</main>
+<!--TABBAR:workout-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gym, for a person with no gym, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" data-fixed-h="844" class="screen t-dark" style="width: 390px; height: %H%px">
+<main class="main">
+
+<h1 class="h1">Gym</h1>
+
+<section class="card empty" aria-labelledby="gn-title">
+<span class="dot dot-soft" style="width: 56px; height: 56px; border-radius: 16px"><!--I:building:26--></span>
+<h2 id="gn-title" class="h2">You haven’t joined a gym yet</h2>
+<p class="s15 t2">A gym, studio or trainer invites you by email. Give the front desk this address, and their invitation shows up here.</p>
+<div class="tag tag-plain" style="height: 36px; padding: 0 14px; font-size: 15px"><!--I:mail:16-->maya.rao@gmail.com</div>
+<button type="button" class="btn btn-s btn-wide" style="margin-top: 4px">Check for an invitation</button>
+</section>
+
+<p class="s14 t3" style="text-align: center; padding: 0 12px">Workouts, food and your progress all work without a gym.</p>
+
+</main>
+<!--TABBAR:gym-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

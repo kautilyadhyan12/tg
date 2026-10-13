@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Food, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="screen t-dark" style="width: 390px; height: %H%px">
+<main class="main">
+
+<div class="between">
+<h1 class="h1">Food</h1>
+<div class="hrow" style="gap: 4px">
+<button type="button" class="icon-btn" aria-label="Previous day"><!--I:back:20--></button>
+<span class="s15 w6">Today</span>
+<button type="button" class="icon-btn" aria-label="Next day" disabled style="opacity: 0.4"><!--I:go:20--></button>
+</div>
+</div>
+
+<section class="card pad" aria-label="What is left today">
+<div class="hrow" style="gap: 20px">
+<div class="ring" style="width: 132px; height: 132px">
+<svg width="132" height="132" viewBox="0 0 132 132" aria-hidden="true"><circle class="trk" cx="66" cy="66" r="58"></circle><circle cx="66" cy="66" r="58" stroke="var(--cl-orange)" stroke-dasharray="246 365"></circle></svg>
+<div class="col" style="align-items: center"><span class="big num" style="font-size: 36px; line-height: 40px">680</span><span class="s13 t2">kcal left</span></div>
+</div>
+<div class="col grow" style="gap: 4px">
+<span class="s14 t2">Eaten</span><span class="s16 w6 num">1,420 kcal</span>
+<span class="s14 t2" style="margin-top: 8px">Your day</span><span class="s16 w6 num">2,100 kcal</span>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<div class="col" style="gap: 6px"><span class="s14 w6">Protein</span><div class="bar"><span style="width: 61%; background: var(--cl-blue)"></span></div><span class="s13 t2 num">54 g left</span></div>
+<div class="col" style="gap: 6px"><span class="s14 w6">Carbs</span><div class="bar"><span style="width: 67%; background: var(--cl-green)"></span></div><span class="s13 t2 num">80 g left</span></div>
+<div class="col" style="gap: 6px"><span class="s14 w6">Fat</span><div class="bar"><span style="width: 69%; background: var(--cl-purple)"></span></div><span class="s13 t2 num">22 g left</span></div>
+</div>
+</section>
+
+<div class="col" style="gap: 12px">
+<label class="search"><!--I:search:18--><input class="input" type="search" placeholder="Search food" aria-label="Search food"></label>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+<button type="button" class="btn btn-p"><!--I:camera:18-->Photo of a meal</button>
+<button type="button" class="btn btn-s"><!--I:barcode:18-->Scan a barcode</button>
+</div>
+</div>
+
+<section class="card" aria-labelledby="f-breakfast">
+<div class="between" style="padding: 16px 16px 8px"><h2 id="f-breakfast" class="h2">Breakfast</h2><span class="s14 t2 num">415 kcal</span></div>
+<div class="rows">
+<a href="#food-1" class="row"><div class="col grow"><span class="s16 w6">Oats with milk</span><span class="s14 t2">1 bowl</span></div><span class="s15 t2 num">310 kcal</span></a>
+<a href="#food-2" class="row"><div class="col grow"><span class="s16 w6">Banana</span><span class="s14 t2">1 medium</span></div><span class="s15 t2 num">105 kcal</span></a>
+<button type="button" class="row w6" style="color: var(--link)"><!--I:plus:18-->Add to Breakfast</button>
+</div>
+</section>
+
+<section class="card" aria-labelledby="f-lunch">
+<div class="between" style="padding: 16px 16px 8px"><h2 id="f-lunch" class="h2">Lunch</h2><span class="s14 t2 num">1,005 kcal</span></div>
+<div class="rows">
+<a href="#food-3" class="row"><div class="col grow"><span class="s16 w6">Chicken curry</span><span class="s14 t2">1 cup · from your photo</span></div><span class="s15 t2 num">430 kcal</span></a>
+<a href="#food-4" class="row"><div class="col grow"><span class="s16 w6">Cooked rice</span><span class="s14 t2">1½ cups</span></div><span class="s15 t2 num">310 kcal</span></a>
+<a href="#food-5" class="row"><div class="col grow"><span class="s16 w6">Dal</span><span class="s14 t2">1 bowl</span></div><span class="s15 t2 num">265 kcal</span></a>
+<button type="button" class="row w6" style="color: var(--link)"><!--I:plus:18-->Add to Lunch</button>
+</div>
+</section>
+
+<section class="card" aria-labelledby="f-dinner">
+<div class="between" style="padding: 16px 16px 8px"><h2 id="f-dinner" class="h2">Dinner</h2><span class="s14 t3">Nothing yet</span></div>
+<div class="rows"><button type="button" class="row w6" style="color: var(--link)"><!--I:plus:18-->Add to Dinner</button></div>
+</section>
+
+<section class="card" aria-labelledby="f-snack">
+<div class="between" style="padding: 16px 16px 8px"><h2 id="f-snack" class="h2">Snack</h2><span class="s14 t3">Nothing yet</span></div>
+<div class="rows"><button type="button" class="row w6" style="color: var(--link)"><!--I:plus:18-->Add to Snack</button></div>
+</section>
+
+</main>
+<!--TABBAR:food-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

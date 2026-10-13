@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>No internet, nothing yet and a problem, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="screen t-dark" style="width: 390px; height: %H%px">
+<div class="strip" role="status"><!--I:wifioff:18--><span>No internet. What you do is kept on this phone.</span></div>
+<main class="main">
+
+<div class="hrow" style="gap: 4px; margin-left: -10px">
+<button type="button" class="icon-btn" aria-label="Back to Workout"><!--I:back:22--></button>
+<h1 class="h1">History</h1>
+</div>
+
+<section class="card" aria-label="Workouts">
+<div class="rows">
+<a href="#h-1" class="row"><div class="col grow"><span class="s16 w6">Legs and core</span><span class="s14 t2">Today · 41 min</span></div><span class="tag tag-warn"><!--I:clock:14-->Waiting to send</span></a>
+<a href="#h-2" class="row"><div class="col grow"><span class="s16 w6">Upper body</span><span class="s14 t2">Mon 12 Oct · 38 min</span></div><span class="go"><!--I:go:18--></span></a>
+</div>
+</section>
+
+<section class="card empty" aria-labelledby="st-empty">
+<span class="dot" style="width: 56px; height: 56px; border-radius: 16px"><!--I:heart:26--></span>
+<h2 id="st-empty" class="h2">No saved workouts yet</h2>
+<p class="s15 t2">Build a workout once and save it to do it again.</p>
+<button type="button" class="btn btn-soft">Build a workout</button>
+</section>
+
+<section class="card empty" aria-labelledby="st-fail">
+<span class="dot" style="width: 56px; height: 56px; border-radius: 16px; background: var(--bad-bg); color: var(--bad)"><!--I:warn:26--></span>
+<h2 id="st-fail" class="h2">Couldn’t load your classes</h2>
+<p class="s15 t2">Check your internet, then try again.</p>
+<button type="button" class="btn btn-s">Try again</button>
+</section>
+
+<div class="callout"><span style="color: var(--warn); display: flex; padding-top: 2px"><!--I:warn:18--></span><p class="s15">Your membership ends on 1 Nov. <a href="#renew" class="w6">Renew</a></p></div>
+
+</main>
+<!--TABBAR:workout-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
