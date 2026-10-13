@@ -4,6 +4,10 @@
 // carbohydrate, fat or fibre differs from its entry is printed, and the run
 // fails if any does. Not run in CI: it needs the network.
 //
+// It also holds test/fixtures/usda-sr-food-groups.json to the download: USDA's own
+// description and food group of every SR Legacy entry the list cites, which
+// nutrition.foods.diet.unit.test.ts checks each food's diet against.
+//
 // The USDA zip and CSV readers live in `usda-files.ts`, which the USDA importer
 // reads the same two releases with (ROADMAP 7a-iii-a); the CoFID workbook is
 // this tool's alone.
@@ -11,12 +15,17 @@
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --list          every food beside its entry's own name
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --cache=<dir>   default: the system temp folder
-import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
+//   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --write-groups  write the food groups file again, after the list grew
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { CURATED_FOODS, PIECE_ENTRIES } from "../src/modules/nutrition/foods.js";
+import { foodMeasures } from "../src/modules/nutrition/measures.js";
 import {
   defaultCache,
   download,
   fail,
   unzip,
+  usdaFoodGroups,
   usdaTable,
   USDA_RELEASES,
   type UsdaNutrient,
@@ -93,12 +102,16 @@ function cofidTable(archive: Buffer): Map<string, Entry> {
   return table;
 }
 
+const GROUPS_ABOUT =
+  "USDA FoodData Central, SR Legacy (April 2018, public domain): the description and the food group of every entry our food list cites, by FDC id, as USDA's own food.csv and food_category.csv give them. Written by tools/check-food-sources.ts --write-groups, which also fails when this file differs from the download; never edited by hand.";
+
 const cache = arg("cache") ?? defaultCache();
 const usdaZip = async (release: keyof typeof USDA_RELEASES): Promise<Buffer> => {
   const { url, file, sha256 } = USDA_RELEASES[release];
   return download(url, file, cache, sha256);
 };
-const srLegacy = usdaTable(await usdaZip("sr_legacy"), "sr_legacy");
+const srLegacyZip = await usdaZip("sr_legacy");
+const srLegacy = usdaTable(srLegacyZip, "sr_legacy");
 const fndds = usdaTable(await usdaZip("fndds"), "fndds");
 const cofid = cofidTable(
   await download(
@@ -132,6 +145,40 @@ for (const food of CURATED_FOODS) {
     if (food[figure] !== expected) differences.push(`${food.name}: ${figure} is ${String(food[figure])}, ${food.citation} gives ${String(expected)}`);
   }
   if (process.argv.includes("--list")) console.log(`${food.name}  ·  ${food.citation}  ·  ${entry.description}`);
+}
+
+// USDA's description and food group of every SR Legacy entry cited.
+const groups = usdaFoodGroups(srLegacyZip);
+const cited: Record<string, [string, string]> = {};
+for (const food of CURATED_FOODS) {
+  const [table = "", id = ""] = food.citation.split(":");
+  if (table !== USDA_RELEASES.sr_legacy.citation) continue;
+  const entry = srLegacy.get(Number(id));
+  const group = groups.get(Number(id));
+  if (entry !== undefined && group !== undefined) cited[id] = [entry.description, group];
+  else differences.push(`${food.name}: ${food.citation} has no food group`);
+}
+const groupsPath = join(import.meta.dirname, "..", "test", "fixtures", "usda-sr-food-groups.json");
+const groupsFile = `${JSON.stringify({ about: GROUPS_ABOUT, foods: cited }, null, 1)}\n`;
+if (process.argv.includes("--write-groups")) writeFileSync(groupsPath, groupsFile);
+else if (readFileSync(groupsPath, "utf8").replaceAll("\r\n", "\n") !== groupsFile) {
+  differences.push("test/fixtures/usda-sr-food-groups.json is not what the download gives: run this tool with --write-groups");
+}
+
+// A food that borrows its pieces: the entry is in the survey release and still gives a measure the cited one lacks.
+for (const [canonical, fdcId] of PIECE_ENTRIES) {
+  const food = CURATED_FOODS.find((f) => f.canonical === canonical);
+  const entry = fndds.get(fdcId);
+  const citedId = Number(food?.citation.split(":")[1]);
+  const citedEntry = srLegacy.get(citedId) ?? fndds.get(citedId);
+  if (food === undefined || entry === undefined || citedEntry === undefined) {
+    differences.push(`${canonical}: its pieces' entry ${String(fdcId)} or the food itself is missing`);
+    continue;
+  }
+  const measures = foodMeasures({ serving: food.serving, unit: food.unit, ownServing: true, portions: citedEntry.portions, pieces: entry.portions });
+  const pieces = measures.filter((m) => m.id.startsWith("piece-") && m.grams <= 30);
+  if (pieces.length === 0) differences.push(`${food.name}: ${String(fdcId)} ("${entry.description}") gives no piece of 30 g or less`);
+  else if (process.argv.includes("--list")) console.log(`${food.name}  ·  pieces from ${String(fdcId)}  ·  ${entry.description}: ${pieces.map((m) => `${m.name} ${String(m.grams)} g`).join(", ")}`);
 }
 
 for (const line of differences) console.log(line);
