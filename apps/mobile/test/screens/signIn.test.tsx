@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { App } from "../../src/App";
+import { pictures } from "../../src/look/pictures";
 import { RAVI, fakeServer, kept, lost, memoryStore, refusal, tokens, type Route } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
@@ -30,7 +31,7 @@ const press = (button: string) => fireEvent.press(screen.getByRole("button", { n
 async function askForCode(email = "ravi@example.com") {
   await screen.findByText("Get started.");
   await type("Email", email);
-  await press("Continue with email");
+  await press("Continue");
 }
 
 interface Drawn {
@@ -103,10 +104,18 @@ describe("signing in by email code", () => {
   it("a phone that holds no sign-in opens on Get started, with no tabs", async () => {
     const { server } = await openApp({});
     expect(await screen.findByText("Get started.")).toBeTruthy();
-    expect(screen.getByText("Sign in or create your account — no password needed")).toBeTruthy();
-    // The browser's own picture and its line, at the top.
-    expect(screen.getByText("AI-Powered Training")).toBeTruthy();
-    expect(screen.getByText("“Real-time form correction.\nEvery rep. Every set.”")).toBeTruthy();
+    expect(screen.getByText("Sign in or create your account")).toBeTruthy();
+    // The browser's own picture, across the top.
+    expect(screen.getByTestId("get-started-picture").props.source).toBe(pictures.getstarted);
+    // Few words: the mark, the heading, one line, the box's own words, the button and the terms.
+    expect(screen.getAllByText(/./).map((line) => String(line.props.children))).toEqual([
+      "AI Home Gym",
+      "Get started.",
+      "Sign in or create your account",
+      "Continue",
+      "By continuing you agree to our Terms & Privacy Policy",
+    ]);
+    expect(screen.getByLabelText("Email").props.placeholder).toBe("Email address");
     expect(screen.queryAllByRole("tab")).toEqual([]);
     expect(server.asked).toEqual([]);
   });
@@ -116,6 +125,8 @@ describe("signing in by email code", () => {
     // Typed as people type it: the server is sent the address as it reads it.
     await askForCode("  Ravi@Example.com ");
     expect(await screen.findByText("ravi@example.com")).toBeTruthy();
+    expect(screen.getByText("Check your email.")).toBeTruthy();
+    expect(screen.queryByText("Get started.")).toBeNull();
     expect(screen.getByText("Enter the 6-digit code sent to")).toBeTruthy();
     await type("6-digit code", "12 34x56");
     expect(screen.getByLabelText("6-digit code").props.value).toBe("123456");
@@ -174,7 +185,7 @@ describe("signing in by email code", () => {
     expect(await screen.findByText(line)).toBeTruthy();
     expect(screen.queryByLabelText("6-digit code")).toBeNull();
     // The button can be pressed again.
-    expect(screen.getByRole("button", { name: "Continue with email" }).props.accessibilityState).toEqual({ disabled: false, busy: false });
+    expect(screen.getByRole("button", { name: "Continue" }).props.accessibilityState).toEqual({ disabled: false, busy: false });
   });
 
   it("asked again inside the minute: the code box opens for the code already sent, and Resend waits the server's time", async () => {

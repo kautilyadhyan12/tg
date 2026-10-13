@@ -275,14 +275,16 @@ changes what it does; never drop one.
 **A phone screen is the browser's screen, fitted to a phone (Kd, 2026-10-13, `rulings/`).**
 12b-i's first Get started was plain boxes with no picture and sentences that explained the
 app; it passed its click-through and Kd still called it not good. Every job that adds or
-changes a phone screen follows all four.
+changes a phone screen follows all five.
 - Before building, open that page in the browser, take its picture, and build THAT design:
   its picture, its colours, its order, its glow. A screen the browser has is never invented.
 - Fitted to a thumb: no long lists and no rows of boxes. One main button; a second thing to
   do is words beside it, and a question is a box from the bottom.
-- The words are a finished app's: a short label or one short line ("Coming soon", "Sign
-  out?", "Enter a valid email address."). Never a sentence that explains the feature, how
-  the app is built, or what a later job will add.
+- The words are a finished app's, and few: a short label or one short line ("Coming soon",
+  "Sign out?", "Enter a valid email address."). Never a sentence that explains the feature,
+  how the app is built, or what a later job will add. A first screen holds its heading, one
+  line and its one task; what the picture or the next screen says is not said again.
+- A button's ends are round and the main one glows; it is never a wide flat rectangle.
 - Before Kd is asked, the terminal takes pictures of the real phone and looks at them beside
   the browser's. What looks plainer than the browser's is fixed first.
 

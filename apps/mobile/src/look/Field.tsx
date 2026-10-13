@@ -6,6 +6,8 @@ import { fonts, Txt } from "./Txt";
 interface FieldProps {
   /** Above the box, and what a screen reader calls it. */
   label: string;
+  /** No words above the box: its own faint words say what goes in it. */
+  bare?: boolean;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -22,13 +24,15 @@ interface FieldProps {
 
 /** One line to type in, as tall as a main button; its edge turns orange while it is typed in.
  *  The box is a View round the input: Android drops an input's own padding when its edge is restyled. */
-export function Field({ label, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone }: FieldProps) {
+export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone }: FieldProps) {
   const [on, setOn] = useState(false);
   return (
     <View style={styles.field}>
-      <Txt kind="tiny" style={styles.label}>
-        {label}
-      </Txt>
+      {bare ? null : (
+        <Txt kind="tiny" style={styles.label}>
+          {label}
+        </Txt>
+      )}
       <View style={[styles.box, on ? styles.on : null]}>
         <TextInput
           accessibilityLabel={label}
@@ -50,7 +54,7 @@ export function Field({ label, value, onChange, placeholder, keyboard, fills, ma
             setOn(false);
           }}
           selectionColor={colours.orange}
-          style={[styles.input, spaced ? styles.spaced : null]}
+          style={[styles.input, spaced && value !== "" ? styles.spaced : null]}
         />
       </View>
     </View>
@@ -62,7 +66,7 @@ const styles = StyleSheet.create({
   label: { textTransform: "uppercase", letterSpacing: 0.9 },
   box: {
     height: sizes.button,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colours.fieldLine,
     backgroundColor: colours.field,

@@ -643,10 +643,13 @@ is. This replaces §16.3's "the console's named colours and Archivo, light and d
   tests are jest's, in `test/screens/`; rules that need no screen stay on vitest.
 - **Get started, and what it added to the look (item 12b-i, 2026-10-13):** the browser's
   sign-in page fitted to a phone (`src/screens/SignIn.tsx`, read beside
-  `apps/web/src/pages/Login.jsx`): its athlete picture across the top, running into the
-  page, with its "AI-Powered Training" line in a box over it; under it the mark, "Get
-  started.", the email box and the glowing button. The picture takes the room the form
-  leaves and makes way when the keyboard opens. The picture is `getstarted`, cut from
+  `apps/web/src/pages/Login.jsx`): its athlete picture filling the top and running into
+  the page; under it, by the thumb, the mark, "Get started.", one line, the email box and
+  the glowing button. The browser's box of words over the picture, its label above the
+  email box and its line under the button are left off: on a phone they crowded the screen
+  (Kd, 2026-10-14). The code step's heading is "Check your email.". The picture takes the
+  room the form leaves and makes way when the keyboard opens. A button's ends are round
+  (`sizes.round`; `helmet.html`'s `.btn` was changed to match). The picture is `getstarted`, cut from
   the web's `exercises/lifting.jpg` by `compact.py` (1141 by 1200, 97 KB); it is not
   on the design canvas. New pieces: `Field` (the browser's typing box; its edge turns
   orange while typed in), `Sheet` (the box from the bottom), `Logo`, `Avatar`, a

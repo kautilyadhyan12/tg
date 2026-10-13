@@ -123,16 +123,18 @@ function SignOut() {
     <>
       <Button
         label="Sign out"
-        kind="plain"
+        kind="quiet"
         icon="logout"
-        wide
+        style={styles.middle}
         onPress={() => {
           setAsking(true);
         }}
       />
       <Sheet open={asking} title="Sign out?" onClose={close}>
-        <Button label="Sign out" kind="danger" icon="logout" wide onPress={() => void session.signOut()} />
-        <Button label="Cancel" kind="plain" wide onPress={close} />
+        <View style={styles.two}>
+          <Button label="Cancel" kind="plain" style={styles.half} onPress={close} />
+          <Button label="Sign out" kind="danger" icon="logout" style={styles.half} onPress={() => void session.signOut()} />
+        </View>
       </Sheet>
     </>
   );
@@ -144,4 +146,5 @@ const styles = StyleSheet.create({
   half: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
+  middle: { alignSelf: "center" },
 });

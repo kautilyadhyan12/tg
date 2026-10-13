@@ -13,14 +13,13 @@ import type { Answer } from "../session/calls";
 import { useSession } from "../session/SessionProvider";
 
 // The browser's "Get started" page, fitted to a phone (apps/web/src/pages/Login.jsx): its
-// picture and its line across the top, its form under them. Sign-up and sign-in are the
-// same act: an email, the 6-digit code, and a new address gets its account on the spot.
+// picture fills the top and its form sits under it, by the thumb. Sign-up and sign-in are
+// the same act: an email, the 6-digit code, and a new address gets its account on the spot.
 // Google's button comes with ROADMAP Stage 5 item 12d.
 
 const NO_ANSWER = "Can’t connect. Check your internet and try again.";
 /** The phone's own robot check is item 12b-ii; until then a phone that is asked for it is told to wait. */
 const ROBOT_ON_PHONE = "Too many requests from this network. Try again later.";
-
 /** The picture's height for its width (docs/design/phone/compact.py makes it 1141 by 1200). */
 const PHOTO_TALL = 1200 / 1141;
 
@@ -47,6 +46,8 @@ export function SignInScreen({ note }: { note: string | null }) {
   const [now, setNow] = useState(() => Date.now());
   /** The keyboard is up: the picture makes way, so the box and its button stay in view. */
   const [typing, setTyping] = useState(false);
+  /** The room the form leaves the picture, as the phone laid it out. */
+  const [room, setRoom] = useState(0);
 
   useEffect(() => {
     const show = (up: boolean) => () => {
@@ -150,9 +151,6 @@ export function SignInScreen({ note }: { note: string | null }) {
     setSaid("");
   };
 
-  /** The picture at its own shape; it takes the room the form leaves, and no more than this. */
-  const photoHeight = Math.round(width * PHOTO_TALL);
-
   return (
     <ScrollView
       style={styles.page}
@@ -163,25 +161,21 @@ export function SignInScreen({ note }: { note: string | null }) {
       {typing ? (
         <View style={{ height: insets.top }} />
       ) : (
-        <View style={[styles.hero, { maxHeight: photoHeight }]}>
-          {/* Kept from its top, where the picture's subject is; the words below cover what is cut. */}
+        <View
+          style={styles.hero}
+          onLayout={(laid) => {
+            setRoom(Math.round(laid.nativeEvent.layout.height));
+          }}
+        >
+          {/* Kept from its top, where the picture's subject is; it fills whatever room it is left. */}
           <Image
+            testID="get-started-picture"
             source={pictures.getstarted}
             resizeMode="cover"
-            style={[styles.photo, { height: photoHeight }]}
+            style={[styles.photo, { height: Math.max(room, Math.round(width * PHOTO_TALL)) }]}
             accessible={false}
           />
           <View style={[StyleSheet.absoluteFill, styles.fade]} />
-          <View style={styles.quote}>
-            <View style={styles.eyebrow}>
-              <Icon name="zap" size={14} colour="orange" />
-              <Txt kind="eyebrow">AI-Powered Training</Txt>
-            </View>
-            <Txt style={styles.quoteLine}>{"“Real-time form correction.\nEvery rep. Every set.”"}</Txt>
-            <Txt kind="small" colour="textFaint">
-              Pose detection · Rep counting · Voice coaching
-            </Txt>
-          </View>
         </View>
       )}
 
@@ -192,12 +186,26 @@ export function SignInScreen({ note }: { note: string | null }) {
             AI Home Gym
           </Txt>
         </View>
-        <View style={styles.head}>
-          <Txt kind="hero">Get started.</Txt>
-          <Txt colour="textFaint">Sign in or create your account — no password needed</Txt>
-        </View>
 
-        {note === null ? null : (
+        {step === "email" ? (
+          <View style={styles.head}>
+            <Txt kind="hero">Get started.</Txt>
+            <Txt colour="textFaint">Sign in or create your account</Txt>
+          </View>
+        ) : (
+          <View style={styles.head}>
+            <Txt kind="hero">Check your email.</Txt>
+            <View>
+              <Txt colour="textFaint">Enter the 6-digit code sent to</Txt>
+              <Txt kind="strong" numberOfLines={1}>
+                {address}
+              </Txt>
+            </View>
+          </View>
+        )}
+
+        {/* Why the person is here again; once they have asked for a code it has been read. */}
+        {note === null || step === "code" ? null : (
           <Card style={styles.note}>
             <Icon name="logout" size={16} colour="textSoft" />
             <Txt colour="text" style={styles.noteWords}>
@@ -211,40 +219,33 @@ export function SignInScreen({ note }: { note: string | null }) {
             <Field
               key="email"
               label="Email"
+              bare
               value={typed}
               onChange={(value) => {
                 setTyped(value);
                 setProblem("");
               }}
-              placeholder="you@example.com"
+              placeholder="Email address"
               keyboard="email-address"
               fills="email"
               maxLength={254}
               onDone={() => void continueWithEmail()}
             />
             {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
-            <Button label="Continue with email" icon="mail" wide busy={busy} onPress={() => void continueWithEmail()} />
-            <Txt kind="small" colour="textFaint" style={styles.centre}>
-              We’ll email you a 6-digit code.
-            </Txt>
+            <Button label="Continue" wide busy={busy} onPress={() => void continueWithEmail()} />
           </View>
         ) : (
           <View style={styles.form}>
-            <View>
-              <Txt>Enter the 6-digit code sent to</Txt>
-              <Txt kind="strong" numberOfLines={1}>
-                {address}
-              </Txt>
-            </View>
             <Field
               key="code"
               label="6-digit code"
+              bare
               value={code}
               onChange={(value) => {
                 setCode(value.replace(/\D/g, "").slice(0, 6));
                 setProblem("");
               }}
-              placeholder="123456"
+              placeholder="6-digit code"
               keyboard="number-pad"
               fills="one-time-code"
               maxLength={6}
@@ -282,31 +283,17 @@ export function SignInScreen({ note }: { note: string | null }) {
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colours.page },
   fill: { flexGrow: 1 },
-  hero: { flexGrow: 1, minHeight: 240, overflow: "hidden" },
+  hero: { flexGrow: 1, minHeight: 200, overflow: "hidden" },
   photo: { position: "absolute", top: 0, left: 0, width: "100%" },
   fade: { experimental_backgroundImage: pictureFade },
+  body: { paddingHorizontal: sizes.edge, paddingTop: 16, gap: 18 },
   brand: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandName: { fontFamily: fonts.bold, fontSize: 17, lineHeight: 22 },
-  quote: {
-    position: "absolute",
-    left: sizes.edge,
-    right: sizes.edge,
-    bottom: 4,
-    gap: 6,
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colours.line,
-    backgroundColor: colours.veil,
-  },
-  eyebrow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  quoteLine: { fontFamily: fonts.bold, fontSize: 19, lineHeight: 25, letterSpacing: -0.3, color: colours.text },
-  body: { paddingHorizontal: sizes.edge, paddingTop: 16, gap: 18 },
   head: { gap: 6 },
   note: { flexDirection: "row", alignItems: "center", gap: 10 },
   noteWords: { flex: 1 },
   form: { gap: 14 },
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   centre: { textAlign: "center" },
-  terms: { marginTop: "auto", paddingTop: 20, paddingHorizontal: sizes.edge, textAlign: "center" },
+  terms: { paddingTop: 20, paddingHorizontal: sizes.edge, textAlign: "center" },
 });
