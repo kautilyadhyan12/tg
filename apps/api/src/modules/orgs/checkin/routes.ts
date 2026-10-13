@@ -5,6 +5,9 @@
 //   POST /v1/orgs/:gymId/checkin-devices                 add one, with its one-time link
 //   POST /v1/orgs/:gymId/checkin-devices/:deviceId/link  a new link; the old key stops
 //   POST /v1/orgs/:gymId/checkin-devices/:deviceId/off   switch it off
+//   GET  /v1/orgs/:gymId/checkin-rules                   whom the desk lets in (`org.manage`)
+//   PUT  /v1/orgs/:gymId/checkin-rules                   save the two choices
+//   GET  /v1/orgs/:gymId/checkin-rules/preview?who=&overdue=   who would be stopped today
 //   POST /v1/checkin/device/claim                        the tablet opens its link
 //   POST /v1/checkin/scan                                the device's key, and nothing else
 //   GET  /v1/orgs/:gymId/attendance/people?query=        staff find a person (`attendance.mark`)
@@ -26,6 +29,8 @@ import {
   checkinDeviceIdParamsSchema,
   checkinLogQuerySchema,
   checkinPeopleQuerySchema,
+  checkinRulesPreviewQuerySchema,
+  checkinRulesSchema,
   checkinScanRequestSchema,
   claimCheckinDeviceRequestSchema,
   staffCheckinRequestSchema,
@@ -251,6 +256,47 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     );
     if (off === null) return;
     return reply.status(200).send(off);
+  });
+
+  // Who can check in (16d): the service asks the `org.manage` tick first and the limit
+  // after it, as every staff route here does. The preview reads the whole list, and is
+  // asked each time a choice is picked.
+  const rulesPreviewLimit = createDualRateLimit({
+    name: "checkin_rules_preview",
+    max: 300,
+    ipMax: 900,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const rulesUrl = "/v1/orgs/:gymId/checkin-rules";
+
+  app.get(rulesUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const rules = await service.getRules(checkinDeps, requireUserId(req), params.gymId, gate(deviceReadLimit)(req, reply));
+    if (rules === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(rules);
+  });
+
+  app.put(rulesUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(checkinRulesSchema, req.body, req, reply);
+    if (body === null) return;
+    const rules = await service.saveRules(checkinDeps, requireUserId(req), params.gymId, body, gate(deviceWriteLimit)(req, reply));
+    if (rules === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(rules);
+  });
+
+  app.get(`${rulesUrl}/preview`, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(checkinRulesPreviewQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const preview = await service.previewRules(checkinDeps, requireUserId(req), params.gymId, query, gate(rulesPreviewLimit)(req, reply));
+    if (preview === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(preview);
   });
 
   app.get("/v1/orgs/:gymId/attendance/people", { preHandler: [app.authenticate] }, async (req, reply) => {

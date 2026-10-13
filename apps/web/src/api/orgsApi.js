@@ -18,6 +18,8 @@ import {
   checkinLogResponseSchema,
   checkinPassResponseSchema,
   checkinPeopleResponseSchema,
+  checkinRulesPreviewResponseSchema,
+  checkinRulesResponseSchema,
   addVisitResponseSchema,
   removeVisitResponseSchema,
   staffCheckinResponseSchema,
@@ -1042,6 +1044,19 @@ export const orgService = {
       checkinDeviceResponseSchema,
       'the device',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-devices/${encodeURIComponent(deviceId)}/off`),
+    ),
+
+  // WHO CAN CHECK IN (Settings, `org.manage`; ROADMAP 16d): the gym's two choices, and who
+  // they would send to staff today, asked before a change is saved.
+  getCheckinRules: (gymId) =>
+    readThrough(checkinRulesResponseSchema, 'who can check in', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-rules`)),
+  updateCheckinRules: (gymId, rules) =>
+    readThrough(checkinRulesResponseSchema, 'who can check in', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-rules`, rules)),
+  previewCheckinRules: (gymId, rules) =>
+    readThrough(
+      checkinRulesPreviewResponseSchema,
+      'who this stops',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-rules/preview`, { params: { who: rules.who, overdue: rules.overdue } }),
     ),
 
   // STAFF CHECK-IN AND THE LIVE LOG (Attendance; ROADMAP 16b-ii). The search and the

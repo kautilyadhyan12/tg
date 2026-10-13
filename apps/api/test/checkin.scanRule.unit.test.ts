@@ -1,5 +1,6 @@
 // The scan rule's table (spec Part 3 §12.4): each way in × who the read named × the pass
-// fresh · old · used · garbled × first · same period · next period · outside hours.
+// fresh · old · used · garbled × first · same period · next period · outside hours × the
+// gym's own choice stopping the person or not (16d).
 // Who a read names at a gym (member · former · removed · never · another gym's) is decided
 // against the database and swept in `checkin.routes.test.ts`; here it arrives as one of
 // the three things the rule can be told.
@@ -51,30 +52,44 @@ const PEOPLE: { name: string; person: ScanPerson }[] = [
 ];
 
 describe("the scan rule, every class", () => {
-  const rows: [string, ScanRead, ScanPerson | null, ScanPeriod, VisitToday[], ScanDecision][] = [];
+  const rows: [string, ScanRead, ScanPerson | null, ScanPeriod, VisitToday[], boolean, ScanDecision][] = [];
   for (const read of READS) {
     for (const who of PEOPLE) {
       for (const moment of MOMENTS) {
-        const expected: ScanDecision = !read.names
-          ? { result: "fresh_pass_needed" }
-          : who.person.kind === "not_a_member"
-            ? { result: "not_a_member" }
-            : who.person.kind === "ambiguous"
-              ? { result: "see_staff" }
-              : moment.member;
-        // A pass that is not fresh names nobody: the service never looks a person up.
-        const person = read.names ? who.person : null;
-        rows.push([`${read.name} · ${who.name} · ${moment.name}`, read.read, person, moment.period, moment.visits, expected]);
+        for (const stopped of [false, true]) {
+          // The gym's choice sends a NEW visit at the desk to staff. It never stops staff's
+          // own pick, and somebody already in this period is told so again.
+          const member: ScanDecision =
+            stopped && read.read.kind !== "staff" && moment.member.result === "checked_in" ? { result: "see_staff" } : moment.member;
+          const expected: ScanDecision = !read.names
+            ? { result: "fresh_pass_needed" }
+            : who.person.kind === "not_a_member"
+              ? { result: "not_a_member" }
+              : who.person.kind === "ambiguous"
+                ? { result: "see_staff" }
+                : member;
+          // A pass that is not fresh names nobody: the service never looks a person up.
+          const person = read.names ? who.person : null;
+          const name = `${read.name} · ${who.name} · ${moment.name} · ${stopped ? "stopped by the gym's choice" : "not stopped"}`;
+          rows.push([name, read.read, person, moment.period, moment.visits, stopped, expected]);
+        }
       }
     }
   }
 
-  it("has a row for every class (6 reads × 3 people × 4 moments)", () => {
-    expect(rows.length).toBe(72);
+  it("has a row for every class (6 reads × 3 people × 4 moments × stopped or not)", () => {
+    expect(rows.length).toBe(144);
   });
 
-  it.each(rows)("%s", (_name, read, person, period, visitsToday, expected) => {
-    expect(decideScan({ read, person, period, visitsToday })).toEqual(expected);
+  it.each(rows)("%s", (_name, read, person, period, visitsToday, stopped, expected) => {
+    expect(decideScan({ read, person, period, visitsToday, stopped })).toEqual(expected);
+  });
+
+  it("the gym's choice stops a member's pass and key tag, and never staff's pick", () => {
+    const first = { person: { kind: "member" } as const, period: MORNING, visitsToday: [], stopped: true };
+    expect(decideScan({ ...first, read: { kind: "pass", pass: "fresh" } })).toEqual({ result: "see_staff" });
+    expect(decideScan({ ...first, read: { kind: "key_tag" } })).toEqual({ result: "see_staff" });
+    expect(decideScan({ ...first, read: { kind: "staff" } })).toEqual({ result: "checked_in", slotKey: "360-600" });
   });
 });
 
@@ -88,12 +103,12 @@ describe("the scan rule, the hour and the period", () => {
     ["hours_unset", { hoursStatus: "hours_unset", opensMinute: null, closesMinute: null } satisfies ScanPeriod],
     ["open_24h", { hoursStatus: "open_24h", opensMinute: null, closesMinute: null } satisfies ScanPeriod],
   ])("never refuses for the hour: %s checks in", (slotKey, period) => {
-    expect(decideScan({ read: keyTag, person: member, period, visitsToday: [] })).toEqual({ result: "checked_in", slotKey });
+    expect(decideScan({ read: keyTag, person: member, period, visitsToday: [], stopped: false })).toEqual({ result: "checked_in", slotKey });
   });
 
   it("a second scan outside hours the same day is the same visit", () => {
     const visitsToday = [{ slotKey: "outside_hours", markedAt: at("23:10") }];
-    expect(decideScan({ read: keyTag, person: member, period: OUTSIDE, visitsToday })).toEqual({
+    expect(decideScan({ read: keyTag, person: member, period: OUTSIDE, visitsToday, stopped: false })).toEqual({
       result: "already",
       slotKey: "outside_hours",
       firstAt: at("23:10"),
@@ -106,7 +121,7 @@ describe("the scan rule, the hour and the period", () => {
       { slotKey: "360-600", markedAt: at("06:02") },
       { slotKey: "1020-1260", markedAt: at("05:00") },
     ];
-    expect(decideScan({ read: keyTag, person: member, period: MORNING, visitsToday })).toEqual({
+    expect(decideScan({ read: keyTag, person: member, period: MORNING, visitsToday, stopped: false })).toEqual({
       result: "already",
       slotKey: "360-600",
       firstAt: at("06:02"),
@@ -114,7 +129,7 @@ describe("the scan rule, the hour and the period", () => {
   });
 
   it("a fresh pass that named nobody is not a member", () => {
-    expect(decideScan({ read: { kind: "pass", pass: "fresh" }, person: null, period: MORNING, visitsToday: [] })).toEqual({
+    expect(decideScan({ read: { kind: "pass", pass: "fresh" }, person: null, period: MORNING, visitsToday: [], stopped: false })).toEqual({
       result: "not_a_member",
     });
   });

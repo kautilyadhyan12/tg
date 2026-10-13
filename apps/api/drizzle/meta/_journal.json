@@ -701,6 +701,13 @@
       "when": 1789603200100,
       "tag": "0100_starter_goals",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1789689600101,
+      "tag": "0101_checkin_rules",
+      "breakpoints": true
     }
   ]
 }

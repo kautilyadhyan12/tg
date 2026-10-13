@@ -98,6 +98,21 @@ const drawScreen = () =>
 const typeSearch = async (text) => fireEvent.change(await screen.findByLabelText('Find someone to check in'), { target: { value: text } });
 
 describe('check someone in', () => {
+  it('says why the front desk would stop somebody, and still checks them in', async () => {
+    // The gym lets in only people with a current membership (16d); Anita's has ended.
+    api.findCheckinPeople.mockResolvedValue({ data: { people: [{ ...ANIL, stopped: null }, { ...ANITA, stopped: 'ended' }] } });
+    api.staffCheckIn.mockResolvedValue({ data: { result: 'checked_in', person: { name: 'Anita Kumar' }, notice: { status: 'Ended', payment: null, onList: true } } });
+    drawScreen();
+    await typeSearch('Kumar');
+    await screen.findByText('Anita Kumar');
+    const line = 'Your front desk sends them to staff: membership ended. You can still check them in here.';
+    expect(screen.getAllByText(line)).toHaveLength(1);
+    expect(screen.getByText(line).closest('li').textContent).toContain('Anita Kumar');
+    fireEvent.click(screen.getByRole('button', { name: 'Check in Anita Kumar' }));
+    await waitFor(() => expect(api.staffCheckIn).toHaveBeenCalledWith('g1', ANITA.pick));
+    expect(await screen.findByText('Anita Kumar — Checked in')).toBeTruthy();
+  });
+
   it('names the person the server checked in, with their gym words in orange, and empties the search for the next', async () => {
     api.findCheckinPeople.mockResolvedValue({ data: { people: [ANIL, ANITA] } });
     api.staffCheckIn.mockResolvedValue({
