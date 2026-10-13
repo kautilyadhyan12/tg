@@ -123,7 +123,13 @@ export const chosenItemSchema = z.union([gramsItemSchema, dishwareItemSchema, me
 export type ChosenItem = z.infer<typeof chosenItemSchema>;
 const chosenItemsSchema = z.array(chosenItemSchema).min(1).max(30);
 
+/** The meal's id, made by the phone (ROADMAP 32a): the same id sent twice is one
+ *  meal, and the second reply is the meal as first saved. Without it every send
+ *  is a new meal, as the web's is. */
+const ownMealIdSchema = z.string().uuid().optional();
+
 export const confirmMealRequestSchema = z.object({
+  id: ownMealIdSchema,
   scanToken: z.string().min(32).max(256), takenAt: takenAtSchema,
   mealType: mealTypeSchema.optional(),
   items: chosenItemsSchema,
@@ -133,6 +139,7 @@ export type ConfirmMealRequest = z.infer<typeof confirmMealRequestSchema>;
 /** GAP-2 ruling: manual logging (Stage 4 "missing item → add" / no-photo
  *  entry). Items resolve through food search; origin = 'manual'. */
 export const manualMealRequestSchema = z.object({
+  id: ownMealIdSchema,
   mealName: z.string().trim().min(1).max(200), takenAt: takenAtSchema,
   mealType: mealTypeSchema.optional(),
   items: chosenItemsSchema,
