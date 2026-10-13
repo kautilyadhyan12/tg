@@ -141,6 +141,9 @@ describe('what the line under the promo code says', () => {
 
   it('says applied only while the applied discount is the one on the sale', () => {
     expect(promoCodeNote(page([towels]), TOWEL, towels, applied)).toBe('TOWEL applied: 20% off.');
+    // Changed to 50% while the form was open: the line says what it takes off now.
+    const half = { ...towels, percentBp: 5000 };
+    expect(promoCodeNote(page([half]), TOWEL, half, applied)).toBe('TOWEL applied: 50% off.');
     // The product is changed to one the code is not for: the discount is off the sale.
     expect(promoCodeNote(page([towels]), WATER, null, applied)).toBe('Towels does not apply to Water. No discount is on this sale.');
     // The page is read again and it has been used up, or archived.
@@ -174,6 +177,12 @@ describe('a fixed amount in the money the gym used before it changed country', (
     expect(oldMoneySaleLine(pounds)).toBe('Five off cannot be used until its amount is saved again in GBP. Open it under Discounts below and press Change.');
     expect(oldMoneySaleLine({ ...pounds, discounts: [FIVE, { ...FIVE, id: 'd-2', name: 'Staff' }] })).toBe('Five off and Staff cannot be used until their amounts are saved again in GBP. Open them under Discounts below and press Change.');
     expect(oldMoneySaleLine(page([FIVE, discount()]))).toBeNull();
+    // Desk staff have no Change button: they are told who can.
+    expect(oldMoneySaleLine({ ...pounds, canManage: false })).toBe('Five off cannot be used until its amount is saved again in GBP. The owner, or staff who can change membership types and prices, can save it again under Discounts.');
+    // One that could not be used anyway is not named: expired, used up, not yet started.
+    for (const over of [{ endsOn: '2026-01-01' }, { maxUses: 2, uses: 2 }, { startsOn: '2026-12-01' }, { archivedAt: '2026-10-01T00:00:00.000Z' }]) {
+      expect(oldMoneySaleLine({ ...pounds, discounts: [{ ...FIVE, ...over }] }), JSON.stringify(over)).toBeNull();
+    }
   });
 });
 

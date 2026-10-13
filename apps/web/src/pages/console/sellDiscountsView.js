@@ -52,10 +52,13 @@ export function oldMoneyLine(discount, currency) {
 /** The same, said on the sale form, which leaves such a discount out of its list; null
  *  where the gym has none. */
 export function oldMoneySaleLine(page) {
-  const old = page.discounts.filter((d) => d.archivedAt === null && discountInOldMoney(d, page.currency));
+  // Only the ones that would otherwise be in use: an expired or used-up one is not missed.
+  const old = page.discounts.filter((d) => discountInOldMoney(d, page.currency) && discountStatus(terms(d), page.today) === 'active');
   if (old.length === 0) return null;
   const names = old.length === 1 ? old[0].name : old.length === 2 ? `${old[0].name} and ${old[1].name}` : `${old[0].name} and ${String(old.length - 1)} more`;
-  return `${names} cannot be used until ${old.length === 1 ? 'its amount is' : 'their amounts are'} saved again in ${page.currency}. Open ${old.length === 1 ? 'it' : 'them'} under Discounts below and press Change.`;
+  return `${names} cannot be used until ${old.length === 1 ? 'its amount is' : 'their amounts are'} saved again in ${page.currency}. ${
+    page.canManage === false ? 'The owner, or staff who can change membership types and prices, can save it again under Discounts.' : `Open ${old.length === 1 ? 'it' : 'them'} under Discounts below and press Change.`
+  }`;
 }
 
 /** The word beside a discount's name, and the tag it is drawn in. `currency` is the gym's
@@ -66,12 +69,15 @@ export function discountStatusTag(discount, today, currency = null) {
   return { status, words: DISCOUNT_STATUS_WORDS[status], tag: STATUS_TAGS[status] };
 }
 
+const appliedWords = (discount) => `${discount.code ?? discount.name} applied: ${discountAmountWords(discount)}.`;
+
 /** What the line under the Promo code box says. A code that was applied is said to be
  *  applied only while its discount is the one on the sale: after the product changes, or
  *  the discount is used up or archived, the line says why it is no longer on it. */
 export function promoCodeNote(page, product, discount, code) {
   if (code.appliedId === null || code.appliedId === undefined) return code.note;
-  if (discount !== null && discount.id === code.appliedId) return code.note;
+  // Said from the discount as it is now: it may have been changed since Apply was pressed.
+  if (discount !== null && discount.id === code.appliedId) return appliedWords(discount);
   const applied = page.discounts.find((d) => d.id === code.appliedId);
   if (applied === undefined) return 'That promo code is no longer offered. No discount is on this sale.';
   if (product === null || product === undefined) return null;
@@ -166,7 +172,7 @@ export function applyPromoCode(page, product, text) {
   if (product === null || product === undefined) return { discount: null, note: 'Pick a product first, then apply the promo code.' };
   const why = discountWhyNot(found, product, page.today);
   if (why !== null) return { discount: null, note: why };
-  return { discount: found, appliedId: found.id, note: `${found.code} applied: ${discountAmountWords(found)}.` };
+  return { discount: found, appliedId: found.id, note: appliedWords(found) };
 }
 
 // ── The form ────────────────────────────────────────────────────────────────
