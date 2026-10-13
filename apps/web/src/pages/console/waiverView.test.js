@@ -6,6 +6,7 @@ import {
   waiverAsksLine,
   waiverDraftState,
   waiverLine,
+  waiverLineParts,
   waiverNotInAppLine,
   waiverSaveLabel,
   waiverSavedLine,
@@ -102,6 +103,16 @@ describe("a person's page", () => {
   it('says so when they have not, and never guesses', () => {
     expect(waiverLine({ waiverSigned: null }, when)).toBe('Waiver not signed');
     expect(waiverLine({}, when)).toBe('Waiver not signed');
+  });
+
+  it('gives the page the state as a label of its own, and the same sentence in all', () => {
+    const signed = { waiverSigned: { name: 'Luis Reyes', at: '2026-10-13T09:00:00.000Z' } };
+    expect(waiverLineParts(signed, when)).toEqual({ signed: true, label: 'Waiver signed', rest: ' on 13 October 2026 as Luis Reyes' });
+    expect(waiverLineParts({ waiverSigned: null }, when)).toEqual({ signed: false, label: 'Waiver not signed', rest: '' });
+    for (const member of [signed, { waiverSigned: null }, {}]) {
+      const parts = waiverLineParts(member, when);
+      expect(parts.label + parts.rest).toBe(waiverLine(member, when));
+    }
   });
 
   it('says why somebody with no app has not signed', () => {

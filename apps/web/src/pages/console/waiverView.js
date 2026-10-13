@@ -68,6 +68,14 @@ export function waiverLine(member, when) {
   return `Waiver signed${day === '' ? '' : ` on ${day}`} as ${signed.name}`;
 }
 
+/** `waiverLine` in two parts, so the page can draw the state as a coloured label: the
+ *  label's words, whether it is signed, and the rest of the sentence. */
+export function waiverLineParts(member, when) {
+  const signed = member.waiverSigned ?? null;
+  if (signed === null) return { signed: false, label: 'Waiver not signed', rest: '' };
+  return { signed: true, label: 'Waiver signed', rest: waiverLine(member, when).slice('Waiver signed'.length) };
+}
+
 /** A person's page, for a record with nobody in the app at a gym that asks for a waiver. */
 export function waiverNotInAppLine(fullName) {
   return `Not signed. ${fullName === '' ? 'This person signs' : `${fullName} signs`} your waiver when they join in the app.`;

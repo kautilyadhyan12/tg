@@ -41,7 +41,7 @@ import SentencePlace from '../../components/console/SentencePlace';
 import PostalAddressBox from '../../components/console/PostalAddressBox';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
-import { waiverLine, waiverNotInAppLine } from './waiverView';
+import { waiverLineParts, waiverNotInAppLine } from './waiverView';
 import {
   DAY_FIELDS,
   HELD_ANSWERS,
@@ -427,6 +427,18 @@ function MergePreview({ keep, remove, fields, person }) {
 // offered (the server refuses it too), as the In the app sheet hides its Remove.
 // `pair` ({ otherId, why }) opens the panel on a possible duplicate (5b-iv-a): the two records
 // side by side at once, with Different people beside Merge.
+/** Whether one of the record's people in the app has signed the gym's waiver: the state as
+ *  a coloured label, so it is seen at a glance, then the day and the name they typed. */
+function WaiverLine({ member }) {
+  const parts = waiverLineParts(member, whenWords);
+  return (
+    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1.5 c-s13 c-t2" data-testid="waiver-line">
+      <span className={`c-tag ${parts.signed ? 'c-tag-good' : 'c-tag-warn'}`}>{parts.label}</span>
+      {parts.rest === '' ? null : <span>{parts.rest}</span>}
+    </span>
+  );
+}
+
 export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, addMembership = false, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
@@ -1377,9 +1389,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                   {/* The gym's waiver (3e-i): whether this person in the app has signed the
                       words the gym asks for today, and the name they typed. */}
                   {p.waiverInUse ? (
-                    <span className="block c-s13 c-t3" data-testid="waiver-line">
-                      {waiverLine(m, whenWords)}
-                    </span>
+                    <WaiverLine member={m} />
                   ) : null}
                 </div>
                 {canRemove && p.formerAt === null && !m.sharedEmail ? (

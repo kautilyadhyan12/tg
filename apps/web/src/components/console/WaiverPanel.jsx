@@ -111,11 +111,18 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
         <ConsoleLoading label="Loading…" />
       ) : (
         <form onSubmit={save} className="flex flex-col gap-4">
-          <p className="text-sm m-0" style={softStyle}>
-            Write or paste the waiver people agree to before they train with you. The words are yours: this app does not write or check them.
-            People read it and sign by typing their full name when they join in the app. People already in the app see it on your page there,
-            with a button to sign.
-          </p>
+          {data.waiver === null ? (
+            // Only until the gym has written its waiver: after that the box holds its own words.
+            <div role="note" className="rounded-xl px-4 py-3 flex flex-col gap-1.5" style={{ background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.35)' }}>
+              <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
+                You can write your own waiver here.
+              </p>
+              <p className="text-sm m-0" style={labelStyle}>
+                Type it or paste it in the box below. The words are yours: this app does not write or check them. People read it and sign by
+                typing their full name when they join in the app. People already in the app see it on your page there, with a button to sign.
+              </p>
+            </div>
+          ) : null}
 
           {data.waiver !== null && !data.inUse ? (
             <p className="text-sm m-0 rounded-xl px-4 py-3" style={{ ...boxStyle, ...labelStyle }}>

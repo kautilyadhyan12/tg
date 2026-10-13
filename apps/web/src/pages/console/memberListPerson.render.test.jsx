@@ -855,12 +855,15 @@ describe("the gym's waiver on a person's page (3e-i)", () => {
     openBox(ADA);
     const who = within(await screen.findByTestId('in-app-person'));
     expect(who.getByTestId('waiver-line').textContent).toBe('Waiver signed on 13 October 2026 as Ada Lovelace');
+    // The state is a coloured label, so it is seen at a glance.
+    expect(who.getByText('Waiver signed').className).toContain('c-tag-good');
   });
 
   it('says not signed for somebody in the app who has not, and a shared email shows the name that was typed', async () => {
     orgService.getMemberListEntry.mockResolvedValue(inApp({ waiverSigned: null }));
     openBox(ADA);
     expect(within(await screen.findByTestId('in-app-person')).getByTestId('waiver-line').textContent).toBe('Waiver not signed');
+    expect(screen.getByText('Waiver not signed').className).toContain('c-tag-warn');
     cleanup();
     orgService.getMemberListEntry.mockResolvedValue(inApp({ displayName: 'Mum', sharedEmail: true, waiverSigned: { name: 'Leo Lovelace', at: '2026-10-13T09:00:00.000Z' } }));
     openBox(ADA);

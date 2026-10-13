@@ -50,6 +50,20 @@ describe('a gym with no waiver', () => {
     expect(screen.queryByRole('group', { name: 'Who has signed' })).toBeNull();
   });
 
+  it('tells a gym that has written none that it can write its own, and stops saying so once it has', async () => {
+    open(NONE);
+    const note = await screen.findByRole('note');
+    expect(within(note).getByText('You can write your own waiver here.')).toBeTruthy();
+    expect(within(note).getByText(/The words are yours: this app does not write or check them\./)).toBeTruthy();
+    fireEvent.change(await field(), { target: { value: WORDS } });
+    // Still there while the words are only typed.
+    expect(screen.getByRole('note')).toBeTruthy();
+    orgService.saveGymWaiver.mockResolvedValue({ data: { waiver: waiver(), inUse: true, people: 4, signed: 0 } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save waiver' }));
+    await screen.findByRole('status');
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+
   it('says who will be asked before Save, saves the words typed, and says what happened beside the button', async () => {
     open(NONE);
     fireEvent.change(await field(), { target: { value: WORDS } });
@@ -69,6 +83,8 @@ describe('a gym whose waiver is in use', () => {
   it('shows its words, how many have signed, and where to see one person', async () => {
     open(IN_USE);
     expect((await field()).value).toBe(WORDS);
+    // The first-time note is for a gym with no waiver; this one has written its own.
+    expect(screen.queryByRole('note')).toBeNull();
     const signed = screen.getByRole('group', { name: 'Who has signed' });
     expect(within(signed).getByText('Signed by 3 of 12 people in the app.')).toBeTruthy();
     // The button is named as this person's menu names the page.
@@ -119,6 +135,7 @@ describe('a gym whose waiver is in use', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stop using it' }));
     expect((await screen.findByRole('status')).textContent).toBe('You have stopped using this waiver. Nobody is asked to sign it.');
     expect(screen.getByText('Not in use')).toBeTruthy();
+    expect(screen.queryByRole('note')).toBeNull();
     expect((await field()).value).toBe(WORDS);
     expect(screen.queryByRole('group', { name: 'Who has signed' })).toBeNull();
     const again = screen.getByRole('button', { name: 'Use this waiver' });
