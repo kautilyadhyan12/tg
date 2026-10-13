@@ -3507,7 +3507,7 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
 **As built, 18b-ii-a (2026-10-13; `rulings/2026-10-13-18b-ii-a.md`).** Discounts and promo
 codes on products, as Gymdesk and Mindbody do them.
 - **A discount** (`gym_discounts`, up to 100 in use): a name; **Percentage off** (to two
-  decimals, up to 100) or **Fixed amount off** in the gym's money; an optional **promo
+  decimals, above 0 and under 100) or **Fixed amount off** in the gym's money; an optional **promo
   code** (3 to 20 capitals and digits, one of a code in use at a time); **All products**
   or **Selected products**; an optional start date and end date, both days counted, in the
   gym's own days; an optional **usage limit**. Changed by whoever changes prices
@@ -3515,7 +3515,9 @@ codes on products, as Gymdesk and Mindbody do them.
   back.
 - **What a discount is today** (`discountStatus`): Active · Scheduled · Expired · Used up ·
   Archived. Only an active one is used, on its own products, and a fixed amount only on a
-  price in its own money (`discountFits`).
+  price in its own money (`discountFits`). A fixed amount kept in the money a gym used
+  before it changed country reads **Needs saving**, and its row and the sale form say to
+  press Change and save it again.
 - **On a sale**: one discount or none. Staff pick it from the list, which holds only what
   can be used on the product today, or type the customer's promo code and press Apply,
   which picks it or says why not. What comes off (`discountOff`): a percentage of the
@@ -3523,12 +3525,14 @@ codes on products, as Gymdesk and Mindbody do them.
   off the price as listed, and the tax is worked out on what is left. The screen shows
   Price, Discount, Tax and Total, and sends the total and the discount; the server works
   both out again under the gym's lock and refuses a sale that no longer comes to that
-  total. A sale has to leave something to pay.
+  total. A sale has to leave something to pay, and a discount that rounds to nothing on a
+  price is not sold with, so no use is spent on nothing off. A promo code is said to be
+  applied only while its discount is the one on the sale.
 - **A use** is one sale that stands: counted in the sale's own transaction by a statement
   that will not pass the limit, and given back when the sale is undone.
 - **The sale keeps** which discount it was, its name as it was and what it took off
   (`discount_id`, `discount_name`, `discount_minor`); a later change or an archive
-  rewrites no sale. The day's list, a person's purchases and the note under the day's
+  rewrites no sale, and the database refuses to delete a discount a sale points at. The day's list, a person's purchases and the note under the day's
   total say it; the total is what was paid.
 - **Not built**: discounts on memberships (18b-ii-b); two discounts on one sale; a sale
   for nothing; a code a member types in their own app (18k); discounts in Reports.
