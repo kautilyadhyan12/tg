@@ -9,7 +9,10 @@ import { z } from "zod";
 import {
   MAX_ITEM_GRAMS,
   MEAL_SCAN_TTL_SECONDS,
+  MORE_NOT_KNOWN,
   isNoValueWord,
+  moreForGrams,
+  moreNutrientsSchema,
   shownFoodName,
   type ChosenItem,
   type FoodMeasure,
@@ -112,6 +115,7 @@ const foodSchema = z.object({
   serving: z.number(),
   unit: z.string(),
   source: z.enum(["curated", "openfoodfacts", "usda", "estimate"]),
+  more: moreNutrientsSchema.optional(),
 });
 
 const draftSchema = z
@@ -355,6 +359,24 @@ async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]
   });
 }
 
+/** Each food with its nine further figures per 100 g (ROADMAP 34a), with ONE read
+ *  of the USDA entries they share. A USDA table food reads its own row; one of our
+ *  list reads the entry it cites, its fibre the list's own where the list has one;
+ *  a CoFID food has its fibre and nothing else; a packaged product keeps what its
+ *  label gave; a scan's estimate has none. Whatever a kept draft says a table
+ *  food's figures are is never used: they are read here. */
+async function withMore<T extends FoodReference>(deps: Pick<NutritionDeps, "sql">, foods: readonly T[]): Promise<T[]> {
+  const entries = foods.map(measuresEntry);
+  const rows = await repo.usdaMoreFor(deps.sql, entries.filter((id): id is number => id !== null));
+  return foods.map((food, at) => {
+    if (food.source === "openfoodfacts") return food;
+    if (food.source === "estimate") return { ...food, more: MORE_NOT_KNOWN };
+    const entry = entries[at] ?? null;
+    const row = (entry === null ? undefined : rows.get(entry)) ?? MORE_NOT_KNOWN;
+    return { ...food, more: { ...row, fiberG: food.source === "curated" ? (food.fiberG ?? row.fiberG) : row.fiberG } };
+  });
+}
+
 /** Every chosen item's food's measures, `[i]` for `foods[i]`, with ONE read of the
  *  USDA measures they share, and none where every item is sent by the gram: the
  *  review of PR #76 (L4) found a read per item, one after another, on every
@@ -498,6 +520,7 @@ function nutritionItem(
     // figures, and the saved meal can change its grams later (patchMeal).
     ...(food.source === "estimate" ? { per100g: { kcal: food.kcal, proteinG: food.proteinG, carbsG: food.carbsG, fatG: food.fatG } } : {}),
     ...(measure === null ? {} : { measure }),
+    more: moreForGrams(food.more ?? MORE_NOT_KNOWN, gramsPoint),
   };
 }
 
@@ -806,7 +829,10 @@ async function readMealPhoto(
   // measures. Each food is priced on its own, so they are asked together: a plate
   // of unlisted foods waits for its slowest packaged-product search, not their sum.
   const lookups = scanLookups(deps);
-  const prices = await Promise.all(result.evidence.items.map((evidence) => priceScannedFood(evidence, lookups)));
+  const found = await Promise.all(result.evidence.items.map((evidence) => priceScannedFood(evidence, lookups)));
+  const tableFoods = await withMore(deps, found.flatMap((price) => (price.kind === "table" ? [price.food] : [])));
+  let nextTableFood = 0;
+  const prices = found.map((price): ScanPrice => (price.kind === "table" ? { ...price, food: tableFoods[nextTableFood++] ?? price.food } : price));
   const { foods, draftItems, items, unknownItems } = scanSheet(result.evidence, prices, await scanMeasures(deps, prices));
 
   const scanToken = token();
@@ -897,9 +923,14 @@ async function resolveDraftItems(
     if (extra === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
     found.push({ food: extra, estimate: null });
   }
-  const measures = await measuresForChosen(deps, chosenItems, found.map((f) => f.food));
+  const foods = await withMore(deps, found.map((f) => f.food));
+  const measures = await measuresForChosen(deps, chosenItems, foods);
   const resolved: { item: MealItem; original: MealItem | null }[] = [];
-  for (const { chosen, food: { food, estimate }, measures: own } of withFoods(chosenItems, found, measures)) {
+  const priced = found.flatMap(({ estimate }, at) => {
+    const food = foods[at];
+    return food === undefined ? [] : [{ food, estimate }];
+  });
+  for (const { chosen, food: { food, estimate }, measures: own } of withFoods(chosenItems, priced, measures)) {
     const amount = await amountOf(deps, userId, chosen, own);
     // User-chosen amount collapses the range; a dishware measure overrides the rung
     // to 'user_dishware', otherwise the estimate's rung is preserved.
@@ -1049,7 +1080,7 @@ async function resolveChosenItems(
   }
   const measures = await measuresForChosen(deps, chosenItems, foods);
   const items: MealItem[] = [];
-  for (const { chosen, food, measures: own } of withFoods(chosenItems, foods, measures)) {
+  for (const { chosen, food, measures: own } of withFoods(chosenItems, await withMore(deps, foods), measures)) {
     const amount = await amountOf(deps, userId, chosen, own);
     items.push(nutritionItem(food, amount.grams, [amount.grams, amount.grams], amount.dishwareRung ?? "default", amount.measure));
   }
@@ -1196,10 +1227,11 @@ async function editedItems(
     }
     foods.push(food ?? savedFood(prior ?? unreachable(), null));
   }
+  const figured = await withMore(deps, foods);
   const measures = await measuresForChosen(deps, changed.map((c) => c.edit), foods);
   const priced = new Map<number, MealItem>();
   for (const [n, { edit, prior, at }] of changed.entries()) {
-    const food = foods[n];
+    const food = figured[n];
     if (food === undefined) continue;
     const amount = await amountOf(deps, userId, edit, measures[n] ?? []);
     // T3 P2.6a finding 3: a grams edit must PRESERVE the item's existing
@@ -1215,7 +1247,7 @@ async function editedItems(
     const kept = "grams" in edit && prior?.measure !== undefined && prior.gramsPoint === edit.grams ? prior.measure : null;
     const measure = amount.measure ?? kept;
     const figures = ownFigures(edit, prior, amount.grams);
-    const item = nutritionItem(figures === null ? food : { ...food, ...figures }, amount.grams, [amount.grams, amount.grams], rung, measure);
+    const item = nutritionItem(figures === null ? food : { ...food, ...figures, more: MORE_NOT_KNOWN }, amount.grams, [amount.grams, amount.grams], rung, measure);
     const scanned = prior === undefined ? null : scanFiguresOf(prior);
     priced.set(at, figures === null ? item : {
       ...item,

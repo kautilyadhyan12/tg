@@ -1,13 +1,50 @@
 // Salvage port of usda.py: this is OpenFoodFacts, despite the old name.
 import { z } from "zod";
-import { MAX_ITEM_GRAMS, type NutritionSource } from "@app/shared";
+import { MAX_ITEM_GRAMS, type MoreNutrients, type NutritionSource } from "@app/shared";
 
-/** `fiberG` is null where a curated food's table has no measured figure. */
-export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: NutritionSource; }
+/** `fiberG` is null where a food's table or label has no figure. `more` is the
+ *  nine further figures per 100 g (ROADMAP 34a): a packaged product carries its
+ *  label's; a table food's are read when it is priced (`withMore`, service.ts). */
+export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: NutritionSource; more?: MoreNutrients | undefined; }
 export interface FoodSearchProvider { search(query: string, limit: number): Promise<FoodReference[]>; }
 const productSchema = z.object({ code: z.union([z.string(), z.number()]).optional(), product_name: z.union([z.string(), z.array(z.string())]).optional(), generic_name: z.union([z.string(), z.array(z.string())]).optional(), brands: z.union([z.string(), z.array(z.string())]).optional(), serving_size: z.string().optional(), nutriments: z.record(z.unknown()).optional() }).passthrough();
 const searchSchema = z.object({ hits: z.array(productSchema).optional(), products: z.array(productSchema).optional() }).passthrough();
 const num = (v: unknown): number => typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && Number.isFinite(Number(v)) ? Number(v) : 0;
+/** A label's figure, or null where the label gives none: a missing figure is never a zero. */
+const given = (v: unknown): number | null => typeof v === "number" ? (Number.isFinite(v) ? v : null) : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null;
+/** The most 100 g of any food holds of each figure, in the unit it is kept in:
+ *  the weight itself for the three in grams, and for the rest just above the
+ *  highest in the USDA table (measured 2026-10-13: sodium 38,758 mg, table salt;
+ *  potassium 16,500; calcium 7,364; iron 123.6; magnesium 781; vitamin D 250 µg).
+ *  Open Food Facts is typed in by volunteers, so a figure past these is a slip of
+ *  the unit and reads as not known. A figure typed too LOW cannot be told. */
+const LABEL_MOST: Record<keyof MoreNutrients, number> = { fiberG: 100, sugarsG: 100, satFatG: 100, sodiumMg: 40_000, potassiumMg: 17_000, calciumMg: 7_500, ironMg: 125, magnesiumMg: 800, vitaminDUg: 250 };
+/** Sodium is 1 part in 2.5 of salt by weight (EU Regulation 1169/2011, Annex I). */
+const SALT_PER_SODIUM = 2.5;
+/** A product's nine further figures per 100 g. Open Food Facts keeps every
+ *  `_100g` figure in GRAMS whatever unit the label prints, so sodium and the
+ *  minerals are turned to milligrams and vitamin D to micrograms here, once. A
+ *  label that gives salt and no sodium gives its sodium by the rule above. */
+export function labelMore(n: Record<string, unknown>): MoreNutrients {
+  const salt = given(n["salt_100g"]);
+  const grams: MoreNutrients = {
+    fiberG: given(n["fiber_100g"]), sugarsG: given(n["sugars_100g"]), satFatG: given(n["saturated-fat_100g"]),
+    sodiumMg: given(n["sodium_100g"]) ?? (salt === null ? null : salt / SALT_PER_SODIUM),
+    potassiumMg: given(n["potassium_100g"]), calciumMg: given(n["calcium_100g"]), ironMg: given(n["iron_100g"]),
+    magnesiumMg: given(n["magnesium_100g"]), vitaminDUg: given(n["vitamin-d_100g"]),
+  };
+  const kept = (key: keyof MoreNutrients, perGram: number): number | null => {
+    const g = grams[key];
+    if (g === null) return null;
+    const v = g * perGram;
+    return v >= 0 && v <= LABEL_MOST[key] ? Math.round(v * 1000) / 1000 : null;
+  };
+  return {
+    fiberG: kept("fiberG", 1), sugarsG: kept("sugarsG", 1), satFatG: kept("satFatG", 1),
+    sodiumMg: kept("sodiumMg", 1000), potassiumMg: kept("potassiumMg", 1000), calciumMg: kept("calciumMg", 1000),
+    ironMg: kept("ironMg", 1000), magnesiumMg: kept("magnesiumMg", 1000), vitaminDUg: kept("vitaminDUg", 1_000_000),
+  };
+}
 const first = (v: string | string[] | undefined): string => Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
 const canonicalize = (v: string): string => v.toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "");
 /** A product's name with its brand, so two brands' jars never read alike
@@ -55,11 +92,12 @@ export function servingOf(label: string | undefined): { grams: number; unit: str
 function mapProduct(p: z.infer<typeof productSchema>): FoodReference | null {
   const name = first(p.product_name) || first(p.generic_name); if (name.trim() === "") return null;
   const n = p.nutriments ?? {}; let kcal = num(n["energy-kcal_100g"]); if (kcal === 0) kcal = num(n["energy_100g"]) / 4.184; if (kcal <= 0) return null;
-  const proteinG = num(n["proteins_100g"]), carbsG = num(n["carbohydrates_100g"]), fatG = num(n["fat_100g"]), fiberG = num(n["fiber_100g"]);
+  const proteinG = num(n["proteins_100g"]), carbsG = num(n["carbohydrates_100g"]), fatG = num(n["fat_100g"]);
   // Physical per-100g bounds (T3 manual-off-foods: OFF is crowd-edited; a
   // prank 10^9-kcal product must not enter the pipeline): pure fat is
   // 884 kcal/100g, and no macro can exceed 100 g per 100 g.
-  if (kcal > 1000 || proteinG > 100 || carbsG > 100 || fatG > 100 || fiberG > 100) return null;
+  if (kcal > 1000 || proteinG > 100 || carbsG > 100 || fatG > 100 || num(n["fiber_100g"]) > 100) return null;
+  const more = labelMore(n);
   const serving = servingOf(p.serving_size);
   // Canonical is UNIQUE per product via the OFF barcode (T3: name-slug
   // canonicals collide across products and let one entry overwrite another —
@@ -68,7 +106,7 @@ function mapProduct(p: z.infer<typeof productSchema>): FoodReference | null {
   // jars of one name stay two foods (rare; first-wins caching guards the rest).
   const code = p.code === undefined ? "" : canonicalize(String(p.code));
   const shown = withBrand(name, p.brands);
-  return { canonical: code === "" ? `off_${canonicalize(shown)}` : `off_${code}`, name: shown, kcal, proteinG, carbsG, fatG, fiberG, serving: serving.grams, unit: serving.unit, source: "openfoodfacts" };
+  return { canonical: code === "" ? `off_${canonicalize(shown)}` : `off_${code}`, name: shown, kcal, proteinG, carbsG, fatG, fiberG: more.fiberG, serving: serving.grams, unit: serving.unit, source: "openfoodfacts", more };
 }
 /** How long one search waits for packaged products, both addresses together.
  *  The search box's other foods answer in milliseconds and are held until this
