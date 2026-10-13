@@ -557,6 +557,7 @@ d("join by invitation (real Postgres)", () => {
           canTakeMembers: true,
           notMe: false,
           yourPlan: null,
+          waiver: null,
         },
       ]);
       const inviteId = sees.invitations[0]?.id ?? "";
