@@ -12,14 +12,18 @@ import {
   type AttendanceReportFacts,
   type ReportClassCounts,
 } from "../src/reportsAttendance.js";
+import { addDays, daysBetween } from "../src/heldMemberships.js";
+import { REPORT_PERIODS, type ReportPeriodKey } from "../src/reportPeriod.js";
 
 function facts(over: Partial<AttendanceReportFacts> = {}): AttendanceReportFacts {
   return {
     timezone: "Europe/London",
     today: "2026-10-10",
+    period: "4w",
     firstVisitOn: "2026-06-01",
     days: [],
     weeks: [],
+    people: 0,
     hours: [],
     hoursNoTime: 0,
     member: { members: 0, visits: 0, visitors: 0 },
@@ -62,50 +66,56 @@ describe("the days of the week", () => {
 });
 
 describe("which days each figure is counted over", () => {
-  it("the days shown are 28 with today, the weeks 12 with this one, the classes 56 days with today", () => {
-    expect(attendanceWindows("2026-10-10", null)).toMatchObject({
-      daysFrom: "2026-09-13",
-      weeksFrom: "2026-07-20",
-      thisWeek: "2026-10-05",
-      classesFrom: "2026-08-16",
-    });
+  // Today is Saturday 10 October 2026; its week began on Monday the 5th.
+  it.each<[ReportPeriodKey, string]>([
+    ["4w", "2026-09-13"],
+    ["3m", "2026-08-01"],
+    ["12m", "2025-11-01"],
+  ])("the period %s is counted from %s to today", (key, from) => {
+    expect(attendanceWindows("2026-10-10", null, key)).toEqual({ period: { key, from, to: "2026-10-10" }, thisWeek: "2026-10-05", fullWeeks: 0, whole: null });
   });
 
-  // Today is Saturday 10 October 2026; its week began on Monday the 5th.
-  it.each<[string, string | null, number, [string, string, number] | null, [string, string, number] | null]>([
-    ["nobody has ever checked in", null, 0, null, null],
-    ["the first check-in is today", "2026-10-10", 0, null, null],
-    ["the first was this Monday", "2026-10-05", 0, null, null],
-    ["the first was last Sunday: no whole week yet", "2026-10-04", 0, null, null],
-    ["the first was last Monday: one whole week", "2026-09-28", 1, null, null],
-    ["the first was a Tuesday a fortnight back: still one whole week", "2026-09-22", 1, null, null],
-    ["the first was the Monday before: two whole weeks, enough", "2026-09-21", 2, ["2026-09-21", "2026-10-04", 2], ["2026-09-21", "2026-10-04", 2]],
-    ["a Sunday counts for the week after it", "2026-09-20", 2, ["2026-09-21", "2026-10-04", 2], ["2026-09-21", "2026-10-04", 2]],
-    ["five whole weeks: hours over five, members over the newest four", "2026-08-31", 5, ["2026-08-31", "2026-10-04", 5], ["2026-09-07", "2026-10-04", 4]],
-    ["eight whole weeks", "2026-08-10", 8, ["2026-08-10", "2026-10-04", 8], ["2026-09-07", "2026-10-04", 4]],
-    ["a year of check-ins: hours over the newest eight only", "2025-10-01", 52, ["2026-08-10", "2026-10-04", 8], ["2026-09-07", "2026-10-04", 4]],
-    ["a first check-in dated after today counts for nothing", "2026-11-02", 0, null, null],
-  ])("%s", (_name, first, fullWeeks, hours, member) => {
-    const windows = attendanceWindows("2026-10-10", first);
+  it.each<[string, ReportPeriodKey, string | null, number, [string, string, number] | null]>([
+    ["nobody has ever checked in", "3m", null, 0, null],
+    ["the first check-in is today", "3m", "2026-10-10", 0, null],
+    ["the first was this Monday", "3m", "2026-10-05", 0, null],
+    ["the first was last Sunday: no whole week yet", "3m", "2026-10-04", 0, null],
+    ["the first was last Monday: one whole week", "3m", "2026-09-28", 1, null],
+    ["the first was a Tuesday a fortnight back: still one whole week", "3m", "2026-09-22", 1, null],
+    ["the first was the Monday before: two whole weeks, enough", "3m", "2026-09-21", 2, ["2026-09-21", "2026-10-04", 2]],
+    ["a Sunday counts for the week after it", "3m", "2026-09-20", 2, ["2026-09-21", "2026-10-04", 2]],
+    ["five whole weeks, all inside three months", "3m", "2026-08-31", 5, ["2026-08-31", "2026-10-04", 5]],
+    ["five whole weeks, and four weeks hold the newest three", "4w", "2026-08-31", 5, ["2026-09-14", "2026-10-04", 3]],
+    ["a year of check-ins: three months hold nine whole weeks", "3m", "2025-10-01", 52, ["2026-08-03", "2026-10-04", 9]],
+    ["a year of check-ins: twelve months hold forty-eight", "12m", "2025-10-01", 52, ["2025-11-03", "2026-10-04", 48]],
+    ["a first check-in dated after today counts for nothing", "12m", "2026-11-02", 0, null],
+  ])("%s", (_name, key, first, fullWeeks, whole) => {
+    const windows = attendanceWindows("2026-10-10", first, key);
     expect(windows.fullWeeks).toBe(fullWeeks);
-    expect(windows.hours).toEqual(hours === null ? null : { from: hours[0], to: hours[1], weeks: hours[2] });
-    expect(windows.member).toEqual(member === null ? null : { from: member[0], to: member[1], weeks: member[2] });
+    expect(windows.whole).toEqual(whole === null ? null : { from: whole[0], to: whole[1], weeks: whole[2] });
   });
 
   it("on a Monday no day of this week is in a whole week, and on a Sunday the week is still in progress", () => {
-    expect(attendanceWindows("2026-10-05", "2026-09-21").hours).toEqual({ from: "2026-09-21", to: "2026-10-04", weeks: 2 });
-    expect(attendanceWindows("2026-10-11", "2026-09-21").hours).toEqual({ from: "2026-09-21", to: "2026-10-04", weeks: 2 });
-    expect(attendanceWindows("2026-10-12", "2026-09-21").hours).toEqual({ from: "2026-09-21", to: "2026-10-11", weeks: 3 });
+    expect(attendanceWindows("2026-10-05", "2026-09-21", "3m").whole).toEqual({ from: "2026-09-21", to: "2026-10-04", weeks: 2 });
+    expect(attendanceWindows("2026-10-11", "2026-09-21", "3m").whole).toEqual({ from: "2026-09-21", to: "2026-10-04", weeks: 2 });
+    expect(attendanceWindows("2026-10-12", "2026-09-21", "3m").whole).toEqual({ from: "2026-09-21", to: "2026-10-11", weeks: 3 });
   });
 
-  it("every whole-week window is whole weeks: it starts on a Monday and ends on a Sunday", () => {
-    for (let back = 0; back < 120; back += 1) {
-      const first = new Date(Date.parse("2026-10-10T00:00:00Z") - back * 86_400_000).toISOString().slice(0, 10);
-      const windows = attendanceWindows("2026-10-10", first);
-      for (const window of [windows.hours, windows.member]) {
-        if (window === null) continue;
-        expect([weekdayOf(window.from), weekdayOf(window.to)], first).toEqual([1, 7]);
-        expect(window.from >= first, first).toBe(true);
+  it("the whole weeks are whole, inside the period and after the first check-in, on every day of two years and for every period", () => {
+    for (const key of REPORT_PERIODS) {
+      for (let on = 0; on < 730; on += 1) {
+        const today = addDays("2026-01-01", on);
+        const first = addDays(today, -((on * 7) % 400));
+        const windows = attendanceWindows(today, first, key);
+        const window = windows.whole;
+        if (window === null) {
+          expect(windows.fullWeeks, `${key} ${today}`).toBeLessThan(2);
+          continue;
+        }
+        expect([weekdayOf(window.from), weekdayOf(window.to)], `${key} ${today}`).toEqual([1, 7]);
+        expect(window.from >= first && window.from >= windows.period.from && window.to < today, `${key} ${today}`).toBe(true);
+        expect(window.weeks, `${key} ${today}`).toBe((daysBetween(window.from, window.to) + 1) / 7);
+        expect(window.weeks, `${key} ${today}`).toBeGreaterThanOrEqual(2);
       }
     }
   });
@@ -146,14 +156,48 @@ describe("visits by day and by week", () => {
     ]);
   });
 
-  it("a long history shows 28 days and 12 weeks, the week in progress last and not whole", () => {
-    const r = report({ firstVisitOn: "2025-01-06", weeks: [{ weekStart: "2026-08-03", visits: 40, people: 22 }] });
+  it("four weeks of a long history: 28 days, and the week the period begins in starts on the period's first day", () => {
+    const r = report({
+      firstVisitOn: "2025-01-06",
+      days: [{ day: "2026-09-13", visits: 5 }, { day: "2026-09-22", visits: 40 }],
+      weeks: [{ weekStart: "2026-09-13", visits: 5, people: 5 }, { weekStart: "2026-09-21", visits: 40, people: 22 }],
+      people: 25,
+    });
+    expect(r.period).toEqual({ key: "4w", from: "2026-09-13", to: "2026-10-10" });
+    expect(r.inPeriod).toEqual({ visits: 45, people: 25 });
     expect(r.days).toHaveLength(28);
-    expect(r.days[0]?.day).toBe("2026-09-13");
-    expect(r.weeks).toHaveLength(12);
-    expect(r.weeks[0]).toEqual({ weekStart: "2026-07-20", visits: 0, people: 0, full: true });
-    expect(r.weeks[2]).toEqual({ weekStart: "2026-08-03", visits: 40, people: 22, full: true });
-    expect(r.weeks[11]).toEqual({ weekStart: "2026-10-05", visits: 0, people: 0, full: false });
+    expect(r.days[0]).toEqual({ day: "2026-09-13", visits: 5 });
+    // 13 September 2026 is a Sunday: its week has one day in the period, and is not a whole week.
+    expect(r.weeks).toEqual([
+      { weekStart: "2026-09-13", visits: 5, people: 5, full: false },
+      { weekStart: "2026-09-14", visits: 0, people: 0, full: true },
+      { weekStart: "2026-09-21", visits: 40, people: 22, full: true },
+      { weekStart: "2026-09-28", visits: 0, people: 0, full: true },
+      { weekStart: "2026-10-05", visits: 0, people: 0, full: false },
+    ]);
+  });
+
+  it.each<[ReportPeriodKey, number, string, number]>([
+    ["3m", 71, "2026-08-01", 11],
+    ["12m", 344, "2025-11-01", 50],
+  ])("%s of a long history: %i days from %s, and every week the period touches", (period, days, from, weeks) => {
+    const r = report({ period, firstVisitOn: "2025-01-06" });
+    expect(r.days).toHaveLength(days);
+    expect(r.days[0]?.day).toBe(from);
+    expect(r.weeks).toHaveLength(weeks);
+    // Both periods begin on a Saturday: a two-day week, said by its own first day.
+    expect(r.weeks[0]).toEqual({ weekStart: from, visits: 0, people: 0, full: false });
+    expect(r.weeks[1]).toMatchObject({ weekStart: addDays(from, 2), full: true });
+    expect(r.weeks[weeks - 1]).toEqual({ weekStart: "2026-10-05", visits: 0, people: 0, full: false });
+  });
+
+  it("a gym younger than the period is shown from its first check-in, never from the period's first day", () => {
+    const r = report({ period: "12m", firstVisitOn: "2026-09-23", days: [{ day: "2026-09-23", visits: 4 }], people: 4 });
+    expect(r.period.from).toBe("2025-11-01");
+    expect(r.days).toHaveLength(18);
+    expect(r.days[0]).toEqual({ day: "2026-09-23", visits: 4 });
+    expect(r.weeks.map((w) => w.weekStart)).toEqual(["2026-09-21", "2026-09-28", "2026-10-05"]);
+    expect(r.inPeriod).toEqual({ visits: 4, people: 4 });
   });
 
   it("a count for a day or a week outside what is shown is not drawn", () => {
@@ -173,22 +217,27 @@ describe("visits a member a week", () => {
     [
       "nobody on the list was on it when the weeks began: no members to share between, and the weeks said",
       { member: { members: 0, visits: 0, visitors: 0 } },
-      { state: "no_members", from: "2026-09-07", to: "2026-10-04", weeks: 4 },
+      { state: "no_members", from: "2026-09-14", to: "2026-10-04", weeks: 3 },
     ],
     [
       "visits counted and nobody to share them between is still no figure",
       { member: { members: 0, visits: 12, visitors: 1 } },
-      { state: "no_members", from: "2026-09-07", to: "2026-10-04", weeks: 4 },
+      { state: "no_members", from: "2026-09-14", to: "2026-10-04", weeks: 3 },
     ],
     [
       "members who never came: a true zero",
       { member: { members: 40, visits: 0, visitors: 0 } },
-      { state: "ok", perWeek: 0, from: "2026-09-07", to: "2026-10-04", weeks: 4, members: 40, visits: 0, visitors: 0 },
+      { state: "ok", perWeek: 0, from: "2026-09-14", to: "2026-10-04", weeks: 3, members: 40, visits: 0, visitors: 0 },
     ],
     [
-      "600 visits by 100 members over four weeks: 1.5 each a week",
-      { member: { members: 100, visits: 600, visitors: 71 } },
-      { state: "ok", perWeek: 1.5, from: "2026-09-07", to: "2026-10-04", weeks: 4, members: 100, visits: 600, visitors: 71 },
+      "450 visits by 100 members over the three whole weeks in four: 1.5 each a week",
+      { member: { members: 100, visits: 450, visitors: 71 } },
+      { state: "ok", perWeek: 1.5, from: "2026-09-14", to: "2026-10-04", weeks: 3, members: 100, visits: 450, visitors: 71 },
+    ],
+    [
+      "the same members over three months are shared over its nine whole weeks",
+      { period: "3m", member: { members: 100, visits: 1350, visitors: 90 } },
+      { state: "ok", perWeek: 1.5, from: "2026-08-03", to: "2026-10-04", weeks: 9, members: 100, visits: 1350, visitors: 90 },
     ],
     [
       "two whole weeks only: shared over two",
@@ -198,12 +247,12 @@ describe("visits a member a week", () => {
     [
       "to one decimal place",
       { member: { members: 3, visits: 7, visitors: 2 } },
-      { state: "ok", perWeek: 0.6, from: "2026-09-07", to: "2026-10-04", weeks: 4, members: 3, visits: 7, visitors: 2 },
+      { state: "ok", perWeek: 0.8, from: "2026-09-14", to: "2026-10-04", weeks: 3, members: 3, visits: 7, visitors: 2 },
     ],
     [
       "never more people who came than members",
       { member: { members: 3, visits: 9, visitors: 5 } },
-      { state: "ok", perWeek: 0.8, from: "2026-09-07", to: "2026-10-04", weeks: 4, members: 3, visits: 9, visitors: 3 },
+      { state: "ok", perWeek: 1, from: "2026-09-14", to: "2026-10-04", weeks: 3, members: 3, visits: 9, visitors: 3 },
     ],
   ];
   it.each(cases)("%s", (_name, over, expected) => {
@@ -217,7 +266,7 @@ describe("the busiest hours", () => {
   });
 
   it("enough weeks and no visit in them says so, with the visits that have no time", () => {
-    expect(report({ hours: [], hoursNoTime: 4 }).hours).toEqual({ state: "no_visits", from: "2026-08-10", to: "2026-10-04", weeks: 8, noTime: 4 });
+    expect(report({ hours: [], hoursNoTime: 4 }).hours).toEqual({ state: "no_visits", from: "2026-09-14", to: "2026-10-04", weeks: 3, noTime: 4 });
     expect(report({ hours: [{ weekday: 2, hour: 9, visits: 0 }] }).hours).toMatchObject({ state: "no_visits", noTime: 0 });
   });
 
@@ -233,9 +282,9 @@ describe("the busiest hours", () => {
     }).hours;
     expect(hours).toEqual({
       state: "ok",
-      from: "2026-08-10",
+      from: "2026-09-14",
       to: "2026-10-04",
-      weeks: 8,
+      weeks: 3,
       cells: [
         { weekday: 1, hour: 7, visits: 12 },
         { weekday: 1, hour: 18, visits: 31 },
@@ -294,9 +343,10 @@ describe("the busiest hours", () => {
 describe("how full classes are, and no-shows", () => {
   it("no class ever set up, and classes set up with none run, are two different sentences", () => {
     expect(report().classes).toEqual({ state: "none_ever" });
-    expect(report({ classes: { ever: true, types: [] } }).classes).toEqual({ state: "none_recent", from: "2026-08-16" });
+    expect(report({ classes: { ever: true, types: [] } }).classes).toEqual({ state: "none_recent", from: "2026-09-13" });
+    expect(report({ period: "12m", classes: { ever: true, types: [] } }).classes).toEqual({ state: "none_recent", from: "2025-11-01" });
     // A class counted with none run is as good as not there.
-    expect(report({ classes: { ever: true, types: [classCounts({ classes: 0 })] } }).classes).toEqual({ state: "none_recent", from: "2026-08-16" });
+    expect(report({ classes: { ever: true, types: [classCounts({ classes: 0 })] } }).classes).toEqual({ state: "none_recent", from: "2026-09-13" });
   });
 
   const fillCases: [string, ReportClassCounts[], unknown][] = [

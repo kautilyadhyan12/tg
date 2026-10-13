@@ -57,6 +57,7 @@ export * from "./posts.js";
 export * from "./gymEvents.js";
 export * from "./gymChallenges.js";
 export * from "./startHere.js";
+export * from "./reportPeriod.js";
 export * from "./reports.js";
 export * from "./reportsAttendance.js";
 export * from "./reportsMoney.js";

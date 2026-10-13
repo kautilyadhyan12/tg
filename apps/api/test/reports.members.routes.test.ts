@@ -204,11 +204,14 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
         expect(await read(london, londonOwner)).toEqual({
           timezone: "Europe/London",
           today: "2026-10-10",
+          period: { key: "12m", from: "2025-11-01", to: "2026-10-10" },
           listChangedOn: "2026-10-03",
           activeNow: 11,
           everLeft: true,
           fullMonths: 3,
           thisMonth: { month: "2026-10", joined: 1, left: 1 },
+          // New is counted from July, the month after the list began: one in July and one in October.
+          inPeriod: { joined: 2, joinedFrom: "2026-07-01", left: 4 },
           churnMonths: ["2026-07", "2026-08", "2026-09"],
           // Of 13 + 13 + 12 on the list as July, August and September began, 0 + 1 + 1 left.
           churn: { state: "ok", percent: 5.3 },
@@ -237,12 +240,14 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
         expect(await read(delhi, delhiOwner)).toEqual({
           timezone: "Asia/Kolkata",
           today: "2026-10-10",
+          period: { key: "12m", from: "2025-11-01", to: "2026-10-10" },
           listChangedOn: "2026-10-01",
           activeNow: 2,
           everLeft: true,
           // Listed on the 1st by Delhi's clock, so September is a full month: one, not three.
           fullMonths: 1,
           thisMonth: { month: "2026-10", joined: 0, left: 1 },
+          inPeriod: { joined: 0, joinedFrom: "2026-10-01", left: 1 },
           churnMonths: [],
           churn: { state: "not_enough_data" },
           retention: { state: "not_enough_data" },

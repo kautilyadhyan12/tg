@@ -344,11 +344,11 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
         overdueAfterDays: 20,
       });
       expect(report.types).toEqual([
-        { name: "Annual", inUse: 1, monthlyMinor: 4000, monthNetMinor: 0, yearNetMinor: 96000 },
-        { name: "Gold Monthly", inUse: 3, monthlyMinor: 14997, monthNetMinor: 4999, yearNetMinor: 5 * 4999 + 4999 + 2000 },
-        { name: "One month", inUse: 1, monthlyMinor: 0, monthNetMinor: -6000, yearNetMinor: 6000 - 2000 },
-        { name: "Weekly", inUse: 1, monthlyMinor: 5200, monthNetMinor: 1200, yearNetMinor: 1200 },
-        { name: "Staff family", inUse: 1, monthlyMinor: 0, monthNetMinor: 0, yearNetMinor: 0 },
+        { name: "Annual", inUse: 1, monthlyMinor: 4000, monthNetMinor: 0, periodNetMinor: 96000 },
+        { name: "Gold Monthly", inUse: 3, monthlyMinor: 14997, monthNetMinor: 4999, periodNetMinor: 5 * 4999 + 4999 + 2000 },
+        { name: "One month", inUse: 1, monthlyMinor: 0, monthNetMinor: -6000, periodNetMinor: 6000 - 2000 },
+        { name: "Weekly", inUse: 1, monthlyMinor: 5200, monthNetMinor: 1200, periodNetMinor: 1200 },
+        { name: "Staff family", inUse: 1, monthlyMinor: 0, monthNetMinor: 0, periodNetMinor: 0 },
       ]);
 
       // Lifetime value divides by the Members figures' own churn: the same months, and the
@@ -364,7 +364,7 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
       expect(theirReport.recurring).toEqual({ monthlyMinor: 3000, memberships: 1 });
       expect(theirReport.months).toEqual([{ month: "2026-10", paidMinor: 3000, refundedMinor: 0, netMinor: 3000 }]);
       expect(theirReport.owed).toMatchObject({ minor: 0, people: 0, pastMinor: 0, pastPeople: 0 });
-      expect(theirReport.types).toEqual([{ name: "Gold Monthly", inUse: 1, monthlyMinor: 3000, monthNetMinor: 3000, yearNetMinor: 3000 }]);
+      expect(theirReport.types).toEqual([{ name: "Gold Monthly", inUse: 1, monthlyMinor: 3000, monthNetMinor: 3000, periodNetMinor: 3000 }]);
       expect(theirReport.lifetimeValue).toEqual({ state: "nobody_left" });
 
       // Who reads it: both ticks, and this gym's staff.

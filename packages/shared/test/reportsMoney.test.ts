@@ -64,6 +64,9 @@ const money = (typeId: string, month: string, paidMinor: number, refundedMinor =
   month,
   paidMinor,
   refundedMinor,
+  // Twelve months hold every month the notebook is read over.
+  periodPaidMinor: paidMinor,
+  periodRefundedMinor: refundedMinor,
 });
 
 /** A gym a year into its list, three members leaving in each of the months churn reads. */
@@ -73,6 +76,7 @@ function facts(over: Partial<MoneyReportFacts> = {}): MoneyReportFacts {
   return {
     timezone: "Europe/London",
     today: TODAY,
+    period: "12m",
     currency: "GBP",
     anyMembership: true,
     firstPaidOn: "2026-01-10",
@@ -159,8 +163,8 @@ describe("collected: payments less refunds, month by month", () => {
     ]);
     expect(r.thisMonth).toEqual({ month: "2026-10", paidMinor: 4999, refundedMinor: 6000, netMinor: -1001 });
     expect(r.types).toEqual([
-      { name: "GOLD", inUse: 0, monthlyMinor: 0, monthNetMinor: 4999, yearNetMinor: 22499 },
-      { name: "DAY", inUse: 0, monthlyMinor: 0, monthNetMinor: -6000, yearNetMinor: 0 },
+      { name: "GOLD", inUse: 0, monthlyMinor: 0, monthNetMinor: 4999, periodNetMinor: 22499 },
+      { name: "DAY", inUse: 0, monthlyMinor: 0, monthNetMinor: -6000, periodNetMinor: 0 },
     ]);
   });
 
@@ -175,7 +179,7 @@ describe("collected: payments less refunds, month by month", () => {
   it("a month after today's is not this gym's yet", () => {
     const r = figures({ months: [money("gold", "2026-11", 9999), money("gold", "2026-10", 100)] });
     expect(r.thisMonth.paidMinor).toBe(100);
-    expect(r.types[0]?.yearNetMinor).toBe(100);
+    expect(r.types[0]?.periodNetMinor).toBe(100);
   });
 
   it("a type has a row while it is in use or money moved on it, even where it all went back", () => {
@@ -202,7 +206,7 @@ describe("lifetime value: the money of churn's months for each member who left i
     const f = facts({ months: quarter });
     const r = figures({ months: quarter });
     expect(r.lifetimeValue).toEqual({ state: "ok", minor: 100000, months: ["2026-07", "2026-08", "2026-09"], leavers: 10 });
-    const members = membersReportFrom({ ...f.members, timezone: f.timezone, listChangedOn: null, activeNow: 100, stay: { leavers: 0, totalDays: 0 }, leads: [] });
+    const members = membersReportFrom({ ...f.members, period: "12m", inPeriod: { joined: 0, left: 0 }, timezone: f.timezone, listChangedOn: null, activeNow: 100, stay: { leavers: 0, totalDays: 0 }, leads: [] });
     expect(members.churnMonths).toEqual(["2026-07", "2026-08", "2026-09"]);
     if (members.churn.state !== "ok") throw new Error("no churn");
     // 1,000,000 over 300 member-months is 3,333.33 a member a month; churn is 10 in 300.

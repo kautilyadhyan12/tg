@@ -1,23 +1,18 @@
 // The console's Reports page: the attendance figures (spec Part 3 §16.5; ROADMAP 21a-ii).
 //
-// `attendanceWindows` says which days each figure is counted over; the server counts the
+// `attendanceWindows` says which days of the period each figure is counted over; the server counts the
 // gym's visits and classes over them, and `attendanceReportFrom` turns the counts into the
 // figures, and says why where a figure cannot be given.
 import { z } from "zod";
 import { addDays, daysBetween } from "./heldMemberships.js";
+import { reportPeriodOf, reportPeriodSchema, type ReportPeriod, type ReportPeriodKey } from "./reportPeriod.js";
 
-/** Visits day by day: this many days, today last. */
-export const REPORT_VISIT_DAYS = 28;
-/** Visits week by week: this many weeks, Monday to Sunday, the week in progress last. */
-export const REPORT_VISIT_WEEKS = 12;
-/** The busiest hours are counted over the newest full weeks, this many at most. */
-export const REPORT_HOUR_WEEKS = 8;
-/** Visits a member a week are counted over the newest full weeks, this many at most. */
-export const REPORT_MEMBER_WEEKS = 4;
-/** Both wait for this many full weeks of check-ins. */
+/** The most days a period holds: twelve calendar months, one of them February in a leap year. */
+export const REPORT_VISIT_DAYS_MAX = 366;
+/** The most weeks those days touch. */
+export const REPORT_VISIT_WEEKS_MAX = 54;
+/** The busiest hours and visits a member a week wait for this many full weeks of check-ins. */
 export const REPORT_FULL_WEEKS_NEEDED = 2;
-/** Classes are counted over this many days, today last. */
-export const REPORT_CLASS_DAYS = 56;
 /** How many classes the page lists, the ones that ran most first. */
 export const REPORT_CLASS_TYPES_MAX = 100;
 /** How many hours are named as the busiest when several tie. */
@@ -50,46 +45,38 @@ export interface DayWindow {
 }
 
 export interface AttendanceWindows {
-  /** The first of the days shown one by one. */
-  daysFrom: string;
-  /** The Monday of the first week shown. */
-  weeksFrom: string;
+  /** The period: visits day by day, week by week, and classes are counted from its first day. */
+  period: ReportPeriod;
   /** The Monday of the week in progress. */
   thisWeek: string;
   /** Whole weeks, Monday to Sunday, that began on or after the first check-in and have ended. */
   fullWeeks: number;
-  /** Null before there are enough full weeks. */
-  hours: DayWindow | null;
-  member: DayWindow | null;
-  /** The first day classes are counted from. */
-  classesFrom: string;
+  /** The whole weeks inside the period, since the first check-in. Null before there are
+   *  `REPORT_FULL_WEEKS_NEEDED` full weeks of check-ins. */
+  whole: DayWindow | null;
 }
 
-/** Which days each figure is counted over, from the gym's own day today and the day of
- *  its first check-in. Only whole weeks feed the busiest hours and visits a member, so
- *  every weekday is counted the same number of times. */
-export function attendanceWindows(today: string, firstVisitOn: string | null): AttendanceWindows {
+/** The first Monday on or after `day`. */
+function mondayFrom(day: string): string {
+  const monday = mondayOf(day);
+  return monday === day ? monday : addDays(monday, 7);
+}
+
+/** Which days each figure is counted over, from the gym's own day today, the period and
+ *  the day of the gym's first check-in. Only whole weeks feed the busiest hours and visits
+ *  a member, so every weekday is counted the same number of times. */
+export function attendanceWindows(today: string, firstVisitOn: string | null, key: ReportPeriodKey): AttendanceWindows {
+  const period = reportPeriodOf(key, today);
   const thisWeek = mondayOf(today);
-  let fullWeeks = 0;
-  if (firstVisitOn !== null) {
-    const monday = mondayOf(firstVisitOn);
-    const firstFull = monday === firstVisitOn ? monday : addDays(monday, 7);
-    fullWeeks = Math.max(0, Math.floor(daysBetween(firstFull, thisWeek) / 7));
+  const firstFull = firstVisitOn === null ? null : mondayFrom(firstVisitOn);
+  const fullWeeks = firstFull === null ? 0 : Math.max(0, Math.floor(daysBetween(firstFull, thisWeek) / 7));
+  let whole: DayWindow | null = null;
+  if (firstFull !== null && fullWeeks >= REPORT_FULL_WEEKS_NEEDED) {
+    const inPeriod = mondayFrom(period.from);
+    const from = firstFull > inPeriod ? firstFull : inPeriod;
+    whole = { from, to: addDays(thisWeek, -1), weeks: Math.floor(daysBetween(from, thisWeek) / 7) };
   }
-  const newest = (most: number): DayWindow | null => {
-    if (fullWeeks < REPORT_FULL_WEEKS_NEEDED) return null;
-    const weeks = Math.min(fullWeeks, most);
-    return { from: addDays(thisWeek, -7 * weeks), to: addDays(thisWeek, -1), weeks };
-  };
-  return {
-    daysFrom: addDays(today, 1 - REPORT_VISIT_DAYS),
-    weeksFrom: addDays(thisWeek, -7 * (REPORT_VISIT_WEEKS - 1)),
-    thisWeek,
-    fullWeeks,
-    hours: newest(REPORT_HOUR_WEEKS),
-    member: newest(REPORT_MEMBER_WEEKS),
-    classesFrom: addDays(today, 1 - REPORT_CLASS_DAYS),
-  };
+  return { period, thisWeek, fullWeeks, whole };
 }
 
 /** One class the gym runs, counted over the classes of it that started in the window. */
@@ -112,18 +99,22 @@ export interface AttendanceReportFacts {
   timezone: string;
   /** The gym's own day today. */
   today: string;
+  period: ReportPeriodKey;
   /** The day of the gym's first check-in; null with none. */
   firstVisitOn: string | null;
-  /** The days that had a visit, from `daysFrom`. */
+  /** The days of the period that had a visit. */
   days: readonly { day: string; visits: number }[];
-  /** The weeks that had a visit, from `weeksFrom`, each by its Monday. */
+  /** The weeks of the period that had a visit, each by its Monday, or by the period's
+   *  first day for the week that day falls in. */
   weeks: readonly { weekStart: string; visits: number; people: number }[];
-  /** Visits with a known time in the hours window, by weekday and hour on the gym's clock. */
+  /** How many different people visited in the period. */
+  people: number;
+  /** Visits with a known time in the whole weeks, by weekday and hour on the gym's clock. */
   hours: readonly { weekday: number; hour: number; visits: number }[];
-  /** Visits in the hours window that staff added on a later day, so no time is known. */
+  /** Visits in the whole weeks that staff added on a later day, so no time is known. */
   hoursNoTime: number;
-  /** People on the list today who were on it when the member window began, and their
-   *  visits in it: somebody added since could not have come. */
+  /** People on the list today who were on it when the whole weeks began, and their
+   *  visits in them: somebody added since could not have come. */
   member: { members: number; visits: number; visitors: number };
   /** Whether the gym has set up any class, and the classes that started in the window. */
   classes: { ever: boolean; types: readonly ReportClassCounts[] };
@@ -231,15 +222,19 @@ export const attendanceReportSchema = z
   .object({
     timezone: z.string(),
     today: daySchema,
+    period: reportPeriodSchema,
     /** Null while nobody has ever checked in: the visit figures are then said in words. */
     firstVisitOn: daySchema.nullable(),
     fullWeeks: countSchema,
-    /** From the first check-in or `REPORT_VISIT_DAYS` back, whichever is later, to today. */
-    days: z.array(z.object({ day: daySchema, visits: countSchema }).strict()).max(REPORT_VISIT_DAYS),
-    /** `full` is a whole week of check-ins that has ended; the week in progress is last. */
+    /** Every visit in the period, and the people who made them. */
+    inPeriod: z.object({ visits: countSchema, people: countSchema }).strict(),
+    /** From the first check-in or the period's first day, whichever is later, to today. */
+    days: z.array(z.object({ day: daySchema, visits: countSchema }).strict()).max(REPORT_VISIT_DAYS_MAX),
+    /** `weekStart` is a Monday, or the period's first day for the week that day falls in.
+     *  `full` is a whole week of check-ins that has ended; the week in progress is last. */
     weeks: z
       .array(z.object({ weekStart: daySchema, visits: countSchema, people: countSchema, full: z.boolean() }).strict())
-      .max(REPORT_VISIT_WEEKS),
+      .max(REPORT_VISIT_WEEKS_MAX),
     perMember: perMemberSchema,
     hours: hoursSchema,
     classes: classesSchema,
@@ -322,38 +317,41 @@ function classesFrom(facts: AttendanceReportFacts, from: string): ReportClasses 
 
 /** The figures from the counts.
  *
- *  A day or a week nobody came is a zero, from the gym's first check-in on; nothing
- *  earlier is shown. The busiest hours and visits a member a week are given only once
+ *  Everything is counted over the period. A day or a week nobody came is a zero, from the
+ *  gym's first check-in on; nothing earlier is shown. The busiest hours and visits a member a week are given only once
  *  there are `REPORT_FULL_WEEKS_NEEDED` full weeks of check-ins. No-shows are a share of
  *  the places marked came or no-show, so a gym that marks nobody is told so. */
 export function attendanceReportFrom(facts: AttendanceReportFacts): AttendanceReport {
-  const windows = attendanceWindows(facts.today, facts.firstVisitOn);
+  const windows = attendanceWindows(facts.today, facts.firstVisitOn, facts.period);
+  const from = windows.period.from;
   const first = facts.firstVisitOn;
 
   const days: AttendanceReport["days"] = [];
   const weeks: AttendanceReport["weeks"] = [];
   if (first !== null && first <= facts.today) {
     const visitsOn = new Map(facts.days.map((d) => [d.day, d.visits]));
-    for (let day = first > windows.daysFrom ? first : windows.daysFrom; day <= facts.today; day = addDays(day, 1)) {
+    const start = first > from ? first : from;
+    for (let day = start; day <= facts.today; day = addDays(day, 1)) {
       days.push({ day, visits: visitsOn.get(day) ?? 0 });
     }
     const weekOf = new Map(facts.weeks.map((w) => [w.weekStart, w]));
-    const firstWeek = mondayOf(first);
-    const firstFull = firstWeek === first ? firstWeek : addDays(firstWeek, 7);
-    for (let week = firstWeek > windows.weeksFrom ? firstWeek : windows.weeksFrom; week <= windows.thisWeek; week = addDays(week, 7)) {
-      const found = weekOf.get(week);
-      weeks.push({ weekStart: week, visits: found?.visits ?? 0, people: found?.people ?? 0, full: week >= firstFull && week < windows.thisWeek });
+    const firstFull = mondayFrom(first);
+    for (let week = mondayOf(start); week <= windows.thisWeek; week = addDays(week, 7)) {
+      // The week the period begins in is counted from the period's first day, and says so.
+      const weekStart = week < from ? from : week;
+      const found = weekOf.get(weekStart);
+      weeks.push({ weekStart, visits: found?.visits ?? 0, people: found?.people ?? 0, full: week >= from && week >= firstFull && week < windows.thisWeek });
     }
   }
 
   let perMember: ReportPerMember;
-  if (windows.member === null) perMember = { state: "not_enough_data" };
-  else if (facts.member.members === 0) perMember = { state: "no_members", ...windows.member };
+  if (windows.whole === null) perMember = { state: "not_enough_data" };
+  else if (facts.member.members === 0) perMember = { state: "no_members", ...windows.whole };
   else {
     perMember = {
       state: "ok",
-      perWeek: Math.round((facts.member.visits / windows.member.weeks / facts.member.members) * 10) / 10,
-      ...windows.member,
+      perWeek: Math.round((facts.member.visits / windows.whole.weeks / facts.member.members) * 10) / 10,
+      ...windows.whole,
       members: facts.member.members,
       visits: facts.member.visits,
       visitors: Math.min(facts.member.visitors, facts.member.members),
@@ -363,12 +361,14 @@ export function attendanceReportFrom(facts: AttendanceReportFacts): AttendanceRe
   return {
     timezone: facts.timezone,
     today: facts.today,
+    period: windows.period,
     firstVisitOn: first !== null && first <= facts.today ? first : null,
     fullWeeks: windows.fullWeeks,
+    inPeriod: { visits: days.reduce((sum, d) => sum + d.visits, 0), people: days.length === 0 ? 0 : facts.people },
     days,
     weeks,
     perMember,
-    hours: hoursFrom(facts, windows.hours),
-    classes: classesFrom(facts, windows.classesFrom),
+    hours: hoursFrom(facts, windows.whole),
+    classes: classesFrom(facts, from),
   };
 }

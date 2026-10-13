@@ -4,6 +4,7 @@
 // counts into the figures, and says why where a figure cannot be given.
 import { z } from "zod";
 import { LEAD_SOURCES, leadSourceSchema, type LeadSource } from "./leads.js";
+import { reportPeriodOf, reportPeriodSchema, type ReportPeriodKey } from "./reportPeriod.js";
 
 /** How many months the page and its CSV show, the month in progress last. */
 export const REPORT_MONTHS = 12;
@@ -37,6 +38,7 @@ export interface MembersReportFacts {
   timezone: string;
   /** The gym's own day today. */
   today: string;
+  period: ReportPeriodKey;
   /** The gym's day its first person went on the list; null with nobody ever on it. */
   firstListedOn: string | null;
   /** The gym's day somebody was last added or taken off. */
@@ -47,7 +49,9 @@ export interface MembersReportFacts {
   everLeft: boolean;
   /** `REPORT_MONTHS` of them, oldest first, the month in progress last. */
   months: readonly ReportMonthCounts[];
-  /** Those who left in the months shown: how many, and their days as a member together. */
+  /** Counted over the period's own days: who started from `newCountedFrom` on, and who left. */
+  inPeriod: { joined: number; left: number };
+  /** Those who left in the period: how many, and their days as a member together. */
   stay: { leavers: number; totalDays: number };
   leads: readonly { source: LeadSource; leads: number; joined: number }[];
 }
@@ -72,6 +76,7 @@ export const membersReportSchema = z
   .object({
     timezone: z.string(),
     today: daySchema,
+    period: reportPeriodSchema,
     listChangedOn: daySchema.nullable(),
     activeNow: countSchema,
     /** False while nobody has ever left: Left and what is worked out from it
@@ -81,6 +86,10 @@ export const membersReportSchema = z
     fullMonths: countSchema,
     /** `joined` is null in the month the list began: its first people are not new members. */
     thisMonth: z.object({ month: monthSchema, joined: countSchema.nullable(), left: countSchema }).strict(),
+    /** New and left over the period's days. `joined` is null while the list's first month
+     *  is still going, and is counted from `joinedFrom`: the period's first day, or the
+     *  month after the list began when that is later. */
+    inPeriod: z.object({ joined: countSchema.nullable(), joinedFrom: daySchema.nullable(), left: countSchema }).strict(),
     /** The full months churn was worked out over, oldest first; empty without a figure. */
     churnMonths: z.array(monthSchema).max(REPORT_CHURN_MONTHS),
     churn: shareFigureSchema,
@@ -148,6 +157,14 @@ function firstFullMonth(firstListedOn: string): string {
   return firstListedOn.endsWith("-01") ? monthOf(firstListedOn) : nextMonth(monthOf(firstListedOn));
 }
 
+/** The first day new members are counted from in a period that begins on `from`: never
+ *  the month the list began, whose people are not new. Null with nobody ever on the list. */
+export function newCountedFrom(firstListedOn: string | null, from: string): string | null {
+  if (firstListedOn === null) return null;
+  const after = `${nextMonth(monthOf(firstListedOn))}-01`;
+  return after > from ? after : from;
+}
+
 /** What churn is worked out from: the newest `REPORT_CHURN_MONTHS` full months of the
  *  list taken together, with everybody on it as each began and those of them who left
  *  during it. One answer for churn and for lifetime value (`reportsMoney.ts`). */
@@ -176,9 +193,14 @@ export function churnBasis(facts: Pick<MembersReportFacts, "today" | "firstListe
  *  Churn is the share of the people on the list when a month began who came off during it,
  *  over the newest `REPORT_CHURN_MONTHS` full months taken together; retention is the rest.
  *  Neither is given, nor the average stay, before `REPORT_FULL_MONTHS_NEEDED` full months,
- *  and none of the three while nobody has ever come off the list. */
+ *  and none of the three while nobody has ever come off the list. New, left, the average
+ *  stay and the months listed follow the period; churn and retention are a monthly rate
+ *  and keep their own three months. */
 export function membersReportFrom(facts: MembersReportFacts): MembersReport {
   const thisMonth = monthOf(facts.today);
+  const period = reportPeriodOf(facts.period, facts.today);
+  const newFrom = newCountedFrom(facts.firstListedOn, period.from);
+  const joinedFrom = newFrom === null || newFrom > facts.today ? null : newFrom;
   const firstFull = facts.firstListedOn === null ? null : firstFullMonth(facts.firstListedOn);
   const fullMonths = firstFull === null ? 0 : monthsBetween(firstFull, thisMonth);
   const enough = fullMonths >= REPORT_FULL_MONTHS_NEEDED;
@@ -201,9 +223,9 @@ export function membersReportFrom(facts: MembersReportFacts): MembersReport {
   else if (!enough) averageStay = { state: "not_enough_data" };
   else averageStay = { state: "ok", days: Math.round(facts.stay.totalDays / facts.stay.leavers), leavers: facts.stay.leavers };
 
-  // A month before the list was started is counted from join dates alone, so it is left out.
+  // The months the period touches. A month before the list was started is counted from join dates alone, so it is left out.
   const firstMonth = facts.firstListedOn === null ? null : monthOf(facts.firstListedOn);
-  const shown = firstMonth === null ? [] : facts.months.filter((m) => m.month >= firstMonth && m.month <= thisMonth);
+  const shown = firstMonth === null ? [] : facts.months.filter((m) => m.month >= firstMonth && m.month >= monthOf(period.from) && m.month <= thisMonth);
   const current = facts.months.find((m) => m.month === thisMonth);
   const leadsTotal = facts.leads.reduce((sum, s) => sum + s.leads, 0);
   const leadsJoined = facts.leads.reduce((sum, s) => sum + Math.min(s.joined, s.leads), 0);
@@ -211,11 +233,13 @@ export function membersReportFrom(facts: MembersReportFacts): MembersReport {
   return {
     timezone: facts.timezone,
     today: facts.today,
+    period,
     listChangedOn: facts.listChangedOn,
     activeNow: facts.activeNow,
     everLeft: facts.everLeft,
     fullMonths,
     thisMonth: { month: thisMonth, joined: thisMonth === firstMonth ? null : (current?.joined ?? 0), left: current?.left ?? 0 },
+    inPeriod: { joined: joinedFrom === null ? null : facts.inPeriod.joined, joinedFrom, left: facts.inPeriod.left },
     churnMonths: basis.months,
     churn,
     retention,

@@ -1,9 +1,9 @@
-// The Reports page's reads (ROADMAP 21a-i, 21a-ii): counts of the gym's member list, its
+// The Reports page's reads (ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i): counts of the gym's member list, its
 // leads, its visits and its classes.
 // Every read names the gym in the WHERE and returns counts, never a person.
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
-import { REPORT_MONTHS, type AttendanceWindows, type ReportClassCounts } from "@app/shared";
+import { REPORT_MONTHS, newCountedFrom, type AttendanceWindows, type ReportClassCounts } from "@app/shared";
 
 const count = z.number().int().min(0);
 const countsRowSchema = z.object({
@@ -13,6 +13,8 @@ const countsRowSchema = z.object({
   ever_left: z.boolean(),
   first_listed_on: z.string().nullable(),
   list_changed_on: z.string().nullable(),
+  period_joined: count,
+  period_left: count,
   stay_leavers: count,
   stay_days: z.number().min(0),
 });
@@ -60,14 +62,22 @@ export function listPeople(sql: Sql | TransactionSql, gymId: string, timezone: s
  *  month's "at its start" is everybody who had started before its first day, had not left
  *  before it, and was on the list before the month ended: a list imported in September
  *  with last year's join dates fills no month before September, when nobody on it could
- *  have been seen to leave. */
+ *  have been seen to leave. New, left and the stay of those who left are also counted
+ *  from `periodFrom`, the first day of the period the page shows; new never in the month
+ *  the list began (`newCountedFrom`). */
 export async function readMemberCounts(
   sql: Sql | TransactionSql,
   gymId: string,
   timezone: string,
   today: string,
   gone: readonly { id: string; on: string }[],
+  periodFrom: string,
 ): Promise<MemberCounts> {
+  const first = await sql<{ first_listed_on: string | null }[]>`
+    SELECT to_char(min((e.created_at AT TIME ZONE ${timezone})::date), 'YYYY-MM-DD') AS first_listed_on
+    FROM gym_member_list_entries e WHERE e.gym_id = ${gymId}`;
+  // No list: nobody is counted, and this day is never read.
+  const newFrom = newCountedFrom(first[0]?.first_listed_on ?? null, periodFrom) ?? periodFrom;
   const rows = await sql<Record<string, unknown>[]>`
     WITH clock AS (
       SELECT ${today}::date AS today, date_trunc('month', ${today}::date)::date AS this_month
@@ -90,7 +100,7 @@ export async function readMemberCounts(
       LEFT JOIN people p ON true
       GROUP BY m.first_day
     ),
-    shown AS (SELECT min(first_day) AS from_day FROM months)
+    shown AS (SELECT ${periodFrom}::date AS from_day)
     SELECT to_char(c.today, 'YYYY-MM-DD') AS today,
       (SELECT json_agg(json_build_object(
                 'month', to_char(b.first_day, 'YYYY-MM'),
@@ -103,6 +113,8 @@ export async function readMemberCounts(
       EXISTS (SELECT 1 FROM people WHERE left_on IS NOT NULL) AS ever_left,
       (SELECT to_char(min(listed_on), 'YYYY-MM-DD') FROM people) AS first_listed_on,
       (SELECT to_char(GREATEST(max(listed_on), max(removed_on)), 'YYYY-MM-DD') FROM people) AS list_changed_on,
+      (SELECT count(*)::int FROM people p WHERE p.started >= ${newFrom}::date) AS period_joined,
+      (SELECT count(*)::int FROM people p, shown s WHERE p.left_on >= s.from_day) AS period_left,
       (SELECT count(*)::int FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_leavers,
       (SELECT COALESCE(sum(GREATEST(p.left_on - p.started, 0)), 0)::float8
        FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_days
@@ -141,13 +153,14 @@ const visitCountsSchema = z.object({
   weeks: z.array(z.object({ weekStart: z.string(), visits: count, people: count })),
   hours: z.array(z.object({ weekday: z.number().int(), hour: z.number().int(), visits: count })),
   hours_no_time: count,
+  people: count,
   members: count,
   member_visits: count,
   member_visitors: count,
 });
 export type VisitCounts = z.infer<typeof visitCountsSchema>;
 
-/** The gym's visits counted over the report's windows, in two passes over the days shown.
+/** The gym's visits counted over the report's period, in two passes over its days.
  *
  *  A visit is a row of the Attendance page, so a day here and a day there are one number.
  *  A person is their record on the list, or their app account when the visit has none. A
@@ -158,8 +171,9 @@ export type VisitCounts = z.infer<typeof visitCountsSchema>;
  *
  *  The hours are counted by the quarter-hour first and put on the gym's clock after: every
  *  zone is a whole number of quarter-hours from UTC, and a few thousand quarter-hours are
- *  converted where every visit would have been. The member window is whole weeks, so the
- *  pass that counts people by the week serves it too. */
+ *  converted where every visit would have been. A week is Monday to Sunday; the one the
+ *  period begins in starts on the period's first day. The whole weeks are among them, so
+ *  the pass that counts people by the week serves visits a member too. */
 export async function readVisitCounts(
   sql: Sql,
   gymId: string,
@@ -167,10 +181,11 @@ export async function readVisitCounts(
   today: string,
   windows: AttendanceWindows,
 ): Promise<VisitCounts> {
-  const hoursFrom = windows.hours?.from ?? null;
-  const hoursTo = windows.hours?.to ?? null;
-  const memberFrom = windows.member?.from ?? null;
-  const memberTo = windows.member?.to ?? null;
+  const from = windows.period.from;
+  const hoursFrom = windows.whole?.from ?? null;
+  const hoursTo = windows.whole?.to ?? null;
+  const memberFrom = hoursFrom;
+  const memberTo = hoursTo;
   const rows = await sql<Record<string, unknown>[]>`
     WITH by_quarter AS MATERIALIZED (
       SELECT a.day,
@@ -179,15 +194,15 @@ export async function readVisitCounts(
              COALESCE(a.day >= ${hoursFrom}::date AND a.day <= ${hoursTo}::date AND a.hours_status = 'added_later', false) AS no_time,
              count(*)::int AS visits
       FROM gym_attendance a
-      WHERE a.gym_id = ${gymId} AND a.day >= ${windows.weeksFrom}::date AND a.day <= ${today}::date
+      WHERE a.gym_id = ${gymId} AND a.day >= ${from}::date AND a.day <= ${today}::date
       GROUP BY 1, 2, 3
     ),
     by_person AS MATERIALIZED (
-      SELECT (a.day - (extract(isodow FROM a.day)::int - 1)) AS week_start,
+      SELECT GREATEST(a.day - (extract(isodow FROM a.day)::int - 1), ${from}::date) AS week_start,
              COALESCE(a.entry_id, a.user_id) AS who, COALESCE(a.entry_id, m.entry_id) AS entry_id, count(*)::int AS visits
       FROM gym_attendance a
       LEFT JOIN gym_members m ON a.entry_id IS NULL AND m.gym_id = a.gym_id AND m.user_id = a.user_id AND m.removed_at IS NULL
-      WHERE a.gym_id = ${gymId} AND a.day >= ${windows.weeksFrom}::date AND a.day <= ${today}::date
+      WHERE a.gym_id = ${gymId} AND a.day >= ${from}::date AND a.day <= ${today}::date
       GROUP BY 1, 2, 3
     ),
     members AS MATERIALIZED (
@@ -203,13 +218,14 @@ export async function readVisitCounts(
     )
     SELECT
       (SELECT COALESCE(json_agg(json_build_object('day', to_char(d.day, 'YYYY-MM-DD'), 'visits', d.visits)), '[]'::json)
-       FROM (SELECT day, sum(visits)::int AS visits FROM by_quarter WHERE day >= ${windows.daysFrom}::date GROUP BY day) d) AS days,
+       FROM (SELECT day, sum(visits)::int AS visits FROM by_quarter GROUP BY day) d) AS days,
       (SELECT COALESCE(json_agg(json_build_object('weekStart', to_char(w.week_start, 'YYYY-MM-DD'), 'visits', w.visits, 'people', w.people)), '[]'::json)
        FROM (SELECT week_start, sum(visits)::int AS visits, count(DISTINCT who)::int AS people FROM by_person GROUP BY 1) w) AS weeks,
       (SELECT COALESCE(json_agg(json_build_object('weekday', h.weekday, 'hour', h.hour, 'visits', h.visits)), '[]'::json)
        FROM (SELECT extract(isodow FROM quarter AT TIME ZONE ${timezone})::int AS weekday, extract(hour FROM quarter AT TIME ZONE ${timezone})::int AS hour, sum(visits)::int AS visits
              FROM by_quarter WHERE quarter IS NOT NULL GROUP BY 1, 2) h) AS hours,
       (SELECT COALESCE(sum(visits), 0)::int FROM by_quarter WHERE no_time) AS hours_no_time,
+      (SELECT count(DISTINCT who)::int FROM by_person) AS people,
       (SELECT count(*)::int FROM members) AS members,
       (SELECT visits FROM of_members) AS member_visits,
       (SELECT visitors FROM of_members) AS member_visitors`;
@@ -298,7 +314,9 @@ const moneyRowSchema = z.object({
   any_membership: z.boolean(),
   first_paid_on: z.string().nullable(),
   other_currency: z.boolean(),
-  months: z.array(z.object({ typeId: z.string(), typeName: z.string(), month: z.string(), paidMinor: minor, refundedMinor: minor })),
+  months: z.array(
+    z.object({ typeId: z.string(), typeName: z.string(), month: z.string(), paidMinor: minor, refundedMinor: minor, periodPaidMinor: minor, periodRefundedMinor: minor }),
+  ),
   current_minor: minor,
   current_people: count,
   past_minor: minor,
@@ -313,7 +331,9 @@ export type MoneyCounts = z.infer<typeof moneyRowSchema>;
  *  A payment counts in the month of the gym's day it was paid on, a refund in the month
  *  the money went back, each only while it stands (one taken back is kept, marked, and is
  *  not money). A refund of a payment that was taken back is not counted either. Both are
- *  given for each membership type, over the last `REPORT_MONTHS` months.
+ *  given for each membership type, over the last `REPORT_MONTHS` months, with the part of
+ *  each that falls from `periodFrom` on: the first day of the period the page shows,
+ *  never earlier than those months.
  *
  *  Owed is every bill still open whose day has come, less what is paid on it, for the
  *  people on the list and for past members apart; overdue is the part of both that is
@@ -324,6 +344,7 @@ export async function readMoney(
   today: string,
   currency: string,
   overdueAfterDays: number,
+  periodFrom: string,
 ): Promise<MoneyCounts> {
   const rows = await sql<Record<string, unknown>[]>`
     WITH clock AS (
@@ -331,7 +352,8 @@ export async function readMoney(
              (date_trunc('month', ${today}::date) - make_interval(months => ${REPORT_MONTHS - 1}))::date AS from_day
     ),
     paid AS (
-      SELECT h.membership_type_id AS type_id, to_char(p.paid_on, 'YYYY-MM') AS month, sum(p.amount_minor) AS minor
+      SELECT h.membership_type_id AS type_id, to_char(p.paid_on, 'YYYY-MM') AS month, sum(p.amount_minor) AS minor,
+             COALESCE(sum(p.amount_minor) FILTER (WHERE p.paid_on >= ${periodFrom}::date), 0) AS period_minor
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
@@ -340,7 +362,8 @@ export async function readMoney(
       GROUP BY 1, 2
     ),
     refunded AS (
-      SELECT h.membership_type_id AS type_id, to_char(r.refunded_on, 'YYYY-MM') AS month, sum(r.amount_minor) AS minor
+      SELECT h.membership_type_id AS type_id, to_char(r.refunded_on, 'YYYY-MM') AS month, sum(r.amount_minor) AS minor,
+             COALESCE(sum(r.amount_minor) FILTER (WHERE r.refunded_on >= ${periodFrom}::date), 0) AS period_minor
       FROM gym_member_refunds r
       JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
@@ -352,7 +375,8 @@ export async function readMoney(
     ),
     by_month AS (
       SELECT COALESCE(p.type_id, r.type_id) AS type_id, COALESCE(p.month, r.month) AS month,
-             COALESCE(p.minor, 0) AS paid_minor, COALESCE(r.minor, 0) AS refunded_minor
+             COALESCE(p.minor, 0) AS paid_minor, COALESCE(r.minor, 0) AS refunded_minor,
+             COALESCE(p.period_minor, 0) AS period_paid_minor, COALESCE(r.period_minor, 0) AS period_refunded_minor
       FROM paid p
       FULL JOIN refunded r ON r.type_id = p.type_id AND r.month = p.month
     ),
@@ -376,7 +400,8 @@ export async function readMoney(
                   WHERE b.gym_id = ${gymId} AND b.status = 'open' AND b.due_on <= c.today AND b.currency <> ${currency})) AS other_currency,
       (SELECT COALESCE(json_agg(json_build_object(
                 'typeId', m.type_id, 'typeName', t.name, 'month', m.month,
-                'paidMinor', m.paid_minor, 'refundedMinor', m.refunded_minor)), '[]'::json)
+                'paidMinor', m.paid_minor, 'refundedMinor', m.refunded_minor,
+                'periodPaidMinor', m.period_paid_minor, 'periodRefundedMinor', m.period_refunded_minor)), '[]'::json)
        FROM by_month m
        JOIN gym_membership_types t ON t.gym_id = ${gymId} AND t.id = m.type_id) AS months,
       (SELECT COALESCE(sum(left_minor) FILTER (WHERE NOT past), 0)::float8 FROM owed) AS current_minor,

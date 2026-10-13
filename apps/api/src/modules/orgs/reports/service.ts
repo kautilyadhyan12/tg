@@ -1,4 +1,4 @@
-// The Reports page (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i): the members, attendance
+// The Reports page (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i): the members, attendance
 // and money figures, for staff holding `reports.read`. Counts only; no person's name or details leave here.
 import type { Sql } from "postgres";
 import {
@@ -13,11 +13,13 @@ import {
   membersReportResponseSchema,
   moneyReportFrom,
   moneyReportResponseSchema,
+  reportPeriodOf,
   type AttendanceReportResponse,
   type LeadSource,
   type MembersReportResponse,
   type MoneyReportResponse,
   type OrgPrivilege,
+  type ReportPeriodKey,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { inUseForMoney } from "../memberships/heldRepo.js";
@@ -40,19 +42,19 @@ export async function requireReportsReader(deps: ReportsDeps, userId: string, gy
   return { timezone: org.timezone };
 }
 
-/** The members figures for a gym whose reader has been checked.
+/** The members figures for a gym whose reader has been checked, over `period`.
  *
  *  Who has left is the people taken off the list and the people the Members list reads as
  *  "Ended" or "Cancelled" today, apart from anybody whose renewal is waiting: `overNow`,
  *  the one answer the sign atop Members counts by too (21c-iii). The reads share one
  *  snapshot: a membership given between them would otherwise count its person as left and
  *  as a member at once. */
-export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { timezone: string }): Promise<MembersReportResponse> {
+export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { timezone: string }, period: ReportPeriodKey): Promise<MembersReportResponse> {
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
   const counts = await deps.sql.begin("isolation level repeatable read read only", async (tx) => {
     const gone = [...(await overNow(tx, gymId, today, null))].map(([id, left]) => ({ id, on: left.on }));
-    return await repo.readMemberCounts(tx, gymId, org.timezone, today, gone);
+    return await repo.readMemberCounts(tx, gymId, org.timezone, today, gone, reportPeriodOf(period, today).from);
   });
   const leadRows = await repo.readLeadCounts(deps.sql, gymId);
   const leads: { source: LeadSource; leads: number; joined: number }[] = [];
@@ -64,31 +66,35 @@ export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { 
     report: membersReportFrom({
       timezone: org.timezone,
       today: counts.today,
+      period,
       firstListedOn: counts.first_listed_on,
       listChangedOn: counts.list_changed_on,
       activeNow: counts.active_now,
       everLeft: counts.ever_left,
       months: counts.months,
+      inPeriod: { joined: counts.period_joined, left: counts.period_left },
       stay: { leavers: counts.stay_leavers, totalDays: counts.stay_days },
       leads,
     }),
   });
 }
 
-/** The attendance figures for a gym whose reader has been checked. */
-export async function getAttendanceReport(deps: ReportsDeps, gymId: string, org: { timezone: string }): Promise<AttendanceReportResponse> {
+/** The attendance figures for a gym whose reader has been checked, over `period`. */
+export async function getAttendanceReport(deps: ReportsDeps, gymId: string, org: { timezone: string }, period: ReportPeriodKey): Promise<AttendanceReportResponse> {
   const now = deps.now();
   const clock = await repo.readVisitClock(deps.sql, gymId, org.timezone, now);
-  const windows = attendanceWindows(clock.today, clock.firstVisitOn);
+  const windows = attendanceWindows(clock.today, clock.firstVisitOn, period);
   const visits = await repo.readVisitCounts(deps.sql, gymId, org.timezone, clock.today, windows);
-  const classes = await repo.readClassCounts(deps.sql, gymId, org.timezone, windows.classesFrom, now);
+  const classes = await repo.readClassCounts(deps.sql, gymId, org.timezone, windows.period.from, now);
   return attendanceReportResponseSchema.parse({
     report: attendanceReportFrom({
       timezone: org.timezone,
       today: clock.today,
+      period,
       firstVisitOn: clock.firstVisitOn,
       days: visits.days,
       weeks: visits.weeks,
+      people: visits.people,
       hours: visits.hours,
       hoursNoTime: visits.hours_no_time,
       member: { members: visits.members, visits: visits.member_visits, visitors: visits.member_visitors },
@@ -97,12 +103,13 @@ export async function getAttendanceReport(deps: ReportsDeps, gymId: string, org:
   });
 }
 
-/** The money figures for a gym whose reader has been checked: sums and counts, never a
+/** The money figures for a gym whose reader has been checked, over `period`: sums and counts, never a
  *  person. Its reads share one snapshot, so a payment recorded between them is in every
  *  figure or in none; the list's own counts are read with them because lifetime value
  *  divides by churn, which must be the Members figures' churn. */
-export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { timezone: string }): Promise<MoneyReportResponse> {
+export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { timezone: string }, period: ReportPeriodKey): Promise<MoneyReportResponse> {
   const today = dayInTz(deps.now(), org.timezone);
+  const periodFrom = reportPeriodOf(period, today).from;
   const facts = await deps.sql.begin("isolation level repeatable read read only", async (tx) => {
     const gym = await repo.readMoneyGym(tx, gymId);
     // The country's own currency once a payment stands in it, so the page does not turn
@@ -110,12 +117,12 @@ export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { ti
     const home = memberCurrencyForCountry(gym.country);
     const currency = home !== null && gym.paidCurrencies.includes(home) ? home : (gym.paidCurrencies[0] ?? gym.heldCurrency ?? home);
     if (currency === null) return null;
-    const money = await repo.readMoney(tx, gymId, today, currency, gym.overdueAfterDays);
+    const money = await repo.readMoney(tx, gymId, today, currency, gym.overdueAfterDays, periodFrom);
     if (!money.any_membership || money.first_paid_on === null) return { gym, currency, money, held: [], members: null, listPeople: 0 };
     const held = await inUseForMoney(tx, gymId, currency);
     const onList = await heldAndOverIn(tx, gymId, today, null);
     const gone = [...onList.over].map(([id, left]) => ({ id, on: left.on }));
-    const members = await repo.readMemberCounts(tx, gymId, org.timezone, today, gone);
+    const members = await repo.readMemberCounts(tx, gymId, org.timezone, today, gone, periodFrom);
     // Who the Members page reads as "Payment due": Overview's box counts them the same way.
     const answered = [...onList.held.values()].filter(({ shown }) => heldListWords(shown).payment === HELD_PAYMENT_WORDS.due).length;
     const own = await readPaymentDue(tx, gymId, [...onList.held.keys()]);
@@ -125,6 +132,7 @@ export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { ti
     report: moneyReportFrom({
       timezone: org.timezone,
       today,
+      period,
       currency: facts?.currency ?? null,
       anyMembership: facts?.money.any_membership ?? false,
       firstPaidOn: facts?.money.first_paid_on ?? null,

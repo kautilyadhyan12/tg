@@ -31,11 +31,13 @@ function facts(over: Partial<MembersReportFacts> = {}): MembersReportFacts {
   return {
     timezone: "Europe/London",
     today,
+    period: "12m",
     firstListedOn: "2026-01-05",
     listChangedOn: "2026-10-01",
     activeNow: 100,
     everLeft: true,
     months: monthsTo(today),
+    inPeriod: { joined: 0, left: 0 },
     stay: { leavers: 0, totalDays: 0 },
     leads: [],
     ...over,
