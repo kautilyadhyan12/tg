@@ -570,6 +570,15 @@ The terminal's own choices, each a job's to better with a reason.
 - **Sign-in** (item 12; §8): the refresh token in SecureStore, the access token in
   memory. The server's sign-in learns a phone client (`refresh_tokens.client`, Part 3
   §10.5), which alone is sent its tokens in the reply. Risky: the two extra passes.
+  **Built in 12b-i (2026-10-13):** `apps/mobile/src/session/`. The app opens on "Get
+  started" (an email, the 6-digit code) and, signed in, on the five tabs. The key store
+  holds the refresh token and the person, so the app opens signed in with no internet.
+  Only this api's own 401 signs anybody out: no answer, a late one, or a reply that is
+  not this api's never does. One refresh at a time, sent again after 2, 5 and 10 seconds
+  when it had no answer (inside Part 3 §10.5's 60), on opening and on coming back after
+  ten minutes. Sign out is on Me, asks first, and forgets on the phone before it tells
+  the server. A screen's signed-in requests take `session.accessToken()`. The robot
+  check on the phone is 12b-ii; until then a phone asked for it says why it must wait.
 - **Kept on the phone until the server has it** (§4): what a person DOES (a workout, a
   meal, a weigh-in, a run) is written to the phone first and sent when the internet is
   there, each route safe to call twice. Built once, with the workout (item 61), then used
