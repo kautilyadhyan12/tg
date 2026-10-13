@@ -1,8 +1,8 @@
 import { REPORT_FULL_WEEKS_NEEDED, weekdayOf } from '@app/shared';
 import { clockLabel } from './hoursView';
-import { csvWords, dayText, monthShort, percentText } from './reportsView';
+import { csvWords, dayText, monthShort, percentText, periodWords } from './reportsView';
 
-// The Reports page's attendance words (spec Part 3 §16.5; ROADMAP 21a-ii). Every figure
+// The Reports page's attendance words (spec Part 3 §16.5; ROADMAP 21a-ii, 21d-i). Every figure
 // says how it is worked out, and a figure the gym's check-ins or classes cannot give is a
 // sentence, never a zero.
 
@@ -46,7 +46,7 @@ export function visitsLine(report) {
  *  is none; `note` is the small line under a number; `how` is how it is worked out. */
 export function visitTiles(report, words, clockFormat) {
   const week = report.weeks.length > 0 ? report.weeks[report.weeks.length - 1] : null;
-  const before = report.weeks.length >= 2 ? report.weeks[report.weeks.length - 2] : null;
+  const shownFrom = report.days.length > 0 ? report.days[0].day : report.period.from;
 
   let member;
   if (report.perMember.state === 'ok') {
@@ -65,7 +65,7 @@ export function visitTiles(report, words, clockFormat) {
           ? `Nobody on your ${words.person} list today was on it by ${dayText(report.perMember.from)}, when the weeks counted here began.`
           : memberNotYet(report, words),
       note: null,
-      how: `Visits in the last full weeks, Monday to Sunday (4 at most), by the ${words.people} who were on your list when those weeks began, shared between them and those weeks.`,
+      how: `Visits in the full weeks of ${periodWords(report.period)}, Monday to Sunday, by the ${words.people} who were on your list when those weeks began, shared between them and those weeks.`,
     };
   }
 
@@ -95,21 +95,18 @@ export function visitTiles(report, words, clockFormat) {
             : `Nobody checked in in the last ${String(hours.weeks)} full weeks.`
           : busiestNotYet(report),
       note: null,
-      how: 'Check-ins in the last full weeks, Monday to Sunday (8 at most), counted by weekday and hour on your clock.',
+      how: `Check-ins in the full weeks of ${periodWords(report.period)}, Monday to Sunday, counted by weekday and hour on your clock.`,
     };
   }
 
   return [
     {
-      key: 'week',
-      label: 'Visits this week',
-      value: week === null ? null : count(week.visits),
+      key: 'visits',
+      label: 'Visits',
+      value: count(report.inPeriod.visits),
       line: null,
-      note:
-        week === null
-          ? null
-          : `${dayNamed(week.weekStart)} to today · ${count(week.people)} ${week.people === 1 ? 'person' : 'people'}${before === null ? '' : ` · last week: ${count(before.visits)}`}`,
-      how: 'Every check-in from Monday to today. Someone who comes on three days is three visits and one person.',
+      note: `${count(report.inPeriod.people)} ${report.inPeriod.people === 1 ? 'person' : 'people'} · ${dayShort(shownFrom)} to ${dayText(report.period.to)}${week === null ? '' : ` · this week, so far: ${count(week.visits)}`}`,
+      how: `Every check-in from ${dayText(shownFrom)} to today${shownFrom === report.period.from ? '' : ', the day of your first check-in'}. Someone who comes on three days is three visits and one person.`,
     },
     { key: 'per-member', label: `Visits a ${words.person} a week`, ...member },
     { key: 'busiest', label: 'Busiest time', ...busiest },
@@ -131,6 +128,8 @@ export function chartTop(max) {
 export function dayChart(report) {
   const days = report.days;
   const top = chartTop(Math.max(1, ...days.map((d) => d.visits)));
+  // A date under the line for each Monday, or for each month's first day where Mondays would crowd.
+  const byMonth = days.length > 45;
   const points = days.map((d, i) => {
     const weekday = weekdayOf(d.day);
     const today = d.day === report.today;
@@ -141,8 +140,8 @@ export function dayChart(report) {
       visits: d.visits,
       today,
       weekend: weekday >= 6,
-      monday: weekday === 1,
-      label: dayShort(d.day),
+      mark: byMonth ? d.day.endsWith('-01') : weekday === 1,
+      label: byMonth ? monthShort(d.day.slice(0, 7)).slice(0, 3) : dayShort(d.day),
       title: today ? `Today, ${dayNamed(d.day)}` : dayNamed(d.day),
       said: today ? `${visitsWord(d.visits)} so far` : visitsWord(d.visits),
       text: `${today ? `Today, ${dayNamed(d.day)}` : dayNamed(d.day)}: ${today ? `${visitsWord(d.visits)} so far` : visitsWord(d.visits)}`,
@@ -185,6 +184,9 @@ export function smoothLine(points, width, height) {
   const last = xy[xy.length - 1];
   return { xy, line, area: xy.length === 0 ? '' : `${line} L${String(last.x)} ${String(height)} L${String(first.x)} ${String(height)} Z` };
 }
+
+/** How many weeks the table lists before its "Show all" button. */
+export const WEEK_ROWS_SHOWN = 12;
 
 /** The week-by-week table's rows, newest first. */
 export function weekRows(report) {
@@ -242,7 +244,7 @@ export function hourGrid(report, clockFormat) {
 export function classTiles(report) {
   const classes = report.classes;
   if (classes.state !== 'ok') return null;
-  const since = `classes that started since ${dayText(classes.from)} (the last 8 weeks)`;
+  const since = `classes that started since ${dayText(classes.from)} (${periodWords(report.period)})`;
   const fill = classes.fill;
   const noShows = classes.noShows;
   let noShowTile;
@@ -261,7 +263,7 @@ export function classTiles(report) {
       calendar: true,
     };
   } else {
-    noShowTile = { value: null, line: 'Nobody has booked a class in the last 8 weeks.', note: null, calendar: false };
+    noShowTile = { value: null, line: `Nobody has booked a class in ${periodWords(report.period)}.`, note: null, calendar: false };
   }
   return [
     {
@@ -304,7 +306,7 @@ const csv = (rows) => `${rows.map((row) => row.map(cell).join(',')).join('\r\n')
 /** The weeks as a CSV: counts only, oldest first. */
 export function weeksCsv(report) {
   return csv([
-    ['Week starting (Monday)', 'Visits', 'People'],
+    ['Week starting', 'Visits', 'People'],
     ...report.weeks.map((w) => [w.weekStart === report.weeks[report.weeks.length - 1].weekStart ? `${w.weekStart} (so far)` : w.weekStart, w.visits, w.people]),
   ]);
 }

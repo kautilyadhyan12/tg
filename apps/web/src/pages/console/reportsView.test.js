@@ -3,7 +3,9 @@
 import { describe, expect, it } from 'vitest';
 import { membersReportFrom, orgWords } from '@app/shared';
 import {
+  PERIOD_CHOICES,
   canReadReports,
+  csvName,
   dayText,
   leadRows,
   leadsCsv,
@@ -16,6 +18,8 @@ import {
   monthShort,
   monthBars,
   nobodyRemovedNote,
+  periodFrom,
+  periodLine,
   staySplit,
   stayText,
   trendPoints,
@@ -29,6 +33,7 @@ const MONTHS = ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
 const facts = (over = {}) => ({
   timezone: 'Europe/London',
   today: '2026-10-10',
+  period: '12m',
   firstListedOn: '2026-06-10',
   listChangedOn: '2026-10-03',
   activeNow: 1234,
@@ -40,6 +45,8 @@ const facts = (over = {}) => ({
     { month: '2026-09', activeAtStart: 12, joined: 0, left: 1, leftOfStart: 1 },
     { month: '2026-10', activeAtStart: 11, joined: 1, left: 1, leftOfStart: 1 },
   ],
+  // New from July, the month after the list began: 1 + 0 + 0 + 1. Left: 0 + 1 + 1 + 1 + 1.
+  inPeriod: { joined: 2, left: 4 },
   stay: { leavers: 4, totalDays: 1338 },
   leads: [
     { source: 'walk_in', leads: 3, joined: 1 },
@@ -84,15 +91,16 @@ describe('the tiles', () => {
     const tiles = memberTiles(r, GYM);
     expect(tiles.map((t) => [t.label, t.value, t.note])).toEqual([
       ['Members now', '1,234', null],
-      ['New this month', '1', 'October 2026, so far · September: 0'],
-      ['Left this month', '1', 'October 2026, so far · September: 1'],
+      // The list began on 10 June, inside the twelve months: each tile says where its count starts.
+      ['New members', '2', 'since 1 Jul 2026, the month after your member list started'],
+      ['Members who left', '4', 'since 10 Jun 2026, when your member list started'],
       ['Churn', '5.3%', 'a month, Jul to Sep 2026'],
       ['Retention', '94.7%', 'a month, Jul to Sep 2026'],
-      ['Average stay', '11 months', '4 people left in the months shown'],
+      ['Average stay', '11 months', '4 people left · since 10 Jun 2026, when your member list started'],
     ]);
     for (const t of tiles) expect(t.how.length, t.key).toBeGreaterThan(20);
     expect(tile(r, 'churn').how).toContain('at the start of July, August and September');
-    expect(tile(r, 'new').how).toContain('October 2026');
+    expect(tile(r, 'new').how).toContain('from 1 Jul 2026 to today');
   });
 
   it('never print a zero for a gym that has removed nobody: Left, churn, retention and average stay are a sentence', () => {
@@ -122,11 +130,11 @@ describe('the tiles', () => {
     expect(tile(two, 'stay').line).toContain('you have 2 so far.');
     expect(tile(two, 'churn').value).toBeNull();
     // What needs no history is still a number.
-    expect(tile(two, 'left').value).toBe('1');
+    expect(tile(two, 'left').value).toBe('4');
   });
 
   it('say nobody left lately when somebody once did, and nobody at the start when the list was empty then', () => {
-    expect(tile(report({ stay: { leavers: 0, totalDays: 0 } }), 'stay').line).toBe('Nobody has left in the months shown.');
+    expect(tile(report({ stay: { leavers: 0, totalDays: 0 } }), 'stay').line).toBe('Nobody has left in the last 12 months.');
     const empty = report({ months: MONTHS.map((month) => ({ month, activeAtStart: 0, joined: 0, left: 0, leftOfStart: 0 })) });
     expect(tile(empty, 'churn').line).toBe('You had no members at the start of the last 3 full months, so nobody could leave.');
     expect(tile(empty, 'retention').line).toBe('You had no members at the start of the last 3 full months, so there was nobody to keep.');
@@ -156,7 +164,7 @@ describe('the tiles', () => {
       'Everyone on your member list today, except members whose membership has ended or been cancelled and who have no new one, unless your member list shows a later end date for them. A status from your own file, such as Expired, is not counted. Members you have removed are not counted.',
     );
     expect(tile(r, 'left').how).toBe(
-      'Members removed from your member list in October 2026, and members whose membership ended or was cancelled in October 2026 and who have no new one. On your member list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a member the whole time. Records deleted for good are not counted.',
+      'Members removed from your member list from 10 Jun 2026 to today, and members whose membership ended or was cancelled in those days and who have no new one. On your member list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a member the whole time. Records deleted for good are not counted.',
     );
     expect(tile(r, 'stay').how).toContain('from their join date to the day they were removed or their membership ended.');
     // Somebody Ended is still on the list and is not counted, so churn does not say "on your list".
@@ -281,7 +289,7 @@ describe('the pictures are the same numbers', () => {
 });
 
 describe('the month the list began', () => {
-  it('says so in place of New this month, and gives no last month to compare with', () => {
+  it('says so in place of New members, and counts them from the month after', () => {
     const r = report({ firstListedOn: '2026-10-08', months: [{ month: '2026-10', activeAtStart: 0, joined: 200, left: 0, leftOfStart: 0 }], everLeft: false, stay: { leavers: 0, totalDays: 0 } });
     expect(tile(r, 'new')).toMatchObject({
       value: null,
@@ -290,7 +298,50 @@ describe('the month the list began', () => {
     });
     expect(monthRows(r)).toEqual([{ key: '2026-10', month: 'Oct 2026 (so far)', activeAtStart: '–', joined: '–', left: '–', churn: '–' }]);
     // The second month: New is a number, with no figure for the month before.
-    const next = report({ today: '2026-11-10', firstListedOn: '2026-10-08', months: [{ month: '2026-10', activeAtStart: 0, joined: 200, left: 0, leftOfStart: 0 }, { month: '2026-11', activeAtStart: 200, joined: 4, left: 0, leftOfStart: 0 }] });
-    expect(tile(next, 'new')).toMatchObject({ value: '4', note: 'November 2026, so far' });
+    const next = report({ today: '2026-11-10', firstListedOn: '2026-10-08', months: [{ month: '2026-10', activeAtStart: 0, joined: 200, left: 0, leftOfStart: 0 }, { month: '2026-11', activeAtStart: 200, joined: 4, left: 0, leftOfStart: 0 }], inPeriod: { joined: 4, left: 0 } });
+    expect(tile(next, 'new')).toMatchObject({ value: '4', note: 'since 1 Nov 2026, the month after your member list started' });
+  });
+});
+
+describe('the period', () => {
+  it('has three choices, and an address that names none, or something else, shows twelve months', () => {
+    expect(PERIOD_CHOICES).toEqual([
+      { key: '4w', label: 'Last 4 weeks' },
+      { key: '3m', label: 'Last 3 months' },
+      { key: '12m', label: 'Last 12 months' },
+    ]);
+    expect([periodFrom('4w'), periodFrom('3m'), periodFrom('12m')]).toEqual(['4w', '3m', '12m']);
+    for (const not of [null, '', '1y', '12M', 'constructor', 'toString']) expect(periodFrom(not), String(not)).toBe('12m');
+  });
+
+  it('says the days it shows, and which figures do not move with it, in the gym’s own word for its people', () => {
+    expect(periodLine(report({ period: '3m' }).period, GYM)).toBe(
+      "Showing 1 Aug 2026 to 10 Oct 2026. Members now, churn, retention, monthly recurring revenue, payment due and lifetime value are today's figures, so they stay the same whichever period you choose.",
+    );
+    expect(periodLine(report({ period: '4w' }).period, STUDIO)).toContain('Showing 13 Sep 2026 to 10 Oct 2026. Clients now, churn');
+  });
+
+  it('a gym older than the period reads the period’s own days on each tile; a younger one reads where its list began', () => {
+    const old = report({ period: '3m', firstListedOn: '2024-02-01', inPeriod: { joined: 1, left: 3 } });
+    expect([tile(old, 'new').note, tile(old, 'left').note, tile(old, 'stay').note]).toEqual([
+      '1 Aug 2026 to 10 Oct 2026',
+      '1 Aug 2026 to 10 Oct 2026',
+      '4 people left · 1 Aug 2026 to 10 Oct 2026',
+    ]);
+    expect(tile(old, 'new').how).toContain('whose join date is from 1 Aug 2026 to today.');
+    expect(tile(old, 'left').how).toContain('removed from your member list from 1 Aug 2026 to today');
+    expect(tile(old, 'stay').how).toContain('who left from 1 Aug 2026 to today');
+    expect(monthRows(old).map((m) => m.month)).toEqual(['Oct 2026 (so far)', 'Sep 2026', 'Aug 2026']);
+
+    const young = report({ period: '4w', firstListedOn: '2026-09-20', inPeriod: { joined: 1, left: 0 } });
+    expect(tile(young, 'new').note).toBe('since 1 Oct 2026, the month after your member list started');
+    expect(tile(young, 'left').note).toBe('since 20 Sep 2026, when your member list started');
+  });
+
+  it('nobody left in the period reads a sentence that names the period, and a CSV is named for it', () => {
+    expect(tile(report({ period: '4w', stay: { leavers: 0, totalDays: 0 } }), 'stay').line).toBe('Nobody has left in the last 4 weeks.');
+    expect(csvName('members-report', report({ period: '4w' }))).toBe('members-report-last-4-weeks-2026-10-10.csv');
+    expect(csvName('members-report', report({ period: '3m' }))).toBe('members-report-last-3-months-2026-10-10.csv');
+    expect(csvName('members-report', report())).toBe('members-report-last-12-months-2026-10-10.csv');
   });
 });

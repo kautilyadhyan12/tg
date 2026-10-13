@@ -33,6 +33,7 @@ const ORG = {
 const facts = (over = {}) => ({
   timezone: 'Europe/London',
   today: '2026-10-10',
+  period: '12m',
   firstListedOn: '2026-06-10',
   listChangedOn: '2026-10-03',
   activeNow: 11,
@@ -44,6 +45,7 @@ const facts = (over = {}) => ({
     { month: '2026-09', activeAtStart: 12, joined: 0, left: 1, leftOfStart: 1 },
     { month: '2026-10', activeAtStart: 11, joined: 1, left: 1, leftOfStart: 1 },
   ],
+  inPeriod: { joined: 2, left: 4 },
   stay: { leavers: 4, totalDays: 1338 },
   leads: [
     { source: 'walk_in', leads: 3, joined: 1 },
@@ -58,10 +60,10 @@ const NOBODY_REMOVED = facts({
 });
 const EMPTY = facts({ firstListedOn: null, listChangedOn: null, activeNow: 0, everLeft: false, months: [], stay: { leavers: 0, totalDays: 0 }, leads: [] });
 
-const open = (org = ORG) => {
+const open = (org = ORG, address = '/console/iron-house/reports') => {
   orgApi.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
   render(
-    <MemoryRouter initialEntries={['/console/iron-house/reports']}>
+    <MemoryRouter initialEntries={[address]}>
       <Routes>
         <Route path="/console/:orgSlug/reports" element={<Reports />} />
       </Routes>
@@ -82,9 +84,11 @@ beforeEach(() => {
     attendanceReportFrom({
       timezone: 'Europe/London',
       today: '2026-10-10',
+      period: '12m',
       firstVisitOn: null,
       days: [],
       weeks: [],
+      people: 0,
       hours: [],
       hoursNoTime: 0,
       member: { members: 0, visits: 0, visitors: 0 },
@@ -103,14 +107,14 @@ describe('the members figures', () => {
     open();
     await screen.findByTestId('tile-active');
     expect(svc.members).toHaveBeenCalledTimes(1);
-    expect(svc.members).toHaveBeenCalledWith('g1');
+    expect(svc.members).toHaveBeenCalledWith('g1', '12m');
     expect(['active', 'new', 'left', 'churn', 'retention', 'stay'].map((k) => tile(k).textContent)).toEqual([
       'Members now11Members on your list, month by month1 Jul 2026Today',
-      'New this month1October 2026, so far · September: 0',
-      'Left this month1October 2026, so far · September: 1',
+      'New members2since 1 Jul 2026, the month after your member list started',
+      'Members who left4since 10 Jun 2026, when your member list started',
       'Churn5.3%a month, Jul to Sep 2026',
       'Retention94.7%a month, Jul to Sep 202694.7% stayed5.3% left',
-      'Average stay11 months4 people left in the months shown',
+      'Average stay11 months4 people left · since 10 Jun 2026, when your member list started',
     ]);
     expect(screen.getByText('These figures come from your member list and the memberships you give in the app. Someone was last added or removed on 3 Oct 2026.')).toBeTruthy();
     expect(tableRows('Members, month by month')).toEqual([
@@ -165,7 +169,7 @@ describe('the members figures', () => {
       expect(tile(key).textContent, key).toContain(line);
       expect(tile(key).textContent, key).not.toContain('%');
     }
-    expect(tile('left').textContent).toBe('Left this month1October 2026, so far · September: 1');
+    expect(tile('left').textContent).toBe('Members who left4since 15 Aug 2026, when your member list started');
     expect(screen.queryByTestId('stay-bar')).toBeNull();
   });
 
@@ -184,7 +188,7 @@ describe('the members figures', () => {
     expect(tile('retention').textContent).toBe('Retention94.7%a month, Jul to Sep 202694.7% stayed5.3% left');
     fireEvent.click(button);
     expect(tile('churn').textContent).toBe('Churn5.3%a month, Jul to Sep 2026');
-    for (const label of ['Members now', 'New this month', 'Left this month', 'Retention', 'Average stay', 'leads that became members']) {
+    for (const label of ['Members now', 'New members', 'Members who left', 'Retention', 'Average stay', 'leads that became members']) {
       expect(screen.getByRole('button', { name: `How ${label} is worked out` })).toBeTruthy();
     }
   });
@@ -245,7 +249,7 @@ describe('the members figures', () => {
     const [months, leads] = screen.getAllByRole('button', { name: 'Download CSV' });
     fireEvent.click(months);
     fireEvent.click(leads);
-    expect(names).toEqual(['members-report-2026-10-10.csv', 'leads-report-2026-10-10.csv']);
+    expect(names).toEqual(['members-report-last-12-months-2026-10-10.csv', 'leads-report-last-12-months-2026-10-10.csv']);
     expect(made.map((b) => b.type)).toEqual(['text/csv;charset=utf-8', 'text/csv;charset=utf-8']);
   });
 });
@@ -276,7 +280,7 @@ describe('what a gym has not done yet is never a zero', () => {
     );
     open();
     await screen.findByTestId('tile-active');
-    expect(tile('new').textContent).toBe('New this monthYour member list started this month, so new members are counted from next month.');
+    expect(tile('new').textContent).toBe('New membersYour member list started this month, so new members are counted from next month.');
     expect(tile('active').textContent).toBe('Members now200');
     expect(screen.queryByTestId('members-trend')).toBeNull();
     // Nothing to draw yet: no empty picture.
@@ -336,5 +340,91 @@ describe('who sees it, and when it cannot be read', () => {
     await screen.findByTestId('tile-active');
     expect(tile('active').textContent).toContain('Clients now11Clients on your list');
     expect(screen.getByRole('heading', { name: 'Leads that became clients' })).toBeTruthy();
+  });
+});
+
+describe('the period', () => {
+  const picked = () => screen.getAllByRole('radio').map((b) => [b.textContent, b.getAttribute('aria-checked')]);
+  const attendanceOf = (period) =>
+    attendanceReportFrom({ timezone: 'Europe/London', today: '2026-10-10', period, firstVisitOn: null, days: [], weeks: [], people: 0, hours: [], hoursNoTime: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: { ever: false, types: [] } });
+  // The server's part: each read answers for the period it was asked.
+  const answering = () => {
+    svc.members.mockImplementation((gymId, period) => Promise.resolve(membersReportFrom(facts({ period, firstListedOn: '2024-02-01' }))));
+    svc.attendance.mockImplementation((gymId, period) => Promise.resolve(attendanceOf(period)));
+  };
+
+  it('opens on the last 12 months, says which days those are and which figures do not move, and offers the three choices', async () => {
+    answering();
+    open();
+    await screen.findByTestId('tile-active');
+    expect(picked()).toEqual([
+      ['Last 4 weeks', 'false'],
+      ['Last 3 months', 'false'],
+      ['Last 12 months', 'true'],
+    ]);
+    expect(screen.getByTestId('period-line').textContent).toBe(
+      "Showing 1 Nov 2025 to 10 Oct 2026. Members now, churn, retention, monthly recurring revenue, payment due and lifetime value are today's figures, so they stay the same whichever period you choose.",
+    );
+    expect(svc.attendance).toHaveBeenCalledWith('g1', '12m');
+  });
+
+  it('a choice asks every part of the page again for that period, and the page says the new days', async () => {
+    answering();
+    open();
+    await screen.findByTestId('tile-active');
+    fireEvent.click(screen.getByRole('radio', { name: 'Last 4 weeks' }));
+    await waitFor(() => expect(screen.getByTestId('period-line').textContent).toContain('Showing 13 Sep 2026 to 10 Oct 2026.'));
+    expect(picked()).toEqual([
+      ['Last 4 weeks', 'true'],
+      ['Last 3 months', 'false'],
+      ['Last 12 months', 'false'],
+    ]);
+    expect(svc.members).toHaveBeenLastCalledWith('g1', '4w');
+    await waitFor(() => expect(svc.attendance).toHaveBeenLastCalledWith('g1', '4w'));
+    expect(tile('new').textContent).toBe('New members213 Sep 2026 to 10 Oct 2026');
+    expect(tile('left').textContent).toBe('Members who left413 Sep 2026 to 10 Oct 2026');
+    // Four weeks touch two months; the table lists those and no other.
+    expect(tableRows('Members, month by month').map((row) => row[0])).toEqual(['Month', 'Oct 2026 (so far)', 'Sep 2026']);
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Last 3 months' }));
+    await waitFor(() => expect(screen.getByTestId('period-line').textContent).toContain('Showing 1 Aug 2026 to 10 Oct 2026.'));
+    expect(svc.members).toHaveBeenLastCalledWith('g1', '3m');
+    expect(tableRows('Members, month by month').map((row) => row[0])).toEqual(['Month', 'Oct 2026 (so far)', 'Sep 2026', 'Aug 2026']);
+  });
+
+  it('while another period is being read, the figures of the one before are not shown under the new choice', async () => {
+    answering();
+    open();
+    await screen.findByTestId('tile-active');
+    let answer;
+    svc.members.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Last 4 weeks' }));
+    await waitFor(() => expect(screen.queryByTestId('tile-active')).toBeNull());
+    expect(screen.queryByTestId('period-line')).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Last 4 weeks' }).getAttribute('aria-checked')).toBe('true');
+    answer(membersReportFrom(facts({ period: '4w', firstListedOn: '2024-02-01' })));
+    await screen.findByTestId('tile-active');
+    expect(screen.getByTestId('period-line').textContent).toContain('Showing 13 Sep 2026 to 10 Oct 2026.');
+  });
+
+  it('an address that names a period opens on it, and one that names anything else opens on 12 months', async () => {
+    answering();
+    open(ORG, '/console/iron-house/reports?period=3m');
+    await screen.findByTestId('tile-active');
+    expect(svc.members).toHaveBeenCalledWith('g1', '3m');
+    expect(screen.getByRole('radio', { name: 'Last 3 months' }).getAttribute('aria-checked')).toBe('true');
+    cleanup();
+    vi.clearAllMocks();
+    answering();
+    open(ORG, '/console/iron-house/reports?period=1y');
+    await screen.findByTestId('tile-active');
+    expect(svc.members).toHaveBeenCalledWith('g1', '12m');
+    expect(screen.getByRole('radio', { name: 'Last 12 months' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('somebody who may not read reports is offered no period', async () => {
+    open({ ...ORG, staffRole: 'trainer', privileges: ['members.read'] });
+    await screen.findByText("Your role doesn't allow you to see reports. Ask the owner if you need to.");
+    expect(screen.queryByRole('radiogroup')).toBeNull();
   });
 });

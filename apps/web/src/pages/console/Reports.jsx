@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Download, Info } from 'lucide-react';
 import { reportsService } from '../../api/reportsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
@@ -10,6 +10,7 @@ import { placeFor } from './consolePlaces';
 import { LeadBars, MembersTrend, MonthBars, StayBar } from './ReportCharts';
 import { DayLine, HourGrid } from './ReportAttendanceCharts';
 import {
+  WEEK_ROWS_SHOWN,
   classRows,
   classTiles,
   classesCsv,
@@ -28,14 +29,17 @@ import {
   moneyMonthName,
   moneyMonthRows,
   moneyMonthsCsv,
+  moneyPeriodHead,
   moneyTiles,
   moneyTypeRows,
   moneyTypesCsv,
 } from './reportsMoneyView';
 import {
   LEADS_HOW,
+  PERIOD_CHOICES,
   canReadReports,
   csvName,
+  dayText,
   leadRows,
   leadsCsv,
   leadsHeadline,
@@ -44,12 +48,15 @@ import {
   membersCsv,
   monthRows,
   nobodyRemovedNote,
+  periodFrom,
+  periodLine,
+  periodWords,
   saveCsv,
   trendPoints,
 } from './reportsView';
 
-// REPORTS (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i): the gym's figures about its members,
-// its leads, its visits, its classes and its money, each with how it is worked out, and a CSV of the counts. The menu draws the line
+// REPORTS (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i): the gym's figures about its members,
+// its leads, its visits, its classes and its money, over the period picked at the top, each with how it is worked out, and a CSV of the counts. The menu draws the line
 // for `reports.read`; the address can be typed by anybody, so somebody without the tick is
 // told, and nothing is asked for them.
 
@@ -92,6 +99,26 @@ function Tile({ tile, className = '', children = null }) {
       {how.line}
       {children}
     </section>
+  );
+}
+
+/** Last 4 weeks · Last 3 months · Last 12 months: one choice for every part of the page. */
+function PeriodPicker({ period, onPick }) {
+  return (
+    <div role="radiogroup" aria-label="Period" className="flex flex-wrap gap-2">
+      {PERIOD_CHOICES.map((choice) => (
+        <button
+          key={choice.key}
+          type="button"
+          role="radio"
+          aria-checked={period === choice.key}
+          className={period === choice.key ? 'c-chip c-chip-on' : 'c-chip'}
+          onClick={() => onPick(choice.key)}
+        >
+          {choice.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -261,6 +288,9 @@ function VisitsReport({ report, org, orgSlug }) {
   const clockFormat = org.clockFormat ?? '24h';
   const tiles = visitTiles(report, words, clockFormat);
   const weeks = weekRows(report);
+  // A year is fifty weeks or more: the newest are listed, and a button lists the rest.
+  const [allWeeks, setAllWeeks] = useState(false);
+  const weeksShown = allWeeks ? weeks : weeks.slice(0, WEEK_ROWS_SHOWN);
   return (
     <section className="flex flex-col gap-4" aria-label="Attendance">
       <div className="flex flex-col gap-1">
@@ -293,7 +323,14 @@ function VisitsReport({ report, org, orgSlug }) {
               <h3 className="c-h3">Visits week by week</h3>
               <CsvButton name={csvName('visits-by-week', report)} text={weeksCsv(report)} />
             </div>
-            <CountTable caption="Visits, week by week" heads={['Week starting', 'Visits', 'People']} rows={weeks} cells={['week', 'visits', 'people']} />
+            <CountTable caption="Visits, week by week" heads={['Week starting', 'Visits', 'People']} rows={weeksShown} cells={['week', 'visits', 'people']} />
+            {weeks.length > WEEK_ROWS_SHOWN ? (
+              <div className="px-4 md:px-5 py-3">
+                <button type="button" className="c-btn c-btn-s c-btn-sm" aria-expanded={allWeeks} onClick={() => setAllWeeks((was) => !was)}>
+                  {allWeeks ? `Show the newest ${String(WEEK_ROWS_SHOWN)} weeks` : `Show all ${String(weeks.length)} weeks`}
+                </button>
+              </div>
+            ) : null}
           </section>
           {report.hours.state === 'ok' ? (
             <section className="c-card overflow-hidden" aria-label="Busiest hours">
@@ -327,7 +364,12 @@ function ClassesReport({ report, org, orgSlug }) {
           ask="Staff who run the timetable can set them up."
         />
       ) : classes.state === 'none_recent' ? (
-        <Missing line="No class has started in the last 8 weeks." to={calendar} button="Open the calendar" ask="Staff who run the timetable can open the calendar." />
+        <Missing
+          line={`No class has started in ${periodWords(report.period)}, since ${dayText(classes.from)}.`}
+          to={calendar}
+          button="Open the calendar"
+          ask="Staff who run the timetable can open the calendar."
+        />
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
@@ -346,7 +388,7 @@ function ClassesReport({ report, org, orgSlug }) {
               <h3 className="c-h3">Class by class</h3>
               <CsvButton name={csvName('classes-report', report)} text={classesCsv(report)} />
             </div>
-            <CountTable caption="Classes in the last 8 weeks" heads={['Class', 'Classes', 'Booked', 'Full', 'No-shows']} rows={rows} cells={['name', 'classes', 'booked', 'full', 'noShows']} />
+            <CountTable caption={`Classes in ${periodWords(report.period)}`} heads={['Class', 'Classes', 'Booked', 'Full', 'No-shows']} rows={rows} cells={['name', 'classes', 'booked', 'full', 'noShows']} />
             {classes.moreTypes > 0 ? (
               <p className="px-4 md:px-5 py-3 c-s13 c-t3">{`And ${String(classes.moreTypes)} more that ran less often, counted in the figures above.`}</p>
             ) : null}
@@ -359,22 +401,23 @@ function ClassesReport({ report, org, orgSlug }) {
 
 /** The attendance figures, asked for by themselves: the members figures above stay on the
  *  page while these load, and when these fail. */
-function AttendanceReport({ org, orgSlug }) {
+function AttendanceReport({ org, orgSlug, period }) {
   const gymId = org.id;
-  // Each answer carries the gym it was asked for, so another gym's figures are never drawn.
-  const [state, setState] = useState({ gymId: null, error: null, report: null });
+  // Each answer carries the gym and the period it was asked for, so another gym's figures,
+  // or another period's, are never drawn.
+  const [state, setState] = useState({ gymId: null, period: null, error: null, report: null });
   const load = useCallback(
     () =>
-      reportsService.attendance(gymId).then(
-        (report) => setState({ gymId, error: null, report }),
-        (err) => setState({ gymId, error: errorText(err, "We couldn't load your attendance figures."), report: null }),
+      reportsService.attendance(gymId, period).then(
+        (report) => setState({ gymId, period, error: null, report }),
+        (err) => setState({ gymId, period, error: errorText(err, "We couldn't load your attendance figures."), report: null }),
       ),
-    [gymId],
+    [gymId, period],
   );
   useEffect(() => {
     load();
   }, [load]);
-  const mine = state.gymId === gymId ? state : { gymId, error: null, report: null };
+  const mine = state.gymId === gymId && state.period === period ? state : { gymId, error: null, report: null };
   if (mine.report !== null) {
     return (
       <>
@@ -432,9 +475,9 @@ function MoneyFigures({ report, org, orgSlug }) {
           </div>
           <CountTable
             caption="Money, by membership"
-            heads={['Membership', 'In use now', 'Monthly recurring', `Collected in ${moneyMonthName(report)}`, 'Collected, last 12 months']}
+            heads={['Membership', 'In use now', 'Monthly recurring', `Collected in ${moneyMonthName(report)}`, moneyPeriodHead(report)]}
             rows={types}
-            cells={['name', 'inUse', 'monthly', 'month', 'year']}
+            cells={['name', 'inUse', 'monthly', 'month', 'period']}
           />
         </section>
       ) : null}
@@ -444,23 +487,24 @@ function MoneyFigures({ report, org, orgSlug }) {
 
 /** The money figures, asked for by themselves: the figures above stay on the page while
  *  these load, and when these fail. */
-function MoneyAsked({ org, orgSlug }) {
+function MoneyAsked({ org, orgSlug, period }) {
   const gymId = org.id;
   const words = orgWords(org.orgType);
-  // Each answer carries the gym it was asked for, so another gym's money is never drawn.
-  const [state, setState] = useState({ gymId: null, error: null, report: null });
+  // Each answer carries the gym and the period it was asked for, so another gym's money,
+  // or another period's, is never drawn.
+  const [state, setState] = useState({ gymId: null, period: null, error: null, report: null });
   const load = useCallback(
     () =>
-      reportsService.money(gymId).then(
-        (report) => setState({ gymId, error: null, report }),
-        (err) => setState({ gymId, error: errorText(err, "We couldn't load your money figures."), report: null }),
+      reportsService.money(gymId, period).then(
+        (report) => setState({ gymId, period, error: null, report }),
+        (err) => setState({ gymId, period, error: errorText(err, "We couldn't load your money figures."), report: null }),
       ),
-    [gymId],
+    [gymId, period],
   );
   useEffect(() => {
     load();
   }, [load]);
-  const mine = state.gymId === gymId ? state : { gymId, error: null, report: null };
+  const mine = state.gymId === gymId && state.period === period ? state : { gymId, error: null, report: null };
   if (mine.report === null) {
     return (
       <section className="flex flex-col gap-4" aria-label="Money">
@@ -487,8 +531,8 @@ function MoneyAsked({ org, orgSlug }) {
 
 /** Money is for staff who may record payments; anybody else is told, and nothing is asked
  *  for them. */
-function MoneyReport({ org, orgSlug }) {
-  if (canReadMoney(viewerPrivileges(org))) return <MoneyAsked org={org} orgSlug={orgSlug} />;
+function MoneyReport({ org, orgSlug, period }) {
+  if (canReadMoney(viewerPrivileges(org))) return <MoneyAsked org={org} orgSlug={orgSlug} period={period} />;
   return (
     <section className="flex flex-col gap-4" aria-label="Money">
       <h2 className="c-h2">Money</h2>
@@ -504,22 +548,28 @@ export default function Reports() {
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
   const gymId = org?.id ?? null;
   const may = canReadReports(viewerPrivileges(org));
-  // Each answer carries the gym it was asked for, so another gym's figures are never drawn.
-  const [state, setState] = useState({ gymId: null, error: null, refused: false, report: null });
+  // The period is in the address, so a page loaded again, or a link sent to somebody, shows the same one.
+  const [search, setSearch] = useSearchParams();
+  const period = periodFrom(search.get('period'));
+  const pick = (key) => setSearch({ period: key }, { replace: true });
+  // Each answer carries the gym and the period it was asked for, so another gym's figures,
+  // or another period's, are never drawn.
+  const [state, setState] = useState({ gymId: null, period: null, error: null, refused: false, report: null });
 
   const load = useCallback(() => {
     if (gymId === null || !may) return Promise.resolve();
-    return reportsService.members(gymId).then(
-      (report) => setState({ gymId, error: null, refused: false, report }),
+    return reportsService.members(gymId, period).then(
+      (report) => setState({ gymId, period, error: null, refused: false, report }),
       (err) =>
         setState({
           gymId,
+          period,
           error: errorText(err, "We couldn't load your reports."),
           refused: errorStatus(err) === 403,
           report: null,
         }),
     );
-  }, [gymId, may]);
+  }, [gymId, may, period]);
 
   useEffect(() => {
     load();
@@ -552,8 +602,9 @@ export default function Reports() {
     );
   }
 
-  const mine = state.gymId === gymId ? state : { gymId, error: null, refused: false, report: null };
-  const refused = !may || mine.refused;
+  const mine = state.gymId === gymId && state.period === period ? state : { gymId, error: null, refused: false, report: null };
+  // A refusal is about the person, not the period: it stays while another period loads.
+  const refused = !may || (state.gymId === gymId && state.refused);
 
   return (
     <div className="c-page">
@@ -561,6 +612,16 @@ export default function Reports() {
         <h1 className="c-h1">Reports</h1>
         <p className="c-sub">{org.name}</p>
       </header>
+      {refused ? null : (
+        <div className="flex flex-col gap-2">
+          <PeriodPicker period={period} onPick={pick} />
+          {mine.report !== null ? (
+            <p className="c-s14 c-t2" data-testid="period-line">
+              {periodLine(mine.report.period, orgWords(org.orgType))}
+            </p>
+          ) : null}
+        </div>
+      )}
       {refused ? (
         <section className="c-card p-5 md:p-6">
           <p className="c-s15 c-t2">Your role doesn&apos;t allow you to see reports. Ask the owner if you need to.</p>
@@ -568,8 +629,8 @@ export default function Reports() {
       ) : mine.report !== null ? (
         <>
           <MembersReport report={mine.report} org={org} orgSlug={orgSlug} />
-          <AttendanceReport org={org} orgSlug={orgSlug} />
-          <MoneyReport org={org} orgSlug={orgSlug} />
+          <AttendanceReport org={org} orgSlug={orgSlug} period={period} />
+          <MoneyReport org={org} orgSlug={orgSlug} period={period} />
         </>
       ) : mine.error !== null ? (
         <ConsoleFailed message={mine.error} onRetry={load} newLook />

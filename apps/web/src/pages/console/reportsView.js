@@ -1,8 +1,9 @@
-import { REPORT_FULL_MONTHS_NEEDED } from '@app/shared';
+import { REPORT_FULL_MONTHS_NEEDED, REPORT_PERIODS } from '@app/shared';
 import { sourceWord } from './leadsView';
 
-// The Reports page's words (spec Part 3 §16.5; ROADMAP 21a-i). Every figure says how it is
-// worked out, and a figure the gym's list cannot give is a sentence, never a zero.
+// The Reports page's words (spec Part 3 §16.5; ROADMAP 21a-i, 21d-i). Every figure says how it is
+// worked out and which days it counts, and a figure the gym's list cannot give is a sentence,
+// never a zero.
 
 export function canReadReports(privileges) {
   return Array.isArray(privileges) && privileges.includes('reports.read');
@@ -17,6 +18,33 @@ export const monthLong = (month) => `${monthName(month)} ${month.slice(0, 4)}`;
 export const monthShort = (month) => `${monthName(month).slice(0, 3)} ${month.slice(0, 4)}`;
 /** 'YYYY-MM-DD' as "3 Oct 2026". */
 export const dayText = (day) => `${String(Number(day.slice(8, 10)))} ${monthShort(day.slice(0, 7))}`;
+
+// THE PERIOD. The page asks for one of three; every answer says which days it counted,
+// and the page's words are made from the answer, never from what was pressed.
+
+/** What the page shows when its address names no period. */
+export const DEFAULT_PERIOD = '12m';
+const PERIOD_NAMES = { '4w': 'Last 4 weeks', '3m': 'Last 3 months', '12m': 'Last 12 months' };
+/** The picker's choices, in order. */
+export const PERIOD_CHOICES = REPORT_PERIODS.map((key) => ({ key, label: PERIOD_NAMES[key] }));
+/** The period an address names, or the page's own when it names none or one that is not a choice. */
+export const periodFrom = (value) => (REPORT_PERIODS.includes(value) ? value : DEFAULT_PERIOD);
+/** "Last 3 months". */
+export const periodName = (period) => PERIOD_NAMES[period.key];
+/** "the last 3 months", for the middle of a sentence. */
+export const periodWords = (period) => `the ${PERIOD_NAMES[period.key].toLowerCase()}`;
+/** "1 Aug 2026 to 13 Oct 2026". */
+export const periodSpan = (period) => `${dayText(period.from)} to ${dayText(period.to)}`;
+/** The days a figure counts, in a tile's small line: the period's, or, for a gym that began
+ *  `what` inside the period, the day it began and what began then. */
+export function countedSpan(period, startedOn, what) {
+  if (startedOn !== null && startedOn > period.from) return `since ${dayText(startedOn)}, ${what}`;
+  return periodSpan(period);
+}
+/** The line under the picker: the days counted, and what does not move with them. */
+export function periodLine(period, words) {
+  return `Showing ${periodSpan(period)}. ${words.peopleCap} now, churn, retention, monthly recurring revenue, payment due and lifetime value are today's figures, so they stay the same whichever period you choose.`;
+}
 
 const people = (n) => (n === 1 ? '1 person' : `${String(n)} people`);
 const count = (n) => n.toLocaleString('en-GB');
@@ -60,6 +88,7 @@ const NO_FIGURE = {
   },
   stay: {
     nobody_left: (report, words) => `Average stay is how long your ${words.people} had been with you when they left. Nobody has left yet.`,
+    nobody_in_period: (report) => `Nobody has left in ${periodWords(report.period)}.`,
     not_enough_data: (report, words) =>
       `Not enough data yet. Average stay shows after ${String(REPORT_FULL_MONTHS_NEEDED)} full months of your ${words.person} list here; you have ${have(report)}.`,
   },
@@ -86,13 +115,10 @@ export function nobodyRemovedNote(report, words) {
 /** The six tiles, in order: `value` is the big number, or null with `line` saying why
  *  there is none; `note` is the small line under a number; `how` is how it is worked out. */
 export function memberTiles(report, words) {
-  const month = monthLong(report.thisMonth.month);
-  // The month before, whole, beside this month's so far. Not an arrow: ten days against thirty would mislead.
-  const before = report.months.length >= 2 ? report.months[report.months.length - 2] : null;
-  const soFar = (n) => {
-    const was = before === null ? null : n(before);
-    return was === null ? `${month}, so far` : `${month}, so far · ${monthName(before.month)}: ${count(was)}`;
-  };
+  // A list younger than the period is counted from the day it began, and the tiles say so.
+  const listed = report.firstListedOn;
+  const span = countedSpan(report.period, listed, `when your ${words.person} list started`);
+  const from = dayText(listed !== null && listed > report.period.from ? listed : report.period.from);
   const churn = shareTile('churn', report.churn, report, words);
   const retention = shareTile('retention', report.retention, report, words);
   const over = report.churnMonths.length > 0 ? monthList(report.churnMonths) : 'the last 3 full months';
@@ -100,15 +126,18 @@ export function memberTiles(report, words) {
 
   let stay;
   if (report.averageStay.state === 'ok') {
-    stay = { value: stayText(report.averageStay.days), line: null, note: `${people(report.averageStay.leavers)} left in the months shown` };
+    stay = { value: stayText(report.averageStay.days), line: null, note: `${people(report.averageStay.leavers)} left · ${span}` };
   } else if (report.averageStay.state === 'nobody_left') {
-    stay = { value: null, line: report.everLeft ? 'Nobody has left in the months shown.' : NO_FIGURE.stay.nobody_left(report, words), note: null };
+    stay = { value: null, line: report.everLeft ? NO_FIGURE.stay.nobody_in_period(report) : NO_FIGURE.stay.nobody_left(report, words), note: null };
   } else {
     stay = { value: null, line: NO_FIGURE.stay.not_enough_data(report, words), note: null };
   }
 
   // The list's first people have been with the gym for years: they are not new members.
-  const started = report.thisMonth.joined === null;
+  const started = report.inPeriod.joined === null;
+  // New is counted from the month after the list began, when that is inside the period.
+  const newFrom = report.inPeriod.joinedFrom;
+  const newSpan = countedSpan(report.period, newFrom, `the month after your ${words.person} list started`);
 
   return [
     {
@@ -121,19 +150,19 @@ export function memberTiles(report, words) {
     },
     {
       key: 'new',
-      label: 'New this month',
-      value: started ? null : count(report.thisMonth.joined),
+      label: `New ${words.people}`,
+      value: started ? null : count(report.inPeriod.joined),
       line: started ? `Your ${words.person} list started this month, so new ${words.people} are counted from next month.` : null,
-      note: started ? null : soFar((m) => m.joined),
-      how: `${words.peopleCap} whose join date is in ${month}. Where your list gave no join date, or one later than the day they were added here, it is the day they were added. The month your list started is not counted.`,
+      note: started ? null : newSpan,
+      how: `${words.peopleCap} whose join date is from ${dayText(newFrom ?? report.period.from)} to today. Where your list gave no join date, or one later than the day they were added here, it is the day they were added. The month your list started is not counted.`,
     },
     {
       key: 'left',
-      label: 'Left this month',
-      value: report.everLeft ? count(report.thisMonth.left) : null,
+      label: `${words.peopleCap} who left`,
+      value: report.everLeft ? count(report.inPeriod.left) : null,
       line: report.everLeft ? null : nobodyRemoved(words),
-      note: report.everLeft ? soFar((m) => m.left) : null,
-      how: `${words.peopleCap} removed from your ${words.person} list in ${month}, and ${words.people} whose membership ended or was cancelled in ${month} and who have no new one. On your ${words.person} list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
+      note: report.everLeft ? span : null,
+      how: `${words.peopleCap} removed from your ${words.person} list from ${from} to today, and ${words.people} whose membership ended or was cancelled in those days and who have no new one. On your ${words.person} list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
     },
     {
       key: 'churn',
@@ -157,7 +186,7 @@ export function memberTiles(report, words) {
       value: stay.value,
       line: stay.line,
       note: stay.note,
-      how: `How long the ${words.people} who left in the months shown below had been with you on average, from their join date to the day they were removed or their membership ended.`,
+      how: `How long the ${words.people} who left from ${from} to today had been with you on average, from their join date to the day they were removed or their membership ended.`,
     },
   ];
 }
@@ -229,7 +258,9 @@ export function leadsCsv(report) {
   ]);
 }
 
-export const csvName = (what, report) => `${what}-${report.today}.csv`;
+const PERIOD_SLUGS = { '4w': 'last-4-weeks', '3m': 'last-3-months', '12m': 'last-12-months' };
+/** A CSV's file name: what it holds, the period it covers and the day it was saved. */
+export const csvName = (what, report) => `${what}-${PERIOD_SLUGS[report.period.key]}-${report.today}.csv`;
 
 /** The browser saves the text as a CSV file under this name. */
 export function saveCsv(text, filename) {

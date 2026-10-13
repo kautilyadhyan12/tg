@@ -352,6 +352,7 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
         timezone: "Europe/London",
         today: "2026-10-15",
         period: { key: "12m", from: "2025-11-01", to: "2026-10-15" },
+        firstListedOn: "2026-06-10",
         // The list itself last changed when Rob was removed; a membership ending is not a change to it.
         listChangedOn: "2026-10-05",
         activeNow: 11,

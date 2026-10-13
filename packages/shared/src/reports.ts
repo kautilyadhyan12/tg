@@ -77,6 +77,8 @@ export const membersReportSchema = z
     timezone: z.string(),
     today: daySchema,
     period: reportPeriodSchema,
+    /** The day the list began: a gym younger than the period is told its figures start there. */
+    firstListedOn: daySchema.nullable(),
     listChangedOn: daySchema.nullable(),
     activeNow: countSchema,
     /** False while nobody has ever left: Left and what is worked out from it
@@ -234,6 +236,7 @@ export function membersReportFrom(facts: MembersReportFacts): MembersReport {
     timezone: facts.timezone,
     today: facts.today,
     period,
+    firstListedOn: facts.firstListedOn,
     listChangedOn: facts.listChangedOn,
     activeNow: facts.activeNow,
     everLeft: facts.everLeft,

@@ -9,6 +9,9 @@ const words = orgWords('gym');
 const facts = (over = {}) => ({
   timezone: 'Europe/London',
   today: '2026-10-10',
+  // Three months, from 1 August: the gym's own first check-in is later, so it is shown from there.
+  period: '3m',
+  people: 1,
   firstVisitOn: '2026-09-07',
   days: [
     { day: '2026-10-05', visits: 10 },
@@ -52,15 +55,24 @@ describe('an hour on the gym’s clock', () => {
 describe('the visit tiles', () => {
   it('one of a thing is said as one, and large numbers are grouped', () => {
     const t = tiles();
-    expect(t.week).toMatchObject({ value: '15', note: 'Mon 5 Oct to today · 1 person · last week: 1,240' });
+    expect(t.visits).toMatchObject({ label: 'Visits', value: '15', note: '1 person · 7 Sep to 10 Oct 2026 · this week, so far: 15' });
+    expect(t.visits.how).toBe('Every check-in from 7 Sep 2026 to today, the day of your first check-in. Someone who comes on three days is three visits and one person.');
+    expect(tiles({ people: 1240, days: [{ day: '2026-10-05', visits: 2480 }] }).visits).toMatchObject({ value: '2,480', note: '1,240 people · 7 Sep to 10 Oct 2026 · this week, so far: 15' });
     expect(t['per-member']).toMatchObject({ value: '2.3', note: '1 of the 1 member on your list since 7 Sep came · 7 Sep to 4 Oct 2026' });
     expect(t['per-member'].how).toContain('The 9 visits that the 1 member on your list since 7 Sep 2026 made in the last 4 full weeks');
     expect(t.busiest).toMatchObject({ value: 'Tue 06:00', note: '40 visits in 4 weeks' });
   });
 
-  it('the first week has no last week beside it', () => {
-    const t = tiles({ firstVisitOn: '2026-10-06', weeks: [{ weekStart: '2026-10-05', visits: 2, people: 2 }] });
-    expect(t.week.note).toBe('Mon 5 Oct to today · 2 people');
+  it('the visits are the period’s, from its first day for a gym older than it and from the first check-in for a younger one', () => {
+    const young = tiles({ firstVisitOn: '2026-10-06', weeks: [{ weekStart: '2026-10-05', visits: 5, people: 1 }] });
+    // The 10 visits dated before the first check-in are not counted.
+    expect(young.visits).toMatchObject({ value: '5', note: '1 person · 6 Oct to 10 Oct 2026 · this week, so far: 5' });
+    const old = tiles({ period: '4w', firstVisitOn: '2025-01-06' });
+    expect(old.visits.note).toBe('1 person · 13 Sep to 10 Oct 2026 · this week, so far: 15');
+    expect(old.visits.how).toBe('Every check-in from 13 Sep 2026 to today. Someone who comes on three days is three visits and one person.');
+    // Four weeks hold three whole ones, and the tiles say which.
+    expect(old['per-member'].note).toBe('1 of the 1 member on your list since 14 Sep came · 14 Sep to 4 Oct 2026');
+    expect(old.busiest.note).toBe('40 visits in 3 weeks');
   });
 
   it('nobody on the list, no visit in the weeks counted, and only visits added later each say which', () => {
@@ -95,11 +107,11 @@ describe('the pictures', () => {
   });
 
   it('a point for each day: how high against the top of the chart, the weekend, each Monday with its date', () => {
-    const chart = dayChart(report());
+    const chart = dayChart(report({ period: '4w', firstVisitOn: '2025-01-06' }));
     expect(chart.points).toHaveLength(28);
     expect(chart.top).toBe(12);
     expect(chart.ticks.map((t) => t.label)).toEqual(['12', '6', '0']);
-    expect(chart.points.filter((p) => p.monday).map((p) => p.label)).toEqual(['14 Sep', '21 Sep', '28 Sep', '5 Oct']);
+    expect(chart.points.filter((p) => p.mark).map((p) => p.label)).toEqual(['14 Sep', '21 Sep', '28 Sep', '5 Oct']);
     expect(chart.points.filter((p) => p.weekend)).toHaveLength(8);
     expect(chart.points[0]).toMatchObject({ at: 0, up: 0, visits: 0, today: false });
     expect(chart.points[22]).toMatchObject({ visits: 10, text: 'Mon 5 Oct: 10 visits', title: 'Mon 5 Oct', said: '10 visits' });
@@ -110,9 +122,20 @@ describe('the pictures', () => {
     expect(chart.any).toBe(true);
   });
 
+  it('a long period has a date under the line for each month’s first day, where every Monday would crowd', () => {
+    const year = dayChart(report({ period: '12m', firstVisitOn: '2025-01-06' }));
+    expect(year.points).toHaveLength(344);
+    expect(year.points.filter((p) => p.mark).map((p) => p.label)).toEqual(['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct']);
+    const quarter = dayChart(report({ period: '3m', firstVisitOn: '2025-01-06' }));
+    expect(quarter.points).toHaveLength(71);
+    expect(quarter.points.filter((p) => p.mark).map((p) => p.label)).toEqual(['Aug', 'Sep', 'Oct']);
+    // Each point still says its own day.
+    expect(year.points[343].text).toBe('Today, Sat 10 Oct: 5 visits so far');
+  });
+
   it('two days level are not called the busiest, and with no visit at all there is nothing to draw', () => {
     const level = dayChart(report({ days: [{ day: '2026-10-05', visits: 7 }, { day: '2026-10-07', visits: 7 }] }));
-    expect(level.summary).toBe('About 0.5 a day · most in one day: 7');
+    expect(level.summary).toBe('About 0.4 a day · most in one day: 7');
     const none = dayChart(report({ days: [] }));
     expect(none).toMatchObject({ any: false, top: 4, summary: 'About 0 a day' });
     expect(none.points.every((p) => p.up === 0)).toBe(true);
@@ -181,15 +204,15 @@ describe('the tables and their CSVs', () => {
       { key: '2026-09-28', week: '28 Sep 2026', visits: '1,240', people: '300' },
     ]);
     expect(weeksCsv(report())).toBe(
-      '"Week starting (Monday)","Visits","People"\r\n"2026-09-07","0","0"\r\n"2026-09-14","0","0"\r\n"2026-09-21","0","0"\r\n"2026-09-28","1240","300"\r\n"2026-10-05 (so far)","15","1"\r\n',
+      '"Week starting","Visits","People"\r\n"2026-09-07","0","0"\r\n"2026-09-14","0","0"\r\n"2026-09-21","0","0"\r\n"2026-09-28","1240","300"\r\n"2026-10-05 (so far)","15","1"\r\n',
     );
   });
 
   it('the days carry their weekday, and the hours the gym’s clock', () => {
     const lines = daysCsv(report()).split('\r\n');
     expect(lines[0]).toBe('"Day","Weekday","Visits"');
-    expect(lines).toHaveLength(30);
-    expect(lines[28]).toBe('"2026-10-10 (so far)","Saturday","5"');
+    expect(lines).toHaveLength(36);
+    expect(lines[34]).toBe('"2026-10-10 (so far)","Saturday","5"');
     expect(hoursCsv(report(), '12h')).toBe('"Weekday","Hour starting","Visits"\r\n"Tuesday","6 AM","40"\r\n"Saturday","12 AM","3"\r\n');
     expect(hoursCsv(report({ firstVisitOn: '2026-10-01' }), '24h')).toBe('"Weekday","Hour starting","Visits"\r\n');
   });
