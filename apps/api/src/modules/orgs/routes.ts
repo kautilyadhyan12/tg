@@ -58,6 +58,7 @@ import { registerMemberListRoutes } from "./memberList/routes.js";
 import { registerStartHereRoutes } from "./startHere/routes.js";
 import { registerReportsRoutes } from "./reports/routes.js";
 import { registerAtRiskRoutes } from "./atRisk/routes.js";
+import { registerRegisterRoutes } from "./register/routes.js";
 import { registerWeekRoutes } from "./week/routes.js";
 import * as service from "./service.js";
 import { PT_SESSIONS_ENDING_ERROR, confirmPtSessionsQuerySchema } from "@app/shared";
@@ -182,6 +183,8 @@ export function registerOrgRoutes(
   registerStartHereRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerReportsRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerAtRiskRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+  // The desk's Sell page: products, sales and the gym's tax (ROADMAP 18b-i).
+  registerRegisterRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerWeekRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
