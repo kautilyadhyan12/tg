@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest";
 import { chosenItemSchema, foodSearchItemSchema, mealItemSchema, measureIdSchema } from "../src/index.js";
 
 describe("measureIdSchema", () => {
-  it.each(["g", "oz", "serving", "usda-1", "usda-9999"])("takes %s", (id) => {
+  it.each(["g", "oz", "serving", "usda-1", "usda-9999", "piece-3"])("takes %s", (id) => {
     expect(measureIdSchema.safeParse(id).success).toBe(true);
   });
 
   // An id is looked up in the food's own list, so only the shapes that list makes are ids at all.
-  it.each(["cup", "usda-", "usda-12345", "USDA-1", "usda-1 ", "dish", "", "g;DROP"])("refuses %j", (id) => {
+  it.each(["cup", "usda-", "usda-12345", "piece-", "piece-12345", "pieces-1", "USDA-1", "usda-1 ", "dish", "", "g;DROP"])("refuses %j", (id) => {
     expect(measureIdSchema.safeParse(id).success).toBe(false);
   });
 });

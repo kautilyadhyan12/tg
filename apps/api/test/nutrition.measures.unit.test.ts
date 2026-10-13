@@ -391,4 +391,41 @@ describe("the USDA entry a food of our list has its measures from", () => {
       expect(curatedUsdaFdcId(food.canonical) === null, food.canonical).toBe(food.citation.startsWith("uk-cofid:"));
     }
   });
+
+  describe("pieces borrowed from another USDA entry (ROADMAP 34c-i)", () => {
+    // Our shrimp: SR Legacy's one measure, and the survey entry's pieces.
+    const cited: UsdaPortion[] = [{ seqNum: 1, amount: 3, unit: "oz", gramWeight: 85 }];
+    const pieces: UsdaPortion[] = [
+      { seqNum: 1, amount: null, unit: "1 tiny shrimp", gramWeight: 5 }, { seqNum: 2, amount: null, unit: "1 small/medium shrimp", gramWeight: 10 },
+      { seqNum: 3, amount: null, unit: "1 large/jumbo shrimp", gramWeight: 15 }, { seqNum: 4, amount: null, unit: "1 prawn", gramWeight: 20 },
+      { seqNum: 5, amount: null, unit: "1 cup", gramWeight: 135 },
+    ];
+    const shrimp = { serving: 100, unit: "g", ownServing: true, portions: cited, pieces };
+    const brief = (measures: readonly { id: string; name: string; grams: number }[]): string[] => measures.map((m) => `${m.id} ${m.name} ${String(m.grams)}`);
+
+    it("keeps the cited entry's measures under their ids and gives the borrowed ones ids of their own", () => {
+      // "usda-1" was "3 oz" in every meal saved before the pieces came: it must never become the 5 g shrimp.
+      expect(brief(foodMeasures(shrimp))).toEqual([
+        "usda-1 3 oz 85", "piece-1 tiny shrimp 5", "piece-2 small/medium shrimp 10", "piece-3 large/jumbo shrimp 15", "piece-4 prawn 20", "piece-5 cup 135",
+        "g g 1", "oz oz 28.349523125",
+      ]);
+      const ids = foodMeasures(shrimp).map((m) => m.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it("starts the food where it started, and counts a photo's pieces", () => {
+      const measures = foodMeasures(shrimp);
+      expect(startingMeasure(shrimp, measures)).toEqual({ measure: "g", amount: 100 });
+      expect(scanStart(shrimp, measures, 5, 75)).toEqual({ measure: "piece-3", amount: 5, grams: 75, estimated: false });
+      expect(scanStart(shrimp, measures, 7, 70)).toEqual({ measure: "piece-2", amount: 7, grams: 70, estimated: false });
+      // No count of any measure is near: the photo's grams, an estimate.
+      expect(scanStart(shrimp, measures, 2, 500)).toEqual({ measure: "g", amount: 500, grams: 500, estimated: true });
+    });
+
+    it("leaves a food with no borrowed entry exactly as it was, and drops a borrowed measure the cited entry already has", () => {
+      expect(brief(foodMeasures({ serving: 100, unit: "g", ownServing: true, portions: cited }))).toEqual(["usda-1 3 oz 85", "g g 1", "oz oz 28.349523125"]);
+      const same = foodMeasures({ serving: 100, unit: "g", ownServing: true, portions: [{ seqNum: 1, amount: 1, unit: "cup", gramWeight: 135 }], pieces });
+      expect(brief(same).filter((m) => m.includes("cup"))).toEqual(["usda-1 cup 135"]);
+    });
+  });
 });
