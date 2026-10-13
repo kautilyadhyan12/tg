@@ -20,6 +20,20 @@ import { useSession } from "../session/SessionProvider";
 const NO_ANSWER = "Can’t connect. Check your internet and try again.";
 /** The phone's own robot check is item 12b-ii; until then a phone that is asked for it is told to wait. */
 const ROBOT_ON_PHONE = "Too many requests from this network. Try again later.";
+/** The resend gap in words, from the number the server enforces. */
+const gapWords = (seconds: number) =>
+  seconds === 60 ? "a minute" : seconds % 60 === 0 ? `${String(seconds / 60)} minutes` : `${String(seconds)} seconds`;
+/** What a "too soon" refusal may claim (apps/web/src/pages/Login.jsx): that a code was asked for
+ *  inside the gap. Never that one was sent just now, or that it is still good: it may be the
+ *  code that signed this person in a moment ago. */
+const TOO_SOON = {
+  asked: `You asked for a code less than ${gapWords(SIGN_IN_CODE_RULES.resendAfterSeconds)} ago for`,
+  wait: "Enter it, or resend when the countdown ends.",
+  /** The countdown has run out, so "less than a minute ago" would now be false. */
+  have: "Enter the code you have for",
+  resend: "Or resend for a new one.",
+};
+
 /** The picture's height for its width (docs/design/phone/compact.py makes it 1141 by 1200). */
 const PHOTO_TALL = 1200 / 1141;
 
@@ -42,6 +56,10 @@ export function SignInScreen({ note }: { note: string | null }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [said, setSaid] = useState("");
+  /** How the code step was reached: a code went out, or the server refused inside its gap and none did. */
+  const [arrival, setArrival] = useState<"sent" | "too-soon">("sent");
+  /** A code whose check got no answer: the server may have taken it and its reply been lost. */
+  const [unanswered, setUnanswered] = useState("");
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   /** The keyboard is up: the picture makes way, so the box and its button stay in view. */
@@ -112,9 +130,11 @@ export function SignInScreen({ note }: { note: string | null }) {
       setProblem("Enter a valid email address.");
       return;
     }
-    if ((await askForCode(parsed.data)) !== null) {
+    const arrived = await askForCode(parsed.data);
+    if (arrived !== null) {
       setAddress(parsed.data);
       setCode("");
+      setArrival(arrived);
       setStep("code");
     }
   }
@@ -123,6 +143,7 @@ export function SignInScreen({ note }: { note: string | null }) {
     if (busy || secondsToResend > 0) return;
     if ((await askForCode(address)) === "sent") {
       setCode("");
+      setArrival("sent");
       setSaid("New code sent.");
     }
   }
@@ -139,7 +160,10 @@ export function SignInScreen({ note }: { note: string | null }) {
     const answer = await session.verifyCode(address, code);
     // Signed in: the tabs take this screen's place.
     if (answer.kind === "ok") return;
-    setProblem(wordsFor(answer, "That code didn’t work. Try again."));
+    if (answer.kind === "no_answer") setUnanswered(code);
+    // The same digits refused after a check with no answer: that check signed nobody in here, and spent them.
+    const spent = answer.kind === "refused" && answer.error === "invalid_code" && code === unanswered;
+    setProblem(spent ? "That code can’t be used again. Resend code." : wordsFor(answer, "That code didn’t work. Try again."));
     if (answer.kind === "refused") setCode("");
     setBusy(false);
   }
@@ -192,7 +216,7 @@ export function SignInScreen({ note }: { note: string | null }) {
             <Txt kind="hero">Get started.</Txt>
             <Txt colour="textFaint">Sign in or create your account</Txt>
           </View>
-        ) : (
+        ) : arrival === "sent" ? (
           <View style={styles.head}>
             <Txt kind="hero">Check your email.</Txt>
             <View>
@@ -200,6 +224,17 @@ export function SignInScreen({ note }: { note: string | null }) {
               <Txt kind="strong" numberOfLines={1}>
                 {address}
               </Txt>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.head}>
+            <Txt kind="hero">Enter your code.</Txt>
+            <View>
+              <Txt colour="textFaint">{secondsToResend > 0 ? TOO_SOON.asked : TOO_SOON.have}</Txt>
+              <Txt kind="strong" numberOfLines={1}>
+                {address}
+              </Txt>
+              <Txt colour="textFaint">{secondsToResend > 0 ? TOO_SOON.wait : TOO_SOON.resend}</Txt>
             </View>
           </View>
         )}

@@ -207,7 +207,7 @@ const MUTANTS = [
   {
     id: 'A14',
     target: 'repo',
-    why: "the day's count never forgets: yesterday's codes count for ever, so an address is locked out after its second code of all time",
+    why: "the day's count never forgets: yesterday's codes count for ever, so an address is locked out after its third code of all time",
     expect: 'three codes a day',
     from: '      WHERE email = ${input.email} AND purpose = ${input.purpose} AND created_at >= ${input.since}',
     to: '      WHERE email = ${input.email} AND purpose = ${input.purpose}',

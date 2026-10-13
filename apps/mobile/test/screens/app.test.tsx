@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { App, TABS } from "../../src/App";
 import { colours } from "../../src/look/colours";
@@ -73,7 +73,7 @@ describe("the five tabs", () => {
       // What is not built yet says so in two words: the tab's own row, and on Me its two pictures.
       expect(await screen.findAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : 1);
       const withDigits = screen.queryAllByText(/\d/).map(words);
-      const copyLine = [["Feature 1 test copy", " · ", "Connected"]];
+      const copyLine = [["Feature 1 test copy · ", "Connected"]];
       expect([tab.name, withDigits]).toEqual([tab.name, tab.name === "Me" ? copyLine : []]);
     }
   });
@@ -123,6 +123,35 @@ describe("Me says which copy this is and whether it reaches its server", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Feature 1 test copy · Connected")).toBeTruthy();
     expect(screen.queryByText(/Can’t reach the server/)).toBeNull();
+  });
+
+  it("the store's app, which has no copy name, says nothing here while its server is reached", async () => {
+    const asked: string[] = [];
+    await render(
+      <App
+        extra={{ apiUrl: "https://api.example.com" }}
+        store={signedIn()}
+        ask={(url, init) => {
+          asked.push(url);
+          return answers(true)(url, init);
+        }}
+      />,
+    );
+    await open("Me");
+    expect(await screen.findByText("ravi@example.com")).toBeTruthy();
+    // Its server was asked and answered, and still nothing is said of it.
+    await waitFor(() => {
+      expect(asked).toContain("https://api.example.com/health");
+    });
+    expect(screen.queryByText(/Connected|Checking|test copy|This app/)).toBeNull();
+  });
+
+  it("the store's app says so when its server is not reached, with no copy's name", async () => {
+    await render(<App extra={{ apiUrl: "https://api.example.com" }} store={signedIn()} ask={answers(false)} />);
+    await open("Me");
+    expect(await screen.findByText("Can’t reach the server")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByText(/test copy|This app/)).toBeNull();
   });
 
   it("a copy with no settings says so, shows no sign-in and no tabs, and asks nothing", async () => {

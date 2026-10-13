@@ -575,8 +575,10 @@ The terminal's own choices, each a job's to better with a reason.
   holds the refresh token and the person, so the app opens signed in with no internet.
   Only this api's own 401 signs anybody out: no answer, a late one, or a reply that is
   not this api's never does. One refresh at a time, sent again after 2, 5 and 10 seconds
-  when it had no answer (inside Part 3 §10.5's 60), on opening and on coming back after
-  ten minutes. Sign out is on Me, asks first, and forgets on the phone before it tells
+  when it had no answer, on opening and on coming back after ten minutes; a reply lost
+  costs nothing, since the server takes the same token again (Part 3 §10.5). A code asked
+  for inside the server's minute opens the code step as "Enter your code.", never as a
+  code just sent. Sign out is on Me, asks first, and forgets on the phone before it tells
   the server. A screen's signed-in requests take `session.accessToken()`. The robot
   check on the phone is 12b-ii; until then a phone asked for it says why it must wait.
 - **Kept on the phone until the server has it** (§4): what a person DOES (a workout, a

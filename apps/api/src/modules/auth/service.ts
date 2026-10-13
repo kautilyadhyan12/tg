@@ -385,10 +385,6 @@ export async function redeemEmailCode(
 
 // ── refresh (rotation + reuse detection) ────────────────────────────────────
 
-/** How long after a phone's refresh the same token is taken again, for a reply lost on
- *  a weak signal (CLAUDE.md §4: a lost connection never signs anybody out). */
-export const PHONE_REFRESH_GRACE_SECONDS = 60;
-
 const invalidRefresh = () => new AuthError(401, "invalid_refresh", "Invalid refresh token");
 
 const signedInElsewhere = () => new AuthError(401, SIGNED_IN_ELSEWHERE.error, SIGNED_IN_ELSEWHERE.message);
@@ -422,7 +418,6 @@ export async function refresh(
       expiresAt: refreshExpiry(deps),
       ip: meta.ip,
       userAgent: meta.userAgent,
-      graceSeconds: PHONE_REFRESH_GRACE_SECONDS,
     });
     return reissued
       ? { accessToken: signAccessToken(row.userId, deps.config, row.familyId), refreshToken: again }

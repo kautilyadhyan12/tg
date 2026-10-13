@@ -12,7 +12,6 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import { startPhoneSession } from "../src/modules/auth/repo.js";
-import { PHONE_REFRESH_GRACE_SECONDS } from "../src/modules/auth/service.js";
 import { mintOpaqueToken, newFamilyId, sha256Hex } from "../src/modules/auth/tokens.js";
 
 const url = process.env["DATABASE_URL"];
@@ -401,18 +400,38 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     expect(answers.map((a) => sha256Hex(tokensIn(a).refreshToken))).toContain(live[0]?.token_hash);
   });
 
-  it("a stolen phone token is still caught: after the grace, or once the token that replaced it is used", { timeout: 30_000 }, async () => {
-    // After the minute: the used token again is reuse, and ends the sign-in.
-    const late = await phoneSignIn("phone12a-late@example.com");
-    const lateNext = tokensIn(await phoneRefresh(late.refreshToken));
+  // THE PHONE'S WORST THING (12b-i's review): a reply lost in a lift, and the app opened again
+  // the next day. No clock makes that a stolen token: the token that replaced it was never used.
+  it.each([
+    ["61 seconds", "61 seconds"],
+    ["a day", "1 day"],
+    ["three weeks", "21 days"],
+  ])("a refresh whose reply was lost is answered again %s later, and the phone stays signed in", { timeout: 30_000 }, async (_name, later) => {
+    const email = `phone12a-later-${later.replace(" ", "")}@example.com`;
+    const phone = await phoneSignIn(email);
+    expect((await phoneRefresh(phone.refreshToken)).statusCode).toBe(200);
     await sql`
-      UPDATE refresh_tokens SET revoked_at = revoked_at - make_interval(secs => ${PHONE_REFRESH_GRACE_SECONDS + 1})
-      WHERE token_hash = ${sha256Hex(late.refreshToken)}`;
-    const reuse = await phoneRefresh(late.refreshToken);
-    expect(reuse.statusCode).toBe(401);
-    expect(errorOf(reuse).error).toBe("invalid_refresh");
-    expect(errorOf(await phoneRefresh(lateNext.refreshToken)).error).toBe("invalid_refresh");
+      UPDATE refresh_tokens SET revoked_at = revoked_at - ${later}::interval, created_at = created_at - ${later}::interval
+      WHERE user_id = ${await userIdOf(email)}`;
+    const back = tokensIn(await phoneRefresh(phone.refreshToken));
+    // One sign-in is live, the one the phone now holds, and it carries on.
+    const live = await sql<{ token_hash: string }[]>`
+      SELECT token_hash FROM refresh_tokens
+      WHERE user_id = ${await userIdOf(email)} AND client = 'phone' AND revoked_at IS NULL`;
+    expect(live.map((row) => row.token_hash)).toEqual([sha256Hex(back.refreshToken)]);
+    tokensIn(await phoneRefresh(back.refreshToken));
+  });
 
+  it("a token past its own life is not answered again, lost reply or none", { timeout: 30_000 }, async () => {
+    const email = "phone12a-expired@example.com";
+    const phone = await phoneSignIn(email);
+    expect((await phoneRefresh(phone.refreshToken)).statusCode).toBe(200);
+    await sql`UPDATE refresh_tokens SET expires_at = now() - interval '1 second' WHERE token_hash = ${sha256Hex(phone.refreshToken)}`;
+    expect(errorOf(await phoneRefresh(phone.refreshToken)).error).toBe("invalid_refresh");
+    expect(await livePhoneFamilies(await userIdOf(email))).toEqual([]);
+  });
+
+  it("a stolen phone token is still caught: once the token that replaced it is used, or at the phone's own next refresh", { timeout: 30_000 }, async () => {
     // Once its successor has been used, the first token is past any lost reply.
     const used = await phoneSignIn("phone12a-used@example.com");
     const usedNext = tokensIn(await phoneRefresh(used.refreshToken));
@@ -420,8 +439,8 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     expect(errorOf(await phoneRefresh(used.refreshToken)).error).toBe("invalid_refresh");
     expect(errorOf(await phoneRefresh(usedThird.refreshToken)).error).toBe("invalid_refresh");
 
-    // A thief sends the old token inside the minute and is answered; the phone, holding
-    // the token that answer ended, refreshes next, and that ends the thief's too.
+    // A thief sends the old token before the phone has refreshed again, and is answered;
+    // the phone, holding the token that answer ended, refreshes next, and that ends the thief's too.
     const owner = await phoneSignIn("phone12a-thief@example.com");
     const ownerNext = tokensIn(await phoneRefresh(owner.refreshToken));
     const thief = tokensIn(await phoneRefresh(owner.refreshToken));

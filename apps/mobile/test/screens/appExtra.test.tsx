@@ -18,6 +18,7 @@ describe("what the copy was handed when it opened", () => {
     ["no server", { copyName: "Feature 1" }],
     ["a server that is not an address", { copyName: "Feature 1", apiUrl: "the laptop" }],
     ["another app's settings", { eas: { projectId: "x" } }],
+    ["the store's app with a server that is not https", { apiUrl: "http://api.example.com" }],
   ])("%s reads as no settings", (_name, extra) => {
     hand(extra);
     expect(readAppExtra()).toBeNull();

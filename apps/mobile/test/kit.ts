@@ -44,7 +44,7 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
   const asked: Asked[] = [];
   const all: Record<string, Route> = { "/health": () => ({ status: 200, body: { status: "ok" } }), ...routes };
   const ask: Ask = async (url: string, init: AskInit) => {
-    const path = url.slice(API.length);
+    const path = new URL(url).pathname;
     asked.push({
       path,
       body: init.body === undefined ? undefined : (JSON.parse(init.body) as unknown),

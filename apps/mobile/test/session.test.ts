@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SIGNED_IN_ELSEWHERE } from "@app/shared";
-import { createSession, REFRESH_RETRY_AFTER_MS, type SessionState } from "../src/session/session";
+import { createSession, type SessionState } from "../src/session/session";
 import { API, RAVI, fakeServer, kept, lost, memoryStore, never, refusal, tokens, type Reply, type Route } from "./kit";
 
 const MEERA = { ...RAVI, id: "0e3d7a11-58a4-4f0b-8f1d-6c2b9a7e4d10", email: "meera@example.com", displayName: "Meera" };
@@ -23,7 +23,7 @@ function phone(routes: Record<string, Route>, held: string | null = null, clock 
   return { session, store, server, seen, waits, clock };
 }
 
-const signedInAs = (user: typeof RAVI) => ({ kind: "in", user, isNewAccount: false });
+const signedInAs = (user: typeof RAVI) => ({ kind: "in", user });
 
 afterEach(() => {
   vi.useRealTimers();
@@ -45,8 +45,8 @@ describe("the worst thing: no internet never signs anybody out, and a signed-out
     await session.start();
     expect(session.state()).toEqual(signedInAs(RAVI));
     expect(store.value).toBe(kept(1));
-    // With no answer it is tried again inside the server's minute, the same token each time.
-    expect(waits).toEqual(was === "answered" ? [] : [...REFRESH_RETRY_AFTER_MS]);
+    // With no answer it is tried again after 2, 5 and 10 seconds, the same token each time.
+    expect(waits).toEqual(was === "answered" ? [] : [2000, 5000, 10000]);
     expect(server.asked.map((one) => one.body)).toEqual(Array(was === "answered" ? 1 : 4).fill({ refreshToken: "refresh-1" }));
   });
 
@@ -137,6 +137,29 @@ describe("opening the app", () => {
     expect(server.asked).toEqual([]);
   });
 
+  it("a key store that fails once is asked once more, to read and to write", async () => {
+    const { session, store, server } = phone({ "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }) }, kept(1));
+    const read = store.read;
+    const write = store.write;
+    let reads = 0;
+    let writes = 0;
+    store.read = () => (++reads === 1 ? Promise.reject(new Error("keystore busy")) : read());
+    store.write = (value) => (++writes === 1 ? Promise.reject(new Error("keystore busy")) : write(value));
+    await session.start();
+    expect(session.state()).toEqual(signedInAs(RAVI));
+    expect([reads, writes]).toEqual([2, 2]);
+    expect(store.value).toBe(kept(2));
+    expect(server.asked).toHaveLength(1);
+  });
+
+  it("a key store that cannot be read at all opens signed out, and asks the server nothing", async () => {
+    const { session, store, server } = phone({}, kept(1));
+    store.read = () => Promise.reject(new Error("keystore gone"));
+    await session.start();
+    expect(session.state()).toEqual({ kind: "out", note: null });
+    expect(server.asked).toEqual([]);
+  });
+
   it("a kept sign-in opens signed in, takes a new token and keeps it", async () => {
     const { session, store, server } = phone({ "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }) }, kept(1));
     await session.start();
@@ -172,10 +195,64 @@ describe("opening the app", () => {
 });
 
 describe("one refresh at a time, and the answer to the last try", () => {
-  it("two asks while one is away send one request", async () => {
-    const { session, server } = phone({ "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }) }, kept(1));
-    await Promise.all([session.start(), session.refresh(), session.refresh()]);
+  it("two more asks while one is away send no second request", async () => {
+    let answer: (reply: Reply) => void = () => undefined;
+    const { session, server } = phone(
+      { "/v1/auth/refresh": () => new Promise<Reply>((resolve) => (answer = resolve)) },
+      kept(1),
+    );
+    const started = session.start();
+    // The first refresh is away, held open, and the person is signed in.
+    await vi.waitFor(() => {
+      expect(server.paths()).toEqual(["/v1/auth/refresh"]);
+    });
+    expect(session.state().kind).toBe("in");
+    const more = [session.refresh(), session.refresh()];
+    answer({ status: 200, body: { tokens: tokens(2) } });
+    await Promise.all([started, ...more]);
     expect(server.paths()).toEqual(["/v1/auth/refresh"]);
+    expect(session.accessToken()).toBe("access-2");
+  });
+
+  it("the last person's refresh, still away, is not the next person's: theirs is sent with their own token", async () => {
+    const answers: ((reply: Reply) => void)[] = [];
+    const { session, server, store } = phone(
+      {
+        "/v1/auth/refresh": () => new Promise<Reply>((resolve) => answers.push(resolve)),
+        "/v1/auth/logout": () => ({ status: 200, body: {} }),
+        "/v1/auth/code/verify": () => ({ status: 200, body: { user: MEERA, isNewAccount: false, tokens: tokens(7) } }),
+      },
+      kept(1),
+    );
+    const started = session.start();
+    await vi.waitFor(() => {
+      expect(answers).toHaveLength(1);
+    });
+    await session.signOut();
+    await session.verifyCode(MEERA.email, "123456");
+    const hers = session.refresh();
+    await vi.waitFor(() => {
+      expect(answers).toHaveLength(2);
+    });
+    expect(server.asked.filter((one) => one.path === "/v1/auth/refresh").map((one) => one.body)).toEqual([
+      { refreshToken: "refresh-1" },
+      { refreshToken: "refresh-7" },
+    ]);
+    answers[1]?.({ status: 200, body: { tokens: tokens(8) } });
+    await hers;
+    // The last person's answer comes last, and changes nothing of hers.
+    answers[0]?.({ status: 200, body: { tokens: tokens(2) } });
+    await started;
+    expect(store.value).toBe(kept(8, MEERA));
+    expect(session.accessToken()).toBe("access-8");
+    // Her one-at-a-time rule still holds after his run has ended.
+    const again = [session.refresh(), session.refresh()];
+    await vi.waitFor(() => {
+      expect(answers).toHaveLength(3);
+    });
+    answers[2]?.({ status: 200, body: { tokens: tokens(9) } });
+    await Promise.all(again);
+    expect(answers).toHaveLength(3);
   });
 
   it("a reply that comes too late is dropped: the same token is sent again and the LAST try's answer is kept", async () => {
@@ -246,7 +323,7 @@ describe("signing in with a code", () => {
         headers: { "content-type": "application/json" },
       },
     ]);
-    expect(session.state()).toEqual({ kind: "in", user: RAVI, isNewAccount: true });
+    expect(session.state()).toEqual({ kind: "in", user: RAVI });
     expect(store.value).toBe(kept(1));
     expect(session.accessToken()).toBe("access-1");
   });

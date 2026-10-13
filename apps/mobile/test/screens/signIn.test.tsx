@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { AppState, StyleSheet, type AppStateStatus, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { App } from "../../src/App";
 import { pictures } from "../../src/look/pictures";
 import { RAVI, fakeServer, kept, lost, memoryStore, refusal, tokens, type Route } from "../kit";
@@ -100,6 +100,61 @@ describe("the worst thing, on the screen", () => {
   });
 });
 
+describe("coming back to the app", () => {
+  it("after ten minutes away a new token is asked for, so an older phone learns it was signed out; sooner, nothing", async () => {
+    let heard: (next: AppStateStatus) => void = () => undefined;
+    // For this opening of the app only: React Native's own stand-in is left as it was for the tests after.
+    const listened = jest.spyOn(AppState, "addEventListener").mockImplementationOnce((_event, listener) => {
+      heard = listener;
+      return { remove: () => undefined };
+    });
+    const opened = 1_800_000_000_000;
+    const clock = jest.spyOn(Date, "now").mockReturnValue(opened);
+    try {
+      let elsewhere = false;
+      const { server, store } = await openApp(
+        {
+          "/v1/auth/refresh": () =>
+            elsewhere
+              ? refusal(401, "signed_in_elsewhere", "You were signed out because your account was signed in on another phone.")
+              : { status: 200, body: { tokens: tokens(2) } },
+        },
+        kept(1),
+      );
+      const refreshes = () => server.paths().filter((path) => path === "/v1/auth/refresh");
+      await screen.findByRole("tab", { name: "Dashboard" });
+      await waitFor(() => {
+        expect(refreshes()).toHaveLength(1);
+      });
+      expect(listened).toHaveBeenCalledWith("change", expect.any(Function));
+
+      // Back after nine minutes, and the app going to the background: nothing is asked.
+      clock.mockReturnValue(opened + 9 * 60 * 1000);
+      await act(async () => {
+        heard("active");
+        heard("background");
+        await Promise.resolve();
+      });
+      expect(refreshes()).toHaveLength(1);
+
+      // Back after ten: asked, and this phone was signed out on another one meanwhile.
+      elsewhere = true;
+      clock.mockReturnValue(opened + 10 * 60 * 1000);
+      await act(async () => {
+        heard("active");
+        await Promise.resolve();
+      });
+      expect(
+        await screen.findByText("You were signed out because your account was signed in on another phone."),
+      ).toBeTruthy();
+      expect(refreshes()).toHaveLength(2);
+      expect(store.value).toBeNull();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+});
+
 describe("signing in by email code", () => {
   it("a phone that holds no sign-in opens on Get started, with no tabs", async () => {
     const { server } = await openApp({});
@@ -191,18 +246,40 @@ describe("signing in by email code", () => {
     expect(screen.getByRole("button", { name: "Continue" }).props.accessibilityState).toEqual({ disabled: false, busy: false });
   });
 
-  it("asked again inside the minute: the code box opens for the code already sent, and Resend waits the server's time", async () => {
+  // Sign in, Sign out, the same address at once: the only code is the one that signed the
+  // person in. Nothing was sent, so nothing says one was.
+  it("asked again inside the minute: the code box opens, and never says a code was sent", async () => {
+    let refused = true;
     await openApp({
       "/v1/auth/code/send": () =>
-        refusal(429, "code_too_soon", "Please wait 42 seconds before asking for a new code.", { retryAfterSeconds: 42 }),
+        refused
+          ? refusal(429, "code_too_soon", "Please wait 1 seconds before asking for a new code.", { retryAfterSeconds: 1 })
+          : { status: 200, body: { message: "Sent.", resendAfterSeconds: 60, expiresInSeconds: 600 } },
     });
     await askForCode();
     expect(await screen.findByLabelText("6-digit code")).toBeTruthy();
+    expect(screen.getByText("Enter your code.")).toBeTruthy();
+    expect(screen.getByText("You asked for a code less than a minute ago for")).toBeTruthy();
+    expect(screen.getByText("Enter it, or resend when the countdown ends.")).toBeTruthy();
+    expect(screen.queryByText("Check your email.")).toBeNull();
+    expect(screen.queryByText(/sent/i)).toBeNull();
+    expect(screen.getByRole("button", { name: "Resend code in 1s" }).props.accessibilityState).toEqual({ disabled: true, busy: false });
+
+    // The countdown over, "less than a minute ago" would be false, and is gone.
+    expect(await screen.findByText("Enter the code you have for", {}, { timeout: 4000 })).toBeTruthy();
+    expect(screen.getByText("Or resend for a new one.")).toBeTruthy();
+    expect(screen.queryByText(/less than a minute ago/)).toBeNull();
+    expect(screen.queryByText(/sent/i)).toBeNull();
+
+    // A code that DID go out is the only thing that says so.
+    refused = false;
+    await press("Resend code");
+    expect(await screen.findByText("Check your email.")).toBeTruthy();
     expect(screen.getByText("Enter the 6-digit code sent to")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Resend code in 42s" }).props.accessibilityState).toEqual({ disabled: true, busy: false });
+    expect(screen.getByText("New code sent.")).toBeTruthy();
   });
 
-  it("a wrong code says what the server says and empties the box; no internet keeps the digits", async () => {
+  it("a wrong code says what the server says and empties the box; no internet keeps the digits; a code the lost check spent says so", async () => {
     let online = true;
     const { store } = await openApp({
       "/v1/auth/code/send": sent,
@@ -222,6 +299,14 @@ describe("signing in by email code", () => {
     await press("Continue");
     expect(await screen.findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
     expect(screen.getByLabelText("6-digit code").props.value).toBe("222222");
+    // The same digits again, refused: the check that got no answer spent them at the server.
+    online = true;
+    await press("Continue");
+    expect(await screen.findByText("That code can’t be used again. Resend code.")).toBeTruthy();
+    // Other digits are only wrong, in the server's own words.
+    await type("6-digit code", "333333");
+    await press("Continue");
+    expect(await screen.findByText("That code is wrong. You have 4 tries left.")).toBeTruthy();
     expect(screen.queryAllByRole("tab")).toEqual([]);
     expect(store.value).toBeNull();
   });

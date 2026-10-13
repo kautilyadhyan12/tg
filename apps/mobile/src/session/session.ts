@@ -22,7 +22,7 @@ export type SessionState =
   | { kind: "starting" }
   /** `note`: why the sign-in screen is showing, when the person did not just open the app. */
   | { kind: "out"; note: string | null }
-  | { kind: "in"; user: AuthUser; isNewAccount: boolean };
+  | { kind: "in"; user: AuthUser };
 
 export const SIGNED_OUT_NOTES = {
   own: "You’re signed out.",
@@ -30,8 +30,9 @@ export const SIGNED_OUT_NOTES = {
   ended: "Your session ended. Sign in again.",
 } as const;
 
-/** The server answers a refresh sent again within 60 seconds of one whose reply was lost
- *  (spec Part 3 §10.5), so a refresh with no answer is tried again inside that minute. */
+/** A refresh with no answer is tried again, soon and then less soon. The server answers the
+ *  same token again for as long as the one that replaced it was never used (spec Part 3
+ *  §10.5), so a reply lost here costs nothing, today or the next time the app is opened. */
 export const REFRESH_RETRY_AFTER_MS = [2_000, 5_000, 10_000] as const;
 const REFRESH_WAIT_MS = 8_000;
 /** The access token lasts 15 minutes; a new one is asked for when the app is opened past this. */
@@ -71,16 +72,26 @@ export function createSession({
   let state: SessionState = { kind: "starting" };
   let kept: PhoneKeptSession | null = null;
   let access: { token: string; at: number } | null = null;
-  let refreshing: Promise<void> | null = null;
+  /** The refresh that is away, and whose sign-in it is for: one at a time for each. */
+  let refreshing: { run: Promise<void>; of: PhoneKeptSession } | null = null;
 
   const show = (next: SessionState) => {
     state = next;
     onChange(next);
   };
 
+  /** A key store that fails once is asked once more: one bad read must not show Get started. */
+  const twice = async <T>(ask: () => Promise<T>): Promise<T> => {
+    try {
+      return await ask();
+    } catch {
+      return await ask();
+    }
+  };
+
   const readKept = async (): Promise<PhoneKeptSession | null> => {
     try {
-      const written = await store.read();
+      const written = await twice(store.read);
       if (written === null) return null;
       const parsed = phoneKeptSessionSchema.safeParse(JSON.parse(written));
       return parsed.success ? parsed.data : null;
@@ -93,9 +104,10 @@ export function createSession({
     kept = next;
     access = { token: accessToken, at: now() };
     try {
-      await store.write(JSON.stringify(next));
+      await twice(() => store.write(JSON.stringify(next)));
     } catch {
-      // Signed in for as long as the app stays open; the next opening asks again.
+      // Signed in for as long as the app stays open. The key store still holds the token
+      // before this one, which the server takes again until this one is used.
     }
   };
 
@@ -134,18 +146,19 @@ export function createSession({
   };
 
   const refresh = (): Promise<void> => {
-    if (refreshing !== null) return refreshing;
     const mine = kept;
     if (mine === null) return Promise.resolve();
+    // The last person's refresh, still away, is not this person's.
+    if (refreshing !== null && refreshing.of === mine) return refreshing.run;
     const run = (async () => {
       for (const pause of [0, ...REFRESH_RETRY_AFTER_MS]) {
         if (pause > 0) await wait(pause);
         if (kept !== mine || (await refreshOnce(mine)) === "done") return;
       }
     })().finally(() => {
-      refreshing = null;
+      if (refreshing?.run === run) refreshing = null;
     });
-    refreshing = run;
+    refreshing = { run, of: mine };
     return run;
   };
 
@@ -157,7 +170,7 @@ export function createSession({
 
     start: async () => {
       kept = await readKept();
-      show(kept === null ? { kind: "out", note: null } : { kind: "in", user: kept.user, isNewAccount: false });
+      show(kept === null ? { kind: "out", note: null } : { kind: "in", user: kept.user });
       await refresh();
     },
 
@@ -171,9 +184,9 @@ export function createSession({
         verifyCodePhoneResponseSchema,
       );
       if (answer.kind === "ok") {
-        const { user, tokens, isNewAccount } = answer.data;
+        const { user, tokens } = answer.data;
         await keep({ refreshToken: tokens.refreshToken, user }, tokens.accessToken);
-        show({ kind: "in", user, isNewAccount });
+        show({ kind: "in", user });
       }
       return answer;
     },

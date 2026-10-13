@@ -36,12 +36,14 @@ export function ThisCopy() {
       </Txt>
     );
   }
-  const copy = extra.copyName === undefined ? "This app" : `${extra.copyName} test copy`;
+  // The store's app has no copy to name: it says nothing here while its server is reached.
+  if (extra.copyName === undefined && state !== "unreachable") return null;
+  const copy = extra.copyName === undefined ? "" : `${extra.copyName} test copy · `;
   if (state === "unreachable") {
     return (
       <View style={styles.row}>
         <Txt kind="small" colour="badText">
-          {copy} · Can’t reach the server
+          {copy}Can’t reach the server
         </Txt>
         <Button label="Try again" kind="link" onPress={check} />
       </View>
@@ -49,7 +51,8 @@ export function ThisCopy() {
   }
   return (
     <Txt kind="small" colour="textFaint" style={styles.centre}>
-      {copy} · {state === "checking" ? "Checking…" : "Connected"}
+      {copy}
+      {state === "checking" ? "Checking…" : "Connected"}
     </Txt>
   );
 }
