@@ -1,4 +1,4 @@
-// A gym's waiver and who signed it (ROADMAP 3e-i). Mirrors `0102_gym_waiver.sql`.
+// A gym's waiver and who signed it (ROADMAP 3e-i). Mirrors `0103_gym_waiver.sql`.
 //
 // Every wording a gym saves is a row, numbered from 1; its waiver today is the highest
 // version, unless `stoppedAt` is set. A signature names the wording the person was shown.

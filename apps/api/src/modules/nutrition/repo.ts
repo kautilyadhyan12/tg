@@ -175,47 +175,97 @@ export async function getLiveGymId(sql: Sql, userId: string): Promise<string | n
 
 // ── meals ────────────────────────────────────────────────────────────────────
 
+/** Writes the meal and, where the estimate was changed, its correction. `id` null:
+ *  the database makes the id. null back: a meal already has that id. */
+async function insertMeal(tx: TransactionSql, userId: string, id: string | null, input: MealWrite): Promise<MealRow | null> {
+  const t = totals(input.items);
+  const rows = await tx<MealDbRow[]>`
+    INSERT INTO meal_logs (id, user_id, taken_at, meal_type, meal_name, items,
+                           kcal_point, kcal_low, kcal_high,
+                           protein_g, carbs_g, fat_g,
+                           confirmed, origin, portion_source, nutrition_sources, calc_version)
+    VALUES (COALESCE(${id}::uuid, gen_random_uuid()), ${userId}, ${input.takenAt}, ${input.mealType}, ${input.mealName}, ${tx.json(input.items)},
+            ${t.kcalPoint}, ${t.kcalLow}, ${t.kcalHigh},
+            ${t.proteinG}, ${t.carbsG}, ${t.fatG},
+            true, ${input.origin}, ${worst(input.items)}, ${sources(input.items)}, 1)
+    ON CONFLICT (id) DO NOTHING
+    RETURNING id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
+           protein_g, carbs_g, fat_g, confirmed, origin, portion_source,
+           nutrition_sources, calc_version`;
+  const row = rows[0];
+  if (row === undefined) return null;
+
+  // 2B Stage 5: a confirm that changed the estimate records the correction —
+  // stamped with the ORIGINAL estimate's rung (T3 P2.6a finding 3: the rung
+  // that produced the wrong number is the telemetry signal, not the user's
+  // corrected state). Card 5c: the diff is estimate-vs-confirmed for the
+  // ESTIMATED items only. An empty originalItems means nothing was estimated
+  // (an all-added meal), so there is no correction and no rung to stamp —
+  // worst([]) would otherwise fabricate the BEST rung ('user_dishware').
+  const corrected = input.correctedItems ?? input.items;
+  if (
+    input.originalItems !== undefined &&
+    input.originalItems.length > 0 &&
+    JSON.stringify(input.originalItems) !== JSON.stringify(corrected)
+  ) {
+    await tx`
+      INSERT INTO meal_log_corrections (meal_log_id, field, original, corrected, portion_source)
+      VALUES (${row.id}, 'items', ${tx.json(input.originalItems)}, ${tx.json(corrected)},
+              ${worst(input.originalItems)})`;
+  }
+  return toMeal(row);
+}
+
 export async function createMeal(sql: Sql, userId: string, input: MealWrite): Promise<MealRow> {
   return await sql.begin(async (tx) => {
-    const t = totals(input.items);
-    const rows = await tx<MealDbRow[]>`
-      INSERT INTO meal_logs (user_id, taken_at, meal_type, meal_name, items,
-                             kcal_point, kcal_low, kcal_high,
-                             protein_g, carbs_g, fat_g,
-                             confirmed, origin, portion_source, nutrition_sources, calc_version)
-      VALUES (${userId}, ${input.takenAt}, ${input.mealType}, ${input.mealName}, ${tx.json(input.items)},
-              ${t.kcalPoint}, ${t.kcalLow}, ${t.kcalHigh},
-              ${t.proteinG}, ${t.carbsG}, ${t.fatG},
-              true, ${input.origin}, ${worst(input.items)}, ${sources(input.items)}, 1)
-      RETURNING id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
-             protein_g, carbs_g, fat_g, confirmed, origin, portion_source,
-             nutrition_sources, calc_version`;
-    const row = rows[0];
-    if (row === undefined) throw new Error("meal insert returned no row");
-
-    // 2B Stage 5: a confirm that changed the estimate records the correction —
-    // stamped with the ORIGINAL estimate's rung (T3 P2.6a finding 3: the rung
-    // that produced the wrong number is the telemetry signal, not the user's
-    // corrected state). Card 5c: the diff is estimate-vs-confirmed for the
-    // ESTIMATED items only. An empty originalItems means nothing was estimated
-    // (an all-added meal), so there is no correction and no rung to stamp —
-    // worst([]) would otherwise fabricate the BEST rung ('user_dishware').
-    const corrected = input.correctedItems ?? input.items;
-    if (
-      input.originalItems !== undefined &&
-      input.originalItems.length > 0 &&
-      JSON.stringify(input.originalItems) !== JSON.stringify(corrected)
-    ) {
-      await tx`
-        INSERT INTO meal_log_corrections (meal_log_id, field, original, corrected, portion_source)
-        VALUES (${row.id}, 'items', ${tx.json(input.originalItems)}, ${tx.json(corrected)},
-                ${worst(input.originalItems)})`;
-    }
-    return toMeal(row);
+    const row = await insertMeal(tx, userId, null, input);
+    if (row === null) throw new Error("meal insert returned no row");
+    return row;
   });
 }
 
-export async function getMeal(sql: Sql, userId: string, id: string): Promise<MealRow | null> {
+const lockMealId = async (tx: TransactionSql, id: string): Promise<void> => {
+  await tx`SELECT pg_advisory_xact_lock(hashtext(${`meal:${id}`}))`;
+};
+
+/** A meal saved under the phone's own id (ROADMAP 32a): the same id sent twice is
+ *  one meal. `claim` runs once the row is written and before it is kept, so
+ *  whatever it throws leaves no meal. `created` false: this person already has
+ *  that meal, returned as it is now. null: the id is somebody else's. */
+export async function createMealOnce(
+  sql: Sql,
+  userId: string,
+  id: string,
+  input: MealWrite,
+  claim?: () => Promise<unknown>,
+): Promise<{ meal: MealRow; created: boolean } | null> {
+  return await sql.begin(async (tx) => {
+    await lockMealId(tx, id);
+    const row = await insertMeal(tx, userId, id, input);
+    if (row === null) {
+      const kept = await getMeal(tx, userId, id);
+      return kept === null ? null : { meal: kept, created: false };
+    }
+    if (claim !== undefined) await claim();
+    return { meal: row, created: true };
+  });
+}
+
+/** Whether any meal, anybody's, has that id. */
+export async function mealIdTaken(sql: Sql, id: string): Promise<boolean> {
+  const rows = await sql`SELECT 1 FROM meal_logs WHERE id = ${id}`;
+  return rows.length > 0;
+}
+
+/** The person's meal under that id once any save of it under way has ended. */
+export async function getMealOnceSaved(sql: Sql, userId: string, id: string): Promise<MealRow | null> {
+  return await sql.begin(async (tx) => {
+    await lockMealId(tx, id);
+    return await getMeal(tx, userId, id);
+  });
+}
+
+export async function getMeal(sql: SqlOrTx, userId: string, id: string): Promise<MealRow | null> {
   const rows = await sql<MealDbRow[]>`
     SELECT id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
              protein_g, carbs_g, fat_g, confirmed, origin, portion_source,

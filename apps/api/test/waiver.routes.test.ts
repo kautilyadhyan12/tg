@@ -1,5 +1,5 @@
 // A GYM'S WAIVER — routes against REAL Postgres (DATABASE_URL-gated). ROADMAP Stage 2
-// item 3e-i; needs migration 0102.
+// item 3e-i; needs migration 0103.
 //
 // The first block is the worst thing this job could do to a real person (CLAUDE.md §2.1):
 // show somebody as having signed words they never saw, or put a signature on a relative

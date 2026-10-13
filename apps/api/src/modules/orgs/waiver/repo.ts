@@ -1,4 +1,4 @@
-// A gym's waiver and its signatures (ROADMAP 3e-i; migration 0102). Every statement
+// A gym's waiver and its signatures (ROADMAP 3e-i; migration 0103). Every statement
 // carries the gym in its WHERE.
 import type { Sql, TransactionSql } from "postgres";
 

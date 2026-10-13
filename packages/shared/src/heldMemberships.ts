@@ -695,6 +695,9 @@ export const giveHeldMembershipRequestSchema = z
     paid: z.boolean(),
     /** How they paid, where `paid` is true and the type has a price (18a-i). */
     method: memberPaymentByHandSchema.optional(),
+    /** The price the screen showed, where it showed one (the Sell page, 18b-i): a type
+     *  whose price is now anything else is not given. */
+    priceMinor: z.number().int().min(0).max(99_999_999).optional(),
   })
   .strict();
 export type GiveHeldMembershipRequest = z.infer<typeof giveHeldMembershipRequestSchema>;

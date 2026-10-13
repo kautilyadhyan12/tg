@@ -28,6 +28,7 @@ import DatePick from '../../components/console/DatePick';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
 import { ptEndingAction, ptSessionsAsked } from './ptSessionsEndView';
 import MemberMemberships from './MemberMemberships';
+import MemberPurchases from './MemberPurchases';
 import MemberNotes from './MemberNotes';
 import MembershipChoice from './MembershipChoice';
 import { METHOD_NEEDED, giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
@@ -1353,6 +1354,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
           addNow={addMembership}
         />
+        <MemberPurchases key={`purchases-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} past={p.formerAt !== null} />
         <MemberNotes key={`notes-${p.entryId}`} gymId={gymId} entryId={p.entryId} name={p.fullName} readOnly={readOnly} timeZone={gym?.timezone ?? null} />
         {membership.length > 0 ? (
           // What the gym's own list says about them, in its words; the box above is what

@@ -41,6 +41,8 @@ function openableToday(privileges) {
     `${BASE}/members`,
     // Memberships (23c-i): its own page, for whoever may change the price list.
     ...(has('memberships.manage') ? [`${BASE}/memberships`] : []),
+    // Sell (18b-i): its own page, for whoever may record a sale or change products.
+    ...(has('billing.members') || has('memberships.manage') ? [`${BASE}/sell`] : []),
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
     // At risk (20d-i): its own page, for whoever may see the gym's people.

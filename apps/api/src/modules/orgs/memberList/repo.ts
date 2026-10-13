@@ -2261,6 +2261,12 @@ export async function moveMembershipLinks(tx: TransactionSql, gymId: string, fro
   return joined.length + removed.length;
 }
 
+/** Two records joined: what the one not kept bought at the desk (18b-i) becomes the kept
+ *  one's, each sale as it is. */
+export async function moveSaleLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<void> {
+  await tx`UPDATE gym_sales SET entry_id = ${toEntryId} WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}`;
+}
+
 /** Two records joined: the visits of the one not kept become the kept one's (16a). A
  *  visit in a period the kept record already has a visit for is the same visit, so it
  *  goes rather than counting the person twice, and the app account it named is given to
