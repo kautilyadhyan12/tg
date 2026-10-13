@@ -36,6 +36,13 @@ of the pose LIBRARY on such a phone. Android and iPhone are one Expo app; Kd wor
 Windows, so iPhone builds run in EAS's cloud. The member web stays as the testing
 place until the phone app holds everything, and is deleted then.
 
+**AMENDED 2026-10-12 (RULINGS that day; §16 below).** The two versions above are ONE
+list now: the phone app gets every member feature except the chatbot, and the Exercise
+Library, the Workout section and camera form tracking are planned in Part 2 §11. Google's
+closed test starts when the app is completely built, not with a small first build. Apple
+sign-in comes with the iPhone version. §3.6's automatic step-down is not built. Where
+this Part differs from §16, §16 wins.
+
 ## 0. Amendments & locked context
 
 1. **Engine thread placement** (amends v1 §12's "landmarks stay in
@@ -500,6 +507,98 @@ mismatch impossible to ship |
 | GIF/app-size bloat | §9 pipeline; app stays < 60 MB installed |
 | Two-store release overhead (solo dev) | Android-first (§0.3); iOS rides
 the same EAS pipeline when Android is proven |
+
+---
+
+## 16. The plan of 2026-10-12 (Kd, RULINGS that day; ROADMAP Stage 5)
+
+Written by a planning terminal that read the member web and the server that day. No
+code. Where an earlier section of this Part differs, this section wins.
+
+### 16.1 What the phone app is
+
+Every member feature except the chatbot, in ONE list (2026-09-22's first and second
+version are gone), and the exercises, which are Part 2 §11. One Expo app for Android and
+iPhone from one code, the member's alone. Android first. The iPhone version, with Apple
+sign-in, waits for Kd's Apple developer account and an iPhone; its builds are made in
+EAS's cloud, because his laptop is Windows. Google's closed test (12 testers, 14 days)
+starts when the app is completely built. From 2026-10-12 a member feature is built for
+the phone only.
+
+### 16.2 What the member web holds today (read in the code 2026-10-12, not run)
+
+**Works on the new server:** sign-in by code and by Google with the robot check, "Before
+you start", the invitations gate, setup (eleven screens), Nutrition (search, measures,
+the photo scan, a person's own ring numbers, saved dishes), Progress but for its
+predictions, My Gyms (the pass, the days you came, Inbox with Contact the gym and the
+switches, Updates, a person's profile, Events, Leaderboard, Challenges, Classes, Personal
+training), Settings (profile, fitness, health, gym, account), the workout save and its
+summary.
+
+**Dead, because it reads the old backend (`mlApi`):** Running's four pages and the run
+bar · on the Dashboard: Recommended For You, Weekly Challenges, the rank in Your Rank,
+Latest Badges · Achievements' three tabs · Progress's AI Predictions · saved workouts ·
+the profile photo. Settings → Notifications saves nothing, and says so.
+
+**On the server with no screen:** the streak's freezes and the 20 badges of
+`/v1/gamification/me` (the web reads only its XP) · `/v1/users/me/export` · `/v1/geo/*`
+(routes and runs, read only: no route records a run) · `/v1/exercise-definitions` ·
+renaming and deleting a saved dish.
+
+**No server at all for:** a profile photo · saved workouts (the table `workout_templates`
+has no routes) · the badge list, weekly challenges, a global board · predictions ·
+recommendations · notification preferences · recording a run.
+
+**Sign-in on the server:** `authenticate` already takes `Authorization: Bearer` as well
+as the cookie. The refresh route reads its token only from the cookie, and no reply body
+carries a token. Nothing ends an older session, so "one phone at a time" (Part 3 §10.5)
+is still to build. The side menu has ten lines and no breakpoint.
+
+### 16.3 How the app is built
+
+The terminal's own choices, each a job's to better with a reason.
+
+- **Typed, and one place for shapes.** `apps/mobile` is TypeScript under the shared
+  strict config. It reads `@app/shared`'s Zod shapes and parses every reply with them, so
+  a changed shape fails the build or one parse, never a blank screen. The web's axios
+  clients are not shared.
+- **One look, drawn first** (item 11): the console's named colours and Archivo, light and
+  dark, and the building blocks every screen uses. Five tabs: Today · Workout · Food ·
+  Gym · Me. Progress and Settings are under Me, Running under Workout. A person with no
+  gym reads, on Gym, how an invitation reaches them.
+- **Sign-in** (item 12; §8): the refresh token in SecureStore, the access token in
+  memory. The server's sign-in learns a phone client (`refresh_tokens.client`, Part 3
+  §10.5), which alone is sent its tokens in the reply. Risky: the two extra passes.
+- **Kept on the phone until the server has it** (§4): what a person DOES (a workout, a
+  meal, a weigh-in, a run) is written to the phone first and sent when the internet is
+  there, each route safe to call twice. Built once, with the workout (item 61), then used
+  by the rest. A lost connection never signs anybody out and never loses what they did.
+- **Notifications** (item 18; §6) are sent by the server through Firebase. The six
+  switches the web only drew become real ones, kept on the server (item 38).
+- **No automatic step-down** (RULINGS 2026-08-17 and 2026-10-12): §3.6's ladder is not
+  built. The pose model is chosen once, by item 51's test; a phone that cannot keep up
+  is told so, and counts by hand.
+- **Four copies on one phone.** Each folder installs its OWN copy of the app on Kd's one
+  phone (its own application id, the folder's name under the icon), talking to that
+  folder's api through the USB cable (`adb reverse`). Each folder's `FOLDER.md` names its
+  ports. Metro's usual port, 8081, is taken on his laptop.
+- **Walked on the real phone.** Before Kd is asked to click through, the terminal walks
+  the whole task on the phone itself (CLAUDE.md §4), and says what it saw.
+
+### 16.4 The order
+
+ROADMAP Stage 5: feature folder 1, items 10 to 21 · feature folder 2, items 30 to 38.
+Item 10 is first; item 30 needs no phone and starts beside it. Every phone screen waits
+for items 10, 11 and 12. A numbered item is a step of one or more jobs, split by the
+terminal that reaches it.
+
+### 16.5 Kd's own steps, each when its job comes
+
+His phone on USB with USB debugging on, and its make and model (item 10) · Windows' long
+file names switched on, one command as administrator, if a build asks for it (item 10) ·
+a Firebase project (item 18) · a Cloudflare account for clips and photos (item 62; Stage
+4 item 4) · the Google Play developer account and twelve testers, when the app is
+completely built (item 21) · the Apple developer account and an iPhone (item 21).
 
 ---
 

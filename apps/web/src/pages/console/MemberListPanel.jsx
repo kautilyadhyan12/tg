@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronRight, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { HELD_PAYMENT_WORDS, MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
@@ -367,6 +368,13 @@ function DuplicatesSign({ duplicates }) {
   );
 }
 
+/** The filter the list opens on when Overview's Last 7 days box sent staff here. */
+function startFilters(show) {
+  if (show === PAYMENT_DUE_SHOW) return { ...EMPTY_FILTERS, paymentStatus: [HELD_PAYMENT_WORDS.due] };
+  if (show === PAST_PAYMENT_DUE_SHOW) return { ...EMPTY_FILTERS, records: 'former', paymentStatus: [HELD_PAYMENT_WORDS.due] };
+  return EMPTY_FILTERS;
+}
+
 // `onRosterChanged` tells the Members screen that the list moved, so "Using the app",
 // whose "not on your list" marks read the list, is read again. `action` is the header's
 // Import or Add member, pressed; `onActionTaken` clears it.
@@ -382,10 +390,21 @@ export default function MemberListPanel({
   onRosterChanged = () => undefined,
   canRemove = false,
   sentMessagesTo = null,
+  startShow = null,
+  onStartTaken = () => undefined,
 }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  // Overview's "See who" beside Payment due opens the list already showing them, or the
+  // past members who still owe (20d-ii).
+  const [filters, setFilters] = useState(() => startFilters(startShow));
+  // Said once, when the list is first drawn: the filter is the list's own from then on.
+  const started = useRef(startShow !== null);
+  useEffect(() => {
+    if (!started.current) return;
+    started.current = false;
+    onStartTaken();
+  }, [onStartTaken]);
   const [typed, setTyped] = useState('');
   const [page, setPage] = useState({ loading: true, error: null, entries: [], total: 0, cursor: null });
   const [loadingMore, setLoadingMore] = useState(false);

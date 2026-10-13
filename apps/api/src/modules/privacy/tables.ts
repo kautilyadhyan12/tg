@@ -60,6 +60,9 @@ export const DIRECT_DELETE_TABLES = [
   // person's own eating targets are their own data on `user_fitness_profiles`'
   // footing — deleted at Day 14 and exported.
   "user_nutrition_targets",
+  // A person's goals (migration 0099; ROADMAP Stage 5 item 30a): their own, deleted at
+  // Day 14 and exported.
+  "user_goals",
   // A member's reactions to their gym's posts (migration 0071; ROADMAP 19b-i): the
   // person's own taps, deleted at Day 14 and exported.
   "gym_post_reactions",
@@ -478,7 +481,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gym_member_bills",
   "gym_member_refunds",
   // gym_sales.recorded_by and undone_by — which member of staff recorded a sale at the
-  // desk and who took it back (`0099`), on the same footing: the gym's record; `ON DELETE
+  // desk and who took it back (`0100`), on the same footing: the gym's record; `ON DELETE
   // set null`. Who bought it is a record on the gym's list, not an account, and a sale
   // holds no typed word: the product's name as it was sold.
   "gym_sales",
