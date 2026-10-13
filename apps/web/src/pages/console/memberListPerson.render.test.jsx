@@ -839,6 +839,49 @@ describe('a person on the list', () => {
 
 // 23a-ii: where the app answers for a person (`held`, what the Members list's row reads),
 // their page says their status, membership, dates and payment ONCE, in the Memberships box.
+describe("the gym's waiver on a person's page (3e-i)", () => {
+  const MUM = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  const inApp = (over, page = {}) =>
+    entryAnswer({
+      ...ada,
+      inApp: true,
+      waiverInUse: true,
+      members: [{ userId: MUM, displayName: 'Ada L', joinedAt: '2026-09-07T10:00:00.000Z', visits: 0, lastVisitOn: null, sharedEmail: false, ...over }],
+      ...page,
+    });
+
+  it('says who signed, on what day and under what name', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(inApp({ waiverSigned: { name: 'Ada Lovelace', at: '2026-10-13T09:00:00.000Z' } }));
+    openBox(ADA);
+    const who = within(await screen.findByTestId('in-app-person'));
+    expect(who.getByTestId('waiver-line').textContent).toBe('Waiver signed on 13 October 2026 as Ada Lovelace');
+  });
+
+  it('says not signed for somebody in the app who has not, and a shared email shows the name that was typed', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(inApp({ waiverSigned: null }));
+    openBox(ADA);
+    expect(within(await screen.findByTestId('in-app-person')).getByTestId('waiver-line').textContent).toBe('Waiver not signed');
+    cleanup();
+    orgService.getMemberListEntry.mockResolvedValue(inApp({ displayName: 'Mum', sharedEmail: true, waiverSigned: { name: 'Leo Lovelace', at: '2026-10-13T09:00:00.000Z' } }));
+    openBox(ADA);
+    expect(within(await screen.findByTestId('in-app-person')).getByTestId('waiver-line').textContent).toBe('Waiver signed on 13 October 2026 as Leo Lovelace');
+  });
+
+  it('says why somebody with no app has not signed', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...ada, waiverInUse: true, members: [] }));
+    openBox(ADA);
+    expect((await screen.findByTestId('waiver-line')).textContent).toBe('Not signed. Ada Lovelace signs your waiver when they join in the app.');
+  });
+
+  it('says nothing about a waiver at a gym that asks for none', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(inApp({ waiverSigned: null }, { waiverInUse: false }));
+    openBox(ADA);
+    await screen.findByTestId('in-app-person');
+    expect(screen.queryByTestId('waiver-line')).toBeNull();
+    expect(dialog().queryByText(/waiver/i)).toBeNull();
+  });
+});
+
 describe('23a-ii: Details and Edit agree with the Memberships box', () => {
   const heldGold = {
     status: 'active',

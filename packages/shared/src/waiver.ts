@@ -99,6 +99,9 @@ export const WAIVER_WORDS = {
   nothing_to_stop: "You have no waiver in use.",
 } as const;
 
+/** A screen may send a signature: a name typed and the box ticked. */
+export const waiverReadyToSign = (name: string, agreed: boolean): boolean => agreed && cleanSignedName(name).length >= WAIVER_NAME_MIN_CHARS;
+
 /** The line under the agree box, the same on every screen that signs. */
 export const WAIVER_AGREE_LABEL = "I have read this waiver and I agree to it.";
 
@@ -109,6 +112,6 @@ export function waiverSaveAsks(input: { savedText: string | null; inUse: boolean
   if (draft === "" || input.people === 0) return null;
   const sameWords = input.savedText !== null && cleanWaiverText(input.savedText) === draft;
   if (sameWords) return input.inUse ? null : "People in the app who have not signed these words will be asked to sign.";
-  const who = input.people === 1 ? "The 1 person in the app" : `All ${input.people} people in the app`;
+  const who = input.people === 1 ? "The 1 person in the app" : `All ${String(input.people)} people in the app`;
   return input.savedText !== null && input.inUse ? `${who} will be asked to sign again, because the words have changed.` : `${who} will be asked to sign it.`;
 }

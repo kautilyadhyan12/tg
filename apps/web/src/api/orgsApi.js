@@ -79,6 +79,9 @@ import {
   memberListPreviewResponseSchema,
   memberListRowsResponseSchema,
   myInvitationsResponseSchema,
+  gymWaiverResponseSchema,
+  myWaiverResponseSchema,
+  signWaiverResponseSchema,
   notMeInvitationResponseSchema,
   billSettingsResponseSchema,
   classBookingSettingsResponseSchema,
@@ -631,13 +634,24 @@ export const orgService = {
   getInvitations: () =>
     readThrough(myInvitationsResponseSchema, 'your invitations', authApi.get('/v1/orgs/invitations')),
 
-  /** POST /v1/orgs/invitations/:invitationId/accept — Join, the one tap. */
-  acceptInvitation: (invitationId) =>
+  /** POST /v1/orgs/invitations/:invitationId/accept — Join, the one tap. `signature`
+   *  (`{ id, name }`) where the gym asks for a waiver: the wording shown and the name typed. */
+  acceptInvitation: (invitationId, signature = null) =>
     readThrough(
       acceptInvitationResponseSchema,
       'joining',
-      authApi.post(`/v1/orgs/invitations/${encodeURIComponent(invitationId)}/accept`, {}),
+      authApi.post(`/v1/orgs/invitations/${encodeURIComponent(invitationId)}/accept`, signature === null ? {} : { waiver: signature }),
     ),
+
+  // A GYM'S WAIVER (ROADMAP 3e-i). The first three are Settings', on `org.manage`; the
+  // last two are a member's own, at a gym they are in.
+  getGymWaiver: (gymId) => readThrough(gymWaiverResponseSchema, 'your waiver', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/waiver`)),
+  saveGymWaiver: (gymId, text) =>
+    readThrough(gymWaiverResponseSchema, 'your waiver', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/waiver`, { text })),
+  stopGymWaiver: (gymId) => readThrough(gymWaiverResponseSchema, 'your waiver', authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/waiver`)),
+  getMyWaiver: (gymId) => readThrough(myWaiverResponseSchema, 'the waiver', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/waiver/mine`)),
+  signMyWaiver: (gymId, waiverId, name) =>
+    readThrough(signWaiverResponseSchema, 'the waiver', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/waiver/sign`, { waiverId, name })),
 
   /** POST /v1/orgs/invitations/:invitationId/decline — No thanks. */
   declineInvitation: (invitationId) =>

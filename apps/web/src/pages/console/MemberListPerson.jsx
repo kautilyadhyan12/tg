@@ -41,6 +41,7 @@ import SentencePlace from '../../components/console/SentencePlace';
 import PostalAddressBox from '../../components/console/PostalAddressBox';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
+import { waiverLine, waiverNotInAppLine } from './waiverView';
 import {
   DAY_FIELDS,
   HELD_ANSWERS,
@@ -1373,6 +1374,13 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                     {m.visits === 1 ? '1 visit' : `${String(m.visits)} visits`}
                     {m.lastVisitOn !== null ? ` · last ${dayWords(m.lastVisitOn)}` : ''}
                   </span>
+                  {/* The gym's waiver (3e-i): whether this person in the app has signed the
+                      words the gym asks for today, and the name they typed. */}
+                  {p.waiverInUse ? (
+                    <span className="block c-s13 c-t3" data-testid="waiver-line">
+                      {waiverLine(m, whenWords)}
+                    </span>
+                  ) : null}
                 </div>
                 {canRemove && p.formerAt === null && !m.sharedEmail ? (
                   <button
@@ -1389,6 +1397,15 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 ) : null}
               </div>
             ))}
+          </section>
+        ) : null}
+        {p.waiverInUse && p.members.length === 0 && p.formerAt === null ? (
+          // Nobody in the app uses this record, so nobody can have signed for it (3e-i).
+          <section className="c-card px-4 py-3 md:px-5 md:py-4">
+            <h3 className="c-h2 mb-1">Waiver</h3>
+            <p className="c-s14 c-t2 m-0" data-testid="waiver-line">
+              {waiverNotInAppLine(p.fullName)}
+            </p>
           </section>
         ) : null}
         {byHand.length > 0 ? (

@@ -8,6 +8,7 @@ import MessageSettingsPanel from '../../components/console/MessageSettingsPanel'
 import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import CheckinRulesPanel from '../../components/console/CheckinRulesPanel';
+import WaiverPanel from '../../components/console/WaiverPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
@@ -233,6 +234,10 @@ export default function Settings() {
           server gates it. Keyed per gym for the panels' reason above: it holds choices
           not saved yet. */}
       {canEditGym ? <CheckinRulesPanel key={`checkin-rules-${org.id}`} org={org} readOnly={readOnly} attendanceTo={placeTo(orgSlug, 'attendance') ?? '../attendance'} /> : null}
+
+      {/* WAIVER (3e-i): the gym's own waiver, signed in the app, on `org.manage` as the server
+          gates it. Keyed per gym for the panels' reason above: it holds words not saved yet. */}
+      {canEditGym ? <WaiverPanel key={`waiver-${org.id}`} org={org} readOnly={readOnly} membersTo={placeTo(orgSlug, 'members') ?? '../members'} /> : null}
 
       {/* FOLLOW-UP EMAILS TO LEADS (20c-v): the owner's "Send them for me", on the
           privilege the server gates it with. Keyed per gym for the panels' reason above:
