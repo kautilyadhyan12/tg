@@ -1510,3 +1510,25 @@ describe('the camera rate is readable without a terminal', () => {
     expect(screen.queryByText(/9\.2/)).toBeNull();
   });
 });
+
+describe('the page leaves no timer behind when it closes', () => {
+  it('the set-complete flash is cancelled when the page closes before its 800 ms are up', () => {
+    // The flash's own timer: the one timeout this page sets with an 800 ms wait.
+    const realSetTimeout = globalThis.setTimeout;
+    const flashes = [];
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn, ms, ...rest) => {
+      const id = realSetTimeout(fn, ms, ...rest);
+      if (ms === 800) flashes.push(id);
+      return id;
+    });
+    const cleared = vi.spyOn(globalThis, 'clearTimeout');
+    const { unmount } = startWorkout([exercise({ sets: 2, reps: 20 })]);
+
+    tapRep();
+    fireEvent.click(screen.getByText('Complete Set ✓'));
+    expect(flashes).toHaveLength(1);
+    unmount();
+    // Left running it fired into a closed page, and after the test run's own page was gone.
+    expect(cleared).toHaveBeenCalledWith(flashes[0]);
+  });
+});
