@@ -658,7 +658,11 @@ is. This replaces §16.3's "the console's named colours and Archivo, light and d
   whose feature is not built shows its picture and one row ending "Coming soon". No
   tab's page has its tab's name as a heading (Kd, 2026-10-14): the Dashboard opens on
   the browser's greeting and the person's name, as 11a drew it (`greetingAt`), Workout
-  and Food on their pictures, Me on the person's card; Gym keeps "My gyms", as drawn. Me has
+  and Food on their pictures, Me on the person's card; Gym keeps "My gyms", as drawn.
+  A page's own picture is `PictureTop`: edge to edge from the top of the phone, running
+  into the page, never a box, with the page's first words over it (the Dashboard's
+  greeting and name; "Exercise Library"; "Nutrition"). `Page` takes it as `top`. Gym's
+  picture is Kd's to add. A new account is not told "Your account is ready" (his word). Me has
   the person's initial, name and email, and Sign out, which asks in a box from the
   bottom. **CLAUDE.md §4, "A phone screen is the browser's screen", is the rule.**
 

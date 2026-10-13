@@ -275,7 +275,7 @@ changes what it does; never drop one.
 **A phone screen is the browser's screen, fitted to a phone (Kd, 2026-10-13, `rulings/`).**
 12b-i's first Get started was plain boxes with no picture and sentences that explained the
 app; it passed its click-through and Kd still called it not good. Every job that adds or
-changes a phone screen follows all five.
+changes a phone screen follows all six.
 - Before building, open that page in the browser, take its picture, and build THAT design:
   its picture, its colours, its order, its glow. A screen the browser has is never invented.
 - Fitted to a thumb: no long lists and no rows of boxes. One main button; a second thing to
@@ -286,6 +286,8 @@ changes a phone screen follows all five.
   line and its one task; what the picture or the next screen says is not said again. A
   tab's page never repeats the tab's name above itself: the lit tab already says it.
 - A button's ends are round and the main one glows; it is never a wide flat rectangle.
+- A page's own picture is never a box. It runs edge to edge from the top of the phone and
+  into the page under it, and the page's first words lie over it.
 - Before Kd is asked, the terminal takes pictures of the real phone and looks at them beside
   the browser's. What looks plainer than the browser's is fixed first.
 

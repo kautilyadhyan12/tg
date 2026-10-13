@@ -134,7 +134,6 @@ describe("signing in by email code", () => {
     // On the Dashboard, greeted by name.
     expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Dashboard" }).props.accessibilityState).toEqual({ selected: true });
-    expect(screen.queryByText("Welcome! Your account is ready.")).toBeNull();
     expect(server.asked.map((one) => [one.path, one.body])).toEqual([
       ["/v1/auth/code/send", { email: "ravi@example.com" }],
       ["/v1/auth/code/verify", { email: "ravi@example.com", code: "123456", client: "phone" }],
@@ -145,12 +144,14 @@ describe("signing in by email code", () => {
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });
 
-  it("a new address is told its account is ready", async () => {
+  it("a new address lands on the same Dashboard, greeted by name, with no box about its account", async () => {
     await openApp({ "/v1/auth/code/send": sent, "/v1/auth/code/verify": signsIn(true) });
     await askForCode();
     await type("6-digit code", "123456");
     await press("Continue");
-    expect(await screen.findByText("Welcome! Your account is ready.")).toBeTruthy();
+    expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
+    expect(screen.getByText(/^Good (morning|afternoon|evening)$/)).toBeTruthy();
+    expect(screen.queryByText(/account is ready/i)).toBeNull();
   });
 
   it.each([

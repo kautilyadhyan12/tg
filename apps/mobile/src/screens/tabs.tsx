@@ -2,8 +2,8 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button } from "../look/Button";
 import { Avatar, Card, PictureCard } from "../look/Card";
-import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
+import { PictureTop } from "../look/PictureTop";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
@@ -11,31 +11,32 @@ import { greetingAt } from "./greeting";
 import { ThisCopy } from "./ThisCopy";
 import { COMING_SOON, Soon } from "./Soon";
 
-// Each tab's page as the look draws it (docs/design/phone/pages), with its own picture.
+// Each tab's page as the look draws it (docs/design/phone/pages). Its own picture runs edge to
+// edge from the top and into the page, never a box of its own, with the page's first words over it.
 // No page says its tab's name again above itself: the lit tab below already does.
 // What a page holds comes with each feature's own job.
 
 export function DashboardScreen() {
   const { state } = useSession();
   return (
-    <Page>
-      <View>
-        <Txt kind="small" colour="textFaint">
-          {greetingAt(new Date().getHours())}
-        </Txt>
-        <Txt kind="h1" numberOfLines={1}>
-          {state.kind === "in" ? state.user.displayName : ""}
-        </Txt>
-      </View>
-      {state.kind === "in" && state.isNewAccount ? (
-        <Card style={styles.row}>
-          <Icon name="check" size={18} colour="goodText" />
-          <Txt colour="text" style={styles.grow}>
-            Welcome! Your account is ready.
-          </Txt>
-        </Card>
-      ) : null}
-      <PictureCard picture="hero" height={300} eyebrow="Today’s Focus" title={"Precision Training\nPowered by AI."} />
+    <Page
+      top={
+        <PictureTop
+          picture="hero"
+          tall={0.9}
+          above={
+            <>
+              <Txt kind="small">{greetingAt(new Date().getHours())}</Txt>
+              <Txt kind="h1" numberOfLines={1}>
+                {state.kind === "in" ? state.user.displayName : ""}
+              </Txt>
+            </>
+          }
+          eyebrow="Today’s Focus"
+          title={"Precision Training\nPowered by AI."}
+        />
+      }
+    >
       <Soon icon="grid" title="Your day" />
     </Page>
   );
@@ -43,8 +44,7 @@ export function DashboardScreen() {
 
 export function WorkoutScreen() {
   return (
-    <Page>
-      <PictureCard picture="exhero" height={200} />
+    <Page top={<PictureTop picture="exhero" tall={0.62} eyebrow="Exercise Library" title="Exercises" />}>
       <Soon icon="dumbbell" title="Your workouts" />
     </Page>
   );
@@ -52,8 +52,7 @@ export function WorkoutScreen() {
 
 export function FoodScreen() {
   return (
-    <Page>
-      <PictureCard picture="food" height={170} eyebrow="Nutrition" title="Fuel Your Training" />
+    <Page top={<PictureTop picture="food" tall={0.62} eyebrow="Nutrition" title="Fuel Your Training" />}>
       <Soon icon="apple" title="Your meals" />
     </Page>
   );
