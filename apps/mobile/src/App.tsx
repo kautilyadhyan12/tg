@@ -16,11 +16,11 @@ import { colours } from "./look/colours";
 import type { IconName } from "./look/Icon";
 import { TabBar } from "./look/TabBar";
 import { CopyContext, type Ask } from "./screens/ThisCopy";
-import { FoodScreen, GymScreen, MeScreen, TodayScreen, WorkoutScreen } from "./screens/tabs";
+import { FoodScreen, GymScreen, MeScreen, DashboardScreen, WorkoutScreen } from "./screens/tabs";
 
 /** The five tabs, in their order (spec Part 6 §16.3a). A tab's name is the word under its icon. */
 export const TABS = [
-  { name: "Today", icon: "grid", screen: TodayScreen },
+  { name: "Dashboard", icon: "grid", screen: DashboardScreen },
   { name: "Workout", icon: "dumbbell", screen: WorkoutScreen },
   { name: "Food", icon: "apple", screen: FoodScreen },
   { name: "Gym", icon: "building", screen: GymScreen },

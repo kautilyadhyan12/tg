@@ -17,13 +17,13 @@ async function open(tab: string) {
 }
 
 describe("the five tabs", () => {
-  it("are Today, Workout, Food, Gym and Me, in that order, opening on Today", async () => {
+  it("are Dashboard, Workout, Food, Gym and Me, in that order, opening on Dashboard", async () => {
     await render(<App extra={extra} ask={answers(true)} />);
     const tabs = await screen.findAllByRole("tab");
-    expect(tabs.map(label)).toEqual(["Today", "Workout", "Food", "Gym", "Me"]);
-    expect(TABS.map((tab) => tab.name)).toEqual(["Today", "Workout", "Food", "Gym", "Me"]);
+    expect(tabs.map(label)).toEqual(["Dashboard", "Workout", "Food", "Gym", "Me"]);
+    expect(TABS.map((tab) => tab.name)).toEqual(["Dashboard", "Workout", "Food", "Gym", "Me"]);
     expect(tabs.map(lit)).toEqual([true, false, false, false, false]);
-    expect(screen.getByRole("header", { name: "Today" })).toBeTruthy();
+    expect(screen.getByRole("header", { name: "Dashboard" })).toBeTruthy();
   });
 
   it.each([
@@ -31,10 +31,10 @@ describe("the five tabs", () => {
     ["Food", "Food", "Your meals"],
     ["Gym", "My gyms", "Your gym"],
     ["Me", "Me", "Settings, Progress and Achievements"],
-    ["Today", "Today", "Your day"],
+    ["Dashboard", "Dashboard", "Your day"],
   ])("%s opens its own page and lights its own tab", async (tab, heading, box) => {
     await render(<App extra={extra} ask={answers(true)} />);
-    await open(tab === "Today" ? "Me" : "Today");
+    await open(tab === "Dashboard" ? "Me" : "Dashboard");
     await open(tab);
     expect(await screen.findByRole("header", { name: heading })).toBeTruthy();
     expect(screen.getByRole("header", { name: box })).toBeTruthy();

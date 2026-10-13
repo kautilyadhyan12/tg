@@ -8,10 +8,10 @@ import { Soon } from "./Soon";
 // Each tab's page as the look draws it (docs/design/phone/pages): its heading
 // and its own picture. What it holds comes with each feature's own job.
 
-export function TodayScreen() {
+export function DashboardScreen() {
   return (
     <Page>
-      <Txt kind="h1">Today</Txt>
+      <Txt kind="h1">Dashboard</Txt>
       <PictureCard picture="hero" height={300} eyebrow="Today’s Focus" title={"Precision Training\nPowered by AI."} />
       <Soon
         icon="grid"
