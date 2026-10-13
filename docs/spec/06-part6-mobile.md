@@ -655,7 +655,10 @@ is. This replaces §16.3's "the console's named colours and Archivo, light and d
   orange while typed in), `Sheet` (the box from the bottom), `Logo`, `Avatar`, a
   button's `link` and `quiet` kinds (words with no box), its `busy`, and the main
   button's glow (`shadows` in `colours.ts`, as `helmet.html` draws `.btn-p`). A tab
-  whose feature is not built shows its picture and one row ending "Coming soon". Me has
+  whose feature is not built shows its picture and one row ending "Coming soon". No
+  tab's page has its tab's name as a heading (Kd, 2026-10-14): the Dashboard opens on
+  the browser's greeting and the person's name, as 11a drew it (`greetingAt`), Workout
+  and Food on their pictures, Me on the person's card; Gym keeps "My gyms", as drawn. Me has
   the person's initial, name and email, and Sign out, which asks in a box from the
   bottom. **CLAUDE.md §4, "A phone screen is the browser's screen", is the rule.**
 

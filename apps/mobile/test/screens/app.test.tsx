@@ -38,21 +38,24 @@ describe("the five tabs", () => {
     expect(tabs.map(label)).toEqual(["Dashboard", "Workout", "Food", "Gym", "Me"]);
     expect(TABS.map((tab) => tab.name)).toEqual(["Dashboard", "Workout", "Food", "Gym", "Me"]);
     expect(tabs.map(lit)).toEqual([true, false, false, false, false]);
-    expect(screen.getByRole("header", { name: "Dashboard" })).toBeTruthy();
+    // The page greets the person by name; the lit tab is what says "Dashboard".
+    expect(screen.getByText(/^Good (morning|afternoon|evening)$/)).toBeTruthy();
+    expect(screen.getByRole("header", { name: "Ravi" })).toBeTruthy();
   });
 
   it.each([
-    ["Workout", "Workout", "Your workouts"],
-    ["Food", "Food", "Your meals"],
-    ["Gym", "My gyms", "Your gym"],
-    ["Me", "Me", "Settings"],
-    ["Dashboard", "Dashboard", "Your day"],
-  ])("%s opens its own page and lights its own tab", async (tab, heading, box) => {
+    ["Workout", ["Your workouts"]],
+    ["Food", ["Fuel Your Training", "Your meals"]],
+    ["Gym", ["My gyms", "Your gym"]],
+    ["Me", ["ravi@example.com", "Settings"]],
+    ["Dashboard", ["Ravi", "Your day"]],
+  ])("%s opens its own page and lights its own tab", async (tab, shows) => {
     await render(<App extra={extra} store={signedIn()} ask={answers(true)} />);
     await open(tab === "Dashboard" ? "Me" : "Dashboard");
     await open(tab);
-    expect(await screen.findByRole("header", { name: heading })).toBeTruthy();
-    expect(screen.getByRole("header", { name: box })).toBeTruthy();
+    for (const words of shows) expect(await screen.findByText(words)).toBeTruthy();
+    // No page says its tab's name again above itself: the lit tab below already does.
+    expect(screen.queryByRole("header", { name: tab })).toBeNull();
     const on = (await screen.findAllByRole("tab")).filter((drawn) => lit(drawn) === true);
     expect(on.map(label)).toEqual([tab]);
     // What is drawn, not only what a screen reader is told: its word is orange, the other four are not.

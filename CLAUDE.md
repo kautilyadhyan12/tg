@@ -283,7 +283,8 @@ changes a phone screen follows all five.
 - The words are a finished app's, and few: a short label or one short line ("Coming soon",
   "Sign out?", "Enter a valid email address."). Never a sentence that explains the feature,
   how the app is built, or what a later job will add. A first screen holds its heading, one
-  line and its one task; what the picture or the next screen says is not said again.
+  line and its one task; what the picture or the next screen says is not said again. A
+  tab's page never repeats the tab's name above itself: the lit tab already says it.
 - A button's ends are round and the main one glows; it is never a wide flat rectangle.
 - Before Kd is asked, the terminal takes pictures of the real phone and looks at them beside
   the browser's. What looks plainer than the browser's is fixed first.

@@ -42,7 +42,7 @@ const drawn = (node: Drawn) => StyleSheet.flatten(node.props.style);
 describe("the worst thing, on the screen", () => {
   it("opened with no internet, a signed-in person is on their tabs, never the sign-in screen", async () => {
     const { server, store } = await openApp({ "/health": lost, "/v1/auth/refresh": lost }, kept(1));
-    expect(await screen.findByRole("header", { name: "Dashboard" })).toBeTruthy();
+    expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
     expect(screen.queryByText("Get started.")).toBeNull();
     await fireEvent.press(screen.getByRole("tab", { name: "Me" }));
     expect(await screen.findByText("ravi@example.com")).toBeTruthy();
@@ -131,7 +131,9 @@ describe("signing in by email code", () => {
     await type("6-digit code", "12 34x56");
     expect(screen.getByLabelText("6-digit code").props.value).toBe("123456");
     await press("Continue");
-    expect(await screen.findByRole("header", { name: "Dashboard" })).toBeTruthy();
+    // On the Dashboard, greeted by name.
+    expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Dashboard" }).props.accessibilityState).toEqual({ selected: true });
     expect(screen.queryByText("Welcome! Your account is ready.")).toBeNull();
     expect(server.asked.map((one) => [one.path, one.body])).toEqual([
       ["/v1/auth/code/send", { email: "ravi@example.com" }],

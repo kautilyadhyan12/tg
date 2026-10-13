@@ -7,17 +7,26 @@ import { Page } from "../look/Page";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
+import { greetingAt } from "./greeting";
 import { ThisCopy } from "./ThisCopy";
 import { COMING_SOON, Soon } from "./Soon";
 
-// Each tab's page as the look draws it (docs/design/phone/pages): its heading
-// and its own picture. What it holds comes with each feature's own job.
+// Each tab's page as the look draws it (docs/design/phone/pages), with its own picture.
+// No page says its tab's name again above itself: the lit tab below already does.
+// What a page holds comes with each feature's own job.
 
 export function DashboardScreen() {
   const { state } = useSession();
   return (
     <Page>
-      <Txt kind="h1">Dashboard</Txt>
+      <View>
+        <Txt kind="small" colour="textFaint">
+          {greetingAt(new Date().getHours())}
+        </Txt>
+        <Txt kind="h1" numberOfLines={1}>
+          {state.kind === "in" ? state.user.displayName : ""}
+        </Txt>
+      </View>
       {state.kind === "in" && state.isNewAccount ? (
         <Card style={styles.row}>
           <Icon name="check" size={18} colour="goodText" />
@@ -35,7 +44,6 @@ export function DashboardScreen() {
 export function WorkoutScreen() {
   return (
     <Page>
-      <Txt kind="h1">Workout</Txt>
       <PictureCard picture="exhero" height={200} />
       <Soon icon="dumbbell" title="Your workouts" />
     </Page>
@@ -45,7 +53,6 @@ export function WorkoutScreen() {
 export function FoodScreen() {
   return (
     <Page>
-      <Txt kind="h1">Food</Txt>
       <PictureCard picture="food" height={170} eyebrow="Nutrition" title="Fuel Your Training" />
       <Soon icon="apple" title="Your meals" />
     </Page>
@@ -67,10 +74,6 @@ export function GymScreen() {
 export function MeScreen() {
   return (
     <Page>
-      <View style={styles.head}>
-        <Txt kind="h1">Me</Txt>
-        <Txt kind="small">Your profile, your progress and your achievements.</Txt>
-      </View>
       <Account />
       <View style={styles.two}>
         <PictureCard picture="progress" height={120} label="Progress" icon="chart" pill={COMING_SOON} style={styles.half} />
