@@ -428,7 +428,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 34a. [x] **Ten more figures kept with every food in a meal** — merged 2026-10-13 (PR #245).
     - 34b. [ ] **The ten figures on the Food screen** (7a-v, the rest): on a saved meal, the photo sheet's rows and under the rings, each beside a published daily reference whose source its plan names; "about, N items not known"; a product's figures said to be from its label. Waits for 32b.
     - 34c. **More foods** (7a-i-b; split 2026-10-13 in three: the first needs only the two tables the list already uses).
-      - 34c-i. [ ] **Healthy everyday foods and more fruit**: 92 more foods on the list, each from USDA; shrimp and scallops counted by the piece (`handoff/2026-10-13-34c-i.md`). No screen.
+      - 34c-i. [ ] **Healthy everyday foods and more fruit**: 91 more foods on the list, each from USDA; shrimp and scallops counted by the piece (`handoff/2026-10-13-34c-i.md`). No screen.
       - 34c-ii. [ ] **The traditional dishes of the US, Canada, Europe, Australia and New Zealand**: USDA and the UK table first; another country's table only once its licence is read and Kd has said yes to it. 34c-iii. [ ] **Brazil and Asia**, by the same rules.
     - 34d. [ ] **Meal suggestions** (7a). 34e. [ ] **Your own diet plan** (7c). 34f. [ ] **Your week in food** (7d). Each is split again by the terminal that reaches it.
 35. [ ] **Progress**: the charts, the workout calendar, body measurements and weigh-ins, badges; then weekly challenges and predictions on the new server (dead on the web; spec Part 2B §5).
