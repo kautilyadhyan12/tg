@@ -408,7 +408,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 30a. [x] **Keep, change, remove and measure a goal** — merged 2026-10-13 (PR #233).
     - 30b. [x] **The starter set from the setup answers** — merged 2026-10-13 (PR #234).
 31. [ ] **Today** (Stage 1's 5b): rings, the streak with its freezes, level and XP, this week, recent workouts, goals, and the Recommended box (7a-ii) with each option as it is built.
-32. [ ] **Food**: search, add by measure, the rings and a person's own numbers, change a logged food, saved dishes with rename and delete. Its database needs the food table loaded first.
+32. **Food** (split 2026-10-13: the server part needs no phone).
+    - 32a. [ ] **A meal sent twice from the phone is saved once**: the phone gives each meal its own id; the same id again answers with the meal as first saved, and somebody else's id is refused. No screen.
+    - 32b. [ ] **The Food screen**: search, add by measure, the rings and a person's own numbers, change a logged food, saved dishes with rename and delete. Waits for items 10 to 12; sends every meal with its own id (32a). Feature folder 2's database holds the food table since 2026-10-13.
 33. [ ] **A meal photo with the phone's camera, and barcode scan** (item 5; Stage 4 item 8).
 34. [ ] **More food**: more than the macros (7a-v), more foods (7a-i-b), meal suggestions (7a), your own diet plan (7c), your week in food (7d).
 35. [ ] **Progress**: the charts, the workout calendar, body measurements and weigh-ins, badges; then weekly challenges and predictions on the new server (dead on the web; spec Part 2B §5).

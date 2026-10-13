@@ -5,6 +5,20 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
 
+## 2026-10-13 · 32a (feature folder 2): a meal sent twice from the phone is saved once (branch `meal-saved-once`)
+
+- **Why this job:** item 31 (Today) waits for feature folder 1's items 10 to 12. Item 32 is split: 32a, its server part, and 32b, the Food screen.
+- **Built, no screen:** `POST /v1/nutrition/meals` takes the phone's own `id`. First time 201; the same id again 200 with the meal as first saved, even if the second body differs. Without an id every send is a new meal, as the web's is. **Risky**; built at Opus 5.5 medium (the `/model` line; xhigh was recommended and said).
+- **The rule:** an id that is somebody else's meal answers 404 and reads and changes nothing (`createMealOnce`, `modules/nutrition/repo.ts`).
+- **A photo meal:** its photo is taken inside the save, so a refused photo leaves no meal and the id can be used again. Sends of one id wait for each other; one photo under two ids is one meal and a 400.
+- **No database change, no new package.**
+- **Verified here** on `aihg_b`: `nutrition.once.routes.test.ts` 9 of 9, on the in-memory Redis and on the real one (`TEST_REDIS_URL`); the four older food route files 96 of 96; shared 1,828 of 1,828; api and shared typecheck and lint clean (remembering runs).
+- **Deliberate breaks of the rule, each red on the first test, then put back:** the meal under the id read without its owner (200 for 404) · a meal under the id written over (201 for 404) · somebody else's id saved as a new meal (201 for 404).
+- **Cost:** one person's own rows; with an id, one more single-row read and one lock per save (not timed). Nothing reads a list of people.
+- **Also:** the USDA food list is loaded into `aihg_b` (13,225 foods, 31,169 measures, counted). Run with `TEST_REDIS_URL` set more than a few times in an hour, this file's sign-ups meet the sign-up limit kept in that Redis.
+- **For 32b and item 35:** a meal removed on the phone before its save was answered must send the save, then the removal, in that order; a late save after a removal would bring the meal back. A weigh-in (`POST /v1/nutrition/body-measurements`) and a saved dish are still saved once per send: item 35 and 32b make them once-only before their screens.
+- **Next:** the review round (`reviews/32a-1-review.md`), then merge. After it: item 36's plan builder (6a) and item 34's server parts need no phone.
+
 ## 2026-10-13 · Four old tests that failed GitHub, fixed (feature folder 2, branch `flaky-tests`, pull request #235)
 
 - **Why:** GitHub went red five times on 12 and 13 October on five old tests, never on the job under test (30b three times; `master` after 30a twice). Kd: *"fix this damn github issue"*. Its own branch and pull request, so 30b merged as reviewed.
