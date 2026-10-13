@@ -794,7 +794,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
         { key: "locker_no", label: "Locker No", value: "L-7" },
         { key: "emergency_contact_name", label: "Emergency Contact Name", value: "Sam Khan" },
       ]);
-      const moSeen = { userId: mo.userId, displayName: "Hand page-mo", joinedAt: row.joined_at.toISOString(), visits: 2, lastVisitOn: "2099-01-03" };
+      const moSeen = { userId: mo.userId, displayName: "Hand page-mo", joinedAt: row.joined_at.toISOString(), visits: 2, lastVisitOn: "2099-01-03", waiverSigned: null };
       expect(entry.members).toEqual([{ ...moSeen, sharedEmail: false }]);
       expect(entry.removeEndsAppFor).toEqual([mo.userId]);
 

@@ -181,6 +181,18 @@ export async function selectExportMemberPosts(sql: Sql, userId: string): Promise
  *  process's only connection (export.ts) — into an unbounded read. */
 export const CONSENT_EXPORT_LIMIT = 1000;
 
+/** The person's signatures of their gyms' waivers, each with the words they agreed to
+ *  (tables.ts): theirs to read, though the gym keeps them after a purge. */
+export async function selectExportWaiverSignatures(sql: Sql, userId: string): Promise<Row[]> {
+  return await sql<Row[]>`
+    SELECT s.id, g.name AS gym_name, w.version AS waiver_version, w.body AS waiver_text, s.signed_name, s.signed_at
+    FROM gym_waiver_signatures s
+    JOIN gym_waivers w ON w.gym_id = s.gym_id AND w.id = s.waiver_id
+    JOIN gyms g ON g.id = s.gym_id
+    WHERE s.user_id = ${userId}
+    ORDER BY s.signed_at, s.id`;
+}
+
 /** The consent log is NOT on the Day-14 delete list (tables.ts: kept as proof
  *  for six years, like audit_log) but it IS the person's own record of what they agreed to, so the
  *  export carries it beside the PII tables. Read here, keyed on the owner.

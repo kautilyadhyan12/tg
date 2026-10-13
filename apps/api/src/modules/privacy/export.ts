@@ -9,7 +9,7 @@
 import type { Sql } from "postgres";
 import { DPDP_EXPORT_SCHEMA_VERSION, type DpdpExport } from "@app/shared";
 import { EXPORTED_TABLES, type ExportedTable } from "./tables.js";
-import { EXPORT_READERS, selectExportConsents, selectExportMemberPosts, selectExportUser } from "./exportRepo.js";
+import { EXPORT_READERS, selectExportConsents, selectExportMemberPosts, selectExportUser, selectExportWaiverSignatures } from "./exportRepo.js";
 
 /** Columns stripped from EVERY exported row, whatever table it came from.
  *
@@ -126,6 +126,9 @@ export async function buildUserExport(deps: ExportDeps, userId: string): Promise
   // makes that answer false. `truncated` carries the count beside the rows.
   const consents = await selectExportConsents(deps.sql, userId);
   data["consent_log"] = consents.rows;
+
+  // The waivers the person signed at their gyms, with the words (tables.ts).
+  data["gym_waiver_signatures"] = await selectExportWaiverSignatures(deps.sql, userId);
 
   const truncated: Record<string, { returned: number; total: number }> = {};
   if (consents.total > consents.rows.length) {

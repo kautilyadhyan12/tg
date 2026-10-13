@@ -1945,6 +1945,78 @@ identity.ts` `refresh_tokens`, `orgs/routes.ts`, and the fifteen web places that
 or take a join code. No source was found for a gym app that limits an account to one
 device; the one-phone rule follows apps that fight shared accounts (WhatsApp).
 
+### 10.10 A gym's waiver, signed in the app (3e)
+
+*(ADDED 2026-10-13 with 3e-i, as built. RULINGS 2026-10-08. 3e-ii adds signing at the
+desk with no app and the "Waiver not signed" choice in Members' Filter.)*
+
+**The worst thing it could do to a real person:** show somebody as having signed words
+they never saw, or put a signature on a relative when a family shares one email address.
+
+- **The words are the gym's, never ours.** Settings has a **Waiver** box (`org.manage`): the
+  owner writes or pastes the waiver, up to 30,000 characters, kept as plain text with its
+  line breaks. The app does not write, check or change it.
+- **Every wording is kept and numbered** (`gym_waivers`, migration `0103`). The gym's
+  waiver today is its highest version, unless the gym has stopped using it. Saving the same
+  words again makes no new version; saving changed words makes the next one.
+- **A signature names the wording the person was shown** (`gym_waiver_signatures`: the
+  wording, the app account, the name they typed, the time; one per person per wording).
+  The screen sends the wording's id back with the typed name. If the gym has saved new
+  words or stopped since, nothing is written and the person is told (`409 waiver_changed`,
+  `409 waiver_not_in_use`) and shown the words as they are now.
+- **A changed waiver asks everybody again.** The earlier signatures stay with the words
+  they were given for. Before Save the box says how many people will be asked ("again"
+  only where somebody has signed the words in use). Somebody who signed these words, was
+  removed and joins again keeps that one signature.
+- **Join** (10.2): where the gym has a waiver, the Join screen shows it in full under "What
+  {gym} can see", with a box for the person's full name and a tick; Join waits for both.
+  `POST …/invitations/:id/accept` takes `{ waiver: { id, name } }` and writes the signature
+  in the membership's own transaction, under the gym's lock, which Save also takes. With no
+  signature it joins nobody (`409 waiver_needed`). A gym with no waiver is joined on the
+  one tap, as before.
+- **People already in the app** are asked on their gym's card in My Gyms: "Read and sign",
+  the words, the name, the tick, Sign. `GET /v1/orgs/:gymId/waiver/mine` and
+  `POST /v1/orgs/:gymId/waiver/sign`, for a live member only; anybody else reads 404.
+- **Whose signature it is.** A signature is the app account's. A person's page lists it
+  under each person in the app that the page already lists ("Waiver signed on 13 October
+  2026 as Luis Reyes" or "Waiver not signed"), by the rule that says whose record a person
+  is (§18.4). The state is a coloured label: green "Waiver signed", amber "Waiver not
+  signed". **On an email a family shares, no record is ever said to have signed:** the
+  label is plain, "Signed as Luis Reyes", followed by "This email address is shared, so we
+  can't tell which of them signed." (round one, High-1). A record with nobody in the app
+  reads "Not signed. {name} signs your waiver when they join in the app." The day is the
+  gym's own calendar day, on the person's page and on My Gyms.
+- **What a name is:** two letters or digits at least, counted as people count them (one
+  letter outside the basic plane is one). Controls, the zero-width space, direction marks
+  and overrides, and the letters a screen draws as a blank, are dropped, so a name is never
+  blank on a page or drawn backwards; the
+  two zero-width joiners stay, since some names are spelled with them. The gym's words
+  lose only what a database refuses (controls other than a tab and a new line).
+- **Stop using this waiver** asks first, naming who changes and what is kept. Stopped,
+  nobody is asked and nothing can be signed; the words and signatures are kept, and saving
+  the same words starts it again with them.
+- **Not built here:** a missing signature stops nobody at the front desk; no list of who
+  has not signed (3e-ii); no drawn signature, and no IP address kept.
+- **Privacy.** A person's "download my data" holds each waiver they signed with its words.
+  A signature is kept with the gym after the person's account is deleted, on the consent
+  log's footing: it is the gym's proof. How long a gym may keep it is the lawyer's (ROADMAP
+  Stage 4 item 3).
+- **Limits:** staff reads 300 an hour a person (900 an address), saves and stops 30 (90);
+  a member's read 120 (6,000 an address, a gym's wi-fi), signing 10 (600).
+- **Cost at full size** (2026-10-13, mains, 3,294 MHz, local database, a waiver of 29,990
+  characters, one gym of 2,000 with 1,200 in the app beside 19 of 200; 20 runs, medians;
+  `tools/measure-waiver-cost.ts`): Settings' box 7.2 ms, thread busy 1.4 ms; all 20 gyms at
+  one moment 35.0 ms, busy 23.8 ms · what a person's page reads more, 4.0 ms · a member's
+  read 7.6 ms; 20 at one moment 28.8 ms, busy 16.5 ms · a signature 15.7 ms; 20 at one
+  moment 50.2 ms, busy 35.0 ms · Save with changed words 21.9 ms. Longest stall anywhere
+  5.1 ms. Join's own added read and write were not timed.
+- **Where the facts came from** (read 2026-10-13, the vendors' own help pages): Mindbody,
+  "How to set up and manage liability waivers" and "How to reset liability waiver statuses
+  and prompt clients to accept new terms" (a tick box; the gym resets people after a
+  change) · PushPress, "Digital documents overview" (Signed or Unsigned per member) ·
+  Gymdesk, "Document Management" and "Gym Liability Waiver" (a dated record; re-signed when
+  the terms change).
+
 ---
 
 ## 11. The member record — what is kept from a gym's file

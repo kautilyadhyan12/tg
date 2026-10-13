@@ -485,6 +485,15 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // set null`. Who bought it is a record on the gym's list, not an account, and a sale
   // holds no typed word: the product's name as it was sold.
   "gym_sales",
+  // gym_waivers.saved_by — which member of staff saved a wording of the gym's waiver
+  // (`0103`), on gym_leads' footing: the gym's record; `ON DELETE set null`.
+  "gym_waivers",
+  // gym_waiver_signatures.user_id — a person's signature of a gym's waiver: the typed
+  // name, the wording and the time (`0103`). KEPT past Day 14 on consent_log's footing:
+  // it is the gym's proof that the person agreed, wanted exactly when a claim is brought
+  // after they have left. It IS in the export (exportRepo.ts). How long a gym may keep
+  // it is a question for the lawyer (ROADMAP Stage 4 item 3), with staff notes.
+  "gym_waiver_signatures",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

@@ -1,5 +1,5 @@
 // THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i and 18b-ii-a). Mirrors
-// `0102_register.sql` and `0103_discounts.sql` 1:1; the migrations carry the reasoning.
+// `0102_register.sql` and `0104_discounts.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -53,7 +53,7 @@ export const gymProducts = pgTable(
   ],
 );
 
-/** One discount a gym offers (`0103`): a percentage or a fixed amount, with or without a
+/** One discount a gym offers (`0104`): a percentage or a fixed amount, with or without a
  *  promo code. `uses` counts the sales made with it that still stand. */
 export const gymDiscounts = pgTable(
   "gym_discounts",

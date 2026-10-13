@@ -720,7 +720,14 @@
       "idx": 102,
       "version": "7",
       "when": 1789862400103,
-      "tag": "0103_discounts",
+      "tag": "0103_gym_waiver",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1789948800104,
+      "tag": "0104_discounts",
       "breakpoints": true
     }
   ]

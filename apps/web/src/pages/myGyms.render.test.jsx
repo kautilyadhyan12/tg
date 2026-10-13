@@ -20,6 +20,7 @@ const api = {
   getHours: vi.fn(),
   getAttendanceHistory: vi.fn(),
   getCheckinPass: vi.fn(),
+  getMyWaiver: vi.fn(),
 };
 vi.mock('../api/orgsApi', () => ({
   orgService: api,
@@ -156,6 +157,8 @@ beforeEach(() => {
   api.getHours.mockReset().mockResolvedValue({ data: { hours: { mode: 'unset' } } });
   api.getAttendanceHistory.mockReset().mockResolvedValue(history([]));
   api.getCheckinPass.mockReset().mockResolvedValue(pass());
+  // A gym that asks for no waiver draws nothing; its states are in `gymWaiver.render.test.jsx`.
+  api.getMyWaiver.mockReset().mockResolvedValue({ data: { gymName: GYM.name, waiver: null, signed: null } });
 });
 afterEach(() => {
   cleanup();
