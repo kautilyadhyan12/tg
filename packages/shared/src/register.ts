@@ -8,6 +8,7 @@
 // A membership is sold by giving it as paid (`heldMemberships.ts`, `memberBills.ts`): its
 // bill and payment are the notebook's, and no row of this file's is written for it.
 import { z } from "zod";
+import { gymDiscountSchema } from "./discounts.js";
 import { memberPaymentByHandSchema, memberPaymentMethodSchema } from "./memberBills.js";
 import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
 import { VISIBLE_TEXT } from "./visibleText.js";
@@ -60,14 +61,18 @@ export interface SaleAmounts {
   totalMinor: number;
 }
 
-export type SaleAmountsResult = ({ ok: true } & SaleAmounts) | { ok: false; reason: "not_an_amount" | "too_much" };
+export type SaleAmountsResult = ({ ok: true } & SaleAmounts) | { ok: false; reason: "not_an_amount" | "too_much" | "nothing_to_pay" };
 
 /** WHAT ONE SALE COMES TO. Whole-number arithmetic throughout, the tax rounded to the
  *  nearest minor unit (a half goes up).
  *
  *  Tax on top: the price is before tax, and the tax is added. Tax in the price: the price
  *  is what the person pays, and the tax is the part of it that is tax. Either way the
- *  three numbers add up: `netMinor + taxMinor === totalMinor`. */
+ *  three numbers add up: `netMinor + taxMinor === totalMinor`.
+ *
+ *  A discount comes off the price as the gym lists it (before tax where tax is added, with
+ *  it where it is included), and the tax is worked out on what is left. A sale has to
+ *  leave something to pay. */
 export function saleAmounts(input: {
   unitPriceMinor: number;
   quantity: number;
@@ -75,12 +80,18 @@ export function saleAmounts(input: {
   taxed: boolean;
   taxBp: number;
   taxIncluded: boolean;
+  /** What a discount takes off the price times how many (`discountOff`); 0 for none. */
+  discountMinor?: number;
 }): SaleAmountsResult {
   const { unitPriceMinor, quantity, taxBp } = input;
+  const discountMinor = input.discountMinor ?? 0;
   if (!Number.isSafeInteger(unitPriceMinor) || unitPriceMinor < 1) return { ok: false, reason: "not_an_amount" };
   if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > SALE_QUANTITY_MAX) return { ok: false, reason: "not_an_amount" };
   if (!Number.isSafeInteger(taxBp) || taxBp < 0 || taxBp > SALES_TAX_BP_MAX) return { ok: false, reason: "not_an_amount" };
-  const listed = unitPriceMinor * quantity;
+  const full = unitPriceMinor * quantity;
+  if (!Number.isSafeInteger(discountMinor) || discountMinor < 0 || discountMinor > full) return { ok: false, reason: "not_an_amount" };
+  const listed = full - discountMinor;
+  if (listed < 1) return { ok: false, reason: "nothing_to_pay" };
   const rate = input.taxed ? taxBp : 0;
   let amounts: SaleAmounts;
   if (rate === 0) {
@@ -152,6 +163,10 @@ export const gymSaleSchema = z
     totalMinor: minorSchema,
     taxBp: taxBpSchema,
     taxIncluded: z.boolean(),
+    /** The discount it was sold with, as it was named then, and what it took off; null and
+     *  0 where there was none. */
+    discountName: z.string().nullable(),
+    discountMinor: minorSchema,
     currency: currencySchema,
     method: memberPaymentByHandSchema,
     /** The gym's own day, and the instant. */
@@ -205,6 +220,8 @@ export const saleTotalsSchema = z
     link: z.number().int().min(0),
     company: z.number().int().min(0),
     refundedMinor: z.number().int().min(0),
+    /** What discounts took off the product sales that stand. */
+    discountMinor: z.number().int().min(0),
     otherCurrency: z.number().int().min(0),
   })
   .strict();
@@ -220,6 +237,10 @@ export const sellPageResponseSchema = z
     products: z.array(gymProductSchema),
     archived: z.array(gymProductSchema),
     archivedTotal: z.number().int().min(0),
+    /** The gym's discounts that are not archived, by name. */
+    discounts: z.array(gymDiscountSchema),
+    archivedDiscounts: z.array(gymDiscountSchema),
+    archivedDiscountsTotal: z.number().int().min(0),
     /** May record a sale and take one back (`billing.members`). */
     canSell: z.boolean(),
     /** May change the products and the tax (`memberships.manage`). */
@@ -240,7 +261,8 @@ export type SellPageResponse = z.infer<typeof sellPageResponseSchema>;
 
 /** `requestKey` is made by the screen once a form: the same key twice is one sale.
  *  `totalMinor` is the total the screen showed: a sale that would now come to anything
- *  else is refused. `entryId` null is a walk-in. */
+ *  else is refused. `entryId` null is a walk-in. `discountId` is the gym's discount the
+ *  sale is made with, if any: one a sale. */
 export const sellProductRequestSchema = z
   .object({
     requestKey: z.string().uuid(),
@@ -249,9 +271,12 @@ export const sellProductRequestSchema = z
     entryId: z.string().uuid().nullable(),
     method: memberPaymentByHandSchema,
     totalMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX),
+    discountId: z.string().uuid().nullable().default(null),
   })
   .strict();
 export type SellProductRequest = z.infer<typeof sellProductRequestSchema>;
+/** The same, as a screen sends it: `discountId` may be left out. */
+export type SellProductRequestBody = z.input<typeof sellProductRequestSchema>;
 
 export const sellProductResponseSchema = z.object({ saleId: z.string().uuid(), register: sellPageResponseSchema }).strict();
 export type SellProductResponse = z.infer<typeof sellProductResponseSchema>;

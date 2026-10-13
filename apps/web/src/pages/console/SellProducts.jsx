@@ -1,5 +1,5 @@
-import { useId, useState } from 'react';
-import { Loader2, Plus } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { CheckCircle2, Loader2, Plus } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
@@ -27,6 +27,21 @@ import { PRODUCTS_MAX } from '@app/shared';
 
 const LINE = { borderTop: '1px solid var(--line)' };
 const BAD = { color: 'var(--bad)' };
+
+/** What was just done, said where it was done: a green tick and one sentence, brought
+ *  into view so it is seen (Kd's click-through of 18b-ii-a). */
+export function SavedNote({ children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [children]);
+  return (
+    <p ref={ref} className="c-s15 c-w6 m-0 flex items-start gap-2 px-3 py-2" style={{ background: 'var(--good-bg)', color: 'var(--good)', borderRadius: 10 }} role="status">
+      <CheckCircle2 aria-hidden="true" className="w-5 h-5 flex-shrink-0" />
+      <span>{children}</span>
+    </p>
+  );
+}
 
 function ProductForm({ gymId, currency, taxOn, draft, setDraft, busy, error, onSave, onCancel }) {
   const problems = draft.pressed ? productProblems(draft, currency) : {};
@@ -222,11 +237,7 @@ export default function SellProducts({ gymId, page, locked, lockedNote, countryT
       {draft !== null && draft.id === null ? (
         <ProductForm gymId={gymId} currency={page.currency} taxOn={page.tax.bp > 0} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={() => { setDraft(null); setState({ busy: false, error: null, done: null }); }} />
       ) : null}
-      {state.done !== null ? (
-        <p className="c-s14 c-t1 c-w6 m-0" role="status">
-          {state.done}
-        </p>
-      ) : null}
+      {state.done !== null ? <SavedNote>{state.done}</SavedNote> : null}
       {state.error !== null && draft === null ? <Refusal>{state.error}</Refusal> : null}
 
       {page.products.length === 0 ? (

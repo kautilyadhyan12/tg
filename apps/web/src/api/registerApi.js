@@ -33,6 +33,10 @@ export const registerService = {
   changeProduct: async (gymId, productId, body) => page(await authApi.put(`${gymPath(gymId)}/register/products/${encodeURIComponent(productId)}`, body)),
   archiveProduct: async (gymId, productId) => page(await authApi.delete(`${gymPath(gymId)}/register/products/${encodeURIComponent(productId)}`)),
   restoreProduct: async (gymId, productId) => page(await authApi.post(`${gymPath(gymId)}/register/products/${encodeURIComponent(productId)}/restore`, {})),
+  addDiscount: async (gymId, body) => page(await authApi.post(`${gymPath(gymId)}/register/discounts`, body)),
+  changeDiscount: async (gymId, discountId, body) => page(await authApi.put(`${gymPath(gymId)}/register/discounts/${encodeURIComponent(discountId)}`, body)),
+  archiveDiscount: async (gymId, discountId) => page(await authApi.delete(`${gymPath(gymId)}/register/discounts/${encodeURIComponent(discountId)}`)),
+  restoreDiscount: async (gymId, discountId) => page(await authApi.post(`${gymPath(gymId)}/register/discounts/${encodeURIComponent(discountId)}/restore`, {})),
   /** What one person has bought at the desk, newest first. */
   purchases: async (gymId, entryId) =>
     read(memberPurchasesResponseSchema, "this person's purchases", await authApi.get(`${gymPath(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/purchases`)),
