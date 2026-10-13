@@ -4,28 +4,31 @@
 // carbohydrate, fat or fibre differs from its entry is printed, and the run
 // fails if any does. Not run in CI: it needs the network.
 //
-// It also holds test/fixtures/usda-sr-food-groups.json to the download: USDA's own
-// description and food group of every SR Legacy entry the list cites, which
-// nutrition.foods.diet.unit.test.ts checks each food's diet against.
+// It also holds three files in test/fixtures to the download, which
+// nutrition.foods.diet.unit.test.ts checks each food's diet against: USDA's own
+// description and food group of every SR Legacy entry the list cites
+// (usda-sr-food-groups.json), what USDA makes every survey entry it cites from
+// (usda-fndds-ingredients.json), and CoFID's name and note for every entry of its
+// own (uk-cofid-names.json).
 //
 // The USDA zip and CSV readers live in `usda-files.ts`, which the USDA importer
-// reads the same two releases with (ROADMAP 7a-iii-a); the CoFID workbook is
-// this tool's alone.
+// reads the same two releases with (ROADMAP 7a-iii-a); the CoFID workbook's is
+// `cofid-file.ts`.
 //
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --list          every food beside its entry's own name
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --cache=<dir>   default: the system temp folder
-//   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --write-groups  write the food groups file again, after the list grew
-import { readFileSync, writeFileSync } from "node:fs";
+//   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --write-groups  write the three fixture files again, after the list grew
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CURATED_FOODS, PIECE_ENTRIES } from "../src/modules/nutrition/foods.js";
 import { foodMeasures } from "../src/modules/nutrition/measures.js";
+import { COFID_URL, cofidTable } from "./cofid-file.js";
 import {
   defaultCache,
   download,
-  fail,
-  unzip,
   usdaFoodGroups,
+  usdaIngredients,
   usdaTable,
   USDA_RELEASES,
   type UsdaNutrient,
@@ -39,69 +42,23 @@ const FIGURES: readonly Figure[] = ["kcal", "proteinG", "carbsG", "fatG", "fiber
 interface Entry {
   description: string;
   figures: Map<UsdaNutrient, number | null>;
+  /** A USDA entry's household measures; CoFID gives none. */
+  portions?: readonly { gramWeight: number }[];
 }
+
+/** A fixture file's text: what it is, then its foods by id, in id order. */
+const fixture = (about: string, foods: Record<string, unknown>): string =>
+  `${JSON.stringify({ about, foods: Object.fromEntries(Object.entries(foods).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) }, null, 1)}\n`;
 
 function arg(name: string): string | undefined {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
   return hit?.slice(name.length + 3);
 }
 
-const decodeXml = (s: string): string =>
-  s.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&quot;", '"').replaceAll("&apos;", "'").replaceAll("&amp;", "&");
-
-/** CoFID's "1.3 Proximates" sheet, by food code. "Tr" (trace) is 0; "N" (not
- *  measured) and an empty cell are null. Fibre is AOAC, or NSP where AOAC is null. */
-function cofidTable(archive: Buffer): Map<string, Entry> {
-  const files = unzip(archive, (name) => name.startsWith("xl/"));
-  const xml = (name: string): string => files.get(name)?.toString("utf8") ?? fail(`no ${name} in the workbook`);
-  const shared = [...xml("xl/sharedStrings.xml").matchAll(/<si>([\s\S]*?)<\/si>/g)].map((si) =>
-    decodeXml([...(si[1] ?? "").matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => t[1] ?? "").join("")),
-  );
-  const sheetRel = /<sheet [^>]*name="1\.3 Proximates"[^>]*r:id="([^"]+)"/.exec(xml("xl/workbook.xml"))?.[1] ?? fail("no Proximates sheet");
-  const rels = xml("xl/_rels/workbook.xml.rels");
-  const target = [...rels.matchAll(/<Relationship [^>]*>/g)].map((m) => m[0]).find((r) => r.includes(`Id="${sheetRel}"`));
-  const sheetPath = /Target="([^"]+)"/.exec(target ?? "")?.[1] ?? fail("no Proximates sheet file");
-  const rows: Map<string, string>[] = [];
-  for (const rowXml of xml(`xl/${sheetPath}`).matchAll(/<row [^>]*>([\s\S]*?)<\/row>/g)) {
-    const cells = new Map<string, string>();
-    for (const cell of (rowXml[1] ?? "").matchAll(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
-      const column = cell[1] ?? "";
-      const attributes = cell[2] ?? "";
-      const inner = cell[3] ?? "";
-      const value = /<v>([\s\S]*?)<\/v>/.exec(inner)?.[1];
-      if (attributes.includes('t="s"')) cells.set(column, shared[Number(value)] ?? "");
-      else if (attributes.includes('t="inlineStr"')) cells.set(column, decodeXml(/<t[^>]*>([\s\S]*?)<\/t>/.exec(inner)?.[1] ?? ""));
-      else cells.set(column, decodeXml(value ?? ""));
-    }
-    rows.push(cells);
-  }
-  const header = rows[0] ?? fail("an empty Proximates sheet");
-  const column = (title: string): string => [...header].find(([, v]) => v === title)?.[0] ?? fail(`no "${title}" column`);
-  const code = column("Food Code");
-  const name = column("Food Name");
-  const read = (row: Map<string, string>, title: string): number | null => {
-    const raw = (row.get(column(title)) ?? "").trim();
-    if (raw === "Tr") return 0;
-    if (raw === "N" || raw === "") return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : fail(`"${raw}" in ${title}`);
-  };
-  const table = new Map<string, Entry>();
-  for (const row of rows.slice(1)) {
-    const id = row.get(code);
-    if (id === undefined || !/^\d{2}-\d+$/.test(id)) continue;
-    const figures = new Map<UsdaNutrient, number | null>([
-      ["kcal", read(row, "Energy (kcal) (kcal)")],
-      ["proteinG", read(row, "Protein (g)")],
-      ["carbsG", read(row, "Carbohydrate (g)")],
-      ["fatG", read(row, "Fat (g)")],
-      ["fiberG", read(row, "AOAC fibre (g)") ?? read(row, "NSP (g)")],
-    ]);
-    table.set(id, { description: row.get(name) ?? "", figures });
-  }
-  return table;
-}
-
+const INGREDIENTS_ABOUT =
+  "USDA FoodData Central, FNDDS 2021-2023 survey foods (October 2024, public domain): the description of every survey entry our food list cites, by FDC id, and what USDA makes it from, as its input_food.csv lists them: each ingredient's description and its SR Legacy food group, empty where the ingredient is not in that release. An ingredient that is itself a survey food is read down to its own ingredients. Written by tools/check-food-sources.ts --write-groups, which also fails when this file differs from the download; never edited by hand.";
+const COFID_ABOUT =
+  "UK McCance and Widdowson's Composition of Foods Integrated Dataset (2021, Open Government Licence): the food name and the description of every entry our food list cites, by food code, as the workbook's Proximates sheet gives them. Written by tools/check-food-sources.ts --write-groups, which also fails when this file differs from the download; never edited by hand.";
 const GROUPS_ABOUT =
   "USDA FoodData Central, SR Legacy (April 2018, public domain): the description and the food group of every entry our food list cites, by FDC id, as USDA's own food.csv and food_category.csv give them. Written by tools/check-food-sources.ts --write-groups, which also fails when this file differs from the download; never edited by hand.";
 
@@ -112,14 +69,9 @@ const usdaZip = async (release: keyof typeof USDA_RELEASES): Promise<Buffer> => 
 };
 const srLegacyZip = await usdaZip("sr_legacy");
 const srLegacy = usdaTable(srLegacyZip, "sr_legacy");
-const fndds = usdaTable(await usdaZip("fndds"), "fndds");
-const cofid = cofidTable(
-  await download(
-    "https://assets.publishing.service.gov.uk/media/60538b91e90e07527df82ae4/McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2021..xlsx",
-    "uk-cofid-2021.xlsx",
-    cache,
-  ),
-);
+const fnddsZip = await usdaZip("fndds");
+const fndds = usdaTable(fnddsZip, "fndds");
+const cofid = cofidTable(await download(COFID_URL, "uk-cofid-2021.xlsx", cache));
 
 /** The entry a citation points at. USDA is keyed by its numeric FDC id, CoFID by
  *  its "AC-nnn" food code. */
@@ -131,8 +83,11 @@ const lookup = (table: string, id: string): Entry | undefined => {
 };
 
 const differences: string[] = [];
+/** The list's first foods, whose servings round a measure by hand (a cup of milk is
+ *  240 g where USDA's is 244). Every food after them is held to its entry's own. */
+const ROUNDED_SERVINGS = 409;
 const perTable = new Map<string, number>();
-for (const food of CURATED_FOODS) {
+for (const [at, food] of CURATED_FOODS.entries()) {
   const [table = "", id = ""] = food.citation.split(":");
   perTable.set(table, (perTable.get(table) ?? 0) + 1);
   const entry = lookup(table, id);
@@ -143,6 +98,11 @@ for (const food of CURATED_FOODS) {
   for (const figure of FIGURES) {
     const expected = entry.figures.get(figure) ?? null;
     if (food[figure] !== expected) differences.push(`${food.name}: ${figure} is ${String(food[figure])}, ${food.citation} gives ${String(expected)}`);
+  }
+  // A USDA food is served by 100 g or by a measure its own entry gives, never an invented weight.
+  const portions = entry.portions ?? null;
+  if (at >= ROUNDED_SERVINGS && portions !== null && !(food.serving === 100 && food.unit === "g") && !portions.some((portion) => portion.gramWeight === food.serving)) {
+    differences.push(`${food.name}: ${String(food.serving)} g is no measure of ${food.citation} (${portions.map((portion) => String(portion.gramWeight)).join(", ")})`);
   }
   if (process.argv.includes("--list")) console.log(`${food.name}  ·  ${food.citation}  ·  ${entry.description}`);
 }
@@ -158,11 +118,34 @@ for (const food of CURATED_FOODS) {
   if (entry !== undefined && group !== undefined) cited[id] = [entry.description, group];
   else differences.push(`${food.name}: ${food.citation} has no food group`);
 }
-const groupsPath = join(import.meta.dirname, "..", "test", "fixtures", "usda-sr-food-groups.json");
-const groupsFile = `${JSON.stringify({ about: GROUPS_ABOUT, foods: cited }, null, 1)}\n`;
-if (process.argv.includes("--write-groups")) writeFileSync(groupsPath, groupsFile);
-else if (readFileSync(groupsPath, "utf8").replaceAll("\r\n", "\n") !== groupsFile) {
-  differences.push("test/fixtures/usda-sr-food-groups.json is not what the download gives: run this tool with --write-groups");
+
+// What USDA makes every survey entry cited from, and CoFID's own words for each of its entries.
+const ingredients = usdaIngredients(fnddsZip, srLegacyZip);
+const made: Record<string, [string, (readonly [string, string])[]]> = {};
+const named: Record<string, [string, string]> = {};
+for (const food of CURATED_FOODS) {
+  const [table = "", id = ""] = food.citation.split(":");
+  if (table === USDA_RELEASES.fndds.citation) {
+    const entry = fndds.get(Number(id));
+    const list = ingredients.get(Number(id));
+    if (entry !== undefined && list !== undefined && list.length > 0) made[id] = [entry.description, list];
+    else differences.push(`${food.name}: ${food.citation} has no ingredients`);
+  } else if (table === "uk-cofid") {
+    const entry = cofid.get(id);
+    if (entry !== undefined) named[id] = [entry.description, entry.note];
+  }
+}
+
+for (const [file, text] of [
+  ["usda-sr-food-groups.json", fixture(GROUPS_ABOUT, cited)],
+  ["usda-fndds-ingredients.json", fixture(INGREDIENTS_ABOUT, made)],
+  ["uk-cofid-names.json", fixture(COFID_ABOUT, named)],
+] as const) {
+  const path = join(import.meta.dirname, "..", "test", "fixtures", file);
+  if (process.argv.includes("--write-groups")) writeFileSync(path, text);
+  else if (!existsSync(path) || readFileSync(path, "utf8").replaceAll("\r\n", "\n") !== text) {
+    differences.push(`test/fixtures/${file} is not what the download gives: run this tool with --write-groups`);
+  }
 }
 
 // A food that borrows its pieces: the entry is in the survey release and still gives a measure the cited one lacks.

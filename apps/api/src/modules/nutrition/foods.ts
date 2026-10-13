@@ -6,8 +6,10 @@
 //   usda-fndds:<FDC id>  USDA FoodData Central, FNDDS 2021-2023 survey foods (October 2024)
 //   uk-cofid:<food code> UK McCance and Widdowson's Composition of Foods Integrated Dataset (2021)
 // USDA is used first. CoFID is used where USDA has no entry for the food: a roti
-// made at home without fat (USDA's rotis are store-bought), muesli, chana masala
-// and butter chicken. Paneer is CoFID's too: USDA's survey entry is worked out
+// made at home without fat (USDA's rotis are store-bought), muesli, chana masala,
+// butter chicken, and the British dishes with a few European ones (a Cornish
+// pasty, haggis, a Yorkshire pudding, moussaka, goulash, risotto); CoFID gives no
+// household measure, so those are served by the gram. Paneer is CoFID's too: USDA's survey entry is worked out
 // from whole milk and vinegar and keeps the milk's sugar, 22 g of carbohydrate
 // per 100 g, where CoFID's nine analysed samples carry 0.9 g (Kd, 2026-09-14).
 // kcal, protein, carbohydrate and fat are each table's own figures: USDA counts
@@ -21,7 +23,11 @@
 // what it is made of: a dish by the ingredients its table lists, and a food
 // whose usual versions differ by the version with the animal ingredient its name
 // does not show (egg in naan and in bread rolls, cheese in pesto, lard in
-// traditional refried beans, anchovy in Caesar dressing). Honey is not vegan.
+// traditional refried beans, anchovy in Caesar dressing; meat stock in French
+// onion soup, borscht, minestrone, pumpkin soup, risotto and matzo ball soup,
+// beef dripping under a Yorkshire pudding and bubble and squeak, suet in a
+// mince pie, gelatine in a trifle's jelly, anchovy in the Worcestershire sauce
+// of a Welsh rarebit, egg in fresh pasta, gnocchi and strudel dough). Honey is not vegan.
 // Processing aids such as rennet and fining agents are not followed, and no
 // label can see a product's own recipe.
 import type { Diet } from "@app/shared";
@@ -522,6 +528,110 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Dumplings (pork, fried)", 192, 8.76, 14.05, 11.13, 1.5, 100, "g", "non_vegetarian", "usda-fndds:2708705"),
   row("Pho (beef)", 77, 5.81, 5.6, 3.33, 0.4, 400, "bowl", "non_vegetarian", "usda-fndds:2707124"),
   row("Ramen bowl", 127, 7.13, 13.95, 4.57, 0.9, 490, "bowl", "non_vegetarian", "usda-fndds:2709153"),
+  // ── American dishes
+  row("Clam chowder (New England)", 93, 3.12, 9.25, 4.8, 1, 255, "cup", "non_vegetarian", "usda-fndds:2707139"),
+  row("Cornbread", 287, 6.55, 42.87, 9.8, 1.5, 65, "piece", "vegetarian_eggs", "usda-fndds:2707811"),
+  row("American biscuit (baked)", 350, 7.03, 44.89, 15.97, 1.4, 45, "biscuit", "vegetarian", "usda-fndds:2707804"),
+  row("Biscuits and gravy", 224, 6.2, 16.98, 14.68, 0.8, 220, "portion", "non_vegetarian", "usda-fndds:2708744"),
+  row("Gumbo (with rice)", 89, 8.16, 6.55, 3.43, 0.9, 244, "cup", "non_vegetarian", "usda-fndds:2706726"),
+  row("Jambalaya", 161, 13.76, 8.65, 7.97, 0.7, 244, "cup", "non_vegetarian", "usda-fndds:2706727"),
+  row("Meatloaf", 199, 17.48, 7.2, 10.72, 0.4, 108, "slice", "non_vegetarian", "usda-fndds:2706499"),
+  row("Pot roast (beef)", 251, 28.39, 0, 15.35, 0, 90, "slice", "non_vegetarian", "usda-fndds:2705848"),
+  row("Chicken pot pie", 255, 9.24, 23.95, 13.54, 2, 250, "pie", "non_vegetarian", "usda-fndds:2706703"),
+  row("Corn dog", 250, 8.57, 26.96, 12.02, 1, 88, "corn dog", "non_vegetarian", "usda-fndds:2707044"),
+  row("Sloppy joe", 185, 11.32, 19.95, 6.42, 1.1, 185, "sandwich", "non_vegetarian", "usda-fndds:2706883"),
+  row("Reuben sandwich", 282, 10.01, 16.42, 19.43, 2.2, 215, "sandwich", "non_vegetarian", "usda-fndds:2706952"),
+  row("Club sandwich", 222, 15.08, 23.09, 7.48, 1, 130, "sandwich", "non_vegetarian", "usda-fndds:2706993"),
+  row("BLT sandwich", 231, 10.89, 29.71, 7.54, 1.7, 105, "sandwich", "non_vegetarian", "usda-fndds:2706979"),
+  row("Grits (cooked in water)", 58, 1.2, 12.41, 0.28, 0.7, 240, "cup", "vegan", "usda-fndds:2708365"),
+  row("Cobb salad (no dressing)", 93, 11.32, 2.65, 4.33, 1.2, 105, "cup", "non_vegetarian", "usda-fndds:2709832"),
+  row("Enchilada (chicken)", 178, 10.03, 14.64, 9.02, 2.3, 150, "enchilada", "non_vegetarian", "usda-fndds:2708568"),
+  row("Enchilada (cheese)", 165, 6.37, 17.34, 8.2, 3.1, 150, "enchilada", "non_vegetarian", "usda-fndds:2708569"),
+  row("Tamale (pork)", 174, 7.38, 15.8, 9.04, 2.4, 140, "tamale", "non_vegetarian", "usda-fndds:2708572"),
+  row("Fajita (chicken)", 206, 11.33, 17.99, 9.8, 1.5, 95, "fajita", "non_vegetarian", "usda-fndds:2708604"),
+  row("Empanada (beef)", 333, 12.09, 27.45, 19.2, 1.6, 130, "empanada", "non_vegetarian", "usda-fndds:2708711"),
+  row("Eggs Benedict", 288, 13.81, 8.48, 22.1, 0.6, 155, "portion", "non_vegetarian", "usda-fndds:2707180"),
+  row("Egg salad", 257, 10.26, 1.01, 23.14, 0, 222, "cup", "vegetarian_eggs", "usda-fndds:2707182"),
+  row("Chicken salad", 200, 11.64, 7.41, 13.52, 0, 208, "cup", "non_vegetarian", "usda-fndds:2706221"),
+  row("Macaroni salad", 221, 4.46, 24.65, 11.52, 1.4, 204, "cup", "vegetarian_eggs", "usda-fndds:2708932"),
+  row("Chicken and dumplings", 144, 15.69, 8.04, 5.55, 0.3, 244, "cup", "non_vegetarian", "usda-fndds:2706543"),
+  row("Chicken parmesan", 204, 16.17, 10.92, 10.64, 0.9, 301, "serving", "non_vegetarian", "usda-sr:168062"),
+  row("Eggplant parmesan", 155, 7.02, 8.96, 10.5, 1.9, 198, "cup", "vegetarian_eggs", "usda-fndds:2710050"),
+  row("Crab cake", 155, 20.21, 0.48, 7.52, 0, 60, "cake", "non_vegetarian", "usda-sr:171967"),
+  row("Hush puppies", 296, 6.16, 40.21, 13.25, 2.9, 22, "hush puppy", "vegetarian_eggs", "usda-fndds:2707819"),
+  row("Pumpkin pie", 249, 4.76, 36.34, 9.78, 1.7, 150, "slice", "vegetarian_eggs", "usda-fndds:2708011"),
+  row("Pecan pie", 449, 6.02, 49.46, 25.25, 1.9, 150, "slice", "vegetarian_eggs", "usda-fndds:2708015"),
+  row("Key lime pie", 322, 5.78, 42.16, 14.92, 0.3, 150, "slice", "vegetarian_eggs", "usda-fndds:2708001"),
+  // ── European dishes
+  row("Paella (seafood)", 143, 8.03, 16.44, 4.76, 0.7, 240, "cup", "non_vegetarian", "usda-fndds:2706711"),
+  row("Gazpacho", 26, 0.81, 4.49, 0.63, 1, 245, "cup", "vegan", "usda-fndds:2710106"),
+  row("Ratatouille", 67, 1.09, 5.77, 4.73, 1.9, 215, "cup", "vegan", "usda-fndds:2710028"),
+  row("Quiche (cheese)", 365, 11.91, 13.74, 29.23, 0.8, 192, "slice", "vegetarian_eggs", "usda-fndds:2708733"),
+  row("Quiche Lorraine", 358, 15.3, 16.8, 26, 1.3, 100, "g", "non_vegetarian", "uk-cofid:12-952"),
+  row("Crepe (plain)", 224, 8.85, 22.02, 11.29, 0.6, 65, "crepe", "vegetarian_eggs", "usda-fndds:2708342"),
+  row("Bouillabaisse", 67, 8.25, 1.59, 3.05, 0.3, 255, "cup", "non_vegetarian", "usda-fndds:2706717"),
+  row("French onion soup", 108, 5.45, 11.84, 4.47, 1.1, 245, "cup", "non_vegetarian", "usda-fndds:2710108"),
+  row("Minestrone", 40, 1.71, 7.3, 0.5, 1.5, 245, "cup", "non_vegetarian", "usda-fndds:2710114"),
+  row("Pumpkin soup", 72, 1.1, 6.86, 4.7, 1.5, 245, "cup", "non_vegetarian", "usda-fndds:2709718"),
+  row("Gnocchi (potato)", 135, 2.44, 17.2, 6.33, 1, 188, "cup", "vegetarian_eggs", "usda-fndds:2708722"),
+  row("Ravioli (cheese, with tomato sauce)", 98, 3.98, 15.22, 2.3, 1.2, 250, "cup", "vegetarian_eggs", "usda-fndds:2708768"),
+  row("Tortellini (cheese, with tomato sauce)", 149, 6.18, 23, 3.65, 1.6, 250, "cup", "vegetarian_eggs", "usda-fndds:2708787"),
+  row("Risotto (plain)", 184, 3.3, 35.6, 4.7, 0.9, 100, "g", "non_vegetarian", "uk-cofid:11-999"),
+  row("Polenta (cooked in water)", 58, 1.12, 12.47, 0.28, 0.6, 240, "cup", "vegan", "usda-fndds:2708374"),
+  row("Bruschetta", 171, 4.29, 21.32, 7.61, 1.5, 43, "slice", "vegetarian", "usda-fndds:2707652"),
+  row("Tiramisu", 353, 5.65, 29.44, 23.86, 0.6, 175, "piece", "vegetarian_eggs", "usda-fndds:2705702"),
+  row("Moussaka", 128, 8.5, 4.5, 8, 1, 100, "g", "non_vegetarian", "uk-cofid:19-609"),
+  row("Spanakopita (spinach pie)", 212, 8.27, 10.35, 15.15, 1, 120, "piece", "vegetarian_eggs", "usda-fndds:2708729"),
+  row("Stuffed grape leaves (dolma, beef and rice)", 228, 8.15, 11.3, 17.03, 3.1, 21, "roll", "non_vegetarian", "usda-fndds:2706621"),
+  row("Tzatziki", 91, 5.22, 4.1, 6, 0.2, 15, "tbsp", "vegetarian", "usda-fndds:2705448"),
+  row("Taramasalata", 517, 3.2, 7.4, 52.9, 0.3, 100, "g", "non_vegetarian", "uk-cofid:16-449"),
+  row("Baklava", 440, 6.58, 37.55, 29.34, 2.5, 80, "piece", "vegetarian", "usda-fndds:2708044"),
+  row("Tabbouleh", 127, 1.64, 9.65, 9.66, 1.8, 160, "cup", "vegan", "usda-fndds:2709131"),
+  row("Baba ganoush (eggplant dip)", 183, 4.8, 8.15, 14.98, 3.9, 15, "tbsp", "vegan", "usda-fndds:2710049"),
+  row("Shish kebab (lamb)", 162, 12.02, 5.06, 10.28, 0.8, 202, "skewer", "non_vegetarian", "usda-fndds:2706780"),
+  row("Spanish omelette", 112, 5.6, 5.9, 7.6, 1.3, 100, "g", "vegetarian_eggs", "uk-cofid:12-957"),
+  row("Coq au vin", 188, 11, 3.3, 11, 0.2, 100, "g", "non_vegetarian", "uk-cofid:19-486"),
+  row("Goulash", 79, 6.9, 6.5, 3, 0.8, 100, "g", "non_vegetarian", "uk-cofid:19-583"),
+  row("Beef stroganoff", 150, 10.06, 6.21, 9.33, 0.7, 256, "cup", "non_vegetarian", "usda-fndds:2706382"),
+  row("Pierogi (potato and cheese)", 195, 5.26, 29.64, 6.14, 0.9, 40, "pierogi", "vegetarian_eggs", "usda-fndds:2708720"),
+  row("Borscht", 20, 0.52, 3.9, 0.37, 0.8, 245, "cup", "non_vegetarian", "usda-fndds:2710105"),
+  row("Stuffed cabbage rolls (beef and rice)", 114, 8.3, 8.83, 5.06, 1.3, 103, "roll", "non_vegetarian", "usda-fndds:2706620"),
+  row("Stuffed pepper (rice and meat)", 178, 7.83, 9.93, 11.66, 0.7, 149, "half pepper", "non_vegetarian", "usda-fndds:2709073"),
+  row("Swedish meatballs", 170, 12.48, 6.29, 10.3, 0.2, 45, "meatball", "non_vegetarian", "usda-fndds:2706384"),
+  row("Potato pancake / latke", 196, 4.47, 20.64, 10.8, 2.2, 70, "pancake", "vegetarian_eggs", "usda-fndds:2709552"),
+  row("Kielbasa", 337, 12.45, 5.03, 29.68, 0, 100, "g", "non_vegetarian", "usda-sr:173877"),
+  row("Cheese fondue", 276, 19.32, 1.95, 21.2, 0, 13, "tbsp", "vegetarian", "usda-fndds:2705791"),
+  row("Apple strudel", 274, 3.3, 41.1, 11.2, 2.2, 71, "piece", "vegetarian_eggs", "usda-sr:175032"),
+  row("Challah", 287, 9.5, 47.8, 6, 2.3, 31, "slice", "vegetarian_eggs", "usda-fndds:2707624"),
+  row("Matzo ball soup", 73, 3.09, 10.68, 1.96, 0.9, 245, "cup", "non_vegetarian", "usda-fndds:2709151"),
+  // ── British, Irish, Australian and New Zealand dishes
+  row("Cornish pasty", 278, 7, 24, 17.8, 2.9, 100, "g", "non_vegetarian", "uk-cofid:19-466"),
+  row("Steak and kidney pie", 305, 14.6, 22.2, 18.1, 1.8, 100, "g", "non_vegetarian", "uk-cofid:19-629"),
+  row("Pork pie", 370, 9.9, 25.7, 26, 2.9, 100, "g", "non_vegetarian", "uk-cofid:19-467"),
+  row("Sausage roll", 352, 8.4, 27, 24.1, 3.4, 100, "g", "non_vegetarian", "uk-cofid:19-468"),
+  row("Scotch egg", 241, 12, 13.1, 16, 1.7, 100, "g", "non_vegetarian", "uk-cofid:19-518"),
+  row("Toad in the hole", 285, 12, 20.2, 17.9, 2.4, 100, "g", "non_vegetarian", "uk-cofid:19-635"),
+  row("Yorkshire pudding", 211, 6.7, 25.8, 9.8, 1.1, 100, "g", "non_vegetarian", "uk-cofid:11-1146"),
+  row("Lancashire hotpot", 119, 7.3, 7.4, 6.9, 1.1, 100, "g", "non_vegetarian", "uk-cofid:19-601"),
+  row("Haggis", 310, 10.7, 19.2, 21.7, 0.2, 100, "g", "non_vegetarian", "uk-cofid:19-132"),
+  row("Black pudding (fried)", 297, 10.3, 16.6, 21.5, 0.2, 100, "g", "non_vegetarian", "uk-cofid:19-114"),
+  row("Kippers (grilled)", 245, 21.7, 0, 17.6, 0, 100, "g", "non_vegetarian", "uk-cofid:16-397"),
+  row("Kedgeree", 167, 15.9, 9.1, 7.7, 0.2, 100, "g", "non_vegetarian", "uk-cofid:16-447"),
+  row("Breaded scampi (British)", 232, 11.6, 24.3, 10.5, 1.5, 100, "g", "non_vegetarian", "uk-cofid:16-409"),
+  row("Bubble and squeak", 126, 1.7, 10.1, 9, 1.9, 100, "g", "non_vegetarian", "uk-cofid:15-704"),
+  row("Cauliflower cheese", 102, 5.3, 6.1, 6.4, 1.3, 100, "g", "vegetarian", "uk-cofid:15-711"),
+  row("Welsh rarebit", 398, 13.9, 23.1, 28.4, 1.2, 100, "g", "non_vegetarian", "uk-cofid:12-602"),
+  row("Crumpet (toasted)", 207, 6.9, 45.4, 1, 3.1, 100, "g", "vegetarian", "uk-cofid:11-989"),
+  row("Scone", 382, 6.67, 48.07, 18.35, 1.2, 70, "scone", "vegetarian_eggs", "usda-fndds:2707808"),
+  row("Irish soda bread", 301, 6.48, 51.07, 8.96, 2.3, 74, "slice", "vegetarian_eggs", "usda-fndds:2707852"),
+  row("Hot cross bun", 312, 7.3, 58.3, 5.8, 1.9, 100, "g", "vegetarian_eggs", "uk-cofid:11-1084"),
+  row("Shortbread", 515, 5.3, 62.2, 29, 2.2, 100, "g", "vegetarian", "uk-cofid:11-802"),
+  row("Oat flapjack (British oat bar)", 434, 5.1, 55.7, 22.8, 5.2, 100, "g", "vegetarian", "uk-cofid:11-814"),
+  row("Mince pie", 377, 3.8, 60.7, 14.9, 2.6, 100, "g", "non_vegetarian", "uk-cofid:11-848"),
+  row("Trifle", 169, 3.52, 23.24, 7.15, 0.4, 145, "cup", "non_vegetarian", "usda-fndds:2705701"),
+  row("Pavlova (with fruit and cream)", 244, 2.7, 42.2, 8.3, 1.9, 100, "g", "vegetarian_eggs", "uk-cofid:12-552"),
+  row("Roast lamb (leg)", 242, 26.2, 0, 14.42, 0, 100, "g", "non_vegetarian", "usda-sr:174373"),
+  row("Yeast extract spread", 185, 23.88, 20.42, 0.9, 6.5, 6, "tsp", "vegan", "usda-sr:167717"),
 ];
 
 /** Names the words of the list's own names do not reach, each pointing at a
@@ -586,9 +696,29 @@ const FOOD_NAMES: ReadonlyMap<string, string> = new Map(Object.entries({
   // one food's own name
   ground_beef: "ground_beef_85_cooked", cheddar: "cheddar_cheese", mozzarella: "mozzarella_cheese",
   parmesan: "parmesan_cheese", feta: "feta_cheese", chilli_con_carne: "chili_con_carne", bolognese: "spaghetti_bolognese",
+  // other names of the dishes of the US, Europe, Britain, Australia and New Zealand
+  meat_loaf: "meatloaf", corn_bread: "cornbread", corndog: "corn_dog", pot_pie: "chicken_pot_pie",
+  blt: "blt_sandwich", reuben: "reuben_sandwich", pasta_salad: "macaroni_salad",
+  chicken_parm: "chicken_parmesan", chicken_parmigiana: "chicken_parmesan",
+  eggplant_parm: "eggplant_parmesan", eggplant_parmigiana: "eggplant_parmesan", aubergine_parmigiana: "eggplant_parmesan",
+  onion_soup: "french_onion_soup", minestrone_soup: "minestrone", cornmeal_mush: "polenta_cooked_in_water",
+  dolma: "stuffed_grape_leaves_dolma_beef_and_rice", dolmades: "stuffed_grape_leaves_dolma_beef_and_rice",
+  eggplant_dip: "baba_ganoush_eggplant_dip", baba_ghanoush: "baba_ganoush_eggplant_dip", baba_ganouj: "baba_ganoush_eggplant_dip",
+  shish_kabob: "shish_kebab_lamb", lamb_kebab: "shish_kebab_lamb", lamb_kabob: "shish_kebab_lamb",
+  tabouli: "tabbouleh", tabouleh: "tabbouleh", tabbouli: "tabbouleh", taramosalata: "taramasalata",
+  spanish_omelet: "spanish_omelette", spanish_tortilla: "spanish_omelette", tortilla_espanola: "spanish_omelette",
+  stroganoff: "beef_stroganoff", pierogies: "pierogi_potato_and_cheese", perogies: "pierogi_potato_and_cheese", borsch: "borscht", borsht: "borscht",
+  cabbage_rolls: "stuffed_cabbage_rolls_beef_and_rice", polish_sausage: "kielbasa", fondue: "cheese_fondue", strudel: "apple_strudel",
+  lancashire_hot_pot: "lancashire_hotpot", blood_sausage: "black_pudding_fried", rarebit: "welsh_rarebit",
+  welsh_rabbit: "welsh_rarebit", soda_bread: "irish_soda_bread", lamb_roast: "roast_lamb_leg", leg_of_lamb: "roast_lamb_leg",
+  marmite: "yeast_extract_spread", vegemite: "yeast_extract_spread", yeast_extract: "yeast_extract_spread",
   // Left out on purpose: a word the markets use for different foods. "Jelly" is
   // jam in the US and a gelatine dessert in the UK, "chips" are crisps in the US
-  // and fries in the UK, and "beans" on a British plate are baked beans.
+  // and fries in the UK, and "beans" on a British plate are baked beans. A
+  // "biscuit" is a soft bread in the US and a cookie in the UK, a "flapjack" a
+  // pancake in the US and an oat bar in the UK, and "scampi" shrimp in garlic
+  // butter in the US and breaded langoustine in the UK: each is listed under the
+  // longer name that says which, and the word alone names none.
 }));
 
 /** One word for one common food: a word several foods answer to, and the one the

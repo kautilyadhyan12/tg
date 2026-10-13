@@ -431,7 +431,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 34b. [ ] **The ten figures on the Food screen** (7a-v, the rest): on a saved meal, the photo sheet's rows and under the rings, each beside a published daily reference whose source its plan names; "about, N items not known"; a product's figures said to be from its label. Waits for 32b.
     - 34c. **More foods** (7a-i-b; split 2026-10-13 in three: the first needs only the two tables the list already uses).
       - 34c-i. [x] **Healthy everyday foods and more fruit** — merged 2026-10-13 (PR #249).
-      - 34c-ii. [ ] **The traditional dishes of the US, Canada, Europe, Australia and New Zealand**: USDA and the UK table first; another country's table only once its licence is read and Kd has said yes to it. 34c-iii. [ ] **Brazil and Asia**, by the same rules.
+      - 34c-ii. [x] **The traditional dishes of the US, Canada, Europe, Australia and New Zealand** — merged 2026-10-13 (PR #253).
+      - 34c-iii. [ ] **Brazil and Asia**, by the same rules: USDA and the UK table first; another country's table only once its licence is read and Kd has said yes to it. With it, the dishes 34c-ii left for such a table (`handoff/2026-10-13-34c-ii.md`).
     - 34d. [ ] **Meal suggestions** (7a). 34e. [ ] **Your own diet plan** (7c). 34f. [ ] **Your week in food** (7d). Each is split again by the terminal that reaches it.
 35. [ ] **Progress**: the charts, the workout calendar, body measurements and weigh-ins, badges; then weekly challenges and predictions on the new server (dead on the web; spec Part 2B §5).
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13).
