@@ -11,7 +11,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { z } from "zod";
-import { mealMeasuresResponseSchema, mealPreviewSchema, mealSchema, type Meal, type MealItem } from "@app/shared";
+import { MORE_NOT_KNOWN, mealMeasuresResponseSchema, mealPreviewSchema, mealSchema, type Meal, type MealItem } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -309,7 +309,8 @@ d("changing a food already logged (real Postgres)", () => {
     expect(halved.items[0]?.scanEstimate).toEqual(estimate);
     // Taken away: the scan's estimate at the amount it holds now.
     const back = await edit(row.id, [{ canonical: "est_zqxedit_fritter", grams: 100, from: 0, own: null }, { from: 1 }, { from: 2 }]);
-    expect(back.items[0]).toEqual({ ...fritter, measure: undefined });
+    // An item written before the ten further figures were kept has them, not known, once it is priced again.
+    expect(back.items[0]).toEqual({ ...fritter, measure: undefined, more: MORE_NOT_KNOWN });
     expect(back.items[0]?.scanEstimate).toBeUndefined();
 
     // The product no longer found: its amount cannot be priced again by a table...

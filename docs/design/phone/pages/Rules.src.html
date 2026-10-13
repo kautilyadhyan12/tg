@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How the member web becomes the phone app</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<style>
+.rule{display:grid;grid-template-columns:40px minmax(0,1fr);gap:14px;padding:16px 18px}
+.rule + .rule{border-top:1px solid var(--line)}
+.rule b{width:34px;height:34px;border-radius:50%;background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;box-sizing:border-box}
+</style>
+<div data-root="1" class="screen" style="width: 840px; height: %H%px">
+<main style="box-sizing: border-box; padding: 40px; display: flex; flex-direction: column; gap: 32px">
+
+<div class="col" style="gap: 6px">
+<span class="eyebrow">The phone app’s look</span>
+<h1 class="h1">The member web’s design, fitted to a phone</h1>
+<p class="s14 t2">Same colours, same font, same pictures, same boxes in the same order.</p>
+</div>
+
+<div class="card col">
+<div class="rule"><b>1</b><div class="col" style="gap: 4px"><h2 class="h3">The design is the member web’s</h2><p class="s14 t2">Near-black page, dark boxes with a thin line, orange for what you press, Inter. Dark only, as the web is.</p></div></div>
+<div class="rule"><b>2</b><div class="col" style="gap: 4px"><h2 class="h3">The pictures stay</h2><p class="s14 t2">Every photo and drawing a web page has is on its phone screen, made small enough to open fast.</p></div></div>
+<div class="rule"><b>3</b><div class="col" style="gap: 4px"><h2 class="h3">Same boxes, same order</h2><p class="s14 t2">A row of four on the web is two and two on the phone. A row of picture cards swipes sideways. Nothing is turned into one long list.</p></div></div>
+<div class="rule"><b>4</b><div class="col" style="gap: 4px"><h2 class="h3">Five tabs at the bottom</h2><p class="s14 t2">The side menu’s pages sit under Today · Workout · Food · Gym · Me. The AI Coach is not in the phone app.</p></div></div>
+<div class="rule"><b>5</b><div class="col" style="gap: 4px"><h2 class="h3">Big enough for a thumb</h2><p class="s14 t2">A main button is 48 tall. Nothing you press is under 44. No words smaller than 11.</p></div></div>
+<div class="rule"><b>6</b><div class="col" style="gap: 4px"><h2 class="h3">A choice opens from the bottom</h2><p class="s14 t2">Adding a food, booking a class or a question opens as a box from the bottom of the screen.</p></div></div>
+<div class="rule"><b>7</b><div class="col" style="gap: 4px"><h2 class="h3">Nothing is lost without internet</h2><p class="s14 t2">A workout, a meal or a run is kept on the phone and sent when the internet is back. A line at the top says so.</p></div></div>
+</div>
+
+<section class="col" style="gap: 14px" aria-labelledby="r-where">
+<h2 id="r-where" class="h3">Where each web page goes</h2>
+<div class="card">
+<div class="row"><span class="badge"><!--I:grid:16--></span><span class="s14 w6" style="width: 90px">Today</span><span class="s14 t2 grow">Dashboard</span></div>
+<div class="row"><span class="badge"><!--I:dumbbell:16--></span><span class="s14 w6" style="width: 90px">Workout</span><span class="s14 t2 grow">Exercises · My Workout · Running</span></div>
+<div class="row"><span class="badge"><!--I:apple:16--></span><span class="s14 w6" style="width: 90px">Food</span><span class="s14 t2 grow">Nutrition</span></div>
+<div class="row"><span class="badge"><!--I:building:16--></span><span class="s14 w6" style="width: 90px">Gym</span><span class="s14 t2 grow">My gyms</span></div>
+<div class="row"><span class="badge"><!--I:user:16--></span><span class="s14 w6" style="width: 90px">Me</span><span class="s14 t2 grow">Settings · Progress · Achievements</span></div>
+</div>
+</section>
+
+<section class="col" style="gap: 14px" aria-labelledby="r-blocks">
+<h2 id="r-blocks" class="h3">The pieces every screen uses</h2>
+<div class="g2" style="gap: 16px">
+<div class="card pad col" style="gap: 10px">
+<button type="button" class="btn btn-p btn-wide"><!--I:play:18-->Start Workout</button>
+<button type="button" class="btn btn-soft btn-wide">Join waitlist</button>
+<button type="button" class="btn btn-s btn-wide">Cancel booking</button>
+<button type="button" class="btn btn-danger btn-wide">Delete Account</button>
+</div>
+<div class="card pad col" style="gap: 12px">
+<div class="hrow" style="flex-wrap: wrap; gap: 6px"><span class="pill pill-good">Beginner</span><span class="pill pill-gold">Intermediate</span><span class="pill pill-bad">Advanced</span><span class="pill pill-ai"><!--I:sparkles:10-->AI</span><span class="pill pill-am">New</span><span class="pill pill-plain">Quadriceps</span></div>
+<div class="hrow" style="flex-wrap: wrap; gap: 6px"><span class="chip chip-on">All</span><span class="chip">Yoga</span><span class="chip">HIIT</span></div>
+<label class="col" style="gap: 6px"><span class="label">Full Name</span><span class="input">Maya Rao</span></label>
+<div class="col" style="gap: 6px"><div class="between s12"><span class="am w6">Level 7</span><span class="t3 num">1,240/1,500 XP</span></div><div class="bar"><span style="width: 83%"></span></div></div>
+</div>
+</div>
+<div class="card" style="width: 390px"><div class="strip"><!--I:wifioff:16--><span>No internet. What you do is kept on this phone.</span></div><!--TABBAR:today--></div>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":840,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -398,7 +398,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 **Feature folder 1 — `D:\Projects\ai-home-gym`: getting into the app, and the member's gym.**
 
 10. [ ] **The empty app, on Kd's phone** (item 0's app, without the store): `apps/mobile` as one Expo app in TypeScript, under the same checks as the rest, with each folder's own copy on his one phone. New packages need his yes in its plan. The first job of the whole phone app.
-11. [ ] **The look, and five tabs**: Today · Workout · Food · Gym · Me, light and dark, drawn as pictures first (as the console's were), then the building blocks every screen uses. Owed from item 10's review: with the screen-test tool this item chooses, a test of the first screen's three lines and of `readAppExtra`.
+11. **The look, and five tabs**: Today · Workout · Food · Gym · Me (split 2026-10-13: the pictures first, as the console's were). The look is the MEMBER WEB's own, fitted to a phone, dark only (`rulings/2026-10-13-stage5-11a-phone-look-pictures.md`).
+    - 11a. [x] **The look as pictures** — merged 2026-10-13 (PR #246).
+    - 11b. [ ] **The look in the app**: the member web's colours, Inter, its pictures made small, and the building blocks in `apps/mobile`; the five tabs on Kd's phone. After Kd's yes to 11a's pictures; new packages need his yes in its plan. Owed from item 10's review: with the screen-test tool it chooses, a test of the first screen's three lines and of `readAppExtra`.
 12. [ ] **Sign-in** by email code and by Google, with the robot check; one phone at a time (spec Part 3 §10.5); "Before you start"; sign out. Risky. Apple sign-in comes with the iPhone version (item 21).
 13. [ ] **Invitations and Join**, with what the gym can see (spec Part 3 §10.2); My Gyms; the invitation email's button opens the app.
 14. [ ] **Setup**: the eleven screens and the plan, the health question, Safe mode, the consent taps.
@@ -419,8 +421,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
     - 32b. [ ] **The Food screen**: search, add by measure, the rings and a person's own numbers, change a logged food, saved dishes with rename and delete. Waits for items 10 to 12; sends every meal with its own id, made in small letters (32a). Its plan settles a removed meal whose save arrives again, which today saves it anew: the phone never sends a save once its removal is queued, or the server keeps removed ids. Feature folder 2's database holds the food table since 2026-10-13.
-33. [ ] **A meal photo with the phone's camera, and barcode scan** (item 5; Stage 4 item 8).
-34. [ ] **More food**: more than the macros (7a-v), more foods (7a-i-b), meal suggestions (7a), your own diet plan (7c), your week in food (7d).
+33. [ ] **A meal photo with the phone's camera, and barcode scan** (item 5; Stage 4 item 8). A scanned barcode reads the product's own page at Open Food Facts, which sends the minerals, vitamin D and the serving size that its search leaves out (34a's review).
+34. **More food** (split 2026-10-13: the parts on the server need no phone).
+    - 34a. [x] **Ten more figures kept with every food in a meal** — merged 2026-10-13 (PR #245).
+    - 34b. [ ] **The ten figures on the Food screen** (7a-v, the rest): on a saved meal, the photo sheet's rows and under the rings, each beside a published daily reference whose source its plan names; "about, N items not known"; a product's figures said to be from its label. Waits for 32b.
+    - 34c. [ ] **More foods** (7a-i-b). 34d. [ ] **Meal suggestions** (7a). 34e. [ ] **Your own diet plan** (7c). 34f. [ ] **Your week in food** (7d). Each is split again by the terminal that reaches it.
 35. [ ] **Progress**: the charts, the workout calendar, body measurements and weigh-ins, badges; then weekly challenges and predictions on the new server (dead on the web; spec Part 2B §5).
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13).
 37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes.
