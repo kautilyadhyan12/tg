@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workout: My Workout</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<style>
+.set{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.set div{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid var(--line)}
+</style>
+<div data-root="1" class="screen" style="width: 390px; height: %H%px">
+
+<div class="rel" style="height: 190px; flex-shrink: 0">
+<img class="photo" src="%IMG:weight%" alt="" style="opacity: 0.55">
+<span class="shade"></span>
+<div class="g3" role="tablist" aria-label="Workout" style="position: absolute; left: 16px; right: 16px; top: 14px; gap: 6px; padding: 4px; border-radius: 16px; background: rgba(10,9,8,0.72); border: 1px solid var(--line2)">
+<a href="#exercises" role="tab" aria-selected="false" class="btn" style="height: 40px; padding: 0; font-size: 13px; color: var(--t2)">Exercises</a>
+<a href="#my-workout" role="tab" aria-selected="true" class="btn btn-soft" style="height: 40px; padding: 0; font-size: 13px; border-radius: 12px">My Workout</a>
+<a href="#running" role="tab" aria-selected="false" class="btn" style="height: 40px; padding: 0; font-size: 13px; color: var(--t2)">Running</a>
+</div>
+<div class="between" style="position: absolute; left: 16px; right: 16px; bottom: 14px; align-items: flex-end">
+<div class="col" style="gap: 4px"><span class="eyebrow">Workout Builder</span><h1 class="h1">Legs and core</h1></div>
+<button type="button" class="btn btn-s btn-sm" style="border-radius: 999px"><!--I:folder:16-->Templates</button>
+</div>
+</div>
+
+<main class="main">
+
+<div class="g3">
+<div class="card col" style="align-items: center; gap: 4px; padding: 12px 4px"><span class="am" style="display: flex"><!--I:dumbbell:16--></span><span class="big num">3</span><span class="s11 t3">Exercises</span></div>
+<div class="card col" style="align-items: center; gap: 4px; padding: 12px 4px"><span style="display: flex; color: var(--blue)"><!--I:clock:16--></span><span class="big num">18m</span><span class="s11 t3">Est. Duration</span></div>
+<div class="card col" style="align-items: center; gap: 4px; padding: 12px 4px"><span class="am" style="display: flex"><!--I:flame:16--></span><span class="big num">~96</span><span class="s11 t3">Est. Calories</span></div>
+</div>
+
+<div class="card pad col" style="gap: 12px">
+<div class="hrow"><div class="rel" style="width: 56px; height: 56px; border-radius: 12px; overflow: hidden; flex-shrink: 0"><img class="photo" src="%IMG:chairsquat%" alt=""></div><div class="col grow" style="gap: 4px"><span class="s15 w6">Chair Squats</span><div class="hrow" style="gap: 4px"><span class="pill pill-good">Beginner</span><span class="pill pill-ai"><!--I:sparkles:10-->AI</span></div></div><button type="button" class="icon-btn" aria-label="Remove Chair Squats"><!--I:trash:18--></button></div>
+<div class="set"><div><span class="s15 w7 num">3</span><span class="s11 t3">Sets</span></div><div><span class="s15 w7 num">12</span><span class="s11 t3">Reps</span></div><div><span class="s15 w7 num">60</span><span class="s11 t3">Rest (s)</span></div></div>
+</div>
+
+<div class="card pad col" style="gap: 12px">
+<div class="hrow"><div class="rel" style="width: 56px; height: 56px; border-radius: 12px; overflow: hidden; flex-shrink: 0"><img class="photo" src="%IMG:jumpsquat%" alt="" style="object-position: 50% 20%"></div><div class="col grow" style="gap: 4px"><span class="s15 w6">Jump Squats</span><div class="hrow" style="gap: 4px"><span class="pill pill-gold">Intermediate</span><span class="pill pill-ai"><!--I:sparkles:10-->AI</span></div></div><button type="button" class="icon-btn" aria-label="Remove Jump Squats"><!--I:trash:18--></button></div>
+<div class="set"><div><span class="s15 w7 num">3</span><span class="s11 t3">Sets</span></div><div><span class="s15 w7 num">15</span><span class="s11 t3">Reps</span></div><div><span class="s15 w7 num">60</span><span class="s11 t3">Rest (s)</span></div></div>
+</div>
+
+<div class="card pad col" style="gap: 12px">
+<div class="hrow"><div class="rel" style="width: 56px; height: 56px; border-radius: 12px; overflow: hidden; flex-shrink: 0"><img class="photo" src="%IMG:cyclingcrunch%" alt=""></div><div class="col grow" style="gap: 4px"><span class="s15 w6">Bicycle Crunch</span><span class="pill pill-gold" style="align-self: flex-start">Intermediate</span></div><button type="button" class="icon-btn" aria-label="Remove Bicycle Crunch"><!--I:trash:18--></button></div>
+<div class="set"><div><span class="s15 w7 num">3</span><span class="s11 t3">Sets</span></div><div><span class="s15 w7 num">20</span><span class="s11 t3">Reps</span></div><div><span class="s15 w7 num">45</span><span class="s11 t3">Rest (s)</span></div></div>
+</div>
+
+<button type="button" class="btn btn-s btn-wide"><!--I:plus:18-->Browse Exercises</button>
+<div class="g2"><button type="button" class="btn btn-s"><!--I:save:16-->Save</button><button type="button" class="btn btn-s">Clear</button></div>
+<button type="button" class="btn btn-p btn-wide"><!--I:play:18-->Start Workout</button>
+
+</main>
+<!--TABBAR:workout-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
