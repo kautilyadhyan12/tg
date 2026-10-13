@@ -60,6 +60,11 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       updateMessageSettings: vi.fn(),
       /** Settings' check-in devices box (16b-i) reads on mount too: a gym with none. */
       getCheckinDevices: vi.fn(() => Promise.resolve({ data: { devices: [] } })),
+      /** Who can check in (16d) reads on mount too: a gym that never changed it. */
+      getCheckinRules: vi.fn(() => Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in' }, overdueAfterDays: 0 } })),
+      previewCheckinRules: vi.fn(() =>
+        Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in' }, listed: 0, stopped: 0, notListed: 0, people: [] } }),
+      ),
       /** Memberships left Settings for a page of its own (23c-i): these two are here so a
        *  test can show that Settings no longer reads them. */
       getMembershipWords: vi.fn(() => Promise.resolve({ data: { words: [], types: [] } })),

@@ -7,10 +7,11 @@ import MemberContactPanel from '../../components/console/MemberContactPanel';
 import MessageSettingsPanel from '../../components/console/MessageSettingsPanel';
 import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
+import CheckinRulesPanel from '../../components/console/CheckinRulesPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
-import { DETAILS_SECTIONS, SETTINGS_SECTION } from './consolePlaces';
+import { DETAILS_SECTIONS, SETTINGS_SECTION, placeTo } from './consolePlaces';
 import { canManageSchedule } from './classesView';
 import { canManageOrg } from './gymDetailsView';
 import { consoleIsReadOnly } from './billingView';
@@ -227,6 +228,11 @@ export default function Settings() {
           />
         </div>
       ) : null}
+
+      {/* WHO CAN CHECK IN (16d): whom the front desk checks in, on `org.manage` as the
+          server gates it. Keyed per gym for the panels' reason above: it holds choices
+          not saved yet. */}
+      {canEditGym ? <CheckinRulesPanel key={`checkin-rules-${org.id}`} org={org} readOnly={readOnly} attendanceTo={placeTo(orgSlug, 'attendance') ?? '../attendance'} /> : null}
 
       {/* FOLLOW-UP EMAILS TO LEADS (20c-v): the owner's "Send them for me", on the
           privilege the server gates it with. Keyed per gym for the panels' reason above:
