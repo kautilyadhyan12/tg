@@ -302,7 +302,13 @@ headings, a real label's wording — and include what the list has never heard o
 structural rule comes first where one exists (a plain heading beats a qualified one),
 and the word list is the backstop, never the mechanism.
 
-**Dependencies.** A new dependency needs Kd's yes in the plan, with the reason.
+**Dependencies.** A new dependency needs Kd's yes in the plan, with the reason. Taken
+carefully (Kd, 2026-10-12, `rulings/`): the package list is worked out refusing anything
+published in the last 14 days (`corepack pnpm@10.34.5 install --lockfile-only
+--ignore-scripts --config.minimum-release-age=20160
+--config.manage-package-manager-versions=false`, then the usual `corepack pnpm install
+--frozen-lockfile`), a main package is pinned to an exact version, and no added package
+runs a script on install without being read first.
 
 **Cost at full size (Kd, 2026-09-20, after the member-list preview).** A card that
 reads or writes a list of PEOPLE is not done until it says what it costs at the
@@ -342,6 +348,10 @@ corepack pnpm --filter api test:local            # or test:local -t "name" / a f
 
 # root guards (what CI runs)
 corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test
+
+# the phone app, on the phone on the USB cable (apps/mobile/.copy names this folder's copy)
+corepack pnpm --filter mobile phone              # build, install and open it: the first time, and after a new package with Android code
+corepack pnpm --filter mobile start              # open the copy already installed
 
 # engine purity (must print nothing)
 grep -rnE 'Date\.now|new Date\(|Math\.random|performance\.now|setTimeout|setInterval|process\.env|window\.|document\.|navigator\.|localStorage|fetch\(|console\.|toLocale|Intl\.' packages/engine/src

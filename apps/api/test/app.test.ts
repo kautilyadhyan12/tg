@@ -3,6 +3,7 @@
 // is set, i.e. locally against Neon and in DB-enabled CI runs).
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
+import { serverHealthSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { ACCESS_COOKIE, signAccessToken } from "../src/modules/auth/tokens.js";
@@ -153,6 +154,8 @@ describe("api skeleton", () => {
       const res = await app.inject({ method: "GET", url: "/health" });
       expect(res.statusCode).toBe(200);
       expect(res.json<{ status: string }>().status).toBe("ok");
+      // The phone app reads this reply with this shape (apps/mobile serverCheck).
+      expect(serverHealthSchema.safeParse(res.json()).success).toBe(true);
     },
   );
 });
