@@ -430,3 +430,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **21b-i, as it stood when it was built (merged 2026-10-13, PR #236):**
 
      - 21b-i. [ ] **Money on the Reports page**: monthly recurring revenue, collected, payment due and overdue, lifetime value, and money by membership; a gym that records no payment here is told why. Spec §16.5, "Built by 21b-i".
+
+## Stage 5 item 32a, as it stood when it merged (2026-10-13, PR #238)
+
+- 32a. [ ] **A meal sent twice from the phone is saved once**: the phone gives each meal its own id; the same id again answers with the meal as it is now, and somebody else's id is refused. No screen.

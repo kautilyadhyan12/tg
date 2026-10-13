@@ -18,7 +18,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Also:** the USDA food list is loaded into `aihg_b` (13,225 foods, 31,169 measures, counted).
 - **For 32b and item 35:** a meal removed on the phone before its save was answered must send the save, then the removal, in that order; a late save after a removal would bring the meal back. A weigh-in (`POST /v1/nutrition/body-measurements`) and a saved dish are still saved once per send: item 35 and 32b make them once-only before their screens.
 - **Round one:** nothing Critical or High, eight Lows, all fixed: somebody refused for another's id while Redis blinks keeps their photo · an id is kept in small letters · a Redis that stops answering is given up on after 5 seconds (`createIoRedis`, for every use of it) · the wait for a save under way has its own test · the test file keeps sign-in's counts in memory, so it runs any number of times.
-- **The re-check closed the round** (`reviews/32a-4-verdict.md`): all eight closed, nothing broken by a fix. **Next:** merge on Kd's word. After it: item 36's plan builder (6a) and item 34's server parts need no phone.
+- **The re-check closed the round** (`reviews/32a-4-verdict.md`): all eight closed, nothing broken by a fix. **Merged** 2026-10-13, pull request #238, on Kd's "merge when green", GitHub green on `54b229b`. **Next:** item 31 and 32b wait for feature folder 1's items 10 to 12; item 36's plan builder (6a) and item 34's server parts need no phone.
 
 
 
