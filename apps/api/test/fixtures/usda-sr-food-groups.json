@@ -93,8 +93,20 @@
    "Dates, medjool",
    "Fruits and Fruit Juices"
   ],
+  "168192": [
+   "Durian, raw or frozen",
+   "Fruits and Fruit Juices"
+  ],
   "168195": [
    "Clementines, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "168200": [
+   "Plantains, yellow, fried, Latino restaurant",
+   "Fruits and Fruit Juices"
+  ],
+  "168216": [
+   "Plantains, green, boiled",
    "Fruits and Fruit Juices"
   ],
   "168250": [
@@ -161,6 +173,10 @@
    "Tomatoes, sun-dried",
    "Vegetables and Vegetable Products"
   ],
+  "168569": [
+   "Hearts of palm, canned",
+   "Vegetables and Vegetable Products"
+  ],
   "168576": [
    "Peppers, jalapeno, raw",
    "Vegetables and Vegetable Products"
@@ -199,6 +215,10 @@
   ],
   "168897": [
    "Wild rice, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "168907": [
+   "Noodles, japanese, soba, cooked",
    "Cereal Grains and Pasta"
   ],
   "168910": [
@@ -373,6 +393,14 @@
    "Rice, brown, long-grain, cooked (Includes foods for USDA's Food Distribution Program)",
    "Cereal Grains and Pasta"
   ],
+  "169711": [
+   "Rice, white, glutinous, unenriched, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "169717": [
+   "Tapioca, pearl, dry",
+   "Cereal Grains and Pasta"
+  ],
   "169737": [
    "Pasta, cooked, enriched, without added salt",
    "Cereal Grains and Pasta"
@@ -541,6 +569,10 @@
    "Cabbage, chinese (pak-choi), cooked, boiled, drained, without salt",
    "Vegetables and Vegetable Products"
   ],
+  "170392": [
+   "Cabbage, kimchi",
+   "Vegetables and Vegetable Products"
+  ],
   "170393": [
    "Carrots, raw",
    "Vegetables and Vegetable Products"
@@ -665,6 +697,10 @@
    "Chicken, liver, all classes, cooked, simmered",
    "Poultry Products"
   ],
+  "171186": [
+   "Sauce, hot chile, sriracha",
+   "Soups, Sauces, and Gravies"
+  ],
   "171192": [
    "Sauce, pasta, spaghetti/marinara, ready-to-serve",
    "Soups, Sauces, and Gravies"
@@ -771,6 +807,10 @@
   ],
   "171711": [
    "Blueberries, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "171715": [
+   "Carambola, (starfruit), raw",
    "Fruits and Fruit Juices"
   ],
   "171719": [
@@ -909,8 +949,16 @@
    "Miso",
    "Legumes and Legume Products"
   ],
+  "172443": [
+   "Natto",
+   "Legumes and Legume Products"
+  ],
   "172449": [
    "Tofu, soft, prepared with calcium sulfate and magnesium chloride (nigari)",
+   "Legumes and Legume Products"
+  ],
+  "172451": [
+   "Tofu, fried",
    "Legumes and Legume Products"
   ],
   "172455": [
@@ -984,6 +1032,10 @@
   "173044": [
    "Guavas, common, raw",
    "Fruits and Fruit Juices"
+  ],
+  "173061": [
+   "Beef, loin, top sirloin cap steak, boneless, separable lean and fat, trimmed to 1/8\" fat, all grades, cooked, grilled",
+   "Beef Products"
   ],
   "173190": [
    "Alcoholic beverage, wine, table, red",
@@ -1237,8 +1289,16 @@
    "Grapes, red or green (European type, such as Thompson seedless), raw",
    "Fruits and Fruit Juices"
   ],
+  "174687": [
+   "Jackfruit, raw",
+   "Fruits and Fruit Juices"
+  ],
   "174815": [
    "Alcoholic beverage, distilled, all (gin, rum, vodka, whiskey) 80 proof",
+   "Beverages"
+  ],
+  "174831": [
+   "Beverages, Coconut water, ready-to-drink, unsweetened",
    "Beverages"
   ],
   "174832": [
@@ -1317,12 +1377,20 @@
    "Fish, sardine, Atlantic, canned in oil, drained solids with bone",
    "Finfish and Shellfish Products"
   ],
+  "175159": [
+   "Fish, tuna, fresh, yellowfin, raw",
+   "Finfish and Shellfish Products"
+  ],
   "175160": [
    "Fish, tuna salad",
    "Finfish and Shellfish Products"
   ],
   "175166": [
    "Fish, catfish, channel, farmed, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "175167": [
+   "Fish, salmon, Atlantic, farmed, raw",
    "Finfish and Shellfish Products"
   ],
   "175168": [
