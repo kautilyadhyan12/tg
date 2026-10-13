@@ -277,7 +277,7 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Hash browns", 219, 2.65, 28.51, 11.59, 3.2, 100, "g", "vegan", "usda-sr:170044"),
   row("Roast potatoes", 126, 1.87, 20.45, 4.25, 1.4, 100, "g", "vegetarian", "usda-fndds:2709402"),
   row("Butternut squash (cooked)", 40, 0.9, 10.49, 0.09, 3.2, 100, "g", "vegan", "usda-sr:169296"),
-  row("Pumpkin (cooked)", 20, 0.72, 4.9, 0.07, 1.1, 100, "g", "vegan", "usda-sr:168449"),
+  row("Pumpkin (boiled)", 20, 0.72, 4.9, 0.07, 1.1, 100, "g", "vegan", "usda-sr:168449"),
   row("Acorn squash (cooked)", 56, 1.12, 14.58, 0.14, 4.4, 100, "g", "vegan", "usda-sr:169293"),
   row("Spaghetti squash (cooked)", 27, 0.66, 6.46, 0.26, 1.4, 100, "g", "vegan", "usda-sr:169299"),
   row("Parsnips (cooked)", 71, 1.32, 17.01, 0.3, 3.6, 100, "g", "vegan", "usda-sr:170009"),
@@ -335,7 +335,6 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Sun-dried tomatoes", 258, 14.11, 55.76, 2.97, 12.3, 30, "g", "vegan", "usda-sr:168567"),
   row("Portobello mushroom (grilled)", 29, 3.28, 4.44, 0.58, 2.2, 100, "g", "vegan", "usda-sr:169243"),
   row("Shiitake mushrooms (cooked)", 56, 1.56, 14.39, 0.22, 2.1, 100, "g", "vegan", "usda-sr:168437"),
-  row("Nori (seaweed sheets)", 35, 5.81, 5.11, 0.28, 0.3, 2.6, "sheet", "vegan", "usda-sr:168458"),
   // ── Fruit
   row("Apple", 52, 0.26, 13.81, 0.17, 2.4, 180, "apple", "vegan", "usda-sr:171688"),
   row("Banana", 89, 1.09, 22.84, 0.33, 2.6, 120, "banana", "vegan", "usda-sr:173944"),
@@ -419,7 +418,7 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Guacamole", 155, 1.95, 8.45, 14.18, 6.5, 30, "2 tbsp", "vegan", "usda-fndds:2709307"),
   row("Avocado oil", 884, 0, 0, 100, 0, 14, "tbsp", "vegan", "usda-sr:173573"),
   row("Canola oil", 884, 0, 0, 100, 0, 14, "tbsp", "vegan", "usda-sr:172336"),
-  row("Sesame oil", 884, 0, 0, 100, 0, 13.6, "tbsp", "vegan", "usda-sr:171016"),
+  row("Sesame oil", 884, 0, 0, 100, 0, 13.6, "tablespoon", "vegan", "usda-sr:171016"),
   row("Balsamic vinegar", 88, 0.49, 17.03, 0, null, 16, "tbsp", "vegan", "usda-sr:172241"),
   row("Apple cider vinegar", 21, 0, 0.93, 0, 0, 14.9, "tbsp", "vegan", "usda-sr:173469"),
   row("Coconut milk (canned)", 197, 2.02, 2.81, 21.33, null, 100, "g", "vegan", "usda-sr:170173"),
@@ -668,7 +667,8 @@ const FOOD_WORDS: readonly FoodWords[] = CURATED_FOODS.map((food) => {
 const BY_CANONICAL: ReadonlyMap<string, CuratedFood> = new Map(CURATED_FOODS.map((food) => [food.canonical, food]));
 
 /** The FDC id of the USDA entry a food of the list copies its numbers from, or
- *  null for a CoFID food and for any canonical not on the list. */
+ *  null for a CoFID food and for any canonical not on the list. Its household
+ *  measures are that entry's (ROADMAP 7a-iv-a). */
 export function curatedUsdaFdcId(canonical: string): number | null {
   const citation = BY_CANONICAL.get(canonical)?.citation;
   const cited = citation === undefined ? null : /^usda-(?:sr|fndds):(\d+)$/.exec(citation);
@@ -676,17 +676,17 @@ export function curatedUsdaFdcId(canonical: string): number | null {
 }
 
 /** A food of the list whose cited entry names no piece, and the USDA entry of the
- *  same food that does: SR Legacy weighs cooked shrimp and scallops by 3 oz alone,
- *  and the survey release has "1 large/jumbo shrimp" and "1 scallop". Its numbers
- *  stay its cited entry's. */
-const PIECE_ENTRIES: ReadonlyMap<string, number> = new Map([
+ *  same food whose measures it is given as well: SR Legacy weighs cooked shrimp
+ *  and scallops by 3 oz alone, and the survey release has "1 large/jumbo shrimp"
+ *  and "1 scallop". Only the measures are borrowed; every number stays the cited
+ *  entry's. `tools/check-food-sources.ts` checks each is in the survey release. */
+export const PIECE_ENTRIES: ReadonlyMap<string, number> = new Map([
   ["shrimp_cooked", 2706363],
   ["scallops_cooked", 2706358],
 ]);
 
-/** The USDA entry whose household measures a food of the list is logged by: its
- *  cited entry, or the one that weighs it by the piece (`PIECE_ENTRIES`). */
-export const curatedMeasuresFdcId = (canonical: string): number | null => PIECE_ENTRIES.get(canonical) ?? curatedUsdaFdcId(canonical);
+/** The USDA entry a food of the list borrows its pieces from, or null. */
+export const curatedPieceFdcId = (canonical: string): number | null => PIECE_ENTRIES.get(canonical) ?? null;
 
 /** The food a slugged name names word for word. First a food whose name outside
  *  its brackets is those words, in order ("tuna" is "Tuna (canned in water)"; the

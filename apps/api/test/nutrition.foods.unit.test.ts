@@ -4,7 +4,7 @@
 // tests hold what can be held without downloading the tables.
 import { describe, expect, it } from "vitest";
 import { DIET_LADDER, dietSchema, type Diet } from "@app/shared";
-import { COMMON_FOOD_PICKS, CURATED_FOODS, FOOD_ALIASES, curatedMeasuresFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
+import { COMMON_FOOD_PICKS, CURATED_FOODS, FOOD_ALIASES, PIECE_ENTRIES, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
 
 /** Every canonical the list held before it grew. Editing a saved meal finds its
  *  foods again by canonical, so none of these may go missing. */
@@ -47,7 +47,7 @@ const nameWords = (name: string): string[] =>
 
 describe("the curated food list", () => {
   it("gives every food a table entry, a diet, whole kcal per 100 g and a serving", () => {
-    expect(CURATED_FOODS).toHaveLength(410);
+    expect(CURATED_FOODS).toHaveLength(409);
     for (const f of CURATED_FOODS) {
       expect(f.citation, f.name).toMatch(/^(?:usda-sr:\d{6}|usda-fndds:\d{7}|uk-cofid:\d{2}-\d{3,4})$/);
       expect(dietSchema.options, f.name).toContain(f.diet);
@@ -177,13 +177,13 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     // 34c-i
     "tofu_soft", "miso", "red_lentils_dry", "split_peas_cooked", "navy_beans_cooked", "lima_beans_cooked",
     "mung_beans_cooked", "soybeans_cooked", "black_eyed_peas_cooked", "fava_broad_beans_cooked", "barley_cooked",
-    "bulgur_cooked", "buckwheat_cooked", "millet_cooked", "wild_rice_cooked", "wheat_germ", "pumpkin_cooked",
+    "bulgur_cooked", "buckwheat_cooked", "millet_cooked", "wild_rice_cooked", "wheat_germ", "pumpkin_boiled",
     "acorn_squash_cooked", "spaghetti_squash_cooked", "parsnips_cooked", "turnip_cooked", "broccoli_raw",
     "cauliflower_raw", "kale_raw", "leeks_cooked", "radishes", "artichoke_cooked", "bok_choy_cooked",
     "swiss_chard_cooked", "collard_greens_cooked", "fennel", "red_cabbage", "watercress",
     "snow_peas_sugar_snap_peas", "bean_sprouts", "green_onions_scallions", "jalapeno_pepper", "garlic",
     "ginger_fresh", "sun_dried_tomatoes", "portobello_mushroom_grilled", "shiitake_mushrooms_cooked",
-    "nori_seaweed_sheets", "papaya", "apricot", "apricots_dried", "figs_fresh", "figs_dried", "lemon", "lime",
+    "papaya", "apricot", "apricots_dried", "figs_fresh", "figs_dried", "lemon", "lime",
     "nectarine", "tangerine_mandarin", "persimmon", "guava", "lychee", "passion_fruit", "honeydew_melon",
     "prunes", "cranberries_dried_sweetened", "brazil_nuts", "macadamia_nuts", "pine_nuts",
     "chestnuts_roasted", "sesame_seeds", "hemp_seeds", "tahini_sesame_paste", "avocado_oil", "canola_oil",
@@ -299,23 +299,27 @@ describe("the list as it grew (ROADMAP 34c-i)", () => {
       ["jalapeño", "jalapeno_pepper"], ["mahi mahi", "mahi_mahi_cooked"], ["fava beans", "fava_broad_beans_cooked"],
       ["broad beans", "fava_broad_beans_cooked"], ["raw broccoli", "broccoli_raw"], ["soft tofu", "tofu_soft"],
       ["snow peas", "snow_peas_sugar_snap_peas"], ["sugar snap peas", "snow_peas_sugar_snap_peas"], ["red cabbage", "red_cabbage"],
-      ["coconut milk", "coconut_milk_canned"], ["pumpkin", "pumpkin_cooked"], ["goat milk", "goat_milk"],
+      ["coconut milk", "coconut_milk_canned"], ["pumpkin", "pumpkin_boiled"], ["goat milk", "goat_milk"],
     ];
     for (const [name, canonical] of cases) expect(findCurated(name)?.canonical ?? null, name).toBe(canonical);
   });
 
-  it("weighs shrimp and scallops by the piece from USDA's survey entry, and keeps their numbers", () => {
+  it("borrows only the pieces of shrimp and scallops from USDA's survey entry: the entry they cite is unchanged", () => {
     // SR Legacy weighs both by 3 oz alone; the survey release has "1 large/jumbo shrimp" and "1 scallop".
-    expect(curatedMeasuresFdcId("shrimp_cooked")).toBe(2706363);
-    expect(curatedMeasuresFdcId("scallops_cooked")).toBe(2706358);
+    expect([...PIECE_ENTRIES]).toEqual([["shrimp_cooked", 2706363], ["scallops_cooked", 2706358]]);
+    expect(curatedPieceFdcId("shrimp_cooked")).toBe(2706363);
+    expect(curatedPieceFdcId("apple")).toBeNull();
+    expect(curatedPieceFdcId("constructor")).toBeNull();
+    // The entry their numbers, their further figures and their own measures are read from.
+    expect(curatedUsdaFdcId("shrimp_cooked")).toBe(175180);
+    expect(curatedUsdaFdcId("scallops_cooked")).toBe(167742);
     expect(food("shrimp_cooked")).toMatchObject({ kcal: 99, proteinG: 23.98, serving: 100, unit: "g", citation: "usda-sr:175180" });
     expect(food("scallops_cooked")).toMatchObject({ kcal: 111, proteinG: 20.54, serving: 100, unit: "g", citation: "usda-sr:167742" });
-    // Every other food is weighed by the entry it cites, and a CoFID food by none.
-    for (const f of CURATED_FOODS) {
-      if (f.canonical !== "shrimp_cooked" && f.canonical !== "scallops_cooked") expect(curatedMeasuresFdcId(f.canonical), f.name).toBe(curatedUsdaFdcId(f.canonical));
+    // A food that borrows pieces is on the list and cites another entry than the one it borrows from.
+    for (const [canonical, fdcId] of PIECE_ENTRIES) {
+      expect(findCurated(canonical)?.canonical, canonical).toBe(canonical);
+      expect(curatedUsdaFdcId(canonical), canonical).not.toBe(fdcId);
     }
-    expect(curatedMeasuresFdcId("paneer")).toBeNull();
-    expect(curatedMeasuresFdcId("zqxnothing")).toBeNull();
   });
 });
 

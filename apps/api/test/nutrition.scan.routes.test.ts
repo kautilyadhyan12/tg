@@ -655,6 +655,37 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   // it is, no packaged products, and the USDA rows above — so a change to how a food
   // is looked up, priced or started shows here as a diff, and a new finding is a new
   // plate, never a new word list (RULINGS 2026-09-15).
+  it("counts our list's shrimp by the piece, and keeps everything else its cited entry's (ROADMAP 34c-i)", async () => {
+    const found = await inject("GET", "/v1/nutrition/foods?q=shrimp&limit=15", alice);
+    expect(found.statusCode, found.body).toBe(200);
+    const shrimp = z.object({ items: z.array(z.object({ canonical: z.string(), measures: z.array(z.object({ id: z.string(), name: z.string(), grams: z.number() })), startsAt: z.unknown() })) })
+      .parse(found.json()).items.find((f) => f.canonical === "shrimp_cooked");
+    // The cited entry's own measure keeps its id; the survey entry's pieces have ids of their own.
+    expect([shrimp?.measures.map((m) => `${m.id} ${m.name} ${String(m.grams)}`), shrimp?.startsAt]).toEqual([[
+      "usda-1 3 oz 85", "piece-1 tiny shrimp 5", "piece-2 small/medium shrimp 10", "piece-3 large/jumbo shrimp 15", "piece-4 prawn 20", "piece-5 cup 135",
+      "g g 1", "oz oz 28.349523125",
+    ], { measure: "g", amount: 100 }]);
+
+    // "usda-1" is what a meal saved before the pieces came holds for "3 oz": two of it are 170 g, never two 5 g shrimp.
+    const saved = await inject("POST", "/v1/nutrition/meals", alice, {
+      mealName: "Qwzx shrimp", takenAt: new Date().toISOString(),
+      items: [{ canonical: "shrimp_cooked", measure: "usda-1", amount: 2 }, { canonical: "shrimp_cooked", measure: "piece-3", amount: 6 }, { canonical: "shrimp_cooked", grams: 100 }],
+    });
+    expect(saved.statusCode, saved.body).toBe(201);
+    const items = mealOf(saved.body).items;
+    // Six large shrimp are 90 g at SR Legacy's 99 kcal per 100 g, never the survey entry's 90.
+    expect(items.map((i) => [i.gramsPoint, i.kcalPoint, i.measure])).toEqual([
+      [170, 168, { id: "usda-1", name: "3 oz", amount: 2 }],
+      [90, 89, { id: "piece-3", name: "large/jumbo shrimp", amount: 6 }],
+      [100, 99, undefined],
+    ]);
+    // The further figures are the cited entry's too: SR Legacy measured no fibre for shrimp (not known), where the
+    // survey entry says 0; and its sodium is 111 mg per 100 g where the whole table is loaded, never the survey's 248.
+    const more = z.object({ fiberG: z.number().nullable(), sodiumMg: z.number().nullable() }).parse(items[2]?.more);
+    expect(more.fiberG).toBeNull();
+    expect([111, null]).toContain(more.sodiumMg);
+  }, 60_000);
+
   describe("the test plates", () => {
     const PLATES = join(import.meta.dirname, "fixtures", "plates");
     /** Each row as the sheet shows it: name, tag, where it starts — "2 × slice", or
@@ -684,7 +715,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // Pumpkin at the 60 g the model saw in its two pieces: two of USDA's cups are 460 g.
       "download-3.json": [
         ["Chicken breast (cooked)", "curated", "~150 g", 150, 248], ["Shrimp (cooked)", "curated", "6 × large/jumbo shrimp", 90, 89], ["Egg (whole, large)", "curated", "1 × egg", 50, 72],
-        ["Broccoli (cooked)", "curated", "~60 g", 60, 21], ["Corn (cooked)", "curated", "~50 g", 50, 48], ["Pumpkin (cooked)", "curated", "~60 g", 60, 12],
+        ["Broccoli (cooked)", "curated", "~60 g", 60, 21], ["Corn (cooked)", "curated", "~50 g", 50, 48], ["Pumpkin (boiled)", "curated", "~60 g", 60, 12],
         ["Orange juice", "curated", "1 × cup", 248, 112],
       ],
       // Two lemon wedges at 40 g: two of USDA's 8 g wedges are 16 g.

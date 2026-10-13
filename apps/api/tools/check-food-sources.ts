@@ -18,7 +18,8 @@
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --write-groups  write the food groups file again, after the list grew
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
+import { CURATED_FOODS, PIECE_ENTRIES } from "../src/modules/nutrition/foods.js";
+import { foodMeasures } from "../src/modules/nutrition/measures.js";
 import {
   defaultCache,
   download,
@@ -162,6 +163,22 @@ const groupsFile = `${JSON.stringify({ about: GROUPS_ABOUT, foods: cited }, null
 if (process.argv.includes("--write-groups")) writeFileSync(groupsPath, groupsFile);
 else if (readFileSync(groupsPath, "utf8").replaceAll("\r\n", "\n") !== groupsFile) {
   differences.push("test/fixtures/usda-sr-food-groups.json is not what the download gives: run this tool with --write-groups");
+}
+
+// A food that borrows its pieces: the entry is in the survey release and still gives a measure the cited one lacks.
+for (const [canonical, fdcId] of PIECE_ENTRIES) {
+  const food = CURATED_FOODS.find((f) => f.canonical === canonical);
+  const entry = fndds.get(fdcId);
+  const citedId = Number(food?.citation.split(":")[1]);
+  const citedEntry = srLegacy.get(citedId) ?? fndds.get(citedId);
+  if (food === undefined || entry === undefined || citedEntry === undefined) {
+    differences.push(`${canonical}: its pieces' entry ${String(fdcId)} or the food itself is missing`);
+    continue;
+  }
+  const measures = foodMeasures({ serving: food.serving, unit: food.unit, ownServing: true, portions: citedEntry.portions, pieces: entry.portions });
+  const pieces = measures.filter((m) => m.id.startsWith("piece-") && m.grams <= 30);
+  if (pieces.length === 0) differences.push(`${food.name}: ${String(fdcId)} ("${entry.description}") gives no piece of 30 g or less`);
+  else if (process.argv.includes("--list")) console.log(`${food.name}  ·  pieces from ${String(fdcId)}  ·  ${entry.description}: ${pieces.map((m) => `${m.name} ${String(m.grams)} g`).join(", ")}`);
 }
 
 for (const line of differences) console.log(line);
