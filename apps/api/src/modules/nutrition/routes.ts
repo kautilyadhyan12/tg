@@ -229,7 +229,7 @@ export function registerNutritionRoutes(
 
   // Photo confirm (scanToken) or manual entry (mealName) — GAP-2 ruling. With the
   // phone's own `id` the same meal sent twice is one meal: 201 when it is saved,
-  // 200 with the meal as first saved when it already was (ROADMAP 32a).
+  // 200 with the meal as it is now when it already was (ROADMAP 32a).
   app.post("/v1/nutrition/meals", { preHandler: [app.authenticate] }, async (req, reply) => {
     const v = parse(createMealRequestSchema, req.body, req, reply);
     if (v === null) return;

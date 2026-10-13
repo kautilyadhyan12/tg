@@ -231,7 +231,7 @@ const lockMealId = async (tx: TransactionSql, id: string): Promise<void> => {
 /** A meal saved under the phone's own id (ROADMAP 32a): the same id sent twice is
  *  one meal. `claim` runs once the row is written and before it is kept, so
  *  whatever it throws leaves no meal. `created` false: this person already has
- *  that meal, returned as it was first saved. null: the id is somebody else's. */
+ *  that meal, returned as it is now. null: the id is somebody else's. */
 export async function createMealOnce(
   sql: Sql,
   userId: string,
@@ -249,6 +249,12 @@ export async function createMealOnce(
     if (claim !== undefined) await claim();
     return { meal: row, created: true };
   });
+}
+
+/** Whether any meal, anybody's, has that id. */
+export async function mealIdTaken(sql: Sql, id: string): Promise<boolean> {
+  const rows = await sql`SELECT 1 FROM meal_logs WHERE id = ${id}`;
+  return rows.length > 0;
 }
 
 /** The person's meal under that id once any save of it under way has ended. */

@@ -124,9 +124,9 @@ export type ChosenItem = z.infer<typeof chosenItemSchema>;
 const chosenItemsSchema = z.array(chosenItemSchema).min(1).max(30);
 
 /** The meal's id, made by the phone (ROADMAP 32a): the same id sent twice is one
- *  meal, and the second reply is the meal as first saved. Without it every send
- *  is a new meal, as the web's is. */
-const ownMealIdSchema = z.string().uuid().optional();
+ *  meal, and the second reply is the meal as it is now. Kept and answered in small
+ *  letters. Without it every send is a new meal, as the web's is. */
+const ownMealIdSchema = z.string().uuid().toLowerCase().optional();
 
 export const confirmMealRequestSchema = z.object({
   id: ownMealIdSchema,

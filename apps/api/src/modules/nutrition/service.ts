@@ -1022,6 +1022,13 @@ async function confirmNewMeal(deps: NutritionDeps, userId: string, input: Confir
   // stop scans being burned, and would itself burn a recovered one). Build
   // from the taken draft (already consumed, so a resolve failure here burns it
   // — accepted only in this rare flap window).
+  // Taking it here is for good, so an id that cannot be this meal's is answered
+  // first: somebody else's is the 404 it would be, and the photo stays to be saved.
+  if (input.id !== undefined && (await repo.mealIdTaken(deps.sql, input.id))) {
+    const kept = await alreadySaved(deps, userId, input.id);
+    if (kept !== null) return kept;
+    throw new NutritionError(404, "not_found", "Meal not found.");
+  }
   const recovered = await takeDraft(deps, userId, input.scanToken);
   const built = await buildConfirmItems(deps, userId, recovered, input);
   return await writeMeal(deps, userId, input.id, confirmWrite(input, recovered, built));
