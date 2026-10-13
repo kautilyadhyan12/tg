@@ -1,7 +1,10 @@
 // THE SCAN RULE (spec Part 3 §12.4): what the desk says about one read. Pure, and the only
 // place the answer is decided; `scanRule.unit.test.ts` sweeps every class of case.
 //
-// It never refuses for a status word, a payment word or the hour. A visit's period is the
+// It never refuses for the hour, nor for a status or payment word of the gym's own file. A
+// gym may choose to stop people by what they hold in the app (16d): `stopped` is that
+// choice's answer for this person, and it sends a new visit to staff. Staff's own pick is
+// never stopped. A visit's period is the
 // opening period the scan falls in, or the hours status when it falls in none, so a second
 // scan in the same period is the same visit and a later period that day counts again.
 import type { GymAttendanceHoursStatus } from "@app/shared";
@@ -43,6 +46,8 @@ export function decideScan(input: {
   person: ScanPerson | null;
   period: ScanPeriod;
   visitsToday: readonly VisitToday[];
+  /** The gym's own choice sends this person to staff (`checkinStop` in `@app/shared`). */
+  stopped: boolean;
 }): ScanDecision {
   if (input.read.kind === "pass" && input.read.pass !== "fresh") return { result: "fresh_pass_needed" };
   if (input.person === null || input.person.kind === "not_a_member") return { result: "not_a_member" };
@@ -52,5 +57,8 @@ export function decideScan(input: {
   for (const visit of input.visitsToday) {
     if (visit.slotKey === slotKey && (firstAt === null || visit.markedAt < firstAt)) firstAt = visit.markedAt;
   }
-  return firstAt === null ? { result: "checked_in", slotKey } : { result: "already", slotKey, firstAt };
+  // Somebody staff have let in this period is in: their pass says so again.
+  if (firstAt !== null) return { result: "already", slotKey, firstAt };
+  if (input.stopped && input.read.kind !== "staff") return { result: "see_staff" };
+  return { result: "checked_in", slotKey };
 }

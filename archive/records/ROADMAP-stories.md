@@ -402,3 +402,22 @@ stage. History, never a rule: RULINGS wins where they differ.
 **20d-ii, as it stood when it was built (merged 2026-10-12, PR #229):**
 
      - 20d-ii. [ ] **The weekly summary, as a box on Overview** (Kd, RULINGS 2026-10-12: a notice in the console, not an email): Last 7 days — new, left, at risk, visits against the 7 days before, payments due, each with a button to its page.
+
+**30a, as it stood when it was built (merged 2026-10-13, PR #233):**
+
+    - 30a. [ ] **Keep, change, remove and measure a goal.** Ten kinds the server can measure today; running goals wait for item 37, "master an exercise" and a harder version for item 36, a hold time (plank) for the exercise folders' holds, mobility sessions for a way to record one.
+
+**30b, as it stood when it was built (merged 2026-10-13, PR #234):**
+
+    - 30b. [ ] **The starter set from the setup answers**: the app's own goals for a new person, each one changeable and removable, under 30a's health rule.
+
+**Stage 1 item 10, four known defects as each stood when it was fixed (merged with pull request #235, 2026-10-13):**
+
+- the web test `membersStaff.render.test.jsx` '"?open=invite" with no Staff tab in the address opens nothing, then or later' found the Invite staff form open once in a full local run and passed alone three times and in the next full run (seen 2026-10-07 in 23d, which does not change how Members reads its address; it waits 20 ms and then asserts)
+- the api test file `auth.signupBurst.test.ts` failed once on CI with every test in it passed: a hook ran past its 10 seconds on the runner (seen 2026-10-08 on PR #192, which does not touch sign-in; green on the re-run; seen again 2026-10-12 on pull request #234, 30b, with all 5,751 tests passed; fix: a longer limit for that hook)
+- the api test `classAttendance.routes.test.ts` "the run reads the window itself…" fails by the clock: its class starts three hours after the moment the file is run and lasts 45 minutes, so run between about 20:15 and 22:00 in London the class or its check-ins fall either side of midnight there, and somebody "at the gym that day, outside the window" is on another day and reads as a no-show (seen 2026-10-11 on GitHub at 19:10 UTC on pull request #225 and on this laptop at 19:29 UTC, `left` 1 for 2 and `noShows` 3 for 2; 21c-iii changes no line of classes, check-in or that test; fix: the test picks a start that keeps the class and its hour before inside one London day).
+- the web run fails with every test passed when `ActiveWorkout.jsx`'s 800 ms timer for the set-complete flash (`handleSetComplete`) fires after `activeWorkout.render.test.jsx` has closed its page: "ReferenceError: window is not defined" (seen 2026-10-12 on `master`'s run after pull request #233, its second try; the first try failed on `membersStaff.render.test.jsx` above; 30a changes no web file; fix: keep the timer and clear it when the page closes).
+
+**16d, as it stood when it was built (merged 2026-10-13, PR #230):**
+
+    - 16d. [ ] **Who can check in** (RULINGS 2026-10-02): a Check-in setting the gym picks — everyone on the list (the starting value) or only people with a current membership, and a payment overdue let in or sent to staff — read from the app's own memberships and bills, never a file's words; a person stopped reads "Please see a member of staff" at the desk, and staff can still check them in. After 18a; Opus xhigh.

@@ -86,10 +86,10 @@ export async function getUserSyncContext(
  *  be worked out refuses nothing, and the caller says so instead
  *  (`plan_incomplete`). */
 export async function getUserPlanAndCutRules(
-  sql: Sql,
+  sql: repo.SqlOrTx,
   userId: string,
   requestedTimeZone: string | null,
-): Promise<{ plan: PlanResponse; noCutReasons: readonly NoDeficitReason[] }> {
+): Promise<{ plan: PlanResponse; noCutReasons: readonly NoDeficitReason[]; answers: PlanAnswers }> {
   const { plan, answers } = await planWithAnswersOf(
     sql,
     userId,
@@ -98,14 +98,15 @@ export async function getUserPlanAndCutRules(
   );
   const noCutReasons =
     answers.age === undefined ? [] : noDeficitReasons({ age: answers.age, health: answers.health ?? null });
-  return { plan, noCutReasons };
+  // The answers too, for a reader that needs the weight choice or Safe mode beside the plan (goals).
+  return { plan, noCutReasons, answers };
 }
 
 /** THE flag every plan route reads (ROADMAP 3b): the stored screening as the
  *  plan calculator's health input — null until the screen is answered, which
  *  the calculator treats as "no condition rule yet". sql-only like the two
  *  above, so the plan route (4a) and the nutrition targets can call it. */
-export async function getPlanHealth(sql: Sql, userId: string): Promise<PlanHealth | null> {
+export async function getPlanHealth(sql: repo.SqlOrTx, userId: string): Promise<PlanHealth | null> {
   const row = await repo.getHealthScreening(sql, userId);
   if (row === null) return null;
   const stored = { hasCondition: row.hasCondition, checkFirst: checkFirstOf(row.checkFirst) };
@@ -407,7 +408,7 @@ async function planOf(
  *  a caller that needs a rule the plan's own flags do not carry (7a-iv-e) does
  *  not fetch the profile and the screening a second time. */
 async function planWithAnswersOf(
-  sql: Sql,
+  sql: repo.SqlOrTx,
   userId: string,
   row: repo.OnboardingRow,
   requestedTimeZone: string | null,

@@ -10,7 +10,7 @@ import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { checkinPassKey } from "../src/modules/orgs/checkin/routes.js";
 import * as checkin from "../src/modules/orgs/checkin/service.js";
-import type { DeskDevice } from "../src/modules/orgs/checkin/repo.js";
+import { DESK_RULES_START, type DeskDevice } from "../src/modules/orgs/checkin/repo.js";
 import { proveAddress } from "./proveAddress.js";
 
 const url = process.env["DATABASE_URL"];
@@ -578,6 +578,7 @@ d("check-in, the two extra passes' fixes (real Postgres)", () => {
       gymName: (await sql<{ name: string }[]>`SELECT name FROM gyms WHERE id = ${gymId}`)[0]?.name ?? "",
       timezone: "Europe/London",
       clockFormat: "24h",
+      ...DESK_RULES_START,
     });
 
     it("a pass whose visit could not be saved is not used up: the same pass checks the person in", async () => {

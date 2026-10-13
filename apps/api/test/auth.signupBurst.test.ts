@@ -137,7 +137,7 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     await sql`DELETE FROM sign_in_codes WHERE email LIKE 'burst-%@example.com'`;
     await sql`DELETE FROM users WHERE email LIKE 'burst-%@example.com'`;
     await sql.end({ timeout: 5 });
-  });
+  }, 60_000);
 
   // ── the worst thing, first ────────────────────────────────────────────────
 
