@@ -137,7 +137,7 @@ try {
   const deps: ReportsDeps = { sql, now: () => now };
   const read = async (gym: { gymId: string; owner: string }, people: number): Promise<number> => {
     const expectActive = people - overOf(people);
-    const { report } = await getMembersReport(deps, gym.gymId, await requireReportsReader(deps, gym.owner, gym.gymId));
+    const { report } = await getMembersReport(deps, gym.gymId, await requireReportsReader(deps, gym.owner, gym.gymId, null));
     if (report.activeNow !== expectActive) throw new Error(`expected ${String(expectActive)} members now, read ${String(report.activeNow)}`);
     return JSON.stringify(report).length;
   };

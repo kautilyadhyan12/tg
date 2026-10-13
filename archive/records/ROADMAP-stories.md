@@ -425,3 +425,11 @@ stage. History, never a rule: RULINGS wins where they differ.
 **16d, as it stood when it was built (merged 2026-10-13, PR #230):**
 
     - 16d. [ ] **Who can check in** (RULINGS 2026-10-02): a Check-in setting the gym picks — everyone on the list (the starting value) or only people with a current membership, and a payment overdue let in or sent to staff — read from the app's own memberships and bills, never a file's words; a person stopped reads "Please see a member of staff" at the desk, and staff can still check them in. After 18a; Opus xhigh.
+
+## 21b, as first written (split 2026-10-13 into 21b-i and 21b-ii)
+
+   - 21b. [ ] **Money, from the gym's own notebook** (after 18a): MRR, collected, overdue, lifetime value; a gym that bills elsewhere is told why it has none. **Also (RULINGS 2026-10-08):** money by membership type and product, and by coach.
+
+**21b-i, as it stood when it was built (merged 2026-10-13, PR #236):**
+
+     - 21b-i. [ ] **Money on the Reports page**: monthly recurring revenue, collected, payment due and overdue, lifetime value, and money by membership; a gym that records no payment here is told why. Spec §16.5, "Built by 21b-i".

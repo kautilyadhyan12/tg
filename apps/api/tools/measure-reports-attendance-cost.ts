@@ -165,7 +165,7 @@ try {
 
   const deps: ReportsDeps = { sql, now: () => now };
   const read = async (gym: Made, expectMembers: number): Promise<number> => {
-    const { report } = await getAttendanceReport(deps, gym.gymId, await requireReportsReader(deps, gym.owner, gym.gymId));
+    const { report } = await getAttendanceReport(deps, gym.gymId, await requireReportsReader(deps, gym.owner, gym.gymId, null));
     if (report.perMember.state !== "ok" || report.perMember.members !== expectMembers) throw new Error(`expected ${String(expectMembers)} members, read ${JSON.stringify(report.perMember)}`);
     if (report.hours.state !== "ok" || report.classes.state !== "ok") throw new Error("a figure is missing");
     return JSON.stringify(report).length;

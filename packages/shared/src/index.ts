@@ -60,6 +60,7 @@ export * from "./gymChallenges.js";
 export * from "./startHere.js";
 export * from "./reports.js";
 export * from "./reportsAttendance.js";
+export * from "./reportsMoney.js";
 export * from "./gymMessages.js";
 export * from "./gymMessageMemberships.js";
 export * from "./gymClassReminders.js";

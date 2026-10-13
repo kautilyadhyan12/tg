@@ -4977,6 +4977,43 @@ from the same allowance as the members read; the rule is `attendanceReportFrom`
 up to a day after a gym moves its clock west, a visit dated tomorrow on the new clock is in
 no figure.
 
+**Built by 21b-i (2026-10-13): money.** Read from the notebook of §14.2 and shown under
+Attendance, for staff who hold `reports.read` AND `billing.members`: an owner who lets a
+trainer see attendance has not shown them what the gym takes, and such a person reads
+"Your role doesn't allow you to see money figures." **Monthly recurring revenue** is the
+price of every repeating membership in use today as one month (a term of months or years
+shared out, a week counted as a twelfth of fifty-two), for people on the list; one that
+is frozen, not started, ended, cancelled or free is not counted, and one that is running
+and owing is. **Collected** is the payments that stand, each in the month of the gym's day
+it was paid on, less the refunds that stand, each in the month the money went back; a
+payment or a refund that was undone is not money. **Payment due** is every bill still open
+whose day has come, less what is paid on it, for people on the list and past members
+together, with how much of it is overdue by the gym's own grace period (§14.2) and a
+button to Members already showing who owes. The people counted are those with a bill
+here; anybody else the Members list reads as "Payment due" (the gym's own file says so, or
+their bill is not opened yet) is said beside them, "3 more are marked Payment due on your
+member list, with no amount in the app", so the tile, Overview's box and the list its
+button opens count the same people. **Lifetime value** is the money a member
+brings in a month over monthly churn, both over the same three full months as the Members
+figures' churn (`churnBasis`, one helper for both): the money collected in those months
+for each member who left in them. It reads "Not enough data yet" until payments were
+recorded here for the whole of those months, and a sentence where nobody left in them or
+where those months gave back as much as they took.
+**Month by month** (from the month of the first payment, twelve at most) and **by
+membership** (in use now, monthly recurring, collected this month and in the last twelve)
+each download as a CSV of amounts, never a name. **A gym with no figures** reads why and
+has a button: nothing given here yet (Set up memberships), or no payment recorded here
+(Open Members; "If you take payments in other software, your money figures are there"),
+never a zero. Money is counted in the currency of the gym's country once a payment stands
+in it, and until then in the currency of its newest payment (a membership
+keeps the currency it was given in, so a gym whose country changed still reads the money it
+recorded); payments and bills in another currency are left out and the page says so.
+`GET /v1/orgs/:gymId/reports/money`, from the same allowance as the other two reads; the
+rule is `moneyReportFrom` (`packages/shared/src/reportsMoney.ts`), the sums `readMoney`
+(`reports/repo.ts`), in one snapshot with the list's own counts. Not in this job (21b-ii):
+money by product, which waits for the Sell page (18b), and by coach, which no payment
+names today.
+
 ### 16.6 Cards
 
 **20a** the inbox and the message rule (its table test first) · **20b** the automatic
