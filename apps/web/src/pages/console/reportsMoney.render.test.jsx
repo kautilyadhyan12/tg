@@ -36,20 +36,25 @@ const memberMonths = MONTHS.map((month) => ({ month, activeAtStart: 10, joined: 
 const MEMBERS = membersReportFrom({
   timezone: 'Europe/London',
   today: TODAY,
+  period: '12m',
   firstListedOn: '2026-01-05',
   listChangedOn: '2026-10-03',
   activeNow: 8,
   everLeft: true,
   months: memberMonths,
+  inPeriod: { joined: 0, left: 2 },
   stay: { leavers: 2, totalDays: 400 },
   leads: [],
+  anyLead: false,
 });
 const NO_VISITS = attendanceReportFrom({
   timezone: 'Europe/London',
   today: TODAY,
+  period: '12m',
   firstVisitOn: null,
   days: [],
   weeks: [],
+  people: 0,
   hours: [],
   hoursNoTime: 0,
   member: { members: 0, visits: 0, visitors: 0 },
@@ -79,10 +84,13 @@ const gold = (over = {}) => ({
     ...over,
   },
 });
+// Twelve months hold every month the fixture names, so each month's money is all in the period.
+const inPeriod = (facts) => ({ ...facts, months: facts.months.map((m) => ({ periodPaidMinor: m.paidMinor, periodRefundedMinor: m.refundedMinor, ...m })) });
 const money = (over = {}) =>
-  moneyReportFrom({
+  moneyReportFrom(inPeriod({
     timezone: 'Europe/London',
     today: TODAY,
+    period: '12m',
     currency: 'GBP',
     anyMembership: true,
     firstPaidOn: '2026-06-10',
@@ -98,7 +106,7 @@ const money = (over = {}) =>
     owed: { currentMinor: 7998, currentPeople: 2, listPeople: 2, pastMinor: 6000, pastPeople: 1, overdueMinor: 4999, overduePeople: 1 },
     members: { today: TODAY, firstListedOn: '2026-01-05', everLeft: true, months: memberMonths },
     ...over,
-  });
+  }));
 
 const open = (org = ORG) => {
   orgApi.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
@@ -133,13 +141,13 @@ describe('the money figures', () => {
   it('shows each figure, the months and the memberships, for the gym the page is on', async () => {
     open();
     await screen.findByTestId('tile-recurring');
-    expect(svc.money).toHaveBeenCalledWith('g1');
+    expect(svc.money).toHaveBeenCalledWith('g1', '12m');
     expect(moneyPart().getByText('These figures come from the payments your staff record in the app. The first was recorded on 10 Jun 2026.')).toBeTruthy();
 
     expect(within(tile('recurring')).getByText('£99.98')).toBeTruthy();
     expect(within(tile('recurring')).getByText('2 repeating memberships')).toBeTruthy();
-    expect(within(tile('collected')).getByText('£45.00')).toBeTruthy();
-    expect(within(tile('collected')).getByText('October, so far: £60.00 paid, £15.00 refunded · September: £100.00')).toBeTruthy();
+    expect(within(tile('collected')).getByText('£345.00')).toBeTruthy();
+    expect(within(tile('collected')).getByText('since 10 Jun 2026, the first payment recorded here: £380.00 paid, £35.00 refunded · October, so far: £45.00')).toBeTruthy();
     expect(within(tile('due')).getByText('£139.98')).toBeTruthy();
     expect(within(tile('due')).getByText('2 members and 1 past member · £49.99 of it overdue')).toBeTruthy();
     // 300.00 collected in July to September, and 2 members left in them.
@@ -324,5 +332,50 @@ describe('who sees money', () => {
     await screen.findByTestId('tile-recurring');
     expect(screen.getByTestId('tile-active')).toBeTruthy();
     expect(svc.money).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the period', () => {
+  it('four weeks: Collected is the money of those days, said with them, and the membership table is headed for them', async () => {
+    // From 23 September: 50.00 of September's 120.00 and all of October's, less the refunds of those days.
+    svc.money.mockResolvedValue(
+      money({
+        period: '4w',
+        firstPaidOn: '2025-03-01',
+        months: [
+          { typeId: 'gold', typeName: 'Gold Monthly', month: '2026-08', paidMinor: 10000, refundedMinor: 0, periodPaidMinor: 0, periodRefundedMinor: 0 },
+          { typeId: 'gold', typeName: 'Gold Monthly', month: '2026-09', paidMinor: 12000, refundedMinor: 2000, periodPaidMinor: 5000, periodRefundedMinor: 0 },
+          { typeId: 'day', typeName: 'One month', month: '2026-10', paidMinor: 6000, refundedMinor: 1500, periodPaidMinor: 6000, periodRefundedMinor: 1500 },
+        ],
+      }),
+    );
+    open();
+    await screen.findByTestId('tile-recurring');
+    expect(tile('collected').textContent).toBe('Collected£95.0023 Sep 2026 to 20 Oct 2026: £110.00 paid, £15.00 refunded · October, so far: £45.00');
+    fireEvent.click(within(tile('collected')).getByRole('button', { name: 'How Collected is worked out' }));
+    expect(within(tile('collected')).getByText('Payments your staff recorded from 23 Sep 2026 to today, less refunds noted in those days. A payment or a refund that was undone is not counted.')).toBeTruthy();
+    // Whole months, each its own figure; and each membership's money in the four weeks.
+    expect(tableRows('Money, month by month')).toEqual([
+      ['Month', 'Paid', 'Refunded', 'Collected'],
+      ['Oct 2026 (so far)', '£60.00', '£15.00', '£45.00'],
+      ['Sep 2026', '£120.00', '£20.00', '£100.00'],
+    ]);
+    expect(tableRows('Money, by membership')).toEqual([
+      ['Membership', 'In use now', 'Monthly recurring', 'Collected in October', 'Collected, last 4 weeks'],
+      ['Gold Monthly', '2', '£99.98', '£0.00', '£50.00'],
+      ['One month', '0', '–', '£45.00', '£45.00'],
+    ]);
+  });
+
+  it('a gym whose first payment is inside the period reads where its money starts', async () => {
+    svc.money.mockResolvedValue(money({ period: '12m', firstPaidOn: '2026-06-10' }));
+    open();
+    await screen.findByTestId('tile-recurring');
+    expect(tile('collected').textContent).toContain('since 10 Jun 2026, the first payment recorded here');
+    svc.money.mockResolvedValue(money({ period: '12m', firstPaidOn: '2025-03-01' }));
+    cleanup();
+    open();
+    await screen.findByTestId('tile-recurring');
+    expect(tile('collected').textContent).toContain('1 Nov 2025 to 20 Oct 2026: £380.00 paid, £35.00 refunded');
   });
 });

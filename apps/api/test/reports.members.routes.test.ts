@@ -204,11 +204,15 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
         expect(await read(london, londonOwner)).toEqual({
           timezone: "Europe/London",
           today: "2026-10-10",
+          period: { key: "12m", from: "2025-11-01", to: "2026-10-10" },
+          firstListedOn: "2026-06-10",
           listChangedOn: "2026-10-03",
           activeNow: 11,
           everLeft: true,
           fullMonths: 3,
           thisMonth: { month: "2026-10", joined: 1, left: 1 },
+          // New is counted from July, the month after the list began: one in July and one in October.
+          inPeriod: { joined: 2, joinedFrom: "2026-07-01", left: 4 },
           churnMonths: ["2026-07", "2026-08", "2026-09"],
           // Of 13 + 13 + 12 on the list as July, August and September began, 0 + 1 + 1 left.
           churn: { state: "ok", percent: 5.3 },
@@ -224,6 +228,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
             { month: "2026-10", full: false, activeAtStart: 11, joined: 1, left: 1, churnPercent: null },
           ],
           leads: {
+            ever: true,
             total: 4,
             joined: 2,
             percent: 50,
@@ -237,12 +242,15 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
         expect(await read(delhi, delhiOwner)).toEqual({
           timezone: "Asia/Kolkata",
           today: "2026-10-10",
+          period: { key: "12m", from: "2025-11-01", to: "2026-10-10" },
+          firstListedOn: "2026-09-01",
           listChangedOn: "2026-10-01",
           activeNow: 2,
           everLeft: true,
           // Listed on the 1st by Delhi's clock, so September is a full month: one, not three.
           fullMonths: 1,
           thisMonth: { month: "2026-10", joined: 0, left: 1 },
+          inPeriod: { joined: 0, joinedFrom: "2026-10-01", left: 1 },
           churnMonths: [],
           churn: { state: "not_enough_data" },
           retention: { state: "not_enough_data" },
@@ -251,7 +259,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
             { month: "2026-09", full: true, activeAtStart: 0, joined: null, left: 0, churnPercent: null },
             { month: "2026-10", full: false, activeAtStart: 3, joined: 0, left: 1, churnPercent: null },
           ],
-          leads: { total: 2, joined: 0, percent: 0, sources: [{ source: "website", leads: 2, joined: 0, percent: 0 }] },
+          leads: { ever: true, total: 2, joined: 0, percent: 0, sources: [{ source: "website", leads: 2, joined: 0, percent: 0 }] },
         });
 
         // Nobody from outside reads either gym, and the refusal carries none of its numbers.
@@ -351,7 +359,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
       const empty = await read(gym, owner);
       expect(empty).toMatchObject({ activeNow: 0, everLeft: false, listChangedOn: null, months: [], fullMonths: 0 });
       expect(empty.churn).toEqual({ state: "nobody_left" });
-      expect(empty.leads).toEqual({ total: 0, joined: 0, percent: null, sources: [] });
+      expect(empty.leads).toEqual({ ever: false, total: 0, joined: 0, percent: null, sources: [] });
 
       // The list's first person, added today: on the list, and not a new member.
       const first = await post(`/v1/orgs/${gym}/member-list/entries`, { fullName: "Ola First", email: "rep-t-ola@example.com" }, owner.cookies);
@@ -386,6 +394,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
       expect(made.statusCode, made.body).toBe(201);
       const leadId = (JSON.parse(made.body) as { lead: { id: string } }).lead.id;
       expect((await read(gym, owner)).leads).toEqual({
+        ever: true,
         total: 1,
         joined: 0,
         percent: 0,
@@ -394,7 +403,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
       const joined = await post(`/v1/orgs/${gym}/leads/${leadId}/join`, { asNew: true }, owner.cookies);
       expect(joined.statusCode, joined.body).toBe(200);
       const after = await read(gym, owner);
-      expect(after.leads).toEqual({ total: 1, joined: 1, percent: 100, sources: [{ source: "social", leads: 1, joined: 1, percent: 100 }] });
+      expect(after.leads).toEqual({ ever: true, total: 1, joined: 1, percent: 100, sources: [{ source: "social", leads: 1, joined: 1, percent: 100 }] });
       expect(after).toMatchObject({ activeNow: 3, thisMonth: { joined: 2, left: 0 } });
     },
     TEST_TIMEOUT_MS,

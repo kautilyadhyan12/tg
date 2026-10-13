@@ -18,6 +18,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
+import { reportPeriodKeySchema } from "@app/shared";
 import { getMembersReport, requireReportsReader, type ReportsDeps } from "../src/modules/orgs/reports/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -29,6 +30,9 @@ if (!/localhost|127\.0\.0\.1/.test(url)) {
 const sql = postgres(url, { prepare: false, max: 10 });
 const peopleArg = process.argv.find((a) => a.startsWith("--people="));
 const PEOPLE = peopleArg === undefined ? 2000 : Number(peopleArg.slice("--people=".length));
+const periodArg = process.argv.find((a) => a.startsWith("--period="));
+/** The period read: twelve months, the widest, unless told. */
+const PERIOD = reportPeriodKeySchema.parse(periodArg === undefined ? "12m" : periodArg.slice("--period=".length));
 const FORMER_EACH = 3;
 const LEADS = 1000;
 const OTHER_GYMS = 19;
@@ -137,7 +141,7 @@ try {
   const deps: ReportsDeps = { sql, now: () => now };
   const read = async (gym: { gymId: string; owner: string }, people: number): Promise<number> => {
     const expectActive = people - overOf(people);
-    const { report } = await getMembersReport(deps, gym.gymId, await requireReportsReader(deps, gym.owner, gym.gymId, null));
+    const { report } = await getMembersReport(deps, gym.gymId, await requireReportsReader(deps, gym.owner, gym.gymId, null), PERIOD);
     if (report.activeNow !== expectActive) throw new Error(`expected ${String(expectActive)} members now, read ${String(report.activeNow)}`);
     return JSON.stringify(report).length;
   };

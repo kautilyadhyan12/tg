@@ -1,8 +1,8 @@
-import { REPORT_FULL_WEEKS_NEEDED, weekdayOf } from '@app/shared';
+import { REPORT_FULL_WEEKS_NEEDED, addDays, weekdayOf } from '@app/shared';
 import { clockLabel } from './hoursView';
-import { csvWords, dayText, monthShort, percentText } from './reportsView';
+import { csvWords, dayText, monthShort, percentText, periodWords } from './reportsView';
 
-// The Reports page's attendance words (spec Part 3 §16.5; ROADMAP 21a-ii). Every figure
+// The Reports page's attendance words (spec Part 3 §16.5; ROADMAP 21a-ii, 21d-i). Every figure
 // says how it is worked out, and a figure the gym's check-ins or classes cannot give is a
 // sentence, never a zero.
 
@@ -18,7 +18,9 @@ const classesWord = (n) => (n === 1 ? '1 class' : `${count(n)} classes`);
 const dayShort = (day) => `${String(Number(day.slice(8, 10)))} ${monthShort(day.slice(0, 7)).slice(0, 3)}`;
 /** "Mon 5 Oct". */
 const dayNamed = (day) => `${weekdayShort(weekdayOf(day))} ${dayShort(day)}`;
-const span = (from, to) => `${dayShort(from)} to ${dayText(to)}`;
+/** A day beside a later one that carries its year: its own year is said only where it differs. */
+const dayBefore = (day, later) => (day.slice(0, 4) === later.slice(0, 4) ? dayShort(day) : dayText(day));
+const span = (from, to) => `${dayBefore(from, to)} to ${dayText(to)}`;
 
 /** An hour of the day on the gym's clock: "18:00", or "6 PM". */
 export function hourLabel(hour, clockFormat) {
@@ -46,7 +48,7 @@ export function visitsLine(report) {
  *  is none; `note` is the small line under a number; `how` is how it is worked out. */
 export function visitTiles(report, words, clockFormat) {
   const week = report.weeks.length > 0 ? report.weeks[report.weeks.length - 1] : null;
-  const before = report.weeks.length >= 2 ? report.weeks[report.weeks.length - 2] : null;
+  const shownFrom = report.days.length > 0 ? report.days[0].day : report.period.from;
 
   let member;
   if (report.perMember.state === 'ok') {
@@ -54,7 +56,7 @@ export function visitTiles(report, words, clockFormat) {
     member = {
       value: String(m.perWeek),
       line: null,
-      note: `${count(m.visitors)} of the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list since ${dayShort(m.from)} came · ${span(m.from, m.to)}`,
+      note: `${count(m.visitors)} of the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list since ${dayBefore(m.from, m.to)} came · ${span(m.from, m.to)}`,
       how: `The ${visitsWord(m.visits)} that the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list since ${dayText(m.from)} made in the last ${String(m.weeks)} full weeks (${span(m.from, m.to)}), shared between them and the ${String(m.weeks)} weeks. Anyone added since, and anyone you have removed, is not counted.`,
     };
   } else {
@@ -65,7 +67,7 @@ export function visitTiles(report, words, clockFormat) {
           ? `Nobody on your ${words.person} list today was on it by ${dayText(report.perMember.from)}, when the weeks counted here began.`
           : memberNotYet(report, words),
       note: null,
-      how: `Visits in the last full weeks, Monday to Sunday (4 at most), by the ${words.people} who were on your list when those weeks began, shared between them and those weeks.`,
+      how: `Visits in the full weeks of ${periodWords(report.period)}, Monday to Sunday, by the ${words.people} who were on your list when those weeks began, shared between them and those weeks.`,
     };
   }
 
@@ -73,7 +75,7 @@ export function visitTiles(report, words, clockFormat) {
   const hours = report.hours;
   if (hours.state === 'ok') {
     const left = hours.noTime > 0 ? ` ${visitsWord(hours.noTime)} staff added on a later day ${hours.noTime === 1 ? 'has' : 'have'} no time and ${hours.noTime === 1 ? 'is' : 'are'} left out.` : '';
-    const how = `Check-ins in the last ${String(hours.weeks)} full weeks (${span(hours.from, hours.to)}), counted by weekday and hour on your clock.${left}`;
+    const how = `Check-ins from ${dayText(hours.from)} to today, counted by weekday and hour on your clock.${left}`;
     const names = hours.busiest.map((c) => `${weekdayShort(c.weekday)} ${hourLabel(c.hour, clockFormat)}`);
     if (hours.tied > hours.busiest.length) {
       busiest = { value: null, line: `No one hour stands out: ${String(hours.tied)} hours had ${visitsWord(hours.top)} each.`, note: null, how };
@@ -81,7 +83,7 @@ export function visitTiles(report, words, clockFormat) {
       busiest = {
         value: names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`,
         line: null,
-        note: `${visitsWord(hours.top)}${names.length > 1 ? ' each' : ''} in ${String(hours.weeks)} weeks`,
+        note: `${visitsWord(hours.top)}${names.length > 1 ? ' each' : ''} · ${span(hours.from, hours.to)}`,
         how,
       };
     }
@@ -91,25 +93,22 @@ export function visitTiles(report, words, clockFormat) {
       line:
         hours.state === 'no_visits'
           ? hours.noTime > 0
-            ? `The only visits in the last ${String(hours.weeks)} full weeks were added by staff on a later day, so their time is not known.`
-            : `Nobody checked in in the last ${String(hours.weeks)} full weeks.`
+            ? `The only visits from ${span(hours.from, hours.to)} were added by staff on a later day, so their time is not known.`
+            : `Nobody checked in from ${span(hours.from, hours.to)}.`
           : busiestNotYet(report),
       note: null,
-      how: 'Check-ins in the last full weeks, Monday to Sunday (8 at most), counted by weekday and hour on your clock.',
+      how: `Check-ins in ${periodWords(report.period)}, counted by weekday and hour on your clock.`,
     };
   }
 
   return [
     {
-      key: 'week',
-      label: 'Visits this week',
-      value: week === null ? null : count(week.visits),
+      key: 'visits',
+      label: 'Visits',
+      value: count(report.inPeriod.visits),
       line: null,
-      note:
-        week === null
-          ? null
-          : `${dayNamed(week.weekStart)} to today · ${count(week.people)} ${week.people === 1 ? 'person' : 'people'}${before === null ? '' : ` · last week: ${count(before.visits)}`}`,
-      how: 'Every check-in from Monday to today. Someone who comes on three days is three visits and one person.',
+      note: `${count(report.inPeriod.people)} ${report.inPeriod.people === 1 ? 'person' : 'people'} · ${span(shownFrom, report.period.to)}${week === null ? '' : ` · this week, so far: ${count(week.visits)}`}`,
+      how: `Every check-in from ${dayText(shownFrom)} to today${shownFrom === report.period.from ? '' : ', the day of your first check-in'}. Someone who comes on three days is three visits and one person.`,
     },
     { key: 'per-member', label: `Visits a ${words.person} a week`, ...member },
     { key: 'busiest', label: 'Busiest time', ...busiest },
@@ -131,6 +130,8 @@ export function chartTop(max) {
 export function dayChart(report) {
   const days = report.days;
   const top = chartTop(Math.max(1, ...days.map((d) => d.visits)));
+  // A date under the line for each Monday, or for each month's first day where Mondays would crowd.
+  const byMonth = days.length > 45;
   const points = days.map((d, i) => {
     const weekday = weekdayOf(d.day);
     const today = d.day === report.today;
@@ -141,8 +142,8 @@ export function dayChart(report) {
       visits: d.visits,
       today,
       weekend: weekday >= 6,
-      monday: weekday === 1,
-      label: dayShort(d.day),
+      mark: byMonth ? d.day.endsWith('-01') : weekday === 1,
+      label: byMonth ? monthShort(d.day.slice(0, 7)).slice(0, 3) : dayShort(d.day),
       title: today ? `Today, ${dayNamed(d.day)}` : dayNamed(d.day),
       said: today ? `${visitsWord(d.visits)} so far` : visitsWord(d.visits),
       text: `${today ? `Today, ${dayNamed(d.day)}` : dayNamed(d.day)}: ${today ? `${visitsWord(d.visits)} so far` : visitsWord(d.visits)}`,
@@ -186,27 +187,56 @@ export function smoothLine(points, width, height) {
   return { xy, line, area: xy.length === 0 ? '' : `${line} L${String(last.x)} ${String(height)} L${String(first.x)} ${String(height)} Z` };
 }
 
+/** How many weeks the table lists before its "Show all" button. */
+export const WEEK_ROWS_SHOWN = 12;
+
+/** The last day of a week that does not begin on a Monday: the week a period begins in is
+ *  counted from the period's first day, and is said as the days it holds. Null for a whole week. */
+const partWeekEnd = (weekStart) => (weekdayOf(weekStart) === 1 ? null : addDays(weekStart, 7 - weekdayOf(weekStart)));
+/** "Sat 1 Aug to Sun 2 Aug 2026"; across New Year each day says its own year. */
+const partWeekText = (from, to) => `${dayNamed(from)}${from.slice(0, 4) === to.slice(0, 4) ? '' : ` ${from.slice(0, 4)}`} to ${dayNamed(to)} ${to.slice(0, 4)}`;
+
 /** The week-by-week table's rows, newest first. */
 export function weekRows(report) {
   return [...report.weeks].reverse().map((w, i) => ({
     key: w.weekStart,
-    week: i === 0 ? `${dayShort(w.weekStart)} (so far)` : dayText(w.weekStart),
+    week:
+      i === 0
+        ? `${dayShort(w.weekStart)} (so far)`
+        : partWeekEnd(w.weekStart) !== null
+          ? partWeekText(w.weekStart, partWeekEnd(w.weekStart))
+          : dayText(w.weekStart),
     visits: count(w.visits),
     people: count(w.people),
   }));
 }
 
+/** What stands in the grid of hours' place while there is none: why, and the days counted.
+ *  Null where the grid is drawn. */
+export function hoursMissing(report) {
+  const hours = report.hours;
+  if (hours.state === 'ok') return null;
+  if (hours.state === 'not_enough_data') return busiestNotYet(report);
+  if (hours.noTime > 0) return `The only visits from ${span(hours.from, hours.to)} were added by staff on a later day, so their time is not known.`;
+  return `Nobody checked in from ${span(hours.from, hours.to)}.`;
+}
+
+/** The grid of hours always shows at least these, a gym's usual day, so that one busy hour
+ *  is one square; it is wider when anybody came earlier or later. */
+const GRID_FROM = 6;
+const GRID_TO = 21;
+
 /** How many shades the grid of hours has, quiet to busy. */
 export const HEAT_LEVELS = 5;
 
 /** The busiest hours as a grid: a row for each weekday, a column for each hour from the
- *  earliest to the latest that had a visit. `share` is a cell's visits against the busiest
+ *  earliest to the latest that had a visit, and never fewer than 06:00 to 21:00. `share` is a cell's visits against the busiest
  *  hour's. Null without the figure. */
 export function hourGrid(report, clockFormat) {
   const hours = report.hours;
   if (hours.state !== 'ok') return null;
-  const from = Math.min(...hours.cells.map((c) => c.hour));
-  const to = Math.max(...hours.cells.map((c) => c.hour));
+  const from = Math.min(GRID_FROM, ...hours.cells.map((c) => c.hour));
+  const to = Math.max(GRID_TO, ...hours.cells.map((c) => c.hour));
   const columns = [];
   for (let hour = from; hour <= to; hour += 1) columns.push({ hour, label: hourLabel(hour, clockFormat) });
   const visitsAt = new Map(hours.cells.map((c) => [`${String(c.weekday)}-${String(c.hour)}`, c.visits]));
@@ -242,7 +272,7 @@ export function hourGrid(report, clockFormat) {
 export function classTiles(report) {
   const classes = report.classes;
   if (classes.state !== 'ok') return null;
-  const since = `classes that started since ${dayText(classes.from)} (the last 8 weeks)`;
+  const since = `classes that started since ${dayText(classes.from)} (${periodWords(report.period)})`;
   const fill = classes.fill;
   const noShows = classes.noShows;
   let noShowTile;
@@ -261,7 +291,7 @@ export function classTiles(report) {
       calendar: true,
     };
   } else {
-    noShowTile = { value: null, line: 'Nobody has booked a class in the last 8 weeks.', note: null, calendar: false };
+    noShowTile = { value: null, line: `Nobody has booked a class in ${periodWords(report.period)}.`, note: null, calendar: false };
   }
   return [
     {
@@ -304,8 +334,16 @@ const csv = (rows) => `${rows.map((row) => row.map(cell).join(',')).join('\r\n')
 /** The weeks as a CSV: counts only, oldest first. */
 export function weeksCsv(report) {
   return csv([
-    ['Week starting (Monday)', 'Visits', 'People'],
-    ...report.weeks.map((w) => [w.weekStart === report.weeks[report.weeks.length - 1].weekStart ? `${w.weekStart} (so far)` : w.weekStart, w.visits, w.people]),
+    ['Week starting', 'Visits', 'People'],
+    ...report.weeks.map((w) => [
+      w.weekStart === report.weeks[report.weeks.length - 1].weekStart
+        ? `${w.weekStart} (so far)`
+        : partWeekEnd(w.weekStart) !== null
+          ? `${w.weekStart} (part week, to ${partWeekEnd(w.weekStart)})`
+          : w.weekStart,
+      w.visits,
+      w.people,
+    ]),
   ]);
 }
 

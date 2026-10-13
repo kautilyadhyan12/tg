@@ -1,7 +1,7 @@
 // What the Reports page's attendance figures cost to read (ROADMAP 21a-ii; CLAUDE.md §4
 // "Cost at full size"). One gym at the biggest size the app sells, 2,000 people on its list
 // (--people= for another size) each checking in three days a week for a year, with three
-// former records for each of them and 40 classes a week of 20 bookings, beside 19 gyms of
+// former records for each of them and 42 classes a week of 20 bookings, beside 19 gyms of
 // 200 doing the same: read through the service the route calls.
 //
 // Two numbers each: how long it takes, and how long the server's one thread is busy and
@@ -18,6 +18,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
+import { reportPeriodKeySchema } from "@app/shared";
 import { getAttendanceReport, requireReportsReader, type ReportsDeps } from "../src/modules/orgs/reports/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -29,11 +30,14 @@ if (!/localhost|127\.0\.0\.1/.test(url)) {
 const sql = postgres(url, { prepare: false, max: 10 });
 const peopleArg = process.argv.find((a) => a.startsWith("--people="));
 const PEOPLE = peopleArg === undefined ? 2000 : Number(peopleArg.slice("--people=".length));
+const periodArg = process.argv.find((a) => a.startsWith("--period="));
+/** The period read: twelve months, the widest, unless told. */
+const PERIOD = reportPeriodKeySchema.parse(periodArg === undefined ? "12m" : periodArg.slice("--period=".length));
 const KEEP = process.argv.includes("--keep");
 const CLEAN_ONLY = process.argv.includes("--clean");
 const FORMER_EACH = 3;
 const VISIT_DAYS = 364;
-const CLASS_DAYS = 70;
+const CLASS_DAYS = 364;
 const CLASSES_A_DAY = 6;
 const BOOKINGS_A_CLASS = 20;
 const OTHER_GYMS = 19;
@@ -69,7 +73,7 @@ interface Made {
 }
 
 /** A gym a year into check-in: `people` on its list, three former records for each, every
- *  person checked in three days a week, and classes every day for ten weeks. */
+ *  person checked in three days a week, and classes every day for a year. */
 async function makeGym(people: number): Promise<Made> {
   const owner = randomUUID();
   await sql`INSERT INTO users (id, email, display_name) VALUES (${owner}, ${`${PREFIX}${owner}@example.com`}, 'Cost Owner')`;
@@ -165,7 +169,7 @@ try {
 
   const deps: ReportsDeps = { sql, now: () => now };
   const read = async (gym: Made, expectMembers: number): Promise<number> => {
-    const { report } = await getAttendanceReport(deps, gym.gymId, await requireReportsReader(deps, gym.owner, gym.gymId, null));
+    const { report } = await getAttendanceReport(deps, gym.gymId, await requireReportsReader(deps, gym.owner, gym.gymId, null), PERIOD);
     if (report.perMember.state !== "ok" || report.perMember.members !== expectMembers) throw new Error(`expected ${String(expectMembers)} members, read ${JSON.stringify(report.perMember)}`);
     if (report.hours.state !== "ok" || report.classes.state !== "ok") throw new Error("a figure is missing");
     return JSON.stringify(report).length;
