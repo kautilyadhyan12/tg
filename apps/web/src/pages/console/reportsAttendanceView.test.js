@@ -1,7 +1,7 @@
 // The Reports page's attendance words and CSVs (ROADMAP 21a-ii; spec Part 3 §16.5).
 import { describe, expect, it } from 'vitest';
 import { attendanceReportFrom, orgWords } from '@app/shared';
-import { classRows, classTiles, chartTop, classesCsv, dayChart, daysCsv, hourGrid, hourLabel, hoursCsv, smoothLine, visitTiles, visitsLine, weekRows, weeksCsv } from './reportsAttendanceView';
+import { classRows, classTiles, chartTop, classesCsv, dayChart, daysCsv, hourGrid, hourLabel, hoursCsv, hoursMissing, smoothLine, visitTiles, visitsLine, weekRows, weeksCsv } from './reportsAttendanceView';
 
 const words = orgWords('gym');
 
@@ -9,6 +9,9 @@ const words = orgWords('gym');
 const facts = (over = {}) => ({
   timezone: 'Europe/London',
   today: '2026-10-10',
+  // Three months, from 1 August: the gym's own first check-in is later, so it is shown from there.
+  period: '3m',
+  people: 1,
   firstVisitOn: '2026-09-07',
   days: [
     { day: '2026-10-05', visits: 10 },
@@ -45,29 +48,45 @@ describe('an hour on the gym’s clock', () => {
 
   it('the last hour of the day runs to midnight', () => {
     const grid = hourGrid(report({ hours: [{ weekday: 7, hour: 23, visits: 2 }] }), '24h');
-    expect(grid.rows[6].cells[0].text).toBe('Sunday 23:00 to 00:00: 2 visits');
+    expect(grid.rows[6].cells.at(-1).text).toBe('Sunday 23:00 to 00:00: 2 visits');
   });
 });
 
 describe('the visit tiles', () => {
   it('one of a thing is said as one, and large numbers are grouped', () => {
     const t = tiles();
-    expect(t.week).toMatchObject({ value: '15', note: 'Mon 5 Oct to today · 1 person · last week: 1,240' });
+    expect(t.visits).toMatchObject({ label: 'Visits', value: '15', note: '1 person · 7 Sep to 10 Oct 2026 · this week, so far: 15' });
+    expect(t.visits.how).toBe('Every check-in from 7 Sep 2026 to today, the day of your first check-in. Someone who comes on three days is three visits and one person.');
+    expect(tiles({ people: 1240, days: [{ day: '2026-10-05', visits: 2480 }] }).visits).toMatchObject({ value: '2,480', note: '1,240 people · 7 Sep to 10 Oct 2026 · this week, so far: 15' });
     expect(t['per-member']).toMatchObject({ value: '2.3', note: '1 of the 1 member on your list since 7 Sep came · 7 Sep to 4 Oct 2026' });
     expect(t['per-member'].how).toContain('The 9 visits that the 1 member on your list since 7 Sep 2026 made in the last 4 full weeks');
-    expect(t.busiest).toMatchObject({ value: 'Tue 06:00', note: '40 visits in 4 weeks' });
+    expect(t.busiest).toMatchObject({ value: 'Tue 06:00', note: '40 visits · 7 Sep to 10 Oct 2026' });
   });
 
-  it('the first week has no last week beside it', () => {
-    const t = tiles({ firstVisitOn: '2026-10-06', weeks: [{ weekStart: '2026-10-05', visits: 2, people: 2 }] });
-    expect(t.week.note).toBe('Mon 5 Oct to today · 2 people');
+  it('the visits are the period’s, from its first day for a gym older than it and from the first check-in for a younger one', () => {
+    const young = tiles({ firstVisitOn: '2026-10-06', weeks: [{ weekStart: '2026-10-05', visits: 5, people: 1 }] });
+    // The 10 visits dated before the first check-in are not counted.
+    expect(young.visits).toMatchObject({ value: '5', note: '1 person · 6 Oct to 10 Oct 2026 · this week, so far: 5' });
+    const old = tiles({ period: '4w', firstVisitOn: '2025-01-06' });
+    expect(old.visits.note).toBe('1 person · 13 Sep to 10 Oct 2026 · this week, so far: 15');
+    expect(old.visits.how).toBe('Every check-in from 13 Sep 2026 to today. Someone who comes on three days is three visits and one person.');
+    // Four weeks hold three whole ones for the weekly rate, and the tile says which; the busiest
+    // time counts every day of the four weeks.
+    expect(old['per-member'].note).toBe('1 of the 1 member on your list since 14 Sep came · 14 Sep to 4 Oct 2026');
+    expect(old.busiest.note).toBe('40 visits · 13 Sep to 10 Oct 2026');
+    expect(old.busiest.how).toBe('Check-ins from 13 Sep 2026 to today, counted by weekday and hour on your clock.');
+    // Twelve months begin in the year before: every first day says its year.
+    const year = tiles({ period: '12m', firstVisitOn: '2025-01-06' });
+    expect(year.visits.note).toBe('1 person · 1 Nov 2025 to 10 Oct 2026 · this week, so far: 15');
+    expect(year['per-member'].note).toBe('1 of the 1 member on your list since 3 Nov 2025 came · 3 Nov 2025 to 4 Oct 2026');
+    expect(year.busiest.note).toBe('40 visits · 1 Nov 2025 to 10 Oct 2026');
   });
 
   it('nobody on the list, no visit in the weeks counted, and only visits added later each say which', () => {
     expect(tiles({ member: { members: 0, visits: 0, visitors: 0 } })['per-member'].line).toBe('Nobody on your member list today was on it by 7 Sep 2026, when the weeks counted here began.');
-    expect(tiles({ hours: [] }).busiest.line).toBe('Nobody checked in in the last 4 full weeks.');
+    expect(tiles({ hours: [] }).busiest.line).toBe('Nobody checked in from 7 Sep to 10 Oct 2026.');
     expect(tiles({ hours: [], hoursNoTime: 3 }).busiest.line).toBe(
-      'The only visits in the last 4 full weeks were added by staff on a later day, so their time is not known.',
+      'The only visits from 7 Sep to 10 Oct 2026 were added by staff on a later day, so their time is not known.',
     );
     expect(tiles({ hoursNoTime: 3 }).busiest.how).toContain('3 visits staff added on a later day have no time and are left out.');
   });
@@ -95,11 +114,11 @@ describe('the pictures', () => {
   });
 
   it('a point for each day: how high against the top of the chart, the weekend, each Monday with its date', () => {
-    const chart = dayChart(report());
+    const chart = dayChart(report({ period: '4w', firstVisitOn: '2025-01-06' }));
     expect(chart.points).toHaveLength(28);
     expect(chart.top).toBe(12);
     expect(chart.ticks.map((t) => t.label)).toEqual(['12', '6', '0']);
-    expect(chart.points.filter((p) => p.monday).map((p) => p.label)).toEqual(['14 Sep', '21 Sep', '28 Sep', '5 Oct']);
+    expect(chart.points.filter((p) => p.mark).map((p) => p.label)).toEqual(['14 Sep', '21 Sep', '28 Sep', '5 Oct']);
     expect(chart.points.filter((p) => p.weekend)).toHaveLength(8);
     expect(chart.points[0]).toMatchObject({ at: 0, up: 0, visits: 0, today: false });
     expect(chart.points[22]).toMatchObject({ visits: 10, text: 'Mon 5 Oct: 10 visits', title: 'Mon 5 Oct', said: '10 visits' });
@@ -110,9 +129,20 @@ describe('the pictures', () => {
     expect(chart.any).toBe(true);
   });
 
+  it('a long period has a date under the line for each month’s first day, where every Monday would crowd', () => {
+    const year = dayChart(report({ period: '12m', firstVisitOn: '2025-01-06' }));
+    expect(year.points).toHaveLength(344);
+    expect(year.points.filter((p) => p.mark).map((p) => p.label)).toEqual(['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct']);
+    const quarter = dayChart(report({ period: '3m', firstVisitOn: '2025-01-06' }));
+    expect(quarter.points).toHaveLength(71);
+    expect(quarter.points.filter((p) => p.mark).map((p) => p.label)).toEqual(['Aug', 'Sep', 'Oct']);
+    // Each point still says its own day.
+    expect(year.points[343].text).toBe('Today, Sat 10 Oct: 5 visits so far');
+  });
+
   it('two days level are not called the busiest, and with no visit at all there is nothing to draw', () => {
     const level = dayChart(report({ days: [{ day: '2026-10-05', visits: 7 }, { day: '2026-10-07', visits: 7 }] }));
-    expect(level.summary).toBe('About 0.5 a day · most in one day: 7');
+    expect(level.summary).toBe('About 0.4 a day · most in one day: 7');
     const none = dayChart(report({ days: [] }));
     expect(none).toMatchObject({ any: false, top: 4, summary: 'About 0 a day' });
     expect(none.points.every((p) => p.up === 0)).toBe(true);
@@ -145,9 +175,30 @@ describe('the pictures', () => {
     expect(numbers.every((n) => n >= 0 && n <= 200)).toBe(true);
   });
 
+  it('the grid is never narrower than 06:00 to 21:00, so one busy hour is one square and not a bar across the page', () => {
+    const one = hourGrid(report({ hours: [{ weekday: 2, hour: 9, visits: 5 }] }), '24h');
+    expect(one.columns.map((c) => c.label)).toEqual(['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00']);
+    expect(one.rows.every((r) => r.cells.length === 16)).toBe(true);
+    expect(one.rows.flatMap((r) => r.cells).filter((c) => c.visits > 0).map((c) => c.text)).toEqual(['Tuesday 09:00 to 10:00: 5 visits']);
+    // Wider when anybody came earlier or later, and no wider than they came.
+    expect(hourGrid(report({ hours: [{ weekday: 2, hour: 4, visits: 1 }] }), '24h').columns.map((c) => c.hour)).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(hourGrid(report({ hours: [{ weekday: 2, hour: 23, visits: 1 }] }), '24h').columns).toHaveLength(18);
+    expect(hourGrid(report({ hours: [{ weekday: 1, hour: 0, visits: 1 }, { weekday: 1, hour: 23, visits: 1 }] }), '24h').columns).toHaveLength(24);
+  });
+
+  it('no grid: its place says why, with the days counted', () => {
+    expect(hoursMissing(report())).toBeNull();
+    expect(hoursMissing(report({ hours: [] }))).toBe(
+      'Nobody checked in from 7 Sep to 10 Oct 2026.',
+    );
+    expect(hoursMissing(report({ period: '4w', firstVisitOn: '2025-01-06', hours: [] }))).toBe('Nobody checked in from 13 Sep to 10 Oct 2026.');
+    expect(hoursMissing(report({ hours: [], hoursNoTime: 3 }))).toBe('The only visits from 7 Sep to 10 Oct 2026 were added by staff on a later day, so their time is not known.');
+    expect(hoursMissing(report({ firstVisitOn: '2026-10-01' }))).toBe('Not enough data yet. The busiest time is picked once every weekday has been counted twice: 2 full weeks of check-ins; you have none yet.');
+  });
+
   it('the grid runs from the earliest hour to the latest, and a square is a share of the busiest', () => {
     const grid = hourGrid(report(), '24h');
-    expect(grid.columns.map((c) => c.hour)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(grid.columns.map((c) => c.hour)).toEqual(Array.from({ length: 22 }, (_, hour) => hour));
     expect(grid.rows.map((r) => r.label)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
     expect(grid.rows[1].cells[6]).toMatchObject({ visits: 40, share: 1, level: 5, best: true });
     expect(grid.rows[5].cells[0]).toMatchObject({ visits: 3, share: 0.075, level: 1, best: false, text: 'Saturday 00:00 to 01:00: 3 visits' });
@@ -160,7 +211,7 @@ describe('the pictures', () => {
 describe('the shades of the grid', () => {
   const grid = (hours) => hourGrid(report({ hours }), '24h');
   it('five shades from quiet to the busiest hour, and none for nobody', () => {
-    const cells = grid([1, 2, 3, 4, 5, 6, 7].map((weekday, i) => ({ weekday, hour: 9, visits: [1, 20, 21, 40, 60, 80, 100][i] }))).rows.map((r) => r.cells[0].level);
+    const cells = grid([1, 2, 3, 4, 5, 6, 7].map((weekday, i) => ({ weekday, hour: 9, visits: [1, 20, 21, 40, 60, 80, 100][i] }))).rows.map((r) => r.cells.find((c) => c.hour === 9).level);
     expect(cells).toEqual([1, 1, 2, 2, 3, 4, 5]);
   });
 
@@ -181,15 +232,29 @@ describe('the tables and their CSVs', () => {
       { key: '2026-09-28', week: '28 Sep 2026', visits: '1,240', people: '300' },
     ]);
     expect(weeksCsv(report())).toBe(
-      '"Week starting (Monday)","Visits","People"\r\n"2026-09-07","0","0"\r\n"2026-09-14","0","0"\r\n"2026-09-21","0","0"\r\n"2026-09-28","1240","300"\r\n"2026-10-05 (so far)","15","1"\r\n',
+      '"Week starting","Visits","People"\r\n"2026-09-07","0","0"\r\n"2026-09-14","0","0"\r\n"2026-09-21","0","0"\r\n"2026-09-28","1240","300"\r\n"2026-10-05 (so far)","15","1"\r\n',
     );
+  });
+
+  it('the week a period begins in is a part week, and its row and its CSV line say the days it holds', () => {
+    // Three months from Saturday 1 August: that week is two days.
+    const r = report({ firstVisitOn: '2025-01-06', weeks: [{ weekStart: '2026-08-01', visits: 8, people: 8 }] });
+    const rows = weekRows(r);
+    expect(rows.at(-1)).toEqual({ key: '2026-08-01', week: 'Sat 1 Aug to Sun 2 Aug 2026', visits: '8', people: '8' });
+    expect(rows.at(-2).week).toBe('3 Aug 2026');
+    expect(weeksCsv(r).split('\r\n').slice(1, 3)).toEqual(['"2026-08-01 (part week, to 2026-08-02)","8","8"', '"2026-08-03","0","0"']);
+    // Four weeks on 26 January 2027 begin on Wednesday 30 December 2026: that week ends in the new year.
+    const newYear = weekRows(report({ today: '2027-01-26', period: '4w', firstVisitOn: '2025-01-06', days: [], weeks: [] }));
+    expect(newYear.at(-1).week).toBe('Wed 30 Dec 2026 to Sun 3 Jan 2027');
+    // A gym's own first week begins on its Monday and is said as any week.
+    expect(weekRows(report()).at(-1).week).toBe('7 Sep 2026');
   });
 
   it('the days carry their weekday, and the hours the gym’s clock', () => {
     const lines = daysCsv(report()).split('\r\n');
     expect(lines[0]).toBe('"Day","Weekday","Visits"');
-    expect(lines).toHaveLength(30);
-    expect(lines[28]).toBe('"2026-10-10 (so far)","Saturday","5"');
+    expect(lines).toHaveLength(36);
+    expect(lines[34]).toBe('"2026-10-10 (so far)","Saturday","5"');
     expect(hoursCsv(report(), '12h')).toBe('"Weekday","Hour starting","Visits"\r\n"Tuesday","6 AM","40"\r\n"Saturday","12 AM","3"\r\n');
     expect(hoursCsv(report({ firstVisitOn: '2026-10-01' }), '24h')).toBe('"Weekday","Hour starting","Visits"\r\n');
   });

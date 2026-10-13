@@ -19,6 +19,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
+import { reportPeriodKeySchema } from "@app/shared";
 import { getMoneyReport, type ReportsDeps } from "../src/modules/orgs/reports/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -30,6 +31,9 @@ if (!/localhost|127\.0\.0\.1/.test(url)) {
 const sql = postgres(url, { prepare: false, max: 10 });
 const peopleArg = process.argv.find((a) => a.startsWith("--people="));
 const PEOPLE = peopleArg === undefined ? 2000 : Number(peopleArg.slice("--people=".length));
+const periodArg = process.argv.find((a) => a.startsWith("--period="));
+/** The period read: twelve months, the widest, unless told. */
+const PERIOD = reportPeriodKeySchema.parse(periodArg === undefined ? "12m" : periodArg.slice("--period=".length));
 const KEEP = process.argv.includes("--keep");
 const CLEAN_ONLY = process.argv.includes("--clean");
 const FORMER_EACH = 3;
@@ -140,7 +144,7 @@ try {
 
   const deps: ReportsDeps = { sql, now: () => now };
   const read = async (gym: Made): Promise<string> => {
-    const { report } = await getMoneyReport(deps, gym.gymId, { timezone: "Europe/London" });
+    const { report } = await getMoneyReport(deps, gym.gymId, { timezone: "Europe/London" }, PERIOD);
     if (report.state !== "ok") throw new Error(`no figures: ${report.state}`);
     if (report.recurring.memberships !== gym.people) throw new Error(`expected ${String(gym.people)} repeating memberships, read ${String(report.recurring.memberships)}`);
     if (report.owed.people !== gym.people / 5) throw new Error(`expected ${String(gym.people / 5)} people owing, read ${String(report.owed.people)}`);

@@ -1,11 +1,14 @@
-// The Reports page's routes (ROADMAP 21a-i, 21a-ii, 21b-i): authenticate, the asker's own ceiling,
+// The Reports page's routes (ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i): authenticate, the asker's own ceiling,
 // Zod-parse, who may read, the limit, then the read. The service owns the authorisation.
 //
 //   GET /v1/orgs/:gymId/reports/members      the members figures (`reports.read`)
 //   GET /v1/orgs/:gymId/reports/attendance   the attendance figures (`reports.read`)
 //   GET /v1/orgs/:gymId/reports/money        the money figures (`reports.read` and `billing.members`)
+//
+// Each takes `?period=4w|3m|12m`, the days its figures are counted over (12m when not given).
 import type { FastifyInstance } from "fastify";
 import type { Sql } from "postgres";
+import { reportPeriodQuerySchema } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
@@ -51,11 +54,13 @@ export function registerReportsRoutes(app: FastifyInstance, deps: { sql: Sql; re
   for (const [path, read, also] of routes) {
     app.get(path, { preHandler: [app.authenticate, askerLimit] }, async (req, reply) => {
       const params = orgParamsSchema.safeParse(req.params);
-      if (!params.success) {
+      const query = reportPeriodQuerySchema.safeParse(req.query);
+      if (!params.success || !query.success) {
+        const issues = [...(params.success ? [] : params.error.issues), ...(query.success ? [] : query.error.issues)];
         // Issue paths and codes only, never the offending value.
         return reply.status(400).send({
           error: "validation_error",
-          message: params.error.issues.map((i) => `${i.path.join(".")}: ${i.code}`).join("; "),
+          message: issues.map((i) => `${i.path.join(".")}: ${i.code}`).join("; "),
           requestId: req.id,
         });
       }
@@ -64,7 +69,7 @@ export function registerReportsRoutes(app: FastifyInstance, deps: { sql: Sql; re
       const org = await service.requireReportsReader(reportsDeps, userId, params.data.gymId, also);
       await limit(req, reply);
       if (reply.sent) return reply;
-      return reply.status(200).send(await read(reportsDeps, params.data.gymId, org));
+      return reply.status(200).send(await read(reportsDeps, params.data.gymId, org, query.data.period));
     });
   }
 }

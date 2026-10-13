@@ -351,12 +351,16 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
       const expected: MembersReport = {
         timezone: "Europe/London",
         today: "2026-10-15",
+        period: { key: "12m", from: "2025-11-01", to: "2026-10-15" },
+        firstListedOn: "2026-06-10",
         // The list itself last changed when Rob was removed; a membership ending is not a change to it.
         listChangedOn: "2026-10-05",
         activeNow: 11,
         everLeft: true,
         fullMonths: 3,
         thisMonth: { month: "2026-10", joined: 0, left: 4 },
+        // New is counted from July, the month after the list began; the eight who left are below.
+        inPeriod: { joined: 1, joinedFrom: "2026-07-01", left: 8 },
         churnMonths: ["2026-07", "2026-08", "2026-09"],
         // Of 18 + 17 + 17 as July, August and September began, 1 + 0 + 2 left.
         churn: { state: "ok", percent: 5.8 },
@@ -373,7 +377,7 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
           { month: "2026-09", full: true, activeAtStart: 17, joined: 1, left: 3, churnPercent: 11.8 },
           { month: "2026-10", full: false, activeAtStart: 15, joined: 0, left: 4, churnPercent: null },
         ],
-        leads: { total: 0, joined: 0, percent: null, sources: [] },
+        leads: { ever: false, total: 0, joined: 0, percent: null, sources: [] },
       };
       expect(await read(gym, owner)).toEqual(expected);
 
@@ -439,7 +443,7 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
 
       // The count itself: a day handed in for somebody already removed, or for another
       // gym's person, moves nothing. Rob left on the day he was removed, whatever it says.
-      const counted = (gone: { id: string; on: string }[]) => readMemberCounts(sql, gym, "Europe/London", "2026-10-15", gone);
+      const counted = (gone: { id: string; on: string }[]) => readMemberCounts(sql, gym, "Europe/London", "2026-10-15", gone, "2025-11-01");
       expect(await counted([{ id: id["Rob Removed"], on: "2026-07-20" }, { id: nell, on: "2026-07-20" }])).toEqual(await counted([]));
 
       // A month that has closed stays as it closed. October, read on 2 November and again on

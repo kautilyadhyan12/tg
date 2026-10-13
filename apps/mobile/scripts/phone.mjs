@@ -102,11 +102,11 @@ async function bundlerIsUp() {
   }
 }
 let up = false;
-for (let tries = 0; tries < 150 && !up; tries++) {
+for (let tries = 0; tries < 300 && !up; tries++) {
   up = await bundlerIsUp();
   if (!up) await new Promise((resolve) => setTimeout(resolve, 2000));
 }
-if (!up) stopBundler("The bundler did not start in five minutes, so the app was not opened.");
+if (!up) stopBundler("The bundler did not start in ten minutes, so the app was not opened.");
 
 const opened = read("adb", [
   "shell",

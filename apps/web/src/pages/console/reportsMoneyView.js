@@ -1,8 +1,8 @@
 import { formatMinor, minorToPriceText } from '@app/shared';
-import { csvWords, dayText, monthLong, monthShort } from './reportsView';
+import { countedSpan, csvWords, dayText, monthLong, monthShort, periodName } from './reportsView';
 import { PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 
-// The Reports page's money words (spec Part 3 §16.5; ROADMAP 21b-i). The figures come from
+// The Reports page's money words (spec Part 3 §16.5; ROADMAP 21b-i, 21d-i). The figures come from
 // the payments staff record in the app; a figure the notebook cannot give is a sentence,
 // never a zero.
 
@@ -71,9 +71,11 @@ function owingPeople(owed, words) {
 export function moneyTiles(report, words, orgSlug) {
   const cur = report.currency;
   const month = monthName(report.thisMonth.month);
-  const before = report.months.length >= 2 ? report.months[report.months.length - 2] : null;
-  const beforeText = before === null ? '' : ` · ${monthName(before.month)}: ${moneyText(before.netMinor, cur)}`;
-  const refunded = report.thisMonth.refundedMinor > 0;
+  // A gym whose first payment is inside the period is counted from that day, and the tile says so.
+  const span = countedSpan(report.period, report.firstPaidOn, 'the first payment recorded here');
+  const paidFrom = report.firstPaidOn > report.period.from ? report.firstPaidOn : report.period.from;
+  const soFar = `${month}, so far: ${moneyText(report.thisMonth.netMinor, cur)}`;
+  const refunded = report.inPeriod.refundedMinor > 0;
   const owedMinor = report.owed.minor + report.owed.pastMinor;
   // People the Members page also shows as Payment due, with no amount in the app.
   const listOnly = report.owed.listOnlyPeople;
@@ -112,13 +114,13 @@ export function moneyTiles(report, words, orgSlug) {
     },
     {
       key: 'collected',
-      label: 'Collected this month',
-      value: moneyText(report.thisMonth.netMinor, cur),
+      label: 'Collected',
+      value: moneyText(report.inPeriod.netMinor, cur),
       line: null,
       note: refunded
-        ? `${month}, so far: ${moneyText(report.thisMonth.paidMinor, cur)} paid, ${moneyText(report.thisMonth.refundedMinor, cur)} refunded${beforeText}`
-        : `${month}, so far${beforeText}`,
-      how: `Payments your staff recorded in ${month}, less refunds noted in ${month}. A payment or a refund that was undone is not counted.`,
+        ? `${span}: ${moneyText(report.inPeriod.paidMinor, cur)} paid, ${moneyText(report.inPeriod.refundedMinor, cur)} refunded · ${soFar}`
+        : `${span} · ${soFar}`,
+      how: `Payments your staff recorded from ${dayText(paidFrom)} to today, less refunds noted in those days. A payment or a refund that was undone is not counted.`,
       links: [],
     },
     {
@@ -169,12 +171,14 @@ export function moneyTypeRows(report) {
     inUse: count(t.inUse),
     monthly: t.monthlyMinor === 0 ? '–' : moneyText(t.monthlyMinor, cur),
     month: moneyText(t.monthNetMinor, cur),
-    year: moneyText(t.yearNetMinor, cur),
+    period: moneyText(t.periodNetMinor, cur),
   }));
 }
 
 /** The month's name, for the membership table's heading. */
 export const moneyMonthName = (report) => monthName(report.thisMonth.month);
+/** "Collected, last 3 months": the membership table's last heading. */
+export const moneyPeriodHead = (report) => `Collected, ${periodName(report.period).toLowerCase()}`;
 
 const cell = (value) => `"${String(value).replace(/"/g, '""')}"`;
 const csv = (rows) => `${rows.map((row) => row.map(cell).join(',')).join('\r\n')}\r\n`;
@@ -199,7 +203,7 @@ export function moneyMonthsCsv(report) {
 export function moneyTypesCsv(report) {
   const cur = report.currency;
   return csv([
-    ['Membership', 'In use now', `Monthly recurring (${cur})`, `Collected in ${report.thisMonth.month} (${cur})`, `Collected, last 12 months (${cur})`],
-    ...report.types.map((t) => [csvWords(t.name), t.inUse, plain(t.monthlyMinor, cur), plain(t.monthNetMinor, cur), plain(t.yearNetMinor, cur)]),
+    ['Membership', 'In use now', `Monthly recurring (${cur})`, `Collected in ${report.thisMonth.month} (${cur})`, `${moneyPeriodHead(report)} (${cur})`],
+    ...report.types.map((t) => [csvWords(t.name), t.inUse, plain(t.monthlyMinor, cur), plain(t.monthNetMinor, cur), plain(t.periodNetMinor, cur)]),
   ]);
 }
