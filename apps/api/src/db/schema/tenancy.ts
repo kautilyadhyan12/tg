@@ -143,10 +143,14 @@ export const gyms = pgTable(
      *  `AT_RISK_QUIET_DAYS` and `AT_RISK_WEEKS_CAME` in `@app/shared`. */
     atRiskQuietDays: integer("at_risk_quiet_days").notNull().default(14),
     atRiskWeeksCame: integer("at_risk_weeks_came").notNull().default(2),
-    /** The gym's tax on what it sells (0101; spec Part 3 §14.3): hundredths of a percent, and
+    /** The gym's tax on what it sells (0102; spec Part 3 §14.3): hundredths of a percent, and
      *  whether its prices already hold it (null: its country says). */
     salesTaxBp: integer("sales_tax_bp").notNull().default(0),
     salesTaxIncluded: boolean("sales_tax_included"),
+    /** Whom the front desk checks in, and what it does with a payment overdue (0101; spec
+     *  Part 3 §12.4), under `gyms_checkin_rules_check`; `checkinRulesSchema` in `@app/shared`. */
+    checkinWho: text("checkin_who").notNull().default("everyone"),
+    checkinOverdue: text("checkin_overdue").notNull().default("let_in"),
     createdAt: createdAt(),
   },
   (t) => [

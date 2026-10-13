@@ -21,6 +21,7 @@ import os from "node:os";
 import postgres from "postgres";
 import { createMemoryRedis } from "../src/redis.js";
 import { dayInTz } from "../src/modules/gamification/streak.js";
+import { DESK_RULES_START } from "../src/modules/orgs/checkin/repo.js";
 import { findPeople, readLog, scan, staffCheckIn, type CheckinDeps } from "../src/modules/orgs/checkin/service.js";
 import { heldOnListOf } from "../src/modules/orgs/memberships/onList.js";
 
@@ -80,7 +81,7 @@ await sql`
   VALUES ('gym', ${gymId}, (SELECT id FROM plans WHERE code = ${PLAN}), 'active', 'pilot')`;
 const deviceId = randomUUID();
 await sql`INSERT INTO gym_checkin_devices (id, gym_id, name, created_by_user_id) VALUES (${deviceId}, ${gymId}, 'Front desk', ${owner})`;
-const device = { deviceId, gymId, gymName: "Cost Gym", timezone: ZONE, clockFormat: "24h" as const };
+const device = { deviceId, gymId, gymName: "Cost Gym", timezone: ZONE, clockFormat: "24h" as const, ...DESK_RULES_START };
 const gold = randomUUID();
 const pack = randomUUID();
 await sql`

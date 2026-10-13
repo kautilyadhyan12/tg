@@ -1,4 +1,4 @@
-// THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 item 18b-i). Mirrors `0101_register.sql`
+// THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 item 18b-i). Mirrors `0102_register.sql`
 // 1:1; the migration carries the reasoning.
 import { sql } from "drizzle-orm";
 import {
@@ -101,7 +101,7 @@ export const gymSales = pgTable(
       columns: [t.gymId, t.productId],
       foreignColumns: [gymProducts.gymId, gymProducts.id],
     }).onDelete("cascade"),
-    // `0101` sets only `entry_id` to null when the record goes; Drizzle cannot say which column.
+    // `0102` sets only `entry_id` to null when the record goes; Drizzle cannot say which column.
     foreignKey({
       name: "gym_sales_entry_fk",
       columns: [t.gymId, t.entryId],

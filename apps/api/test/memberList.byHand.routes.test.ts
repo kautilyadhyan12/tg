@@ -1152,7 +1152,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // deleted record lets it go.
       "gym_pt_appointments.entry_id",
       "gym_pt_appointments.gym_id",
-      // What the person bought at the desk (0101): moved by the join, and kept as a
+      // What the person bought at the desk (0102): moved by the join, and kept as a
       // walk-in's when the record is deleted for good (`register.routes.test.ts`).
       "gym_sales.entry_id",
       "gym_sales.gym_id",

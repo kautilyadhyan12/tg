@@ -879,6 +879,27 @@ export async function inUseForList(
   return rows.map((row) => ({ entryId: row.entry_id, noEmail: row.no_email, held: listHeld(row) }));
 }
 
+/** Every membership stored in use of the gym's current records, sold in `currency`, with
+ *  its type and the price it was sold at: what Reports' money figures read (21b-i). */
+export async function inUseForMoney(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  currency: string,
+): Promise<{ typeId: string; typeName: string; priceMinor: number; membership: HeldMembership }[]> {
+  const rows = await sql<(ListHeldColumns & { membership_type_id: string; price_minor: number })[]>`
+    SELECT ${LIST_COLUMNS(sql)}, h.membership_type_id, h.price_minor
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
+    WHERE h.gym_id = ${gymId} AND h.status = ANY(${[...IN_USE]}::text[]) AND h.currency = ${currency}`;
+  return rows.map((row) => ({
+    typeId: row.membership_type_id,
+    typeName: row.type_name,
+    priceMinor: row.price_minor,
+    membership: listHeld(row).membership,
+  }));
+}
+
 /** A stored membership's last day, for a row aliased `h`, as the rule works it out
  *  (`lastDay` in `@app/shared`): the start, so many terms on, plus the days frozen, less
  *  one. A repeating one counts the periods it is paid for; any other kind has one. Postgres

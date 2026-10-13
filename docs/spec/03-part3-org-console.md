@@ -2231,6 +2231,44 @@ person as their record, or their account when the visit has no record. The table
 never a member · another gym's person × first scan · same period · next period ·
 outside hours × the pass fresh · old · used · garbled.
 
+**Who a gym's desk lets in, as built (16d; RULINGS 2026-10-02 and 2026-10-12).** Settings
+has a box, **Who can check in** (`org.manage`, beside Check-in devices), with two choices
+that wait for one Save: whom the front desk checks in, **Everyone on your list** (where
+every gym starts) or **Only people with a current membership**; and what it does with
+**someone with an overdue payment**, **Check them in** (the start) or **Send them to
+staff**. They are two columns on the gym (`checkin_who`, `checkin_overdue`, migration
+`0101`) and ONE pure rule, `checkinStop` in `@app/shared` (`checkinRules.ts`), which the
+desk's scan, staff's search and the box all read:
+- It reads what the app holds and never a word of the gym's file: the status the Members
+  list itself gives the person (`heldOnList`), and their bills. A current membership is one
+  running today. One frozen, ended, cancelled or still to start is not, and neither is
+  holding nothing in the app, whatever the file says.
+- A payment is overdue on the day its bill reads Overdue on the person's page
+  (`memberBillState`): a bill still open, and the gym's own days of grace passed. A
+  payment a membership says is due with no bill of ours open stops nobody.
+- The gym's owner and staff are never stopped by their own pass, nor by the key tag of
+  their own record: the record their account holds, or one that carries both their
+  address and their name. An address alone is a relative's. A read that fails stops
+  nobody, with a log (`checkin.rules_unread`). A gym that never changed its choices reads
+  nothing extra.
+- **A family on one address.** Where the list cannot say which record is an account's
+  (§18.4: several records on its email, none in its name), the account's pass is judged
+  by every one of those records and stopped only where the rule stops them all, with the
+  first one's reason; staff's search answers the same. Somebody in the app on no record
+  at all holds nothing, and "current membership" stops them.
+- A stopped person's pass or key tag answers `see_staff` with the gym's name and nothing
+  else: "Please see a member of staff", no name, no reason, the low sound. No visit is
+  written and a pass is not used up. Staff's own check-in is never stopped, and somebody
+  staff let in this period reads "Already checked in" at the desk.
+- Staff's search on Attendance says, under the name, why the desk would stop the person
+  (`stopped` on each person found), and Check in works as before.
+- Before Save the box names who the choices would send to staff today, each with why (the
+  first three, "and N more", See all), and how many would be checked in as now
+  (`GET …/checkin-rules/preview`, up to 500 by name), and in a line of its own how many
+  people in the app are on no record of the list and would be stopped too
+  (`notListed`); Save waits for that answer. A save
+  is noted in `audit_log` (`org.checkin_rules_changed`), once for the same choices.
+
 ### 12.5 Staff check-in, and the live log
 
 The console's Attendance page gains a search and **Check in** for signed-in staff with
@@ -4926,6 +4964,43 @@ from the same allowance as the members read; the rule is `attendanceReportFrom`
 `gym_attendance` and the class tables themselves, not the nightly rollup. Known and left: for
 up to a day after a gym moves its clock west, a visit dated tomorrow on the new clock is in
 no figure.
+
+**Built by 21b-i (2026-10-13): money.** Read from the notebook of §14.2 and shown under
+Attendance, for staff who hold `reports.read` AND `billing.members`: an owner who lets a
+trainer see attendance has not shown them what the gym takes, and such a person reads
+"Your role doesn't allow you to see money figures." **Monthly recurring revenue** is the
+price of every repeating membership in use today as one month (a term of months or years
+shared out, a week counted as a twelfth of fifty-two), for people on the list; one that
+is frozen, not started, ended, cancelled or free is not counted, and one that is running
+and owing is. **Collected** is the payments that stand, each in the month of the gym's day
+it was paid on, less the refunds that stand, each in the month the money went back; a
+payment or a refund that was undone is not money. **Payment due** is every bill still open
+whose day has come, less what is paid on it, for people on the list and past members
+together, with how much of it is overdue by the gym's own grace period (§14.2) and a
+button to Members already showing who owes. The people counted are those with a bill
+here; anybody else the Members list reads as "Payment due" (the gym's own file says so, or
+their bill is not opened yet) is said beside them, "3 more are marked Payment due on your
+member list, with no amount in the app", so the tile, Overview's box and the list its
+button opens count the same people. **Lifetime value** is the money a member
+brings in a month over monthly churn, both over the same three full months as the Members
+figures' churn (`churnBasis`, one helper for both): the money collected in those months
+for each member who left in them. It reads "Not enough data yet" until payments were
+recorded here for the whole of those months, and a sentence where nobody left in them or
+where those months gave back as much as they took.
+**Month by month** (from the month of the first payment, twelve at most) and **by
+membership** (in use now, monthly recurring, collected this month and in the last twelve)
+each download as a CSV of amounts, never a name. **A gym with no figures** reads why and
+has a button: nothing given here yet (Set up memberships), or no payment recorded here
+(Open Members; "If you take payments in other software, your money figures are there"),
+never a zero. Money is counted in the currency of the gym's country once a payment stands
+in it, and until then in the currency of its newest payment (a membership
+keeps the currency it was given in, so a gym whose country changed still reads the money it
+recorded); payments and bills in another currency are left out and the page says so.
+`GET /v1/orgs/:gymId/reports/money`, from the same allowance as the other two reads; the
+rule is `moneyReportFrom` (`packages/shared/src/reportsMoney.ts`), the sums `readMoney`
+(`reports/repo.ts`), in one snapshot with the list's own counts. Not in this job (21b-ii):
+money by product, which waits for the Sell page (18b), and by coach, which no payment
+names today.
 
 ### 16.6 Cards
 

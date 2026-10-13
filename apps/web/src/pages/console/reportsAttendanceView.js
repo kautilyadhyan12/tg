@@ -1,6 +1,6 @@
 import { REPORT_FULL_WEEKS_NEEDED, weekdayOf } from '@app/shared';
 import { clockLabel } from './hoursView';
-import { dayText, monthShort, percentText } from './reportsView';
+import { csvWords, dayText, monthShort, percentText } from './reportsView';
 
 // The Reports page's attendance words (spec Part 3 §16.5; ROADMAP 21a-ii). Every figure
 // says how it is worked out, and a figure the gym's check-ins or classes cannot give is a
@@ -298,8 +298,7 @@ export function classRows(report) {
 }
 
 const cell = (value) => `"${String(value).replace(/"/g, '""')}"`;
-/** A cell a spreadsheet would run as a formula is kept as words. */
-const words = (value) => (/^[=+\-@\t\r]/.test(value) ? `'${value}` : value);
+const words = csvWords;
 const csv = (rows) => `${rows.map((row) => row.map(cell).join(',')).join('\r\n')}\r\n`;
 
 /** The weeks as a CSV: counts only, oldest first. */
