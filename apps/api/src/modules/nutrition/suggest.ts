@@ -16,27 +16,28 @@
 import { dietAllows, type Diet, type MealIdea, type MealIdeaKind, type SuggestedFood, type SuggestedMeal } from "@app/shared";
 import { CURATED_FOODS, type CuratedFood } from "./foods.js";
 
-export type SuggestRole = "protein" | "starch" | "vegetable" | "fruit" | "dish" | "base" | "topping";
+export type SuggestRole =
+  | "protein" | "starch" | "bread" | "curry_side" | "vegetable" | "fruit" | "bowl" | "toast" | "nuts" | "spread" | "dish";
 
-/** The foods that may be suggested, by the part of a meal each plays. A dish is
- *  a meal's main part by itself; one marked `true` is eaten with a starch beside
- *  it (a soup, a stew, a curry, a salad). */
+/** The foods that may be suggested, by the part of a meal each plays. */
 const POOL_NAMES: Readonly<Record<Exclude<SuggestRole, "dish">, readonly string[]>> = {
   protein: [
     "Chicken breast (grilled)", "Chicken thigh (cooked)", "Turkey breast (cooked)", "Ground turkey (cooked)",
     "Steak (sirloin, cooked)", "Pork tenderloin (cooked)", "Ground beef 90% (cooked)",
     "Salmon (cooked)", "Cod (cooked)", "Tilapia (cooked)", "Shrimp (cooked)", "Tuna steak (cooked)", "Trout (cooked)",
     "Haddock (cooked)", "Tuna (canned in water)",
-    "Eggs (scrambled)", "Egg (hard-boiled)", "Omelette (plain)",
-    "Cottage cheese (low-fat)", "Paneer (Indian cottage cheese)",
+    "Eggs (scrambled)", "Egg (hard-boiled)", "Omelette (plain)", "Paneer (Indian cottage cheese)",
     "Tofu (firm)", "Tempeh", "Lentils (cooked)", "Chickpeas (cooked)", "Black beans (cooked)", "Kidney beans (cooked)",
     "Edamame (cooked)",
   ],
+  // Beside a protein food, a stew or a stir-fry.
   starch: [
     "Rice (brown, cooked)", "Rice (white, cooked)", "Quinoa (cooked)", "Pasta (whole wheat, cooked)", "Pasta (cooked)",
     "Couscous (cooked)", "Potato (baked)", "Potato (boiled)", "Sweet potato (baked)", "Barley (cooked)", "Bulgur (cooked)",
-    "Whole wheat bread", "Rye bread", "Roti / Chapati (homemade flatbread, no fat)",
   ],
+  // Beside a soup or a salad, never beside a curry or on a plate.
+  bread: ["Whole wheat bread", "Rye bread", "French bread / sourdough"],
+  curry_side: ["Rice (brown, cooked)", "Rice (white, cooked)", "Roti / Chapati (homemade flatbread, no fat)"],
   vegetable: [
     "Broccoli (cooked)", "Spinach (cooked)", "Green beans (cooked)", "Carrots (cooked)", "Asparagus (cooked)",
     "Cauliflower (cooked)", "Mixed vegetables (cooked)", "Salad (green, no dressing)", "Zucchini",
@@ -46,23 +47,29 @@ const POOL_NAMES: Readonly<Record<Exclude<SuggestRole, "dish">, readonly string[
     "Apple", "Banana", "Orange", "Strawberries", "Blueberries", "Grapes", "Pear", "Peach", "Kiwi", "Raspberries",
     "Mango", "Pineapple",
   ],
-  base: [
-    "Greek yogurt (plain, nonfat)", "Cottage cheese (low-fat)", "Yogurt (plain, low-fat)", "Oatmeal (cooked)",
-    "Whole wheat bread", "Rye bread", "French bread / sourdough",
-  ],
-  topping: ["Almonds", "Walnuts", "Peanut butter", "Almond butter", "Pumpkin seeds", "Pistachios"],
+  // A bowl takes fruit, and nuts or seeds.
+  bowl: ["Greek yogurt (plain, nonfat)", "Cottage cheese (low-fat)", "Yogurt (plain, low-fat)", "Oatmeal (cooked)", "Soy milk"],
+  // Toast takes a spread, and fruit.
+  toast: ["Whole wheat bread", "Rye bread", "French bread / sourdough"],
+  nuts: ["Almonds", "Walnuts", "Pumpkin seeds", "Pistachios", "Cashews", "Peanuts"],
+  spread: ["Peanut butter", "Almond butter", "Hummus"],
 };
 
-const DISH_NAMES: readonly (readonly [name: string, withStarch: boolean])[] = [
-  ["Lentil soup", true], ["Chili con carne", true], ["Beef stew", true], ["Chicken noodle soup", true],
-  ["Tomato soup", true], ["Ratatouille", true], ["Dal (lentil curry)", true], ["Chana masala (chickpea curry)", true],
-  ["Chicken curry", true], ["Vegetable curry", true], ["Palak paneer (spinach and cheese curry)", true],
-  ["Sambar (lentil and vegetable stew)", true], ["Greek salad (no dressing)", true], ["Cobb salad (no dressing)", true],
-  ["Caesar salad (with chicken, no dressing)", true], ["Chicken stir-fry (with vegetables)", true],
-  ["Beef and broccoli", true], ["Teriyaki chicken", true], ["Tandoori chicken", true], ["Ceviche", true],
-  ["Rice and beans, meatless (black beans and white rice)", false], ["Rice and beans with meat", false],
-  ["Spaghetti bolognese", false], ["Paella (seafood)", false], ["Bibimbap", false], ["Tabbouleh", false],
-  ["Khichdi (rice and mung beans, with ghee)", false], ["Sandwich (turkey)", false],
+/** What is eaten beside a dish: bread beside a soup or a salad, rice or roti
+ *  beside a curry, a grain or potato beside a stew or a stir-fry, and fruit
+ *  after a dish that is a meal by itself. */
+type DishSide = "bread" | "curry_side" | "starch" | "fruit";
+const DISH_NAMES: readonly (readonly [name: string, side: DishSide])[] = [
+  ["Lentil soup", "bread"], ["Chicken noodle soup", "bread"], ["Tomato soup", "bread"], ["Minestrone", "bread"],
+  ["Cobb salad (no dressing)", "bread"], ["Caesar salad (with chicken, no dressing)", "bread"],
+  ["Dal (lentil curry)", "curry_side"], ["Chana masala (chickpea curry)", "curry_side"], ["Chicken curry", "curry_side"],
+  ["Vegetable curry", "curry_side"], ["Palak paneer (spinach and cheese curry)", "curry_side"],
+  ["Sambar (lentil and vegetable stew)", "curry_side"], ["Tandoori chicken", "curry_side"],
+  ["Chili con carne", "starch"], ["Beef stew", "starch"], ["Ratatouille", "starch"],
+  ["Chicken stir-fry (with vegetables)", "starch"], ["Beef and broccoli", "starch"], ["Teriyaki chicken", "starch"],
+  ["Rice and beans, meatless (black beans and white rice)", "fruit"], ["Rice and beans with meat", "fruit"],
+  ["Spaghetti bolognese", "fruit"], ["Paella (seafood)", "fruit"], ["Bibimbap", "fruit"], ["Tabbouleh", "fruit"],
+  ["Khichdi (rice and mung beans, with ghee)", "fruit"], ["Sandwich (turkey)", "fruit"],
 ];
 
 const BY_NAME: ReadonlyMap<string, CuratedFood> = new Map(CURATED_FOODS.map((f) => [f.name, f]));
@@ -71,18 +78,15 @@ const named = (name: string): CuratedFood => {
   if (food === undefined) throw new Error(`a suggested food is not on the food list: "${name}"`);
   return food;
 };
+const pool = (role: Exclude<SuggestRole, "dish">): CuratedFood[] => POOL_NAMES[role].map(named);
 
 /** Every food that may be suggested, by its part. */
 export const SUGGEST_POOLS: Readonly<Record<SuggestRole, readonly CuratedFood[]>> = {
-  protein: POOL_NAMES.protein.map(named),
-  starch: POOL_NAMES.starch.map(named),
-  vegetable: POOL_NAMES.vegetable.map(named),
-  fruit: POOL_NAMES.fruit.map(named),
-  base: POOL_NAMES.base.map(named),
-  topping: POOL_NAMES.topping.map(named),
-  dish: DISH_NAMES.map(([name]) => named(name)),
+  protein: pool("protein"), starch: pool("starch"), bread: pool("bread"), curry_side: pool("curry_side"),
+  vegetable: pool("vegetable"), fruit: pool("fruit"), bowl: pool("bowl"), toast: pool("toast"), nuts: pool("nuts"),
+  spread: pool("spread"), dish: DISH_NAMES.map(([name]) => named(name)),
 };
-const DISH_WITH_STARCH: ReadonlySet<string> = new Set(DISH_NAMES.filter(([, w]) => w).map(([name]) => named(name).canonical));
+const DISH_SIDE: ReadonlyMap<string, DishSide> = new Map(DISH_NAMES.map(([name, side]) => [named(name).canonical, side]));
 
 /** The least a day must have left for a meal to be suggested, and the least one idea holds. */
 export const LEAST_MEAL_KCAL = 150;
@@ -91,48 +95,60 @@ export const LEAST_MEAL_KCAL = 150;
 export const MOST_MEAL_SHARE = 1.5;
 /** No idea is sized past this: a plate of the list's foods at amounts a person
  *  would serve holds about this much. A day with more left gets more meals. */
-export const MOST_MEAL_KCAL = 800;
+export const MOST_MEAL_KCAL = 700;
 /** The most meals a reply holds (screen 9 asks for two to six a day). */
 export const MOST_MEALS = 6;
-/** Past this a yogurt bowl or toast cannot be made big enough, and a second plate takes its place. */
-const MOST_LIGHT_KCAL = 500;
+/** The most food one idea puts on the table, in grams. */
+export const MOST_IDEA_GRAMS = 750;
+/** Past this a bowl or toast cannot be made big enough, and a second plate takes its place. */
+const MOST_LIGHT_KCAL = 450;
 /** Under this a meal is a light one only. */
 const LEAST_PLATE_KCAL = 300;
-export const IDEAS_PER_MEAL = 3;
 /** How far an idea's calories may be from the meal's, as a share of them. */
 export const IDEA_TOLERANCE = 0.2;
+/** How many times one shape is drawn for one idea before it is given up. */
+const DRAWS = 100;
 
 interface Bounds { step: number; min: number; max: number }
 
+/** A food served by weight, in grams: the least and the most of it in one idea. */
+const BY_WEIGHT: Readonly<Record<SuggestRole, readonly [min: number, max: number]>> = {
+  protein: [75, 200], starch: [75, 250], curry_side: [75, 250], vegetable: [75, 200], fruit: [100, 150], dish: [150, 400],
+  bowl: [100, 250], bread: [25, 75], toast: [25, 75], nuts: [25, 50], spread: [25, 50],
+};
+/** A counted food (an egg, a slice, a potato, "2 tbsp"): the most of them in one idea. */
+const MOST_COUNTED: Readonly<Record<SuggestRole, number>> = {
+  protein: 3, starch: 2, curry_side: 2, vegetable: 2, fruit: 1, dish: 2, bowl: 1, bread: 2, toast: 2, nuts: 2, spread: 2,
+};
+
 /** The amounts a food may be suggested at, in grams. A food served by weight
- *  moves 25 g at a time; a cup by the half cup; anything counted (an egg, a
- *  slice, a potato, "2 tbsp") by the whole one. */
+ *  moves 25 g at a time; a cup by the half cup, one and a half at most; anything
+ *  counted by the whole one. */
 function boundsFor(food: CuratedFood, role: SuggestRole): Bounds {
   if (food.unit === "g") {
-    const [min, max] =
-      role === "protein" ? [75, 250] : role === "starch" ? [75, 350] : role === "vegetable" ? [75, 200]
-      : role === "fruit" ? [100, 200] : role === "dish" ? [150, 500] : role === "base" ? [100, 300] : [25, 75];
+    const [min, max] = BY_WEIGHT[role];
     return { step: 25, min, max };
   }
-  const half = food.unit === "cup";
-  const most = role === "dish" ? 2 : role === "protein" ? 4 : role === "base" && half ? 1.5 : 2;
-  return { step: half ? food.serving / 2 : food.serving, min: half ? food.serving / 2 : food.serving, max: most * food.serving };
+  if (food.unit === "cup") return { step: food.serving / 2, min: food.serving / 2, max: 1.5 * food.serving };
+  return { step: food.serving, min: food.serving, max: MOST_COUNTED[role] * food.serving };
 }
 
-interface Part { food: CuratedFood; role: SuggestRole; share: number; bounds: Bounds; grams: number }
+interface Part { food: CuratedFood; role: SuggestRole; bounds: Bounds; grams: number }
+type Share = readonly [CuratedFood, SuggestRole, number];
 
 const kcalOf = (food: CuratedFood, grams: number): number => Math.round((food.kcal * grams) / 100);
 const round1 = (v: number): number => Math.round(v * 10) / 10;
 const partsKcal = (parts: readonly Part[]): number => parts.reduce((n, p) => n + kcalOf(p.food, p.grams), 0);
+const partsGrams = (parts: readonly Part[]): number => parts.reduce((n, p) => n + p.grams, 0);
 
 /** Each part at its share of the meal, on a step of its own; then one step at a
  *  time, whichever brings the whole nearest the meal's calories, until none does. */
-function sized(shares: readonly (readonly [CuratedFood, SuggestRole, number])[], kcalTarget: number): Part[] {
+function sized(shares: readonly Share[], kcalTarget: number): Part[] {
   const parts = shares.map(([food, role, share]): Part => {
     const bounds = boundsFor(food, role);
     const wanted = ((share * kcalTarget) / food.kcal) * 100;
     const stepped = Math.round(wanted / bounds.step) * bounds.step;
-    return { food, role, share, bounds, grams: Math.min(bounds.max, Math.max(bounds.min, stepped)) };
+    return { food, role, bounds, grams: Math.min(bounds.max, Math.max(bounds.min, stepped)) };
   });
   for (let round = 0; round < 40; round++) {
     const off = Math.abs(kcalTarget - partsKcal(parts));
@@ -207,13 +223,21 @@ export interface SuggestInput {
   /** The day's calories, and how many of them are eaten. */
   kcalTarget: number;
   kcalEaten: number;
+  /** The meals logged today; a snack is not one. */
   mealsLogged: number;
 }
 
 export interface Suggested { kcalLeft: number; meals: SuggestedMeal[] }
 
+/** The three ideas of a meal, by its size. */
+export function kindsFor(kcalTarget: number): readonly [MealIdeaKind, MealIdeaKind, MealIdeaKind] {
+  if (kcalTarget < LEAST_PLATE_KCAL) return ["light", "light", "light"];
+  return kcalTarget > MOST_LIGHT_KCAL ? ["plate", "dish", "plate"] : ["plate", "dish", "light"];
+}
+
 /** The ideas for each meal still to come today; none once under LEAST_MEAL_KCAL is left.
- *  An idea whose foods cannot be sized to within IDEA_TOLERANCE of the meal is left out. */
+ *  An idea is within IDEA_TOLERANCE of its meal's calories, holds MOST_IDEA_GRAMS of
+ *  food at most, and is in the reply once; one that cannot be made so is left out. */
 export function suggestMeals(input: SuggestInput): Suggested {
   const kcalLeft = Math.round(input.kcalTarget - input.kcalEaten);
   if (kcalLeft < LEAST_MEAL_KCAL) return { kcalLeft, meals: [] };
@@ -226,54 +250,70 @@ export function suggestMeals(input: SuggestInput): Suggested {
 
   const next = drawer(hash(`${input.seed}|${input.day}`));
   const allowed = (role: SuggestRole): CuratedFood[] => SUGGEST_POOLS[role].filter((f) => dietAllows(input.diet, f.diet));
+  /** The foods already in an idea of this reply. */
   const used = new Set<string>();
-  /** One of the pool, not yet in an idea of this reply while one is left. */
-  const pick = (pool: readonly CuratedFood[]): CuratedFood => {
-    const fresh = pool.filter((f) => !used.has(f.canonical));
-    const from = fresh.length > 0 ? fresh : pool;
+  /** Whether a draw keeps to foods not yet in the reply. */
+  let freshOnly = true;
+  /** One of the role's foods: one not yet in the reply while any is left, unless
+   *  the draws so far found none of those that fits. */
+  const pick = (role: SuggestRole): CuratedFood => {
+    const all = allowed(role);
+    const fresh = freshOnly ? all.filter((f) => !used.has(f.canonical)) : [];
+    const from = fresh.length > 0 ? fresh : all;
     const food = from[Math.floor(next() * from.length)];
-    if (food === undefined) throw new Error(`no food to suggest for the diet "${input.diet}"`);
-    used.add(food.canonical);
+    if (food === undefined) throw new Error(`no ${role} to suggest for the diet "${input.diet}"`);
     return food;
   };
-  const isBread = (food: CuratedFood): boolean => food.unit === "slice";
+  const size = (...shares: Share[]): Part[] => sized(shares, kcalTarget);
 
-  const plate = (): Part[] =>
-    sized([[pick(allowed("protein")), "protein", 0.42], [pick(allowed("starch")), "starch", 0.48], [pick(allowed("vegetable")), "vegetable", 0.1]], kcalTarget);
+  const plate = (): Part[] => size([pick("protein"), "protein", 0.42], [pick("starch"), "starch", 0.48], [pick("vegetable"), "vegetable", 0.1]);
   const dish = (): Part[] => {
-    const main = pick(allowed("dish"));
-    return DISH_WITH_STARCH.has(main.canonical)
-      ? sized([[main, "dish", 0.55], [pick(allowed("starch")), "starch", 0.35], [pick(allowed("vegetable")), "vegetable", 0.1]], kcalTarget)
-      : sized([[main, "dish", 0.85], [pick(allowed("fruit")), "fruit", 0.15]], kcalTarget);
+    const main = pick("dish");
+    const side = DISH_SIDE.get(main.canonical) ?? "fruit";
+    return side === "fruit"
+      ? size([main, "dish", 0.85], [pick("fruit"), "fruit", 0.15])
+      : size([main, "dish", side === "bread" ? 0.6 : 0.55], [pick(side), side, side === "bread" ? 0.4 : 0.45]);
   };
-  const light = (): Part[] => {
-    const base = pick(allowed("base"));
-    // Bread takes a spread; a bowl takes nuts or seeds.
-    const toppings = allowed("topping").filter((f) => !isBread(base) || f.unit === "2 tbsp");
-    return sized([[base, "base", 0.4], [pick(allowed("fruit")), "fruit", 0.25], [pick(toppings), "topping", 0.35]], kcalTarget);
-  };
-
-  /** A small meal: a bowl with fruit, or fruit with nuts or seeds. */
-  const snack = (): Part[] =>
+  const light = (): Part[] =>
     next() < 0.5
-      ? sized([[pick(allowed("base").filter((f) => !isBread(f))), "base", 0.6], [pick(allowed("fruit")), "fruit", 0.4]], kcalTarget)
-      : sized([[pick(allowed("fruit")), "fruit", 0.4], [pick(allowed("topping")), "topping", 0.6]], kcalTarget);
-
-  const near = (parts: readonly Part[]): boolean => Math.abs(partsKcal(parts) - kcalTarget) <= kcalTarget * IDEA_TOLERANCE;
-  /** The shape drawn again, a few times, until its foods can be sized to the meal. */
-  const drawn = (shape: () => Part[]): Part[] => {
-    let parts = shape();
-    for (let tries = 0; tries < 12 && !near(parts); tries++) parts = shape();
-    return parts;
+      ? size([pick("bowl"), "bowl", 0.4], [pick("fruit"), "fruit", 0.25], [pick("nuts"), "nuts", 0.35])
+      : size([pick("toast"), "toast", 0.4], [pick("fruit"), "fruit", 0.25], [pick("spread"), "spread", 0.35]);
+  /** A small meal: a bowl with fruit, fruit with nuts or seeds, or toast with a spread. */
+  const snack = (): Part[] => {
+    const form = next();
+    if (form < 1 / 3) return size([pick("bowl"), "bowl", 0.6], [pick("fruit"), "fruit", 0.4]);
+    if (form < 2 / 3) return size([pick("fruit"), "fruit", 0.4], [pick("nuts"), "nuts", 0.6]);
+    return size([pick("toast"), "toast", 0.45], [pick("spread"), "spread", 0.55]);
   };
-
-  const kinds: readonly MealIdeaKind[] =
-    kcalTarget < LEAST_PLATE_KCAL ? ["light", "light", "light"] : kcalTarget > MOST_LIGHT_KCAL ? ["plate", "dish", "plate"] : ["plate", "dish", "light"];
   const shapes: Readonly<Record<MealIdeaKind, () => Part[]>> = { plate, dish, light: kcalTarget < LEAST_PLATE_KCAL ? snack : light };
+
+  /** The ideas already in the reply, each by its foods and amounts. */
+  const given = new Set<string>();
+  const keyOf = (parts: readonly Part[]): string => parts.map((p) => `${p.food.canonical}:${String(p.grams)}`).sort().join("|");
+  const fits = (parts: readonly Part[]): boolean =>
+    Math.abs(partsKcal(parts) - kcalTarget) <= kcalTarget * IDEA_TOLERANCE && partsGrams(parts) <= MOST_IDEA_GRAMS && !given.has(keyOf(parts));
+
   const meals: SuggestedMeal[] = [];
   for (let m = 0; m < count; m++) {
-    const ideas = kinds.map((kind) => ({ kind, parts: drawn(shapes[kind]) })).filter((i) => near(i.parts));
-    meals.push({ kcalTarget, ideas: ideas.map((i) => toIdea(i.kind, i.parts)) });
+    const ideas: MealIdea[] = [];
+    for (const wanted of kindsFor(kcalTarget)) {
+      // The shape drawn again until its foods can be sized to the meal. Where no
+      // dish or bowl of the diet can be (a vegan's big meal), a plate takes its place.
+      for (const kind of kcalTarget < LEAST_PLATE_KCAL || wanted === "plate" ? [wanted] : [wanted, "plate"] as const) {
+        freshOnly = true;
+        let parts = shapes[kind]();
+        for (let tries = 0; tries < DRAWS && !fits(parts); tries++) {
+          freshOnly = tries < DRAWS / 4;
+          parts = shapes[kind]();
+        }
+        if (!fits(parts)) continue;
+        given.add(keyOf(parts));
+        for (const part of parts) used.add(part.food.canonical);
+        ideas.push(toIdea(kind, parts));
+        break;
+      }
+    }
+    meals.push({ kcalTarget, ideas });
   }
   return { kcalLeft, meals };
 }

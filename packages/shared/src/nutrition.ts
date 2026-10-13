@@ -568,7 +568,7 @@ export const suggestedFoodSchema = z.object({
 }).strict();
 export type SuggestedFood = z.infer<typeof suggestedFoodSchema>;
 /** A plate is a protein food, a starch and a vegetable; a dish is one cooked
- *  dish with something beside it; light is a bowl or toast with fruit. */
+ *  dish with something beside it; light is a bowl, toast, or fruit with nuts. */
 export const mealIdeaKindSchema = z.enum(["plate", "dish", "light"]);
 export type MealIdeaKind = z.infer<typeof mealIdeaKindSchema>;
 export const mealIdeaSchema = z.object({
@@ -578,7 +578,7 @@ export const mealIdeaSchema = z.object({
 }).strict();
 export type MealIdea = z.infer<typeof mealIdeaSchema>;
 /** One meal still to come today: the calories it is sized to, and the ideas for it. */
-export const suggestedMealSchema = z.object({ kcalTarget: z.number().int().positive(), ideas: z.array(mealIdeaSchema) }).strict();
+export const suggestedMealSchema = z.object({ kcalTarget: z.number().int().positive(), ideas: z.array(mealIdeaSchema).max(3) }).strict();
 export type SuggestedMeal = z.infer<typeof suggestedMealSchema>;
 export const foodAnswerSchema = z.enum(["diet", "mealsPerDay"]);
 /** The day's meal ideas. Nobody is given ideas on a guessed answer (RULINGS

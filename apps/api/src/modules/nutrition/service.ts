@@ -33,7 +33,7 @@ import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
 import { dayInTz, safeTimeZone } from "../gamification/streak.js";
 import { getUserFoodAnswers, getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
-import { suggestMeals } from "./suggest.js";
+import { LEAST_MEAL_KCAL, suggestMeals } from "./suggest.js";
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
@@ -608,7 +608,7 @@ export async function getMealIdeas(deps: Pick<NutritionDeps, "sql">, userId: str
   if (targets === null) return { status: "needs_plan" };
   const timeZone = safeTimeZone(ctx.timezone);
   const day = dayInTz(now, timeZone);
-  const eaten = await repo.dayEaten(deps.sql, userId, timeZone, day);
+  const eaten = await repo.dayEaten(deps.sql, userId, timeZone, day, LEAST_MEAL_KCAL);
   const { kcalLeft, meals } = suggestMeals({
     seed: userId, day, diet, mealsPerDay, kcalTarget: targets.kcal, kcalEaten: eaten.kcal, mealsLogged: eaten.meals,
   });

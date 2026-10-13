@@ -96,8 +96,9 @@ d("meal ideas route (real Postgres)", () => {
     if (reply.status !== "ok") throw new Error(`expected ideas, got ${reply.status}`);
     return reply;
   };
-  const log = async (cookies: Cookies, items: { canonical: string; grams: number }[], takenAt = new Date()): Promise<number> => {
-    const res = await inject({ method: "POST", url: "/v1/nutrition/meals", cookies, body: { mealName: "A meal", takenAt: takenAt.toISOString(), items } });
+  const log = async (cookies: Cookies, items: { canonical: string; grams: number }[], takenAt = new Date(), mealType?: "snack" | "lunch"): Promise<number> => {
+    const body = { mealName: "A meal", takenAt: takenAt.toISOString(), items, ...(mealType === undefined ? {} : { mealType }) };
+    const res = await inject({ method: "POST", url: "/v1/nutrition/meals", cookies, body });
     expect(res.statusCode).toBe(201);
     return (JSON.parse(res.body) as { meal: { totals: { kcalPoint: number } } }).meal.totals.kcalPoint;
   };
@@ -122,7 +123,8 @@ d("meal ideas route (real Postgres)", () => {
     const vegan = await eater("vegan", "vegan");
     const meat = await eater("meat", "non_vegetarian");
     const vegetarian = await eater("vegetarian", "vegetarian");
-    for (const [cookies, diet] of [[vegan, "vegan"], [vegetarian, "vegetarian"], [meat, "non_vegetarian"]] as const) {
+    const eggs = await eater("eggs", "vegetarian_eggs");
+    for (const [cookies, diet] of [[vegan, "vegan"], [vegetarian, "vegetarian"], [eggs, "vegetarian_eggs"], [meat, "non_vegetarian"]] as const) {
       const reply = await ok(cookies);
       const items = reply.meals.flatMap((m) => m.ideas).flatMap((i) => i.items);
       expect(items.length).toBeGreaterThan(0);
@@ -169,6 +171,38 @@ d("meal ideas route (real Postgres)", () => {
     expect(done.kcalLeft).toBe(1817 - eaten);
     expect(done.meals).toEqual([]);
     expect(done.caution).toBe(FOOD_ALLERGY_CAUTION);
+  });
+
+  it("the day is the person's own: a meal an hour before THEIR midnight is yesterday's, one an hour after is today's", { timeout: 60_000 }, async () => {
+    // Kiritimati is fourteen hours ahead of UTC all year, so both meals fall on ONE day of UTC.
+    const zone = "Pacific/Kiritimati";
+    const cookies = await eater("zone", "non_vegetarian");
+    await sql`UPDATE users SET timezone = ${zone} WHERE email = 'ideas-zone@example.com'`;
+    const now = new Date();
+    const theirDay = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    const theirMidnight = Date.parse(`${theirDay}T00:00:00Z`) - 14 * 60 * 60 * 1000;
+    const hour = 60 * 60 * 1000;
+    // Where they are less than an hour into the day, "an hour after midnight" is 30 minutes ahead; a meal may be.
+    const after = new Date(Math.min(theirMidnight + hour, now.getTime() + hour / 2));
+    await log(cookies, [{ canonical: "rice_white_cooked", grams: 500 }], new Date(theirMidnight - hour));
+    const today = await log(cookies, [{ canonical: "rice_white_cooked", grams: 300 }], after);
+
+    const reply = await ok(cookies);
+    expect(reply.day).toBe(theirDay);
+    expect(reply.kcalLeft).toBe(1817 - today);
+  });
+
+  it("a snack, and a bite under the least a meal holds, are eaten and are not a meal", { timeout: 60_000 }, async () => {
+    const cookies = await eater("snack", "non_vegetarian");
+    const snack = await log(cookies, [{ canonical: "rice_white_cooked", grams: 300 }], new Date(), "snack");
+    const bite = await log(cookies, [{ canonical: "rice_white_cooked", grams: 100 }]);
+    expect(bite).toBeLessThan(150);
+    const before = await ok(cookies);
+    expect(before.kcalLeft).toBe(1817 - snack - bite);
+    expect(before.meals.length).toBe(3);
+
+    await log(cookies, [{ canonical: "rice_white_cooked", grams: 300 }], new Date(), "lunch");
+    expect((await ok(cookies)).meals.length).toBe(2);
   });
 
   it("nobody is given ideas on a guessed answer: the missing ones are named", { timeout: 60_000 }, async () => {

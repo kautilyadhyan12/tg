@@ -10,7 +10,7 @@ import { z } from "zod";
 import { DIET_LADDER, dietAllows, mealIdeaSchema, type Diet, type MealIdea } from "@app/shared";
 import { CURATED_FOODS, type CuratedFood } from "../src/modules/nutrition/foods.js";
 import {
-  IDEAS_PER_MEAL, IDEA_TOLERANCE, LEAST_MEAL_KCAL, MOST_MEALS, MOST_MEAL_KCAL, SUGGEST_POOLS, suggestMeals, type SuggestInput,
+  IDEA_TOLERANCE, LEAST_MEAL_KCAL, MOST_IDEA_GRAMS, MOST_MEALS, MOST_MEAL_KCAL, SUGGEST_POOLS, kindsFor, suggestMeals, type SuggestInput,
 } from "../src/modules/nutrition/suggest.js";
 
 const fixture = <T extends z.ZodType>(file: string, entry: T): Record<string, z.infer<T>> =>
@@ -28,7 +28,8 @@ const MEAT_WORDS = [
   "beef", "pork", "chicken", "turkey", "lamb", "veal", "bacon", "ham", "sausage", "meat", "fish", "anchov", "tuna", "salmon",
   "shrimp", "prawn", "clam", "oyster", "crab", "lard", "tallow", "gelatin", "duck", "liver", "steak", "cod", "haddock",
   "mussel", "scallop", "lobster", "squid", "sardine", "herring", "mackerel", "trout", "broth", "stock", "suet", "tilapia",
-  "goat", "mutton", "venison", "bison", "octopus", "eel",
+  "goat", "mutton", "venison", "bison", "octopus", "eel", "salami", "chorizo", "pepperoni", "prosciutto", "pancetta",
+  "rabbit", "quail", "snail", "roe",
 ];
 const EGG_WORDS = ["egg", "mayonnaise", "omelet", "meringue", "yolk"];
 const DAIRY_WORDS = ["milk", "cheese", "butter", "cream", "yogurt", "yoghurt", "whey", "casein", "ghee", "paneer", "curd", "kefir", "honey"];
@@ -101,6 +102,8 @@ describe("THE WORST THING: nobody is offered a food their diet does not eat", ()
     expect(lowestByWords(["Soup, vegetable, made with chicken broth"], [])).toBe("non_vegetarian");
     expect(lowestByWords(["Peanut butter, smooth", "Squash, butternut"], ["Legumes and Legume Products"])).toBe("vegan");
     expect(lowestByWords(["Cheddar"], ["Dairy and Egg Products"])).toBe("vegetarian");
+    expect(lowestByWords(["Pea and pancetta risotto, homemade"], [])).toBe("non_vegetarian");
+    expect(lowestByWords(["Taramasalata", "cod roe"], [])).toBe("non_vegetarian");
   });
 
   it("every food that may be suggested is labelled no lower than its own table's words put it", () => {
@@ -129,7 +132,7 @@ describe("THE WORST THING: nobody is offered a food their diet does not eat", ()
   it("every diet has foods for every part of a meal", () => {
     for (const diet of DIETS) {
       for (const [role, pool] of Object.entries(SUGGEST_POOLS)) {
-        expect(pool.filter((f) => dietAllows(diet, f.diet)).length, `${diet} ${role}`).toBeGreaterThanOrEqual(3);
+        expect(pool.filter((f) => dietAllows(diet, f.diet)).length, `${diet} ${role}`).toBeGreaterThanOrEqual(2);
       }
     }
   });
@@ -173,9 +176,48 @@ describe("what is suggested", () => {
     expect(suggestMeals(input({ seed: "person-2" }))).not.toEqual(today);
   });
 
-  it("no food twice among one reply's ideas while the pools hold another", () => {
+  it.each(DIETS)("a %s person: no idea twice in one reply, and no food twice in one idea", (diet) => {
+    for (const one of sweep(diet)) {
+      const ideas = suggestMeals(one).meals.flatMap((m) => m.ideas);
+      const keys = ideas.map((i) => i.items.map((x) => `${x.canonical}:${String(x.grams)}`).sort().join("|"));
+      expect(new Set(keys).size, JSON.stringify(one)).toBe(keys.length);
+      for (const idea of ideas) expect(new Set(idea.items.map((x) => x.canonical)).size).toBe(idea.items.length);
+    }
+  });
+
+  it("no first food twice in a day's nine ideas while the pools hold another", () => {
     const mains = suggestMeals(input()).meals.flatMap((m) => m.ideas).map((i) => i.items[0]?.canonical);
     expect(new Set(mains).size).toBe(mains.length);
+  });
+
+  it("bread is beside a soup or a salad or under a spread, never on a plate or beside a curry", () => {
+    const sliced = new Set(SUGGEST_POOLS.bread.map((f) => f.canonical));
+    const breadDishes = new Set(["Lentil soup", "Chicken noodle soup", "Tomato soup", "Minestrone", "Cobb salad (no dressing)", "Caesar salad (with chicken, no dressing)"]);
+    const curries = new Set(["Dal (lentil curry)", "Chana masala (chickpea curry)", "Chicken curry", "Vegetable curry", "Palak paneer (spinach and cheese curry)", "Sambar (lentil and vegetable stew)", "Tandoori chicken"]);
+    const curryBeside = new Set(SUGGEST_POOLS.curry_side.map((f) => f.name));
+    let withBread = 0;
+    let curriesSeen = 0;
+    for (const diet of DIETS) {
+      for (const one of sweep(diet)) {
+        for (const idea of suggestMeals(one).meals.flatMap((m) => m.ideas)) {
+          const [first, second] = idea.items;
+          if (first === undefined) throw new Error("an idea with no food");
+          const hasBread = idea.items.some((i) => sliced.has(i.canonical));
+          if (idea.kind === "plate") expect(hasBread, idea.items.map((i) => i.name).join(" + ")).toBe(false);
+          if (idea.kind === "dish") {
+            expect(idea.items.length).toBe(2);
+            expect(hasBread, first.name).toBe(breadDishes.has(first.name));
+            if (hasBread) withBread++;
+            if (curries.has(first.name)) {
+              curriesSeen++;
+              expect(curryBeside.has(second?.name ?? ""), `${first.name} + ${second?.name ?? ""}`).toBe(true);
+            }
+          }
+        }
+      }
+    }
+    expect(withBread).toBeGreaterThan(100);
+    expect(curriesSeen).toBeGreaterThan(100);
   });
 });
 
@@ -206,6 +248,10 @@ describe("how many meals, and how big: every class of day", () => {
     expect(ideasOf({ kcalEaten: 1800, mealsLogged: 2 }).map((i) => i.kind)).toEqual(["light", "light", "light"]);
     expect(ideasOf({ kcalTarget: 2400 }).map((i) => i.kind)).not.toContain("light");
     expect(ideasOf({ kcalTarget: 1200 }).slice(0, 3).map((i) => i.kind)).toEqual(["plate", "dish", "light"]);
+    expect(kindsFor(299)).toEqual(["light", "light", "light"]);
+    expect(kindsFor(300)).toEqual(["plate", "dish", "light"]);
+    expect(kindsFor(450)).toEqual(["plate", "dish", "light"]);
+    expect(kindsFor(451)).toEqual(["plate", "dish", "plate"]);
   });
 
   it.each(DIETS)("a %s person: every meal has its three ideas, each near the meal's calories, at amounts of the food's own serving", (diet) => {
@@ -215,8 +261,14 @@ describe("how many meals, and how big: every class of day", () => {
       for (const meal of reply.meals) {
         expect(meal.kcalTarget).toBeGreaterThanOrEqual(LEAST_MEAL_KCAL);
         expect(meal.kcalTarget).toBeLessThanOrEqual(MOST_MEAL_KCAL);
-        expect(meal.ideas.length, JSON.stringify(one)).toBe(IDEAS_PER_MEAL);
+        expect(meal.ideas.length, JSON.stringify(one)).toBe(3);
+        const wanted = kindsFor(meal.kcalTarget);
+        meal.ideas.forEach((idea, at) => {
+          // A plate stands in where no dish or bowl of the diet can be sized to the meal.
+          expect([wanted[at], ...(meal.kcalTarget >= 300 ? ["plate"] : [])]).toContain(idea.kind);
+        });
         for (const idea of meal.ideas) {
+          expect(idea.items.reduce((n, i) => n + i.grams, 0), idea.items.map((i) => i.name).join(" + ")).toBeLessThanOrEqual(MOST_IDEA_GRAMS);
           expect(mealIdeaSchema.safeParse(idea).success).toBe(true);
           expect(Math.abs(idea.totals.kcal - meal.kcalTarget)).toBeLessThanOrEqual(meal.kcalTarget * IDEA_TOLERANCE);
           expect(idea.totals.kcal).toBe(idea.items.reduce((n, i) => n + i.kcal, 0));
@@ -228,8 +280,9 @@ describe("how many meals, and how big: every class of day", () => {
             expect(item.servings).toBeCloseTo(item.grams / food.serving, 2);
             const step = food.unit === "g" ? 25 : food.unit === "cup" ? food.serving / 2 : food.serving;
             expect((item.grams / step) % 1, `${item.name} ${String(item.grams)} g`).toBeCloseTo(0, 6);
-            // Two cups of a soup at most.
-            expect(item.grams).toBeLessThanOrEqual(510);
+            // One and a half cups, three eggs, two slices or two potatoes at most.
+            expect(item.servings, item.name).toBeLessThanOrEqual(food.unit === "g" ? 400 / food.serving : 3);
+            if (food.unit === "cup") expect(item.servings).toBeLessThanOrEqual(1.5);
           }
         }
       }

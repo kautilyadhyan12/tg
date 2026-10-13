@@ -252,10 +252,18 @@ export async function createMealOnce(
 }
 
 /** What the person has logged on one day of their own time zone: the calories,
- *  and how many meals. */
-export async function dayEaten(sql: Sql, userId: string, timeZone: string, day: string): Promise<{ kcal: number; meals: number }> {
+ *  and how many meals. A row logged as a snack, or under `leastMealKcal` (a
+ *  coffee, a piece of fruit), is eaten and is not a meal. */
+export async function dayEaten(
+  sql: Sql,
+  userId: string,
+  timeZone: string,
+  day: string,
+  leastMealKcal: number,
+): Promise<{ kcal: number; meals: number }> {
   const rows = await sql<{ kcal: string; meals: string }[]>`
-    SELECT coalesce(sum(kcal_point), 0) AS kcal, count(*) AS meals
+    SELECT coalesce(sum(kcal_point), 0) AS kcal,
+           count(*) FILTER (WHERE meal_type IS DISTINCT FROM 'snack' AND kcal_point >= ${leastMealKcal}) AS meals
     FROM meal_logs
     WHERE user_id = ${userId}
       AND taken_at >= (${day}::date - 1)::timestamp AT TIME ZONE 'UTC'
