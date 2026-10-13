@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
-import { colours, sizes } from "./colours";
+import { colours, shadows, sizes } from "./colours";
 import { fonts, Txt } from "./Txt";
 
 interface FieldProps {
@@ -14,31 +15,44 @@ interface FieldProps {
   maxLength?: number;
   /** Wide-set digits, for a code. */
   spaced?: boolean;
+  /** Opens with the keyboard up: the one thing this step is for. */
+  ready?: boolean;
   onDone?: () => void;
 }
 
-/** One line to type in, as tall as a main button. */
-export function Field({ label, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, onDone }: FieldProps) {
+/** One line to type in, as tall as a main button; its edge turns orange while it is typed in.
+ *  The box is a View round the input: Android drops an input's own padding when its edge is restyled. */
+export function Field({ label, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone }: FieldProps) {
+  const [on, setOn] = useState(false);
   return (
     <View style={styles.field}>
       <Txt kind="tiny" style={styles.label}>
         {label}
       </Txt>
-      <TextInput
-        accessibilityLabel={label}
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder}
-        placeholderTextColor={colours.textFaint}
-        keyboardType={keyboard}
-        autoComplete={fills}
-        autoCapitalize="none"
-        autoCorrect={false}
-        maxLength={maxLength}
-        onSubmitEditing={onDone}
-        selectionColor={colours.orange}
-        style={[styles.box, spaced ? styles.spaced : null]}
-      />
+      <View style={[styles.box, on ? styles.on : null]}>
+        <TextInput
+          accessibilityLabel={label}
+          value={value}
+          onChangeText={onChange}
+          placeholder={placeholder}
+          placeholderTextColor={colours.textFaint}
+          keyboardType={keyboard}
+          autoComplete={fills}
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={maxLength}
+          autoFocus={ready}
+          onSubmitEditing={onDone}
+          onFocus={() => {
+            setOn(true);
+          }}
+          onBlur={() => {
+            setOn(false);
+          }}
+          selectionColor={colours.orange}
+          style={[styles.input, spaced ? styles.spaced : null]}
+        />
+      </View>
     </View>
   );
 }
@@ -50,13 +64,11 @@ const styles = StyleSheet.create({
     height: sizes.button,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: colours.lineStrong,
+    borderColor: colours.fieldLine,
     backgroundColor: colours.field,
-    color: colours.text,
-    paddingHorizontal: 14,
-    paddingVertical: 0,
-    fontFamily: fonts.regular,
-    fontSize: 15,
+    paddingHorizontal: 16,
   },
+  input: { height: sizes.button - 2, padding: 0, color: colours.text, fontFamily: fonts.regular, fontSize: 15 },
+  on: { borderColor: colours.fieldOnLine, backgroundColor: colours.fieldOn, boxShadow: shadows.fieldOn },
   spaced: { fontSize: 18, letterSpacing: 7 },
 });

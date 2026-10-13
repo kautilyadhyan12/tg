@@ -272,6 +272,20 @@ never signs anybody out and never loses it. Before a web feature is rebuilt, rea
 version, tell Kd plainly what you would do better, and get his yes for anything that
 changes what it does; never drop one.
 
+**A phone screen is the browser's screen, fitted to a phone (Kd, 2026-10-13, `rulings/`).**
+12b-i's first Get started was plain boxes with no picture and sentences that explained the
+app; it passed its click-through and Kd still called it not good. Every job that adds or
+changes a phone screen follows all four.
+- Before building, open that page in the browser, take its picture, and build THAT design:
+  its picture, its colours, its order, its glow. A screen the browser has is never invented.
+- Fitted to a thumb: no long lists and no rows of boxes. One main button; a second thing to
+  do is words beside it, and a question is a box from the bottom.
+- The words are a finished app's: a short label or one short line ("Coming soon", "Sign
+  out?", "Enter a valid email address."). Never a sentence that explains the feature, how
+  the app is built, or what a later job will add.
+- Before Kd is asked, the terminal takes pictures of the real phone and looks at them beside
+  the browser's. What looks plainer than the browser's is fixed first.
+
 **Exercises (Kd, RULINGS 2026-10-12; spec Part 2 §11).** An exercise is data, made on the
 line: Kd names it and gives one or two good-form links; the videos are measured on his
 laptop and never go to git. ONE pose model, the one the phone runs, measures everything,

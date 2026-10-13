@@ -641,6 +641,20 @@ is. This replaces §16.3's "the console's named colours and Archivo, light and d
   added there by that feature's job, from `helmet.html`. The tabs are React Navigation's
   bottom tabs (`src/App.tsx`, `TABS`); a page under a tab is added to that tab. Screen
   tests are jest's, in `test/screens/`; rules that need no screen stay on vitest.
+- **Get started, and what it added to the look (item 12b-i, 2026-10-13):** the browser's
+  sign-in page fitted to a phone (`src/screens/SignIn.tsx`, read beside
+  `apps/web/src/pages/Login.jsx`): its athlete picture across the top, running into the
+  page, with its "AI-Powered Training" line in a box over it; under it the mark, "Get
+  started.", the email box and the glowing button. The picture takes the room the form
+  leaves and makes way when the keyboard opens. The picture is `getstarted`, cut from
+  the web's `exercises/lifting.jpg` by `compact.py` (1141 by 1200, 97 KB); it is not
+  on the design canvas. New pieces: `Field` (the browser's typing box; its edge turns
+  orange while typed in), `Sheet` (the box from the bottom), `Logo`, `Avatar`, a
+  button's `link` and `quiet` kinds (words with no box), its `busy`, and the main
+  button's glow (`shadows` in `colours.ts`, as `helmet.html` draws `.btn-p`). A tab
+  whose feature is not built shows its picture and one row ending "Coming soon". Me has
+  the person's initial, name and email, and Sign out, which asks in a box from the
+  bottom. **CLAUDE.md §4, "A phone screen is the browser's screen", is the rule.**
 
 ### 16.4 The order
 

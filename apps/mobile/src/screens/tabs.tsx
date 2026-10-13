@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button } from "../look/Button";
-import { Badge, Card, PictureCard } from "../look/Card";
+import { Avatar, Card, PictureCard } from "../look/Card";
+import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
+import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { ThisCopy } from "./ThisCopy";
-import { Soon } from "./Soon";
+import { COMING_SOON, Soon } from "./Soon";
 
 // Each tab's page as the look draws it (docs/design/phone/pages): its heading
 // and its own picture. What it holds comes with each feature's own job.
@@ -17,16 +19,15 @@ export function DashboardScreen() {
     <Page>
       <Txt kind="h1">Dashboard</Txt>
       {state.kind === "in" && state.isNewAccount ? (
-        <Card>
-          <Txt colour="goodText">Welcome! Your account is ready.</Txt>
+        <Card style={styles.row}>
+          <Icon name="check" size={18} colour="goodText" />
+          <Txt colour="text" style={styles.grow}>
+            Welcome! Your account is ready.
+          </Txt>
         </Card>
       ) : null}
       <PictureCard picture="hero" height={300} eyebrow="Today’s Focus" title={"Precision Training\nPowered by AI."} />
-      <Soon
-        icon="grid"
-        title="Your day"
-        line="Your workouts, calories burned, level and this week will be here."
-      />
+      <Soon icon="grid" title="Your day" />
     </Page>
   );
 }
@@ -36,11 +37,7 @@ export function WorkoutScreen() {
     <Page>
       <Txt kind="h1">Workout</Txt>
       <PictureCard picture="exhero" height={200} />
-      <Soon
-        icon="dumbbell"
-        title="Exercises, My Workout and Running"
-        line="The exercise list, the workouts you build and your runs will be here."
-      />
+      <Soon icon="dumbbell" title="Your workouts" />
     </Page>
   );
 }
@@ -50,11 +47,7 @@ export function FoodScreen() {
     <Page>
       <Txt kind="h1">Food</Txt>
       <PictureCard picture="food" height={170} eyebrow="Nutrition" title="Fuel Your Training" />
-      <Soon
-        icon="apple"
-        title="Your meals"
-        line="Breakfast, lunch, dinner and snacks, with today’s calories and protein, will be here."
-      />
+      <Soon icon="apple" title="Your meals" />
     </Page>
   );
 }
@@ -66,11 +59,7 @@ export function GymScreen() {
         <Txt kind="h1">My gyms</Txt>
         <Txt kind="small">Where you train, when it’s open, and your pass to check in.</Txt>
       </View>
-      <Soon
-        icon="building"
-        title="Your gym"
-        line="Your gym, its classes and your pass will be here. A gym invites the email address it has for you."
-      />
+      <Soon icon="building" title="Your gym" />
     </Page>
   );
 }
@@ -82,68 +71,77 @@ export function MeScreen() {
         <Txt kind="h1">Me</Txt>
         <Txt kind="small">Your profile, your progress and your achievements.</Txt>
       </View>
-      <View style={styles.two}>
-        <PictureCard picture="progress" height={110} label="Progress" icon="chart" style={styles.half} />
-        <PictureCard picture="monalisa" height={110} label="Achievements" icon="trophy" style={styles.half} />
-      </View>
-      <Soon
-        icon="user"
-        title="Settings, Progress and Achievements"
-        line="Your profile, your charts and your badges will be here."
-      />
       <Account />
+      <View style={styles.two}>
+        <PictureCard picture="progress" height={120} label="Progress" icon="chart" pill={COMING_SOON} style={styles.half} />
+        <PictureCard
+          picture="monalisa"
+          height={120}
+          label="Achievements"
+          icon="trophy"
+          pill={COMING_SOON}
+          style={styles.half}
+        />
+      </View>
+      <Soon icon="settings" title="Settings" />
+      <SignOut />
       <ThisCopy />
     </Page>
   );
 }
 
-/** Whose account this phone is signed in to, and the way out of it. */
+/** Whose account this phone is signed in to. */
 function Account() {
-  const { session, state } = useSession();
-  const [asking, setAsking] = useState(false);
+  const { state } = useSession();
   if (state.kind !== "in") return null;
+  const { displayName, email } = state.user;
   return (
-    <Card>
-      <View style={styles.boxHead}>
-        <Badge icon="user" tone="plain" />
-        <Txt kind="h3">Your account</Txt>
+    <Card style={styles.row}>
+      <Avatar name={displayName} />
+      <View style={styles.grow}>
+        <Txt kind="strong" numberOfLines={1}>
+          {displayName}
+        </Txt>
+        {email === null ? null : (
+          <Txt kind="small" numberOfLines={1}>
+            {email}
+          </Txt>
+        )}
       </View>
-      <Txt>
-        Signed in as <Txt kind="strong">{state.user.email ?? state.user.displayName}</Txt>
-      </Txt>
-      {asking ? (
-        <>
-          <Txt colour="text">Sign out of AI Home Gym on this phone?</Txt>
-          <View style={styles.two}>
-            <Button label="Yes, sign out" kind="danger" icon="logout" style={styles.half} onPress={() => void session.signOut()} />
-            <Button
-              label="Cancel"
-              kind="plain"
-              style={styles.half}
-              onPress={() => {
-                setAsking(false);
-              }}
-            />
-          </View>
-        </>
-      ) : (
-        <Button
-          label="Sign out"
-          kind="plain"
-          icon="logout"
-          wide
-          onPress={() => {
-            setAsking(true);
-          }}
-        />
-      )}
     </Card>
   );
 }
 
+/** The way out of the account; nothing happens until the person says so in the box from the bottom. */
+function SignOut() {
+  const { session } = useSession();
+  const [asking, setAsking] = useState(false);
+  const close = () => {
+    setAsking(false);
+  };
+  return (
+    <>
+      <Button
+        label="Sign out"
+        kind="plain"
+        icon="logout"
+        wide
+        onPress={() => {
+          setAsking(true);
+        }}
+      />
+      <Sheet open={asking} title="Sign out?" onClose={close}>
+        <Button label="Sign out" kind="danger" icon="logout" wide onPress={() => void session.signOut()} />
+        <Button label="Cancel" kind="plain" wide onPress={close} />
+      </Sheet>
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
-  boxHead: { flexDirection: "row", alignItems: "center", gap: 10 },
   head: { gap: 4 },
   two: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  grow: { flex: 1 },
 });

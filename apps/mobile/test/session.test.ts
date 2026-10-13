@@ -66,7 +66,7 @@ describe("the worst thing: no internet never signs anybody out, and a signed-out
     const { session, store, seen } = phone({ "/v1/auth/logout": lost }, kept(1));
     await session.start();
     await session.signOut();
-    expect(seen.at(-1)).toEqual({ kind: "out", note: "You are signed out." });
+    expect(seen.at(-1)).toEqual({ kind: "out", note: "You’re signed out." });
     expect(store.value).toBeNull();
     expect(session.accessToken()).toBeNull();
   });
@@ -95,7 +95,7 @@ describe("the worst thing: no internet never signs anybody out, and a signed-out
     await session.signOut();
     answer({ status: 200, body: { tokens: tokens(2) } });
     await started;
-    expect(session.state()).toEqual({ kind: "out", note: "You are signed out." });
+    expect(session.state()).toEqual({ kind: "out", note: "You’re signed out." });
     expect(store.value).toBeNull();
     expect(session.accessToken()).toBeNull();
   });
@@ -166,7 +166,7 @@ describe("opening the app", () => {
   it("a sign-in the server has ended for another reason: signed out, asked to sign in again", async () => {
     const { session, store } = phone({ "/v1/auth/refresh": () => refusal(401, "invalid_refresh", "Invalid refresh token") }, kept(1));
     await session.start();
-    expect(session.state()).toEqual({ kind: "out", note: "You were signed out. Please sign in again." });
+    expect(session.state()).toEqual({ kind: "out", note: "Your session ended. Sign in again." });
     expect(store.value).toBeNull();
   });
 });

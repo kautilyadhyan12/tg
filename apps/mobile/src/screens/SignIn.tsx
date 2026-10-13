@@ -1,31 +1,28 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Image, Keyboard, LayoutAnimation, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SIGN_IN_CODE_RULES, authEmailSchema } from "@app/shared";
 import { Button } from "../look/Button";
-import { Badge, Card } from "../look/Card";
+import { Card, Logo } from "../look/Card";
+import { colours, pictureFade, sizes } from "../look/colours";
 import { Field } from "../look/Field";
-import { Page } from "../look/Page";
-import { Txt } from "../look/Txt";
+import { Icon } from "../look/Icon";
+import { pictures } from "../look/pictures";
+import { fonts, Txt } from "../look/Txt";
 import type { Answer } from "../session/calls";
 import { useSession } from "../session/SessionProvider";
 
-// One "Get started" screen, as the member web's: sign-up and sign-in are the same act.
-// Type your email, type the 6-digit code we send, and you are in; a new address gets a
-// new account on the spot. Google's button comes with ROADMAP Stage 5 item 12d.
+// The browser's "Get started" page, fitted to a phone (apps/web/src/pages/Login.jsx): its
+// picture and its line across the top, its form under them. Sign-up and sign-in are the
+// same act: an email, the 6-digit code, and a new address gets its account on the spot.
+// Google's button comes with ROADMAP Stage 5 item 12d.
 
-const NO_ANSWER = "We can’t reach the server. Check your internet connection and try again.";
-/** The phone's own robot check is item 12b-ii; until then a phone that is asked for it says why it must wait. */
-const ROBOT_ON_PHONE =
-  "Too many codes were asked for from this Wi-Fi or network in the last hour. Switch to mobile data or another network, or try again in an hour.";
+const NO_ANSWER = "Can’t connect. Check your internet and try again.";
+/** The phone's own robot check is item 12b-ii; until then a phone that is asked for it is told to wait. */
+const ROBOT_ON_PHONE = "Too many requests from this network. Try again later.";
 
-/** The resend gap in words, from the number the server enforces. */
-const gapWords = (seconds: number) =>
-  seconds === 60 ? "a minute" : seconds % 60 === 0 ? `${String(seconds / 60)} minutes` : `${String(seconds)} seconds`;
-/** A "too soon" refusal says only that a code was asked for inside the gap, never that it is still good. */
-const TOO_SOON = {
-  when: `less than ${gapWords(SIGN_IN_CODE_RULES.resendAfterSeconds)} ago.`,
-  next: "Type it below if you have it, or press Resend code when the countdown ends.",
-};
+/** The picture's height for its width (docs/design/phone/compact.py makes it 1141 by 1200). */
+const PHOTO_TALL = 1200 / 1141;
 
 /** The server's sentence is written for people; a reply with none gets one plain line. */
 function wordsFor(answer: Exclude<Answer<unknown>, { kind: "ok" }>, fallback: string): string {
@@ -36,6 +33,8 @@ function wordsFor(answer: Exclude<Answer<unknown>, { kind: "ok" }>, fallback: st
 
 export function SignInScreen({ note }: { note: string | null }) {
   const { session } = useSession();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [step, setStep] = useState<"email" | "code">("email");
   const [typed, setTyped] = useState("");
   /** The address the code was asked for, as the server reads it. */
@@ -44,10 +43,23 @@ export function SignInScreen({ note }: { note: string | null }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [said, setSaid] = useState("");
-  /** `sent`: a code went out. `too-soon`: the server refused inside the gap, so nothing did. */
-  const [arrival, setArrival] = useState<"sent" | "too-soon">("sent");
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  /** The keyboard is up: the picture makes way, so the box and its button stay in view. */
+  const [typing, setTyping] = useState(false);
+
+  useEffect(() => {
+    const show = (up: boolean) => () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setTyping(up);
+    };
+    const shown = Keyboard.addListener("keyboardDidShow", show(true));
+    const hidden = Keyboard.addListener("keyboardDidHide", show(false));
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (step !== "code" || resendAt <= now) return undefined;
@@ -66,6 +78,7 @@ export function SignInScreen({ note }: { note: string | null }) {
     setNow(Date.now());
   };
 
+  /** `too-soon`: a code was asked for inside the server's gap, so none went out; the code box opens either way. */
   async function askForCode(to: string): Promise<"sent" | "too-soon" | null> {
     setBusy(true);
     setProblem("");
@@ -74,15 +87,13 @@ export function SignInScreen({ note }: { note: string | null }) {
       const answer = await session.sendCode(to);
       if (answer.kind === "ok") {
         waitFor(answer.data.resendAfterSeconds);
-        setArrival("sent");
         return "sent";
       }
       if (answer.kind === "refused" && answer.error === "code_too_soon") {
-        waitFor(answer.retryAfterSeconds ?? 0);
-        setArrival("too-soon");
+        waitFor(answer.retryAfterSeconds ?? SIGN_IN_CODE_RULES.resendAfterSeconds);
         return "too-soon";
       }
-      setProblem(wordsFor(answer, "We could not send the code. Please try again."));
+      setProblem(wordsFor(answer, "We couldn’t send the code. Try again."));
       return null;
     } finally {
       setBusy(false);
@@ -92,15 +103,14 @@ export function SignInScreen({ note }: { note: string | null }) {
   async function continueWithEmail() {
     if (busy) return;
     if (typed.trim() === "") {
-      setProblem("Please type your email address.");
+      setProblem("Enter your email address.");
       return;
     }
     const parsed = authEmailSchema.safeParse(typed);
     if (!parsed.success) {
-      setProblem("That doesn’t look like an email address. Check it and try again.");
+      setProblem("Enter a valid email address.");
       return;
     }
-    // Sent or too soon, the code box is next: a good code may already be in the inbox.
     if ((await askForCode(parsed.data)) !== null) {
       setAddress(parsed.data);
       setCode("");
@@ -110,8 +120,7 @@ export function SignInScreen({ note }: { note: string | null }) {
 
   async function resend() {
     if (busy || secondsToResend > 0) return;
-    const result = await askForCode(address);
-    if (result === "sent") {
+    if ((await askForCode(address)) === "sent") {
       setCode("");
       setSaid("New code sent.");
     }
@@ -120,7 +129,7 @@ export function SignInScreen({ note }: { note: string | null }) {
   async function continueWithCode() {
     if (busy) return;
     if (code.length !== 6) {
-      setProblem("Type the 6 digits from the email.");
+      setProblem("Enter the 6-digit code.");
       return;
     }
     setBusy(true);
@@ -129,7 +138,7 @@ export function SignInScreen({ note }: { note: string | null }) {
     const answer = await session.verifyCode(address, code);
     // Signed in: the tabs take this screen's place.
     if (answer.kind === "ok") return;
-    setProblem(wordsFor(answer, "That code did not work. Please try again."));
+    setProblem(wordsFor(answer, "That code didn’t work. Try again."));
     if (answer.kind === "refused") setCode("");
     setBusy(false);
   }
@@ -141,113 +150,163 @@ export function SignInScreen({ note }: { note: string | null }) {
     setSaid("");
   };
 
+  /** The picture at its own shape; it takes the room the form leaves, and no more than this. */
+  const photoHeight = Math.round(width * PHOTO_TALL);
+
   return (
-    <Page>
-      <View style={styles.logo}>
-        <Badge icon="dumbbell" />
-        <Txt kind="strong">AI Home Gym</Txt>
-      </View>
-      <View style={styles.head}>
-        <Txt kind="h1">Get started.</Txt>
-        <Txt>Sign in or create your account. No password needed.</Txt>
-      </View>
-
-      {note === null ? null : (
-        <Card>
-          <Txt colour="text">{note}</Txt>
-        </Card>
-      )}
-
-      {step === "email" ? (
-        <View style={styles.form}>
-          <Field
-            label="Email"
-            value={typed}
-            onChange={(value) => {
-              setTyped(value);
-              setProblem("");
-            }}
-            placeholder="you@example.com"
-            keyboard="email-address"
-            fills="email"
-            maxLength={254}
-            onDone={() => void continueWithEmail()}
-          />
-          {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
-          <Button
-            label={busy ? "Sending your code…" : "Continue with email"}
-            icon="mail"
-            wide
-            disabled={busy}
-            onPress={() => void continueWithEmail()}
-          />
-          <Txt kind="small" colour="textFaint" style={styles.centre}>
-            We’ll email you a 6-digit code.
-          </Txt>
-        </View>
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={[styles.fill, { paddingBottom: insets.bottom + 16 }]}
+      keyboardShouldPersistTaps="handled"
+      bounces={false}
+    >
+      {typing ? (
+        <View style={{ height: insets.top }} />
       ) : (
-        <View style={styles.form}>
-          <Txt>
-            {arrival === "sent" ? (
-              <>
-                We sent a 6-digit code to <Txt kind="strong">{address}</Txt>.
-              </>
-            ) : secondsToResend > 0 ? (
-              <>
-                You asked for a code for <Txt kind="strong">{address}</Txt> {TOO_SOON.when} {TOO_SOON.next}
-              </>
-            ) : (
-              <>
-                Type the 6-digit code for <Txt kind="strong">{address}</Txt>, or press Resend code for a new one.
-              </>
-            )}
-          </Txt>
-          <Field
-            label="6-digit code"
-            value={code}
-            onChange={(value) => {
-              setCode(value.replace(/\D/g, "").slice(0, 6));
-              setProblem("");
-            }}
-            placeholder="123456"
-            keyboard="number-pad"
-            fills="one-time-code"
-            maxLength={6}
-            spaced
-            onDone={() => void continueWithCode()}
+        <View style={[styles.hero, { maxHeight: photoHeight }]}>
+          {/* Kept from its top, where the picture's subject is; the words below cover what is cut. */}
+          <Image
+            source={pictures.getstarted}
+            resizeMode="cover"
+            style={[styles.photo, { height: photoHeight }]}
+            accessible={false}
           />
-          {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
-          <Button
-            label={busy ? "One moment…" : "Continue"}
-            wide
-            disabled={busy}
-            onPress={() => void continueWithCode()}
-          />
-          <View style={styles.row}>
-            <Button
-              label={secondsToResend > 0 ? `Resend code in ${String(secondsToResend)}s` : "Resend code"}
-              kind="plain"
-              small
-              disabled={busy || secondsToResend > 0}
-              onPress={() => void resend()}
-            />
-            <Button label="Use a different email" kind="plain" small disabled={busy} onPress={changeEmail} />
+          <View style={[StyleSheet.absoluteFill, styles.fade]} />
+          <View style={styles.quote}>
+            <View style={styles.eyebrow}>
+              <Icon name="zap" size={14} colour="orange" />
+              <Txt kind="eyebrow">AI-Powered Training</Txt>
+            </View>
+            <Txt style={styles.quoteLine}>{"“Real-time form correction.\nEvery rep. Every set.”"}</Txt>
+            <Txt kind="small" colour="textFaint">
+              Pose detection · Rep counting · Voice coaching
+            </Txt>
           </View>
-          {said === "" ? null : <Txt colour="goodText">{said}</Txt>}
         </View>
       )}
 
-      <Txt kind="small" colour="textFaint" style={styles.centre}>
+      <View style={styles.body}>
+        <View style={styles.brand}>
+          <Logo />
+          <Txt kind="strong" style={styles.brandName}>
+            AI Home Gym
+          </Txt>
+        </View>
+        <View style={styles.head}>
+          <Txt kind="hero">Get started.</Txt>
+          <Txt colour="textFaint">Sign in or create your account — no password needed</Txt>
+        </View>
+
+        {note === null ? null : (
+          <Card style={styles.note}>
+            <Icon name="logout" size={16} colour="textSoft" />
+            <Txt colour="text" style={styles.noteWords}>
+              {note}
+            </Txt>
+          </Card>
+        )}
+
+        {step === "email" ? (
+          <View style={styles.form}>
+            <Field
+              key="email"
+              label="Email"
+              value={typed}
+              onChange={(value) => {
+                setTyped(value);
+                setProblem("");
+              }}
+              placeholder="you@example.com"
+              keyboard="email-address"
+              fills="email"
+              maxLength={254}
+              onDone={() => void continueWithEmail()}
+            />
+            {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
+            <Button label="Continue with email" icon="mail" wide busy={busy} onPress={() => void continueWithEmail()} />
+            <Txt kind="small" colour="textFaint" style={styles.centre}>
+              We’ll email you a 6-digit code.
+            </Txt>
+          </View>
+        ) : (
+          <View style={styles.form}>
+            <View>
+              <Txt>Enter the 6-digit code sent to</Txt>
+              <Txt kind="strong" numberOfLines={1}>
+                {address}
+              </Txt>
+            </View>
+            <Field
+              key="code"
+              label="6-digit code"
+              value={code}
+              onChange={(value) => {
+                setCode(value.replace(/\D/g, "").slice(0, 6));
+                setProblem("");
+              }}
+              placeholder="123456"
+              keyboard="number-pad"
+              fills="one-time-code"
+              maxLength={6}
+              spaced
+              ready
+              onDone={() => void continueWithCode()}
+            />
+            {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
+            <Button label="Continue" wide busy={busy} onPress={() => void continueWithCode()} />
+            <View style={styles.links}>
+              <Button
+                label={secondsToResend > 0 ? `Resend code in ${String(secondsToResend)}s` : "Resend code"}
+                kind="link"
+                disabled={busy || secondsToResend > 0}
+                onPress={() => void resend()}
+              />
+              <Button label="Use a different email" kind="quiet" disabled={busy} onPress={changeEmail} />
+            </View>
+            {said === "" ? null : (
+              <Txt colour="goodText" style={styles.centre}>
+                {said}
+              </Txt>
+            )}
+          </View>
+        )}
+      </View>
+
+      <Txt kind="tiny" style={styles.terms}>
         By continuing you agree to our Terms & Privacy Policy
       </Txt>
-    </Page>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  logo: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 24 },
-  head: { gap: 6, marginTop: 8 },
+  page: { flex: 1, backgroundColor: colours.page },
+  fill: { flexGrow: 1 },
+  hero: { flexGrow: 1, minHeight: 240, overflow: "hidden" },
+  photo: { position: "absolute", top: 0, left: 0, width: "100%" },
+  fade: { experimental_backgroundImage: pictureFade },
+  brand: { flexDirection: "row", alignItems: "center", gap: 10 },
+  brandName: { fontFamily: fonts.bold, fontSize: 17, lineHeight: 22 },
+  quote: {
+    position: "absolute",
+    left: sizes.edge,
+    right: sizes.edge,
+    bottom: 4,
+    gap: 6,
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colours.line,
+    backgroundColor: colours.veil,
+  },
+  eyebrow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  quoteLine: { fontFamily: fonts.bold, fontSize: 19, lineHeight: 25, letterSpacing: -0.3, color: colours.text },
+  body: { paddingHorizontal: sizes.edge, paddingTop: 16, gap: 18 },
+  head: { gap: 6 },
+  note: { flexDirection: "row", alignItems: "center", gap: 10 },
+  noteWords: { flex: 1 },
   form: { gap: 14 },
-  row: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 10 },
+  links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   centre: { textAlign: "center" },
+  terms: { marginTop: "auto", paddingTop: 20, paddingHorizontal: sizes.edge, textAlign: "center" },
 });

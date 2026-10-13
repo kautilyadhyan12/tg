@@ -25,9 +25,9 @@ export type SessionState =
   | { kind: "in"; user: AuthUser; isNewAccount: boolean };
 
 export const SIGNED_OUT_NOTES = {
-  own: "You are signed out.",
+  own: "You’re signed out.",
   elsewhere: SIGNED_IN_ELSEWHERE.message,
-  ended: "You were signed out. Please sign in again.",
+  ended: "Your session ended. Sign in again.",
 } as const;
 
 /** The server answers a refresh sent again within 60 seconds of one whose reply was lost

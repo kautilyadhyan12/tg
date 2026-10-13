@@ -61,17 +61,20 @@ describe("the worst thing, on the screen", () => {
     );
     await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
     await press("Sign out");
-    // Nothing happens until the person says yes.
-    expect(screen.getByText("Sign out of AI Home Gym on this phone?")).toBeTruthy();
+    // Nothing happens until the person says so in the box from the bottom.
+    expect(screen.getByText("Sign out?")).toBeTruthy();
     expect(store.value).toBe(kept(2));
     await press("Cancel");
-    expect(screen.queryByText("Sign out of AI Home Gym on this phone?")).toBeNull();
+    expect(screen.queryByText("Sign out?")).toBeNull();
     expect(screen.getByText("ravi@example.com")).toBeTruthy();
 
     await press("Sign out");
-    await press("Yes, sign out");
+    // The page's button and the box's: the box's is the one that signs out.
+    const [onThePage, inTheBox, ...more] = screen.getAllByRole("button", { name: "Sign out" });
+    if (onThePage === undefined || inTheBox === undefined || more.length > 0) throw new Error("two Sign out buttons were expected");
+    await fireEvent.press(inTheBox);
     expect(await screen.findByText("Get started.")).toBeTruthy();
-    expect(screen.getByText("You are signed out.")).toBeTruthy();
+    expect(screen.getByText("You’re signed out.")).toBeTruthy();
     expect(screen.queryByText(/ravi/i)).toBeNull();
     expect(screen.queryAllByRole("tab")).toEqual([]);
     expect(store.value).toBeNull();
@@ -100,7 +103,10 @@ describe("signing in by email code", () => {
   it("a phone that holds no sign-in opens on Get started, with no tabs", async () => {
     const { server } = await openApp({});
     expect(await screen.findByText("Get started.")).toBeTruthy();
-    expect(screen.getByText("Sign in or create your account. No password needed.")).toBeTruthy();
+    expect(screen.getByText("Sign in or create your account — no password needed")).toBeTruthy();
+    // The browser's own picture and its line, at the top.
+    expect(screen.getByText("AI-Powered Training")).toBeTruthy();
+    expect(screen.getByText("“Real-time form correction.\nEvery rep. Every set.”")).toBeTruthy();
     expect(screen.queryAllByRole("tab")).toEqual([]);
     expect(server.asked).toEqual([]);
   });
@@ -110,7 +116,7 @@ describe("signing in by email code", () => {
     // Typed as people type it: the server is sent the address as it reads it.
     await askForCode("  Ravi@Example.com ");
     expect(await screen.findByText("ravi@example.com")).toBeTruthy();
-    expect(screen.getByText(/^We sent a 6-digit code to /)).toBeTruthy();
+    expect(screen.getByText("Enter the 6-digit code sent to")).toBeTruthy();
     await type("6-digit code", "12 34x56");
     expect(screen.getByLabelText("6-digit code").props.value).toBe("123456");
     await press("Continue");
@@ -135,8 +141,8 @@ describe("signing in by email code", () => {
   });
 
   it.each([
-    ["nothing typed", "   ", "Please type your email address."],
-    ["not an address", "ravi at example", "That doesn’t look like an email address. Check it and try again."],
+    ["nothing typed", "   ", "Enter your email address."],
+    ["not an address", "ravi at example", "Enter a valid email address."],
   ])("%s: said under the box, and the server is asked nothing", async (_name, typed, line) => {
     const { server } = await openApp({ "/v1/auth/code/send": sent });
     await askForCode(typed);
@@ -146,7 +152,7 @@ describe("signing in by email code", () => {
   });
 
   it.each<[string, Route, string]>([
-    ["no internet", lost, "We can’t reach the server. Check your internet connection and try again."],
+    ["no internet", lost, "Can’t connect. Check your internet and try again."],
     [
       "three codes already today",
       () => refusal(429, "code_limit", "You have asked for too many codes today. Try again in about 5 hours.", { retryAfterSeconds: 18_000 }),
@@ -160,7 +166,7 @@ describe("signing in by email code", () => {
     [
       "the server asks for the robot check, which this job's phone cannot show",
       () => refusal(403, "robot_check", "One quick check that you're not a robot, then we'll send your code.", { robotCheckKey: "0x4AAA" }),
-      "Too many codes were asked for from this Wi-Fi or network in the last hour. Switch to mobile data or another network, or try again in an hour.",
+      "Too many requests from this network. Try again later.",
     ],
   ])("a code that cannot be sent (%s) says why, and stays on the email step", async (_name, route, line) => {
     await openApp({ "/v1/auth/code/send": route });
@@ -168,19 +174,18 @@ describe("signing in by email code", () => {
     expect(await screen.findByText(line)).toBeTruthy();
     expect(screen.queryByLabelText("6-digit code")).toBeNull();
     // The button can be pressed again.
-    expect(screen.getByRole("button", { name: "Continue with email" }).props.accessibilityState).toEqual({ disabled: false });
+    expect(screen.getByRole("button", { name: "Continue with email" }).props.accessibilityState).toEqual({ disabled: false, busy: false });
   });
 
-  it("asked again inside the minute: the code box opens and says only that a code was asked for", async () => {
+  it("asked again inside the minute: the code box opens for the code already sent, and Resend waits the server's time", async () => {
     await openApp({
       "/v1/auth/code/send": () =>
         refusal(429, "code_too_soon", "Please wait 42 seconds before asking for a new code.", { retryAfterSeconds: 42 }),
     });
     await askForCode();
     expect(await screen.findByLabelText("6-digit code")).toBeTruthy();
-    expect(screen.getByText(/^You asked for a code for /)).toBeTruthy();
-    expect(screen.queryByText(/^We sent/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Resend code in 42s" }).props.accessibilityState).toEqual({ disabled: true });
+    expect(screen.getByText("Enter the 6-digit code sent to")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resend code in 42s" }).props.accessibilityState).toEqual({ disabled: true, busy: false });
   });
 
   it("a wrong code says what the server says and empties the box; no internet keeps the digits", async () => {
@@ -193,7 +198,7 @@ describe("signing in by email code", () => {
     await askForCode();
     await screen.findByLabelText("6-digit code");
     await press("Continue");
-    expect(screen.getByText("Type the 6 digits from the email.")).toBeTruthy();
+    expect(screen.getByText("Enter the 6-digit code.")).toBeTruthy();
     await type("6-digit code", "111111");
     await press("Continue");
     expect(await screen.findByText("That code is wrong. You have 4 tries left.")).toBeTruthy();
@@ -201,7 +206,7 @@ describe("signing in by email code", () => {
     online = false;
     await type("6-digit code", "222222");
     await press("Continue");
-    expect(await screen.findByText("We can’t reach the server. Check your internet connection and try again.")).toBeTruthy();
+    expect(await screen.findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
     expect(screen.getByLabelText("6-digit code").props.value).toBe("222222");
     expect(screen.queryAllByRole("tab")).toEqual([]);
     expect(store.value).toBeNull();
@@ -214,12 +219,12 @@ describe("signing in by email code", () => {
     });
     await askForCode();
     const resend = () => screen.getByRole("button", { name: /^Resend code/ });
-    expect((await screen.findByRole("button", { name: "Resend code in 1s" })).props.accessibilityState).toEqual({ disabled: true });
+    expect((await screen.findByRole("button", { name: "Resend code in 1s" })).props.accessibilityState).toEqual({ disabled: true, busy: false });
     await fireEvent.press(resend());
     expect(server.paths()).toEqual(["/v1/auth/code/send"]);
     await waitFor(
       () => {
-        expect(screen.getByRole("button", { name: "Resend code" }).props.accessibilityState).toEqual({ disabled: false });
+        expect(screen.getByRole("button", { name: "Resend code" }).props.accessibilityState).toEqual({ disabled: false, busy: false });
       },
       { timeout: 4000 },
     );

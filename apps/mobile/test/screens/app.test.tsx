@@ -42,10 +42,10 @@ describe("the five tabs", () => {
   });
 
   it.each([
-    ["Workout", "Workout", "Exercises, My Workout and Running"],
+    ["Workout", "Workout", "Your workouts"],
     ["Food", "Food", "Your meals"],
     ["Gym", "My gyms", "Your gym"],
-    ["Me", "Me", "Settings, Progress and Achievements"],
+    ["Me", "Me", "Settings"],
     ["Dashboard", "Dashboard", "Your day"],
   ])("%s opens its own page and lights its own tab", async (tab, heading, box) => {
     await render(<App extra={extra} store={signedIn()} ask={answers(true)} />);
@@ -67,9 +67,10 @@ describe("the five tabs", () => {
     await render(<App extra={extra} store={signedIn()} ask={answers(true)} />);
     for (const tab of TABS) {
       await open(tab.name);
-      expect(await screen.findAllByText("Not in the app yet.")).toHaveLength(1);
+      // What is not built yet says so in two words: the tab's own row, and on Me its two pictures.
+      expect(await screen.findAllByText("Coming soon")).toHaveLength(tab.name === "Me" ? 3 : 1);
       const withDigits = screen.queryAllByText(/\d/).map(words);
-      const copyLine = [["This is the ", "Feature 1", " copy, for testing."]];
+      const copyLine = [["Feature 1 test copy", " · ", "Connected"]];
       expect([tab.name, withDigits]).toEqual([tab.name, tab.name === "Me" ? copyLine : []]);
     }
   });
@@ -83,7 +84,7 @@ describe("the five tabs", () => {
     }
     await screen.findByRole("button", { name: "Try again" });
     const pressed = [...screen.getAllByRole("tab"), ...screen.getAllByRole("button")];
-    expect(pressed.map(label).slice(5)).toEqual([undefined, undefined]);
+    expect(pressed.map(label).slice(5)).toEqual(["Sign out", "Try again"]);
     expect(pressed).toHaveLength(7);
     const heights = pressed.map((one) => Number(drawn(one).height ?? drawn(one).minHeight ?? 0));
     expect(heights.filter((height) => height < 44)).toEqual([]);
@@ -104,8 +105,7 @@ describe("Me says which copy this is and whether it reaches its server", () => {
       />,
     );
     await open("Me");
-    expect(await screen.findByText("This is the Feature 1 copy, for testing.")).toBeTruthy();
-    expect(await screen.findByText("Connected to the server.")).toBeTruthy();
+    expect(await screen.findByText("Feature 1 test copy · Connected")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     expect(asked.filter((url) => !url.includes("/v1/auth/"))).toEqual(["http://localhost:3000/health"]);
   });
@@ -114,12 +114,12 @@ describe("Me says which copy this is and whether it reaches its server", () => {
     let up = false;
     await render(<App extra={extra} store={signedIn()} ask={(url, init) => answers(up)(url, init)} />);
     await open("Me");
-    expect(await screen.findByText(/^Can’t reach the server\. Check that the phone’s cable is in/)).toBeTruthy();
-    expect(screen.queryByText("Connected to the server.")).toBeNull();
+    expect(await screen.findByText("Feature 1 test copy · Can’t reach the server")).toBeTruthy();
+    expect(screen.queryByText(/Connected/)).toBeNull();
     up = true;
     await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("Connected to the server.")).toBeTruthy();
-    expect(screen.queryByText(/^Can’t reach the server/)).toBeNull();
+    expect(await screen.findByText("Feature 1 test copy · Connected")).toBeTruthy();
+    expect(screen.queryByText(/Can’t reach the server/)).toBeNull();
   });
 
   it("a copy with no settings says so, shows no sign-in and no tabs, and asks nothing", async () => {
@@ -128,7 +128,7 @@ describe("Me says which copy this is and whether it reaches its server", () => {
     expect(
       await screen.findByText("This copy of the app has no settings. Stop it and start it again from the laptop."),
     ).toBeTruthy();
-    expect(screen.queryByText("Connected to the server.")).toBeNull();
+    expect(screen.queryByText(/Connected/)).toBeNull();
     expect(screen.queryAllByRole("tab")).toEqual([]);
     expect(screen.queryByText("Get started.")).toBeNull();
     expect(ask).not.toHaveBeenCalled();
