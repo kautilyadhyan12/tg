@@ -95,6 +95,21 @@ const NO_ANIMAL_FOOD: ReadonlyMap<string, readonly [words: readonly string[], wh
   ["Sesame butter, creamy", [["butter"], "sesame butter is ground sesame seeds"]],
 ]);
 
+/** A UK-table dish labelled below non-vegetarian whose CoFID words do not settle
+ *  its label: a real label or the maker's own recipe, read on 2026-10-13, with
+ *  where it was read. CoFID lists no ingredients, so this is what holds them. */
+const REAL_LABELS: ReadonlyMap<string, readonly [where: string, ingredients: string]> = new Map<string, readonly [string, string]>([
+  ["crumpet_toasted", ["Warburtons' own crumpet recipe (foodanddrink.scotsman.com/food/warburtons-crumpets-recipe)", "plain white flour, water, salt, sugar, baking powder, dried yeast"]],
+  ["shortbread", ["Walkers Pure Butter Shortbread Fingers (walkersshortbread.com/shortbread-fingers)", "wheat flour (wheat flour, calcium carbonate, iron, niacin, thiamin), butter (milk) (32%), sugar, salt"]],
+  ["oat_flapjack_british_oat_bar", ["Tesco 20 Flapjack Bites (tesco.com/groceries/en-GB/products/268394986)", "oats (39%), sweetened condensed skimmed milk, partially inverted sugar syrup, glucose syrup, sugar, butter (milk), palm oil, rapeseed oil, salt, flavouring"]],
+  ["hot_cross_bun", ["Tesco Finest hot cross buns, as bakedbyclo.com/are-hot-cross-buns-vegan gives the label", "butter (milk), buttermilk powder (milk), honey"]],
+  ["pavlova_with_fruit_and_cream", ["Tesco Raspberry Pavlova 310G (tesco.com/groceries/en-GB/products/291745550)", "sugar, whipping cream (milk) (28%), pasteurised egg white, raspberries (17%), water, cornflour, citric acid, stabilisers (carob gum, xanthan gum), caramelised sugar syrup, flavouring"]],
+]);
+
+/** UK-table foods on the list before 34c-ii, each a single food or a dish the
+ *  list's own comment explains (`foods.ts`); not re-read here. */
+const COFID_BEFORE = new Set(["muesli", "roti_chapati", "paneer", "chana_masala"]);
+
 const cited = (food: CuratedFood, table: string): string | null => (food.citation.startsWith(`${table}:`) ? food.citation.slice(table.length + 1) : null);
 
 const V = "vegetarian", E = "vegetarian_eggs";
@@ -123,7 +138,6 @@ const READ: ReadonlyMap<string, Diet | null> = new Map<string, Diet | null>([
   ["Oil, canola", null], ["Oil, corn", null], ["Oil, olive, extra light", null], ["Oil, olive, extra virgin", null],
   ["Oil, soybean", null], ["Oil, sunflower", null], ["Onions, red, raw", null], ["Onions, white, raw", null], ["Onions, yellow, raw", null],
   ["Phyllo dough", null], ["Pie crust, standard-type, frozen, ready-to-bake, enriched, baked", null],
-  ["Potatoes, gold, without skin, raw", null], ["Potatoes, red, without skin, raw", null], ["Potatoes, russet, without skin, raw", null],
   ["Sauce, pasta, spaghetti/marinara, ready-to-serve", null], ["Shortening, vegetable, household, composite", null],
   ["Snacks, CLIF BAR, mixed flavors", null], ["Snacks, tortilla chips, plain, white corn, salted", null], ["Spinach, baby", null],
   ["Sugars, granulated", null], ["Syrup, NESTLE, chocolate", null], ["Tomato, roma", null], ["Tomatoes, grape, raw", null],
@@ -147,7 +161,8 @@ function surveyLowest(id: string): Diet | null {
 // bought food (a frozen pierogi, a restaurant tamale) and a CoFID dish show no
 // ingredients, so an animal food their words do not name (dripping under a
 // Yorkshire pudding, stock in a risotto) is held only by the pinned table in
-// nutrition.foods.unit.test.ts.
+// nutrition.foods.unit.test.ts; a UK-table dish labelled below non-vegetarian is
+// held to a real label besides (`REAL_LABELS`).
 describe("a food's diet, against its table's own words", () => {
   it("is never lower than the animal food USDA's group or description names (SR Legacy)", () => {
     const wrong: string[] = [];
@@ -203,6 +218,26 @@ describe("a food's diet, against its table's own words", () => {
       if (lowest !== null && DIET_LADDER[food.diet] < DIET_LADDER[lowest]) wrong.push(`${food.name} is ${food.diet}; CoFID: "${name}" (${note}) is ${lowest} at the lowest`);
     }
     expect(wrong).toEqual([]);
+  });
+
+  it("holds a UK-table dish labelled for somebody who eats no meat to CoFID's own words or to a real label", () => {
+    // CoFID's words name no animal food for a crumpet, shortbread or a flapjack, and none for a Cornish pasty or a
+    // moussaka either: so a label below non-vegetarian needs more than their silence.
+    const unheld: string[] = [];
+    for (const food of CURATED_FOODS) {
+      const id = cited(food, "uk-cofid");
+      if (id === null || food.diet === "non_vegetarian" || COFID_BEFORE.has(food.canonical)) continue;
+      const [name, note] = COFID[id] ?? ["", ""];
+      const label = REAL_LABELS.get(food.canonical);
+      if (label === undefined) {
+        if (higher(lowestDiet(name, ""), lowestDiet(note, "")) !== food.diet) unheld.push(`${food.name}: CoFID's words do not say ${food.diet}, and no real label is kept`);
+        continue;
+      }
+      const lowest = lowestDiet(label[1], "");
+      if (lowest !== null && DIET_LADDER[food.diet] < DIET_LADDER[lowest]) unheld.push(`${food.name} is ${food.diet}; ${label[0]} holds ${lowest}`);
+    }
+    expect(unheld).toEqual([]);
+    for (const canonical of REAL_LABELS.keys()) expect(CURATED_FOODS.some((food) => food.canonical === canonical && food.citation.startsWith("uk-cofid:")), canonical).toBe(true);
   });
 
   it("excuses a word only where the description holds it", () => {

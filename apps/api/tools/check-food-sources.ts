@@ -42,6 +42,8 @@ const FIGURES: readonly Figure[] = ["kcal", "proteinG", "carbsG", "fatG", "fiber
 interface Entry {
   description: string;
   figures: Map<UsdaNutrient, number | null>;
+  /** A USDA entry's household measures; CoFID gives none. */
+  portions?: readonly { gramWeight: number }[];
 }
 
 /** A fixture file's text: what it is, then its foods by id, in id order. */
@@ -81,8 +83,11 @@ const lookup = (table: string, id: string): Entry | undefined => {
 };
 
 const differences: string[] = [];
+/** The list's first foods, whose servings round a measure by hand (a cup of milk is
+ *  240 g where USDA's is 244). Every food after them is held to its entry's own. */
+const ROUNDED_SERVINGS = 409;
 const perTable = new Map<string, number>();
-for (const food of CURATED_FOODS) {
+for (const [at, food] of CURATED_FOODS.entries()) {
   const [table = "", id = ""] = food.citation.split(":");
   perTable.set(table, (perTable.get(table) ?? 0) + 1);
   const entry = lookup(table, id);
@@ -93,6 +98,11 @@ for (const food of CURATED_FOODS) {
   for (const figure of FIGURES) {
     const expected = entry.figures.get(figure) ?? null;
     if (food[figure] !== expected) differences.push(`${food.name}: ${figure} is ${String(food[figure])}, ${food.citation} gives ${String(expected)}`);
+  }
+  // A USDA food is served by 100 g or by a measure its own entry gives, never an invented weight.
+  const portions = entry.portions ?? null;
+  if (at >= ROUNDED_SERVINGS && portions !== null && !(food.serving === 100 && food.unit === "g") && !portions.some((portion) => portion.gramWeight === food.serving)) {
+    differences.push(`${food.name}: ${String(food.serving)} g is no measure of ${food.citation} (${portions.map((portion) => String(portion.gramWeight)).join(", ")})`);
   }
   if (process.argv.includes("--list")) console.log(`${food.name}  ·  ${food.citation}  ·  ${entry.description}`);
 }
