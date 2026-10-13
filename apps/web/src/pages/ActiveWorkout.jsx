@@ -136,6 +136,7 @@ export default function ActiveWorkout() {
   const [setCompleteAnim,  setSetCompleteAnim]  = useState(false);
 
   const timerRef           = useRef(null);
+  const setCompleteAnimRef = useRef(null);
   const restRef            = useRef(null);
   const videoContainerRef  = useRef(null);
   const restSecondsRef     = useRef(0);
@@ -729,6 +730,9 @@ export default function ActiveWorkout() {
     return () => clearInterval(id);
   }, [phase]);
 
+  // The set-complete flash's timer goes with the page: left running it fires into a closed page.
+  useEffect(() => () => clearTimeout(setCompleteAnimRef.current), []);
+
   // Mirror the live is_active flag into a ref for the interval callback.
   // Force it false whenever we're not actively exercising (paused, resting,
   // between phases, or no pose data), so idle moments never get counted as
@@ -867,7 +871,8 @@ export default function ActiveWorkout() {
 
   const handleSetComplete = useCallback(() => {
     setSetCompleteAnim(true);
-    setTimeout(() => setSetCompleteAnim(false), 800);
+    clearTimeout(setCompleteAnimRef.current);
+    setCompleteAnimRef.current = setTimeout(() => setSetCompleteAnim(false), 800);
     playSetEndBeep();
 
     // THE set-end funnel: the rep target being reached AND the "Complete Set"
