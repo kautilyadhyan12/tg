@@ -122,8 +122,18 @@ export const refreshTokens = pgTable(
     ip: inet("ip"),
     userAgent: text("user_agent"),
     createdAt: createdAt(),
+    // 0105 (spec Part 3 §10.5): where the sign-in was made, and why it was ended.
+    client: text("client").notNull().default("web"),
+    revokedReason: text("revoked_reason"),
   },
-  (t) => [index("refresh_tokens_user_family_idx").on(t.userId, t.familyId)],
+  (t) => [
+    index("refresh_tokens_user_family_idx").on(t.userId, t.familyId),
+    check("refresh_tokens_client_check", sql`${t.client} IN ('web','phone')`),
+    check(
+      "refresh_tokens_revoked_reason_check",
+      sql`${t.revokedReason} IS NULL OR (${t.revokedAt} IS NOT NULL AND ${t.revokedReason} IN ('signed_in_elsewhere'))`,
+    ),
+  ],
 );
 
 // onboarding-storage card (DECISIONS 2026-07-15): the onboarding/fitness

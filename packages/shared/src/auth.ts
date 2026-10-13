@@ -96,8 +96,14 @@ export const sendCodeResponseSchema = z.object({
 });
 export type SendCodeResponse = z.infer<typeof sendCodeResponseSchema>;
 
+/** Where a sign-in is made. A browser keeps it in httpOnly cookies; the phone app has no
+ *  cookie, so it alone is sent its tokens in the reply (spec Part 3 §10.5; Part 6 §8). */
+export const SESSION_CLIENTS = ["web", "phone"] as const;
+export type SessionClient = (typeof SESSION_CLIENTS)[number];
+
+/** `client`: sent by the phone app only. A browser leaves it out. */
 export const verifyCodeRequestSchema = z
-  .object({ email: authEmailSchema, code: signInCodeSchema })
+  .object({ email: authEmailSchema, code: signInCodeSchema, client: z.literal("phone").optional() })
   .strict();
 export type VerifyCodeRequest = z.infer<typeof verifyCodeRequestSchema>;
 
@@ -132,6 +138,32 @@ export const verifyCodeResponseSchema = z.object({
   isNewAccount: z.boolean(),
 });
 export type VerifyCodeResponse = z.infer<typeof verifyCodeResponseSchema>;
+
+// ── the phone app's sign-in (ROADMAP Stage 5 item 12; spec Part 3 §10.5) ─────────────
+
+/** The phone keeps the refresh token in its own key store and the access token in memory. */
+export const phoneSessionTokensSchema = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: oneTimeTokenSchema,
+});
+export type PhoneSessionTokens = z.infer<typeof phoneSessionTokensSchema>;
+
+export const verifyCodePhoneResponseSchema = verifyCodeResponseSchema.extend({ tokens: phoneSessionTokensSchema });
+export type VerifyCodePhoneResponse = z.infer<typeof verifyCodePhoneResponseSchema>;
+
+/** The phone's own refresh and sign-out: its token travels in the body, never a cookie. */
+export const phoneRefreshRequestSchema = z.object({ refreshToken: oneTimeTokenSchema }).strict();
+export type PhoneRefreshRequest = z.infer<typeof phoneRefreshRequestSchema>;
+
+export const phoneRefreshResponseSchema = z.object({ tokens: phoneSessionTokensSchema });
+export type PhoneRefreshResponse = z.infer<typeof phoneRefreshResponseSchema>;
+
+/** The refresh refusal an older phone gets once its account is signed in on another
+ *  phone, with the sentence its sign-in screen shows. */
+export const SIGNED_IN_ELSEWHERE = {
+  error: "signed_in_elsewhere",
+  message: "You were signed out because your account was signed in on another phone.",
+} as const;
 
 export const registerResponseSchema = z.object({
   userId: z.string().uuid(),
