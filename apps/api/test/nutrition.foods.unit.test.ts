@@ -2,7 +2,10 @@
 // its diet, and the name matching the photo scan and saved meals rely on.
 // `tools/check-food-sources.ts` compares every number with its table; these
 // tests hold what can be held without downloading the tables.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { DIET_LADDER, dietSchema, type Diet } from "@app/shared";
 import { COMMON_FOOD_PICKS, CURATED_FOODS, FOOD_ALIASES, PIECE_ENTRIES, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated, type CuratedFood } from "../src/modules/nutrition/foods.js";
 
@@ -47,7 +50,7 @@ const nameWords = (name: string): string[] =>
 
 describe("the curated food list", () => {
   it("gives every food a table entry, a diet, whole kcal per 100 g and a serving", () => {
-    expect(CURATED_FOODS).toHaveLength(596);
+    expect(CURATED_FOODS).toHaveLength(599);
     for (const f of CURATED_FOODS) {
       expect(f.citation, f.name).toMatch(/^(?:usda-sr:\d{6}|usda-fndds:\d{7}|uk-cofid:\d{2}-\d{3,4})$/);
       expect(dietSchema.options, f.name).toContain(f.diet);
@@ -194,7 +197,7 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     // 34c-iii
     "rice_and_beans_meatless_black_beans_and_white_rice", "cassava_fries_yuca_fries", "plantain_green_boiled", "plantain_ripe_fried", "plantain_chips", "hearts_of_palm_canned",
     "guava_paste", "coconut_water", "tapioca_pearls_dry", "jackfruit", "starfruit_carambola",
-    "durian", "congee_plain_rice_porridge", "sticky_rice_glutinous_cooked", "sushi_roll_vegetable", "soba_noodles_cooked",
+    "durian", "plain_congee_rice_porridge", "congee_with_vegetables", "sticky_rice_glutinous_cooked", "sushi_roll_vegetable", "soba_noodles_cooked",
     "natto", "tofu_fried", "coconut_rice", "peanut_sauce_peanut_butter_and_soy_sauce", "hoisin_sauce",
     "teriyaki_sauce", "sriracha", "glass_noodles_mung_bean_cooked", "pakora_vegetable_fritter", "sambar_lentil_and_vegetable_stew",
     "papad_poppadom_grilled", "puri_fried_bread",
@@ -234,7 +237,7 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     "potato_pancake_latke", "challah", "scone", "irish_soda_bread", "hot_cross_bun",
     "pavlova_with_fruit_and_cream", "apple_strudel",
     // 34c-iii
-    "flan_caramel_custard", "churros", "vegetable_tempura", "vegetable_lo_mein",
+    "flan_caramel_custard", "churros", "vegetable_tempura",
   ],
   non_vegetarian: [
     "chicken_breast_cooked", "chicken_thigh_cooked", "ground_beef_85_cooked", "ground_beef_90_cooked",
@@ -271,13 +274,13 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     // 34c-iii
     "picanha_top_sirloin_cap_grilled", "ceviche", "kung_pao_chicken", "general_tso_chicken",
     "orange_chicken", "sesame_chicken", "sweet_and_sour_chicken", "sweet_and_sour_pork", "beef_and_broccoli",
-    "chicken_lo_mein", "rice_and_beans_with_meat", "chow_mein_chicken_with_noodles", "egg_drop_soup", "hot_and_sour_soup",
-    "wonton_soup", "potstickers_gyoza_steamed_pork_dumplings", "egg_foo_yung", "peking_duck", "moo_shu_pork",
-    "bao_bun_pork", "miso_soup", "teriyaki_chicken", "sushi_roll_salmon", "sushi_roll_tuna",
-    "nigiri_sushi_salmon", "sashimi_salmon", "sashimi_tuna", "bibimbap", "kimchi",
-    "tteokbokki_korean_rice_cakes", "adobo_chicken_and_pork_with_rice", "summer_roll_shrimp_rice_paper", "chicken_satay", "thai_green_curry_chicken",
+    "chicken_lo_mein", "vegetable_lo_mein", "rice_and_beans_with_meat", "chicken_chow_mein_with_noodles", "vegetable_chow_mein_with_noodles", "congee_with_meat_or_seafood", "egg_drop_soup", "hot_and_sour_soup",
+    "wonton_soup", "potstickers_gyoza_steamed_pork_dumplings", "egg_foo_yung_with_shrimp", "crispy_duck_peking_duck_meat_and_skin", "moo_shu_pork",
+    "pork_bao_bun", "miso_soup", "teriyaki_chicken", "sushi_roll_salmon", "sushi_roll_tuna",
+    "salmon_nigiri_sushi", "salmon_sashimi", "tuna_sashimi", "bibimbap", "kimchi",
+    "tteokbokki_korean_rice_cakes", "adobo_chicken_and_pork_with_rice", "shrimp_summer_roll_rice_paper", "chicken_satay", "thai_green_curry_with_chicken",
     "fish_sauce", "oyster_sauce", "prawn_crackers", "beef_in_black_bean_sauce", "sesame_prawn_toast",
-    "beef_curry", "fish_curry", "chicken_korma", "lamb_rogan_josh", "chicken_vindaloo",
+    "beef_curry", "fish_curry_fish_and_shrimp", "chicken_korma", "lamb_rogan_josh", "chicken_vindaloo",
     "tandoori_chicken", "prawn_curry", "biryani_spiced_rice_with_lamb", "samosa_meat",
   ],
 };
@@ -465,9 +468,38 @@ describe("the list as it grew (ROADMAP 34c-iii): the dishes of Brazil, Latin Ame
       ["soy sauce", "soy_sauce"], ["ice cream", "ice_cream_vanilla"], ["steak", "steak_sirloin_cooked"], ["black beans", "black_beans_cooked"],
       ["yogurt", "yogurt_plain_low_fat"], ["rajma", "kidney_beans_cooked"], ["california roll", "sushi_roll"],
       // a dish made with meat or without names neither by its plain word (Kd, 2026-10-13); a word many dishes share names none
-      ["dumplings", null], ["fried dumplings", null], ["steamed dumplings", null], ["vegetable dumplings", null], ["lo mein", null], ["rice and beans", null], ["beans and rice", null], ["curry", null], ["noodles", null], ["roll", null], ["sauce", null],
+      ["dumplings", null], ["fried dumplings", null], ["steamed dumplings", null], ["vegetable dumplings", null], ["lo mein", null], ["rice and beans", null], ["beans and rice", null],
+      ["chow mein", null], ["chop suey", null], ["chow mein noodles", null], ["bao", null], ["steamed buns", null], ["summer rolls", null], ["fresh spring rolls", null],
+      ["rice paper rolls", null], ["korma", null], ["satay", null], ["green curry", null], ["thai green curry", null], ["vindaloo", null], ["rogan josh", null], ["tempura", null],
+      ["sashimi", null], ["nigiri", null], ["congee", null], ["rice porridge", null], ["vegetable roll", null], ["veggie roll", null], ["sweet rice", null], ["curry", null], ["noodles", null], ["roll", null], ["sauce", null],
     ];
     for (const [name, canonical] of cases) expect(findCurated(name)?.canonical ?? null, name).toBe(canonical);
+  });
+
+  it("still answers every name the list of 510 answered, but the plain word for a dish made with meat or without", () => {
+    // What findCurated answered for 2,196 names before this job (fixtures/food-names-before-34c-iii.json).
+    const before = z.object({ names: z.record(z.string(), z.string()) }).parse(JSON.parse(readFileSync(join(import.meta.dirname, "fixtures", "food-names-before-34c-iii.json"), "utf8"))).names;
+    expect(Object.keys(before).length).toBeGreaterThan(2000);
+    // Kd, 2026-10-13: "dumplings" alone was the fried pork one, and names none now.
+    const namesNoneNow = new Set(["Dumplings", "dumpling", "dumplings"]);
+    const changed: string[] = [];
+    for (const [name, canonical] of Object.entries(before)) {
+      const now = findCurated(name)?.canonical ?? null;
+      if (now !== (namesNoneNow.has(name) ? null : canonical)) changed.push(`${name}: ${canonical} before, ${String(now)} now`);
+    }
+    expect(changed).toEqual([]);
+  });
+
+  it("lists every version in the search box where the plain word picks none", () => {
+    const listed = (typed: string): string[] => searchCurated(typed, 8).map((f) => f.canonical);
+    expect(listed("dumplings")).toEqual(expect.arrayContaining(["dumplings_pork", "potstickers_gyoza_steamed_pork_dumplings"]));
+    expect(listed("lo mein")).toEqual(["chicken_lo_mein", "vegetable_lo_mein"]);
+    expect(listed("chow mein")).toEqual(["chicken_chow_mein_with_noodles", "vegetable_chow_mein_with_noodles"]);
+    expect(listed("rice and beans")).toEqual(expect.arrayContaining(["rice_and_beans_meatless_black_beans_and_white_rice", "rice_and_beans_with_meat"]));
+    expect(listed("rice & beans")).toEqual(listed("rice and beans"));
+    expect(listed("congee")).toEqual(expect.arrayContaining(["plain_congee_rice_porridge", "congee_with_vegetables", "congee_with_meat_or_seafood"]));
+    expect(listed("sashimi")).toEqual(expect.arrayContaining(["salmon_sashimi", "tuna_sashimi"]));
+    expect(listed("korma")).toEqual(["chicken_korma"]);
   });
 
   it("answers the new dishes by the names people use", () => {
@@ -479,16 +511,16 @@ describe("the list as it grew (ROADMAP 34c-iii): the dishes of Brazil, Latin Ame
       ["doce de leite", "dulce_de_leche"], ["goiabada", "guava_paste"], ["churro", "churros"], ["água de coco", "coconut_water"],
       ["star fruit", "starfruit_carambola"], ["kung pao chicken", "kung_pao_chicken"], ["general tso's chicken", "general_tso_chicken"],
       ["beef with broccoli", "beef_and_broccoli"], ["chicken lo mein", "chicken_lo_mein"], ["vegetable lo mein", "vegetable_lo_mein"],
-      ["chow mein", "chow_mein_chicken_with_noodles"], ["egg drop soup", "egg_drop_soup"], ["hot and sour soup", "hot_and_sour_soup"],
-      ["potstickers", "potstickers_gyoza_steamed_pork_dumplings"], ["gyoza", "potstickers_gyoza_steamed_pork_dumplings"], ["egg foo young", "egg_foo_yung"], ["bao", "bao_bun_pork"],
-      ["congee", "congee_plain_rice_porridge"], ["sticky rice", "sticky_rice_glutinous_cooked"], ["miso soup", "miso_soup"],
-      ["chicken teriyaki", "teriyaki_chicken"], ["tempura", "vegetable_tempura"], ["salmon roll", "sushi_roll_salmon"], ["nigiri", "nigiri_sushi_salmon"],
-      ["sashimi", "sashimi_salmon"], ["tuna sashimi", "sashimi_tuna"], ["soba", "soba_noodles_cooked"], ["fried tofu", "tofu_fried"],
-      ["kimchi", "kimchi"], ["tteokbokki", "tteokbokki_korean_rice_cakes"], ["chicken adobo", "adobo_chicken_and_pork_with_rice"],
-      ["summer roll", "summer_roll_shrimp_rice_paper"], ["satay", "chicken_satay"], ["green curry", "thai_green_curry_chicken"],
+      ["chicken chow mein", "chicken_chow_mein_with_noodles"], ["vegetable chow mein", "vegetable_chow_mein_with_noodles"], ["egg drop soup", "egg_drop_soup"], ["hot and sour soup", "hot_and_sour_soup"],
+      ["potstickers", "potstickers_gyoza_steamed_pork_dumplings"], ["gyoza", "potstickers_gyoza_steamed_pork_dumplings"], ["egg foo young", "egg_foo_yung_with_shrimp"], ["pork bao", "pork_bao_bun"], ["char siu bao", "pork_bao_bun"],
+      ["plain congee", "plain_congee_rice_porridge"], ["congee with vegetables", "congee_with_vegetables"], ["congee with meat", "congee_with_meat_or_seafood"], ["crispy duck", "crispy_duck_peking_duck_meat_and_skin"], ["peking duck", "crispy_duck_peking_duck_meat_and_skin"], ["sticky rice", "sticky_rice_glutinous_cooked"], ["miso soup", "miso_soup"],
+      ["chicken teriyaki", "teriyaki_chicken"], ["vegetable tempura", "vegetable_tempura"], ["salmon roll", "sushi_roll_salmon"], ["salmon nigiri", "salmon_nigiri_sushi"],
+      ["salmon sashimi", "salmon_sashimi"], ["tuna sashimi", "tuna_sashimi"], ["vegetable sushi roll", "sushi_roll_vegetable"], ["soba", "soba_noodles_cooked"], ["fried tofu", "tofu_fried"],
+      ["kimchi", "kimchi"], ["tteokbokki", "tteokbokki_korean_rice_cakes"], ["adobo", "adobo_chicken_and_pork_with_rice"],
+      ["shrimp summer roll", "shrimp_summer_roll_rice_paper"], ["chicken satay", "chicken_satay"], ["thai green curry with chicken", "thai_green_curry_with_chicken"],
       ["glass noodles", "glass_noodles_mung_bean_cooked"], ["prawn toast", "sesame_prawn_toast"], ["pakoras", "pakora_vegetable_fritter"],
       ["sambhar", "sambar_lentil_and_vegetable_stew"], ["poppadoms", "papad_poppadom_grilled"], ["poori", "puri_fried_bread"], ["clarified butter", "ghee"],
-      ["korma", "chicken_korma"], ["rogan josh", "lamb_rogan_josh"], ["vindaloo", "chicken_vindaloo"], ["tandoori chicken", "tandoori_chicken"],
+      ["chicken korma", "chicken_korma"], ["lamb rogan josh", "lamb_rogan_josh"], ["chicken vindaloo", "chicken_vindaloo"], ["tandoori chicken", "tandoori_chicken"],
       ["lamb biryani", "biryani_spiced_rice_with_lamb"], ["meat samosa", "samosa_meat"], ["khichdi", "khichdi_rice_and_mung_beans_with_ghee"],
       ["raita", "raita_yogurt_with_spices"], ["lassi", "lassi_sweet_yogurt_drink"], ["kulfi", "kulfi_indian_ice_cream"],
     ];
@@ -504,9 +536,13 @@ describe("the list as it grew (ROADMAP 34c-iii): the dishes of Brazil, Latin Ame
       ["egg_drop_soup", N, "chicken stock"], ["hot_and_sour_soup", N, "pork and meat stock"], ["wonton_soup", N, "pork wontons in stock"],
       ["miso_soup", N, "dashi, a fish stock (USDA makes it with beef and chicken broth)"],
       ["sambar_lentil_and_vegetable_stew", VEGAN, "lentils, vegetables, tamarind and oil: no stock"],
-      ["congee_plain_rice_porridge", VEGAN, "rice and water, and named plain"],
+      ["plain_congee_rice_porridge", VEGAN, "rice and water, and named plain"], ["congee_with_vegetables", VEGAN, "rice, water, mushrooms and scallions"],
+      ["congee_with_meat_or_seafood", N, "beef, chicken and fish"],
       // the entry does not show it
-      ["kimchi", N, "fish sauce or salted shrimp"], ["vegetable_lo_mein", E, "egg in the noodles"],
+      ["kimchi", N, "fish sauce or salted shrimp"],
+      // a real label, read 2026-10-13: Giant Food's Asian Express Vegetable Lo Mein lists oyster sauce and chicken base
+      // (giantfood.com/groceries/product/asian-express-vegetable-lo-mein-cold-apx-1-lb/311160)
+      ["vegetable_lo_mein", N, "oyster sauce and chicken base"], ["vegetable_chow_mein_with_noodles", N, "the same restaurant sauce as the lo mein"],
       ["rice_and_beans_meatless_black_beans_and_white_rice", VEGAN, "none, and named so: the one with meat is listed beside it"], ["rice_and_beans_with_meat", N, "beef and ham"],
       ["prawn_crackers", N, "prawn"], ["vegetable_tempura", E, "egg in the batter"], ["churros", E, "egg in the dough"],
       ["flan_caramel_custard", E, "egg"], ["cassava_yuca_cooked", V, "butter"], ["khichdi_rice_and_mung_beans_with_ghee", V, "ghee"],
@@ -519,24 +555,27 @@ describe("the list as it grew (ROADMAP 34c-iii): the dishes of Brazil, Latin Ame
     for (const [canonical, diet, why] of answers) expect(food(canonical).diet, `${canonical}: ${why}`).toBe(diet);
     // No soup added in this job is missing from the table.
     const soups = CURATED_FOODS.slice(510).filter((f) => /soup|chowder|bisque|broth|consomm|stew|pho|ramen|laksa|congee|porridge/i.test(f.name)).map((f) => f.canonical);
-    expect(soups).toHaveLength(6);
+    expect(soups).toHaveLength(8);
     expect(answers.map(([canonical]) => canonical)).toEqual(expect.arrayContaining(soups));
     // Named for the entry it is: a satay sauce made with fish sauce is not this one.
     expect(food("peanut_sauce_peanut_butter_and_soy_sauce").name).toBe("Peanut sauce (peanut butter and soy sauce)");
     expect(findCurated("satay sauce")).toBeNull();
   });
 
-  it("serves a CoFID dish by the gram, and a USDA dish by a measure its own entry gives", () => {
+  // Every USDA serving is held to its entry's measures by tools/check-food-sources.ts, which needs the download and
+  // is not run on GitHub; this pins a few.
+  it("serves a CoFID dish by the gram, and pins three rows to their entries", () => {
     const added = CURATED_FOODS.slice(510);
-    expect(added).toHaveLength(86);
+    expect(added).toHaveLength(89);
     for (const f of added) {
       if (f.citation.startsWith("uk-cofid:")) expect([f.serving, f.unit], f.name).toEqual([100, "g"]);
     }
     expect(food("kung_pao_chicken")).toMatchObject({ kcal: 129, serving: 162, unit: "cup", citation: "usda-fndds:2706796" });
     expect(food("rice_and_beans_meatless_black_beans_and_white_rice")).toMatchObject({ kcal: 160, serving: 170, unit: "cup", citation: "usda-fndds:2708994" });
     expect(food("chicken_korma")).toMatchObject({ kcal: 127, proteinG: 14.6, citation: "uk-cofid:19-565" });
-    // USDA first: Peking duck, pakora and papad are USDA's, though CoFID has each.
-    expect(food("peking_duck").citation).toBe("usda-fndds:2706141");
+    // USDA first: pakora and papad are USDA's, though CoFID has each. Not where USDA's entry is another dish: its
+    // "Duck, Peking" is duck in a pineapple sauce, 5 g of protein, so the duck is CoFID's ten takeaway samples.
+    expect(food("crispy_duck_peking_duck_meat_and_skin")).toMatchObject({ kcal: 331, proteinG: 27.9, citation: "uk-cofid:18-490" });
     expect(food("pakora_vegetable_fritter").citation).toBe("usda-fndds:2710066");
     expect(food("papad_poppadom_grilled").citation).toBe("usda-fndds:2707429");
   });

@@ -30,12 +30,13 @@
 // beef dripping under a Yorkshire pudding and bubble and squeak, suet in a
 // mince pie, gelatine in a trifle's jelly, anchovy in the Worcestershire sauce
 // of a Welsh rarebit, egg in fresh pasta, gnocchi and strudel dough; fish sauce
-// or salted shrimp in kimchi, fish stock in miso soup, egg in tempura batter
-// and in lo mein noodles). Honey is not vegan.
+// or salted shrimp in kimchi, fish stock in miso soup, egg in tempura batter, oyster sauce and chicken base
+// in a restaurant's vegetable lo mein and chow mein). Honey is not vegan.
 // A dish made with meat or without is listed both ways where the tables hold
-// both, each under a name that says which ("Vegetable lo mein", "Rice and beans
-// with meat", "Pork dumplings"), so the plain word names neither and the person
-// picks (Kd, 2026-10-13).
+// both, each under a name that says which ("Vegetable chow mein", "Rice and
+// beans with meat", "Congee with vegetables"), and a dish the tables hold one
+// way says which way in front ("Pork dumplings", "Chicken korma", "Shrimp summer
+// roll"), so the plain word names none and the person picks (Kd, 2026-10-13).
 // Processing aids such as rennet and fining agents are not followed, and no
 // label can see a product's own recipe.
 import type { Diet } from "@app/shared";
@@ -669,17 +670,20 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Sweet and sour pork", 260, 8.88, 25.5, 13.6, 1, 226, "cup", "non_vegetarian", "usda-fndds:2706401"),
   row("Beef and broccoli", 160, 10.43, 5.09, 10.63, 1.3, 217, "cup", "non_vegetarian", "usda-fndds:2706738"),
   row("Chicken lo mein", 130, 9.15, 16.15, 3.15, 1, 200, "cup", "non_vegetarian", "usda-fndds:2708803"),
-  row("Vegetable lo mein", 121, 4.77, 20.16, 2.35, 1.3, 200, "cup", "vegetarian_eggs", "usda-fndds:2708799"),
-  row("Chow mein (chicken, with noodles)", 131, 9.91, 11.15, 5.43, 1.5, 220, "cup", "non_vegetarian", "usda-fndds:2706687"),
+  row("Vegetable lo mein", 121, 4.77, 20.16, 2.35, 1.3, 200, "cup", "non_vegetarian", "usda-fndds:2708799"),
+  row("Chicken chow mein (with noodles)", 131, 9.91, 11.15, 5.43, 1.5, 220, "cup", "non_vegetarian", "usda-fndds:2706687"),
+  row("Vegetable chow mein (with noodles)", 117, 2.98, 15.72, 5.05, 2.1, 220, "cup", "non_vegetarian", "usda-fndds:2710069"),
   row("Egg drop soup", 27, 1.16, 4.29, 0.61, 0.4, 245, "cup", "non_vegetarian", "usda-fndds:2707282"),
   row("Hot and sour soup", 39, 2.58, 4.35, 1.21, 0.5, 245, "cup", "non_vegetarian", "usda-fndds:2707136"),
   row("Wonton soup", 33, 2.39, 2.95, 1.31, 0.3, 245, "cup", "non_vegetarian", "usda-fndds:2709160"),
   row("Potstickers / gyoza (steamed pork dumplings)", 113, 6.9, 11.07, 4.6, 1.2, 25, "dumpling", "non_vegetarian", "usda-fndds:2708708"),
-  row("Egg foo yung", 125, 11.69, 5.2, 6.16, 0.3, 86, "patty", "non_vegetarian", "usda-fndds:2707193"),
-  row("Peking duck", 154, 5.32, 6.47, 11.76, 0.3, 100, "g", "non_vegetarian", "usda-fndds:2706141"),
+  row("Egg foo yung (with shrimp)", 125, 11.69, 5.2, 6.16, 0.3, 86, "patty", "non_vegetarian", "usda-fndds:2707193"),
+  row("Crispy duck / Peking duck (meat and skin)", 331, 27.9, 0.3, 24.2, 0, 100, "g", "non_vegetarian", "uk-cofid:18-490"),
   row("Moo shu pork", 153, 10.41, 4.01, 10.7, 0.9, 151, "cup", "non_vegetarian", "usda-fndds:2706764"),
-  row("Bao bun (pork)", 273, 11.17, 39.78, 7.58, 1.2, 100, "bun", "non_vegetarian", "usda-fndds:2708724"),
-  row("Congee (plain rice porridge)", 39, 0.8, 8.4, 0.08, 0.1, 255, "cup", "vegan", "usda-fndds:2708418"),
+  row("Pork bao bun", 273, 11.17, 39.78, 7.58, 1.2, 100, "bun", "non_vegetarian", "usda-fndds:2708724"),
+  row("Plain congee (rice porridge)", 39, 0.8, 8.4, 0.08, 0.1, 255, "cup", "vegan", "usda-fndds:2708418"),
+  row("Congee with vegetables", 38, 1.12, 7.88, 0.12, 0.4, 255, "cup", "vegan", "usda-fndds:2708983"),
+  row("Congee with meat or seafood", 58, 4.34, 7, 1.28, 0.1, 255, "cup", "non_vegetarian", "usda-fndds:2708981"),
   row("Sticky rice (glutinous, cooked)", 97, 2.02, 21.09, 0.19, 1, 174, "cup", "vegan", "usda-sr:169711"),
   row("Miso soup", 24, 2.21, 2.3, 0.85, 0.6, 245, "cup", "non_vegetarian", "usda-fndds:2707455"),
   row("Teriyaki chicken", 163, 25.73, 1.62, 5.96, 0, 244, "cup", "non_vegetarian", "usda-fndds:2706433"),
@@ -687,9 +691,9 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Sushi roll (salmon)", 103, 6.88, 15.3, 1.28, 0.7, 30, "piece", "non_vegetarian", "usda-fndds:2708963"),
   row("Sushi roll (tuna)", 97, 7.4, 15.3, 0.26, 0.7, 30, "piece", "non_vegetarian", "usda-fndds:2708965"),
   row("Sushi roll (vegetable)", 93, 1.8, 17.65, 1.47, 1.4, 22, "piece", "vegan", "usda-fndds:2708966"),
-  row("Nigiri sushi (salmon)", 107, 8.92, 13.39, 1.74, 0.6, 35, "piece", "non_vegetarian", "usda-fndds:2708969"),
-  row("Sashimi (salmon)", 208, 20.42, 0, 13.42, 0, 85, "3 oz", "non_vegetarian", "usda-sr:175167"),
-  row("Sashimi (tuna)", 109, 24.4, 0, 0.49, 0, 85, "3 oz", "non_vegetarian", "usda-sr:175159"),
+  row("Salmon nigiri (sushi)", 107, 8.92, 13.39, 1.74, 0.6, 35, "piece", "non_vegetarian", "usda-fndds:2708969"),
+  row("Salmon sashimi", 208, 20.42, 0, 13.42, 0, 85, "3 oz", "non_vegetarian", "usda-sr:175167"),
+  row("Tuna sashimi", 109, 24.4, 0, 0.49, 0, 85, "3 oz", "non_vegetarian", "usda-sr:175159"),
   row("Soba noodles (cooked)", 99, 5.06, 21.44, 0.1, null, 114, "cup", "vegan", "usda-sr:168907"),
   row("Natto", 211, 19.4, 12.68, 11, 5.4, 100, "g", "vegan", "usda-sr:172443"),
   row("Tofu (fried)", 270, 18.82, 8.86, 20.18, 3.9, 13, "piece", "vegan", "usda-sr:172451"),
@@ -698,9 +702,9 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Tteokbokki (Korean rice cakes)", 131, 4.11, 19.61, 4.05, 0.8, 250, "cup", "non_vegetarian", "usda-fndds:2708957"),
   row("Adobo (chicken and pork, with rice)", 181, 17.69, 8.86, 7.94, 0.2, 244, "cup", "non_vegetarian", "usda-fndds:2708958"),
   row("Coconut rice", 267, 3.57, 26.55, 17.23, 1.9, 200, "cup", "vegan", "usda-fndds:2709032"),
-  row("Summer roll (shrimp, rice paper)", 112, 5.65, 17.23, 2.65, 1.9, 71, "roll", "non_vegetarian", "usda-fndds:2708704"),
+  row("Shrimp summer roll (rice paper)", 112, 5.65, 17.23, 2.65, 1.9, 71, "roll", "non_vegetarian", "usda-fndds:2708704"),
   row("Chicken satay", 191, 21.7, 3, 10.3, 2, 100, "g", "non_vegetarian", "uk-cofid:19-323"),
-  row("Thai green curry (chicken)", 119, 8.8, 1.5, 8.7, 2.6, 100, "g", "non_vegetarian", "uk-cofid:19-465"),
+  row("Thai green curry with chicken", 119, 8.8, 1.5, 8.7, 2.6, 100, "g", "non_vegetarian", "uk-cofid:19-465"),
   row("Peanut sauce (peanut butter and soy sauce)", 257, 6.31, 22.02, 16.02, 1.8, 16, "tbsp", "vegan", "usda-fndds:2707546"),
   row("Fish sauce", 35, 5.06, 3.64, 0.01, 0, 16, "tbsp", "non_vegetarian", "usda-fndds:2706457"),
   row("Hoisin sauce", 220, 3.31, 44.08, 3.39, 2.8, 16, "tbsp", "vegan", "usda-fndds:2707441"),
@@ -717,7 +721,7 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Papad / poppadom (grilled)", 371, 25.56, 59.87, 3.25, 18.6, 9, "papad", "vegan", "usda-fndds:2707429"),
   row("Puri (fried bread)", 409, 6.84, 39.23, 24.94, 3.5, 36, "puri", "vegan", "usda-fndds:2707714"),
   row("Beef curry", 113, 7.57, 6.53, 6.57, 1.4, 240, "cup", "non_vegetarian", "usda-fndds:2706388"),
-  row("Fish curry", 93, 4.94, 6.65, 5.42, 1.4, 240, "cup", "non_vegetarian", "usda-fndds:2706460"),
+  row("Fish curry (fish and shrimp)", 93, 4.94, 6.65, 5.42, 1.4, 240, "cup", "non_vegetarian", "usda-fndds:2706460"),
   row("Chicken korma", 127, 14.6, 4.6, 5.1, 0.7, 100, "g", "non_vegetarian", "uk-cofid:19-565"),
   row("Lamb rogan josh", 149, 14.4, 3.9, 9.1, 1.8, 100, "g", "non_vegetarian", "uk-cofid:19-595"),
   row("Chicken vindaloo", 192, 18.5, 2.6, 12.5, 0.7, 100, "g", "non_vegetarian", "uk-cofid:19-567"),
@@ -818,23 +822,21 @@ const FOOD_NAMES: ReadonlyMap<string, string> = new Map(Object.entries({
   agua_de_coco: "coconut_water", churro: "churros", carambola: "starfruit_carambola", star_fruit: "starfruit_carambola", jaca: "jackfruit",
   kung_po_chicken: "kung_pao_chicken", general_tso_s_chicken: "general_tso_chicken", general_tsos_chicken: "general_tso_chicken",
   beef_with_broccoli: "beef_and_broccoli", broccoli_beef: "beef_and_broccoli",
-  chicken_chow_mein: "chow_mein_chicken_with_noodles", chop_suey: "chow_mein_chicken_with_noodles",
   egg_flower_soup: "egg_drop_soup", potstickers: "potstickers_gyoza_steamed_pork_dumplings", pot_stickers: "potstickers_gyoza_steamed_pork_dumplings", gyoza: "potstickers_gyoza_steamed_pork_dumplings",
-  steamed_pork_dumplings: "potstickers_gyoza_steamed_pork_dumplings", egg_foo_young: "egg_foo_yung", egg_fu_yung: "egg_foo_yung", mu_shu_pork: "moo_shu_pork", crispy_duck: "peking_duck",
-  bao: "bao_bun_pork", steamed_bun: "bao_bun_pork", pork_bun: "bao_bun_pork", char_siu_bao: "bao_bun_pork",
-  rice_porridge: "congee_plain_rice_porridge", jook: "congee_plain_rice_porridge", glutinous_rice: "sticky_rice_glutinous_cooked", sweet_rice: "sticky_rice_glutinous_cooked",
-  chicken_teriyaki: "teriyaki_chicken", tempura: "vegetable_tempura", salmon_roll: "sushi_roll_salmon", tuna_roll: "sushi_roll_tuna",
-  vegetable_roll: "sushi_roll_vegetable", veggie_roll: "sushi_roll_vegetable", cucumber_roll: "sushi_roll_vegetable", avocado_roll: "sushi_roll_vegetable",
-  nigiri: "nigiri_sushi_salmon", salmon_nigiri: "nigiri_sushi_salmon", sashimi: "sashimi_salmon", salmon_sashimi: "sashimi_salmon", tuna_sashimi: "sashimi_tuna",
+  steamed_pork_dumplings: "potstickers_gyoza_steamed_pork_dumplings", egg_foo_young: "egg_foo_yung_with_shrimp", egg_fu_yung: "egg_foo_yung_with_shrimp", mu_shu_pork: "moo_shu_pork",
+  pork_bun: "pork_bao_bun", pork_bao: "pork_bao_bun", char_siu_bao: "pork_bao_bun",
+  glutinous_rice: "sticky_rice_glutinous_cooked", congee_with_meat: "congee_with_meat_or_seafood", chicken_congee: "congee_with_meat_or_seafood",
+  pork_congee: "congee_with_meat_or_seafood", fish_congee: "congee_with_meat_or_seafood", vegetable_congee: "congee_with_vegetables",
+  chicken_teriyaki: "teriyaki_chicken", salmon_roll: "sushi_roll_salmon", tuna_roll: "sushi_roll_tuna",
+  cucumber_roll: "sushi_roll_vegetable", avocado_roll: "sushi_roll_vegetable",
   soba: "soba_noodles_cooked", buckwheat_noodles: "soba_noodles_cooked", fried_tofu: "tofu_fried", kimchee: "kimchi", topokki: "tteokbokki_korean_rice_cakes",
-  tteokbokki: "tteokbokki_korean_rice_cakes", dukboki: "tteokbokki_korean_rice_cakes", chicken_adobo: "adobo_chicken_and_pork_with_rice", pork_adobo: "adobo_chicken_and_pork_with_rice",
-  rice_paper_roll: "summer_roll_shrimp_rice_paper", fresh_spring_roll: "summer_roll_shrimp_rice_paper", goi_cuon: "summer_roll_shrimp_rice_paper",
-  satay: "chicken_satay", satay_chicken: "chicken_satay", green_curry: "thai_green_curry_chicken", nam_pla: "fish_sauce",
+  tteokbokki: "tteokbokki_korean_rice_cakes", dukboki: "tteokbokki_korean_rice_cakes",
+  satay_chicken: "chicken_satay", nam_pla: "fish_sauce",
   cellophane_noodles: "glass_noodles_mung_bean_cooked", bean_thread_noodles: "glass_noodles_mung_bean_cooked", prawn_toast: "sesame_prawn_toast",
   shrimp_chips: "prawn_crackers", shrimp_crackers: "prawn_crackers", krupuk: "prawn_crackers",
   pakoda: "pakora_vegetable_fritter", pakoras: "pakora_vegetable_fritter", sambhar: "sambar_lentil_and_vegetable_stew", papadum: "papad_poppadom_grilled",
   poppadoms: "papad_poppadom_grilled", papadam: "papad_poppadom_grilled", poori: "puri_fried_bread", clarified_butter: "ghee",
-  korma: "chicken_korma", rogan_josh: "lamb_rogan_josh", vindaloo: "chicken_vindaloo", chicken_tandoori: "tandoori_chicken", shrimp_curry: "prawn_curry",
+  chicken_tandoori: "tandoori_chicken", shrimp_curry: "prawn_curry",
   lamb_biryani: "biryani_spiced_rice_with_lamb", mutton_biryani: "biryani_spiced_rice_with_lamb", keema_samosa: "samosa_meat", meat_samosa: "samosa_meat", khichri: "khichdi_rice_and_mung_beans_with_ghee",
   kitchari: "khichdi_rice_and_mung_beans_with_ghee", khichadi: "khichdi_rice_and_mung_beans_with_ghee", sweet_lassi: "lassi_sweet_yogurt_drink",
   // Left out on purpose: a word the markets use for different foods. "Jelly" is
@@ -1085,7 +1087,8 @@ function searchScore(food: CuratedFood, q: string, aliasTarget: string | undefin
 /** Foods for the search box, best match first; the box shows several and the
  *  person picks, so part of a word still counts here. */
 export function searchCurated(query: string, limit: number): CuratedFood[] {
-  const q = query.toLowerCase().trim();
+  // "rice & beans" is typed for "rice and beans".
+  const q = query.toLowerCase().replaceAll("&", " and ").replaceAll(/\s+/g, " ").trim();
   if (q === "") return [];
   const aliasTarget = aliasTargetFor(slug(q));
   return CURATED_FOODS.map((food) => ({ food, score: searchScore(food, q, aliasTarget) }))

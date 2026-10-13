@@ -389,79 +389,6 @@
     ]
    ]
   ],
-  "2706141": [
-   "Duck, Peking",
-   [
-    [
-     "Beverages, water, tap, drinking",
-     "Beverages"
-    ],
-    [
-     "Cornstarch",
-     "Cereal Grains and Pasta"
-    ],
-    [
-     "Duck, domesticated, meat and skin, cooked, roasted",
-     "Poultry Products"
-    ],
-    [
-     "Oil, canola",
-     "Fats and Oils"
-    ],
-    [
-     "Oil, corn",
-     "Fats and Oils"
-    ],
-    [
-     "Oil, olive, extra light",
-     ""
-    ],
-    [
-     "Oil, olive, extra virgin",
-     ""
-    ],
-    [
-     "Oil, sesame, salad or cooking",
-     "Fats and Oils"
-    ],
-    [
-     "Oil, soybean",
-     "Fats and Oils"
-    ],
-    [
-     "Oil, sunflower",
-     ""
-    ],
-    [
-     "Onions, raw",
-     "Vegetables and Vegetable Products"
-    ],
-    [
-     "Pineapple juice, canned or bottled, unsweetened, without added ascorbic acid",
-     "Fruits and Fruit Juices"
-    ],
-    [
-     "Pineapple, raw",
-     "Fruits and Fruit Juices"
-    ],
-    [
-     "Salt, table",
-     "Spices and Herbs"
-    ],
-    [
-     "Soup, chicken broth, ready-to-serve",
-     "Soups, Sauces, and Gravies"
-    ],
-    [
-     "Sugars, granulated",
-     "Sweets"
-    ],
-    [
-     "Tomato products, canned, sauce",
-     "Vegetables and Vegetable Products"
-    ]
-   ]
-  ],
   "2706221": [
    "Chicken salad spread",
    [
@@ -5629,6 +5556,104 @@
     ]
    ]
   ],
+  "2708981": [
+   "Congee, with meat, poultry, and/or seafood",
+   [
+    [
+     "Beef, brisket, whole, separable lean and fat, trimmed to 0\" fat, all grades, cooked, braised",
+     "Beef Products"
+    ],
+    [
+     "Beef, chuck, under blade pot roast, boneless, separable lean and fat, trimmed to 0\" fat, all grades, cooked, braised",
+     "Beef Products"
+    ],
+    [
+     "Beef, ground, 75% lean meat / 25% fat, patty, cooked, broiled",
+     "Beef Products"
+    ],
+    [
+     "Beef, ground, 80% lean meat / 20% fat, patty, cooked, broiled",
+     "Beef Products"
+    ],
+    [
+     "Beef, ground, 85% lean meat / 15% fat, patty, cooked, broiled",
+     "Beef Products"
+    ],
+    [
+     "Beef, loin, top loin, separable lean and fat, trimmed to 1/8\" fat, all grades, cooked, grilled",
+     "Beef Products"
+    ],
+    [
+     "Beef, round, top round steak, boneless, separable lean and fat, trimmed to 0\" fat, all grades, cooked, grilled",
+     "Beef Products"
+    ],
+    [
+     "Beverages, water, tap, drinking",
+     "Beverages"
+    ],
+    [
+     "Chicken, broiler or fryers, breast, skinless, boneless, meat only, cooked, braised",
+     "Poultry Products"
+    ],
+    [
+     "Chicken, broilers or fryers, thigh, meat and skin, cooked, roasted",
+     "Poultry Products"
+    ],
+    [
+     "Chicken, broilers or fryers, thigh, meat only, cooked, roasted",
+     "Poultry Products"
+    ],
+    [
+     "Fish, haddock, raw",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Fish, pollock, raw",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Rice, white, long-grain, regular, enriched, cooked",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2708983": [
+   "Congee, with vegetables",
+   [
+    [
+     "Beverages, water, tap, drinking",
+     "Beverages"
+    ],
+    [
+     "Mushroom, crimini",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Mushroom, portabella",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Mushrooms, white button",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Onions, spring or scallions (includes tops and bulb), raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Rice, white, long-grain, regular, enriched, cooked",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
   "2708985": [
    "Biryani with vegetables",
    [
@@ -7172,6 +7197,19 @@
     [
      "Yogurt, plain, whole milk",
      "Dairy and Egg Products"
+    ]
+   ]
+  ],
+  "2710069": [
+   "Chow mein or chop suey, meatless, with noodles",
+   [
+    [
+     "Noodles, chinese, chow mein",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Restaurant, Chinese, vegetable chow mein, without meat or noodles",
+     "Restaurant Foods"
     ]
    ]
   ],
