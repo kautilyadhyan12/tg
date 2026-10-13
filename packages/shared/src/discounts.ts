@@ -166,23 +166,16 @@ export type GymDiscount = z.infer<typeof gymDiscountSchema>;
 
 /** A percentage carries `percentBp` alone and a fixed amount `amountMinor` alone; a
  *  discount ends on or after the day it starts; one limited to some products names them. */
-const discountShape = <T extends z.ZodTypeAny>(schema: T) =>
-  schema.superRefine((value: unknown, ctx) => {
-    const v = value as {
-      kind: DiscountKind;
-      percentBp: number | null;
-      amountMinor: number | null;
-      startsOn: string | null;
-      endsOn: string | null;
-      allProducts: boolean;
-      productIds: string[];
-    };
-    if (v.kind === "percent" && (v.percentBp === null || v.amountMinor !== null)) ctx.addIssue({ code: "custom", path: ["percentBp"], message: "invalid_percent" });
-    if (v.kind === "amount" && (v.amountMinor === null || v.percentBp !== null)) ctx.addIssue({ code: "custom", path: ["amountMinor"], message: "invalid_amount" });
-    if (v.startsOn !== null && v.endsOn !== null && v.endsOn < v.startsOn) ctx.addIssue({ code: "custom", path: ["endsOn"], message: "ends_before_start" });
-    if (v.allProducts ? v.productIds.length > 0 : v.productIds.length === 0) ctx.addIssue({ code: "custom", path: ["productIds"], message: "invalid_products" });
-    if (new Set(v.productIds).size !== v.productIds.length) ctx.addIssue({ code: "custom", path: ["productIds"], message: "repeated_product" });
-  });
+function checkDiscountShape(
+  v: { kind: DiscountKind; percentBp: number | null; amountMinor: number | null; startsOn: string | null; endsOn: string | null; allProducts: boolean; productIds: string[] },
+  ctx: z.RefinementCtx,
+): void {
+  if (v.kind === "percent" && (v.percentBp === null || v.amountMinor !== null)) ctx.addIssue({ code: "custom", path: ["percentBp"], message: "invalid_percent" });
+  if (v.kind === "amount" && (v.amountMinor === null || v.percentBp !== null)) ctx.addIssue({ code: "custom", path: ["amountMinor"], message: "invalid_amount" });
+  if (v.startsOn !== null && v.endsOn !== null && v.endsOn < v.startsOn) ctx.addIssue({ code: "custom", path: ["endsOn"], message: "ends_before_start" });
+  if (v.allProducts ? v.productIds.length > 0 : v.productIds.length === 0) ctx.addIssue({ code: "custom", path: ["productIds"], message: "invalid_products" });
+  if (new Set(v.productIds).size !== v.productIds.length) ctx.addIssue({ code: "custom", path: ["productIds"], message: "repeated_product" });
+}
 
 const saveGymDiscountFields = z
   .object({
@@ -199,13 +192,13 @@ const saveGymDiscountFields = z
   })
   .strict();
 
-export const saveGymDiscountRequestSchema = discountShape(saveGymDiscountFields);
-export type SaveGymDiscountRequest = z.infer<typeof saveGymDiscountFields>;
+export const saveGymDiscountRequestSchema = saveGymDiscountFields.superRefine(checkDiscountShape);
+export type SaveGymDiscountRequest = z.infer<typeof saveGymDiscountRequestSchema>;
 
 /** `updatedAt` is the discount as the form read it: a change since then refuses the save.
  *  A sale that used it in between does not. */
-export const updateGymDiscountRequestSchema = discountShape(saveGymDiscountFields.extend({ updatedAt: z.string().datetime() }).strict());
-export type UpdateGymDiscountRequest = SaveGymDiscountRequest & { updatedAt: string };
+export const updateGymDiscountRequestSchema = saveGymDiscountFields.extend({ updatedAt: z.string().datetime() }).strict().superRefine(checkDiscountShape);
+export type UpdateGymDiscountRequest = z.infer<typeof updateGymDiscountRequestSchema>;
 
 /** The server's sentences, one place for the routes and the screen's tests. */
 export const DISCOUNT_WORDS = {
