@@ -406,3 +406,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **30a, as it stood when it was built (merged 2026-10-13, PR #233):**
 
     - 30a. [ ] **Keep, change, remove and measure a goal.** Ten kinds the server can measure today; running goals wait for item 37, "master an exercise" and a harder version for item 36, a hold time (plank) for the exercise folders' holds, mobility sessions for a way to record one.
+
+## 21b, as first written (split 2026-10-13 into 21b-i and 21b-ii)
+
+   - 21b. [ ] **Money, from the gym's own notebook** (after 18a): MRR, collected, overdue, lifetime value; a gym that bills elsewhere is told why it has none. **Also (RULINGS 2026-10-08):** money by membership type and product, and by coach.

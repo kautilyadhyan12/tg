@@ -139,7 +139,7 @@ describe('the money figures', () => {
     expect(within(tile('recurring')).getByText('£99.98')).toBeTruthy();
     expect(within(tile('recurring')).getByText('2 repeating memberships')).toBeTruthy();
     expect(within(tile('collected')).getByText('£45.00')).toBeTruthy();
-    expect(within(tile('collected')).getByText('£60.00 paid, £15.00 refunded · September: £100.00')).toBeTruthy();
+    expect(within(tile('collected')).getByText('October, so far: £60.00 paid, £15.00 refunded · September: £100.00')).toBeTruthy();
     expect(within(tile('due')).getByText('£139.98')).toBeTruthy();
     expect(within(tile('due')).getByText('2 members and 1 past member · £49.99 of it overdue')).toBeTruthy();
     // 300.00 collected in July to September, and 2 members left in them.
@@ -203,6 +203,14 @@ describe('the money figures', () => {
     open();
     const life = within(await screen.findByTestId('tile-lifetime'));
     expect(life.getByText('Not enough data yet. Lifetime value needs 3 full months of payments recorded here and of your member list.')).toBeTruthy();
+  });
+
+  it('everything owed being overdue is said in words, not as the same amount twice', async () => {
+    svc.money.mockResolvedValue(money({ owed: { currentMinor: 4999, currentPeople: 1, pastMinor: 0, pastPeople: 0, overdueMinor: 4999, overduePeople: 1 } }));
+    open();
+    const due = within(await screen.findByTestId('tile-due'));
+    expect(due.getByText('1 member · all of it overdue')).toBeTruthy();
+    expect(due.queryByRole('link', { name: 'See past members' })).toBeNull();
   });
 
   it('says so where payments in another currency are left out', async () => {

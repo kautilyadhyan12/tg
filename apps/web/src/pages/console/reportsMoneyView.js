@@ -105,7 +105,7 @@ export function moneyTiles(report, words, orgSlug) {
       value: moneyText(report.thisMonth.netMinor, cur),
       line: null,
       note: refunded
-        ? `${moneyText(report.thisMonth.paidMinor, cur)} paid, ${moneyText(report.thisMonth.refundedMinor, cur)} refunded${beforeText}`
+        ? `${month}, so far: ${moneyText(report.thisMonth.paidMinor, cur)} paid, ${moneyText(report.thisMonth.refundedMinor, cur)} refunded${beforeText}`
         : `${month}, so far${beforeText}`,
       how: `Payments your staff recorded in ${month}, less refunds noted in ${month}. A payment or a refund that was undone is not counted.`,
       links: [],
@@ -118,7 +118,7 @@ export function moneyTiles(report, words, orgSlug) {
       note:
         owedMinor === 0
           ? null
-          : `${owingPeople(report.owed, words)} · ${report.owed.overdueMinor === 0 ? 'none of it overdue' : `${moneyText(report.owed.overdueMinor, cur)} of it overdue`}`,
+          : `${owingPeople(report.owed, words)} · ${report.owed.overdueMinor === 0 ? 'none of it overdue' : report.owed.overdueMinor >= owedMinor ? 'all of it overdue' : `${moneyText(report.owed.overdueMinor, cur)} of it overdue`}`,
       how: `Bills that have fallen due and are not fully paid, less what has been paid on them. A bill is overdue ${overdueWhen}; you set this in Memberships, under Bills. Cancelled bills are not counted.`,
       links: [
         ...(report.owed.people > 0 ? [{ to: `${base}/members?show=${PAYMENT_DUE_SHOW}`, button: 'See who' }] : []),
