@@ -3,8 +3,8 @@ import { Badge, Card } from "../look/Card";
 import type { IconName } from "../look/Icon";
 import { Txt } from "../look/Txt";
 
-/** Sign-in is ROADMAP Stage 5 item 12. Until it is built a tab has nothing of anybody's to show, and says so. */
-export const NO_SIGN_IN = "This copy of the app has no sign-in yet.";
+/** A tab's own feature comes with its own job; until then the tab says so, with no made-up number. */
+export const NOT_BUILT = "Not in the app yet.";
 
 /** What a tab will hold, in the tab's own box, with no made-up number. */
 export function Soon({ icon, title, line }: { icon: IconName; title: string; line: string }) {
@@ -18,7 +18,7 @@ export function Soon({ icon, title, line }: { icon: IconName; title: string; lin
       </View>
       <Txt>{line}</Txt>
       <Txt kind="small" colour="textFaint">
-        {NO_SIGN_IN}
+        {NOT_BUILT}
       </Txt>
     </Card>
   );

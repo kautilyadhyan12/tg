@@ -65,7 +65,7 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
 
   /** A fresh code for the address, by the real send route. */
   const codeFor = async (email: string): Promise<string> => {
-    // The rules read created_at (a sixty-second gap, two a day), so moving it is the clock.
+    // The rules read created_at (a sixty-second gap, three a day), so moving it is the clock.
     await sql`UPDATE sign_in_codes SET created_at = created_at - interval '2 days' WHERE email = ${email}`;
     const res = await post("/v1/auth/code/send", { email });
     expect(res.statusCode).toBe(200);

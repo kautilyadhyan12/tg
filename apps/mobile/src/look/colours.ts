@@ -8,6 +8,7 @@ export const colours = {
   tabBar: "#0D0C0B",
   glass: "rgba(255,255,255,0.035)",
   fill: "rgba(255,255,255,0.05)",
+  field: "rgba(10,9,8,0.7)",
   track: "rgba(255,255,255,0.08)",
   line: "rgba(255,255,255,0.06)",
   lineStrong: "rgba(255,255,255,0.10)",

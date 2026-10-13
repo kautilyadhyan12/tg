@@ -12,6 +12,8 @@ interface ButtonProps {
   icon?: IconName;
   small?: boolean;
   wide?: boolean;
+  /** Drawn faint, and a press does nothing: while its own work is away, or until a wait is over. */
+  disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -23,10 +25,12 @@ const ink: Record<ButtonKind, ColourName> = {
 };
 
 /** A main button is 48 tall, a small one 44; nothing pressed is smaller. */
-export function Button({ label, onPress, kind = "main", icon, small = false, wide = false, style }: ButtonProps) {
+export function Button({ label, onPress, kind = "main", icon, small = false, wide = false, disabled = false, style }: ButtonProps) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
@@ -34,6 +38,7 @@ export function Button({ label, onPress, kind = "main", icon, small = false, wid
         small ? styles.small : null,
         wide ? styles.wide : null,
         pressed ? styles.pressed : null,
+        disabled ? styles.disabled : null,
         style,
       ]}
     >
@@ -65,6 +70,7 @@ const styles = StyleSheet.create({
   small: { height: sizes.press, paddingHorizontal: 14, borderRadius: 12 },
   wide: { alignSelf: "stretch" },
   pressed: { opacity: 0.8 },
+  disabled: { opacity: 0.45 },
   label: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
   smallLabel: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 20 },
 });

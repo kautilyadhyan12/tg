@@ -407,7 +407,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 11b. [x] **The look in the app** — merged 2026-10-13 (PR #250).
 12. **Sign-in** (split 2026-10-13: the server part needs no phone). Risky; the two extra passes run once, after 12d and before anybody else uses the app. Apple sign-in comes with the iPhone version (item 21).
     - 12a. [x] **The server learns a phone, and one phone at a time** — merged 2026-10-13 (PR #254).
-    - 12b. [ ] **Sign in on the phone by email code**: the screen, the robot check, the sign-in kept in the phone's key store, staying signed in with no internet, Sign out on Me, and "You were signed out because your account was signed in on another phone". New packages need Kd's yes in its plan.
+    - 12b. **Sign in on the phone by email code** (split 2026-10-13: the robot check needs a package and a page of its own).
+        - 12b-i. [ ] **The sign-in itself**: the Get started screen, the sign-in kept in the phone's key store, staying signed in with no internet, Sign out on Me, and "You were signed out because your account was signed in on another phone". Three codes a day, not two (Kd, 2026-10-13).
+        - 12b-ii. [ ] **The robot check on the phone**: Cloudflare's box when the server asks for it (past 20 codes an hour from one internet address); until then the phone says why it must wait. A new package (a web view) needs Kd's yes in its plan.
     - 12c. [ ] **"Before you start" on the phone** (it reads the profile's `signUpDisclaimerAgreed`).
     - 12d. [ ] **Sign in with Google on the phone**: Google's own sign-in box, and a server route that takes its answer. Needs Kd's step in Google's console for each copy of the app, told to him in its plan.
 13. [ ] **Invitations and Join**, with what the gym can see (spec Part 3 §10.2); My Gyms; the invitation email's button opens the app.

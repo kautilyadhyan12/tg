@@ -9,6 +9,7 @@ export function Page({ children }: { children: ReactNode }) {
   return (
     <ScrollView
       style={styles.page}
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={[styles.boxes, { paddingTop: insets.top + sizes.edge }]}
     >
       {children}

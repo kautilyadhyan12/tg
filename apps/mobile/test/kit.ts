@@ -1,0 +1,75 @@
+import type { Ask, AskInit } from "../src/session/calls";
+import type { KeyStore } from "../src/session/session";
+
+// A stand-in server and key store, for the rules (vitest) and the screens (jest) alike.
+
+export const API = "http://localhost:3000";
+
+export const RAVI = {
+  id: "7b0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6a",
+  email: "ravi@example.com",
+  displayName: "Ravi",
+  emailVerified: true,
+  locale: "en",
+  units: "metric",
+};
+
+export const tokens = (n: number) => ({ accessToken: `access-${String(n)}`, refreshToken: `refresh-${String(n)}` });
+export const kept = (n: number, user = RAVI) => JSON.stringify({ refreshToken: `refresh-${String(n)}`, user });
+
+export interface Reply {
+  status: number;
+  body: unknown;
+}
+/** What a route does with a request: answer, fail as a lost connection does (`throw`), or never answer. */
+export type Route = (body: unknown) => Reply | Promise<Reply>;
+
+export const never = (): Promise<Reply> => new Promise(() => undefined);
+export const lost = (): Reply => {
+  throw new TypeError("Network request failed");
+};
+export const refusal = (status: number, error: string, message: string, more: object = {}): Reply => ({
+  status,
+  body: { error, message, requestId: "req-1", ...more },
+});
+
+export interface Asked {
+  path: string;
+  body: unknown;
+  headers: Record<string, string>;
+}
+
+/** A server of the routes it is handed; any other path answers 404. `/health` is up unless told. */
+export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: Asked[]; paths: () => string[] } {
+  const asked: Asked[] = [];
+  const all: Record<string, Route> = { "/health": () => ({ status: 200, body: { status: "ok" } }), ...routes };
+  const ask: Ask = async (url: string, init: AskInit) => {
+    const path = url.slice(API.length);
+    asked.push({
+      path,
+      body: init.body === undefined ? undefined : (JSON.parse(init.body) as unknown),
+      headers: init.headers ?? {},
+    });
+    const route = all[path];
+    const reply = route === undefined ? refusal(404, "not_found", "Not found") : await route(asked.at(-1)?.body);
+    return { ok: reply.status >= 200 && reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
+  };
+  return { ask, asked, paths: () => asked.map((one) => one.path) };
+}
+
+/** The key store, in memory. `value` is what the phone would hold after a restart. */
+export function memoryStore(value: string | null = null): KeyStore & { value: string | null } {
+  const store = {
+    value,
+    read: () => Promise.resolve(store.value),
+    write: (next: string) => {
+      store.value = next;
+      return Promise.resolve();
+    },
+    clear: () => {
+      store.value = null;
+      return Promise.resolve();
+    },
+  };
+  return store;
+}
