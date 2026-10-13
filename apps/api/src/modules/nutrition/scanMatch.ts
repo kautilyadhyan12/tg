@@ -197,7 +197,7 @@ function madeAs(words: readonly string[]): { cooked: boolean; raw: boolean; fres
  *  from a scanned name say: cooked against raw or kept ("steamed carrots" are no
  *  "Carrots (raw)", "grilled tuna" no canned tuna), raw against cooked or kept, fresh
  *  against kept, and a way of cooking against one of another group ("steamed
- *  dumplings" are no "Dumplings (pork, fried)"). A plain "cooked" names no way, so
+ *  potatoes" are no "Potato (baked)"). A plain "cooked" names no way, so
  *  "grilled broccoli" is "Broccoli (cooked)". */
 export function contradicts(dropped: readonly string[], foodName: string): boolean {
   const scanned = madeAs(dropped);

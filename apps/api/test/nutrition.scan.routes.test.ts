@@ -864,7 +864,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
         ["Carrots (raw)", "curated", "10 × strip large (3\" long)", 70, 29], // baby carrots, a size: USDA's toddler food (26) is no nearer the 36 seen
         ["Tea, hot, leaf, green", "usda", "1 × cup", 240, 2], // "green" is what the tea is: USDA's green tea, never our black
         // A version our list does not hold is the model's estimate: "masala" is no way of
-        // cooking a dosa, and our dumplings are fried, where these were steamed.
+        // cooking a dosa, and steamed dumplings may be pork or vegetable: a photo cannot say which.
         ["Masala dosa", "estimate", "~150 g", 150, 255],
         ["Steamed dumplings", "estimate", "~180 g", 180, 270],
         // USDA's food of every word, far nearer what the model saw than ours of fewer.

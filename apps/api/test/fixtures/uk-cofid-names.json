@@ -1,6 +1,10 @@
 {
  "about": "UK McCance and Widdowson's Composition of Foods Integrated Dataset (2021, Open Government Licence): the food name and the description of every entry our food list cites, by food code, as the workbook's Proximates sheet gives them. Written by tools/check-food-sources.ts --write-groups, which also fails when this file differs from the download; never edited by hand.",
  "foods": {
+  "11-1023": [
+   "Prawn crackers, takeaway",
+   "10 samples from different outlets"
+  ],
   "11-1084": [
    "Hot cross buns, homemade",
    "Recipe"
@@ -37,6 +41,10 @@
    "Risotto, plain, homemade",
    "Recipe"
   ],
+  "12-373": [
+   "Lassi, sweetened",
+   "5 samples, takeaway and retail"
+  ],
   "12-495": [
    "Cheese, Paneer",
    "9 samples, sampled in spring and autumn"
@@ -49,6 +57,10 @@
    "Welsh rarebit, homemade",
    "Recipe"
   ],
+  "12-606": [
+   "Kulfi, homemade",
+   "Indian ice cream. Recipe"
+  ],
   "12-952": [
    "Quiche, Lorraine, homemade",
    "Recipe"
@@ -56,6 +68,10 @@
   "12-957": [
    "Omelette, Spanish, homemade",
    "Recipe"
+  ],
+  "15-528": [
+   "Khichadi, with butter ghee",
+   "Recipe. Mung bean and rice dish."
   ],
   "15-704": [
    "Bubble and squeak, fried in rapeseed oil, homemade",
@@ -68,6 +84,14 @@
   "15-746": [
    "Curry, chick pea, whole and tomato, Gujerati, with butter ghee, homemade",
    "Recipe. Large white chick peas, tomato and onion."
+  ],
+  "16-333": [
+   "Curry, prawn, takeaway",
+   "20 samples, average of 10 Bhuna and 10 Madras"
+  ],
+  "16-367": [
+   "Sesame prawn toast, takeaway",
+   "10 sub-samples, 2 from different establishments in each of 5 regions"
   ],
   "16-397": [
    "Kippers, flesh only, grilled",
@@ -85,6 +109,14 @@
    "Taramasalata",
    "10 assorted samples. Greek dish based on cod's roe"
   ],
+  "17-832": [
+   "Raita, homemade",
+   "Recipe, spiced curd/yoghurt"
+  ],
+  "18-490": [
+   "Duck, crispy, chinese style, meat and skin",
+   "10 samples from chinese takeaways, seasoned roasted duck"
+  ],
   "19-114": [
    "Black pudding, dry-fried",
    "8 samples, 6 brands"
@@ -96,6 +128,22 @@
   "19-296": [
    "Curry, chicken tikka masala, retail, reheated",
    "11 samples, 11 products, chilled and frozen"
+  ],
+  "19-323": [
+   "Chicken satay, takeaway",
+   "10 samples"
+  ],
+  "19-326": [
+   "Meat samosas, takeaway",
+   "10 samples from Indian restaurants"
+  ],
+  "19-460": [
+   "Stir-fry beef with green peppers and blackbean sauce, takeaway",
+   "10 sub-samples, 2 from different establishments in each of 5 regions"
+  ],
+  "19-465": [
+   "Curry, chicken, Thai green, takeaway and restaurant",
+   "10 sub-samples, 2 from different establishments in each of 5 regions. Dish consists of chicken that has been stir fried in a standard Thai green curry sauce (usually includes coconut milk, lemongrass, ginger and peppers)"
   ],
   "19-466": [
    "Cornish pasty, retail",
@@ -117,8 +165,28 @@
    "Scotch eggs, retail",
    "10 samples, 8 brands"
   ],
+  "19-540": [
+   "Curry, chicken tandoori, retail, reheated",
+   "7 samples, 6 brands. 95-96% meat"
+  ],
+  "19-565": [
+   "Curry, chicken korma, homemade",
+   "Recipe"
+  ],
+  "19-567": [
+   "Curry, chicken vindaloo, homemade",
+   "Recipe"
+  ],
   "19-583": [
    "Goulash, homemade",
+   "Recipe"
+  ],
+  "19-591": [
+   "Curry, lamb biryani, homemade",
+   "Recipe"
+  ],
+  "19-595": [
+   "Curry, lamb rogan josh, homemade",
    "Recipe"
   ],
   "19-601": [

@@ -1,5 +1,5 @@
-// A food's diet against what its own table says the food is (ROADMAP 34c-i and
-// 34c-ii). The worst a label can do is offer meat, fish, egg or milk to somebody
+// A food's diet against what its own table says the food is (ROADMAP 34c-i to
+// 34c-iii). The worst a label can do is offer meat, fish, egg or milk to somebody
 // who does not eat it, so no label is checked against our own names. Three files
 // in fixtures/ hold each table's words, and `tools/check-food-sources.ts` holds
 // them to the downloads: USDA's description and food group of every SR Legacy
@@ -48,11 +48,12 @@ const MEAT_AND_FISH_WORDS = new Set([
   "duck", "venison", "bison", "liver", "steak", "chorizo", "bologna", "kielbasa", "prosciutto", "pastrami", "bratwurst", "poultry",
   "mollusk", "crustacean", "cod", "haddock", "pollock", "mussel", "scallop", "lobster", "squid", "sardine", "herring",
   "kipper", "mackerel", "trout", "scampi", "prawn", "worcestershire", "suet", "dripping", "haggi",
+  "eel", "octopus", "bonito", "roe", "snapper", "mutton",
 ]);
 const EGG_WORDS = new Set(["egg", "mayonnaise", "omelette", "omelet", "meringue", "pavlova", "yolk", "ladyfinger"]);
 const DAIRY_WORDS = new Set([
   "milk", "cheese", "cheesecake", "butter", "cream", "yogurt", "whey", "casein", "buttermilk", "ghee",
-  "yoghurt", "parmesan", "mozzarella", "cheddar", "ricotta", "feta", "gruyere", "paneer", "custard",
+  "yoghurt", "parmesan", "mozzarella", "cheddar", "ricotta", "feta", "gruyere", "paneer", "custard", "lassi", "curd",
 ]);
 
 /** An ingredient whose animal food USDA's description does not name: the phrase,
@@ -93,6 +94,8 @@ const NO_ANIMAL_FOOD: ReadonlyMap<string, readonly [words: readonly string[], wh
   ["Restaurant, Chinese, fried rice, without meat", [["meat"], "WITHOUT meat"]],
   ["Nuts, coconut milk, raw (liquid expressed from grated meat and water)", [["milk", "meat"], "coconut milk, and the coconut's white"]],
   ["Sesame butter, creamy", [["butter"], "sesame butter is ground sesame seeds"]],
+  ["2709032", [["milk"], "rice cooked in coconut milk"]],
+  ["Sauce, peanut, made from peanut butter, water, soy sauce", [["butter"], "peanut butter is ground peanuts"]],
 ]);
 
 /** A UK-table dish labelled below non-vegetarian whose CoFID words do not settle
@@ -128,6 +131,9 @@ const READ: ReadonlyMap<string, Diet | null> = new Map<string, Diet | null>([
   ["Formulated bar, ZONE PERFECT CLASSIC CRUNCH BAR, mixed flavors", V],
   ["Pie Crust, Cookie-type, Graham Cracker, Ready Crust", V],
   ["Fast foods, hush puppies", E], ["Salad dressing, coleslaw", E],
+  ["Doughnuts, yeast-leavened, glazed, enriched (includes honey buns)", E],
+  ["Sauce, hoisin, ready-to-serve", null], ["Sauce, teriyaki, ready-to-serve", null], ["Snacks, plantain chips, salted", null],
+  ["Sauce, peanut, made from peanut butter, water, soy sauce", null],
   ["Restaurant, Chinese, fried rice, without meat", E], ["Sesame butter, creamy", null],
   ["Calcium as ingredient", null], ["Folic acid as ingredient", null], ["Iron as ingredient", null],
   ["Vitamin B composite in cereals", null], ["Vitamin B-12 as ingredient", null], ["Vitamin D as ingredient", null],
@@ -142,6 +148,20 @@ const READ: ReadonlyMap<string, Diet | null> = new Map<string, Diet | null>([
   ["Snacks, CLIF BAR, mixed flavors", null], ["Snacks, tortilla chips, plain, white corn, salted", null], ["Spinach, baby", null],
   ["Sugars, granulated", null], ["Syrup, NESTLE, chocolate", null], ["Tomato, roma", null], ["Tomatoes, grape, raw", null],
   ["Tortillas, ready-to-bake or -fry, flour, refrigerated", null],
+]);
+
+/** USDA's food groups of whole bought dishes, whose ingredients it does not list. */
+const BOUGHT_GROUPS = new Set(["Restaurant Foods", "Fast Foods", "Meals, Entrees, and Side Dishes"]);
+
+/** The dishes of 34c-iii labelled below non-vegetarian that USDA makes from one
+ *  bought food, or with a bought dish in them, and what reading that food found. */
+const ONE_BOUGHT_FOOD: ReadonlyMap<string, string> = new Map([
+  ["plantain_chips", "plantain, oil, salt"],
+  ["dulce_de_leche", "milk and sugar: vegetarian"],
+  ["papad_poppadom_grilled", "lentil flour, salt, spices"],
+  ["hoisin_sauce", "soybean paste, sugar, garlic, vinegar"],
+  ["teriyaki_sauce", "soy sauce, sugar, rice wine"],
+  ["peanut_sauce_peanut_butter_and_soy_sauce", "USDA names it: peanut butter, water, soy sauce"],
 ]);
 
 /** What one ingredient allows: its group and words, and what reading it found. */
@@ -206,6 +226,19 @@ describe("a food's diet, against its table's own words", () => {
     }
     expect([...unread].sort()).toEqual([]);
     expect([...READ.keys()].filter((name) => !met.has(name))).toEqual([]);
+  });
+
+  it("has read every dish of 34c-iii labelled for somebody who eats no meat that USDA makes from one bought food or a restaurant dish", () => {
+    // USDA shows no ingredients for these, so the tests above see nothing in them: a restaurant's vegetable lo mein
+    // held oyster sauce and chicken base, and only a real label said so. A new one fails here until it is read.
+    const one: string[] = [];
+    for (const food of CURATED_FOODS.slice(510)) {
+      const id = cited(food, "usda-fndds");
+      if (id === null || food.diet === "non_vegetarian") continue;
+      const from = SURVEY[id]?.[1] ?? [];
+      if (from.length === 1 || from.some(([, group]) => BOUGHT_GROUPS.has(group))) one.push(food.canonical);
+    }
+    expect(one.sort()).toEqual([...ONE_BOUGHT_FOOD.keys()].sort());
   });
 
   it("is never lower than the animal food CoFID's name or note names", () => {

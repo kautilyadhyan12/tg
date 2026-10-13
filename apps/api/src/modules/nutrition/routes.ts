@@ -212,6 +212,13 @@ export function registerNutritionRoutes(
     return reply.send(await service.putTargets(nutritionDeps, authedUserId(req), body));
   });
 
+  /** Meal ideas for what is left of today (ROADMAP 34d-i). Nothing to parse:
+   *  the person is the session's own, so there is no id to change. No model
+   *  call and no quota: the ideas are drawn from the food list. */
+  app.get("/v1/nutrition/suggestions", { preHandler: [app.authenticate] }, async (req, reply) => {
+    return reply.send(await service.getMealIdeas(nutritionDeps, authedUserId(req)));
+  });
+
   app.get("/v1/nutrition/foods", { preHandler: [app.authenticate] }, async (req, reply) => {
     const q = parse(foodSearchQuerySchema, req.query, req, reply);
     if (q === null) return;

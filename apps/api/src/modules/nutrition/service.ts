@@ -7,10 +7,13 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import {
+  DIET_LABEL_CAUTION,
+  FOOD_ALLERGY_CAUTION,
   MAX_ITEM_GRAMS,
   MEAL_SCAN_TTL_SECONDS,
   MORE_NOT_KNOWN,
   isNoValueWord,
+  mealIdeasResponseSchema,
   moreForGrams,
   moreNutrientsSchema,
   shownFoodName,
@@ -19,6 +22,7 @@ import {
   type FoodSearchItem,
   type LoggedMeasure,
   type Meal,
+  type MealIdeasResponse,
   type MealItem,
   type MealPhotoItem,
   type Per100g,
@@ -27,7 +31,9 @@ import {
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
-import { getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
+import { dayInTz, safeTimeZone } from "../gamification/streak.js";
+import { getUserFoodAnswers, getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
+import { LEAST_MEAL_KCAL, suggestMeals } from "./suggest.js";
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
@@ -581,6 +587,35 @@ export async function getTargets(deps: Pick<NutritionDeps, "sql">, userId: strin
     repo.getRingTargets(deps.sql, userId),
   ]);
   return targetsFromPlan(planResult, pick, noCutReasons);
+}
+
+/** Meal ideas for what is left of the person's day (ROADMAP 34d-i), from their
+ *  own diet, meals a day, the rings' calories and what they have logged today.
+ *  The calories are the rings' own, so the rules that hold a cut hold here. */
+export async function getMealIdeas(deps: Pick<NutritionDeps, "sql">, userId: string, now: Date = new Date()): Promise<MealIdeasResponse> {
+  const [answers, { targets }, ctx] = await Promise.all([
+    getUserFoodAnswers(deps.sql, userId),
+    getTargets(deps, userId),
+    getUserSyncContext(deps.sql, userId),
+  ]);
+  const { diet, mealsPerDay } = answers;
+  if (diet === null || mealsPerDay === null) {
+    return mealIdeasResponseSchema.parse({
+      status: "needs_answers",
+      missing: [...(diet === null ? ["diet"] : []), ...(mealsPerDay === null ? ["mealsPerDay"] : [])],
+    });
+  }
+  if (targets === null) return { status: "needs_plan" };
+  const timeZone = safeTimeZone(ctx.timezone);
+  const day = dayInTz(now, timeZone);
+  const eaten = await repo.dayEaten(deps.sql, userId, timeZone, day, LEAST_MEAL_KCAL);
+  const { kcalLeft, meals } = suggestMeals({
+    seed: userId, day, diet, mealsPerDay, kcalTarget: targets.kcal, kcalEaten: eaten.kcal, mealsLogged: eaten.meals,
+  });
+  return mealIdeasResponseSchema.parse({
+    status: "ok", day, kcalLeft, meals, caution: FOOD_ALLERGY_CAUTION,
+    labelCaution: diet === "non_vegetarian" ? null : DIET_LABEL_CAUTION,
+  });
 }
 
 /** The rings' answer for a plan the caller has already read (goals read it once for the
