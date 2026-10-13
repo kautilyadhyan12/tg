@@ -1,0 +1,6 @@
+# Which folder's copy this is (one word from copies.json). Each folder has its own.
+.copy
+# Made by `expo prebuild` from app.config.ts; never edited by hand.
+android/
+ios/
+.expo/

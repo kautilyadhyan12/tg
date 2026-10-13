@@ -70,4 +70,5 @@ export * from "./register.js";
 export * from "./gymWeek.js";
 export * from "./gymMessageSettings.js";
 export * from "./gymContact.js";
+export * from "./phoneApp.js";
 export * from "./goals.js";
