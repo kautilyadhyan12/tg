@@ -248,6 +248,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "request_reused", "That was already saved for somebody else. Open the form again.");
     case "method_needed":
       throw new OrgsError(400, "payment_method_needed", "Pick how they paid.");
+    case "price_changed":
+      throw new OrgsError(409, "membership_price_changed", "The price of this membership changed while this was open. Nothing was saved: check the total and press again.");
     case "early_payment":
       throw new OrgsError(
         409,
@@ -299,6 +301,7 @@ export async function giveHeldMembership(
       startsOn: req.startsOn,
       paid: req.paid,
       method: req.method ?? null,
+      shownPriceMinor: req.priceMinor ?? null,
       today,
       actorUserId: userId,
       now,

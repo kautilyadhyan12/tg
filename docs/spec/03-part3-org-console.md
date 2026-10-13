@@ -3455,6 +3455,55 @@ much). **Discounts and promo codes** on membership types: so much off or a perce
 from and until, a limit of uses, counted under a lock; the price a person was sold at
 is written on their membership, so a later change of price or promo never rewrites it.
 
+**As built, 18b-i (2026-10-12; RULINGS that day).** A line in the menu, **Sell**, for staff
+who may record payments (`billing.members`) or change prices (`memberships.manage`).
+- **A product sale** is one row (`gym_sales`): the product as it was named and priced when
+  sold, how many (1 to 99), the price before tax, the tax, the total, how it was paid (Cash ·
+  Card at the desk · Bank transfer), who bought it (a record on the gym's list, a past
+  member too, or nobody: a walk-in), who sold it and the gym's own day. The server works
+  out every amount (`saleAmounts`); the screen sends the total it showed, and a sale that
+  no longer comes to it is refused, so nobody is charged a total they were not told. One
+  row, the stock count and the note in the gym's record are written together under the
+  gym's lock; the form's own key makes the same press twice one sale.
+- **Products** (`gym_products`, up to 200 on sale): a name, a price in the gym's own
+  money, whether tax is charged on it, and a stock count or none. A sale takes what was
+  sold off the count and is refused when fewer are left. A product is archived, never
+  deleted, and put back; a change of name or price rewrites no sale.
+- **Tax** (RULINGS 2026-10-08, settled here): one rate the gym sets, 0 to 30% to two
+  decimals, 0 (none) to start, and whether it is **added on top of the price** or
+  **already included in the price**. A gym starts on what its country does (added on top
+  in the United States and Canada, included elsewhere) and can change it. The tax is a
+  line of its own on the sale and is kept on its row with the rate. It is charged on
+  products; a membership's bill carries no tax yet (ROADMAP 18b-iii).
+- **Once a sale is recorded** the box shows "Sale recorded", what was sold and one button,
+  New sale; the form is gone until it is pressed, so a second press cannot sell again, and
+  the new form has no product picked (Kd's click-through, RULINGS 2026-10-12). Today's list
+  draws its newest 10 rows, with Show all.
+- **Undo sale**: the same day only, by whoever may sell. The row is kept, marked, counted
+  in nothing, and what it took from the stock count goes back.
+- **A membership** is sold from the same box by giving it as paid (§14.2): the notebook's
+  own bill and payment, starting today, to a person on the list. No `gym_sales` row.
+- **Today**: the day's product sales and the membership payments recorded that day (here
+  or on a person's page), newest first, with one total and how it was paid. A refund noted
+  that day is said beside the total and taken off nothing. A reader without
+  `billing.members` is sent no payment.
+- **A person's page** lists what they bought at the desk, with a button that opens Sell
+  with them already picked. Two records joined: the sales follow the kept one. A record
+  deleted for good leaves its sales as a walk-in's.
+- **After round one (2026-10-13).** Staff who only change prices are sent the products and
+  the tax: no sale, no buyer's or seller's name and no money. **One day's total is one
+  money:** a product priced before the gym changed its country is not sold until its price
+  is saved again (which puts it in the gym's money as it is now), and a sale or payment
+  taken in the old money stays in the list and is counted beside the total, never added to
+  it. **A membership sold here carries the price the button showed** (`priceMinor` on the
+  give): at any other price nothing is given, and the price list is read again. The page is
+  read again each time its tab is looked at, and a membership starts on the day the server
+  says it is at the press. The same press again is the same sale even after its buyer's
+  record was joined to another.
+- **Not built**: a sale of several different products at once; a refund of a product sale
+  on a later day; receipts (18g); discounts and promo codes (18b-ii); tax on memberships
+  (18b-iii); product sales in Reports' money figures (21b).
+
 ### 14.4 Pay by the gym's own link
 
 A gym pastes its own payment link for a membership type (any company: RULINGS
