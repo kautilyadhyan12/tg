@@ -7,7 +7,7 @@
 // through untouched.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ROLE_PRIVILEGES } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -121,9 +121,17 @@ const apiError = (status, error, message) => ({
 });
 const offline = () => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' });
 
+/** What follows the "?" in the address, for a test that waits until the page has changed it. */
+const Address = () => (
+  <span hidden data-testid="address">
+    {useLocation().search}
+  </span>
+);
+
 const drawStaff = (path = '/console/iron-house/members?view=staff') =>
   render(
     <MemoryRouter initialEntries={[path]}>
+      <Address />
       <Link to="/console/iron-palace/members?view=staff">jump</Link>
       <Routes>
         <Route path="/console/:orgSlug/members" element={<Members />} />
@@ -690,7 +698,10 @@ describe('what was found by the review', () => {
   it('"?open=invite" with no Staff tab in the address opens nothing, then or later', async () => {
     drawStaff('/console/iron-house/members?open=invite');
     const tab = await screen.findByRole('tab', { name: 'Staff' });
-    await new Promise((r) => setTimeout(r, 20));
+    // The page takes "open" out of the address once it has read it. A press before that
+    // would carry it to the Staff tab: sooner than a person can press, and not sooner
+    // than a test on a slow machine, which is why this waits on the address and not 20 ms.
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe(''));
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(tab);
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
