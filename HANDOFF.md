@@ -17,6 +17,22 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Real run in headless Edge**, 1366 x 700 and 390 x 844 (`apps/api/.cost/look-21d-i.mjs`, pictures in `C:/Projects-dhyan/ai-home-gym-look/2026-10-13-21d-i-4`; two of run 3 looked at): a gym made that day, Overview → Reports, the three choices, no number drawn; with history, each choice reads the figures worked out apart from the app (new 5 / 3 / 1, collected $135 / $90 / $45, visits 27 / 22 / 13), the address carries the choice, a fresh load keeps it, Back from Members returns to it; Show all weeks; the how line names the same days; a phone, each choice 44 px; a trainer with Reports alone picks a period and reads no amount. Problems listed: only Overview's older 410s. **Found by the walk, fixed:** a range that crosses New Year dropped its first year.
 - **To know:** the two old servers on 3001 and 5174 are the last terminal's and run the code before this job; this terminal could not stop them, and walked on 3011 and 5184 (its own, still running). **Kd's click-through needs 3001 and 5174 stopped and started again** (FOLDER.md has the two commands). Reports in the menu opens on twelve months again; the choice is not remembered between visits.
 - **Waits for:** Kd's click-through, round one (`reviews/21d-i-1-review.md`) and his **merge**. Not ticked: the tick rides the merge. **Next in Folder B after it:** 21d-ii.
+## 2026-10-13 · 32a (feature folder 2): a meal sent twice from the phone is saved once (branch `meal-saved-once`)
+
+- **Why this job:** item 31 (Today) waits for feature folder 1's items 10 to 12. Item 32 is split: 32a, its server part, and 32b, the Food screen.
+- **Built, no screen:** `POST /v1/nutrition/meals` takes the phone's own `id`. First time 201; the same id again 200 with the meal as it is now, even if the second body differs. Without an id every send is a new meal, as the web's is. **Risky**; built at Opus 5.5 medium (the `/model` line; xhigh was recommended and said).
+- **The rule:** an id that is somebody else's meal answers 404 and reads and changes nothing (`createMealOnce`, `modules/nutrition/repo.ts`).
+- **A photo meal:** its photo is taken inside the save, so a refused photo leaves no meal and the id can be used again. Sends of one id wait for each other; one photo under two ids is one meal and a 400.
+- **No database change, no new package.**
+- **Verified here** on `aihg_b`: `nutrition.once.routes.test.ts` 14 of 14 after the review's fixes, the photo kept in the real Redis; the four older food route files 96 of 96; shared 1,923 of 1,923; api and shared typecheck and lint clean (remembering runs).
+- **Deliberate breaks of the rule, each red on the first test, then put back:** the meal under the id read without its owner (200 for 404) · a meal under the id written over (201 for 404) · somebody else's id saved as a new meal (201 for 404).
+- **Cost:** one person's own rows; with an id, one more single-row read and one lock per save (not timed). Nothing reads a list of people.
+- **Also:** the USDA food list is loaded into `aihg_b` (13,225 foods, 31,169 measures, counted).
+- **For 32b and item 35:** a meal removed on the phone before its save was answered must send the save, then the removal, in that order; a late save after a removal would bring the meal back. A weigh-in (`POST /v1/nutrition/body-measurements`) and a saved dish are still saved once per send: item 35 and 32b make them once-only before their screens.
+- **Round one:** nothing Critical or High, eight Lows, all fixed: somebody refused for another's id while Redis blinks keeps their photo · an id is kept in small letters · a Redis that stops answering is given up on after 5 seconds (`createIoRedis`, for every use of it) · the wait for a save under way has its own test · the test file keeps sign-in's counts in memory, so it runs any number of times.
+- **The re-check closed the round** (`reviews/32a-4-verdict.md`): all eight closed, nothing broken by a fix. **Merged** 2026-10-13, pull request #238, on Kd's "merge when green", GitHub green on `54b229b`. **Next:** item 31 and 32b wait for feature folder 1's items 10 to 12; item 36's plan builder (6a) and item 34's server parts need no phone.
+
+
 
 ## 2026-10-12 · 18b-i (Folder A, the borrowed laptop): the Sell page (branch `sell-screen`)
 

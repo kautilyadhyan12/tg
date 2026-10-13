@@ -47,6 +47,7 @@ return 0`;
 export function createIoRedis(url: string): RedisLike {
   const client = new Redis(url, {
     maxRetriesPerRequest: 1, // fail fast; policy lives in the callers
+    commandTimeout: 5_000, // a Redis that stops answering is "down", never a wait without end
     enableOfflineQueue: false,
     lazyConnect: false,
   });
