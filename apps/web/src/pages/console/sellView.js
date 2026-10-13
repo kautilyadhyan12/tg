@@ -154,7 +154,7 @@ export function takingsNotes(page) {
   if (totals.refundedMinor > 0) notes.push(`Refunds noted today: ${money(totals.refundedMinor)}. They are not taken off the total above.`);
   if (totals.otherCurrency > 0) {
     notes.push(
-      `${count(totals.otherCurrency, 'sale or payment today was', 'sales or payments today were')} taken in another currency, before your country was changed. ${totals.otherCurrency === 1 ? 'It is' : 'They are'} listed below and not added to the total above.`,
+      `${count(totals.otherCurrency, 'sale or payment today was', 'sales or payments today were')} taken in another currency. ${totals.otherCurrency === 1 ? 'It is' : 'They are'} listed below and not added to the total above.`,
     );
   }
   const hidden = page.salesNotShown + page.paymentsNotShown;

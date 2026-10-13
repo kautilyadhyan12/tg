@@ -177,10 +177,10 @@ describe('today', () => {
     expect(takingsNotes(page({ salesNotShown: 1 }))).toEqual(['The list shows the newest. 1 earlier one is not listed.']);
     // What was taken in another money is said, never added in.
     expect(takingsNotes(page({ totals: totals({ otherCurrency: 1 }) }))).toEqual([
-      '1 sale or payment today was taken in another currency, before your country was changed. It is listed below and not added to the total above.',
+      '1 sale or payment today was taken in another currency. It is listed below and not added to the total above.',
     ]);
     expect(takingsNotes(page({ totals: totals({ otherCurrency: 4 }) }))).toEqual([
-      '4 sales or payments today were taken in another currency, before your country was changed. They are listed below and not added to the total above.',
+      '4 sales or payments today were taken in another currency. They are listed below and not added to the total above.',
     ]);
   });
   it('product sales and membership payments are one list, newest first, on the gym’s own clock', () => {

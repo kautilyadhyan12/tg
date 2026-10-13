@@ -268,7 +268,7 @@ describe('today', () => {
     open();
     await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row');
     expect(within(today()).getByTestId('takings-line').textContent).toBe('Nothing taken yet today.');
-    expect(within(today()).getByText('1 sale or payment today was taken in another currency, before your country was changed. It is listed below and not added to the total above.')).toBeTruthy();
+    expect(within(today()).getByText('1 sale or payment today was taken in another currency. It is listed below and not added to the total above.')).toBeTruthy();
     // The product still priced in the old money cannot be sold, and its row says what to do.
     pick('Product', 'p-water');
     expect(takeButton().disabled).toBe(true);
