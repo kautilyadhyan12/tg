@@ -5,6 +5,19 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
 
+## 2026-10-13 · Four old tests that failed GitHub, fixed (feature folder 2, branch `flaky-tests`, pull request #235)
+
+- **Why:** GitHub went red five times on 12 and 13 October on five old tests, never on the job under test (30b three times; `master` after 30a twice). Kd: *"fix this damn github issue"*. Its own branch and pull request, so 30b merged as reviewed.
+- **`classAttendance.routes.test.ts`:** the file is anchored to the real clock and its gyms were in London. Run between 20:15 and 21:00 there, a class three hours on ends past midnight, and "at the gym that day, after the class" is the next day. The gyms now stand in whichever of Tokyo, Lagos and Phoenix has its morning now (`ZONE`). The "staff move a class" test, skipped two hours a night for the same reason, always runs.
+- **`auth.signupBurst.test.ts`:** its cleanup has 60 seconds; it had the default 10.
+- **`ActiveWorkout.jsx`:** the set-complete flash's 800 ms timer is kept and cancelled when the page closes. Its test failed first.
+- **`membersStaff.render.test.jsx`:** the `?open=invite` test waits until the page has taken `open` out of the address (an `Address` probe in `drawStaff`), not 20 ms.
+- **Proved here:** gyms forced into a zone where it was 20:37, red exactly as on GitHub (`left` 1 for 2, `noShows` 3 for 2), as fixed 14 of 14 · the Staff tab pressed with no wait, red 3 of 3 with GitHub's Invite staff box, as fixed 94 of 94 three times · the workout page's file 45 of 45 · api typecheck and lint clean; the three web files hold the lint problems they hold on `master` (13, 0, 0).
+- **Not what I first thought:** two more evening failures I expected in the class file did not happen when forced (21:33 and 23:35): the rule counts a visit in the twelve hours before a class as that day's.
+- **Still open** (ROADMAP Stage 1 item 10): `memberList.leak.test.ts` answered 200 for 409 once on GitHub; 3 of 3 green here; cause not found.
+- **Sized by the terminal:** the smallest job, no review. Two of the files are web files, taken here on Kd's word though this folder builds no web job; no open web branch touches them.
+- **Next:** item 31 waits for feature folder 1's items 10 to 12; item 32's server parts and item 36's plan builder (6a) need no phone.
+
 ## 2026-10-13 · 30b (feature folder 2): the app's starter goals (branch `starter-goals`)
 
 - **Built, no screen:** on the first read of `GET /v1/goals` after setup is finished the app adds its own goals, marked `setBy: "app"`: training days a week, active minutes a week (days × session length), within calories, protein, weight. Pure rule: `starterGoals` (`modules/goals/starter.ts`). **Risky**; built at Opus 5.5 high (the record), xhigh was recommended and said.
