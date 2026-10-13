@@ -303,7 +303,7 @@ structural rule comes first where one exists (a plain heading beats a qualified 
 and the word list is the backstop, never the mechanism.
 
 **Dependencies.** A new dependency needs Kd's yes in the plan, with the reason. Taken
-carefully (Kd, RULINGS 2026-10-12): the package list is worked out refusing anything
+carefully (Kd, 2026-10-12, `rulings/`): the package list is worked out refusing anything
 published in the last 14 days (`corepack pnpm@10.34.5 install --lockfile-only
 --ignore-scripts --config.minimum-release-age=20160
 --config.manage-package-manager-versions=false`, then the usual `corepack pnpm install
