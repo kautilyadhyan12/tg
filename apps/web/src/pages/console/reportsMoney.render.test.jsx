@@ -229,6 +229,13 @@ describe('the money figures', () => {
     expect(again.getByRole('link', { name: 'See who' }).getAttribute('href')).toBe('/console/iron-house/members?show=payment-due');
   });
 
+  it('with money in another currency left out, the list-only sentence does not say the app holds no amount', async () => {
+    svc.money.mockResolvedValue(money({ otherCurrency: true, owed: { currentMinor: 0, currentPeople: 0, listPeople: 1, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 } }));
+    open();
+    const due = within(await screen.findByTestId('tile-due'));
+    expect(due.getByText('1 member is marked Payment due on your member list, with no amount counted here.')).toBeTruthy();
+  });
+
   it('three months that gave back as much as they took say so, not "not enough data"', async () => {
     svc.money.mockResolvedValue(
       money({

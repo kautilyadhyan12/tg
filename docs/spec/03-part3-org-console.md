@@ -4943,7 +4943,8 @@ membership** (in use now, monthly recurring, collected this month and in the las
 each download as a CSV of amounts, never a name. **A gym with no figures** reads why and
 has a button: nothing given here yet (Set up memberships), or no payment recorded here
 (Open Members; "If you take payments in other software, your money figures are there"),
-never a zero. Money is counted in the currency of the gym's newest payment (a membership
+never a zero. Money is counted in the currency of the gym's country once a payment stands
+in it, and until then in the currency of its newest payment (a membership
 keeps the currency it was given in, so a gym whose country changed still reads the money it
 recorded); payments and bills in another currency are left out and the page says so.
 `GET /v1/orgs/:gymId/reports/money`, from the same allowance as the other two reads; the

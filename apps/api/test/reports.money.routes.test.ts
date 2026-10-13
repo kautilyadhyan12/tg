@@ -508,6 +508,11 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
         owed: { minor: 0, people: 0 },
       });
       expect(after.types.map((t) => t.name)).toEqual(["Dollar Monthly"]);
+
+      // Somebody still paying in pounds does not turn the page back: the country's own
+      // currency stands once a payment is in it.
+      await give(gym, owner, "Cy Pounds Later", gold, "2026-10-19", true);
+      expect(figures(await read(gym, owner))).toEqual(after);
     },
     TEST_TIMEOUT_MS,
   );

@@ -77,12 +77,13 @@ export function moneyTiles(report, words, orgSlug) {
   const owedMinor = report.owed.minor + report.owed.pastMinor;
   // People the Members page also shows as Payment due, with no amount in the app.
   const listOnly = report.owed.listOnlyPeople;
+  const noAmount = report.otherCurrency ? 'with no amount counted here.' : 'with no amount in the app.';
   const listOnlyText =
     listOnly === 0
       ? null
       : owedMinor === 0
-        ? `${listOnly === 1 ? `1 ${words.person} is` : `${count(listOnly)} ${words.people} are`} marked Payment due on your ${words.person} list, with no amount in the app.`
-        : `${listOnly === 1 ? '1 more is' : `${count(listOnly)} more are`} marked Payment due on your ${words.person} list, with no amount in the app.`;
+        ? `${listOnly === 1 ? `1 ${words.person} is` : `${count(listOnly)} ${words.people} are`} marked Payment due on your ${words.person} list, ${noAmount}`
+        : `${listOnly === 1 ? '1 more is' : `${count(listOnly)} more are`} marked Payment due on your ${words.person} list, ${noAmount}`;
   const overdueText = report.owed.overdueMinor === 0 ? 'none of it overdue' : report.owed.overdueMinor >= owedMinor ? 'all of it overdue' : `${moneyText(report.owed.overdueMinor, cur)} of it overdue`;
   const base = `/console/${orgSlug}`;
   const overdueWhen =

@@ -267,29 +267,29 @@ export async function readClassCounts(
 const moneyGymSchema = z.object({
   country: z.string().nullable(),
   bills_overdue_days: count,
-  paid_currency: z.string().nullable(),
+  paid_currencies: z.array(z.string()),
   held_currency: z.string().nullable(),
 });
 
-/** How many days after its due date an unpaid bill reads Overdue, and the currency the
- *  gym's notebook is in: its newest standing payment's, else its newest membership's. A
- *  membership keeps the currency it was given in, so after a gym's country changes its
- *  money is still there to count; `country` is for a gym with neither. */
+/** How many days after its due date an unpaid bill reads Overdue, and the currencies the
+ *  gym's notebook holds: those of its standing payments, the newest first, and its newest
+ *  membership's. A membership keeps the currency it was given in, so after a gym's
+ *  country changes its money is still there to count. */
 export async function readMoneyGym(
   sql: Sql | TransactionSql,
   gymId: string,
-): Promise<{ country: string | null; overdueAfterDays: number; notebookCurrency: string | null }> {
+): Promise<{ country: string | null; overdueAfterDays: number; paidCurrencies: string[]; heldCurrency: string | null }> {
   const rows = await sql<Record<string, unknown>[]>`
     SELECT g.country, g.bills_overdue_days,
-           (SELECT p.currency FROM gym_member_payments p
-            WHERE p.gym_id = g.id AND p.undone_at IS NULL
-            ORDER BY p.paid_on DESC, p.seq DESC LIMIT 1) AS paid_currency,
+           (SELECT COALESCE(array_agg(x.currency ORDER BY x.newest DESC), '{}')
+            FROM (SELECT p.currency, max(p.seq) AS newest FROM gym_member_payments p
+                  WHERE p.gym_id = g.id AND p.undone_at IS NULL GROUP BY p.currency) x) AS paid_currencies,
            (SELECT h.currency FROM gym_held_memberships h
             WHERE h.gym_id = g.id
             ORDER BY h.created_at DESC, h.id LIMIT 1) AS held_currency
     FROM gyms g WHERE g.id = ${gymId}`;
   const row = moneyGymSchema.parse(rows[0]);
-  return { country: row.country, overdueAfterDays: row.bills_overdue_days, notebookCurrency: row.paid_currency ?? row.held_currency };
+  return { country: row.country, overdueAfterDays: row.bills_overdue_days, paidCurrencies: row.paid_currencies, heldCurrency: row.held_currency };
 }
 
 /** Sums of money are whole minor units; added up they can pass an int4. */

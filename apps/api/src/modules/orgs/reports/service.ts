@@ -105,7 +105,10 @@ export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { ti
   const today = dayInTz(deps.now(), org.timezone);
   const facts = await deps.sql.begin("isolation level repeatable read read only", async (tx) => {
     const gym = await repo.readMoneyGym(tx, gymId);
-    const currency = gym.notebookCurrency ?? memberCurrencyForCountry(gym.country);
+    // The country's own currency once a payment stands in it, so the page does not turn
+    // with whoever paid last; before that, the money the gym has.
+    const home = memberCurrencyForCountry(gym.country);
+    const currency = home !== null && gym.paidCurrencies.includes(home) ? home : (gym.paidCurrencies[0] ?? gym.heldCurrency ?? home);
     if (currency === null) return null;
     const money = await repo.readMoney(tx, gymId, today, currency, gym.overdueAfterDays);
     if (!money.any_membership || money.first_paid_on === null) return { gym, currency, money, held: [], members: null, listPeople: 0 };
