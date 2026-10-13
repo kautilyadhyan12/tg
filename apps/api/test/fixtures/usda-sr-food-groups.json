@@ -29,6 +29,10 @@
    "Candies, milk chocolate",
    "Sweets"
   ],
+  "167717": [
+   "Yeast extract spread",
+   "Vegetables and Vegetable Products"
+  ],
   "167742": [
    "Mollusks, scallop, (bay and sea), cooked, steamed",
    "Finfish and Shellfish Products"
@@ -64,6 +68,10 @@
   "168013": [
    "Bread, multi-grain (includes whole-grain)",
    "Baked Products"
+  ],
+  "168062": [
+   "Restaurant, Italian, chicken parmesan without pasta",
+   "Restaurant Foods"
   ],
   "168153": [
    "Kiwifruit, green, raw",
@@ -797,6 +805,10 @@
    "Fish, cod, Atlantic, cooked, dry heat",
    "Finfish and Shellfish Products"
   ],
+  "171967": [
+   "Crustaceans, crab, blue, crab cakes, home recipe",
+   "Finfish and Shellfish Products"
+  ],
   "171975": [
    "Mollusks, clam, mixed species, cooked, moist heat",
    "Finfish and Shellfish Products"
@@ -1093,6 +1105,10 @@
    "Ham, sliced, regular (approximately 11% fat)",
    "Sausages and Luncheon Meats"
   ],
+  "173877": [
+   "Kielbasa, fully cooked, grilled",
+   "Sausages and Luncheon Meats"
+  ],
   "173904": [
    "Cereals, oats, regular and quick, not fortified, dry",
    "Breakfast Cereals"
@@ -1185,6 +1201,10 @@
    "Hummus, commercial",
    "Legumes and Legume Products"
   ],
+  "174373": [
+   "Lamb, leg, whole (shank and sirloin), separable lean and fat, trimmed to 1/8\" fat, choice, cooked, roasted",
+   "Lamb, Veal, and Game Products"
+  ],
   "174422": [
    "Game meat, bison, ground, cooked, pan-broiled",
    "Lamb, Veal, and Game Products"
@@ -1263,6 +1283,10 @@
   ],
   "175011": [
    "Pie, apple, commercially prepared, enriched flour",
+   "Baked Products"
+  ],
+  "175032": [
+   "Strudel, apple",
    "Baked Products"
   ],
   "175036": [

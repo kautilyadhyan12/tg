@@ -47,7 +47,7 @@ const nameWords = (name: string): string[] =>
 
 describe("the curated food list", () => {
   it("gives every food a table entry, a diet, whole kcal per 100 g and a serving", () => {
-    expect(CURATED_FOODS).toHaveLength(409);
+    expect(CURATED_FOODS).toHaveLength(510);
     for (const f of CURATED_FOODS) {
       expect(f.citation, f.name).toMatch(/^(?:usda-sr:\d{6}|usda-fndds:\d{7}|uk-cofid:\d{2}-\d{3,4})$/);
       expect(dietSchema.options, f.name).toContain(f.diet);
@@ -188,6 +188,9 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     "prunes", "cranberries_dried_sweetened", "brazil_nuts", "macadamia_nuts", "pine_nuts",
     "chestnuts_roasted", "sesame_seeds", "hemp_seeds", "tahini_sesame_paste", "avocado_oil", "canola_oil",
     "sesame_oil", "balsamic_vinegar", "apple_cider_vinegar", "coconut_milk_canned",
+    // 34c-ii
+    "grits_cooked", "gazpacho", "ratatouille", "polenta_cooked", "tabbouleh", "baba_ganoush_eggplant_dip",
+    "yeast_extract_spread",
   ],
   vegetarian: [
     "greek_yogurt_plain", "cottage_cheese_low_fat", "milk_whole", "milk_skim", "cheddar_cheese",
@@ -203,6 +206,10 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     "biryani_vegetable", "paratha",
     // 34c-i
     "greek_yogurt_plain_whole_milk", "ricotta_cheese", "blue_cheese", "gouda_cheese", "buttermilk", "goat_milk",
+    // 34c-ii
+    "american_biscuit_baked", "minestrone", "pumpkin_soup", "bruschetta", "tzatziki", "baklava", "cheese_fondue",
+    "apple_strudel", "bubble_and_squeak", "cauliflower_cheese", "crumpet_toasted", "shortbread",
+    "oat_flapjack_british_oat_bar",
   ],
   vegetarian_eggs: [
     "egg_whole_large", "egg_white", "egg_hard_boiled", "eggs_scrambled", "egg_fried", "egg_poached",
@@ -210,6 +217,12 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     "mayonnaise", "ranch_dressing", "fried_rice", "veggie_burger", "potato_salad", "chocolate_chip_cookie",
     "ice_cream_vanilla", "donut_glazed", "croissant", "brownie", "cheesecake", "blueberry_muffin",
     "chocolate_cake", "banana_bread", "naan", "spring_roll",
+    // 34c-ii
+    "cornbread", "egg_salad", "macaroni_salad", "eggplant_parmesan", "hush_puppies", "pumpkin_pie", "pecan_pie",
+    "key_lime_pie", "quiche_cheese", "crepe_plain", "gnocchi_potato", "ravioli_cheese_with_tomato_sauce",
+    "tortellini_cheese_with_tomato_sauce", "tiramisu", "spanakopita_spinach_pie", "spanish_omelette", "pierogi",
+    "potato_pancake_latke", "challah", "scone", "irish_soda_bread", "hot_cross_bun", "mince_pie",
+    "pavlova_with_fruit_and_cream",
   ],
   non_vegetarian: [
     "chicken_breast_cooked", "chicken_thigh_cooked", "ground_beef_85_cooked", "ground_beef_90_cooked",
@@ -232,6 +245,17 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     "duck_roasted", "venison_cooked", "bison_ground_cooked", "beef_liver_cooked", "chicken_liver_cooked",
     "halibut_cooked", "pollock_cooked", "catfish_cooked", "snapper_cooked", "swordfish_cooked", "mahi_mahi_cooked",
     "anchovies_canned_in_oil", "oysters_raw", "clams_cooked",
+    // 34c-ii
+    "clam_chowder_new_england", "biscuits_and_gravy", "gumbo_with_rice", "jambalaya", "meatloaf", "pot_roast_beef",
+    "chicken_pot_pie", "corn_dog", "sloppy_joe", "reuben_sandwich", "club_sandwich", "blt_sandwich",
+    "cobb_salad_no_dressing", "enchilada_chicken", "enchilada_cheese", "tamale_pork", "fajita_chicken",
+    "empanada_beef", "eggs_benedict", "chicken_salad", "chicken_and_dumplings", "chicken_parmesan", "crab_cake",
+    "paella_seafood", "quiche_lorraine", "bouillabaisse", "french_onion_soup", "risotto_plain", "moussaka",
+    "stuffed_grape_leaves_dolma", "taramasalata", "shish_kebab_lamb", "coq_au_vin", "goulash", "beef_stroganoff",
+    "borscht", "stuffed_cabbage_rolls", "stuffed_pepper_rice_and_meat", "swedish_meatballs", "kielbasa",
+    "matzo_ball_soup", "cornish_pasty", "steak_and_kidney_pie", "pork_pie", "sausage_roll", "scotch_egg",
+    "toad_in_the_hole", "yorkshire_pudding", "lancashire_hotpot", "haggis", "black_pudding_fried", "kippers_grilled",
+    "kedgeree", "scampi_breaded", "welsh_rarebit", "trifle", "roast_lamb_leg",
   ],
 };
 
@@ -320,6 +344,72 @@ describe("the list as it grew (ROADMAP 34c-i)", () => {
       expect(findCurated(canonical)?.canonical, canonical).toBe(canonical);
       expect(curatedUsdaFdcId(canonical), canonical).not.toBe(fdcId);
     }
+  });
+});
+
+describe("the list as it grew (ROADMAP 34c-ii): the dishes of the US, Europe, Britain, Australia and New Zealand", () => {
+  it("still answers a name with the food it answered before", () => {
+    const cases: [string, string][] = [
+      ["cottage pie", "shepherd_s_pie"], ["porridge", "oatmeal_cooked"], ["doner kebab", "gyro"], ["pumpkin", "pumpkin_boiled"],
+      ["omelette", "omelette_plain"], ["pancakes", "pancakes"], ["cauliflower", "cauliflower_cooked"], ["sausage", "pork_sausage_cooked"],
+      ["lamb", "lamb_cooked"], ["meatballs", "meatballs_in_sauce"], ["parmesan", "parmesan_cheese"], ["mince", "ground_beef_85_cooked"],
+      ["tortilla", "tortilla_flour"], ["apple pie", "apple_pie"], ["potato salad", "potato_salad"], ["egg", "egg_whole_large"],
+      ["kidney beans", "kidney_beans_cooked"], ["hot dog", "hot_dog"],
+    ];
+    for (const [name, canonical] of cases) expect(findCurated(name)?.canonical ?? null, name).toBe(canonical);
+  });
+
+  it("answers the new dishes by the names people use", () => {
+    const cases: [string, string][] = [
+      ["clam chowder", "clam_chowder_new_england"], ["meat loaf", "meatloaf"], ["corn bread", "cornbread"], ["BLT", "blt_sandwich"],
+      ["reuben", "reuben_sandwich"], ["sloppy joes", "sloppy_joe"], ["grits", "grits_cooked"], ["tamales", "tamale_pork"],
+      ["enchiladas", "enchilada_chicken"], ["cheese enchilada", "enchilada_cheese"], ["pasta salad", "macaroni_salad"],
+      ["chicken parm", "chicken_parmesan"], ["aubergine parmigiana", "eggplant_parmesan"], ["crab cakes", "crab_cake"],
+      ["paella", "paella_seafood"], ["quiche", "quiche_cheese"], ["quiche lorraine", "quiche_lorraine"], ["crêpes", "crepe_plain"],
+      ["onion soup", "french_onion_soup"], ["polenta", "polenta_cooked"], ["dolmades", "stuffed_grape_leaves_dolma"],
+      ["baba ghanoush", "baba_ganoush_eggplant_dip"], ["tabouli", "tabbouleh"], ["shish kabob", "shish_kebab_lamb"],
+      ["spanish omelet", "spanish_omelette"], ["stroganoff", "beef_stroganoff"], ["pierogies", "pierogi"], ["latkes", "potato_pancake_latke"],
+      ["cabbage rolls", "stuffed_cabbage_rolls"], ["stuffed peppers", "stuffed_pepper_rice_and_meat"], ["strudel", "apple_strudel"],
+      ["cornish pasty", "cornish_pasty"], ["steak and kidney pie", "steak_and_kidney_pie"], ["yorkshire puddings", "yorkshire_pudding"],
+      ["toad in the hole", "toad_in_the_hole"], ["kippers", "kippers_grilled"], ["welsh rabbit", "welsh_rarebit"], ["crumpets", "crumpet_toasted"],
+      ["soda bread", "irish_soda_bread"], ["hot cross buns", "hot_cross_bun"], ["mince pies", "mince_pie"], ["pavlova", "pavlova_with_fruit_and_cream"],
+      ["leg of lamb", "roast_lamb_leg"], ["Vegemite", "yeast_extract_spread"], ["marmite", "yeast_extract_spread"],
+      ["oat flapjack", "oat_flapjack_british_oat_bar"], ["american biscuit", "american_biscuit_baked"],
+    ];
+    for (const [name, canonical] of cases) expect(findCurated(name)?.canonical ?? null, name).toBe(canonical);
+  });
+
+  it("names no food for a word the markets use for different foods", () => {
+    // A biscuit is a soft bread in the US and a cookie in the UK; a flapjack a pancake in the US and an oat bar in the UK;
+    // a kebab is a skewer or a doner; a pasty, a pudding and a hot pot are many dishes.
+    for (const name of ["biscuit", "biscuits", "flapjack", "flapjacks", "kebab", "pasty", "pudding", "hot pot", "pie", "soup", "roast"]) expect(findCurated(name), name).toBeNull();
+  });
+
+  it("labels a dish by the animal ingredient its table does not show", () => {
+    // USDA's recipe for each holds no meat; the usual dish is made with meat stock.
+    for (const canonical of ["french_onion_soup", "borscht", "matzo_ball_soup"]) expect(food(canonical).diet, canonical).toBe("non_vegetarian");
+    // CoFID lists no ingredients: stock in a risotto, beef dripping under a Yorkshire pudding, anchovy in a rarebit's Worcestershire sauce.
+    for (const canonical of ["risotto_plain", "yorkshire_pudding", "welsh_rarebit"]) expect(food(canonical).diet, canonical).toBe("non_vegetarian");
+    // Gelatine in a trifle's jelly, and lard in the refried beans USDA fills a cheese enchilada with.
+    expect(food("trifle").diet).toBe("non_vegetarian");
+    expect(food("enchilada_cheese").diet).toBe("non_vegetarian");
+    // Egg in fresh pasta, gnocchi, a pierogi's dough and a key lime pie's filling; milk in bread and in a minestrone's cheese.
+    for (const canonical of ["gnocchi_potato", "ravioli_cheese_with_tomato_sauce", "tortellini_cheese_with_tomato_sauce", "pierogi", "key_lime_pie", "hush_puppies"]) {
+      expect(food(canonical).diet, canonical).toBe("vegetarian_eggs");
+    }
+    for (const canonical of ["minestrone", "bruschetta", "bubble_and_squeak", "crumpet_toasted"]) expect(food(canonical).diet, canonical).toBe("vegetarian");
+  });
+
+  it("serves a CoFID dish by the gram, and a USDA dish by a measure its own entry gives", () => {
+    for (const f of CURATED_FOODS.slice(409)) {
+      if (f.citation.startsWith("uk-cofid:")) expect([f.serving, f.unit], f.name).toEqual([100, "g"]);
+    }
+    expect(food("clam_chowder_new_england")).toMatchObject({ kcal: 93, serving: 255, unit: "cup", citation: "usda-fndds:2707139" });
+    expect(food("meatloaf")).toMatchObject({ kcal: 199, serving: 108, unit: "slice", citation: "usda-fndds:2706499" });
+    expect(food("cornish_pasty")).toMatchObject({ kcal: 278, proteinG: 7, citation: "uk-cofid:19-466" });
+    // USDA first: a scone and a trifle are USDA's, though CoFID has both.
+    expect(food("scone").citation).toBe("usda-fndds:2707808");
+    expect(food("trifle").citation).toBe("usda-fndds:2705701");
   });
 });
 

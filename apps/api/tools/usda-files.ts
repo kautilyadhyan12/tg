@@ -246,6 +246,49 @@ export function usdaFoodGroups(archive: Buffer): Map<number, string> {
   return groups;
 }
 
+/** One ingredient of a survey food: USDA's description of it, and its SR Legacy
+ *  food group, "" where the ingredient's code is not in that release. */
+export type UsdaIngredient = readonly [description: string, group: string];
+
+/** What USDA makes each survey food from (the survey release's input_food.csv),
+ *  by FDC id. An ingredient that is itself a survey food is replaced by its own
+ *  ingredients, so a pie's crust is read down to its flour and fat. */
+export function usdaIngredients(fnddsArchive: Buffer, srLegacyArchive: Buffer): Map<number, UsdaIngredient[]> {
+  const read = (archive: Buffer, suffix: string): string => {
+    for (const [, data] of unzip(archive, (name) => name.endsWith(suffix))) return data.toString("utf8");
+    return fail(`no ${suffix} in the archive`);
+  };
+  const srGroups = usdaFoodGroups(srLegacyArchive);
+  const groupByCode = new Map<string, string>();
+  for (const [fdcId, code] of csvRows(read(srLegacyArchive, "/sr_legacy_food.csv"))) {
+    const group = srGroups.get(Number(fdcId));
+    if (code !== undefined && group !== undefined) groupByCode.set(code, group);
+  }
+  const surveyByCode = new Map<string, number>();
+  for (const [fdcId, code] of csvRows(read(fnddsArchive, "/survey_fndds_food.csv"))) {
+    if (code !== undefined && Number.isInteger(Number(fdcId))) surveyByCode.set(code, Number(fdcId));
+  }
+  const direct = new Map<number, { code: string; description: string }[]>();
+  for (const [, fdcId, , , , code, description] of csvRows(read(fnddsArchive, "/input_food.csv"))) {
+    if (!Number.isInteger(Number(fdcId)) || code === undefined || description === undefined) continue;
+    const list = direct.get(Number(fdcId)) ?? [];
+    list.push({ code, description: description.trim() });
+    direct.set(Number(fdcId), list);
+  }
+  const flatten = (fdcId: number, above: ReadonlySet<number>): UsdaIngredient[] =>
+    (direct.get(fdcId) ?? []).flatMap(({ code, description }): UsdaIngredient[] => {
+      const survey = surveyByCode.get(code);
+      if (survey !== undefined && !above.has(survey) && direct.has(survey)) return flatten(survey, new Set([...above, survey]));
+      return [[description, groupByCode.get(code) ?? ""]];
+    });
+  const all = new Map<number, UsdaIngredient[]>();
+  for (const fdcId of direct.keys()) {
+    const unique = new Map(flatten(fdcId, new Set([fdcId])).map((ingredient) => [ingredient.join("	"), ingredient]));
+    all.set(fdcId, [...unique.values()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)));
+  }
+  return all;
+}
+
 /** The three CSVs of a release, already unzipped. Split out from `usdaTable` so
  *  the tests can feed it a few lines of each rather than a 40 MB archive. */
 export interface UsdaCsv {

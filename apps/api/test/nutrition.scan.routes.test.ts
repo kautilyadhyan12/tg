@@ -873,7 +873,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       ],
       // Names no shorter name of ours stands for.
       "review-names-kept-whole.json": [
-        ["Chicken salad spread", "usda", "~150 g", 150, 300], // chicken is a food: never shortened to a salad
+        ["Chicken salad", "curated", "~150 g", 150, 300], // ours since 34c-ii, from the same USDA entry ("Chicken salad spread"): never shortened to a salad
         ["Cherry tomatoes", "estimate", "~80 g", 80, 14], // a cherry is a food
         ["Lemon water", "estimate", "~250 g", 250, 5], // a lemon is a food: never our water
         ["Light coconut milk", "estimate", "~120 g", 120, 37], // coconut is a food: never whole milk
