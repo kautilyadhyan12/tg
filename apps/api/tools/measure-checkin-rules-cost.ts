@@ -1,7 +1,9 @@
 // What "Who can check in" costs (ROADMAP 16d; CLAUDE.md §4 "Cost at full size"). One gym
 // of 2,000 people on its list (--people= for another size) beside 19 gyms of 200, the
 // launch shape. In each gym seven in ten hold a paid Gold Monthly, one in ten holds one
-// with a bill ten days overdue, one in ten a cancelled one, and one in ten nothing.
+// with a bill ten days overdue, one in ten a cancelled one, and one in ten nothing. Six in
+// ten are in the app, on their own record, and one more person in a hundred is in the app
+// on no record at all.
 //
 // For each thing the desk, staff and the owner do: a key tag read with the gym's choice
 // where it starts (nothing extra is read) and with both choices on, for somebody let in
@@ -51,6 +53,7 @@ async function cleanup(): Promise<void> {
   await sql`DELETE FROM audit_log WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_attendance WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_checkin_devices WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_members WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_bills WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${gyms})`;
@@ -64,7 +67,7 @@ async function cleanup(): Promise<void> {
 /** A table filled seconds ago has no statistics, and a plan made without them is not the
  *  one a gym meets (`measure-bookings-cost.ts`). */
 async function analyse(): Promise<void> {
-  for (const table of ["users", "gyms", "gym_staff", "gym_member_list_entries", "gym_held_memberships", "gym_member_bills", "gym_membership_types", "gym_attendance"]) {
+  for (const table of ["users", "gyms", "gym_staff", "gym_members", "gym_member_list_entries", "gym_held_memberships", "gym_member_bills", "gym_membership_types", "gym_attendance"]) {
     await sql`VACUUM ANALYZE ${sql(table)}`;
   }
 }
@@ -107,6 +110,19 @@ async function makeGym(size: number, tag: string): Promise<Gym> {
     };
   });
   for (let i = 0; i < entries.length; i += 1000) await sql`INSERT INTO gym_member_list_entries ${sql(entries.slice(i, i + 1000))}`;
+  // Six in ten are in the app on their own record's address; one in a hundred more is in
+  // the app on no record.
+  const inApp = entries.filter((_, i) => i % 10 < 6).map((e) => ({ id: randomUUID(), email: e.email, display_name: e.full_name, entry: e.id }));
+  const offList = Array.from({ length: Math.floor(size / 100) }, (_, i) => {
+    const userId = randomUUID();
+    return { id: userId, email: `${PREFIX}a-${String(i)}-${userId}@example.com`, display_name: `Apponly${String(i)} Cost`, entry: null };
+  });
+  const accounts = [...inApp, ...offList];
+  for (let i = 0; i < accounts.length; i += 1000) {
+    const part = accounts.slice(i, i + 1000);
+    await sql`INSERT INTO users ${sql(part.map((a) => ({ id: a.id, email: a.email, display_name: a.display_name })))}`;
+    await sql`INSERT INTO gym_members ${sql(part.map((a) => ({ gym_id: id, user_id: a.id, entry_id: a.entry })))}`;
+  }
   await sql`
     INSERT INTO gym_held_memberships
       (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, cancelled_on, paid_periods, renews)
@@ -228,6 +244,7 @@ const expectStopped = (size: number): number => Math.floor(size / 10) * 3;
 await measure(`the gym of ${String(PEOPLE)}`, async () => {
   const got = await previewRules(deps(), big.owner, big.id, STRICT, yes);
   if (got?.stopped !== expectStopped(PEOPLE)) throw new Error(`the box counted ${String(got?.stopped)}`);
+  if (got.notListed !== Math.floor(PEOPLE / 100)) throw new Error(`the box counted ${String(got.notListed)} people on no record`);
 });
 await measure(`the gym of ${String(PEOPLE)}, its 5 staff at one moment`, async () => {
   await Promise.all(Array.from({ length: 5 }, () => previewRules(deps(), big.owner, big.id, STRICT, yes)));
