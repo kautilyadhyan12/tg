@@ -1965,7 +1965,9 @@ they never saw, or put a signature on a relative when a family shares one email 
   words or stopped since, nothing is written and the person is told (`409 waiver_changed`,
   `409 waiver_not_in_use`) and shown the words as they are now.
 - **A changed waiver asks everybody again.** The earlier signatures stay with the words
-  they were given for. Before Save the box says how many people will be asked.
+  they were given for. Before Save the box says how many people will be asked ("again"
+  only where somebody has signed the words in use). Somebody who signed these words, was
+  removed and joins again keeps that one signature.
 - **Join** (10.2): where the gym has a waiver, the Join screen shows it in full under "What
   {gym} can see", with a box for the person's full name and a tick; Join waits for both.
   `POST …/invitations/:id/accept` takes `{ waiver: { id, name } }` and writes the signature
@@ -1978,9 +1980,17 @@ they never saw, or put a signature on a relative when a family shares one email 
 - **Whose signature it is.** A signature is the app account's. A person's page lists it
   under each person in the app that the page already lists ("Waiver signed on 13 October
   2026 as Luis Reyes" or "Waiver not signed"), by the rule that says whose record a person
-  is (§18.4), so a family on one email shows the name that was typed on each of its records
-  and no record is said to have signed for itself. A record with nobody in the app reads
-  "Not signed. {name} signs your waiver when they join in the app."
+  is (§18.4). The state is a coloured label: green "Waiver signed", amber "Waiver not
+  signed". **On an email a family shares, no record is ever said to have signed:** the
+  label is plain, "Signed as Luis Reyes", followed by "This email address is shared, so we
+  can't tell which of them signed." (round one, High-1). A record with nobody in the app
+  reads "Not signed. {name} signs your waiver when they join in the app." The day is the
+  gym's own calendar day, on the person's page and on My Gyms.
+- **What a name is:** two letters or digits at least, counted as people count them (one
+  letter outside the basic plane is one). Controls, the zero-width space, direction marks
+  and overrides are dropped, so a name is never blank on a page or drawn backwards; the
+  two zero-width joiners stay, since some names are spelled with them. The gym's words
+  lose only what a database refuses (controls other than a tab and a new line).
 - **Stop using this waiver** asks first, naming who changes and what is kept. Stopped,
   nobody is asked and nothing can be signed; the words and signatures are kept, and saving
   the same words starts it again with them.
