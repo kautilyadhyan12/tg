@@ -42,16 +42,23 @@ const T0 = Date.now();
 /** Every class here is 45 minutes long. */
 const LENGTH = 45 * MIN;
 
-/** The minute of the day in the gyms' zone. */
-const londonMinute = (ms: number): number => {
+/** The minute of the day in a zone. */
+const minuteIn = (zone: string, ms: number): number => {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(ms)).map((p) => [p.type, p.value]),
+    new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(ms)).map((p) => [p.type, p.value]),
   );
   return Number(parts["hour"]) * 60 + Number(parts["minute"]);
 };
-/** A class half an hour from now can be moved 100 minutes later and still be today: not
- *  in the two hours before midnight in London, when the test that moves one is skipped. */
-const ROOM_TO_MOVE = londonMinute(T0 + 30 * MIN) + 100 < 1440;
+/** The gyms' zone. The classes stand around the real now, and a class, its check-ins and
+ *  "that day" must fall on the days a test means whatever hour the file is run at. So it
+ *  is the one of three zones, eight hours apart and never changing their clocks, where it
+ *  is now between two and ten in the morning: midnight is fourteen hours off or more. */
+const morningZone = ["Asia/Tokyo", "Africa/Lagos", "America/Phoenix"].find((zone) => {
+  const minute = minuteIn(zone, T0);
+  return minute >= 120 && minute < 600;
+});
+if (morningZone === undefined) throw new Error("no zone has its morning now");
+const ZONE: string = morningZone;
 
 let ipCounter = 0;
 const nextIp = () => `10.91.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
@@ -124,7 +131,7 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
   }
   const makeGym = async (name: string): Promise<Gym> => {
     const owner = await signedIn(`${name} Owner`);
-    const res = await inject("POST", "/v1/orgs", owner.cookies, { trainsHere: false, name, city: "Leeds", country: "GB", timezone: "Europe/London" });
+    const res = await inject("POST", "/v1/orgs", owner.cookies, { trainsHere: false, name, city: "Leeds", country: "GB", timezone: ZONE });
     expect(res.statusCode, res.body).toBe(201);
     const id = (JSON.parse(res.body) as { org: { id: string } }).org.id;
     await sql`
@@ -168,7 +175,7 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
       INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, coach_user_id, status)
       SELECT ${gym.id}, ${type.id}, l::date, (EXTRACT(HOUR FROM l) * 60 + EXTRACT(MINUTE FROM l))::int, ${at}, 45, ${over.places ?? null},
              ${over.coach ?? null}, ${over.cancelled === true ? "cancelled" : "scheduled"}
-      FROM (SELECT ${at}::timestamptz AT TIME ZONE 'Europe/London' AS l) x
+      FROM (SELECT ${at}::timestamptz AT TIME ZONE ${ZONE}::text AS l) x
       RETURNING id`;
     if (row === undefined) throw new Error("no class");
     return row.id;
@@ -221,7 +228,7 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
         (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days,
          classes_left, starts_on, status, renews)
       VALUES (${gym.id}, ${who.entryId}, ${typeId}, gen_random_uuid(), 'pack', 9000, 'GBP', NULL, NULL, 10, 60, 10,
-              (now() AT TIME ZONE 'Europe/London')::date - 1, 'active', false)
+              (now() AT TIME ZONE ${ZONE}::text)::date - 1, 'active', false)
       RETURNING id`;
     if (row === undefined) throw new Error("no pack");
     return row.id;
@@ -269,7 +276,7 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     await sql`
       INSERT INTO gym_attendance (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
       VALUES (${gym.id}, ${who.userId}, ${who.entryId}, ${method === "staff" ? gym.owner.userId : who.userId},
-              (${new Date(at)}::timestamptz AT TIME ZONE 'Europe/London')::date, ${method}, 'hours_unset', 'hours_unset', ${new Date(at)})`;
+              (${new Date(at)}::timestamptz AT TIME ZONE ${ZONE}::text)::date, ${method}, 'hours_unset', 'hours_unset', ${new Date(at)})`;
   };
 
   /** The id of this person's one check-in at the gym that staff or a desk made. */
@@ -534,7 +541,7 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     await sql`
       INSERT INTO gym_attendance (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
       VALUES (${gym.id}, ${addedLater.userId}, ${addedLater.entryId}, ${gym.owner.userId},
-              (${new Date(T0)}::timestamptz AT TIME ZONE 'Europe/London')::date, 'staff', 'added_later', 'added_later', ${new Date(T0)})`;
+              (${new Date(T0)}::timestamptz AT TIME ZONE ${ZONE}::text)::date, 'staff', 'added_later', 'added_later', ${new Date(T0)})`;
     // Somebody else checked in, so the gym was checking people in.
     await visitAt(gym, checker, T0);
 
@@ -662,7 +669,7 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     await sql`
       INSERT INTO gym_attendance (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
       VALUES (${gym.id}, ${twice.userId}, ${twice.entryId}, ${gym.owner.userId},
-              (now() AT TIME ZONE 'Europe/London')::date, 'staff', 'added_later', 'added_later', now())`;
+              (now() AT TIME ZONE ${ZONE}::text)::date, 'staff', 'added_later', 'added_later', now())`;
 
     const gone = await removeVisit(gym, await checkInOf(gym, wrong));
     expect(gone.statusCode, gone.body).toBe(200);
@@ -692,7 +699,7 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     clock = T0;
   });
 
-  it.skipIf(!ROOM_TO_MOVE)("staff move a class after a check-in: still within the hour the mark stays, more than an hour away the place is booked again", async () => {
+  it("staff move a class after a check-in: still within the hour the mark stays, more than an hour away the place is booked again", async () => {
     clock = T0;
     const gym = await makeGym("Move Gym");
     const start = T0 + 30 * MIN;
@@ -703,7 +710,7 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     await book(gym, booked, spin);
     expect(await staffCheckIn(gym, early)).toBe("checked_in");
     expect(await statusOf(spin, early)).toBe("attended");
-    const minute = londonMinute(start);
+    const minute = minuteIn(ZONE, start);
     const move = (by: number) =>
       inject("PUT", `/v1/orgs/${gym.id}/class-sessions/${spin}`, gym.owner.cookies, { scope: "this", startMinute: minute + by, minutes: 45, places: null, coachUserId: null });
 
