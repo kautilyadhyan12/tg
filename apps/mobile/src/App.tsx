@@ -51,13 +51,14 @@ interface AppProps {
 }
 
 export function App({ extra, ask = fetch }: AppProps) {
-  const [fontsReady] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+  // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
+  const [fontsReady, fontsFailed] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
   const copy = useMemo(() => ({ extra: extra === undefined ? readAppExtra() : extra, ask }), [extra, ask]);
 
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="light-content" backgroundColor={colours.page} />
-      {fontsReady ? (
+      <StatusBar barStyle="light-content" />
+      {fontsReady || fontsFailed !== null ? (
         <CopyContext.Provider value={copy}>
           <NavigationContainer theme={theme}>
             <Tabs.Navigator

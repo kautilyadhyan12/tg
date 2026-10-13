@@ -24,7 +24,12 @@ describe("the look is drawn once", () => {
     const written = files
       .filter((path) => short(path) !== "src/look/colours.ts")
       .flatMap((path) =>
-        [...read(path).matchAll(/#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/g)].map((hit) => `${short(path)}: ${hit[0]}`),
+        // A hex, rgb or hsl colour anywhere, or a colour's name ("white") given to a colour style.
+        [
+          ...read(path).matchAll(
+            /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(|\w*[cC]olor\w*\s*[:=]\s*["'`](?!transparent["'`])[a-zA-Z]+["'`]/g,
+          ),
+        ].map((hit) => `${short(path)}: ${hit[0]}`),
       );
     expect(written).toEqual([]);
   });
@@ -42,7 +47,8 @@ describe("the look is drawn once", () => {
     });
   });
 
-  it("no words are under 11, and nothing pressed is under 44", () => {
+  it("no size written in the look is under 11, and its two press sizes are 48 and 44", () => {
+    // What is DRAWN is measured in test/screens/app.test.tsx; this reads the sizes as written.
     const fontSizes = files.flatMap((path) =>
       [...read(path).matchAll(/fontSize: (\d+)/g)].map((hit) => Number(hit[1])),
     );
