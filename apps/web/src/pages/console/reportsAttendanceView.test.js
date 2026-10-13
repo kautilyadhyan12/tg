@@ -243,6 +243,9 @@ describe('the tables and their CSVs', () => {
     expect(rows.at(-1)).toEqual({ key: '2026-08-01', week: 'Sat 1 Aug to Sun 2 Aug 2026', visits: '8', people: '8' });
     expect(rows.at(-2).week).toBe('3 Aug 2026');
     expect(weeksCsv(r).split('\r\n').slice(1, 3)).toEqual(['"2026-08-01 (part week, to 2026-08-02)","8","8"', '"2026-08-03","0","0"']);
+    // Four weeks on 26 January 2027 begin on Wednesday 30 December 2026: that week ends in the new year.
+    const newYear = weekRows(report({ today: '2027-01-26', period: '4w', firstVisitOn: '2025-01-06', days: [], weeks: [] }));
+    expect(newYear.at(-1).week).toBe('Wed 30 Dec 2026 to Sun 3 Jan 2027');
     // A gym's own first week begins on its Monday and is said as any week.
     expect(weekRows(report()).at(-1).week).toBe('7 Sep 2026');
   });

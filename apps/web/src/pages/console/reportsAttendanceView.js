@@ -193,6 +193,8 @@ export const WEEK_ROWS_SHOWN = 12;
 /** The last day of a week that does not begin on a Monday: the week a period begins in is
  *  counted from the period's first day, and is said as the days it holds. Null for a whole week. */
 const partWeekEnd = (weekStart) => (weekdayOf(weekStart) === 1 ? null : addDays(weekStart, 7 - weekdayOf(weekStart)));
+/** "Sat 1 Aug to Sun 2 Aug 2026"; across New Year each day says its own year. */
+const partWeekText = (from, to) => `${dayNamed(from)}${from.slice(0, 4) === to.slice(0, 4) ? '' : ` ${from.slice(0, 4)}`} to ${dayNamed(to)} ${to.slice(0, 4)}`;
 
 /** The week-by-week table's rows, newest first. */
 export function weekRows(report) {
@@ -202,7 +204,7 @@ export function weekRows(report) {
       i === 0
         ? `${dayShort(w.weekStart)} (so far)`
         : partWeekEnd(w.weekStart) !== null
-          ? `${dayNamed(w.weekStart)} to ${dayNamed(partWeekEnd(w.weekStart))} ${w.weekStart.slice(0, 4)}`
+          ? partWeekText(w.weekStart, partWeekEnd(w.weekStart))
           : dayText(w.weekStart),
     visits: count(w.visits),
     people: count(w.people),
