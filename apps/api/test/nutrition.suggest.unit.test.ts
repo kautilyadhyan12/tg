@@ -10,7 +10,8 @@ import { z } from "zod";
 import { DIET_LADDER, dietAllows, mealIdeaSchema, type Diet, type MealIdea } from "@app/shared";
 import { CURATED_FOODS, type CuratedFood } from "../src/modules/nutrition/foods.js";
 import {
-  IDEA_TOLERANCE, LEAST_MEAL_KCAL, MOST_IDEA_GRAMS, MOST_MEALS, MOST_MEAL_KCAL, SUGGEST_POOLS, kindsFor, suggestMeals, type SuggestInput,
+  IDEA_TOLERANCE, LEAST_MEAL_KCAL, MOST_IDEA_GRAMS, MOST_MEALS, MOST_MEAL_KCAL, SUGGEST_POOLS, kindsFor, mealSizes, suggestAfterWorkout, suggestMeals,
+  type AfterWorkoutInput, type DayNumbers, type SuggestInput,
 } from "../src/modules/nutrition/suggest.js";
 
 const fixture = <T extends z.ZodType>(file: string, entry: T): Record<string, z.infer<T>> =>
@@ -92,7 +93,43 @@ function* sweep(diet: Diet): Generator<SuggestInput> {
   }
 }
 
+const dayOf = (over: Partial<DayNumbers> = {}): DayNumbers => ({ mealsPerDay: 3, kcalTarget: 2000, kcalEaten: 0, mealsLogged: 0, ...over });
+const after = (over: Partial<AfterWorkoutInput> = {}): AfterWorkoutInput => ({ seed: "person-1|workout-1", diet: "non_vegetarian", kcalBurned: 300, day: dayOf(), ...over });
+
+/** Every case of the workout sweep: 60 workouts, 6 burns, a day with no calorie
+ *  number and 6 day sizes at 4 points in the day. */
+function* workoutSweep(diet: Diet): Generator<AfterWorkoutInput> {
+  for (let w = 0; w < 60; w++) {
+    for (const kcalBurned of [null, 0, 150, 201, 401, 900]) {
+      const seed = `person-${String(w % 7)}|workout-${String(w)}`;
+      yield after({ seed, diet, kcalBurned, day: null });
+      for (const kcalTarget of [1200, 1500, 1800, 2200, 2800, 3500]) {
+        for (const eaten of [0, 0.3, 0.6, 0.9]) {
+          const mealsPerDay = [2, 3, 4, 6][w % 4] ?? 3;
+          yield after({ seed, diet, kcalBurned, day: dayOf({ mealsPerDay, kcalTarget, kcalEaten: Math.round(kcalTarget * eaten), mealsLogged: Math.round(mealsPerDay * eaten) }) });
+        }
+      }
+    }
+  }
+}
+
 describe("THE WORST THING: nobody is offered a food their diet does not eat", () => {
+  it.each(DIETS.filter((d) => d !== "non_vegetarian"))("a %s person: no idea after any workout holds a food their diet rules out", (diet) => {
+    const offered = new Set<string>();
+    let ideas = 0;
+    for (const one of workoutSweep(diet)) {
+      for (const { idea } of suggestAfterWorkout(one)) {
+        ideas++;
+        for (const item of idea.items) offered.add(item.canonical);
+      }
+    }
+    expect(ideas).toBeGreaterThan(5000);
+    const wrong = [...offered].map(foodOf)
+      .filter((f) => !dietAllows(diet, f.diet) || !dietAllows(diet, tableLowest(f)))
+      .map((f) => `${f.name} (${f.diet}; its table: ${tableLowest(f)})`);
+    expect(wrong).toEqual([]);
+  });
+
   it("reads an animal food in a table's words, the ones no suggested food has among them", () => {
     expect(lowestByWords(["Soup, ham and bean"], ["Soups, Sauces, and Gravies"])).toBe("non_vegetarian");
     expect(lowestByWords(["Bread, naan", "Egg, whole, raw"], ["Baked Products", "Baked Products"])).toBe("vegetarian_eggs");
@@ -284,6 +321,78 @@ describe("how many meals, and how big: every class of day", () => {
             expect(item.servings, item.name).toBeLessThanOrEqual(food.unit === "g" ? 400 / food.serving : 3);
             if (food.unit === "cup") expect(item.servings).toBeLessThanOrEqual(1.5);
           }
+        }
+      }
+    }
+  });
+});
+
+describe("after a workout (34d-ii)", () => {
+  const sizes = (over: Partial<AfterWorkoutInput>): (readonly [string, number])[] => suggestAfterWorkout(after(over)).map((i) => [i.when, i.kcalTarget] as const);
+
+  const cases: readonly (readonly [name: string, over: Partial<AfterWorkoutInput>, wanted: readonly (readonly [string, number])[]])[] = [
+    ["a light workout, nothing eaten: something small, then a usual meal", { kcalBurned: 150 }, [["soon", 150], ["meal", 667]]],
+    ["no calories on the workout reads as a light one", { kcalBurned: null }, [["soon", 150], ["meal", 667]]],
+    ["exactly 200 burned is still a light one", { kcalBurned: 200 }, [["soon", 150], ["meal", 667]]],
+    ["over 200 burned: a bigger small one", { kcalBurned: 201 }, [["soon", 200], ["meal", 667]]],
+    ["exactly 400 burned is still the middle", { kcalBurned: 400 }, [["soon", 200], ["meal", 667]]],
+    ["over 400 burned: the biggest small one", { kcalBurned: 401 }, [["soon", 250], ["meal", 667]]],
+    ["two meals logged: the meal is what the day's ideas would size it to", { kcalBurned: 401, day: dayOf({ kcalEaten: 1300, mealsLogged: 2 }) }, [["soon", 250], ["meal", 450]]],
+    ["little left: the meal is what is left after the small one", { kcalBurned: 401, day: dayOf({ kcalEaten: 1500, mealsLogged: 3 }) }, [["soon", 250], ["meal", 250]]],
+    ["less left than a small one and a meal: the small one only", { kcalBurned: 401, day: dayOf({ kcalEaten: 1700, mealsLogged: 3 }) }, [["soon", 250]]],
+    ["less left than the small one: it is sized to what is left", { kcalBurned: 401, day: dayOf({ kcalEaten: 1820, mealsLogged: 3 }) }, [["soon", 180]]],
+    ["exactly the least a meal holds is left", { day: dayOf({ kcalEaten: 2000 - LEAST_MEAL_KCAL }) }, [["soon", LEAST_MEAL_KCAL]]],
+    ["one calorie under the least: nothing", { day: dayOf({ kcalEaten: 2000 - LEAST_MEAL_KCAL + 1 }) }, []],
+    ["the day's calories eaten: nothing", { day: dayOf({ kcalEaten: 2000, mealsLogged: 3 }) }, []],
+    ["over the day's calories: nothing", { day: dayOf({ kcalEaten: 2600, mealsLogged: 3 }) }, []],
+    ["a big day: the meal is never past the most a meal holds", { day: dayOf({ kcalTarget: 3500, mealsPerDay: 2 }) }, [["soon", 200], ["meal", MOST_MEAL_KCAL]]],
+    ["no calorie number yet, a light workout", { kcalBurned: 100, day: null }, [["soon", 150], ["meal", 300]]],
+    ["no calorie number yet, a middle workout", { kcalBurned: 300, day: null }, [["soon", 200], ["meal", 450]]],
+    ["no calorie number yet, a hard workout", { kcalBurned: 600, day: null }, [["soon", 250], ["meal", 600]]],
+  ];
+  it.each(cases)("%s", (_name, over, wanted) => {
+    expect(sizes(over)).toEqual(wanted);
+  });
+
+  it("the same workout gets the same ideas, and another workout other ones", () => {
+    const first = suggestAfterWorkout(after());
+    expect(suggestAfterWorkout(after())).toEqual(first);
+    expect(suggestAfterWorkout(after({ seed: "person-1|workout-2" }))).not.toEqual(first);
+    const meals = new Set<string>();
+    for (let w = 0; w < 30; w++) meals.add(suggestAfterWorkout(after({ seed: `person-1|workout-${String(w)}` })).map((i) => i.idea.items.map((x) => x.name).join("+")).join(" / "));
+    expect(meals.size).toBeGreaterThan(25);
+  });
+
+  it("the meal is a plate after some workouts and a dish after others", () => {
+    const kinds = new Set<string>();
+    for (let w = 0; w < 30; w++) kinds.add(suggestAfterWorkout(after({ seed: `person-1|workout-${String(w)}` }))[1]?.idea.kind ?? "none");
+    expect([...kinds].sort()).toEqual(["dish", "plate"]);
+  });
+
+  it.each(DIETS)("a %s person: every workout with a meal's calories left has its ideas, each near its calories, never sized past what is left", (diet) => {
+    const pool = new Set(Object.values(SUGGEST_POOLS).flat().map((f) => f.canonical));
+    for (const one of workoutSweep(diet)) {
+      const ideas = suggestAfterWorkout(one);
+      const left = one.day === null ? null : mealSizes(one.day).kcalLeft;
+      if (left !== null && left < LEAST_MEAL_KCAL) {
+        expect(ideas, JSON.stringify(one)).toEqual([]);
+        continue;
+      }
+      expect(ideas[0]?.when, JSON.stringify(one)).toBe("soon");
+      expect(ideas[0]?.idea.kind).toBe("light");
+      // The meal is there whenever a meal's calories are left after the small one.
+      expect(ideas.length, JSON.stringify(one)).toBe(left === null || left - (ideas[0]?.kcalTarget ?? 0) >= LEAST_MEAL_KCAL ? 2 : 1);
+      if (left !== null) expect(ideas.reduce((n, i) => n + i.kcalTarget, 0)).toBeLessThanOrEqual(left);
+      const keys = ideas.map((i) => i.idea.items.map((x) => `${x.canonical}:${String(x.grams)}`).sort().join("|"));
+      expect(new Set(keys).size).toBe(keys.length);
+      for (const { kcalTarget, idea } of ideas) {
+        expect(kcalTarget).toBeLessThanOrEqual(MOST_MEAL_KCAL);
+        expect(mealIdeaSchema.safeParse(idea).success).toBe(true);
+        expect(Math.abs(idea.totals.kcal - kcalTarget)).toBeLessThanOrEqual(kcalTarget * IDEA_TOLERANCE);
+        expect(idea.items.reduce((n, i) => n + i.grams, 0)).toBeLessThanOrEqual(MOST_IDEA_GRAMS);
+        for (const item of idea.items) {
+          expect(pool.has(item.canonical), item.name).toBe(true);
+          expect(item.kcal).toBe(Math.round((foodOf(item.canonical).kcal * item.grams) / 100));
         }
       }
     }

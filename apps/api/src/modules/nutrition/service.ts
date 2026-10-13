@@ -33,7 +33,7 @@ import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
 import { dayInTz, safeTimeZone } from "../gamification/streak.js";
 import { getUserFoodAnswers, getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
-import { LEAST_MEAL_KCAL, suggestMeals } from "./suggest.js";
+import { LEAST_MEAL_KCAL, suggestAfterWorkout, suggestMeals, type AfterWorkoutIdea, type DayNumbers } from "./suggest.js";
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
@@ -616,6 +616,41 @@ export async function getMealIdeas(deps: Pick<NutritionDeps, "sql">, userId: str
     status: "ok", day, kcalLeft, meals, caution: FOOD_ALLERGY_CAUTION,
     labelCaution: diet === "non_vegetarian" ? null : DIET_LABEL_CAUTION,
   });
+}
+
+/** What to eat after one of the person's own workouts (ROADMAP 34d-ii), from the
+ *  same rule and the same foods as the day's ideas. A workout of today is sized
+ *  to what today has left; an earlier day's to a usual meal.
+ *
+ *  No diet answer reads as the strictest diet, so every idea is one anybody can
+ *  eat (RULINGS 2026-07-15: a guessed "non-vegetarian" would put meat in front
+ *  of a vegetarian). No meals answer reads as three: it sizes a meal and picks
+ *  no food. No calorie number yet sizes the ideas by what the workout burned. */
+export async function getAfterWorkoutIdeas(
+  deps: Pick<NutritionDeps, "sql">,
+  userId: string,
+  workout: { id: string; startedAt: Date; kcalBurned: number | null },
+  now: Date = new Date(),
+): Promise<{ ideas: AfterWorkoutIdea[]; labelCaution: typeof DIET_LABEL_CAUTION | null }> {
+  const [answers, { targets }, ctx] = await Promise.all([
+    getUserFoodAnswers(deps.sql, userId),
+    getTargets(deps, userId),
+    getUserSyncContext(deps.sql, userId),
+  ]);
+  const diet = answers.diet ?? "vegan";
+  const timeZone = safeTimeZone(ctx.timezone);
+  const today = dayInTz(now, timeZone);
+  let day: DayNumbers | null = null;
+  if (targets !== null) {
+    const eaten = dayInTz(workout.startedAt, timeZone) === today
+      ? await repo.dayEaten(deps.sql, userId, timeZone, today, LEAST_MEAL_KCAL)
+      : { kcal: 0, meals: 0 };
+    day = { mealsPerDay: answers.mealsPerDay ?? 3, kcalTarget: targets.kcal, kcalEaten: eaten.kcal, mealsLogged: eaten.meals };
+  }
+  return {
+    ideas: suggestAfterWorkout({ seed: `${userId}|${workout.id}`, diet, kcalBurned: workout.kcalBurned, day }),
+    labelCaution: diet === "non_vegetarian" ? null : DIET_LABEL_CAUTION,
+  };
 }
 
 /** The rings' answer for a plan the caller has already read (goals read it once for the
