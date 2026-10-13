@@ -973,24 +973,27 @@ export async function usdaPortionsFor(sql: SqlOrTx, fdcIds: readonly number[]): 
   return byFood;
 }
 
-/** The nine further figures per 100 g of these USDA entries, by FDC id (ROADMAP
+/** The ten further figures per 100 g of these USDA entries, by FDC id (ROADMAP
  *  34a), in USDA's own units, which are the units they are kept in. NULL is "the
- *  release does not measure this" and stays null. An id the table does not hold
+ *  release does not measure this" and stays null; unsaturated fat is mono and
+ *  poly together, and not known where either is. An id the table does not hold
  *  has no entry. */
 export async function usdaMoreFor(sql: SqlOrTx, fdcIds: readonly number[]): Promise<Map<number, MoreNutrients>> {
   const ids = [...new Set(fdcIds)].filter((id) => Number.isInteger(id) && id >= 1 && id <= MAX_FDC_ID);
   const byFood = new Map<number, MoreNutrients>();
   if (ids.length === 0) return byFood;
   const rows = await sql<{
-    fdc_id: number; fiber_g: number | null; sugars_g: number | null; sat_fat_g: number | null; sodium_mg: number | null;
+    fdc_id: number; fiber_g: number | null; sugars_g: number | null; sat_fat_g: number | null; mono_fat_g: number | null; poly_fat_g: number | null; sodium_mg: number | null;
     potassium_mg: number | null; calcium_mg: number | null; iron_mg: number | null; magnesium_mg: number | null; vitamin_d_ug: number | null;
   }[]>`
-    SELECT fdc_id, fiber_g, sugars_g, sat_fat_g, sodium_mg, potassium_mg, calcium_mg, iron_mg, magnesium_mg, vitamin_d_ug
+    SELECT fdc_id, fiber_g, sugars_g, sat_fat_g, mono_fat_g, poly_fat_g, sodium_mg, potassium_mg, calcium_mg, iron_mg, magnesium_mg, vitamin_d_ug
     FROM usda_foods
     WHERE fdc_id = ANY(${ids}::int[])`;
   for (const r of rows) {
     byFood.set(r.fdc_id, {
-      fiberG: r.fiber_g, sugarsG: r.sugars_g, satFatG: r.sat_fat_g, sodiumMg: r.sodium_mg, potassiumMg: r.potassium_mg,
+      fiberG: r.fiber_g, sugarsG: r.sugars_g, satFatG: r.sat_fat_g,
+      unsatFatG: r.mono_fat_g === null || r.poly_fat_g === null ? null : r.mono_fat_g + r.poly_fat_g,
+      sodiumMg: r.sodium_mg, potassiumMg: r.potassium_mg,
       calciumMg: r.calcium_mg, ironMg: r.iron_mg, magnesiumMg: r.magnesium_mg, vitaminDUg: r.vitamin_d_ug,
     });
   }

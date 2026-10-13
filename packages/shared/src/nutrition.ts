@@ -32,29 +32,30 @@ export const per100gSchema = z.object({
 }).strict();
 export type Per100g = z.infer<typeof per100gSchema>;
 
-/** The nine figures a food carries beside its energy and macros (ROADMAP 34a;
- *  RULINGS 2026-09-16): fibre, total sugars and saturated fat in grams, sodium,
- *  potassium, calcium, iron and magnesium in milligrams, vitamin D in micrograms.
+/** The ten figures a food carries beside its energy and macros (ROADMAP 34a;
+ *  RULINGS 2026-09-16): fibre, total sugars, saturated fat and unsaturated fat
+ *  (mono and poly together) in grams, sodium, potassium, calcium, iron and
+ *  magnesium in milligrams, vitamin D in micrograms.
  *  They come from the food table or a product's label, never from the scanner.
  *  NULL is "not known", never a zero: a table that does not measure a figure, a
  *  label that does not print it, a scan's estimate, a person's own numbers. */
-export const MORE_NUTRIENTS = ["fiberG", "sugarsG", "satFatG", "sodiumMg", "potassiumMg", "calciumMg", "ironMg", "magnesiumMg", "vitaminDUg"] as const;
+export const MORE_NUTRIENTS = ["fiberG", "sugarsG", "satFatG", "unsatFatG", "sodiumMg", "potassiumMg", "calciumMg", "ironMg", "magnesiumMg", "vitaminDUg"] as const;
 export type MoreNutrient = (typeof MORE_NUTRIENTS)[number];
 const figure = z.number().nonnegative().nullable();
 export const moreNutrientsSchema = z.object({
-  fiberG: figure, sugarsG: figure, satFatG: figure, sodiumMg: figure, potassiumMg: figure,
+  fiberG: figure, sugarsG: figure, satFatG: figure, unsatFatG: figure, sodiumMg: figure, potassiumMg: figure,
   calciumMg: figure, ironMg: figure, magnesiumMg: figure, vitaminDUg: figure,
 }).strict();
 export type MoreNutrients = z.infer<typeof moreNutrientsSchema>;
 /** Every figure not known. */
 export const MORE_NOT_KNOWN: MoreNutrients = {
-  fiberG: null, sugarsG: null, satFatG: null, sodiumMg: null, potassiumMg: null,
+  fiberG: null, sugarsG: null, satFatG: null, unsatFatG: null, sodiumMg: null, potassiumMg: null,
   calciumMg: null, ironMg: null, magnesiumMg: null, vitaminDUg: null,
 };
 /** The decimals each figure is kept to: whole milligrams for the four counted in
  *  hundreds, one decimal for the rest. */
 const MORE_DECIMALS: Record<MoreNutrient, 0 | 1> = {
-  fiberG: 1, sugarsG: 1, satFatG: 1, sodiumMg: 0, potassiumMg: 0, calciumMg: 0, ironMg: 1, magnesiumMg: 0, vitaminDUg: 1,
+  fiberG: 1, sugarsG: 1, satFatG: 1, unsatFatG: 1, sodiumMg: 0, potassiumMg: 0, calciumMg: 0, ironMg: 1, magnesiumMg: 0, vitaminDUg: 1,
 };
 const roundMore = (key: MoreNutrient, v: number): number => {
   const by = 10 ** MORE_DECIMALS[key];
@@ -74,7 +75,7 @@ export function moreForGrams(per100g: MoreNutrients, grams: number): MoreNutrien
 export const moreTotalSchema = z.object({ amount: z.number().nonnegative(), notKnown: z.number().int().nonnegative() }).strict();
 export type MoreTotal = z.infer<typeof moreTotalSchema>;
 export type MoreTotals = Record<MoreNutrient, MoreTotal>;
-/** A meal's or a day's nine figures from its foods (a day is all its meals' foods).
+/** A meal's or a day's ten figures from its foods (a day is all its meals' foods).
  *  A food saved before these were kept has none, and counts as not known. */
 export function sumMoreNutrients(items: readonly { more?: MoreNutrients | undefined }[]): MoreTotals {
   const total = (key: MoreNutrient): MoreTotal => {
@@ -88,7 +89,7 @@ export function sumMoreNutrients(items: readonly { more?: MoreNutrients | undefi
     return { amount: roundMore(key, amount), notKnown };
   };
   return {
-    fiberG: total("fiberG"), sugarsG: total("sugarsG"), satFatG: total("satFatG"), sodiumMg: total("sodiumMg"),
+    fiberG: total("fiberG"), sugarsG: total("sugarsG"), satFatG: total("satFatG"), unsatFatG: total("unsatFatG"), sodiumMg: total("sodiumMg"),
     potassiumMg: total("potassiumMg"), calciumMg: total("calciumMg"), ironMg: total("ironMg"),
     magnesiumMg: total("magnesiumMg"), vitaminDUg: total("vitaminDUg"),
   };
@@ -118,7 +119,7 @@ export const mealItemSchema = z.object({
    *  so going back to it needs no scan (7a-iv-g). */
   scanEstimate: per100gSchema.optional(),
   measure: loggedMeasureSchema.optional(),
-  /** The nine further figures for this item's grams (ROADMAP 34a). An item saved
+  /** The ten further figures for this item's grams (ROADMAP 34a). An item saved
    *  before they were kept has none: all not known. */
   more: moreNutrientsSchema.optional(),
 });

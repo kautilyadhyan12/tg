@@ -359,11 +359,11 @@ async function withMeasures(deps: NutritionDeps, foods: readonly FoodReference[]
   });
 }
 
-/** Each food with its nine further figures per 100 g (ROADMAP 34a), with ONE read
+/** Each food with its ten further figures per 100 g (ROADMAP 34a), with ONE read
  *  of the USDA entries they share. A USDA table food reads its own row; one of our
- *  list reads the entry it cites, its fibre the list's own where the list has one;
- *  a CoFID food has its fibre and nothing else; a packaged product keeps what its
- *  label gave; a scan's estimate has none. Whatever a kept draft says a table
+ *  list reads the entry it cites; a CoFID food, which cites none, has the list's
+ *  fibre and nothing else; a packaged product keeps what Open Food Facts sent of
+ *  its label; a scan's estimate has none. Whatever a kept draft says a table
  *  food's figures are is never used: they are read here. */
 async function withMore<T extends FoodReference>(deps: Pick<NutritionDeps, "sql">, foods: readonly T[]): Promise<T[]> {
   const entries = foods.map(measuresEntry);
@@ -373,7 +373,7 @@ async function withMore<T extends FoodReference>(deps: Pick<NutritionDeps, "sql"
     if (food.source === "estimate") return { ...food, more: MORE_NOT_KNOWN };
     const entry = entries[at] ?? null;
     const row = (entry === null ? undefined : rows.get(entry)) ?? MORE_NOT_KNOWN;
-    return { ...food, more: { ...row, fiberG: food.source === "curated" ? (food.fiberG ?? row.fiberG) : row.fiberG } };
+    return { ...food, more: { ...row, fiberG: row.fiberG ?? (food.source === "curated" ? food.fiberG : null) } };
   });
 }
 

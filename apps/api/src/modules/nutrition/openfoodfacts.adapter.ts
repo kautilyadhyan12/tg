@@ -3,8 +3,8 @@ import { z } from "zod";
 import { MAX_ITEM_GRAMS, type MoreNutrients, type NutritionSource } from "@app/shared";
 
 /** `fiberG` is null where a food's table or label has no figure. `more` is the
- *  nine further figures per 100 g (ROADMAP 34a): a packaged product carries its
- *  label's; a table food's are read when it is priced (`withMore`, service.ts). */
+ *  ten further figures per 100 g (ROADMAP 34a): a packaged product carries what
+ *  Open Food Facts sent of its label; a table food's are read when it is priced (`withMore`, service.ts). */
 export interface FoodReference { canonical: string; name: string; kcal: number; proteinG: number; carbsG: number; fatG: number; fiberG: number | null; serving: number; unit: string; source: NutritionSource; more?: MoreNutrients | undefined; }
 export interface FoodSearchProvider { search(query: string, limit: number): Promise<FoodReference[]>; }
 const productSchema = z.object({ code: z.union([z.string(), z.number()]).optional(), product_name: z.union([z.string(), z.array(z.string())]).optional(), generic_name: z.union([z.string(), z.array(z.string())]).optional(), brands: z.union([z.string(), z.array(z.string())]).optional(), serving_size: z.string().optional(), nutriments: z.record(z.unknown()).optional() }).passthrough();
@@ -13,22 +13,31 @@ const num = (v: unknown): number => typeof v === "number" && Number.isFinite(v) 
 /** A label's figure, or null where the label gives none: a missing figure is never a zero. */
 const given = (v: unknown): number | null => typeof v === "number" ? (Number.isFinite(v) ? v : null) : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null;
 /** The most 100 g of any food holds of each figure, in the unit it is kept in:
- *  the weight itself for the three in grams, and for the rest just above the
+ *  the weight itself for the four in grams, and for the rest just above the
  *  highest in the USDA table (measured 2026-10-13: sodium 38,758 mg, table salt;
  *  potassium 16,500; calcium 7,364; iron 123.6; magnesium 781; vitamin D 250 µg).
  *  Open Food Facts is typed in by volunteers, so a figure past these is a slip of
  *  the unit and reads as not known. A figure typed too LOW cannot be told. */
-const LABEL_MOST: Record<keyof MoreNutrients, number> = { fiberG: 100, sugarsG: 100, satFatG: 100, sodiumMg: 40_000, potassiumMg: 17_000, calciumMg: 7_500, ironMg: 125, magnesiumMg: 800, vitaminDUg: 250 };
+const LABEL_MOST: Record<keyof MoreNutrients, number> = { fiberG: 100, sugarsG: 100, satFatG: 100, unsatFatG: 100, sodiumMg: 40_000, potassiumMg: 17_000, calciumMg: 7_500, ironMg: 125, magnesiumMg: 800, vitaminDUg: 250 };
 /** Sodium is 1 part in 2.5 of salt by weight (EU Regulation 1169/2011, Annex I). */
 const SALT_PER_SODIUM = 2.5;
-/** A product's nine further figures per 100 g. Open Food Facts keeps every
+/** A product's ten further figures per 100 g. Open Food Facts keeps every
  *  `_100g` figure in GRAMS whatever unit the label prints, so sodium and the
  *  minerals are turned to milligrams and vitamin D to micrograms here, once. A
- *  label that gives salt and no sodium gives its sodium by the rule above. */
+ *  label that gives salt and no sodium gives its sodium by the rule above, and
+ *  unsaturated fat is known only where the label gives both kinds.
+ *
+ *  The search address the app asks first sends fibre, sugars, saturated fat, salt
+ *  and sodium and nothing else of the ten (36 of 36 products, 2026-10-13), so a
+ *  product found by search reads not known for the other six. The fallback
+ *  address and a product's own page send the rest, and they are read the same way. */
 export function labelMore(n: Record<string, unknown>): MoreNutrients {
   const salt = given(n["salt_100g"]);
+  const mono = given(n["monounsaturated-fat_100g"]);
+  const poly = given(n["polyunsaturated-fat_100g"]);
   const grams: MoreNutrients = {
     fiberG: given(n["fiber_100g"]), sugarsG: given(n["sugars_100g"]), satFatG: given(n["saturated-fat_100g"]),
+    unsatFatG: mono === null || poly === null ? null : mono + poly,
     sodiumMg: given(n["sodium_100g"]) ?? (salt === null ? null : salt / SALT_PER_SODIUM),
     potassiumMg: given(n["potassium_100g"]), calciumMg: given(n["calcium_100g"]), ironMg: given(n["iron_100g"]),
     magnesiumMg: given(n["magnesium_100g"]), vitaminDUg: given(n["vitamin-d_100g"]),
@@ -40,7 +49,7 @@ export function labelMore(n: Record<string, unknown>): MoreNutrients {
     return v >= 0 && v <= LABEL_MOST[key] ? Math.round(v * 1000) / 1000 : null;
   };
   return {
-    fiberG: kept("fiberG", 1), sugarsG: kept("sugarsG", 1), satFatG: kept("satFatG", 1),
+    fiberG: kept("fiberG", 1), sugarsG: kept("sugarsG", 1), satFatG: kept("satFatG", 1), unsatFatG: kept("unsatFatG", 1),
     sodiumMg: kept("sodiumMg", 1000), potassiumMg: kept("potassiumMg", 1000), calciumMg: kept("calciumMg", 1000),
     ironMg: kept("ironMg", 1000), magnesiumMg: kept("magnesiumMg", 1000), vitaminDUg: kept("vitaminDUg", 1_000_000),
   };

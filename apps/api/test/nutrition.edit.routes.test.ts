@@ -309,7 +309,7 @@ d("changing a food already logged (real Postgres)", () => {
     expect(halved.items[0]?.scanEstimate).toEqual(estimate);
     // Taken away: the scan's estimate at the amount it holds now.
     const back = await edit(row.id, [{ canonical: "est_zqxedit_fritter", grams: 100, from: 0, own: null }, { from: 1 }, { from: 2 }]);
-    // An item written before the nine further figures were kept has them, not known, once it is priced again.
+    // An item written before the ten further figures were kept has them, not known, once it is priced again.
     expect(back.items[0]).toEqual({ ...fritter, measure: undefined, more: MORE_NOT_KNOWN });
     expect(back.items[0]?.scanEstimate).toBeUndefined();
 
