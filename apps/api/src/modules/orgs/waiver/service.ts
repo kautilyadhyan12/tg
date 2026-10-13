@@ -99,6 +99,7 @@ export async function getMyWaiver(deps: WaiverDeps, userId: string, gymId: strin
   const signed = waiver === null ? undefined : (await repo.signaturesOf(deps.sql, gymId, waiver.id, [userId])).get(userId);
   return myWaiverResponseSchema.parse({
     gymName: org.name,
+    timezone: org.timezone,
     waiver: waiver === null ? null : toRead(waiver),
     signed: signed === undefined ? null : { name: signed.name, at: signed.at.toISOString() },
   });

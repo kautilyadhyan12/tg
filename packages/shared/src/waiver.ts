@@ -10,11 +10,25 @@ export const WAIVER_MAX_CHARS = 30_000;
 export const WAIVER_NAME_MIN_CHARS = 2;
 export const WAIVER_NAME_MAX_CHARS = 100;
 
-/** The gym's words as kept: line ends made one kind, and no space left at either end. */
-export const cleanWaiverText = (text: string): string => text.replace(/\r\n?/g, "\n").trim();
+/** Characters Postgres refuses or a screen cannot show: controls other than a new line and a tab. */
+const CONTROLS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu;
+/** In a name, what nobody can see and what turns its letters round: the soft hyphen, the
+ *  zero-width space, the direction marks, overrides and isolates, the word joiner and the
+ *  byte-order mark. The two zero-width joiners stay: some names are spelled with them. */
+const UNSEEN_IN_A_NAME = /[\u00AD\u200B\u200E\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/gu;
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/gu;
 
-/** The name a person types to sign: spaces tidied, nothing else changed. */
-export const cleanSignedName = (name: string): string => name.replace(/\s+/g, " ").trim();
+/** The gym's words as kept: line ends made one kind, nothing a database refuses, and no
+ *  space left at either end. A language's own direction marks are the gym's words. */
+export const cleanWaiverText = (text: string): string => text.replace(/\r\n?/g, "\n").replace(CONTROLS, "").trim();
+
+/** The name a person types to sign: spaces tidied, and nothing kept that a database
+ *  refuses, nobody can see, or would draw it backwards. */
+export const cleanSignedName = (name: string): string => name.replace(CONTROLS, "").replace(UNSEEN_IN_A_NAME, "").replace(/\s+/g, " ").trim();
+
+/** A name is two letters or digits at least, counted as people count them and never as
+ *  JavaScript measures a string. */
+const isAName = (name: string): boolean => (name.match(LETTER_OR_DIGIT) ?? []).length >= WAIVER_NAME_MIN_CHARS;
 
 export const waiverTextSchema = z
   .string()
@@ -26,7 +40,7 @@ export const signedNameSchema = z
   .string()
   .max(WAIVER_NAME_MAX_CHARS * 2)
   .transform(cleanSignedName)
-  .pipe(z.string().min(WAIVER_NAME_MIN_CHARS).max(WAIVER_NAME_MAX_CHARS));
+  .pipe(z.string().max(WAIVER_NAME_MAX_CHARS).refine(isAName));
 
 /** A waiver as a person reads it. */
 export const waiverToReadSchema = z
@@ -66,6 +80,8 @@ export type GymWaiverResponse = z.infer<typeof gymWaiverResponseSchema>;
 export const myWaiverResponseSchema = z
   .object({
     gymName: z.string(),
+    /** The gym's time zone, so the day a signature was made is written as the gym's own. */
+    timezone: z.string().optional(),
     /** The waiver the gym asks for today, or null where it asks for none. */
     waiver: waiverToReadSchema.nullable(),
     /** The person's own signature of THAT wording, or null. */
@@ -100,18 +116,19 @@ export const WAIVER_WORDS = {
 } as const;
 
 /** A screen may send a signature: a name typed and the box ticked. */
-export const waiverReadyToSign = (name: string, agreed: boolean): boolean => agreed && cleanSignedName(name).length >= WAIVER_NAME_MIN_CHARS;
+export const waiverReadyToSign = (name: string, agreed: boolean): boolean => agreed && isAName(cleanSignedName(name));
 
 /** The line under the agree box, the same on every screen that signs. */
 export const WAIVER_AGREE_LABEL = "I have read this waiver and I agree to it.";
 
 /** How many people are asked to sign when these words are saved, in Settings' own
  *  sentence; null where saving asks nobody (nothing changed, or nobody is in the app). */
-export function waiverSaveAsks(input: { savedText: string | null; inUse: boolean; draft: string; people: number }): string | null {
+export function waiverSaveAsks(input: { savedText: string | null; inUse: boolean; draft: string; people: number; signed: number }): string | null {
   const draft = cleanWaiverText(input.draft);
   if (draft === "" || input.people === 0) return null;
   const sameWords = input.savedText !== null && cleanWaiverText(input.savedText) === draft;
   if (sameWords) return input.inUse ? null : "People in the app who have not signed these words will be asked to sign.";
   const who = input.people === 1 ? "The 1 person in the app" : `All ${String(input.people)} people in the app`;
-  return input.savedText !== null && input.inUse ? `${who} will be asked to sign again, because the words have changed.` : `${who} will be asked to sign it.`;
+  // "Again" only where somebody has signed the words in use.
+  return input.savedText !== null && input.inUse && input.signed > 0 ? `${who} will be asked to sign again, because the words have changed.` : `${who} will be asked to sign it.`;
 }

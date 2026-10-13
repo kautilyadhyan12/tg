@@ -39,7 +39,7 @@ export function waiverSaveLabel(data) {
 
 /** Who saving these words asks to sign, said before Save; null where it asks nobody. */
 export function waiverAsksLine(data, draft) {
-  return waiverSaveAsks({ savedText: data.waiver?.text ?? null, inUse: data.inUse, draft, people: data.people });
+  return waiverSaveAsks({ savedText: data.waiver?.text ?? null, inUse: data.inUse, draft, people: data.people, signed: data.signed });
 }
 
 /** What the save did, said beside the button. */
@@ -62,18 +62,25 @@ export function waiverStopWords(data) {
 /** A person's page, under one of the record's people in the app: whether they have signed
  *  the gym's waiver as it is today, and the name they typed. `when` writes the day. */
 export function waiverLine(member, when) {
-  const signed = member.waiverSigned ?? null;
-  if (signed === null) return 'Waiver not signed';
-  const day = when(signed.at);
-  return `Waiver signed${day === '' ? '' : ` on ${day}`} as ${signed.name}`;
+  const parts = waiverLineParts(member, when);
+  return parts.label + parts.rest;
 }
 
 /** `waiverLine` in two parts, so the page can draw the state as a coloured label: the
- *  label's words, whether it is signed, and the rest of the sentence. */
+ *  label's words, its tone (`good`, `warn`, `plain`), and the rest of the sentence.
+ *
+ *  ON AN EMAIL A FAMILY SHARES the page is one person's record and the signature may be
+ *  another's, so it is never said that this record signed: the label is plain and names
+ *  who typed the signature. */
 export function waiverLineParts(member, when) {
   const signed = member.waiverSigned ?? null;
-  if (signed === null) return { signed: false, label: 'Waiver not signed', rest: '' };
-  return { signed: true, label: 'Waiver signed', rest: waiverLine(member, when).slice('Waiver signed'.length) };
+  if (signed === null) return { tone: 'warn', label: 'Waiver not signed', rest: '' };
+  const day = when(signed.at);
+  const on = day === '' ? '' : ` on ${day}`;
+  if (member.sharedEmail === true) {
+    return { tone: 'plain', label: `Signed as ${signed.name}`, rest: `${on}. This email address is shared, so we can't tell which of them signed.` };
+  }
+  return { tone: 'good', label: 'Waiver signed', rest: `${on} as ${signed.name}` };
 }
 
 /** A person's page, for a record with nobody in the app at a gym that asks for a waiver. */

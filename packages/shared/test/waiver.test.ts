@@ -20,6 +20,13 @@ describe("the gym's words as kept", () => {
     expect(saveGymWaiverBodySchema.parse({ text: "\r\nI agree.\r\n" })).toEqual({ text: "I agree." });
   });
 
+  it("drops the characters a database refuses, and keeps tabs, new lines and a language's own direction marks", () => {
+    expect(cleanWaiverText("One\u0000Two\u0007\n\tThree")).toBe("OneTwo\n\tThree");
+    expect(saveGymWaiverBodySchema.parse({ text: "I agree.\u0000" })).toEqual({ text: "I agree." });
+    expect(saveGymWaiverBodySchema.safeParse({ text: "\u0000\u0000" }).success).toBe(false);
+    expect(cleanWaiverText("\u200F\u05E9\u05DC\u05D5\u05DD")).toBe("\u200F\u05E9\u05DC\u05D5\u05DD");
+  });
+
   it("refuses nothing but spaces, more than the most kept, and anything that is not text", () => {
     for (const text of ["", " \r\n\t ", "x".repeat(WAIVER_MAX_CHARS + 1), 7, null]) {
       expect(saveGymWaiverBodySchema.safeParse({ text }).success).toBe(false);
@@ -45,6 +52,28 @@ describe("the name a person types", () => {
     expect(signWaiverBodySchema.safeParse({ waiverId: "nope", name: "Alice Stone" }).success).toBe(false);
   });
 
+  // Round one, L1 to L3: what a database refuses or a screen cannot show is never a name.
+  it("counts letters, not the bytes JavaScript counts: one letter is not a name, whatever plane it is on", () => {
+    for (const name of ["\u{1D49C}", " \u{1D49C} ", "\u{1F600}\u{1F600}", "-- ", "A."]) {
+      expect(signWaiverBodySchema.safeParse({ waiverId: ID, name }).success).toBe(false);
+      expect(waiverReadyToSign(name, true)).toBe(false);
+    }
+    expect(signWaiverBodySchema.parse({ waiverId: ID, name: "\u{1D49C}\u{1D4B7}" }).name).toBe("\u{1D49C}\u{1D4B7}");
+  });
+
+  it("drops what nobody can see or a database refuses, and keeps the joiners some names are written with", () => {
+    expect(cleanSignedName("Ann\u0000 Lee")).toBe("Ann Lee");
+    expect(cleanSignedName("Ann\nLee")).toBe("Ann Lee");
+    // A right-to-left override would draw the name backwards on a person's page.
+    expect(cleanSignedName("\u202EeeL nnA")).toBe("eeL nnA");
+    expect(cleanSignedName("\u2066Ann\u2069 \uFEFFLee\u200B")).toBe("Ann Lee");
+    // Persian: the zero-width non-joiner inside a name is part of its spelling.
+    expect(cleanSignedName("\u0639\u0644\u06CC\u200C\u0631\u0636\u0627")).toBe("\u0639\u0644\u06CC\u200C\u0631\u0636\u0627");
+    for (const name of ["\u200B\u200B", "\u200C\u200D", "\u202E\u202C", "\u0000\u0000\u0000"]) {
+      expect(signWaiverBodySchema.safeParse({ waiverId: ID, name }).success).toBe(false);
+    }
+  });
+
   it("a screen may send a signature only with a name typed and the box ticked", () => {
     expect(waiverReadyToSign("Alice Stone", true)).toBe(true);
     expect(waiverReadyToSign("Alice Stone", false)).toBe(false);
@@ -65,20 +94,21 @@ describe("who a save asks to sign, said before Save", () => {
   const saved = "I take part at my own risk.";
 
   it.each([
-    ["a first waiver, 12 people in the app", { savedText: null, inUse: false, draft: saved, people: 12 }, "All 12 people in the app will be asked to sign it."],
-    ["a first waiver, 1 person in the app", { savedText: null, inUse: false, draft: saved, people: 1 }, "The 1 person in the app will be asked to sign it."],
-    ["changed words", { savedText: saved, inUse: true, draft: `${saved} And more.`, people: 12 }, "All 12 people in the app will be asked to sign again, because the words have changed."],
-    ["changed words while it is not in use", { savedText: saved, inUse: false, draft: `${saved} And more.`, people: 3 }, "All 3 people in the app will be asked to sign it."],
-    ["the same words while it is not in use", { savedText: saved, inUse: false, draft: saved, people: 3 }, "People in the app who have not signed these words will be asked to sign."],
+    ["a first waiver, 12 people in the app", { savedText: null, inUse: false, draft: saved, people: 12, signed: 0 }, "All 12 people in the app will be asked to sign it."],
+    ["a first waiver, 1 person in the app", { savedText: null, inUse: false, draft: saved, people: 1, signed: 0 }, "The 1 person in the app will be asked to sign it."],
+    ["changed words", { savedText: saved, inUse: true, draft: `${saved} And more.`, people: 12, signed: 3 }, "All 12 people in the app will be asked to sign again, because the words have changed."],
+    ["changed words that nobody has signed yet", { savedText: saved, inUse: true, draft: `${saved} And more.`, people: 12, signed: 0 }, "All 12 people in the app will be asked to sign it."],
+    ["changed words while it is not in use", { savedText: saved, inUse: false, draft: `${saved} And more.`, people: 3, signed: 2 }, "All 3 people in the app will be asked to sign it."],
+    ["the same words while it is not in use", { savedText: saved, inUse: false, draft: saved, people: 3, signed: 1 }, "People in the app who have not signed these words will be asked to sign."],
   ])("%s", (_case, input, line) => {
     expect(waiverSaveAsks(input)).toBe(line);
   });
 
   it.each([
-    ["the same words, in use", { savedText: saved, inUse: true, draft: saved, people: 12 }],
-    ["the same words with other line ends and spaces", { savedText: "One\nTwo", inUse: true, draft: " One\r\nTwo \r\n", people: 12 }],
-    ["nothing typed", { savedText: saved, inUse: true, draft: "  ", people: 12 }],
-    ["nobody in the app", { savedText: null, inUse: false, draft: saved, people: 0 }],
+    ["the same words, in use", { savedText: saved, inUse: true, draft: saved, people: 12, signed: 3 }],
+    ["the same words with other line ends and spaces", { savedText: "One\nTwo", inUse: true, draft: " One\r\nTwo \r\n", people: 12, signed: 3 }],
+    ["nothing typed", { savedText: saved, inUse: true, draft: "  ", people: 12, signed: 3 }],
+    ["nobody in the app", { savedText: null, inUse: false, draft: saved, people: 0, signed: 0 }],
   ])("asks nobody: %s", (_case, input) => {
     expect(waiverSaveAsks(input)).toBeNull();
   });

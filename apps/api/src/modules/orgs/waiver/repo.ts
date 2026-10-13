@@ -109,10 +109,12 @@ export async function signAsMember(sql: SqlOrTx, input: { gymId: string; waiverI
 
 /** The signature Join writes with the membership. The caller holds the gym's row lock and
  *  has read `waiverId` as the wording in use under it. A person who signed it before
- *  keeps that signature. */
-export async function signAtJoin(tx: TransactionSql, input: { gymId: string; waiverId: string; userId: string; name: string; at: Date }): Promise<void> {
-  await tx`
+ *  keeps that signature: false, and nothing is written. */
+export async function signAtJoin(tx: TransactionSql, input: { gymId: string; waiverId: string; userId: string; name: string; at: Date }): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
     INSERT INTO gym_waiver_signatures (gym_id, waiver_id, user_id, signed_name, signed_at)
     VALUES (${input.gymId}, ${input.waiverId}, ${input.userId}, ${input.name}, ${input.at})
-    ON CONFLICT (waiver_id, user_id) DO NOTHING`;
+    ON CONFLICT (waiver_id, user_id) DO NOTHING
+    RETURNING id`;
+  return rows.length > 0;
 }

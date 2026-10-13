@@ -12,6 +12,8 @@ import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import { buildUserExport } from "../src/modules/privacy/export.js";
+import { purgeUser } from "../src/modules/privacy/purge.js";
+import { softDeleteUser } from "../src/modules/users/repo.js";
 import {
   WAIVER_MAX_CHARS,
   WAIVER_WORDS,
@@ -122,8 +124,8 @@ d("a gym's waiver (real Postgres)", () => {
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
-  const post = (path: string, payload: unknown, cookies: Record<string, string>) => send("POST", path, cookies, payload);
-  const get = (path: string, cookies: Record<string, string>) => send("GET", path, cookies);
+  const post = (path: string, payload: unknown, cookies: Record<string, string>, ip?: string) => send("POST", path, cookies, payload, ip);
+  const get = (path: string, cookies: Record<string, string>, ip?: string) => send("GET", path, cookies, undefined, ip);
   const errorOf = (res: { body: string }) => JSON.parse(res.body) as { error: string; message: string };
 
   const registerWithPassword = async (email: string): Promise<User> => {
@@ -220,7 +222,7 @@ d("a gym's waiver (real Postgres)", () => {
     expect(res.statusCode, res.body).toBe(200);
     return myWaiverResponseSchema.parse(JSON.parse(res.body));
   };
-  const sign = (gym: Gym, who: User, body: unknown) => post(`${waiverUrl(gym)}/sign`, body, who.cookies);
+  const sign = (gym: Gym, who: User, body: unknown, ip?: string) => post(`${waiverUrl(gym)}/sign`, body, who.cookies, ip);
 
   const signaturesAt = (gym: Gym) =>
     sql<{ user_id: string; version: number; body: string; signed_name: string }[]>`
@@ -310,7 +312,7 @@ d("a gym's waiver (real Postgres)", () => {
       const second = await save(iron, CHANGED);
       const v2 = savedId(second);
       expect(second).toMatchObject({ inUse: true, people: 2, signed: 0, waiver: { version: 2, text: CHANGED } });
-      expect(await myWaiver(iron, alice)).toEqual({ gymName: "Iron House", waiver: { id: v2, version: 2, text: CHANGED }, signed: null });
+      expect(await myWaiver(iron, alice)).toEqual({ gymName: "Iron House", timezone: "Europe/London", waiver: { id: v2, version: 2, text: CHANGED }, signed: null });
       const page = await personPage(iron, aliceEntry);
       expect(page.waiverInUse).toBe(true);
       expect(page.members).toMatchObject([{ userId: alice.userId, waiverSigned: null }]);
@@ -494,7 +496,7 @@ d("a gym's waiver (real Postgres)", () => {
       expect(umaInvitation.waiver).toBeNull();
       expect((await join(uma, umaInvitation.id, { waiver: { id: "00000000-0000-4000-8000-000000000000", name: "Uma Vance" } })).statusCode).toBe(200);
       expect(await signaturesAt(gym)).toEqual([]);
-      expect(await myWaiver(gym, ola)).toEqual({ gymName: "Plain Gym", waiver: null, signed: null });
+      expect(await myWaiver(gym, ola)).toEqual({ gymName: "Plain Gym", timezone: "Europe/London", waiver: null, signed: null });
       expect(await personPage(gym, entryId)).toMatchObject({ waiverInUse: false, members: [{ waiverSigned: null }] });
 
       // The gym writes one: the two people already in the app are asked.
@@ -551,6 +553,154 @@ d("a gym's waiver (real Postgres)", () => {
       expect(out.data["gym_waiver_signatures"]).toMatchObject([{ gym_name: "Export Gym", waiver_version: 1, waiver_text: KEPT, signed_name: "Zoe Adams" }]);
       expect(JSON.stringify(out.data["gym_waiver_signatures"])).not.toContain("Yan Brook");
       expect(other.userId).not.toBe(zoe.userId);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
+  // ROUND ONE
+  // =========================================================================
+
+  it(
+    "a name or a waiver holding what a database refuses is answered in words, never with a failure",
+    async () => {
+      const gym = await makeGym("Odd Letters Gym");
+      // L2: a waiver pasted with a NUL in it is kept without it.
+      const saved = await send("PUT", waiverUrl(gym), gym.owner.cookies, { text: "I take part\u0000 at my own risk.\u0007" });
+      expect(saved.statusCode, saved.body).toBe(200);
+      const waiverId = savedId(gymWaiverResponseSchema.parse(JSON.parse(saved.body)));
+      expect((await readGymWaiver(gym)).waiver?.text).toBe("I take part at my own risk.");
+
+      // L1: Join signed with one letter, which JavaScript counts as two: refused, nobody joins.
+      await addInvited(gym, { fullName: "Ann Lee", email: addr("annlee") });
+      const ann = await signIn(addr("annlee"));
+      const invitation = await invitationAt(ann, gym);
+      const oneLetter = await join(ann, invitation.id, { waiver: { id: waiverId, name: "\u{1D49C}" } });
+      expect(oneLetter.statusCode, oneLetter.body).toBe(400);
+      expect(await isMember(gym, ann)).toBe(false);
+      // A NUL and a line break inside a name: joined, under the name without them.
+      const joined = await join(ann, invitation.id, { waiver: { id: waiverId, name: "Ann\u0000\nLee" } });
+      expect(joined.statusCode, joined.body).toBe(200);
+      expect((await signaturesAt(gym)).map((row) => row.signed_name)).toEqual(["Ann Lee"]);
+
+      // Sign, the same: one letter and an unseen name are refused; a reversed one is kept the right way round.
+      const { who: bo } = await member(gym, "bo", "Bo Finch");
+      const v2 = savedId(await save(gym, "New words."));
+      for (const name of ["\u{1D49C}", "\u200B\u200B", "\u0000\u0000", "\u202E\u202C"]) {
+        const res = await sign(gym, bo, { waiverId: v2, name });
+        expect({ name, status: res.statusCode }).toEqual({ name, status: 400 });
+      }
+      expect((await signaturesAt(gym)).filter((row) => row.version === 2)).toEqual([]);
+      const reversed = await sign(gym, bo, { waiverId: v2, name: "\u202EhcniF oB" });
+      expect(reversed.statusCode, reversed.body).toBe(200);
+      expect(signWaiverResponseSchema.parse(JSON.parse(reversed.body)).signed.name).toBe("hcniF oB");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "somebody who signed these words, was removed and joins again keeps their one signature, and it is noted once",
+    async () => {
+      const gym = await makeGym("Back Again Gym");
+      const waiverId = savedId(await save(gym, KEPT));
+      const { who: cy } = await member(gym, "cy", "Cy Young");
+      expect(await audits(gym, "org.waiver_signed")).toBe(1);
+      expect((await send("DELETE", `/v1/orgs/${gym.id}/members/${cy.userId}`, gym.owner.cookies)).statusCode).toBe(200);
+      // The gym puts them back on its list and invites them again (the row, as `addInvited` writes it).
+      await addInvited(gym, { fullName: "Cy Young", email: addr("cy") });
+      await sql`
+        UPDATE gym_invites SET state = 'pending', answered_at = NULL, not_me_at = NULL, wrong_person_at = NULL
+        WHERE gym_id = ${gym.id} AND email_hmac = ${emailHmac(settings.hmacKey, addr("cy"))}`;
+      const invitation = await invitationAt(cy, gym);
+      const again = await join(cy, invitation.id, { waiver: { id: waiverId, name: "Cyrus Young" } });
+      expect(again.statusCode, again.body).toBe(200);
+      expect(await isMember(gym, cy)).toBe(true);
+      expect(await signaturesAt(gym)).toEqual([{ user_id: cy.userId, version: 1, body: KEPT, signed_name: "Cy Young" }]);
+      expect(await audits(gym, "org.waiver_signed")).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the count is of the people in the app today; a signature stays with the gym after its person is removed, and after their account is deleted and purged",
+    async () => {
+      const gym = await makeGym("Count Gym");
+      const waiverId = savedId(await save(gym, KEPT));
+      const { who: di } = await member(gym, "di", "Di Marsh");
+      const { who: ed } = await member(gym, "ed", "Ed Nolan");
+      const { who: flo } = await member(gym, "flo", "Flo Ortiz");
+      expect(await readGymWaiver(gym)).toMatchObject({ people: 3, signed: 3 });
+
+      // Removed from the app by the gym: no longer counted, the signature kept.
+      expect((await send("DELETE", `/v1/orgs/${gym.id}/members/${di.userId}`, gym.owner.cookies)).statusCode).toBe(200);
+      expect(await readGymWaiver(gym)).toMatchObject({ people: 2, signed: 2 });
+      // Ed deletes his account: no longer counted from that moment.
+      expect(await softDeleteUser(sql, ed.userId)).not.toBeNull();
+      expect(await readGymWaiver(gym)).toMatchObject({ people: 1, signed: 1 });
+      expect((await signaturesAt(gym)).map((row) => row.signed_name).sort()).toEqual(["Di Marsh", "Ed Nolan", "Flo Ortiz"]);
+
+      // Day 14: the account is emptied. The gym's proof that he agreed stays (tables.ts).
+      await sql`UPDATE users SET deleted_at = now() - interval '15 days' WHERE id = ${ed.userId}`;
+      expect(await sql.begin((tx) => purgeUser(tx, ed.userId, new Date()))).toBe("purged");
+      const kept = await sql<{ signed_name: string; waiver_id: string }[]>`
+        SELECT signed_name, waiver_id FROM gym_waiver_signatures WHERE gym_id = ${gym.id} AND user_id = ${ed.userId}`;
+      expect(kept).toEqual([{ signed_name: "Ed Nolan", waiver_id: waiverId }]);
+      expect(await readGymWaiver(gym)).toMatchObject({ people: 1, signed: 1 });
+      expect(flo.userId).not.toBe(ed.userId);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "two and three saves at the same moment each make their own wording: no number twice, none missed, nobody refused",
+    async () => {
+      const gym = await makeGym("Busy Owner Gym");
+      for (let round = 0; round < 3; round++) {
+        const answers = await Promise.all([0, 1, 2].map((n) => send("PUT", waiverUrl(gym), gym.owner.cookies, { text: `Words ${String(round)}-${String(n)}.` })));
+        expect(answers.map((res) => res.statusCode)).toEqual([200, 200, 200]);
+      }
+      const versions = await sql<{ version: number }[]>`SELECT version FROM gym_waivers WHERE gym_id = ${gym.id} ORDER BY version`;
+      expect(versions.map((row) => row.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      expect(await audits(gym, "org.waiver_saved")).toBe(9);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "each limit stops the one person who passed it, and not the next person at the same address",
+    async () => {
+      const gym = await makeGym("Limits Gym");
+      const waiverId = savedId(await save(gym, KEPT));
+      const { who: gus } = await member(gym, "gus", "Gus Park");
+      const { who: hal } = await member(gym, "hal", "Hal Quinn");
+      const wifi = "10.66.240.7";
+
+      // Signing: 10 an hour a person.
+      const signs: number[] = [];
+      for (let n = 0; n < 11; n++) signs.push((await sign(gym, gus, { waiverId, name: "Gus Park" }, wifi)).statusCode);
+      expect(signs).toEqual([...Array<number>(10).fill(200), 429]);
+      expect((await sign(gym, hal, { waiverId, name: "Hal Quinn" }, wifi)).statusCode).toBe(200);
+
+      // A member's read: 120 an hour a person.
+      const reads: number[] = [];
+      for (let n = 0; n < 121; n++) reads.push((await get(`${waiverUrl(gym)}/mine`, gus.cookies, wifi)).statusCode);
+      expect(reads.filter((status) => status === 200)).toHaveLength(120);
+      expect(reads[120]).toBe(429);
+      expect((await get(`${waiverUrl(gym)}/mine`, hal.cookies, wifi)).statusCode).toBe(200);
+
+      // Saving and stopping share one allowance: 30 an hour a person (one is used above).
+      const office = "10.66.240.8";
+      const writes: number[] = [];
+      for (let n = 0; n < 30; n++) writes.push((await send("PUT", waiverUrl(gym), gym.owner.cookies, { text: KEPT }, office)).statusCode);
+      expect(writes).toEqual([...Array<number>(29).fill(200), 429]);
+      expect((await send("DELETE", waiverUrl(gym), gym.owner.cookies, undefined, office)).statusCode).toBe(429);
+      expect((await readGymWaiver(gym)).inUse).toBe(true);
+
+      // Settings' read: 300 an hour a person (one is used above).
+      const staffReads: number[] = [];
+      for (let n = 0; n < 300; n++) staffReads.push((await get(waiverUrl(gym), gym.owner.cookies, office)).statusCode);
+      expect(staffReads.filter((status) => status === 200)).toHaveLength(299);
+      expect(staffReads[299]).toBe(429);
     },
     TEST_TIMEOUT_MS,
   );

@@ -152,8 +152,10 @@ export async function acceptInvitation(
     }
     await repo.answerInvitation(tx, { gymId, inviteId: invite.id, state: "accepted", at });
     if (waiver !== null && body.waiver !== undefined) {
-      await waiverRepo.signAtJoin(tx, { gymId, waiverId: waiver.id, userId: caller.id, name: body.waiver.name, at });
-      await insertAudit(tx, { actorUserId: caller.id, gymId, action: "org.waiver_signed", targetType: "gym_waiver", targetId: waiver.id, meta: { via: "join" } });
+      // Somebody who signed these words before, was removed and joins again keeps that signature.
+      if (await waiverRepo.signAtJoin(tx, { gymId, waiverId: waiver.id, userId: caller.id, name: body.waiver.name, at })) {
+        await insertAudit(tx, { actorUserId: caller.id, gymId, action: "org.waiver_signed", targetType: "gym_waiver", targetId: waiver.id, meta: { via: "join" } });
+      }
     }
     await insertAudit(tx, {
       actorUserId: caller.id,

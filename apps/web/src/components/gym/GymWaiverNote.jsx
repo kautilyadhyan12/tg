@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { FileSignature, Loader2 } from 'lucide-react';
 import { errorCode, errorText, orgService } from '../../api/orgsApi';
-import { whenWords } from '../../pages/console/memberListPeople';
+import { noteDay } from '../../pages/console/memberListPeople';
 import { waiverReadyToSign } from '@app/shared';
 import WaiverSign from './WaiverSign';
 
@@ -56,8 +56,18 @@ export default function GymWaiverNote({ gym }) {
       </p>
     );
   }
-  if (data === null || data.waiver === null) return null;
+  if (data === null) return null;
+  if (data.waiver === null) {
+    // The gym stopped its waiver while this was open: say so where Sign was pressed.
+    return error === null ? null : (
+      <p role="alert" className="text-sm mt-2" style={soft}>
+        {error}
+      </p>
+    );
+  }
   const { waiver, signed } = data;
+  // The day is the gym's own.
+  const day = signed === null ? '' : noteDay(signed.at, data.timezone ?? null);
 
   const sign = async () => {
     if (!waiverReadyToSign(name, agreed) || busy) return;
@@ -85,7 +95,7 @@ export default function GymWaiverNote({ gym }) {
       <div className="mt-2 flex flex-col gap-2">
         <p className="text-sm m-0 flex flex-wrap items-center gap-x-2" style={soft}>
           <span role={justSigned ? 'status' : undefined}>
-            {justSigned ? `Thank you. You signed ${gym.name}'s waiver` : 'Waiver signed'} on {whenWords(signed.at)} as {signed.name}.
+            {justSigned ? `Thank you. You signed ${gym.name}'s waiver` : 'Waiver signed'} on {day} as {signed.name}.
           </span>
           <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="font-semibold underline" style={{ ...strong, minHeight: 44 }}>
             {open ? 'Hide the waiver' : 'Read the waiver'}

@@ -64,6 +64,8 @@ describe('Save', () => {
     expect(waiverAsksLine(NONE, WORDS)).toBe('All 4 people in the app will be asked to sign it.');
     expect(waiverAsksLine(IN_USE, `${WORDS} More.`)).toBe('All 12 people in the app will be asked to sign again, because the words have changed.');
     expect(waiverAsksLine(IN_USE, WORDS)).toBeNull();
+    // Nobody has signed the words in use, so nobody is asked "again" (round one, L5).
+    expect(waiverAsksLine({ ...IN_USE, signed: 0 }, `${WORDS} More.`)).toBe('All 12 people in the app will be asked to sign it.');
   });
 
   it.each([
@@ -107,12 +109,25 @@ describe("a person's page", () => {
 
   it('gives the page the state as a label of its own, and the same sentence in all', () => {
     const signed = { waiverSigned: { name: 'Luis Reyes', at: '2026-10-13T09:00:00.000Z' } };
-    expect(waiverLineParts(signed, when)).toEqual({ signed: true, label: 'Waiver signed', rest: ' on 13 October 2026 as Luis Reyes' });
-    expect(waiverLineParts({ waiverSigned: null }, when)).toEqual({ signed: false, label: 'Waiver not signed', rest: '' });
-    for (const member of [signed, { waiverSigned: null }, {}]) {
+    expect(waiverLineParts(signed, when)).toEqual({ tone: 'good', label: 'Waiver signed', rest: ' on 13 October 2026 as Luis Reyes' });
+    expect(waiverLineParts({ waiverSigned: null }, when)).toEqual({ tone: 'warn', label: 'Waiver not signed', rest: '' });
+    for (const member of [signed, { waiverSigned: null }, {}, { ...signed, sharedEmail: true }]) {
       const parts = waiverLineParts(member, when);
       expect(parts.label + parts.rest).toBe(waiverLine(member, when));
     }
+  });
+
+  // Round one, High-1: on an email a family shares, the record's own person may not be the
+  // one who signed, so the page never says this record signed.
+  it('never says a record on a shared email has signed: it names who typed the signature', () => {
+    const shared = { sharedEmail: true, waiverSigned: { name: 'Luis Reyes', at: '2026-10-13T09:00:00.000Z' } };
+    expect(waiverLineParts(shared, when)).toEqual({
+      tone: 'plain',
+      label: 'Signed as Luis Reyes',
+      rest: " on 13 October 2026. This email address is shared, so we can't tell which of them signed.",
+    });
+    expect(waiverLine(shared, when)).toBe("Signed as Luis Reyes on 13 October 2026. This email address is shared, so we can't tell which of them signed.");
+    expect(waiverLineParts({ sharedEmail: true, waiverSigned: null }, when)).toEqual({ tone: 'warn', label: 'Waiver not signed', rest: '' });
   });
 
   it('says why somebody with no app has not signed', () => {

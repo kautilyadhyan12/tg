@@ -859,15 +859,30 @@ describe("the gym's waiver on a person's page (3e-i)", () => {
     expect(who.getByText('Waiver signed').className).toContain('c-tag-good');
   });
 
-  it('says not signed for somebody in the app who has not, and a shared email shows the name that was typed', async () => {
+  it('says not signed for somebody in the app who has not', async () => {
     orgService.getMemberListEntry.mockResolvedValue(inApp({ waiverSigned: null }));
     openBox(ADA);
     expect(within(await screen.findByTestId('in-app-person')).getByTestId('waiver-line').textContent).toBe('Waiver not signed');
     expect(screen.getByText('Waiver not signed').className).toContain('c-tag-warn');
-    cleanup();
+  });
+
+  // Round one, High-1. Ada's page; Leo, on the email they share, typed the signature.
+  it("a family's shared email: Ada's page never says she signed, it names who typed the signature", async () => {
     orgService.getMemberListEntry.mockResolvedValue(inApp({ displayName: 'Mum', sharedEmail: true, waiverSigned: { name: 'Leo Lovelace', at: '2026-10-13T09:00:00.000Z' } }));
     openBox(ADA);
-    expect(within(await screen.findByTestId('in-app-person')).getByTestId('waiver-line').textContent).toBe('Waiver signed on 13 October 2026 as Leo Lovelace');
+    const line = within(await screen.findByTestId('in-app-person')).getByTestId('waiver-line');
+    expect(line.textContent).toBe("Signed as Leo Lovelace on 13 October 2026. This email address is shared, so we can't tell which of them signed.");
+    expect(within(line).queryByText('Waiver signed')).toBeNull();
+    expect(line.querySelector('.c-tag-good')).toBeNull();
+    expect(within(line).getByText('Signed as Leo Lovelace').className).toContain('c-tag-plain');
+  });
+
+  // Round one, L7: the day is the gym's own, whatever calendar the reader's laptop is on.
+  it("writes the day signed on the gym's own calendar", async () => {
+    // 23:30 on 13 October in Los Angeles is already 14 October in London and Kolkata.
+    orgService.getMemberListEntry.mockResolvedValue(inApp({ waiverSigned: { name: 'Ada Lovelace', at: '2026-10-14T06:30:00.000Z' } }));
+    openBox(ADA, { gym: { timezone: 'America/Los_Angeles' } });
+    expect(within(await screen.findByTestId('in-app-person')).getByTestId('waiver-line').textContent).toBe('Waiver signed on 13 October 2026 as Ada Lovelace');
   });
 
   it('says why somebody with no app has not signed', async () => {

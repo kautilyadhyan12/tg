@@ -182,6 +182,28 @@ describe("a member's own gym", () => {
     expect(screen.getByRole('button', { name: 'Sign' }).disabled).toBe(true);
   });
 
+  // Round one, L4.
+  it('a gym that stopped its waiver meanwhile: the reason is said where Sign was pressed, never a box that vanishes', async () => {
+    mine(V1);
+    orgService.signMyWaiver.mockRejectedValue(refusal('waiver_not_in_use', 'Iron House is not asking for a waiver right now. There is nothing to sign.'));
+    draw();
+    fireEvent.click(await screen.findByRole('button', { name: 'Read and sign' }));
+    fireEvent.change(nameBox(), { target: { value: 'Mia Hart' } });
+    fireEvent.click(tick());
+    mine(null);
+    fireEvent.click(screen.getByRole('button', { name: 'Sign' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Iron House is not asking for a waiver right now. There is nothing to sign.');
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sign' })).toBeNull());
+    expect(screen.getByRole('alert')).toBeTruthy();
+  });
+
+  // Round one, L7.
+  it("writes the day signed on the gym's own calendar", async () => {
+    orgService.getMyWaiver.mockResolvedValue({ data: { gymName: 'Iron House', timezone: 'America/Los_Angeles', waiver: V1, signed: { name: 'Mia Hart', at: '2026-10-14T06:30:00.000Z' } } });
+    draw();
+    expect(await screen.findByText('Waiver signed on 13 October 2026 as Mia Hart.')).toBeTruthy();
+  });
+
   it('somebody who has signed reads when and under what name, and can read the words again', async () => {
     mine(V1, { name: 'Mia Hart', at: '2026-10-13T09:00:00.000Z' });
     draw();
