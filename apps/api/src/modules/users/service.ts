@@ -35,6 +35,7 @@ import {
   DISCLAIMER_WORDINGS,
   fitnessProfileSchema,
   healthScreeningSchema,
+  mealsPerDaySchema,
   onboardingAnswersSchema,
   onboardingResponseSchema,
   UNANSWERED_HEALTH_SCREENING,
@@ -121,6 +122,12 @@ export async function getPlanHealth(sql: repo.SqlOrTx, userId: string): Promise<
 export async function getUserDiet(sql: Sql, userId: string): Promise<Diet | null> {
   const profile = await repo.getFitnessProfile(sql, userId);
   return dietSchema.nullable().parse(profile?.diet ?? null);
+}
+
+/** Screen 9's two answers, for the meal ideas (34d-i): null until answered. */
+export async function getUserFoodAnswers(sql: Sql, userId: string): Promise<{ diet: Diet | null; mealsPerDay: number | null }> {
+  const profile = await repo.getFitnessProfile(sql, userId);
+  return { diet: dietSchema.nullable().parse(profile?.diet ?? null), mealsPerDay: mealsPerDaySchema.nullable().parse(profile?.mealsPerDay ?? null) };
 }
 
 /** Typed failure for the central error mapper (R8.1); message client-safe. */

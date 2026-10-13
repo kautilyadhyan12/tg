@@ -552,6 +552,54 @@ export type NutritionTargetsResponse = z.infer<typeof nutritionTargetsResponseSc
  *  workout today, the meal suggestions (ROADMAP 7a) when they are built. */
 export const FOOD_ALLERGY_CAUTION = "If you have any food allergy, take care and check the labels.";
 
+/** The line a vegetarian or vegan reads under the meal ideas, beside the allergy
+ *  line (Kd, 2026-10-14): a food's diet follows its usual recipe, and no label
+ *  of ours can see a product's own. Never shown to somebody who eats meat. */
+export const DIET_LABEL_CAUTION = "Check labels too: some breads and cheeses contain animal ingredients.";
+
+// ROADMAP 34d-i — meal ideas for what is left of the day.
+/** One food of an idea, at the amount suggested: `servings` of the food's own
+ *  `unit` ("g" means by weight, and `grams` is the amount), with the numbers
+ *  the food list gives for those grams. Logged as it stands by canonical and grams. */
+export const suggestedFoodSchema = z.object({
+  canonical: z.string().min(1).max(120), name: z.string().min(1),
+  grams: z.number().positive().max(MAX_ITEM_GRAMS), servings: z.number().positive(), unit: z.string().min(1),
+  kcal: z.number().int().nonnegative(), proteinG: z.number().nonnegative(), carbsG: z.number().nonnegative(), fatG: z.number().nonnegative(),
+}).strict();
+export type SuggestedFood = z.infer<typeof suggestedFoodSchema>;
+/** A plate is a protein food, a starch and a vegetable; a dish is one cooked
+ *  dish with something beside it; light is a bowl, toast, or fruit with nuts. */
+export const mealIdeaKindSchema = z.enum(["plate", "dish", "light"]);
+export type MealIdeaKind = z.infer<typeof mealIdeaKindSchema>;
+export const mealIdeaSchema = z.object({
+  kind: mealIdeaKindSchema,
+  items: z.array(suggestedFoodSchema).min(1).max(4),
+  totals: z.object({ kcal: z.number().int().nonnegative(), proteinG: z.number().nonnegative(), carbsG: z.number().nonnegative(), fatG: z.number().nonnegative() }).strict(),
+}).strict();
+export type MealIdea = z.infer<typeof mealIdeaSchema>;
+/** One meal still to come today: the calories it is sized to, and the ideas for it. */
+export const suggestedMealSchema = z.object({ kcalTarget: z.number().int().positive(), ideas: z.array(mealIdeaSchema).max(3) }).strict();
+export type SuggestedMeal = z.infer<typeof suggestedMealSchema>;
+export const foodAnswerSchema = z.enum(["diet", "mealsPerDay"]);
+/** The day's meal ideas. Nobody is given ideas on a guessed answer (RULINGS
+ *  2026-07-15): `needs_answers` names the food answers still to give, and
+ *  `needs_plan` says the day has no calorie number yet. `meals` is empty once
+ *  the day's calories are eaten. Every `ok` reply carries the allergy line. */
+export const mealIdeasResponseSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("needs_answers"), missing: z.array(foodAnswerSchema).min(1) }).strict(),
+  z.object({ status: z.literal("needs_plan") }).strict(),
+  z.object({
+    status: z.literal("ok"),
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    kcalLeft: z.number().int(),
+    meals: z.array(suggestedMealSchema).max(6),
+    caution: z.literal(FOOD_ALLERGY_CAUTION),
+    /** For a vegetarian or vegan; null for somebody who eats meat. */
+    labelCaution: z.literal(DIET_LABEL_CAUTION).nullable(),
+  }).strict(),
+]);
+export type MealIdeasResponse = z.infer<typeof mealIdeasResponseSchema>;
+
 /** The line a photo scan's sheet carries (RULINGS 2026-09-07, kept 2026-09-09):
  *  photo scans say they estimate calories and cannot detect allergens. One
  *  wording, for the web's sheet and the phone app's. */
