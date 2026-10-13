@@ -581,7 +581,11 @@ The terminal's own choices, each a job's to better with a reason.
 - **Four copies on one phone.** Each folder installs its OWN copy of the app on Kd's one
   phone (its own application id, the folder's name under the icon), talking to that
   folder's api through the USB cable (`adb reverse`). Each folder's `FOLDER.md` names its
-  ports. Metro's usual port, 8081, is taken on his laptop.
+  ports. Metro's usual port, 8081, is taken on his laptop. **Built in item 10:** a
+  folder writes its copy's word (`feature1`, `feature2`, `exercise1`, `exercise2`) in
+  `apps/mobile/.copy`, which git ignores; `copies.json` holds each copy's name and ports;
+  the Android project is made from `app.config.ts` on each build and is never in git.
+  The store's app gets its own name and id with item 21.
 - **Walked on the real phone.** Before Kd is asked to click through, the terminal walks
   the whole task on the phone itself (CLAUDE.md §4), and says what it saw.
 

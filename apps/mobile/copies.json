@@ -1,0 +1,6 @@
+{
+  "feature1": { "name": "Feature 1", "apiPort": 3000, "metroPort": 8091 },
+  "feature2": { "name": "Feature 2", "apiPort": 3001, "metroPort": 8092 },
+  "exercise1": { "name": "Exercise 1", "apiPort": 3002, "metroPort": 8093 },
+  "exercise2": { "name": "Exercise 2", "apiPort": 3003, "metroPort": 8094 }
+}

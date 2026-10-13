@@ -1,0 +1,5 @@
+# Rulings · 2026-10-12 · Stage 5 item 10, the empty app on Kd's phone (feature folder 1)
+
+## How work is done
+
+- 2026-10-12 · **Item 10, the empty app on his phone: go, and packages are taken carefully.** Kd: *"go but careful while downloadin packages as i have heard hackers tries to hack companies through packages"*. His yes covers Expo, React Native, React and Expo's developer build. **The terminal's own, his to overrule:** a new package's list is worked out refusing anything published in the last 14 days (`minimum-release-age`, which needs pnpm 10 for that one step; the lockfile stays the one pnpm 9 reads), main packages are pinned to an exact version, and every added package is checked for a script that runs on install before any is allowed to. Measured for item 10 on 2026-10-12: the first list had 39 packages under 14 days old, 11 published that day; the list kept has 356 added, none under 14 days, none with an install script. The phone test tools named in the plan (`jest-expo`, React Native's testing library) were left out: the tests run on vitest, already here, and item 11 chooses a screen-test tool. CLAUDE.md §4, "Dependencies".
