@@ -272,6 +272,8 @@ d("a gym's waiver (real Postgres)", () => {
     async () => {
       const iron = await makeGym("Iron House");
       const studio = await makeGym("Studio Nine");
+      // Dana joined before the gym wrote a waiver, so she has signed nothing.
+      const { who: dana } = await member(iron, "dana", "Dana Cole");
       const first = await save(iron, PASTED);
       expect(first).toMatchObject({ inUse: true, waiver: { version: 1, text: KEPT } });
       const v1 = savedId(first);
@@ -307,7 +309,7 @@ d("a gym's waiver (real Postgres)", () => {
       // The gym changes its words. Alice has NOT signed the new ones, anywhere it is said.
       const second = await save(iron, CHANGED);
       const v2 = savedId(second);
-      expect(second).toMatchObject({ inUse: true, people: 1, signed: 0, waiver: { version: 2, text: CHANGED } });
+      expect(second).toMatchObject({ inUse: true, people: 2, signed: 0, waiver: { version: 2, text: CHANGED } });
       expect(await myWaiver(iron, alice)).toEqual({ gymName: "Iron House", waiver: { id: v2, version: 2, text: CHANGED }, signed: null });
       const page = await personPage(iron, aliceEntry);
       expect(page.waiverInUse).toBe(true);
@@ -317,6 +319,11 @@ d("a gym's waiver (real Postgres)", () => {
       expect(stale.statusCode).toBe(409);
       expect(errorOf(stale)).toMatchObject({ error: "waiver_changed", message: WAIVER_WORDS.waiver_changed("Iron House") });
       expect((await signaturesAt(iron)).map((row) => row.version)).toEqual([1]);
+      // Dana's screen still shows version 1 too, which she never signed: refused, and she has
+      // signed nothing, old words or new.
+      expect((await sign(iron, dana, { waiverId: v1, name: "Dana Cole" })).statusCode).toBe(409);
+      expect((await signaturesAt(iron)).filter((row) => row.user_id === dana.userId)).toEqual([]);
+      expect((await myWaiver(iron, dana)).signed).toBeNull();
       // She reads the new words and signs them. Her first signature stays with its own words.
       const again = await sign(iron, alice, { waiverId: v2, name: "Alice Stone" });
       expect(again.statusCode, again.body).toBe(200);
@@ -343,7 +350,7 @@ d("a gym's waiver (real Postgres)", () => {
       }
       // Ben is on the list and not in the app: nobody has signed for him.
       expect(await personPage(iron, benEntry)).toMatchObject({ waiverInUse: true, members: [] });
-      expect(await readGymWaiver(iron)).toMatchObject({ people: 2, signed: 2 });
+      expect(await readGymWaiver(iron)).toMatchObject({ people: 3, signed: 2 });
     },
     TEST_TIMEOUT_MS,
   );
