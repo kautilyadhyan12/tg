@@ -399,6 +399,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 
      - 20d-i. [ ] **The At risk list**: a line in the menu, At risk, naming who used to come and has stopped (no check-in for 14 days after coming in 2 of their last 4 weeks, both the gym's to change), each with their last check-in and one press to send a come-back message.
 
+- **18b as first written (split 2026-10-12 into 18b-i, 18b-ii and 18b-iii).** 18b. [ ] **The register**: the Sell screen (a product or a membership type, the person or "walk-in", how they paid — one bill and one payment, one transaction, an idempotency key), products, discounts and promo codes counted under a lock, the sold-at price written on the membership. **Tax** (RULINGS 2026-10-08): its plan settles how a gym adds tax to what it sells, as a rate the gym sets and a line of its own on the bill and the receipt.
 **20d-ii, as it stood when it was built (merged 2026-10-12, PR #229):**
 
      - 20d-ii. [ ] **The weekly summary, as a box on Overview** (Kd, RULINGS 2026-10-12: a notice in the console, not an email): Last 7 days — new, left, at risk, visits against the 7 days before, payments due, each with a button to its page.

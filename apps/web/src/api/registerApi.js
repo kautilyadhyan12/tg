@@ -1,0 +1,39 @@
+import { memberPurchasesResponseSchema, salePeopleResponseSchema, sellPageResponseSchema, sellProductResponseSchema } from '@app/shared';
+import authApi from './authApi';
+
+// THE CONSOLE'S SELL PAGE (spec Part 3 §14.3; ROADMAP 18b-i): for staff holding
+// `billing.members` (sell) or `memberships.manage` (products and tax). The server refuses
+// anyone else whatever a screen shows. Each answer is read through its contract, so a body
+// this screen cannot read is an error, never an empty page.
+function contractError(what) {
+  const err = new Error(`response for ${what} did not match its contract`);
+  err.isContractError = true;
+  return err;
+}
+
+const gymPath = (gymId) => `/v1/orgs/${encodeURIComponent(gymId)}`;
+const read = (schema, what, res) => {
+  const parsed = schema.safeParse(res.data);
+  if (!parsed.success) throw contractError(what);
+  return parsed.data;
+};
+const page = (res) => read(sellPageResponseSchema, 'the Sell page', res);
+
+export const registerService = {
+  /** What there is to sell, the gym's tax and today's takings. */
+  get: async (gymId) => page(await authApi.get(`${gymPath(gymId)}/register`)),
+  /** The gym's own records a name or a member number finds. */
+  findPeople: async (gymId, query) =>
+    read(salePeopleResponseSchema, 'that search', await authApi.get(`${gymPath(gymId)}/register/people`, { params: { query } })).people,
+  /** One sale. `body.requestKey` is the form's own, so the same form pressed twice sells once. */
+  sell: async (gymId, body) => read(sellProductResponseSchema, 'that sale', await authApi.post(`${gymPath(gymId)}/register/sales`, body)),
+  undoSale: async (gymId, saleId) => page(await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/undo`, {})),
+  saveTax: async (gymId, tax) => page(await authApi.put(`${gymPath(gymId)}/register/tax`, tax)),
+  addProduct: async (gymId, body) => page(await authApi.post(`${gymPath(gymId)}/register/products`, body)),
+  changeProduct: async (gymId, productId, body) => page(await authApi.put(`${gymPath(gymId)}/register/products/${encodeURIComponent(productId)}`, body)),
+  archiveProduct: async (gymId, productId) => page(await authApi.delete(`${gymPath(gymId)}/register/products/${encodeURIComponent(productId)}`)),
+  restoreProduct: async (gymId, productId) => page(await authApi.post(`${gymPath(gymId)}/register/products/${encodeURIComponent(productId)}/restore`, {})),
+  /** What one person has bought at the desk, newest first. */
+  purchases: async (gymId, entryId) =>
+    read(memberPurchasesResponseSchema, "this person's purchases", await authApi.get(`${gymPath(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/purchases`)),
+};

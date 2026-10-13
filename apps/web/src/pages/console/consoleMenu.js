@@ -9,6 +9,7 @@ import { canManageMemberships } from './membershipTypesView';
 import { canManagePosts } from '../../components/gym/postsView';
 import { canReadReports } from './reportsView';
 import { canSeeAtRisk } from './atRiskView';
+import { canOpenSell } from './sellView';
 
 /** Settings holds sections gated on two permissions (the gym's details: `org.manage`;
  *  Booking rules: `schedule.manage`), so its page is drawn for whoever holds either.
@@ -41,6 +42,8 @@ export function consoleMenu(orgSlug, privileges, orgType) {
     { key: 'members', to: `${base}/members`, end: false, label: membersPageName(privileges, orgType), tabLabel: orgWords(orgType).peopleCap, phone: 'tab' },
     // What the gym sells (23c-i): its own line, straight after the people who hold it.
     canManageMemberships(privileges) && { key: 'memberships', to: `${base}/memberships`, end: false, label: 'Memberships', phone: 'more' },
+    // The desk's register (18b-i): used every day, so a line of its own, beside what it sells.
+    canOpenSell(privileges) && { key: 'sell', to: `${base}/sell`, end: false, label: 'Sell', phone: 'more' },
     has('members.confirm') && { key: 'leads', to: `${base}/leads`, end: false, label: 'Leads', phone: 'more' },
     canReadAttendance(privileges) && {
       key: 'attendance',

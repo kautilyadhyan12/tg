@@ -835,6 +835,7 @@ export async function mergeEntries(
     }
     const memberships = await repo.moveHeldMemberships(tx, gymId, goneId, keepId);
     await repo.moveVisitLinks(tx, gymId, goneId, keepId);
+    await repo.moveSaleLinks(tx, gymId, goneId, keepId);
     await repo.moveBookingLinks(tx, gymId, goneId, keepId);
     await repo.movePtLinks(tx, gymId, goneId, keepId);
     await moveNotesAndTags(tx, gymId, goneId, keepId);

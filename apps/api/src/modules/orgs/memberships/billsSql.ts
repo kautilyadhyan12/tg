@@ -1,5 +1,5 @@
 // The statements that read and write a gym's bills, payments and refunds (spec Part 3
-// §14.2; ROADMAP 18a-i and 18a-ii). With `billsRepo.ts` and the give in `heldRepo.ts`,
+// §14.2; ROADMAP 18a-i and 18a-ii; the day's takings for the Sell page, 18b-i). With `billsRepo.ts` and the give in `heldRepo.ts`,
 // the only files that touch the three tables.
 //
 // Every statement carries `gym_id` in its WHERE. A write runs in its caller's
@@ -332,6 +332,71 @@ export async function insertPayment(tx: TransactionSql, p: NewPayment, now: Date
     ON CONFLICT DO NOTHING
     RETURNING id`;
   return row?.id ?? null;
+}
+
+export interface DayPaymentRow {
+  id: string;
+  typeName: string;
+  amountMinor: number;
+  currency: string;
+  method: MemberPaymentMethod;
+  paidAt: Date;
+  by: string | null;
+  entryId: string;
+  personName: string;
+}
+
+/** THE MEMBERSHIP PAYMENTS RECORDED ON ONE OF THE GYM'S DAYS that stand (18b-i: the Sell
+ *  page's takings), newest first, with what they add up to by how they were paid and in
+ *  which money, and the refunds noted that day. */
+export async function paymentsOn(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  day: string,
+  limit: number,
+): Promise<{ payments: DayPaymentRow[]; count: number; sums: { method: MemberPaymentMethod; currency: string; count: number; totalMinor: number }[]; refunds: { currency: string; totalMinor: number }[] }> {
+  const [rows, sums, refunds] = await Promise.all([
+    sql<{ id: string; type_name: string; amount_minor: number; currency: string; method: string; created_at: Date; by: string | null; entry_id: string; full_name: string }[]>`
+      SELECT p.id, t.name AS type_name, p.amount_minor, p.currency, p.method, p.created_at, u.display_name AS by, h.entry_id, e.full_name
+      FROM gym_member_payments p
+      JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+      JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+      JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+      JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+      LEFT JOIN users u ON u.id = p.recorded_by
+      WHERE p.gym_id = ${gymId} AND p.paid_on = ${day}::date AND p.undone_at IS NULL
+      ORDER BY p.seq DESC
+      LIMIT ${limit}`,
+    sql<{ method: string; currency: string; n: number; total: string }[]>`
+      SELECT method, currency, count(*)::int AS n, sum(amount_minor)::text AS total
+      FROM gym_member_payments
+      WHERE gym_id = ${gymId} AND paid_on = ${day}::date AND undone_at IS NULL
+      GROUP BY method, currency`,
+    sql<{ currency: string; total: string }[]>`
+      SELECT r.currency, sum(r.amount_minor)::text AS total
+      FROM gym_member_refunds r
+      JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
+      WHERE r.gym_id = ${gymId} AND r.refunded_on = ${day}::date AND r.undone_at IS NULL AND p.undone_at IS NULL
+      GROUP BY r.currency`,
+  ]);
+  const count = sums.reduce((n, row) => n + row.n, 0);
+  return {
+    payments: rows.map((r) => ({
+      id: r.id,
+      typeName: r.type_name,
+      amountMinor: r.amount_minor,
+      currency: r.currency,
+      method: memberPaymentMethodSchema.parse(r.method),
+      paidAt: r.created_at,
+      by: r.by,
+      entryId: r.entry_id,
+      personName: r.full_name,
+    })),
+    count,
+    // One money is never added to another: each sum says which it is in.
+    sums: sums.map((row) => ({ method: memberPaymentMethodSchema.parse(row.method), currency: row.currency, count: row.n, totalMinor: Number(row.total) })),
+    refunds: refunds.map((row) => ({ currency: row.currency, totalMinor: Number(row.total) })),
+  };
 }
 
 /** How many days after its due date this gym's unpaid bill reads Overdue. */
