@@ -7,6 +7,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import {
+  DIET_LABEL_CAUTION,
   FOOD_ALLERGY_CAUTION,
   MAX_ITEM_GRAMS,
   MEAL_SCAN_TTL_SECONDS,
@@ -611,7 +612,10 @@ export async function getMealIdeas(deps: Pick<NutritionDeps, "sql">, userId: str
   const { kcalLeft, meals } = suggestMeals({
     seed: userId, day, diet, mealsPerDay, kcalTarget: targets.kcal, kcalEaten: eaten.kcal, mealsLogged: eaten.meals,
   });
-  return mealIdeasResponseSchema.parse({ status: "ok", day, kcalLeft, meals, caution: FOOD_ALLERGY_CAUTION });
+  return mealIdeasResponseSchema.parse({
+    status: "ok", day, kcalLeft, meals, caution: FOOD_ALLERGY_CAUTION,
+    labelCaution: diet === "non_vegetarian" ? null : DIET_LABEL_CAUTION,
+  });
 }
 
 /** The rings' answer for a plan the caller has already read (goals read it once for the

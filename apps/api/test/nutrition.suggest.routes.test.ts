@@ -5,7 +5,7 @@
 // no sign-in, and a signed-in person can only ever read their own.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { FOOD_ALLERGY_CAUTION, dietAllows, mealIdeasResponseSchema, type Diet, type MealIdeasResponse } from "@app/shared";
+import { DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, dietAllows, mealIdeasResponseSchema, type Diet, type MealIdeasResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
@@ -126,6 +126,8 @@ d("meal ideas route (real Postgres)", () => {
       const reply = await ok(cookies);
       const items = reply.meals.flatMap((m) => m.ideas).flatMap((i) => i.items);
       expect(items.length).toBeGreaterThan(0);
+      // Told to check labels, and only they are.
+      expect(reply.labelCaution, diet).toBe(diet === "non_vegetarian" ? null : DIET_LABEL_CAUTION);
       for (const item of items) {
         const foodDiet = DIET_OF.get(item.canonical);
         expect(foodDiet, item.name).toBeDefined();

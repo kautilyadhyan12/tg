@@ -552,6 +552,11 @@ export type NutritionTargetsResponse = z.infer<typeof nutritionTargetsResponseSc
  *  workout today, the meal suggestions (ROADMAP 7a) when they are built. */
 export const FOOD_ALLERGY_CAUTION = "If you have any food allergy, take care and check the labels.";
 
+/** The line a vegetarian or vegan reads under the meal ideas, beside the allergy
+ *  line (Kd, 2026-10-14): a food's diet follows its usual recipe, and no label
+ *  of ours can see a product's own. Never shown to somebody who eats meat. */
+export const DIET_LABEL_CAUTION = "Check labels too: some breads and cheeses contain animal ingredients.";
+
 // ROADMAP 34d-i — meal ideas for what is left of the day.
 /** One food of an idea, at the amount suggested: `servings` of the food's own
  *  `unit` ("g" means by weight, and `grams` is the amount), with the numbers
@@ -589,6 +594,8 @@ export const mealIdeasResponseSchema = z.discriminatedUnion("status", [
     kcalLeft: z.number().int(),
     meals: z.array(suggestedMealSchema).max(6),
     caution: z.literal(FOOD_ALLERGY_CAUTION),
+    /** For a vegetarian or vegan; null for somebody who eats meat. */
+    labelCaution: z.literal(DIET_LABEL_CAUTION).nullable(),
   }).strict(),
 ]);
 export type MealIdeasResponse = z.infer<typeof mealIdeasResponseSchema>;
