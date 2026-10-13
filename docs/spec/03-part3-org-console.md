@@ -3452,6 +3452,16 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
 - **A person's page** lists what they bought at the desk, with a button that opens Sell
   with them already picked. Two records joined: the sales follow the kept one. A record
   deleted for good leaves its sales as a walk-in's.
+- **After round one (2026-10-13).** Staff who only change prices are sent the products and
+  the tax: no sale, no buyer's or seller's name and no money. **One day's total is one
+  money:** a product priced before the gym changed its country is not sold until its price
+  is saved again (which puts it in the gym's money as it is now), and a sale or payment
+  taken in the old money stays in the list and is counted beside the total, never added to
+  it. **A membership sold here carries the price the button showed** (`priceMinor` on the
+  give): at any other price nothing is given, and the price list is read again. The page is
+  read again each time its tab is looked at, and a membership starts on the day the server
+  says it is at the press. The same press again is the same sale even after its buyer's
+  record was joined to another.
 - **Not built**: a sale of several different products at once; a refund of a product sale
   on a later day; receipts (18g); discounts and promo codes (18b-ii); tax on memberships
   (18b-iii); product sales in Reports' money figures (21b).
