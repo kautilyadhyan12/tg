@@ -7,23 +7,35 @@
     "phone": "node scripts/phone.mjs",
     "start": "node scripts/phone.mjs --start",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test scripts index.ts app.config.ts metro.config.js",
-    "test": "vitest run"
+    "lint": "eslint src test scripts index.ts app.config.ts metro.config.js jest.config.js vitest.config.ts",
+    "test": "vitest run && jest"
   },
   "dependencies": {
     "@app/shared": "workspace:*",
+    "@expo-google-fonts/inter": "0.4.2",
+    "@react-navigation/bottom-tabs": "7.19.2",
+    "@react-navigation/native": "7.4.1",
     "expo": "57.0.25",
     "expo-constants": "57.0.19",
     "expo-dev-client": "57.0.19",
+    "expo-font": "57.0.4",
     "react": "19.2.3",
-    "react-native": "0.86.3"
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "5.7.0",
+    "react-native-screens": "4.26.2",
+    "react-native-svg": "15.15.4"
   },
   "devDependencies": {
     "@app/config": "workspace:*",
+    "@testing-library/react-native": "^14.0.0",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
     "@types/react": "19.2.2",
     "eslint": "^9.18.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "jest": "^29.7.0",
+    "jest-expo": "~57.0.0",
+    "test-renderer": "1.2.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0",
     "vitest": "^2.1.8"
