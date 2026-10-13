@@ -263,3 +263,127 @@ export async function readClassCounts(
     GROUP BY t.id, t.name`;
   return { ever: ever[0]?.ever === true, types: z.array(classCountsSchema).parse(rows) };
 }
+
+const moneyGymSchema = z.object({
+  country: z.string().nullable(),
+  bills_overdue_days: count,
+  paid_currencies: z.array(z.string()),
+  held_currency: z.string().nullable(),
+});
+
+/** How many days after its due date an unpaid bill reads Overdue, and the currencies the
+ *  gym's notebook holds: those of its standing payments, the newest first, and its newest
+ *  membership's. A membership keeps the currency it was given in, so after a gym's
+ *  country changes its money is still there to count. */
+export async function readMoneyGym(
+  sql: Sql | TransactionSql,
+  gymId: string,
+): Promise<{ country: string | null; overdueAfterDays: number; paidCurrencies: string[]; heldCurrency: string | null }> {
+  const rows = await sql<Record<string, unknown>[]>`
+    SELECT g.country, g.bills_overdue_days,
+           (SELECT COALESCE(array_agg(x.currency ORDER BY x.newest DESC), '{}')
+            FROM (SELECT p.currency, max(p.seq) AS newest FROM gym_member_payments p
+                  WHERE p.gym_id = g.id AND p.undone_at IS NULL GROUP BY p.currency) x) AS paid_currencies,
+           (SELECT h.currency FROM gym_held_memberships h
+            WHERE h.gym_id = g.id
+            ORDER BY h.created_at DESC, h.id LIMIT 1) AS held_currency
+    FROM gyms g WHERE g.id = ${gymId}`;
+  const row = moneyGymSchema.parse(rows[0]);
+  return { country: row.country, overdueAfterDays: row.bills_overdue_days, paidCurrencies: row.paid_currencies, heldCurrency: row.held_currency };
+}
+
+/** Sums of money are whole minor units; added up they can pass an int4. */
+const minor = z.number().int().min(0);
+const moneyRowSchema = z.object({
+  any_membership: z.boolean(),
+  first_paid_on: z.string().nullable(),
+  other_currency: z.boolean(),
+  months: z.array(z.object({ typeId: z.string(), typeName: z.string(), month: z.string(), paidMinor: minor, refundedMinor: minor })),
+  current_minor: minor,
+  current_people: count,
+  past_minor: minor,
+  past_people: count,
+  overdue_minor: minor,
+  overdue_people: count,
+});
+export type MoneyCounts = z.infer<typeof moneyRowSchema>;
+
+/** The gym's notebook added up, in one statement: money in `currency` only.
+ *
+ *  A payment counts in the month of the gym's day it was paid on, a refund in the month
+ *  the money went back, each only while it stands (one taken back is kept, marked, and is
+ *  not money). A refund of a payment that was taken back is not counted either. Both are
+ *  given for each membership type, over the last `REPORT_MONTHS` months.
+ *
+ *  Owed is every bill still open whose day has come, less what is paid on it, for the
+ *  people on the list and for past members apart; overdue is the part of both that is
+ *  more than `overdueAfterDays` past its due date, as `memberBillState` reads one bill. */
+export async function readMoney(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  today: string,
+  currency: string,
+  overdueAfterDays: number,
+): Promise<MoneyCounts> {
+  const rows = await sql<Record<string, unknown>[]>`
+    WITH clock AS (
+      SELECT ${today}::date AS today,
+             (date_trunc('month', ${today}::date) - make_interval(months => ${REPORT_MONTHS - 1}))::date AS from_day
+    ),
+    paid AS (
+      SELECT h.membership_type_id AS type_id, to_char(p.paid_on, 'YYYY-MM') AS month, sum(p.amount_minor) AS minor
+      FROM gym_member_payments p
+      JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+      JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+      CROSS JOIN clock c
+      WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency = ${currency} AND p.paid_on >= c.from_day
+      GROUP BY 1, 2
+    ),
+    refunded AS (
+      SELECT h.membership_type_id AS type_id, to_char(r.refunded_on, 'YYYY-MM') AS month, sum(r.amount_minor) AS minor
+      FROM gym_member_refunds r
+      JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
+      JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+      JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+      CROSS JOIN clock c
+      WHERE r.gym_id = ${gymId} AND r.undone_at IS NULL AND p.undone_at IS NULL AND r.currency = ${currency}
+        AND r.refunded_on >= c.from_day
+      GROUP BY 1, 2
+    ),
+    by_month AS (
+      SELECT COALESCE(p.type_id, r.type_id) AS type_id, COALESCE(p.month, r.month) AS month,
+             COALESCE(p.minor, 0) AS paid_minor, COALESCE(r.minor, 0) AS refunded_minor
+      FROM paid p
+      FULL JOIN refunded r ON r.type_id = p.type_id AND r.month = p.month
+    ),
+    owed AS (
+      SELECT (e.former_at IS NOT NULL) AS past, e.id AS entry_id, (b.due_on + ${overdueAfterDays}::int < c.today) AS overdue,
+             b.amount_minor - COALESCE((SELECT sum(p.amount_minor) FROM gym_member_payments p
+                                        WHERE p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL), 0) AS left_minor
+      FROM gym_member_bills b
+      JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+      JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+      CROSS JOIN clock c
+      WHERE b.gym_id = ${gymId} AND b.status = 'open' AND b.due_on <= c.today AND b.currency = ${currency}
+    )
+    SELECT
+      EXISTS (SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = ${gymId}) AS any_membership,
+      (SELECT to_char(min(p.paid_on), 'YYYY-MM-DD') FROM gym_member_payments p
+       WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency = ${currency}) AS first_paid_on,
+      (EXISTS (SELECT 1 FROM gym_member_payments p
+               WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency <> ${currency})
+       OR EXISTS (SELECT 1 FROM gym_member_bills b, clock c
+                  WHERE b.gym_id = ${gymId} AND b.status = 'open' AND b.due_on <= c.today AND b.currency <> ${currency})) AS other_currency,
+      (SELECT COALESCE(json_agg(json_build_object(
+                'typeId', m.type_id, 'typeName', t.name, 'month', m.month,
+                'paidMinor', m.paid_minor, 'refundedMinor', m.refunded_minor)), '[]'::json)
+       FROM by_month m
+       JOIN gym_membership_types t ON t.gym_id = ${gymId} AND t.id = m.type_id) AS months,
+      (SELECT COALESCE(sum(left_minor) FILTER (WHERE NOT past), 0)::float8 FROM owed) AS current_minor,
+      (SELECT (count(DISTINCT entry_id) FILTER (WHERE NOT past))::int FROM owed) AS current_people,
+      (SELECT COALESCE(sum(left_minor) FILTER (WHERE past), 0)::float8 FROM owed) AS past_minor,
+      (SELECT (count(DISTINCT entry_id) FILTER (WHERE past))::int FROM owed) AS past_people,
+      (SELECT COALESCE(sum(left_minor) FILTER (WHERE overdue), 0)::float8 FROM owed) AS overdue_minor,
+      (SELECT (count(DISTINCT entry_id) FILTER (WHERE overdue))::int FROM owed) AS overdue_people`;
+  return moneyRowSchema.parse(rows[0]);
+}
