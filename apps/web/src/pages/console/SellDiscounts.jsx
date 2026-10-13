@@ -12,9 +12,11 @@ import {
   discountBody,
   discountProblems,
   discountRow,
+  discountInOldMoney,
   discountStatusTag,
   draftFromDiscount,
   emptyDiscountDraft,
+  oldMoneyLine,
 } from './sellDiscountsView';
 import { priceExample } from './sellView';
 import { SavedNote } from './SellProducts';
@@ -260,7 +262,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, onPage 
       ) : (
         <ul className="list-none m-0 p-0">
           {page.discounts.map((discount) => {
-            const tag = discountStatusTag(discount, page.today);
+            const tag = discountStatusTag(discount, page.today, page.currency);
             return (
               <li key={discount.id} className="flex flex-col gap-3 py-3" style={LINE} data-testid="discount-row">
                 {draft !== null && draft.id === discount.id ? (
@@ -273,6 +275,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, onPage 
                         <span className={`c-tag ${tag.tag}`}>{tag.words}</span>
                       </p>
                       <p className="c-s14 c-t2 m-0">{discountRow(discount, page.products)}</p>
+                      {discountInOldMoney(discount, page.currency) ? <p className="c-s14 c-t1 m-0">{oldMoneyLine(discount, page.currency)}</p> : null}
                     </div>
                     {canManage ? (
                       <div className="flex flex-wrap gap-2 flex-shrink-0">

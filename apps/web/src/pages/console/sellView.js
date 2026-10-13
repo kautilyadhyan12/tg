@@ -113,9 +113,12 @@ export function saleProblem({ product, quantity, who, person, currency, discount
   if (quantity > SALE_QUANTITY_MAX) return `One sale can hold up to ${String(SALE_QUANTITY_MAX)}.`;
   if (product.stock !== null && quantity > product.stock) return `Only ${String(product.stock)} left in stock.`;
   if (who === 'member' && (person === null || person === undefined)) return 'Find and pick the member, or choose Walk-in.';
-  // The server sells nothing for nothing either.
+  // The server sells nothing for nothing either, and spends no use on nothing off.
   if (discount !== null && discountMinorFor(product, quantity, discount) >= product.priceMinor * quantity) {
     return `${discount.name} takes off the whole price, so there is nothing to pay. Choose No discount, or another one.`;
+  }
+  if (discount !== null && discountMinorFor(product, quantity, discount) === 0) {
+    return `${discount.name} takes nothing off this price. Choose No discount, or another one.`;
   }
   return null;
 }

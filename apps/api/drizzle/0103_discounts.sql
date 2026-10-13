@@ -4,7 +4,8 @@
 -- One discount a gym offers: a percentage (hundredths of a percent) or a fixed amount in
 -- one money, optionally between two of the gym's own days, optionally a limited number of
 -- times. `uses` counts the sales made with it that still stand; it is moved in the sale's
--- own transaction. Archived, never deleted: a sale keeps pointing at it.
+-- own transaction. Archived, never deleted: a sale keeps pointing at it, and the database
+-- refuses to delete a discount a sale points at.
 CREATE TABLE "gym_discounts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"gym_id" uuid NOT NULL REFERENCES "gyms"("id") ON DELETE CASCADE,
@@ -30,7 +31,7 @@ CREATE TABLE "gym_discounts" (
 	CONSTRAINT "gym_discounts_kind_check" CHECK ("kind" IN ('percent','amount')),
 	CONSTRAINT "gym_discounts_shape_check" CHECK (
 		CASE WHEN "kind" = 'percent' THEN
-			"percent_bp" IS NOT NULL AND "percent_bp" BETWEEN 1 AND 10000
+			"percent_bp" IS NOT NULL AND "percent_bp" BETWEEN 1 AND 9999
 			AND "amount_minor" IS NULL AND "currency" IS NULL
 		ELSE
 			"amount_minor" IS NOT NULL AND "amount_minor" BETWEEN 1 AND 99999999
@@ -68,8 +69,8 @@ ALTER TABLE "gym_sales" ADD COLUMN "discount_minor" integer DEFAULT 0 NOT NULL;-
 ALTER TABLE "gym_sales" ADD CONSTRAINT "gym_sales_discount_check" CHECK (
 	("discount_id" IS NULL) = ("discount_name" IS NULL)
 	AND CASE WHEN "discount_id" IS NULL THEN "discount_minor" = 0
-		ELSE "discount_minor" BETWEEN 0 AND "unit_price_minor" * "quantity" - 1 END
+		ELSE "discount_minor" BETWEEN 1 AND "unit_price_minor" * "quantity" - 1 END
 );--> statement-breakpoint
 ALTER TABLE "gym_sales" ADD CONSTRAINT "gym_sales_discount_fk" FOREIGN KEY ("gym_id", "discount_id")
-	REFERENCES "gym_discounts"("gym_id", "id") ON DELETE CASCADE;--> statement-breakpoint
+	REFERENCES "gym_discounts"("gym_id", "id");--> statement-breakpoint
 CREATE INDEX "gym_sales_discount_idx" ON "gym_sales" ("gym_id", "discount_id") WHERE "discount_id" IS NOT NULL;

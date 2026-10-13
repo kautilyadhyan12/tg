@@ -14,7 +14,7 @@ import MemberListPerson from './MemberListPerson';
 import { Refusal } from './MemberListTags';
 import SellDiscounts from './SellDiscounts';
 import SellProducts from './SellProducts';
-import { applyPromoCode, discountOption, discountsFor } from './sellDiscountsView';
+import { applyPromoCode, discountOption, discountsFor, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
 import {
   NO_SELLING_LINE,
   PAY_CHOICES,
@@ -195,7 +195,7 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
   const [key, setKey] = useState(newKey);
   const [state, setState] = useState({ busy: false, error: null, done: null });
   const [discountId, setDiscountId] = useState('');
-  const [code, setCode] = useState({ text: '', note: null });
+  const [code, setCode] = useState({ text: '', note: null, appliedId: null });
   const productSelect = useId();
   const quantityId = useId();
   const discountSelect = useId();
@@ -210,10 +210,13 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
   const hasCodes = page.discounts.some((d) => d.code !== null);
   const summary = Number.isInteger(quantity) ? saleSummary(product, quantity, page.tax, discount) : null;
   const problem = saleProblem({ product, quantity, who, person, currency: page.currency, discount });
+  // "Applied" is said only while the applied discount is the one on the sale.
+  const codeNote = promoCodeNote(page, product, discount, code);
+  const oldMoney = oldMoneySaleLine(page);
   const applyCode = () => {
     const found = applyPromoCode(page, product, code.text);
     if (found.discount !== null) setDiscountId(found.discount.id);
-    setCode((was) => ({ ...was, note: found.note }));
+    setCode((was) => ({ ...was, note: found.note, appliedId: found.discount === null ? null : found.discount.id }));
     touched();
   };
   const touched = () => setState((was) => (was.error === null && was.done === null ? was : { ...was, error: null, done: null }));
@@ -239,7 +242,7 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
       setWho('walkin');
       setPerson(null);
       setDiscountId('');
-      setCode({ text: '', note: null });
+      setCode({ text: '', note: null, appliedId: null });
       onPage(answer.register);
     } catch (err) {
       setState({ busy: false, error: errorText(err, "We couldn't record that sale. Nothing was sold: try again."), done: null });
@@ -348,7 +351,7 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
                 disabled={locked || state.busy}
                 onChange={(e) => {
                   setDiscountId(e.target.value);
-                  setCode((was) => ({ ...was, note: null }));
+                  setCode((was) => ({ ...was, note: null, appliedId: null }));
                   touched();
                 }}
               >
@@ -360,6 +363,7 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
                 ))}
               </select>
             )}
+            {oldMoney !== null ? <p className="c-s14 c-t2 m-0">{oldMoney}</p> : null}
           </div>
           {hasCodes ? (
             <div className="c-field">
@@ -375,7 +379,7 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
                   maxLength={40}
                   autoComplete="off"
                   disabled={locked || state.busy}
-                  onChange={(e) => setCode({ text: e.target.value, note: null })}
+                  onChange={(e) => setCode({ text: e.target.value, note: null, appliedId: null })}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') applyCode();
                   }}
@@ -384,9 +388,9 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
                   Apply
                 </button>
               </div>
-              {code.note !== null ? (
+              {codeNote !== null ? (
                 <p className="c-s14 c-t2 m-0" role="status">
-                  {code.note}
+                  {codeNote}
                 </p>
               ) : (
                 <p className="c-s13 c-t3 m-0">If the customer gives a code, type it here and press Apply.</p>

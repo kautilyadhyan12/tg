@@ -29,7 +29,7 @@ describe("what a discount takes off", () => {
     ["a half goes up: 50% of 0.05", percent(5000), 5, 3],
     ["1% of 0.30 rounds to nothing", percent(100), 30, 0],
     ["33.33% of 9.00 is 2.9997, so 3.00", percent(3333), 900, 300],
-    ["100% is the whole price", percent(10_000), 500, 500],
+    ["99.99% of 5.00 is 4.9995, so the whole 5.00", percent(9999), 500, 500],
     ["a fixed amount comes off once, however many are bought", amount(100), 597, 100],
     ["a fixed amount bigger than the price takes the price and no more", amount(500), 300, 300],
     ["a fixed amount equal to the price", amount(300), 300, 300],
@@ -42,6 +42,7 @@ describe("what a discount takes off", () => {
     expect(discountOff({ kind: "percent", percentBp: null, amountMinor: 500 }, 1000)).toBe(0);
     expect(discountOff({ kind: "amount", percentBp: 1000, amountMinor: null }, 1000)).toBe(0);
     expect(discountOff(percent(10_001), 1000)).toBe(0);
+    expect(discountOff(percent(10_000), 1000)).toBe(0);
     expect(discountOff(percent(0), 1000)).toBe(0);
     expect(discountOff(percent(-500), 1000)).toBe(0);
     expect(discountOff(amount(-1), 1000)).toBe(0);
@@ -186,8 +187,9 @@ describe("what staff type", () => {
     ["12.50", 1250],
     [" 7 ", 700],
     ["0.5", 50],
-    ["100", 10_000],
-    ["100.00", 10_000],
+    ["99.99", 9999],
+    ["100", null],
+    ["100.00", null],
     ["0", null],
     ["0.00", null],
     ["100.01", null],
@@ -203,7 +205,7 @@ describe("what staff type", () => {
   });
 
   it("a percentage reads back as it was typed", () => {
-    for (const [bp, text] of [[1000, "10"], [1250, "12.5"], [50, "0.5"], [3333, "33.33"], [10_000, "100"], [5, "0.05"]] as const) {
+    for (const [bp, text] of [[1000, "10"], [1250, "12.5"], [50, "0.5"], [3333, "33.33"], [9999, "99.99"], [5, "0.05"]] as const) {
       expect(bpToPercentText(bp)).toBe(text);
       expect(percentToBp(text)).toBe(bp);
     }
@@ -247,6 +249,8 @@ describe("the discount form as the server takes it", () => {
     expect(saveGymDiscountRequestSchema.safeParse({ ...good, code: null, startsOn: null, endsOn: null, maxUses: null }).success).toBe(true);
     expect(saveGymDiscountRequestSchema.safeParse({ ...good, allProducts: false, productIds: [WATER] }).success).toBe(true);
     expect(saveGymDiscountRequestSchema.safeParse({ ...good, startsOn: "2026-06-01", endsOn: "2026-06-01" }).success).toBe(true);
+    expect(saveGymDiscountRequestSchema.safeParse({ ...good, startsOn: "2028-02-29", endsOn: "2028-02-29" }).success).toBe(true);
+    expect(saveGymDiscountRequestSchema.safeParse({ ...good, percentBp: 9999 }).success).toBe(true);
     expect(saveGymDiscountRequestSchema.parse({ ...good, name: "  Summer sale  " }).name).toBe("Summer sale");
   });
 
@@ -257,6 +261,11 @@ describe("the discount form as the server takes it", () => {
     ["a fixed amount with a percentage as well", { kind: "amount", amountMinor: 500 }],
     ["a percentage of nothing", { percentBp: 0 }],
     ["more than 100%", { percentBp: 10_001 }],
+    ["100%, which would leave nothing to pay", { percentBp: 10_000 }],
+    ["the 31st of February", { startsOn: "2026-02-31", endsOn: null }],
+    ["the 30th of February as the last day", { endsOn: "2026-02-30" }],
+    ["a thirteenth month", { startsOn: "2026-13-01", endsOn: null }],
+    ["the year nothing", { startsOn: "0000-00-00" }],
     ["a kind nobody knows", { kind: "bogo" }],
     ["it ends before it starts", { startsOn: "2026-08-31", endsOn: "2026-06-01" }],
     ["a day that is not a day", { startsOn: "June 1" }],

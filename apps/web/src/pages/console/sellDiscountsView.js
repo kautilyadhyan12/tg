@@ -35,13 +35,48 @@ export function discountAmountWords(discount) {
 
 const terms = (discount) => ({ ...discount, archived: discount.archivedAt !== null });
 
-export const DISCOUNT_STATUS_WORDS = { active: 'Active', scheduled: 'Scheduled', expired: 'Expired', used_up: 'Used up', archived: 'Archived' };
-const STATUS_TAGS = { active: 'c-tag-good', scheduled: 'c-tag-soft', expired: 'c-tag-plain', used_up: 'c-tag-warn', archived: 'c-tag-plain' };
+export const DISCOUNT_STATUS_WORDS = { active: 'Active', scheduled: 'Scheduled', expired: 'Expired', used_up: 'Used up', archived: 'Archived', needs_saving: 'Needs saving' };
+const STATUS_TAGS = { active: 'c-tag-good', scheduled: 'c-tag-soft', expired: 'c-tag-plain', used_up: 'c-tag-warn', archived: 'c-tag-plain', needs_saving: 'c-tag-warn' };
 
-/** The word beside a discount's name, and the tag it is drawn in. */
-export function discountStatusTag(discount, today) {
-  const status = discountStatus(terms(discount), today);
+/** A fixed amount kept in a money the gym no longer sells in (it changed its country):
+ *  the server uses it on nothing until its amount is saved again. */
+export function discountInOldMoney(discount, currency) {
+  return discount.kind === 'amount' && typeof currency === 'string' && discount.currency !== currency;
+}
+
+/** What to do about one, said on its row. */
+export function oldMoneyLine(discount, currency) {
+  return `This amount is in ${discount.currency}. Press Change and save it again to use it in ${currency}.`;
+}
+
+/** The same, said on the sale form, which leaves such a discount out of its list; null
+ *  where the gym has none. */
+export function oldMoneySaleLine(page) {
+  const old = page.discounts.filter((d) => d.archivedAt === null && discountInOldMoney(d, page.currency));
+  if (old.length === 0) return null;
+  const names = old.length === 1 ? old[0].name : old.length === 2 ? `${old[0].name} and ${old[1].name}` : `${old[0].name} and ${String(old.length - 1)} more`;
+  return `${names} cannot be used until ${old.length === 1 ? 'its amount is' : 'their amounts are'} saved again in ${page.currency}. Open ${old.length === 1 ? 'it' : 'them'} under Discounts below and press Change.`;
+}
+
+/** The word beside a discount's name, and the tag it is drawn in. `currency` is the gym's
+ *  own as it is now. */
+export function discountStatusTag(discount, today, currency = null) {
+  const real = discountStatus(terms(discount), today);
+  const status = real === 'active' && discountInOldMoney(discount, currency) ? 'needs_saving' : real;
   return { status, words: DISCOUNT_STATUS_WORDS[status], tag: STATUS_TAGS[status] };
+}
+
+/** What the line under the Promo code box says. A code that was applied is said to be
+ *  applied only while its discount is the one on the sale: after the product changes, or
+ *  the discount is used up or archived, the line says why it is no longer on it. */
+export function promoCodeNote(page, product, discount, code) {
+  if (code.appliedId === null || code.appliedId === undefined) return code.note;
+  if (discount !== null && discount.id === code.appliedId) return code.note;
+  const applied = page.discounts.find((d) => d.id === code.appliedId);
+  if (applied === undefined) return 'That promo code is no longer offered. No discount is on this sale.';
+  if (product === null || product === undefined) return null;
+  const why = discountWhyNot(applied, product, page.today);
+  return why === null ? null : `${why} No discount is on this sale.`;
 }
 
 /** Which products a discount is for, by name. */
@@ -131,7 +166,7 @@ export function applyPromoCode(page, product, text) {
   if (product === null || product === undefined) return { discount: null, note: 'Pick a product first, then apply the promo code.' };
   const why = discountWhyNot(found, product, page.today);
   if (why !== null) return { discount: null, note: why };
-  return { discount: found, note: `${found.code} applied: ${discountAmountWords(found)}.` };
+  return { discount: found, appliedId: found.id, note: `${found.code} applied: ${discountAmountWords(found)}.` };
 }
 
 // ── The form ────────────────────────────────────────────────────────────────
@@ -179,7 +214,7 @@ export function discountProblems(draft, currency, products) {
   else if (name.length > DISCOUNT_NAME_MAX) problems.name = `Keep the name to ${String(DISCOUNT_NAME_MAX)} characters.`;
   else if (!isVisibleText(name)) problems.name = HIDDEN_TEXT;
   if (draft.kind === 'percent') {
-    if (percentToBp(draft.percent) === null) problems.value = 'Enter the percentage as a number above 0 and up to 100, like 10.';
+    if (percentToBp(draft.percent) === null) problems.value = 'Enter the percentage as a number above 0 and under 100, like 10.';
   } else if (currency === null) {
     problems.value = 'Set your country in Settings before adding a fixed-amount discount.';
   } else {

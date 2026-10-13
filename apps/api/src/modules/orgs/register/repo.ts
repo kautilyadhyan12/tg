@@ -406,7 +406,9 @@ export type SellOutcome =
   /** The gym's own discount, and it cannot be used on this sale today. */
   | { kind: "discount_refused"; name: string; reason: DiscountRefusal }
   /** The discount takes off the whole price. */
-  | { kind: "nothing_to_pay" };
+  | { kind: "nothing_to_pay" }
+  /** The discount rounds to nothing on this price. */
+  | { kind: "discount_nothing_off"; name: string };
 
 export interface SellInput {
   gymId: string;
@@ -475,6 +477,8 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
       const fits = discountFits({ ...found, archived: found.archivedAt !== null }, { today: input.today, productId: item.id, currency: item.currency });
       if (!fits.ok) return { kind: "discount_refused", name: found.name, reason: fits.reason };
       used = { id: found.id, name: found.name, offMinor: discountOff(found, item.price_minor * input.quantity) };
+      // No use is spent on a discount that takes nothing off.
+      if (used.offMinor === 0) return { kind: "discount_nothing_off", name: found.name };
     }
 
     const tax = taxOf(gym);

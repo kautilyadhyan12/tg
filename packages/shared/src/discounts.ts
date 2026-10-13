@@ -17,8 +17,9 @@ export const DISCOUNT_ARCHIVED_PAGE = 50;
 /** How many products one discount can be limited to. */
 export const DISCOUNT_PRODUCTS_MAX = 200;
 export const DISCOUNT_USES_MAX = 100_000;
-/** A percentage in hundredths of a percent: 1250 is 12.5%. */
-export const DISCOUNT_PERCENT_BP_MAX = 10_000;
+/** A percentage in hundredths of a percent: 1250 is 12.5%. Under 100%: a sale has to
+ *  leave something to pay. */
+export const DISCOUNT_PERCENT_BP_MAX = 9_999;
 export const PROMO_CODE_MIN = 3;
 export const PROMO_CODE_MAX = 20;
 
@@ -31,7 +32,7 @@ export function promoCodeFrom(text: string): string | null {
 }
 
 /** A typed percentage as hundredths of a percent, or null where it is not plainly one
- *  above 0 and no more than 100, with at most two decimals. */
+ *  above 0 and under 100, with at most two decimals. */
 export function percentToBp(text: string): number | null {
   const match = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(text.trim());
   if (match === null) return null;
@@ -106,6 +107,12 @@ export function discountFits(
   return { ok: true };
 }
 
+/** Said where a discount rounds to nothing on a price: the sale is not made with it, so
+ *  no use is spent on nothing. */
+export function discountNothingOffWords(name: string): string {
+  return `${name} takes nothing off this price. Nothing was sold: pick another discount, or sell without one.`;
+}
+
 /** Why a discount was not used, said to staff. */
 export function discountRefusalWords(name: string, reason: DiscountRefusal): string {
   switch (reason) {
@@ -130,7 +137,14 @@ export function discountRefusalWords(name: string, reason: DiscountRefusal): str
 
 // ── The wire ────────────────────────────────────────────────────────────────
 
-const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/** A day that exists: "2026-02-31" has the shape of one and is not. */
+function isRealDay(text: string): boolean {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (parts === null) return false;
+  const made = new Date(Date.UTC(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])));
+  return !Number.isNaN(made.getTime()) && made.toISOString().slice(0, 10) === text;
+}
+const daySchema = z.string().refine(isRealDay, "not_a_day");
 const currencySchema = z.string().regex(/^[A-Z]{3}$/);
 const percentBpSchema = z.number().int().min(1).max(DISCOUNT_PERCENT_BP_MAX);
 const amountSchema = z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX);

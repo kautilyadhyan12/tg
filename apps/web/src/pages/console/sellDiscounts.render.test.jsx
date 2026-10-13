@@ -236,7 +236,7 @@ describe('the Discounts list', () => {
     const form = within(discounts()).getByRole('form', { name: 'Add a discount' });
     fireEvent.click(within(form).getByRole('button', { name: 'Add discount' }));
     expect(within(form).getByText('Give the discount a name.')).toBeTruthy();
-    expect(within(form).getByText('Enter the percentage as a number above 0 and up to 100, like 10.')).toBeTruthy();
+    expect(within(form).getByText('Enter the percentage as a number above 0 and under 100, like 10.')).toBeTruthy();
     expect(svc.addDiscount).not.toHaveBeenCalled();
 
     fireEvent.change(within(form).getByLabelText('Discount name'), { target: { value: ' Members week ' } });
@@ -322,4 +322,61 @@ describe('the Discounts list', () => {
     pick('Product', 'p-towel');
     expect(options('Discount')).toEqual(['No discount', 'Staff · $1.00 off', 'Summer sale · 20% off · code SUMMER20', 'Towels only · 10% off · code TOWEL']);
   });
+
+describe('what the screen says stays true', () => {
+  it('a promo code is said to be applied only while its discount is on the sale', async () => {
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Product', 'p-towel');
+    fireEvent.change(within(newSale()).getByLabelText('Promo code'), { target: { value: 'towel' } });
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'Apply' }));
+    expect(within(newSale()).getByRole('status').textContent).toBe('TOWEL applied: 10% off.');
+    expect(within(newSale()).getByLabelText('Discount').value).toBe('d-towels');
+    // Water is picked instead: the towels' discount is off the sale, and the line says so.
+    pick('Product', 'p-water');
+    expect(within(newSale()).getByLabelText('Discount').value).toBe('');
+    expect(within(newSale()).queryByText('TOWEL applied: 10% off.')).toBeNull();
+    expect(within(newSale()).getByRole('status').textContent).toBe('Towels only does not apply to Water. No discount is on this sale.');
+    expect(summary()).toBe('Price$1.99Tax (8.25%)$0.16Total$2.15');
+    // Back on the towel it is the one on the sale again, and is said to be.
+    pick('Product', 'p-towel');
+    expect(within(newSale()).getByLabelText('Discount').value).toBe('d-towels');
+    expect(within(newSale()).getByRole('status').textContent).toBe('TOWEL applied: 10% off.');
+    // Another discount picked by hand: nothing is said of the code any more.
+    pick('Discount', 'd-summer');
+    expect(within(newSale()).queryByRole('status')).toBeNull();
+  });
+
+  it('a code applied and then used up by somebody else is no longer said to be applied', async () => {
+    svc.get.mockResolvedValue(page({ discounts: [discount({ maxUses: 5, uses: 4 })] }));
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Product', 'p-water');
+    fireEvent.change(within(newSale()).getByLabelText('Promo code'), { target: { value: 'summer20' } });
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'Apply' }));
+    expect(within(newSale()).getByRole('status').textContent).toBe('SUMMER20 applied: 20% off.');
+    svc.sell.mockRejectedValue(refusal(409, 'Summer sale has reached its usage limit. Nothing was sold: pick another discount, or sell without one.'));
+    svc.get.mockResolvedValue(page({ discounts: [discount({ maxUses: 5, uses: 5 })] }));
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(within(newSale()).getByText('No discount applies to this product today.')).toBeTruthy());
+    expect(within(newSale()).queryByText('SUMMER20 applied: 20% off.')).toBeNull();
+    expect(within(newSale()).getByRole('status').textContent).toBe('Summer sale has reached its usage limit. No discount is on this sale.');
+  });
+
+  it('a fixed amount in the money used before the gym changed country reads Needs saving, and both places say what to do', async () => {
+    const water = { ...WATER, currency: 'GBP' };
+    svc.get.mockResolvedValue(page({ currency: 'GBP', products: [water], discounts: [STAFF] }));
+    open();
+    await screen.findByRole('region', { name: 'Discounts' });
+    expect(within(discounts()).getByTestId('discount-row').textContent).toBe(
+      'StaffNeeds saving$1.00 off · No promo code · All products · Not used yetThis amount is in USD. Press Change and save it again to use it in GBP.ChangeArchive',
+    );
+    pick('Product', 'p-water');
+    expect(within(newSale()).getByText('No discount applies to this product today.')).toBeTruthy();
+    expect(within(newSale()).getByText('Staff cannot be used until its amount is saved again in GBP. Open it under Discounts below and press Change.')).toBeTruthy();
+    // Change opens it with the amount, to be saved in the gym's money as it is now.
+    fireEvent.click(within(discounts()).getByRole('button', { name: 'Change Staff' }));
+    expect(within(discounts()).getByLabelText('Amount off, in GBP').value).toBe('1.00');
+  });
+});
 });

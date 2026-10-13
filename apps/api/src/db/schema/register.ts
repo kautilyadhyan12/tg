@@ -85,7 +85,7 @@ export const gymDiscounts = pgTable(
     check(
       "gym_discounts_shape_check",
       sql`CASE WHEN ${t.kind} = 'percent' THEN
-        ${t.percentBp} IS NOT NULL AND ${t.percentBp} BETWEEN 1 AND 10000
+        ${t.percentBp} IS NOT NULL AND ${t.percentBp} BETWEEN 1 AND 9999
         AND ${t.amountMinor} IS NULL AND ${t.currency} IS NULL
       ELSE
         ${t.amountMinor} IS NOT NULL AND ${t.amountMinor} BETWEEN 1 AND 99999999
@@ -188,13 +188,13 @@ export const gymSales = pgTable(
     }),
     check(
       "gym_sales_discount_check",
-      sql`(${t.discountId} IS NULL) = (${t.discountName} IS NULL) AND CASE WHEN ${t.discountId} IS NULL THEN ${t.discountMinor} = 0 ELSE ${t.discountMinor} BETWEEN 0 AND ${t.unitPriceMinor} * ${t.quantity} - 1 END`,
+      sql`(${t.discountId} IS NULL) = (${t.discountName} IS NULL) AND CASE WHEN ${t.discountId} IS NULL THEN ${t.discountMinor} = 0 ELSE ${t.discountMinor} BETWEEN 1 AND ${t.unitPriceMinor} * ${t.quantity} - 1 END`,
     ),
     foreignKey({
       name: "gym_sales_discount_fk",
       columns: [t.gymId, t.discountId],
       foreignColumns: [gymDiscounts.gymId, gymDiscounts.id],
-    }).onDelete("cascade"),
+    }),
     index("gym_sales_discount_idx")
       .on(t.gymId, t.discountId)
       .where(sql`${t.discountId} IS NOT NULL`),

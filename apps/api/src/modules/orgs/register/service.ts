@@ -17,6 +17,7 @@ import {
   REGISTER_WORDS,
   SALES_SHOWN,
   SALE_PEOPLE_FOUND,
+  discountNothingOffWords,
   discountRefusalWords,
   memberCurrencyForCountry,
   memberPurchasesResponseSchema,
@@ -267,6 +268,8 @@ export async function sellProduct(deps: RegisterDeps, userId: string, gymId: str
       throw new OrgsError(409, `discount_${outcome.reason}`, discountRefusalWords(outcome.name, outcome.reason));
     case "nothing_to_pay":
       throw new OrgsError(409, "discount_nothing_to_pay", DISCOUNT_WORDS.nothing_to_pay);
+    case "discount_nothing_off":
+      throw new OrgsError(409, "discount_takes_nothing_off", discountNothingOffWords(outcome.name));
     default: {
       const never: never = outcome;
       throw new Error(`unhandled sale outcome: ${JSON.stringify(never)}`);

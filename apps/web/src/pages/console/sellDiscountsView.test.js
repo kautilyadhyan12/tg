@@ -5,6 +5,7 @@ import {
   discountAmountWords,
   discountBody,
   discountDatesWords,
+  discountInOldMoney,
   discountOption,
   discountProblems,
   discountProductsWords,
@@ -15,6 +16,9 @@ import {
   discountsFor,
   draftFromDiscount,
   emptyDiscountDraft,
+  oldMoneyLine,
+  oldMoneySaleLine,
+  promoCodeNote,
 } from './sellDiscountsView';
 import { purchaseLine, saleProblem, saleSummary, soldWords, takingsNotes, takingsRows } from './sellView';
 
@@ -119,7 +123,7 @@ describe('which discounts the sale form offers', () => {
   });
 
   it('a promo code typed finds its discount, however it is typed, or says why not', () => {
-    expect(applyPromoCode(all, WATER, ' summer20 ')).toEqual({ discount: all.discounts[0], note: 'SUMMER20 applied: 20% off.' });
+    expect(applyPromoCode(all, WATER, ' summer20 ')).toEqual({ discount: all.discounts[0], appliedId: 'd-summer', note: 'SUMMER20 applied: 20% off.' });
     expect(applyPromoCode(all, TOWEL, 'Towel')).toMatchObject({ discount: towels, note: 'TOWEL applied: 20% off.' });
     expect(applyPromoCode(all, WATER, 'towel')).toEqual({ discount: null, note: 'Towels does not apply to Water.' });
     expect(applyPromoCode(all, WATER, 'bf26')).toEqual({ discount: null, note: 'Black Friday starts on 27 Nov 2026.' });
@@ -128,6 +132,48 @@ describe('which discounts the sale form offers', () => {
     expect(applyPromoCode(all, WATER, 'summer 20')).toEqual({ discount: null, note: 'There is no promo code SUMMER 20. Check the spelling with the customer.' });
     expect(applyPromoCode(all, WATER, '   ')).toEqual({ discount: null, note: 'Type the promo code, then press Apply.' });
     expect(applyPromoCode(all, null, 'summer20')).toEqual({ discount: null, note: 'Pick a product first, then apply the promo code.' });
+  });
+});
+
+describe('what the line under the promo code says', () => {
+  const towels = discount({ id: 'd-towels', name: 'Towels', code: 'TOWEL', allProducts: false, productIds: [TOWEL.id] });
+  const applied = { text: 'towel', note: 'TOWEL applied: 20% off.', appliedId: 'd-towels' };
+
+  it('says applied only while the applied discount is the one on the sale', () => {
+    expect(promoCodeNote(page([towels]), TOWEL, towels, applied)).toBe('TOWEL applied: 20% off.');
+    // The product is changed to one the code is not for: the discount is off the sale.
+    expect(promoCodeNote(page([towels]), WATER, null, applied)).toBe('Towels does not apply to Water. No discount is on this sale.');
+    // The page is read again and it has been used up, or archived.
+    const spent = { ...towels, maxUses: 3, uses: 3 };
+    expect(promoCodeNote(page([spent]), TOWEL, null, applied)).toBe('Towels has reached its usage limit. No discount is on this sale.');
+    expect(promoCodeNote(page([]), TOWEL, null, applied)).toBe('That promo code is no longer offered. No discount is on this sale.');
+    expect(promoCodeNote(page([towels]), null, null, applied)).toBeNull();
+  });
+
+  it('a code that was never applied keeps its own sentence, and no sentence is none', () => {
+    const wrong = { text: 'x', note: 'There is no promo code X. Check the spelling with the customer.', appliedId: null };
+    expect(promoCodeNote(page([towels]), WATER, null, wrong)).toBe(wrong.note);
+    expect(promoCodeNote(page([towels]), WATER, null, { text: '', note: null, appliedId: null })).toBeNull();
+  });
+});
+
+describe('a fixed amount in the money the gym used before it changed country', () => {
+  const pounds = { ...page([FIVE, discount()]), currency: 'GBP' };
+
+  it('reads Needs saving, with what to do, and the sale form says the same', () => {
+    expect(discountInOldMoney(FIVE, 'GBP')).toBe(true);
+    expect(discountInOldMoney(FIVE, 'USD')).toBe(false);
+    expect(discountInOldMoney(discount(), 'GBP')).toBe(false);
+    expect(discountInOldMoney(FIVE, null)).toBe(false);
+    expect(discountStatusTag(FIVE, '2026-10-13', 'GBP')).toMatchObject({ words: 'Needs saving', tag: 'c-tag-warn' });
+    expect(discountStatusTag(FIVE, '2026-10-13', 'USD')).toMatchObject({ words: 'Active' });
+    expect(discountStatusTag(discount(), '2026-10-13', 'GBP')).toMatchObject({ words: 'Active' });
+    // What it already is comes first: an expired one is expired.
+    expect(discountStatusTag({ ...FIVE, endsOn: '2026-01-01' }, '2026-10-13', 'GBP')).toMatchObject({ words: 'Expired' });
+    expect(oldMoneyLine(FIVE, 'GBP')).toBe('This amount is in USD. Press Change and save it again to use it in GBP.');
+    expect(oldMoneySaleLine(pounds)).toBe('Five off cannot be used until its amount is saved again in GBP. Open it under Discounts below and press Change.');
+    expect(oldMoneySaleLine({ ...pounds, discounts: [FIVE, { ...FIVE, id: 'd-2', name: 'Staff' }] })).toBe('Five off and Staff cannot be used until their amounts are saved again in GBP. Open them under Discounts below and press Change.');
+    expect(oldMoneySaleLine(page([FIVE, discount()]))).toBeNull();
   });
 });
 
@@ -168,10 +214,12 @@ describe('what a sale with a discount shows', () => {
     expect(saleSummary(WATER, 1, TAX, FIVE)).toBeNull();
     const base = { product: WATER, quantity: 1, who: 'walkin', person: null, currency: 'USD' };
     expect(saleProblem({ ...base, discount: FIVE })).toBe('Five off takes off the whole price, so there is nothing to pay. Choose No discount, or another one.');
-    expect(saleProblem({ ...base, discount: discount({ percentBp: 10000 }) })).toBe('Summer sale takes off the whole price, so there is nothing to pay. Choose No discount, or another one.');
+    expect(saleProblem({ ...base, discount: discount({ percentBp: 9999 }) })).toBe('Summer sale takes off the whole price, so there is nothing to pay. Choose No discount, or another one.');
     // Three at 1.99 is 5.97: five off leaves something.
     expect(saleProblem({ ...base, quantity: 3, discount: FIVE })).toBeNull();
     expect(saleProblem({ ...base, discount: discount() })).toBeNull();
+    // 0.01% of 1.99 rounds to nothing: the server spends no use on it, so the form does not send it.
+    expect(saleProblem({ ...base, discount: discount({ name: 'Tiny', percentBp: 1 }) })).toBe('Tiny takes nothing off this price. Choose No discount, or another one.');
     expect(saleProblem(base)).toBeNull();
   });
 
@@ -206,7 +254,7 @@ describe('the discount form', () => {
   it('says what is missing, box by box', () => {
     expect(discountProblems(emptyDiscountDraft(), 'USD', products)).toEqual({
       name: 'Give the discount a name.',
-      value: 'Enter the percentage as a number above 0 and up to 100, like 10.',
+      value: 'Enter the percentage as a number above 0 and under 100, like 10.',
     });
     const bad = { ...emptyDiscountDraft(), name: 'x'.repeat(61), kind: 'amount', amount: '0', code: 'no spaces', scope: 'some', productIds: [], startsOn: '2026-08-31', endsOn: '2026-06-01', limited: true, maxUses: '0' };
     expect(discountProblems(bad, 'USD', products)).toEqual({
@@ -219,7 +267,7 @@ describe('the discount form', () => {
     });
     expect(discountProblems({ ...emptyDiscountDraft(), name: 'Sum​mer', percent: '10' }, 'USD', products).name).toBe('Something hidden was pasted in with this. Delete it and type it again.');
     expect(discountProblems({ ...emptyDiscountDraft(), name: 'Staff', kind: 'amount', amount: '5' }, null, products).value).toBe('Set your country in Settings before adding a fixed-amount discount.');
-    for (const percent of ['0', '101', '12.555', 'ten', '']) expect(discountProblems({ ...emptyDiscountDraft(), name: 'A', percent }, 'USD', products).value, percent).toBeTruthy();
+    for (const percent of ['0', '100', '101', '12.555', 'ten', '']) expect(discountProblems({ ...emptyDiscountDraft(), name: 'A', percent }, 'USD', products).value, percent).toBeTruthy();
     for (const maxUses of ['', '0', '100001', '1.5', '-3']) expect(discountProblems({ ...emptyDiscountDraft(), name: 'A', percent: '10', limited: true, maxUses }, 'USD', products).maxUses, maxUses).toBeTruthy();
   });
 

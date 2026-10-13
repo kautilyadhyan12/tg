@@ -324,7 +324,7 @@ d("the register: discounts and promo codes (real Postgres)", () => {
       const yesterday = await addDiscount(gymId, owner.cookies, "Ended on the 12th", { startsOn: "2026-10-01", endsOn: "2026-10-12" });
       const towels = await addDiscount(gymId, owner.cookies, "Towels only", { allProducts: false, productIds: [towel.id] });
       const dollar = await addDiscount(gymId, owner.cookies, "Dollar off", { kind: "amount", percentBp: null, amountMinor: 100 });
-      const whole = await addDiscount(gymId, owner.cookies, "Whole price", { percentBp: 10_000 });
+      const whole = await addDiscount(gymId, owner.cookies, "Whole price", { percentBp: 9999 });
       const five = await addDiscount(gymId, owner.cookies, "Five dollars off", { kind: "amount", percentBp: null, amountMinor: 500 });
       const tiny = await addDiscount(gymId, owner.cookies, "Tiny", { percentBp: 1 });
 
@@ -348,15 +348,13 @@ d("the register: discounts and promo codes (real Postgres)", () => {
       expect((await sell(gymId, owner.cookies, sale(towel.id, 400, { discountId: towels.id }))).statusCode).toBe(201);
       // A fixed amount comes off once, however many are bought: three at 2.00 less 1.00.
       expect((await sell(gymId, owner.cookies, sale(water.id, 500, { quantity: 3, discountId: dollar.id }))).statusCode).toBe(201);
-      // 0.01% of 2.00 rounds to nothing: sold at the full price, as the screen showed, and counted.
-      expect((await sell(gymId, owner.cookies, sale(water.id, 200, { discountId: tiny.id }))).statusCode).toBe(201);
+      // 0.01% of 2.00 rounds to nothing: not sold with it, so no use is spent on nothing off.
+      await refusedAs(tiny.id, water.id, 200, "discount_takes_nothing_off", `Tiny takes nothing off this price. ${none}`);
       expect((await salesOf(gymId)).map((r) => [r.discount_name, r.discount_minor, r.total_minor])).toEqual([
         ["Ends on the 13th", 40, 160],
         ["Towels only", 100, 400],
         ["Dollar off", 100, 500],
-        ["Tiny", 0, 200],
       ]);
-      expect(await usesOf(tiny.id)).toBe(1);
 
       // Six hours on it is the 14th in Honolulu: what ended on the 13th is over, what starts on the 14th works.
       clock = new Date("2026-10-14T11:00:00Z");
@@ -573,6 +571,91 @@ d("the register: discounts and promo codes (real Postgres)", () => {
       expect((await get(base(gymId), owner.cookies)).statusCode).toBe(200);
       expect(await everything(owner.cookies)).toEqual(all(409));
       expect(await state()).toEqual(frozen);
+    },
+    T,
+  );
+
+  it(
+    "tax inside the price is the tax of what is left, a day that does not exist is refused, each change is noted, a discount with a sale cannot be deleted, and the limit holds at ONE address",
+    async () => {
+      const owner = await makeUser("more-owner");
+      const pricer = await makeUser("more-pricer");
+      const other = await makeUser("more-other");
+      const gymId = await makeGym(owner, "Regd More Gym", "GB", "Europe/London");
+      const otherGym = await makeGym(other, "Regd More Other");
+      await staffWith(gymId, pricer, "trainer", ["memberships.manage"]);
+
+      // 20% VAT inside the price. A towel at 10.00 less 2.00 is 8.00 paid; a sixth of it,
+      // 1.3333, is tax, so 1.33, and 6.67 before tax. Less 15% (1.50) it is 8.50 paid;
+      // a sixth, 1.41667, so 1.42, and 7.08.
+      expect((await put(`${base(gymId)}/tax`, { bp: 2000, included: true }, owner.cookies)).statusCode).toBe(200);
+      const towel = await addProduct(gymId, owner.cookies, { name: "Towel", priceMinor: 1000 });
+      const two = await addDiscount(gymId, owner.cookies, "Two pounds off", { kind: "amount", percentBp: null, amountMinor: 200 });
+      const fifteen = await addDiscount(gymId, owner.cookies, "Fifteen", { percentBp: 1500 });
+      for (const wrong of [1000, 799, 801, 667]) {
+        const res = await sell(gymId, owner.cookies, sale(towel.id, wrong, { discountId: two.id }));
+        expect(res.statusCode, String(wrong)).toBe(409);
+        expect(errorOf(res)).toBe("sale_price_changed");
+      }
+      expect((await sell(gymId, owner.cookies, sale(towel.id, 800, { discountId: two.id }))).statusCode).toBe(201);
+      expect((await sell(gymId, owner.cookies, sale(towel.id, 850, { discountId: fifteen.id }))).statusCode).toBe(201);
+      expect((await salesOf(gymId)).map((r) => [r.discount_name, r.discount_minor, r.net_minor, r.tax_minor, r.total_minor])).toEqual([
+        ["Two pounds off", 200, 667, 133, 800],
+        ["Fifteen", 150, 708, 142, 850],
+      ]);
+
+      // A day that has the shape of one and does not exist, on a new discount and on a change.
+      const before = await discountsOf(gymId);
+      for (const days of [{ startsOn: "2026-02-31" }, { endsOn: "2026-02-30" }, { startsOn: "2026-13-01" }, { startsOn: "0000-00-00" }, { percentBp: 10_000 }]) {
+        const made = await post(`${base(gymId)}/discounts`, form("Bad day", days), owner.cookies);
+        expect(made.statusCode, JSON.stringify(days)).toBe(400);
+        expect(errorOf(made)).toBe("validation_error");
+        const saved = await put(`${base(gymId)}/discounts/${fifteen.id}`, { ...form("Fifteen", { percentBp: 1500, ...days }), updatedAt: fifteen.updatedAt }, owner.cookies);
+        expect(saved.statusCode, JSON.stringify(days)).toBe(400);
+      }
+      expect(await discountsOf(gymId)).toEqual(before);
+
+      // Each change is noted in the gym's record, once, against the discount.
+      const changed = await put(`${base(gymId)}/discounts/${fifteen.id}`, { ...form("Fifteen percent", { percentBp: 1500, code: "FIFTEEN" }), updatedAt: fifteen.updatedAt }, owner.cookies);
+      expect(changed.statusCode, changed.body).toBe(200);
+      expect((await del(`${base(gymId)}/discounts/${fifteen.id}`, owner.cookies)).statusCode).toBe(200);
+      expect((await post(`${base(gymId)}/discounts/${fifteen.id}/restore`, {}, owner.cookies)).statusCode).toBe(200);
+      const updated = await auditOf(gymId, "org.discount_updated");
+      expect(updated.map((n) => [n.target_id, n.meta["before"], n.meta["name"], n.meta["code"]])).toEqual([[fifteen.id, "Fifteen", "Fifteen percent", "FIFTEEN"]]);
+      expect((await auditOf(gymId, "org.discount_archived")).map((n) => [n.target_id, n.meta["name"]])).toEqual([[fifteen.id, "Fifteen percent"]]);
+      expect((await auditOf(gymId, "org.discount_restored")).map((n) => [n.target_id, n.meta["name"]])).toEqual([[fifteen.id, "Fifteen percent"]]);
+
+      // The database itself refuses to lose a discount a sale was made with.
+      await expect(sql`DELETE FROM gym_discounts WHERE id = ${two.id}`).rejects.toThrow(/gym_sales_discount_fk/);
+      expect(await salesOf(gymId)).toHaveLength(2);
+
+      // The limit, counted into the store: somebody at their own ceiling is refused and
+      // writes nothing; the gym's address at its ceiling stops the gym, and not next door.
+      const DESK = "10.96.0.9";
+      const add = (who: Person, gym: string, name: string) => send("POST", `${base(gym)}/discounts`, who.cookies, form(name), DESK);
+      expect((await add(pricer, gymId, "Within the limit")).statusCode).toBe(201);
+      for (let n = 1; n < 300; n++) await redis.incrWithTtl(`rl:orgs_register_manage:id:${pricer.userId}`, 3600);
+      const overOwn = await add(pricer, gymId, "Past my own limit");
+      expect(overOwn.statusCode).toBe(429);
+      expect((await add(owner, gymId, "The owner still can")).statusCode).toBe(201);
+      for (let n = 0; n < 900; n++) await redis.incrWithTtl(`rl:orgs_register_manage:ip:${gymId}:${DESK}`, 3600);
+      for (const res of [
+        await add(owner, gymId, "Past the address limit"),
+        await send("PUT", `${base(gymId)}/discounts/${two.id}`, owner.cookies, { ...form("Renamed", { kind: "amount", percentBp: null, amountMinor: 200 }), updatedAt: two.updatedAt }, DESK),
+        await send("DELETE", `${base(gymId)}/discounts/${two.id}`, owner.cookies, undefined, DESK),
+        await send("POST", `${base(gymId)}/discounts/${two.id}/restore`, owner.cookies, {}, DESK),
+      ]) {
+        expect(res.statusCode, res.body).toBe(429);
+      }
+      expect((await add(other, otherGym, "Next door at the same address")).statusCode).toBe(201);
+      expect((await discountsOf(gymId)).map((x) => [x.name, x.archived]).sort()).toEqual(
+        [
+          ["Fifteen percent", false],
+          ["The owner still can", false],
+          ["Two pounds off", false],
+          ["Within the limit", false],
+        ].sort(),
+      );
     },
     T,
   );
