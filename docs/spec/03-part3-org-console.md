@@ -2237,7 +2237,7 @@ that wait for one Save: whom the front desk checks in, **Everyone on your list**
 every gym starts) or **Only people with a current membership**; and what it does with
 **someone with an overdue payment**, **Check them in** (the start) or **Send them to
 staff**. They are two columns on the gym (`checkin_who`, `checkin_overdue`, migration
-`0100`) and ONE pure rule, `checkinStop` in `@app/shared` (`checkinRules.ts`), which the
+`0101`) and ONE pure rule, `checkinStop` in `@app/shared` (`checkinRules.ts`), which the
 desk's scan, staff's search and the box all read:
 - It reads what the app holds and never a word of the gym's file: the status the Members
   list itself gives the person (`heldOnList`), and their bills. A current membership is one
