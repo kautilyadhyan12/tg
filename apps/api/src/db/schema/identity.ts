@@ -36,6 +36,8 @@ export const users = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     legacyMongoId: text("legacy_mongo_id").unique(), // migration traceability (§7); drop after 6 months
     lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
+    // When the app's starter goals were given; they are given once (0100).
+    starterGoalsAt: timestamp("starter_goals_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [

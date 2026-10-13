@@ -18,6 +18,7 @@ import { targetsForPlan } from "../nutrition/service.js";
 import { getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
 import { goalHeld, measureGoal, windowSpan, type GoalFacts, type GoalRules, type StoredGoal } from "./measure.js";
 import * as repo from "./repo.js";
+import { starterGoals } from "./starter.js";
 
 export interface GoalsDeps {
   sql: Sql;
@@ -121,7 +122,33 @@ async function measured(deps: GoalsDeps, userId: string, rows: readonly repo.Goa
   });
 }
 
+/** The app's own goals, given once, on the first read after setup is finished. One the
+ *  person removes stays removed: the mark is on the account and outlives a setup reset. */
+async function giveStarterGoals(deps: GoalsDeps, userId: string): Promise<void> {
+  const { sql } = deps;
+  if (!(await repo.starterDue(sql, userId))) return;
+  await sql.begin(async (tx) => {
+    await repo.lockGoalsOf(tx, userId);
+    if (!(await repo.lockStarterDue(tx, userId))) return;
+    const read = await getUserPlanAndCutRules(tx, userId, null);
+    // With an answer missing the health rule cannot be read (a blank age is nobody's
+    // under-18), so nothing is given or marked: the whole set comes once the plan is ready.
+    if (read.plan.plan === null) return;
+    const goals = starterGoals(
+      { trainingDays: read.answers.trainingDays ?? null, sessionMinutes: read.answers.sessionMinutes ?? null },
+      rulesOf(read),
+    );
+    await repo.markStarterGiven(tx, userId);
+    let room = MAX_GOALS - (await repo.countGoals(tx, userId));
+    for (const goal of goals) {
+      if (room <= 0) break;
+      if (await repo.insertStarterGoal(tx, userId, goal)) room -= 1;
+    }
+  });
+}
+
 export async function listGoals(deps: GoalsDeps, userId: string): Promise<GoalsResponse> {
+  await giveStarterGoals(deps, userId);
   const rows = await repo.listGoals(deps.sql, userId);
   const goals = rows.length === 0 ? [] : await measured(deps, userId, rows);
   return goalsResponseSchema.parse({ goals, max: MAX_GOALS });
