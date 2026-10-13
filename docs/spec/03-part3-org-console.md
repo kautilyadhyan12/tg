@@ -1988,7 +1988,8 @@ they never saw, or put a signature on a relative when a family shares one email 
   gym's own calendar day, on the person's page and on My Gyms.
 - **What a name is:** two letters or digits at least, counted as people count them (one
   letter outside the basic plane is one). Controls, the zero-width space, direction marks
-  and overrides are dropped, so a name is never blank on a page or drawn backwards; the
+  and overrides, and the letters a screen draws as a blank, are dropped, so a name is never
+  blank on a page or drawn backwards; the
   two zero-width joiners stay, since some names are spelled with them. The gym's words
   lose only what a database refuses (controls other than a tab and a new line).
 - **Stop using this waiver** asks first, naming who changes and what is kept. Stopped,

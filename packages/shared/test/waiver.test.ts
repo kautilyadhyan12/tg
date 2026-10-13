@@ -74,6 +74,17 @@ describe("the name a person types", () => {
     }
   });
 
+  // The re-check's Low: Unicode calls these letters, and a screen draws each as a blank.
+  it("letters that are drawn as a blank are not a name: the Hangul fillers and the two unseen Khmer vowels", () => {
+    for (const name of ["\u3164\u3164", "\u115F\u1160", "\uFFA0\uFFA0", "\u17B4\u17B5", "\u3164 \u1160"]) {
+      expect(signWaiverBodySchema.safeParse({ waiverId: ID, name }).success).toBe(false);
+      expect(waiverReadyToSign(name, true)).toBe(false);
+    }
+    expect(cleanSignedName("\u3164Kim\u3164 Min\uFFA0")).toBe("Kim Min");
+    // Real Hangul is untouched.
+    expect(signWaiverBodySchema.parse({ waiverId: ID, name: "\uAE40\uBBFC\uC900" }).name).toBe("\uAE40\uBBFC\uC900");
+  });
+
   it("a screen may send a signature only with a name typed and the box ticked", () => {
     expect(waiverReadyToSign("Alice Stone", true)).toBe(true);
     expect(waiverReadyToSign("Alice Stone", false)).toBe(false);

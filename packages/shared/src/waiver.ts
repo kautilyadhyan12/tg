@@ -14,8 +14,9 @@ export const WAIVER_NAME_MAX_CHARS = 100;
 const CONTROLS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu;
 /** In a name, what nobody can see and what turns its letters round: the soft hyphen, the
  *  zero-width space, the direction marks, overrides and isolates, the word joiner and the
- *  byte-order mark. The two zero-width joiners stay: some names are spelled with them. */
-const UNSEEN_IN_A_NAME = /[\u00AD\u200B\u200E\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/gu;
+ *  byte-order mark, and the letters a screen draws as a blank (the Hangul fillers and two
+ *  Khmer vowels). The two zero-width joiners stay: some names are spelled with them. */
+const UNSEEN_IN_A_NAME = /[\u00AD\u115F\u1160\u17B4\u17B5\u200B\u200E\u200F\u202A-\u202E\u2060-\u2069\u3164\uFEFF\uFFA0]/gu;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/gu;
 
 /** The gym's words as kept: line ends made one kind, nothing a database refuses, and no
