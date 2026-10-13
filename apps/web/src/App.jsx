@@ -57,6 +57,7 @@ import ConsoleEvents   from './pages/console/Events';
 import ConsoleChallenges from './pages/console/Challenges';
 import ConsoleReports  from './pages/console/Reports';
 import ConsoleAtRisk   from './pages/console/AtRisk';
+import ConsoleSell     from './pages/console/Sell';
 import ConsoleSettings from './pages/console/Settings';
 import ConsoleMore     from './pages/console/More';
 
@@ -346,6 +347,13 @@ export default function App() {
             <Route path="/console/:orgSlug/at-risk" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleAtRisk /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* SELL (18b-i): the desk's register. The nav draws it for `billing.members` or
+                `memberships.manage`; the server is the enforcement. */}
+            <Route path="/console/:orgSlug/sell" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleSell /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={
