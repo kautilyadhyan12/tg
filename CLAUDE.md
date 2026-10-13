@@ -8,9 +8,12 @@ on 2026-09-07 when Kd ruled the old process too slow; the old playbook is kept a
 ## 1. Read these before working (and nothing else is required)
 
 1. This file.
-2. `RULINGS.md` — Kd's decisions, one line each. They override any chat's judgement.
+2. `RULINGS.md` and the files in `rulings/` (one for each job since 2026-10-13;
+   `rulings/README.md`) — Kd's decisions, one line each. They override any chat's
+   judgement; where two differ, the newer one stands.
 3. `ROADMAP.md` — the ordered work list. Your task is the next unticked item unless Kd says otherwise.
-4. `HANDOFF.md` — the newest entry, to see where the last terminal stopped.
+4. `handoff/` — the newest files, one for each job, to see where the last terminals
+   stopped (`handoff/README.md`). `HANDOFF.md` holds the entries before 2026-10-13.
 5. `FOLDER.md` at the root of the folder you are in — it says which folder this is (a web
    folder, a feature folder or an exercise folder), which list of jobs it builds, and its
    own database, Redis number and ports (§8). It is not in git; each folder has its own.
@@ -98,16 +101,27 @@ line, next to the model and effort. When in doubt, the bigger size.
    after the merge. Small commits, explicit file lists (`git add <files>`, never
    `git add -A`). `master` takes pull requests only: GitHub refuses a direct push,
    records included, and refuses a merge until the six checks pass (a skipped check
-   counts as passed). **Merge when green** (Kd, RULINGS 2026-09-22): if Kd's start
+   counts as passed). **Take `master` in once** (the ruling of 2026-10-13, `rulings/`): a
+   job whose branch is behind `master` when it is ready to merge takes `master` in ONE
+   time and lets the checks run; when they are green it merges, even if another folder
+   merged meanwhile. Only a real clash, which GitHub names, sends it round again. After
+   its merge the terminal reads `master`'s own run of that merge, and a red one is that
+   terminal's next work, before anything else. A terminal whose checks fail in something
+   its job did not touch reads `master`'s newest run first, and waits if that is red.
+   **Merge when green** (Kd, RULINGS 2026-09-22): if Kd's start
    text for the job says "merge when green", the building terminal merges its own pull
    request once the checks are green and the review round is closed (or none was due),
    deletes the branch, and says so. Without those words it ends with "say **merge** and
    I merge it" and waits. If the tool refuses the merge because it cannot see those
    words, say so in one line and ask Kd to type `merge`.
-8. **Record**: one line in `RULINGS.md` for anything Kd decided; in `ROADMAP.md` the
-   job's line becomes ONE line — its number, its name, `[x]`, the merge date and the
-   pull request — and anything longer moves whole to `archive/records/ROADMAP-stories.md`
-   (a NEW ROADMAP line is three lines at most); ten lines in `HANDOFF.md`. That is all.
+8. **Record**, in files of the job's OWN, so that two jobs' records cannot clash (the
+   ruling of 2026-10-13, `rulings/`): one line for anything Kd decided, in the job's file
+   in `rulings/` (`rulings/README.md`); ten lines in its file in `handoff/`
+   (`handoff/README.md`), which also takes the lines that only say what happened (round
+   one, the re-check, the merge) and the job's long ROADMAP line. In `ROADMAP.md` the
+   job's line becomes ONE line — its number, its name, `[x]`, the merge date and the pull
+   request (a NEW ROADMAP line is three lines at most). Nothing new is added to
+   `RULINGS.md`, `HANDOFF.md` or `archive/records/ROADMAP-stories.md`. That is all.
    No cards, no essays, no review-round history anywhere, including code comments.
    Records ride on the job's own pull request, never a pull request of their own: a
    push that changes only `.md` files runs just the secrets scan, and every code push
@@ -451,10 +465,11 @@ Redis number and ports; the two lists are in ROADMAP Stage 2's header.
 - Kd says "build the next thing" once in each folder. A terminal takes the first
   unticked job of ITS folder's list whose needs are met, and if none is, says so
   rather than taking the other folder's.
-- Records (RULINGS, ROADMAP, HANDOFF) are written on the job's own branch, each job
-  touching only its own lines, so the two folders' records never collide.
-- Jobs merge ONE at a time. The one that merges second first takes `master` in,
-  re-runs its checks, and, if both added a migration, renames its own to the next free
+- Records are written on the job's own branch, in files of its own (`rulings/`,
+  `handoff/`) and on its own lines of ROADMAP, so two folders' records cannot collide
+  (§2.8).
+- Jobs merge ONE at a time. The one that merges second first takes `master` in, once
+  (§2.7), re-runs its checks, and, if both added a migration, renames its own to the next free
   number and re-stamps its journal entry: Drizzle applies migrations in the journal's
   time order and would skip an older-stamped one on a database already past it.
 - Each folder runs only its own servers, on its own ports, against its own database
