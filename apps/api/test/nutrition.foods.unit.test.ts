@@ -272,7 +272,7 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     "rice_and_beans_black_beans_and_white_rice", "picanha_top_sirloin_cap_grilled", "ceviche", "kung_pao_chicken", "general_tso_chicken",
     "orange_chicken", "sesame_chicken", "sweet_and_sour_chicken", "sweet_and_sour_pork", "beef_and_broccoli",
     "lo_mein_chicken", "lo_mein_vegetable", "chow_mein_chicken_with_noodles", "egg_drop_soup", "hot_and_sour_soup",
-    "wonton_soup", "dumplings_pork_steamed", "egg_foo_yung", "peking_duck", "moo_shu_pork",
+    "wonton_soup", "potstickers_gyoza_pork_steamed", "egg_foo_yung", "peking_duck", "moo_shu_pork",
     "bao_bun_pork", "miso_soup", "teriyaki_chicken", "sushi_roll_salmon", "sushi_roll_tuna",
     "nigiri_sushi_salmon", "sashimi_salmon", "sashimi_tuna", "bibimbap", "kimchi",
     "tteokbokki_korean_rice_cakes", "adobo_chicken_and_pork_with_rice", "summer_roll_shrimp_rice_paper", "chicken_satay", "thai_green_curry_chicken",
@@ -465,7 +465,7 @@ describe("the list as it grew (ROADMAP 34c-iii): the dishes of Brazil, Latin Ame
       ["soy sauce", "soy_sauce"], ["ice cream", "ice_cream_vanilla"], ["steak", "steak_sirloin_cooked"], ["black beans", "black_beans_cooked"],
       ["yogurt", "yogurt_plain_low_fat"], ["rajma", "kidney_beans_cooked"], ["california roll", "sushi_roll"],
       // a word many dishes share still names none
-      ["curry", null], ["noodles", null], ["roll", null], ["sauce", null],
+      ["steamed dumplings", null], ["curry", null], ["noodles", null], ["roll", null], ["sauce", null],
     ];
     for (const [name, canonical] of cases) expect(findCurated(name)?.canonical ?? null, name).toBe(canonical);
   });
@@ -480,7 +480,7 @@ describe("the list as it grew (ROADMAP 34c-iii): the dishes of Brazil, Latin Ame
       ["star fruit", "starfruit_carambola"], ["kung pao chicken", "kung_pao_chicken"], ["general tso's chicken", "general_tso_chicken"],
       ["beef with broccoli", "beef_and_broccoli"], ["lo mein", "lo_mein_chicken"], ["vegetable lo mein", "lo_mein_vegetable"],
       ["chow mein", "chow_mein_chicken_with_noodles"], ["egg drop soup", "egg_drop_soup"], ["hot and sour soup", "hot_and_sour_soup"],
-      ["potstickers", "dumplings_pork_steamed"], ["gyoza", "dumplings_pork_steamed"], ["egg foo young", "egg_foo_yung"], ["bao", "bao_bun_pork"],
+      ["potstickers", "potstickers_gyoza_pork_steamed"], ["gyoza", "potstickers_gyoza_pork_steamed"], ["egg foo young", "egg_foo_yung"], ["bao", "bao_bun_pork"],
       ["congee", "congee_plain_rice_porridge"], ["sticky rice", "sticky_rice_glutinous_cooked"], ["miso soup", "miso_soup"],
       ["chicken teriyaki", "teriyaki_chicken"], ["tempura", "vegetable_tempura"], ["salmon roll", "sushi_roll_salmon"], ["nigiri", "nigiri_sushi_salmon"],
       ["sashimi", "sashimi_salmon"], ["tuna sashimi", "sashimi_tuna"], ["soba", "soba_noodles_cooked"], ["fried tofu", "tofu_fried"],
