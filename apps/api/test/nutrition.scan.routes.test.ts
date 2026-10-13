@@ -655,6 +655,37 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   // it is, no packaged products, and the USDA rows above — so a change to how a food
   // is looked up, priced or started shows here as a diff, and a new finding is a new
   // plate, never a new word list (RULINGS 2026-09-15).
+  it("counts our list's shrimp by the piece, and keeps everything else its cited entry's (ROADMAP 34c-i)", async () => {
+    const found = await inject("GET", "/v1/nutrition/foods?q=shrimp&limit=15", alice);
+    expect(found.statusCode, found.body).toBe(200);
+    const shrimp = z.object({ items: z.array(z.object({ canonical: z.string(), measures: z.array(z.object({ id: z.string(), name: z.string(), grams: z.number() })), startsAt: z.unknown() })) })
+      .parse(found.json()).items.find((f) => f.canonical === "shrimp_cooked");
+    // The cited entry's own measure keeps its id; the survey entry's pieces have ids of their own.
+    expect([shrimp?.measures.map((m) => `${m.id} ${m.name} ${String(m.grams)}`), shrimp?.startsAt]).toEqual([[
+      "usda-1 3 oz 85", "piece-1 tiny shrimp 5", "piece-2 small/medium shrimp 10", "piece-3 large/jumbo shrimp 15", "piece-4 prawn 20", "piece-5 cup 135",
+      "g g 1", "oz oz 28.349523125",
+    ], { measure: "g", amount: 100 }]);
+
+    // "usda-1" is what a meal saved before the pieces came holds for "3 oz": two of it are 170 g, never two 5 g shrimp.
+    const saved = await inject("POST", "/v1/nutrition/meals", alice, {
+      mealName: "Qwzx shrimp", takenAt: new Date().toISOString(),
+      items: [{ canonical: "shrimp_cooked", measure: "usda-1", amount: 2 }, { canonical: "shrimp_cooked", measure: "piece-3", amount: 6 }, { canonical: "shrimp_cooked", grams: 100 }],
+    });
+    expect(saved.statusCode, saved.body).toBe(201);
+    const items = mealOf(saved.body).items;
+    // Six large shrimp are 90 g at SR Legacy's 99 kcal per 100 g, never the survey entry's 90.
+    expect(items.map((i) => [i.gramsPoint, i.kcalPoint, i.measure])).toEqual([
+      [170, 168, { id: "usda-1", name: "3 oz", amount: 2 }],
+      [90, 89, { id: "piece-3", name: "large/jumbo shrimp", amount: 6 }],
+      [100, 99, undefined],
+    ]);
+    // The further figures are the cited entry's too: SR Legacy measured no fibre for shrimp (not known), where the
+    // survey entry says 0; and its sodium is 111 mg per 100 g where the whole table is loaded, never the survey's 248.
+    const more = z.object({ fiberG: z.number().nullable(), sodiumMg: z.number().nullable() }).parse(items[2]?.more);
+    expect(more.fiberG).toBeNull();
+    expect([111, null]).toContain(more.sodiumMg);
+  }, 60_000);
+
   describe("the test plates", () => {
     const PLATES = join(import.meta.dirname, "fixtures", "plates");
     /** Each row as the sheet shows it: name, tag, where it starts — "2 × slice", or
@@ -679,18 +710,18 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // one of its 248 g cups is near the 200 g the photo saw.
       "download-2.json": [
         ["avocado toast with egg", "estimate", "~220 g", 220, 380], ["Asparagus (cooked)", "curated", "~60 g", 60, 13], ["cherry tomatoes", "estimate", "~60 g", 60, 11],
-        ["Pork sausage (cooked)", "curated", "2 × serving", 96, 312], ["Shrimp (cooked)", "curated", "~75 g", 75, 74], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", "1 × cup (8 fl oz)", 248, 77],
+        ["Pork sausage (cooked)", "curated", "2 × serving", 96, 312], ["Shrimp (cooked)", "curated", "5 × large/jumbo shrimp", 75, 74], ["Iced Coffee, pre-lightened and pre-sweetened", "usda", "1 × cup (8 fl oz)", 248, 77],
       ],
       // Pumpkin at the 60 g the model saw in its two pieces: two of USDA's cups are 460 g.
       "download-3.json": [
-        ["Chicken breast (cooked)", "curated", "~150 g", 150, 248], ["Shrimp (cooked)", "curated", "~90 g", 90, 89], ["Egg (whole, large)", "curated", "1 × egg", 50, 72],
-        ["Broccoli (cooked)", "curated", "~60 g", 60, 21], ["Corn (cooked)", "curated", "~50 g", 50, 48], ["Pumpkin, cooked", "usda", "~60 g", 60, 31],
+        ["Chicken breast (cooked)", "curated", "~150 g", 150, 248], ["Shrimp (cooked)", "curated", "6 × large/jumbo shrimp", 90, 89], ["Egg (whole, large)", "curated", "1 × egg", 50, 72],
+        ["Broccoli (cooked)", "curated", "~60 g", 60, 21], ["Corn (cooked)", "curated", "~50 g", 50, 48], ["Pumpkin (boiled)", "curated", "~60 g", 60, 12],
         ["Orange juice", "curated", "1 × cup", 248, 112],
       ],
       // Two lemon wedges at 40 g: two of USDA's 8 g wedges are 16 g.
       "download-4.json": [
         ["Salmon (cooked)", "curated", "2 × half fillet", 356, 733], ["Roast potatoes", "curated", "~200 g", 200, 252], ["Broccoli (cooked)", "curated", "~150 g", 150, 53],
-        ["Lemon, raw", "usda", "~40 g", 40, 12],
+        ["Lemon", "curated", "~40 g", 40, 12],
       ],
       // 100 g of scrambled eggs are no large egg of 61 g (RULINGS 2026-09-16).
       "download-5.json": [
@@ -722,13 +753,13 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // "steamed broccoli" our cooked broccoli (ROADMAP 7a-iv-i); "roasted pumpkin" is
       // still no table's: our list has no pumpkin, and USDA's name has no "roasted".
       "download-3-apart.json": [
-        ["Chicken thigh (cooked)", "curated", "~150 g", 150, 269], ["Shrimp (cooked)", "curated", "~70 g", 70, 69], ["Egg (hard-boiled)", "curated", "1 × egg", 50, 78],
+        ["Chicken thigh (cooked)", "curated", "~150 g", 150, 269], ["Shrimp (cooked)", "curated", "7 × small/medium shrimp", 70, 69], ["Egg (hard-boiled)", "curated", "1 × egg", 50, 78],
         ["pumpkin", "estimate", "~60 g", 60, 30], ["Broccoli (cooked)", "curated", "~80 g", 80, 28], ["Corn (cooked)", "curated", "~60 g", 60, 58],
         ["Orange juice", "curated", "1 × cup", 248, 112],
       ],
       "download-4-apart.json": [
         ["Salmon (cooked)", "curated", "2 × half fillet", 356, 733], ["Broccoli (cooked)", "curated", "~120 g", 120, 42], ["Roast potatoes", "curated", "~200 g", 200, 252],
-        ["Lemon, raw", "usda", "~30 g", 30, 9],
+        ["Lemon", "curated", "~30 g", 30, 9],
       ],
       // The model names the toast "bread", which alone is white bread (RULINGS
       // 2026-09-17), no longer whole wheat. Its two slices at 70 g start at its own slice,
@@ -736,7 +767,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // never at two 35 g cups of bread cubes (the reviews of PR #80 and #81).
       "download-6-apart.json": [
         ["White bread", "curated", "2 × slice", 58, 154], ["Peanut butter", "curated", "1 × 2 tbsp", 32, 191], ["Jam", "curated", "~30 g", 30, 83],
-        ["Sesame seeds", "usda", "~5 g", 5, 32], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Eggs (scrambled)", "curated", "~120 g", 120, 179],
+        ["Sesame seeds", "curated", "~5 g", 5, 29], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Eggs (scrambled)", "curated", "~120 g", 120, 179],
         ["Blueberries", "curated", "1 × 50 berries", 68, 39], ["Raspberries", "curated", "~50 g", 50, 26],
       ],
       // "Sweet corn" and "steamed broccoli" are our list's cooked corn and broccoli here too.
@@ -756,7 +787,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // tomato, and a toast is no table's.
       "download-2-apart.json": [
         ["toast", "estimate", "~60 g", 60, 160], ["Avocado", "curated", "1 × NLEA Serving", 50, 80], ["Egg (fried)", "curated", "1 × egg", 46, 90],
-        ["Asparagus (cooked)", "curated", "~45 g", 45, 10], ["cherry tomato", "estimate", "~70 g", 70, 12], ["Shrimp (cooked)", "curated", "~60 g", 60, 59],
+        ["Asparagus (cooked)", "curated", "~45 g", 45, 10], ["cherry tomato", "estimate", "~70 g", 70, 12], ["Shrimp (cooked)", "curated", "4 × large/jumbo shrimp", 60, 59],
         ["Pork sausage (cooked)", "curated", "2 × serving", 96, 312], ["Latte", "curated", "1 × cup (8 fl oz)", 240, 103],
       ],
       "download-5-apart.json": [
@@ -842,11 +873,11 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       ],
       // Names no shorter name of ours stands for.
       "review-names-kept-whole.json": [
-        ["Chicken salad spread", "usda", "~150 g", 150, 300], // chicken is a food: never shortened to a salad
+        ["Chicken salad", "curated", "~150 g", 150, 300], // ours since 34c-ii, from the same USDA entry ("Chicken salad spread"): never shortened to a salad
         ["Cherry tomatoes", "estimate", "~80 g", 80, 14], // a cherry is a food
-        ["Lemon water", "estimate", "~250 g", 250, 5], // a lemon is a food, and only USDA's ("Lemon, raw"): never our water
+        ["Lemon water", "estimate", "~250 g", 250, 5], // a lemon is a food: never our water
         ["Light coconut milk", "estimate", "~120 g", 120, 37], // coconut is a food: never whole milk
-        ["Coconut milk", "estimate", "~60 g", 60, 114], // USDA's coconut milk drink (31) is another food at 190, and never milk
+        ["Coconut milk (canned)", "curated", "~60 g", 60, 118], // ours, canned (197): never USDA's coconut milk drink (31), and never milk
         ["Oreo cookies", "estimate", "~34 g", 34, 160], // "cookie" alone is our pick, never a name shortened to it
         ["Overnight oats", "estimate", "~250 g", 250, 375], // dry oats carry 947 kcal at 250 g, not 375
         ["Garlic bread, NFS", "usda", "2 × small slice", 78, 272], // USDA's food of that name, before any shorter name
@@ -886,7 +917,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
       // A way of cooking is dropped, and our list's version its own name does not contradict is the food.
       "review-cooking.json": [
         ["Carrots (cooked)", "curated", "~80 g", 80, 28], // steamed: never "Carrots (raw)", listed first
-        ["Broccoli, raw", "usda", "~90 g", 90, 35], // raw: never our cooked broccoli, so USDA's
+        ["Broccoli (raw)", "curated", "~90 g", 90, 31], // raw: never our cooked broccoli
         ["Potato (boiled)", "curated", "~150 g", 150, 129], // steamed, cooked in water: never our baked potato
         ["Spinach (cooked)", "curated", "~90 g", 90, 21],
         ["Grilled tuna", "estimate", "~150 g", 150, 276], // our only tuna is canned

@@ -1,0 +1,141 @@
+{
+ "about": "UK McCance and Widdowson's Composition of Foods Integrated Dataset (2021, Open Government Licence): the food name and the description of every entry our food list cites, by food code, as the workbook's Proximates sheet gives them. Written by tools/check-food-sources.ts --write-groups, which also fails when this file differs from the download; never edited by hand.",
+ "foods": {
+  "11-1084": [
+   "Hot cross buns, homemade",
+   "Recipe"
+  ],
+  "11-1146": [
+   "Yorkshire pudding, made with whole milk",
+   "Recipe"
+  ],
+  "11-459": [
+   "Chapatis, made without fat",
+   "Analysed and calculated values"
+  ],
+  "11-780": [
+   "Muesli, Swiss style, unfortified",
+   "11 samples, 9 products, including Alpen and own brand"
+  ],
+  "11-802": [
+   "Shortbread",
+   "10 samples, 7 products"
+  ],
+  "11-814": [
+   "Flapjacks, retail",
+   "10 samples, 9 products"
+  ],
+  "11-848": [
+   "Mince pies, retail",
+   "10 samples, 8 products"
+  ],
+  "11-989": [
+   "Crumpets, toasted",
+   "9 samples"
+  ],
+  "11-999": [
+   "Risotto, plain, homemade",
+   "Recipe"
+  ],
+  "12-495": [
+   "Cheese, Paneer",
+   "9 samples, sampled in spring and autumn"
+  ],
+  "12-552": [
+   "Pavlova, with fruit and cream",
+   "12 samples, 7 brands, including raspberry, strawberry and tropical fruits, frozen"
+  ],
+  "12-602": [
+   "Welsh rarebit, homemade",
+   "Recipe"
+  ],
+  "12-952": [
+   "Quiche, Lorraine, homemade",
+   "Recipe"
+  ],
+  "12-957": [
+   "Omelette, Spanish, homemade",
+   "Recipe"
+  ],
+  "15-704": [
+   "Bubble and squeak, fried in rapeseed oil, homemade",
+   "Fried cabbage and potato. Recipe from Wiles et al, 1980"
+  ],
+  "15-711": [
+   "Cauliflower cheese, made with whole milk, homemade",
+   "Recipe"
+  ],
+  "15-746": [
+   "Curry, chick pea, whole and tomato, Gujerati, with butter ghee, homemade",
+   "Recipe. Large white chick peas, tomato and onion."
+  ],
+  "16-397": [
+   "Kippers, flesh only, grilled",
+   "7 samples, 7 products, frozen and chilled"
+  ],
+  "16-409": [
+   "Scampi, coated in breadcrumbs, baked",
+   "11 samples, 11 products, frozen and chilled"
+  ],
+  "16-447": [
+   "Kedgeree, homemade",
+   "Recipe"
+  ],
+  "16-449": [
+   "Taramasalata",
+   "10 assorted samples. Greek dish based on cod's roe"
+  ],
+  "19-114": [
+   "Black pudding, dry-fried",
+   "8 samples, 6 brands"
+  ],
+  "19-132": [
+   "Haggis, boiled",
+   "8 samples"
+  ],
+  "19-296": [
+   "Curry, chicken tikka masala, retail, reheated",
+   "11 samples, 11 products, chilled and frozen"
+  ],
+  "19-466": [
+   "Cornish pasty, retail",
+   "11 samples, 10 products"
+  ],
+  "19-467": [
+   "Pork pie, individual",
+   "10 samples, 10 products"
+  ],
+  "19-468": [
+   "Sausage roll, flaky pastry, ready-to-eat, retail",
+   "10 samples, 10 products, mini and large"
+  ],
+  "19-486": [
+   "Coq au vin, homemade",
+   "Recipe"
+  ],
+  "19-518": [
+   "Scotch eggs, retail",
+   "10 samples, 8 brands"
+  ],
+  "19-583": [
+   "Goulash, homemade",
+   "Recipe"
+  ],
+  "19-601": [
+   "Lancashire hotpot, homemade",
+   "Recipe"
+  ],
+  "19-609": [
+   "Moussaka, homemade",
+   "Recipe"
+  ],
+  "19-629": [
+   "Pie, steak and kidney, double crust, homemade",
+   "Recipe"
+  ],
+  "19-635": [
+   "Toad in the hole, homemade",
+   "Recipe"
+  ]
+ }
+}
