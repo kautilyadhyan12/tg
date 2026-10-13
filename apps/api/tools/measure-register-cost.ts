@@ -18,6 +18,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
+import { DISCOUNTS_MAX, discountOff } from "@app/shared";
 import { findPeople, getPurchases, getRegister, sellProduct, type RegisterDeps } from "../src/modules/orgs/register/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -63,6 +64,7 @@ interface Made {
   sales: number;
   productId: string;
   buyer: string;
+  discountId: string;
 }
 
 async function makeGym(people: number, salesADay: number): Promise<Made> {
@@ -91,6 +93,11 @@ async function makeGym(people: number, salesADay: number): Promise<Made> {
   const products = Array.from({ length: PRODUCTS }, (_, i) => ({ id: randomUUID(), gym_id: gymId, name: `Product ${String(i)}`, price_minor: 100 + i * 25, currency: "GBP", taxed: i % 5 !== 0, stock: i % 2 === 0 ? 100_000 : null }));
   await sql`INSERT INTO gym_products ${sql(products)}`;
   const productIds = products.map((p) => p.id);
+  // As many discounts as a gym can have, half of them limited to five products.
+  const discounts = Array.from({ length: DISCOUNTS_MAX }, (_, i) => ({ id: randomUUID(), gym_id: gymId, name: `Discount ${String(i)}`, code: `CODE${String(i)}`, kind: "percent", percent_bp: 1000, all_products: i % 2 === 0 }));
+  await sql`INSERT INTO gym_discounts ${sql(discounts)}`;
+  const limited = discounts.filter((_, i) => i % 2 === 1).flatMap((d) => productIds.slice(0, 5).map((product_id) => ({ gym_id: gymId, discount_id: d.id, product_id })));
+  await sql`INSERT INTO gym_discount_products ${sql(limited)}`;
   const entryIds = entries.slice(0, people).map((e) => e.id);
 
   // A year of sales, the newest day today: two in three for a member, the rest walk-ins.
@@ -103,7 +110,7 @@ async function makeGym(people: number, salesADay: number): Promise<Made> {
            (ARRAY['cash','card_at_desk','bank_transfer'])[1 + (n % 3)],
            ${today}::date - d, ${owner}, ${now}::timestamptz - make_interval(days => d, mins => n)
     FROM generate_series(0, ${DAYS - 1}) AS d, generate_series(0, ${salesADay - 1}) AS n`;
-  return { gymId, owner, sales: DAYS * salesADay, productId: products[1]?.id ?? "", buyer: entryIds[1] ?? "" };
+  return { gymId, owner, sales: DAYS * salesADay, productId: products[1]?.id ?? "", buyer: entryIds[1] ?? "", discountId: discounts[0]?.id ?? "" };
 }
 
 await cleanup();
@@ -122,6 +129,7 @@ try {
   const viewer = { timezone: TZ, canSell: true, canManage: true, seesEmail: true };
   const open = async (gym: Made, salesADay: number): Promise<number> => {
     const page = await getRegister(deps, gym.gymId, viewer);
+    if (page.discounts.length !== DISCOUNTS_MAX) throw new Error(`read ${String(page.discounts.length)} discounts`);
     if (page.totals.count !== salesADay || page.products.length !== PRODUCTS) throw new Error(`read ${String(page.totals.count)} sales and ${String(page.products.length)} products`);
     return JSON.stringify(page).length;
   };
@@ -133,9 +141,11 @@ try {
   const product = (gym: Made) => sql<{ id: string; price_minor: number }[]>`SELECT id, price_minor FROM gym_products WHERE gym_id = ${gym.gymId} AND NOT taxed AND stock IS NULL LIMIT 1`;
   const [untaxed] = await product(big);
   if (untaxed === undefined) throw new Error("no product to sell");
+  // Sold with a discount of 10%, which is one more row read and one more written.
+  const discounted = untaxed.price_minor - discountOff({ kind: "percent", percentBp: 1000, amountMinor: null }, untaxed.price_minor);
   const sold: string[] = [];
   const sell = async (gym: Made): Promise<void> => {
-    const answer = await sellProduct(deps, gym.owner, gym.gymId, viewer, { requestKey: randomUUID(), productId: untaxed.id, quantity: 1, entryId: gym.buyer, method: "cash", totalMinor: untaxed.price_minor });
+    const answer = await sellProduct(deps, gym.owner, gym.gymId, viewer, { requestKey: randomUUID(), productId: untaxed.id, quantity: 1, entryId: gym.buyer, method: "cash", totalMinor: discounted, discountId: gym.discountId });
     sold.push(answer.saleId);
   };
 

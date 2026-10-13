@@ -13,19 +13,32 @@
 //   PUT    /v1/orgs/:gymId/register/products/:productId     change one, every field
 //   DELETE /v1/orgs/:gymId/register/products/:productId     archive it
 //   POST   /v1/orgs/:gymId/register/products/:productId/restore
+//   POST   /v1/orgs/:gymId/register/discounts               add a discount (`memberships.manage`)
+//   PUT    /v1/orgs/:gymId/register/discounts/:discountId   change one, every field
+//   DELETE /v1/orgs/:gymId/register/discounts/:discountId   archive it
+//   POST   /v1/orgs/:gymId/register/discounts/:discountId/restore
 //   GET    /v1/orgs/:gymId/member-list/entries/:entryId/purchases   what one person bought (`billing.members`)
 //
 // A sale carries the form's own key: the same key twice is one sale.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import { salePeopleQuerySchema, salesTaxSchema, saveGymProductRequestSchema, sellProductRequestSchema, updateGymProductRequestSchema } from "@app/shared";
+import {
+  salePeopleQuerySchema,
+  salesTaxSchema,
+  saveGymDiscountRequestSchema,
+  saveGymProductRequestSchema,
+  sellProductRequestSchema,
+  updateGymDiscountRequestSchema,
+  updateGymProductRequestSchema,
+} from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { memberListEntryParamsSchema, orgParamsSchema } from "../schemas.js";
 import * as service from "./service.js";
 
 const productParamsSchema = z.object({ gymId: z.string().uuid(), productId: z.string().uuid() }).strict();
+const discountParamsSchema = z.object({ gymId: z.string().uuid(), discountId: z.string().uuid() }).strict();
 const saleParamsSchema = z.object({ gymId: z.string().uuid(), saleId: z.string().uuid() }).strict();
 
 export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date }): void {
@@ -162,6 +175,46 @@ export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; r
     const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
     if (!(await within(manageLimit, req, reply))) return reply;
     return reply.status(200).send(await service.restoreProduct(registerDeps, userId, params.data.gymId, viewer, params.data.productId));
+  });
+
+  app.post("/v1/orgs/:gymId/register/discounts", pre, async (req, reply) => {
+    const params = orgParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const body = saveGymDiscountRequestSchema.safeParse(req.body);
+    if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
+    if (!(await within(manageLimit, req, reply))) return reply;
+    return reply.status(201).send(await service.createDiscount(registerDeps, userId, params.data.gymId, viewer, body.data));
+  });
+
+  app.put("/v1/orgs/:gymId/register/discounts/:discountId", pre, async (req, reply) => {
+    const params = discountParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const body = updateGymDiscountRequestSchema.safeParse(req.body);
+    if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
+    if (!(await within(manageLimit, req, reply))) return reply;
+    return reply.status(200).send(await service.updateDiscount(registerDeps, userId, params.data.gymId, viewer, params.data.discountId, body.data));
+  });
+
+  app.delete("/v1/orgs/:gymId/register/discounts/:discountId", pre, async (req, reply) => {
+    const params = discountParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
+    if (!(await within(manageLimit, req, reply))) return reply;
+    return reply.status(200).send(await service.archiveDiscount(registerDeps, userId, params.data.gymId, viewer, params.data.discountId));
+  });
+
+  app.post("/v1/orgs/:gymId/register/discounts/:discountId/restore", pre, async (req, reply) => {
+    const params = discountParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
+    if (!(await within(manageLimit, req, reply))) return reply;
+    return reply.status(200).send(await service.restoreDiscount(registerDeps, userId, params.data.gymId, viewer, params.data.discountId));
   });
 
   app.get("/v1/orgs/:gymId/member-list/entries/:entryId/purchases", pre, async (req, reply) => {

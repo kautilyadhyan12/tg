@@ -12,7 +12,9 @@ import { placeFor } from './consolePlaces';
 import { priceLabel, termLine } from './membershipTypesView';
 import MemberListPerson from './MemberListPerson';
 import { Refusal } from './MemberListTags';
+import SellDiscounts from './SellDiscounts';
 import SellProducts from './SellProducts';
+import { applyPromoCode, discountOption, discountsFor, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
 import {
   NO_SELLING_LINE,
   PAY_CHOICES,
@@ -33,8 +35,8 @@ import {
   undoSaleQuestion,
 } from './sellView';
 
-// SELL (spec Part 3 §14.3; ROADMAP 18b-i): the desk's register. Staff pick what is sold,
-// who it is for and how it was paid, and press once. The menu draws the line for whoever
+// SELL (spec Part 3 §14.3; ROADMAP 18b-i, 18b-ii-a): the desk's register. Staff pick what
+// is sold, who it is for, a discount if there is one, and how it was paid, and press once. The menu draws the line for whoever
 // may sell or change products; the address can be typed by anybody, so somebody without
 // either tick is told, and nothing is asked for them.
 
@@ -192,13 +194,31 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
   const [method, setMethod] = useState(PAY_CHOICES[0]?.value ?? 'cash');
   const [key, setKey] = useState(newKey);
   const [state, setState] = useState({ busy: false, error: null, done: null });
+  const [discountId, setDiscountId] = useState('');
+  const [code, setCode] = useState({ text: '', note: null, appliedId: null });
   const productSelect = useId();
   const quantityId = useId();
+  const discountSelect = useId();
+  const codeId = useId();
 
   const product = page.products.find((p) => p.id === productId) ?? null;
   const quantity = /^\d{1,2}$/.test(quantityText.trim()) ? Number(quantityText.trim()) : Number.NaN;
-  const summary = Number.isInteger(quantity) ? saleSummary(product, quantity, page.tax) : null;
-  const problem = saleProblem({ product, quantity, who, person, currency: page.currency });
+  // Only a discount that can be used on this product today is ever sent: one picked for
+  // another product, or since used up, falls back to none.
+  const usable = discountsFor(page, product);
+  const discount = usable.find((d) => d.id === discountId) ?? null;
+  const hasCodes = page.discounts.some((d) => d.code !== null);
+  const summary = Number.isInteger(quantity) ? saleSummary(product, quantity, page.tax, discount) : null;
+  const problem = saleProblem({ product, quantity, who, person, currency: page.currency, discount });
+  // "Applied" is said only while the applied discount is the one on the sale.
+  const codeNote = promoCodeNote(page, product, discount, code);
+  const oldMoney = oldMoneySaleLine(page);
+  const applyCode = () => {
+    const found = applyPromoCode(page, product, code.text);
+    if (found.discount !== null) setDiscountId(found.discount.id);
+    setCode((was) => ({ ...was, note: found.note, appliedId: found.discount === null ? null : found.discount.id }));
+    touched();
+  };
   const touched = () => setState((was) => (was.error === null && was.done === null ? was : { ...was, error: null, done: null }));
 
   const sell = async () => {
@@ -212,6 +232,7 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
         entryId: who === 'member' && person !== null ? person.entryId : null,
         method,
         totalMinor: summary.totalMinor,
+        discountId: discount === null ? null : discount.id,
       });
       const sold = answer.register.sales.find((s) => s.id === answer.saleId);
       setState({ busy: false, error: null, done: sold === undefined ? 'Sold.' : soldWords(sold) });
@@ -220,6 +241,8 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
       setQuantityText('1');
       setWho('walkin');
       setPerson(null);
+      setDiscountId('');
+      setCode({ text: '', note: null, appliedId: null });
       onPage(answer.register);
     } catch (err) {
       setState({ busy: false, error: errorText(err, "We couldn't record that sale. Nothing was sold: try again."), done: null });
@@ -310,6 +333,72 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
         disabled={locked || state.busy}
         addMemberTo={addMemberTo}
       />
+      {product !== null && page.discounts.length > 0 ? (
+        <div className="flex flex-col gap-3">
+          <div className="c-field">
+            <label className="c-label" htmlFor={discountSelect}>
+              Discount
+            </label>
+            {usable.length === 0 ? (
+              <p id={discountSelect} className="c-s14 c-t2 m-0">
+                No discount applies to this product today.
+              </p>
+            ) : (
+              <select
+                id={discountSelect}
+                className="c-input"
+                value={discount === null ? '' : discount.id}
+                disabled={locked || state.busy}
+                onChange={(e) => {
+                  setDiscountId(e.target.value);
+                  setCode((was) => ({ ...was, note: null, appliedId: null }));
+                  touched();
+                }}
+              >
+                <option value="">No discount</option>
+                {usable.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {discountOption(d)}
+                  </option>
+                ))}
+              </select>
+            )}
+            {oldMoney !== null ? <p className="c-s14 c-t2 m-0">{oldMoney}</p> : null}
+          </div>
+          {hasCodes ? (
+            <div className="c-field">
+              <label className="c-label" htmlFor={codeId}>
+                Promo code
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  id={codeId}
+                  className="c-input"
+                  style={{ maxWidth: 220, textTransform: 'uppercase' }}
+                  value={code.text}
+                  maxLength={40}
+                  autoComplete="off"
+                  disabled={locked || state.busy}
+                  onChange={(e) => setCode({ text: e.target.value, note: null, appliedId: null })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') applyCode();
+                  }}
+                />
+                <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={locked || state.busy} onClick={applyCode}>
+                  Apply
+                </button>
+              </div>
+              {codeNote !== null ? (
+                <p className="c-s14 c-t2 m-0" role="status">
+                  {codeNote}
+                </p>
+              ) : (
+                <p className="c-s13 c-t3 m-0">If the customer gives a code, type it here and press Apply.</p>
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <PayPicker method={method} setMethod={setMethod} disabled={locked || state.busy} />
 
       {summary !== null ? (
@@ -708,6 +797,7 @@ export default function Sell() {
           <div ref={productsRef}>
             <SellProducts key={`products-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} onPage={setPage} />
           </div>
+          <SellDiscounts key={`discounts-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} onPage={setPage} />
         </>
       )}
 
