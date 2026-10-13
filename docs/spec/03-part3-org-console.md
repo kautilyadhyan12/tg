@@ -1905,8 +1905,12 @@ a shared login, not a secret.
 `client: "phone"` answers `{ user, isNewAccount, tokens }` and sets no cookie.
 `POST /v1/auth/refresh` and `/logout` with `{ refreshToken }` in the body are the
 phone's: refresh answers `{ tokens }`. A token is taken only the way its sign-in was
-made (a phone's from the body, a browser's from its cookie); the other way is a plain
-401 and ends nothing. The old phone's 401 is `signed_in_elsewhere`
+made (a phone's from the body, a browser's from its cookie); the other way ends
+nothing, a plain 401 on refresh. The phone's way is refused (400) to any request that
+carries an `Origin`, as every browser's does, so no script in a page is ever handed a
+token. A phone's refresh sent again within 60 seconds, its reply lost, is answered
+with a new token and its unreceived successor is ended; after that, or once the
+successor has been used, the same token again is reuse and ends the sign-in. The old phone's 401 is `signed_in_elsewhere`
 (`SIGNED_IN_ELSEWHERE` in `@app/shared`). Its access token lasts out its fifteen
 minutes, as a signed-out browser's does. Google on the phone is 12d.
 

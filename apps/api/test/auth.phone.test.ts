@@ -12,6 +12,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import { startPhoneSession } from "../src/modules/auth/repo.js";
+import { PHONE_REFRESH_GRACE_SECONDS } from "../src/modules/auth/service.js";
 import { mintOpaqueToken, newFamilyId, sha256Hex } from "../src/modules/auth/tokens.js";
 
 const url = process.env["DATABASE_URL"];
@@ -47,7 +48,8 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     return app;
   };
 
-  const post = (path: string, body: unknown, opts: { cookies?: Record<string, string>; bearer?: string } = {}) =>
+  /** `origin`: the header every browser puts on these POSTs and the phone app never does. */
+  const post = (path: string, body: unknown, opts: { cookies?: Record<string, string>; bearer?: string; origin?: string } = {}) =>
     api().inject({
       method: "POST",
       url: path,
@@ -55,6 +57,7 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
       headers: {
         "content-type": "application/json",
         ...(opts.bearer === undefined ? {} : { authorization: `Bearer ${opts.bearer}` }),
+        ...(opts.origin === undefined ? {} : { origin: opts.origin }),
       },
       cookies: opts.cookies ?? {},
       payload: JSON.stringify(body),
@@ -93,6 +96,20 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     const id = rows[0]?.id;
     if (id === undefined) throw new Error(`no account for ${email}`);
     return id;
+  };
+  const tokensIn = (res: { statusCode: number; body: string }): PhoneSessionTokens => {
+    expect(res.statusCode).toBe(200);
+    return phoneRefreshResponseSchema.parse(JSON.parse(res.body)).tokens;
+  };
+  const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
+  const newPhoneRow = (userId: string) => {
+    const refreshToken = mintOpaqueToken();
+    const familyId = newFamilyId();
+    return {
+      refreshToken,
+      familyId,
+      row: { userId, familyId, tokenHash: sha256Hex(refreshToken), expiresAt: new Date(Date.now() + 60_000), ip: null, userAgent: null },
+    };
   };
   const livePhoneFamilies = async (userId: string): Promise<string[]> => {
     const rows = await sql<{ family_id: string }[]>`
@@ -209,12 +226,90 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     }
   });
 
+  it("an old phone's refresh that waited behind the new phone's sign-in is told why", { timeout: 30_000 }, async () => {
+    const email = "phone12a-waited@example.com";
+    const oldPhone = await phoneSignIn(email);
+    const userId = await userIdOf(email);
+    let refreshing: ReturnType<typeof phoneRefresh> | undefined;
+    // The new phone's sign-in, held open: it has the person's row, and the old phone's
+    // refresh arrives and waits behind it.
+    await sql.begin(async (tx) => {
+      await tx`SELECT 1 FROM users WHERE id = ${userId} FOR UPDATE`;
+      refreshing = phoneRefresh(oldPhone.refreshToken);
+      await pause(1500);
+      await tx`
+        UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'signed_in_elsewhere'
+        WHERE user_id = ${userId} AND client = 'phone' AND revoked_at IS NULL`;
+    });
+    if (refreshing === undefined) throw new Error("the refresh was never sent");
+    const refused = await refreshing;
+    expect(refused.statusCode).toBe(401);
+    expect(errorOf(refused).error).toBe(SIGNED_IN_ELSEWHERE.error);
+    expect(await livePhoneFamilies(userId)).toEqual([]);
+  });
+
+  it("a new phone's sign-in waits for the old phone's refresh in flight, then ends what it made", { timeout: 30_000 }, async () => {
+    const email = "phone12a-inflight@example.com";
+    const oldPhone = await phoneSignIn(email);
+    const userId = await userIdOf(email);
+    const successor = mintOpaqueToken();
+    const newPhone = newPhoneRow(userId);
+    let signedIn = false;
+    let signingIn: Promise<void> | undefined;
+    // The old phone's rotation, held open after its successor is written.
+    await sql.begin(async (tx) => {
+      const made = await tx<{ id: string }[]>`
+        INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, client)
+        SELECT user_id, family_id, ${sha256Hex(successor)}, expires_at, 'phone'
+        FROM refresh_tokens WHERE token_hash = ${sha256Hex(oldPhone.refreshToken)}
+        RETURNING id`;
+      signingIn = startPhoneSession(sql, newPhone.row).then(() => {
+        signedIn = true;
+      });
+      await pause(1500);
+      expect(signedIn).toBe(false);
+      await tx`
+        UPDATE refresh_tokens SET revoked_at = now(), replaced_by = ${made[0]?.id ?? null}
+        WHERE token_hash = ${sha256Hex(oldPhone.refreshToken)}`;
+    });
+    await signingIn;
+    expect(signedIn).toBe(true);
+    expect(errorOf(await phoneRefresh(successor)).error).toBe(SIGNED_IN_ELSEWHERE.error);
+    expect(await livePhoneFamilies(userId)).toEqual([newPhone.familyId]);
+  });
+
+  it("a script in a browser is never handed a token: the phone's way is refused to a request with an Origin", { timeout: 30_000 }, async () => {
+    const email = "phone12a-origin@example.com";
+    const phone = await phoneSignIn(email);
+    for (const origin of ["http://localhost:5173", "https://evil.example", "null"]) {
+      const code = await codeFor(email);
+      const signIn = await post("/v1/auth/code/verify", { email, code, client: "phone" }, { origin });
+      expect(signIn.statusCode).toBe(400);
+      expect(signIn.body).not.toMatch(/token/i);
+      expect(signIn.cookies).toEqual([]);
+      const refresh = await post("/v1/auth/refresh", { refreshToken: phone.refreshToken }, { origin });
+      expect(refresh.statusCode).toBe(400);
+      expect(refresh.body).not.toMatch(/token/i);
+      expect((await post("/v1/auth/logout", { refreshToken: phone.refreshToken }, { origin })).statusCode).toBe(400);
+      // The refusal used nothing up: the same code signs the browser in its own way.
+      const browser = await post("/v1/auth/code/verify", { email, code }, { origin });
+      expect(browser.statusCode).toBe(200);
+      expect(browser.body).not.toMatch(/token/i);
+    }
+    // The real phone was not signed out by any of it.
+    tokensIn(await phoneRefresh(phone.refreshToken));
+  });
+
   it("a phone is sent its tokens in the reply and no cookie; a browser gets cookies and no token in the reply", { timeout: 30_000 }, async () => {
     const email = "phone12a-reply@example.com";
     const phone = await post("/v1/auth/code/verify", { email, code: await codeFor(email), client: "phone" });
     expect(phone.statusCode).toBe(200);
     expect(phone.cookies).toEqual([]);
+    expect(phone.headers["cache-control"]).toBe("no-store");
     const tokens = verifyCodePhoneResponseSchema.parse(JSON.parse(phone.body)).tokens;
+    const refreshed = await phoneRefresh(tokens.refreshToken);
+    expect(refreshed.headers["cache-control"]).toBe("no-store");
+    tokens.refreshToken = tokensIn(refreshed).refreshToken;
 
     const browser = await post("/v1/auth/code/verify", { email, code: await codeFor(email) });
     expect(browser.statusCode).toBe(200);
@@ -251,24 +346,80 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     // A browser's token in a body: no tokens come back.
     const asBody = await phoneRefresh(browser);
     expect(asBody.statusCode).toBe(401);
+    expect(errorOf(asBody).error).toBe("invalid_refresh");
     expect(asBody.body).not.toMatch(/accessToken/);
+    // Sign-out the wrong way answers as ever and ends nothing.
+    expect((await post("/v1/auth/logout", { refreshToken: browser })).statusCode).toBe(200);
+    expect((await post("/v1/auth/logout", {}, { cookies: { refreshToken: phone.refreshToken } })).statusCode).toBe(200);
 
     expect((await phoneRefresh(phone.refreshToken)).statusCode).toBe(200);
     expect((await post("/v1/auth/refresh", {}, { cookies: { refreshToken: browser } })).statusCode).toBe(204);
   });
 
-  it("a phone refresh rotates the token; the used one again ends that sign-in as a stolen token", { timeout: 30_000 }, async () => {
-    const first = await phoneSignIn("phone12a-rotate@example.com");
-    const res = await phoneRefresh(first.refreshToken);
-    expect(res.statusCode).toBe(200);
-    expect(res.cookies).toEqual([]);
-    const second = phoneRefreshResponseSchema.parse(JSON.parse(res.body)).tokens;
-    expect(second.refreshToken).not.toBe(first.refreshToken);
+  it("a refresh whose reply was lost does not sign the phone out: the same token again is answered", { timeout: 30_000 }, async () => {
+    const email = "phone12a-lost@example.com";
+    const first = await phoneSignIn(email);
+    const lost = await phoneRefresh(first.refreshToken);
+    expect(lost.statusCode).toBe(200);
+    expect(lost.cookies).toEqual([]);
+    // The reply never arrived, twice over.
+    const again = tokensIn(await phoneRefresh(first.refreshToken));
+    const third = tokensIn(await phoneRefresh(first.refreshToken));
+    expect(new Set([first.refreshToken, tokensIn(lost).refreshToken, again.refreshToken, third.refreshToken]).size).toBe(4);
+    // Only the last one received is live, and it carries on.
+    expect(await livePhoneFamilies(await userIdOf(email))).toHaveLength(1);
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM refresh_tokens
+      WHERE user_id = ${await userIdOf(email)} AND client = 'phone' AND revoked_at IS NULL`;
+    expect(live[0]?.n).toBe(1);
+    tokensIn(await phoneRefresh(third.refreshToken));
+  });
 
-    const reuse = await phoneRefresh(first.refreshToken);
+  it("two tries of one refresh at the same instant both get an answer, and one sign-in is left", { timeout: 30_000 }, async () => {
+    const email = "phone12a-twice@example.com";
+    const first = await phoneSignIn(email);
+    const answers = await Promise.all([phoneRefresh(first.refreshToken), phoneRefresh(first.refreshToken)]);
+    expect(answers.map((a) => a.statusCode)).toEqual([200, 200]);
+    const live = await sql<{ token_hash: string }[]>`
+      SELECT token_hash FROM refresh_tokens
+      WHERE user_id = ${await userIdOf(email)} AND client = 'phone' AND revoked_at IS NULL`;
+    expect(live).toHaveLength(1);
+    expect(answers.map((a) => sha256Hex(tokensIn(a).refreshToken))).toContain(live[0]?.token_hash);
+  });
+
+  it("a stolen phone token is still caught: after the grace, or once the token that replaced it is used", { timeout: 30_000 }, async () => {
+    // After the minute: the used token again is reuse, and ends the sign-in.
+    const late = await phoneSignIn("phone12a-late@example.com");
+    const lateNext = tokensIn(await phoneRefresh(late.refreshToken));
+    await sql`
+      UPDATE refresh_tokens SET revoked_at = revoked_at - make_interval(secs => ${PHONE_REFRESH_GRACE_SECONDS + 1})
+      WHERE token_hash = ${sha256Hex(late.refreshToken)}`;
+    const reuse = await phoneRefresh(late.refreshToken);
     expect(reuse.statusCode).toBe(401);
     expect(errorOf(reuse).error).toBe("invalid_refresh");
-    expect(errorOf(await phoneRefresh(second.refreshToken)).error).toBe("invalid_refresh");
+    expect(errorOf(await phoneRefresh(lateNext.refreshToken)).error).toBe("invalid_refresh");
+
+    // Once its successor has been used, the first token is past any lost reply.
+    const used = await phoneSignIn("phone12a-used@example.com");
+    const usedNext = tokensIn(await phoneRefresh(used.refreshToken));
+    const usedThird = tokensIn(await phoneRefresh(usedNext.refreshToken));
+    expect(errorOf(await phoneRefresh(used.refreshToken)).error).toBe("invalid_refresh");
+    expect(errorOf(await phoneRefresh(usedThird.refreshToken)).error).toBe("invalid_refresh");
+
+    // A thief sends the old token inside the minute and is answered; the phone, holding
+    // the token that answer ended, refreshes next, and that ends the thief's too.
+    const owner = await phoneSignIn("phone12a-thief@example.com");
+    const ownerNext = tokensIn(await phoneRefresh(owner.refreshToken));
+    const thief = tokensIn(await phoneRefresh(owner.refreshToken));
+    expect(errorOf(await phoneRefresh(ownerNext.refreshToken)).error).toBe("invalid_refresh");
+    expect(errorOf(await phoneRefresh(thief.refreshToken)).error).toBe("invalid_refresh");
+    expect(await livePhoneFamilies(await userIdOf("phone12a-thief@example.com"))).toEqual([]);
+  });
+
+  it("a browser's refresh has no such grace", { timeout: 30_000 }, async () => {
+    const browser = await browserSignIn("phone12a-nograce@example.com");
+    expect((await post("/v1/auth/refresh", {}, { cookies: { refreshToken: browser } })).statusCode).toBe(204);
+    expect((await post("/v1/auth/refresh", {}, { cookies: { refreshToken: browser } })).statusCode).toBe(401);
   });
 
   it("sign out on the phone ends that sign-in, and is safe to send twice", { timeout: 30_000 }, async () => {
@@ -304,7 +455,8 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
   });
 
   it("the database refuses a sign-in from anywhere else, and a reason on a live one", async () => {
-    const userId = await userIdOf("phone12a-worst@example.com");
+    await phoneSignIn("phone12a-checks@example.com");
+    const userId = await userIdOf("phone12a-checks@example.com");
     const insert = (client: string, reason: string | null, revoked: boolean) => sql`
       INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, client, revoked_reason, revoked_at)
       VALUES (${userId}, ${newFamilyId()}, ${sha256Hex(mintOpaqueToken())}, now(), ${client}, ${reason},

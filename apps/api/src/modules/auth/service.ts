@@ -385,6 +385,12 @@ export async function redeemEmailCode(
 
 // ── refresh (rotation + reuse detection) ────────────────────────────────────
 
+/** How long after a phone's refresh the same token is taken again, for a reply lost on
+ *  a weak signal (CLAUDE.md §4: a lost connection never signs anybody out). */
+export const PHONE_REFRESH_GRACE_SECONDS = 60;
+
+const invalidRefresh = () => new AuthError(401, "invalid_refresh", "Invalid refresh token");
+
 const signedInElsewhere = () => new AuthError(401, SIGNED_IN_ELSEWHERE.error, SIGNED_IN_ELSEWHERE.message);
 
 /** `from`: how the token arrived, the browser's cookie or the phone's request body. A
@@ -398,22 +404,44 @@ export async function refresh(
 ): Promise<SessionTokens> {
   const tokenHash = sha256Hex(rawRefreshToken);
   const row = await repo.findRefreshTokenByHash(deps.sql, tokenHash);
-  if (row === null || row.client !== from) throw new AuthError(401, "invalid_refresh", "Invalid refresh token");
+  if (row === null || row.client !== from) throw invalidRefresh();
   // A newer phone sign-in ended this one: no theft, so nothing more to end, and the
   // phone is told why (spec Part 3 §10.5).
   if (row.revokedReason === "signed_in_elsewhere") throw signedInElsewhere();
+  /** The phone's lost reply (repo.reissueAfterLostReply); null where it is not one. */
+  const afterLostReply = async (): Promise<SessionTokens | null> => {
+    if (row.client !== "phone") return null;
+    const owner = await repo.findUserById(deps.sql, row.userId);
+    if (owner === null || owner.status !== "active") return null;
+    const again = mintOpaqueToken();
+    const reissued = await repo.reissueAfterLostReply(deps.sql, {
+      oldId: row.id,
+      userId: row.userId,
+      familyId: row.familyId,
+      newTokenHash: sha256Hex(again),
+      expiresAt: refreshExpiry(deps),
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      graceSeconds: PHONE_REFRESH_GRACE_SECONDS,
+    });
+    return reissued
+      ? { accessToken: signAccessToken(row.userId, deps.config, row.familyId), refreshToken: again }
+      : null;
+  };
   if (row.revokedAt !== null) {
+    const tokens = await afterLostReply();
+    if (tokens !== null) return tokens;
     // Reuse of a rotated-out/revoked member: the family is compromised —
     // kill it all (Part 4 §3.1).
     await repo.revokeFamily(deps.sql, row.userId, row.familyId);
-    throw new AuthError(401, "invalid_refresh", "Invalid refresh token");
+    throw invalidRefresh();
   }
   if (row.expiresAt.getTime() <= Date.now()) {
-    throw new AuthError(401, "invalid_refresh", "Invalid refresh token");
+    throw invalidRefresh();
   }
   const user = await repo.findUserById(deps.sql, row.userId);
   if (user === null || user.status !== "active") {
-    throw new AuthError(401, "invalid_refresh", "Invalid refresh token");
+    throw invalidRefresh();
   }
   const refreshToken = mintOpaqueToken();
   try {
@@ -433,11 +461,14 @@ export async function refresh(
       // sign-in: say so, as above.
       const now = await repo.findRefreshTokenByHash(deps.sql, tokenHash);
       if (now?.revokedReason === "signed_in_elsewhere") throw signedInElsewhere();
+      // The phone's own second try, sent while its first was still being answered.
+      const tokens = await afterLostReply();
+      if (tokens !== null) return tokens;
       // A concurrent presentation of the same token beat us: that IS reuse —
       // kill the family, including the winner's freshly minted successor
       // (T3 2026-07-11; Part 4 §3.1 "reuse kills the family").
       await repo.revokeFamily(deps.sql, row.userId, row.familyId);
-      throw new AuthError(401, "invalid_refresh", "Invalid refresh token");
+      throw invalidRefresh();
     }
     throw err;
   }
@@ -447,11 +478,16 @@ export async function refresh(
 // ── logout ──────────────────────────────────────────────────────────────────
 
 /** Revokes the presented token's whole family (the login session). Unknown
- *  token → still succeeds: logout must be idempotent and never an oracle. */
-export async function logout(deps: AuthDeps, rawRefreshToken: string | null): Promise<void> {
+ *  token → still succeeds: logout must be idempotent and never an oracle. `from` as
+ *  in `refresh`: a token that came the other way ends nothing. */
+export async function logout(
+  deps: AuthDeps,
+  rawRefreshToken: string | null,
+  from: SessionClient = "web",
+): Promise<void> {
   if (rawRefreshToken === null) return;
   const row = await repo.findRefreshTokenByHash(deps.sql, sha256Hex(rawRefreshToken));
-  if (row !== null) await repo.revokeFamily(deps.sql, row.userId, row.familyId);
+  if (row !== null && row.client === from) await repo.revokeFamily(deps.sql, row.userId, row.familyId);
 }
 
 // ── email verification ──────────────────────────────────────────────────────

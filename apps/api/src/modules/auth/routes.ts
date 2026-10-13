@@ -86,14 +86,23 @@ const googleCallbackQuerySchema = z.object({
   state: z.string().min(1).optional(),
 });
 
+/** A BROWSER NEVER HOLDS A TOKEN A SCRIPT CAN READ (CLAUDE.md §4). A browser puts an
+ *  `Origin` on every one of these POSTs and the phone app sends none, so the phone's
+ *  way is refused to anything that carries one. true: refused, and answered. */
+function refusedFromABrowser(req: FastifyRequest, reply: FastifyReply): boolean {
+  if (req.headers.origin === undefined) return false;
+  void reply.status(400).send({ error: "validation_error", message: "client: not_in_a_browser", requestId: req.id });
+  return true;
+}
+
 /** The phone app's refresh token, from a body that names one. null: the body names
- *  none (a browser sends nothing or an empty one), so the cookie is read. A body that
- *  names one in the wrong shape is refused by the caller, never read as a browser's. */
-function phoneTokenIn(req: FastifyRequest): { token: string } | "malformed" | null {
+ *  none (a browser sends nothing or an empty one), so the cookie is read. undefined:
+ *  the body names one and was refused, and the reply is already sent. */
+function phoneTokenIn(req: FastifyRequest, reply: FastifyReply): string | null | undefined {
   const body: unknown = req.body;
   if (typeof body !== "object" || body === null || !("refreshToken" in body)) return null;
-  const parsed = phoneRefreshRequestSchema.safeParse(req.body);
-  return parsed.success ? { token: parsed.data.refreshToken } : "malformed";
+  if (refusedFromABrowser(req, reply)) return undefined;
+  return parseBody(phoneRefreshRequestSchema, req, reply)?.refreshToken;
 }
 
 function requestMeta(req: FastifyRequest): service.RequestMeta {
@@ -301,6 +310,7 @@ export function registerAuthRoutes(
   app.post("/v1/auth/code/verify", { preHandler: [codeVerifyLimit, guessRoom] }, async (req, reply) => {
     const input = parseBody(verifyCodeRequestSchema, req, reply);
     if (input === null) return;
+    if (input.client === "phone" && refusedFromABrowser(req, reply)) return;
     let signedIn: Awaited<ReturnType<typeof service.signInWithCode>>;
     try {
       signedIn = await service.signInWithCode(authDeps, input, requestMeta(req));
@@ -309,7 +319,9 @@ export function registerAuthRoutes(
       throw err;
     }
     const { user, tokens, isNewAccount } = signedIn;
-    if (input.client === "phone") return reply.status(200).send({ user, isNewAccount, tokens });
+    if (input.client === "phone") {
+      return reply.header("cache-control", "no-store").status(200).send({ user, isNewAccount, tokens });
+    }
     setSessionCookies(reply, deps.config, tokens);
     return reply.status(200).send({ user, isNewAccount });
   });
@@ -332,15 +344,12 @@ export function registerAuthRoutes(
     return reply.status(200).send({ user });
   });
 
-  const invalidBody = (req: FastifyRequest, reply: FastifyReply) =>
-    reply.status(400).send({ error: "validation_error", message: "refreshToken: invalid", requestId: req.id });
-
   app.post("/v1/auth/refresh", async (req, reply) => {
-    const phone = phoneTokenIn(req);
-    if (phone === "malformed") return invalidBody(req, reply);
+    const phone = phoneTokenIn(req, reply);
+    if (phone === undefined) return;
     if (phone !== null) {
-      const tokens = await service.refresh(authDeps, phone.token, requestMeta(req), "phone");
-      return reply.status(200).send({ tokens });
+      const tokens = await service.refresh(authDeps, phone, requestMeta(req), "phone");
+      return reply.header("cache-control", "no-store").status(200).send({ tokens });
     }
     const raw = req.cookies[REFRESH_COOKIE];
     if (raw === undefined || raw === "") {
@@ -356,10 +365,10 @@ export function registerAuthRoutes(
   });
 
   app.post("/v1/auth/logout", async (req, reply) => {
-    const phone = phoneTokenIn(req);
-    if (phone === "malformed") return invalidBody(req, reply);
+    const phone = phoneTokenIn(req, reply);
+    if (phone === undefined) return;
     if (phone !== null) {
-      await service.logout(authDeps, phone.token);
+      await service.logout(authDeps, phone, "phone");
       return reply.status(200).send({ message: "Logged out successfully" });
     }
     await service.logout(authDeps, req.cookies[REFRESH_COOKIE] ?? null);

@@ -439,6 +439,53 @@ export async function rotateRefreshToken(
   });
 }
 
+/** A PHONE'S REFRESH WHOSE REPLY WAS LOST. The phone sends the same token again; the
+ *  first try already rotated it, so the token it holds is revoked and its successor is
+ *  one the phone never received. Within `graceSeconds` of that rotation, while the
+ *  successor is still live, the successor is ended and a new one issued in its place.
+ *  false: none of that holds, and the caller treats the token as reused.
+ *
+ *  The ended successor keeps no `replaced_by`, so it is never itself given this grace:
+ *  if somebody does hold it (a thief used the old token, and the phone holds the
+ *  successor), its next refresh is reuse and ends the whole sign-in. */
+export async function reissueAfterLostReply(
+  sql: Sql,
+  input: {
+    oldId: string;
+    userId: string;
+    familyId: string;
+    newTokenHash: string;
+    expiresAt: Date;
+    ip: string | null;
+    userAgent: string | null;
+    graceSeconds: number;
+  },
+): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    await waitOutRotations(tx, input.userId);
+    const ended = await tx<{ id: string }[]>`
+      UPDATE refresh_tokens AS successor SET revoked_at = now()
+      FROM refresh_tokens AS old
+      WHERE old.id = ${input.oldId} AND old.user_id = ${input.userId} AND old.client = 'phone'
+        AND old.revoked_reason IS NULL
+        AND old.revoked_at > now() - make_interval(secs => ${input.graceSeconds})
+        AND successor.id = old.replaced_by AND successor.user_id = old.user_id
+        AND successor.family_id = old.family_id AND successor.revoked_at IS NULL
+        AND successor.expires_at > now()
+      RETURNING successor.id`;
+    if (ended.length === 0) return false;
+    const rows = await tx<{ id: string }[]>`
+      INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent, client)
+      VALUES (${input.userId}, ${input.familyId}, ${input.newTokenHash}, ${input.expiresAt},
+              ${input.ip}, ${input.userAgent}, 'phone')
+      RETURNING id`;
+    const newId = rows[0]?.id;
+    if (newId === undefined) throw new Error("refresh token re-issue insert returned no row");
+    await tx`UPDATE refresh_tokens SET replaced_by = ${newId} WHERE id = ${input.oldId}`;
+    return true;
+  });
+}
+
 /** Reuse detection (Part 4 §3.1: "reuse of a revoked member kills the family"). */
 export async function revokeFamily(sql: Sql, userId: string, familyId: string): Promise<void> {
   await sql.begin(async (tx) => {
