@@ -5,6 +5,23 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
 
+## 2026-10-13 · 32a (feature folder 2): a meal sent twice from the phone is saved once (branch `meal-saved-once`)
+
+- **Why this job:** item 31 (Today) waits for feature folder 1's items 10 to 12. Item 32 is split: 32a, its server part, and 32b, the Food screen.
+- **Built, no screen:** `POST /v1/nutrition/meals` takes the phone's own `id`. First time 201; the same id again 200 with the meal as it is now, even if the second body differs. Without an id every send is a new meal, as the web's is. **Risky**; built at Opus 5.5 medium (the `/model` line; xhigh was recommended and said).
+- **The rule:** an id that is somebody else's meal answers 404 and reads and changes nothing (`createMealOnce`, `modules/nutrition/repo.ts`).
+- **A photo meal:** its photo is taken inside the save, so a refused photo leaves no meal and the id can be used again. Sends of one id wait for each other; one photo under two ids is one meal and a 400.
+- **No database change, no new package.**
+- **Verified here** on `aihg_b`: `nutrition.once.routes.test.ts` 14 of 14 after the review's fixes, the photo kept in the real Redis; the four older food route files 96 of 96; shared 1,923 of 1,923; api and shared typecheck and lint clean (remembering runs).
+- **Deliberate breaks of the rule, each red on the first test, then put back:** the meal under the id read without its owner (200 for 404) · a meal under the id written over (201 for 404) · somebody else's id saved as a new meal (201 for 404).
+- **Cost:** one person's own rows; with an id, one more single-row read and one lock per save (not timed). Nothing reads a list of people.
+- **Also:** the USDA food list is loaded into `aihg_b` (13,225 foods, 31,169 measures, counted).
+- **For 32b and item 35:** a meal removed on the phone before its save was answered must send the save, then the removal, in that order; a late save after a removal would bring the meal back. A weigh-in (`POST /v1/nutrition/body-measurements`) and a saved dish are still saved once per send: item 35 and 32b make them once-only before their screens.
+- **Round one:** nothing Critical or High, eight Lows, all fixed: somebody refused for another's id while Redis blinks keeps their photo · an id is kept in small letters · a Redis that stops answering is given up on after 5 seconds (`createIoRedis`, for every use of it) · the wait for a save under way has its own test · the test file keeps sign-in's counts in memory, so it runs any number of times.
+- **The re-check closed the round** (`reviews/32a-4-verdict.md`): all eight closed, nothing broken by a fix. **Merged** 2026-10-13, pull request #238, on Kd's "merge when green", GitHub green on `54b229b`. **Next:** item 31 and 32b wait for feature folder 1's items 10 to 12; item 36's plan builder (6a) and item 34's server parts need no phone.
+
+
+
 ## 2026-10-12 · 18b-i (Folder A, the borrowed laptop): the Sell page (branch `sell-screen`)
 
 - **Why this job:** first in Folder A's list on the borrowed laptop. 18b was too big for one terminal and is split in three (ROADMAP): this is the Sell page, 18b-ii is discounts and promo codes, 18b-iii is tax on memberships. **Risky** (money, other people's data). Kd: *"go follow wht is done in industry already"* (RULINGS 2026-10-12). One migration, `0099_register` (`gym_products`, `gym_sales`, two tax columns on `gyms`); no package, no cost. **Built at Opus 5.5 high** (the record); xhigh was recommended and said in the plan.

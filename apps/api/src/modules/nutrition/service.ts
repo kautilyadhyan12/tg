@@ -938,27 +938,70 @@ async function buildConfirmItems(
   return { items, originalItems, correctedItems };
 }
 
-async function persistConfirm(
+/** A meal as the save route answers it: `created` false when the phone's id
+ *  already was this person's meal, and nothing was written. */
+export interface SavedMeal { meal: Meal; created: boolean }
+
+/** Writes the meal: under the phone's own id once (ROADMAP 32a), or as a new meal
+ *  each time where no id was sent. `claim`, with an id, runs before the meal is
+ *  kept and its throw leaves none. An id that is somebody else's meal is a 404,
+ *  the answer a read of it gives. */
+async function writeMeal(
   deps: NutritionDeps,
   userId: string,
+  id: string | undefined,
+  write: repo.MealWrite,
+  claim?: () => Promise<unknown>,
+): Promise<SavedMeal> {
+  if (id === undefined) {
+    await claim?.();
+    const row = await repo.createMeal(deps.sql, userId, write);
+    await awardMealBadges(deps, userId);
+    return { meal: asMeal(row), created: true };
+  }
+  const saved = await repo.createMealOnce(deps.sql, userId, id, write, claim);
+  if (saved === null) throw new NutritionError(404, "not_found", "Meal not found.");
+  if (saved.created) await awardMealBadges(deps, userId);
+  return { meal: asMeal(saved.meal), created: saved.created };
+}
+
+/** The meal this person already saved under the phone's id, if any. */
+async function alreadySaved(deps: NutritionDeps, userId: string, id: string | undefined): Promise<SavedMeal | null> {
+  if (id === undefined) return null;
+  const row = await repo.getMeal(deps.sql, userId, id);
+  return row === null ? null : { meal: asMeal(row), created: false };
+}
+
+const confirmWrite = (
   input: ConfirmMealRequest,
   draft: Draft,
   built: { items: MealItem[]; originalItems: MealItem[]; correctedItems: MealItem[] },
-): Promise<Meal> {
-  const row = await repo.createMeal(deps.sql, userId, {
-    correctedItems: built.correctedItems,
-    takenAt: new Date(input.takenAt),
-    mealType: input.mealType ?? null,
-    mealName: draft.mealName,
-    items: built.items,
-    origin: "photo",
-    originalItems: built.originalItems,
-  });
-  await awardMealBadges(deps, userId);
-  return asMeal(row);
+): repo.MealWrite => ({
+  correctedItems: built.correctedItems,
+  takenAt: new Date(input.takenAt),
+  mealType: input.mealType ?? null,
+  mealName: draft.mealName,
+  items: built.items,
+  origin: "photo",
+  originalItems: built.originalItems,
+});
+
+export async function confirmMeal(deps: NutritionDeps, userId: string, input: ConfirmMealRequest): Promise<SavedMeal> {
+  const kept = await alreadySaved(deps, userId, input.id);
+  if (kept !== null) return kept;
+  try {
+    return await confirmNewMeal(deps, userId, input);
+  } catch (err) {
+    // The photo is gone: a send of this same meal may have taken it and be saving
+    // now. Wait for that save to end, and answer with its meal.
+    if (input.id === undefined || !(err instanceof NutritionError) || err.code !== "invalid_scan") throw err;
+    const row = await repo.getMealOnceSaved(deps.sql, userId, input.id);
+    if (row === null) throw err;
+    return { meal: asMeal(row), created: false };
+  }
 }
 
-export async function confirmMeal(deps: NutritionDeps, userId: string, input: ConfirmMealRequest): Promise<Meal> {
+async function confirmNewMeal(deps: NutritionDeps, userId: string, input: ConfirmMealRequest): Promise<SavedMeal> {
   // Resolve EVERYTHING before consuming the single-use draft (T3 Card 5c).
   // takeDraft is destructive, so resolving after it meant one unresolvable
   // item (an added ingredient whose canonical has aged out of the food cache)
@@ -970,8 +1013,7 @@ export async function confirmMeal(deps: NutritionDeps, userId: string, input: Co
     // Everything that could reject has passed — NOW consume the draft. Still
     // the atomic single-use gate: two concurrent confirms both read, but only
     // one take() returns the draft; the loser gets its 400 here.
-    await takeDraft(deps, userId, input.scanToken);
-    return await persistConfirm(deps, userId, input, peeked, built);
+    return await writeMeal(deps, userId, input.id, confirmWrite(input, peeked, built), () => takeDraft(deps, userId, input.scanToken));
   }
   // get() returned null: the draft is expired, OR Redis was momentarily down.
   // take()'s Lua GET+DEL distinguishes them (undefined → 400, null → 503) and,
@@ -980,9 +1022,16 @@ export async function confirmMeal(deps: NutritionDeps, userId: string, input: Co
   // stop scans being burned, and would itself burn a recovered one). Build
   // from the taken draft (already consumed, so a resolve failure here burns it
   // — accepted only in this rare flap window).
+  // Taking it here is for good, so an id that cannot be this meal's is answered
+  // first: somebody else's is the 404 it would be, and the photo stays to be saved.
+  if (input.id !== undefined && (await repo.mealIdTaken(deps.sql, input.id))) {
+    const kept = await alreadySaved(deps, userId, input.id);
+    if (kept !== null) return kept;
+    throw new NutritionError(404, "not_found", "Meal not found.");
+  }
   const recovered = await takeDraft(deps, userId, input.scanToken);
   const built = await buildConfirmItems(deps, userId, recovered, input);
-  return await persistConfirm(deps, userId, input, recovered, built);
+  return await writeMeal(deps, userId, input.id, confirmWrite(input, recovered, built));
 }
 
 /** Search-resolved items for the manual flow — ONE implementation shared by
@@ -1009,17 +1058,17 @@ async function resolveChosenItems(
 
 /** GAP-2 ruling: manual logging — items resolve via food search; grams are
  *  user-chosen so ranges collapse; origin='manual'. */
-export async function createManualMeal(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<Meal> {
+export async function createManualMeal(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<SavedMeal> {
+  const kept = await alreadySaved(deps, userId, input.id);
+  if (kept !== null) return kept;
   const items = await resolveChosenItems(deps, userId, input.items);
-  const row = await repo.createMeal(deps.sql, userId, {
+  return await writeMeal(deps, userId, input.id, {
     takenAt: new Date(input.takenAt),
     mealType: input.mealType ?? null,
     mealName: input.mealName,
     items,
     origin: "manual",
   });
-  await awardMealBadges(deps, userId);
-  return asMeal(row);
 }
 
 /** Kd-approved 2026-07-16 (Card-5a smoke): live preview — NOTHING persists,
