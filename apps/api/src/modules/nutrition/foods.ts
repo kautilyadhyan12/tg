@@ -30,9 +30,12 @@
 // beef dripping under a Yorkshire pudding and bubble and squeak, suet in a
 // mince pie, gelatine in a trifle's jelly, anchovy in the Worcestershire sauce
 // of a Welsh rarebit, egg in fresh pasta, gnocchi and strudel dough; fish sauce
-// or salted shrimp in kimchi, fish stock in miso soup, oyster sauce in a
-// vegetable lo mein, bacon or pork fat in a plate of rice and beans, egg in
-// tempura batter). Honey is not vegan.
+// or salted shrimp in kimchi, fish stock in miso soup, egg in tempura batter
+// and in lo mein noodles). Honey is not vegan.
+// A dish made with meat or without is listed both ways where the tables hold
+// both, each under a name that says which ("Vegetable lo mein", "Rice and beans
+// with meat", "Pork dumplings"), so the plain word names neither and the person
+// picks (Kd, 2026-10-13).
 // Processing aids such as rennet and fining agents are not followed, and no
 // label can see a product's own recipe.
 import type { Diet } from "@app/shared";
@@ -63,7 +66,7 @@ const KEPT_CANONICALS: ReadonlyMap<string, string> = new Map([
   ["Caesar salad (with chicken, no dressing)", "caesar_salad_with_chicken"],
   ["Ramen (instant, cooked)", "ramen_cooked"],
   ["Egg roll (vegetable, fried)", "spring_roll"],
-  ["Dumplings (pork, fried)", "dumplings_pork"],
+  ["Pork dumplings (fried)", "dumplings_pork"],
   ["Butter chicken / tikka masala", "butter_chicken"],
   ["Chocolate (dark, 70–85%)", "chocolate_dark_70"],
   ["Roti / Chapati (homemade flatbread, no fat)", "roti_chapati"],
@@ -530,7 +533,7 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Ramen (instant, cooked)", 66, 1.53, 9.04, 2.64, 0.4, 100, "g", "non_vegetarian", "usda-fndds:2709152"),
   row("Pad Thai", 154, 8.13, 14.36, 7.5, 1.2, 100, "g", "non_vegetarian", "usda-fndds:2708804"),
   row("Egg roll (vegetable, fried)", 270, 5.62, 30.02, 14.14, 2.3, 64, "roll", "vegetarian_eggs", "usda-fndds:2708700"),
-  row("Dumplings (pork, fried)", 192, 8.76, 14.05, 11.13, 1.5, 100, "g", "non_vegetarian", "usda-fndds:2708705"),
+  row("Pork dumplings (fried)", 192, 8.76, 14.05, 11.13, 1.5, 100, "g", "non_vegetarian", "usda-fndds:2708705"),
   row("Pho (beef)", 77, 5.81, 5.6, 3.33, 0.4, 400, "bowl", "non_vegetarian", "usda-fndds:2707124"),
   row("Ramen bowl", 127, 7.13, 13.95, 4.57, 0.9, 490, "bowl", "non_vegetarian", "usda-fndds:2709153"),
   // ── American dishes
@@ -638,7 +641,8 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Roast lamb (leg)", 242, 26.2, 0, 14.42, 0, 100, "g", "non_vegetarian", "usda-sr:174373"),
   row("Yeast extract spread", 185, 23.88, 20.42, 0.9, 6.5, 6, "tsp", "vegan", "usda-sr:167717"),
   // ── Brazilian and Latin American foods
-  row("Rice and beans (black beans and white rice)", 160, 6.01, 24.42, 4.32, 5, 170, "cup", "non_vegetarian", "usda-fndds:2708994"),
+  row("Rice and beans, meatless (black beans and white rice)", 160, 6.01, 24.42, 4.32, 5, 170, "cup", "vegan", "usda-fndds:2708994"),
+  row("Rice and beans with meat", 162, 7.49, 23.54, 4.24, 4.4, 170, "cup", "non_vegetarian", "usda-fndds:2708992"),
   row("Cassava / yuca (cooked)", 191, 1.42, 39.62, 3.03, 1.9, 160, "cup", "vegetarian", "usda-fndds:2709564"),
   row("Cassava fries (yuca fries)", 269, 1.24, 34.72, 13.94, 1.6, 140, "cup", "vegan", "usda-fndds:2709565"),
   row("Plantain (green, boiled)", 121, 1.09, 29.15, 0.08, 2.6, 137, "cup", "vegan", "usda-sr:168216"),
@@ -664,13 +668,13 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Sweet and sour chicken", 250, 10.1, 23.86, 12.65, 1, 252, "cup", "non_vegetarian", "usda-fndds:2706435"),
   row("Sweet and sour pork", 260, 8.88, 25.5, 13.6, 1, 226, "cup", "non_vegetarian", "usda-fndds:2706401"),
   row("Beef and broccoli", 160, 10.43, 5.09, 10.63, 1.3, 217, "cup", "non_vegetarian", "usda-fndds:2706738"),
-  row("Lo mein (chicken)", 130, 9.15, 16.15, 3.15, 1, 200, "cup", "non_vegetarian", "usda-fndds:2708803"),
-  row("Lo mein (vegetable)", 121, 4.77, 20.16, 2.35, 1.3, 200, "cup", "non_vegetarian", "usda-fndds:2708799"),
+  row("Chicken lo mein", 130, 9.15, 16.15, 3.15, 1, 200, "cup", "non_vegetarian", "usda-fndds:2708803"),
+  row("Vegetable lo mein", 121, 4.77, 20.16, 2.35, 1.3, 200, "cup", "vegetarian_eggs", "usda-fndds:2708799"),
   row("Chow mein (chicken, with noodles)", 131, 9.91, 11.15, 5.43, 1.5, 220, "cup", "non_vegetarian", "usda-fndds:2706687"),
   row("Egg drop soup", 27, 1.16, 4.29, 0.61, 0.4, 245, "cup", "non_vegetarian", "usda-fndds:2707282"),
   row("Hot and sour soup", 39, 2.58, 4.35, 1.21, 0.5, 245, "cup", "non_vegetarian", "usda-fndds:2707136"),
   row("Wonton soup", 33, 2.39, 2.95, 1.31, 0.3, 245, "cup", "non_vegetarian", "usda-fndds:2709160"),
-  row("Potstickers / gyoza (pork, steamed)", 113, 6.9, 11.07, 4.6, 1.2, 25, "dumpling", "non_vegetarian", "usda-fndds:2708708"),
+  row("Potstickers / gyoza (steamed pork dumplings)", 113, 6.9, 11.07, 4.6, 1.2, 25, "dumpling", "non_vegetarian", "usda-fndds:2708708"),
   row("Egg foo yung", 125, 11.69, 5.2, 6.16, 0.3, 86, "patty", "non_vegetarian", "usda-fndds:2707193"),
   row("Peking duck", 154, 5.32, 6.47, 11.76, 0.3, 100, "g", "non_vegetarian", "usda-fndds:2706141"),
   row("Moo shu pork", 153, 10.41, 4.01, 10.7, 0.9, 151, "cup", "non_vegetarian", "usda-fndds:2706764"),
@@ -807,16 +811,16 @@ const FOOD_NAMES: ReadonlyMap<string, string> = new Map(Object.entries({
   marmite: "yeast_extract_spread", vegemite: "yeast_extract_spread", yeast_extract: "yeast_extract_spread",
   // other names of the dishes of Brazil, Latin America and Asia
   yuca: "cassava_yuca_cooked", manioc: "cassava_yuca_cooked", mandioca: "cassava_yuca_cooked", aipim: "cassava_yuca_cooked",
-  yuca_fries: "cassava_fries_yuca_fries", arroz_e_feijao: "rice_and_beans_black_beans_and_white_rice", beans_and_rice: "rice_and_beans_black_beans_and_white_rice",
-  black_beans_and_rice: "rice_and_beans_black_beans_and_white_rice", fried_plantain: "plantain_ripe_fried", platanos_maduros: "plantain_ripe_fried", maduros: "plantain_ripe_fried",
+  yuca_fries: "cassava_fries_yuca_fries",
+  black_beans_and_rice: "rice_and_beans_meatless_black_beans_and_white_rice", fried_plantain: "plantain_ripe_fried", platanos_maduros: "plantain_ripe_fried", maduros: "plantain_ripe_fried",
   palmito: "hearts_of_palm_canned", palm_hearts: "hearts_of_palm_canned", top_sirloin_cap: "picanha_top_sirloin_cap_grilled", coulotte: "picanha_top_sirloin_cap_grilled",
   pudim: "flan_caramel_custard", creme_caramel: "flan_caramel_custard", doce_de_leite: "dulce_de_leche", goiabada: "guava_paste",
   agua_de_coco: "coconut_water", churro: "churros", carambola: "starfruit_carambola", star_fruit: "starfruit_carambola", jaca: "jackfruit",
   kung_po_chicken: "kung_pao_chicken", general_tso_s_chicken: "general_tso_chicken", general_tsos_chicken: "general_tso_chicken",
-  beef_with_broccoli: "beef_and_broccoli", broccoli_beef: "beef_and_broccoli", chicken_lo_mein: "lo_mein_chicken", vegetable_lo_mein: "lo_mein_vegetable",
+  beef_with_broccoli: "beef_and_broccoli", broccoli_beef: "beef_and_broccoli",
   chicken_chow_mein: "chow_mein_chicken_with_noodles", chop_suey: "chow_mein_chicken_with_noodles",
-  egg_flower_soup: "egg_drop_soup", potstickers: "potstickers_gyoza_pork_steamed", pot_stickers: "potstickers_gyoza_pork_steamed", gyoza: "potstickers_gyoza_pork_steamed",
-  steamed_pork_dumplings: "potstickers_gyoza_pork_steamed", egg_foo_young: "egg_foo_yung", egg_fu_yung: "egg_foo_yung", mu_shu_pork: "moo_shu_pork", crispy_duck: "peking_duck",
+  egg_flower_soup: "egg_drop_soup", potstickers: "potstickers_gyoza_steamed_pork_dumplings", pot_stickers: "potstickers_gyoza_steamed_pork_dumplings", gyoza: "potstickers_gyoza_steamed_pork_dumplings",
+  steamed_pork_dumplings: "potstickers_gyoza_steamed_pork_dumplings", egg_foo_young: "egg_foo_yung", egg_fu_yung: "egg_foo_yung", mu_shu_pork: "moo_shu_pork", crispy_duck: "peking_duck",
   bao: "bao_bun_pork", steamed_bun: "bao_bun_pork", pork_bun: "bao_bun_pork", char_siu_bao: "bao_bun_pork",
   rice_porridge: "congee_plain_rice_porridge", jook: "congee_plain_rice_porridge", glutinous_rice: "sticky_rice_glutinous_cooked", sweet_rice: "sticky_rice_glutinous_cooked",
   chicken_teriyaki: "teriyaki_chicken", tempura: "vegetable_tempura", salmon_roll: "sushi_roll_salmon", tuna_roll: "sushi_roll_tuna",
