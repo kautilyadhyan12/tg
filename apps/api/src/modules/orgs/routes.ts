@@ -52,6 +52,7 @@ import { registerMessageRoutes } from "./messages/routes.js";
 import type { PhotoStore } from "./gymPage/photoStore.js";
 import type { RobotCheck } from "./gymPage/robotCheck.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
+import { registerWaiverRoutes } from "./waiver/routes.js";
 import { registerStaffInviteRoutes } from "./staffInvites/routes.js";
 import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
@@ -174,6 +175,9 @@ export function registerOrgRoutes(
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).
   registerInvitationRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
+
+  // A gym's waiver: written in Settings, signed by its members (ROADMAP 3e-i).
+  registerWaiverRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // Staff invited by email, and the invited person's Accept (Part 3 §10.3).
   registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });

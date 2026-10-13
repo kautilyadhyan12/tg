@@ -11,7 +11,9 @@
 // unproved.
 import {
   INVITATION_WORDS,
+  WAIVER_WORDS,
   orgTypeSchema,
+  type AcceptInvitationBody,
   type AcceptInvitationResponse,
   type DeclineInvitationResponse,
   type MyInvitationsResponse,
@@ -24,6 +26,8 @@ import { bustEntitlements, yourPlansAt } from "../../entitlements/service.js";
 import { claimSeatByInvitation, gymHasLivePlan, insertAudit, lockOrg, type OrgRow } from "../repo.js";
 import { OrgsError } from "../service.js";
 import { lockLiveAccount } from "../staffInvites/repo.js";
+import * as waiverRepo from "../waiver/repo.js";
+import { toRead } from "../waiver/service.js";
 import { emailHmac } from "./address.js";
 import { underAgeAt } from "./age.js";
 import * as repo from "./repo.js";
@@ -77,6 +81,8 @@ export async function myInvitations(deps: JoinDeps, caller: Caller): Promise<MyI
     caller.id,
     rows.flatMap((row) => (row.onPlan ? [row.gymId] : [])),
   );
+  // The waiver each gym asks for is read and agreed to before Join (3e-i).
+  const waivers = await waiverRepo.waiversInUse(deps.sql, [...new Set(rows.map((row) => row.gymId))]);
   return {
     address: address.email,
     addressProved: true,
@@ -87,6 +93,7 @@ export async function myInvitations(deps: JoinDeps, caller: Caller): Promise<MyI
       canTakeMembers: row.onPlan,
       notMe: row.notMe,
       yourPlan: plans.get(row.gymId) ?? null,
+      waiver: ((waiver) => (waiver === undefined ? null : toRead(waiver)))(waivers.get(row.gymId)),
     })),
   };
 }
@@ -94,11 +101,18 @@ export async function myInvitations(deps: JoinDeps, caller: Caller): Promise<MyI
 type AcceptOutcome =
   | { kind: "none" }
   | { kind: "joined" | "already_member"; org: OrgRow }
-  | { kind: "full" | "not_taking" | "under_age"; org: OrgRow };
+  | { kind: "full" | "not_taking" | "under_age" | "waiver_needed" | "waiver_changed"; org: OrgRow };
 
 /** Join: the ONE tap, on "What {gym} can see". Everything that decides it is checked
- *  again under the gym's lock at the moment of the tap. */
-export async function acceptInvitation(deps: JoinDeps, caller: Caller, inviteId: string): Promise<AcceptInvitationResponse> {
+ *  again under the gym's lock at the moment of the tap. Where the gym asks for a waiver,
+ *  the person's signature of the wording they were shown is written with the membership,
+ *  and a Join that carries no signature, or one of other words, joins nobody. */
+export async function acceptInvitation(
+  deps: JoinDeps,
+  caller: Caller,
+  inviteId: string,
+  body: AcceptInvitationBody = {},
+): Promise<AcceptInvitationResponse> {
   const address = await callerAddress(deps, caller);
   const hmac = answerableHmac(address);
   const gymId = await repo.invitationGym(deps.sql, inviteId, hmac);
@@ -127,12 +141,20 @@ export async function acceptInvitation(deps: JoinDeps, caller: Caller, inviteId:
     // A family sharing one address has several records; which of them this person is,
     // the list cannot say, so the membership is linked to none of them.
     const entryId = holders.length === 1 ? (holders[0]?.entryId ?? null) : null;
+    // Saving a waiver takes this same lock, so the wording read here is the gym's now.
+    const waiver = await waiverRepo.waiverInUse(tx, gymId);
+    if (waiver !== null && body.waiver === undefined) return { kind: "waiver_needed", org };
+    if (waiver !== null && body.waiver?.id !== waiver.id) return { kind: "waiver_changed", org };
     const claim = await claimSeatByInvitation(tx, { org, userId: caller.id, entryId, at });
     if (claim.kind === "seat_cap") {
       await repo.markWaitingForPlace(tx, { gymId, inviteId: invite.id, at });
       return { kind: "full", org };
     }
     await repo.answerInvitation(tx, { gymId, inviteId: invite.id, state: "accepted", at });
+    if (waiver !== null && body.waiver !== undefined) {
+      await waiverRepo.signAtJoin(tx, { gymId, waiverId: waiver.id, userId: caller.id, name: body.waiver.name, at });
+      await insertAudit(tx, { actorUserId: caller.id, gymId, action: "org.waiver_signed", targetType: "gym_waiver", targetId: waiver.id, meta: { via: "join" } });
+    }
     await insertAudit(tx, {
       actorUserId: caller.id,
       gymId,
@@ -153,6 +175,10 @@ export async function acceptInvitation(deps: JoinDeps, caller: Caller, inviteId:
       throw new OrgsError(409, "gym_not_taking_members", INVITATION_WORDS.gym_not_taking_members(outcome.org.name, outcome.org.orgType));
     case "under_age":
       throw new OrgsError(409, "under_age", INVITATION_WORDS.under_age(outcome.org.name));
+    case "waiver_needed":
+      throw new OrgsError(409, "waiver_needed", WAIVER_WORDS.waiver_needed(outcome.org.name));
+    case "waiver_changed":
+      throw new OrgsError(409, "waiver_changed", WAIVER_WORDS.waiver_changed(outcome.org.name));
     case "joined":
     case "already_member":
       // The gym's member features follow the membership; the cached answer must not

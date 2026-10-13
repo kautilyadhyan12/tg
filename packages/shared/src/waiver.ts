@@ -1,0 +1,114 @@
+// A GYM'S WAIVER, SIGNED IN THE APP — ROADMAP Stage 2 item 3e-i; RULINGS 2026-10-08.
+//
+// The gym writes its own waiver; the words are the gym's, never ours. A person reads it
+// and agrees by typing their full name, when they join or afterwards. Every wording a gym
+// saves is kept and numbered, and a signature names the wording the person was shown, so
+// changing the words asks everybody again.
+import { z } from "zod";
+
+export const WAIVER_MAX_CHARS = 30_000;
+export const WAIVER_NAME_MIN_CHARS = 2;
+export const WAIVER_NAME_MAX_CHARS = 100;
+
+/** The gym's words as kept: line ends made one kind, and no space left at either end. */
+export const cleanWaiverText = (text: string): string => text.replace(/\r\n?/g, "\n").trim();
+
+/** The name a person types to sign: spaces tidied, nothing else changed. */
+export const cleanSignedName = (name: string): string => name.replace(/\s+/g, " ").trim();
+
+export const waiverTextSchema = z
+  .string()
+  .max(WAIVER_MAX_CHARS * 2)
+  .transform(cleanWaiverText)
+  .pipe(z.string().min(1).max(WAIVER_MAX_CHARS));
+
+export const signedNameSchema = z
+  .string()
+  .max(WAIVER_NAME_MAX_CHARS * 2)
+  .transform(cleanSignedName)
+  .pipe(z.string().min(WAIVER_NAME_MIN_CHARS).max(WAIVER_NAME_MAX_CHARS));
+
+/** A waiver as a person reads it. */
+export const waiverToReadSchema = z
+  .object({
+    id: z.string().uuid(),
+    version: z.number().int().min(1),
+    text: z.string().min(1).max(WAIVER_MAX_CHARS),
+  })
+  .strict();
+export type WaiverToRead = z.infer<typeof waiverToReadSchema>;
+
+/** A signature as shown to the person who made it, or to the gym's staff. */
+export const waiverSignedSchema = z.object({ name: z.string(), at: z.string() }).strict();
+export type WaiverSigned = z.infer<typeof waiverSignedSchema>;
+
+// ── The gym's side (Settings, `org.manage`) ──
+
+export const saveGymWaiverBodySchema = z.object({ text: waiverTextSchema }).strict();
+export type SaveGymWaiverBody = z.infer<typeof saveGymWaiverBodySchema>;
+
+export const gymWaiverResponseSchema = z
+  .object({
+    /** The newest wording the gym saved, or null where it never saved one. */
+    waiver: waiverToReadSchema.extend({ savedAt: z.string() }).strict().nullable(),
+    /** People are asked to sign it. False where the gym has none, or stopped using it. */
+    inUse: z.boolean(),
+    /** How many people use the app through this gym, and how many of them have signed
+     *  the newest wording. */
+    people: z.number().int().min(0),
+    signed: z.number().int().min(0),
+  })
+  .strict();
+export type GymWaiverResponse = z.infer<typeof gymWaiverResponseSchema>;
+
+// ── The person's side ──
+
+export const myWaiverResponseSchema = z
+  .object({
+    gymName: z.string(),
+    /** The waiver the gym asks for today, or null where it asks for none. */
+    waiver: waiverToReadSchema.nullable(),
+    /** The person's own signature of THAT wording, or null. */
+    signed: waiverSignedSchema.nullable(),
+  })
+  .strict();
+export type MyWaiverResponse = z.infer<typeof myWaiverResponseSchema>;
+
+/** What a person sends to sign: the wording they were shown, and their name as typed. */
+export const signWaiverBodySchema = z.object({ waiverId: z.string().uuid(), name: signedNameSchema }).strict();
+export type SignWaiverBody = z.infer<typeof signWaiverBodySchema>;
+
+export const signWaiverResponseSchema = z.object({ signed: waiverSignedSchema }).strict();
+export type SignWaiverResponse = z.infer<typeof signWaiverResponseSchema>;
+
+/** Join carries the same two things, where the gym has a waiver. */
+export const acceptInvitationBodySchema = z
+  .object({ waiver: z.object({ id: z.string().uuid(), name: signedNameSchema }).strict().optional() })
+  .strict();
+export type AcceptInvitationBody = z.infer<typeof acceptInvitationBodySchema>;
+
+export const WAIVER_WORDS = {
+  /** Join or Sign, with no waiver sent, at a gym that asks for one. */
+  waiver_needed: (gymName: string): string => `Read ${gymName}'s waiver, type your full name and tick the box to agree.`,
+  /** The gym saved new words after the person's screen loaded. */
+  waiver_changed: (gymName: string): string => `${gymName} has changed its waiver. Read the new one below, then agree to it.`,
+  /** The gym stopped using its waiver after the person's screen loaded. */
+  waiver_not_in_use: (gymName: string): string => `${gymName} is not asking for a waiver right now. There is nothing to sign.`,
+  not_found: "We couldn't find that.",
+  /** Stop, where the gym has no waiver in use. */
+  nothing_to_stop: "You have no waiver in use.",
+} as const;
+
+/** The line under the agree box, the same on every screen that signs. */
+export const WAIVER_AGREE_LABEL = "I have read this waiver and I agree to it.";
+
+/** How many people are asked to sign when these words are saved, in Settings' own
+ *  sentence; null where saving asks nobody (nothing changed, or nobody is in the app). */
+export function waiverSaveAsks(input: { savedText: string | null; inUse: boolean; draft: string; people: number }): string | null {
+  const draft = cleanWaiverText(input.draft);
+  if (draft === "" || input.people === 0) return null;
+  const sameWords = input.savedText !== null && cleanWaiverText(input.savedText) === draft;
+  if (sameWords) return input.inUse ? null : "People in the app who have not signed these words will be asked to sign.";
+  const who = input.people === 1 ? "The 1 person in the app" : `All ${input.people} people in the app`;
+  return input.savedText !== null && input.inUse ? `${who} will be asked to sign again, because the words have changed.` : `${who} will be asked to sign it.`;
+}
