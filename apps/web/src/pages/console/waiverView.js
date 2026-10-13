@@ -13,10 +13,10 @@ export function waiverSummary(data) {
   return `In use · ${signedCount(data)}`;
 }
 
-/** "3 of 12 people in the app have signed". */
+/** "signed by 3 of 12 people in the app". */
 export function signedCount(data) {
   if (data.people === 0) return 'nobody is in the app yet';
-  return `${String(data.signed)} of ${people(data.people)} in the app ${data.signed === 1 ? 'has' : 'have'} signed`;
+  return `signed by ${String(data.signed)} of ${people(data.people)} in the app`;
 }
 
 /** What Save would do with the words typed: nothing to save, too long, or go. */

@@ -17,7 +17,8 @@ const hintStyle = { color: 'rgba(255,255,255,0.45)' };
 const softStyle = { color: 'rgba(255,255,255,0.55)' };
 const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)' };
 
-export default function WaiverPanel({ org, readOnly, startOpen = false, membersTo = '../members' }) {
+// `membersName`: what this person's menu calls the Members page (`membersPageName`).
+export default function WaiverPanel({ org, readOnly, startOpen = false, membersTo = '../members', membersName = 'Members' }) {
   const gymId = org.id;
   const fieldId = useId();
   const [data, setData] = useState(null);
@@ -154,14 +155,14 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
                 {signedCount(data).replace(/^./, (first) => first.toUpperCase())}.
               </p>
               <p className="text-sm m-0" style={softStyle}>
-                To see whether one person has signed, open them on the Members page and look under App.
+                To see whether one person has signed, open them on the {membersName} page and look under App.
               </p>
               <Link
                 to={membersTo}
                 className="self-start rounded-xl px-3.5 text-sm font-semibold inline-flex items-center min-h-11"
                 style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
               >
-                Open Members
+                Open {membersName}
               </Link>
             </div>
           ) : null}

@@ -26,7 +26,7 @@ function open(data, { readOnly = false } = {}) {
   orgService.getGymWaiver.mockResolvedValue({ data });
   render(
     <MemoryRouter>
-      <WaiverPanel org={ORG} readOnly={readOnly} membersTo="/console/iron-house/members" />
+      <WaiverPanel org={ORG} readOnly={readOnly} membersTo="/console/iron-house/members" membersName="Members & staff" />
     </MemoryRouter>,
   );
   fireEvent.click(screen.getByRole('button', { name: /^waiver/i }));
@@ -58,7 +58,7 @@ describe('a gym with no waiver', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save waiver' }));
     await waitFor(() => expect(orgService.saveGymWaiver).toHaveBeenCalledWith(ORG.id, WORDS));
     expect((await screen.findByRole('status')).textContent).toBe('Saved. 4 people in the app are now asked to sign it.');
-    expect(screen.getByText('In use · 0 of 4 people in the app have signed')).toBeTruthy();
+    expect(screen.getByText('In use · signed by 0 of 4 people in the app')).toBeTruthy();
     // Saved, so there is nothing to save and the waiver can be stopped.
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Stop using this waiver' })).toBeTruthy();
@@ -70,8 +70,10 @@ describe('a gym whose waiver is in use', () => {
     open(IN_USE);
     expect((await field()).value).toBe(WORDS);
     const signed = screen.getByRole('group', { name: 'Who has signed' });
-    expect(within(signed).getByText('3 of 12 people in the app have signed.')).toBeTruthy();
-    expect(within(signed).getByRole('link', { name: 'Open Members' }).getAttribute('href')).toBe('/console/iron-house/members');
+    expect(within(signed).getByText('Signed by 3 of 12 people in the app.')).toBeTruthy();
+    // The button is named as this person's menu names the page.
+    expect(within(signed).getByText('To see whether one person has signed, open them on the Members & staff page and look under App.')).toBeTruthy();
+    expect(within(signed).getByRole('link', { name: 'Open Members & staff' }).getAttribute('href')).toBe('/console/iron-house/members');
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
   });
 

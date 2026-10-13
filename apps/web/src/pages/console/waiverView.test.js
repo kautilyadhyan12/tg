@@ -24,15 +24,16 @@ describe('the folded box', () => {
     [null, ''],
     [NONE, 'Not set up'],
     [STOPPED, 'Not in use'],
-    [IN_USE, 'In use · 3 of 12 people in the app have signed'],
-    [{ ...IN_USE, people: 1, signed: 1 }, 'In use · 1 of 1 person in the app has signed'],
+    [IN_USE, 'In use · signed by 3 of 12 people in the app'],
+    [{ ...IN_USE, people: 1, signed: 1 }, 'In use · signed by 1 of 1 person in the app'],
+    [{ ...IN_USE, people: 1, signed: 0 }, 'In use · signed by 0 of 1 person in the app'],
     [{ ...IN_USE, people: 0, signed: 0 }, 'In use · nobody is in the app yet'],
   ])('%#', (data, line) => {
     expect(waiverSummary(data)).toBe(line);
   });
 
   it('counts people, never a false zero of nobody', () => {
-    expect(signedCount({ ...IN_USE, signed: 0 })).toBe('0 of 12 people in the app have signed');
+    expect(signedCount({ ...IN_USE, signed: 0 })).toBe('signed by 0 of 12 people in the app');
   });
 });
 
