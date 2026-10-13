@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import type { PhoneAppExtra } from "@app/shared";
 import { Button } from "../look/Button";
@@ -16,10 +16,16 @@ export function ThisCopy() {
   const { extra, ask } = useContext(CopyContext);
   const [state, setState] = useState<ServerState | "checking">("checking");
 
+  const newest = useRef(0);
+
   const check = useCallback(() => {
     if (extra === null) return;
+    const mine = ++newest.current;
     setState("checking");
-    void checkServer(extra.apiUrl, ask).then(setState);
+    // Only the newest check's answer is shown, whichever comes back last.
+    void checkServer(extra.apiUrl, ask).then((answer) => {
+      if (mine === newest.current) setState(answer);
+    });
   }, [extra, ask]);
 
   useEffect(check, [check]);

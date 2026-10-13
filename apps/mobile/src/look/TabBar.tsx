@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colours.line,
   },
-  tab: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3 },
+  tab: { flex: 1, minHeight: sizes.press, alignItems: "center", justifyContent: "center", gap: 3 },
   icon: {
     width: 52,
     height: 30,

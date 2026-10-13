@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "transparent",
   },
-  main: { experimental_backgroundImage: orangeGradient },
+  main: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
   plain: { backgroundColor: colours.fill, borderColor: colours.lineStrong },
   soft: { backgroundColor: colours.orangeFill, borderColor: colours.orangeLine },
   danger: { backgroundColor: colours.badFill, borderColor: colours.badLine },
