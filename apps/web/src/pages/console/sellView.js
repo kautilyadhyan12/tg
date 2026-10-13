@@ -6,6 +6,7 @@ import {
   PRODUCT_STOCK_MAX,
   SALE_QUANTITY_MAX,
   bpToTaxRateText,
+  discountOff,
   formatMinor,
   isVisibleText,
   minorToPriceText,
@@ -69,18 +70,29 @@ export function quantityMax(product) {
   return Math.min(SALE_QUANTITY_MAX, product.stock);
 }
 
+/** What a discount takes off this many of a product; 0 with no discount. */
+export function discountMinorFor(product, quantity, discount) {
+  if (product === null || product === undefined || discount === null || discount === undefined || !Number.isInteger(quantity)) return 0;
+  return discountOff(discount, product.priceMinor * quantity);
+}
+
 /** What the sale comes to, as the lines above the button; null where there is nothing to
- *  add up. `total` is the number sent with the sale. */
-export function saleSummary(product, quantity, tax) {
+ *  add up. `total` is the number sent with the sale. `discount` is the one picked, if any. */
+export function saleSummary(product, quantity, tax, discount = null) {
   if (product === null || product === undefined) return null;
-  const amounts = saleAmounts({ unitPriceMinor: product.priceMinor, quantity, taxed: product.taxed, taxBp: tax.bp, taxIncluded: tax.included });
+  const off = discountMinorFor(product, quantity, discount);
+  const amounts = saleAmounts({ unitPriceMinor: product.priceMinor, quantity, taxed: product.taxed, taxBp: tax.bp, taxIncluded: tax.included, discountMinor: off });
   if (!amounts.ok) return null;
   const money = (minor) => formatMinor(minor, product.currency);
   const lines = [];
-  if (amounts.taxMinor > 0 && !tax.included) {
+  const taxOnTop = amounts.taxMinor > 0 && !tax.included;
+  if (discount !== null) {
+    lines.push({ label: 'Price', value: money(product.priceMinor * quantity) });
+    lines.push({ label: `Discount (${discount.name})`, value: `-${money(off)}` });
+  } else if (taxOnTop) {
     lines.push({ label: 'Price', value: money(amounts.netMinor) });
-    lines.push({ label: `Tax (${taxPercent(tax.bp)})`, value: money(amounts.taxMinor) });
   }
+  if (taxOnTop) lines.push({ label: `Tax (${taxPercent(tax.bp)})`, value: money(amounts.taxMinor) });
   lines.push({ label: 'Total', value: money(amounts.totalMinor), strong: true });
   if (amounts.taxMinor > 0 && tax.included) lines.push({ label: `Includes tax (${taxPercent(tax.bp)})`, value: money(amounts.taxMinor) });
   return { totalMinor: amounts.totalMinor, total: money(amounts.totalMinor), lines };
@@ -92,7 +104,7 @@ export function productCurrencyLine(product, currency) {
 }
 
 /** Why the Take payment button is off, or null where it can be pressed. */
-export function saleProblem({ product, quantity, who, person, currency }) {
+export function saleProblem({ product, quantity, who, person, currency, discount = null }) {
   if (product === null || product === undefined) return 'Pick a product.';
   // Priced before the gym changed its country: the server will not sell it either.
   if (typeof currency === 'string' && product.currency !== currency) return productCurrencyLine(product, currency);
@@ -101,13 +113,24 @@ export function saleProblem({ product, quantity, who, person, currency }) {
   if (quantity > SALE_QUANTITY_MAX) return `One sale can hold up to ${String(SALE_QUANTITY_MAX)}.`;
   if (product.stock !== null && quantity > product.stock) return `Only ${String(product.stock)} left in stock.`;
   if (who === 'member' && (person === null || person === undefined)) return 'Find and pick the member, or choose Walk-in.';
+  // The server sells nothing for nothing either.
+  if (discount !== null && discountMinorFor(product, quantity, discount) >= product.priceMinor * quantity) {
+    return `${discount.name} takes off the whole price, so there is nothing to pay. Choose No discount, or another one.`;
+  }
   return null;
 }
 
 /** Said in the same place once a sale is recorded. */
 export function soldWords(sale) {
   const to = sale.person === null ? 'a walk-in' : sale.person.name;
-  return `Sold: ${String(sale.quantity)} × ${sale.itemName} to ${to}. ${formatMinor(sale.totalMinor, sale.currency)}, ${methodWords(sale.method).toLowerCase()}.`;
+  const sold = `Sold: ${String(sale.quantity)} × ${sale.itemName} to ${to}. ${formatMinor(sale.totalMinor, sale.currency)}, ${methodWords(sale.method).toLowerCase()}.`;
+  return sale.discountName === null || sale.discountName === undefined ? sold : `${sold} ${saleDiscountWords(sale)}.`;
+}
+
+/** "Summer sale: $0.80 off", for a sale made with a discount; null for one made without. */
+export function saleDiscountWords(sale) {
+  if (sale.discountName === null || sale.discountName === undefined) return null;
+  return `${sale.discountName}: ${formatMinor(sale.discountMinor, sale.currency)} off`;
 }
 
 /** Said once a membership is given as paid from this page. */
@@ -151,6 +174,7 @@ export function takingsNotes(page) {
   const money = (minor) => formatMinor(minor, currency ?? 'USD');
   const notes = [];
   if (totals.taxMinor > 0) notes.push(`${money(totals.taxMinor)} of the product sales is tax.`);
+  if (totals.discountMinor > 0) notes.push(`Discounts took ${money(totals.discountMinor)} off today's product sales. The total above is what was paid.`);
   if (totals.refundedMinor > 0) notes.push(`Refunds noted today: ${money(totals.refundedMinor)}. They are not taken off the total above.`);
   if (totals.otherCurrency > 0) {
     notes.push(
@@ -164,14 +188,15 @@ export function takingsNotes(page) {
 
 /** Today's product sales and membership payments as one list, newest first. */
 export function takingsRows(page, timeZone, clockFormat) {
-  const facts = (who, method, at, by) => [who, methodWords(method), sentTime(at, timeZone, clockFormat), by === null ? null : `by ${by}`].filter((x) => x !== null && x !== '').join(' · ');
+  const facts = (who, method, at, by, discount = null) =>
+    [who, methodWords(method), discount, sentTime(at, timeZone, clockFormat), by === null ? null : `by ${by}`].filter((x) => x !== null && x !== '').join(' · ');
   const sales = page.sales.map((sale) => ({
     key: `sale-${sale.id}`,
     kind: 'sale',
     at: sale.soldAt,
     title: `${String(sale.quantity)} × ${sale.itemName}`,
     amount: formatMinor(sale.totalMinor, sale.currency),
-    facts: facts(sale.person === null ? 'Walk-in' : sale.person.name, sale.method, sale.soldAt, sale.by),
+    facts: facts(sale.person === null ? 'Walk-in' : sale.person.name, sale.method, sale.soldAt, sale.by, saleDiscountWords(sale)),
     person: sale.person,
     undone: sale.undone,
     canUndo: sale.canUndo,
@@ -205,7 +230,7 @@ export function purchaseLine(sale) {
   return {
     title: `${String(sale.quantity)} × ${sale.itemName}`,
     amount: formatMinor(sale.totalMinor, sale.currency),
-    facts: [when, methodWords(sale.method), sale.taxMinor > 0 ? `${formatMinor(sale.taxMinor, sale.currency)} tax` : null].filter((x) => x !== null).join(' · '),
+    facts: [when, methodWords(sale.method), saleDiscountWords(sale), sale.taxMinor > 0 ? `${formatMinor(sale.taxMinor, sale.currency)} tax` : null].filter((x) => x !== null).join(' · '),
     undone: sale.undone,
   };
 }

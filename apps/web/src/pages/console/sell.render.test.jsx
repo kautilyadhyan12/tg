@@ -65,6 +65,8 @@ const sale = (over = {}) => ({
   totalMinor: 431,
   taxBp: 825,
   taxIncluded: false,
+  discountName: null,
+  discountMinor: 0,
   currency: 'USD',
   method: 'cash',
   soldOn: '2026-10-12',
@@ -75,7 +77,7 @@ const sale = (over = {}) => ({
   canUndo: true,
   ...over,
 });
-const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0, ...over });
+const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0, ...over });
 const page = (over = {}) => ({
   currency: 'USD',
   today: '2026-10-12',
@@ -83,6 +85,9 @@ const page = (over = {}) => ({
   products: [TOWEL, product()],
   archived: [],
   archivedTotal: 0,
+  discounts: [],
+  archivedDiscounts: [],
+  archivedDiscountsTotal: 0,
   canSell: true,
   canManage: true,
   sales: [],
@@ -156,7 +161,7 @@ describe('a product sale', () => {
     expect(svc.sell).toHaveBeenCalledTimes(1);
     const [gymId, body] = svc.sell.mock.calls[0];
     expect(gymId).toBe('g1');
-    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), productId: 'p-water', quantity: 2, entryId: null, method: 'card_at_desk', totalMinor: 431 });
+    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), productId: 'p-water', quantity: 2, entryId: null, method: 'card_at_desk', totalMinor: 431, discountId: null });
     finish({ saleId: 's1', register: withSale(sale({ method: 'card_at_desk' })) });
 
     const done = await within(newSale()).findByTestId('sale-done');
