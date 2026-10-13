@@ -55,6 +55,7 @@ interface AppProps {
   extra?: PhoneAppExtra | null;
   ask?: Ask;
   store?: KeyStore;
+  wait?: (ms: number) => Promise<void>;
 }
 
 /** Signed out, the sign-in screen and nothing of anybody's; signed in, the five tabs. */
@@ -73,7 +74,7 @@ function SignedInOrOut() {
   );
 }
 
-export function App({ extra, ask = fetch, store = phoneKeyStore }: AppProps) {
+export function App({ extra, ask = fetch, store = phoneKeyStore, wait }: AppProps) {
   // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
   const [fontsReady, fontsFailed] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
   const copy = useMemo(() => ({ extra: extra === undefined ? readAppExtra() : extra, ask }), [extra, ask]);
@@ -91,7 +92,7 @@ export function App({ extra, ask = fetch, store = phoneKeyStore }: AppProps) {
               <ThisCopy />
             </Page>
           ) : (
-            <SessionProvider server={server} store={store}>
+            <SessionProvider server={server} store={store} wait={wait}>
               <SignedInOrOut />
             </SessionProvider>
           )}

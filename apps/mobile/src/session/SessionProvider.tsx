@@ -6,9 +6,23 @@ import { createSession, type KeyStore, type Session, type SessionState } from ".
 const SessionContext = createContext<{ session: Session; state: SessionState } | null>(null);
 
 /** Who is signed in on this phone, for every screen under it. */
-export function SessionProvider({ server, store, children }: { server: Server; store: KeyStore; children: ReactNode }) {
+export function SessionProvider({
+  server,
+  store,
+  wait,
+  children,
+}: {
+  server: Server;
+  store: KeyStore;
+  /** A test's stand-in for the pause between two tries of a refresh. */
+  wait?: ((ms: number) => Promise<void>) | undefined;
+  children: ReactNode;
+}) {
   const [state, setState] = useState<SessionState>({ kind: "starting" });
-  const session = useMemo(() => createSession({ server, store, onChange: setState }), [server, store]);
+  const session = useMemo(
+    () => createSession({ server, store, onChange: setState, ...(wait === undefined ? {} : { wait }) }),
+    [server, store, wait],
+  );
 
   useEffect(() => {
     void session.start();

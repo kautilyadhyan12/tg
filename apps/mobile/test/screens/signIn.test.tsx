@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { App } from "../../src/App";
 import { RAVI, fakeServer, kept, lost, memoryStore, refusal, tokens, type Route } from "../kit";
@@ -13,11 +13,14 @@ const signsIn =
   (isNewAccount = false): Route =>
   () => ({ status: 200, body: { user: RAVI, isNewAccount, tokens: tokens(1) } });
 
+/** A refresh with no answer is tried again at once here, so no test leaves a clock running. */
+const noWait = () => Promise.resolve();
+
 /** The app as a phone opens it: `held` is what its key store kept from last time. */
 async function openApp(routes: Record<string, Route>, held: string | null = null) {
   const server = fakeServer(routes);
   const store = memoryStore(held);
-  await render(<App extra={extra} ask={server.ask} store={store} />);
+  await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
   return { server, store };
 }
 
@@ -35,24 +38,20 @@ interface Drawn {
 }
 const drawn = (node: Drawn) => StyleSheet.flatten(node.props.style);
 
-afterEach(() => {
-  jest.useRealTimers();
-});
-
 describe("the worst thing, on the screen", () => {
   it("opened with no internet, a signed-in person is on their tabs, never the sign-in screen", async () => {
-    jest.useFakeTimers();
-    await openApp({ "/health": lost, "/v1/auth/refresh": lost }, kept(1));
+    const { server, store } = await openApp({ "/health": lost, "/v1/auth/refresh": lost }, kept(1));
     expect(await screen.findByRole("header", { name: "Dashboard" })).toBeTruthy();
     expect(screen.queryByText("Get started.")).toBeNull();
     await fireEvent.press(screen.getByRole("tab", { name: "Me" }));
     expect(await screen.findByText("ravi@example.com")).toBeTruthy();
     // Every later try has had no answer either, and the person is where they were.
-    await act(async () => {
-      await jest.advanceTimersByTimeAsync(60_000);
+    await waitFor(() => {
+      expect(server.paths().filter((path) => path === "/v1/auth/refresh")).toHaveLength(4);
     });
     expect(screen.getByText("ravi@example.com")).toBeTruthy();
     expect(screen.queryByText("Get started.")).toBeNull();
+    expect(store.value).toBe(kept(1));
   });
 
   it("after Sign out the screen holds nothing of the person, and neither does the phone", async () => {
@@ -209,21 +208,25 @@ describe("signing in by email code", () => {
   });
 
   it("Resend code waits out the server's minute, then sends and says so; Use a different email goes back", async () => {
-    jest.useFakeTimers();
-    const { server } = await openApp({ "/v1/auth/code/send": sent });
+    // The server's own wait is what the button counts: one second here, sixty in the app.
+    const { server } = await openApp({
+      "/v1/auth/code/send": () => ({ status: 200, body: { message: "Sent.", resendAfterSeconds: 1, expiresInSeconds: 600 } }),
+    });
     await askForCode();
     const resend = () => screen.getByRole("button", { name: /^Resend code/ });
-    expect((await screen.findByRole("button", { name: "Resend code in 60s" })).props.accessibilityState).toEqual({ disabled: true });
+    expect((await screen.findByRole("button", { name: "Resend code in 1s" })).props.accessibilityState).toEqual({ disabled: true });
     await fireEvent.press(resend());
     expect(server.paths()).toEqual(["/v1/auth/code/send"]);
-    await act(async () => {
-      await jest.advanceTimersByTimeAsync(61_000);
-    });
-    expect(resend().props.accessibilityState).toEqual({ disabled: false });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: "Resend code" }).props.accessibilityState).toEqual({ disabled: false });
+      },
+      { timeout: 4000 },
+    );
     await press("Resend code");
     expect(await screen.findByText("New code sent.")).toBeTruthy();
     expect(server.paths()).toEqual(["/v1/auth/code/send", "/v1/auth/code/send"]);
-    expect(screen.getByRole("button", { name: "Resend code in 60s" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resend code in 1s" })).toBeTruthy();
 
     await press("Use a different email");
     expect(screen.getByLabelText("Email").props.value).toBe("ravi@example.com");

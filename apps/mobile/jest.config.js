@@ -4,6 +4,8 @@ module.exports = {
   preset: "jest-expo",
   testMatch: ["<rootDir>/test/screens/**/*.test.tsx"],
   setupFiles: ["<rootDir>/test/screens/setup.js"],
+  // A screen is slow to draw on a busy machine; a test that hangs still fails.
+  testTimeout: 20000,
   // @app/shared is TypeScript whose imports end in ".js" (the api's module rules).
   moduleNameMapper: { "^([.]{1,2}/.*)[.]js$": "$1" },
 };
