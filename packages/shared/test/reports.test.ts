@@ -31,13 +31,16 @@ function facts(over: Partial<MembersReportFacts> = {}): MembersReportFacts {
   return {
     timezone: "Europe/London",
     today,
+    period: "12m",
     firstListedOn: "2026-01-05",
     listChangedOn: "2026-10-01",
     activeNow: 100,
     everLeft: true,
     months: monthsTo(today),
+    inPeriod: { joined: 0, left: 0 },
     stay: { leavers: 0, totalDays: 0 },
     leads: [],
+    anyLead: false,
     ...over,
   };
 }
@@ -178,6 +181,7 @@ describe("leads that became members", () => {
       ],
     });
     expect(r.leads).toEqual({
+      ever: true,
       total: 17,
       joined: 5,
       percent: 29.4,
@@ -190,7 +194,7 @@ describe("leads that became members", () => {
   });
 
   it("has no share with no leads, and leaves out a source nobody came from", () => {
-    expect(report().leads).toEqual({ total: 0, joined: 0, percent: null, sources: [] });
+    expect(report().leads).toEqual({ ever: false, total: 0, joined: 0, percent: null, sources: [] });
     expect(report({ leads: [{ source: "other", leads: 0, joined: 0 }] }).leads.sources).toEqual([]);
   });
 });
@@ -219,5 +223,14 @@ describe("the month the list began", () => {
     const r = report({ firstListedOn: "2026-10-08", months: monthsTo("2026-10-10", { "2026-10": { joined: 200 } }) });
     expect(r.thisMonth).toEqual({ month: "2026-10", joined: null, left: 0 });
     expect(r.months).toEqual([{ month: "2026-10", full: false, activeAtStart: null, joined: null, left: 0, churnPercent: null }]);
+  });
+});
+
+describe("leads before the period", () => {
+  it("a gym with leads and none added in the period says so, apart from a gym that never had one", () => {
+    expect(report({ leads: [], anyLead: true }).leads).toEqual({ ever: true, total: 0, joined: 0, percent: null, sources: [] });
+    expect(report({ leads: [], anyLead: false }).leads.ever).toBe(false);
+    // Leads counted in the period are leads, whatever the other read says.
+    expect(report({ leads: [{ source: "friend", leads: 2, joined: 1 }], anyLead: false }).leads.ever).toBe(true);
   });
 });
