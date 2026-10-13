@@ -329,6 +329,9 @@ d("Reports, the period: every figure counts the days the answer names (real Post
         expect(attendance.days, key).toHaveLength(daysBetween(from, TODAY) + 1);
         expect(attendance.weeks.reduce((sum, w) => sum + w.visits, 0), key).toBe(visitsFrom(from));
         expect(attendance.weeks[0]?.weekStart, key).toBe(from);
+        // The busiest hours count the same days: every visit of the period is in the grid, and no other.
+        expect(attendance.hours, key).toMatchObject({ state: "ok", from, to: TODAY });
+        expect(attendance.hours.state === "ok" ? attendance.hours.cells.reduce((sum, c) => sum + c.visits, 0) : null, key).toBe(visitsFrom(from));
         // Classes that have started, from the first day on: today's has not.
         expect(attendance.classes, key).toMatchObject({ state: "ok", from, classes: daysFrom(from) - 1 });
 
@@ -442,9 +445,12 @@ d("Reports, the period: every figure counts the days the answer names (real Post
         const money = await get(`/v1/orgs/${gym}/reports/money?period=${key}`, owner.cookies);
         expect(moneyReportResponseSchema.parse(JSON.parse(money.body)).report, key).toEqual({ state: "no_memberships", timezone: "Europe/London", today: TODAY });
       }
-      // Two whole weeks of check-ins are behind it (5 and 12 October): enough for a busiest time in every period.
-      expect((await attendanceOf(gym, owner, "4w")).hours).toMatchObject({ state: "ok", from: "2026-10-05", to: "2026-10-18", weeks: 2 });
-      expect((await attendanceOf(gym, owner, "12m")).hours).toMatchObject({ state: "ok", from: "2026-10-05", to: "2026-10-18", weeks: 2 });
+      // Two whole weeks of check-ins are behind it (5 and 12 October): enough for a busiest time in every
+      // period, counted from its first check-in to today.
+      expect((await attendanceOf(gym, owner, "4w")).hours).toMatchObject({ state: "ok", from: "2026-10-01", to: TODAY });
+      expect((await attendanceOf(gym, owner, "12m")).hours).toMatchObject({ state: "ok", from: "2026-10-01", to: TODAY });
+      // Visits a member a week is a weekly rate, and keeps to the whole weeks.
+      expect((await attendanceOf(gym, owner, "4w")).perMember).toMatchObject({ from: "2026-10-05", to: "2026-10-18", weeks: 2 });
     },
     TEST_TIMEOUT_MS,
   );

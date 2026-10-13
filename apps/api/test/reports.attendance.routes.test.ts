@@ -325,14 +325,18 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
           ],
           // Ana, Ben and Cat are on the list; between them 7 visits in the five whole weeks to 4 October.
           perMember: { state: "ok", perWeek: 0.5, from: "2026-08-31", to: "2026-10-04", weeks: 5, members: 3, visits: 7, visitors: 3 },
+          // Every day from the first check-in to today: this week's three visits are in it too
+          // (Ben's at 00:30 on Monday, Ana's at noon on Thursday, the owner's at 09:00 today).
           hours: {
             state: "ok",
             from: "2026-08-31",
-            to: "2026-10-04",
-            weeks: 5,
+            to: "2026-10-10",
             cells: [
+              { weekday: 1, hour: 0, visits: 1 },
               { weekday: 1, hour: 18, visits: 5 },
               { weekday: 3, hour: 7, visits: 1 },
+              { weekday: 4, hour: 12, visits: 1 },
+              { weekday: 6, hour: 9, visits: 1 },
               { weekday: 7, hour: 23, visits: 1 },
             ],
             top: 5,

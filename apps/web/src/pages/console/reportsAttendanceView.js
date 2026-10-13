@@ -75,7 +75,7 @@ export function visitTiles(report, words, clockFormat) {
   const hours = report.hours;
   if (hours.state === 'ok') {
     const left = hours.noTime > 0 ? ` ${visitsWord(hours.noTime)} staff added on a later day ${hours.noTime === 1 ? 'has' : 'have'} no time and ${hours.noTime === 1 ? 'is' : 'are'} left out.` : '';
-    const how = `Check-ins in the last ${String(hours.weeks)} full weeks (${span(hours.from, hours.to)}), counted by weekday and hour on your clock.${left}`;
+    const how = `Check-ins from ${dayText(hours.from)} to today, counted by weekday and hour on your clock.${left}`;
     const names = hours.busiest.map((c) => `${weekdayShort(c.weekday)} ${hourLabel(c.hour, clockFormat)}`);
     if (hours.tied > hours.busiest.length) {
       busiest = { value: null, line: `No one hour stands out: ${String(hours.tied)} hours had ${visitsWord(hours.top)} each.`, note: null, how };
@@ -83,7 +83,7 @@ export function visitTiles(report, words, clockFormat) {
       busiest = {
         value: names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`,
         line: null,
-        note: `${visitsWord(hours.top)}${names.length > 1 ? ' each' : ''} in ${String(hours.weeks)} weeks`,
+        note: `${visitsWord(hours.top)}${names.length > 1 ? ' each' : ''} · ${span(hours.from, hours.to)}`,
         how,
       };
     }
@@ -93,11 +93,11 @@ export function visitTiles(report, words, clockFormat) {
       line:
         hours.state === 'no_visits'
           ? hours.noTime > 0
-            ? `The only visits in the last ${String(hours.weeks)} full weeks were added by staff on a later day, so their time is not known.`
-            : `Nobody checked in in the last ${String(hours.weeks)} full weeks.`
+            ? `The only visits from ${span(hours.from, hours.to)} were added by staff on a later day, so their time is not known.`
+            : `Nobody checked in from ${span(hours.from, hours.to)}.`
           : busiestNotYet(report),
       note: null,
-      how: `Check-ins in the full weeks of ${periodWords(report.period)}, Monday to Sunday, counted by weekday and hour on your clock.`,
+      how: `Check-ins in ${periodWords(report.period)}, counted by weekday and hour on your clock.`,
     };
   }
 
@@ -200,16 +200,14 @@ export function weekRows(report) {
   }));
 }
 
-/** What stands in the grid of hours' place while there is none: why, and the weeks counted.
+/** What stands in the grid of hours' place while there is none: why, and the days counted.
  *  Null where the grid is drawn. */
 export function hoursMissing(report) {
   const hours = report.hours;
   if (hours.state === 'ok') return null;
   if (hours.state === 'not_enough_data') return busiestNotYet(report);
-  const weeks = hours.weeks === 1 ? 'the 1 full week' : `the ${String(hours.weeks)} full weeks`;
-  const what = hours.noTime > 0 ? 'The only visits in' : 'Nobody checked in in';
-  const why = hours.noTime > 0 ? ' were added by staff on a later day, so their time is not known' : '';
-  return `${what} ${weeks} counted here, ${span(hours.from, hours.to)}${why}. Busiest hours count whole weeks, Monday to Sunday, so that every weekday is counted the same number of times; this week is counted once it has ended.`;
+  if (hours.noTime > 0) return `The only visits from ${span(hours.from, hours.to)} were added by staff on a later day, so their time is not known.`;
+  return `Nobody checked in from ${span(hours.from, hours.to)}.`;
 }
 
 /** The grid of hours always shows at least these, a gym's usual day, so that one busy hour

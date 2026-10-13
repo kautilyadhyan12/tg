@@ -173,7 +173,8 @@ export type VisitCounts = z.infer<typeof visitCountsSchema>;
  *  zone is a whole number of quarter-hours from UTC, and a few thousand quarter-hours are
  *  converted where every visit would have been. A week is Monday to Sunday; the one the
  *  period begins in starts on the period's first day. The whole weeks are among them, so
- *  the pass that counts people by the week serves visits a member too. */
+ *  the pass that counts people by the week serves visits a member too. The hours are
+ *  counted over every day of the period (`windows.hours`). */
 export async function readVisitCounts(
   sql: Sql,
   gymId: string,
@@ -182,10 +183,10 @@ export async function readVisitCounts(
   windows: AttendanceWindows,
 ): Promise<VisitCounts> {
   const from = windows.period.from;
-  const hoursFrom = windows.whole?.from ?? null;
-  const hoursTo = windows.whole?.to ?? null;
-  const memberFrom = hoursFrom;
-  const memberTo = hoursTo;
+  const hoursFrom = windows.hours?.from ?? null;
+  const hoursTo = windows.hours?.to ?? null;
+  const memberFrom = windows.whole?.from ?? null;
+  const memberTo = windows.whole?.to ?? null;
   const rows = await sql<Record<string, unknown>[]>`
     WITH by_quarter AS MATERIALIZED (
       SELECT a.day,

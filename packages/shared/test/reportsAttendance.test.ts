@@ -72,7 +72,7 @@ describe("which days each figure is counted over", () => {
     ["3m", "2026-08-01"],
     ["12m", "2025-11-01"],
   ])("the period %s is counted from %s to today", (key, from) => {
-    expect(attendanceWindows("2026-10-10", null, key)).toEqual({ period: { key, from, to: "2026-10-10" }, thisWeek: "2026-10-05", fullWeeks: 0, whole: null });
+    expect(attendanceWindows("2026-10-10", null, key)).toEqual({ period: { key, from, to: "2026-10-10" }, thisWeek: "2026-10-05", fullWeeks: 0, whole: null, hours: null });
   });
 
   it.each<[string, ReportPeriodKey, string | null, number, [string, string, number] | null]>([
@@ -261,12 +261,31 @@ describe("visits a member a week", () => {
 });
 
 describe("the busiest hours", () => {
+  // Today is Saturday 10 October 2026.
+  it.each<[string, ReportPeriodKey, string | null, [string, string] | null]>([
+    ["four weeks: every day of them, today among them", "4w", "2025-01-06", ["2026-09-13", "2026-10-10"]],
+    ["three months", "3m", "2025-01-06", ["2026-08-01", "2026-10-10"]],
+    ["twelve months", "12m", "2025-01-06", ["2025-11-01", "2026-10-10"]],
+    ["a gym younger than the period: from its first check-in", "12m", "2026-09-17", ["2026-09-17", "2026-10-10"]],
+    ["under two whole weeks of check-ins: no busiest hour yet", "4w", "2026-09-28", null],
+    ["nobody has ever checked in", "4w", null, null],
+  ])("the busiest hours count %s", (_name, key, first, hours) => {
+    expect(attendanceWindows("2026-10-10", first, key).hours).toEqual(hours === null ? null : { from: hours[0], to: hours[1] });
+  });
+
+  it("visits on the period's first days and this week, and none in its whole weeks, still have a busiest hour", () => {
+    // Four weeks from Sunday 13 September hold three whole weeks, 14 September to 4 October.
+    const r = report({ firstVisitOn: "2025-01-06", hours: [{ weekday: 7, hour: 9, visits: 6 }, { weekday: 6, hour: 9, visits: 7 }] });
+    expect(r.hours).toMatchObject({ state: "ok", from: "2026-09-13", to: "2026-10-10", top: 7, busiest: [{ weekday: 6, hour: 9 }] });
+    expect(r.perMember).toMatchObject({ from: "2026-09-14", to: "2026-10-04", weeks: 3 });
+  });
+
   it("under two whole weeks no hour is named, whatever was counted", () => {
     expect(report({ firstVisitOn: "2026-09-28", hours: [{ weekday: 1, hour: 18, visits: 30 }] }).hours).toEqual({ state: "not_enough_data" });
   });
 
   it("enough weeks and no visit in them says so, with the visits that have no time", () => {
-    expect(report({ hours: [], hoursNoTime: 4 }).hours).toEqual({ state: "no_visits", from: "2026-09-14", to: "2026-10-04", weeks: 3, noTime: 4 });
+    expect(report({ hours: [], hoursNoTime: 4 }).hours).toEqual({ state: "no_visits", from: "2026-09-13", to: "2026-10-10", noTime: 4 });
     expect(report({ hours: [{ weekday: 2, hour: 9, visits: 0 }] }).hours).toMatchObject({ state: "no_visits", noTime: 0 });
   });
 
@@ -282,9 +301,8 @@ describe("the busiest hours", () => {
     }).hours;
     expect(hours).toEqual({
       state: "ok",
-      from: "2026-09-14",
-      to: "2026-10-04",
-      weeks: 3,
+      from: "2026-09-13",
+      to: "2026-10-10",
       cells: [
         { weekday: 1, hour: 7, visits: 12 },
         { weekday: 1, hour: 18, visits: 31 },

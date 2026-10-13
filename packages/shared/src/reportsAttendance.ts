@@ -51,9 +51,12 @@ export interface AttendanceWindows {
   thisWeek: string;
   /** Whole weeks, Monday to Sunday, that began on or after the first check-in and have ended. */
   fullWeeks: number;
-  /** The whole weeks inside the period, since the first check-in. Null before there are
-   *  `REPORT_FULL_WEEKS_NEEDED` full weeks of check-ins. */
+  /** The whole weeks inside the period, since the first check-in: visits a member a week
+   *  is a weekly rate. Null before there are `REPORT_FULL_WEEKS_NEEDED` full weeks of check-ins. */
   whole: DayWindow | null;
+  /** The days the busiest hours are counted over: every day of the period, from the first
+   *  check-in on, today among them. Null before there are that many full weeks. */
+  hours: { from: string; to: string } | null;
 }
 
 /** The first Monday on or after `day`. */
@@ -63,20 +66,23 @@ function mondayFrom(day: string): string {
 }
 
 /** Which days each figure is counted over, from the gym's own day today, the period and
- *  the day of the gym's first check-in. Only whole weeks feed the busiest hours and visits
- *  a member, so every weekday is counted the same number of times. */
+ *  the day of the gym's first check-in. Visits a member a week counts whole weeks only.
+ *  The busiest hours count every day of the period, so what the page says came in the
+ *  period is what the grid shows; both wait for two full weeks of check-ins. */
 export function attendanceWindows(today: string, firstVisitOn: string | null, key: ReportPeriodKey): AttendanceWindows {
   const period = reportPeriodOf(key, today);
   const thisWeek = mondayOf(today);
   const firstFull = firstVisitOn === null ? null : mondayFrom(firstVisitOn);
   const fullWeeks = firstFull === null ? 0 : Math.max(0, Math.floor(daysBetween(firstFull, thisWeek) / 7));
   let whole: DayWindow | null = null;
-  if (firstFull !== null && fullWeeks >= REPORT_FULL_WEEKS_NEEDED) {
+  let hours: AttendanceWindows["hours"] = null;
+  if (firstVisitOn !== null && firstFull !== null && fullWeeks >= REPORT_FULL_WEEKS_NEEDED) {
+    hours = { from: firstVisitOn > period.from ? firstVisitOn : period.from, to: today };
     const inPeriod = mondayFrom(period.from);
     const from = firstFull > inPeriod ? firstFull : inPeriod;
     whole = { from, to: addDays(thisWeek, -1), weeks: Math.floor(daysBetween(from, thisWeek) / 7) };
   }
-  return { period, thisWeek, fullWeeks, whole };
+  return { period, thisWeek, fullWeeks, whole, hours };
 }
 
 /** One class the gym runs, counted over the classes of it that started in the window. */
@@ -109,9 +115,9 @@ export interface AttendanceReportFacts {
   weeks: readonly { weekStart: string; visits: number; people: number }[];
   /** How many different people visited in the period. */
   people: number;
-  /** Visits with a known time in the whole weeks, by weekday and hour on the gym's clock. */
+  /** Visits with a known time in the hours' days, by weekday and hour on the gym's clock. */
   hours: readonly { weekday: number; hour: number; visits: number }[];
-  /** Visits in the whole weeks that staff added on a later day, so no time is known. */
+  /** Visits in the hours' days that staff added on a later day, so no time is known. */
   hoursNoTime: number;
   /** People on the list today who were on it when the whole weeks began, and their
    *  visits in them: somebody added since could not have come. */
@@ -150,7 +156,6 @@ const hoursSchema = z.discriminatedUnion("state", [
       state: z.literal("ok"),
       from: daySchema,
       to: daySchema,
-      weeks: countSchema.min(1),
       /** Every weekday and hour that had a visit. */
       cells: z.array(cellSchema.extend({ visits: countSchema.min(1) }).strict()).min(1).max(7 * 24),
       /** The most visits any one hour had, and the hours that had it: the first few, in the week's order. */
@@ -161,8 +166,8 @@ const hoursSchema = z.discriminatedUnion("state", [
       noTime: countSchema,
     })
     .strict(),
-  /** Enough weeks, and no visit in them with a time. */
-  z.object({ state: z.literal("no_visits"), from: daySchema, to: daySchema, weeks: countSchema.min(1), noTime: countSchema }).strict(),
+  /** Enough weeks of check-ins, and no visit with a time in those days. */
+  z.object({ state: z.literal("no_visits"), from: daySchema, to: daySchema, noTime: countSchema }).strict(),
   z.object({ state: z.literal("not_enough_data") }).strict(),
 ]);
 export type ReportHours = z.infer<typeof hoursSchema>;
@@ -250,7 +255,7 @@ function percentOf(part: number, whole: number): number {
   return Math.round((Math.min(part, whole) / whole) * 1000) / 10;
 }
 
-function hoursFrom(facts: AttendanceReportFacts, window: DayWindow | null): ReportHours {
+function hoursFrom(facts: AttendanceReportFacts, window: AttendanceWindows["hours"]): ReportHours {
   if (window === null) return { state: "not_enough_data" };
   const cells = facts.hours
     .filter((c) => c.visits > 0)
@@ -368,7 +373,7 @@ export function attendanceReportFrom(facts: AttendanceReportFacts): AttendanceRe
     days,
     weeks,
     perMember,
-    hours: hoursFrom(facts, windows.whole),
+    hours: hoursFrom(facts, windows.hours),
     classes: classesFrom(facts, from),
   };
 }

@@ -117,7 +117,7 @@ describe('the attendance figures', () => {
     expect(['visits', 'per-member', 'busiest', 'fill', 'no-shows'].map((k) => tile(k).textContent)).toEqual([
       'Visits85 people · 31 Aug to 10 Oct 2026 · this week, so far: 6',
       'Visits a member a week0.42 of the 3 members on your list since 31 Aug came · 31 Aug to 4 Oct 2026',
-      'Busiest timeMon 18:005 visits in 5 weeks',
+      'Busiest timeMon 18:005 visits · 31 Aug to 10 Oct 2026',
       'How full classes are41.7%5 of 12 places booked · 2 classes',
       'No-shows33.3%2 no-shows of 6 places marked · 2 not marked yet',
     ]);
@@ -150,7 +150,7 @@ describe('the attendance figures', () => {
       'Visits a member a week':
         'The 6 visits that the 3 members on your list since 31 Aug 2026 made in the last 5 full weeks (31 Aug to 4 Oct 2026), shared between them and the 5 weeks. Anyone added since, and anyone you have removed, is not counted.',
       'Busiest time':
-        'Check-ins in the last 5 full weeks (31 Aug to 4 Oct 2026), counted by weekday and hour on your clock. 1 visit staff added on a later day has no time and is left out.',
+        'Check-ins from 31 Aug 2026 to today, counted by weekday and hour on your clock. 1 visit staff added on a later day has no time and is left out.',
       'No-shows':
         'Places marked No-show, out of the places marked Came or No-show, in classes that started since 1 Nov 2025 (the last 12 months). A place nobody marked is left out.',
     };
@@ -197,7 +197,7 @@ describe('the attendance figures', () => {
     expect(cells.filter((c) => c.dataset.best === 'yes')).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Wednesday 07:00 to 08:00: 1 visit' }).dataset.level).toBe('1');
     expect(screen.getByTestId('hour-grid').textContent).toContain('QuietBusyNobodyThe busiest');
-    expect(screen.getByTestId('hour-grid-caption').textContent).toBe('Check-ins by weekday and hour, 31 Aug to 4 Oct 2026');
+    expect(screen.getByTestId('hour-grid-caption').textContent).toBe('Check-ins by weekday and hour, 31 Aug to 10 Oct 2026');
     // Nothing is shown until a square is pointed at or pressed, and nothing stays behind after.
     const idle = 'Point at a square, or press one, to see that hour.';
     const grid = cells[0].parentElement.parentElement;
@@ -239,7 +239,7 @@ describe('the attendance figures', () => {
   it("a gym on the 12-hour clock reads its hours that way", async () => {
     open({ ...ORG, clockFormat: '12h' });
     await screen.findByTestId('tile-busiest');
-    expect(tile('busiest').textContent).toBe('Busiest timeMon 6 PM5 visits in 5 weeks');
+    expect(tile('busiest').textContent).toBe('Busiest timeMon 6 PM5 visits · 31 Aug to 10 Oct 2026');
     expect(screen.getByRole('button', { name: 'Monday 6 PM to 7 PM: 5 visits' })).toBeTruthy();
   });
 
@@ -284,13 +284,13 @@ describe('what a gym has not done yet is never a zero', () => {
     expect(within(screen.getByRole('region', { name: 'Busiest hours' })).queryByRole('button', { name: 'Download CSV' })).toBeNull();
   });
 
-  it('visits this week and none in the whole weeks counted: Busiest hours says so, with the weeks, and does not vanish', async () => {
+  it('a period with visits and no time for any of them: Busiest hours says so, with the days, and does not vanish', async () => {
     svc.attendance.mockResolvedValue(attendanceReportFrom(facts({ period: '4w', firstVisitOn: '2025-01-06', hours: [], hoursNoTime: 0, days: [{ day: '2026-10-08', visits: 4 }] })));
     open();
     await screen.findByTestId('tile-visits');
     expect(tile('visits').textContent).toContain('Visits4');
     expect(screen.getByTestId('hour-grid-none').textContent).toBe(
-      'Nobody checked in in the 3 full weeks counted here, 14 Sep to 4 Oct 2026. Busiest hours count whole weeks, Monday to Sunday, so that every weekday is counted the same number of times; this week is counted once it has ended.',
+      'Nobody checked in from 13 Sep to 10 Oct 2026.',
     );
   });
 
@@ -308,7 +308,7 @@ describe('what a gym has not done yet is never a zero', () => {
     );
     open();
     await screen.findByTestId('tile-busiest');
-    expect(tile('busiest').textContent).toBe('Busiest timeMon 18:00 and Wed 18:005 visits each in 5 weeks');
+    expect(tile('busiest').textContent).toBe('Busiest timeMon 18:00 and Wed 18:005 visits each · 31 Aug to 10 Oct 2026');
     cleanup();
     resetConsoleOrgs();
     svc.attendance.mockResolvedValue(attendanceReportFrom(facts({ hours: [1, 2, 3, 4].map((weekday) => ({ weekday, hour: 9, visits: 2 })) })));

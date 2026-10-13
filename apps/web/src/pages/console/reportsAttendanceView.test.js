@@ -60,7 +60,7 @@ describe('the visit tiles', () => {
     expect(tiles({ people: 1240, days: [{ day: '2026-10-05', visits: 2480 }] }).visits).toMatchObject({ value: '2,480', note: '1,240 people · 7 Sep to 10 Oct 2026 · this week, so far: 15' });
     expect(t['per-member']).toMatchObject({ value: '2.3', note: '1 of the 1 member on your list since 7 Sep came · 7 Sep to 4 Oct 2026' });
     expect(t['per-member'].how).toContain('The 9 visits that the 1 member on your list since 7 Sep 2026 made in the last 4 full weeks');
-    expect(t.busiest).toMatchObject({ value: 'Tue 06:00', note: '40 visits in 4 weeks' });
+    expect(t.busiest).toMatchObject({ value: 'Tue 06:00', note: '40 visits · 7 Sep to 10 Oct 2026' });
   });
 
   it('the visits are the period’s, from its first day for a gym older than it and from the first check-in for a younger one', () => {
@@ -70,21 +70,23 @@ describe('the visit tiles', () => {
     const old = tiles({ period: '4w', firstVisitOn: '2025-01-06' });
     expect(old.visits.note).toBe('1 person · 13 Sep to 10 Oct 2026 · this week, so far: 15');
     expect(old.visits.how).toBe('Every check-in from 13 Sep 2026 to today. Someone who comes on three days is three visits and one person.');
-    // Four weeks hold three whole ones, and the tiles say which.
+    // Four weeks hold three whole ones for the weekly rate, and the tile says which; the busiest
+    // time counts every day of the four weeks.
     expect(old['per-member'].note).toBe('1 of the 1 member on your list since 14 Sep came · 14 Sep to 4 Oct 2026');
-    expect(old.busiest.note).toBe('40 visits in 3 weeks');
+    expect(old.busiest.note).toBe('40 visits · 13 Sep to 10 Oct 2026');
+    expect(old.busiest.how).toBe('Check-ins from 13 Sep 2026 to today, counted by weekday and hour on your clock.');
     // Twelve months begin in the year before: every first day says its year.
     const year = tiles({ period: '12m', firstVisitOn: '2025-01-06' });
     expect(year.visits.note).toBe('1 person · 1 Nov 2025 to 10 Oct 2026 · this week, so far: 15');
     expect(year['per-member'].note).toBe('1 of the 1 member on your list since 3 Nov 2025 came · 3 Nov 2025 to 4 Oct 2026');
-    expect(year.busiest.how).toContain('(3 Nov 2025 to 4 Oct 2026)');
+    expect(year.busiest.note).toBe('40 visits · 1 Nov 2025 to 10 Oct 2026');
   });
 
   it('nobody on the list, no visit in the weeks counted, and only visits added later each say which', () => {
     expect(tiles({ member: { members: 0, visits: 0, visitors: 0 } })['per-member'].line).toBe('Nobody on your member list today was on it by 7 Sep 2026, when the weeks counted here began.');
-    expect(tiles({ hours: [] }).busiest.line).toBe('Nobody checked in in the last 4 full weeks.');
+    expect(tiles({ hours: [] }).busiest.line).toBe('Nobody checked in from 7 Sep to 10 Oct 2026.');
     expect(tiles({ hours: [], hoursNoTime: 3 }).busiest.line).toBe(
-      'The only visits in the last 4 full weeks were added by staff on a later day, so their time is not known.',
+      'The only visits from 7 Sep to 10 Oct 2026 were added by staff on a later day, so their time is not known.',
     );
     expect(tiles({ hoursNoTime: 3 }).busiest.how).toContain('3 visits staff added on a later day have no time and are left out.');
   });
@@ -184,14 +186,13 @@ describe('the pictures', () => {
     expect(hourGrid(report({ hours: [{ weekday: 1, hour: 0, visits: 1 }, { weekday: 1, hour: 23, visits: 1 }] }), '24h').columns).toHaveLength(24);
   });
 
-  it('no grid: its place says why, with the weeks counted', () => {
+  it('no grid: its place says why, with the days counted', () => {
     expect(hoursMissing(report())).toBeNull();
     expect(hoursMissing(report({ hours: [] }))).toBe(
-      'Nobody checked in in the 4 full weeks counted here, 7 Sep to 4 Oct 2026. Busiest hours count whole weeks, Monday to Sunday, so that every weekday is counted the same number of times; this week is counted once it has ended.',
+      'Nobody checked in from 7 Sep to 10 Oct 2026.',
     );
-    // Four weeks hold three whole ones: visits this week alone are not in them, and the sentence says which weeks are.
-    expect(hoursMissing(report({ period: '4w', firstVisitOn: '2025-01-06', hours: [] }))).toContain('in the 3 full weeks counted here, 14 Sep to 4 Oct 2026.');
-    expect(hoursMissing(report({ hours: [], hoursNoTime: 3 }))).toContain('The only visits in the 4 full weeks counted here, 7 Sep to 4 Oct 2026 were added by staff on a later day, so their time is not known.');
+    expect(hoursMissing(report({ period: '4w', firstVisitOn: '2025-01-06', hours: [] }))).toBe('Nobody checked in from 13 Sep to 10 Oct 2026.');
+    expect(hoursMissing(report({ hours: [], hoursNoTime: 3 }))).toBe('The only visits from 7 Sep to 10 Oct 2026 were added by staff on a later day, so their time is not known.');
     expect(hoursMissing(report({ firstVisitOn: '2026-10-01' }))).toBe('Not enough data yet. The busiest time is picked once every weekday has been counted twice: 2 full weeks of check-ins; you have none yet.');
   });
 

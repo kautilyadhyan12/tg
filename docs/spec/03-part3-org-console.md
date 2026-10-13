@@ -5014,14 +5014,17 @@ and the page's words are made from the answer, never from what was pressed. **Wh
 the period:** new members and members who left, the average stay of those who left, and
 the months listed · visits and the people who made them, the days and the weeks (the week
 a period begins in starts on the period's first day and says so), visits a member a week
-and the busiest hours over the whole weeks inside the period, and classes that started in
-it · money collected, the months listed, and each membership's money. **What does not,**
+over the whole weeks inside the period, the busiest hours over every day of it (today
+among them, so the grid shows whatever the page says came in the period; Kd's
+click-through, the job's file in `rulings/`), and classes that started in it · money collected, the months listed, and each membership's money. **What does not,**
 because it is true today or is a monthly rate with its own months: members now, churn and
 retention (the newest three full months, RULINGS 2026-07-15), monthly recurring revenue,
 payment due and lifetime value; a line under the control says so. A gym younger than the
 period is counted from its own first day and each tile says which ("since 10 Jun 2026,
 when your member list started"); what it has no history for is a sentence, never a zero.
-A list of weeks longer than twelve shows the newest twelve and a button for the rest. A
+A list of weeks longer than twelve shows the newest twelve and a button for the rest. The
+grid of hours is never narrower than 06:00 to 21:00, and where there is none its place
+says why, with the days counted. A
 value that is not one of the three is refused (400). Cost at twelve months, a gym of 2,000
 beside 19 of 200 (the three `tools/measure-reports-*-cost.ts`, `--period=`): HANDOFF has
 the table. Not in this job (21d-ii): the same period a year earlier beside the figures.
