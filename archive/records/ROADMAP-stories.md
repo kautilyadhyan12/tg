@@ -433,10 +433,6 @@ never a rule: RULINGS wins where they differ.
 
      - 21b-i. [ ] **Money on the Reports page**: monthly recurring revenue, collected, payment due and overdue, lifetime value, and money by membership; a gym that records no payment here is told why. Spec §16.5, "Built by 21b-i".
 
-## 21d, as first written (split 2026-10-13 into 21d-i and 21d-ii)
-
-- 21d. [ ] **A period picker for Reports** (Kd, RULINGS 2026-10-10; Folder B, after 21b): one control at the top of the page, Last 4 weeks · Last 3 months · Last 12 months, that every part of Reports follows (members, attendance, classes, money), with the same period a year earlier beside the figures. Its plan reads Mindbody's and PushPress's report pages first, and measures the cost at 12 months for a gym of 2,000.
-
 ## Stage 5 item 32a, as it stood when it merged (2026-10-13, PR #238)
 
 - 32a. [ ] **A meal sent twice from the phone is saved once**: the phone gives each meal its own id; the same id again answers with the meal as it is now, and somebody else's id is refused. No screen.

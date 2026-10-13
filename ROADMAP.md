@@ -167,7 +167,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 5b-iv-b. [x] **The warning when adding** — merged 2026-09-30 (PR #141).
      - 5b-vi. [ ] **Member photos** (Kd, RULINGS 2026-09-28): the photo a member adds in the app, small and round on each Members row and on their page, initials when there is none; only their own gym's staff see it, and not after they leave. Needs Stage 4 item 4 (photo storage); the check-in screen (16a) shows it once both are built.
    - 5c. [x] **Which software is your list in?** — merged 2026-10-01 (PR #143).
-   - 5d. **Staff notes and tags** (Kd, RULINGS 2026-10-08; spec §18.13), split 2026-10-08 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+   - 5d. **Staff notes and tags** (Kd, RULINGS 2026-10-08; spec §18.13), split 2026-10-08 in two (too big for one terminal; the line as first written is in this job's file in `handoff/`):
      - 5d-i. [x] **Notes and tags on a person's page** — merged 2026-10-08 (PR #196).
      - 5d-ii. [x] **Tags on the Members list** — merged 2026-10-09 (PR #199).
      - 5d-iii. [x] **The two extra passes' fixes** over notes and tags — merged 2026-10-09 (PR #201).
@@ -192,7 +192,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 16f. [x] **The desk reads a pass in poor light, and has a sound for each answer** — merged 2026-10-04 (PR #164).
 
 17. **What a gym sells, and its timetable** (RULINGS 2026-09-21, Part 4 of the re-plan; spec Part 3 §13) — items 8 and 9's prices, planned; "the largest gym item". Every card Opus xhigh; every number a starting value the gym can change; the two extra passes run once over 17a–17f.
-   - 17a. **Membership types, and a person's membership** (§13.1–13.2), split 2026-10-04 in three (the line as first written is in `archive/records/ROADMAP-stories.md`):
+   - 17a. **Membership types, and a person's membership** (§13.1–13.2), split 2026-10-04 in three (the line as first written is in this job's file in `handoff/`):
      - 17a-i. [x] **The gym's price list** — merged 2026-10-04 (PR #166).
      - 17a-ii. [x] **A person's membership** — merged 2026-10-04 (PR #168).
      - 17a-iii. [x] **A file's word linked to a type** — merged 2026-10-05 (PR #171).
@@ -206,9 +206,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
          - 17b-ii-b-ii. **This day and later, and every time slot of one class at once.** Split in two 2026-09-23 (a move from a date, the Calendar's "This and future classes" and a bulk edit are more than one terminal).
            - 17b-ii-b-ii-a. [x] **Change a time slot from a date** — merged 2026-09-23 (PR #97).
            - 17b-ii-b-ii-b. [x] **Edit all time slots of a class at once** — merged 2026-09-23 (PR #99).
-   - 17c. **Booking and the waitlist, on the server** (§13.4), split 2026-10-05 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+   - 17c. **Booking and the waitlist, on the server** (§13.4), split 2026-10-05 in two (too big for one terminal; the line as first written is in this job's file in `handoff/`):
      - 17c-i. [x] **Book, Cancel, the waitlist and Claim** — merged 2026-10-05 (PR #173).
-     - 17c-ii. **Bookings when things change, the settings and the emails**, split 2026-10-05 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+     - 17c-ii. **Bookings when things change, the settings and the emails**, split 2026-10-05 in two (too big for one terminal; the line as first written is in this job's file in `handoff/`):
        - 17c-ii-a. [x] **Bookings when things change, and the settings** — merged 2026-10-05 (PR #175).
        - 17c-ii-b. ~~**The emails**: booked · moved in · a place is free · class cancelled or moved.~~ **Not built (Kd, RULINGS 2026-10-05)**: members are told in the app, with the inbox (20a) and the phone app's notifications; the box keeps "the app doesn't tell them yet" until then.
      - 17c-iii. [x] **Who is booked, on the Calendar** — merged 2026-10-06 (PR #179).
@@ -216,19 +216,19 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 17e. **Personal training** (§13.5), split 2026-10-06 in four (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`). **Built in this order, the staff side first (Kd, RULINGS 2026-10-06): 17e-i → 17e-iii (a, then b) → 17e-ii → 17e-iv.**
      - 17e-i. [x] **Trainers' hours, and staff book a session** — merged 2026-10-06 (PR #181).
      - 17e-ii. [x] **The member books and cancels their own** — merged 2026-10-08 (PR #197).
-     - 17e-iii. **Classes and sessions agree both ways, and a trainer's time off** (Kd, RULINGS 2026-10-06; straight after 17e-i), split 2026-10-06 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+     - 17e-iii. **Classes and sessions agree both ways, and a trainer's time off** (Kd, RULINGS 2026-10-06; straight after 17e-i), split 2026-10-06 in two (too big for one terminal; the line as first written is in this job's file in `handoff/`):
        - 17e-iii-a. [x] **The Classes page asks first** — merged 2026-10-06 (PR #184).
        - 17e-iii-b. [x] **A trainer's time off** — merged 2026-10-06 (PR #185).
      - 17e-v. [x] **A limit on personal training sessions on a membership** — merged 2026-10-08 (PR #198).
      - 17e-vi. [x] **Personal training's own booking rules** — merged 2026-10-09 (PR #200).
-     - 17e-iv. **Sessions when people change**, split 2026-10-09 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+     - 17e-iv. **Sessions when people change**, split 2026-10-09 in two (too big for one terminal; the line as first written is in this job's file in `handoff/`):
        - 17e-iv-a. [x] **Sessions when a person leaves** — merged 2026-10-09 (PR #202).
        - 17e-iv-b. [x] **A trainer leaves the staff, and came or no-show** — merged 2026-10-09 (PR #203).
    - 17f. [x] **Check-in meets bookings** — merged 2026-10-09 (PR #206).
    - 17g. [x] **Online classes, and staff take one person off a class** — merged 2026-10-09 (PR #208).
    - 17h. [x] **The two extra passes' fixes** over what a gym sells — merged 2026-10-10 (PR #212).
 18. **Money between a member and their gym** (RULINGS 2026-09-22, Part 5 of the re-plan; spec Part 3 §14) — it takes in Stage 3 item 3 and what is left of item 9. The app never holds the money and takes no part of it. Every card Opus xhigh.
-   - 18a. **The notebook** (§14.2), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+   - 18a. **The notebook** (§14.2), split 2026-10-10 in two (too big for one terminal; the line as first written is in this job's file in `handoff/`):
      - 18a-i. [x] **Bills and payments on a person's page** — merged 2026-10-10 (PR #215).
      - 18a-ii. [x] **Cancel a bill, note a refund, and the Members list's Payment reads the bills** — merged 2026-10-11 (PR #218).
    - 18b. **The register** (§14.3), split 2026-10-12 in three (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`). In Folder A's list "18b" is 18b-i → 18b-ii → 18b-iii.
@@ -265,7 +265,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 19c-ii. [x] **"I'm coming"** — merged 2026-10-06 (PR #183).
    - 19d. **Challenges** (spec Part 3 §15.6; the document's leagues and tournaments; knock-outs later), split 2026-10-06 in two (the gym's side, the member's card and board, joining, teams and the posted result are more than one terminal):
      - 19d-i. [x] **A gym runs a challenge, members see its board** — merged 2026-10-07 (PR #186).
-     - 19d-ii. **Teams, and the result posted to Updates**, split 2026-10-09 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+     - 19d-ii. **Teams, and the result posted to Updates**, split 2026-10-09 in two (too big for one terminal; the line as first written is in this job's file in `handoff/`):
        - 19d-ii-a. [x] **Teams in a challenge** — merged 2026-10-09 (PR #204).
        - 19d-ii-b. [x] **The result posted to Updates** — merged 2026-10-09 (PR #205).
      - 19d-iii. **A challenge about anything the app tracks** (Kd, RULINGS 2026-10-09; it takes the place of 2026-10-06's "a challenge the camera counts", whose line is in `archive/records/ROADMAP-stories.md`). A gym picks what a challenge is about from a list the server sends, or types its own, and picks who judges it, the app or its staff; a new feature of the app adds one line to that list. Four jobs. **Their plan is spec Part 3 §15.10** (written 2026-10-09 on his word; a number a member types never counts where the app counts: Kd, RULINGS that day), and each job's worst thing and first test are in §15.10.7:
@@ -279,7 +279,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 20a. [x] **The inbox and the message rule** — merged 2026-10-09 (PR #207).
    - 20a-ii. [x] **The menu shows when a message is waiting** — merged 2026-10-09 (PR #209).
    - 20a-iii. [x] **Contact the gym** — merged 2026-10-09 (PR #210).
-   - 20b. **The automatic messages and their switches** (Settings → Automatic messages; spec §16.2), split 2026-10-10 in three (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+   - 20b. **The automatic messages and their switches** (Settings → Automatic messages; spec §16.2), split 2026-10-10 in three (too big for one terminal; the line as first written is in this job's file in `handoff/`):
      - 20b-i. [x] **Birthday, Visit milestone and We miss you, with the gym's switches and a member's own** — merged 2026-10-11 (PR #219).
      - 20b-ii. [x] **Trial check-in, Trial ending, Membership ending and Payment overdue** — merged 2026-10-11 (PR #221).
      - 20b-iii. [x] **Class reminder** — merged 2026-10-11 (PR #224).
@@ -300,22 +300,22 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 20d-ii. [x] **The weekly summary, as a box on Overview** — merged 2026-10-12 (PR #229).
      - 20d-iii. [ ] **The weekly summary by email** (kept from 20d-ii, RULINGS 2026-10-12; later, once the gyms are enough to pay for the email service): the same figures to the owner each Monday, a switch, an unsubscribe link. Risky. Not on a folder's list until Kd places it.
    - 20e. [ ] **Review and referral messages** (Kd, RULINGS 2026-10-08): two more automatic messages, each a switch. **Review**: once, after a number of visits the gym picks, with the gym's own review link. **Refer a friend**: each member has an invite link to the gym's enquiry form (20c-iv); the lead arrives marked with who sent them, and when they join the gym gives the reward it set (a promo code of 18b, never money from us). Its plan reads Mindbody's and PushPress's referral tools first. After 20b and 18b.
-   - 20f. **Messages to a chosen group** (Kd, RULINGS 2026-10-08; spec §16.8), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+   - 20f. **Messages to a chosen group** (Kd, RULINGS 2026-10-08; spec §16.8), split 2026-10-10 in two (too big for one terminal; the line as first written is in this job's file in `handoff/`):
      - 20f-i. [x] **Send message, from the Members list** — merged 2026-10-10 (PR #216).
      - 20f-ii. [x] **Sent messages** — merged 2026-10-10 (PR #217).
 21. **Reports** (RULINGS 2026-09-22; spec Part 3 §16.5) — it takes in item 12's reports. Opus xhigh (a rule that thresholds, other people's data).
-   - 21a. **Members and attendance**, split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
+   - 21a. **Members and attendance**, split 2026-10-10 in two (too big for one terminal; the line as first written is in this job's file in `handoff/`):
      - 21a-i. [x] **The Reports page, with the members figures** — merged 2026-10-10 (PR #211).
      - 21a-ii. [x] **Attendance on the Reports page** — merged 2026-10-10 (PR #214).
-   - 21b. **Money, from the gym's own notebook** (after 18a), split 2026-10-13 in two (products arrive with 18b, and no payment names a coach yet; the line as first written is in `archive/records/ROADMAP-stories.md`):
+   - 21b. **Money, from the gym's own notebook** (after 18a), split 2026-10-13 in two (products arrive with 18b, and no payment names a coach yet; the line as first written is in this job's file in `handoff/`):
      - 21b-i. [x] **Money on the Reports page** — merged 2026-10-13 (PR #236).
      - 21b-ii. [ ] **Money by product and by coach** (RULINGS 2026-10-08): by product once Folder A's Sell page (18b) has merged; by coach, its plan first settles with Kd what money counts as a coach's. Folder B, after 18b.
-   - 21c. **Somebody whose membership ended counts as left** (Kd, RULINGS 2026-10-10 and 2026-10-11; Folder A, after 18a), split 2026-10-11 in two. **Both are planned in full in spec Part 3 §16.9, which each job's terminal reads first; its three decisions (§16.9.1) have Kd's "go", RULINGS 2026-10-11** (the line as first written is in `archive/records/ROADMAP-stories.md`):
+   - 21c. **Somebody whose membership ended counts as left** (Kd, RULINGS 2026-10-10 and 2026-10-11; Folder A, after 18a), split 2026-10-11 in two. **Both are planned in full in spec Part 3 §16.9, which each job's terminal reads first; its three decisions (§16.9.1) have Kd's "go", RULINGS 2026-10-11** (the line as first written is in this job's file in `handoff/`):
      - 21c-i. [x] **A later end date on the gym's list renews a membership that ended** — merged 2026-10-11 (PR #220).
      - 21c-ii. [x] **Reports counts a membership that ended as left** — merged 2026-10-11 (PR #223).
      - 21c-iii. [x] **Tidy up members whose membership is over** — merged 2026-10-12 (PR #225).
        Reports keeps the day the membership ended for somebody removed later, never the day Remove was pressed. Risky (it removes people from the app). Its plan reads how Mindbody, PushPress and Gymdesk treat inactive members first.
-   - 21d. **A period picker for Reports** (Kd, RULINGS 2026-10-10; Folder B, after 21b), split 2026-10-13 in two (the year earlier doubles what is read and has its own tests; the line as first written is in `archive/records/ROADMAP-stories.md`):
+   - 21d. **A period picker for Reports** (Kd, RULINGS 2026-10-10; Folder B, after 21b), split 2026-10-13 in two (the year earlier doubles what is read and has its own tests; the line as first written is in this job's file in `handoff/`):
      - 21d-i. [ ] **The period picker**: Last 4 weeks · Last 3 months · Last 12 months at the top of Reports, followed by every part of the page. Built, in review (branch `reports-period`).
      - 21d-ii. [ ] **The same period a year earlier**, beside the figures the period moves; a gym with no figures for that year reads a sentence, never a zero. Its plan measures the cost again. Folder B, after 21d-i.
 22. **The console's new look** (Kd, RULINGS 2026-09-26; spec Part 3 §17; the drawings in `docs/design/console`). Screen jobs, Opus high, no review; a restyle keeps every button, field, message and permission its page has, and the last of R2–R8 built also turns on the Light · Dark · Auto switch (§17.7). **R4–R7, R9 and 19d-iv are built LAST (Kd, RULINGS 2026-10-08), when every web feature that can be built is built: those pages still get boxes from the features to come, so each is restyled once, as it will stay; a box added to one of them before then is built in the page's present look.**

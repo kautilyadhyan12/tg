@@ -182,9 +182,9 @@ describe('the attendance figures', () => {
     expect(screen.getByTestId('day-bars').querySelectorAll('[data-part="weekend"]')).toHaveLength(11);
     expect(screen.getByTestId('day-bars').textContent).toContain('420');
 
-    // Seven weekdays, and the hours from the earliest to the latest anybody came: 07 to 20.
+    // Seven weekdays, and 06 to 21: anybody came from 07 to 20, and the grid is never narrower than a usual day.
     const cells = screen.getAllByTestId('hour-cell');
-    expect(cells).toHaveLength(7 * 14);
+    expect(cells).toHaveLength(7 * 16);
     expect(cells.filter((c) => c.dataset.visits !== '0').map((c) => c.getAttribute('aria-label'))).toEqual([
       'Monday 18:00 to 19:00: 5 visits',
       'Wednesday 07:00 to 08:00: 1 visit',
@@ -213,7 +213,7 @@ describe('the attendance figures', () => {
     fireEvent.focus(monday6);
     fireEvent.click(monday6);
     fireEvent.mouseEnter(cells[0]);
-    expect(screen.getByTestId('hour-grid-card').textContent).toBe('Monday 07:00 to 08:00Nobody checked in');
+    expect(screen.getByTestId('hour-grid-card').textContent).toBe('Monday 06:00 to 07:00Nobody checked in');
     expect(screen.getAllByTestId('hour-grid-card')).toHaveLength(1);
     expect(ringed()).toEqual([cells[0]]);
     // The pointer leaves the squares: nothing is left on the one that was pressed.
@@ -276,8 +276,22 @@ describe('what a gym has not done yet is never a zero', () => {
     expect(tile('busiest').textContent).toBe(
       'Busiest timeNot enough data yet. The busiest time is picked once every weekday has been counted twice: 2 full weeks of check-ins; you have 1 so far.',
     );
+    // No grid, and its place says why: it never just goes.
     expect(screen.queryByTestId('hour-grid')).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Busiest hours' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Busiest hours' })).getByTestId('hour-grid-none').textContent).toBe(
+      'Not enough data yet. The busiest time is picked once every weekday has been counted twice: 2 full weeks of check-ins; you have 1 so far.',
+    );
+    expect(within(screen.getByRole('region', { name: 'Busiest hours' })).queryByRole('button', { name: 'Download CSV' })).toBeNull();
+  });
+
+  it('visits this week and none in the whole weeks counted: Busiest hours says so, with the weeks, and does not vanish', async () => {
+    svc.attendance.mockResolvedValue(attendanceReportFrom(facts({ period: '4w', firstVisitOn: '2025-01-06', hours: [], hoursNoTime: 0, days: [{ day: '2026-10-08', visits: 4 }] })));
+    open();
+    await screen.findByTestId('tile-visits');
+    expect(tile('visits').textContent).toContain('Visits4');
+    expect(screen.getByTestId('hour-grid-none').textContent).toBe(
+      'Nobody checked in in the 3 full weeks counted here, 14 Sep to 4 Oct 2026. Busiest hours count whole weeks, Monday to Sunday, so that every weekday is counted the same number of times; this week is counted once it has ended.',
+    );
   });
 
   it('hours that tie are all named, and past three no one hour is', async () => {

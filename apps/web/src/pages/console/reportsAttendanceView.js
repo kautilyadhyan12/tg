@@ -200,17 +200,34 @@ export function weekRows(report) {
   }));
 }
 
+/** What stands in the grid of hours' place while there is none: why, and the weeks counted.
+ *  Null where the grid is drawn. */
+export function hoursMissing(report) {
+  const hours = report.hours;
+  if (hours.state === 'ok') return null;
+  if (hours.state === 'not_enough_data') return busiestNotYet(report);
+  const weeks = hours.weeks === 1 ? 'the 1 full week' : `the ${String(hours.weeks)} full weeks`;
+  const what = hours.noTime > 0 ? 'The only visits in' : 'Nobody checked in in';
+  const why = hours.noTime > 0 ? ' were added by staff on a later day, so their time is not known' : '';
+  return `${what} ${weeks} counted here, ${span(hours.from, hours.to)}${why}. Busiest hours count whole weeks, Monday to Sunday, so that every weekday is counted the same number of times; this week is counted once it has ended.`;
+}
+
+/** The grid of hours always shows at least these, a gym's usual day, so that one busy hour
+ *  is one square; it is wider when anybody came earlier or later. */
+const GRID_FROM = 6;
+const GRID_TO = 21;
+
 /** How many shades the grid of hours has, quiet to busy. */
 export const HEAT_LEVELS = 5;
 
 /** The busiest hours as a grid: a row for each weekday, a column for each hour from the
- *  earliest to the latest that had a visit. `share` is a cell's visits against the busiest
+ *  earliest to the latest that had a visit, and never fewer than 06:00 to 21:00. `share` is a cell's visits against the busiest
  *  hour's. Null without the figure. */
 export function hourGrid(report, clockFormat) {
   const hours = report.hours;
   if (hours.state !== 'ok') return null;
-  const from = Math.min(...hours.cells.map((c) => c.hour));
-  const to = Math.max(...hours.cells.map((c) => c.hour));
+  const from = Math.min(GRID_FROM, ...hours.cells.map((c) => c.hour));
+  const to = Math.max(GRID_TO, ...hours.cells.map((c) => c.hour));
   const columns = [];
   for (let hour = from; hour <= to; hour += 1) columns.push({ hour, label: hourLabel(hour, clockFormat) });
   const visitsAt = new Map(hours.cells.map((c) => [`${String(c.weekday)}-${String(c.hour)}`, c.visits]));

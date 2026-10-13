@@ -16,6 +16,7 @@ import {
   classesCsv,
   daysCsv,
   hoursCsv,
+  hoursMissing,
   visitTiles,
   visitsLine,
   weekRows,
@@ -340,7 +341,14 @@ function VisitsReport({ report, org, orgSlug }) {
               </div>
               <HourGrid report={report} clockFormat={clockFormat} />
             </section>
-          ) : null}
+          ) : (
+            <section className="c-card p-4 md:p-5 flex flex-col gap-2" aria-label="Busiest hours">
+              <h3 className="c-h3">Busiest hours</h3>
+              <p className="c-s14 c-t2" data-testid="hour-grid-none">
+                {hoursMissing(report)}
+              </p>
+            </section>
+          )}
         </>
       )}
     </section>

@@ -1,7 +1,7 @@
 // The Reports page's attendance words and CSVs (ROADMAP 21a-ii; spec Part 3 §16.5).
 import { describe, expect, it } from 'vitest';
 import { attendanceReportFrom, orgWords } from '@app/shared';
-import { classRows, classTiles, chartTop, classesCsv, dayChart, daysCsv, hourGrid, hourLabel, hoursCsv, smoothLine, visitTiles, visitsLine, weekRows, weeksCsv } from './reportsAttendanceView';
+import { classRows, classTiles, chartTop, classesCsv, dayChart, daysCsv, hourGrid, hourLabel, hoursCsv, hoursMissing, smoothLine, visitTiles, visitsLine, weekRows, weeksCsv } from './reportsAttendanceView';
 
 const words = orgWords('gym');
 
@@ -48,7 +48,7 @@ describe('an hour on the gym’s clock', () => {
 
   it('the last hour of the day runs to midnight', () => {
     const grid = hourGrid(report({ hours: [{ weekday: 7, hour: 23, visits: 2 }] }), '24h');
-    expect(grid.rows[6].cells[0].text).toBe('Sunday 23:00 to 00:00: 2 visits');
+    expect(grid.rows[6].cells.at(-1).text).toBe('Sunday 23:00 to 00:00: 2 visits');
   });
 });
 
@@ -173,9 +173,31 @@ describe('the pictures', () => {
     expect(numbers.every((n) => n >= 0 && n <= 200)).toBe(true);
   });
 
+  it('the grid is never narrower than 06:00 to 21:00, so one busy hour is one square and not a bar across the page', () => {
+    const one = hourGrid(report({ hours: [{ weekday: 2, hour: 9, visits: 5 }] }), '24h');
+    expect(one.columns.map((c) => c.label)).toEqual(['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00']);
+    expect(one.rows.every((r) => r.cells.length === 16)).toBe(true);
+    expect(one.rows.flatMap((r) => r.cells).filter((c) => c.visits > 0).map((c) => c.text)).toEqual(['Tuesday 09:00 to 10:00: 5 visits']);
+    // Wider when anybody came earlier or later, and no wider than they came.
+    expect(hourGrid(report({ hours: [{ weekday: 2, hour: 4, visits: 1 }] }), '24h').columns.map((c) => c.hour)).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(hourGrid(report({ hours: [{ weekday: 2, hour: 23, visits: 1 }] }), '24h').columns).toHaveLength(18);
+    expect(hourGrid(report({ hours: [{ weekday: 1, hour: 0, visits: 1 }, { weekday: 1, hour: 23, visits: 1 }] }), '24h').columns).toHaveLength(24);
+  });
+
+  it('no grid: its place says why, with the weeks counted', () => {
+    expect(hoursMissing(report())).toBeNull();
+    expect(hoursMissing(report({ hours: [] }))).toBe(
+      'Nobody checked in in the 4 full weeks counted here, 7 Sep to 4 Oct 2026. Busiest hours count whole weeks, Monday to Sunday, so that every weekday is counted the same number of times; this week is counted once it has ended.',
+    );
+    // Four weeks hold three whole ones: visits this week alone are not in them, and the sentence says which weeks are.
+    expect(hoursMissing(report({ period: '4w', firstVisitOn: '2025-01-06', hours: [] }))).toContain('in the 3 full weeks counted here, 14 Sep to 4 Oct 2026.');
+    expect(hoursMissing(report({ hours: [], hoursNoTime: 3 }))).toContain('The only visits in the 4 full weeks counted here, 7 Sep to 4 Oct 2026 were added by staff on a later day, so their time is not known.');
+    expect(hoursMissing(report({ firstVisitOn: '2026-10-01' }))).toBe('Not enough data yet. The busiest time is picked once every weekday has been counted twice: 2 full weeks of check-ins; you have none yet.');
+  });
+
   it('the grid runs from the earliest hour to the latest, and a square is a share of the busiest', () => {
     const grid = hourGrid(report(), '24h');
-    expect(grid.columns.map((c) => c.hour)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(grid.columns.map((c) => c.hour)).toEqual(Array.from({ length: 22 }, (_, hour) => hour));
     expect(grid.rows.map((r) => r.label)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
     expect(grid.rows[1].cells[6]).toMatchObject({ visits: 40, share: 1, level: 5, best: true });
     expect(grid.rows[5].cells[0]).toMatchObject({ visits: 3, share: 0.075, level: 1, best: false, text: 'Saturday 00:00 to 01:00: 3 visits' });
@@ -188,7 +210,7 @@ describe('the pictures', () => {
 describe('the shades of the grid', () => {
   const grid = (hours) => hourGrid(report({ hours }), '24h');
   it('five shades from quiet to the busiest hour, and none for nobody', () => {
-    const cells = grid([1, 2, 3, 4, 5, 6, 7].map((weekday, i) => ({ weekday, hour: 9, visits: [1, 20, 21, 40, 60, 80, 100][i] }))).rows.map((r) => r.cells[0].level);
+    const cells = grid([1, 2, 3, 4, 5, 6, 7].map((weekday, i) => ({ weekday, hour: 9, visits: [1, 20, 21, 40, 60, 80, 100][i] }))).rows.map((r) => r.cells.find((c) => c.hour === 9).level);
     expect(cells).toEqual([1, 1, 2, 2, 3, 4, 5]);
   });
 
