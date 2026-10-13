@@ -132,7 +132,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 3c. [x] **Join codes switched off** — merged 2026-10-02 (PR #152).
    - 3d. [x] **The two extra passes' fixes** over "getting in" — merged 2026-10-02 (PR #154).
    - 3e. **A gym's waiver, signed in the app** (RULINGS 2026-10-08; spec Part 3 §10.10): split 2026-10-13 in two, built back to back (the line as first written is in `handoff/2026-10-13-3e-i.md`). The words are the gym's, never ours.
-     - 3e-i. [ ] **The gym writes it, and people sign in the app**: a Waiver box in Settings; read and signed on the Join screen and, for people already in, on My Gyms; a changed waiver asks again; a person's page says who signed.
+     - 3e-i. [x] **The gym writes it, and people sign in the app** — merged 2026-10-13 (PR #239).
      - 3e-ii. [ ] **Signed at the desk with no app, and who has not signed**: staff open a person, who reads and signs on that screen (a parent or guardian for somebody under 18); a "Waiver not signed" choice in Members' Filter. Its plan asks Kd whether the front desk sends somebody who has not signed to staff (16d's box).
    - ~~3c. **The code admits at once**~~ **(STRUCK 2026-09-21, never built)**; its plan of 2026-09-19 (spec Part 3 §9.13) went with it.
    - The line as Kd ruled it (RULINGS 2026-09-17): a roster upload that reconciles, invitations by email, and a code that admits at once — the code part reversed 2026-09-21; the rest is the lines above.
