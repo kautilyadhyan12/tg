@@ -24,7 +24,7 @@ interface TxtProps {
 export function Txt({ kind = "body", colour, style, numberOfLines, children }: TxtProps) {
   return (
     <Text
-      accessibilityRole={kind === "h1" || kind === "h2" || kind === "h3" ? "header" : undefined}
+      accessibilityRole={kind === "hero" || kind === "h1" || kind === "h2" || kind === "h3" ? "header" : undefined}
       numberOfLines={numberOfLines}
       style={[kinds[kind], colour === undefined ? null : { color: colours[colour] }, style]}
     >
@@ -34,6 +34,8 @@ export function Txt({ kind = "body", colour, style, numberOfLines, children }: T
 }
 
 const kinds = StyleSheet.create({
+  /** A first screen's own heading. */
+  hero: { fontFamily: fonts.bold, fontSize: 36, lineHeight: 40, letterSpacing: -1.2, color: colours.text },
   h1: { fontFamily: fonts.bold, fontSize: 28, lineHeight: 32, letterSpacing: -0.56, color: colours.text },
   h2: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 26, letterSpacing: -0.44, color: colours.text },
   h3: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colours.text },

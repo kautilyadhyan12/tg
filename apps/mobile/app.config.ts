@@ -56,6 +56,8 @@ export function configFor(copy: Copy): ExpoConfig {
     backgroundColor: "#0A0908",
     scheme: copy.scheme,
     android: { package: copy.applicationId },
+    // Keeps the key store's sign-in out of Android's backups, so it never lands on another phone.
+    plugins: ["expo-secure-store"],
     extra,
   };
 }

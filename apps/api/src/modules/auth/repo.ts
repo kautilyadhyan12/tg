@@ -441,9 +441,15 @@ export async function rotateRefreshToken(
 
 /** A PHONE'S REFRESH WHOSE REPLY WAS LOST. The phone sends the same token again; the
  *  first try already rotated it, so the token it holds is revoked and its successor is
- *  one the phone never received. Within `graceSeconds` of that rotation, while the
- *  successor is still live, the successor is ended and a new one issued in its place.
- *  false: none of that holds, and the caller treats the token as reused.
+ *  one the phone never received. While that successor has never been used, and the
+ *  token is inside its own life, the successor is ended and a new one issued in its
+ *  place. false: none of that holds, and the caller treats the token as reused.
+ *
+ *  No clock on it (12b-i's review): a reply lost in a lift and the app opened the next
+ *  day is the same lost reply (CLAUDE.md §4: a lost connection never signs anybody
+ *  out). What tells a thief from the phone is the successor, not the minute: once it
+ *  has been used the old token is reuse; and a thief answered here is ended, with the
+ *  whole sign-in, by the phone's own next refresh.
  *
  *  The ended successor keeps no `replaced_by`, so it is never itself given this grace:
  *  if somebody does hold it (a thief used the old token, and the phone holds the
@@ -458,7 +464,6 @@ export async function reissueAfterLostReply(
     expiresAt: Date;
     ip: string | null;
     userAgent: string | null;
-    graceSeconds: number;
   },
 ): Promise<boolean> {
   return await sql.begin(async (tx) => {
@@ -467,8 +472,7 @@ export async function reissueAfterLostReply(
       UPDATE refresh_tokens AS successor SET revoked_at = now()
       FROM refresh_tokens AS old
       WHERE old.id = ${input.oldId} AND old.user_id = ${input.userId} AND old.client = 'phone'
-        AND old.revoked_reason IS NULL
-        AND old.revoked_at > now() - make_interval(secs => ${input.graceSeconds})
+        AND old.revoked_reason IS NULL AND old.expires_at > now()
         AND successor.id = old.replaced_by AND successor.user_id = old.user_id
         AND successor.family_id = old.family_id AND successor.revoked_at IS NULL
         AND successor.expires_at > now()

@@ -5,7 +5,7 @@
 //
 // The worst thing this could do to a real person: refuse a member at the desk because
 // others share their address — or, the other way, let one busy address get past a
-// person's OWN limits (two codes a day, five guesses a code, ten sends an hour) and
+// person's OWN limits (three codes a day, five guesses a code, ten sends an hour) and
 // guess their code. Those are the first tests.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
@@ -167,18 +167,18 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     expect(refused).toEqual([]);
   });
 
-  it("on a busy address, ONE person still gets two codes a day, and the third is refused", { timeout: 30_000 }, async () => {
+  it("on a busy address, ONE person still gets three codes a day, and the fourth is refused", { timeout: 30_000 }, async () => {
     const ip = gymAddress();
     await makeBusy(ip);
     const email = "burst-daycap@example.com";
-    expect((await askForCode(ip, email)).statusCode).toBe(200);
-    await ageCodes(email, "61 seconds");
-    expect((await askForCode(ip, email)).statusCode).toBe(200);
-    await ageCodes(email, "61 seconds");
-    const third = await askForCode(ip, email);
-    expect(third.statusCode).toBe(429);
-    expect(errorOf(third)).toBe("code_limit");
-    expect(await codesFor(email)).toBe(2);
+    for (let sentSoFar = 0; sentSoFar < 3; sentSoFar++) {
+      expect([sentSoFar, (await askForCode(ip, email)).statusCode]).toEqual([sentSoFar, 200]);
+      await ageCodes(email, "61 seconds");
+    }
+    const fourth = await askForCode(ip, email);
+    expect(fourth.statusCode).toBe(429);
+    expect(errorOf(fourth)).toBe("code_limit");
+    expect(await codesFor(email)).toBe(3);
   });
 
   it("on a busy address, five wrong guesses still kill ONE person's code; the right one is then refused", { timeout: 30_000 }, async () => {

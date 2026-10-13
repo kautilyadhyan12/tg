@@ -25,6 +25,10 @@ WANT = {
     "ropping": "wellness/ropping.jpg", "yoga1": "wellness/yoga1.jpg",
 }
 
+# A picture cut for one screen: its file, the part kept (left, top, right, bottom, each 0 to 1)
+# and its long side. "getstarted" is the browser's sign-in picture, cut to sit at the top of a phone.
+CUT = {"getstarted": ("exercises/lifting.jpg", (0.30, 0.0, 1.0, 0.92), 1200)}
+
 src, out = sys.argv[1], sys.argv[2]
 os.makedirs(out, exist_ok=True)
 before = after = 0
@@ -43,3 +47,15 @@ for name, path in WANT.items():
     after += len(buf)
     print(f"{name}: {w}x{h} {os.path.getsize(full) // 1024} KB -> {im.shape[1]}x{im.shape[0]} {len(buf) // 1024} KB")
 print(f"total {before // 1024} KB -> {after // 1024} KB")
+for name, (path, (left, top, right, bottom), long_side) in CUT.items():
+    im = cv2.imdecode(np.fromfile(os.path.join(src, path), dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+    assert im is not None, path
+    h, w = im.shape[:2]
+    im = im[round(top * h):round(bottom * h), round(left * w):round(right * w)]
+    h, w = im.shape[:2]
+    scale = min(1.0, long_side / max(w, h))
+    im = cv2.resize(im, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".webp", im, [cv2.IMWRITE_WEBP_QUALITY, 80])
+    assert ok, path
+    buf.tofile(os.path.join(out, name + ".webp"))
+    print(f"{name}: cut from {path} -> {im.shape[1]}x{im.shape[0]} {len(buf) // 1024} KB")
