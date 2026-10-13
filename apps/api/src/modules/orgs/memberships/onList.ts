@@ -36,6 +36,20 @@ export async function heldOnListOf(
   return await sql.begin("isolation level repeatable read read only", (tx) => bothReads(tx, gymId, today, entryIds, null));
 }
 
+/** The list's rows, and with them the day each record's oldest open bill fell due, where
+ *  one has: what the front desk's own rule reads (`checkinStop`; 16d). One snapshot, the
+ *  same reads and the same rule as the list's own rows. */
+export async function heldWithOwedOf(
+  sql: Sql,
+  gymId: string,
+  today: string,
+  entryIds: readonly string[] | null,
+): Promise<{ held: Map<string, HeldShown>; owedSince: Map<string, string> }> {
+  const owedSince = new Map<string, string>();
+  const held = await sql.begin("isolation level repeatable read read only", (tx) => bothReads(tx, gymId, today, entryIds, null, owedSince));
+  return { held, owedSince };
+}
+
 /** The day somebody stopped being a member, and the membership it is the day of. */
 export interface LeftWith {
   on: string;
@@ -74,9 +88,12 @@ async function bothReads(
   entryIds: readonly string[] | null,
   /** Filled with the day each person the list reads as over left on, where asked. */
   left: Map<string, LeftWith> | null,
+  /** Filled with the day each record's oldest open bill fell due, where asked. */
+  owedOut: Map<string, string> | null = null,
 ): Promise<Map<string, HeldShown>> {
   const bills = await listBillFacts(sql, gymId, today, entryIds);
   const owed = bills.owedSince;
+  if (owedOut !== null) for (const [entryId, since] of owed) owedOut.set(entryId, since);
   const byEntry = new Map<string, { noEmail: boolean; held: HeldForList[] }>();
   for (const row of await inUseForList(sql, gymId, entryIds)) {
     const held: HeldForList = { ...row.held, notCharged: bills.notCharged.has(row.held.id) };

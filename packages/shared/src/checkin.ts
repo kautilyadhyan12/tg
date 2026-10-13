@@ -1,6 +1,7 @@
 // Check-in at the front desk (spec Part 3 §12; ROADMAP 16a). The member's pass, the
 // gym's desk devices, and the scan that reads a pass or a key tag.
 import { z } from "zod";
+import { checkinStopReasonSchema } from "./checkinRules.js";
 import { gymAttendanceMethodSchema, gymClockFormatSchema } from "./orgs.js";
 
 /** A pass is "AHGP" and 58 letters and digits (base32 of 36 bytes): the uppercase
@@ -178,6 +179,9 @@ export const checkinPersonFoundSchema = z
     memberNumber: z.string().nullable(),
     email: z.string().nullable(),
     notice: checkinNoticeSchema,
+    /** Why the gym's desk would send them to staff today (16d), or null where it lets them
+     *  in. Staff can check them in all the same. */
+    stopped: checkinStopReasonSchema.nullable(),
   })
   .strict();
 export type CheckinPersonFound = z.infer<typeof checkinPersonFoundSchema>;

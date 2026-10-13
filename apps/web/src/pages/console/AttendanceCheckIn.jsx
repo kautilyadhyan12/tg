@@ -18,6 +18,7 @@ import { visitTimeLabel } from '../../components/gym/attendanceView';
 import { dayLabel } from '../../components/gym/leaderboardView';
 import { deskAnswer } from '../checkin/deskView';
 import { foundDetails, howLine, mergeLog, newestAt, pickKey, wordsLine } from './checkinLogView';
+import { stoppedLine } from './checkinRulesView';
 import { gymToday } from './hoursView';
 import { addVisitWindow } from './leaderboardStaffView';
 
@@ -271,6 +272,7 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
             const key = pickKey(person.pick);
             const details = foundDetails(person);
             const notice = wordsLine(person.notice);
+            const stopped = stoppedLine(person);
             return (
               <li
                 key={key}
@@ -289,6 +291,11 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
                   {notice !== '' ? (
                     <span className="block text-xs truncate" style={{ color: ORANGE }}>
                       {notice}
+                    </span>
+                  ) : null}
+                  {stopped !== '' ? (
+                    <span className="block text-xs mt-0.5" style={{ color: '#fff' }}>
+                      {stopped}
                     </span>
                   ) : null}
                 </span>

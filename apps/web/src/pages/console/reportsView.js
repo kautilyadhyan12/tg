@@ -202,6 +202,8 @@ export const LEADS_HOW =
   'Leads marked Joined, out of every lead on your Leads page, by where they heard of you. Leads you deleted are not counted.';
 
 const cell = (value) => `"${String(value).replace(/"/g, '""')}"`;
+/** A cell a spreadsheet would run as a formula is kept as words: for any name staff typed. */
+export const csvWords = (value) => (/^[=+\-@\t\r]/.test(value) ? `'${value}` : value);
 const csv = (rows) => `${rows.map((row) => row.map(cell).join(',')).join('\r\n')}\r\n`;
 
 /** The months as a CSV: counts only, oldest first. A figure that is not given is left empty. */

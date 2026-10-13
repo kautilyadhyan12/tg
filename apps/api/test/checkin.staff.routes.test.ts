@@ -348,7 +348,7 @@ d("staff check-in and the live log (real Postgres)", () => {
 
     const people = await found(ironHouse, "Zo", owner);
     expect(people).toEqual([
-      { pick: { userId: noRecord.userId }, name: "Zoya Apponly", memberNumber: null, email: noRecord.email, notice: { status: null, payment: null, onList: false } },
+      { pick: { userId: noRecord.userId }, name: "Zoya Apponly", memberNumber: null, email: noRecord.email, notice: { status: null, payment: null, onList: false }, stopped: null },
     ]);
     // Found by the app's email, Zubin is his record, once.
     const byEmail = await found(ironHouse, withRecord.email.slice(0, 20), owner);
@@ -393,7 +393,7 @@ d("staff check-in and the live log (real Postgres)", () => {
     expect(await found(gym, "rita-noapp-list", trainer)).toEqual([]);
     expect(await found(gym, "noapp-list@", trainer)).toEqual([]);
     expect(await found(gym, "Rita", trainer)).toEqual([
-      { pick: { entryId: rita }, name: "Rita Noapp", memberNumber: "7301", email: null, notice: { status: null, payment: null, onList: true } },
+      { pick: { entryId: rita }, name: "Rita Noapp", memberNumber: "7301", email: null, notice: { status: null, payment: null, onList: true }, stopped: null },
     ]);
     expect((await checkIn(gym, { entryId: rita }, trainer)).statusCode).toBe(200);
     // The day list names her for both, and sends her record's email to the owner alone.

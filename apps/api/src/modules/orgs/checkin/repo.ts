@@ -3,11 +3,15 @@
 import type { Sql, TransactionSql } from "postgres";
 import {
   CHECKIN_DEVICES_MAX,
+  CHECKIN_RULES_START,
+  checkinRulesSchema,
   gymAttendanceMethodSchema,
   gymClockFormatSchema,
+  type CheckinRules,
   type GymAttendanceMethod,
   type GymClockFormat,
 } from "@app/shared";
+import { sameName } from "../memberList/samePerson.js";
 import { readAttendanceContext } from "../repo.js";
 import type { ScanPeriod, VisitToday } from "./scanRule.js";
 
@@ -129,7 +133,23 @@ export async function claimLink(
   return row === undefined ? null : { gymName: row.gym_name, deviceName: row.device_name };
 }
 
-export interface DeskDevice {
+/** The gym's own choices for its desk (16d), with its days of grace before a bill reads
+ *  Overdue. */
+export interface DeskRules {
+  rules: CheckinRules;
+  overdueAfterDays: number;
+}
+
+/** Where every gym starts: nobody is stopped. */
+export const DESK_RULES_START: DeskRules = { rules: CHECKIN_RULES_START, overdueAfterDays: 0 };
+
+const toRules = (row: { checkin_who: string; checkin_overdue: string; bills_overdue_days: number }): DeskRules => ({
+  // Text under a CHECK: parsed, so a choice this build does not know fails here.
+  rules: checkinRulesSchema.parse({ who: row.checkin_who, overdue: row.checkin_overdue }),
+  overdueAfterDays: row.bills_overdue_days,
+});
+
+export interface DeskDevice extends DeskRules {
   deviceId: string;
   gymId: string;
   gymName: string;
@@ -139,8 +159,10 @@ export interface DeskDevice {
 
 /** The device a key belongs to, if it is switched on and its gym is open. */
 export async function deviceByKey(sql: SqlOrTx, keyHash: string): Promise<DeskDevice | null> {
-  const rows = await sql<{ id: string; gym_id: string; gym_name: string; timezone: string; clock_format: string }[]>`
-    SELECT d.id, d.gym_id, g.name AS gym_name, g.timezone, g.clock_format
+  const rows = await sql<
+    { id: string; gym_id: string; gym_name: string; timezone: string; clock_format: string; checkin_who: string; checkin_overdue: string; bills_overdue_days: number }[]
+  >`
+    SELECT d.id, d.gym_id, g.name AS gym_name, g.timezone, g.clock_format, g.checkin_who, g.checkin_overdue, g.bills_overdue_days
     FROM gym_checkin_devices d
     JOIN gyms g ON g.id = d.gym_id
     WHERE d.key_hash = ${keyHash} AND d.switched_off_at IS NULL AND g.status = 'active'`;
@@ -152,7 +174,77 @@ export async function deviceByKey(sql: SqlOrTx, keyHash: string): Promise<DeskDe
     gymName: row.gym_name,
     timezone: row.timezone,
     clockFormat: gymClockFormatSchema.parse(row.clock_format),
+    ...toRules(row),
   };
+}
+
+// ── WHO THE DESK LETS IN (16d) ──
+
+export async function deskRules(sql: SqlOrTx, gymId: string): Promise<DeskRules | null> {
+  const rows = await sql<{ checkin_who: string; checkin_overdue: string; bills_overdue_days: number }[]>`
+    SELECT checkin_who, checkin_overdue, bills_overdue_days FROM gyms WHERE id = ${gymId}`;
+  const row = rows[0];
+  return row === undefined ? null : toRules(row);
+}
+
+/** Saves the gym's two choices, under the gym's lock; false where they were already so. */
+export async function saveRules(tx: TransactionSql, gymId: string, rules: CheckinRules): Promise<boolean> {
+  const rows = await tx`
+    UPDATE gyms SET checkin_who = ${rules.who}, checkin_overdue = ${rules.overdue}
+    WHERE id = ${gymId} AND (checkin_who <> ${rules.who} OR checkin_overdue <> ${rules.overdue})
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** Which of the accounts and records named are the gym's own staff: its owner, anybody on
+ *  its staff, and the record such an account holds or that carries both its address and
+ *  its name (every such record for null). An address alone is not enough: a relative's
+ *  record on a staff address is the relative's. Never stopped at the desk. */
+export async function staffAmong(
+  sql: SqlOrTx,
+  gymId: string,
+  named: { userIds: readonly string[]; entryIds: readonly string[] | null },
+): Promise<{ userIds: Set<string>; entryIds: Set<string> }> {
+  const out = { userIds: new Set<string>(), entryIds: new Set<string>() };
+  if (named.userIds.length === 0 && named.entryIds !== null && named.entryIds.length === 0) return out;
+  const entryIds = named.entryIds === null ? null : [...named.entryIds];
+  const rows = await sql<{ user_id: string; entry_id: string | null; record_name: string | null; account_name: string | null }[]>`
+    WITH staff AS (
+      SELECT g.owner_user_id AS user_id FROM gyms g WHERE g.id = ${gymId}
+      UNION
+      SELECT s.user_id FROM gym_staff s WHERE s.gym_id = ${gymId}
+      UNION
+      SELECT m.user_id FROM gym_members m WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL AND m.complimentary
+    )
+    SELECT s.user_id, NULL::uuid AS entry_id, NULL::text AS record_name, NULL::text AS account_name
+    FROM staff s WHERE s.user_id = ANY(${[...named.userIds]}::uuid[])
+    UNION ALL
+    SELECT s.user_id, m.entry_id, NULL::text, NULL::text
+    FROM staff s
+    JOIN gym_members m ON m.gym_id = ${gymId} AND m.user_id = s.user_id AND m.removed_at IS NULL AND m.entry_id IS NOT NULL
+    WHERE ${entryIds}::uuid[] IS NULL OR m.entry_id = ANY(${entryIds}::uuid[])
+    UNION ALL
+    -- The record on a staff account's own address, as a pass names it: theirs where it
+    -- carries their name too, which is asked below.
+    SELECT s.user_id, e.id, e.full_name, u.display_name
+    FROM staff s
+    JOIN users u ON u.id = s.user_id
+    JOIN gym_member_list_entries e ON e.gym_id = ${gymId} AND e.former_at IS NULL AND e.email = u.email
+    WHERE ${entryIds}::uuid[] IS NULL OR e.id = ANY(${entryIds}::uuid[])`;
+  for (const row of rows) {
+    if (row.entry_id === null) out.userIds.add(row.user_id);
+    else if (row.record_name === null || row.account_name === null || sameName(row.record_name, row.account_name)) out.entryIds.add(row.entry_id);
+  }
+  return out;
+}
+
+/** Every current record of the gym, by name: the people the box in Settings counts. */
+export async function currentNames(sql: SqlOrTx, gymId: string): Promise<{ id: string; name: string }[]> {
+  const rows = await sql<{ id: string; name: string }[]>`
+    SELECT id, btrim(full_name) AS name FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND former_at IS NULL
+    ORDER BY lower(btrim(full_name)), id`;
+  return rows.map((row) => ({ id: row.id, name: row.name }));
 }
 
 /** "Last seen", written at most once a minute. */

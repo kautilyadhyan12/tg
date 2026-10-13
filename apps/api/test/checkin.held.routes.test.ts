@@ -25,6 +25,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
+import { DESK_RULES_START } from "../src/modules/orgs/checkin/repo.js";
 import * as checkinService from "../src/modules/orgs/checkin/service.js";
 import * as heldService from "../src/modules/orgs/memberships/heldService.js";
 import { heldOnListOf } from "../src/modules/orgs/memberships/onList.js";
@@ -533,7 +534,7 @@ d("a check-in says what the person holds (real Postgres)", () => {
       // and the log all still answer, with no words.
       expect(await checkinService.staffCheckIn(deps, gymOwner.userId, gymId, { entryId: zoe.entryId }, yes)).toMatchObject({ result: "already", notice: none });
       const made = await makeDesk(gymId, gymOwner);
-      const device = { deviceId: made.deviceId, gymId, gymName: "Blip Gym", timezone: "Asia/Kolkata", clockFormat: "24h" as const };
+      const device = { deviceId: made.deviceId, gymId, gymName: "Blip Gym", timezone: "Asia/Kolkata", clockFormat: "24h" as const, ...DESK_RULES_START };
       expect(await checkinService.scan(deps, device, zoe.tag)).toMatchObject({ result: "already", notice: none });
       expect((await checkinService.findPeople(deps, gymOwner.userId, gymId, "Zoe", yes))?.people.map((p) => [p.name, p.notice])).toEqual([["Zoe Blip", none]]);
       expect((await checkinService.readLog(deps, gymOwner.userId, gymId, undefined, yes))?.log.visits.map((v) => [v.name, v.status, v.payment])).toEqual([
@@ -575,7 +576,7 @@ d("a check-in says what the person holds (real Postgres)", () => {
       expect(answer?.notice).toEqual({ status: "Active", payment: "Payment due", onList: true });
       // The desk and the log read the same day.
       const made = await makeDesk(gymId, gymOwner);
-      const device = { deviceId: made.deviceId, gymId, gymName: "Far Gym", timezone: "Pacific/Kiritimati", clockFormat: "24h" as const };
+      const device = { deviceId: made.deviceId, gymId, gymName: "Far Gym", timezone: "Pacific/Kiritimati", clockFormat: "24h" as const, ...DESK_RULES_START };
       expect(await checkinService.scan(deps, device, kai.tag)).toMatchObject({ notice: { status: "Active", payment: "Payment due" } });
       const log = await checkinService.readLog(deps, gymOwner.userId, gymId, undefined, yes);
       expect(log?.log.visits.map((v) => [v.name, v.status, v.payment])).toEqual([["Kai Tong", "Active", "Payment due"]]);

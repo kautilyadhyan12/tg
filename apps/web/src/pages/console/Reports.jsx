@@ -21,6 +21,18 @@ import {
   weeksCsv,
 } from './reportsAttendanceView';
 import {
+  OTHER_CURRENCY_NOTE,
+  canReadMoney,
+  moneyLine,
+  moneyMissing,
+  moneyMonthName,
+  moneyMonthRows,
+  moneyMonthsCsv,
+  moneyTiles,
+  moneyTypeRows,
+  moneyTypesCsv,
+} from './reportsMoneyView';
+import {
   LEADS_HOW,
   canReadReports,
   csvName,
@@ -36,8 +48,8 @@ import {
   trendPoints,
 } from './reportsView';
 
-// REPORTS (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii): the gym's figures about its members,
-// its leads, its visits and its classes, each with how it is worked out, and a CSV of the counts. The menu draws the line
+// REPORTS (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i): the gym's figures about its members,
+// its leads, its visits, its classes and its money, each with how it is worked out, and a CSV of the counts. The menu draws the line
 // for `reports.read`; the address can be typed by anybody, so somebody without the tick is
 // told, and nothing is asked for them.
 
@@ -379,6 +391,114 @@ function AttendanceReport({ org, orgSlug }) {
   );
 }
 
+function MoneyFigures({ report, org, orgSlug }) {
+  const words = orgWords(org.orgType);
+  const tiles = moneyTiles(report, words, orgSlug);
+  const types = moneyTypeRows(report);
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+        {tiles.map((t) => (
+          <Tile key={t.key} tile={t}>
+            {t.links.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {t.links.map((link) => (
+                  <Link key={link.to} to={link.to} className="c-btn c-btn-s c-btn-sm">
+                    {link.button}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </Tile>
+        ))}
+      </div>
+      {report.otherCurrency ? (
+        <p className="c-card p-4 md:p-5 c-s14 c-t2" data-testid="other-currency-note">
+          {OTHER_CURRENCY_NOTE}
+        </p>
+      ) : null}
+      <section className="c-card overflow-hidden" aria-label="Money month by month">
+        <div className="px-4 md:px-5 pt-4 pb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="c-h3">Money month by month</h3>
+          <CsvButton name={csvName('money-by-month', report)} text={moneyMonthsCsv(report)} />
+        </div>
+        <CountTable caption="Money, month by month" heads={['Month', 'Paid', 'Refunded', 'Collected']} rows={moneyMonthRows(report)} cells={['month', 'paid', 'refunded', 'collected']} />
+      </section>
+      {types.length > 0 ? (
+        <section className="c-card overflow-hidden" aria-label="Money by membership" data-testid="money-by-membership">
+          <div className="px-4 md:px-5 pt-4 pb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="c-h3">Money by membership</h3>
+            <CsvButton name={csvName('money-by-membership', report)} text={moneyTypesCsv(report)} />
+          </div>
+          <CountTable
+            caption="Money, by membership"
+            heads={['Membership', 'In use now', 'Monthly recurring', `Collected in ${moneyMonthName(report)}`, 'Collected, last 12 months']}
+            rows={types}
+            cells={['name', 'inUse', 'monthly', 'month', 'year']}
+          />
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+/** The money figures, asked for by themselves: the figures above stay on the page while
+ *  these load, and when these fail. */
+function MoneyAsked({ org, orgSlug }) {
+  const gymId = org.id;
+  const words = orgWords(org.orgType);
+  // Each answer carries the gym it was asked for, so another gym's money is never drawn.
+  const [state, setState] = useState({ gymId: null, error: null, report: null });
+  const load = useCallback(
+    () =>
+      reportsService.money(gymId).then(
+        (report) => setState({ gymId, error: null, report }),
+        (err) => setState({ gymId, error: errorText(err, "We couldn't load your money figures."), report: null }),
+      ),
+    [gymId],
+  );
+  useEffect(() => {
+    load();
+  }, [load]);
+  const mine = state.gymId === gymId ? state : { gymId, error: null, report: null };
+  if (mine.report === null) {
+    return (
+      <section className="flex flex-col gap-4" aria-label="Money">
+        <h2 className="c-h2">Money</h2>
+        {mine.error !== null ? <ConsoleFailed message={mine.error} onRetry={load} newLook /> : <ConsoleLoading label="Loading your money figures…" newLook />}
+      </section>
+    );
+  }
+  const missing = moneyMissing(mine.report, words);
+  return (
+    <section className="flex flex-col gap-4" aria-label="Money">
+      <div className="flex flex-col gap-1">
+        <h2 className="c-h2">Money</h2>
+        {missing === null ? <p className="c-s14 c-t2">{moneyLine(mine.report)}</p> : null}
+      </div>
+      {missing !== null ? (
+        <Missing line={missing.line} to={placeFor(orgSlug, viewerPrivileges(org), missing.place)} button={missing.button} ask={missing.ask} />
+      ) : (
+        <MoneyFigures report={mine.report} org={org} orgSlug={orgSlug} />
+      )}
+    </section>
+  );
+}
+
+/** Money is for staff who may record payments; anybody else is told, and nothing is asked
+ *  for them. */
+function MoneyReport({ org, orgSlug }) {
+  if (canReadMoney(viewerPrivileges(org))) return <MoneyAsked org={org} orgSlug={orgSlug} />;
+  return (
+    <section className="flex flex-col gap-4" aria-label="Money">
+      <h2 className="c-h2">Money</h2>
+      <section className="c-card p-5 md:p-6">
+        <p className="c-s15 c-t2">Your role doesn&apos;t allow you to see money figures. Ask the owner if you need to.</p>
+      </section>
+    </section>
+  );
+}
+
 export default function Reports() {
   const { orgSlug } = useParams();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
@@ -449,6 +569,7 @@ export default function Reports() {
         <>
           <MembersReport report={mine.report} org={org} orgSlug={orgSlug} />
           <AttendanceReport org={org} orgSlug={orgSlug} />
+          <MoneyReport org={org} orgSlug={orgSlug} />
         </>
       ) : mine.error !== null ? (
         <ConsoleFailed message={mine.error} onRetry={load} newLook />
