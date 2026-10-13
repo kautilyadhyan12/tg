@@ -54,7 +54,7 @@ if (!process.argv.includes("--start")) {
   const abi = read("adb", ["shell", "getprop", "ro.product.cpu.abi"]).text.trim();
   run("corepack", ["pnpm", "exec", "expo", "prebuild", "--platform", "android", "--no-install"]);
   run(
-    windows ? "gradlew.bat" : "./gradlew",
+    windows ? String.raw`.\gradlew.bat` : "./gradlew",
     [
       "assembleDebug",
       `-PreactNativeDevServerPort=${String(ports.metroPort)}`,
