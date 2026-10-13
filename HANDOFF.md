@@ -1,7 +1,8 @@
-# HANDOFF — the last thing each chat did (newest first, ten lines each)
+# HANDOFF — the last thing each chat did, up to 2026-10-13 (newest first, ten lines each)
 
-Format: date · what was built or decided · what is verified (commands run) · what is open. Older
-entries move to `archive/records/` when this file passes forty entries. The record before
+**Since 2026-10-13 nothing new is added here: a job's handoff is a file of its own in
+`handoff/`** (`handoff/README.md`; the ruling of that day, `rulings/`). A job begun before
+that day finishes its entry here. This file is kept for what is in it. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
 

@@ -3,8 +3,10 @@
 Cut out of `ROADMAP.md` on 2026-09-22 (RULINGS that day, the "five changes" line): a
 finished job keeps one line there, and the whole line as it stood that day is kept here,
 in ROADMAP order under its stage, together with the struck, moved and replaced lines that
-were kept for their words. A job finished after that date adds its line at the end of its
-stage. History, never a rule: RULINGS wins where they differ.
+were kept for their words. A job finished after that date added its line at the end of its
+stage, until 2026-10-13: since then the line goes at the end of the job's own file in
+`handoff/` (the ruling of that day, `rulings/`), and nothing new is added here. History,
+never a rule: RULINGS wins where they differ.
 
 ## Stage 1 — The member's core, web first
 
