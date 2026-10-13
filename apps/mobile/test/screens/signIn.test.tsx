@@ -279,7 +279,7 @@ describe("signing in by email code", () => {
     expect(screen.getByText("New code sent.")).toBeTruthy();
   });
 
-  it("a wrong code says what the server says and empties the box; no internet keeps the digits; a code the lost check spent says so", async () => {
+  it("a wrong code says what the server says and empties the box; no internet keeps the digits; the same digits refused after it are sent for a new code", async () => {
     let online = true;
     const { store } = await openApp({
       "/v1/auth/code/send": sent,
@@ -299,10 +299,11 @@ describe("signing in by email code", () => {
     await press("Continue");
     expect(await screen.findByText("Can’t connect. Check your internet and try again.")).toBeTruthy();
     expect(screen.getByLabelText("6-digit code").props.value).toBe("222222");
-    // The same digits again, refused: the check that got no answer spent them at the server.
+    // The same digits again, refused: the check that got no answer may have spent them at the
+    // server, so the line sends the person for a new code, not to try these again.
     online = true;
     await press("Continue");
-    expect(await screen.findByText("That code can’t be used again. Resend code.")).toBeTruthy();
+    expect(await screen.findByText("That code didn’t work. Resend code.")).toBeTruthy();
     // Other digits are only wrong, in the server's own words.
     await type("6-digit code", "333333");
     await press("Continue");

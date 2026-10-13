@@ -161,9 +161,10 @@ export function SignInScreen({ note }: { note: string | null }) {
     // Signed in: the tabs take this screen's place.
     if (answer.kind === "ok") return;
     if (answer.kind === "no_answer") setUnanswered(code);
-    // The same digits refused after a check with no answer: that check signed nobody in here, and spent them.
-    const spent = answer.kind === "refused" && answer.error === "invalid_code" && code === unanswered;
-    setProblem(spent ? "That code can’t be used again. Resend code." : wordsFor(answer, "That code didn’t work. Try again."));
+    // The same digits refused after a check with no answer: that check may have spent them at the
+    // server, or they were wrong all along. Either way a new code is the way on, and the line says so.
+    const afterNoAnswer = answer.kind === "refused" && answer.error === "invalid_code" && code === unanswered;
+    setProblem(afterNoAnswer ? "That code didn’t work. Resend code." : wordsFor(answer, "That code didn’t work. Try again."));
     if (answer.kind === "refused") setCode("");
     setBusy(false);
   }
