@@ -10,6 +10,7 @@ const nodeGlobals = {
   require: "readonly",
   module: "writable",
   __dirname: "readonly",
+  jest: "readonly",
 };
 
 export default [
@@ -23,7 +24,7 @@ export default [
   },
   {
     // Plain Node files outside the TypeScript project: read without the typed rules.
-    files: ["scripts/*.mjs", "metro.config.js"],
+    files: ["scripts/*.mjs", "metro.config.js", "jest.config.js", "test/screens/setup.js"],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       ...tseslint.configs.disableTypeChecked.languageOptions,

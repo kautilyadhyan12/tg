@@ -7,7 +7,7 @@
     "moduleResolution": "Bundler",
     "jsx": "react-native",
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": ["node", "jest"]
   },
-  "include": ["src", "test", "scripts/*.d.mts", "index.ts", "app.config.ts"]
+  "include": ["src", "test", "scripts/*.d.mts", "index.ts", "app.config.ts", "vitest.config.ts"]
 }
