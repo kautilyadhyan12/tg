@@ -481,7 +481,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gym_member_bills",
   "gym_member_refunds",
   // gym_sales.recorded_by and undone_by — which member of staff recorded a sale at the
-  // desk and who took it back (`0100`), on the same footing: the gym's record; `ON DELETE
+  // desk and who took it back (`0101`), on the same footing: the gym's record; `ON DELETE
   // set null`. Who bought it is a record on the gym's list, not an account, and a sale
   // holds no typed word: the product's name as it was sold.
   "gym_sales",
