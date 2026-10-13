@@ -128,13 +128,16 @@ export interface LeadCounts {
   joined: number;
 }
 
-/** The gym's leads by where they came from, and how many of each are marked Joined. */
-export async function readLeadCounts(sql: Sql, gymId: string): Promise<LeadCounts[]> {
-  return await sql<LeadCounts[]>`
+/** The gym's leads added from `periodFrom` on, on the gym's calendar, by where they came
+ *  from, with how many of each are marked Joined; and whether it has any lead at all. */
+export async function readLeadCounts(sql: Sql, gymId: string, timezone: string, periodFrom: string): Promise<{ any: boolean; sources: LeadCounts[] }> {
+  const sources = await sql<LeadCounts[]>`
     SELECT source, count(*)::int AS leads, (count(*) FILTER (WHERE status = 'joined'))::int AS joined
     FROM gym_leads
-    WHERE gym_id = ${gymId}
+    WHERE gym_id = ${gymId} AND created_at >= (${periodFrom}::date::timestamp AT TIME ZONE ${timezone})
     GROUP BY source`;
+  const any = await sql<{ any: boolean }[]>`SELECT EXISTS (SELECT 1 FROM gym_leads WHERE gym_id = ${gymId}) AS any`;
+  return { any: any[0]?.any === true, sources };
 }
 
 const visitClockSchema = z.object({ today: z.string(), first_visit_on: z.string().nullable() });

@@ -72,6 +72,8 @@ d("Reports, the period: every figure counts the days the answer names (real Post
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const redisUrl = process.env["TEST_REDIS_URL"];
   const redis = redisUrl === undefined || redisUrl === "" ? createMemoryRedis() : createIoRedis(redisUrl);
+  /** The routes' clock. */
+  let clock = NOW;
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -82,6 +84,7 @@ d("Reports, the period: every figure counts the days the answer names (real Post
     const mine = sql`
       SELECT id FROM gyms
       WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'rep-p-%@example.com')`;
+    await sql`DELETE FROM gym_leads WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_class_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_attendance WHERE gym_id IN (${mine})`;
@@ -119,8 +122,8 @@ d("Reports, the period: every figure counts the days the answer names (real Post
     return { userId, cookies: cookieMap(login) };
   };
 
-  const makeGym = async (owner: User, name: string): Promise<string> => {
-    const res = await post("/v1/orgs", { trainsHere: false, name, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
+  const makeGym = async (owner: User, name: string, timezone = "Europe/London"): Promise<string> => {
+    const res = await post("/v1/orgs", { trainsHere: false, name, city: "Leeds", country: "GB", timezone }, owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
     const gymId = (JSON.parse(res.body) as { org: { id: string } }).org.id;
     await sql`
@@ -156,6 +159,15 @@ d("Reports, the period: every figure counts the days the answer names (real Post
       INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
       SELECT ${gymId}, ${typeId}, l::date, (EXTRACT(HOUR FROM l) * 60 + EXTRACT(MINUTE FROM l))::int, ${at}::timestamptz, 45, 10, 'scheduled'
       FROM (SELECT ${at}::timestamptz AT TIME ZONE 'Europe/London' AS l) x`;
+  };
+
+  let leadNo = 0;
+  /** A lead added at an instant, marked Joined. */
+  const lead = async (gymId: string, at: string) => {
+    leadNo += 1;
+    await sql`
+      INSERT INTO gym_leads (gym_id, full_name, email, source, status, created_at)
+      VALUES (${gymId}, ${`Lead ${String(leadNo)}`}, ${`rep-p-lead-${String(leadNo)}@example.com`}, 'walk_in', 'joined', ${at}::timestamptz)`;
   };
 
   /** The services' own clock for one step: noon in London on that day. */
@@ -238,7 +250,7 @@ d("Reports, the period: every figure counts the days the answer names (real Post
       INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap, trial_days, rank, entitlements, member_entitlements)
       VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'GBP', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
-    app = await buildApp(loadConfig(baseEnv), { redis, orgs: { now: () => NOW } });
+    app = await buildApp(loadConfig(baseEnv), { redis, orgs: { now: () => clock } });
     await api().ready();
   }, HOOK_TIMEOUT_MS);
 
@@ -263,11 +275,15 @@ d("Reports, the period: every figure counts the days the answer names (real Post
         await listed(gym, `Joined ${day}`, day);
         await listed(gym, `Left ${day}`, "2025-02-01", day);
       }
-      // Visits double day by day (1, 2, 4, 8, 16, 32), made by the first so many of 32 regulars; 3 come today.
+      // Visits double day by day (1, 2, 4, 8, 16, 32), each day's by people who come on no other of
+      // those days, so the people of each period are a different number; today 3 of the last 32 come again.
       const regulars: string[] = [];
-      for (let i = 0; i < 32; i += 1) regulars.push(await listed(gym, `Regular ${String(i)}`, "2025-03-01"));
-      const visitsOn = new Map<string, number>(DAYS.map((day, i) => [day, day === TODAY ? 3 : 2 ** i]));
-      for (const [day, n] of visitsOn) for (const entryId of regulars.slice(0, n)) await visit(gym, owner.userId, entryId, day);
+      for (let i = 0; i < 63; i += 1) regulars.push(await listed(gym, `Regular ${String(i)}`, "2025-03-01"));
+      const cameOn = new Map<string, string[]>(DAYS.map((day, i) => [day, day === TODAY ? regulars.slice(31, 34) : regulars.slice(2 ** i - 1, 2 ** (i + 1) - 1)]));
+      const visitsOn = new Map<string, number>([...cameOn].map(([day, who]) => [day, who.length]));
+      for (const [day, who] of cameOn) for (const entryId of who) await visit(gym, owner.userId, entryId, day);
+      // A lead is added, and marked Joined, on each of the days.
+      for (const day of DAYS) await lead(gym, `${day}T11:00:00Z`);
       // A class at five in the afternoon on each of the days; today's has not started.
       const spin = (await sql<{ id: string }[]>`
         INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${gym}, 'Spin', 45, 10, 'blue', false) RETURNING id`)[0]?.id;
@@ -286,6 +302,13 @@ d("Reports, the period: every figure counts the days the answer names (real Post
       const sues = await give(gym, owner, sue, oneMonth, PAID_ONCE, true);
       await refund(gym, owner, ray, rays.id, rays.paymentId, BEFORE["4w"], 10);
       await refund(gym, owner, sue, sues.id, sues.paymentId, FROM["4w"], 20);
+      // Two more leave without being taken off the list: their membership is cancelled on the day
+      // before four weeks begin, and on their first day.
+      const [cal, dee] = [await listed(gym, "Cal Cancelled Before", "2025-03-01"), await listed(gym, "Dee Cancelled On", "2025-03-01")];
+      for (const [who, day] of [[cal, BEFORE["4w"]], [dee, FROM["4w"]]] as const) {
+        const theirs = await give(gym, owner, who, oneMonth, PAID_ONCE, false);
+        await heldService.moveHeldMembership(on(day), owner.userId, gym, who, theirs.id, { type: "cancel", when: "today" });
+      }
       // A payment inside every period that was taken back the next day is not money.
       const mistake = await pay(gym, owner, payer, held.id, "2026-10-05", 12800);
       await heldService.undoMemberPayment(on("2026-10-06"), owner.userId, gym, payer, held.id, mistake);
@@ -302,6 +325,9 @@ d("Reports, the period: every figure counts the days the answer names (real Post
       const paidFrom = (from: string) => yearlyFrom(from) + onceFrom(from);
       const visitsFrom = (from: string) => [...visitsOn].reduce((sum, [day, n]) => (day >= from ? sum + n : sum), 0);
       const daysFrom = (from: string) => DAYS.filter((day) => day >= from).length;
+      const peopleFrom = (from: string) => DAYS.reduce((sum, day) => (day >= from && day !== TODAY ? sum + (visitsOn.get(day) ?? 0) : sum), 0);
+      /** Who left by a cancelled membership from `from` on: the days they left. */
+      const cancelledFrom = (from: string) => [BEFORE["4w"], FROM["4w"]].filter((day) => day >= from);
 
       for (const key of REPORT_PERIODS) {
         const from = FROM[key];
@@ -314,16 +340,20 @@ d("Reports, the period: every figure counts the days the answer names (real Post
         expect([members.period, attendance.period, money.period], key).toEqual([period, period, period]);
 
         // Members: one joiner and one leaver for each of the days from the first on.
-        expect(members.inPeriod, key).toEqual({ joined: daysFrom(from), joinedFrom: from, left: daysFrom(from) });
+        expect(members.inPeriod, key).toEqual({ joined: daysFrom(from), joinedFrom: from, left: daysFrom(from) + cancelledFrom(from).length });
+        // Leads added on those days, each marked Joined.
+        expect(members.leads, key).toMatchObject({ ever: true, total: daysFrom(from), joined: daysFrom(from), percent: 100 });
         expect(members.months[0]?.month, key).toBe(from.slice(0, 7));
         expect(members.months.at(-1)?.month, key).toBe("2026-10");
-        const stayed = DAYS.filter((day) => day >= from).map((day) => daysBetween("2025-02-01", day));
+        const stayed = [...DAYS.filter((day) => day >= from).map((day) => daysBetween("2025-02-01", day)), ...cancelledFrom(from).map((day) => daysBetween("2025-03-01", day))];
         expect(members.averageStay, key).toEqual({ state: "ok", days: Math.round(stayed.reduce((a, b) => a + b, 0) / stayed.length), leavers: stayed.length });
-        // Who is a member today does not move with the period: 1 + 7 joiners + 32 regulars + the three who pay.
-        expect(members.activeNow, key).toBe(43);
+        // Who is a member today does not move with the period: 1 + 7 joiners + 63 regulars + the three who pay.
+        expect(members.activeNow, key).toBe(74);
 
         // Attendance: the visits of those days, and the first day shown is the period's own.
-        expect(attendance.inPeriod, key).toEqual({ visits: visitsFrom(from), people: 32 });
+        expect(attendance.inPeriod, key).toEqual({ visits: visitsFrom(from), people: peopleFrom(from) });
+        // The week the period begins in holds its first day alone of the days anybody came.
+        expect(attendance.weeks[0], key).toMatchObject({ weekStart: from, visits: visitsOn.get(from), people: visitsOn.get(from) });
         expect(attendance.days[0], key).toEqual({ day: from, visits: visitsOn.get(from) });
         expect(attendance.days.at(-1), key).toEqual({ day: TODAY, visits: 3 });
         expect(attendance.days, key).toHaveLength(daysBetween(from, TODAY) + 1);
@@ -346,6 +376,8 @@ d("Reports, the period: every figure counts the days the answer names (real Post
       }
 
       // The sums, said once as numbers, so a fault in the test's own arithmetic shows.
+      expect([(await attendanceOf(gym, owner, "4w")).inPeriod.people, (await attendanceOf(gym, owner, "3m")).inPeriod.people, (await attendanceOf(gym, owner, "12m")).inPeriod.people]).toEqual([32, 56, 62]);
+      expect([(await membersOf(gym, owner, "4w")).inPeriod.left, (await membersOf(gym, owner, "3m")).inPeriod.left, (await membersOf(gym, owner, "12m")).inPeriod.left]).toEqual([3, 6, 8]);
       expect((await moneyOf(gym, owner, "4w")).inPeriod.netMinor).toBe(3200 + 6400 - 20);
       expect((await moneyOf(gym, owner, "3m")).inPeriod.netMinor).toBe(800 + 1600 + 3200 + 6400 + 2000 - 30);
       expect((await moneyOf(gym, owner, "12m")).inPeriod.netMinor).toBe(200 + 400 + 800 + 1600 + 3200 + 6400 + 2000 - 30);
@@ -374,9 +406,75 @@ d("Reports, the period: every figure counts the days the answer names (real Post
 
       // Next door reads its own under every period, and none of this gym's.
       for (const key of REPORT_PERIODS) {
+        expect((await membersOf(next, nextOwner, key)).leads, key).toEqual({ ever: false, total: 0, joined: 0, percent: null, sources: [] });
         expect((await membersOf(next, nextOwner, key)).inPeriod, key).toEqual({ joined: 1, joinedFrom: FROM[key], left: 0 });
         expect((await attendanceOf(next, nextOwner, key)).inPeriod, key).toEqual({ visits: 1, people: 1 });
         expect((await moneyOf(next, nextOwner, key)).inPeriod, key).toEqual({ paidMinor: 5000, refundedMinor: 0, netMinor: 5000 });
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a period begins at the gym's own midnight: half an hour before it is out and half an hour after it is in, far from UTC",
+    async () => {
+      // 11:00 UTC on 20 October is midnight as 21 October begins in Auckland, 13 hours ahead on its summer time.
+      // Four weeks begin on 24 September, when Auckland was 12 hours ahead: its midnight was 12:00 UTC on the 23rd.
+      const ZONE = "Pacific/Auckland";
+      const [OUT, IN] = ["2026-09-23T11:30:00Z", "2026-09-23T12:30:00Z"];
+      const owner = await makeUser("own-nz");
+      const gym = await makeGym(owner, "Rep Period Auckland", ZONE);
+      const at = async (name: string, instant: string, leftAt: string | null = null) => {
+        personNo += 1;
+        const rows = await sql<{ id: string }[]>`
+          INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, former_at)
+          VALUES (${gym}, ${name}, ${`rep-p-listed-${String(personNo)}@example.com`}, ${String(personNo).padStart(64, "0")}, 'typed',
+                  ${instant}::timestamptz, ${leftAt}::timestamptz)
+          RETURNING id`;
+        const id = rows[0]?.id;
+        if (id === undefined) throw new Error("no record");
+        return id;
+      };
+      await at("First On The List", "2025-01-10T00:00:00Z");
+      const monthly = await addType(gym, owner, "Monthly", { priceMinor: 1000, termUnit: "month" });
+      const spin = (await sql<{ id: string }[]>`
+        INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${gym}, 'Spin', 45, 10, 'blue', false) RETURNING id`)[0]?.id;
+      if (spin === undefined) throw new Error("no class type");
+      for (const [instant, localDay] of [[OUT, "2026-09-23"], [IN, "2026-09-24"]] as const) {
+        const joiner = await at(`Joined ${instant}`, instant);
+        await at(`Left ${instant}`, "2025-02-01T00:00:00Z", instant);
+        await sql`
+          INSERT INTO gym_attendance (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
+          VALUES (${gym}, null, ${joiner}, ${owner.userId}, ${localDay}::date, 'staff', 'hours_unset', 'hours_unset', ${instant}::timestamptz)`;
+        await sql`
+          INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
+          SELECT ${gym}, ${spin}, l::date, (EXTRACT(HOUR FROM l) * 60 + EXTRACT(MINUTE FROM l))::int, ${instant}::timestamptz, 45, 10, 'scheduled'
+          FROM (SELECT ${instant}::timestamptz AT TIME ZONE ${ZONE} AS l) x`;
+        await lead(gym, instant);
+        // Paid in full at that instant, by the real service on the gym's own day.
+        await heldService.giveHeldMembership({ sql, now: () => new Date(instant) }, owner.userId, gym, joiner, { requestKey: nextKey(), typeId: monthly, startsOn: localDay, paid: true, method: "cash" });
+      }
+
+      clock = new Date("2026-10-20T11:00:00Z");
+      try {
+        for (const key of REPORT_PERIODS) {
+          const inside = key === "4w" ? 1 : 2;
+          const members = await membersOf(gym, owner, key);
+          const attendance = await attendanceOf(gym, owner, key);
+          const money = await moneyOf(gym, owner, key);
+          expect(members.today, key).toBe("2026-10-21");
+          if (key === "4w") expect([members.period.from, attendance.period.from, money.period.from]).toEqual(["2026-09-24", "2026-09-24", "2026-09-24"]);
+          expect(members.inPeriod, key).toMatchObject({ joined: inside, left: inside });
+          expect(members.leads.total, key).toBe(inside);
+          expect(attendance.inPeriod, key).toEqual({ visits: inside, people: inside });
+          expect(attendance.hours.state === "ok" ? attendance.hours.cells.reduce((sum, c) => sum + c.visits, 0) : null, key).toBe(inside);
+          expect(attendance.classes, key).toMatchObject({ state: "ok", classes: inside });
+          expect(money.inPeriod, key).toEqual({ paidMinor: 1000 * inside, refundedMinor: 0, netMinor: 1000 * inside });
+        }
+        // The first day shown is the 24th, with the one visit of half past midnight.
+        expect((await attendanceOf(gym, owner, "4w")).days[0]).toEqual({ day: "2026-09-24", visits: 1 });
+      } finally {
+        clock = NOW;
       }
     },
     TEST_TIMEOUT_MS,

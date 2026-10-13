@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Download, Info } from 'lucide-react';
 import { reportsService } from '../../api/reportsApi';
@@ -36,7 +36,6 @@ import {
   moneyTypesCsv,
 } from './reportsMoneyView';
 import {
-  LEADS_HOW,
   PERIOD_CHOICES,
   canReadReports,
   csvName,
@@ -44,6 +43,8 @@ import {
   leadRows,
   leadsCsv,
   leadsHeadline,
+  leadsHow,
+  leadsMissing,
   listLine,
   memberTiles,
   membersCsv,
@@ -54,6 +55,7 @@ import {
   periodWords,
   saveCsv,
   trendPoints,
+  wholeMonthsNote,
 } from './reportsView';
 
 // REPORTS (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i): the gym's figures about its members,
@@ -101,6 +103,20 @@ function Tile({ tile, className = '', children = null }) {
       {children}
     </section>
   );
+}
+
+/** An answer is kept only while it is for what the page shows now. Two presses of the
+ *  picker can bring the older answer back last; drawn, it would not match the choice, and
+ *  the page would wait for good. `keep(what, then)` marks `what` as shown now and gives
+ *  back `then`, which does nothing once something else is. */
+function useNewestAsk() {
+  const shown = useRef(null);
+  return useCallback((what, then) => {
+    shown.current = what;
+    return (value) => {
+      if (shown.current === what) then(value);
+    };
+  }, []);
 }
 
 /** Last 4 weeks · Last 3 months · Last 12 months: one choice for every part of the page. */
@@ -201,7 +217,8 @@ function MembersReport({ report, org, orgSlug }) {
   const months = monthRows(report);
   const leads = leadRows(report);
   const headline = leadsHeadline(report);
-  const leadsHow = useHow('leads that became members', LEADS_HOW);
+  const leadsWorked = useHow('leads that became members', leadsHow(report));
+  const monthsNote = wholeMonthsNote(report.period);
 
   return (
     <>
@@ -248,6 +265,7 @@ function MembersReport({ report, org, orgSlug }) {
                 rows={months}
                 cells={['month', 'activeAtStart', 'joined', 'left', 'churn']}
               />
+              {monthsNote !== null ? <p className="px-4 md:px-5 py-3 c-s13 c-t3">{monthsNote}</p> : null}
             </section>
           </>
         )}
@@ -256,12 +274,12 @@ function MembersReport({ report, org, orgSlug }) {
       <section className="flex flex-col gap-4" aria-label="Leads">
         <div className="flex items-center justify-between gap-2">
           <h2 className="c-h2">{`Leads that became ${words.people}`}</h2>
-          {leadsHow.button}
+          {leadsWorked.button}
         </div>
-        {leadsHow.line}
+        {leadsWorked.line}
         {headline === null ? (
           <Missing
-            line="You haven't added any leads yet."
+            line={leadsMissing(report)}
             to={placeFor(orgSlug, privileges, 'addLead')}
             button="Add a lead"
             ask={`Staff who keep the ${words.person} list can add leads.`}
@@ -414,13 +432,14 @@ function AttendanceReport({ org, orgSlug, period }) {
   // Each answer carries the gym and the period it was asked for, so another gym's figures,
   // or another period's, are never drawn.
   const [state, setState] = useState({ gymId: null, period: null, error: null, report: null });
+  const keep = useNewestAsk();
   const load = useCallback(
     () =>
       reportsService.attendance(gymId, period).then(
-        (report) => setState({ gymId, period, error: null, report }),
-        (err) => setState({ gymId, period, error: errorText(err, "We couldn't load your attendance figures."), report: null }),
+        keep(`${gymId} ${period}`, (report) => setState({ gymId, period, error: null, report })),
+        keep(`${gymId} ${period}`, (err) => setState({ gymId, period, error: errorText(err, "We couldn't load your attendance figures."), report: null })),
       ),
-    [gymId, period],
+    [gymId, period, keep],
   );
   useEffect(() => {
     load();
@@ -474,6 +493,7 @@ function MoneyFigures({ report, org, orgSlug }) {
           <CsvButton name={csvName('money-by-month', report)} text={moneyMonthsCsv(report)} />
         </div>
         <CountTable caption="Money, month by month" heads={['Month', 'Paid', 'Refunded', 'Collected']} rows={moneyMonthRows(report)} cells={['month', 'paid', 'refunded', 'collected']} />
+        {wholeMonthsNote(report.period) !== null ? <p className="px-4 md:px-5 py-3 c-s13 c-t3">{wholeMonthsNote(report.period)}</p> : null}
       </section>
       {types.length > 0 ? (
         <section className="c-card overflow-hidden" aria-label="Money by membership" data-testid="money-by-membership">
@@ -501,13 +521,14 @@ function MoneyAsked({ org, orgSlug, period }) {
   // Each answer carries the gym and the period it was asked for, so another gym's money,
   // or another period's, is never drawn.
   const [state, setState] = useState({ gymId: null, period: null, error: null, report: null });
+  const keep = useNewestAsk();
   const load = useCallback(
     () =>
       reportsService.money(gymId, period).then(
-        (report) => setState({ gymId, period, error: null, report }),
-        (err) => setState({ gymId, period, error: errorText(err, "We couldn't load your money figures."), report: null }),
+        keep(`${gymId} ${period}`, (report) => setState({ gymId, period, error: null, report })),
+        keep(`${gymId} ${period}`, (err) => setState({ gymId, period, error: errorText(err, "We couldn't load your money figures."), report: null })),
       ),
-    [gymId, period],
+    [gymId, period, keep],
   );
   useEffect(() => {
     load();
@@ -563,12 +584,13 @@ export default function Reports() {
   // Each answer carries the gym and the period it was asked for, so another gym's figures,
   // or another period's, are never drawn.
   const [state, setState] = useState({ gymId: null, period: null, error: null, refused: false, report: null });
+  const keep = useNewestAsk();
 
   const load = useCallback(() => {
     if (gymId === null || !may) return Promise.resolve();
     return reportsService.members(gymId, period).then(
-      (report) => setState({ gymId, period, error: null, refused: false, report }),
-      (err) =>
+      keep(`${gymId} ${period}`, (report) => setState({ gymId, period, error: null, refused: false, report })),
+      keep(`${gymId} ${period}`, (err) =>
         setState({
           gymId,
           period,
@@ -576,8 +598,9 @@ export default function Reports() {
           refused: errorStatus(err) === 403,
           report: null,
         }),
+      ),
     );
-  }, [gymId, may, period]);
+  }, [gymId, may, period, keep]);
 
   useEffect(() => {
     load();
@@ -625,7 +648,7 @@ export default function Reports() {
           <PeriodPicker period={period} onPick={pick} />
           {mine.report !== null ? (
             <p className="c-s14 c-t2" data-testid="period-line">
-              {periodLine(mine.report.period, orgWords(org.orgType))}
+              {periodLine(mine.report.period, orgWords(org.orgType), canReadMoney(viewerPrivileges(org)))}
             </p>
           ) : null}
         </div>

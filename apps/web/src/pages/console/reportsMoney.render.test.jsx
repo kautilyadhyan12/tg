@@ -45,6 +45,7 @@ const MEMBERS = membersReportFrom({
   inPeriod: { joined: 0, left: 2 },
   stay: { leavers: 2, totalDays: 400 },
   leads: [],
+  anyLead: false,
 });
 const NO_VISITS = attendanceReportFrom({
   timezone: 'Europe/London',

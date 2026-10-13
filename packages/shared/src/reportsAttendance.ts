@@ -1,4 +1,4 @@
-// The console's Reports page: the attendance figures (spec Part 3 §16.5; ROADMAP 21a-ii).
+// The console's Reports page: the attendance figures (spec Part 3 §16.5; ROADMAP 21a-ii, 21d-i).
 //
 // `attendanceWindows` says which days of the period each figure is counted over; the server counts the
 // gym's visits and classes over them, and `attendanceReportFrom` turns the counts into the

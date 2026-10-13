@@ -1,4 +1,4 @@
-import { REPORT_FULL_WEEKS_NEEDED, weekdayOf } from '@app/shared';
+import { REPORT_FULL_WEEKS_NEEDED, addDays, weekdayOf } from '@app/shared';
 import { clockLabel } from './hoursView';
 import { csvWords, dayText, monthShort, percentText, periodWords } from './reportsView';
 
@@ -190,11 +190,20 @@ export function smoothLine(points, width, height) {
 /** How many weeks the table lists before its "Show all" button. */
 export const WEEK_ROWS_SHOWN = 12;
 
+/** The last day of a week that does not begin on a Monday: the week a period begins in is
+ *  counted from the period's first day, and is said as the days it holds. Null for a whole week. */
+const partWeekEnd = (weekStart) => (weekdayOf(weekStart) === 1 ? null : addDays(weekStart, 7 - weekdayOf(weekStart)));
+
 /** The week-by-week table's rows, newest first. */
 export function weekRows(report) {
   return [...report.weeks].reverse().map((w, i) => ({
     key: w.weekStart,
-    week: i === 0 ? `${dayShort(w.weekStart)} (so far)` : dayText(w.weekStart),
+    week:
+      i === 0
+        ? `${dayShort(w.weekStart)} (so far)`
+        : partWeekEnd(w.weekStart) !== null
+          ? `${dayNamed(w.weekStart)} to ${dayNamed(partWeekEnd(w.weekStart))} ${w.weekStart.slice(0, 4)}`
+          : dayText(w.weekStart),
     visits: count(w.visits),
     people: count(w.people),
   }));
@@ -324,7 +333,15 @@ const csv = (rows) => `${rows.map((row) => row.map(cell).join(',')).join('\r\n')
 export function weeksCsv(report) {
   return csv([
     ['Week starting', 'Visits', 'People'],
-    ...report.weeks.map((w) => [w.weekStart === report.weeks[report.weeks.length - 1].weekStart ? `${w.weekStart} (so far)` : w.weekStart, w.visits, w.people]),
+    ...report.weeks.map((w) => [
+      w.weekStart === report.weeks[report.weeks.length - 1].weekStart
+        ? `${w.weekStart} (so far)`
+        : partWeekEnd(w.weekStart) !== null
+          ? `${w.weekStart} (part week, to ${partWeekEnd(w.weekStart)})`
+          : w.weekStart,
+      w.visits,
+      w.people,
+    ]),
   ]);
 }
 

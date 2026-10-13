@@ -47,6 +47,7 @@ const facts = (over = {}) => ({
   ],
   inPeriod: { joined: 2, left: 4 },
   stay: { leavers: 4, totalDays: 1338 },
+  anyLead: true,
   leads: [
     { source: 'walk_in', leads: 3, joined: 1 },
     { source: 'friend', leads: 1, joined: 1 },
@@ -58,7 +59,7 @@ const NOBODY_REMOVED = facts({
   stay: { leavers: 0, totalDays: 0 },
   months: facts().months.map((m) => ({ ...m, left: 0, leftOfStart: 0 })),
 });
-const EMPTY = facts({ firstListedOn: null, listChangedOn: null, activeNow: 0, everLeft: false, months: [], stay: { leavers: 0, totalDays: 0 }, leads: [] });
+const EMPTY = facts({ firstListedOn: null, listChangedOn: null, activeNow: 0, everLeft: false, months: [], stay: { leavers: 0, totalDays: 0 }, leads: [], anyLead: false });
 
 const open = (org = ORG, address = '/console/iron-house/reports') => {
   orgApi.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
@@ -362,10 +363,61 @@ describe('the period', () => {
       ['Last 3 months', 'false'],
       ['Last 12 months', 'true'],
     ]);
+    // This owner is shown no money, so the line names no money figure.
+    expect(screen.getByTestId('period-line').textContent).toBe(
+      "Showing 1 Nov 2025 to 10 Oct 2026. Members now, churn and retention are today's figures, so they stay the same whichever period you choose.",
+    );
+    expect(svc.attendance).toHaveBeenCalledWith('g1', '12m');
+  });
+
+  it('staff who are shown money read which money figures do not move', async () => {
+    answering();
+    svc.money = vi.fn(() => new Promise(() => {}));
+    open({ ...ORG, privileges: [...ORG.privileges, 'billing.members'] });
+    await screen.findByTestId('tile-active');
     expect(screen.getByTestId('period-line').textContent).toBe(
       "Showing 1 Nov 2025 to 10 Oct 2026. Members now, churn, retention, monthly recurring revenue, payment due and lifetime value are today's figures, so they stay the same whichever period you choose.",
     );
-    expect(svc.attendance).toHaveBeenCalledWith('g1', '12m');
+  });
+
+  it('an older answer that comes back after a newer one is not drawn, and the page does not wait for good', async () => {
+    answering();
+    open();
+    await screen.findByTestId('tile-active');
+    const answers = {};
+    svc.members.mockImplementation((gymId, period) => new Promise((resolve) => { answers[period] = resolve; }));
+    // Two quick presses: three months is asked, then four weeks, before either is back.
+    fireEvent.click(screen.getByRole('radio', { name: 'Last 3 months' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Last 4 weeks' }));
+    await waitFor(() => expect(Object.keys(answers).sort()).toEqual(['3m', '4w']));
+    // The newer answer first, the older one last.
+    answers['4w'](membersReportFrom(facts({ period: '4w', firstListedOn: '2024-02-01' })));
+    await waitFor(() => expect(screen.getByTestId('period-line').textContent).toContain('Showing 13 Sep 2026 to 10 Oct 2026.'));
+    answers['3m'](membersReportFrom(facts({ period: '3m', firstListedOn: '2024-02-01' })));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(screen.getByTestId('period-line').textContent).toContain('Showing 13 Sep 2026 to 10 Oct 2026.');
+    expect(screen.getByTestId('tile-active')).toBeTruthy();
+    expect(screen.queryByText('Loading your reports…')).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Last 4 weeks' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('four weeks: the month table says its rows are whole months, and leads are those added in the four weeks', async () => {
+    answering();
+    open(ORG, '/console/iron-house/reports?period=4w');
+    await screen.findByTestId('tile-active');
+    expect(screen.getByText('Months are shown whole, so they include days before 13 Sep 2026.')).toBeTruthy();
+    expect(screen.getByTestId('leads-report').textContent).toContain('50%2 of 4 leads joined · added 13 Sep 2026 to 10 Oct 2026');
+    cleanup();
+    // Leads before the four weeks and none in them: said so, never "no leads yet".
+    svc.members.mockImplementation((gymId, period) => Promise.resolve(membersReportFrom(facts({ period, firstListedOn: '2024-02-01', leads: [], anyLead: true }))));
+    open(ORG, '/console/iron-house/reports?period=4w');
+    await screen.findByText('No lead was added in the last 4 weeks.');
+    expect(screen.queryByText("You haven't added any leads yet.")).toBeNull();
+    cleanup();
+    // Twelve months begin on the 1st: nothing to say.
+    open();
+    await screen.findByTestId('tile-active');
+    expect(screen.queryByText(/Months are shown whole/)).toBeNull();
   });
 
   it('a choice asks every part of the page again for that period, and the page says the new days', async () => {

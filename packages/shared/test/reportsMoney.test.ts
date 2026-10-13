@@ -206,7 +206,7 @@ describe("lifetime value: the money of churn's months for each member who left i
     const f = facts({ months: quarter });
     const r = figures({ months: quarter });
     expect(r.lifetimeValue).toEqual({ state: "ok", minor: 100000, months: ["2026-07", "2026-08", "2026-09"], leavers: 10 });
-    const members = membersReportFrom({ ...f.members, period: "12m", inPeriod: { joined: 0, left: 0 }, timezone: f.timezone, listChangedOn: null, activeNow: 100, stay: { leavers: 0, totalDays: 0 }, leads: [] });
+    const members = membersReportFrom({ ...f.members, period: "12m", inPeriod: { joined: 0, left: 0 }, timezone: f.timezone, listChangedOn: null, activeNow: 100, stay: { leavers: 0, totalDays: 0 }, leads: [], anyLead: false });
     expect(members.churnMonths).toEqual(["2026-07", "2026-08", "2026-09"]);
     if (members.churn.state !== "ok") throw new Error("no churn");
     // 1,000,000 over 300 member-months is 3,333.33 a member a month; churn is 10 in 300.

@@ -236,6 +236,17 @@ describe('the tables and their CSVs', () => {
     );
   });
 
+  it('the week a period begins in is a part week, and its row and its CSV line say the days it holds', () => {
+    // Three months from Saturday 1 August: that week is two days.
+    const r = report({ firstVisitOn: '2025-01-06', weeks: [{ weekStart: '2026-08-01', visits: 8, people: 8 }] });
+    const rows = weekRows(r);
+    expect(rows.at(-1)).toEqual({ key: '2026-08-01', week: 'Sat 1 Aug to Sun 2 Aug 2026', visits: '8', people: '8' });
+    expect(rows.at(-2).week).toBe('3 Aug 2026');
+    expect(weeksCsv(r).split('\r\n').slice(1, 3)).toEqual(['"2026-08-01 (part week, to 2026-08-02)","8","8"', '"2026-08-03","0","0"']);
+    // A gym's own first week begins on its Monday and is said as any week.
+    expect(weekRows(report()).at(-1).week).toBe('7 Sep 2026');
+  });
+
   it('the days carry their weekday, and the hours the gym’s clock', () => {
     const lines = daysCsv(report()).split('\r\n');
     expect(lines[0]).toBe('"Day","Weekday","Visits"');

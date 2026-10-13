@@ -41,9 +41,17 @@ export function countedSpan(period, startedOn, what) {
   if (startedOn !== null && startedOn > period.from) return `since ${dayText(startedOn)}, ${what}`;
   return periodSpan(period);
 }
-/** The line under the picker: the days counted, and what does not move with them. */
-export function periodLine(period, words) {
-  return `Showing ${periodSpan(period)}. ${words.peopleCap} now, churn, retention, monthly recurring revenue, payment due and lifetime value are today's figures, so they stay the same whichever period you choose.`;
+/** The line under the picker: the days counted, and what does not move with them. The
+ *  money figures are named only to staff who are shown money. */
+export function periodLine(period, words, seesMoney) {
+  const still = [`${words.peopleCap} now`, 'churn', 'retention', ...(seesMoney ? ['monthly recurring revenue', 'payment due', 'lifetime value'] : [])];
+  return `Showing ${periodSpan(period)}. ${still.slice(0, -1).join(', ')} and ${still[still.length - 1]} are today's figures, so they stay the same whichever period you choose.`;
+}
+/** Under a month-by-month table when the period begins inside a month: the rows are whole
+ *  months, so they do not add up to the period's own figure. Null where they do. */
+export function wholeMonthsNote(period) {
+  if (period.from.endsWith('-01')) return null;
+  return `Months are shown whole, so they include days before ${dayText(period.from)}.`;
 }
 
 const people = (n) => (n === 1 ? '1 person' : `${String(n)} people`);
@@ -218,17 +226,25 @@ export function leadRows(report) {
   }));
 }
 
-/** The leads headline: the share that joined, or the sentence in its place; null with no leads. */
+/** What stands in the leads box's place with no lead in the period: the gym has none at
+ *  all, or none added in these days. Null with leads to show. */
+export function leadsMissing(report) {
+  if (report.leads.percent !== null) return null;
+  return report.leads.ever ? `No lead was added in ${periodWords(report.period)}.` : "You haven't added any leads yet.";
+}
+
+/** The leads headline: the share that joined, or the sentence in its place; null with no leads in the period. */
 export function leadsHeadline(report) {
   if (report.leads.percent === null) return null;
   if (!everJoined(report)) {
-    return { value: null, line: 'No lead has been marked Joined yet. Press Joined on a lead when they sign up.', note: leadsWord(report.leads.total) };
+    return { value: null, line: 'No lead has been marked Joined yet. Press Joined on a lead when they sign up.', note: `${leadsWord(report.leads.total)} added · ${periodSpan(report.period)}` };
   }
-  return { value: percentText(report.leads.percent), line: null, note: `${count(report.leads.joined)} of ${leadsWord(report.leads.total)} joined` };
+  return { value: percentText(report.leads.percent), line: null, note: `${count(report.leads.joined)} of ${leadsWord(report.leads.total)} joined · added ${periodSpan(report.period)}` };
 }
 
-export const LEADS_HOW =
-  'Leads marked Joined, out of every lead on your Leads page, by where they heard of you. Leads you deleted are not counted.';
+/** How the leads figure is worked out, for the period shown. */
+export const leadsHow = (report) =>
+  `Leads added from ${dayText(report.period.from)} to today that are marked Joined, out of every lead added in those days, by where they heard of you. Leads you deleted are not counted.`;
 
 const cell = (value) => `"${String(value).replace(/"/g, '""')}"`;
 /** A cell a spreadsheet would run as a formula is kept as words: for any name staff typed. */

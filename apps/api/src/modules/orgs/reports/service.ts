@@ -52,13 +52,14 @@ export async function requireReportsReader(deps: ReportsDeps, userId: string, gy
 export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { timezone: string }, period: ReportPeriodKey): Promise<MembersReportResponse> {
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
+  const periodFrom = reportPeriodOf(period, today).from;
   const counts = await deps.sql.begin("isolation level repeatable read read only", async (tx) => {
     const gone = [...(await overNow(tx, gymId, today, null))].map(([id, left]) => ({ id, on: left.on }));
-    return await repo.readMemberCounts(tx, gymId, org.timezone, today, gone, reportPeriodOf(period, today).from);
+    return await repo.readMemberCounts(tx, gymId, org.timezone, today, gone, periodFrom);
   });
-  const leadRows = await repo.readLeadCounts(deps.sql, gymId);
+  const leadRows = await repo.readLeadCounts(deps.sql, gymId, org.timezone, periodFrom);
   const leads: { source: LeadSource; leads: number; joined: number }[] = [];
-  for (const row of leadRows) {
+  for (const row of leadRows.sources) {
     const source = leadSourceSchema.safeParse(row.source);
     if (source.success) leads.push({ source: source.data, leads: row.leads, joined: row.joined });
   }
@@ -75,6 +76,7 @@ export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { 
       inPeriod: { joined: counts.period_joined, left: counts.period_left },
       stay: { leavers: counts.stay_leavers, totalDays: counts.stay_days },
       leads,
+      anyLead: leadRows.any,
     }),
   });
 }

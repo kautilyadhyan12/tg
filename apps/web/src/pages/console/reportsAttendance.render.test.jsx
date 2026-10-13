@@ -42,6 +42,7 @@ const MEMBERS = membersReportFrom({
   inPeriod: { joined: 0, left: 0 },
   stay: { leavers: 0, totalDays: 0 },
   leads: [],
+  anyLead: false,
 });
 
 // Saturday 10 October 2026. The first check-in was Monday 31 August: five whole weeks.
@@ -428,8 +429,8 @@ describe('a long period', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show all 50 weeks' }));
     const all = tableRows('Visits, week by week');
     expect(all).toHaveLength(51);
-    // The week the period begins in starts on the period's own first day, a Saturday.
-    expect(all[50]).toEqual(['1 Nov 2025', '0', '0']);
+    // The week the period begins in starts on the period's own first day, a Saturday, and says the two days it holds.
+    expect(all[50]).toEqual(['Sat 1 Nov to Sun 2 Nov 2025', '0', '0']);
     expect(all[49]).toEqual(['3 Nov 2025', '0', '0']);
     fireEvent.click(screen.getByRole('button', { name: 'Show the newest 12 weeks' }));
     expect(tableRows('Visits, week by week')).toHaveLength(13);

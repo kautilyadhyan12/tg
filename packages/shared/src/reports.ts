@@ -53,7 +53,10 @@ export interface MembersReportFacts {
   inPeriod: { joined: number; left: number };
   /** Those who left in the period: how many, and their days as a member together. */
   stay: { leavers: number; totalDays: number };
+  /** Leads added in the period, by where they heard of the gym. */
   leads: readonly { source: LeadSource; leads: number; joined: number }[];
+  /** Whether the gym has any lead at all, in the period or before it. */
+  anyLead: boolean;
 }
 
 /** Why a figure has no number. */
@@ -117,6 +120,8 @@ export const membersReportSchema = z
       .max(REPORT_MONTHS),
     leads: z
       .object({
+        /** False while the gym has never added a lead; true with leads only before the period. */
+        ever: z.boolean(),
         total: countSchema,
         joined: countSchema,
         /** The share of all leads that joined; null with no leads. */
@@ -196,8 +201,8 @@ export function churnBasis(facts: Pick<MembersReportFacts, "today" | "firstListe
  *  over the newest `REPORT_CHURN_MONTHS` full months taken together; retention is the rest.
  *  Neither is given, nor the average stay, before `REPORT_FULL_MONTHS_NEEDED` full months,
  *  and none of the three while nobody has ever come off the list. New, left, the average
- *  stay and the months listed follow the period; churn and retention are a monthly rate
- *  and keep their own three months. */
+ *  stay, the months listed and the leads follow the period; churn and retention are a
+ *  monthly rate and keep their own three months. */
 export function membersReportFrom(facts: MembersReportFacts): MembersReport {
   const thisMonth = monthOf(facts.today);
   const period = reportPeriodOf(facts.period, facts.today);
@@ -260,6 +265,7 @@ export function membersReportFrom(facts: MembersReportFacts): MembersReport {
       };
     }),
     leads: {
+      ever: facts.anyLead || leadsTotal > 0,
       total: leadsTotal,
       joined: leadsJoined,
       percent: leadsTotal === 0 ? null : percentOf(leadsJoined, leadsTotal),

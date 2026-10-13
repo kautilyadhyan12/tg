@@ -10,6 +10,8 @@ import {
   leadRows,
   leadsCsv,
   leadsHeadline,
+  leadsHow,
+  leadsMissing,
   listLine,
   memberTiles,
   membersCsv,
@@ -20,6 +22,7 @@ import {
   nobodyRemovedNote,
   periodFrom,
   periodLine,
+  wholeMonthsNote,
   staySplit,
   stayText,
   trendPoints,
@@ -48,6 +51,7 @@ const facts = (over = {}) => ({
   // New from July, the month after the list began: 1 + 0 + 0 + 1. Left: 0 + 1 + 1 + 1 + 1.
   inPeriod: { joined: 2, left: 4 },
   stay: { leavers: 4, totalDays: 1338 },
+  anyLead: true,
   leads: [
     { source: 'walk_in', leads: 3, joined: 1 },
     { source: 'friend', leads: 1, joined: 1 },
@@ -205,7 +209,7 @@ describe('the tables and their CSV', () => {
 
   it('show leads by where they heard of the gym, with the share that joined', () => {
     const r = report();
-    expect(leadsHeadline(r)).toEqual({ value: '50%', line: null, note: '2 of 4 leads joined' });
+    expect(leadsHeadline(r)).toEqual({ value: '50%', line: null, note: '2 of 4 leads joined · added 1 Nov 2025 to 10 Oct 2026' });
     expect(leadRows(r)).toEqual([
       { key: 'walk_in', source: 'Walked in', percent: 33.3, text: '1 of 3 joined · 33.3%' },
       { key: 'friend', source: 'A friend', percent: 100, text: '1 of 1 joined · 100%' },
@@ -224,7 +228,7 @@ describe('the tables and their CSV', () => {
     expect(leadsHeadline(r)).toEqual({
       value: null,
       line: 'No lead has been marked Joined yet. Press Joined on a lead when they sign up.',
-      note: '4 leads',
+      note: '4 leads added · 1 Nov 2025 to 10 Oct 2026',
     });
     expect(leadRows(r)).toEqual([
       { key: 'walk_in', source: 'Walked in', percent: 0, text: '3 leads' },
@@ -315,10 +319,33 @@ describe('the period', () => {
   });
 
   it('says the days it shows, and which figures do not move with it, in the gym’s own word for its people', () => {
-    expect(periodLine(report({ period: '3m' }).period, GYM)).toBe(
+    expect(periodLine(report({ period: '3m' }).period, GYM, true)).toBe(
       "Showing 1 Aug 2026 to 10 Oct 2026. Members now, churn, retention, monthly recurring revenue, payment due and lifetime value are today's figures, so they stay the same whichever period you choose.",
     );
-    expect(periodLine(report({ period: '4w' }).period, STUDIO)).toContain('Showing 13 Sep 2026 to 10 Oct 2026. Clients now, churn');
+    expect(periodLine(report({ period: '4w' }).period, STUDIO, true)).toContain('Showing 13 Sep 2026 to 10 Oct 2026. Clients now, churn');
+    // Staff who are shown no money are not told about money figures.
+    expect(periodLine(report({ period: '3m' }).period, GYM, false)).toBe(
+      "Showing 1 Aug 2026 to 10 Oct 2026. Members now, churn and retention are today's figures, so they stay the same whichever period you choose.",
+    );
+  });
+
+  it('leads are the period’s: the headline says the days, and no lead in them is not "no leads yet"', () => {
+    const r = report({ period: '4w' });
+    expect(leadsHeadline(r)).toEqual({ value: '50%', line: null, note: '2 of 4 leads joined · added 13 Sep 2026 to 10 Oct 2026' });
+    expect(leadsHow(r)).toBe('Leads added from 13 Sep 2026 to today that are marked Joined, out of every lead added in those days, by where they heard of you. Leads you deleted are not counted.');
+    expect(leadsMissing(r)).toBeNull();
+    // Leads from before the period, and none in it.
+    const quiet = report({ period: '4w', leads: [], anyLead: true });
+    expect(leadsHeadline(quiet)).toBeNull();
+    expect(leadsMissing(quiet)).toBe('No lead was added in the last 4 weeks.');
+    // No lead ever.
+    expect(leadsMissing(report({ leads: [], anyLead: false }))).toBe("You haven't added any leads yet.");
+  });
+
+  it('four weeks begin inside a month: the month tables say their rows are whole months; three and twelve months add up and say nothing', () => {
+    expect(wholeMonthsNote(report({ period: '4w' }).period)).toBe('Months are shown whole, so they include days before 13 Sep 2026.');
+    expect(wholeMonthsNote(report({ period: '3m' }).period)).toBeNull();
+    expect(wholeMonthsNote(report({ period: '12m' }).period)).toBeNull();
   });
 
   it('a gym older than the period reads the period’s own days on each tile; a younger one reads where its list began', () => {
