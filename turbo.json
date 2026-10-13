@@ -2,7 +2,7 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "typecheck": {
-      "inputs": ["src/**", "test/**", "tsconfig.json", "package.json"],
+      "inputs": ["src/**", "test/**", "scripts/**", "app.config.ts", "index.ts", "copies.json", "tsconfig.json", "package.json"],
       "dependsOn": ["^typecheck"]
     },
     "lint": {
@@ -13,12 +13,16 @@
         "scripts/**",
         "eslint.config.js",
         "eslint.config.mjs",
+        "metro.config.js",
+        "app.config.ts",
+        "index.ts",
+        "copies.json",
         "tsconfig.json",
         "package.json"
       ]
     },
     "test": {
-      "inputs": ["src/**", "test/**", "tools/**", "vitest.config.{ts,js}", "tsconfig.json", "package.json"],
+      "inputs": ["src/**", "test/**", "tools/**", "scripts/**", "app.config.ts", "copies.json", "vitest.config.{ts,js}", "tsconfig.json", "package.json"],
       "dependsOn": ["^typecheck"]
     },
     "build": {

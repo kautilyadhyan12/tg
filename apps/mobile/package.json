@@ -7,7 +7,7 @@
     "phone": "node scripts/phone.mjs",
     "start": "node scripts/phone.mjs --start",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test index.ts app.config.ts",
+    "lint": "eslint src test scripts index.ts app.config.ts metro.config.js",
     "test": "vitest run"
   },
   "dependencies": {
@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@app/config": "workspace:*",
+    "@types/node": "^22.10.7",
     "@types/react": "19.2.2",
     "eslint": "^9.18.0",
     "eslint-plugin-react-hooks": "^7.1.1",

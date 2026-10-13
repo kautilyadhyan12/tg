@@ -34,7 +34,7 @@ export function App() {
       <Text style={[styles.title, { color: look.ink }]}>AI Home Gym</Text>
       {extra === null ? (
         <Text style={[styles.line, { color: look.bad }]}>
-          This copy of the app was built without its settings. Build it again from the laptop.
+          This copy of the app has no settings. Stop it and start it again from the laptop.
         </Text>
       ) : (
         <>
