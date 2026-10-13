@@ -11,6 +11,7 @@ import {
   type GymAttendanceMethod,
   type GymClockFormat,
 } from "@app/shared";
+import { sameName } from "../memberList/samePerson.js";
 import { readAttendanceContext } from "../repo.js";
 import type { ScanPeriod, VisitToday } from "./scanRule.js";
 
@@ -196,8 +197,9 @@ export async function saveRules(tx: TransactionSql, gymId: string, rules: Checki
 }
 
 /** Which of the accounts and records named are the gym's own staff: its owner, anybody on
- *  its staff, and the records such an account holds or that carry its address (every such
- *  record for null). Never stopped at the desk. */
+ *  its staff, and the record such an account holds or that carries both its address and
+ *  its name (every such record for null). An address alone is not enough: a relative's
+ *  record on a staff address is the relative's. Never stopped at the desk. */
 export async function staffAmong(
   sql: SqlOrTx,
   gymId: string,
@@ -206,7 +208,7 @@ export async function staffAmong(
   const out = { userIds: new Set<string>(), entryIds: new Set<string>() };
   if (named.userIds.length === 0 && named.entryIds !== null && named.entryIds.length === 0) return out;
   const entryIds = named.entryIds === null ? null : [...named.entryIds];
-  const rows = await sql<{ user_id: string; entry_id: string | null }[]>`
+  const rows = await sql<{ user_id: string; entry_id: string | null; record_name: string | null; account_name: string | null }[]>`
     WITH staff AS (
       SELECT g.owner_user_id AS user_id FROM gyms g WHERE g.id = ${gymId}
       UNION
@@ -214,22 +216,24 @@ export async function staffAmong(
       UNION
       SELECT m.user_id FROM gym_members m WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL AND m.complimentary
     )
-    SELECT s.user_id, NULL::uuid AS entry_id FROM staff s WHERE s.user_id = ANY(${[...named.userIds]}::uuid[])
+    SELECT s.user_id, NULL::uuid AS entry_id, NULL::text AS record_name, NULL::text AS account_name
+    FROM staff s WHERE s.user_id = ANY(${[...named.userIds]}::uuid[])
     UNION ALL
-    SELECT s.user_id, m.entry_id
+    SELECT s.user_id, m.entry_id, NULL::text, NULL::text
     FROM staff s
     JOIN gym_members m ON m.gym_id = ${gymId} AND m.user_id = s.user_id AND m.removed_at IS NULL AND m.entry_id IS NOT NULL
     WHERE ${entryIds}::uuid[] IS NULL OR m.entry_id = ANY(${entryIds}::uuid[])
     UNION ALL
-    -- The record on a staff account's own address, as a pass names it.
-    SELECT s.user_id, e.id
+    -- The record on a staff account's own address, as a pass names it: theirs where it
+    -- carries their name too, which is asked below.
+    SELECT s.user_id, e.id, e.full_name, u.display_name
     FROM staff s
     JOIN users u ON u.id = s.user_id
     JOIN gym_member_list_entries e ON e.gym_id = ${gymId} AND e.former_at IS NULL AND e.email = u.email
     WHERE ${entryIds}::uuid[] IS NULL OR e.id = ANY(${entryIds}::uuid[])`;
   for (const row of rows) {
     if (row.entry_id === null) out.userIds.add(row.user_id);
-    else out.entryIds.add(row.entry_id);
+    else if (row.record_name === null || row.account_name === null || sameName(row.record_name, row.account_name)) out.entryIds.add(row.entry_id);
   }
   return out;
 }

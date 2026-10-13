@@ -350,10 +350,13 @@ interface Named {
   /** Their record's own two words, from the gym's list. Never shown as they stand. */
   listed: Words;
   onList: boolean;
+  /** For somebody whose record the list cannot say (a family on one address, none of its
+   *  records in the account's name): the records that may be theirs. Empty otherwise. */
+  maybe: readonly string[];
 }
 
 const NO_WORDS: Words = { status: null, payment: null };
-const NOBODY: Named = { person: { kind: "not_a_member" }, who: null, name: "", listed: NO_WORDS, onList: false };
+const NOBODY: Named = { person: { kind: "not_a_member" }, who: null, name: "", listed: NO_WORDS, onList: false, maybe: [] };
 
 /** The two words of each record named that the app answers for (`heldOnList`); null when
  *  they cannot be read. A read that fails is logged and takes the words away, never the
@@ -416,6 +419,7 @@ async function namedByAccount(sql: Sql, gymId: string, userId: string): Promise<
       name: words?.fullName.trim() || account.displayName,
       listed: { status: words?.status ?? null, payment: words?.payment ?? null },
       onList: member.onList,
+      maybe: member.unsure?.records.map((record) => record.id) ?? [],
     };
   }
   const records = account.records;
@@ -429,6 +433,7 @@ async function namedByAccount(sql: Sql, gymId: string, userId: string): Promise<
     name: own.fullName.trim() || account.displayName,
     listed: { status: own.status, payment: own.payment },
     onList: true,
+    maybe: [],
   };
 }
 
@@ -467,6 +472,7 @@ async function namedRecord(
     name: record.fullName.trim() || (owner?.fullName ?? ""),
     listed: { status: record.status, payment: record.payment },
     onList: true,
+    maybe: [],
   };
 }
 
@@ -485,35 +491,53 @@ async function accountOfRecord(sql: Sql, gymId: string, record: { id: string; em
 // itself says the person holds and from their open bills; a gym that never changed its
 // choices reads nothing here; and a read that fails lets the person in, with a log.
 
+/** One person the desk's rule is asked about: who they are, and the records that may be
+ *  theirs where the list cannot say which is (`Named.maybe`). */
+interface AtDesk {
+  who: repo.Who;
+  maybe: readonly string[];
+}
+
 /** Why the gym's desk sends each of these people to staff today; a person not in the map
- *  is let in. `people` are records and, for somebody in the app with none, accounts. */
+ *  is let in. `people` are records and, for somebody in the app with none, accounts.
+ *
+ *  Somebody whose record the list cannot say is judged by every record that may be
+ *  theirs, and stopped only where the rule stops all of them: a paid-up member of a
+ *  family on one address is never turned away for a relative's record. */
 async function stopsFor(
   deps: Pick<CheckinDeps, "sql" | "now" | "log">,
   gymId: string,
   desk: repo.DeskRules,
   timezone: string,
-  people: readonly repo.Who[],
-): Promise<Map<repo.Who, CheckinStopReason>> {
-  const stops = new Map<repo.Who, CheckinStopReason>();
+  people: readonly AtDesk[],
+): Promise<Map<AtDesk, CheckinStopReason>> {
+  const stops = new Map<AtDesk, CheckinStopReason>();
   if (people.length === 0 || !checkinRulesStopAnyone(desk.rules)) return stops;
   try {
     const today = dayInTz(deps.now(), timezone);
-    const entryIds = people.flatMap((who) => (who.entryId === null ? [] : [who.entryId]));
-    const userIds = people.flatMap((who) => (who.userId === null ? [] : [who.userId]));
+    const recordsOf = (at: AtDesk): readonly string[] => (at.who.entryId !== null ? [at.who.entryId] : at.maybe);
+    const entryIds = [...new Set(people.flatMap(recordsOf))];
+    const userIds = people.flatMap((at) => (at.who.userId === null ? [] : [at.who.userId]));
     const [staff, facts] = await Promise.all([
       repo.staffAmong(deps.sql, gymId, { userIds, entryIds }),
       heldWithOwedOf(deps.sql, gymId, today, entryIds),
     ]);
-    for (const who of people) {
-      const reason = checkinStop({
-        rules: desk.rules,
-        staff: (who.userId !== null && staff.userIds.has(who.userId)) || (who.entryId !== null && staff.entryIds.has(who.entryId)),
-        held: who.entryId === null ? null : (facts.held.get(who.entryId)?.shown ?? null),
-        owedSince: who.entryId === null ? null : (facts.owedSince.get(who.entryId) ?? null),
-        today,
-        overdueAfterDays: desk.overdueAfterDays,
-      });
-      if (reason !== null) stops.set(who, reason);
+    for (const at of people) {
+      const records = recordsOf(at);
+      const isStaff = (at.who.userId !== null && staff.userIds.has(at.who.userId)) || records.some((id) => staff.entryIds.has(id));
+      const judge = (entryId: string | null): CheckinStopReason | null =>
+        checkinStop({
+          rules: desk.rules,
+          staff: isStaff,
+          held: entryId === null ? null : (facts.held.get(entryId)?.shown ?? null),
+          owedSince: entryId === null ? null : (facts.owedSince.get(entryId) ?? null),
+          today,
+          overdueAfterDays: desk.overdueAfterDays,
+        });
+      // On no record at all: the app holds nothing for them.
+      const reasons = records.length === 0 ? [judge(null)] : records.map(judge);
+      const reason = reasons.includes(null) ? null : (reasons[0] ?? null);
+      if (reason !== null) stops.set(at, reason);
     }
     return stops;
   } catch (err: unknown) {
@@ -686,9 +710,10 @@ async function writeNamedVisit(
 ): Promise<Visit | null> {
   const who = named?.who ?? null;
   const ctx = who === null ? null : await repo.scanContext(deps.sql, gymId, who);
+  const at: AtDesk | null = who === null ? null : { who, maybe: named?.maybe ?? [] };
   const stopped =
-    desk !== null && who !== null && ctx !== null && named?.person.kind === "member"
-      ? (await stopsFor(deps, gymId, desk, ctx.timezone, [who])).has(who)
+    desk !== null && at !== null && ctx !== null && named?.person.kind === "member"
+      ? (await stopsFor(deps, gymId, desk, ctx.timezone, [at])).has(at)
       : false;
   const decision = decideScan({
     read,
@@ -751,11 +776,22 @@ const foundRecord = (record: repo.FoundRecord): CheckinPersonFound => ({
   stopped: null,
 });
 
-/** The people found, each saying why the gym's desk would send them to staff, if it would. */
-async function withStops(deps: CheckinDeps, gymId: string, people: CheckinPersonFound[]): Promise<CheckinPersonFound[]> {
+/** The people found, each saying why the gym's desk would send them to staff, if it would.
+ *  `maybeOf`: for an account whose record the list cannot say, the records that may be theirs. */
+async function withStops(
+  deps: CheckinDeps,
+  gymId: string,
+  people: CheckinPersonFound[],
+  maybeOf: ReadonlyMap<string, readonly string[]>,
+): Promise<CheckinPersonFound[]> {
   const desk = await repo.deskRules(deps.sql, gymId);
   if (desk === null || !checkinRulesStopAnyone(desk.rules)) return people;
-  const whos = people.map((person): repo.Who => ("entryId" in person.pick ? { userId: null, entryId: person.pick.entryId } : { userId: person.pick.userId, entryId: null }));
+  const whos = people.map(
+    (person): AtDesk =>
+      "entryId" in person.pick
+        ? { who: { userId: null, entryId: person.pick.entryId }, maybe: [] }
+        : { who: { userId: person.pick.userId, entryId: null }, maybe: maybeOf.get(person.pick.userId) ?? [] },
+  );
   const stops = await stopsFor(deps, gymId, desk, await gymTimeZone(deps.sql, gymId), whos);
   return people.map((person, i) => {
     const who = whos[i];
@@ -826,7 +862,8 @@ export async function findPeople(
   }
   found.sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
   const shownPeople = await withHeld(deps, gymId, found.slice(0, CHECKIN_SEARCH_LIMIT));
-  return checkinPeopleResponseSchema.parse({ people: await withStops(deps, gymId, shownPeople) });
+  const maybeOf = new Map(members.flatMap((row) => (row.unsure === null ? [] : [[row.userId, row.unsure.records.map((record) => record.id)] as const])));
+  return checkinPeopleResponseSchema.parse({ people: await withStops(deps, gymId, shownPeople, maybeOf) });
 }
 
 /** Staff check a person in: the desk's rule, never refused for the hour, a payment word
@@ -915,11 +952,15 @@ export async function previewRules(
   const desk = await repo.deskRules(deps.sql, gymId);
   if (desk === null) throw orgNotFound();
   const today = dayInTz(deps.now(), await gymTimeZone(deps.sql, gymId));
+  // "Current membership" also stops whoever is in the app and on no record: they are counted.
+  const appMembers = rules.who === "current_membership" ? await membersAgainstList(deps.sql, gymId) : [];
+  const offList = appMembers.filter((member) => !member.onList).map((member) => member.userId);
   const [names, staff, facts] = await Promise.all([
     repo.currentNames(deps.sql, gymId),
-    repo.staffAmong(deps.sql, gymId, { userIds: [], entryIds: null }),
+    repo.staffAmong(deps.sql, gymId, { userIds: offList, entryIds: null }),
     checkinRulesStopAnyone(rules) ? heldWithOwedOf(deps.sql, gymId, today, null) : null,
   ]);
+  const notListed = offList.filter((userId) => !staff.userIds.has(userId)).length;
   const listed = names.filter((record) => !staff.entryIds.has(record.id));
   const people: CheckinRulesPreviewResponse["people"] = [];
   let stopped = 0;
@@ -936,7 +977,7 @@ export async function previewRules(
     stopped += 1;
     if (people.length < CHECKIN_RULES_PREVIEW_NAMES) people.push({ entryId: record.id, name: record.name, reason });
   }
-  return checkinRulesPreviewResponseSchema.parse({ rules, listed: listed.length, stopped, people });
+  return checkinRulesPreviewResponseSchema.parse({ rules, listed: listed.length, stopped, notListed, people });
 }
 
 // ── FIXING A VISIT (19a-iv; spec Part 3 §12.5, §15.5) ──

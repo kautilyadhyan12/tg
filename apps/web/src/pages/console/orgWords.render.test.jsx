@@ -70,7 +70,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       /** Who can check in (16d) reads on mount too: a gym that never changed it. */
       getCheckinRules: vi.fn(() => Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in' }, overdueAfterDays: 0 } })),
       previewCheckinRules: vi.fn(() =>
-        Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in' }, listed: 0, stopped: 0, people: [] } }),
+        Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in' }, listed: 0, stopped: 0, notListed: 0, people: [] } }),
       ),
     },
   };

@@ -39,7 +39,7 @@ function previewFor(rules) {
   const notCurrent = rules.who === 'current_membership' ? PEOPLE : [];
   const overdue = rules.overdue === 'see_staff' ? [{ entryId: '22222222-2222-4222-8222-0000000000aa', name: 'Owen Owes', reason: 'overdue' }] : [];
   const people = [...notCurrent, ...overdue];
-  return { data: { rules, listed: 13, stopped: people.length, people } };
+  return { data: { rules, listed: 13, stopped: people.length, notListed: rules.who === 'current_membership' ? 2 : 0, people } };
 }
 
 function open({ rules = START, overdueAfterDays = 0, readOnly = false } = {}) {
@@ -112,6 +112,9 @@ describe('picking who can check in', () => {
     expect(within(box).queryByText('Noel Nothing')).toBeNull();
     expect(within(box).getByText('and 2 more')).toBeTruthy();
     expect(within(box).getByText('The other 8 would be checked in as now.')).toBeTruthy();
+    // People in the app who are on no record are stopped too, and the box says so.
+    expect(within(box).getByText('2 people in the app who are not on your Members list would also be sent to staff.')).toBeTruthy();
+    expect(within(box).getByText(/Your own staff are always checked in when they scan their own pass\./)).toBeTruthy();
     // What the person at the desk reads, and where staff go.
     expect(within(box).getByText(/Please see a member of staff/)).toBeTruthy();
     expect(within(box).getByRole('link', { name: 'Open Attendance' }).getAttribute('href')).toBe('/console/iron-house/attendance');
@@ -135,7 +138,9 @@ describe('picking who can check in', () => {
     orgService.updateCheckinRules.mockResolvedValue({ data: { rules: strict, overdueAfterDays: 0 } });
     fireEvent.click(saveButton());
     await waitFor(() => expect(orgService.updateCheckinRules).toHaveBeenCalledWith(ORG.id, strict));
-    expect(await screen.findByText('Saved. Your front desk follows this from the next scan: 6 people sent to staff today.')).toBeTruthy();
+    expect(
+      await screen.findByText('Saved. Your front desk follows this from the next scan. 6 people on your list would be sent to staff if they came today.'),
+    ).toBeTruthy();
     expect(saveButton().disabled).toBe(true);
     // The box now speaks of what is, not what would be.
     expect(screen.getByText('Today 6 of the 13 people on your list are sent to staff:')).toBeTruthy();
@@ -176,7 +181,7 @@ describe('picking who can check in', () => {
 
   it('says the gym’s own days of grace', async () => {
     open({ overdueAfterDays: 7 });
-    expect(await screen.findByText('A payment is overdue 7 days after it was due.')).toBeTruthy();
+    expect(await screen.findByText('A payment is overdue once it is more than 7 days late.')).toBeTruthy();
   });
 
   it('a gym on no plan reads its choice and cannot change it', async () => {

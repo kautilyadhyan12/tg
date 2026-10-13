@@ -6,6 +6,7 @@ import { readOnlyNote } from '../../pages/console/billingView';
 import {
   OVERDUE_CHOICES,
   WHO_CHOICES,
+  notListedLine,
   overdueHint,
   previewNames,
   previewWords,
@@ -72,6 +73,7 @@ function Today({ preview, changed, attendanceTo }) {
   const words = previewWords(preview.data, changed);
   if (words === null) return null;
   const names = previewNames(preview.data, all);
+  const alsoStopped = notListedLine(preview.data, changed);
   return (
     <div role="group" aria-label="Who is sent to staff today" className="rounded-xl px-4 py-3 flex flex-col gap-2" style={boxStyle}>
       <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
@@ -103,11 +105,16 @@ function Today({ preview, changed, attendanceTo }) {
           {words.rest}
         </p>
       ) : null}
-      {preview.data.stopped > 0 ? (
+      {alsoStopped !== null ? (
+        <p className="text-sm m-0" style={labelStyle}>
+          {alsoStopped}
+        </p>
+      ) : null}
+      {preview.data.stopped > 0 || alsoStopped !== null ? (
         <>
           <p className="text-sm m-0" style={softStyle}>
             At the desk they read &ldquo;Please see a member of staff&rdquo;, with no name and no reason. Your staff can still check them in on
-            the Attendance page, which says why. Your own staff are always checked in.
+            the Attendance page, which says why. Your own staff are always checked in when they scan their own pass.
           </p>
           <Link
             to={attendanceTo}

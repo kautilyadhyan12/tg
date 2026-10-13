@@ -5,6 +5,7 @@ import {
   OVERDUE_CHOICES,
   PREVIEW_NAMES_SHOWN,
   WHO_CHOICES,
+  notListedLine,
   overdueHint,
   previewNames,
   previewWords,
@@ -29,8 +30,9 @@ describe('the choices', () => {
 
   it('says when a payment is overdue, by the gym’s own days of grace', () => {
     expect(overdueHint(0)).toBe('A payment is overdue from the day after it was due.');
-    expect(overdueHint(1)).toBe('A payment is overdue 1 day after it was due.');
-    expect(overdueHint(7)).toBe('A payment is overdue 7 days after it was due.');
+    // With 7 days of grace a bill due on the 8th stops somebody from the 16th.
+    expect(overdueHint(1)).toBe('A payment is overdue once it is more than 1 day late.');
+    expect(overdueHint(7)).toBe('A payment is overdue once it is more than 7 days late.');
     expect(overdueHint(undefined)).toBe('A payment is overdue from the day after it was due.');
   });
 
@@ -119,11 +121,26 @@ describe('who is sent to staff today', () => {
   });
 });
 
+describe('people in the app who are on no record', () => {
+  it('are said in a line of their own, before Save and after', () => {
+    expect(notListedLine({ ...preview(13, []), notListed: 0 }, true)).toBeNull();
+    expect(notListedLine(preview(13, []), true)).toBeNull();
+    expect(notListedLine({ ...preview(13, []), notListed: 1 }, true)).toBe('1 person in the app who is not on your Members list would also be sent to staff.');
+    expect(notListedLine({ ...preview(13, []), notListed: 1 }, false)).toBe('1 person in the app who is not on your Members list is also sent to staff.');
+    expect(notListedLine({ ...preview(13, []), notListed: 4 }, true)).toBe('4 people in the app who are not on your Members list would also be sent to staff.');
+    expect(notListedLine({ ...preview(13, []), notListed: 4 }, false)).toBe('4 people in the app who are not on your Members list are also sent to staff.');
+  });
+});
+
 describe('what Save says', () => {
   it('says what the desk now does', () => {
     expect(rulesSavedLine(START, preview(13, []))).toBe('Saved. Everyone on your list is checked in at the front desk.');
-    expect(rulesSavedLine(STRICT, preview(13, [person(1)]))).toBe('Saved. Your front desk follows this from the next scan: 1 person sent to staff today.');
-    expect(rulesSavedLine(STRICT, preview(13, [person(1), person(2)]))).toBe('Saved. Your front desk follows this from the next scan: 2 people sent to staff today.');
+    expect(rulesSavedLine(STRICT, preview(13, [person(1)]))).toBe(
+      'Saved. Your front desk follows this from the next scan. 1 person on your list would be sent to staff if they came today.',
+    );
+    expect(rulesSavedLine(STRICT, preview(13, [person(1), person(2)]))).toBe(
+      'Saved. Your front desk follows this from the next scan. 2 people on your list would be sent to staff if they came today.',
+    );
     expect(rulesSavedLine(STRICT, null)).toBe('Saved. Your front desk follows this from the next scan.');
   });
 });

@@ -264,6 +264,7 @@ d("who the front desk lets in (real Postgres)", () => {
   let zed: Person;
   let ironHouse: string;
   let nextDoor: string;
+  let gold: string;
   /** Everybody on Iron House's list, by first name. */
   const people: Record<string, Listed> = {};
   /** Who the rule must stop on 12 October, with the gym's grace at 0 days. */
@@ -307,7 +308,7 @@ d("who the front desk lets in (real Postgres)", () => {
     nextDoor = await makeGym(nextDoorOwner, "Next Door");
     await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${ironHouse}, ${trainer.userId}, 'trainer', NULL)`;
 
-    const gold = await addType(ironHouse, owner, type({ name: "Gold Monthly" }));
+    gold = await addType(ironHouse, owner, type({ name: "Gold Monthly" }));
     const oneMonth = await addType(ironHouse, owner, type({ name: "One Month", kind: "one_time", priceMinor: 4999 }));
     const freeWeek = await addType(ironHouse, owner, type({ name: "Free Week", kind: "trial", priceMinor: 0, termCount: 7, termUnit: "day" }));
     const ptTen = await addType(
@@ -614,6 +615,156 @@ d("who the front desk lets in (real Postgres)", () => {
       expect(warned.filter((w) => w.event === "checkin.rules_unread")).toHaveLength(2);
       // With the read back, the next person whose membership ended is sent to staff.
       expect(await checkinService.scan({ ...deps, sql }, device, people["Cara"]?.tag ?? "")).toEqual({ result: "see_staff", gymName: "Iron House" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // ===========================================================================
+  // PEOPLE THE LIST CANNOT TIE TO ONE RECORD (round one: High-1, Low-1 to Low-3)
+  // ===========================================================================
+
+  const STRICT: CheckinRules = { who: "current_membership", overdue: "see_staff" };
+  const SEE_STAFF = { result: "see_staff", gymName: "Iron House" };
+  /** A pass is one a person for each half minute, and works once: a minute on, the same
+   *  person shows a new one. */
+  const aMinuteOn = (): void => {
+    clock = new Date(clock.getTime() + 60_000);
+  };
+
+  it(
+    "a family on one email: the account's pass is let in while any of their records is, and stopped only when every one is",
+    async () => {
+      // Ann and Bob share an address; the account on it gave the app another name, so the
+      // list cannot say which record is theirs.
+      const jo = await makeUser("jo", "Jo Sharedmail");
+      const ann = await addPerson(ironHouse, owner, "Ann Family", { email: jo.email });
+      const bob = await addPerson(ironHouse, owner, "Bob Family", { email: jo.email });
+      await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${ironHouse}, ${jo.userId}, ${null})`;
+      const anns = await give(ironHouse, owner, ann.entryId, gold, "2026-10-12", true);
+      const bobs = await give(ironHouse, owner, bob.entryId, gold, "2026-10-12", true);
+      const stoppedInSearch = async (): Promise<CheckinStopReason | null | undefined> =>
+        (await found(ironHouse, "Jo Sharedmail", owner)).find((p) => "userId" in p.pick && p.pick.userId === jo.userId)?.stopped;
+
+      // Both paid up: the pass is in under every choice, and nobody of theirs is named.
+      for (const rules of EVERY_CHOICE) {
+        await save(ironHouse, owner, rules);
+        await emptyTheGym(ironHouse);
+        aMinuteOn();
+        const answer = (await scan(await makeDesk(ironHouse, owner), await passOf(jo))).answer;
+        expect(answer, JSON.stringify(rules)).toMatchObject({ result: "checked_in", person: { name: "Jo Sharedmail" } });
+        expect(await stoppedInSearch(), JSON.stringify(rules)).toBeNull();
+        const named = (await preview(ironHouse, owner, rules)).people.map((p) => p.name);
+        expect(named).not.toContain("Ann Family");
+        expect(named).not.toContain("Bob Family");
+      }
+
+      // Ann's is cancelled: her own key tag is stopped, and the pass is still in, since
+      // the account may be Bob's.
+      await save(ironHouse, owner, STRICT);
+      await move(ironHouse, owner, ann.entryId, anns, "cancel", { when: "today" });
+      await emptyTheGym(ironHouse);
+      let desk = await makeDesk(ironHouse, owner);
+      expect(JSON.parse((await scan(desk, ann.tag)).body)).toEqual(SEE_STAFF);
+      expect((await scan(desk, bob.tag)).answer.result).toBe("checked_in");
+      aMinuteOn();
+      expect((await scan(desk, await passOf(jo))).answer.result).toBe("checked_in");
+      expect(await stoppedInSearch()).toBeNull();
+
+      // Bob's too: now every record on the address is stopped, and so is the pass.
+      await move(ironHouse, owner, bob.entryId, bobs, "cancel", { when: "today" });
+      await emptyTheGym(ironHouse);
+      desk = await makeDesk(ironHouse, owner);
+      aMinuteOn();
+      expect(JSON.parse((await scan(desk, await passOf(jo))).body)).toEqual(SEE_STAFF);
+      expect(await stoppedInSearch()).toBe("cancelled");
+      // Where the gym lets everyone in, they are in again.
+      await save(ironHouse, owner, { who: "everyone", overdue: "let_in" });
+      expect((await scan(desk, await passOf(jo))).answer.result).toBe("checked_in");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "somebody in the app who is on no record is stopped by 'current membership', and the box counts them",
+    async () => {
+      const lone = await makeUser("lone", "Lone Apponly");
+      await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${ironHouse}, ${lone.userId}, ${null})`;
+      const everyone: CheckinRules = { who: "everyone", overdue: "see_staff" };
+      await save(ironHouse, owner, everyone);
+      await emptyTheGym(ironHouse);
+      expect((await preview(ironHouse, owner, everyone)).notListed).toBe(0);
+      expect((await scan(await makeDesk(ironHouse, owner), await passOf(lone))).answer).toMatchObject({ result: "checked_in", person: { name: "Lone Apponly" } });
+
+      await save(ironHouse, owner, STRICT);
+      await emptyTheGym(ironHouse);
+      aMinuteOn();
+      expect(JSON.parse((await scan(await makeDesk(ironHouse, owner), await passOf(lone))).body)).toEqual(SEE_STAFF);
+      // The box says so: one person in the app, not on the list. The family's account is
+      // on the list, and the owner and the trainer are staff.
+      expect((await preview(ironHouse, owner, STRICT)).notListed).toBe(1);
+      expect((await found(ironHouse, "Lone Apponly", owner)).find((p) => p.name === "Lone Apponly")?.stopped).toBe("no_membership");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "staff are known by their account and their own record, never by an address alone",
+    async () => {
+      await save(ironHouse, owner, STRICT);
+      await emptyTheGym(ironHouse);
+      const desk = await makeDesk(ironHouse, owner);
+      // The trainer's own record (her name, her address) is let in by its key tag.
+      expect((await scan(desk, people["Tara"]?.tag ?? "")).answer).toMatchObject({ result: "checked_in", person: { name: "Tara Trainer" } });
+      // A relative's record on the trainer's address is not hers: stopped, and counted.
+      const kid = await addPerson(ironHouse, owner, "Kid Trainer", { email: trainer.email });
+      expect(JSON.parse((await scan(desk, kid.tag)).body)).toEqual(SEE_STAFF);
+      // A record of a member of staff kept under another address is not known as theirs:
+      // its key tag is stopped, and the box names it before the gym saves.
+      const theo = await makeUser("theo", "Theo Staffer");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${ironHouse}, ${theo.userId}, 'trainer', NULL)`;
+      const offsite = await addPerson(ironHouse, owner, "Theo Staffer");
+      expect(JSON.parse((await scan(desk, offsite.tag)).body)).toEqual(SEE_STAFF);
+      const box = await preview(ironHouse, owner, STRICT);
+      const reasonOf = (entryId: string) => box.people.find((p) => p.entryId === entryId)?.reason;
+      expect(reasonOf(kid.entryId)).toBe("no_membership");
+      expect(reasonOf(offsite.entryId)).toBe("no_membership");
+      expect(reasonOf(people["Tara"]?.entryId ?? "")).toBeUndefined();
+      expect(reasonOf(people["Owner"]?.entryId ?? "")).toBeUndefined();
+      const rows = await found(ironHouse, "Kid Trainer", owner);
+      expect(rows.find((p) => p.name === "Kid Trainer")?.stopped).toBe("no_membership");
+      // Her own pass is always in.
+      aMinuteOn();
+      expect((await scan(desk, await passOf(trainer))).answer.result).toMatch(/^(checked_in|already)$/);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "two gyms on the strict choices: each gym's box and desk name only its own people",
+    async () => {
+      await save(ironHouse, owner, STRICT);
+      await save(nextDoor, nextDoorOwner, STRICT);
+      const theirGold = await addType(nextDoor, nextDoorOwner, type({ name: "Gold Monthly" }));
+      const nell = await addPerson(nextDoor, nextDoorOwner, "Nell Nextdoor");
+      const pia = await addPerson(nextDoor, nextDoorOwner, "Pia Nextdoor");
+      await give(nextDoor, nextDoorOwner, pia.entryId, theirGold, "2026-10-12", true);
+      await emptyTheGym(nextDoor);
+
+      const theirs = await preview(nextDoor, nextDoorOwner, STRICT);
+      const theirList = (await sql<{ full_name: string }[]>`SELECT full_name FROM gym_member_list_entries WHERE gym_id = ${nextDoor} AND former_at IS NULL`).map((r) => r.full_name);
+      expect(theirs.listed).toBe(theirList.length);
+      expect(theirs.people.map((p) => p.name).sort()).toEqual(theirList.filter((name) => name !== "Pia Nextdoor").sort());
+      expect(theirs.notListed).toBe(0);
+      const ours = await preview(ironHouse, owner, STRICT);
+      for (const name of theirList) expect(ours.people.map((p) => p.name)).not.toContain(name);
+      for (const person of ours.people) expect(theirs.people.map((p) => p.entryId)).not.toContain(person.entryId);
+
+      const theirDesk = await makeDesk(nextDoor, nextDoorOwner);
+      expect((await scan(theirDesk, pia.tag)).answer).toMatchObject({ result: "checked_in", person: { name: "Pia Nextdoor" } });
+      expect(JSON.parse((await scan(theirDesk, nell.tag)).body)).toEqual({ result: "see_staff", gymName: "Next Door" });
+      // Iron House's paid-up member is nobody there, and Iron House's owner is not their staff.
+      expect((await scan(theirDesk, people["Paula"]?.tag ?? "")).answer.result).toBe("not_a_member");
+      expect((await found(nextDoor, "Nell", nextDoorOwner)).map((p) => [p.name, p.stopped])).toEqual([["Nell Nextdoor", "no_membership"]]);
     },
     TEST_TIMEOUT_MS,
   );

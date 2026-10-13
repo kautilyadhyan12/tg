@@ -24,7 +24,7 @@ export const OVERDUE_CHOICES = [
 export function overdueHint(overdueAfterDays) {
   const days = Number.isInteger(overdueAfterDays) && overdueAfterDays > 0 ? overdueAfterDays : 0;
   if (days === 0) return 'A payment is overdue from the day after it was due.';
-  return `A payment is overdue ${String(days)} ${days === 1 ? 'day' : 'days'} after it was due.`;
+  return `A payment is overdue once it is more than ${String(days)} ${days === 1 ? 'day' : 'days'} late.`;
 }
 
 /** The closed box's one line. */
@@ -84,6 +84,15 @@ export function previewWords(preview, changed) {
   };
 }
 
+/** The line about people in the app who are on no record of the list: "current
+ *  membership" stops them too, and the names above are the list's alone. */
+export function notListedLine(preview, changed) {
+  const n = typeof preview?.notListed === 'number' ? preview.notListed : 0;
+  if (n <= 0) return null;
+  const who = n === 1 ? '1 person in the app who is not on your Members list' : `${String(n)} people in the app who are not on your Members list`;
+  return `${who} ${changed ? 'would also be' : n === 1 ? 'is also' : 'are also'} sent to staff.`;
+}
+
 /** The names to draw: the first few, or every one sent once See all is pressed. */
 export function previewNames(preview, all) {
   const list = Array.isArray(preview?.people) ? preview.people : [];
@@ -103,5 +112,5 @@ export function rulesSavedLine(rules, preview) {
   if (rules.who === 'everyone' && rules.overdue === 'let_in') return 'Saved. Everyone on your list is checked in at the front desk.';
   const stopped = typeof preview?.stopped === 'number' ? preview.stopped : null;
   if (stopped === null) return 'Saved. Your front desk follows this from the next scan.';
-  return `Saved. Your front desk follows this from the next scan: ${people(stopped)} sent to staff today.`;
+  return `Saved. Your front desk follows this from the next scan. ${people(stopped)} on your list would be sent to staff if they came today.`;
 }

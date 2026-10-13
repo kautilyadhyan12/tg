@@ -100,6 +100,9 @@ export const checkinRulesPreviewResponseSchema = z
     /** The people on the gym's list today, its own staff left out. */
     listed: z.number().int().min(0),
     stopped: z.number().int().min(0),
+    /** People in the app who are on no record of the list, the gym's staff left out: under
+     *  "current membership" the desk stops them too. 0 under "everyone". */
+    notListed: z.number().int().min(0),
     /** The first of them by name, each with why. */
     people: z
       .array(z.object({ entryId: z.string().uuid(), name: z.string(), reason: checkinStopReasonSchema }).strict())
