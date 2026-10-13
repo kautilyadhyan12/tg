@@ -32,7 +32,7 @@ interface PictureCardProps {
 export function PictureCard({ picture, height, eyebrow, title, label, icon, style }: PictureCardProps) {
   return (
     <View style={[styles.card, styles.picture, { height }, style]}>
-      <Image source={pictures[picture]} resizeMode="cover" style={StyleSheet.absoluteFill} accessible={false} />
+      <Image source={pictures[picture]} resizeMode="cover" style={styles.fill} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.shade]} />
       <View style={styles.pictureWords}>
         {eyebrow === undefined ? null : <Txt kind="eyebrow">{eyebrow}</Txt>}
@@ -92,6 +92,8 @@ const styles = StyleSheet.create({
   glass: { backgroundColor: colours.glass },
   pad: { padding: 14, gap: 10 },
   picture: { borderRadius: 22 },
+  // A picture has a size of its own, so it is told the box's; "cover" then cuts it to fit.
+  fill: { position: "absolute", width: "100%", height: "100%" },
   shade: { experimental_backgroundImage: pictureShade },
   pictureWords: { position: "absolute", left: 14, right: 14, bottom: 14, gap: 8 },
   pictureLabel: { flexDirection: "row", alignItems: "center", gap: 8 },

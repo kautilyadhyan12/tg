@@ -47,7 +47,7 @@ export function ThisCopy() {
                 Can’t reach the server. Check that the phone’s cable is in and the server is running on the
                 laptop.
               </Txt>
-              <Button label="Try again" kind="plain" icon="updown" onPress={check} wide />
+              <Button label="Try again" kind="plain" onPress={check} wide />
             </>
           )}
         </>

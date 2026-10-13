@@ -53,7 +53,7 @@ export function FoodScreen() {
 export function GymScreen() {
   return (
     <Page>
-      <View>
+      <View style={styles.head}>
         <Txt kind="h1">My gyms</Txt>
         <Txt kind="small">Where you train, when it’s open, and your pass to check in.</Txt>
       </View>
@@ -69,7 +69,7 @@ export function GymScreen() {
 export function MeScreen() {
   return (
     <Page>
-      <View>
+      <View style={styles.head}>
         <Txt kind="h1">Me</Txt>
         <Txt kind="small">Your profile, your progress and your achievements.</Txt>
       </View>
@@ -88,6 +88,7 @@ export function MeScreen() {
 }
 
 const styles = StyleSheet.create({
+  head: { gap: 4 },
   two: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
 });

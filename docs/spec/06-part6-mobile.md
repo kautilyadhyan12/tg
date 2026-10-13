@@ -619,6 +619,15 @@ is. This replaces §16.3's "the console's named colours and Archivo, light and d
 - **The pictures:** the web's own, made small (31 of them: 47,597 KB as the web ships
   them, 1,036 KB at 900 pixels on the long side as WebP, measured 2026-10-13). 11b
   ships them in the app that way and never the web's full-size files.
+- **In the app (item 11b, 2026-10-13):** `apps/mobile/src/look/` holds the look, and a
+  screen takes everything from it by name: `colours.ts` (every colour and size; a test
+  fails a screen that writes its own), `Txt` (every word, Inter), `Icon`
+  (`icons.json`, the drawn file's copy), `Button`, `Card`, `PictureCard`, `Badge`,
+  `Pill`, `Page`, `TabBar`, and `pictures.ts` (the 31 pictures in `assets/pictures/`).
+  A piece a feature needs first (a chip, a field, a ring, a box from the bottom) is
+  added there by that feature's job, from `helmet.html`. The tabs are React Navigation's
+  bottom tabs (`src/App.tsx`, `TABS`); a page under a tab is added to that tab. Screen
+  tests are jest's, in `test/screens/`; rules that need no screen stay on vitest.
 
 ### 16.4 The order
 

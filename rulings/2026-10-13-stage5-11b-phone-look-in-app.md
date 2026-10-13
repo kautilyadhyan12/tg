@@ -1,0 +1,6 @@
+# Rulings · 2026-10-13 · Stage 5 item 11b, the look in the app and five tabs (feature folder 1)
+
+## The phone app
+
+- 2026-10-13 · **11b: go, and yes to its packages.** Shown the plan, Kd: *"go"*. His yes covers React Navigation (`@react-navigation/native`, `@react-navigation/bottom-tabs`, with `react-native-screens` and `react-native-safe-area-context`), `react-native-svg`, `expo-font` with `@expo-google-fonts/inter`, and for screen tests `jest`, `jest-expo`, React Native's testing library and its renderer (`test-renderer`). Taken as 2026-10-12's rule says: 221 packages added, none under 14 days old, none with an install script (each checked against the registry).
+- 2026-10-13 · **The terminal's own, his to overrule:** until sign-in is built (item 12) a tab shows its heading, its own picture and one plain line of what will be there, with no made-up number; item 10's server line and Try again sit on Me. Screens are tested on jest (`test/screens/`), the rules that need no screen stay on vitest. He set this terminal to Opus 5.5 medium before *"go"*; the plan had said high.
