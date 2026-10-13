@@ -278,7 +278,7 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     "wonton_soup", "potstickers_gyoza_steamed_pork_dumplings", "egg_foo_yung_with_shrimp", "crispy_duck_peking_duck_meat_and_skin", "moo_shu_pork",
     "pork_bao_bun", "miso_soup", "teriyaki_chicken", "sushi_roll_salmon", "sushi_roll_tuna",
     "salmon_nigiri_sushi", "salmon_sashimi", "tuna_sashimi", "bibimbap", "kimchi",
-    "tteokbokki_korean_rice_cakes", "adobo_chicken_and_pork_with_rice", "shrimp_summer_roll_rice_paper", "chicken_satay", "thai_green_curry_with_chicken",
+    "tteokbokki_korean_rice_cakes", "chicken_and_pork_adobo_with_rice", "shrimp_summer_roll_rice_paper", "chicken_satay", "thai_green_curry_with_chicken",
     "fish_sauce", "oyster_sauce", "prawn_crackers", "beef_in_black_bean_sauce", "sesame_prawn_toast",
     "beef_curry", "fish_curry_fish_and_shrimp", "chicken_korma", "lamb_rogan_josh", "chicken_vindaloo",
     "tandoori_chicken", "prawn_curry", "biryani_spiced_rice_with_lamb", "samosa_meat",
@@ -471,7 +471,7 @@ describe("the list as it grew (ROADMAP 34c-iii): the dishes of Brazil, Latin Ame
       ["dumplings", null], ["fried dumplings", null], ["steamed dumplings", null], ["vegetable dumplings", null], ["lo mein", null], ["rice and beans", null], ["beans and rice", null],
       ["chow mein", null], ["chop suey", null], ["chow mein noodles", null], ["bao", null], ["steamed buns", null], ["summer rolls", null], ["fresh spring rolls", null],
       ["rice paper rolls", null], ["korma", null], ["satay", null], ["green curry", null], ["thai green curry", null], ["vindaloo", null], ["rogan josh", null], ["tempura", null],
-      ["sashimi", null], ["nigiri", null], ["congee", null], ["rice porridge", null], ["vegetable roll", null], ["veggie roll", null], ["sweet rice", null], ["curry", null], ["noodles", null], ["roll", null], ["sauce", null],
+      ["adobo", null], ["chicken adobo", null], ["pork adobo", null], ["sashimi", null], ["nigiri", null], ["congee", null], ["rice porridge", null], ["vegetable roll", null], ["veggie roll", null], ["sweet rice", null], ["curry", null], ["noodles", null], ["roll", null], ["sauce", null],
     ];
     for (const [name, canonical] of cases) expect(findCurated(name)?.canonical ?? null, name).toBe(canonical);
   });
@@ -516,7 +516,7 @@ describe("the list as it grew (ROADMAP 34c-iii): the dishes of Brazil, Latin Ame
       ["plain congee", "plain_congee_rice_porridge"], ["congee with vegetables", "congee_with_vegetables"], ["congee with meat", "congee_with_meat_or_seafood"], ["crispy duck", "crispy_duck_peking_duck_meat_and_skin"], ["peking duck", "crispy_duck_peking_duck_meat_and_skin"], ["sticky rice", "sticky_rice_glutinous_cooked"], ["miso soup", "miso_soup"],
       ["chicken teriyaki", "teriyaki_chicken"], ["vegetable tempura", "vegetable_tempura"], ["salmon roll", "sushi_roll_salmon"], ["salmon nigiri", "salmon_nigiri_sushi"],
       ["salmon sashimi", "salmon_sashimi"], ["tuna sashimi", "tuna_sashimi"], ["vegetable sushi roll", "sushi_roll_vegetable"], ["soba", "soba_noodles_cooked"], ["fried tofu", "tofu_fried"],
-      ["kimchi", "kimchi"], ["tteokbokki", "tteokbokki_korean_rice_cakes"], ["adobo", "adobo_chicken_and_pork_with_rice"],
+      ["kimchi", "kimchi"], ["tteokbokki", "tteokbokki_korean_rice_cakes"], ["chicken and pork adobo", "chicken_and_pork_adobo_with_rice"],
       ["shrimp summer roll", "shrimp_summer_roll_rice_paper"], ["chicken satay", "chicken_satay"], ["thai green curry with chicken", "thai_green_curry_with_chicken"],
       ["glass noodles", "glass_noodles_mung_bean_cooked"], ["prawn toast", "sesame_prawn_toast"], ["pakoras", "pakora_vegetable_fritter"],
       ["sambhar", "sambar_lentil_and_vegetable_stew"], ["poppadoms", "papad_poppadom_grilled"], ["poori", "puri_fried_bread"], ["clarified butter", "ghee"],

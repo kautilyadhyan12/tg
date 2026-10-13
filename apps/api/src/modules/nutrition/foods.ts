@@ -700,7 +700,7 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Bibimbap", 76, 5.5, 8.11, 2.44, 1.1, 162, "cup", "non_vegetarian", "usda-fndds:2708950"),
   row("Kimchi", 15, 1.1, 2.4, 0.5, 1.6, 150, "cup", "non_vegetarian", "usda-sr:170392"),
   row("Tteokbokki (Korean rice cakes)", 131, 4.11, 19.61, 4.05, 0.8, 250, "cup", "non_vegetarian", "usda-fndds:2708957"),
-  row("Adobo (chicken and pork, with rice)", 181, 17.69, 8.86, 7.94, 0.2, 244, "cup", "non_vegetarian", "usda-fndds:2708958"),
+  row("Chicken and pork adobo (with rice)", 181, 17.69, 8.86, 7.94, 0.2, 244, "cup", "non_vegetarian", "usda-fndds:2708958"),
   row("Coconut rice", 267, 3.57, 26.55, 17.23, 1.9, 200, "cup", "vegan", "usda-fndds:2709032"),
   row("Shrimp summer roll (rice paper)", 112, 5.65, 17.23, 2.65, 1.9, 71, "roll", "non_vegetarian", "usda-fndds:2708704"),
   row("Chicken satay", 191, 21.7, 3, 10.3, 2, 100, "g", "non_vegetarian", "uk-cofid:19-323"),
