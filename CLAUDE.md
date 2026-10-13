@@ -101,16 +101,16 @@ line, next to the model and effort. When in doubt, the bigger size.
    after the merge. Small commits, explicit file lists (`git add <files>`, never
    `git add -A`). `master` takes pull requests only: GitHub refuses a direct push,
    records included, and refuses a merge until the six checks pass (a skipped check
-   counts as passed). **Take `master` in once** (the ruling of 2026-10-13, `rulings/`): a
-   job whose branch is behind `master` when it is ready to merge takes `master` in ONE
-   time and lets the checks run; when they are green it merges, even if another folder
-   merged meanwhile. Only a real clash, which GitHub names, sends it round again. After
+   counts as passed). **When another folder merges first** (the rulings of 2026-10-13,
+   `rulings/`): GitHub also refuses a merge until the branch holds the newest `master`,
+   and that stays so. The terminal takes `master` in, lets the checks run and merges
+   when they are green; overtaken again, it does the same again, by itself. Kd's one
+   "merge" covers every round: he is not asked again, and is told only when it is merged.
+   Each job's records being files of its own (step 8), taking `master` in needs no
+   hand-fix unless two jobs changed the same code or each added a migration (§8). After
    its merge the terminal reads `master`'s own run of that merge, and a red one is that
    terminal's next work, before anything else. A terminal whose checks fail in something
-   its job did not touch reads `master`'s newest run first, and waits if that is red.
-   (Merging once overtaken needs the lock's "newest `master`" setting off, which only Kd
-   can switch. While GitHub still answers that a branch is out of date, the setting is on:
-   take `master` in again, and tell Kd so.)
+   its job did not touch reads `master`'s newest run first, and tells Kd if that is red.
    **Merge when green** (Kd, RULINGS 2026-09-22): if Kd's start
    text for the job says "merge when green", the building terminal merges its own pull
    request once the checks are green and the review round is closed (or none was due),
@@ -481,7 +481,7 @@ Redis number and ports; the two lists are in ROADMAP Stage 2's header.
 - Records are written on the job's own branch, in files of its own (`rulings/`,
   `handoff/`) and on its own lines of ROADMAP, so two folders' records cannot collide
   (§2.8).
-- Jobs merge ONE at a time. The one that merges second first takes `master` in, once
+- Jobs merge ONE at a time. The one that merges second first takes `master` in
   (§2.7), re-runs its checks, and, if both added a migration, renames its own to the next free
   number and re-stamps its journal entry: Drizzle applies migrations in the journal's
   time order and would skip an older-stamped one on a database already past it.
