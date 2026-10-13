@@ -1,13 +1,21 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen, within } from "@testing-library/react-native";
+import { StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { App, TABS } from "../../src/App";
+import { colours } from "../../src/look/colours";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const answers = (ok: boolean) => () =>
   Promise.resolve({ ok, json: () => Promise.resolve({ status: "ok" }) });
 
 interface Drawn {
-  props: { accessibilityLabel?: unknown; accessibilityState?: { selected?: unknown }; children?: unknown };
+  props: {
+    accessibilityLabel?: unknown;
+    accessibilityState?: { selected?: unknown };
+    children?: unknown;
+    style?: StyleProp<ViewStyle & TextStyle>;
+  };
 }
+const drawn = (node: Drawn) => StyleSheet.flatten(node.props.style);
 const label = (tab: Drawn) => tab.props.accessibilityLabel;
 const lit = (tab: Drawn) => tab.props.accessibilityState?.selected;
 const words = (line: Drawn) => line.props.children;
@@ -40,6 +48,12 @@ describe("the five tabs", () => {
     expect(screen.getByRole("header", { name: box })).toBeTruthy();
     const on = (await screen.findAllByRole("tab")).filter((drawn) => lit(drawn) === true);
     expect(on.map(label)).toEqual([tab]);
+    // What is drawn, not only what a screen reader is told: its word is orange, the other four are not.
+    const inks = (await screen.findAllByRole("tab")).map((one) => [
+      label(one),
+      drawn(within(one).getByText(String(label(one)))).color === colours.orange,
+    ]);
+    expect(inks).toEqual(TABS.map((each) => [each.name, each.name === tab]));
   });
 
   it("no tab shows a number while nobody is signed in", async () => {
@@ -51,6 +65,19 @@ describe("the five tabs", () => {
       const copyLine = [["This is the ", "Feature 1", " copy, for testing."]];
       expect([tab.name, withDigits]).toEqual([tab.name, tab.name === "Me" ? copyLine : []]);
     }
+  });
+
+  it("no drawn words are under 11, and no drawn tab or button is under 44 tall", async () => {
+    await render(<App extra={extra} ask={answers(false)} />);
+    for (const tab of TABS) {
+      await open(tab.name);
+      const small = screen.getAllByText(/./).filter((line) => !((drawn(line).fontSize ?? 0) >= 11));
+      expect([tab.name, small.map(words)]).toEqual([tab.name, []]);
+    }
+    const pressed = [...screen.getAllByRole("tab"), await screen.findByRole("button", { name: "Try again" })];
+    expect(pressed).toHaveLength(6);
+    const heights = pressed.map((one) => Number(drawn(one).height ?? drawn(one).minHeight ?? 0));
+    expect(heights.filter((height) => height < 44)).toEqual([]);
   });
 });
 
