@@ -14,7 +14,8 @@ import * as service from "./service.js";
 export function registerReportsRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date }): void {
   const reportsDeps: service.ReportsDeps = { sql: deps.sql, now: deps.now };
 
-  /** Read each time the page opens, every report from one allowance. Keyed on the person; a gym's staff share one address,
+  /** Read each time the page opens, every report from one allowance: three reads an open
+   *  for somebody who sees money, so 40 opens an hour for one person, which is meant. Keyed on the person; a gym's staff share one address,
    *  so the address ceiling is ten times one person's and is counted a gym at a time. It
    *  is asked after the staff check, so somebody refused uses up nobody's allowance. */
   const limit = createDualRateLimit({

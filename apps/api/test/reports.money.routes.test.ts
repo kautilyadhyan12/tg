@@ -48,8 +48,12 @@ const LIVE_PLAN = "zz_reports_money_routes";
 /** Tuesday 20 October 2026, midday in London. */
 const TODAY = new Date("2026-10-20T11:00:00Z");
 
+// The limits are counted in the real Redis, which outlives a run: each run signs up its
+// own email addresses, from network addresses of its own.
+const RUN_NET = String(1 + Math.floor(Math.random() * 250));
+const RUN_TAG = Date.now().toString(36);
 let ipCounter = 0;
-const nextIp = () => `10.23.${String(Math.floor(ipCounter / 250))}.${String((ipCounter++ % 250) + 1)}`;
+const nextIp = () => `10.${RUN_NET}.${String(Math.floor(ipCounter / 250))}.${String((ipCounter++ % 250) + 1)}`;
 let keyCounter = 0;
 const nextKey = () => `00000000-0000-4000-8000-${String(++keyCounter).padStart(12, "0")}`;
 const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies =>
@@ -115,7 +119,7 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
   const post = (path: string, payload: unknown, cookies: Cookies = {}) => send("POST", path, cookies, payload);
 
   const makeUser = async (local: string): Promise<User> => {
-    const email = `rep-m-${local}@example.com`;
+    const email = `rep-m-${RUN_TAG}-${local}@example.com`;
     const reg = await post("/v1/auth/register", { email, password: PASSWORD, displayName: `Rep ${local}` });
     expect(reg.statusCode, reg.body).toBe(201);
     const { userId } = JSON.parse(reg.body) as { userId: string };
@@ -330,6 +334,8 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
       expect(report.owed).toEqual({
         minor: 4999 + 2999 + 4999,
         people: 2,
+        // The Members list marks the same two, and nobody else.
+        listOnlyPeople: 0,
         pastMinor: 6000,
         pastPeople: 1,
         // Due before 30 September: Dee's, Eve's September and Hal's.
@@ -412,6 +418,96 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
 
       await heldService.undoMemberPayment(on("2026-10-16"), owner.userId, gym, amy.entryId, amy.id, idOf(paid.billing.bills[0]?.payments[0]));
       expect((await read(gym, owner)).state).toBe("no_payments");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Payment due counts the people the Members list and Overview count, and the edges of due and overdue fall on the right day",
+    async () => {
+      clock = TODAY;
+      const owner = await makeUser("edges");
+      const gym = await makeGym(owner, "Rep Money Edges");
+      const gold = await addType(gym, owner, type("Gold Monthly", {}));
+      await sql`UPDATE gyms SET bills_overdue_days = 20 WHERE id = ${gym}`;
+      await give(gym, owner, "Zoe Paid", gold, "2026-10-10", true);
+      // Due today: owed, and not overdue. Due 20 days ago: the last day it is not overdue.
+      await give(gym, owner, "Tom Due Today", gold, "2026-10-20", false);
+      await give(gym, owner, "Uma On The Edge", gold, "2026-09-30", false);
+      await give(gym, owner, "Vic Overdue", gold, "2026-09-29", false);
+      // A past member whose repeating membership is still stored in use brings in nothing.
+      const wes = await give(gym, owner, "Wes Past", gold, "2026-10-05", true);
+      await sql`UPDATE gym_member_list_entries SET former_at = '2026-10-12T11:00:00Z' WHERE gym_id = ${gym} AND id = ${wes.entryId}`;
+      // Two people the gym's own file marks Payment due, with no bill here.
+      for (const name of ["Xia File Only", "Yan File Only"]) {
+        const id = await listed(gym, name);
+        await sql`UPDATE gym_member_list_entries SET payment_status = 'Payment due' WHERE gym_id = ${gym} AND id = ${id}`;
+      }
+
+      const report = figures(await read(gym, owner));
+      expect(report.recurring).toEqual({ monthlyMinor: 4 * 4999, memberships: 4 });
+      expect(report.owed).toEqual({
+        minor: 3 * 4999,
+        people: 3,
+        listOnlyPeople: 2,
+        pastMinor: 0,
+        pastPeople: 0,
+        overdueMinor: 4999,
+        overduePeople: 1,
+        overdueAfterDays: 20,
+      });
+
+      // One answer with Overview's box and the Members list's own chip.
+      const weekRes = await get(`/v1/orgs/${gym}/week`, owner.cookies);
+      expect(weekRes.statusCode, weekRes.body).toBe(200);
+      const week = (JSON.parse(weekRes.body) as { week: { paymentDue: { count: number; past: number } | null } }).week;
+      expect(week.paymentDue).toEqual({ count: report.owed.people + report.owed.listOnlyPeople, past: report.owed.pastPeople });
+      const listRes = await get(`/v1/orgs/${gym}/member-list`, owner.cookies);
+      expect(listRes.statusCode, listRes.body).toBe(200);
+      const { list } = JSON.parse(listRes.body) as { list: { paymentStatuses: { label: string; count: number }[] } };
+      const chip = list.paymentStatuses.filter((c) => c.label.toLowerCase() === "payment due").reduce((sum, c) => sum + c.count, 0);
+      expect(chip).toBe(report.owed.people + report.owed.listOnlyPeople);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym whose country changed still reads the money it recorded, in the currency it was recorded in",
+    async () => {
+      clock = TODAY;
+      const owner = await makeUser("moved");
+      const gym = await makeGym(owner, "Rep Money Moved");
+      const gold = await addType(gym, owner, type("Gold Monthly", {}));
+      await give(gym, owner, "Amy Pounds", gold, "2026-10-10", true);
+      await give(gym, owner, "Abe Owes Pounds", gold, "2026-10-12", false);
+      const before = figures(await read(gym, owner));
+      expect(before).toMatchObject({ currency: "GBP", otherCurrency: false, thisMonth: { paidMinor: 4999 }, owed: { minor: 4999, people: 1 } });
+
+      const moved = await api().inject({
+        method: "PATCH",
+        url: `/v1/orgs/${gym}`,
+        remoteAddress: nextIp(),
+        cookies: owner.cookies,
+        headers: { "content-type": "application/json" },
+        payload: JSON.stringify({ name: "Rep Money Moved", city: "Austin", country: "US", timezone: "Europe/London" }),
+      });
+      expect(moved.statusCode, moved.body).toBe(200);
+      // The same figures as before: nothing is lost, and nothing reads "no payment".
+      expect(figures(await read(gym, owner))).toEqual(before);
+
+      // A payment in the new currency: the figures follow the newest money, and say the
+      // older money is left out.
+      const dollars = await addType(gym, owner, type("Dollar Monthly", { priceMinor: 3000 }));
+      await give(gym, owner, "Bea Dollars", dollars, "2026-10-18", true);
+      const after = figures(await read(gym, owner));
+      expect(after).toMatchObject({
+        currency: "USD",
+        otherCurrency: true,
+        recurring: { monthlyMinor: 3000, memberships: 1 },
+        thisMonth: { paidMinor: 3000, refundedMinor: 0, netMinor: 3000 },
+        owed: { minor: 0, people: 0 },
+      });
+      expect(after.types.map((t) => t.name)).toEqual(["Dollar Monthly"]);
     },
     TEST_TIMEOUT_MS,
   );

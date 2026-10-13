@@ -80,7 +80,7 @@ function facts(over: Partial<MoneyReportFacts> = {}): MoneyReportFacts {
     overdueAfterDays: 0,
     held: [],
     months: [],
-    owed: { currentMinor: 0, currentPeople: 0, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 },
+    owed: { currentMinor: 0, currentPeople: 0, listPeople: 0, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 },
     members: { today: TODAY, firstListedOn: "2026-01-05", everLeft: true, months: monthsTo(TODAY, LEAVING) },
     ...over,
   };
@@ -189,7 +189,7 @@ describe("no figures, and why", () => {
     ["no membership ever given", { anyMembership: false, firstPaidOn: null }, "no_memberships"],
     ["a country we do not serve", { currency: null }, "no_memberships"],
     ["memberships, and no payment recorded", { firstPaidOn: null }, "no_payments"],
-    ["memberships owing, and no payment recorded", { firstPaidOn: null, owed: { currentMinor: 9999, currentPeople: 2, pastMinor: 0, pastPeople: 0, overdueMinor: 9999, overduePeople: 2 } }, "no_payments"],
+    ["memberships owing, and no payment recorded", { firstPaidOn: null, owed: { currentMinor: 9999, currentPeople: 2, listPeople: 2, pastMinor: 0, pastPeople: 0, overdueMinor: 9999, overduePeople: 2 } }, "no_payments"],
   ] as const)("%s", (_name, over, state) => {
     expect(report(over)).toEqual({ state, timezone: "Europe/London", today: TODAY });
   });
@@ -224,7 +224,7 @@ describe("lifetime value: the money of churn's months for each member who left i
       { members: { today: TODAY, firstListedOn: "2026-01-05", everLeft: true, months: monthsTo(TODAY).map((m) => ({ ...m, activeAtStart: 0 })) } },
       "nobody_at_start",
     ],
-    ["those months gave back as much as they took", { months: [money("gold", "2026-08", 5000, 5000), money("gold", "2026-10", 9000)] }, "not_enough_data"],
+    ["those months gave back as much as they took", { months: [money("gold", "2026-08", 5000, 5000), money("gold", "2026-10", 9000)] }, "nothing_collected"],
   ];
   it.each(cases)("%s", (_name, over, state) => {
     expect(figures({ months: quarter, ...over }).lifetimeValue.state).toBe(state);
@@ -236,9 +236,20 @@ describe("what is carried through as the database counted it", () => {
     const r = figures({
       otherCurrency: true,
       overdueAfterDays: 14,
-      owed: { currentMinor: 12997, currentPeople: 2, pastMinor: 6000, pastPeople: 1, overdueMinor: 13998, overduePeople: 3 },
+      owed: { currentMinor: 12997, currentPeople: 2, listPeople: 5, pastMinor: 6000, pastPeople: 1, overdueMinor: 13998, overduePeople: 3 },
     });
     expect(r.otherCurrency).toBe(true);
-    expect(r.owed).toEqual({ minor: 12997, people: 2, pastMinor: 6000, pastPeople: 1, overdueMinor: 13998, overduePeople: 3, overdueAfterDays: 14 });
+    expect(r.owed).toEqual({ minor: 12997, people: 2, listOnlyPeople: 3, pastMinor: 6000, pastPeople: 1, overdueMinor: 13998, overduePeople: 3, overdueAfterDays: 14 });
+  });
+
+  it.each([
+    ["the list counts the same people as the bills", 2, 2, 0],
+    ["the list counts people with no bill here", 2, 6, 4],
+    ["only the list counts anybody", 0, 3, 3],
+    ["the list counts fewer than the bills: never below nought", 3, 2, 0],
+  ])("people marked Payment due with no bill here: %s", (_name, currentPeople, listPeople, want) => {
+    const r = figures({ owed: { currentMinor: 100 * currentPeople, currentPeople, listPeople, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 } });
+    expect(r.owed.listOnlyPeople).toBe(want);
+    expect(r.owed.people).toBe(currentPeople);
   });
 });

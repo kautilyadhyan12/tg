@@ -39,13 +39,14 @@ export interface MoneyReportFacts {
   timezone: string;
   /** The gym's own day today. */
   today: string;
-  /** The currency the gym sells in; null where its country is not one we serve. */
+  /** The currency of the gym's newest money: its newest payment's, else its newest
+   *  membership's, else its country's. Null with none of the three. */
   currency: string | null;
   /** Whether a membership has ever been given here. */
   anyMembership: boolean;
   /** The gym's day of the first payment that stands; null with none. */
   firstPaidOn: string | null;
-  /** A payment stands in another currency (the gym's country changed): not counted. */
+  /** A payment or a bill owed stands in another currency (the gym's country changed): not counted. */
   otherCurrency: boolean;
   /** How many days after its due date an unpaid bill reads Overdue. */
   overdueAfterDays: number;
@@ -56,6 +57,8 @@ export interface MoneyReportFacts {
   owed: {
     currentMinor: number;
     currentPeople: number;
+    /** The people on the list the Members page reads as "Payment due": Overview's count. */
+    listPeople: number;
     pastMinor: number;
     pastPeople: number;
     overdueMinor: number;
@@ -67,8 +70,9 @@ export interface MoneyReportFacts {
 
 const lifetimeSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("ok"), minor: minorSchema, months: z.array(monthSchema).min(1), leavers: countSchema.min(1) }).strict(),
-  /** `nobody_left` here is nobody in the months it is worked out over. */
-  z.object({ state: z.enum(["not_enough_data", "nobody_left", "nobody_at_start"]) }).strict(),
+  /** `nobody_left` here is nobody in the months it is worked out over; `nothing_collected`
+   *  is those months giving back as much as they took. */
+  z.object({ state: z.enum(["not_enough_data", "nobody_left", "nobody_at_start", "nothing_collected"]) }).strict(),
 ]);
 export type MoneyLifetimeFigure = z.infer<typeof lifetimeSchema>;
 
@@ -86,7 +90,11 @@ const moneyFiguresSchema = z
     owed: z
       .object({
         minor: minorSchema,
+        /** People on the list with a bill owed here. */
         people: countSchema,
+        /** People the Members page also reads as "Payment due" with no bill owed here: the
+         *  gym's own file says so, or their bill is not opened yet. No amount is known. */
+        listOnlyPeople: countSchema,
         pastMinor: minorSchema,
         pastPeople: countSchema,
         overdueMinor: minorSchema,
@@ -217,6 +225,7 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
     owed: {
       minor: facts.owed.currentMinor,
       people: facts.owed.currentPeople,
+      listOnlyPeople: Math.max(0, facts.owed.listPeople - facts.owed.currentPeople),
       pastMinor: facts.owed.pastMinor,
       pastPeople: facts.owed.pastPeople,
       overdueMinor: facts.owed.overdueMinor,
@@ -240,7 +249,7 @@ function lifetimeValue(facts: MoneyReportFacts, netOf: (month: string) => number
   if (first === undefined || facts.firstPaidOn === null || facts.firstPaidOn > `${first}-01`) return { state: "not_enough_data" };
   if (basis.leftOfStart === 0) return { state: "nobody_left" };
   const net = basis.months.reduce((sum, month) => sum + netOf(month), 0);
-  if (net <= 0) return { state: "not_enough_data" };
+  if (net <= 0) return { state: "nothing_collected" };
   return { state: "ok", minor: Math.round(net / basis.leftOfStart), months: basis.months, leavers: basis.leftOfStart };
 }
 

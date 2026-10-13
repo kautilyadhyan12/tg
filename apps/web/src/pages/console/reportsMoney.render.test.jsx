@@ -95,7 +95,7 @@ const money = (over = {}) =>
       { typeId: 'gold', typeName: 'Gold Monthly', month: '2026-09', paidMinor: 12000, refundedMinor: 2000 },
       { typeId: 'day', typeName: 'One month', month: '2026-10', paidMinor: 6000, refundedMinor: 1500 },
     ],
-    owed: { currentMinor: 7998, currentPeople: 2, pastMinor: 6000, pastPeople: 1, overdueMinor: 4999, overduePeople: 1 },
+    owed: { currentMinor: 7998, currentPeople: 2, listPeople: 2, pastMinor: 6000, pastPeople: 1, overdueMinor: 4999, overduePeople: 1 },
     members: { today: TODAY, firstListedOn: '2026-01-05', everLeft: true, months: memberMonths },
     ...over,
   });
@@ -170,7 +170,7 @@ describe('the money figures', () => {
 
   it('nothing due is a sentence with no button; no repeating membership is a sentence, never £0.00', async () => {
     svc.money.mockResolvedValue(
-      money({ held: [], owed: { currentMinor: 0, currentPeople: 0, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 } }),
+      money({ held: [], owed: { currentMinor: 0, currentPeople: 0, listPeople: 0, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 } }),
     );
     open();
     const due = within(await screen.findByTestId('tile-due'));
@@ -186,14 +186,14 @@ describe('the money figures', () => {
     fireEvent.click(due.getByRole('button', { name: 'How Payment due is worked out' }));
     expect(
       due.getByText(
-        'Bills that have fallen due and are not fully paid, less what has been paid on them. A bill is overdue 7 days after its due date; you set this in Memberships, under Bills. Cancelled bills are not counted.',
+        "Bills that have fallen due and are not fully paid, less what has been paid on them. A bill is overdue 7 days after its due date; you set this in Memberships, under Bills. Cancelled bills are not counted. A new month's bill appears within the hour after the month begins.",
       ),
     ).toBeTruthy();
     const life = within(tile('lifetime'));
     fireEvent.click(life.getByRole('button', { name: 'How Lifetime value is worked out' }));
     expect(
       life.getByText(
-        'What a member pays you before they leave, on average: the money collected in July, August and September, divided by the 2 members who left in those months. It is the same as the money a member brings in a month divided by churn.',
+        'What a member pays you before they leave, on average: the money collected in July, August and September, divided by the 2 members who left in those months. Someone who joined and left inside one month is not counted. It is the same as the money a member brings in a month divided by churn.',
       ),
     ).toBeTruthy();
   });
@@ -206,17 +206,66 @@ describe('the money figures', () => {
   });
 
   it('everything owed being overdue is said in words, not as the same amount twice', async () => {
-    svc.money.mockResolvedValue(money({ owed: { currentMinor: 4999, currentPeople: 1, pastMinor: 0, pastPeople: 0, overdueMinor: 4999, overduePeople: 1 } }));
+    svc.money.mockResolvedValue(money({ owed: { currentMinor: 4999, currentPeople: 1, listPeople: 1, pastMinor: 0, pastPeople: 0, overdueMinor: 4999, overduePeople: 1 } }));
     open();
     const due = within(await screen.findByTestId('tile-due'));
     expect(due.getByText('1 member · all of it overdue')).toBeTruthy();
     expect(due.queryByRole('link', { name: 'See past members' })).toBeNull();
   });
 
+  it('people the Members list marks Payment due with no bill here are said, and See who still opens them', async () => {
+    svc.money.mockResolvedValue(money({ owed: { currentMinor: 7998, currentPeople: 2, listPeople: 5, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 } }));
+    open();
+    const due = within(await screen.findByTestId('tile-due'));
+    expect(due.getByText('2 members · none of it overdue · 3 more are marked Payment due on your member list, with no amount in the app.')).toBeTruthy();
+    expect(due.getByRole('link', { name: 'See who' })).toBeTruthy();
+    cleanup();
+    resetConsoleOrgs();
+    svc.money.mockResolvedValue(money({ owed: { currentMinor: 0, currentPeople: 0, listPeople: 1, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 } }));
+    open();
+    const again = within(await screen.findByTestId('tile-due'));
+    expect(again.getByText('No bill in the app is due.')).toBeTruthy();
+    expect(again.getByText('1 member is marked Payment due on your member list, with no amount in the app.')).toBeTruthy();
+    expect(again.getByRole('link', { name: 'See who' }).getAttribute('href')).toBe('/console/iron-house/members?show=payment-due');
+  });
+
+  it('three months that gave back as much as they took say so, not "not enough data"', async () => {
+    svc.money.mockResolvedValue(
+      money({
+        months: [
+          { typeId: 'gold', typeName: 'Gold Monthly', month: '2026-08', paidMinor: 5000, refundedMinor: 5000 },
+          { typeId: 'gold', typeName: 'Gold Monthly', month: '2026-10', paidMinor: 5000, refundedMinor: 0 },
+        ],
+      }),
+    );
+    open();
+    const life = within(await screen.findByTestId('tile-lifetime'));
+    expect(life.getByText('In the last 3 full months you refunded as much as you collected, so there is no lifetime value to show.')).toBeTruthy();
+  });
+
+  it('a membership name a spreadsheet would run as a formula is saved as words', async () => {
+    const saved = [];
+    const real = globalThis.Blob;
+    vi.stubGlobal('Blob', function Blob(parts, options) {
+      saved.push(parts.join(''));
+      return new real(parts, options);
+    });
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    svc.money.mockResolvedValue(money({ months: [{ typeId: 'bad', typeName: '=HYPERLINK("http://x","Gold")', month: '2026-10', paidMinor: 100, refundedMinor: 0 }] }));
+    open();
+    const part = within(await screen.findByTestId('money-by-membership'));
+    fireEvent.click(part.getByRole('button', { name: 'Download CSV' }));
+    vi.unstubAllGlobals();
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toContain(`"'=HYPERLINK(""http://x"",""Gold"")"`);
+    expect(saved[0]).not.toMatch(/(^|,|\n)"=/);
+  });
+
   it('says so where payments in another currency are left out', async () => {
     svc.money.mockResolvedValue(money({ otherCurrency: true }));
     open();
-    expect((await screen.findByTestId('other-currency-note')).textContent).toBe('Payments recorded in another currency, before your country changed, are not counted.');
+    expect((await screen.findByTestId('other-currency-note')).textContent).toBe('Payments and bills in another currency, from before your country changed, are not counted here.');
   });
 });
 

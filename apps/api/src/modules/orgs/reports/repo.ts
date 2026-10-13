@@ -264,14 +264,32 @@ export async function readClassCounts(
   return { ever: ever[0]?.ever === true, types: z.array(classCountsSchema).parse(rows) };
 }
 
-const moneyGymSchema = z.object({ country: z.string().nullable(), bills_overdue_days: count });
+const moneyGymSchema = z.object({
+  country: z.string().nullable(),
+  bills_overdue_days: count,
+  paid_currency: z.string().nullable(),
+  held_currency: z.string().nullable(),
+});
 
-/** The gym's country, which names the currency it sells in, and how many days after its
- *  due date an unpaid bill reads Overdue. */
-export async function readMoneyGym(sql: Sql | TransactionSql, gymId: string): Promise<{ country: string | null; overdueAfterDays: number }> {
-  const rows = await sql<Record<string, unknown>[]>`SELECT country, bills_overdue_days FROM gyms WHERE id = ${gymId}`;
+/** How many days after its due date an unpaid bill reads Overdue, and the currency the
+ *  gym's notebook is in: its newest standing payment's, else its newest membership's. A
+ *  membership keeps the currency it was given in, so after a gym's country changes its
+ *  money is still there to count; `country` is for a gym with neither. */
+export async function readMoneyGym(
+  sql: Sql | TransactionSql,
+  gymId: string,
+): Promise<{ country: string | null; overdueAfterDays: number; notebookCurrency: string | null }> {
+  const rows = await sql<Record<string, unknown>[]>`
+    SELECT g.country, g.bills_overdue_days,
+           (SELECT p.currency FROM gym_member_payments p
+            WHERE p.gym_id = g.id AND p.undone_at IS NULL
+            ORDER BY p.paid_on DESC, p.seq DESC LIMIT 1) AS paid_currency,
+           (SELECT h.currency FROM gym_held_memberships h
+            WHERE h.gym_id = g.id
+            ORDER BY h.created_at DESC, h.id LIMIT 1) AS held_currency
+    FROM gyms g WHERE g.id = ${gymId}`;
   const row = moneyGymSchema.parse(rows[0]);
-  return { country: row.country, overdueAfterDays: row.bills_overdue_days };
+  return { country: row.country, overdueAfterDays: row.bills_overdue_days, notebookCurrency: row.paid_currency ?? row.held_currency };
 }
 
 /** Sums of money are whole minor units; added up they can pass an int4. */
@@ -352,8 +370,10 @@ export async function readMoney(
       EXISTS (SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = ${gymId}) AS any_membership,
       (SELECT to_char(min(p.paid_on), 'YYYY-MM-DD') FROM gym_member_payments p
        WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency = ${currency}) AS first_paid_on,
-      EXISTS (SELECT 1 FROM gym_member_payments p
-              WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency <> ${currency}) AS other_currency,
+      (EXISTS (SELECT 1 FROM gym_member_payments p
+               WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency <> ${currency})
+       OR EXISTS (SELECT 1 FROM gym_member_bills b, clock c
+                  WHERE b.gym_id = ${gymId} AND b.status = 'open' AND b.due_on <= c.today AND b.currency <> ${currency})) AS other_currency,
       (SELECT COALESCE(json_agg(json_build_object(
                 'typeId', m.type_id, 'typeName', t.name, 'month', m.month,
                 'paidMinor', m.paid_minor, 'refundedMinor', m.refunded_minor)), '[]'::json)

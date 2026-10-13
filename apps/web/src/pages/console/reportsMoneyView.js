@@ -1,5 +1,5 @@
 import { formatMinor, minorToPriceText } from '@app/shared';
-import { dayText, monthLong, monthShort } from './reportsView';
+import { csvWords, dayText, monthLong, monthShort } from './reportsView';
 import { PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 
 // The Reports page's money words (spec Part 3 §16.5; ROADMAP 21b-i). The figures come from
@@ -28,7 +28,7 @@ export function moneyLine(report) {
   return `These figures come from the payments your staff record in the app. The first was recorded on ${dayText(report.firstPaidOn)}.`;
 }
 
-export const OTHER_CURRENCY_NOTE = 'Payments recorded in another currency, before your country changed, are not counted.';
+export const OTHER_CURRENCY_NOTE = 'Payments and bills in another currency, from before your country changed, are not counted here.';
 
 /** What takes the figures' place while there are none: the sentence, the place that
  *  starts them, its button, and who can for staff who may not open it. */
@@ -56,6 +56,7 @@ const LIFETIME_NONE = {
   not_enough_data: (words) => `Not enough data yet. Lifetime value needs 3 full months of payments recorded here and of your ${words.person} list.`,
   nobody_left: (words) => `Lifetime value is what a ${words.person} pays you before they leave. Nobody left in the months it is worked out over.`,
   nobody_at_start: (words) => `You had no ${words.people} at the start of the last 3 full months, so there is no lifetime value yet.`,
+  nothing_collected: () => 'In the last 3 full months you refunded as much as you collected, so there is no lifetime value to show.',
 };
 
 /** The people who owe, in words: "2 members", "1 past member", "2 members and 1 past member". */
@@ -74,6 +75,15 @@ export function moneyTiles(report, words, orgSlug) {
   const beforeText = before === null ? '' : ` · ${monthName(before.month)}: ${moneyText(before.netMinor, cur)}`;
   const refunded = report.thisMonth.refundedMinor > 0;
   const owedMinor = report.owed.minor + report.owed.pastMinor;
+  // People the Members page also shows as Payment due, with no amount in the app.
+  const listOnly = report.owed.listOnlyPeople;
+  const listOnlyText =
+    listOnly === 0
+      ? null
+      : owedMinor === 0
+        ? `${listOnly === 1 ? `1 ${words.person} is` : `${count(listOnly)} ${words.people} are`} marked Payment due on your ${words.person} list, with no amount in the app.`
+        : `${listOnly === 1 ? '1 more is' : `${count(listOnly)} more are`} marked Payment due on your ${words.person} list, with no amount in the app.`;
+  const overdueText = report.owed.overdueMinor === 0 ? 'none of it overdue' : report.owed.overdueMinor >= owedMinor ? 'all of it overdue' : `${moneyText(report.owed.overdueMinor, cur)} of it overdue`;
   const base = `/console/${orgSlug}`;
   const overdueWhen =
     report.owed.overdueAfterDays === 0
@@ -115,13 +125,10 @@ export function moneyTiles(report, words, orgSlug) {
       label: 'Payment due',
       value: owedMinor === 0 ? null : moneyText(owedMinor, cur),
       line: owedMinor === 0 ? 'No bill in the app is due.' : null,
-      note:
-        owedMinor === 0
-          ? null
-          : `${owingPeople(report.owed, words)} · ${report.owed.overdueMinor === 0 ? 'none of it overdue' : report.owed.overdueMinor >= owedMinor ? 'all of it overdue' : `${moneyText(report.owed.overdueMinor, cur)} of it overdue`}`,
-      how: `Bills that have fallen due and are not fully paid, less what has been paid on them. A bill is overdue ${overdueWhen}; you set this in Memberships, under Bills. Cancelled bills are not counted.`,
+      note: [owedMinor === 0 ? null : `${owingPeople(report.owed, words)} · ${overdueText}`, listOnlyText].filter((part) => part !== null).join(' · ') || null,
+      how: `Bills that have fallen due and are not fully paid, less what has been paid on them. A bill is overdue ${overdueWhen}; you set this in Memberships, under Bills. Cancelled bills are not counted. A new month's bill appears within the hour after the month begins.`,
       links: [
-        ...(report.owed.people > 0 ? [{ to: `${base}/members?show=${PAYMENT_DUE_SHOW}`, button: 'See who' }] : []),
+        ...(report.owed.people + listOnly > 0 ? [{ to: `${base}/members?show=${PAYMENT_DUE_SHOW}`, button: 'See who' }] : []),
         ...(report.owed.pastPeople > 0 ? [{ to: `${base}/members?show=${PAST_PAYMENT_DUE_SHOW}`, button: `See past ${words.people}` }] : []),
       ],
     },
@@ -133,7 +140,7 @@ export function moneyTiles(report, words, orgSlug) {
       note: life.state === 'ok' ? `a ${words.person}, ${monthShort(life.months[0]).slice(0, 3)} to ${monthShort(life.months[life.months.length - 1])}` : null,
       how:
         life.state === 'ok'
-          ? `What a ${words.person} pays you before they leave, on average: the money collected in ${monthList(life.months)}, divided by the ${leavers} who left in those months. It is the same as the money a ${words.person} brings in a month divided by churn.`
+          ? `What a ${words.person} pays you before they leave, on average: the money collected in ${monthList(life.months)}, divided by the ${leavers} who left in those months. Someone who joined and left inside one month is not counted. It is the same as the money a ${words.person} brings in a month divided by churn.`
           : `What a ${words.person} pays you before they leave, on average: the money collected in the last 3 full months, divided by the ${words.people} who left in those months.`,
       links: [],
     },
@@ -192,6 +199,6 @@ export function moneyTypesCsv(report) {
   const cur = report.currency;
   return csv([
     ['Membership', 'In use now', `Monthly recurring (${cur})`, `Collected in ${report.thisMonth.month} (${cur})`, `Collected, last 12 months (${cur})`],
-    ...report.types.map((t) => [t.name, t.inUse, plain(t.monthlyMinor, cur), plain(t.monthNetMinor, cur), plain(t.yearNetMinor, cur)]),
+    ...report.types.map((t) => [csvWords(t.name), t.inUse, plain(t.monthlyMinor, cur), plain(t.monthNetMinor, cur), plain(t.yearNetMinor, cur)]),
   ]);
 }

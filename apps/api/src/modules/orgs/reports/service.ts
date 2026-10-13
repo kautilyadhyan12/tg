@@ -2,9 +2,11 @@
 // and money figures, for staff holding `reports.read`. Counts only; no person's name or details leave here.
 import type { Sql } from "postgres";
 import {
+  HELD_PAYMENT_WORDS,
   attendanceReportFrom,
   attendanceReportResponseSchema,
   attendanceWindows,
+  heldListWords,
   leadSourceSchema,
   memberCurrencyForCountry,
   membersReportFrom,
@@ -19,8 +21,9 @@ import {
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { inUseForMoney } from "../memberships/heldRepo.js";
-import { overNow } from "../memberships/over.js";
+import { heldAndOverIn, overNow } from "../memberships/over.js";
 import { OrgsError, requirePrivilege } from "../service.js";
+import { readPaymentDue } from "../week/repo.js";
 import * as repo from "./repo.js";
 
 export interface ReportsDeps {
@@ -102,14 +105,18 @@ export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { ti
   const today = dayInTz(deps.now(), org.timezone);
   const facts = await deps.sql.begin("isolation level repeatable read read only", async (tx) => {
     const gym = await repo.readMoneyGym(tx, gymId);
-    const currency = memberCurrencyForCountry(gym.country);
+    const currency = gym.notebookCurrency ?? memberCurrencyForCountry(gym.country);
     if (currency === null) return null;
     const money = await repo.readMoney(tx, gymId, today, currency, gym.overdueAfterDays);
-    if (!money.any_membership || money.first_paid_on === null) return { gym, currency, money, held: [], members: null };
+    if (!money.any_membership || money.first_paid_on === null) return { gym, currency, money, held: [], members: null, listPeople: 0 };
     const held = await inUseForMoney(tx, gymId, currency);
-    const gone = [...(await overNow(tx, gymId, today, null))].map(([id, left]) => ({ id, on: left.on }));
+    const onList = await heldAndOverIn(tx, gymId, today, null);
+    const gone = [...onList.over].map(([id, left]) => ({ id, on: left.on }));
     const members = await repo.readMemberCounts(tx, gymId, org.timezone, today, gone);
-    return { gym, currency, money, held, members };
+    // Who the Members page reads as "Payment due": Overview's box counts them the same way.
+    const answered = [...onList.held.values()].filter(({ shown }) => heldListWords(shown).payment === HELD_PAYMENT_WORDS.due).length;
+    const own = await readPaymentDue(tx, gymId, [...onList.held.keys()]);
+    return { gym, currency, money, held, members, listPeople: answered + own.ownWord };
   });
   return moneyReportResponseSchema.parse({
     report: moneyReportFrom({
@@ -125,6 +132,7 @@ export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { ti
       owed: {
         currentMinor: facts?.money.current_minor ?? 0,
         currentPeople: facts?.money.current_people ?? 0,
+        listPeople: facts?.listPeople ?? 0,
         pastMinor: facts?.money.past_minor ?? 0,
         pastPeople: facts?.money.past_people ?? 0,
         overdueMinor: facts?.money.overdue_minor ?? 0,
