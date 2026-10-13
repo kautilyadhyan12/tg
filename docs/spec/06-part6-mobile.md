@@ -602,8 +602,8 @@ is. This replaces §16.3's "the console's named colours and Archivo, light and d
   `tabbar.html`, `icons.json` (Lucide's line icons), `images.json` (each picture's
   address on the canvas). `python build.py <out folder> <folder of pictures>` makes
   them. The design canvas: https://claude.ai/artifact/Q8H9SQHG7bMfmp9sJRMPCQ (Kd's).
-  On his laptop, in `D:\Projectsi-home-gym-design-phone\`: `member-web\` (pictures
-  of the web pages as they are), `img\` (the small pictures), `shots-member-design\`.
+  On his laptop, in `D:/Projects/ai-home-gym-design/4-phone/`: `member-web/` (pictures
+  of the web pages as they are), `img/` (the small pictures), `shots-member-design/`.
 - **Drawn:** Today (the Dashboard) · Workout (Exercises, and My Workout) · Food
   (Nutrition, and Add to a meal as a box from the bottom) · Gym (My gyms, with a gym and
   with none) · Me (Settings, Progress, Achievements) · one sheet of rules and pieces.
