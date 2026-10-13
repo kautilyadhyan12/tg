@@ -406,3 +406,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **30a, as it stood when it was built (merged 2026-10-13, PR #233):**
 
     - 30a. [ ] **Keep, change, remove and measure a goal.** Ten kinds the server can measure today; running goals wait for item 37, "master an exercise" and a harder version for item 36, a hold time (plank) for the exercise folders' holds, mobility sessions for a way to record one.
+
+**30b, as it stood when it was built (merged 2026-10-13, PR #234):**
+
+    - 30b. [ ] **The starter set from the setup answers**: the app's own goals for a new person, each one changeable and removable, under 30a's health rule.

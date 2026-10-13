@@ -406,7 +406,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 30. **Goals, server side** (Stage 1's 5a; split 2026-10-12). It needs no phone, so it is this folder's first job.
     - 30a. [x] **Keep, change, remove and measure a goal** — merged 2026-10-13 (PR #233).
-    - 30b. [ ] **The starter set from the setup answers**: the app's own goals for a new person, each one changeable and removable, under 30a's health rule.
+    - 30b. [x] **The starter set from the setup answers** — merged 2026-10-13 (PR #234).
 31. [ ] **Today** (Stage 1's 5b): rings, the streak with its freezes, level and XP, this week, recent workouts, goals, and the Recommended box (7a-ii) with each option as it is built.
 32. [ ] **Food**: search, add by measure, the rings and a person's own numbers, change a logged food, saved dishes with rename and delete. Its database needs the food table loaded first.
 33. [ ] **A meal photo with the phone's camera, and barcode scan** (item 5; Stage 4 item 8).
