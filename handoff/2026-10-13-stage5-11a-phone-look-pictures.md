@@ -8,3 +8,4 @@
 - **Examples, not decisions:** the numbers, the gym, the classes and the nine badge names are made up for the pictures; each feature's own job settles what its screen holds.
 - **Verified:** every drawing built by `build.py` and looked at as a picture from headless Edge at 390 wide. Found and fixed by looking: two pictures swapped between Weekly Challenges and Your Rank; a picture over a row's number; grey edges round two background pictures; the AI mark too pale on a white photo. Not seen with data: My gyms on the web was read from its code and its empty page, since the look's account had no gym.
 - **Open:** Kd's look at the pictures. **Next in feature folder 1:** 11b, in a fresh terminal, after his yes; its plan asks his yes for the packages (the tabs, the font, the icons, pictures, a screen-test tool).
+- (11a) **Kd's look: yes** (*"ok it looks good"*). The pull request is not open: the terminal's tool refused to open one twice, so it is his click or his word.
