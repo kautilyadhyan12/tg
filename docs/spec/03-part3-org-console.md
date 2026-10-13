@@ -2246,8 +2246,16 @@ desk's scan, staff's search and the box all read:
 - A payment is overdue on the day its bill reads Overdue on the person's page
   (`memberBillState`): a bill still open, and the gym's own days of grace passed. A
   payment a membership says is due with no bill of ours open stops nobody.
-- The gym's owner and staff are never stopped. A read that fails stops nobody, with a log
-  (`checkin.rules_unread`). A gym that never changed its choices reads nothing extra.
+- The gym's owner and staff are never stopped by their own pass, nor by the key tag of
+  their own record: the record their account holds, or one that carries both their
+  address and their name. An address alone is a relative's. A read that fails stops
+  nobody, with a log (`checkin.rules_unread`). A gym that never changed its choices reads
+  nothing extra.
+- **A family on one address.** Where the list cannot say which record is an account's
+  (§18.4: several records on its email, none in its name), the account's pass is judged
+  by every one of those records and stopped only where the rule stops them all, with the
+  first one's reason; staff's search answers the same. Somebody in the app on no record
+  at all holds nothing, and "current membership" stops them.
 - A stopped person's pass or key tag answers `see_staff` with the gym's name and nothing
   else: "Please see a member of staff", no name, no reason, the low sound. No visit is
   written and a pass is not used up. Staff's own check-in is never stopped, and somebody
@@ -2256,7 +2264,9 @@ desk's scan, staff's search and the box all read:
   (`stopped` on each person found), and Check in works as before.
 - Before Save the box names who the choices would send to staff today, each with why (the
   first three, "and N more", See all), and how many would be checked in as now
-  (`GET …/checkin-rules/preview`, up to 500 by name); Save waits for that answer. A save
+  (`GET …/checkin-rules/preview`, up to 500 by name), and in a line of its own how many
+  people in the app are on no record of the list and would be stopped too
+  (`notListed`); Save waits for that answer. A save
   is noted in `audit_log` (`org.checkin_rules_changed`), once for the same choices.
 
 ### 12.5 Staff check-in, and the live log
