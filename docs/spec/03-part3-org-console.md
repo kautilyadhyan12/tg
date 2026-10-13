@@ -4953,6 +4953,30 @@ rule is `moneyReportFrom` (`packages/shared/src/reportsMoney.ts`), the sums `rea
 money by product, which waits for the Sell page (18b), and by coach, which no payment
 names today.
 
+**Built by 21d-i (2026-10-13): the period.** One control at the top of Reports, **Last 4
+weeks · Last 3 months · Last 12 months**, that every part of the page follows; the page
+opens on twelve months, and the choice is in the address (`?period=4w|3m|12m`), so a page
+loaded again shows the same one. Four weeks are today and the 27 days before it. Three and
+twelve months are whole calendar months with the month in progress last, so a
+month-by-month table adds up to the period's own figure. One rule says which days a period
+covers (`reportPeriodOf`, `packages/shared/src/reportPeriod.ts`); each of the three reads
+takes the period, counts those days and answers with them (`period: { key, from, to }`),
+and the page's words are made from the answer, never from what was pressed. **What follows
+the period:** new members and members who left, the average stay of those who left, and
+the months listed · visits and the people who made them, the days and the weeks (the week
+a period begins in starts on the period's first day and says so), visits a member a week
+and the busiest hours over the whole weeks inside the period, and classes that started in
+it · money collected, the months listed, and each membership's money. **What does not,**
+because it is true today or is a monthly rate with its own months: members now, churn and
+retention (the newest three full months, RULINGS 2026-07-15), monthly recurring revenue,
+payment due and lifetime value; a line under the control says so. A gym younger than the
+period is counted from its own first day and each tile says which ("since 10 Jun 2026,
+when your member list started"); what it has no history for is a sentence, never a zero.
+A list of weeks longer than twelve shows the newest twelve and a button for the rest. A
+value that is not one of the three is refused (400). Cost at twelve months, a gym of 2,000
+beside 19 of 200 (the three `tools/measure-reports-*-cost.ts`, `--period=`): HANDOFF has
+the table. Not in this job (21d-ii): the same period a year earlier beside the figures.
+
 ### 16.6 Cards
 
 **20a** the inbox and the message rule (its table test first) · **20b** the automatic

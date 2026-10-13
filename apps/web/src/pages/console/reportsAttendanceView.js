@@ -18,7 +18,9 @@ const classesWord = (n) => (n === 1 ? '1 class' : `${count(n)} classes`);
 const dayShort = (day) => `${String(Number(day.slice(8, 10)))} ${monthShort(day.slice(0, 7)).slice(0, 3)}`;
 /** "Mon 5 Oct". */
 const dayNamed = (day) => `${weekdayShort(weekdayOf(day))} ${dayShort(day)}`;
-const span = (from, to) => `${dayShort(from)} to ${dayText(to)}`;
+/** A day beside a later one that carries its year: its own year is said only where it differs. */
+const dayBefore = (day, later) => (day.slice(0, 4) === later.slice(0, 4) ? dayShort(day) : dayText(day));
+const span = (from, to) => `${dayBefore(from, to)} to ${dayText(to)}`;
 
 /** An hour of the day on the gym's clock: "18:00", or "6 PM". */
 export function hourLabel(hour, clockFormat) {
@@ -54,7 +56,7 @@ export function visitTiles(report, words, clockFormat) {
     member = {
       value: String(m.perWeek),
       line: null,
-      note: `${count(m.visitors)} of the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list since ${dayShort(m.from)} came · ${span(m.from, m.to)}`,
+      note: `${count(m.visitors)} of the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list since ${dayBefore(m.from, m.to)} came · ${span(m.from, m.to)}`,
       how: `The ${visitsWord(m.visits)} that the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list since ${dayText(m.from)} made in the last ${String(m.weeks)} full weeks (${span(m.from, m.to)}), shared between them and the ${String(m.weeks)} weeks. Anyone added since, and anyone you have removed, is not counted.`,
     };
   } else {
@@ -105,7 +107,7 @@ export function visitTiles(report, words, clockFormat) {
       label: 'Visits',
       value: count(report.inPeriod.visits),
       line: null,
-      note: `${count(report.inPeriod.people)} ${report.inPeriod.people === 1 ? 'person' : 'people'} · ${dayShort(shownFrom)} to ${dayText(report.period.to)}${week === null ? '' : ` · this week, so far: ${count(week.visits)}`}`,
+      note: `${count(report.inPeriod.people)} ${report.inPeriod.people === 1 ? 'person' : 'people'} · ${span(shownFrom, report.period.to)}${week === null ? '' : ` · this week, so far: ${count(week.visits)}`}`,
       how: `Every check-in from ${dayText(shownFrom)} to today${shownFrom === report.period.from ? '' : ', the day of your first check-in'}. Someone who comes on three days is three visits and one person.`,
     },
     { key: 'per-member', label: `Visits a ${words.person} a week`, ...member },

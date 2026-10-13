@@ -73,6 +73,11 @@ describe('the visit tiles', () => {
     // Four weeks hold three whole ones, and the tiles say which.
     expect(old['per-member'].note).toBe('1 of the 1 member on your list since 14 Sep came · 14 Sep to 4 Oct 2026');
     expect(old.busiest.note).toBe('40 visits in 3 weeks');
+    // Twelve months begin in the year before: every first day says its year.
+    const year = tiles({ period: '12m', firstVisitOn: '2025-01-06' });
+    expect(year.visits.note).toBe('1 person · 1 Nov 2025 to 10 Oct 2026 · this week, so far: 15');
+    expect(year['per-member'].note).toBe('1 of the 1 member on your list since 3 Nov 2025 came · 3 Nov 2025 to 4 Oct 2026');
+    expect(year.busiest.how).toContain('(3 Nov 2025 to 4 Oct 2026)');
   });
 
   it('nobody on the list, no visit in the weeks counted, and only visits added later each say which', () => {
