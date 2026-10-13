@@ -303,7 +303,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 21a. **Members and attendance**, split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 21a-i. [x] **The Reports page, with the members figures** — merged 2026-10-10 (PR #211).
      - 21a-ii. [x] **Attendance on the Reports page** — merged 2026-10-10 (PR #214).
-   - 21b. [ ] **Money, from the gym's own notebook** (after 18a): MRR, collected, overdue, lifetime value; a gym that bills elsewhere is told why it has none. **Also (RULINGS 2026-10-08):** money by membership type and product, and by coach.
+   - 21b. **Money, from the gym's own notebook** (after 18a), split 2026-10-13 in two (products arrive with 18b, and no payment names a coach yet; the line as first written is in `archive/records/ROADMAP-stories.md`):
+     - 21b-i. [x] **Money on the Reports page** — merged 2026-10-13 (PR #236).
+     - 21b-ii. [ ] **Money by product and by coach** (RULINGS 2026-10-08): by product once Folder A's Sell page (18b) has merged; by coach, its plan first settles with Kd what money counts as a coach's. Folder B, after 18b.
    - 21c. **Somebody whose membership ended counts as left** (Kd, RULINGS 2026-10-10 and 2026-10-11; Folder A, after 18a), split 2026-10-11 in two. **Both are planned in full in spec Part 3 §16.9, which each job's terminal reads first; its three decisions (§16.9.1) have Kd's "go", RULINGS 2026-10-11** (the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 21c-i. [x] **A later end date on the gym's list renews a membership that ended** — merged 2026-10-11 (PR #220).
      - 21c-ii. [x] **Reports counts a membership that ended as left** — merged 2026-10-11 (PR #223).

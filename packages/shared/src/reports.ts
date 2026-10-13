@@ -148,6 +148,29 @@ function firstFullMonth(firstListedOn: string): string {
   return firstListedOn.endsWith("-01") ? monthOf(firstListedOn) : nextMonth(monthOf(firstListedOn));
 }
 
+/** What churn is worked out from: the newest `REPORT_CHURN_MONTHS` full months of the
+ *  list taken together, with everybody on it as each began and those of them who left
+ *  during it. One answer for churn and for lifetime value (`reportsMoney.ts`). */
+export function churnBasis(facts: Pick<MembersReportFacts, "today" | "firstListedOn" | "everLeft" | "months">): {
+  state: "ok" | (typeof REPORT_NO_FIGURE)[number];
+  /** The months it is worked out over, oldest first; empty unless `ok`. */
+  months: string[];
+  atStart: number;
+  leftOfStart: number;
+} {
+  const thisMonth = monthOf(facts.today);
+  const firstFull = facts.firstListedOn === null ? null : firstFullMonth(facts.firstListedOn);
+  const enough = firstFull !== null && monthsBetween(firstFull, thisMonth) >= REPORT_FULL_MONTHS_NEEDED;
+  const over = enough ? facts.months.filter((m) => m.month >= firstFull && m.month < thisMonth).slice(-REPORT_CHURN_MONTHS) : [];
+  const atStart = over.reduce((sum, m) => sum + m.activeAtStart, 0);
+  const leftOfStart = over.reduce((sum, m) => sum + m.leftOfStart, 0);
+  const none = { months: [], atStart: 0, leftOfStart: 0 };
+  if (!facts.everLeft) return { state: "nobody_left", ...none };
+  if (!enough || over.length < REPORT_CHURN_MONTHS) return { state: "not_enough_data", ...none };
+  if (atStart === 0) return { state: "nobody_at_start", ...none };
+  return { state: "ok", months: over.map((m) => m.month), atStart, leftOfStart };
+}
+
 /** The figures from the counts.
  *
  *  Churn is the share of the people on the list when a month began who came off during it,
@@ -161,25 +184,16 @@ export function membersReportFrom(facts: MembersReportFacts): MembersReport {
   const enough = fullMonths >= REPORT_FULL_MONTHS_NEEDED;
   const isFull = (month: string): boolean => firstFull !== null && month >= firstFull && month < thisMonth;
 
-  const churnOver = enough ? facts.months.filter((m) => isFull(m.month)).slice(-REPORT_CHURN_MONTHS) : [];
-  const atStart = churnOver.reduce((sum, m) => sum + m.activeAtStart, 0);
-  const leftOfStart = churnOver.reduce((sum, m) => sum + m.leftOfStart, 0);
-
+  const basis = churnBasis(facts);
   let churn: ReportShareFigure;
   let retention: ReportShareFigure;
-  if (!facts.everLeft) {
-    churn = { state: "nobody_left" };
-    retention = { state: "nobody_left" };
-  } else if (!enough || churnOver.length < REPORT_CHURN_MONTHS) {
-    churn = { state: "not_enough_data" };
-    retention = { state: "not_enough_data" };
-  } else if (atStart === 0) {
-    churn = { state: "nobody_at_start" };
-    retention = { state: "nobody_at_start" };
-  } else {
-    const percent = percentOf(leftOfStart, atStart);
+  if (basis.state === "ok") {
+    const percent = percentOf(basis.leftOfStart, basis.atStart);
     churn = { state: "ok", percent };
     retention = { state: "ok", percent: Math.round((100 - percent) * 10) / 10 };
+  } else {
+    churn = { state: basis.state };
+    retention = { state: basis.state };
   }
 
   let averageStay: ReportStayFigure;
@@ -202,7 +216,7 @@ export function membersReportFrom(facts: MembersReportFacts): MembersReport {
     everLeft: facts.everLeft,
     fullMonths,
     thisMonth: { month: thisMonth, joined: thisMonth === firstMonth ? null : (current?.joined ?? 0), left: current?.left ?? 0 },
-    churnMonths: churn.state === "ok" ? churnOver.map((m) => m.month) : [],
+    churnMonths: basis.months,
     churn,
     retention,
     averageStay,

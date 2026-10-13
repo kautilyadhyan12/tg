@@ -1,8 +1,9 @@
-// The Reports page's routes (ROADMAP 21a-i, 21a-ii): authenticate, the asker's own ceiling,
+// The Reports page's routes (ROADMAP 21a-i, 21a-ii, 21b-i): authenticate, the asker's own ceiling,
 // Zod-parse, who may read, the limit, then the read. The service owns the authorisation.
 //
 //   GET /v1/orgs/:gymId/reports/members      the members figures (`reports.read`)
 //   GET /v1/orgs/:gymId/reports/attendance   the attendance figures (`reports.read`)
+//   GET /v1/orgs/:gymId/reports/money        the money figures (`reports.read` and `billing.members`)
 import type { FastifyInstance } from "fastify";
 import type { Sql } from "postgres";
 import type { RedisLike } from "../../../redis.js";
@@ -13,7 +14,8 @@ import * as service from "./service.js";
 export function registerReportsRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date }): void {
   const reportsDeps: service.ReportsDeps = { sql: deps.sql, now: deps.now };
 
-  /** Read each time the page opens, both reports from one allowance. Keyed on the person; a gym's staff share one address,
+  /** Read each time the page opens, every report from one allowance: three reads an open
+   *  for somebody who sees money, so 40 opens an hour for one person, which is meant. Keyed on the person; a gym's staff share one address,
    *  so the address ceiling is ten times one person's and is counted a gym at a time. It
    *  is asked after the staff check, so somebody refused uses up nobody's allowance. */
   const limit = createDualRateLimit({
@@ -42,10 +44,11 @@ export function registerReportsRoutes(app: FastifyInstance, deps: { sql: Sql; re
   });
 
   const routes = [
-    ["/v1/orgs/:gymId/reports/members", service.getMembersReport],
-    ["/v1/orgs/:gymId/reports/attendance", service.getAttendanceReport],
+    ["/v1/orgs/:gymId/reports/members", service.getMembersReport, null],
+    ["/v1/orgs/:gymId/reports/attendance", service.getAttendanceReport, null],
+    ["/v1/orgs/:gymId/reports/money", service.getMoneyReport, "billing.members"],
   ] as const;
-  for (const [path, read] of routes) {
+  for (const [path, read, also] of routes) {
     app.get(path, { preHandler: [app.authenticate, askerLimit] }, async (req, reply) => {
       const params = orgParamsSchema.safeParse(req.params);
       if (!params.success) {
@@ -58,7 +61,7 @@ export function registerReportsRoutes(app: FastifyInstance, deps: { sql: Sql; re
       }
       const userId = req.authUser?.id;
       if (userId === undefined) throw new Error("authenticate preHandler did not run");
-      const org = await service.requireReportsReader(reportsDeps, userId, params.data.gymId);
+      const org = await service.requireReportsReader(reportsDeps, userId, params.data.gymId, also);
       await limit(req, reply);
       if (reply.sent) return reply;
       return reply.status(200).send(await read(reportsDeps, params.data.gymId, org));
