@@ -37,9 +37,9 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
     <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" aria-label="Bought at the desk">
       <h3 className="c-h2">Bought at the desk</h3>
       {state.found === null ? (
-        <p className="c-s14 c-t2 m-0" role="alert">
-          {state.error}
-        </p>
+        // Said quietly: this box is a side note on the person's page, and its read failing
+        // is not an alarm about anything staff just did there.
+        <p className="c-s14 c-t2 m-0">{state.error}</p>
       ) : state.found.sales.length === 0 ? (
         <p className="c-s14 c-t2 m-0">Nothing yet. Products sold to them on the Sell page are listed here.</p>
       ) : (

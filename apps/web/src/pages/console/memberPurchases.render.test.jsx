@@ -68,6 +68,14 @@ describe('bought at the desk', () => {
     expect(await screen.findByText('Nothing yet. Products sold to them on the Sell page are listed here.')).toBeTruthy();
   });
 
+  it('a read that fails is said in the box, and raises no alert on the person’s page', async () => {
+    svc.purchases.mockRejectedValue(Object.assign(new Error('down'), { response: { status: 500, data: {} } }));
+    open();
+    const box = await screen.findByRole('region', { name: 'Bought at the desk' });
+    expect(within(box).getByText("We couldn't load what they bought.")).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('drawn with no router around it, lists the purchases and offers no link', async () => {
     svc.purchases.mockResolvedValue({ sales: [sale()], notShown: 0 });
     render(<MemberPurchases gymId="g1" gym={GYM} entryId="e1" name="Maya Patel" past={false} />);
