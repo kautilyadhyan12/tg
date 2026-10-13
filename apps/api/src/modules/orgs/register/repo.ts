@@ -1,6 +1,7 @@
 // The register: the only file that reads or writes a gym's products, its sales and its
 // tax (spec Part 3 §14.3; ROADMAP 18b-i). `memberList/repo.ts` moves a sale's person when
-// two records are joined.
+// two records are joined. A gym's discounts are `discountsRepo.ts`'s; a sale made with one
+// counts its use here, in the sale's own transaction.
 //
 // Every statement carries `gym_id` in its WHERE, the ones holding a product's or a
 // sale's id included. Every write takes the gym's row lock first, so the stock count, the
@@ -10,13 +11,17 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   PRODUCTS_MAX,
   PRODUCT_ARCHIVED_PAGE,
+  discountFits,
+  discountOff,
   memberCurrencyForCountry,
   memberPaymentByHandSchema,
   saleAmounts,
   taxIncludedForCountry,
+  type DiscountRefusal,
   type MemberPaymentByHand,
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
+import { lockedDiscount, returnUse, takeUse } from "./discountsRepo.js";
 
 export interface ProductRow {
   id: string;
@@ -61,6 +66,8 @@ export interface SaleRow {
   totalMinor: number;
   taxBp: number;
   taxIncluded: boolean;
+  discountName: string | null;
+  discountMinor: number;
   currency: string;
   method: MemberPaymentByHand;
   soldOn: string;
@@ -80,6 +87,8 @@ interface RawSale {
   total_minor: number;
   tax_bp: number;
   tax_included: boolean;
+  discount_name: string | null;
+  discount_minor: number;
   currency: string;
   method: string;
   sold_on: string;
@@ -103,6 +112,8 @@ const sale = (r: RawSale): SaleRow => ({
   totalMinor: r.total_minor,
   taxBp: r.tax_bp,
   taxIncluded: r.tax_included,
+  discountName: r.discount_name,
+  discountMinor: r.discount_minor,
   currency: r.currency,
   // Text under a CHECK: parsed, so a method this build does not know fails here.
   method: memberPaymentByHandSchema.parse(r.method),
@@ -116,7 +127,7 @@ const sale = (r: RawSale): SaleRow => ({
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. */
 const saleColumns = (sql: Sql | TransactionSql) => sql`
   s.id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_included,
-  s.currency, s.method, s.sold_on::text AS sold_on, s.created_at, u.display_name AS by, s.entry_id,
+  s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, s.created_at, u.display_name AS by, s.entry_id,
   e.full_name AS person_name, s.undone_at IS NOT NULL AS undone`;
 
 export interface GymTax {
@@ -133,7 +144,7 @@ export interface RegisterRow {
   sales: SaleRow[];
   salesTotal: number;
   /** The day's sales that stand, added up in each money they were taken in. */
-  totals: { currency: string; count: number; totalMinor: number; taxMinor: number; cash: number; card_at_desk: number; bank_transfer: number }[];
+  totals: { currency: string; count: number; totalMinor: number; taxMinor: number; discountMinor: number; cash: number; card_at_desk: number; bank_transfer: number }[];
 }
 
 const taxOf = (gym: { country: string | null; sales_tax_bp: number; sales_tax_included: boolean | null }): GymTax => ({
@@ -169,11 +180,12 @@ export async function readRegister(sql: Sql, gymId: string, today: string, sales
       LIMIT ${salesShown}`,
     !withSales
       ? []
-      : sql<{ currency: string; n: number; standing: number; total: string; tax: string; cash: string; card: string; bank: string }[]>`
+      : sql<{ currency: string; n: number; standing: number; total: string; tax: string; discount: string; cash: string; card: string; bank: string }[]>`
       SELECT currency, count(*)::int AS n,
              (count(*) FILTER (WHERE undone_at IS NULL))::int AS standing,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL), 0)::text AS total,
              COALESCE(sum(tax_minor) FILTER (WHERE undone_at IS NULL), 0)::text AS tax,
+             COALESCE(sum(discount_minor) FILTER (WHERE undone_at IS NULL), 0)::text AS discount,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'cash'), 0)::text AS cash,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'card_at_desk'), 0)::text AS card,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'bank_transfer'), 0)::text AS bank
@@ -195,6 +207,7 @@ export async function readRegister(sql: Sql, gymId: string, today: string, sales
       count: row.standing,
       totalMinor: Number(row.total),
       taxMinor: Number(row.tax),
+      discountMinor: Number(row.discount),
       cash: Number(row.cash),
       card_at_desk: Number(row.card),
       bank_transfer: Number(row.bank),
@@ -387,7 +400,13 @@ export type SellOutcome =
   | { kind: "price_changed" }
   /** The product is priced in a money the gym no longer sells in. */
   | { kind: "currency_changed"; name: string; was: string; now: string | null }
-  | { kind: "out_of_stock"; name: string; left: number };
+  | { kind: "out_of_stock"; name: string; left: number }
+  /** The discount named is not one of this gym's. */
+  | { kind: "discount_not_found" }
+  /** The gym's own discount, and it cannot be used on this sale today. */
+  | { kind: "discount_refused"; name: string; reason: DiscountRefusal }
+  /** The discount takes off the whole price. */
+  | { kind: "nothing_to_pay" };
 
 export interface SellInput {
   gymId: string;
@@ -398,22 +417,24 @@ export interface SellInput {
   method: MemberPaymentByHand;
   /** The total the screen showed. */
   totalMinor: number;
+  /** The gym's discount the sale is made with; null for none. */
+  discountId: string | null;
   /** The gym's own day. */
   today: string;
   actorUserId: string;
   now: Date;
 }
 
-/** ONE SALE: one row, the stock count down by what was sold, and its note in the gym's
- *  record, together or not at all. Under the gym's lock, so the same request arriving
+/** ONE SALE: one row, the stock count down by what was sold, one use of its discount
+ *  counted, and its note in the gym's record, together or not at all. Under the gym's lock, so the same request arriving
  *  twice at one instant is one sale and the last one in stock is sold once. */
 export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
   return await sql.begin(async (tx): Promise<SellOutcome> => {
     await lockOrgRow(tx, input.gymId);
 
     // The same request again: the sale it made stands, and nothing is added.
-    const [again] = await tx<{ id: string; product_id: string; quantity: number; method: string; total_minor: number }[]>`
-      SELECT id, product_id, quantity, method, total_minor FROM gym_sales
+    const [again] = await tx<{ id: string; product_id: string; quantity: number; method: string; total_minor: number; discount_id: string | null }[]>`
+      SELECT id, product_id, quantity, method, total_minor, discount_id FROM gym_sales
       WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
     if (again !== undefined) {
       // Not who bought it: their record may have been joined to another or deleted since,
@@ -422,7 +443,8 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
         again.product_id === input.productId &&
         again.quantity === input.quantity &&
         again.method === input.method &&
-        again.total_minor === input.totalMinor;
+        again.total_minor === input.totalMinor &&
+        again.discount_id === input.discountId;
       return same ? { kind: "ok", saleId: again.id } : { kind: "request_reused" };
     }
 
@@ -445,19 +467,41 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
     const selling = memberCurrencyForCountry(gym.country);
     if (item.currency !== selling) return { kind: "currency_changed", name: item.name, was: item.currency, now: selling };
 
+    // The discount is this gym's own, read under its lock, and judged on the gym's own day.
+    let used: { id: string; name: string; offMinor: number } | null = null;
+    if (input.discountId !== null) {
+      const found = await lockedDiscount(tx, input.gymId, input.discountId);
+      if (found === null) return { kind: "discount_not_found" };
+      const fits = discountFits({ ...found, archived: found.archivedAt !== null }, { today: input.today, productId: item.id, currency: item.currency });
+      if (!fits.ok) return { kind: "discount_refused", name: found.name, reason: fits.reason };
+      used = { id: found.id, name: found.name, offMinor: discountOff(found, item.price_minor * input.quantity) };
+    }
+
     const tax = taxOf(gym);
-    const amounts = saleAmounts({ unitPriceMinor: item.price_minor, quantity: input.quantity, taxed: item.taxed, taxBp: tax.bp, taxIncluded: tax.included });
+    const amounts = saleAmounts({
+      unitPriceMinor: item.price_minor,
+      quantity: input.quantity,
+      taxed: item.taxed,
+      taxBp: tax.bp,
+      taxIncluded: tax.included,
+      discountMinor: used?.offMinor ?? 0,
+    });
+    if (!amounts.ok && amounts.reason === "nothing_to_pay") return { kind: "nothing_to_pay" };
     if (!amounts.ok || amounts.totalMinor !== input.totalMinor) return { kind: "price_changed" };
     if (item.stock !== null && item.stock < input.quantity) return { kind: "out_of_stock", name: item.name, left: item.stock };
+    // The last check before anything is written: the count moves only if the limit allows.
+    if (used !== null && !(await takeUse(tx, input.gymId, used.id))) return { kind: "discount_refused", name: used.name, reason: "used_up" };
 
     const taxBp = item.taxed ? tax.bp : 0;
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_sales
         (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-         tax_bp, tax_included, currency, method, sold_on, recorded_by, stock_counted, created_at)
+         tax_bp, tax_included, currency, method, sold_on, recorded_by, stock_counted, created_at,
+         discount_id, discount_name, discount_minor)
       VALUES (${input.gymId}, ${input.requestKey}, ${item.id}, ${input.entryId}, ${item.name}, ${input.quantity}, ${item.price_minor},
               ${amounts.netMinor}, ${amounts.taxMinor}, ${amounts.totalMinor}, ${taxBp}, ${tax.included}, ${item.currency},
-              ${input.method}, ${input.today}::date, ${input.actorUserId}, ${item.stock !== null}, ${input.now})
+              ${input.method}, ${input.today}::date, ${input.actorUserId}, ${item.stock !== null}, ${input.now},
+              ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0})
       RETURNING id`;
     if (created === undefined) throw new Error("sale insert returned no row");
     if (item.stock !== null) {
@@ -480,6 +524,7 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
         currency: item.currency,
         method: input.method,
         ...(input.entryId === null ? {} : { entryId: input.entryId }),
+        ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor) }),
       },
     });
     return { kind: "ok", saleId: created.id };
@@ -488,13 +533,14 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
 
 export type UndoSaleOutcome = { kind: "ok" } | { kind: "sale_not_found" } | { kind: "not_today" };
 
-/** Takes one sale back: its row is kept, marked, and what it took from the stock count is
- *  returned where the product is still counted. Pressed twice it is taken back once. */
+/** Takes one sale back: its row is kept, marked, what it took from the stock count is
+ *  returned where the product is still counted, and the use of its discount is given
+ *  back. Pressed twice it is taken back once. */
 export async function undoSale(sql: Sql, input: { gymId: string; saleId: string; today: string; actorUserId: string; now: Date }): Promise<UndoSaleOutcome> {
   return await sql.begin(async (tx): Promise<UndoSaleOutcome> => {
     await lockOrgRow(tx, input.gymId);
-    const [row] = await tx<{ product_id: string; quantity: number; sold_on: string; stock_counted: boolean; undone: boolean; total_minor: number; currency: string; item_name: string }[]>`
-      SELECT product_id, quantity, sold_on::text AS sold_on, stock_counted, undone_at IS NOT NULL AS undone, total_minor, currency, item_name
+    const [row] = await tx<{ product_id: string; quantity: number; sold_on: string; stock_counted: boolean; undone: boolean; total_minor: number; currency: string; item_name: string; discount_id: string | null }[]>`
+      SELECT product_id, quantity, sold_on::text AS sold_on, stock_counted, undone_at IS NOT NULL AS undone, total_minor, currency, item_name, discount_id
       FROM gym_sales WHERE gym_id = ${input.gymId} AND id = ${input.saleId}`;
     if (row === undefined) return { kind: "sale_not_found" };
     if (row.undone) return { kind: "ok" };
@@ -507,6 +553,7 @@ export async function undoSale(sql: Sql, input: { gymId: string; saleId: string;
         UPDATE gym_products SET stock = LEAST(stock + ${row.quantity}, 100000), updated_at = ${input.now}
         WHERE gym_id = ${input.gymId} AND id = ${row.product_id} AND stock IS NOT NULL`;
     }
+    if (row.discount_id !== null) await returnUse(tx, input.gymId, row.discount_id);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,

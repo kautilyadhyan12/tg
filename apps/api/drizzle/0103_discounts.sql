@@ -68,7 +68,7 @@ ALTER TABLE "gym_sales" ADD COLUMN "discount_minor" integer DEFAULT 0 NOT NULL;-
 ALTER TABLE "gym_sales" ADD CONSTRAINT "gym_sales_discount_check" CHECK (
 	("discount_id" IS NULL) = ("discount_name" IS NULL)
 	AND CASE WHEN "discount_id" IS NULL THEN "discount_minor" = 0
-		ELSE "discount_minor" BETWEEN 1 AND "unit_price_minor" * "quantity" - 1 END
+		ELSE "discount_minor" BETWEEN 0 AND "unit_price_minor" * "quantity" - 1 END
 );--> statement-breakpoint
 ALTER TABLE "gym_sales" ADD CONSTRAINT "gym_sales_discount_fk" FOREIGN KEY ("gym_id", "discount_id")
 	REFERENCES "gym_discounts"("gym_id", "id") ON DELETE CASCADE;--> statement-breakpoint

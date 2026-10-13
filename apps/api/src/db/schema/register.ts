@@ -188,7 +188,7 @@ export const gymSales = pgTable(
     }),
     check(
       "gym_sales_discount_check",
-      sql`(${t.discountId} IS NULL) = (${t.discountName} IS NULL) AND CASE WHEN ${t.discountId} IS NULL THEN ${t.discountMinor} = 0 ELSE ${t.discountMinor} BETWEEN 1 AND ${t.unitPriceMinor} * ${t.quantity} - 1 END`,
+      sql`(${t.discountId} IS NULL) = (${t.discountName} IS NULL) AND CASE WHEN ${t.discountId} IS NULL THEN ${t.discountMinor} = 0 ELSE ${t.discountMinor} BETWEEN 0 AND ${t.unitPriceMinor} * ${t.quantity} - 1 END`,
     ),
     foreignKey({
       name: "gym_sales_discount_fk",

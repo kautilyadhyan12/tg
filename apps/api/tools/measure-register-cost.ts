@@ -135,7 +135,7 @@ try {
   if (untaxed === undefined) throw new Error("no product to sell");
   const sold: string[] = [];
   const sell = async (gym: Made): Promise<void> => {
-    const answer = await sellProduct(deps, gym.owner, gym.gymId, viewer, { requestKey: randomUUID(), productId: untaxed.id, quantity: 1, entryId: gym.buyer, method: "cash", totalMinor: untaxed.price_minor });
+    const answer = await sellProduct(deps, gym.owner, gym.gymId, viewer, { requestKey: randomUUID(), productId: untaxed.id, quantity: 1, entryId: gym.buyer, method: "cash", totalMinor: untaxed.price_minor, discountId: null });
     sold.push(answer.saleId);
   };
 
