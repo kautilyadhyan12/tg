@@ -411,7 +411,7 @@ describe("the list as it grew (ROADMAP 34c-ii): the dishes of the US, Europe, Br
     ];
     for (const [canonical, diet, why] of answers) expect(food(canonical).diet, `${canonical}: ${why}`).toBe(diet);
     // No soup added in this job is missing from the table.
-    const soups = CURATED_FOODS.slice(409).filter((f) => /soup|chowder|borscht|minestrone|gazpacho|bouillabaisse|gumbo/i.test(f.name)).map((f) => f.canonical);
+    const soups = CURATED_FOODS.slice(409).filter((f) => /soup|chowder|borscht|minestrone|gazpacho|bouillabaisse|gumbo|bisque|broth|consomm|stew|pho|ramen|laksa/i.test(f.name)).map((f) => f.canonical);
     expect(answers.map(([canonical]) => canonical)).toEqual(expect.arrayContaining(soups));
     expect(food("grits_cooked_in_water").name).toBe("Grits (cooked in water)");
     expect(food("polenta_cooked_in_water").name).toBe("Polenta (cooked in water)");
