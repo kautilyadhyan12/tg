@@ -251,6 +251,19 @@ export async function createMealOnce(
   });
 }
 
+/** What the person has logged on one day of their own time zone: the calories,
+ *  and how many meals. */
+export async function dayEaten(sql: Sql, userId: string, timeZone: string, day: string): Promise<{ kcal: number; meals: number }> {
+  const rows = await sql<{ kcal: string; meals: string }[]>`
+    SELECT coalesce(sum(kcal_point), 0) AS kcal, count(*) AS meals
+    FROM meal_logs
+    WHERE user_id = ${userId}
+      AND taken_at >= (${day}::date - 1)::timestamp AT TIME ZONE 'UTC'
+      AND taken_at < (${day}::date + 2)::timestamp AT TIME ZONE 'UTC'
+      AND (taken_at AT TIME ZONE ${timeZone})::date = ${day}::date`;
+  return { kcal: Number(rows[0]?.kcal ?? 0), meals: Number(rows[0]?.meals ?? 0) };
+}
+
 /** Whether any meal, anybody's, has that id. */
 export async function mealIdTaken(sql: Sql, id: string): Promise<boolean> {
   const rows = await sql`SELECT 1 FROM meal_logs WHERE id = ${id}`;
