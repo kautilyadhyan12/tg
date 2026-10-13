@@ -225,6 +225,27 @@ export function usdaTable(archive: Buffer, release: UsdaRelease): Map<number, Us
   );
 }
 
+/** SR Legacy's own food group of each entry ("Finfish and Shellfish Products"),
+ *  by FDC id: `food.csv` numbers the group and `food_category.csv` names it. The
+ *  survey release has no such column. */
+export function usdaFoodGroups(archive: Buffer): Map<number, string> {
+  const files = unzip(archive, (name) => name.endsWith("/food.csv") || name.endsWith("/food_category.csv"));
+  const text = (suffix: string): string => {
+    for (const [name, data] of files) if (name.endsWith(suffix)) return data.toString("utf8");
+    return fail(`no ${suffix} in the archive`);
+  };
+  const names = new Map<string, string>();
+  for (const [id, , description] of csvRows(text("/food_category.csv"))) {
+    if (id !== undefined && description !== undefined) names.set(id, description.trim());
+  }
+  const groups = new Map<number, string>();
+  for (const [id, , , category] of csvRows(text("/food.csv"))) {
+    const group = category === undefined ? undefined : names.get(category);
+    if (Number.isInteger(Number(id)) && group !== undefined) groups.set(Number(id), group);
+  }
+  return groups;
+}
+
 /** The three CSVs of a release, already unzipped. Split out from `usdaTable` so
  *  the tests can feed it a few lines of each rather than a 40 MB archive. */
 export interface UsdaCsv {

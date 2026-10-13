@@ -4,6 +4,10 @@
 // carbohydrate, fat or fibre differs from its entry is printed, and the run
 // fails if any does. Not run in CI: it needs the network.
 //
+// It also holds test/fixtures/usda-sr-food-groups.json to the download: USDA's own
+// description and food group of every SR Legacy entry the list cites, which
+// nutrition.foods.diet.unit.test.ts checks each food's diet against.
+//
 // The USDA zip and CSV readers live in `usda-files.ts`, which the USDA importer
 // reads the same two releases with (ROADMAP 7a-iii-a); the CoFID workbook is
 // this tool's alone.
@@ -11,12 +15,16 @@
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --list          every food beside its entry's own name
 //   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --cache=<dir>   default: the system temp folder
+//   corepack pnpm --filter api exec tsx tools/check-food-sources.ts --write-groups  write the food groups file again, after the list grew
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
 import {
   defaultCache,
   download,
   fail,
   unzip,
+  usdaFoodGroups,
   usdaTable,
   USDA_RELEASES,
   type UsdaNutrient,
@@ -93,12 +101,16 @@ function cofidTable(archive: Buffer): Map<string, Entry> {
   return table;
 }
 
+const GROUPS_ABOUT =
+  "USDA FoodData Central, SR Legacy (April 2018, public domain): the description and the food group of every entry our food list cites, by FDC id, as USDA's own food.csv and food_category.csv give them. Written by tools/check-food-sources.ts --write-groups, which also fails when this file differs from the download; never edited by hand.";
+
 const cache = arg("cache") ?? defaultCache();
 const usdaZip = async (release: keyof typeof USDA_RELEASES): Promise<Buffer> => {
   const { url, file, sha256 } = USDA_RELEASES[release];
   return download(url, file, cache, sha256);
 };
-const srLegacy = usdaTable(await usdaZip("sr_legacy"), "sr_legacy");
+const srLegacyZip = await usdaZip("sr_legacy");
+const srLegacy = usdaTable(srLegacyZip, "sr_legacy");
 const fndds = usdaTable(await usdaZip("fndds"), "fndds");
 const cofid = cofidTable(
   await download(
@@ -132,6 +144,24 @@ for (const food of CURATED_FOODS) {
     if (food[figure] !== expected) differences.push(`${food.name}: ${figure} is ${String(food[figure])}, ${food.citation} gives ${String(expected)}`);
   }
   if (process.argv.includes("--list")) console.log(`${food.name}  ·  ${food.citation}  ·  ${entry.description}`);
+}
+
+// USDA's description and food group of every SR Legacy entry cited.
+const groups = usdaFoodGroups(srLegacyZip);
+const cited: Record<string, [string, string]> = {};
+for (const food of CURATED_FOODS) {
+  const [table = "", id = ""] = food.citation.split(":");
+  if (table !== USDA_RELEASES.sr_legacy.citation) continue;
+  const entry = srLegacy.get(Number(id));
+  const group = groups.get(Number(id));
+  if (entry !== undefined && group !== undefined) cited[id] = [entry.description, group];
+  else differences.push(`${food.name}: ${food.citation} has no food group`);
+}
+const groupsPath = join(import.meta.dirname, "..", "test", "fixtures", "usda-sr-food-groups.json");
+const groupsFile = `${JSON.stringify({ about: GROUPS_ABOUT, foods: cited }, null, 1)}\n`;
+if (process.argv.includes("--write-groups")) writeFileSync(groupsPath, groupsFile);
+else if (readFileSync(groupsPath, "utf8").replaceAll("\r\n", "\n") !== groupsFile) {
+  differences.push("test/fixtures/usda-sr-food-groups.json is not what the download gives: run this tool with --write-groups");
 }
 
 for (const line of differences) console.log(line);

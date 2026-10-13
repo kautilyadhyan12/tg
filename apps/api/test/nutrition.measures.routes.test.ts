@@ -49,6 +49,8 @@ const NUTS = `usda_sr_${String(NUTS_ID)}`;
 const GREENS_ID = 90_000_403;
 const GREENS = `usda_sr_${String(GREENS_ID)}`;
 const APPLE_ID = 171_688;
+/** USDA's survey entry "Shrimp, steamed or boiled", which our list's shrimp is weighed by the piece from. */
+const SHRIMP_ID = 2_706_363;
 
 const entry = (fdcId: number, description: string, kcal: number, portions: UsdaPortion[]): UsdaEntry => {
   const figures = new Map<UsdaNutrient, number | null>(USDA_NUTRIENTS.map((n) => [n.key, null]));
@@ -70,6 +72,7 @@ d("adding a food by measure (real Postgres)", () => {
   let alice = "";
   let bob = "";
   let wroteApple = false;
+  let wroteShrimp = false;
 
   const api = () => { if (app === undefined) throw new Error("beforeAll did not run"); return app; };
   const inject = (method: "GET" | "POST" | "PATCH", path: string, access: string, body?: unknown) =>
@@ -104,8 +107,17 @@ d("adding a food by measure (real Postgres)", () => {
   beforeAll(async () => {
     await clean();
     wroteApple = (await sql`SELECT 1 FROM usda_foods WHERE fdc_id = ${APPLE_ID}`).length === 0;
+    wroteShrimp = (await sql`SELECT 1 FROM usda_foods WHERE fdc_id = ${SHRIMP_ID}`).length === 0;
     await importUsda(sql, [
-      ["fndds", [entry(PORRIDGE_ID, "Zqxmeasure porridge, cooked", 71, [at(1, "1 cup", 234, null), at(2, "1 tablespoon", 15, null)])]],
+      ["fndds", [
+        entry(PORRIDGE_ID, "Zqxmeasure porridge, cooked", 71, [at(1, "1 cup", 234, null), at(2, "1 tablespoon", 15, null)]),
+        ...(wroteShrimp
+          ? [entry(SHRIMP_ID, "Shrimp, steamed or boiled", 90, [
+              at(1, "1 tiny shrimp", 5, null), at(2, "1 small/medium shrimp", 10, null), at(3, "1 large/jumbo shrimp", 15, null),
+              at(4, "1 prawn", 20, null), at(5, "1 cup", 135, null),
+            ])]
+          : []),
+      ]],
       ["sr_legacy", [
         entry(NUTS_ID, "Zqxmeasure nuts, raw", 607, [at(1, "cup", 70, 0.5), at(2, "nut", 1.2), at(3, "oz", 28.35)]),
         entry(GREENS_ID, "Zqxmeasure greens, frozen", 29, [at(0, "package (10 oz)", 94, 0), at(1, "cup", 67, 0.33), at(2, "package (10 oz)", 284), at(3, "Guideline amount per cup of vegetable", 30, null)]),
@@ -126,9 +138,9 @@ d("adding a food by measure (real Postgres)", () => {
   afterAll(async () => {
     if (app !== undefined) await app.close();
     await clean();
-    if (wroteApple) {
-      await sql`DELETE FROM usda_food_portions WHERE fdc_id = ${APPLE_ID}`;
-      await sql`DELETE FROM usda_foods WHERE fdc_id = ${APPLE_ID}`;
+    for (const id of [...(wroteApple ? [APPLE_ID] : []), ...(wroteShrimp ? [SHRIMP_ID] : [])]) {
+      await sql`DELETE FROM usda_food_portions WHERE fdc_id = ${id}`;
+      await sql`DELETE FROM usda_foods WHERE fdc_id = ${id}`;
     }
     await sql.end({ timeout: 5 });
   });
@@ -277,5 +289,20 @@ d("adding a food by measure (real Postgres)", () => {
     const readAt = await itemsVersionOf(mealId);
     expect((await inject("PATCH", `/v1/nutrition/meals/${mealId}`, bob, { items: [{ canonical: "apple", measure: "serving", amount: 1 }], itemsVersion: readAt })).statusCode).toBe(404);
     expect((await inject("PATCH", `/v1/nutrition/meals/${mealId}`, "", { items: [{ canonical: "apple", measure: "serving", amount: 1 }], itemsVersion: readAt })).statusCode).toBe(401);
+  }, 60_000);
+
+  it("counts our list's shrimp by the piece, at the numbers of the entry it cites (ROADMAP 34c-i)", async () => {
+    // SR Legacy weighs cooked shrimp by 3 oz alone, so the pieces are the survey entry's, and Add food still starts at 100 g.
+    const shrimp = (await search("shrimp")).find((f) => f.canonical === "shrimp_cooked");
+    expect([shrimp?.measures.map((m) => `${m.id} ${m.name} ${String(m.grams)}`), shrimp?.startsAt]).toEqual([[
+      "usda-1 tiny shrimp 5", "usda-2 small/medium shrimp 10", "usda-3 large/jumbo shrimp 15", "usda-4 prawn 20", "usda-5 cup 135",
+      "g g 1", "oz oz 28.349523125",
+    ], { measure: "g", amount: 100 }]);
+    // Six large shrimp are 90 g, at SR Legacy's 99 kcal per 100 g, never the survey entry's 90.
+    const saved = await manual(alice, [{ canonical: "shrimp_cooked", measure: "usda-3", amount: 6 }]);
+    expect(saved.statusCode, saved.body).toBe(201);
+    expect(mealOf(saved.body).items.map((i) => [i.canonical, i.gramsPoint, i.kcalPoint, i.measure])).toEqual([
+      ["shrimp_cooked", 90, 89, { id: "usda-3", name: "large/jumbo shrimp", amount: 6 }],
+    ]);
   }, 60_000);
 });

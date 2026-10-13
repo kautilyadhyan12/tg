@@ -29,7 +29,7 @@ import { onMealLogged } from "../gamification/service.js";
 import { refundQuota } from "../quotas/service.js";
 import { getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
-import { CURATED_FOODS, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
+import { CURATED_FOODS, curatedMeasuresFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { itemsVersion, ownPer100g, savedPlaces } from "./mealEdit.js";
@@ -276,7 +276,7 @@ const asUsdaReference = (row: repo.UsdaFoodRow): FoodReference => ({
 });
 
 /** Kd's ruling, 2026-09-16: OUR LIST FIRST, then USDA, then packaged products.
- *  313 of the list's 318 foods copy their numbers from a USDA entry, so the
+ *  405 of the list's 410 foods copy their numbers from a USDA entry, so the
  *  order costs nothing in accuracy and puts a plain name ("Paneer") ahead of a
  *  technical one; the five that do not are the foods where USDA's own entry is
  *  wrong for how they are made here (its paneer is worked out from milk and
@@ -327,7 +327,7 @@ async function searchFoodReferences(deps: NutritionDeps, query: string, limit: n
  *  of the USDA table's; the entry it cites, for one of our list's; none for a
  *  packaged product or a scan's estimate. */
 const measuresEntry = (food: FoodReference): number | null =>
-  food.source === "usda" ? repo.usdaFdcId(food.canonical) : food.source === "curated" ? curatedUsdaFdcId(food.canonical) : null;
+  food.source === "usda" ? repo.usdaFdcId(food.canonical) : food.source === "curated" ? curatedMeasuresFdcId(food.canonical) : null;
 
 /** Every food's measures (`measures.ts`), `[i]` for `foods[i]`, with ONE read of
  *  the USDA measures they share. */

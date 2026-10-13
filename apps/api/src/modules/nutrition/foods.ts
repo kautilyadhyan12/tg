@@ -130,6 +130,11 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Bratwurst", 333, 13.72, 2.85, 29.18, 0, 85, "sausage", "non_vegetarian", "usda-sr:171620"),
   row("Lamb chop (cooked)", 316, 25.17, 0, 23.08, 0, 100, "g", "non_vegetarian", "usda-sr:172489"),
   row("Turkey bacon (cooked)", 368, 29.5, 4.24, 25.87, 0, 11, "slice", "non_vegetarian", "usda-fndds:2706135"),
+  row("Duck (roasted)", 201, 23.48, 0, 11.2, 0, 100, "g", "non_vegetarian", "usda-sr:172411"),
+  row("Venison (cooked)", 158, 30.21, 0, 3.19, 0, 100, "g", "non_vegetarian", "usda-sr:175085"),
+  row("Bison (ground, cooked)", 238, 23.77, 0, 15.13, 0, 87, "patty", "non_vegetarian", "usda-sr:174422"),
+  row("Beef liver (cooked)", 175, 26.52, 5.16, 4.68, 0, 100, "g", "non_vegetarian", "usda-sr:168627"),
+  row("Chicken liver (cooked)", 167, 24.46, 0.87, 6.51, 0, 100, "g", "non_vegetarian", "usda-sr:171061"),
   // ── Fish and seafood
   row("Salmon (cooked)", 206, 22.1, 0, 12.35, 0, 100, "g", "non_vegetarian", "usda-sr:175168"),
   row("Tuna (canned in water)", 86, 19.44, 0, 0.96, 0, 100, "g", "non_vegetarian", "usda-sr:173709"),
@@ -153,6 +158,15 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Fish sticks", 277, 11.01, 21.66, 16.23, 1.5, 28, "stick", "non_vegetarian", "usda-sr:174195"),
   row("Fried fish (coated)", 269, 16.05, 11.72, 17.23, 0.5, 100, "g", "non_vegetarian", "usda-fndds:2706227"),
   row("Tuna salad", 187, 16.04, 9.41, 9.26, 0, 100, "g", "non_vegetarian", "usda-sr:175160"),
+  row("Halibut (cooked)", 111, 22.54, 0, 1.61, 0, 100, "g", "non_vegetarian", "usda-sr:174201"),
+  row("Pollock (cooked)", 111, 23.48, 0, 1.18, 0, 100, "g", "non_vegetarian", "usda-sr:173681"),
+  row("Catfish (cooked)", 144, 18.44, 0, 7.19, 0, 100, "g", "non_vegetarian", "usda-sr:175166"),
+  row("Snapper (cooked)", 128, 26.3, 0, 1.72, 0, 100, "g", "non_vegetarian", "usda-sr:173699"),
+  row("Swordfish (cooked)", 172, 23.45, 0, 7.93, 0, 100, "g", "non_vegetarian", "usda-sr:173704"),
+  row("Mahi-mahi (cooked)", 109, 23.72, 0, 0.9, 0, 100, "g", "non_vegetarian", "usda-sr:171992"),
+  row("Anchovies (canned in oil)", 210, 28.89, 0, 9.71, 0, 4, "anchovy", "non_vegetarian", "usda-sr:174183"),
+  row("Oysters (raw)", 51, 5.71, 2.72, 1.71, 0, 14, "oyster", "non_vegetarian", "usda-sr:171978"),
+  row("Clams (cooked)", 148, 25.55, 5.13, 1.95, 0, 9.5, "clam", "non_vegetarian", "usda-sr:171975"),
   // ── Eggs
   row("Egg (whole, large)", 143, 12.56, 0.72, 9.51, 0, 50, "egg", "vegetarian_eggs", "usda-sr:171287"),
   row("Egg white", 52, 10.9, 0.73, 0.17, 0, 33, "white", "vegetarian_eggs", "usda-sr:172183"),
@@ -186,6 +200,12 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Kefir", 52, 3.59, 7.48, 0.96, 0, 244, "cup", "vegetarian", "usda-fndds:2705394"),
   row("Cottage cheese (full-fat)", 98, 11.12, 3.38, 4.3, 0, 100, "g", "vegetarian", "usda-sr:172179"),
   row("Ghee", 876, 0.28, 0, 99.48, 0, 13, "tbsp", "vegetarian", "usda-sr:173412"),
+  row("Greek yogurt (plain, whole milk)", 97, 9, 3.98, 5, 0, 100, "g", "vegetarian", "usda-sr:171304"),
+  row("Ricotta cheese", 150, 7.54, 7.27, 10.18, 0, 124, "half cup", "vegetarian", "usda-sr:170851"),
+  row("Blue cheese", 353, 21.4, 2.34, 28.74, 0, 28, "oz", "vegetarian", "usda-sr:172175"),
+  row("Gouda cheese", 356, 24.94, 2.22, 27.44, 0, 28, "oz", "vegetarian", "usda-sr:171241"),
+  row("Buttermilk", 40, 3.31, 4.79, 1.07, 0, 245, "cup", "vegetarian", "usda-sr:170874"),
+  row("Goat milk", 69, 3.56, 4.45, 4.14, 0, 244, "cup", "vegetarian", "usda-sr:171278"),
   // ── Tofu, beans and lentils
   row("Tofu (firm)", 144, 17.27, 2.78, 8.72, 2.3, 100, "g", "vegan", "usda-sr:172475"),
   row("Tempeh", 192, 20.29, 7.64, 10.8, null, 100, "g", "vegan", "usda-sr:174272"),
@@ -200,6 +220,16 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Refried beans", 90, 4.98, 13.55, 2.01, 3.7, 100, "g", "non_vegetarian", "usda-sr:172438"),
   row("Baked beans (canned)", 94, 4.75, 21.14, 0.37, 4.1, 127, "half cup", "vegan", "usda-sr:175182"),
   row("Falafel", 333, 13.31, 31.84, 17.8, null, 17, "patty", "vegan", "usda-sr:172455"),
+  row("Tofu (soft)", 61, 7.17, 1.18, 3.69, 0.2, 120, "piece", "vegan", "usda-sr:172449"),
+  row("Miso", 198, 12.79, 25.37, 6.01, 5.4, 17, "tbsp", "vegan", "usda-sr:172442"),
+  row("Red lentils (dry)", 358, 23.91, 63.1, 2.17, 10.8, 100, "g", "vegan", "usda-sr:174284"),
+  row("Split peas (cooked)", 118, 8.34, 21.1, 0.39, 8.3, 100, "g", "vegan", "usda-sr:172429"),
+  row("Navy beans (cooked)", 140, 8.23, 26.05, 0.62, 10.5, 100, "g", "vegan", "usda-sr:173746"),
+  row("Lima beans (cooked)", 115, 7.8, 20.88, 0.38, 7, 100, "g", "vegan", "usda-sr:174253"),
+  row("Mung beans (cooked)", 105, 7.02, 19.15, 0.38, 7.6, 100, "g", "vegan", "usda-sr:174257"),
+  row("Soybeans (cooked)", 172, 18.21, 8.36, 8.97, 6, 100, "g", "vegan", "usda-sr:174271"),
+  row("Black-eyed peas (cooked)", 116, 7.73, 20.76, 0.53, 6.5, 100, "g", "vegan", "usda-sr:173759"),
+  row("Fava / broad beans (cooked)", 110, 7.6, 19.65, 0.4, 5.4, 100, "g", "vegan", "usda-sr:173753"),
   // ── Grains, bread and cereal
   row("Rice (white, cooked)", 130, 2.69, 28.17, 0.28, 0.4, 100, "g", "vegan", "usda-sr:168878"),
   row("Rice (brown, cooked)", 123, 2.74, 25.58, 0.97, 1.6, 100, "g", "vegan", "usda-sr:169704"),
@@ -231,6 +261,12 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Pancakes", 282, 7.41, 35.32, 12.07, 2.1, 50, "pancake", "vegetarian_eggs", "usda-fndds:2708304"),
   row("Waffles", 309, 7.42, 48.39, 9.49, 2.6, 75, "waffle", "vegetarian_eggs", "usda-fndds:2708312"),
   row("French toast", 273, 10.36, 32.34, 11.38, 1.2, 65, "slice", "vegetarian_eggs", "usda-fndds:2708331"),
+  row("Barley (cooked)", 123, 2.26, 28.22, 0.44, 3.8, 100, "g", "vegan", "usda-sr:170285"),
+  row("Bulgur (cooked)", 83, 3.08, 18.58, 0.24, 4.5, 100, "g", "vegan", "usda-sr:170287"),
+  row("Buckwheat (cooked)", 92, 3.38, 19.94, 0.62, 2.7, 100, "g", "vegan", "usda-sr:170686"),
+  row("Millet (cooked)", 119, 3.51, 23.67, 1, 1.3, 100, "g", "vegan", "usda-sr:168871"),
+  row("Wild rice (cooked)", 101, 3.99, 21.34, 0.34, 1.8, 100, "g", "vegan", "usda-sr:168897"),
+  row("Wheat germ", 360, 23.15, 51.8, 9.72, 13.2, 15, "g", "vegan", "usda-sr:168892"),
   // ── Potatoes and starchy vegetables
   row("Potato (baked)", 93, 2.5, 21.15, 0.13, 2.2, 150, "potato", "vegan", "usda-sr:170093"),
   row("Sweet potato (baked)", 90, 2.01, 20.71, 0.15, 3.3, 150, "potato", "vegan", "usda-sr:168483"),
@@ -241,6 +277,11 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Hash browns", 219, 2.65, 28.51, 11.59, 3.2, 100, "g", "vegan", "usda-sr:170044"),
   row("Roast potatoes", 126, 1.87, 20.45, 4.25, 1.4, 100, "g", "vegetarian", "usda-fndds:2709402"),
   row("Butternut squash (cooked)", 40, 0.9, 10.49, 0.09, 3.2, 100, "g", "vegan", "usda-sr:169296"),
+  row("Pumpkin (cooked)", 20, 0.72, 4.9, 0.07, 1.1, 100, "g", "vegan", "usda-sr:168449"),
+  row("Acorn squash (cooked)", 56, 1.12, 14.58, 0.14, 4.4, 100, "g", "vegan", "usda-sr:169293"),
+  row("Spaghetti squash (cooked)", 27, 0.66, 6.46, 0.26, 1.4, 100, "g", "vegan", "usda-sr:169299"),
+  row("Parsnips (cooked)", 71, 1.32, 17.01, 0.3, 3.6, 100, "g", "vegan", "usda-sr:170009"),
+  row("Turnip (cooked)", 22, 0.71, 5.06, 0.08, 2, 100, "g", "vegan", "usda-sr:170058"),
   // ── Vegetables
   row("Broccoli (cooked)", 35, 2.38, 7.18, 0.41, 3.3, 100, "g", "vegan", "usda-sr:169967"),
   row("Spinach (raw)", 23, 2.86, 3.63, 0.39, 2.2, 100, "g", "vegan", "usda-sr:168462"),
@@ -273,6 +314,28 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Mixed vegetables (cooked)", 65, 2.86, 13.09, 0.15, 4.4, 100, "g", "vegan", "usda-sr:170472"),
   row("Salad (green, no dressing)", 24, 1.07, 4.58, 0.2, 1.5, 100, "g", "vegan", "usda-fndds:2709822"),
   row("Coleslaw", 117, 0.94, 10.45, 7.98, 1.9, 110, "g", "vegetarian_eggs", "usda-fndds:2709815"),
+  row("Broccoli (raw)", 34, 2.82, 6.64, 0.37, 2.6, 100, "g", "vegan", "usda-sr:170379"),
+  row("Cauliflower (raw)", 25, 1.92, 4.97, 0.28, 2, 100, "g", "vegan", "usda-sr:169986"),
+  row("Kale (raw)", 35, 2.92, 4.42, 1.49, 4.1, 100, "g", "vegan", "usda-sr:168421"),
+  row("Leeks (cooked)", 31, 0.81, 7.62, 0.2, 1, 124, "leek", "vegan", "usda-sr:168426"),
+  row("Radishes", 16, 0.68, 3.4, 0.1, 1.6, 100, "g", "vegan", "usda-sr:169276"),
+  row("Artichoke (cooked)", 53, 2.89, 11.95, 0.34, 5.7, 120, "artichoke", "vegan", "usda-sr:168386"),
+  row("Bok choy (cooked)", 12, 1.56, 1.78, 0.16, 1, 100, "g", "vegan", "usda-sr:170391"),
+  row("Swiss chard (cooked)", 20, 1.88, 4.13, 0.08, 2.1, 100, "g", "vegan", "usda-sr:170401"),
+  row("Collard greens (cooked)", 33, 2.71, 5.65, 0.72, 4, 100, "g", "vegan", "usda-sr:170407"),
+  row("Fennel", 31, 1.24, 7.3, 0.2, 3.1, 100, "g", "vegan", "usda-sr:169385"),
+  row("Red cabbage", 31, 1.43, 7.37, 0.16, 2.1, 100, "g", "vegan", "usda-sr:169977"),
+  row("Watercress", 11, 2.3, 1.29, 0.1, 0.5, 100, "g", "vegan", "usda-sr:170068"),
+  row("Snow peas / sugar snap peas", 42, 2.8, 7.55, 0.2, 2.6, 100, "g", "vegan", "usda-sr:170010"),
+  row("Bean sprouts", 30, 3.04, 5.94, 0.18, 1.8, 100, "g", "vegan", "usda-sr:169957"),
+  row("Green onions / scallions", 32, 1.83, 7.34, 0.19, 2.6, 15, "green onion", "vegan", "usda-sr:170005"),
+  row("Jalapeño pepper", 29, 0.91, 6.5, 0.37, 2.8, 14, "pepper", "vegan", "usda-sr:168576"),
+  row("Garlic", 149, 6.36, 33.06, 0.5, 2.1, 3, "clove", "vegan", "usda-sr:169230"),
+  row("Ginger (fresh)", 80, 1.82, 17.77, 0.75, 2, 2, "tsp", "vegan", "usda-sr:169231"),
+  row("Sun-dried tomatoes", 258, 14.11, 55.76, 2.97, 12.3, 30, "g", "vegan", "usda-sr:168567"),
+  row("Portobello mushroom (grilled)", 29, 3.28, 4.44, 0.58, 2.2, 100, "g", "vegan", "usda-sr:169243"),
+  row("Shiitake mushrooms (cooked)", 56, 1.56, 14.39, 0.22, 2.1, 100, "g", "vegan", "usda-sr:168437"),
+  row("Nori (seaweed sheets)", 35, 5.81, 5.11, 0.28, 0.3, 2.6, "sheet", "vegan", "usda-sr:168458"),
   // ── Fruit
   row("Apple", 52, 0.26, 13.81, 0.17, 2.4, 180, "apple", "vegan", "usda-sr:171688"),
   row("Banana", 89, 1.09, 22.84, 0.33, 2.6, 120, "banana", "vegan", "usda-sr:173944"),
@@ -297,6 +360,22 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Raisins", 299, 3.3, 79.32, 0.25, 4.5, 30, "g", "vegan", "usda-sr:168165"),
   row("Pomegranate", 83, 1.67, 18.7, 1.17, 4, 100, "g", "vegan", "usda-sr:169134"),
   row("Applesauce (unsweetened)", 42, 0.17, 11.27, 0.1, 1.1, 122, "half cup", "vegan", "usda-sr:171695"),
+  row("Papaya", 43, 0.47, 10.82, 0.26, 1.7, 100, "g", "vegan", "usda-sr:169926"),
+  row("Apricot", 48, 1.4, 11.12, 0.39, 2, 35, "apricot", "vegan", "usda-sr:171697"),
+  row("Apricots (dried)", 241, 3.39, 62.64, 0.51, 7.3, 30, "g", "vegan", "usda-sr:173941"),
+  row("Figs (fresh)", 74, 0.75, 19.18, 0.3, 2.9, 50, "fig", "vegan", "usda-sr:173021"),
+  row("Figs (dried)", 249, 3.3, 63.87, 0.93, 9.8, 8.4, "fig", "vegan", "usda-sr:174665"),
+  row("Lemon", 29, 1.1, 9.32, 0.3, 2.8, 58, "lemon", "vegan", "usda-sr:167746"),
+  row("Lime", 30, 0.7, 10.54, 0.2, 2.8, 67, "lime", "vegan", "usda-sr:168155"),
+  row("Nectarine", 44, 1.06, 10.55, 0.32, 1.7, 142, "nectarine", "vegan", "usda-sr:169914"),
+  row("Tangerine / mandarin", 53, 0.81, 13.34, 0.31, 1.8, 88, "tangerine", "vegan", "usda-sr:169105"),
+  row("Persimmon", 70, 0.58, 18.59, 0.19, 3.6, 168, "persimmon", "vegan", "usda-sr:169941"),
+  row("Guava", 68, 2.55, 14.32, 0.95, 5.4, 55, "guava", "vegan", "usda-sr:173044"),
+  row("Lychee", 66, 0.83, 16.53, 0.44, 1.3, 9.6, "lychee", "vegan", "usda-sr:169086"),
+  row("Passion fruit", 97, 2.2, 23.38, 0.7, 10.4, 18, "passion fruit", "vegan", "usda-sr:169108"),
+  row("Honeydew melon", 36, 0.54, 9.09, 0.14, 0.8, 100, "g", "vegan", "usda-sr:169911"),
+  row("Prunes", 240, 2.18, 63.88, 0.38, 7.1, 9.5, "prune", "vegan", "usda-sr:168162"),
+  row("Cranberries (dried, sweetened)", 308, 0.17, 82.8, 1.09, 5.3, 40, "g", "vegan", "usda-sr:171723"),
   // ── Nuts and seeds
   row("Almonds", 579, 21.15, 21.55, 49.93, 12.5, 28, "oz", "vegan", "usda-sr:170567"),
   row("Peanuts", 567, 25.8, 16.13, 49.24, 8.5, 28, "oz", "vegan", "usda-sr:172430"),
@@ -313,6 +392,13 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Pumpkin seeds", 559, 30.23, 10.71, 49.05, 6, 28, "oz", "vegan", "usda-sr:170556"),
   row("Mixed nuts", 607, 19.5, 22.42, 53.5, 6.4, 28, "oz", "vegan", "usda-sr:170585"),
   row("Trail mix", 462, 13.8, 44.9, 29.4, null, 42, "g", "vegan", "usda-sr:167561"),
+  row("Brazil nuts", 659, 14.32, 11.74, 67.1, 7.5, 5, "nut", "vegan", "usda-sr:170569"),
+  row("Macadamia nuts", 718, 7.91, 13.82, 75.77, 8.6, 28, "oz", "vegan", "usda-sr:170178"),
+  row("Pine nuts", 673, 13.69, 13.08, 68.37, 3.7, 28, "oz", "vegan", "usda-sr:170591"),
+  row("Chestnuts (roasted)", 245, 3.17, 52.96, 2.2, 5.1, 8.4, "chestnut", "vegan", "usda-sr:170190"),
+  row("Sesame seeds", 573, 17.73, 23.45, 49.67, 11.8, 9, "tbsp", "vegan", "usda-sr:170150"),
+  row("Hemp seeds", 553, 31.56, 8.67, 48.75, 4, 10, "tbsp", "vegan", "usda-sr:170148"),
+  row("Tahini (sesame paste)", 595, 17, 21.19, 53.76, 9.3, 15, "tbsp", "vegan", "usda-sr:170189"),
   // ── Oils, sauces and spreads
   row("Olive oil", 884, 0, 0, 100, 0, 14, "tbsp", "vegan", "usda-sr:171413"),
   row("Coconut oil", 892, 0, 0, 99.06, 0, 14, "tbsp", "vegan", "usda-sr:171412"),
@@ -331,6 +417,12 @@ export const CURATED_FOODS: readonly CuratedFood[] = [
   row("Tomato sauce (marinara)", 50, 1.39, 7.43, 1.61, 1.8, 132, "half cup", "vegan", "usda-sr:171192"),
   row("Salsa", 29, 1.52, 6.64, 0.17, 1.9, 36, "2 tbsp", "vegan", "usda-sr:174524"),
   row("Guacamole", 155, 1.95, 8.45, 14.18, 6.5, 30, "2 tbsp", "vegan", "usda-fndds:2709307"),
+  row("Avocado oil", 884, 0, 0, 100, 0, 14, "tbsp", "vegan", "usda-sr:173573"),
+  row("Canola oil", 884, 0, 0, 100, 0, 14, "tbsp", "vegan", "usda-sr:172336"),
+  row("Sesame oil", 884, 0, 0, 100, 0, 13.6, "tbsp", "vegan", "usda-sr:171016"),
+  row("Balsamic vinegar", 88, 0.49, 17.03, 0, null, 16, "tbsp", "vegan", "usda-sr:172241"),
+  row("Apple cider vinegar", 21, 0, 0.93, 0, 0, 14.9, "tbsp", "vegan", "usda-sr:173469"),
+  row("Coconut milk (canned)", 197, 2.02, 2.81, 21.33, null, 100, "g", "vegan", "usda-sr:170173"),
   // ── Drinks
   row("Coffee (black)", 1, 0.12, 0, 0.02, 0, 240, "cup", "vegan", "usda-sr:171890"),
   row("Tea (unsweetened)", 1, 0, 0.3, 0, 0, 240, "cup", "vegan", "usda-sr:173227"),
@@ -462,7 +554,7 @@ const FOOD_NAMES: ReadonlyMap<string, string> = new Map(Object.entries({
   beetroot: "beets_cooked", rocket: "arugula", crisps: "potato_chips", porridge: "oatmeal_cooked",
   mince: "ground_beef_85_cooked", minced_beef: "ground_beef_85_cooked", lasagne: "lasagna_meat",
   fish_fingers: "fish_sticks", cottage_pie: "shepherd_s_pie", shepherds_pie: "shepherd_s_pie", omelet: "omelette_plain",
-  doughnut: "donut_glazed", mandarin: "clementine", tangerine: "clementine",
+  doughnut: "donut_glazed",
   apple_sauce: "applesauce_unsweetened", mayo: "mayonnaise", lox: "smoked_salmon",
   cornflakes: "cereal_cornflakes", corn_flakes: "cereal_cornflakes", pita: "pita_bread",
   bun: "bread_roll", baguette: "french_bread_sourdough", ribeye: "ribeye_steak_cooked",
@@ -479,6 +571,11 @@ const FOOD_NAMES: ReadonlyMap<string, string> = new Map(Object.entries({
   macaroni_and_cheese: "mac_and_cheese", chicken_soup: "chicken_noodle_soup", doner: "gyro",
   doner_kebab: "gyro", california_roll: "sushi_roll", egg_fried_rice: "fried_rice",
   battered_fish: "fried_fish_coated",
+  butter_beans: "lima_beans_cooked", pak_choi: "bok_choy_cooked", pak_choy: "bok_choy_cooked",
+  spring_onions: "green_onions_scallions", beansprouts: "bean_sprouts", mangetout: "snow_peas_sugar_snap_peas",
+  litchi: "lychee", chard: "swiss_chard_cooked", collards: "collard_greens_cooked",
+  portobello: "portobello_mushroom_grilled", portabella: "portobello_mushroom_grilled",
+  shiitake: "shiitake_mushrooms_cooked", jalapeno: "jalapeno_pepper", mahimahi: "mahi_mahi_cooked",
   // the food its cited entry is, by another name: sweet corn ("Corn, sweet, yellow,
   // cooked"), a potato baked in its jacket ("Potatoes, baked, flesh and skin"), two
   // long-grain white rices ("Rice, white, long-grain"), and the latte's Italian name
@@ -571,13 +668,25 @@ const FOOD_WORDS: readonly FoodWords[] = CURATED_FOODS.map((food) => {
 const BY_CANONICAL: ReadonlyMap<string, CuratedFood> = new Map(CURATED_FOODS.map((food) => [food.canonical, food]));
 
 /** The FDC id of the USDA entry a food of the list copies its numbers from, or
- *  null for a CoFID food and for any canonical not on the list. Its household
- *  measures are that entry's (ROADMAP 7a-iv-a). */
+ *  null for a CoFID food and for any canonical not on the list. */
 export function curatedUsdaFdcId(canonical: string): number | null {
   const citation = BY_CANONICAL.get(canonical)?.citation;
   const cited = citation === undefined ? null : /^usda-(?:sr|fndds):(\d+)$/.exec(citation);
   return cited?.[1] === undefined ? null : Number(cited[1]);
 }
+
+/** A food of the list whose cited entry names no piece, and the USDA entry of the
+ *  same food that does: SR Legacy weighs cooked shrimp and scallops by 3 oz alone,
+ *  and the survey release has "1 large/jumbo shrimp" and "1 scallop". Its numbers
+ *  stay its cited entry's. */
+const PIECE_ENTRIES: ReadonlyMap<string, number> = new Map([
+  ["shrimp_cooked", 2706363],
+  ["scallops_cooked", 2706358],
+]);
+
+/** The USDA entry whose household measures a food of the list is logged by: its
+ *  cited entry, or the one that weighs it by the piece (`PIECE_ENTRIES`). */
+export const curatedMeasuresFdcId = (canonical: string): number | null => PIECE_ENTRIES.get(canonical) ?? curatedUsdaFdcId(canonical);
 
 /** The food a slugged name names word for word. First a food whose name outside
  *  its brackets is those words, in order ("tuna" is "Tuna (canned in water)"; the
