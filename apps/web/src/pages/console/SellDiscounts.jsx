@@ -17,6 +17,7 @@ import {
   emptyDiscountDraft,
 } from './sellDiscountsView';
 import { priceExample } from './sellView';
+import { SavedNote } from './SellProducts';
 
 // DISCOUNTS, on the Sell page (spec Part 3 §14.3; ROADMAP 18b-ii-a): the gym's own
 // discounts and promo codes, for staff who may change prices. Whoever sells reads the
@@ -251,11 +252,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, onPage 
       {canManage && full ? <p className="c-s14 c-t3 m-0">{TOO_MANY_DISCOUNTS}</p> : null}
 
       {draft !== null && draft.id === null ? form() : null}
-      {state.done !== null ? (
-        <p className="c-s14 c-t1 c-w6 m-0" role="status">
-          {state.done}
-        </p>
-      ) : null}
+      {state.done !== null ? <SavedNote>{state.done}</SavedNote> : null}
       {state.error !== null && draft === null ? <Refusal>{state.error}</Refusal> : null}
 
       {page.discounts.length === 0 ? (
