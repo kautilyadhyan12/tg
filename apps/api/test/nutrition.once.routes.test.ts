@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import type { VisionEvidence } from "@app/shared";
 import { buildApp } from "../src/app.js";
@@ -89,6 +89,8 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     // A free account scans once a day; these two scan all through the file.
     for (const id of [alice.userId, bob.userId]) await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) SELECT 'user', ${id}, id, 'active', 'pilot' FROM plans WHERE code='pro_us_m'`;
   }, 60_000);
+  // Each test starts with no meals, whatever the one before it left.
+  afterEach(async () => { await sql`DELETE FROM meal_logs WHERE user_id IN (${alice.userId}, ${bob.userId})`; });
   afterAll(async () => { if (app !== undefined) await app.close(); await wipe(); await sql.end({ timeout: 5 }); });
 
   it("an id that is somebody else's meal reads nothing and changes nothing, typed or from a photo", async () => {
@@ -113,7 +115,6 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     // Bob's photo is still his to save, under an id of his own.
     const kept = await inject("POST", "/v1/nutrition/meals", bob.access, photo(randomUUID(), bobScan));
     expect(kept.statusCode, kept.body).toBe(201);
-    await sql`DELETE FROM meal_logs WHERE user_id IN (${alice.userId}, ${bob.userId})`;
   }, 30_000);
 
   it("the same typed meal sent twice is one meal, and the second answer is the first", async () => {
@@ -130,7 +131,6 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     const list = await inject("GET", "/v1/nutrition/meals?limit=50", alice.access);
     const kcal = list.json<{ items: { totals: { kcalPoint: number } }[] }>().items.reduce((sum, m) => sum + m.totals.kcalPoint, 0);
     expect(kcal).toBe(first.json<MealBody>().meal.totals.kcalPoint);
-    await sql`DELETE FROM meal_logs WHERE user_id = ${alice.userId}`;
   }, 30_000);
 
   it("the same typed meal sent five times at the same instant is one meal: one 201, four 200", async () => {
@@ -139,7 +139,6 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     expect(replies.map((r) => r.statusCode).sort()).toEqual([200, 200, 200, 200, 201]);
     expect(new Set(replies.map((r) => JSON.stringify(r.json<MealBody>()))).size).toBe(1);
     expect(await rowsOf(alice.userId)).toHaveLength(1);
-    await sql`DELETE FROM meal_logs WHERE user_id = ${alice.userId}`;
   }, 30_000);
 
   it("the same id with different food keeps the meal as it was first saved", async () => {
@@ -149,7 +148,6 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     expect(other.statusCode).toBe(200);
     expect(other.json<MealBody>()).toEqual(first.json<MealBody>());
     expect((await rowsOf(alice.userId)).map((r) => r.meal_name)).toEqual(["Lunch"]);
-    await sql`DELETE FROM meal_logs WHERE user_id = ${alice.userId}`;
   }, 30_000);
 
   it("the same photo meal sent twice is one meal, though its photo can be saved only once", async () => {
@@ -164,7 +162,6 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     expect(await rowsOf(alice.userId)).toHaveLength(1);
     const corrections = await sql`SELECT 1 FROM meal_log_corrections WHERE meal_log_id = ${id}`;
     expect(corrections.length).toBeLessThanOrEqual(1);
-    await sql`DELETE FROM meal_logs WHERE user_id = ${alice.userId}`;
   }, 30_000);
 
   it("the same photo meal sent five times at the same instant is one meal: one 201, four 200", async () => {
@@ -174,7 +171,6 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     expect(replies.map((r) => r.statusCode).sort()).toEqual([200, 200, 200, 200, 201]);
     expect(new Set(replies.map((r) => JSON.stringify(r.json<MealBody>()))).size).toBe(1);
     expect((await rowsOf(alice.userId)).map((r) => r.id)).toEqual([id]);
-    await sql`DELETE FROM meal_logs WHERE user_id = ${alice.userId}`;
   }, 30_000);
 
   it("one photo under two ids is still one meal: the second is refused and leaves nothing", async () => {
@@ -182,7 +178,6 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     const replies = await Promise.all([randomUUID(), randomUUID()].map((id) => inject("POST", "/v1/nutrition/meals", alice.access, photo(id, s))));
     expect(replies.map((r) => r.statusCode).sort()).toEqual([201, 400]);
     expect(await rowsOf(alice.userId)).toHaveLength(1);
-    await sql`DELETE FROM meal_logs WHERE user_id = ${alice.userId}`;
   }, 30_000);
 
   it("a photo that cannot be saved leaves no meal under the id, so the id can be used again", async () => {
@@ -191,7 +186,6 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     expect(dead.statusCode).toBe(400);
     expect(await rowsOf(alice.userId)).toHaveLength(0);
     expect((await inject("POST", "/v1/nutrition/meals", alice.access, typed(id))).statusCode).toBe(201);
-    await sql`DELETE FROM meal_logs WHERE user_id = ${alice.userId}`;
   }, 30_000);
 
   it("an id that is not an id is refused, nobody signed in is refused, and a meal with no id is saved each time as before", async () => {
@@ -203,6 +197,5 @@ d("a meal saved under the phone's own id (real Postgres)", () => {
     expect((await inject("POST", "/v1/nutrition/meals", alice.access, body)).statusCode).toBe(201);
     expect((await inject("POST", "/v1/nutrition/meals", alice.access, body)).statusCode).toBe(201);
     expect(await rowsOf(alice.userId)).toHaveLength(2);
-    await sql`DELETE FROM meal_logs WHERE user_id = ${alice.userId}`;
   }, 30_000);
 });
