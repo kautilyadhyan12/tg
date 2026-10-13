@@ -108,6 +108,9 @@ line, next to the model and effort. When in doubt, the bigger size.
    its merge the terminal reads `master`'s own run of that merge, and a red one is that
    terminal's next work, before anything else. A terminal whose checks fail in something
    its job did not touch reads `master`'s newest run first, and waits if that is red.
+   (Merging once overtaken needs the lock's "newest `master`" setting off, which only Kd
+   can switch. While GitHub still answers that a branch is out of date, the setting is on:
+   take `master` in again, and tell Kd so.)
    **Merge when green** (Kd, RULINGS 2026-09-22): if Kd's start
    text for the job says "merge when green", the building terminal merges its own pull
    request once the checks are green and the review round is closed (or none was due),
