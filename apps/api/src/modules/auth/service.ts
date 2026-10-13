@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs";
 import { hash as argon2Hash, hashSync as argon2HashSync, verify as argon2Verify } from "@node-rs/argon2";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
+import { SIGNED_IN_ELSEWHERE, type SessionClient } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import { DPDP_RETENTION_MS } from "../../retention.js";
 import * as codes from "./codes.js";
@@ -105,18 +106,20 @@ async function issueSession(
   deps: AuthDeps,
   userId: string,
   meta: RequestMeta,
-  familyId = newFamilyId(),
+  client: SessionClient = "web",
 ): Promise<SessionTokens> {
+  const familyId = newFamilyId();
   const refreshToken = mintOpaqueToken();
-  const expiresAt = refreshExpiry(deps);
-  await repo.insertRefreshToken(deps.sql, {
+  const row = {
     userId,
     familyId,
     tokenHash: sha256Hex(refreshToken),
-    expiresAt,
+    expiresAt: refreshExpiry(deps),
     ip: meta.ip,
     userAgent: meta.userAgent,
-  });
+  };
+  if (client === "phone") await repo.startPhoneSession(deps.sql, row);
+  else await repo.insertRefreshToken(deps.sql, row);
   return { accessToken: signAccessToken(userId, deps.config, familyId), refreshToken };
 }
 
@@ -323,7 +326,7 @@ export async function requestSignInCode(
  *  address is new. Returns a session exactly like password or Google login. */
 export async function signInWithCode(
   deps: AuthDeps,
-  input: { email: string; code: string },
+  input: { email: string; code: string; client?: "phone" | undefined },
   meta: RequestMeta,
 ): Promise<{ user: AuthUser; tokens: SessionTokens; isNewAccount: boolean }> {
   await codes.redeemCode(codeDeps(deps), { email: input.email, purpose: "sign_in", code: input.code });
@@ -356,7 +359,7 @@ export async function signInWithCode(
   await ensureEmailVerified(deps, user.id);
   return {
     user: await toAuthUser(deps.sql, user),
-    tokens: await issueSession(deps, user.id, meta),
+    tokens: await issueSession(deps, user.id, meta, input.client ?? "web"),
     isNewAccount,
   };
 }
@@ -382,13 +385,23 @@ export async function redeemEmailCode(
 
 // ── refresh (rotation + reuse detection) ────────────────────────────────────
 
+const signedInElsewhere = () => new AuthError(401, SIGNED_IN_ELSEWHERE.error, SIGNED_IN_ELSEWHERE.message);
+
+/** `from`: how the token arrived, the browser's cookie or the phone's request body. A
+ *  token is taken only the way its own sign-in was made, so a phone's token never
+ *  becomes a browser's cookies and a browser's never comes back in a reply. */
 export async function refresh(
   deps: AuthDeps,
   rawRefreshToken: string,
   meta: RequestMeta,
+  from: SessionClient = "web",
 ): Promise<SessionTokens> {
-  const row = await repo.findRefreshTokenByHash(deps.sql, sha256Hex(rawRefreshToken));
-  if (row === null) throw new AuthError(401, "invalid_refresh", "Invalid refresh token");
+  const tokenHash = sha256Hex(rawRefreshToken);
+  const row = await repo.findRefreshTokenByHash(deps.sql, tokenHash);
+  if (row === null || row.client !== from) throw new AuthError(401, "invalid_refresh", "Invalid refresh token");
+  // A newer phone sign-in ended this one: no theft, so nothing more to end, and the
+  // phone is told why (spec Part 3 §10.5).
+  if (row.revokedReason === "signed_in_elsewhere") throw signedInElsewhere();
   if (row.revokedAt !== null) {
     // Reuse of a rotated-out/revoked member: the family is compromised —
     // kill it all (Part 4 §3.1).
@@ -412,9 +425,14 @@ export async function refresh(
       expiresAt: new Date(Date.now() + deps.config.REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000),
       ip: meta.ip,
       userAgent: meta.userAgent,
+      client: row.client,
     });
   } catch (err) {
     if (err instanceof repo.RefreshRotationRaceError) {
+      // The token was ended between the read above and the rotation. By a newer phone
+      // sign-in: say so, as above.
+      const now = await repo.findRefreshTokenByHash(deps.sql, tokenHash);
+      if (now?.revokedReason === "signed_in_elsewhere") throw signedInElsewhere();
       // A concurrent presentation of the same token beat us: that IS reuse —
       // kill the family, including the winner's freshly minted successor
       // (T3 2026-07-11; Part 4 §3.1 "reuse kills the family").

@@ -1,7 +1,9 @@
 // P2.1 — auth routes (thin, R7.1). Route order per R3.3:
 // rate limit (per-IP AND per-identifier, R3.7) → Zod parse → handler.
-// Tokens travel ONLY as httpOnly cookies (DECISIONS 2026-07-11); bodies never
-// carry them. All limits/lifetimes are ported values, cited inline.
+// A browser's tokens travel ONLY as httpOnly cookies (DECISIONS 2026-07-11). The phone
+// app has no cookie: a sign-in that names itself `phone` is sent its tokens in the
+// reply and sets no cookie (spec Part 3 §10.5). All limits/lifetimes are ported values,
+// cited inline.
 import "@fastify/cookie"; // module augmentation: reply.setCookie / req.cookies
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
@@ -13,7 +15,7 @@ import { errorSummary, type GoogleVerifier } from "./google.js";
 import { WrongGuessError } from "./errors.js";
 import { createDualRateLimit } from "./rateLimit.js";
 import type { RobotCheck } from "../orgs/gymPage/robotCheck.js";
-import { SIGN_IN_FREE_SENDS_PER_ADDRESS, SIGN_IN_ROBOT_WORDS } from "@app/shared";
+import { SIGN_IN_FREE_SENDS_PER_ADDRESS, SIGN_IN_ROBOT_WORDS, phoneRefreshRequestSchema } from "@app/shared";
 import {
   changePasswordRequestSchema,
   forgotPasswordRequestSchema,
@@ -83,6 +85,16 @@ const googleCallbackQuerySchema = z.object({
   code: z.string().min(1).optional(),
   state: z.string().min(1).optional(),
 });
+
+/** The phone app's refresh token, from a body that names one. null: the body names
+ *  none (a browser sends nothing or an empty one), so the cookie is read. A body that
+ *  names one in the wrong shape is refused by the caller, never read as a browser's. */
+function phoneTokenIn(req: FastifyRequest): { token: string } | "malformed" | null {
+  const body: unknown = req.body;
+  if (typeof body !== "object" || body === null || !("refreshToken" in body)) return null;
+  const parsed = phoneRefreshRequestSchema.safeParse(req.body);
+  return parsed.success ? { token: parsed.data.refreshToken } : "malformed";
+}
 
 function requestMeta(req: FastifyRequest): service.RequestMeta {
   return { ip: req.ip || null, userAgent: req.headers["user-agent"] ?? null };
@@ -297,6 +309,7 @@ export function registerAuthRoutes(
       throw err;
     }
     const { user, tokens, isNewAccount } = signedIn;
+    if (input.client === "phone") return reply.status(200).send({ user, isNewAccount, tokens });
     setSessionCookies(reply, deps.config, tokens);
     return reply.status(200).send({ user, isNewAccount });
   });
@@ -319,7 +332,16 @@ export function registerAuthRoutes(
     return reply.status(200).send({ user });
   });
 
+  const invalidBody = (req: FastifyRequest, reply: FastifyReply) =>
+    reply.status(400).send({ error: "validation_error", message: "refreshToken: invalid", requestId: req.id });
+
   app.post("/v1/auth/refresh", async (req, reply) => {
+    const phone = phoneTokenIn(req);
+    if (phone === "malformed") return invalidBody(req, reply);
+    if (phone !== null) {
+      const tokens = await service.refresh(authDeps, phone.token, requestMeta(req), "phone");
+      return reply.status(200).send({ tokens });
+    }
     const raw = req.cookies[REFRESH_COOKIE];
     if (raw === undefined || raw === "") {
       return reply.status(401).send({
@@ -334,6 +356,12 @@ export function registerAuthRoutes(
   });
 
   app.post("/v1/auth/logout", async (req, reply) => {
+    const phone = phoneTokenIn(req);
+    if (phone === "malformed") return invalidBody(req, reply);
+    if (phone !== null) {
+      await service.logout(authDeps, phone.token);
+      return reply.status(200).send({ message: "Logged out successfully" });
+    }
     await service.logout(authDeps, req.cookies[REFRESH_COOKIE] ?? null);
     clearSessionCookies(reply, deps.config);
     return reply.status(200).send({ message: "Logged out successfully" });

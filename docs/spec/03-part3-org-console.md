@@ -1901,6 +1901,15 @@ next sign-in and wiped for any other account's. The `client` word comes from the
 own request; proving it (Play Integrity, App Attest) is after launch — what it guards is
 a shared login, not a secret.
 
+**Built in 12a (2026-10-13):** migration `0105`. `POST /v1/auth/code/verify` with
+`client: "phone"` answers `{ user, isNewAccount, tokens }` and sets no cookie.
+`POST /v1/auth/refresh` and `/logout` with `{ refreshToken }` in the body are the
+phone's: refresh answers `{ tokens }`. A token is taken only the way its sign-in was
+made (a phone's from the body, a browser's from its cookie); the other way is a plain
+401 and ends nothing. The old phone's 401 is `signed_in_elsewhere`
+(`SIGNED_IN_ELSEWHERE` in `@app/shared`). Its access token lasts out its fifteen
+minutes, as a signed-out browser's does. Google on the phone is 12d.
+
 ### 10.6 Join codes switched off (3c) — built LAST in this section
 
 So that no build exists in which nobody can join. **Server:** `POST /v1/orgs/join`, the

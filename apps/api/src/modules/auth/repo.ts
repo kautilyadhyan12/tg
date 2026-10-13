@@ -3,6 +3,7 @@
 // the owning identity or an unguessable token hash — no fetch-by-id-alone of
 // tenant data leaves this file unscoped (R3.2).
 import type { Sql, TransactionSql } from "postgres";
+import type { SessionClient } from "@app/shared";
 
 /** The password-hash algorithms users.hash_algo may hold (identity.ts §3.1
  *  CHECK). Owned here because it types the DB row; the service imports it. */
@@ -25,6 +26,9 @@ export interface RefreshTokenRow {
   familyId: string;
   expiresAt: Date;
   revokedAt: Date | null;
+  client: SessionClient;
+  /** Set only where a newer phone sign-in ended this one (spec Part 3 §10.5). */
+  revokedReason: "signed_in_elsewhere" | null;
 }
 
 // 'restore_account' added by migration 0004 (P2.2 CORRECTION 1; Part 4 §5.2 undo flow).
@@ -334,13 +338,48 @@ export async function insertRefreshToken(
   return id;
 }
 
+/** ONE PHONE AT A TIME (spec Part 3 §10.5): the new phone's sign-in and the end of that
+ *  person's other phone sign-ins are one transaction under the user's row lock, so two
+ *  phones signing in together leave exactly one signed in, and a rotation in flight on
+ *  the old phone is waited out. Browser sign-ins are never touched. */
+export async function startPhoneSession(
+  sql: Sql,
+  input: {
+    userId: string;
+    familyId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    ip: string | null;
+    userAgent: string | null;
+  },
+): Promise<void> {
+  await sql.begin(async (tx) => {
+    await waitOutRotations(tx, input.userId);
+    await tx`
+      UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'signed_in_elsewhere'
+      WHERE user_id = ${input.userId} AND client = 'phone' AND revoked_at IS NULL`;
+    await tx`
+      INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent, client)
+      VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
+              ${input.ip}, ${input.userAgent}, 'phone')`;
+  });
+}
+
 export async function findRefreshTokenByHash(
   sql: Sql,
   tokenHash: string,
 ): Promise<RefreshTokenRow | null> {
   const rows = await sql<
-    { id: string; user_id: string; family_id: string; expires_at: Date; revoked_at: Date | null }[]
-  >`SELECT id, user_id, family_id, expires_at, revoked_at
+    {
+      id: string;
+      user_id: string;
+      family_id: string;
+      expires_at: Date;
+      revoked_at: Date | null;
+      client: string;
+      revoked_reason: string | null;
+    }[]
+  >`SELECT id, user_id, family_id, expires_at, revoked_at, client, revoked_reason
     FROM refresh_tokens WHERE token_hash = ${tokenHash}`;
   const r = rows[0];
   if (r === undefined) return null;
@@ -350,6 +389,8 @@ export async function findRefreshTokenByHash(
     familyId: r.family_id,
     expiresAt: r.expires_at,
     revokedAt: r.revoked_at,
+    client: r.client === "phone" ? "phone" : "web",
+    revokedReason: r.revoked_reason === "signed_in_elsewhere" ? "signed_in_elsewhere" : null,
   };
 }
 
@@ -378,13 +419,15 @@ export async function rotateRefreshToken(
     expiresAt: Date;
     ip: string | null;
     userAgent: string | null;
+    /** The presented token's own: a rotation never changes where a sign-in was made. */
+    client: SessionClient;
   },
 ): Promise<void> {
   await sql.begin(async (tx) => {
     const rows = await tx<{ id: string }[]>`
-      INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent)
+      INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent, client)
       VALUES (${input.userId}, ${input.familyId}, ${input.newTokenHash}, ${input.expiresAt},
-              ${input.ip}, ${input.userAgent})
+              ${input.ip}, ${input.userAgent}, ${input.client})
       RETURNING id`;
     const newId = rows[0]?.id;
     if (newId === undefined) throw new Error("refresh token rotation insert returned no row");
