@@ -47,7 +47,7 @@ const nameWords = (name: string): string[] =>
 
 describe("the curated food list", () => {
   it("gives every food a table entry, a diet, whole kcal per 100 g and a serving", () => {
-    expect(CURATED_FOODS).toHaveLength(510);
+    expect(CURATED_FOODS).toHaveLength(595);
     for (const f of CURATED_FOODS) {
       expect(f.citation, f.name).toMatch(/^(?:usda-sr:\d{6}|usda-fndds:\d{7}|uk-cofid:\d{2}-\d{3,4})$/);
       expect(dietSchema.options, f.name).toContain(f.diet);
@@ -191,6 +191,13 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     // 34c-ii
     "grits_cooked_in_water", "gazpacho", "ratatouille", "polenta_cooked_in_water", "tabbouleh", "baba_ganoush_eggplant_dip",
     "yeast_extract_spread",
+    // 34c-iii
+    "cassava_fries_yuca_fries", "plantain_green_boiled", "plantain_ripe_fried", "plantain_chips", "hearts_of_palm_canned",
+    "guava_paste", "coconut_water", "tapioca_pearls_dry", "jackfruit", "starfruit_carambola",
+    "durian", "congee_plain_rice_porridge", "sticky_rice_glutinous_cooked", "sushi_roll_vegetable", "soba_noodles_cooked",
+    "natto", "tofu_fried", "coconut_rice", "peanut_sauce_peanut_butter_and_soy_sauce", "hoisin_sauce",
+    "teriyaki_sauce", "sriracha", "glass_noodles_mung_bean_cooked", "pakora_vegetable_fritter", "sambar_lentil_and_vegetable_stew",
+    "papad_poppadom_grilled", "puri_fried_bread",
   ],
   vegetarian: [
     "greek_yogurt_plain", "cottage_cheese_low_fat", "milk_whole", "milk_skim", "cheddar_cheese",
@@ -210,6 +217,9 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     "american_biscuit_baked", "bruschetta", "tzatziki", "baklava", "cheese_fondue",
     "cauliflower_cheese", "crumpet_toasted", "shortbread",
     "oat_flapjack_british_oat_bar",
+    // 34c-iii
+    "cassava_yuca_cooked", "dulce_de_leche", "khichdi_rice_and_mung_beans_with_ghee", "raita_yogurt_with_spices",
+    "lassi_sweet_yogurt_drink", "kulfi_indian_ice_cream",
   ],
   vegetarian_eggs: [
     "egg_whole_large", "egg_white", "egg_hard_boiled", "eggs_scrambled", "egg_fried", "egg_poached",
@@ -223,6 +233,8 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     "tortellini_cheese_with_tomato_sauce", "tiramisu", "spanakopita_spinach_pie", "spanish_omelette", "pierogi_potato_and_cheese",
     "potato_pancake_latke", "challah", "scone", "irish_soda_bread", "hot_cross_bun",
     "pavlova_with_fruit_and_cream", "apple_strudel",
+    // 34c-iii
+    "flan_caramel_custard", "churros", "vegetable_tempura",
   ],
   non_vegetarian: [
     "chicken_breast_cooked", "chicken_thigh_cooked", "ground_beef_85_cooked", "ground_beef_90_cooked",
@@ -256,6 +268,17 @@ const DIETS: Readonly<Record<Diet, readonly string[]>> = {
     "matzo_ball_soup", "cornish_pasty", "steak_and_kidney_pie", "pork_pie", "sausage_roll", "scotch_egg",
     "toad_in_the_hole", "yorkshire_pudding", "lancashire_hotpot", "haggis", "black_pudding_fried", "kippers_grilled",
     "kedgeree", "breaded_scampi_british", "welsh_rarebit", "trifle", "roast_lamb_leg", "mince_pie", "minestrone", "pumpkin_soup", "bubble_and_squeak",
+    // 34c-iii
+    "rice_and_beans_black_beans_and_white_rice", "picanha_top_sirloin_cap_grilled", "ceviche", "kung_pao_chicken", "general_tso_chicken",
+    "orange_chicken", "sesame_chicken", "sweet_and_sour_chicken", "sweet_and_sour_pork", "beef_and_broccoli",
+    "lo_mein_chicken", "lo_mein_vegetable", "chow_mein_chicken_with_noodles", "egg_drop_soup", "hot_and_sour_soup",
+    "wonton_soup", "dumplings_pork_steamed", "egg_foo_yung", "peking_duck", "moo_shu_pork",
+    "bao_bun_pork", "miso_soup", "teriyaki_chicken", "sushi_roll_salmon", "sushi_roll_tuna",
+    "nigiri_sushi_salmon", "sashimi_salmon", "sashimi_tuna", "bibimbap", "kimchi",
+    "tteokbokki_korean_rice_cakes", "adobo_chicken_and_pork_with_rice", "summer_roll_shrimp_rice_paper", "chicken_satay", "thai_green_curry_chicken",
+    "fish_sauce", "oyster_sauce", "prawn_crackers", "beef_in_black_bean_sauce", "sesame_prawn_toast",
+    "beef_curry", "fish_curry", "chicken_korma", "lamb_rogan_josh", "chicken_vindaloo",
+    "tandoori_chicken", "prawn_curry", "biryani_spiced_rice_with_lamb", "samosa_meat",
   ],
 };
 
@@ -411,7 +434,7 @@ describe("the list as it grew (ROADMAP 34c-ii): the dishes of the US, Europe, Br
     ];
     for (const [canonical, diet, why] of answers) expect(food(canonical).diet, `${canonical}: ${why}`).toBe(diet);
     // No soup added in this job is missing from the table.
-    const soups = CURATED_FOODS.slice(409).filter((f) => /soup|chowder|borscht|minestrone|gazpacho|bouillabaisse|gumbo|bisque|broth|consomm|stew|pho|ramen|laksa/i.test(f.name)).map((f) => f.canonical);
+    const soups = CURATED_FOODS.slice(409, 510).filter((f) => /soup|chowder|borscht|minestrone|gazpacho|bouillabaisse|gumbo|bisque|broth|consomm|stew|pho|ramen|laksa/i.test(f.name)).map((f) => f.canonical);
     expect(answers.map(([canonical]) => canonical)).toEqual(expect.arrayContaining(soups));
     expect(food("grits_cooked_in_water").name).toBe("Grits (cooked in water)");
     expect(food("polenta_cooked_in_water").name).toBe("Polenta (cooked in water)");
@@ -429,6 +452,93 @@ describe("the list as it grew (ROADMAP 34c-ii): the dishes of the US, Europe, Br
     // USDA first: a scone and a trifle are USDA's, though CoFID has both.
     expect(food("scone").citation).toBe("usda-fndds:2707808");
     expect(food("trifle").citation).toBe("usda-fndds:2705701");
+  });
+});
+
+describe("the list as it grew (ROADMAP 34c-iii): the dishes of Brazil, Latin America and Asia", () => {
+  it("still answers a name with the food it answered before", () => {
+    const cases: [string, string | null][] = [
+      ["dumplings", "dumplings_pork"], ["sushi", "sushi_roll"], ["tofu", "tofu_firm"], ["biryani", "biryani_chicken"], ["samosa", "samosa"],
+      ["spring roll", "spring_roll"], ["egg roll", "spring_roll"], ["rice", "rice_white_cooked"], ["duck", "duck_roasted"], ["chicken curry", "chicken_curry"],
+      ["fried rice", "fried_rice"], ["pad thai", "pad_thai"], ["pho", "pho_beef"], ["ramen", "ramen_cooked"], ["dal", "dal_lentil_curry"],
+      ["prawns", "shrimp_cooked"], ["coconut milk", "coconut_milk_canned"], ["rice noodles", "rice_noodles_cooked"], ["miso", "miso"],
+      ["soy sauce", "soy_sauce"], ["ice cream", "ice_cream_vanilla"], ["steak", "steak_sirloin_cooked"], ["black beans", "black_beans_cooked"],
+      ["yogurt", "yogurt_plain_low_fat"], ["rajma", "kidney_beans_cooked"], ["california roll", "sushi_roll"],
+      // a word many dishes share still names none
+      ["curry", null], ["noodles", null], ["roll", null], ["sauce", null],
+    ];
+    for (const [name, canonical] of cases) expect(findCurated(name)?.canonical ?? null, name).toBe(canonical);
+  });
+
+  it("answers the new dishes by the names people use", () => {
+    const cases: [string, string][] = [
+      ["rice and beans", "rice_and_beans_black_beans_and_white_rice"], ["arroz e feijão", "rice_and_beans_black_beans_and_white_rice"],
+      ["cassava", "cassava_yuca_cooked"], ["yuca", "cassava_yuca_cooked"], ["mandioca", "cassava_yuca_cooked"], ["yuca fries", "cassava_fries_yuca_fries"],
+      ["plantain", "plantain_green_boiled"], ["fried plantain", "plantain_ripe_fried"], ["palmito", "hearts_of_palm_canned"],
+      ["picanha", "picanha_top_sirloin_cap_grilled"], ["flan", "flan_caramel_custard"], ["pudim", "flan_caramel_custard"],
+      ["doce de leite", "dulce_de_leche"], ["goiabada", "guava_paste"], ["churro", "churros"], ["água de coco", "coconut_water"],
+      ["star fruit", "starfruit_carambola"], ["kung pao chicken", "kung_pao_chicken"], ["general tso's chicken", "general_tso_chicken"],
+      ["beef with broccoli", "beef_and_broccoli"], ["lo mein", "lo_mein_chicken"], ["vegetable lo mein", "lo_mein_vegetable"],
+      ["chow mein", "chow_mein_chicken_with_noodles"], ["egg drop soup", "egg_drop_soup"], ["hot and sour soup", "hot_and_sour_soup"],
+      ["potstickers", "dumplings_pork_steamed"], ["gyoza", "dumplings_pork_steamed"], ["egg foo young", "egg_foo_yung"], ["bao", "bao_bun_pork"],
+      ["congee", "congee_plain_rice_porridge"], ["sticky rice", "sticky_rice_glutinous_cooked"], ["miso soup", "miso_soup"],
+      ["chicken teriyaki", "teriyaki_chicken"], ["tempura", "vegetable_tempura"], ["salmon roll", "sushi_roll_salmon"], ["nigiri", "nigiri_sushi_salmon"],
+      ["sashimi", "sashimi_salmon"], ["tuna sashimi", "sashimi_tuna"], ["soba", "soba_noodles_cooked"], ["fried tofu", "tofu_fried"],
+      ["kimchi", "kimchi"], ["tteokbokki", "tteokbokki_korean_rice_cakes"], ["chicken adobo", "adobo_chicken_and_pork_with_rice"],
+      ["summer roll", "summer_roll_shrimp_rice_paper"], ["satay", "chicken_satay"], ["green curry", "thai_green_curry_chicken"],
+      ["glass noodles", "glass_noodles_mung_bean_cooked"], ["prawn toast", "sesame_prawn_toast"], ["pakoras", "pakora_vegetable_fritter"],
+      ["sambhar", "sambar_lentil_and_vegetable_stew"], ["poppadoms", "papad_poppadom_grilled"], ["poori", "puri_fried_bread"], ["clarified butter", "ghee"],
+      ["korma", "chicken_korma"], ["rogan josh", "lamb_rogan_josh"], ["vindaloo", "chicken_vindaloo"], ["tandoori chicken", "tandoori_chicken"],
+      ["lamb biryani", "biryani_spiced_rice_with_lamb"], ["meat samosa", "samosa_meat"], ["khichdi", "khichdi_rice_and_mung_beans_with_ghee"],
+      ["raita", "raita_yogurt_with_spices"], ["lassi", "lassi_sweet_yogurt_drink"], ["kulfi", "kulfi_indian_ice_cream"],
+    ];
+    for (const [name, canonical] of cases) expect(findCurated(name)?.canonical ?? null, name).toBe(canonical);
+  });
+
+  it("labels a dish by the animal ingredient its table does not show", () => {
+    // Every soup, every dish whose usual version holds an animal food its entry does not show, and every sauce and
+    // dish labelled vegan that somebody might doubt, with the answer the rule gave it.
+    const N = "non_vegetarian", E = "vegetarian_eggs", V = "vegetarian", VEGAN = "vegan";
+    const answers: [string, Diet, string][] = [
+      // soups: USDA's entry is one restaurant soup, or is made with meat broth
+      ["egg_drop_soup", N, "chicken stock"], ["hot_and_sour_soup", N, "pork and meat stock"], ["wonton_soup", N, "pork wontons in stock"],
+      ["miso_soup", N, "dashi, a fish stock (USDA makes it with beef and chicken broth)"],
+      ["sambar_lentil_and_vegetable_stew", VEGAN, "lentils, vegetables, tamarind and oil: no stock"],
+      ["congee_plain_rice_porridge", VEGAN, "rice and water, and named plain"],
+      // the entry does not show it
+      ["kimchi", N, "fish sauce or salted shrimp"], ["lo_mein_vegetable", N, "oyster sauce"],
+      ["rice_and_beans_black_beans_and_white_rice", N, "bacon, sausage or pork fat in the beans"],
+      ["prawn_crackers", N, "prawn"], ["vegetable_tempura", E, "egg in the batter"], ["churros", E, "egg in the dough"],
+      ["flan_caramel_custard", E, "egg"], ["cassava_yuca_cooked", V, "butter"], ["khichdi_rice_and_mung_beans_with_ghee", V, "ghee"],
+      // USDA's entry names what it is made from, or the food is a plant by itself
+      ["peanut_sauce_peanut_butter_and_soy_sauce", VEGAN, "none: peanut butter, water and soy sauce, and named so"],
+      ["hoisin_sauce", VEGAN, "none"], ["teriyaki_sauce", VEGAN, "none"], ["sushi_roll_vegetable", VEGAN, "none: avocado, cucumber, rice, seaweed"],
+      ["pakora_vegetable_fritter", VEGAN, "none: chickpea flour, vegetables, oil"], ["puri_fried_bread", VEGAN, "none: flour, water, oil"],
+      ["coconut_rice", VEGAN, "none: coconut milk is pressed from the coconut"],
+    ];
+    for (const [canonical, diet, why] of answers) expect(food(canonical).diet, `${canonical}: ${why}`).toBe(diet);
+    // No soup added in this job is missing from the table.
+    const soups = CURATED_FOODS.slice(510).filter((f) => /soup|chowder|bisque|broth|consomm|stew|pho|ramen|laksa|congee|porridge/i.test(f.name)).map((f) => f.canonical);
+    expect(soups).toHaveLength(6);
+    expect(answers.map(([canonical]) => canonical)).toEqual(expect.arrayContaining(soups));
+    // Named for the entry it is: a satay sauce made with fish sauce is not this one.
+    expect(food("peanut_sauce_peanut_butter_and_soy_sauce").name).toBe("Peanut sauce (peanut butter and soy sauce)");
+    expect(findCurated("satay sauce")).toBeNull();
+  });
+
+  it("serves a CoFID dish by the gram, and a USDA dish by a measure its own entry gives", () => {
+    const added = CURATED_FOODS.slice(510);
+    expect(added).toHaveLength(85);
+    for (const f of added) {
+      if (f.citation.startsWith("uk-cofid:")) expect([f.serving, f.unit], f.name).toEqual([100, "g"]);
+    }
+    expect(food("kung_pao_chicken")).toMatchObject({ kcal: 129, serving: 162, unit: "cup", citation: "usda-fndds:2706796" });
+    expect(food("rice_and_beans_black_beans_and_white_rice")).toMatchObject({ kcal: 160, serving: 170, unit: "cup", citation: "usda-fndds:2708994" });
+    expect(food("chicken_korma")).toMatchObject({ kcal: 127, proteinG: 14.6, citation: "uk-cofid:19-565" });
+    // USDA first: Peking duck, pakora and papad are USDA's, though CoFID has each.
+    expect(food("peking_duck").citation).toBe("usda-fndds:2706141");
+    expect(food("pakora_vegetable_fritter").citation).toBe("usda-fndds:2710066");
+    expect(food("papad_poppadom_grilled").citation).toBe("usda-fndds:2707429");
   });
 });
 
@@ -603,7 +713,7 @@ describe("the food a name means", () => {
   it("is no food at all when a word of the name matches nothing it is", () => {
     // A wrong food is worse than an honest miss: the scan names what it could
     // not identify and leaves it out of the totals.
-    for (const hint of ["mango lassi", "strawberry yogurt", "Aloo Paratha", "banana chips", "orange chicken", "fish", "fish curry", "constructor", "__proto__", ""]) {
+    for (const hint of ["mango lassi", "strawberry yogurt", "Aloo Paratha", "banana chips", "orange duck", "fish", "goat curry", "constructor", "__proto__", ""]) {
       expect(findCurated(hint), hint).toBeNull();
     }
     // Words the markets use for different foods: jelly (jam in the US, a gelatine

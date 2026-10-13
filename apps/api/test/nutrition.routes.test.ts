@@ -171,7 +171,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const item=(name:string,canonical_hint:string,count:number|null=null)=>seen({name,canonical_hint,count});
     // Three bottles the model saw at 195 g, 127 kcal: Yakult's own 65 kcal per 100 g.
     const yakult=seen({name:"Yakult",canonical_hint:"bottles of yakult",count:3,grams:195,kcal:127,protein_g:2,carbs_g:30,fat_g:0});
-    scanned.queue.push({...goodEvidence,meal_name:"Packaged plate",unknown_items:[],items:[item("Mystery sauce","mystery sauce"),yakult,item("Chips","qwzxchips"),item("Glass noodles","glass noodles")]});
+    scanned.queue.push({...goodEvidence,meal_name:"Packaged plate",unknown_items:[],items:[item("Mystery sauce","mystery sauce"),yakult,item("Chips","qwzxchips"),item("Bowl noodles","bowl noodles")]});
     const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:scanned,foodSearchProvider:answersEverything}});
     try{
       const email="p26a-packaged@example.com";
@@ -184,8 +184,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       // Three 65 g bottles, by the label's own pack, which the photo's count and grams agree on.
       expect(draft.items.map((i)=>[i.canonical,i.gramsPoint,i.startsAt,i.portionEstimated])).toEqual([["off_4901392000034",195,{measure:"serving",amount:3},false]]);
       expect(draft.items[0]?.measures.map((m)=>[m.id,m.name,m.grams])).toEqual([["serving","bottle",65],["g","g",1],["oz","oz",28.349523125]]);
-      // Cup Noodles is no glass noodles: "glass" is the food's own word, not a measure.
-      expect(draft.unknownItems).toEqual(["Mystery sauce","Chips","Glass noodles"]);
+      // Cup Noodles is no bowl noodles: "bowl" is the food's own word, not a measure.
+      expect(draft.unknownItems).toEqual(["Mystery sauce","Chips","Bowl noodles"]);
     }finally{await a.close();}
   },30_000);
 

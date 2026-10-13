@@ -142,6 +142,40 @@
     ]
    ]
   ],
+  "2705683": [
+   "Flan",
+   [
+    [
+     "Beverages, water, tap, drinking",
+     "Beverages"
+    ],
+    [
+     "Eggs, Grade A, Large, egg whole",
+     "Dairy and Egg Products"
+    ],
+    [
+     "Milk, canned, evaporated, with added vitamin D and without added vitamin A",
+     "Dairy and Egg Products"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ]
+   ]
+  ],
+  "2705699": [
+   "Dulce de leche",
+   [
+    [
+     "Dulce de Leche",
+     "Dairy and Egg Products"
+    ]
+   ]
+  ],
   "2705701": [
    "Trifle",
    [
@@ -352,6 +386,79 @@
     [
      "Bacon, turkey, microwaved",
      "Sausages and Luncheon Meats"
+    ]
+   ]
+  ],
+  "2706141": [
+   "Duck, Peking",
+   [
+    [
+     "Beverages, water, tap, drinking",
+     "Beverages"
+    ],
+    [
+     "Cornstarch",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Duck, domesticated, meat and skin, cooked, roasted",
+     "Poultry Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, sesame, salad or cooking",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Onions, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Pineapple juice, canned or bottled, unsweetened, without added ascorbic acid",
+     "Fruits and Fruit Juices"
+    ],
+    [
+     "Pineapple, raw",
+     "Fruits and Fruit Juices"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Soup, chicken broth, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ],
+    [
+     "Tomato products, canned, sauce",
+     "Vegetables and Vegetable Products"
     ]
    ]
   ],
@@ -628,6 +735,87 @@
     ]
    ]
   ],
+  "2706388": [
+   "Beef curry",
+   [
+    [
+     "Beans, snap, green, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Beef, chuck for stew, separable lean and fat, all grades, cooked, braised",
+     "Beef Products"
+    ],
+    [
+     "Carrots, mature, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Cauliflower, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Nuts, coconut milk, raw (liquid expressed from grated meat and water)",
+     "Nut and Seed Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Onions, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Peas, green, frozen, cooked, boiled, drained, without salt",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Peppers, bell, green, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Potatoes, baked, flesh and skin, without salt",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Tomato products, canned, sauce",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Tomatoes, red, ripe, raw, year round average",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Yogurt, plain, whole milk",
+     "Dairy and Egg Products"
+    ]
+   ]
+  ],
   "2706399": [
    "Barbecue pork, with sauce",
    [
@@ -646,6 +834,45 @@
     [
      "Sauce, barbecue",
      "Soups, Sauces, and Gravies"
+    ]
+   ]
+  ],
+  "2706401": [
+   "Sweet and sour pork",
+   [
+    [
+     "Restaurant, Chinese, sweet and sour pork",
+     "Restaurant Foods"
+    ]
+   ]
+  ],
+  "2706433": [
+   "Chicken or turkey with teriyaki",
+   [
+    [
+     "Chicken, broiler, rotisserie, BBQ, breast, meat only",
+     "Poultry Products"
+    ],
+    [
+     "Chicken, broiler, rotisserie, BBQ, drumstick, meat only",
+     "Poultry Products"
+    ],
+    [
+     "Chicken, broiler, rotisserie, BBQ, thigh, meat only",
+     "Poultry Products"
+    ],
+    [
+     "Sauce, teriyaki, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ]
+   ]
+  ],
+  "2706435": [
+   "Sweet and sour chicken or turkey",
+   [
+    [
+     "Restaurant, Chinese, sweet and sour chicken",
+     "Restaurant Foods"
     ]
    ]
   ],
@@ -735,6 +962,151 @@
     [
      "Yogurt, plain, whole milk",
      "Dairy and Egg Products"
+    ]
+   ]
+  ],
+  "2706443": [
+   "Orange chicken",
+   [
+    [
+     "Restaurant, Chinese, orange chicken",
+     "Restaurant Foods"
+    ]
+   ]
+  ],
+  "2706444": [
+   "Sesame chicken",
+   [
+    [
+     "Restaurant, Chinese, sesame chicken",
+     "Restaurant Foods"
+    ]
+   ]
+  ],
+  "2706457": [
+   "Fish sauce",
+   [
+    [
+     "Sauce, fish, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ]
+   ]
+  ],
+  "2706460": [
+   "Fish curry",
+   [
+    [
+     "Beans, snap, green, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Carrots, mature, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Cauliflower, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Crustaceans, shrimp, mixed species, raw (may contain additives to retain moisture)",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Fish, haddock, raw",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Nuts, coconut milk, raw (liquid expressed from grated meat and water)",
+     "Nut and Seed Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Onions, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Peas, green, frozen, cooked, boiled, drained, without salt",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Peppers, bell, green, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Potatoes, baked, flesh and skin, without salt",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Tomato products, canned, sauce",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Tomatoes, red, ripe, raw, year round average",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Yogurt, plain, whole milk",
+     "Dairy and Egg Products"
+    ]
+   ]
+  ],
+  "2706463": [
+   "Ceviche",
+   [
+    [
+     "Fish, snapper, mixed species, raw",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Lemon juice, raw",
+     "Fruits and Fruit Juices"
+    ],
+    [
+     "Lime juice, raw",
+     "Fruits and Fruit Juices"
+    ],
+    [
+     "Onions, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Peppers, jalapeno, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Tomatoes, red, ripe, raw, year round average",
+     "Vegetables and Vegetable Products"
     ]
    ]
   ],
@@ -1214,6 +1586,31 @@
     ]
    ]
   ],
+  "2706687": [
+   "Chicken or turkey chow mein or chop suey with noodles",
+   [
+    [
+     "Chicken, broiler, rotisserie, BBQ, breast, meat only",
+     "Poultry Products"
+    ],
+    [
+     "Chicken, broiler, rotisserie, BBQ, drumstick, meat only",
+     "Poultry Products"
+    ],
+    [
+     "Chicken, broiler, rotisserie, BBQ, thigh, meat only",
+     "Poultry Products"
+    ],
+    [
+     "Noodles, chinese, chow mein",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Restaurant, Chinese, vegetable chow mein, without meat or noodles",
+     "Restaurant Foods"
+    ]
+   ]
+  ],
   "2706703": [
    "Pot pie, chicken",
    [
@@ -1603,6 +2000,148 @@
     ]
    ]
   ],
+  "2706738": [
+   "Beef and broccoli",
+   [
+    [
+     "Beef, chuck, arm pot roast, separable lean only, trimmed to 1/8\" fat, choice, raw",
+     "Beef Products"
+    ],
+    [
+     "Beverages, water, tap, drinking",
+     "Beverages"
+    ],
+    [
+     "Broccoli, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Cornstarch",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Garlic, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Soy sauce made from soy and wheat (shoyu)",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ],
+    [
+     "Vinegar, cider",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2706764": [
+   "Moo Shu pork, without Chinese pancake",
+   [
+    [
+     "Bamboo shoots, canned, drained solids",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Cabbage, chinese (pak-choi), raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Cornstarch",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Eggs, Grade A, Large, egg whole",
+     "Dairy and Egg Products"
+    ],
+    [
+     "Garlic, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Ginger root, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Mung beans, mature seeds, sprouted, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, sesame, salad or cooking",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Onions, spring or scallions (includes tops and bulb), raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Pork, fresh, loin, tenderloin, separable lean only, raw",
+     "Pork Products"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Soy sauce made from soy and wheat (shoyu)",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ]
+   ]
+  ],
   "2706780": [
    "Lamb shish kabob with vegetables, excluding potatoes",
    [
@@ -1689,6 +2228,24 @@
    [
     [
      "Restaurant, Chinese, chicken and vegetables",
+     "Restaurant Foods"
+    ]
+   ]
+  ],
+  "2706794": [
+   "General Tso chicken",
+   [
+    [
+     "Restaurant, Chinese, general tso's chicken",
+     "Restaurant Foods"
+    ]
+   ]
+  ],
+  "2706796": [
+   "Kung pao chicken",
+   [
+    [
+     "Restaurant, Chinese, kung pao chicken",
      "Restaurant Foods"
     ]
    ]
@@ -2190,6 +2747,15 @@
     ]
    ]
   ],
+  "2707136": [
+   "Soup, hot and sour",
+   [
+    [
+     "Soup, hot and sour, Chinese restaurant",
+     "Soups, Sauces, and Gravies"
+    ]
+   ]
+  ],
   "2707139": [
    "Soup, New England clam chowder",
    [
@@ -2263,6 +2829,15 @@
     ]
    ]
   ],
+  "2707150": [
+   "Oyster sauce",
+   [
+    [
+     "Sauce, oyster, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ]
+   ]
+  ],
   "2707180": [
    "Egg, Benedict",
    [
@@ -2317,6 +2892,88 @@
     ]
    ]
   ],
+  "2707193": [
+   "Egg foo yung, NFS",
+   [
+    [
+     "Beverages, water, tap, municipal",
+     "Beverages"
+    ],
+    [
+     "Coriander (cilantro) leaves, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Cornstarch",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Crustaceans, shrimp, mixed species, cooked, moist heat (may contain additives to retain moisture)",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Eggs, Grade A, Large, egg whole",
+     "Dairy and Egg Products"
+    ],
+    [
+     "Ginger root, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Onions, spring or scallions (includes tops and bulb), raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Soy sauce made from soy and wheat (shoyu)",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ],
+    [
+     "Vinegar, cider",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2707282": [
+   "Soup, egg drop",
+   [
+    [
+     "Soup, egg drop, Chinese restaurant",
+     "Soups, Sauces, and Gravies"
+    ]
+   ]
+  ],
   "2707427": [
    "Dal",
    [
@@ -2331,6 +2988,135 @@
     [
      "Salt, table",
      "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2707429": [
+   "Papad, grilled or broiled",
+   [
+    [
+     "Papad",
+     "Legumes and Legume Products"
+    ]
+   ]
+  ],
+  "2707430": [
+   "Sambar, vegetable stew",
+   [
+    [
+     "Beans, snap, green, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Beverages, water, tap, drinking",
+     "Beverages"
+    ],
+    [
+     "Lentils, mature seeds, cooked, boiled, without salt",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Okra, frozen, cooked, boiled, drained, without salt",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Onions, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Potatoes, baked, flesh and skin, without salt",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Spices, chili powder",
+     "Spices and Herbs"
+    ],
+    [
+     "Spices, mustard seed, ground",
+     "Spices and Herbs"
+    ],
+    [
+     "Spices, turmeric, ground",
+     "Spices and Herbs"
+    ],
+    [
+     "Tamarinds, raw",
+     "Fruits and Fruit Juices"
+    ],
+    [
+     "Tomatoes, red, ripe, raw, year round average",
+     "Vegetables and Vegetable Products"
+    ]
+   ]
+  ],
+  "2707441": [
+   "Hoisin sauce",
+   [
+    [
+     "Sauce, hoisin, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ]
+   ]
+  ],
+  "2707445": [
+   "Teriyaki sauce",
+   [
+    [
+     "Sauce, teriyaki, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ]
+   ]
+  ],
+  "2707455": [
+   "Soup, miso or tofu",
+   [
+    [
+     "Miso",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Onions, spring or scallions (includes tops and bulb), raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Soup, beef broth or bouillon canned, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ],
+    [
+     "Soup, chicken broth, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ],
+    [
+     "Tofu, soft, prepared with calcium sulfate and magnesium chloride (nigari)",
+     "Legumes and Legume Products"
     ]
    ]
   ],
@@ -2396,6 +3182,15 @@
     ]
    ]
   ],
+  "2707546": [
+   "Peanut sauce",
+   [
+    [
+     "Sauce, peanut, made from peanut butter, water, soy sauce",
+     "Soups, Sauces, and Gravies"
+    ]
+   ]
+  ],
   "2707554": [
    "Peanut butter and jelly sandwich, NFS",
    [
@@ -2456,6 +3251,51 @@
     [
      "Tomatoes, red, ripe, raw, year round average",
      "Vegetables and Vegetable Products"
+    ]
+   ]
+  ],
+  "2707714": [
+   "Bread, puri",
+   [
+    [
+     "Beverages, water, tap, drinking",
+     "Beverages"
+    ],
+    [
+     "Flour, wheat, all-purpose, enriched, bleached",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Flour, whole wheat, unenriched",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
     ]
    ]
   ],
@@ -2808,6 +3648,23 @@
     ]
    ]
   ],
+  "2708070": [
+   "Churros",
+   [
+    [
+     "Doughnuts, yeast-leavened, glazed, enriched (includes honey buns)",
+     "Baked Products"
+    ],
+    [
+     "Spices, cinnamon, ground",
+     "Spices and Herbs"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ]
+   ]
+  ],
   "2708127": [
    "Nutrition bar or meal replacement bar, NFS",
    [
@@ -3091,6 +3948,19 @@
     ]
    ]
   ],
+  "2708355": [
+   "Long rice noodles, made from mung beans, cooked",
+   [
+    [
+     "Beverages, water, tap, drinking",
+     "Beverages"
+    ],
+    [
+     "Noodles, chinese, cellophane or long rice (mung beans), dehydrated",
+     "Legumes and Legume Products"
+    ]
+   ]
+  ],
   "2708365": [
    "Grits, regular or quick, made with water, no added fat",
    [
@@ -3117,6 +3987,23 @@
     ],
     [
      "Cornmeal, degermed, enriched, yellow",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2708418": [
+   "Congee",
+   [
+    [
+     "Beverages, water, tap, drinking",
+     "Beverages"
+    ],
+    [
+     "Rice, white, long-grain, regular, enriched, cooked",
      "Cereal Grains and Pasta"
     ],
     [
@@ -3689,6 +4576,75 @@
     ]
    ]
   ],
+  "2708704": [
+   "Roll with meat and/or shrimp, vegetables and rice paper, not fried",
+   [
+    [
+     "Basil, fresh",
+     "Spices and Herbs"
+    ],
+    [
+     "Beverages, water, tap, municipal",
+     "Beverages"
+    ],
+    [
+     "Carrots, mature, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Coriander (cilantro) leaves, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Crustaceans, shrimp, mixed species, cooked, moist heat (may contain additives to retain moisture)",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Flour, rice, white, unenriched",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Garlic, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Lime juice, raw",
+     "Fruits and Fruit Juices"
+    ],
+    [
+     "Mung beans, mature seeds, sprouted, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Onions, spring or scallions (includes tops and bulb), raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Peanuts, all types, dry-roasted, without salt",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Sauce, fish, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ],
+    [
+     "Tapioca, pearl, dry",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Vinegar, cider",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
   "2708705": [
    "Wonton, dumpling or pot sticker, fried",
    [
@@ -3716,6 +4672,15 @@
      "Oil, sunflower",
      ""
     ],
+    [
+     "Potsticker or wonton, pork and vegetable, frozen, unprepared",
+     "Meals, Entrees, and Side Dishes"
+    ]
+   ]
+  ],
+  "2708708": [
+   "Wonton, dumpling or pot sticker, steamed",
+   [
     [
      "Potsticker or wonton, pork and vegetable, frozen, unprepared",
      "Meals, Entrees, and Side Dishes"
@@ -3841,6 +4806,87 @@
     ],
     [
      "Spices, paprika",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2708724": [
+   "Bao bun",
+   [
+    [
+     "Beverages, water, tap, municipal",
+     "Beverages"
+    ],
+    [
+     "Cornstarch",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Flour, wheat, all-purpose, enriched, bleached",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Garlic, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Lard",
+     "Fats and Oils"
+    ],
+    [
+     "Leavening agents, baking powder, double-acting, sodium aluminum sulfate",
+     "Baked Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, sesame, salad or cooking",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Pork, fresh, loin, whole, separable lean only, cooked, roasted",
+     "Pork Products"
+    ],
+    [
+     "Sauce, hoisin, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ],
+    [
+     "Sauce, oyster, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ],
+    [
+     "Soy sauce made from soy and wheat (shoyu)",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ],
+    [
+     "Vinegar, distilled",
      "Spices and Herbs"
     ]
    ]
@@ -4033,6 +5079,36 @@
     [
      "Tortellini, pasta with cheese filling, fresh-refrigerated, as purchased",
      "Meals, Entrees, and Side Dishes"
+    ]
+   ]
+  ],
+  "2708799": [
+   "Lo mein, meatless",
+   [
+    [
+     "Restaurant, Chinese, vegetable lo mein, without meat",
+     "Restaurant Foods"
+    ]
+   ]
+  ],
+  "2708803": [
+   "Lo mein, with chicken",
+   [
+    [
+     "Chicken, broiler, rotisserie, BBQ, breast, meat only",
+     "Poultry Products"
+    ],
+    [
+     "Chicken, broiler, rotisserie, BBQ, drumstick, meat only",
+     "Poultry Products"
+    ],
+    [
+     "Chicken, broiler, rotisserie, BBQ, thigh, meat only",
+     "Poultry Products"
+    ],
+    [
+     "Restaurant, Chinese, vegetable lo mein, without meat",
+     "Restaurant Foods"
     ]
    ]
   ],
@@ -4260,12 +5336,143 @@
     ]
    ]
   ],
+  "2708950": [
+   "Bibimbap, Korean",
+   [
+    [
+     "Beef, round, top round roast, boneless, separable lean and fat, trimmed to 0\" fat, all grades, cooked, roasted",
+     "Beef Products"
+    ],
+    [
+     "Carrots, mature, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Cucumber, with peel, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Mung beans, mature seeds, sprouted, cooked, boiled, drained, without salt",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Mushrooms, shiitake",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Oil, sesame, salad or cooking",
+     "Fats and Oils"
+    ],
+    [
+     "Peppers, hot chili, red, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Rice, white, long-grain, regular, enriched, cooked",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Spinach, mature",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Squash, summer, crookneck and straightneck, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Squash, summer, zucchini, includes skin, raw",
+     "Vegetables and Vegetable Products"
+    ]
+   ]
+  ],
   "2708952": [
    "Rice, fried, NFS",
    [
     [
      "Restaurant, Chinese, fried rice, without meat",
      "Restaurant Foods"
+    ]
+   ]
+  ],
+  "2708957": [
+   "Dukboki or Tteokbokki, Korean",
+   [
+    [
+     "Beverages, water, tap, drinking",
+     "Beverages"
+    ],
+    [
+     "Cabbage, chinese (pak-choi), raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Fish, fish sticks, frozen, prepared",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Flour, rice, white, unenriched",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Garlic, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Mushrooms, shiitake",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Peppers, hot chili, red, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Soy sauce made from soy and wheat (shoyu)",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Spices, chili powder",
+     "Spices and Herbs"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ]
+   ]
+  ],
+  "2708958": [
+   "Adobo, with rice",
+   [
+    [
+     "Chicken, broiler, rotisserie, BBQ, thigh, meat only",
+     "Poultry Products"
+    ],
+    [
+     "Garlic, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Pork, fresh, shoulder, (Boston butt), blade (steaks), separable lean only, cooked, braised",
+     "Pork Products"
+    ],
+    [
+     "Rice, white, long-grain, regular, enriched, cooked",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Soy sauce made from soy and wheat (shoyu)",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Spices, pepper, black",
+     "Spices and Herbs"
     ]
    ]
   ],
@@ -4295,6 +5502,122 @@
     [
      "Seaweed, laver, raw",
      "Vegetables and Vegetable Products"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ],
+    [
+     "Vinegar, distilled",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2708963": [
+   "Sushi roll, salmon",
+   [
+    [
+     "Fish, salmon, sockeye, raw",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Rice, white, glutinous, unenriched, cooked",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Seaweed, laver, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ],
+    [
+     "Vinegar, distilled",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2708965": [
+   "Sushi roll tuna",
+   [
+    [
+     "Fish, tuna, fresh, yellowfin, raw",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Rice, white, glutinous, unenriched, cooked",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Seaweed, laver, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ],
+    [
+     "Vinegar, distilled",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2708966": [
+   "Sushi roll, vegetable",
+   [
+    [
+     "Avocados, raw, all commercial varieties",
+     "Fruits and Fruit Juices"
+    ],
+    [
+     "Cucumber, with peel, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Rice, white, glutinous, unenriched, cooked",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Seaweed, laver, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
+    ],
+    [
+     "Vinegar, distilled",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2708969": [
+   "Sushi, topped with salmon",
+   [
+    [
+     "Fish, salmon, sockeye, raw",
+     "Finfish and Shellfish Products"
+    ],
+    [
+     "Rice, white, glutinous, unenriched, cooked",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
     ],
     [
      "Sugars, granulated",
@@ -4356,6 +5679,68 @@
     [
      "Tomatoes, red, ripe, raw, year round average",
      "Vegetables and Vegetable Products"
+    ]
+   ]
+  ],
+  "2708994": [
+   "Black beans and white rice",
+   [
+    [
+     "Beans, black, mature seeds, cooked, boiled, without salt",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Rice, white, long-grain, regular, enriched, cooked",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2709032": [
+   "Rice, cooked with coconut milk",
+   [
+    [
+     "Nuts, coconut milk, raw (liquid expressed from grated meat and water)",
+     "Nut and Seed Products"
+    ],
+    [
+     "Rice, white, long-grain, regular, raw, enriched",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
     ]
    ]
   ],
@@ -4765,6 +6150,23 @@
     ]
    ]
   ],
+  "2709160": [
+   "Soup, wonton",
+   [
+    [
+     "Potsticker or wonton, pork and vegetable, frozen, unprepared",
+     "Meals, Entrees, and Side Dishes"
+    ],
+    [
+     "Soup, beef broth or bouillon canned, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ],
+    [
+     "Soup, chicken broth, ready-to-serve",
+     "Soups, Sauces, and Gravies"
+    ]
+   ]
+  ],
   "2709307": [
    "Guacamole, NFS",
    [
@@ -4885,6 +6287,109 @@
     [
      "Potatoes, flesh and skin, raw",
      "Vegetables and Vegetable Products"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2709563": [
+   "Plantain chips",
+   [
+    [
+     "Snacks, plantain chips, salted",
+     "Snacks"
+    ]
+   ]
+  ],
+  "2709564": [
+   "Cassava, cooked",
+   [
+    [
+     "Butter, stick, salted",
+     "Dairy and Egg Products"
+    ],
+    [
+     "Cassava, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Margarine, regular, 80% fat, composite, stick, with salt",
+     "Fats and Oils"
+    ],
+    [
+     "Margarine, regular, 80% fat, composite, stick, with salt, with added vitamin D",
+     "Fats and Oils"
+    ],
+    [
+     "Margarine-like, vegetable oil spread, 60% fat, tub, with salt",
+     "Fats and Oils"
+    ],
+    [
+     "Margarine-like, vegetable oil spread, 60% fat, tub, with salt, with added vitamin D",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
+  "2709565": [
+   "Yuca fries",
+   [
+    [
+     "Cassava, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
     ],
     [
      "Salt, table",
@@ -5386,6 +6891,160 @@
     ]
    ]
   ],
+  "2710065": [
+   "Vegetable tempura",
+   [
+    [
+     "Beans, snap, green, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Beverages, water, tap, municipal",
+     "Beverages"
+    ],
+    [
+     "Broccoli, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Cauliflower, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Eggs, Grade A, Large, egg yolk",
+     "Dairy and Egg Products"
+    ],
+    [
+     "Flour, wheat, all-purpose, enriched, bleached",
+     "Cereal Grains and Pasta"
+    ],
+    [
+     "Mushroom, crimini",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Mushroom, portabella",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Mushrooms, white button",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Onions, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Peppers, bell, green, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Squash, summer, zucchini, includes skin, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Sweet potato, raw, unprepared (Includes foods for USDA's Food Distribution Program)",
+     "Vegetables and Vegetable Products"
+    ]
+   ]
+  ],
+  "2710066": [
+   "Pakora",
+   [
+    [
+     "Beverages, water, tap, municipal",
+     "Beverages"
+    ],
+    [
+     "Cauliflower, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Chickpeas (garbanzo beans, bengal gram), mature seeds, raw",
+     "Legumes and Legume Products"
+    ],
+    [
+     "Eggplant, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Oil, canola",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, corn",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, olive, extra light",
+     ""
+    ],
+    [
+     "Oil, olive, extra virgin",
+     ""
+    ],
+    [
+     "Oil, soybean",
+     "Fats and Oils"
+    ],
+    [
+     "Oil, sunflower",
+     ""
+    ],
+    [
+     "Onions, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Plantains, yellow, raw",
+     "Fruits and Fruit Juices"
+    ],
+    [
+     "Potatoes, flesh and skin, raw",
+     "Vegetables and Vegetable Products"
+    ],
+    [
+     "Salt, table",
+     "Spices and Herbs"
+    ],
+    [
+     "Spices, parsley, dried",
+     "Spices and Herbs"
+    ],
+    [
+     "Spices, pepper, red or cayenne",
+     "Spices and Herbs"
+    ],
+    [
+     "Spices, turmeric, ground",
+     "Spices and Herbs"
+    ]
+   ]
+  ],
   "2710067": [
    "Vegetable curry",
    [
@@ -5793,6 +7452,19 @@
     [
      "Salad dressing, caesar dressing, regular",
      "Fats and Oils"
+    ]
+   ]
+  ],
+  "2710307": [
+   "Guava paste",
+   [
+    [
+     "Guava sauce, cooked",
+     "Fruits and Fruit Juices"
+    ],
+    [
+     "Sugars, granulated",
+     "Sweets"
     ]
    ]
   ],
