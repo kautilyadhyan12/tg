@@ -17,6 +17,7 @@ import {
   memberCurrencyForCountry,
   memberPurchasesResponseSchema,
   outOfStockWords,
+  productCurrencyWords,
   sellPageResponseSchema,
   salePeopleResponseSchema,
   sellProductResponseSchema,
@@ -88,17 +89,26 @@ const shownSale = (s: repo.SaleRow, today: string, canSell: boolean) => ({
 
 async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<SellPageResponse> {
   const today = dayInTz(deps.now(), viewer.timezone);
-  // A membership's payment is the notebook's: read only for whoever may record one.
+  // A sale names who bought it and a payment who paid: both are read only for whoever
+  // may record one. Staff who only change prices are sent the products and the tax.
   const [row, paid] = await Promise.all([
-    repo.readRegister(deps.sql, gymId, today, SALES_SHOWN),
+    repo.readRegister(deps.sql, gymId, today, SALES_SHOWN, viewer.canSell),
     viewer.canSell ? paymentsOn(deps.sql, gymId, today, SALES_SHOWN) : null,
   ]);
   if (row === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
-  const of = (method: MemberPaymentMethod): number => paid?.byMethod.get(method) ?? 0;
-  const paidMinor = of("cash") + of("card_at_desk") + of("bank_transfer") + of("link") + of("company");
+  // The day's total is in the gym's own money. What was taken in another (the gym changed
+  // its country) is added to nothing, and counted so the screen can say so.
+  const currency = memberCurrencyForCountry(row.country);
+  const sold = row.totals.find((t) => t.currency === currency);
+  const mine = (paid?.sums ?? []).filter((s) => s.currency === currency);
+  const of = (method: MemberPaymentMethod): number => mine.filter((s) => s.method === method).reduce((n, s) => n + s.totalMinor, 0);
+  const paidMinor = mine.reduce((n, s) => n + s.totalMinor, 0);
+  const otherCurrency =
+    row.totals.filter((t) => t.currency !== currency).reduce((n, t) => n + t.count, 0) +
+    (paid?.sums ?? []).filter((s) => s.currency !== currency).reduce((n, s) => n + s.count, 0);
   // Parsed, not cast: a method or an amount the contract does not know fails here.
   return sellPageResponseSchema.parse({
-    currency: memberCurrencyForCountry(row.country),
+    currency,
     today,
     tax: row.tax,
     products: row.products.map(iso),
@@ -123,15 +133,17 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<
           })),
     paymentsNotShown: paid === null ? 0 : paid.count - paid.payments.length,
     totals: {
-      count: row.totals.count,
-      payments: paid?.count ?? 0,
-      totalMinor: row.totals.totalMinor + paidMinor,
-      taxMinor: row.totals.taxMinor,
-      cash: row.totals.cash + of("cash"),
-      card_at_desk: row.totals.card_at_desk + of("card_at_desk"),
-      bank_transfer: row.totals.bank_transfer + of("bank_transfer"),
-      other: of("link") + of("company"),
-      refundedMinor: paid?.refundedMinor ?? 0,
+      count: sold?.count ?? 0,
+      payments: mine.reduce((n, s) => n + s.count, 0),
+      totalMinor: (sold?.totalMinor ?? 0) + paidMinor,
+      taxMinor: sold?.taxMinor ?? 0,
+      cash: (sold?.cash ?? 0) + of("cash"),
+      card_at_desk: (sold?.card_at_desk ?? 0) + of("card_at_desk"),
+      bank_transfer: (sold?.bank_transfer ?? 0) + of("bank_transfer"),
+      link: of("link"),
+      company: of("company"),
+      refundedMinor: (paid?.refunds ?? []).filter((r) => r.currency === currency).reduce((n, r) => n + r.totalMinor, 0),
+      otherCurrency,
     },
   });
 }
@@ -230,6 +242,8 @@ export async function sellProduct(deps: RegisterDeps, userId: string, gymId: str
       throw new OrgsError(409, "request_reused", REGISTER_WORDS.request_reused);
     case "price_changed":
       throw new OrgsError(409, "sale_price_changed", REGISTER_WORDS.price_changed);
+    case "currency_changed":
+      throw new OrgsError(409, "product_currency_changed", productCurrencyWords(outcome.name, outcome.was, outcome.now));
     case "out_of_stock":
       throw new OrgsError(409, "out_of_stock", outOfStockWords(outcome.name, outcome.left));
     default: {

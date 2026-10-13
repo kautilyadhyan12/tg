@@ -75,7 +75,7 @@ const sale = (over = {}) => ({
   canUndo: true,
   ...over,
 });
-const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, other: 0, refundedMinor: 0, ...over });
+const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0, ...over });
 const page = (over = {}) => ({
   currency: 'USD',
   today: '2026-10-12',
@@ -249,6 +249,34 @@ describe('a product sale', () => {
 });
 
 describe('today', () => {
+  it('is read again when the tab is looked at again: a page left open overnight does not go on saying yesterday', async () => {
+    svc.get.mockResolvedValue(withSale());
+    open();
+    await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row');
+    expect(within(today()).getByTestId('takings-line').textContent).toBe('Taken today: $4.31 from 1 sale. Cash $4.31.');
+    expect(svc.get).toHaveBeenCalledTimes(1);
+    // The next morning: the server's day has moved on, and nothing was taken yet.
+    svc.get.mockResolvedValue(page({ today: '2026-10-13' }));
+    document.dispatchEvent(new Event('visibilitychange'));
+    await waitFor(() => expect(within(today()).getByTestId('takings-line').textContent).toBe('Nothing taken yet today.'));
+    expect(within(today()).queryAllByTestId('takings-row')).toHaveLength(0);
+    expect(svc.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('what was taken in another currency is said and never added to the total', async () => {
+    svc.get.mockResolvedValue(page({ currency: 'GBP', sales: [sale()], products: [product({ currency: 'USD' })], totals: totals({ otherCurrency: 1 }) }));
+    open();
+    await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row');
+    expect(within(today()).getByTestId('takings-line').textContent).toBe('Nothing taken yet today.');
+    expect(within(today()).getByText('1 sale or payment today was taken in another currency, before your country was changed. It is listed below and not added to the total above.')).toBeTruthy();
+    // The product still priced in the old money cannot be sold, and its row says what to do.
+    pick('Product', 'p-water');
+    expect(takeButton().disabled).toBe(true);
+    expect(within(newSale()).getByText('Water is priced in USD, and you now sell in GBP. Open Water under Products and save its price in GBP.')).toBeTruthy();
+    expect(within(products()).getByTestId('product-row').textContent).toContain('priced in USD: save its price in GBP to sell it');
+    expect(svc.sell).not.toHaveBeenCalled();
+  });
+
   it('a sale is undone only after the box is answered, and Keep it sends nothing', async () => {
     svc.get.mockResolvedValue(withSale(sale({ person: { entryId: 'e-maya', name: 'Maya Patel' } })));
     svc.undoSale.mockResolvedValue(page({ sales: [sale({ undone: true, canUndo: false })] }));
@@ -313,16 +341,56 @@ describe('a membership', () => {
     expect(takeButton().textContent).toBe('Take payment · $49.99');
     fireEvent.click(takeButton());
     await waitFor(() => expect(orgApi.giveHeldMembership).toHaveBeenCalledTimes(1));
-    expect(orgApi.giveHeldMembership).toHaveBeenCalledWith('g1', 'e-maya', { requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: 't-month', startsOn: '2026-10-12', paid: true, method: 'bank_transfer' });
+    expect(orgApi.giveHeldMembership).toHaveBeenCalledWith('g1', 'e-maya', { requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: 't-month', startsOn: '2026-10-12', paid: true, priceMinor: 4999, method: 'bank_transfer' });
     const done = await within(newSale()).findByTestId('sale-done');
     expect(done.textContent).toContain('Sale recorded');
     expect(done.textContent).toContain('1 Month given to Maya Patel and recorded as paid. $49.99, bank transfer.');
     expect(done.textContent).toContain("To undo or refund it, open the member's page.");
     expect(within(newSale()).queryByRole('button', { name: /^Take payment/ })).toBeNull();
-    // The takings are read again, so the payment is in today's list.
-    expect(svc.get).toHaveBeenCalledTimes(2);
+    // The day is read before the give and the takings after it, so the payment is in today's list.
+    await waitFor(() => expect(svc.get).toHaveBeenCalledTimes(3));
     fireEvent.click(within(done).getByRole('button', { name: "Open Maya Patel's page" }));
     expect(screen.getByRole('dialog', { name: 'person e-maya' })).toBeTruthy();
+  });
+
+  it('a tab left open overnight starts the membership on the day the server says it is now, never the day the page was opened', async () => {
+    orgApi.giveHeldMembership.mockResolvedValue({ data: {} });
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'A membership' }));
+    await screen.findByLabelText('Membership');
+    pick('Membership', 't-month');
+    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
+    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
+    // Midnight passes at the gym while the form is open.
+    svc.get.mockResolvedValue(page({ today: '2026-10-13' }));
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(orgApi.giveHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgApi.giveHeldMembership.mock.calls[0][2]).toMatchObject({ startsOn: '2026-10-13', priceMinor: 4999 });
+  });
+
+  it('a price that changed while the form was open is refused in words, and the price list is read again', async () => {
+    orgApi.giveHeldMembership.mockRejectedValue(refusal(409, 'The price of this membership changed while this was open. Nothing was saved: check the total and press again.'));
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'A membership' }));
+    await screen.findByLabelText('Membership');
+    pick('Membership', 't-month');
+    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
+    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
+    expect(takeButton().textContent).toBe('Take payment · $49.99');
+    orgApi.getMembershipTypes.mockResolvedValue({ data: { types: [{ ...MONTH, priceMinor: 5999 }] } });
+    fireEvent.click(takeButton());
+    expect((await within(newSale()).findByRole('alert')).textContent).toBe('The price of this membership changed while this was open. Nothing was saved: check the total and press again.');
+    expect(within(newSale()).queryByTestId('sale-done')).toBeNull();
+    // The button now says the price as it is, and the next press sends that one.
+    await waitFor(() => expect(takeButton().textContent).toBe('Take payment · $59.99'));
+    expect(orgApi.getMembershipTypes).toHaveBeenCalledTimes(2);
+    orgApi.giveHeldMembership.mockResolvedValue({ data: {} });
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(orgApi.giveHeldMembership).toHaveBeenCalledTimes(2));
+    expect(orgApi.giveHeldMembership.mock.calls[1][2]).toMatchObject({ priceMinor: 5999 });
+    expect(orgApi.giveHeldMembership.mock.calls[1][2].requestKey).not.toBe(orgApi.giveHeldMembership.mock.calls[0][2].requestKey);
   });
 
   it('a past member is not given one here: the screen says why and opens their page', async () => {

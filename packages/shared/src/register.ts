@@ -186,9 +186,10 @@ export const dayPaymentSchema = z
   .strict();
 export type DayPayment = z.infer<typeof dayPaymentSchema>;
 
-/** The day's takings: product sales that stand and membership payments that stand,
- *  together. `other` is money that did not pass the desk (a payment link, a card on
- *  file). Refunds noted today are said beside the total, never taken off it. */
+/** The day's takings in the gym's own money: product sales that stand and membership
+ *  payments that stand, together, by how each was paid. Refunds noted today are said
+ *  beside the total, never taken off it. A sale or payment taken in another money (the
+ *  gym changed its country) is in no sum here: `otherCurrency` says how many there are. */
 export const saleTotalsSchema = z
   .object({
     /** Product sales that stand. */
@@ -201,8 +202,10 @@ export const saleTotalsSchema = z
     cash: z.number().int().min(0),
     card_at_desk: z.number().int().min(0),
     bank_transfer: z.number().int().min(0),
-    other: z.number().int().min(0),
+    link: z.number().int().min(0),
+    company: z.number().int().min(0),
     refundedMinor: z.number().int().min(0),
+    otherCurrency: z.number().int().min(0),
   })
   .strict();
 export type SaleTotals = z.infer<typeof saleTotalsSchema>;
@@ -221,6 +224,8 @@ export const sellPageResponseSchema = z
     canSell: z.boolean(),
     /** May change the products and the tax (`memberships.manage`). */
     canManage: z.boolean(),
+    /** Today's sales, newest first: empty for a reader who cannot record a sale, with the
+     *  totals at nothing, since a sale names who bought it. */
     sales: z.array(gymSaleSchema),
     salesNotShown: z.number().int().min(0),
     /** Membership payments recorded today, newest first; null for a reader who cannot
@@ -288,6 +293,13 @@ export const REGISTER_WORDS = {
   no_selling: "Selling isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.",
   no_managing: "Changing products and tax isn't part of your role. Ask the owner to turn on \"Change membership types and prices\" for you.",
 } as const;
+
+/** A product priced in a money the gym no longer uses (it changed its country): it is
+ *  not sold until its price is saved again, so a day's total is never two moneys added. */
+export function productCurrencyWords(name: string, was: string, now: string | null): string {
+  if (now === null) return `${name} is priced in ${was}, and your country is not set. Nothing was sold: set your country in Settings first.`;
+  return `${name} is priced in ${was}, and you now sell in ${now}. Nothing was sold: open ${name} under Products and save its price in ${now}.`;
+}
 
 /** How many are left, said to staff who asked for more. */
 export function outOfStockWords(name: string, left: number): string {

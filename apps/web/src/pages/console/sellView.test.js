@@ -54,7 +54,7 @@ const sale = (over = {}) => ({
   canUndo: true,
   ...over,
 });
-const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, other: 0, refundedMinor: 0, ...over });
+const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0, ...over });
 const page = (over = {}) => ({ currency: 'USD', sales: [], payments: [], salesNotShown: 0, paymentsNotShown: 0, totals: totals(), ...over });
 
 describe('who may', () => {
@@ -138,6 +138,9 @@ describe('the sale as it is shown', () => {
     expect(saleProblem({ ...ok, product: water(), quantity: 100 })).toBe('One sale can hold up to 99.');
     expect(saleProblem({ ...ok, who: 'member' })).toBe('Find and pick the member, or choose Walk-in.');
     expect(saleProblem({ ...ok, who: 'member', person: { entryId: 'e1', name: 'Maya' } })).toBeNull();
+    // Priced in the money the gym used before it changed its country: not sold until saved again.
+    expect(saleProblem({ ...ok, currency: 'USD' })).toBeNull();
+    expect(saleProblem({ ...ok, currency: 'GBP' })).toBe('Water is priced in USD, and you now sell in GBP. Open Water under Products and save its price in GBP.');
   });
   it('what is said once it is sold', () => {
     expect(soldWords(sale())).toBe('Sold: 2 × Water to Maya Patel. $4.31, cash.');
@@ -159,16 +162,26 @@ describe('today', () => {
     expect(takingsWords(page({ totals: totals({ count: 3, payments: 1, totalMinor: 5596, cash: 398, card_at_desk: 4999, bank_transfer: 199 }) }))).toBe(
       'Taken today: $55.96 from 3 sales and 1 membership payment. Cash $3.98 · Card at the desk $49.99 · Bank transfer $1.99.',
     );
-    expect(takingsWords(page({ currency: 'GBP', totals: totals({ payments: 2, totalMinor: 9000, other: 9000 }) }))).toBe('Taken today: £90.00 from 2 membership payments. Paid online £90.00.');
+    // Named as the rows under it name them: one thing, one name.
+    expect(takingsWords(page({ currency: 'GBP', totals: totals({ payments: 2, totalMinor: 9000, link: 4000, company: 5000 }) }))).toBe(
+      'Taken today: £90.00 from 2 membership payments. Payment link £40.00 · Card on file £50.00.',
+    );
   });
   it('the smaller lines are each said only where they are true', () => {
     expect(takingsNotes(page())).toEqual([]);
     expect(takingsNotes(page({ salesNotShown: 2, paymentsNotShown: 1, totals: totals({ taxMinor: 33, refundedMinor: 1000 }) }))).toEqual([
       '$0.33 of the product sales is tax.',
       'Refunds noted today: $10.00. They are not taken off the total above.',
-      'The list shows the newest. 3 earlier ones are counted in the total and not listed.',
+      'The list shows the newest. 3 earlier ones are not listed.',
     ]);
-    expect(takingsNotes(page({ salesNotShown: 1 }))).toEqual(['The list shows the newest. 1 earlier one is counted in the total and not listed.']);
+    expect(takingsNotes(page({ salesNotShown: 1 }))).toEqual(['The list shows the newest. 1 earlier one is not listed.']);
+    // What was taken in another money is said, never added in.
+    expect(takingsNotes(page({ totals: totals({ otherCurrency: 1 }) }))).toEqual([
+      '1 sale or payment today was taken in another currency, before your country was changed. It is listed below and not added to the total above.',
+    ]);
+    expect(takingsNotes(page({ totals: totals({ otherCurrency: 4 }) }))).toEqual([
+      '4 sales or payments today were taken in another currency, before your country was changed. They are listed below and not added to the total above.',
+    ]);
   });
   it('product sales and membership payments are one list, newest first, on the gym’s own clock', () => {
     const payment = { id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'card_at_desk', paidAt: '2026-10-12T15:30:00.000Z', by: null, person: { entryId: 'e2', name: 'Omar Diaz' } };
@@ -216,6 +229,8 @@ describe('products and tax', () => {
     expect(productRow(water({ stock: 8 }), TEXAS)).toBe('$1.99 · plus tax · 8 in stock');
     expect(productRow(water({ stock: 0, currency: 'GBP' }), UK)).toBe('£1.99 · tax included · out of stock');
     expect(productRow(water({ taxed: false }), TEXAS)).toBe('$1.99 · no tax · stock not counted');
+    expect(productRow(water(), NO_TAX, 'USD')).toBe('$1.99 · stock not counted');
+    expect(productRow(water(), NO_TAX, 'GBP')).toBe('$1.99 · priced in USD: save its price in GBP to sell it · stock not counted');
   });
   it('the tax form', () => {
     expect(taxDraft(TEXAS)).toEqual({ rate: '8.25', mode: 'added' });

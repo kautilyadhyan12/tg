@@ -198,7 +198,7 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
   const product = page.products.find((p) => p.id === productId) ?? null;
   const quantity = /^\d{1,2}$/.test(quantityText.trim()) ? Number(quantityText.trim()) : Number.NaN;
   const summary = Number.isInteger(quantity) ? saleSummary(product, quantity, page.tax) : null;
-  const problem = saleProblem({ product, quantity, who, person });
+  const problem = saleProblem({ product, quantity, who, person, currency: page.currency });
   const touched = () => setState((was) => (was.error === null && was.done === null ? was : { ...was, error: null, done: null }));
 
   const sell = async () => {
@@ -337,8 +337,10 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
 }
 
 /** A membership given as paid: the notebook's own step, from the desk. */
-function MembershipSale({ gymId, page, locked, firstPerson, addMemberTo, membershipsTo, onOpenPerson, onSold }) {
+function MembershipSale({ gymId, locked, firstPerson, addMemberTo, membershipsTo, onOpenPerson, onPage }) {
   const [types, setTypes] = useState({ gymId: null, list: null, error: null });
+  /** Raised to read the price list again: after a sale, and after a refusal. */
+  const [typesAsk, setTypesAsk] = useState(0);
   const [typeId, setTypeId] = useState('');
   const [person, setPerson] = useState(firstPerson);
   const [method, setMethod] = useState(PAY_CHOICES[0]?.value ?? 'cash');
@@ -355,7 +357,7 @@ function MembershipSale({ gymId, page, locked, firstPerson, addMemberTo, members
     return () => {
       live = false;
     };
-  }, [gymId]);
+  }, [gymId, typesAsk]);
 
   if (types.gymId !== gymId) return <ConsoleLoading label="Loading your membership types…" newLook />;
   if (types.list === null) return <Refusal>{types.error}</Refusal>;
@@ -371,7 +373,14 @@ function MembershipSale({ gymId, page, locked, firstPerson, addMemberTo, members
   if (state.done !== null) {
     const bought = state.done.person;
     return (
-      <SaleRecorded words={state.done.words} note="It is in today's list below. To undo or refund it, open the member's page." onNew={() => setState({ busy: false, error: null, done: null })}>
+      <SaleRecorded
+        words={state.done.words}
+        note="It is in today's list below. To undo or refund it, open the member's page."
+        onNew={() => {
+          setState({ busy: false, error: null, done: null });
+          setTypesAsk((n) => n + 1);
+        }}
+      >
         <button type="button" className="c-btn c-btn-s c-btn-lg" onClick={() => onOpenPerson(bought.entryId)}>
           {`Open ${bought.name}'s page`}
         </button>
@@ -387,15 +396,24 @@ function MembershipSale({ gymId, page, locked, firstPerson, addMemberTo, members
     if (problem !== null || type === null || person === null) return;
     setState({ busy: true, error: null, done: null });
     try {
-      await orgService.giveHeldMembership(gymId, person.entryId, { requestKey: key, typeId: type.id, startsOn: page.today, paid: !free, ...(free ? {} : { method }) });
+      // The gym's own day as the server reads it now, never a day this page read when it
+      // was opened: a tab left open overnight still starts the membership today.
+      const fresh = await registerService.get(gymId);
+      onPage(fresh);
+      // The price sent is the one on the button: the server gives nothing at any other.
+      await orgService.giveHeldMembership(gymId, person.entryId, { requestKey: key, typeId: type.id, startsOn: fresh.today, paid: !free, priceMinor: type.priceMinor, ...(free ? {} : { method }) });
       setState({ busy: false, error: null, done: { words: membershipSoldWords(type, person.name, method), person } });
       setKey(newKey());
       setPerson(null);
       setTypeId('');
-      onSold();
+      registerService.get(gymId).then(onPage, () => undefined);
     } catch (err) {
       setState({ busy: false, error: errorText(err, "We couldn't give that membership. Nothing was saved: try again."), done: null });
-      if (errorStatus(err) === 409) setKey(newKey());
+      // A refusal of this form's own key is final, and the price list may be why: read again.
+      if (errorStatus(err) === 409) {
+        setKey(newKey());
+        setTypesAsk((n) => n + 1);
+      }
     }
   };
 
@@ -557,6 +575,16 @@ export default function Sell() {
 
   useEffect(() => {
     load();
+    // A desk leaves this tab open for days: "Today" is read again whenever it is looked at.
+    const onVisible = () => {
+      if (document.visibilityState !== 'hidden') load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, [load]);
 
   const openPerson = (entryId) => {
@@ -648,13 +676,12 @@ export default function Sell() {
                 <MembershipSale
                   key={`membership-${gymId}`}
                   gymId={gymId}
-                  page={page}
                   locked={readOnly}
                   firstPerson={firstPerson}
                   addMemberTo={placeFor(orgSlug, privileges, 'addMember')}
                   membershipsTo={placeFor(orgSlug, privileges, 'memberships')}
                   onOpenPerson={openPerson}
-                  onSold={() => void load()}
+                  onPage={setPage}
                 />
               ) : (
                 <ProductSale

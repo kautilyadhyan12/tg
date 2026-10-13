@@ -241,7 +241,7 @@ export default function SellProducts({ gymId, page, locked, lockedNote, countryT
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div className="flex flex-col min-w-0">
                     <p className="c-s15 c-w6 c-t1 m-0">{product.name}</p>
-                    <p className="c-s14 c-t2 m-0">{productRow(product, page.tax)}</p>
+                    <p className="c-s14 c-t2 m-0">{productRow(product, page.tax, page.currency)}</p>
                   </div>
                   {canManage ? (
                     <div className="flex flex-wrap gap-2 flex-shrink-0">

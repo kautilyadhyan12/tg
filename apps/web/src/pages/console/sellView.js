@@ -86,9 +86,16 @@ export function saleSummary(product, quantity, tax) {
   return { totalMinor: amounts.totalMinor, total: money(amounts.totalMinor), lines };
 }
 
+/** Said of a product still priced in the money the gym used before it changed country. */
+export function productCurrencyLine(product, currency) {
+  return `${product.name} is priced in ${product.currency}, and you now sell in ${currency}. Open ${product.name} under Products and save its price in ${currency}.`;
+}
+
 /** Why the Take payment button is off, or null where it can be pressed. */
-export function saleProblem({ product, quantity, who, person }) {
+export function saleProblem({ product, quantity, who, person, currency }) {
   if (product === null || product === undefined) return 'Pick a product.';
+  // Priced before the gym changed its country: the server will not sell it either.
+  if (typeof currency === 'string' && product.currency !== currency) return productCurrencyLine(product, currency);
   if (product.stock === 0) return `${product.name} is out of stock. Change its stock count under Products if you have more.`;
   if (!Number.isInteger(quantity) || quantity < 1) return 'Enter how many, 1 or more.';
   if (quantity > SALE_QUANTITY_MAX) return `One sale can hold up to ${String(SALE_QUANTITY_MAX)}.`;
@@ -132,7 +139,9 @@ export function takingsWords(page) {
   if (totals.cash > 0) how.push(`Cash ${money(totals.cash)}`);
   if (totals.card_at_desk > 0) how.push(`Card at the desk ${money(totals.card_at_desk)}`);
   if (totals.bank_transfer > 0) how.push(`Bank transfer ${money(totals.bank_transfer)}`);
-  if (totals.other > 0) how.push(`Paid online ${money(totals.other)}`);
+  // Named as each payment's own row names it.
+  if (totals.link > 0) how.push(`${methodWords('link')} ${money(totals.link)}`);
+  if (totals.company > 0) how.push(`${methodWords('company')} ${money(totals.company)}`);
   return `Taken today: ${money(totals.totalMinor)} from ${what.join(' and ')}. ${how.join(' · ')}.`;
 }
 
@@ -143,8 +152,13 @@ export function takingsNotes(page) {
   const notes = [];
   if (totals.taxMinor > 0) notes.push(`${money(totals.taxMinor)} of the product sales is tax.`);
   if (totals.refundedMinor > 0) notes.push(`Refunds noted today: ${money(totals.refundedMinor)}. They are not taken off the total above.`);
+  if (totals.otherCurrency > 0) {
+    notes.push(
+      `${count(totals.otherCurrency, 'sale or payment today was', 'sales or payments today were')} taken in another currency, before your country was changed. ${totals.otherCurrency === 1 ? 'It is' : 'They are'} listed below and not added to the total above.`,
+    );
+  }
   const hidden = page.salesNotShown + page.paymentsNotShown;
-  if (hidden > 0) notes.push(`The list shows the newest. ${count(hidden, 'earlier one is', 'earlier ones are')} counted in the total and not listed.`);
+  if (hidden > 0) notes.push(`The list shows the newest. ${count(hidden, 'earlier one is', 'earlier ones are')} not listed.`);
   return notes;
 }
 
@@ -252,8 +266,9 @@ export function productBody(draft, currency) {
 }
 
 /** One product in the Products list. */
-export function productRow(product, tax) {
+export function productRow(product, tax, currency) {
   const facts = [formatMinor(product.priceMinor, product.currency)];
+  if (typeof currency === 'string' && product.currency !== currency) facts.push(`priced in ${product.currency}: save its price in ${currency} to sell it`);
   if (tax.bp > 0) facts.push(product.taxed ? (tax.included ? 'tax included' : 'plus tax') : 'no tax');
   facts.push(product.stock === null ? 'stock not counted' : product.stock === 0 ? 'out of stock' : `${String(product.stock)} in stock`);
   return facts.join(' · ');

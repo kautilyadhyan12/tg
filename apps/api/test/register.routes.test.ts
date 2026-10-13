@@ -64,7 +64,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const send = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, cookies: Cookies, payload?: unknown, remoteAddress: string = nextIp()) =>
+  const send = (method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH", path: string, cookies: Cookies, payload?: unknown, remoteAddress: string = nextIp()) =>
     api().inject({
       method,
       url: path,
@@ -202,14 +202,24 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ product_id: water.id, entry_id: maya, quantity: 2, total_minor: 398, method: "card_at_desk", undone: false });
       expect(await stockOf(water.id)).toBe(8);
-      expect(await auditOf(gymId, "org.sale_recorded")).toHaveLength(1);
+      const notes = await auditOf(gymId, "org.sale_recorded");
+      expect(notes).toHaveLength(1);
+      expect(Object.keys(notes[0]?.meta ?? {}).sort()).toEqual(["currency", "entryId", "method", "product", "productId", "quantity", "taxMinor", "totalMinor"]);
+      expect(notes[0]?.meta["entryId"]).toBe(maya);
+      expect(JSON.stringify(notes[0]?.meta)).not.toContain("Maya");
       // And again a moment later: still one.
       expect((await sell(gymId, owner.cookies, press)).statusCode).toBe(201);
       expect(await salesOf(gymId)).toHaveLength(1);
       expect(await stockOf(water.id)).toBe(8);
 
-      // The same key with a different sale behind it: refused, whichever part differs.
-      for (const other of [{ quantity: 1, totalMinor: 199 }, { entryId: null }, { method: "cash" }, { productId: few.id, totalMinor: 600 }]) {
+      // The same key with a different sale behind it: refused, whichever part of the sale differs.
+      // The same key naming another buyer is the sale already made, and adds nothing: who
+      // bought it is not compared, since a record can be joined to another after the press.
+      const otherBuyer = await sell(gymId, owner.cookies, { ...press, entryId: null });
+      expect(otherBuyer.statusCode).toBe(201);
+      expect((JSON.parse(otherBuyer.body) as { saleId: string }).saleId).toBe([...ids][0]);
+      expect((await salesOf(gymId)).map((r) => r.entry_id)).toEqual([maya]);
+      for (const other of [{ quantity: 1, totalMinor: 199 }, { method: "cash" }, { productId: few.id, totalMinor: 600 }]) {
         const res = await sell(gymId, owner.cookies, { ...press, ...other });
         expect(res.statusCode, JSON.stringify(other)).toBe(409);
         expect(errorOf(res)).toBe("request_reused");
@@ -259,7 +269,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
 
       // The page adds up only what stands: one water sale of 398, one shaker, three bars.
       const now = await read(gymId, owner.cookies);
-      expect(now.totals).toEqual({ count: 5, payments: 0, totalMinor: 398 + 1200 + 900, taxMinor: 0, cash: 1200 + 900, card_at_desk: 398, bank_transfer: 0, other: 0, refundedMinor: 0 });
+      expect(now.totals).toEqual({ count: 5, payments: 0, totalMinor: 398 + 1200 + 900, taxMinor: 0, cash: 1200 + 900, card_at_desk: 398, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0 });
       expect(now.sales).toHaveLength(5);
       expect(now.sales.filter((s) => s.person !== null)).toEqual([expect.objectContaining({ person: { entryId: maya, name: "Maya Patel" }, by: expect.stringMatching(/^Reg once-/) as unknown })]);
     },
@@ -286,6 +296,19 @@ d("the register: products, sales and tax (real Postgres)", () => {
       const water = await addProduct(gymId, owner.cookies, { name: "Water", priceMinor: 199, stock: 50 });
       const sold = await sell(gymId, owner.cookies, sale(water.id, 199, { entryId: person }));
       expect(sold.statusCode, sold.body).toBe(201);
+      // Somebody who holds the price tick and nothing else, not even the list's: the page
+      // they are sent names nobody who bought, nobody who sold, and no money.
+      const onlyPrices = await makeUser("who-onlyprices");
+      await staffWith(gymId, onlyPrices, "trainer", ["memberships.manage"]);
+      const bare = await get(base(gymId), onlyPrices.cookies);
+      expect(bare.statusCode, bare.body).toBe(200);
+      expect(page(bare).sales).toEqual([]);
+      expect(page(bare).payments).toBeNull();
+      expect(page(bare).totals.totalMinor).toBe(0);
+      expect(page(bare).products.map((p) => p.name)).toEqual(["Water"]);
+      for (const name of ["Pat Quinn", "Reg who-owner", person]) expect(bare.body).not.toContain(name);
+      // The owner's own read of the same page does name them: the check above can fail.
+      expect((await get(base(gymId), owner.cookies)).body).toContain("Pat Quinn");
       const saleId = (JSON.parse(sold.body) as { saleId: string }).saleId;
       const product = { name: "Towel", priceMinor: 500, taxed: true, stock: null };
       const fresh = async () => (await read(gymId, owner.cookies)).products.find((p) => p.id === water.id)?.updatedAt;
@@ -426,7 +449,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(await salesOf(us)).toEqual(usBefore);
       const after = await read(us, owner.cookies);
       expect(after.sales.map((s) => s.itemName).sort()).toEqual(["Gift card", "Water", "Water", "Water"]);
-      expect(after.totals).toEqual({ count: 4, payments: 0, totalMinor: 199 + 215 + 646 + 2500, taxMinor: 16 + 49, cash: 199 + 215, card_at_desk: 2500, bank_transfer: 646, other: 0, refundedMinor: 0 });
+      expect(after.totals).toEqual({ count: 4, payments: 0, totalMinor: 199 + 215 + 646 + 2500, taxMinor: 16 + 49, cash: 199 + 215, card_at_desk: 2500, bank_transfer: 646, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0 });
       // The tax change is written to the gym's record once each, and a save that changes nothing is not.
       expect((await put(`${base(us)}/tax`, { bp: 0, included: true }, owner.cookies)).statusCode).toBe(200);
       expect((await auditOf(us, "org.sales_tax_changed")).map((a) => a.meta)).toEqual([
@@ -469,7 +492,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(await auditOf(gymId, "org.sale_undone")).toHaveLength(1);
       now = await read(gymId, owner.cookies);
       expect(now.sales.map((s) => [s.itemName, s.canUndo, s.undone])).toEqual([["Coffee", true, false], ["Bar", false, true]]);
-      expect(now.totals).toEqual({ count: 1, payments: 0, totalMinor: 250, taxMinor: 0, cash: 0, card_at_desk: 250, bank_transfer: 0, other: 0, refundedMinor: 0 });
+      expect(now.totals).toEqual({ count: 1, payments: 0, totalMinor: 250, taxMinor: 0, cash: 0, card_at_desk: 250, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0 });
       // The sale's own key again does not sell it a second time.
       expect((await salesOf(gymId)).filter((s) => !s.undone)).toHaveLength(1);
 
@@ -574,7 +597,9 @@ d("the register: products, sales and tax (real Postgres)", () => {
       const water = await addProduct(gymId, owner.cookies, { name: "Water", priceMinor: 199 });
       const towel = await addProduct(otherGym, other.cookies, { name: "Towel", priceMinor: 500 });
       expect((await sell(gymId, owner.cookies, sale(water.id, 199, { entryId: maya }))).statusCode).toBe(201);
-      expect((await sell(gymId, owner.cookies, sale(water.id, 398, { quantity: 2, entryId: twin }))).statusCode).toBe(201);
+      const twinPress = sale(water.id, 398, { quantity: 2, entryId: twin });
+      const twinSold = await sell(gymId, owner.cookies, twinPress);
+      expect(twinSold.statusCode).toBe(201);
       expect((await sell(gymId, owner.cookies, sale(water.id, 199, { entryId: omar }))).statusCode).toBe(201);
       expect((await sell(gymId, owner.cookies, sale(water.id, 199))).statusCode).toBe(201);
       expect((await sell(otherGym, other.cookies, sale(towel.id, 500, { entryId: theirs }))).statusCode).toBe(201);
@@ -594,6 +619,11 @@ d("the register: products, sales and tax (real Postgres)", () => {
       // Two records joined: what the one not kept bought is the kept one's.
       const merged = await post(`/v1/orgs/${gymId}/member-list/entries/${twin}/merge`, { keepEntryId: maya, acknowledgeLeavesList: true }, owner.cookies);
       expect(merged.statusCode, merged.body).toBe(200);
+      // The same press again, its buyer's record now gone into another: the sale it made, not a refusal.
+      const again = await sell(gymId, owner.cookies, twinPress);
+      expect(again.statusCode, again.body).toBe(201);
+      expect((JSON.parse(again.body) as { saleId: string }).saleId).toBe((JSON.parse(twinSold.body) as { saleId: string }).saleId);
+      expect(await salesOf(gymId)).toHaveLength(4);
       expect((await bought(gymId, maya, owner.cookies)).sales.map((s) => [s.quantity, s.person?.entryId])).toEqual([[2, maya], [1, maya]]);
       expect((await salesOf(gymId)).filter((s) => s.entry_id === null)).toHaveLength(1);
 
@@ -650,11 +680,13 @@ d("the register: products, sales and tax (real Postgres)", () => {
 
       const now = await read(gymId, owner.cookies);
       expect(now.payments?.map((p) => [p.typeName, p.amountMinor, p.method, p.person])).toEqual([["One month", 4999, "card_at_desk", { entryId: maya, name: "Maya Patel" }]]);
-      expect(now.totals).toEqual({ count: 1, payments: 1, totalMinor: 199 + 4999, taxMinor: 0, cash: 199, card_at_desk: 4999, bank_transfer: 0, other: 0, refundedMinor: 0 });
+      expect(now.totals).toEqual({ count: 1, payments: 1, totalMinor: 199 + 4999, taxMinor: 0, cash: 199, card_at_desk: 4999, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0 });
       // Whoever cannot record a payment is sent no payment and no money from one.
       const forPricer = await read(gymId, pricer.cookies);
       expect(forPricer.payments).toBeNull();
-      expect(forPricer.totals).toEqual({ count: 1, payments: 0, totalMinor: 199, taxMinor: 0, cash: 199, card_at_desk: 0, bank_transfer: 0, other: 0, refundedMinor: 0 });
+      expect(forPricer.sales).toEqual([]);
+      expect(forPricer.salesNotShown).toBe(0);
+      expect(forPricer.totals).toEqual({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0 });
 
       // A refund noted today is said beside the total and taken off nothing.
       const held = JSON.parse(given.body) as { memberships: { id: string; billing: { bills: { payments: { id: string }[] }[] } | null }[] };
@@ -671,9 +703,99 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect((await post(`/v1/orgs/${gymId}/member-list/entries/${maya}/memberships/${membership.id}/payments/${paymentId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
       const afterUndo = await read(gymId, owner.cookies);
       expect(afterUndo.payments).toEqual([]);
-      expect(afterUndo.totals).toEqual({ count: 1, payments: 0, totalMinor: 199, taxMinor: 0, cash: 199, card_at_desk: 0, bank_transfer: 0, other: 0, refundedMinor: 0 });
+      expect(afterUndo.totals).toEqual({ count: 1, payments: 0, totalMinor: 199, taxMinor: 0, cash: 199, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0 });
       // Next door's takings are its own.
       expect((await read(otherGym, other.cookies)).totals).toMatchObject({ count: 0, payments: 1, totalMinor: 4999, cash: 4999 });
+    },
+    T,
+  );
+
+  it(
+    "one day's total is one money: after a gym changes its country, a product still priced in the old money is not sold, and what was taken in it is added to nothing",
+    async () => {
+      const owner = await makeUser("money-owner");
+      const gymId = await makeGym(owner, "Reg Money Gym");
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
+      const water = await addProduct(gymId, owner.cookies, { name: "Water", priceMinor: 199, stock: 10 });
+      const type = { name: "One month", description: null, kind: "one_time", priceMinor: 4999, termCount: 1, termUnit: "month", packClasses: null, packDays: null, access: "all_classes", bookingsLimit: null, bookingsPeriod: null, classTypeIds: null, includesPt: false, ptLimit: null, ptPeriod: null };
+      const made = await post(`/v1/orgs/${gymId}/membership-types`, type, owner.cookies);
+      expect(made.statusCode, made.body).toBe(201);
+      const month = (JSON.parse(made.body) as { types: { id: string }[] }).types[0]?.id;
+      const today = (await read(gymId, owner.cookies)).today;
+      // In dollars: three waters and a month.
+      expect((await sell(gymId, owner.cookies, sale(water.id, 597, { quantity: 3 }))).statusCode).toBe(201);
+      expect((await post(`/v1/orgs/${gymId}/member-list/entries/${maya}/memberships`, { requestKey: nextKey(), typeId: month, startsOn: today, paid: true, method: "cash" }, owner.cookies)).statusCode).toBe(201);
+      expect((await read(gymId, owner.cookies)).totals).toMatchObject({ count: 1, payments: 1, totalMinor: 597 + 4999, otherCurrency: 0 });
+
+      // The gym moves to the UK.
+      const moved = await send("PATCH", `/v1/orgs/${gymId}`, owner.cookies, { country: "GB" });
+      expect(moved.statusCode, moved.body).toBe(200);
+      let now = await read(gymId, owner.cookies);
+      expect(now.currency).toBe("GBP");
+      expect(now.products.map((p) => [p.name, p.currency])).toEqual([["Water", "USD"]]);
+      // Nothing in dollars is added to a total in pounds, and the page says how many there are.
+      expect(now.totals).toEqual({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 2 });
+      expect(now.sales).toHaveLength(1);
+      expect(now.payments).toHaveLength(1);
+
+      // The water still priced in dollars is not sold.
+      const before = await salesOf(gymId);
+      const refused = await sell(gymId, owner.cookies, sale(water.id, 199));
+      expect(refused.statusCode).toBe(409);
+      expect(errorOf(refused)).toBe("product_currency_changed");
+      expect(messageOf(refused)).toBe("Water is priced in USD, and you now sell in GBP. Nothing was sold: open Water under Products and save its price in GBP.");
+      expect(await salesOf(gymId)).toEqual(before);
+      expect(await stockOf(water.id)).toBe(7);
+
+      // Its price saved again is in pounds, and it sells; a product made now is in pounds.
+      const saved = await put(`${base(gymId)}/products/${water.id}`, { name: "Water", priceMinor: 150, taxed: true, stock: 7, updatedAt: now.products[0]?.updatedAt }, owner.cookies);
+      expect(saved.statusCode, saved.body).toBe(200);
+      expect(page(saved).products.map((p) => [p.name, p.currency, p.priceMinor])).toEqual([["Water", "GBP", 150]]);
+      const bar = await addProduct(gymId, owner.cookies, { name: "Bar", priceMinor: 200 });
+      expect(bar.currency).toBe("GBP");
+      expect((await sell(gymId, owner.cookies, sale(water.id, 150))).statusCode).toBe(201);
+      expect((await sell(gymId, owner.cookies, sale(bar.id, 200, { method: "card_at_desk" }))).statusCode).toBe(201);
+      now = await read(gymId, owner.cookies);
+      expect(now.totals).toEqual({ count: 2, payments: 0, totalMinor: 350, taxMinor: 0, cash: 150, card_at_desk: 200, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 2 });
+      // The rows keep the money each was taken in.
+      expect((await salesOf(gymId)).map((r) => [r.currency, r.total_minor])).toEqual([["USD", 597], ["GBP", 150], ["GBP", 200]]);
+    },
+    T,
+  );
+
+  it(
+    "a membership sold at the desk is given at the price the screen showed, or not at all",
+    async () => {
+      const owner = await makeUser("price-owner");
+      const gymId = await makeGym(owner, "Reg Price Gym");
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
+      const type = { name: "One month", description: null, kind: "one_time", priceMinor: 4999, termCount: 1, termUnit: "month", packClasses: null, packDays: null, access: "all_classes", bookingsLimit: null, bookingsPeriod: null, classTypeIds: null, includesPt: false, ptLimit: null, ptPeriod: null };
+      const made = await post(`/v1/orgs/${gymId}/membership-types`, type, owner.cookies);
+      expect(made.statusCode, made.body).toBe(201);
+      const first = (JSON.parse(made.body) as { types: { id: string; updatedAt: string }[] }).types[0];
+      if (first === undefined) throw new Error("no type");
+      const today = (await read(gymId, owner.cookies)).today;
+      // The owner puts the price up while the desk's form is open at the old one.
+      const raised = await put(`/v1/orgs/${gymId}/membership-types/${first.id}`, { ...type, priceMinor: 5999, updatedAt: first.updatedAt }, owner.cookies);
+      expect(raised.statusCode, raised.body).toBe(200);
+      const heldUrl = `/v1/orgs/${gymId}/member-list/entries/${maya}/memberships`;
+      const rowsNow = async () => ({
+        held: (await sql`SELECT count(*)::int AS n FROM gym_held_memberships WHERE gym_id = ${gymId}`)[0]?.["n"] as number,
+        paid: await sql<{ amount_minor: number }[]>`SELECT amount_minor FROM gym_member_payments WHERE gym_id = ${gymId}`,
+      });
+
+      const stale = await post(heldUrl, { requestKey: nextKey(), typeId: first.id, startsOn: today, paid: true, method: "cash", priceMinor: 4999 }, owner.cookies);
+      expect(stale.statusCode).toBe(409);
+      expect(errorOf(stale)).toBe("membership_price_changed");
+      expect(messageOf(stale)).toBe("The price of this membership changed while this was open. Nothing was saved: check the total and press again.");
+      expect(await rowsNow()).toEqual({ held: 0, paid: [] });
+      // A price below it is refused the same way: no number but the type's own gives it.
+      expect((await post(heldUrl, { requestKey: nextKey(), typeId: first.id, startsOn: today, paid: true, method: "cash", priceMinor: 1 }, owner.cookies)).statusCode).toBe(409);
+      expect((await post(heldUrl, { requestKey: nextKey(), typeId: first.id, startsOn: today, paid: true, method: "cash", priceMinor: -1 }, owner.cookies)).statusCode).toBe(400);
+      expect(await rowsNow()).toEqual({ held: 0, paid: [] });
+      // At the price as it is now, it is given and that is what is recorded.
+      expect((await post(heldUrl, { requestKey: nextKey(), typeId: first.id, startsOn: today, paid: true, method: "cash", priceMinor: 5999 }, owner.cookies)).statusCode).toBe(201);
+      expect(await rowsNow()).toEqual({ held: 1, paid: [{ amount_minor: 5999 }] });
     },
     T,
   );

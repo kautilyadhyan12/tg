@@ -289,6 +289,8 @@ export type HeldWriteOutcome =
   | { kind: "already_held"; typeName: string; ends: boolean }
   /** Given as paid, with a price, and the request does not say how they paid. */
   | { kind: "method_needed" }
+  /** The type's price is no longer the one the screen showed. */
+  | { kind: "price_changed" }
   /** A cancel, and a payment stands on a bill for days after the membership's last day. */
   | { kind: "early_payment" };
 
@@ -387,6 +389,8 @@ export async function giveHeld(
     paid: boolean;
     /** How they paid, where `paid`. */
     method: MemberPaymentByHand | null;
+    /** The price the screen showed; null where it showed none. */
+    shownPriceMinor: number | null;
     /** The gym's own day. */
     today: string;
     actorUserId: string;
@@ -414,6 +418,7 @@ export async function giveHeld(
     const [rawType] = await liveTypes(tx, input.gymId, input.typeId);
     if (rawType === undefined) return { kind: "type_not_found" };
     const type = typeChoice(rawType);
+    if (input.shownPriceMinor !== null && input.shownPriceMinor !== type.priceMinor) return { kind: "price_changed" };
 
     // Worked out unpaid: the bill of the period owed is opened first, and a payment
     // recorded against it is what moves the count of paid periods on.

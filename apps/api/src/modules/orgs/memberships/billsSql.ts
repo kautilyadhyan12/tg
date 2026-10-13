@@ -347,14 +347,14 @@ export interface DayPaymentRow {
 }
 
 /** THE MEMBERSHIP PAYMENTS RECORDED ON ONE OF THE GYM'S DAYS that stand (18b-i: the Sell
- *  page's takings), newest first, with what they add up to by how they were paid and the
- *  refunds noted that day. */
+ *  page's takings), newest first, with what they add up to by how they were paid and in
+ *  which money, and the refunds noted that day. */
 export async function paymentsOn(
   sql: Sql | TransactionSql,
   gymId: string,
   day: string,
   limit: number,
-): Promise<{ payments: DayPaymentRow[]; count: number; byMethod: Map<MemberPaymentMethod, number>; refundedMinor: number }> {
+): Promise<{ payments: DayPaymentRow[]; count: number; sums: { method: MemberPaymentMethod; currency: string; count: number; totalMinor: number }[]; refunds: { currency: string; totalMinor: number }[] }> {
   const [rows, sums, refunds] = await Promise.all([
     sql<{ id: string; type_name: string; amount_minor: number; currency: string; method: string; created_at: Date; by: string | null; entry_id: string; full_name: string }[]>`
       SELECT p.id, t.name AS type_name, p.amount_minor, p.currency, p.method, p.created_at, u.display_name AS by, h.entry_id, e.full_name
@@ -367,23 +367,19 @@ export async function paymentsOn(
       WHERE p.gym_id = ${gymId} AND p.paid_on = ${day}::date AND p.undone_at IS NULL
       ORDER BY p.seq DESC
       LIMIT ${limit}`,
-    sql<{ method: string; n: number; total: string }[]>`
-      SELECT method, count(*)::int AS n, sum(amount_minor)::text AS total
+    sql<{ method: string; currency: string; n: number; total: string }[]>`
+      SELECT method, currency, count(*)::int AS n, sum(amount_minor)::text AS total
       FROM gym_member_payments
       WHERE gym_id = ${gymId} AND paid_on = ${day}::date AND undone_at IS NULL
-      GROUP BY method`,
-    sql<{ total: string }[]>`
-      SELECT COALESCE(sum(r.amount_minor), 0)::text AS total
+      GROUP BY method, currency`,
+    sql<{ currency: string; total: string }[]>`
+      SELECT r.currency, sum(r.amount_minor)::text AS total
       FROM gym_member_refunds r
       JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
-      WHERE r.gym_id = ${gymId} AND r.refunded_on = ${day}::date AND r.undone_at IS NULL AND p.undone_at IS NULL`,
+      WHERE r.gym_id = ${gymId} AND r.refunded_on = ${day}::date AND r.undone_at IS NULL AND p.undone_at IS NULL
+      GROUP BY r.currency`,
   ]);
-  const byMethod = new Map<MemberPaymentMethod, number>();
-  let count = 0;
-  for (const row of sums) {
-    byMethod.set(memberPaymentMethodSchema.parse(row.method), Number(row.total));
-    count += row.n;
-  }
+  const count = sums.reduce((n, row) => n + row.n, 0);
   return {
     payments: rows.map((r) => ({
       id: r.id,
@@ -397,8 +393,9 @@ export async function paymentsOn(
       personName: r.full_name,
     })),
     count,
-    byMethod,
-    refundedMinor: Number(refunds[0]?.total ?? "0"),
+    // One money is never added to another: each sum says which it is in.
+    sums: sums.map((row) => ({ method: memberPaymentMethodSchema.parse(row.method), currency: row.currency, count: row.n, totalMinor: Number(row.total) })),
+    refunds: refunds.map((row) => ({ currency: row.currency, totalMinor: Number(row.total) })),
   };
 }
 
