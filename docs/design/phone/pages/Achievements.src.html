@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Me: Achievements</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<style>
+.bdg{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px;text-align:center}
+.bdg i{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#FF8A1F,#FFB347);color:#fff;box-shadow:0 4px 16px rgba(255,138,31,0.3)}
+.bdg-off{opacity:0.45}
+.bdg-off i{background:rgba(255,255,255,0.08);box-shadow:none;color:var(--t2)}
+</style>
+<div data-root="1" class="screen" style="width: 390px; height: %H%px">
+<img class="backdrop" src="%IMG:monalisa%" alt="" style="top: 300px; height: 440px; opacity: 0.3">
+<main class="main">
+
+<div class="hrow" style="gap: 4px; margin-left: -8px">
+<a href="#me" class="icon-btn" aria-label="Back to Me" style="border: 0; background: transparent"><!--I:back:20--></a>
+<span class="s14 w6 t2">Me</span>
+</div>
+
+<section class="glass pad col" style="gap: 14px; background: rgba(40,36,32,0.72)" aria-labelledby="a-level">
+<div class="hrow" style="gap: 12px">
+<span style="width: 52px; height: 52px; border-radius: 16px; background: linear-gradient(135deg,#FF8A1F,#FFB347); display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; box-shadow: 0 4px 16px rgba(255,138,31,0.3)"><!--I:trophy:24--></span>
+<div class="col grow" style="gap: 2px"><span class="eyebrow">Achievements</span><h1 id="a-level" class="h2">Level 7</h1><span class="s12 t2 num">1,240 total XP · 5 of 20 badges</span></div>
+<div class="col" style="align-items: flex-end"><span class="h2 am num">260</span><span class="s11 t3">XP to Lv 8</span></div>
+</div>
+<div class="bar" style="height: 8px"><span style="width: 83%"></span></div>
+</section>
+
+<div class="g3" role="tablist" aria-label="Achievements" style="gap: 6px">
+<button type="button" role="tab" aria-selected="true" class="btn btn-soft btn-sm" style="padding: 0; font-size: 13px">Badges</button>
+<button type="button" role="tab" aria-selected="false" class="btn btn-s btn-sm" style="padding: 0; font-size: 13px">Challenges</button>
+<button type="button" role="tab" aria-selected="false" class="btn btn-s btn-sm" style="padding: 0; font-size: 13px">Leaderboard</button>
+</div>
+
+<div class="g3">
+<div class="glass bdg" style="background: rgba(40,36,32,0.72)"><i><!--I:flame:22--></i><span class="s12 w6">First Workout</span></div>
+<div class="glass bdg" style="background: rgba(40,36,32,0.72)"><i><!--I:calendar:22--></i><span class="s12 w6">7-Day Streak</span></div>
+<div class="glass bdg" style="background: rgba(40,36,32,0.72)"><i><!--I:dumbbell:22--></i><span class="s12 w6">10 Workouts</span></div>
+<div class="glass bdg" style="background: rgba(40,36,32,0.72)"><i><!--I:zap:22--></i><span class="s12 w6">1,000 XP</span></div>
+<div class="glass bdg" style="background: rgba(40,36,32,0.72)"><i><!--I:star:22--></i><span class="s12 w6">Perfect Form</span></div>
+<div class="glass bdg bdg-off" style="background: rgba(40,36,32,0.72)"><i><!--I:calendar:22--></i><span class="s12 w6">30-Day Streak</span></div>
+<div class="glass bdg bdg-off" style="background: rgba(40,36,32,0.72)"><i><!--I:dumbbell:22--></i><span class="s12 w6">50 Workouts</span></div>
+<div class="glass bdg bdg-off" style="background: rgba(40,36,32,0.72)"><i><!--I:pin:22--></i><span class="s12 w6">First Run</span></div>
+<div class="glass bdg bdg-off" style="background: rgba(40,36,32,0.72)"><i><!--I:crown:22--></i><span class="s12 w6">Top 3</span></div>
+</div>
+
+</main>
+<!--TABBAR:me-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

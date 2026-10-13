@@ -398,7 +398,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 **Feature folder 1 — `D:\Projects\ai-home-gym`: getting into the app, and the member's gym.**
 
 10. [ ] **The empty app, on Kd's phone** (item 0's app, without the store): `apps/mobile` as one Expo app in TypeScript, under the same checks as the rest, with each folder's own copy on his one phone. New packages need his yes in its plan. The first job of the whole phone app.
-11. [ ] **The look, and five tabs**: Today · Workout · Food · Gym · Me, light and dark, drawn as pictures first (as the console's were), then the building blocks every screen uses. Owed from item 10's review: with the screen-test tool this item chooses, a test of the first screen's three lines and of `readAppExtra`.
+11. **The look, and five tabs**: Today · Workout · Food · Gym · Me (split 2026-10-13: the pictures first, as the console's were). The look is the MEMBER WEB's own, fitted to a phone, dark only (`rulings/2026-10-13-stage5-11a-phone-look-pictures.md`).
+    - 11a. [x] **The look as pictures** — merged 2026-10-13 (PR #246).
+    - 11b. [ ] **The look in the app**: the member web's colours, Inter, its pictures made small, and the building blocks in `apps/mobile`; the five tabs on Kd's phone. After Kd's yes to 11a's pictures; new packages need his yes in its plan. Owed from item 10's review: with the screen-test tool it chooses, a test of the first screen's three lines and of `readAppExtra`.
 12. [ ] **Sign-in** by email code and by Google, with the robot check; one phone at a time (spec Part 3 §10.5); "Before you start"; sign out. Risky. Apple sign-in comes with the iPhone version (item 21).
 13. [ ] **Invitations and Join**, with what the gym can see (spec Part 3 §10.2); My Gyms; the invitation email's button opens the app.
 14. [ ] **Setup**: the eleven screens and the plan, the health question, Safe mode, the consent taps.

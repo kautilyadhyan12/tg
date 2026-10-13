@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gym</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="screen" style="width: 390px; height: %H%px">
+<main class="main">
+
+<div class="col" style="gap: 4px">
+<h1 class="h1">My gyms</h1>
+<p class="s13 t2">Where you train, when it’s open, and your pass to check in.</p>
+</div>
+
+<section class="card pad col" style="gap: 14px" aria-labelledby="g-name">
+<div class="hrow"><span class="badge" style="width: 44px; height: 44px; border-radius: 14px"><!--I:building:20--></span><div class="col grow"><h2 id="g-name" class="s15 w7 ell">Iron House Gym</h2><span class="s12 t2">Open today until 10 pm</span></div><span class="pill pill-good">Open</span></div>
+<p class="s13 t2">Show your pass at the front desk when you arrive.</p>
+<button type="button" class="btn btn-p btn-wide"><!--I:qr:18-->Show my pass</button>
+</section>
+
+<section class="card pad col" style="gap: 12px" aria-labelledby="g-days">
+<div class="between"><h2 id="g-days" class="h3">Days you came</h2><div class="hrow" style="gap: 4px"><button type="button" class="icon-btn" aria-label="Previous month" style="width: 36px; height: 36px"><!--I:back:16--></button><span class="s13 w6">October</span><button type="button" class="icon-btn" aria-label="Next month" disabled style="width: 36px; height: 36px; opacity: 0.35"><!--I:go:16--></button></div></div>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px">
+<div class="day day-done"><i>6</i>Mon</div>
+<div class="day"><i>7</i>Tue</div>
+<div class="day day-done"><i>8</i>Wed</div>
+<div class="day"><i>9</i>Thu</div>
+<div class="day day-done"><i>10</i>Fri</div>
+<div class="day"><i>11</i>Sat</div>
+<div class="day day-done"><i>12</i>Sun</div>
+</div>
+</section>
+
+<div class="swipe" role="tablist" aria-label="Iron House Gym">
+<button type="button" role="tab" aria-selected="false" class="chip">Inbox<span class="pill pill-am" style="height: 18px; padding: 0 6px">New</span></button>
+<button type="button" role="tab" aria-selected="false" class="chip">Updates</button>
+<button type="button" role="tab" aria-selected="false" class="chip">Events</button>
+<button type="button" role="tab" aria-selected="true" class="chip chip-on">Classes</button>
+<button type="button" role="tab" aria-selected="false" class="chip">Leaderboard</button>
+</div>
+
+<span class="s13 t3">Next 7 days · 13 Oct – 19 Oct</span>
+
+<section class="card pad col" style="gap: 12px" aria-labelledby="c-1">
+<div class="hrow"><span style="width: 4px; align-self: stretch; border-radius: 999px; background: var(--blue)"></span><div class="col grow" style="gap: 2px"><h2 id="c-1" class="s15 w7">Spin</h2><span class="s12 t2">Wed 14 Oct · 6:30 pm · 45 min</span></div><span class="pill pill-good"><!--I:check:12-->You’re booked</span></div>
+<button type="button" class="btn btn-s btn-sm btn-wide">Cancel booking</button>
+</section>
+
+<section class="card pad col" style="gap: 12px" aria-labelledby="c-2">
+<div class="hrow"><span style="width: 4px; align-self: stretch; border-radius: 999px; background: var(--good)"></span><div class="col grow" style="gap: 2px"><h2 id="c-2" class="s15 w7">Yoga</h2><span class="s12 t2">Thu 15 Oct · 7:00 am · 60 min</span></div><span class="s12 t3">4 of 12 places left</span></div>
+<button type="button" class="btn btn-p btn-sm btn-wide">Book</button>
+</section>
+
+<section class="card pad col" style="gap: 12px" aria-labelledby="c-3">
+<div class="hrow"><span style="width: 4px; align-self: stretch; border-radius: 999px; background: var(--purple)"></span><div class="col grow" style="gap: 2px"><h2 id="c-3" class="s15 w7">HIIT</h2><span class="s12 t2">Fri 16 Oct · 6:00 pm · 30 min</span></div><span class="pill pill-gold">Full · 2 waiting</span></div>
+<button type="button" class="btn btn-soft btn-sm btn-wide">Join waitlist</button>
+</section>
+
+</main>
+<!--TABBAR:gym-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
