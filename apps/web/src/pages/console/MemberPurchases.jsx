@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { viewerPrivileges } from './consoleView';
@@ -14,6 +14,8 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
   const privileges = viewerPrivileges(gym);
   const may = canSell(privileges);
   const [state, setState] = useState({ entryId: null, found: null, error: null });
+  // A person's page is also drawn where there is no address to go to: no link there.
+  const routed = useInRouterContext();
 
   useEffect(() => {
     if (!may) return undefined;
@@ -61,7 +63,7 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
         </ul>
       )}
       {state.found !== null && state.found.notShown > 0 ? <p className="c-s13 c-t3 m-0">{`Showing the newest ${String(state.found.sales.length)}.`}</p> : null}
-      {sellTo !== null ? (
+      {sellTo !== null && routed ? (
         <Link to={sellTo} state={{ sellTo: { entryId, name: who, past: past === true } }} className="c-btn c-btn-s c-btn-sm self-start">
           {`Sell a product to ${who}`}
         </Link>

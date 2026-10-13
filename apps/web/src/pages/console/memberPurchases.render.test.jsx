@@ -68,6 +68,14 @@ describe('bought at the desk', () => {
     expect(await screen.findByText('Nothing yet. Products sold to them on the Sell page are listed here.')).toBeTruthy();
   });
 
+  it('drawn with no router around it, lists the purchases and offers no link', async () => {
+    svc.purchases.mockResolvedValue({ sales: [sale()], notShown: 0 });
+    render(<MemberPurchases gymId="g1" gym={GYM} entryId="e1" name="Maya Patel" past={false} />);
+    const box = await screen.findByRole('region', { name: 'Bought at the desk' });
+    expect(within(box).getAllByTestId('purchase-row')).toHaveLength(1);
+    expect(within(box).queryByRole('link')).toBeNull();
+  });
+
   it('is not drawn, and nothing is asked, for staff who cannot record a payment', () => {
     open({ ...GYM, staffRole: 'trainer', privileges: ['members.confirm'] });
     expect(screen.queryByRole('region', { name: 'Bought at the desk' })).toBeNull();

@@ -512,7 +512,9 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
         ["a pack that would already be over", { typeId: ten, startsOn: addDays(today, -30) }, 409, "membership_already_over"],
         ["a start that is not a day", { typeId: ten, startsOn: "tomorrow" }, 400, "validation_error"],
         ["no request key", { typeId: ten, startsOn: today, requestKey: undefined }, 400, "validation_error"],
-        ["a field nobody asked for", { typeId: ten, startsOn: today, priceMinor: 1 }, 400, "validation_error"],
+        ["a field nobody asked for", { typeId: ten, startsOn: today, price: 1 }, 400, "validation_error"],
+        // The price a screen showed (18b-i) is checked, never taken: any but the type's own gives nothing.
+        ["a price the type does not have", { typeId: ten, startsOn: today, priceMinor: 1 }, 409, "membership_price_changed"],
       ];
       for (const [what, body, status, code] of refusals) {
         const res = await give(gymId, person, owner.cookies, body);
