@@ -231,7 +231,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18a-i. [x] **Bills and payments on a person's page** — merged 2026-10-10 (PR #215).
      - 18a-ii. [x] **Cancel a bill, note a refund, and the Members list's Payment reads the bills** — merged 2026-10-11 (PR #218).
    - 18b. **The register** (§14.3), split 2026-10-12 in three (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`). In Folder A's list "18b" is 18b-i → 18b-ii → 18b-iii.
-     - 18b-i. [ ] **The Sell page: products, a sale, tax on products, today's takings.**
+     - 18b-i. [x] **The Sell page: products, a sale, tax on products, today's takings** — merged 2026-10-13 (PR #228).
      - 18b-ii. [ ] **Discounts and promo codes** on membership types and products: so much off or a percentage, from and until, a limit of uses counted under a lock; the price a person was sold at stays on their membership.
      - 18b-iii. [ ] **Tax on memberships** (found by 18b-i's plan): the gym's tax as a line of its own on a membership's bill, for the types the gym marks as taxed; every reader of a bill's amount is checked. Kd's to say whether it is wanted before launch.
    - 18c. [ ] **Pay by the gym's own link**: the link pasted per membership type, "Pay {gym}" in the member's app, staff ticking paid.
