@@ -1,20 +1,26 @@
-// The Reports page (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii): the members and attendance
-// figures, for staff holding `reports.read`. Counts only; no person's name or details leave here.
+// The Reports page (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i): the members, attendance
+// and money figures, for staff holding `reports.read`. Counts only; no person's name or details leave here.
 import type { Sql } from "postgres";
 import {
   attendanceReportFrom,
   attendanceReportResponseSchema,
   attendanceWindows,
   leadSourceSchema,
+  memberCurrencyForCountry,
   membersReportFrom,
   membersReportResponseSchema,
+  moneyReportFrom,
+  moneyReportResponseSchema,
   type AttendanceReportResponse,
   type LeadSource,
   type MembersReportResponse,
+  type MoneyReportResponse,
+  type OrgPrivilege,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
+import { inUseForMoney } from "../memberships/heldRepo.js";
 import { overNow } from "../memberships/over.js";
-import { requirePrivilege } from "../service.js";
+import { OrgsError, requirePrivilege } from "../service.js";
 import * as repo from "./repo.js";
 
 export interface ReportsDeps {
@@ -22,9 +28,12 @@ export interface ReportsDeps {
   now: () => Date;
 }
 
-/** Whoever may read this gym's reports, with the gym's time zone; anybody else is refused. */
-export async function requireReportsReader(deps: ReportsDeps, userId: string, gymId: string): Promise<{ timezone: string }> {
-  const { org } = await requirePrivilege(deps, gymId, userId, "reports.read");
+/** Whoever may read this gym's reports, with the gym's time zone; anybody else is refused.
+ *  The money figures also need `also`, the notebook's own tick: an owner who lets a
+ *  trainer see attendance has not shown them what the gym takes. */
+export async function requireReportsReader(deps: ReportsDeps, userId: string, gymId: string, also: OrgPrivilege | null): Promise<{ timezone: string }> {
+  const { org, privileges } = await requirePrivilege(deps, gymId, userId, "reports.read");
+  if (also !== null && !privileges.includes(also)) throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
   return { timezone: org.timezone };
 }
 
@@ -81,6 +90,52 @@ export async function getAttendanceReport(deps: ReportsDeps, gymId: string, org:
       hoursNoTime: visits.hours_no_time,
       member: { members: visits.members, visits: visits.member_visits, visitors: visits.member_visitors },
       classes,
+    }),
+  });
+}
+
+/** The money figures for a gym whose reader has been checked: sums and counts, never a
+ *  person. Its reads share one snapshot, so a payment recorded between them is in every
+ *  figure or in none; the list's own counts are read with them because lifetime value
+ *  divides by churn, which must be the Members figures' churn. */
+export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { timezone: string }): Promise<MoneyReportResponse> {
+  const today = dayInTz(deps.now(), org.timezone);
+  const facts = await deps.sql.begin("isolation level repeatable read read only", async (tx) => {
+    const gym = await repo.readMoneyGym(tx, gymId);
+    const currency = memberCurrencyForCountry(gym.country);
+    if (currency === null) return null;
+    const money = await repo.readMoney(tx, gymId, today, currency, gym.overdueAfterDays);
+    if (!money.any_membership || money.first_paid_on === null) return { gym, currency, money, held: [], members: null };
+    const held = await inUseForMoney(tx, gymId, currency);
+    const gone = [...(await overNow(tx, gymId, today, null))].map(([id, left]) => ({ id, on: left.on }));
+    const members = await repo.readMemberCounts(tx, gymId, org.timezone, today, gone);
+    return { gym, currency, money, held, members };
+  });
+  return moneyReportResponseSchema.parse({
+    report: moneyReportFrom({
+      timezone: org.timezone,
+      today,
+      currency: facts?.currency ?? null,
+      anyMembership: facts?.money.any_membership ?? false,
+      firstPaidOn: facts?.money.first_paid_on ?? null,
+      otherCurrency: facts?.money.other_currency ?? false,
+      overdueAfterDays: facts?.gym.overdueAfterDays ?? 0,
+      held: facts?.held ?? [],
+      months: facts?.money.months ?? [],
+      owed: {
+        currentMinor: facts?.money.current_minor ?? 0,
+        currentPeople: facts?.money.current_people ?? 0,
+        pastMinor: facts?.money.past_minor ?? 0,
+        pastPeople: facts?.money.past_people ?? 0,
+        overdueMinor: facts?.money.overdue_minor ?? 0,
+        overduePeople: facts?.money.overdue_people ?? 0,
+      },
+      members: {
+        today,
+        firstListedOn: facts?.members?.first_listed_on ?? null,
+        everLeft: facts?.members?.ever_left ?? false,
+        months: facts?.members?.months ?? [],
+      },
     }),
   });
 }
