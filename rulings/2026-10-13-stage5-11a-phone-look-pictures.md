@@ -1,0 +1,7 @@
+# Rulings · 2026-10-13 · Stage 5 item 11a, the phone app's look as pictures (feature folder 1)
+
+## The phone app
+
+- 2026-10-13 · **The phone app keeps the member web's design, fitted to a phone.** Shown a new look drawn from the console's colours, Kd: *"the layout was not suppose to be changed from the desktop design just need to be compitable according to mobile and just should not create long list of thing like desktop ... and pics which need to be compacted remains same , what you gave was completely different"*. So: the member web's own colours, font, pictures and boxes in their order; a wide row becomes two and two or a row that swipes sideways, never one long list; the pictures are the web's own, made small. This replaces spec Part 6 §16.3's "the console's named colours and Archivo, light and dark" (§16.3a). The console keeps its own look.
+- 2026-10-13 · **Dark only.** Asked whether the phone app also gets a light look, which the member web does not have, Kd: *"yes, dark only"*. No Light · Dark · Auto switch in the phone app.
+- 2026-10-13 · **The terminal's own, his to overrule:** five tabs at the bottom hold the side menu's pages (Today: Dashboard · Workout: Exercises, My Workout, Running · Food: Nutrition · Gym: My gyms · Me: Settings, Progress, Achievements), told to him in the table he said yes to; the AI Coach's card is left off Today because the chatbot is not in the phone app (RULINGS 2026-10-12).

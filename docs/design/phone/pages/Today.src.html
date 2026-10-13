@@ -2,46 +2,56 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Today, dark</title>
+<title>Today</title>
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
 <!--HELMET-->
-<div data-root="1" class="screen t-dark" style="width: 390px; height: %H%px">
+<div data-root="1" class="screen" style="width: 390px; height: %H%px">
 <main class="main">
 
-<div class="col" style="gap: 2px">
-<p class="sub">Good morning, Maya</p>
-<h1 class="h1">Today</h1>
+<div class="between">
+<div class="col"><span class="s13 t3">Good afternoon</span><h1 class="h1">Maya</h1></div>
+<button type="button" class="btn btn-p btn-sm"><!--I:play:16-->Start Workout</button>
 </div>
 
-<section class="card pad" aria-labelledby="t-workout">
-<div class="between">
-<span class="s14 w6 t2">Today’s workout</span>
-<span class="tag tag-plain"><!--I:clock:14-->About 40 min</span>
+<a href="#workout" class="card" style="height: 300px; display: block; border-radius: 22px">
+<img class="photo" src="%IMG:hero%" alt="" style="object-position: 62% 30%">
+<span class="shade"></span>
+<div class="col" style="position: absolute; left: 18px; right: 70px; bottom: 18px; gap: 8px">
+<span class="eyebrow">Today’s Focus</span>
+<h2 class="h2">Precision Training<br>Powered by AI.</h2>
+<span class="pill pill-am" style="height: 26px; padding: 0 10px; align-self: flex-start"><!--I:sparkles:12-->AI Form Detection Active</span>
 </div>
-<div class="col" style="gap: 4px">
-<h2 id="t-workout" class="h2">Legs and core</h2>
-<p class="s15 t2">Squat, chair squat, bicycle crunch and 3 more</p>
+<span class="icon-btn" style="position: absolute; right: 16px; bottom: 18px; border-radius: 50%; color: var(--amber); border-color: var(--amber-line); background: rgba(10,9,8,0.6)"><!--I:arrow:18--></span>
+</a>
+
+<div class="g2">
+<div class="card pad" style="height: 118px"><img class="art" src="%IMG:totalworkout%" alt="" style="position: absolute; right: -6px; bottom: 6px; width: 96px; height: 96px; object-fit: contain"><div class="col rel" style="gap: 8px"><span class="badge"><!--I:dumbbell:16--></span><div class="col"><span class="big num">24</span><span class="s12 w6 t2">Total Workouts</span><span class="s11 t3">last 90 days</span></div></div></div>
+<div class="card pad" style="height: 118px"><img class="art" src="%IMG:hourstrained%" alt="" style="position: absolute; right: -6px; bottom: 6px; width: 96px; height: 96px; object-fit: contain"><div class="col rel" style="gap: 8px"><span class="badge" style="color: var(--blue); background: rgba(96,165,250,0.12); border-color: rgba(96,165,250,0.3)"><!--I:clock:16--></span><div class="col"><span class="big num">18h</span><span class="s12 w6 t2">Hours Trained</span><span class="s11 t3">1,080 minutes</span></div></div></div>
+<div class="card pad" style="height: 118px"><img class="art" src="%IMG:caloriesburned%" alt="" style="position: absolute; right: -2px; bottom: 6px; width: 88px; height: 96px; object-fit: contain"><div class="col rel" style="gap: 8px"><span class="badge"><!--I:flame:16--></span><div class="col"><span class="big num">6,420</span><span class="s12 w6 t2">Calories Burned</span><span class="s11 t3">kcal · last 90 days</span></div></div></div>
+<div class="card pad" style="height: 118px"><img class="art" src="%IMG:currentlevel%" alt="" style="position: absolute; right: 0; bottom: 10px; width: 104px; height: 80px; object-fit: contain"><div class="col rel" style="gap: 8px"><span class="badge" style="color: var(--gold); background: var(--gold-bg); border-color: rgba(255,214,107,0.3)"><!--I:trophy:16--></span><div class="col"><span class="big num">Level 7</span><span class="s12 w6 t2">Current Level</span><span class="s11 t3">1,240 XP earned</span></div></div></div>
 </div>
-<button type="button" class="btn btn-p btn-wide"><!--I:play:18-->Start workout</button>
-<a href="#workout" class="s15 w6" style="align-self: center; min-height: 44px; display: flex; align-items: center">Pick a different workout</a>
+
+<section class="card" aria-labelledby="t-xp" style="display: grid; grid-template-columns: minmax(0, 1fr) 92px">
+<div class="col pad" style="gap: 12px">
+<h2 id="t-xp" class="h3 hrow" style="gap: 8px"><span class="am" style="display: flex"><!--I:zap:16--></span>Experience Points</h2>
+<div class="col" style="gap: 6px"><div class="between s12"><span class="am w6">Level 7</span><span class="t3 num">1,240/1,500 XP → Level 8</span></div><div class="bar"><span style="width: 83%"></span></div></div>
+<div class="g3" style="text-align: center">
+<div class="col"><span class="big am num">3</span><span class="s11 t3">this week</span></div>
+<div class="col"><span class="big am num">12</span><span class="s11 t3">day streak</span></div>
+<div class="col"><span class="big am num">7</span><span class="s11 t3">level</span></div>
+</div>
+</div>
+<div class="rel" style="border-left: 1px solid var(--line)"><img class="photo art" src="%IMG:experiencepoints%" alt="" style="object-fit: contain; padding: 6px; box-sizing: border-box"></div>
 </section>
 
-<section class="card pad" aria-labelledby="t-streak">
-<div class="between">
-<div class="hrow">
-<span class="dot dot-soft"><!--I:flame:22--></span>
-<div class="col">
-<span class="mid num">12 days</span>
-<span id="t-streak" class="s14 t2">Your streak</span>
-</div>
-</div>
-<span class="tag tag-plain"><!--I:snow:14-->2 freezes left</span>
-</div>
-<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px">
-<div class="day day-done"><i><!--I:check:16--></i>Mon</div>
+<section class="card" aria-labelledby="t-week" style="display: grid; grid-template-columns: minmax(0, 1fr) 76px">
+<div class="col pad" style="gap: 12px">
+<h2 id="t-week" class="h3 hrow" style="gap: 8px"><span class="am" style="display: flex"><!--I:calendar:16--></span>This Week</h2>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px">
+<div class="day day-done"><i><!--I:check:14--></i>Mon</div>
 <div class="day day-now"><i>13</i>Tue</div>
 <div class="day"><i>14</i>Wed</div>
 <div class="day"><i>15</i>Thu</div>
@@ -49,54 +59,48 @@
 <div class="day"><i>17</i>Sat</div>
 <div class="day"><i>18</i>Sun</div>
 </div>
-<p class="s14 t2">1 of 7 days active this week</p>
+<span class="s12 t3" style="text-align: center">1 of 7 days active</span>
+</div>
+<div class="rel" style="border-left: 1px solid var(--line)"><img class="photo" src="%IMG:thisweek%" alt=""></div>
 </section>
 
-<section class="card pad" aria-labelledby="t-food">
-<div class="between">
-<h2 id="t-food" class="h2">Food today</h2>
-<a href="#food" class="s15 w6" style="min-height: 44px; display: flex; align-items: center">Open Food</a>
+<div class="swipe">
+<a href="#exercises" class="card" style="width: 150px; height: 190px"><img class="photo" src="%IMG:weight%" alt=""><span class="shade"></span><span class="s14 w6" style="position: absolute; left: 12px; bottom: 12px">Browse Exercises</span></a>
+<a href="#progress" class="card" style="width: 150px; height: 190px"><img class="photo" src="%IMG:running%" alt=""><span class="shade"></span><span class="s14 w6" style="position: absolute; left: 12px; bottom: 12px">View Progress</span></a>
+<div class="card" style="width: 190px; height: 190px"><img src="%IMG:dailymotivation%" alt="" style="position: absolute; right: 0; bottom: 0; width: 86px; height: 150px; object-fit: cover; opacity: 0.9"><div class="col pad rel" style="gap: 8px; padding-right: 78px"><span class="eyebrow" style="font-size: 10px">Daily Motivation</span><p class="s13" style="font-style: italic">“Take care of your body. It’s the only place you have to live.”</p><span class="s11 t3">— Jim Rohn</span></div></div>
 </div>
-<div class="hrow" style="gap: 20px">
-<div class="ring" style="width: 116px; height: 116px">
-<svg width="116" height="116" viewBox="0 0 116 116" aria-hidden="true"><circle class="trk" cx="58" cy="58" r="50"></circle><circle cx="58" cy="58" r="50" stroke="var(--cl-orange)" stroke-dasharray="212 315"></circle></svg>
-<div class="col" style="align-items: center"><span class="mid num">680</span><span class="s13 t2">kcal left</span></div>
-</div>
-<div class="col grow" style="gap: 12px">
-<div class="col" style="gap: 6px"><div class="between s14"><span class="w6">Protein</span><span class="t2 num">86 of 140 g</span></div><div class="bar"><span style="width: 61%; background: var(--cl-blue)"></span></div></div>
-<div class="col" style="gap: 6px"><div class="between s14"><span class="w6">Carbs</span><span class="t2 num">160 of 240 g</span></div><div class="bar"><span style="width: 67%; background: var(--cl-green)"></span></div></div>
-<div class="col" style="gap: 6px"><div class="between s14"><span class="w6">Fat</span><span class="t2 num">48 of 70 g</span></div><div class="bar"><span style="width: 69%; background: var(--cl-purple)"></span></div></div>
-</div>
-</div>
-<button type="button" class="btn btn-soft btn-wide"><!--I:plus:18-->Add a meal</button>
-</section>
 
-<section class="card pad" aria-labelledby="t-level">
-<div class="between">
-<h2 id="t-level" class="h2">Level 7</h2>
-<span class="s14 t2 num">1,240 of 1,500 XP</span>
+<div class="swipe">
+<a href="#challenges" class="card" style="width: 270px; height: 140px"><img class="photo" src="%IMG:rank%" alt="" style="opacity: 0.6"><span class="shade"></span><div class="col pad rel" style="height: 100%; box-sizing: border-box; justify-content: space-between"><div class="between"><h2 class="h3 hrow" style="gap: 6px"><span class="am" style="display: flex"><!--I:target:16--></span>Weekly Challenges</h2><span class="s12 am w6">View all</span></div><div class="col" style="gap: 6px"><div class="between s12"><span class="w6">3 workouts this week</span><span class="t2 num">1 of 3</span></div><div class="bar"><span style="width: 33%"></span></div></div></div></a>
+<a href="#rank" class="card" style="width: 200px; height: 140px"><img src="%IMG:weeklychallenges%" alt="" style="position: absolute; right: -14px; top: 0; height: 100%; width: 140px; object-fit: cover; opacity: 0.9"><span class="shade-l"></span><div class="col pad rel" style="height: 100%; box-sizing: border-box; justify-content: space-between"><h2 class="h3 hrow" style="gap: 6px"><span class="am" style="display: flex"><!--I:crown:16--></span>Your Rank</h2><div class="col" style="gap: 2px"><span class="hrow" style="gap: 6px; align-items: baseline"><span class="h2 am num">4</span><span class="s12 t3">of 38</span></span><span class="s12 t2 num">1,240 XP · Level 7</span></div></div></a>
+<a href="#badges" class="card" style="width: 220px; height: 140px"><img class="photo" src="%IMG:latestbadges%" alt="" style="object-fit: contain; object-position: center 70%; opacity: 0.9"><div class="between pad rel"><h2 class="h3 hrow" style="gap: 6px"><span class="am" style="display: flex"><!--I:trophy:16--></span>Latest Badges</h2><span class="s12 am w6">View all</span></div></a>
 </div>
-<div class="bar" style="height: 8px"><span style="width: 83%"></span></div>
-<p class="s14 t2">260 XP to Level 8</p>
-</section>
 
-<section class="card" aria-labelledby="t-goals">
-<div class="between" style="padding: 16px 16px 4px">
-<h2 id="t-goals" class="h2">Goals</h2>
-<a href="#goals" class="s15 w6" style="min-height: 44px; display: flex; align-items: center">See all</a>
-</div>
-<div class="rows">
-<a href="#goal-1" class="row" style="align-items: flex-start; padding: 12px 16px"><div class="col grow" style="gap: 8px"><div class="between"><span class="s16 w6">Work out 4 days a week</span><span class="s14 t2 num">1 of 4</span></div><div class="bar"><span style="width: 25%"></span></div></div></a>
-<a href="#goal-2" class="row" style="align-items: flex-start; padding: 12px 16px"><div class="col grow" style="gap: 8px"><div class="between"><span class="s16 w6">Reach 72 kg</span><span class="s14 t2 num">74.5 kg now</span></div><div class="bar"><span style="width: 58%"></span></div></div></a>
+<section class="col" style="gap: 10px" aria-labelledby="t-rec">
+<h2 id="t-rec" class="h3">Recommended For You</h2>
+<div class="swipe">
+<a href="#ex-1" class="card" style="width: 160px"><div class="rel" style="height: 96px"><img class="photo" src="%IMG:chairsquat%" alt=""></div><div class="col pad" style="gap: 6px; padding: 10px 12px 12px"><span class="pill pill-good" style="align-self: flex-start">Beginner</span><span class="s14 w6">Chair Squats</span><span class="s12 t3">Lower Body · 4 kcal/min</span></div></a>
+<a href="#ex-2" class="card" style="width: 160px"><div class="rel" style="height: 96px"><img class="photo" src="%IMG:cyclingcrunch%" alt=""></div><div class="col pad" style="gap: 6px; padding: 10px 12px 12px"><span class="pill pill-gold" style="align-self: flex-start">Intermediate</span><span class="s14 w6">Bicycle Crunch</span><span class="s12 t3">Core &amp; Abs · 6 kcal/min</span></div></a>
+<a href="#ex-3" class="card" style="width: 160px"><div class="rel" style="height: 96px"><img class="photo" src="%IMG:bicepcurls%" alt=""></div><div class="col pad" style="gap: 6px; padding: 10px 12px 12px"><span class="pill pill-good" style="align-self: flex-start">Beginner</span><span class="s14 w6">Bicep Curls</span><span class="s12 t3">Strength · 4 kcal/min</span></div></a>
 </div>
 </section>
 
 <section class="card" aria-labelledby="t-recent">
-<div style="padding: 16px 16px 8px"><h2 id="t-recent" class="h2">Recent workouts</h2></div>
-<div class="rows">
-<a href="#w-1" class="row"><div class="col grow"><span class="s16 w6">Upper body</span><span class="s14 t2">Mon 12 Oct · 38 min</span></div><span class="go"><!--I:go:18--></span></a>
-<a href="#w-2" class="row"><div class="col grow"><span class="s16 w6">Legs and core</span><span class="s14 t2">Sat 10 Oct · 42 min</span></div><span class="go"><!--I:go:18--></span></a>
-<a href="#w-3" class="row"><div class="col grow"><span class="s16 w6">Run</span><span class="s14 t2">Fri 9 Oct · 3.2 km · 21 min</span></div><span class="go"><!--I:go:18--></span></a>
+<img class="art" src="%IMG:recentworkout%" alt="" style="position: absolute; right: 8px; top: 2px; width: 64px; height: 48px; object-fit: contain">
+<div class="pad rel" style="padding-bottom: 4px"><h2 id="t-recent" class="h3">Recent Workouts</h2></div>
+<div class="col rel">
+<a href="#w-1" class="row"><span class="badge"><!--I:dumbbell:16--></span><div class="col grow"><span class="s14 w6">Workout Session</span><span class="s12 t3">Mon 12 Oct · 38 min</span></div><div class="col" style="align-items: flex-end"><span class="s13 w6 am num">312 kcal</span><span class="s11 t3 num">86 form</span></div></a>
+<a href="#w-2" class="row"><span class="badge"><!--I:dumbbell:16--></span><div class="col grow"><span class="s14 w6">Workout Session</span><span class="s12 t3">Sat 10 Oct · 42 min</span></div><div class="col" style="align-items: flex-end"><span class="s13 w6 am num">348 kcal</span><span class="s11 t3 num">91 form</span></div></a>
+</div>
+</section>
+
+<section class="card" aria-labelledby="t-ready" style="height: 190px; border-radius: 22px">
+<img class="photo" src="%IMG:ready%" alt="" style="object-position: 50% 22%">
+<span class="shade-l"></span>
+<div class="col" style="position: absolute; left: 18px; bottom: 18px; gap: 6px; align-items: flex-start">
+<h2 id="t-ready" class="h2" style="font-size: 20px">Ready to start?</h2>
+<p class="s13 t2">Your next workout is one tap away.</p>
+<button type="button" class="btn btn-p btn-sm" style="margin-top: 6px"><!--I:play:16-->Start Training</button>
 </div>
 </section>
 

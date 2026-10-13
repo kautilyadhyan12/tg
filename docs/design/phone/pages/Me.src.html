@@ -2,59 +2,49 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Me, dark</title>
+<title>Me</title>
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
 <!--HELMET-->
-<div data-root="1" class="screen t-dark" style="width: 390px; height: %H%px">
+<div data-root="1" class="screen" style="width: 390px; height: %H%px">
+<img class="backdrop" src="%IMG:setting%" alt="" style="top: 330px; height: 420px; opacity: 0.28">
 <main class="main">
 
-<h1 class="h1">Me</h1>
+<div class="between" style="align-items: flex-start">
+<div class="col" style="gap: 2px"><h1 class="h1">Settings</h1><p class="s13 t2">Manage your profile and preferences</p></div>
+<button type="button" class="btn btn-s btn-sm"><!--I:logout:16-->Sign Out</button>
+</div>
 
-<a href="#profile" class="card hrow" style="padding: 16px; color: var(--t1)">
-<span class="dot dot-soft s16 w7" style="width: 52px; height: 52px; border-radius: 50%">MR</span>
-<div class="col grow"><span class="h2 ell">Maya Rao</span><span class="s14 t2 ell">Level 7 · maya.rao@gmail.com</span></div>
-<span class="t3" style="display: flex"><!--I:go:18--></span>
-</a>
+<div class="card pad hrow" style="gap: 12px">
+<div class="rel" style="width: 56px; height: 56px; border-radius: 16px; background: linear-gradient(135deg,#FF8A1F,#FFB347); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: #fff; flex-shrink: 0">M<span style="position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; border-radius: 50%; background: var(--amber); border: 2px solid var(--surface); display: flex; align-items: center; justify-content: center; color: #fff"><!--I:camera:11--></span></div>
+<div class="col grow" style="gap: 1px"><span class="s15 w7 ell">Maya Rao</span><span class="s12 t2 ell">maya.rao@gmail.com</span><span class="s11 t3">Member since 13/10/2026</span></div>
+<span class="pill pill-am"><!--I:flame:11-->Level 7</span>
+</div>
 
-<nav aria-label="Your progress" class="card rows">
-<a href="#progress" class="row"><span class="lead"><!--I:chart:22--></span><span class="s16 w6 grow">Progress</span><span class="go"><!--I:go:18--></span></a>
-<a href="#goals" class="row"><span class="lead"><!--I:target:22--></span><span class="s16 w6 grow">Goals</span><span class="s14 t2">2 goals</span><span class="go"><!--I:go:18--></span></a>
-<a href="#badges" class="row"><span class="lead"><!--I:trophy:22--></span><span class="s16 w6 grow">Badges</span><span class="s14 t2">5 of 20</span><span class="go"><!--I:go:18--></span></a>
+<div class="g2">
+<a href="#progress" class="card" style="height: 110px"><img class="photo" src="%IMG:progress%" alt="" style="opacity: 0.7"><span class="shade"></span><div class="hrow" style="position: absolute; left: 12px; bottom: 12px; gap: 8px"><span class="am" style="display: flex"><!--I:chart:16--></span><span class="s14 w6">Progress</span></div></a>
+<a href="#achievements" class="card" style="height: 110px"><img class="photo" src="%IMG:monalisa%" alt="" style="opacity: 0.7; object-position: 50% 20%"><span class="shade"></span><div class="hrow" style="position: absolute; left: 12px; bottom: 12px; gap: 8px"><span class="am" style="display: flex"><!--I:trophy:16--></span><span class="s14 w6">Achievements</span></div></a>
+</div>
+
+<nav aria-label="Settings" class="col rel" style="gap: 8px">
+<a href="#profile" class="nav nav-on"><!--I:user:18--><span class="grow">Profile</span><!--I:go:16--></a>
+<a href="#fitness" class="nav"><!--I:dumbbell:18--><span class="grow">Fitness</span><!--I:go:16--></a>
+<a href="#gym" class="nav"><!--I:building:18--><span class="grow">Gym</span><!--I:go:16--></a>
+<a href="#account" class="nav"><!--I:shield:18--><span class="grow">Account</span><!--I:go:16--></a>
+<a href="#notifications" class="nav"><!--I:bell:18--><span class="grow">Notifications</span><!--I:go:16--></a>
 </nav>
 
-<div class="col" style="gap: 10px">
-<h2 class="s14 w6 t2">Settings</h2>
-<nav aria-label="Settings" class="card rows">
-<a href="#fitness" class="row"><span class="lead"><!--I:heart:22--></span><span class="s16 w6 grow">Fitness and health</span><span class="go"><!--I:go:18--></span></a>
-<a href="#units" class="row"><span class="lead"><!--I:ruler:22--></span><span class="s16 w6 grow">Units</span><span class="s14 t2">kg · cm</span><span class="go"><!--I:go:18--></span></a>
-<a href="#notifications" class="row"><span class="lead"><!--I:bell:22--></span><span class="s16 w6 grow">Notifications</span><span class="go"><!--I:go:18--></span></a>
-<a href="#gym-sees" class="row"><span class="lead"><!--I:shield:22--></span><span class="s16 w6 grow">What a gym can see</span><span class="go"><!--I:go:18--></span></a>
-<div class="row"><span class="lead"><!--I:eyeoff:22--></span><span class="s16 w6 grow">Hide me on leaderboards</span><button type="button" role="switch" aria-checked="false" aria-label="Hide me on leaderboards" class="switch"></button></div>
-</nav>
+<div class="g2 rel" style="gap: 12px 10px">
+<label class="col" style="gap: 6px; grid-column: 1 / -1"><span class="label">Full Name</span><span class="input">Maya Rao</span></label>
+<label class="col" style="gap: 6px"><span class="label">Age</span><span class="input num">27</span></label>
+<label class="col" style="gap: 6px"><span class="label">Gender</span><span class="input">Female<span class="t3" style="display: flex"><!--I:down:16--></span></span></label>
+<label class="col" style="gap: 6px"><span class="label">Height</span><span class="input num">165<span class="s12 t3">cm</span></span></label>
+<label class="col" style="gap: 6px"><span class="label">Current Weight</span><span class="input num">74.5<span class="s12 t3">kg</span></span></label>
 </div>
 
-<div class="col" style="gap: 10px">
-<h2 class="s14 w6 t2">Appearance</h2>
-<div role="radiogroup" aria-label="Appearance" class="seg">
-<button type="button" role="radio" data-look="light" aria-checked="false"><!--I:sun:16-->Light</button>
-<button type="button" role="radio" data-look="dark" aria-checked="true"><!--I:moon:16-->Dark</button>
-<button type="button" role="radio" data-look="auto" aria-checked="false"><!--I:phone:16-->Auto</button>
-</div>
-<span class="hint">Auto follows your phone’s own light or dark setting.</span>
-</div>
-
-<div class="col" style="gap: 10px">
-<h2 class="s14 w6 t2">Account</h2>
-<nav aria-label="Account" class="card rows">
-<a href="#email" class="row"><span class="lead"><!--I:mail:22--></span><span class="s16 w6 grow">Change email</span><span class="go"><!--I:go:18--></span></a>
-<a href="#export" class="row"><span class="lead"><!--I:download:22--></span><span class="s16 w6 grow">Download my data</span><span class="go"><!--I:go:18--></span></a>
-<a href="#delete" class="row" style="color: var(--bad)"><span style="display: flex"><!--I:trash:22--></span><span class="s16 w6 grow">Delete account</span></a>
-</nav>
-<button type="button" class="btn btn-s btn-wide"><!--I:logout:18-->Sign out</button>
-</div>
+<button type="button" class="btn btn-p btn-wide rel"><!--I:save:16-->Save Changes</button>
 
 </main>
 <!--TABBAR:me-->

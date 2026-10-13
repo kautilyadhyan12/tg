@@ -2,77 +2,68 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Food, dark</title>
+<title>Food</title>
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
 <!--HELMET-->
-<div data-root="1" class="screen t-dark" style="width: 390px; height: %H%px">
+<style>
+.mac{display:flex;flex-direction:column;align-items:center;gap:6px}
+.meal .item{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;padding:6px 14px;border-top:1px solid var(--line)}
+</style>
+<div data-root="1" class="screen" style="width: 390px; height: %H%px">
+<img class="backdrop" src="%IMG:foodbg%" alt="" style="top: 420px; height: 420px">
 <main class="main">
 
-<div class="between">
-<h1 class="h1">Food</h1>
-<div class="hrow" style="gap: 4px">
-<button type="button" class="icon-btn" aria-label="Previous day"><!--I:back:20--></button>
-<span class="s15 w6">Today</span>
-<button type="button" class="icon-btn" aria-label="Next day" disabled style="opacity: 0.4"><!--I:go:20--></button>
-</div>
-</div>
-
-<section class="card pad" aria-label="What is left today">
-<div class="hrow" style="gap: 20px">
-<div class="ring" style="width: 132px; height: 132px">
-<svg width="132" height="132" viewBox="0 0 132 132" aria-hidden="true"><circle class="trk" cx="66" cy="66" r="58"></circle><circle cx="66" cy="66" r="58" stroke="var(--cl-orange)" stroke-dasharray="246 365"></circle></svg>
-<div class="col" style="align-items: center"><span class="big num" style="font-size: 36px; line-height: 40px">680</span><span class="s13 t2">kcal left</span></div>
-</div>
-<div class="col grow" style="gap: 4px">
-<span class="s14 t2">Eaten</span><span class="s16 w6 num">1,420 kcal</span>
-<span class="s14 t2" style="margin-top: 8px">Your day</span><span class="s16 w6 num">2,100 kcal</span>
-</div>
-</div>
-<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
-<div class="col" style="gap: 6px"><span class="s14 w6">Protein</span><div class="bar"><span style="width: 61%; background: var(--cl-blue)"></span></div><span class="s13 t2 num">54 g left</span></div>
-<div class="col" style="gap: 6px"><span class="s14 w6">Carbs</span><div class="bar"><span style="width: 67%; background: var(--cl-green)"></span></div><span class="s13 t2 num">80 g left</span></div>
-<div class="col" style="gap: 6px"><span class="s14 w6">Fat</span><div class="bar"><span style="width: 69%; background: var(--cl-purple)"></span></div><span class="s13 t2 num">22 g left</span></div>
+<section class="card" aria-labelledby="f-title" style="height: 170px; border-radius: 22px">
+<img class="photo" src="%IMG:food%" alt="" style="object-position: 80% 50%">
+<span class="shade-l"></span>
+<div class="col" style="position: absolute; left: 18px; top: 22px; gap: 6px; align-items: flex-start">
+<span class="eyebrow">Nutrition</span>
+<h1 id="f-title" class="h2">Fuel Your Training</h1>
+<button type="button" class="btn btn-soft btn-sm" style="margin-top: 8px; border-radius: 999px; color: #fff; background: rgba(40,24,10,0.85)"><!--I:camera:16--><!--I:sparkles:14-->Log meal from photo</button>
 </div>
 </section>
 
-<div class="col" style="gap: 12px">
-<label class="search"><!--I:search:18--><input class="input" type="search" placeholder="Search food" aria-label="Search food"></label>
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
-<button type="button" class="btn btn-p"><!--I:camera:18-->Photo of a meal</button>
-<button type="button" class="btn btn-s"><!--I:barcode:18-->Scan a barcode</button>
+<section class="glass pad col" style="gap: 14px" aria-labelledby="f-macros">
+<h2 id="f-macros" class="h3">Today’s Macros</h2>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+<div class="mac"><div class="ring" style="width: 68px; height: 68px"><svg width="68" height="68" viewBox="0 0 68 68" aria-hidden="true"><circle class="trk" cx="34" cy="34" r="30"></circle><circle cx="34" cy="34" r="30" stroke="#FF8A1F" stroke-dasharray="127 189"></circle></svg><span class="s13 w7 num">1,420</span></div><span class="s12 w6">Calories</span><span class="s11 t3 num">of 2,100 kcal</span></div>
+<div class="mac"><div class="ring" style="width: 68px; height: 68px"><svg width="68" height="68" viewBox="0 0 68 68" aria-hidden="true"><circle class="trk" cx="34" cy="34" r="30"></circle><circle cx="34" cy="34" r="30" stroke="#60a5fa" stroke-dasharray="115 189"></circle></svg><span class="s13 w7 num">86</span></div><span class="s12 w6">Protein</span><span class="s11 t3 num">of 140 g</span></div>
+<div class="mac"><div class="ring" style="width: 68px; height: 68px"><svg width="68" height="68" viewBox="0 0 68 68" aria-hidden="true"><circle class="trk" cx="34" cy="34" r="30"></circle><circle cx="34" cy="34" r="30" stroke="#22c55e" stroke-dasharray="126 189"></circle></svg><span class="s13 w7 num">160</span></div><span class="s12 w6">Carbs</span><span class="s11 t3 num">of 240 g</span></div>
+<div class="mac"><div class="ring" style="width: 68px; height: 68px"><svg width="68" height="68" viewBox="0 0 68 68" aria-hidden="true"><circle class="trk" cx="34" cy="34" r="30"></circle><circle cx="34" cy="34" r="30" stroke="#a78bfa" stroke-dasharray="130 189"></circle></svg><span class="s13 w7 num">48</span></div><span class="s12 w6">Fat</span><span class="s11 t3 num">of 70 g</span></div>
 </div>
-</div>
-
-<section class="card" aria-labelledby="f-breakfast">
-<div class="between" style="padding: 16px 16px 8px"><h2 id="f-breakfast" class="h2">Breakfast</h2><span class="s14 t2 num">415 kcal</span></div>
-<div class="rows">
-<a href="#food-1" class="row"><div class="col grow"><span class="s16 w6">Oats with milk</span><span class="s14 t2">1 bowl</span></div><span class="s15 t2 num">310 kcal</span></a>
-<a href="#food-2" class="row"><div class="col grow"><span class="s16 w6">Banana</span><span class="s14 t2">1 medium</span></div><span class="s15 t2 num">105 kcal</span></a>
-<button type="button" class="row w6" style="color: var(--link)"><!--I:plus:18-->Add to Breakfast</button>
-</div>
+<div class="between s12" style="padding-top: 12px; border-top: 1px solid var(--line)"><span class="t2 w6">Remaining today</span><span class="t2 num"><span class="am w7">680 kcal</span> · 54 g · 80 g · 22 g</span></div>
 </section>
 
-<section class="card" aria-labelledby="f-lunch">
-<div class="between" style="padding: 16px 16px 8px"><h2 id="f-lunch" class="h2">Lunch</h2><span class="s14 t2 num">1,005 kcal</span></div>
-<div class="rows">
-<a href="#food-3" class="row"><div class="col grow"><span class="s16 w6">Chicken curry</span><span class="s14 t2">1 cup · from your photo</span></div><span class="s15 t2 num">430 kcal</span></a>
-<a href="#food-4" class="row"><div class="col grow"><span class="s16 w6">Cooked rice</span><span class="s14 t2">1½ cups</span></div><span class="s15 t2 num">310 kcal</span></a>
-<a href="#food-5" class="row"><div class="col grow"><span class="s16 w6">Dal</span><span class="s14 t2">1 bowl</span></div><span class="s15 t2 num">265 kcal</span></a>
-<button type="button" class="row w6" style="color: var(--link)"><!--I:plus:18-->Add to Lunch</button>
+<div class="glass between" style="padding: 8px">
+<button type="button" class="icon-btn" aria-label="Previous day"><!--I:back:18--></button>
+<div class="col" style="align-items: center; gap: 2px"><span class="s15 w7">Today</span><span class="s11 t3 num">13-10-2026</span></div>
+<button type="button" class="icon-btn" aria-label="Next day" disabled style="opacity: 0.35"><!--I:go:18--></button>
 </div>
+
+<section class="glass meal" aria-labelledby="f-b">
+<div class="hrow pad"><span class="badge" style="border-radius: 50%"><!--I:coffee:16--></span><div class="col grow"><h2 id="f-b" class="h3">Breakfast</h2><span class="s12 t3 num">2 items · 415 kcal</span></div><button type="button" class="icon-btn plus" aria-label="Add to Breakfast"><!--I:plus:18--></button></div>
+<a href="#i1" class="item"><div class="col"><span class="s14 w6">Oats with milk</span><span class="s12 t3">1 bowl · Our list</span></div><span class="s13 t2 num">310 kcal</span></a>
+<a href="#i2" class="item"><div class="col"><span class="s14 w6">Banana</span><span class="s12 t3">1 medium · USDA</span></div><span class="s13 t2 num">105 kcal</span></a>
 </section>
 
-<section class="card" aria-labelledby="f-dinner">
-<div class="between" style="padding: 16px 16px 8px"><h2 id="f-dinner" class="h2">Dinner</h2><span class="s14 t3">Nothing yet</span></div>
-<div class="rows"><button type="button" class="row w6" style="color: var(--link)"><!--I:plus:18-->Add to Dinner</button></div>
+<section class="glass meal" aria-labelledby="f-l">
+<div class="hrow pad"><span class="badge" style="border-radius: 50%"><!--I:utensils:16--></span><div class="col grow"><h2 id="f-l" class="h3">Lunch</h2><span class="s12 t3 num">3 items · 1,005 kcal</span></div><button type="button" class="icon-btn plus" aria-label="Add to Lunch"><!--I:plus:18--></button></div>
+<a href="#i3" class="item"><div class="col"><span class="s14 w6">Chicken curry</span><span class="s12 t3">1 cup · Estimate</span></div><span class="s13 t2 num">430 kcal</span></a>
+<a href="#i4" class="item"><div class="col"><span class="s14 w6">Cooked rice</span><span class="s12 t3">1½ cups · USDA</span></div><span class="s13 t2 num">310 kcal</span></a>
+<a href="#i5" class="item"><div class="col"><span class="s14 w6">Dal</span><span class="s12 t3">1 bowl · Our list</span></div><span class="s13 t2 num">265 kcal</span></a>
 </section>
 
-<section class="card" aria-labelledby="f-snack">
-<div class="between" style="padding: 16px 16px 8px"><h2 id="f-snack" class="h2">Snack</h2><span class="s14 t3">Nothing yet</span></div>
-<div class="rows"><button type="button" class="row w6" style="color: var(--link)"><!--I:plus:18-->Add to Snack</button></div>
+<section class="glass" aria-labelledby="f-d">
+<div class="hrow pad"><span class="badge" style="border-radius: 50%; color: var(--purple); background: rgba(167,139,250,0.12); border-color: rgba(167,139,250,0.3)"><!--I:moonstar:16--></span><div class="col grow"><h2 id="f-d" class="h3">Dinner</h2><span class="s12 t3 num">0 items · 0 kcal</span></div><button type="button" class="icon-btn plus" aria-label="Add to Dinner"><!--I:plus:18--></button></div>
+<p class="s13 t3" style="text-align: center; padding: 4px 14px 18px">No dinner logged yet</p>
+</section>
+
+<section class="glass" aria-labelledby="f-s">
+<div class="hrow pad"><span class="badge" style="border-radius: 50%; color: var(--blue); background: rgba(96,165,250,0.12); border-color: rgba(96,165,250,0.3)"><!--I:cookie:16--></span><div class="col grow"><h2 id="f-s" class="h3">Snack</h2><span class="s12 t3 num">0 items · 0 kcal</span></div><button type="button" class="icon-btn plus" aria-label="Add to Snack"><!--I:plus:18--></button></div>
+<p class="s13 t3" style="text-align: center; padding: 4px 14px 18px">No snack logged yet</p>
 </section>
 
 </main>

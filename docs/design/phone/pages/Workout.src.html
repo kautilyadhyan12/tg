@@ -2,52 +2,69 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Workout, dark</title>
+<title>Workout: the Exercise Library</title>
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
 <!--HELMET-->
-<div data-root="1" class="screen t-dark" style="width: 390px; height: %H%px">
+<style>
+.ex .top{position:relative;height:104px}
+.ex .cat{position:absolute;left:10px;bottom:8px;font-size:11px;line-height:14px;color:rgba(255,255,255,0.75)}
+.ex .body{display:flex;flex-direction:column;gap:7px;padding:10px 12px 12px}
+.ex .mus{display:flex;gap:4px;flex-wrap:wrap}
+.ex .meta{display:flex;gap:10px;align-items:center;font-size:11px;line-height:14px;color:var(--t3);padding-top:7px;border-top:1px solid var(--line)}
+.ex .meta span{display:flex;align-items:center;gap:4px}
+</style>
+<div data-root="1" class="screen" style="width: 390px; height: %H%px">
+
+<div class="rel" style="height: 230px; flex-shrink: 0">
+<img class="photo" src="%IMG:exhero%" alt="" style="object-position: 70% 20%">
+<span class="shade"></span>
+<div class="g3" role="tablist" aria-label="Workout" style="position: absolute; left: 16px; right: 16px; top: 14px; gap: 6px; padding: 4px; border-radius: 16px; background: rgba(10,9,8,0.72); border: 1px solid var(--line2)">
+<a href="#exercises" role="tab" aria-selected="true" class="btn btn-soft" style="height: 40px; padding: 0; font-size: 13px; border-radius: 12px">Exercises</a>
+<a href="#my-workout" role="tab" aria-selected="false" class="btn" style="height: 40px; padding: 0; font-size: 13px; color: var(--t2)">My Workout</a>
+<a href="#running" role="tab" aria-selected="false" class="btn" style="height: 40px; padding: 0; font-size: 13px; color: var(--t2)">Running</a>
+</div>
+<div class="col" style="position: absolute; left: 16px; right: 16px; bottom: 14px; gap: 4px">
+<span class="eyebrow">Exercise Library</span>
+<h1 style="font-size: 40px; line-height: 44px; font-weight: 800; letter-spacing: -0.03em">58 Exercises</h1>
+<p class="s13 t2">AI-powered form detection on selected exercises</p>
+</div>
+</div>
+
 <main class="main">
 
-<h1 class="h1">Workout</h1>
+<div class="hrow">
+<label class="search grow"><!--I:search:18--><input class="input" type="search" placeholder="Search exercises, muscles..." aria-label="Search exercises, muscles"></label>
+<button type="button" class="icon-btn" aria-label="Filters" style="border-radius: 50%; width: 48px; height: 48px"><!--I:sliders:18--></button>
+</div>
 
-<section class="card pad" aria-labelledby="w-today">
-<div class="between">
-<span class="s14 w6 t2">Today · Tuesday</span>
-<span class="tag tag-plain"><!--I:clock:14-->About 40 min</span>
+<div class="swipe">
+<button type="button" class="chip chip-on">All</button>
+<button type="button" class="chip">Strength Training</button>
+<button type="button" class="chip">Bodyweight Exercises</button>
+<button type="button" class="chip">HIIT</button>
 </div>
-<div class="col" style="gap: 4px">
-<h2 id="w-today" class="h2">Legs and core</h2>
-<p class="s15 t2">6 exercises · the camera counts 4 of them</p>
-</div>
-<button type="button" class="btn btn-p btn-wide"><!--I:play:18-->Start workout</button>
-</section>
 
-<nav aria-label="Workout" class="card rows">
-<a href="#build" class="row"><span class="dot"><!--I:plus:20--></span><div class="col grow"><span class="s16 w6">Build a workout</span><span class="s14 t2">Pick the exercises, sets and rest</span></div><span class="go"><!--I:go:18--></span></a>
-<a href="#library" class="row"><span class="dot"><!--I:book:20--></span><div class="col grow"><span class="s16 w6">Exercise Library</span><span class="s14 t2">58 exercises</span></div><span class="go"><!--I:go:18--></span></a>
-<a href="#saved" class="row"><span class="dot"><!--I:heart:20--></span><div class="col grow"><span class="s16 w6">Saved workouts</span><span class="s14 t2">3 saved</span></div><span class="go"><!--I:go:18--></span></a>
-<a href="#running" class="row"><span class="dot"><!--I:pin:20--></span><div class="col grow"><span class="s16 w6">Running</span><span class="s14 t2">Record a run with GPS</span></div><span class="go"><!--I:go:18--></span></a>
-<a href="#history" class="row"><span class="dot"><!--I:calendar:20--></span><div class="col grow"><span class="s16 w6">History</span><span class="s14 t2">Every workout you’ve done</span></div><span class="go"><!--I:go:18--></span></a>
-</nav>
+<div class="swipe">
+<a href="#c1" class="card" style="width: 148px; height: 84px; border-radius: 14px"><img class="photo" src="%IMG:benchpress%" alt=""><span class="shade"></span><span class="s13 w6" style="position: absolute; left: 10px; bottom: 8px">Strength Training</span></a>
+<a href="#c2" class="card" style="width: 148px; height: 84px; border-radius: 14px"><img class="photo" src="%IMG:ropping%" alt=""><span class="shade"></span><span class="s13 w6" style="position: absolute; left: 10px; bottom: 8px">HIIT</span></a>
+<a href="#c3" class="card" style="width: 148px; height: 84px; border-radius: 14px"><img class="photo" src="%IMG:yoga%" alt=""><span class="shade"></span><span class="s13 w6" style="position: absolute; left: 10px; bottom: 8px">Yoga</span></a>
+</div>
 
-<section class="card" aria-labelledby="w-week">
-<div class="between" style="padding: 16px 16px 4px">
-<h2 id="w-week" class="h2">This week’s plan</h2>
-<a href="#plan" class="s15 w6" style="min-height: 44px; display: flex; align-items: center">Change</a>
+<span class="s13 t3">58 exercises</span>
+
+<div class="g2">
+<a href="#e1" class="card ex"><div class="top"><img class="photo" src="%IMG:benchpress%" alt=""><span class="shade"></span><span class="cat">Strength Training</span></div><div class="body"><span class="s14 w6">Bench Press</span><span class="pill pill-gold" style="align-self: flex-start">Intermediate</span><div class="mus"><span class="pill pill-plain">Chest</span><span class="pill pill-plain">Triceps</span></div><div class="meta"><span><span class="am" style="display: flex"><!--I:flame:12--></span>7 cal/min</span><span><!--I:clock:12-->10 reps</span></div></div></a>
+<a href="#e2" class="card ex"><div class="top"><img class="photo" src="%IMG:bicepcurls%" alt=""><span class="shade"></span><span class="cat">Strength Training</span></div><div class="body"><span class="s14 w6">Bicep Curls</span><span class="pill pill-good" style="align-self: flex-start">Beginner</span><div class="mus"><span class="pill pill-plain">Biceps</span></div><div class="meta"><span><span class="am" style="display: flex"><!--I:flame:12--></span>4 cal/min</span><span><!--I:clock:12-->12 reps</span></div></div></a>
+<a href="#e3" class="card ex"><div class="top"><img class="photo" src="%IMG:cyclingcrunch%" alt=""><span class="shade"></span><span class="cat">Core &amp; Abs</span></div><div class="body"><span class="s14 w6">Bicycle Crunch</span><span class="pill pill-gold" style="align-self: flex-start">Intermediate</span><div class="mus"><span class="pill pill-plain">Abs</span><span class="pill pill-plain">Obliques</span></div><div class="meta"><span><span class="am" style="display: flex"><!--I:flame:12--></span>6 cal/min</span><span><!--I:clock:12-->20 reps</span></div></div></a>
+<a href="#e4" class="card ex"><div class="top"><img class="photo" src="%IMG:chairsquat%" alt=""><span class="shade"></span><span class="cat">Rehabilitation</span><span class="pill pill-ai-solid" style="position: absolute; right: 8px; top: 8px"><!--I:sparkles:10-->AI</span></div><div class="body"><span class="s14 w6">Chair Squats</span><div class="hrow" style="gap: 4px"><span class="pill pill-good">Beginner</span><span class="pill pill-ai"><!--I:sparkles:10-->AI</span></div><div class="mus"><span class="pill pill-plain">Quadriceps</span><span class="pill pill-plain">Glutes</span></div><div class="meta"><span><span class="am" style="display: flex"><!--I:flame:12--></span>4 cal/min</span><span><!--I:clock:12-->12 reps</span></div></div></a>
+<a href="#e5" class="card ex"><div class="top"><img class="photo" src="%IMG:jumpsquat%" alt="" style="object-position: 50% 20%"><span class="shade"></span><span class="cat">HIIT</span><span class="pill pill-ai-solid" style="position: absolute; right: 8px; top: 8px"><!--I:sparkles:10-->AI</span></div><div class="body"><span class="s14 w6">Jump Squats</span><div class="hrow" style="gap: 4px"><span class="pill pill-gold">Intermediate</span><span class="pill pill-ai"><!--I:sparkles:10-->AI</span></div><div class="mus"><span class="pill pill-plain">Quadriceps</span><span class="pill pill-plain">Calves</span></div><div class="meta"><span><span class="am" style="display: flex"><!--I:flame:12--></span>10 cal/min</span><span><!--I:clock:12-->15 reps</span></div></div></a>
+<a href="#e6" class="card ex"><div class="top"><img class="photo" src="%IMG:yoga1%" alt=""><span class="shade"></span><span class="cat">Yoga</span></div><div class="body"><span class="s14 w6">Downward Dog</span><span class="pill pill-good" style="align-self: flex-start">Beginner</span><div class="mus"><span class="pill pill-plain">Hamstrings</span><span class="pill pill-plain">Calves</span></div><div class="meta"><span><span class="am" style="display: flex"><!--I:flame:12--></span>3 cal/min</span><span><!--I:clock:12-->30s</span></div></div></a>
 </div>
-<div class="rows">
-<div class="row"><span class="s14 w6 t3" style="width: 36px">Mon</span><span class="s16 w6 grow">Upper body</span><span class="tag tag-good"><!--I:check:14-->Done</span></div>
-<div class="row"><span class="s14 w6" style="width: 36px">Tue</span><span class="s16 w6 grow">Legs and core</span><span class="tag tag-soft">Today</span></div>
-<div class="row"><span class="s14 w6 t3" style="width: 36px">Wed</span><span class="s16 t2 grow">Rest day</span></div>
-<div class="row"><span class="s14 w6 t3" style="width: 36px">Thu</span><span class="s16 w6 grow">Run · 3 km</span></div>
-<div class="row"><span class="s14 w6 t3" style="width: 36px">Fri</span><span class="s16 w6 grow">Upper body</span></div>
-<div class="row"><span class="s14 w6 t3" style="width: 36px">Sat</span><span class="s16 w6 grow">Legs and core</span></div>
-<div class="row"><span class="s14 w6 t3" style="width: 36px">Sun</span><span class="s16 t2 grow">Rest day</span></div>
-</div>
-</section>
+
+<button type="button" class="btn btn-s" style="align-self: center">Load more</button>
 
 </main>
 <!--TABBAR:workout-->

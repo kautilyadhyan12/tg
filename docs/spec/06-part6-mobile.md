@@ -562,7 +562,8 @@ The terminal's own choices, each a job's to better with a reason.
   strict config. It reads `@app/shared`'s Zod shapes and parses every reply with them, so
   a changed shape fails the build or one parse, never a blank screen. The web's axios
   clients are not shared.
-- **One look, drawn first** (item 11): the console's named colours and Archivo, light and
+- **One look, drawn first** (item 11; **replaced 2026-10-13 by §16.3a: the member web's
+  own design, dark only**): the console's named colours and Archivo, light and
   dark, and the building blocks every screen uses. Five tabs: Today · Workout · Food ·
   Gym · Me. Progress and Settings are under Me, Running under Workout. A person with no
   gym reads, on Gym, how an invitation reaches them.
@@ -591,27 +592,33 @@ The terminal's own choices, each a job's to better with a reason.
 
 ### 16.3a The look, as drawn (item 11a, 2026-10-13)
 
-- **Where:** `docs/design/phone/pages/`, one file a screen, dark (`Name.src.html`; the
-  light look is the same file with `t-dark` changed to `t-light`), and
+**The phone app keeps the MEMBER WEB's design** (Kd, 2026-10-13,
+`rulings/2026-10-13-stage5-11a-phone-look-pictures.md`): its colours, its font, its
+pictures and its boxes in their order, fitted to a phone. Dark only, as the member web
+is. This replaces §16.3's "the console's named colours and Archivo, light and dark".
+
+- **Where:** `docs/design/phone/pages/`, one file a screen (`Name.src.html`), and
   `docs/design/phone/shared/`: `helmet.html` (every colour and building block),
-  `tabbar.html`, `icons.json` (Lucide's line icons). `python build.py <out folder>` makes
-  both looks. The design canvas: https://claude.ai/artifact/Q8H9SQHG7bMfmp9sJRMPCQ (Kd's).
-  Pictures: `D:\Projects\ai-home-gym-design\4-phone\shots\` on his laptop.
-- **Drawn:** Today, Workout, Food, Gym, Gym for a person with no gym, Me, a box that opens
-  from the bottom, and one screen with the no-internet line, "Waiting to send", an empty
-  box and a failed box; then the building blocks and the twelve rules (`Rules.src.html`).
-  What each tab HOLDS is its own job's to settle (items 12 to 21, 31 to 38, 60 to 65);
-  these fix how it looks.
-- **The console's colours by the same names** (Part 3 §17.3), with four more: `--bar` and
-  `--bar-line` (the tab bar, which follows the look, where the console's menu stays
-  dark), `--tab` (a tab's name) and `--track` (the empty part of a ring or bar). The tab
-  you are on is `--soft-t` on a `--soft` pill, never plain orange text, which is too pale
-  on white.
-- **Sizes:** big number 44 · screen title 28 · box title 18 · a row's name 16 · words 15 ·
-  labels 14 · small 13 · tab names 12. A main button 48 tall, a row 56 or more, nothing
-  pressed under 44; 16 at the sides, 20 between boxes, 16 inside one.
-- 11b builds this in `apps/mobile` and measures every text pair's contrast there, as
-  `consoleCss.test.js` does for the console.
+  `tabbar.html`, `icons.json` (Lucide's line icons), `images.json` (each picture's
+  address on the canvas). `python build.py <out folder> <folder of pictures>` makes
+  them. The design canvas: https://claude.ai/artifact/Q8H9SQHG7bMfmp9sJRMPCQ (Kd's).
+  On his laptop, in `D:\Projectsi-home-gym-design-phone\`: `member-web\` (pictures
+  of the web pages as they are), `img\` (the small pictures), `shots-member-design\`.
+- **Drawn:** Today (the Dashboard) · Workout (Exercises, and My Workout) · Food
+  (Nutrition, and Add to a meal as a box from the bottom) · Gym (My gyms, with a gym and
+  with none) · Me (Settings, Progress, Achievements) · one sheet of rules and pieces.
+  Not drawn: Running and the workout itself (items 37, 53 and 64 draw theirs from the
+  same pieces). The AI Coach is not in the phone app.
+- **From the member web** (`apps/web/tailwind.config.js`, `src/index.css`): page
+  #0A0908, box #121110, raised #1A1815, lines white at 6% and 10%, orange #FF8A1F to
+  #FFB347 for what is pressed, green #22c55e, red #ef4444, gold #FFD66B; Inter.
+- **Fitted to a phone:** a web row of four boxes is two and two; a row of picture cards
+  swipes sideways; a page's pages (Exercises · My Workout · Running) are three buttons
+  at its top; the side menu's pages sit under the five tabs. A main button 48 tall,
+  nothing pressed under 44, no words under 11.
+- **The pictures:** the web's own, made small (31 of them: 47,597 KB as the web ships
+  them, 1,036 KB at 900 pixels on the long side as WebP, measured 2026-10-13). 11b
+  ships them in the app that way and never the web's full-size files.
 
 ### 16.4 The order
 

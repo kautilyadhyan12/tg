@@ -2,49 +2,43 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>A box that opens from the bottom, dark</title>
+<title>Food: Add to Breakfast, a box that opens from the bottom</title>
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
 <!--HELMET-->
-<div data-root="1" data-fixed-h="844" class="screen t-dark" style="width: 390px; height: %H%px">
+<div data-root="1" data-fixed-h="844" class="screen" style="width: 390px; height: %H%px">
 <main class="main" aria-hidden="true">
-<div class="between">
-<h1 class="h1">Food</h1>
-<span class="s15 w6">Today</span>
-</div>
-<label class="search"><!--I:search:18--><input class="input" type="search" value="oats" aria-label="Search food"></label>
-<div class="card rows">
-<div class="row"><div class="col grow"><span class="s16 w6">Oats with milk</span><span class="s14 t2">Our list</span></div><span class="s15 t2 num">310 kcal a bowl</span></div>
-<div class="row"><div class="col grow"><span class="s16 w6">Oats, dry</span><span class="s14 t2">USDA</span></div><span class="s15 t2 num">150 kcal a cup</span></div>
-<div class="row"><div class="col grow"><span class="s16 w6">Oat biscuits</span><span class="s14 t2">Packaged product</span></div><span class="s15 t2 num">70 kcal each</span></div>
-</div>
+<section class="card" style="height: 170px; border-radius: 22px">
+<img class="photo" src="%IMG:food%" alt="" style="object-position: 80% 50%">
+<span class="shade-l"></span>
+<div class="col" style="position: absolute; left: 18px; top: 22px; gap: 6px"><span class="eyebrow">Nutrition</span><span class="h2">Fuel Your Training</span></div>
+</section>
 </main>
 <div class="scrim"></div>
 <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="box-title">
 <span class="grab"></span>
-<div class="between" style="align-items: flex-start">
-<div class="col" style="gap: 2px"><h2 id="box-title" class="h2">Oats with milk</h2><span class="s14 t2">Add to Breakfast</span></div>
-<button type="button" class="icon-btn" aria-label="Close" style="margin: -8px -8px 0 0"><!--I:x:20--></button>
+<div class="between">
+<h2 id="box-title" class="h3" style="font-size: 17px">Add to Breakfast</h2>
+<button type="button" class="icon-btn" aria-label="Close"><!--I:x:18--></button>
 </div>
-<div class="field">
+<label class="search"><!--I:search:18--><input class="input" type="search" value="oats" aria-label="Search food"></label>
+<div class="card">
+<div class="row" style="background: var(--amber-bg)"><div class="col grow"><span class="s14 w6">Oats with milk</span><span class="s12 t3">310 kcal a bowl</span></div><span class="pill pill-plain">Our list</span></div>
+<div class="row"><div class="col grow"><span class="s14 w6">Oats, dry</span><span class="s12 t3">150 kcal a cup</span></div><span class="pill pill-plain">USDA</span></div>
+<div class="row"><div class="col grow"><span class="s14 w6">Oat biscuits</span><span class="s12 t3">70 kcal each</span></div><span class="pill pill-plain">Packaged product</span></div>
+</div>
+<div class="col" style="gap: 6px">
 <span class="label">Amount</span>
-<div style="display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 8px; align-items: center">
-<button type="button" class="btn btn-s" aria-label="Less" style="padding: 0"><!--I:minus:18--></button>
-<div class="input num w6" style="display: flex; align-items: center; justify-content: center; font-size: 18px">1</div>
-<button type="button" class="btn btn-s" aria-label="More" style="padding: 0"><!--I:plus:18--></button>
+<div style="display: grid; grid-template-columns: 48px 64px 48px minmax(0, 1fr); gap: 8px; align-items: center">
+<button type="button" class="icon-btn" aria-label="Less" style="width: 48px; height: 48px"><!--I:minus:18--></button>
+<span class="input num w7" style="justify-content: center; padding: 0">1</span>
+<button type="button" class="icon-btn" aria-label="More" style="width: 48px; height: 48px"><!--I:plus:18--></button>
+<span class="input">Bowl<span class="t3" style="display: flex"><!--I:down:16--></span></span>
 </div>
 </div>
-<div class="field">
-<span class="label">Measure</span>
-<button type="button" class="sel"><span>Bowl · 250 ml</span><span class="t3" style="display: flex"><!--I:down:18--></span></button>
-</div>
-<div class="between" style="padding: 12px 14px; border-radius: 12px; background: var(--raise)">
-<span class="s15 t2">Comes to</span>
-<span class="s16 w7 num">310 kcal</span>
-</div>
-<button type="button" class="btn btn-p btn-wide">Add to Breakfast</button>
+<button type="button" class="btn btn-p btn-wide">Add Oats with milk · 310 kcal</button>
 </section>
 </div>
 </x-dc>
