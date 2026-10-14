@@ -226,7 +226,7 @@ function TypeForm({ gymId, currency, options, taxRates, onRateAdded, draft, setD
           </select>
           {addingRate ? null : (
             <p className="c-s13 c-t3 m-0 flex flex-wrap items-center gap-2">
-              {editing ? 'Members who already hold it keep the tax they were sold with.' : taxRates.length === 0 ? 'You have no tax rates yet.' : null}
+              {[taxRates.length === 0 ? 'You have no tax rates yet.' : null, editing ? 'Members who already hold it keep the tax they were sold with.' : null].filter((line) => line !== null).join(' ') || null}
               <button type="button" className="c-btn-link c-s13 c-w6" style={{ minHeight: 44 }} disabled={busy} onClick={() => setAddingRate(true)}>
                 Add a tax rate
               </button>

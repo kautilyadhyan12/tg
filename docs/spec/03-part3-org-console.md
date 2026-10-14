@@ -3722,6 +3722,41 @@ memberships.
   code does); a discount for a set number of months; a discount added to a membership
   already given; discounts in Reports.
 
+**As built, 18b-iii (2026-10-14; `rulings/2026-10-14-18b-iii.md`).** Named tax rates, and tax
+on memberships, as PushPress's own help pages describe it: the gym types its own rates;
+the app never picks one.
+- **A tax rate** (`gym_tax_rates`, up to 10): a name of up to 30 characters ("GST", "Sales
+  tax") and a percentage above 0 and up to 30, to two decimals. Whether the gym's prices
+  hold the tax stays one setting for the whole gym (`gyms.sales_tax_included`), as 18b-i
+  made it. A gym's one rate of 18b-i became its first named rate, "Tax", charged on the
+  products that charged it; a gym at 0 got none.
+- **The Tax box** is one box drawn on Sell and on Memberships (under the price list): its
+  rates, what each is charged on, Add a tax rate, Change, Remove, and how the tax is
+  charged. Changed by whoever may change prices. A new percentage is charged on sales and
+  bills from then on; one already made keeps its own. A rate is removed only once no product,
+  type or membership in use charges it, and the box says what still does.
+- **A product and a membership type each pick a rate or No tax.** A new product starts on
+  the gym's rate where it has exactly one; a new type starts on No tax. A rate can be added
+  from inside either form, and is picked there at once. A type with a rate is priced at most
+  769,230.76, so its bill at 30% on top still fits a bill's cap.
+- **A membership keeps the rate it was sold with**, as it keeps its price: a type changed
+  later moves nobody already holding it. Every bill it opens (the give, a payment taken
+  before the hourly run opened its bill, the hourly run) charges that rate's percentage as
+  it is that day, by `billAmounts`, the sale's own arithmetic: a discount comes off first,
+  the tax is worked out on what is left, rounded to the nearest minor unit, half up.
+- **A bill** keeps `amount_minor` as what the person pays, its tax in, so every reader of
+  what is owed reads one number; its tax, the rate's name and percentage, and whether the
+  price held it are kept beside it. A person's page says "₹2,000.00 plus ₹360.00 GST 18%" or
+  "Includes £8.33 VAT 20%" on the bill, and "Each bill charges GST 18%." under the
+  membership.
+- **Add membership** (a person's page, and Add member) shows Price, the discount, the tax
+  and the Total, and sends the price and the first bill's total it showed: the server gives
+  nothing at any other total.
+- **Not built**: a membership already held moved to a new rate (its rate's percentage can
+  be changed, not the rate it charges); two taxes on one thing (a gym that splits one tax
+  in two on its invoices, as India's CGST and SGST, charges it here as one GST rate); tax in
+  Reports.
+
 ### 14.4 Pay by the gym's own link
 
 A gym pastes its own payment link for a membership type (any company: RULINGS
