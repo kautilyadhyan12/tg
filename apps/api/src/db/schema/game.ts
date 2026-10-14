@@ -127,12 +127,17 @@ export const weeklyChallenges = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     // The week's Monday, in the person's own time zone.
     weekStart: date("week_start").notNull(),
+    // The zone the week was picked in; its days are always read in it.
+    timeZone: text("time_zone").notNull(),
     codes: text("codes").array().notNull(),
+    // The week's challenges Safe mode paused: they pay nothing for that week.
+    heldCodes: text("held_codes").array().notNull().default(sql`'{}'`),
     createdAt: createdAt(),
   },
   (t) => [
     primaryKey({ name: "weekly_challenges_pkey", columns: [t.userId, t.weekStart] }),
     check("weekly_challenges_monday_check", sql`extract(isodow FROM ${t.weekStart}) = 1`),
     check("weekly_challenges_codes_check", sql`cardinality(${t.codes}) BETWEEN 1 AND 3`),
+    check("weekly_challenges_held_codes_check", sql`${t.heldCodes} <@ ${t.codes}`),
   ],
 );

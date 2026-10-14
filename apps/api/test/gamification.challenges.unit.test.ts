@@ -9,6 +9,7 @@ import {
   challengeOf,
   challengeXp,
   measureChallenge,
+  pausedBySafeMode,
   pickChallenges,
   weekOf,
   type FitnessLevel,
@@ -48,11 +49,23 @@ describe("THE WORST THING: somebody in Safe mode is told to push harder", () => 
     expect(cases).toBe(40 * 12 * 4 * 4);
   });
 
-  it("Safe mode turned on after the week was picked holds every challenge but the two gentle ones", () => {
+  it("Safe mode turned on after the week was picked pauses every challenge but the two gentle ones", () => {
     for (const c of CHALLENGES) {
-      const m = measureChallenge(c.code, NO_FACTS, true);
-      expect(m.held === null, c.code).toBe(SAFE_MODE_CHALLENGES.includes(c.code));
+      expect(pausedBySafeMode(c.code), c.code).toBe(!SAFE_MODE_CHALLENGES.includes(c.code));
+      expect(measureChallenge(c.code, NO_FACTS, true).held).toEqual({ code: "safe_mode" });
       expect(measureChallenge(c.code, NO_FACTS, false).held).toBeNull();
+    }
+  });
+
+  it("a paused challenge pays nothing for its week, however done it is, and only for that week", () => {
+    const all = (n: number): WeekFacts => ({ trainingDays: n, kcalBurned: 9000, trainingMinutes: 900, form80Workouts: 9, form90Workouts: 9, families: 12, foodDays: n });
+    for (const c of CHALLENGES) {
+      const paused = [
+        { weekStart: "2026-10-05", codes: [c.code], heldCodes: [c.code] },
+        { weekStart: "2026-10-12", codes: [c.code], heldCodes: [] },
+      ];
+      const facts = new Map([["2026-10-05", all(7)], ["2026-10-12", all(7)]]);
+      expect(challengeXp(paused, facts), c.code).toBe(c.xp);
     }
   });
 });
@@ -142,7 +155,7 @@ describe("XP from challenges", () => {
   const done = (over: Partial<WeekFacts>): WeekFacts => ({ ...NO_FACTS, ...over });
 
   it("a done challenge pays its XP once; one not done pays nothing", () => {
-    const weeks = [{ weekStart: "2026-10-05", codes: ["train_days_3", "food_days_5", "families_3"] as WeeklyChallengeCode[] }];
+    const weeks = [{ weekStart: "2026-10-05", codes: ["train_days_3", "food_days_5", "families_3"] as WeeklyChallengeCode[], heldCodes: [] }];
     const facts = new Map([["2026-10-05", done({ trainingDays: 4, foodDays: 2, families: 3 })]]);
     expect(challengeXp(weeks, facts)).toBe(200 + 250);
     expect(challengeXp(weeks, facts)).toBe(200 + 250);
@@ -150,9 +163,9 @@ describe("XP from challenges", () => {
 
   it("weeks add up, and a week with no workouts or meals pays nothing", () => {
     const weeks = [
-      { weekStart: "2026-09-28", codes: ["train_days_7"] as WeeklyChallengeCode[] },
-      { weekStart: "2026-10-05", codes: ["train_days_7"] as WeeklyChallengeCode[] },
-      { weekStart: "2026-10-12", codes: ["train_days_7"] as WeeklyChallengeCode[] },
+      { weekStart: "2026-09-28", codes: ["train_days_7"] as WeeklyChallengeCode[], heldCodes: [] },
+      { weekStart: "2026-10-05", codes: ["train_days_7"] as WeeklyChallengeCode[], heldCodes: [] },
+      { weekStart: "2026-10-12", codes: ["train_days_7"] as WeeklyChallengeCode[], heldCodes: [] },
     ];
     const facts = new Map([
       ["2026-09-28", done({ trainingDays: 7 })],
@@ -162,7 +175,7 @@ describe("XP from challenges", () => {
   });
 
   it("one week's facts never count for another week", () => {
-    const weeks = [{ weekStart: "2026-10-12", codes: ["food_days_5"] as WeeklyChallengeCode[] }];
+    const weeks = [{ weekStart: "2026-10-12", codes: ["food_days_5"] as WeeklyChallengeCode[], heldCodes: [] }];
     expect(challengeXp(weeks, new Map([["2026-10-05", done({ foodDays: 7 })]]))).toBe(0);
   });
 

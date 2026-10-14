@@ -11,7 +11,7 @@ import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import { getWeeklyChallenges, onWorkoutSynced } from "../src/modules/gamification/service.js";
 import { dayInTz } from "../src/modules/gamification/streak.js";
-import { weekOf } from "../src/modules/gamification/challenges.js";
+import { pickChallenges, weekOf } from "../src/modules/gamification/challenges.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -55,7 +55,7 @@ d("weekly challenges (real Postgres)", () => {
     return app;
   };
 
-  const inject = (opts: { method: "GET" | "PUT" | "PATCH" | "POST"; url: string; body?: unknown; cookies?: Cookies }) =>
+  const inject = (opts: { method: "GET" | "PUT" | "PATCH" | "POST" | "DELETE"; url: string; body?: unknown; cookies?: Cookies }) =>
     api().inject({
       method: opts.method,
       url: opts.url,
@@ -104,15 +104,19 @@ d("weekly challenges (real Postgres)", () => {
         VALUES (${id}, ${userId}, ${exerciseId}, ${startedAt}, ${i++}, 10, 30000)`;
     }
   };
-  const putMeal = async (userId: string, takenAt: Date) => {
-    await sql`
-      INSERT INTO meal_logs (user_id, taken_at, items, kcal_point, kcal_low, kcal_high, portion_source, nutrition_sources, calc_version)
-      VALUES (${userId}, ${takenAt}, ${sql.json([])}, 500, 500, 500, 'default', ${sql.array(["curated"])}, 1)`;
+  const putMeal = async (userId: string, takenAt: Date): Promise<string> => {
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO meal_logs (user_id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high, portion_source, nutrition_sources, calc_version)
+      VALUES (${userId}, ${takenAt}, 'Meal', ${sql.json([])}, 500, 500, 500, 'default', ${sql.array(["curated"])}, 1)
+      RETURNING id`;
+    if (row === undefined) throw new Error("no meal");
+    return row.id;
   };
-  const setPicks = async (userId: string, weekStart: string, picks: WeeklyChallengeCode[]) => {
+  const setPicks = async (userId: string, weekStart: string, picks: WeeklyChallengeCode[], timeZone = "UTC") => {
     await sql`
-      INSERT INTO weekly_challenges (user_id, week_start, codes) VALUES (${userId}, ${weekStart}::date, ${sql.array(picks)}::text[])
-      ON CONFLICT (user_id, week_start) DO UPDATE SET codes = EXCLUDED.codes`;
+      INSERT INTO weekly_challenges (user_id, week_start, time_zone, codes)
+      VALUES (${userId}, ${weekStart}::date, ${timeZone}, ${sql.array(picks)}::text[])
+      ON CONFLICT (user_id, week_start) DO UPDATE SET time_zone = EXCLUDED.time_zone, codes = EXCLUDED.codes, held_codes = '{}'`;
   };
   const xpOf = async (userId: string) =>
     (await sql<{ total_xp: number }[]>`SELECT total_xp FROM user_xp WHERE user_id = ${userId}`)[0]?.total_xp ?? 0;
@@ -294,7 +298,7 @@ d("weekly challenges (real Postgres)", () => {
     it("India: Monday 00:30 counts in the new week and Monday 00:15 a week later does not", { timeout: 60_000 }, async () => {
       const p = await makeUser("tz-india");
       await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE id = ${p.id}`;
-      await setPicks(p.id, "2026-10-12", ["train_days_3", "food_days_5"]);
+      await setPicks(p.id, "2026-10-12", ["train_days_3", "food_days_5"], "Asia/Kolkata");
       await putWorkout(p.id, at("2026-10-11", "19:00")); // Monday 12 Oct 00:30 in India, Sunday in UTC
       await putWorkout(p.id, at("2026-10-18", "18:45")); // Monday 19 Oct 00:15 in India, Sunday in UTC
       await putMeal(p.id, at("2026-10-11", "18:00")); // Sunday 11 Oct 23:30 in India
@@ -307,7 +311,7 @@ d("weekly challenges (real Postgres)", () => {
     it("Los Angeles: Sunday 22:00 belongs to the week before, though it is Monday in UTC", { timeout: 60_000 }, async () => {
       const p = await makeUser("tz-la");
       await sql`UPDATE users SET timezone = 'America/Los_Angeles' WHERE id = ${p.id}`;
-      await setPicks(p.id, "2026-10-12", ["train_days_3"]);
+      await setPicks(p.id, "2026-10-12", ["train_days_3"], "America/Los_Angeles");
       await putWorkout(p.id, at("2026-10-12", "05:00")); // Sunday 11 Oct 22:00 in Los Angeles
       await putWorkout(p.id, at("2026-10-12", "08:00")); // Monday 01:00
       const w = await getWeeklyChallenges({ sql }, p.id, at("2026-10-14", "20:00"));
@@ -334,6 +338,129 @@ d("weekly challenges (real Postgres)", () => {
       expect(one(w, "train_minutes_120")).toMatchObject({ current: 119, done: false });
       expect(one(w, "form_80_workouts_3")).toMatchObject({ current: 1, done: false });
       expect(w.xpThisWeek).toBe(250);
+    });
+  });
+
+  describe("Safe mode pauses the week's other challenges", () => {
+    it("at once when Safe mode is answered: a paused challenge pays nothing, and still nothing after clearance that week", { timeout: 60_000 }, async () => {
+      const p = await makeUser("paused");
+      const { weekStart } = thisWeek();
+      await setPicks(p.id, weekStart, ["train_days_3", "train_minutes_120"]);
+      for (let n = 0; n < 3; n++) await putWorkout(p.id, at(plus(weekStart, n), "07:00"), { minutes: 50 });
+      await onWorkoutSynced({ sql }, p.id, "UTC");
+      expect((await read(p.cookies)).xpThisWeek).toBe(400);
+      const paid = await xpOf(p.id);
+      const health = (checkFirst: string) =>
+        inject({ method: "PUT", url: "/v1/users/me/health-screening", body: { hasCondition: true, checkFirst }, cookies: p.cookies });
+
+      expect((await health("not_yet")).statusCode).toBe(200);
+      expect(await xpOf(p.id)).toBe(paid - 200);
+      const paused = await read(p.cookies);
+      expect(one(paused, "train_minutes_120")).toMatchObject({ done: true, held: { code: "safe_mode" } });
+      expect(one(paused, "train_days_3")).toMatchObject({ done: true, held: null });
+      expect(paused.xpThisWeek).toBe(200);
+
+      // A professional clears them the same week: the paused challenge stays paused until Sunday.
+      expect((await health("cleared")).statusCode).toBe(200);
+      await onWorkoutSynced({ sql }, p.id, "UTC");
+      expect(await xpOf(p.id)).toBe(paid - 200);
+      expect(one(await read(p.cookies), "train_minutes_120").held).toEqual({ code: "safe_mode" });
+    });
+  });
+
+  describe("a meal deleted or moved", () => {
+    it("a deleted meal takes its week's food challenge XP back at once", { timeout: 60_000 }, async () => {
+      const p = await makeUser("meal-delete");
+      await setPicks(p.id, "2026-09-14", ["food_days_5"]);
+      const ids: string[] = [];
+      for (let n = 0; n < 5; n++) ids.push(await putMeal(p.id, at(plus("2026-09-14", n), "08:00")));
+      await onWorkoutSynced({ sql }, p.id, "UTC");
+      const withChallenge = await xpOf(p.id);
+      const res = await inject({ method: "DELETE", url: `/v1/nutrition/meals/${ids[0] ?? ""}`, cookies: p.cookies });
+      expect(res.statusCode).toBe(204);
+      expect(await xpOf(p.id)).toBe(withChallenge - 200);
+    });
+
+    it("a meal moved into a week finishes its food challenge at once", { timeout: 60_000 }, async () => {
+      const p = await makeUser("meal-move");
+      await setPicks(p.id, "2026-09-14", ["food_days_5"]);
+      for (let n = 0; n < 4; n++) await putMeal(p.id, at(plus("2026-09-14", n), "08:00"));
+      const later = await putMeal(p.id, at("2026-09-22", "08:00"));
+      await onWorkoutSynced({ sql }, p.id, "UTC");
+      const fourDays = await xpOf(p.id);
+      const res = await inject({ method: "PATCH", url: `/v1/nutrition/meals/${later}`, body: { takenAt: "2026-09-18T08:00:00Z" }, cookies: p.cookies });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(await xpOf(p.id)).toBe(fourDays + 200);
+    });
+  });
+
+  describe("what a first pick reads", () => {
+    it("the fitness level: an advanced person's week holds two hard challenges and a medium, a beginner's two easy and a medium", { timeout: 60_000 }, async () => {
+      const level = async (name: string, fitnessLevel: string) => {
+        const p = await makeUser(name);
+        expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { fitnessLevel }, cookies: p.cookies })).statusCode).toBe(200);
+        return (await read(p.cookies)).challenges.map((c) => c.difficulty).sort();
+      };
+      expect(await level("level-advanced", "advanced")).toEqual(["hard", "hard", "medium"]);
+      expect(await level("level-beginner", "beginner")).toEqual(["easy", "easy", "medium"]);
+    });
+
+    it("the camera: a camera-scored workout 27 days back offers the form challenges, one 29 days back does not", { timeout: 60_000 }, async () => {
+      const a = await makeUser("camera-27");
+      const b = await makeUser("camera-29");
+      const hasForm = (picked: readonly string[]) => picked.some((c) => c.startsWith("form_"));
+      // A week in which both would get a form challenge if the camera counted for them.
+      const base = { fitnessLevel: "intermediate" as const, safeMode: false, weightKnown: true, usedCamera: true };
+      let week: string | undefined;
+      for (let k = 0; k < 52 && week === undefined; k++) {
+        const w = plus("2026-01-05", 7 * k);
+        if (hasForm(pickChallenges({ ...base, userId: a.id, weekStart: w })) && hasForm(pickChallenges({ ...base, userId: b.id, weekStart: w }))) week = w;
+      }
+      if (week === undefined) throw new Error("no week offers both a form challenge");
+      const now = at(plus(week, 2), "12:00");
+      await putWorkout(a.id, new Date(now.getTime() - 27 * 86_400_000), { form: 85 });
+      await putWorkout(b.id, new Date(now.getTime() - 29 * 86_400_000), { form: 85 });
+      expect(hasForm(codes(await getWeeklyChallenges({ sql }, a.id, now)))).toBe(true);
+      expect(hasForm(codes(await getWeeklyChallenges({ sql }, b.id, now)))).toBe(false);
+    });
+
+    it("a week whose kept challenges the app no longer has gets new ones", { timeout: 60_000 }, async () => {
+      const p = await makeUser("retired");
+      const { weekStart } = thisWeek();
+      await sql`INSERT INTO weekly_challenges (user_id, week_start, time_zone, codes) VALUES (${p.id}, ${weekStart}::date, 'UTC', ARRAY['ask_the_coach'])`;
+      const w = await read(p.cookies);
+      expect(w.challenges).toHaveLength(3);
+      const [row] = await sql<{ codes: string[] }[]>`SELECT codes FROM weekly_challenges WHERE user_id = ${p.id}`;
+      expect(row?.codes).toEqual(codes(w));
+    });
+  });
+
+  describe("the XP is paid in the week's own days", () => {
+    it("India: three workouts after midnight on Monday to Wednesday finish training on 3 days, and a later change of zone moves nothing", { timeout: 60_000 }, async () => {
+      const p = await makeUser("xp-india");
+      await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE id = ${p.id}`;
+      for (const day of ["2026-09-13", "2026-09-14", "2026-09-15"]) await putWorkout(p.id, at(day, "19:00")); // 00:30 the next day in India
+      await onWorkoutSynced({ sql }, p.id, "Asia/Kolkata");
+      const without = await xpOf(p.id);
+      await setPicks(p.id, "2026-09-14", ["train_days_3"], "Asia/Kolkata");
+      await onWorkoutSynced({ sql }, p.id, "Asia/Kolkata");
+      expect(await xpOf(p.id)).toBe(without + 200);
+      // In Los Angeles the first of them is a Sunday; the week was picked in India and stays India's.
+      await sql`UPDATE users SET timezone = 'America/Los_Angeles' WHERE id = ${p.id}`;
+      await onWorkoutSynced({ sql }, p.id, "America/Los_Angeles");
+      expect(await xpOf(p.id)).toBe(without + 200);
+    });
+
+    it("Los Angeles: a workout at 22:00 on the week's last Sunday, Monday in UTC, counts in that week", { timeout: 60_000 }, async () => {
+      const p = await makeUser("tz-la-sunday");
+      await sql`UPDATE users SET timezone = 'America/Los_Angeles' WHERE id = ${p.id}`;
+      await setPicks(p.id, "2026-10-12", ["train_days_3"], "America/Los_Angeles");
+      await putWorkout(p.id, at("2026-10-12", "15:00")); // Monday 08:00 there
+      await putWorkout(p.id, at("2026-10-13", "15:00")); // Tuesday 08:00 there
+      await putWorkout(p.id, at("2026-10-19", "05:00")); // Sunday 18 Oct 22:00 there
+      const w = await getWeeklyChallenges({ sql }, p.id, at("2026-10-19", "06:30")); // Sunday 23:30 there
+      expect(w.weekStart).toBe("2026-10-12");
+      expect(one(w, "train_days_3")).toMatchObject({ current: 3, done: true });
     });
   });
 });

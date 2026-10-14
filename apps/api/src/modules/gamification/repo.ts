@@ -254,39 +254,91 @@ export async function getStats(
 
 export interface WeekPicksRow {
   weekStart: string; // 'YYYY-MM-DD', a Monday
+  /** The zone the week was picked in; its days are read in it. */
+  timeZone: string;
   codes: string[];
+  /** Paused by Safe mode in this week. */
+  heldCodes: string[];
 }
 
+interface WeekPicksDbRow {
+  week_start: string;
+  time_zone: string;
+  codes: string[];
+  held_codes: string[];
+}
+
+const toWeekPicks = (r: WeekPicksDbRow): WeekPicksRow => ({
+  weekStart: r.week_start,
+  timeZone: r.time_zone,
+  codes: r.codes,
+  heldCodes: r.held_codes,
+});
+
 /** The week's challenges, kept; null when none were picked for it. */
-export async function getWeekPicks(sql: SqlOrTx, userId: string, weekStart: string): Promise<string[] | null> {
-  const rows = await sql<{ codes: string[] }[]>`
-    SELECT codes FROM weekly_challenges WHERE user_id = ${userId} AND week_start = ${weekStart}::date`;
-  return rows[0]?.codes ?? null;
+export async function getWeekPicks(sql: SqlOrTx, userId: string, weekStart: string): Promise<WeekPicksRow | null> {
+  const rows = await sql<WeekPicksDbRow[]>`
+    SELECT week_start::text AS week_start, time_zone, codes, held_codes FROM weekly_challenges
+    WHERE user_id = ${userId} AND week_start = ${weekStart}::date`;
+  const row = rows[0];
+  return row === undefined ? null : toWeekPicks(row);
 }
 
 /** Keeps the week's challenges unless another request kept some first: the first pick
  *  stands. True when this call kept them. */
-export async function insertWeekPicks(sql: SqlOrTx, userId: string, weekStart: string, codes: readonly string[]): Promise<boolean> {
+export async function insertWeekPicks(
+  sql: SqlOrTx,
+  userId: string,
+  weekStart: string,
+  timeZone: string,
+  codes: readonly string[],
+): Promise<boolean> {
   const rows = await sql`
-    INSERT INTO weekly_challenges (user_id, week_start, codes)
-    VALUES (${userId}, ${weekStart}::date, ${sql.array([...codes])}::text[])
+    INSERT INTO weekly_challenges (user_id, week_start, time_zone, codes)
+    VALUES (${userId}, ${weekStart}::date, ${timeZone}, ${sql.array([...codes])}::text[])
     ON CONFLICT (user_id, week_start) DO NOTHING
     RETURNING 1`;
   return rows.length > 0;
 }
 
-export async function listWeekPicks(sql: SqlOrTx, userId: string): Promise<WeekPicksRow[]> {
-  const rows = await sql<{ week_start: string; codes: string[] }[]>`
-    SELECT week_start::text AS week_start, codes FROM weekly_challenges
-    WHERE user_id = ${userId} ORDER BY week_start`;
-  return rows.map((r) => ({ weekStart: r.week_start, codes: r.codes }));
+/** A week whose kept challenges the app no longer has gets new ones, unless another
+ *  request replaced them first. */
+export async function replaceWeekPicks(
+  sql: SqlOrTx,
+  userId: string,
+  weekStart: string,
+  was: readonly string[],
+  timeZone: string,
+  codes: readonly string[],
+): Promise<void> {
+  await sql`
+    UPDATE weekly_challenges
+    SET time_zone = ${timeZone}, codes = ${sql.array([...codes])}::text[], held_codes = '{}'
+    WHERE user_id = ${userId} AND week_start = ${weekStart}::date AND codes = ${sql.array([...was])}::text[]`;
 }
 
-/** Whether the camera scored any of the person's workouts since `since`. */
-export async function usedCameraSince(sql: SqlOrTx, userId: string, since: Date): Promise<boolean> {
+/** Safe mode is on in this week: every challenge of the week but `gentle` is paused, and
+ *  stays paused for the week. Run again, it changes nothing. */
+export async function holdWeek(tx: TransactionSql, userId: string, weekStart: string, gentle: readonly string[]): Promise<void> {
+  await tx`
+    UPDATE weekly_challenges
+    SET held_codes = ARRAY(SELECT c FROM unnest(codes) AS c WHERE c <> ALL(${tx.array([...gentle])}::text[]))
+    WHERE user_id = ${userId} AND week_start = ${weekStart}::date`;
+}
+
+export async function listWeekPicks(sql: SqlOrTx, userId: string): Promise<WeekPicksRow[]> {
+  const rows = await sql<WeekPicksDbRow[]>`
+    SELECT week_start::text AS week_start, time_zone, codes, held_codes FROM weekly_challenges
+    WHERE user_id = ${userId} ORDER BY week_start`;
+  return rows.map(toWeekPicks);
+}
+
+/** Whether the camera scored any of the person's workouts from `since` up to `until`. */
+export async function usedCameraBetween(sql: SqlOrTx, userId: string, since: Date, until: Date): Promise<boolean> {
   const rows = await sql`
     SELECT 1 FROM workouts
-    WHERE user_id = ${userId} AND started_at >= ${since} AND avg_form_score IS NOT NULL LIMIT 1`;
+    WHERE user_id = ${userId} AND started_at >= ${since} AND started_at <= ${until}
+      AND avg_form_score IS NOT NULL LIMIT 1`;
   return rows.length > 0;
 }
 

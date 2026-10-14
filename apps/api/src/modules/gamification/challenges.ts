@@ -8,7 +8,8 @@
 // somebody whose weight is known (no weight, no calories); Safe mode gets only the gentle
 // ones; two challenges in a week never count the same thing; a workout count is a count
 // of days, and meals are days with food logged, so seven workouts in one evening are not
-// "every day this week".
+// "every day this week". A challenge Safe mode paused in its week pays nothing for that
+// week, even after clearance.
 import { createHash } from "node:crypto";
 import type {
   WeeklyChallenge,
@@ -45,6 +46,9 @@ export const CHALLENGES: readonly ChallengeTemplate[] = [
 /** Safe mode's two: training days, a consistency goal that goals keep on in Safe mode,
  *  and logging food. Nothing that asks for more effort. */
 export const SAFE_MODE_CHALLENGES: readonly WeeklyChallengeCode[] = ["train_days_3", "food_days_5"];
+
+/** Every other challenge is paused while Safe mode is on. */
+export const pausedBySafeMode = (code: WeeklyChallengeCode): boolean => !SAFE_MODE_CHALLENGES.includes(code);
 
 const BY_CODE = new Map(CHALLENGES.map((c) => [c.code, c]));
 
@@ -140,11 +144,7 @@ const FACT: Record<WeeklyChallengeMeasure, keyof WeekFacts> = {
   food_days: "foodDays",
 };
 
-export function measureChallenge(
-  code: WeeklyChallengeCode,
-  facts: WeekFacts,
-  safeModeNow: boolean,
-): WeeklyChallenge {
+export function measureChallenge(code: WeeklyChallengeCode, facts: WeekFacts, held: boolean): WeeklyChallenge {
   const c = challengeOf(code);
   const current = Math.max(0, Math.floor(facts[FACT[c.measure]]));
   return {
@@ -155,22 +155,27 @@ export function measureChallenge(
     current,
     done: current >= c.target,
     xp: c.xp,
-    held: safeModeNow && !SAFE_MODE_CHALLENGES.includes(code) ? { code: "safe_mode" } : null,
+    held: held ? { code: "safe_mode" } : null,
   };
 }
 
+export interface ChallengeWeek {
+  weekStart: string;
+  codes: readonly WeeklyChallengeCode[];
+  /** Paused by Safe mode in this week. */
+  heldCodes: readonly WeeklyChallengeCode[];
+}
+
 /** XP from done challenges over every week the person was given some. A done challenge
- *  pays once, because the total is worked out again from the weeks, never added to. */
-export function challengeXp(
-  weeks: readonly { weekStart: string; codes: readonly WeeklyChallengeCode[] }[],
-  factsByWeek: ReadonlyMap<string, WeekFacts>,
-): number {
+ *  pays once, because the total is worked out again from the weeks, never added to; a
+ *  challenge Safe mode paused pays nothing for its week. */
+export function challengeXp(weeks: readonly ChallengeWeek[], factsByWeek: ReadonlyMap<string, WeekFacts>): number {
   let total = 0;
   for (const week of weeks) {
     const facts = factsByWeek.get(week.weekStart) ?? NO_FACTS;
     for (const code of week.codes) {
-      const m = measureChallenge(code, facts, false);
-      if (m.done) total += m.xp;
+      const m = measureChallenge(code, facts, week.heldCodes.includes(code));
+      if (m.done && m.held === null) total += m.xp;
     }
   }
   return total;
