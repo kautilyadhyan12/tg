@@ -1,9 +1,11 @@
-// What the Reports page's money figures cost to read (ROADMAP 21b-i; CLAUDE.md §4 "Cost at
+// What the Reports page's money figures cost to read (ROADMAP 21b-i, 21b-ii; CLAUDE.md §4 "Cost at
 // full size"). One gym of 2,000 people on its list (--people= for another size) with three
 // former records for each, beside 19 gyms of 200. Everybody on a list holds a monthly
 // membership two years old with a bill and a payment for each of its 24 months, so the
 // same period a year earlier (21d-ii) has its own; one in
-// five has not paid the newest, and one payment in twenty has a refund noted.
+// five has not paid the newest, and one payment in twenty has a refund noted. The front
+// desk sells one of 30 products for every 20 people on the list each day of those two
+// years, recorded by five staff in turn, and one sale in fifty is taken back (21b-ii).
 //
 // Two numbers each: how long it takes, and how long the server's one thread is busy and
 // answers nobody. Then the big gym's five staff at one moment, and all 20 gyms at once.
@@ -51,6 +53,8 @@ if (!Number.isInteger(PEOPLE) || PEOPLE < 1) {
 
 async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
+  await sql`DELETE FROM gym_sales WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_products WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_refunds WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_payments WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_bills WHERE gym_id IN (${gyms})`;
@@ -122,6 +126,26 @@ async function makeGym(people: number): Promise<Made> {
     INSERT INTO gym_member_refunds (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by)
     SELECT ${gymId}, p.id, 1000, 'GBP', 'cash', 'other', gen_random_uuid(), p.paid_on + 3, ${owner}
     FROM gym_member_payments p WHERE p.gym_id = ${gymId} AND p.seq % 20 = 0`;
+
+  const staff = [owner];
+  for (let i = 1; i < 5; i++) {
+    const id = randomUUID();
+    await sql`INSERT INTO users (id, email, display_name) VALUES (${id}, ${`${PREFIX}${id}@example.com`}, ${`Cost Staff ${String(i)}`})`;
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${id}, 'manager', ${["billing.members"]})`;
+    staff.push(id);
+  }
+  await sql`
+    INSERT INTO gym_products (gym_id, name, price_minor, currency)
+    SELECT ${gymId}, 'Product ' || n, 100 + n * 50, 'GBP' FROM generate_series(1, 30) AS n`;
+  const perDay = Math.max(1, Math.ceil(people / 20));
+  await sql`
+    INSERT INTO gym_sales (gym_id, request_key, product_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
+                           tax_bp, tax_included, currency, method, sold_on, recorded_by, undone_at)
+    SELECT ${gymId}, gen_random_uuid(), p.id, p.name, 1 + k % 3, p.price_minor, p.price_minor * (1 + k % 3), 0, p.price_minor * (1 + k % 3),
+           0, false, 'GBP', 'cash', (current_date - d)::date, ((${staff})::uuid[])[1 + k % 5],
+           CASE WHEN k % 50 = 0 THEN now() END
+    FROM generate_series(0, ${MONTHS * 30}) AS d, generate_series(1, ${perDay}) AS k,
+         LATERAL (SELECT id, name, price_minor FROM gym_products WHERE gym_id = ${gymId} ORDER BY name OFFSET (d + k) % 30 LIMIT 1) p`;
   return { gymId, people };
 }
 
@@ -135,11 +159,12 @@ try {
   const big = await makeGym(PEOPLE);
   const others: Made[] = [];
   for (let i = 0; i < OTHER_GYMS; i++) others.push(await makeGym(OTHER_PEOPLE));
-  for (const table of ["gym_member_list_entries", "gym_held_memberships", "gym_membership_types", "gym_member_bills", "gym_member_payments", "gym_member_refunds", "users"]) {
+  for (const table of ["gym_member_list_entries", "gym_held_memberships", "gym_membership_types", "gym_member_bills", "gym_member_payments", "gym_member_refunds", "gym_products", "gym_sales", "users"]) {
     await sql`ANALYZE ${sql(table)}`;
   }
-  const counts = await sql<{ bills: number; payments: number; refunds: number }[]>`
+  const counts = await sql<{ bills: number; payments: number; refunds: number; sales: number }[]>`
     SELECT (SELECT count(*)::int FROM gym_member_bills WHERE gym_id = ${big.gymId}) AS bills,
+           (SELECT count(*)::int FROM gym_sales WHERE gym_id = ${big.gymId}) AS sales,
            (SELECT count(*)::int FROM gym_member_payments WHERE gym_id = ${big.gymId}) AS payments,
            (SELECT count(*)::int FROM gym_member_refunds WHERE gym_id = ${big.gymId}) AS refunds`;
 
@@ -149,7 +174,8 @@ try {
     if (report.state !== "ok") throw new Error(`no figures: ${report.state}`);
     if (report.recurring.memberships !== gym.people) throw new Error(`expected ${String(gym.people)} repeating memberships, read ${String(report.recurring.memberships)}`);
     if (report.owed.people !== gym.people / 5) throw new Error(`expected ${String(gym.people / 5)} people owing, read ${String(report.owed.people)}`);
-    return JSON.stringify({ recurring: report.recurring, thisMonth: report.thisMonth, owed: report.owed, lifetimeValue: report.lifetimeValue, months: report.months.length });
+    if (report.products.length !== 30 || report.staff.length !== 5) throw new Error(`expected 30 products and 5 staff, read ${String(report.products.length)} and ${String(report.staff.length)}`);
+    return JSON.stringify({ recurring: report.recurring, thisMonth: report.thisMonth, owed: report.owed, lifetimeValue: report.lifetimeValue, months: report.months.length, products: report.products.length, staff: report.staff.length });
   };
 
   const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
@@ -182,7 +208,7 @@ try {
   const cpu = os.cpus()[0];
   console.log(`measure-reports-money-cost: ${cpu?.model ?? "?"} at ${String(cpu?.speed ?? 0)} MHz · ${String(RUNS)} runs each`);
   console.log(
-    `one gym of ${String(PEOPLE)} on its list (${String(counts[0]?.bills ?? 0)} bills, ${String(counts[0]?.payments ?? 0)} payments, ${String(counts[0]?.refunds ?? 0)} refunds) with ${String(PEOPLE * FORMER_EACH)} former records, beside ${String(OTHER_GYMS)} gyms of ${String(OTHER_PEOPLE)}`,
+    `one gym of ${String(PEOPLE)} on its list (${String(counts[0]?.bills ?? 0)} bills, ${String(counts[0]?.payments ?? 0)} payments, ${String(counts[0]?.refunds ?? 0)} refunds, ${String(counts[0]?.sales ?? 0)} sales) with ${String(PEOPLE * FORMER_EACH)} former records, beside ${String(OTHER_GYMS)} gyms of ${String(OTHER_PEOPLE)}`,
   );
   console.log(`  the big gym's answer: ${await read(big)}`);
   await measure("the big gym's money, one read", () => read(big));
