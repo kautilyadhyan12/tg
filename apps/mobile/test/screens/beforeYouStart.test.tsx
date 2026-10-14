@@ -148,7 +148,12 @@ describe("ticking it", () => {
 
   it("a token that ran out is refreshed once and the check sent again", async () => {
     let checks = 0;
+    let refreshes = 0;
     const { server } = await openApp({
+      "/v1/auth/refresh": () => {
+        refreshes += 1;
+        return { status: 200, body: { tokens: tokens(refreshes + 1) } };
+      },
       "/v1/users/me": () => {
         checks += 1;
         return checks === 1 ? refusal(401, "unauthorized", "Sign in again.") : { status: 200, body: profile(true) };
@@ -156,12 +161,42 @@ describe("ticking it", () => {
     });
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
     const asks = server.asked.filter((one) => one.path === "/v1/users/me").map((one) => one.headers.authorization);
-    expect(asks).toEqual(["Bearer access-2", "Bearer access-2"]);
+    // Sent again with the new token, never the one the server refused.
+    expect(asks).toEqual(["Bearer access-2", "Bearer access-3"]);
     expect(server.paths().filter((path) => path === "/v1/auth/refresh")).toHaveLength(2);
   });
 });
 
 describe("Sign out on the note", () => {
+  it("waits while Continue is keeping the tick on the phone", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": refreshed,
+      "/v1/users/me": notTicked,
+      "/v1/users/me/consents": keptTick,
+    });
+    const store = memoryStore(kept(1, RAVI, null));
+    const write = store.write;
+    let finishWrite: () => void = () => undefined;
+    store.write = (next: string) =>
+      next.includes('"signUpNote"')
+        ? new Promise<void>((resolve) => {
+            finishWrite = () => {
+              void write(next).then(resolve);
+            };
+          })
+        : write(next);
+    await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} />);
+    await screen.findByRole("header", { name: "Before you start" });
+    await tick();
+    await waitFor(() => {
+      expect(screen.getByRole("checkbox").props.accessibilityState).toMatchObject({ checked: true });
+    });
+    await press("Continue");
+    expect(screen.getByRole("button", { name: "Sign out" }).props.accessibilityState).toMatchObject({ disabled: true });
+    finishWrite();
+    expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
+  });
+
   it("goes back to Get started and the phone keeps nobody", async () => {
     const { store } = await openApp({ "/v1/users/me": notTicked, "/v1/auth/logout": lost });
     await screen.findByRole("header", { name: "Before you start" });

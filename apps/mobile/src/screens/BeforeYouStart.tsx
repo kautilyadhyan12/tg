@@ -80,6 +80,8 @@ function BeforeYouStart({ problemAtStart, onThrough }: { problemAtStart: string;
   const insets = useSafeAreaInsets();
   const [ticked, setTicked] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** Continue's write to the phone is away: Sign out waits for it. */
+  const [going, setGoing] = useState(false);
   const [problem, setProblem] = useState(problemAtStart);
 
   useEffect(() => {
@@ -104,6 +106,7 @@ function BeforeYouStart({ problemAtStart, onThrough }: { problemAtStart: string;
   };
 
   const goOn = async () => {
+    setGoing(true);
     await session.keepSignUpNote(NOTE_VERSION);
     onThrough();
   };
@@ -146,13 +149,13 @@ function BeforeYouStart({ problemAtStart, onThrough }: { problemAtStart: string;
 
       {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
 
-      <Button label="Continue" wide disabled={!ticked} busy={busy} onPress={() => void goOn()} />
+      <Button label="Continue" wide disabled={!ticked} busy={busy || going} onPress={() => void goOn()} />
       <Button
         label="Sign out"
         kind="quiet"
         icon="logout"
         style={styles.middle}
-        disabled={busy}
+        disabled={busy || going}
         onPress={() => void session.signOut()}
       />
     </ScrollView>

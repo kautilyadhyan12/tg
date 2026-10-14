@@ -108,15 +108,29 @@ export function createSession({
     }
   };
 
-  const keep = async (next: PhoneKeptSession, accessToken: string) => {
-    kept = next;
-    access = { token: accessToken, at: now() };
+  /** Writes this sign-in to the key store. If it was left while the write was away (Sign out, or
+   *  another person), the store is put back to what the phone holds now: a late write never undoes
+   *  a sign-out. */
+  const writeKept = async (mine: PhoneKeptSession) => {
     try {
-      await twice(() => store.write(JSON.stringify(next)));
+      await twice(() => (kept === mine ? store.write(JSON.stringify(mine)) : Promise.resolve()));
     } catch {
       // Signed in for as long as the app stays open. The key store still holds the token
       // before this one, which the server takes again until this one is used.
     }
+    const held = kept;
+    if (held === mine) return;
+    try {
+      await (held === null ? store.clear() : store.write(JSON.stringify(held)));
+    } catch {
+      if (held === null) await store.write("").catch(() => undefined);
+    }
+  };
+
+  const keep = async (next: PhoneKeptSession, accessToken: string) => {
+    kept = next;
+    access = { token: accessToken, at: now() };
+    await writeKept(next);
   };
 
   /** Memory first, so nothing of the last person is shown; then the key store, which must not keep them. */
@@ -142,6 +156,7 @@ export function createSession({
     if (kept !== mine) return "done";
     if (answer.kind === "no_answer") return "no_answer";
     if (answer.kind === "ok") {
+      // `mine` is read now, after the reply, so a tick kept while this was away comes with it.
       await keep({ ...mine, refreshToken: answer.data.tokens.refreshToken }, answer.data.tokens.accessToken);
     } else if (answer.status === 401) {
       await forget();
@@ -169,6 +184,9 @@ export function createSession({
     refreshing = { run, of: mine };
     return run;
   };
+
+  /** Read afresh after each wait: a sign-out or another person may have come in between. */
+  const whoNow = () => kept?.user.id ?? null;
 
   const sendAs = <T>(request: Omit<Request, "token">, shape: Shape<T>, token: string) =>
     call(server, { ...request, token }, shape);
@@ -209,14 +227,16 @@ export function createSession({
       if (access === null) await refresh();
       const first = access;
       // A refresh gives the same person a new kept object; a sign-out or another person does not.
-      if (first === null || kept?.user.id !== mine.user.id) return { kind: "no_answer" };
+      if (first === null || whoNow() !== mine.user.id) return { kind: "no_answer" };
       const answer = await sendAs(request, shape, first.token);
       if (answer.kind !== "refused" || answer.status !== 401) return answer;
       // Its fifteen minutes ran out while the app was open: one refresh, then once more.
       if (access === first) access = null;
       await refresh();
       const next = access;
-      return next === null ? { kind: "no_answer" } : sendAs(request, shape, next.token);
+      // Never sent again as whoever is signed in now, unless it is the same person.
+      if (next === null || whoNow() !== mine.user.id) return { kind: "no_answer" };
+      return sendAs(request, shape, next.token);
     },
 
     signUpNote: () => kept?.signUpNote ?? null,
@@ -226,11 +246,7 @@ export function createSession({
       const mine = kept;
       if (mine === null) return;
       mine.signUpNote = version;
-      try {
-        await twice(() => store.write(JSON.stringify(mine)));
-      } catch {
-        // Known for as long as the app stays open; the server is asked again next time.
-      }
+      await writeKept(mine);
     },
 
     signOut: async () => {
