@@ -48,7 +48,7 @@ import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit, placesFree } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { appViewsOf } from "./appViews.js";
-import { signaturesOf, waiverInUse, type SignatureRow } from "../waiver/repo.js";
+import { deskSignaturesOf, moveDeskSignatures, signaturesOf, waiverInUse, type SignatureRow } from "../waiver/repo.js";
 import { appPeopleIn, removeRecordIn } from "./oneRemove.js";
 import { currentRecordOf, pastRecordOf } from "./whose.js";
 import { applyTyped, changedFields, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
@@ -103,6 +103,8 @@ async function detailOf(
   // The waiver the gym asks for today, and which of this record's people signed it.
   const waiver = await waiverInUse(sql, gymId);
   const signatures = waiver === null ? new Map<string, SignatureRow>() : await signaturesOf(sql, gymId, waiver.id, shownIds);
+  // And the record's own, made at the desk (3e-ii).
+  const desk = waiver === null ? undefined : (await deskSignaturesOf(sql, gymId, waiver.id, [entry.id])).get(entry.id);
   const [visits, held, owedSince, app] = await Promise.all([
     repo.memberVisits(sql, gymId, shownIds),
     // What their memberships here say, as their row on the list says it (23a-i).
@@ -156,6 +158,7 @@ async function detailOf(
       waiverSigned: ((signed) => (signed === undefined ? null : { name: signed.name, at: signed.at.toISOString() }))(signatures.get(row.userId)),
     })),
     waiverInUse: waiver !== null,
+    waiverDesk: desk === undefined ? null : { name: desk.name, signer: desk.signer, at: desk.at.toISOString(), by: desk.by },
   };
 }
 
@@ -770,7 +773,7 @@ export async function deleteFormer(
     const stored = await repo.entryFor(tx, gymId, entryId);
     if (stored === null) throw notFound();
     if (stored.formerAt === null) throw new OrgsError(409, "not_former", MEMBER_LIST_BY_HAND_WORDS.not_former);
-    await repo.deleteEntry(tx, gymId, entryId);
+    await repo.deleteEntry(tx, gymId, entryId, deps.now());
     const version = await repo.bumpListVersion(tx, gymId);
     await insertAudit(tx, {
       actorUserId: userId,
@@ -822,6 +825,7 @@ export async function mergeEntries(
     // (the reference test lists every table that does).
     await repo.moveMembershipLinks(tx, gymId, goneId, keepId);
     await repo.moveLeadLinks(tx, gymId, goneId, keepId);
+    await moveDeskSignatures(tx, gymId, goneId, keepId);
     // What the clock has ended on the kept record is marked first: only a membership
     // still in use there keeps the other record's from-list one from moving.
     const today = dayInTz(at, org.timezone);
@@ -846,7 +850,7 @@ export async function mergeEntries(
     await repo.moveBookingLinks(tx, gymId, goneId, keepId);
     await repo.movePtLinks(tx, gymId, goneId, keepId);
     await moveNotesAndTags(tx, gymId, goneId, keepId);
-    await repo.deleteEntry(tx, gymId, goneId);
+    await repo.deleteEntry(tx, gymId, goneId, at);
     const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");
     await repo.stampListedByContact(

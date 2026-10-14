@@ -1964,8 +1964,9 @@ device; the one-phone rule follows apps that fight shared accounts (WhatsApp).
 
 ### 10.10 A gym's waiver, signed in the app (3e)
 
-*(ADDED 2026-10-13 with 3e-i, as built. RULINGS 2026-10-08. 3e-ii adds signing at the
-desk with no app and the "Waiver not signed" choice in Members' Filter.)*
+*(ADDED 2026-10-13 with 3e-i, as built. RULINGS 2026-10-08. 3e-ii, as built 2026-10-14:
+signing at the desk, "Waiver not signed" in Members' Filter, and the desk's choice for
+somebody who has not signed — at the end of this section.)*
 
 **The worst thing it could do to a real person:** show somebody as having signed words
 they never saw, or put a signature on a relative when a family shares one email address.
@@ -2012,12 +2013,13 @@ they never saw, or put a signature on a relative when a family shares one email 
 - **Stop using this waiver** asks first, naming who changes and what is kept. Stopped,
   nobody is asked and nothing can be signed; the words and signatures are kept, and saving
   the same words starts it again with them.
-- **Not built here:** a missing signature stops nobody at the front desk; no list of who
-  has not signed (3e-ii); no drawn signature, and no IP address kept.
+- **Not built here:** no drawn signature, and no IP address kept.
 - **Privacy.** A person's "download my data" holds each waiver they signed with its words.
   A signature is kept with the gym after the person's account is deleted, on the consent
-  log's footing: it is the gym's proof. How long a gym may keep it is the lawyer's (ROADMAP
-  Stage 4 item 3).
+  log's footing: it is the gym's proof. **It is removed six years after the account is
+  deleted** (Kd, `rulings/2026-10-13-3e-i.md`; the consent log's own six years), by the
+  nightly purge's own step beside the consent log's (3e-iii,
+  `privacy/repo.ts` `deleteExpiredWaiverSignatures`).
 - **Limits:** staff reads 300 an hour a person (900 an address), saves and stops 30 (90);
   a member's read 120 (6,000 an address, a gym's wi-fi), signing 10 (600).
 - **Cost at full size** (2026-10-13, mains, 3,294 MHz, local database, a waiver of 29,990
@@ -2033,6 +2035,68 @@ they never saw, or put a signature on a relative when a family shares one email 
   change) · PushPress, "Digital documents overview" (Signed or Unsigned per member) ·
   Gymdesk, "Document Management" and "Gym Liability Waiver" (a dated record; re-signed when
   the terms change).
+
+**Signed at the desk, and who has not signed, as built (3e-ii; 2026-10-14; `rulings/2026-10-14-3e-ii.md`).**
+*The worst thing it could do to a real person: show somebody as signed who did not sign —
+a signature on the wrong record, on words they were not shown, or a child's own.*
+- **A desk signature is a record's, never an app account's** (`gym_waiver_desk_signatures`,
+  migration `0106`: the wording, the record, `signer` `person` or `guardian`, the name
+  typed, the staff member who opened the screen, the time; one per record per wording). It
+  never signs the person's app: somebody in the app still signs there, so a family on one
+  email is never marked signed by a relative. **The app keeps asking somebody who signed at
+  the desk** until they sign in the app too; that is on purpose, not a fault. Their page's
+  App card says "Signed at the desk · not signed in the app yet", never "Waiver not signed"
+  (round one, High-1).
+- **A person's page** (`members.confirm`), on a current record of a gym with a waiver in use,
+  shows a **Waiver** card unless the person the record certainly is signed in the app:
+  "Waiver signed at the desk on 14 October 2026 as Ben Stone" (or "by Ana Reyes, parent or
+  guardian"), or "Waiver not signed" with **Sign waiver**. The box opens under it: "Hand this
+  screen to {name}. They read the waiver and sign it themselves.", the gym's words, the
+  name, the tick, Sign and Cancel. Done, the card says "Signed. {name}'s waiver is kept with
+  their record."
+- **Under 18** by the record's date of birth on the gym's own day (`isUnder18`; born 29
+  February, 18 on 1 March of a year with no 29th): only a parent or guardian signs, and the
+  server refuses the person (`409 guardian_needed`); a record that says 18 or over is
+  signed by the person only (`409 person_signs`). With no date of birth the box asks "Who
+  is signing?"; nothing is shown to sign until it is answered, and a change of who signs
+  empties the name typed.
+- **"Or in the app"** is said only where somebody in the app whose signature would sign this
+  record is on it: with only a shared family email, the card says "{name} can sign it here
+  at the desk." (round one, High-2).
+- `GET` and `POST /v1/orgs/:gymId/member-list/entries/:entryId/waiver[/sign]` take
+  `{ waiverId, signer, name }`. One statement writes it, only while that wording is the
+  gym's newest in use, the record is on the list and its date of birth is the one checked;
+  otherwise `409 waiver_changed` / `waiver_not_in_use` or `404 person_not_found`, and
+  nothing is written. Twice is once. Two records joined: the kept one takes the other's
+  desk signatures it has none of; a record deleted for good lets go of its signature, which
+  stays as the gym's proof with the day the record was deleted (`record_deleted_at`,
+  `0108`), and the purge removes it six years after that day (Kd,
+  `rulings/2026-10-14-3e-ii.md`; 3e-iii). A gym's whole list deleted with the gym
+  (`deleteListForGym`) is the same. A record cannot be deleted any other way while a
+  signature points at it (the link is checked when the change is saved), and a signature
+  with neither a record nor a day is refused, so none is ever kept for ever by mistake.
+- **Who has signed, by record** (`waiver/signed.ts`, one rule): a desk signature of the
+  wording in use, or an app signature by the person the record certainly is (§18.4). An app
+  signature on a shared family email signs no record. Members' Filter shows **Waiver not
+  signed** with its count while the gym has a waiver in use (`?waiver=not_signed`; Select
+  all means the same people; a current member's word, so a page of past members is not
+  narrowed by it); Settings' Waiver box adds "and N at the desk".
+- **The desk's third choice** (§12.4): **Someone who has not signed your waiver**, Check them
+  in (the start) or Send them to staff, by the same rule. With no waiver in use it stops
+  nobody, and the box says so with **Set up your waiver**, which opens the Waiver box.
+  **A family on one email:** its records read not signed, so their key tags and staff's
+  search send them to staff and Settings counts them; the pass of the account that signed
+  is let in, since that signature is the account's own.
+- **Limits:** the desk's read 300 an hour a person (900 an address), signing 60 (180).
+- **Cost at full size** (2026-10-14, mains, 3,294 MHz; one gym of 2,000 with 1,200 in the
+  app beside 19 of 200; 20 runs, medians; `tools/measure-waiver-cost.ts`,
+  `tools/measure-checkin-rules-cost.ts`): who has signed, by record, 29.6 ms, thread busy
+  11.0 ms · the list's numbers 42.2 ms, busy 25.4 ms · a page of Waiver not signed 45.3 ms,
+  busy 12.7 ms (a page with no filter 46.2 ms, busy 13.5 ms); all 20 gyms at one moment
+  189.0 ms, busy 147.8 ms (no filter 164.1 ms, busy 126.1 ms) · the desk's box 9.5 ms, busy
+  1.8 ms; signing 18.2 ms, busy 2.9 ms · a key tag with the waiver choice on 72.4 ms, busy
+  11.3 ms; one at each of 20 gyms 312.4 ms, busy 201.1 ms · the Settings box with it 61.7 ms,
+  busy 29.0 ms; 20 gyms 211.2 ms, busy 178.4 ms. Longest stall 19.9 ms.
 
 ---
 
@@ -2325,7 +2389,8 @@ has a box, **Who can check in** (`org.manage`, beside Check-in devices), with tw
 that wait for one Save: whom the front desk checks in, **Everyone on your list** (where
 every gym starts) or **Only people with a current membership**; and what it does with
 **someone with an overdue payment**, **Check them in** (the start) or **Send them to
-staff**. They are two columns on the gym (`checkin_who`, `checkin_overdue`, migration
+staff**; and since 3e-ii (§10.10) **someone who has not signed your waiver**, the same two
+(`checkin_waiver`, migration `0106`). They are columns on the gym (`checkin_who`, `checkin_overdue`, migration
 `0101`) and ONE pure rule, `checkinStop` in `@app/shared` (`checkinRules.ts`), which the
 desk's scan, staff's search and the box all read:
 - It reads what the app holds and never a word of the gym's file: the status the Members
@@ -3570,7 +3635,7 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
   draws its newest 10 rows, with Show all.
 - **Undo sale**: the same day only, by whoever may sell. The row is kept, marked, counted
   in nothing, and what it took from the stock count goes back.
-- **A membership** is sold from the same box by giving it as paid (§14.2): the notebook's
+- **A membership** was sold from the same box (moved to the member's own page on 2026-10-14, 18b-ii-b, below) by giving it as paid (§14.2): the notebook's
   own bill and payment, starting today, to a person on the list. No `gym_sales` row.
 - **Today**: the day's product sales and the membership payments recorded that day (here
   or on a person's page), newest first, with one total and how it was paid. A refund noted
@@ -3591,7 +3656,7 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
   record was joined to another.
 - **Not built**: a sale of several different products at once; a refund of a product sale
   on a later day; receipts (18g); discounts on memberships (18b-ii-b); tax on memberships
-  (18b-iii); product sales in Reports' money figures (21b).
+  (18b-iii). Product sales reach Reports' money figures with 21b-ii (§16.5).
 
 **As built, 18b-ii-a (2026-10-13; `rulings/2026-10-13-18b-ii-a.md`).** Discounts and promo
 codes on products, as Gymdesk and Mindbody do them.
@@ -3623,8 +3688,45 @@ codes on products, as Gymdesk and Mindbody do them.
   (`discount_id`, `discount_name`, `discount_minor`); a later change or an archive
   rewrites no sale, and the database refuses to delete a discount a sale points at. The day's list, a person's purchases and the note under the day's
   total say it; the total is what was paid.
-- **Not built**: discounts on memberships (18b-ii-b); two discounts on one sale; a sale
+- **Not built**: discounts on memberships (18b-ii-b, below); two discounts on one sale; a sale
   for nothing; a code a member types in their own app (18k); discounts in Reports.
+
+**As built, 18b-ii-b (2026-10-14; `rulings/2026-10-14-18b-ii-b.md`).** The same discounts on
+memberships.
+- **What a discount applies to**: products (all, or the ones ticked), memberships (all
+  membership types, or the ones ticked), or both. A discount made before this job is for
+  products alone, as it was. One for memberships says how often it comes off a
+  membership that renews: **First payment only** or **Every payment**; a membership paid
+  once (a day pass, a pack, a trial, a fixed term) gets it on that one payment.
+- **Who may use one**: whoever takes payments (`billing.members`), as on Sell. A person's
+  page sends the discounts to nobody else, and a membership given with a discount by
+  anybody else is refused (403), paid or not; staff who may add memberships without that
+  tick add them at the full price. A paid tick says the amount after the discount.
+- **Used** on a person's **Add membership**, from the same Discount list and Promo code
+  box as a product sale, offering only what the server
+  will take on that type today and what leaves something to pay. Price, Discount and
+  Total are shown above the button, and what every later payment is.
+- **The server** works out what comes off again (`membershipDiscount`) under the gym's
+  lock, and gives nothing where the price or what comes off is not what the screen showed.
+  A use is counted in the giving's own transaction by a statement that will not pass the
+  limit. The membership keeps which discount, its name as it was, what came off and which
+  payments (`gym_held_memberships.discount_*`, `0107`). With Every payment its price is
+  the price after the discount, so every bill opened from it carries it; with First payment
+  only its price stays the full price and only the bill opened when it was given is
+  discounted. A later change of the discount or the type's price rewrites nobody's.
+- **One Discounts list, drawn on two pages** (Kd, 2026-10-14): the Memberships page, under
+  the price list, holds the discounts for memberships, and a new one there starts on
+  memberships; the Sell page holds the ones for products. One for both is on both, and one
+  saved that no longer applies to the page it was saved on says where it is listed, with
+  a button to that page.
+- **Sell sells products alone** (Kd, 2026-10-14): its New sale box has no membership
+  choice. A **Sell a membership** box under it finds the member and opens their page
+  with Add membership already open.
+- **A person's page** says it under the membership: "Sold with First month: $10.00 off the
+  first payment. Every payment after it is $50.00."
+- **Not built**: a use given back when a membership is cancelled (it stands, as a redeemed
+  code does); a discount for a set number of months; a discount added to a membership
+  already given; discounts in Reports.
 
 ### 14.4 Pay by the gym's own link
 
@@ -5120,9 +5222,34 @@ keeps the currency it was given in, so a gym whose country changed still reads t
 recorded); payments and bills in another currency are left out and the page says so.
 `GET /v1/orgs/:gymId/reports/money`, from the same allowance as the other two reads; the
 rule is `moneyReportFrom` (`packages/shared/src/reportsMoney.ts`), the sums `readMoney`
-(`reports/repo.ts`), in one snapshot with the list's own counts. Not in this job (21b-ii):
-money by product, which waits for the Sell page (18b), and by coach, which no payment
-names today.
+(`reports/repo.ts`), in one snapshot with the list's own counts. Money by product and by
+staff came with 21b-ii, below.
+
+**Built by 21b-ii (2026-10-14): money by product and by staff.** Kd's choice of "a coach's
+money" (`rulings/2026-10-14-21b-ii.md`): the money each staff member **took in**, the
+payments and sales they recorded, as standard "sales by staff" reports do; the value of
+sessions a coach ran is payroll and is not built. **Product sales** of the Sell page (§14.3)
+that stand count in Collected, its months and its year-earlier line, each in the month of
+the day it was sold, in the gym's currency; a sale taken back is not money, and a sale in
+another currency is left out and said. The month-by-month table reads Memberships ·
+Product sales · Refunded · Collected only where a month it shows holds a sale, so a gym
+that never sells at the desk reads no column of zeros. A gym that has given no membership
+and sold something has its figures. Lifetime value stays membership money only, since a
+sale may be a walk-in's. **Money by product**: each product sold in the period, how many
+and the money, the most money first. **Sales by staff** (Staff member · Membership
+payments · Product sales · Total): each staff member who recorded a payment or a sale in
+the period, the most first; every account since deleted is one row, "Deleted account",
+last; two staff with the same name each have the part of their email before the @ beside
+it; refunds come off Collected, not off a person, and the table says so. Collected's year
+earlier sets each part beside its own history: where the period has desk sales and no sale
+was recorded by those days, there is no figure, and the line says when the first sale was
+(a gym that records payments and has just begun using the Sell page), and the same for
+payments; a part with nothing in the period and no history then is left out of both sides.
+Under Collected, with desk sales, Memberships · Product sales · Refunded are lines of their
+own. Both follow the period and download as CSV; both are shown
+only with `billing.members`, like every money figure. The money read is the only Reports
+read that names a person, and it names only staff. Cost at twelve months, with 72,100 sales
+for the big gym: HANDOFF has the table.
 
 **Built by 21d-i (2026-10-13): the period.** One control at the top of Reports, **Last 4
 weeks · Last 3 months · Last 12 months**, that every part of the page follows; the page
@@ -5156,6 +5283,34 @@ says why, with the days counted. A
 value that is not one of the three is refused (400). Cost at twelve months, a gym of 2,000
 beside 19 of 200 (the three `tools/measure-reports-*-cost.ts`, `--period=`): HANDOFF has
 the table. Not in this job (21d-ii): the same period a year earlier beside the figures.
+
+**Built by 21d-ii (2026-10-14): a year earlier.** Under two figures, New members and,
+for staff shown money, Collected (Kd, 2026-10-14, `rulings/2026-10-14-21d-ii.md`), one
+small line: "A year earlier: 9 · up 3", "down 3" or "the same", for the same days a year
+before (`yearEarlierOf`, `packages/shared/src/reportPeriod.ts`). Four weeks go back 52
+weeks, so a Monday is set beside a Monday; three and twelve months go back a calendar year,
+the same months up to the same day of the month (29 February is 28 February). Each of the
+two tiles says which days in its "how" ("A year earlier counts the same weekdays 52 weeks
+before: …" for four weeks). No other figure has a line, nothing in Attendance has one, and
+the reads work out no other year-earlier figure.
+**New members a year earlier** (`membersYearEarlierFrom`, `packages/shared/src/reports.ts`)
+are counted as today's are: the people who started in those days and were on the list on
+their last day, as it stood then. Today's figure has the same blind spot, joiners not yet
+imported, so a gym that imports each month reads the same in both years. There is no
+figure, and the line says why with the day, never a zero: where the list could not count new
+members from that span's first day (it began after it, or in its month: "Your member list
+started on …"); and where the list was not being kept then: more of the people who started
+in those days were added over a month after them (`REPORT_LIST_LAG_DAYS`, 31; the page asks
+a gym to import each month) than were on it in time, as when one member is typed in by hand
+before the gym imports its real file ("Most of your member list was added on 10 Sep 2026.",
+the day most of them were added, the earliest where days tie). People added within the
+month are an ordinary import and count on neither side. The counts are
+`readMemberCounts`' `was` and `late_days` parts, on the gym's own clock.
+**Collected a year earlier** is payments less refunds of those days in the gym's currency,
+as `readMoney` counts them (`readCollected`; a refund of a payment taken back is not
+money), and no figure where the first payment recorded here came after those days began
+("Your first payment was recorded on …"). Every read names the gym in its WHERE. The cost
+tools seed two years of visits and payments: HANDOFF has the table.
 
 ### 16.6 Cards
 

@@ -193,6 +193,19 @@ export const equipmentArraySchema = uniqueArray(equipmentSchema, equipmentSchema
   { message: "'none' cannot be combined with equipment" },
 );
 
+/** The app is for 18 and over (RULINGS 2026-09-15), and under it there is
+ *  never a calorie-cutting target (RULINGS 2026-09-07); shared so screen 3 can leave its building-muscle
+ *  mark off before the plan exists to say what each pace eats. */
+export const ADULT_AGE = 18;
+
+/** No age under ADULT_AGE is saved (RULINGS 2026-09-15: Google's Gemini terms forbid an
+ *  app likely to be used by under-18s, and the meal scanner runs on Gemini). Both
+ *  places that save an age read this one rail. The plan's own rails keep 16
+ *  (plan.ts), so its under-18 rules stay as a floor: a typed age cannot be checked. */
+export const ageSchema = z.number().int().min(ADULT_AGE).max(120);
+/** What a screen says beside an age under ADULT_AGE. */
+export const UNDER_AGE_LINE = "You must be 18 or older to use this app.";
+
 /** The stored profile. EVERY field is nullable: the wizard may be partial, and
  *  fitness_level is NULL until answered — unanswered is not 'beginner'
  *  (Kd-approved; the old Mongo model defaulted it, we deliberately do not).
@@ -246,7 +259,7 @@ export type FitnessProfileResponse = z.infer<typeof fitnessProfileResponseSchema
  *  field rather than quietly dropping it. */
 export const putFitnessProfileRequestSchema = z
   .object({
-    age: z.number().int().min(16).max(120).nullable().optional(), // the app is for 16 and over (RULINGS 2026-09-07)
+    age: ageSchema.nullable().optional(),
     gender: genderSchema.nullable().optional(),
     heightCm: z.number().min(50).max(300).multipleOf(0.01).nullable().optional(),
     targetWeightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),

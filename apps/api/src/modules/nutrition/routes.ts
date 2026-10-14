@@ -14,16 +14,22 @@ import {
   analyzeMealPhotoRequestSchema,
   bodyMeasurementInputSchema,
   createMealRequestSchema,
+  dietPlanDayParamsSchema,
   dishwareInputSchema,
   foodSearchQuerySchema,
+  foodWeekQuerySchema,
+  makeDietPlanRequestSchema,
   mealEditPreviewRequestSchema,
   nutritionListQuerySchema,
   patchBodyMeasurementSchema,
   patchDishwareSchema,
   patchMealRequestSchema,
   previewMealRequestSchema,
+  putDietPlanDayRequestSchema,
   putNutritionTargetsRequestSchema,
+  swapDietPlanMealRequestSchema,
 } from "./schemas.js";
+import * as dietPlan from "./dietPlanService.js";
 import * as service from "./service.js";
 import { createMealVisionProvider, type VisionProvider } from "./vision.adapter.js";
 
@@ -217,6 +223,45 @@ export function registerNutritionRoutes(
    *  call and no quota: the ideas are drawn from the food list. */
   app.get("/v1/nutrition/suggestions", { preHandler: [app.authenticate] }, async (req, reply) => {
     return reply.send(await service.getMealIdeas(nutritionDeps, authedUserId(req)));
+  });
+
+  /** Your week in food (ROADMAP 34f-i): the last 7 or 30 days of the person's own
+   *  meals against each day's targets. The person is the session's own, so there is
+   *  no id to change; no model call and no quota. */
+  app.get("/v1/nutrition/food-week", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const q = parse(foodWeekQuerySchema, req.query, req, reply);
+    if (q === null) return;
+    return reply.send(await service.getFoodWeek(readDeps, authedUserId(req), q.days));
+  });
+
+  /** The person's own diet plan (ROADMAP 34e-i): one plan for each person, keyed on the
+   *  session's own id, so there is no plan id to change and nobody reaches another's.
+   *  Each change carries the phone's own `changeId`: sent twice, it is made once. No
+   *  model call and no quota; the app-wide limit bounds it, as for the meal ideas. */
+  app.get("/v1/nutrition/diet-plan", { preHandler: [app.authenticate] }, async (req, reply) => {
+    return reply.send(await dietPlan.getDietPlan(readDeps, authedUserId(req)));
+  });
+
+  app.post("/v1/nutrition/diet-plan/make", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const v = parse(makeDietPlanRequestSchema, req.body, req, reply);
+    if (v === null) return;
+    return reply.send(await dietPlan.makeDietPlan(nutritionDeps, authedUserId(req), v));
+  });
+
+  app.put("/v1/nutrition/diet-plan/days/:day", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const p = parse(dietPlanDayParamsSchema, req.params, req, reply);
+    if (p === null) return;
+    const v = parse(putDietPlanDayRequestSchema, req.body, req, reply);
+    if (v === null) return;
+    return reply.send(await dietPlan.putDietPlanDay(nutritionDeps, authedUserId(req), p.day, v));
+  });
+
+  app.post("/v1/nutrition/diet-plan/days/:day/swap", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const p = parse(dietPlanDayParamsSchema, req.params, req, reply);
+    if (p === null) return;
+    const v = parse(swapDietPlanMealRequestSchema, req.body, req, reply);
+    if (v === null) return;
+    return reply.send(await dietPlan.swapDietPlanMeal(nutritionDeps, authedUserId(req), p.day, v));
   });
 
   app.get("/v1/nutrition/foods", { preHandler: [app.authenticate] }, async (req, reply) => {

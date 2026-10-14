@@ -37,8 +37,13 @@ const discount = (over = {}) => ({
   endsOn: null,
   maxUses: null,
   uses: 0,
+  forProducts: true,
   allProducts: true,
   productIds: [],
+  forMemberships: false,
+  allMembershipTypes: true,
+  membershipTypeIds: [],
+  membershipPayments: null,
   archivedAt: null,
   updatedAt: '2026-10-13T10:00:00.000Z',
   ...over,
@@ -292,11 +297,16 @@ describe('the discount form', () => {
       startsOn: '2026-06-01',
       endsOn: '2026-08-31',
       maxUses: 100,
+      forProducts: true,
       allProducts: false,
       productIds: [TOWEL.id],
+      forMemberships: false,
+      allMembershipTypes: true,
+      membershipTypeIds: [],
+      membershipPayments: null,
     });
     const flat = { ...emptyDiscountDraft(), name: 'Staff', kind: 'amount', amount: '5', percent: '99', productIds: [TOWEL.id], maxUses: '7' };
-    expect(discountBody(flat, 'USD', products)).toEqual({ name: 'Staff', code: null, kind: 'amount', percentBp: null, amountMinor: 500, startsOn: null, endsOn: null, maxUses: null, allProducts: true, productIds: [] });
+    expect(discountBody(flat, 'USD', products)).toEqual({ name: 'Staff', code: null, kind: 'amount', percentBp: null, amountMinor: 500, startsOn: null, endsOn: null, maxUses: null, forProducts: true, allProducts: true, productIds: [], forMemberships: false, allMembershipTypes: true, membershipTypeIds: [], membershipPayments: null });
   });
 
   it('opens a discount as it is, and sends back the moment it was read', () => {

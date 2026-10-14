@@ -28,6 +28,7 @@ import { missingPlanInputs, noDeficitReasons, resolvePlan } from "../plan/maths.
 import type { UsersEmailSender } from "./email.js";
 import * as repo from "./repo.js";
 import {
+  ADULT_AGE,
   consentListResponseSchema,
   consentRecordSchema,
   deriveHealthFlags,
@@ -114,17 +115,9 @@ export async function getPlanHealth(sql: repo.SqlOrTx, userId: string): Promise<
   return { hasCondition: stored.hasCondition, safeMode: deriveHealthFlags(stored).safeMode };
 }
 
-/** The person's diet, screen 9's answer (4b-ii), for the meal ideas after a
- *  workout — null until answered. sql-only like the readers above, for the same
- *  reason: the workouts module's deps cannot supply UsersDeps. Keyed on the caller's own id,
- *  and parsed through the shared enum, so a value outside it fails loud rather
- *  than choosing anybody's food. */
-export async function getUserDiet(sql: Sql, userId: string): Promise<Diet | null> {
-  const profile = await repo.getFitnessProfile(sql, userId);
-  return dietSchema.nullable().parse(profile?.diet ?? null);
-}
-
-/** Screen 9's two answers, for the meal ideas (34d-i): null until answered. */
+/** Screen 9's two answers, for the meal ideas (34d-i): null until answered.
+ *  Keyed on the caller's own id, and parsed through the shared enums, so a value
+ *  outside them fails loud rather than choosing anybody's food. */
 export async function getUserFoodAnswers(sql: Sql, userId: string): Promise<{ diet: Diet | null; mealsPerDay: number | null }> {
   const profile = await repo.getFitnessProfile(sql, userId);
   return { diet: dietSchema.nullable().parse(profile?.diet ?? null), mealsPerDay: mealsPerDaySchema.nullable().parse(profile?.mealsPerDay ?? null) };
@@ -394,6 +387,9 @@ async function missingSetupAnswers(
   const missing: MissingSetupAnswer[] = missingOnboardingAnswers(row, requestedTimeZone);
   if ((await repo.getHealthScreening(sql, userId)) === null) missing.push("health");
   const answers = toOnboardingAnswers(row);
+  // An age under 18 kept from before the app became 18+ (RULINGS 2026-09-15)
+  // is not an answer setup finishes on; no route saves one now.
+  if (answers.age !== null && answers.age < ADULT_AGE && !missing.includes("age")) missing.push("age");
   if (answers.diet === null) missing.push("diet");
   if (answers.mealsPerDay === null) missing.push("mealsPerDay");
   return missing;

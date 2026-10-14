@@ -1,4 +1,4 @@
-import { WAIVER_MAX_CHARS, cleanWaiverText, waiverSaveAsks } from '@app/shared';
+import { WAIVER_AGREE_LABEL, WAIVER_MAX_CHARS, cleanWaiverText, waiverSaveAsks } from '@app/shared';
 
 // The words of Settings' Waiver box (ROADMAP 3e-i), worked out from what the server sent
 // (`gymWaiverResponseSchema`) and what is typed. Pure.
@@ -13,10 +13,12 @@ export function waiverSummary(data) {
   return `In use · ${signedCount(data)}`;
 }
 
-/** "signed by 3 of 12 people in the app". */
+/** "signed by 3 of 12 people in the app, and 2 at the desk". */
 export function signedCount(data) {
-  if (data.people === 0) return 'nobody is in the app yet';
-  return `signed by ${String(data.signed)} of ${people(data.people)} in the app`;
+  const atDesk = typeof data.atDesk === 'number' && data.atDesk > 0 ? `${String(data.atDesk)} signed at the desk` : null;
+  if (data.people === 0) return atDesk === null ? 'nobody is in the app yet' : `${atDesk}, nobody in the app yet`;
+  const inApp = `signed by ${String(data.signed)} of ${people(data.people)} in the app`;
+  return atDesk === null ? inApp : `${inApp}, and ${String(data.atDesk)} at the desk`;
 }
 
 /** What Save would do with the words typed: nothing to save, too long, or go. */
@@ -71,9 +73,15 @@ export function waiverLine(member, when) {
  *
  *  ON AN EMAIL A FAMILY SHARES the page is one person's record and the signature may be
  *  another's, so it is never said that this record signed: the label is plain and names
- *  who typed the signature. */
-export function waiverLineParts(member, when) {
+ *  who typed the signature.
+ *
+ *  `desk`: the record's own signature made at the desk (3e-ii), or null. Somebody who
+ *  signed there and not in the app has signed, so the line never says otherwise; the app
+ *  still asks them, since a desk signature is the record's and not the account's. */
+export function waiverLineParts(member, when, desk = null) {
   const signed = member.waiverSigned ?? null;
+  // Never on an email a family shares: the record's desk signature may be a relative's.
+  if (signed === null && desk !== null && member.sharedEmail !== true) return { tone: 'plain', label: 'Signed at the desk', rest: ' · not signed in the app yet' };
   if (signed === null) return { tone: 'warn', label: 'Waiver not signed', rest: '' };
   const day = when(signed.at);
   const on = day === '' ? '' : ` on ${day}`;
@@ -83,7 +91,59 @@ export function waiverLineParts(member, when) {
   return { tone: 'good', label: 'Waiver signed', rest: `${on} as ${signed.name}` };
 }
 
-/** A person's page, for a record with nobody in the app at a gym that asks for a waiver. */
-export function waiverNotInAppLine(fullName) {
-  return `Not signed. ${fullName === '' ? 'This person signs' : `${fullName} signs`} your waiver when they join in the app.`;
+// ── At the desk (3e-ii) ──
+
+/** Whether somebody in the app whose record this certainly is has signed: their own
+ *  signature, not one on an email a family shares. */
+export function signedInApp(entry) {
+  return (entry?.members ?? []).some((member) => member.waiverSigned != null && member.sharedEmail !== true);
+}
+
+/** The Waiver card's label and sentence for a record signed at the desk, or not signed. */
+export function deskWaiverParts(entry, when) {
+  const desk = entry?.waiverDesk ?? null;
+  const name = entry?.fullName === '' || entry?.fullName == null ? 'This person' : entry.fullName;
+  if (desk === null) {
+    // Somebody on an email a family shares signs no record in the app (`signed.ts`).
+    const inApp = (entry?.members ?? []).some((member) => member.sharedEmail !== true);
+    if (!inApp && (entry?.members ?? []).length > 0) return { tone: 'warn', label: 'Waiver not signed', rest: `${name} can sign it here at the desk.` };
+    return { tone: 'warn', label: 'Waiver not signed', rest: `${name} can sign it here at the desk, or in the app${inApp ? '' : ' when they join'}.` };
+  }
+  const day = when(desk.at);
+  const on = day === '' ? '' : ` on ${day}`;
+  return desk.signer === 'guardian'
+    ? { tone: 'good', label: 'Waiver signed', rest: `at the desk${on} by ${desk.name}, parent or guardian` }
+    : { tone: 'good', label: 'Waiver signed', rest: `at the desk${on} as ${desk.name}` };
+}
+
+/** Who signs in the desk's box: the person, or their parent or guardian. `minor` is the
+ *  record's own answer (null where it holds no date of birth); `picked` is the box's. */
+export function deskSigner(minor, picked) {
+  if (minor === true) return 'guardian';
+  if (minor === false) return 'person';
+  return picked;
+}
+
+/** The desk box's words for the one signing. */
+export function deskBoxWords(personName, signer, minor) {
+  const name = personName === '' ? 'this person' : personName;
+  if (signer === 'guardian') {
+    return {
+      handOver: minor === true
+        ? `${name} is under 18. Hand this screen to their parent or guardian, who reads the waiver and signs it for them.`
+        : `Hand this screen to ${name}'s parent or guardian. They read the waiver and sign it for ${name}.`,
+      nameLabel: "Parent or guardian's full name",
+      agree: `I am ${name}'s parent or guardian. I have read this waiver and I agree to it for them.`,
+    };
+  }
+  return {
+    handOver: `Hand this screen to ${name}. They read the waiver and sign it themselves.`,
+    nameLabel: 'Your full name',
+    agree: WAIVER_AGREE_LABEL,
+  };
+}
+
+/** What the card says once the box has signed. */
+export function deskSignedLine(personName) {
+  return `Signed. ${personName === '' ? 'The' : `${personName}'s`} waiver is kept with ${personName === '' ? 'this' : 'their'} record.`;
 }

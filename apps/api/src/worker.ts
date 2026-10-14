@@ -750,7 +750,7 @@ const worker = new Worker(
       throw new Error(
         `purge not fully certified: ${String(result.errors)} user(s) failed, ` +
           `${String(result.schemaDriftSnapshots)} uncertifiable snapshot(s), ` +
-          `consent-log expiry ${result.consentProofExpiryFailed ? "FAILED" : "ok"}, ` +
+          `consent-log and waiver expiry ${result.consentProofExpiryFailed ? "FAILED" : "ok"}, ` +
           `${String(result.photoFilesLeft)} photo file(s) not removed`,
       );
     }

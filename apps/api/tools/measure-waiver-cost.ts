@@ -5,7 +5,9 @@
 //
 // For each thing the owner, staff and a member do: Settings' box (the words and how many
 // have signed), Save with changed words, what a person's page reads more than before, a
-// member reading the waiver, and a member signing it. Two numbers each: how long it takes,
+// member reading the waiver, and a member signing it. Since 3e-ii, also: a quarter of the
+// people with no app signed at the desk; Members with "Waiver not signed" (the list's
+// count and a page of names), and the desk's box read and signed. Two numbers each: how long it takes,
 // and how long the server's one thread is busy and answers nobody.
 //
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_c'
@@ -16,9 +18,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
-import { WAIVER_MAX_CHARS } from "@app/shared";
+import { WAIVER_MAX_CHARS, memberListEntriesQuerySchema } from "@app/shared";
+import { createMemoryRedis } from "../src/redis.js";
+import { membersAgainstList } from "../src/modules/orgs/memberList/repo.js";
+import { readEntries, readList, type MemberListDeps } from "../src/modules/orgs/memberList/service.js";
 import { signaturesOf, waiverInUse } from "../src/modules/orgs/waiver/repo.js";
-import { getGymWaiver, getMyWaiver, saveGymWaiver, signMyWaiver, type WaiverDeps } from "../src/modules/orgs/waiver/service.js";
+import { getDeskWaiver, getGymWaiver, getMyWaiver, saveGymWaiver, signAtDesk, signMyWaiver, type WaiverDeps } from "../src/modules/orgs/waiver/service.js";
+import { signedRecords } from "../src/modules/orgs/waiver/signed.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -43,6 +49,7 @@ const LONGEST = "I take part at my own risk. ".repeat(Math.ceil(WAIVER_MAX_CHARS
 
 async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
+  await sql`DELETE FROM gym_waiver_desk_signatures WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_waiver_signatures WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_waivers WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${gyms})`;
@@ -58,7 +65,7 @@ async function cleanup(): Promise<void> {
 /** A table filled seconds ago has no statistics, and a plan made without them is not the
  *  one a gym meets (`measure-bookings-cost.ts`). */
 async function analyse(): Promise<void> {
-  for (const table of ["users", "gyms", "gym_staff", "gym_members", "gym_member_list_entries", "gym_waivers", "gym_waiver_signatures"]) {
+  for (const table of ["users", "gyms", "gym_staff", "gym_members", "gym_member_list_entries", "gym_waivers", "gym_waiver_signatures", "gym_waiver_desk_signatures"]) {
     await sql`VACUUM ANALYZE ${sql(table)}`;
   }
 }
@@ -70,6 +77,8 @@ interface Gym {
   /** People in the app who have signed, and who have not. */
   signed: string[];
   unsigned: string[];
+  /** Records with nobody in the app that have not signed at the desk. */
+  deskUnsigned: string[];
 }
 
 /** One gym with `size` people on its list, six in ten of them in the app, a waiver of the
@@ -108,7 +117,13 @@ async function makeGym(size: number): Promise<Gym> {
   for (let i = 0; i < signed.length; i += 1000) {
     await sql`INSERT INTO gym_waiver_signatures ${sql(signed.slice(i, i + 1000).map((userId) => ({ gym_id: id, waiver_id: waiverId, user_id: userId, signed_name: "Person Cost" })))}`;
   }
-  return { id, owner, waiverId, signed, unsigned };
+  // A quarter of the records with nobody in the app signed at the desk.
+  const noApp = entries.filter((_, i) => i % 10 >= 6).map((e) => e.id);
+  const atDesk = noApp.filter((_, i) => i % 4 === 0);
+  for (let i = 0; i < atDesk.length; i += 1000) {
+    await sql`INSERT INTO gym_waiver_desk_signatures ${sql(atDesk.slice(i, i + 1000).map((entryId) => ({ gym_id: id, waiver_id: waiverId, entry_id: entryId, signer: "person", signed_name: "Person Cost", witnessed_by: owner })))}`;
+  }
+  return { id, owner, waiverId, signed, unsigned, deskUnsigned: noApp.filter((_, i) => i % 4 !== 0) };
 }
 
 const deps: WaiverDeps = { sql, now: () => new Date() };
@@ -205,6 +220,41 @@ await measure(
   },
   5,
 );
+
+const listDeps: MemberListDeps = { sql, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date() };
+const notSignedQuery = memberListEntriesQuerySchema.parse({ waiver: "not_signed" });
+console.log("Members, Waiver not signed (3e-ii):");
+await measure("who has signed, by record (the one rule's own read)", async () => {
+  await signedRecords(sql, big.id, await membersAgainstList(sql, big.id));
+});
+await measure(`the list's numbers, with the count beside the choice`, async () => {
+  const got = await readList(listDeps, big.owner, big.id, yes);
+  if (got?.waiverNotSigned == null) throw new Error("the list read no waiver count");
+});
+const plainQuery = memberListEntriesQuerySchema.parse({});
+await measure("one page of everybody, no filter (as before this job)", async () => {
+  await readEntries(listDeps, big.owner, big.id, plainQuery, yes);
+});
+await measure("one page of the people who have not signed", async () => {
+  const got = await readEntries(listDeps, big.owner, big.id, notSignedQuery, yes);
+  if (got === null || got.total === 0) throw new Error("the page found nobody");
+});
+await measure("a page of everybody, all 20 gyms at one moment (as before)", async () => {
+  await Promise.all(all.map((gym) => readEntries(listDeps, gym.owner, gym.id, plainQuery, yes)));
+});
+await measure("the page not signed, all 20 gyms at one moment", async () => {
+  await Promise.all(all.map((gym) => readEntries(listDeps, gym.owner, gym.id, notSignedQuery, yes)));
+});
+console.log("the desk's box (3e-ii):");
+await measure("reads the words for one person", async (i) => {
+  const got = await getDeskWaiver(deps, big.owner, big.id, pick(big.deskUnsigned, i), yes);
+  if (got?.waiver === null) throw new Error("the box read no waiver");
+});
+let nextDesk = 0;
+await measure("signs for one person", async () => {
+  const got = await signAtDesk(deps, big.owner, big.id, pick(big.deskUnsigned, nextDesk++), { waiverId: big.waiverId, signer: "person", name: "Person Cost" }, yes);
+  if (got === null) throw new Error("the desk signature was not written");
+});
 
 console.log("Save, with changed words (everybody is asked again):");
 await measure(`the gym of ${String(PEOPLE)}`, async (i) => {

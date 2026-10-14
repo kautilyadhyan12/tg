@@ -125,6 +125,10 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
 
   user_goals: (sql, u) => sql<Row[]>`SELECT * FROM user_goals WHERE user_id = ${u} ORDER BY created_at, id`,
 
+  diet_plans: (sql, u) => sql<Row[]>`SELECT * FROM diet_plans WHERE user_id = ${u}`,
+
+  food_day_targets: (sql, u) => sql<Row[]>`SELECT * FROM food_day_targets WHERE user_id = ${u} ORDER BY day`,
+
   gym_post_reactions: (sql, u) =>
     sql<Row[]>`SELECT * FROM gym_post_reactions WHERE user_id = ${u} ORDER BY created_at, post_id`,
 

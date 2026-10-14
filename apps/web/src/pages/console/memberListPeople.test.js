@@ -858,3 +858,29 @@ describe('Add member: may already be on your list (5b-iv-b)', () => {
     expect(matchDetailWords(m({}))).toBe('No email or phone');
   });
 });
+
+describe('Waiver not signed in the Filter (3e-ii)', () => {
+  const on = { ...EMPTY_FILTERS, waiverNotSigned: true };
+  const words = { people: 'members' };
+
+  it('asks the server for it, shows its pill, and Select all means the same people', () => {
+    expect(entriesQueryString(on, null)).toBe('waiver=not_signed');
+    expect(selectionFilter(on)).toEqual({ waiver: 'not_signed' });
+    expect(filtersAreEmpty(on)).toBe(false);
+    const pills = activeFilters(on, words);
+    expect(pills.map((pill) => pill.text)).toEqual(['Waiver not signed']);
+    expect(pills[0].without).toEqual(EMPTY_FILTERS);
+  });
+
+  it('is a member\'s choice: a page of past members does not send it', () => {
+    const past = { ...on, records: 'former' };
+    expect(entriesQueryString(past, null)).toBe('records=former');
+    expect(selectionFilter(past)).toEqual({ records: 'former' });
+  });
+
+  it('goes with the other choices ticked', () => {
+    const both = { ...on, app: ['in_app'] };
+    expect(entriesQueryString(both, null)).toBe('app=in_app&waiver=not_signed');
+    expect(selectionFilter(both)).toEqual({ app: ['in_app'], waiver: 'not_signed' });
+  });
+});

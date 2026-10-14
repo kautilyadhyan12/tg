@@ -43,6 +43,7 @@ const MEMBERS = membersReportFrom({
   stay: { leavers: 0, totalDays: 0 },
   leads: [],
   anyLead: false,
+  yearEarlier: { joined: 0, late: 0, lateOn: null },
 });
 
 // Saturday 10 October 2026. The first check-in was Monday 31 August: five whole weeks.

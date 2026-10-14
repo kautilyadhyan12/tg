@@ -47,6 +47,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       notThem: vi.fn(),
       inviteMemberListEntry: vi.fn(),
       resendMemberListInvite: vi.fn(),
+      getDeskWaiver: vi.fn(),
+      signAtDesk: vi.fn(),
     },
   };
 });
@@ -859,11 +861,50 @@ describe("the gym's waiver on a person's page (3e-i)", () => {
     expect(who.getByText('Waiver signed').className).toContain('c-tag-good');
   });
 
-  it('says not signed for somebody in the app who has not', async () => {
+  it('says not signed for somebody in the app who has not, and offers to sign at the desk', async () => {
     orgService.getMemberListEntry.mockResolvedValue(inApp({ waiverSigned: null }));
     openBox(ADA);
-    expect(within(await screen.findByTestId('in-app-person')).getByTestId('waiver-line').textContent).toBe('Waiver not signed');
-    expect(screen.getByText('Waiver not signed').className).toContain('c-tag-warn');
+    const who = within(await screen.findByTestId('in-app-person'));
+    expect(who.getByTestId('waiver-line').textContent).toBe('Waiver not signed');
+    expect(who.getByText('Waiver not signed').className).toContain('c-tag-warn');
+    const desk = within(screen.getByTestId('desk-waiver'));
+    expect(desk.getByTestId('waiver-line').textContent).toBe('Waiver not signedAda Lovelace can sign it here at the desk, or in the app.');
+    expect(desk.getByRole('button', { name: 'Sign waiver' })).toBeTruthy();
+  });
+
+  it('somebody in the app who signed at the desk: the App card never says not signed (round one, High-1)', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(
+      inApp({ waiverSigned: null }, { waiverDesk: { name: 'Ada Lovelace', signer: 'person', at: '2026-10-14T09:00:00.000Z', by: 'Sam' } }),
+    );
+    openBox(ADA);
+    const who = within(await screen.findByTestId('in-app-person'));
+    expect(who.getByTestId('waiver-line').textContent).toBe('Signed at the desk · not signed in the app yet');
+    expect(who.queryByText('Waiver not signed')).toBeNull();
+    expect(within(screen.getByTestId('desk-waiver')).getByTestId('waiver-line').textContent).toBe('Waiver signedat the desk on 14 October 2026 as Ada Lovelace');
+  });
+
+  it("a relative on a shared email never reads as signed by the record's desk signature (re-check, High-A)", async () => {
+    orgService.getMemberListEntry.mockResolvedValue(
+      inApp({ displayName: 'Luis Reyes', sharedEmail: true, waiverSigned: null }, { waiverDesk: { name: 'Ada Lovelace', signer: 'person', at: '2026-10-14T09:00:00.000Z', by: 'Sam' } }),
+    );
+    openBox(ADA);
+    const who = within(await screen.findByTestId('in-app-person'));
+    expect(who.getByTestId('waiver-line').textContent).toBe('Waiver not signed');
+    expect(who.queryByText('Signed at the desk')).toBeNull();
+  });
+
+  it('the one person in the app on a shared email: the desk card offers only the desk (round one, High-2)', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(inApp({ sharedEmail: true, waiverSigned: { name: 'Leo Lovelace', at: '2026-10-13T09:00:00.000Z' } }));
+    openBox(ADA);
+    await screen.findByTestId('in-app-person');
+    expect(within(screen.getByTestId('desk-waiver')).getByTestId('waiver-line').textContent).toBe('Waiver not signedAda Lovelace can sign it here at the desk.');
+  });
+
+  it('shows no desk card for somebody who signed in the app', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(inApp({ waiverSigned: { name: 'Ada Lovelace', at: '2026-10-13T09:00:00.000Z' } }));
+    openBox(ADA);
+    await screen.findByTestId('in-app-person');
+    expect(screen.queryByTestId('desk-waiver')).toBeNull();
   });
 
   // Round one, High-1. Ada's page; Leo, on the email they share, typed the signature.
@@ -888,7 +929,7 @@ describe("the gym's waiver on a person's page (3e-i)", () => {
   it('says why somebody with no app has not signed', async () => {
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...ada, waiverInUse: true, members: [] }));
     openBox(ADA);
-    expect((await screen.findByTestId('waiver-line')).textContent).toBe('Not signed. Ada Lovelace signs your waiver when they join in the app.');
+    expect((await screen.findByTestId('waiver-line')).textContent).toBe('Waiver not signedAda Lovelace can sign it here at the desk, or in the app when they join.');
   });
 
   it('says nothing about a waiver at a gym that asks for none', async () => {
@@ -897,6 +938,120 @@ describe("the gym's waiver on a person's page (3e-i)", () => {
     await screen.findByTestId('in-app-person');
     expect(screen.queryByTestId('waiver-line')).toBeNull();
     expect(dialog().queryByText(/waiver/i)).toBeNull();
+  });
+});
+
+describe('signed at the desk (3e-ii)', () => {
+  const WAIVER = { id: '99999999-9999-4999-8999-999999999999', version: 2, text: 'I take part at my own risk.' };
+  const page = (over = {}) => entryAnswer({ ...ada, waiverInUse: true, members: [], dateOfBirth: null, ...over });
+  const box = (over = {}) => ({ data: { gymName: 'Iron House', personName: 'Ada Lovelace', timezone: 'Europe/London', waiver: WAIVER, minor: false, signed: null, ...over } });
+  const desk = () => within(screen.getByTestId('desk-waiver'));
+  const openDesk = async (extra = {}) => {
+    openBox(ADA, extra);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign waiver' }));
+    return await screen.findByRole('group', { name: 'Sign the waiver' });
+  };
+
+  it('hands the screen over, shows the words, and signs only with a name and the tick', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(page());
+    orgService.getDeskWaiver.mockResolvedValue(box());
+    orgService.signAtDesk.mockResolvedValue({ data: { signed: { name: 'Ada Lovelace', signer: 'person', at: '2026-10-14T09:00:00.000Z', by: 'Sam' } } });
+    const group = within(await openDesk());
+    expect(await group.findByText('Hand this screen to Ada Lovelace. They read the waiver and sign it themselves.')).toBeTruthy();
+    expect(group.getByRole('region', { name: "Iron House's waiver" }).textContent).toBe(WAIVER.text);
+    const sign = group.getByRole('button', { name: 'Sign' });
+    expect(sign.disabled).toBe(true);
+    fireEvent.change(group.getByLabelText('Your full name'), { target: { value: 'Ada Lovelace' } });
+    expect(sign.disabled).toBe(true);
+    fireEvent.click(group.getByRole('checkbox', { name: 'I have read this waiver and I agree to it.' }));
+    expect(sign.disabled).toBe(false);
+    fireEvent.click(sign);
+    await waitFor(() => expect(orgService.signAtDesk).toHaveBeenCalledWith(GYM, ADA, { waiverId: WAIVER.id, signer: 'person', name: 'Ada Lovelace' }));
+    expect((await desk().findByRole('status')).textContent).toBe("Signed. Ada Lovelace's waiver is kept with their record.");
+    expect(desk().getByTestId('waiver-line').textContent).toBe('Waiver signedat the desk on 14 October 2026 as Ada Lovelace');
+    expect(desk().queryByRole('button', { name: 'Sign waiver' })).toBeNull();
+  });
+
+  it('asks a parent or guardian to sign for somebody under 18, and never offers the child', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(page());
+    orgService.getDeskWaiver.mockResolvedValue(box({ minor: true }));
+    orgService.signAtDesk.mockResolvedValue({ data: { signed: { name: 'Mum Lovelace', signer: 'guardian', at: '2026-10-14T09:00:00.000Z', by: 'Sam' } } });
+    const group = within(await openDesk());
+    expect(await group.findByText('Ada Lovelace is under 18. Hand this screen to their parent or guardian, who reads the waiver and signs it for them.')).toBeTruthy();
+    expect(group.queryByRole('radiogroup')).toBeNull();
+    fireEvent.change(group.getByLabelText("Parent or guardian's full name"), { target: { value: 'Mum Lovelace' } });
+    fireEvent.click(group.getByRole('checkbox', { name: "I am Ada Lovelace's parent or guardian. I have read this waiver and I agree to it for them." }));
+    fireEvent.click(group.getByRole('button', { name: 'Sign' }));
+    await waitFor(() => expect(orgService.signAtDesk).toHaveBeenCalledWith(GYM, ADA, { waiverId: WAIVER.id, signer: 'guardian', name: 'Mum Lovelace' }));
+    expect((await desk().findByTestId('waiver-line')).textContent).toBe('Waiver signedat the desk on 14 October 2026 by Mum Lovelace, parent or guardian');
+  });
+
+  it('asks who is signing where the record holds no date of birth, and shows nothing to sign until it is answered', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(page());
+    orgService.getDeskWaiver.mockResolvedValue(box({ minor: null }));
+    const group = within(await openDesk());
+    const who = await group.findByRole('radiogroup', { name: 'Who is signing?' });
+    expect(group.queryByRole('region')).toBeNull();
+    fireEvent.click(within(who).getByRole('radio', { name: 'A parent or guardian, for someone under 18' }));
+    expect(group.getByText("Hand this screen to Ada Lovelace's parent or guardian. They read the waiver and sign it for Ada Lovelace.")).toBeTruthy();
+    fireEvent.click(within(who).getByRole('radio', { name: 'Ada Lovelace' }));
+    expect(group.getByLabelText('Your full name')).toBeTruthy();
+  });
+
+  it('new words while the box was open: nothing is signed, it says so, and the new words are read again with the tick off', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(page());
+    orgService.getDeskWaiver
+      .mockResolvedValueOnce(box())
+      .mockResolvedValueOnce(box({ waiver: { ...WAIVER, id: '88888888-8888-4888-8888-888888888888', version: 3, text: 'New words.' } }));
+    orgService.signAtDesk.mockRejectedValue({ response: { status: 409, data: { error: 'waiver_changed', message: 'Iron House has changed its waiver. Read the new one below, then agree to it.' } } });
+    const group = within(await openDesk());
+    fireEvent.change(await group.findByLabelText('Your full name'), { target: { value: 'Ada Lovelace' } });
+    fireEvent.click(group.getByRole('checkbox'));
+    fireEvent.click(group.getByRole('button', { name: 'Sign' }));
+    expect((await group.findByRole('alert')).textContent).toBe('Iron House has changed its waiver. Read the new one below, then agree to it.');
+    await waitFor(() => expect(group.getByRole('region').textContent).toBe('New words.'));
+    expect(group.getByRole('checkbox').getAttribute('aria-checked')).toBe('false');
+    expect(group.getByRole('button', { name: 'Sign' }).disabled).toBe(true);
+    expect(desk().getByTestId('waiver-line').textContent).toContain('Waiver not signed');
+  });
+
+  it("a record found to be under 18 at Sign: the box asks the guardian and empties the name typed (round one, Low-1)", async () => {
+    orgService.getMemberListEntry.mockResolvedValue(page());
+    orgService.getDeskWaiver.mockResolvedValueOnce(box()).mockResolvedValueOnce(box({ minor: true }));
+    orgService.signAtDesk.mockRejectedValue({ response: { status: 409, data: { error: 'guardian_needed', message: 'Ada Lovelace is under 18, so a parent or guardian signs for them.' } } });
+    const group = within(await openDesk());
+    fireEvent.change(await group.findByLabelText('Your full name'), { target: { value: 'Ada Lovelace' } });
+    fireEvent.click(group.getByRole('checkbox'));
+    fireEvent.click(group.getByRole('button', { name: 'Sign' }));
+    expect(await group.findByLabelText("Parent or guardian's full name")).toBeTruthy();
+    expect(group.getByLabelText("Parent or guardian's full name").value).toBe('');
+    expect(group.getByRole('checkbox').getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('changing who is signing empties the name typed', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(page());
+    orgService.getDeskWaiver.mockResolvedValue(box({ minor: null }));
+    const group = within(await openDesk());
+    const who = await group.findByRole('radiogroup', { name: 'Who is signing?' });
+    fireEvent.click(within(who).getByRole('radio', { name: 'Ada Lovelace' }));
+    fireEvent.change(group.getByLabelText('Your full name'), { target: { value: 'Ada Lovelace' } });
+    fireEvent.click(within(who).getByRole('radio', { name: 'A parent or guardian, for someone under 18' }));
+    expect(group.getByLabelText("Parent or guardian's full name").value).toBe('');
+  });
+
+  it('Cancel closes the box and signs nothing', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(page());
+    orgService.getDeskWaiver.mockResolvedValue(box());
+    const group = within(await openDesk());
+    fireEvent.click(await group.findByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('group', { name: 'Sign the waiver' })).toBeNull();
+    expect(orgService.signAtDesk).not.toHaveBeenCalled();
+  });
+
+  it('a gym on no plan cannot open it', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(page());
+    openBox(ADA, { readOnly: true });
+    expect((await screen.findByRole('button', { name: 'Sign waiver' })).disabled).toBe(true);
   });
 });
 

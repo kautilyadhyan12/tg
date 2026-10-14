@@ -7,7 +7,11 @@ import {
   waiverDraftState,
   waiverLine,
   waiverLineParts,
-  waiverNotInAppLine,
+  deskBoxWords,
+  deskSignedLine,
+  deskSigner,
+  deskWaiverParts,
+  signedInApp,
   waiverSaveLabel,
   waiverSavedLine,
   waiverStopWords,
@@ -29,6 +33,8 @@ describe('the folded box', () => {
     [{ ...IN_USE, people: 1, signed: 1 }, 'In use · signed by 1 of 1 person in the app'],
     [{ ...IN_USE, people: 1, signed: 0 }, 'In use · signed by 0 of 1 person in the app'],
     [{ ...IN_USE, people: 0, signed: 0 }, 'In use · nobody is in the app yet'],
+    [{ ...IN_USE, atDesk: 2 }, 'In use · signed by 3 of 12 people in the app, and 2 at the desk'],
+    [{ ...IN_USE, people: 0, signed: 0, atDesk: 1 }, 'In use · 1 signed at the desk, nobody in the app yet'],
   ])('%#', (data, line) => {
     expect(waiverSummary(data)).toBe(line);
   });
@@ -130,8 +136,63 @@ describe("a person's page", () => {
     expect(waiverLineParts({ sharedEmail: true, waiverSigned: null }, when)).toEqual({ tone: 'warn', label: 'Waiver not signed', rest: '' });
   });
 
-  it('says why somebody with no app has not signed', () => {
-    expect(waiverNotInAppLine('Ben Stone')).toBe('Not signed. Ben Stone signs your waiver when they join in the app.');
-    expect(waiverNotInAppLine('')).toBe('Not signed. This person signs your waiver when they join in the app.');
+  it('says on the Waiver card whether this record signed at the desk, and who can sign where', () => {
+    const when = () => '14 October 2026';
+    expect(deskWaiverParts({ fullName: 'Ben Stone', members: [], waiverDesk: null }, when)).toEqual({
+      tone: 'warn',
+      label: 'Waiver not signed',
+      rest: 'Ben Stone can sign it here at the desk, or in the app when they join.',
+    });
+    expect(deskWaiverParts({ fullName: '', members: [{ userId: 'u' }], waiverDesk: null }, when).rest).toBe('This person can sign it here at the desk, or in the app.');
+    expect(deskWaiverParts({ fullName: 'Ben Stone', members: [], waiverDesk: { name: 'Ben Stone', signer: 'person', at: 'x', by: null } }, when)).toEqual({
+      tone: 'good',
+      label: 'Waiver signed',
+      rest: 'at the desk on 14 October 2026 as Ben Stone',
+    });
+    expect(deskWaiverParts({ fullName: 'Mia Reyes', members: [], waiverDesk: { name: 'Ana Reyes', signer: 'guardian', at: 'x', by: null } }, when).rest).toBe(
+      'at the desk on 14 October 2026 by Ana Reyes, parent or guardian',
+    );
+  });
+
+  it('never says not signed in the app line of somebody who signed at the desk (round one, High-1)', () => {
+    const desk = { name: 'Ben Stone', signer: 'person', at: 'x', by: null };
+    expect(waiverLineParts({ waiverSigned: null, sharedEmail: false }, () => '', desk)).toEqual({ tone: 'plain', label: 'Signed at the desk', rest: ' · not signed in the app yet' });
+    // A relative on an email the family shares is never shown as signed by the record's
+    // desk signature: it is somebody else's (re-check, High-A).
+    expect(waiverLineParts({ waiverSigned: null, sharedEmail: true }, () => '', desk)).toEqual({ tone: 'warn', label: 'Waiver not signed', rest: '' });
+    // Their own signature in the app still reads as theirs.
+    expect(waiverLineParts({ waiverSigned: { name: 'Ben Stone', at: 'x' }, sharedEmail: false }, () => '14 October 2026', desk).label).toBe('Waiver signed');
+  });
+
+  it('says only the desk where the one person in the app is on an email a family shares (round one, High-2)', () => {
+    const entry = { fullName: 'Ana Reyes', members: [{ userId: 'u', sharedEmail: true }], waiverDesk: null };
+    expect(deskWaiverParts(entry, () => '').rest).toBe('Ana Reyes can sign it here at the desk.');
+    const both = { ...entry, members: [{ userId: 'u', sharedEmail: true }, { userId: 'v', sharedEmail: false }] };
+    expect(deskWaiverParts(both, () => '').rest).toBe('Ana Reyes can sign it here at the desk, or in the app.');
+  });
+
+  it("reads a signature in the app as this record's only where it is not on an email a family shares", () => {
+    expect(signedInApp({ members: [{ waiverSigned: { name: 'Leo', at: 'x' }, sharedEmail: false }] })).toBe(true);
+    expect(signedInApp({ members: [{ waiverSigned: { name: 'Luis', at: 'x' }, sharedEmail: true }] })).toBe(false);
+    expect(signedInApp({ members: [{ waiverSigned: null, sharedEmail: false }] })).toBe(false);
+    expect(signedInApp({ members: [] })).toBe(false);
+  });
+
+  it('asks a parent or guardian to sign for somebody under 18, and asks who signs only where the record cannot say', () => {
+    expect(deskSigner(true, 'person')).toBe('guardian');
+    expect(deskSigner(false, 'guardian')).toBe('person');
+    expect(deskSigner(null, null)).toBeNull();
+    expect(deskSigner(null, 'guardian')).toBe('guardian');
+    expect(deskBoxWords('Mia Reyes', 'guardian', true)).toEqual({
+      handOver: 'Mia Reyes is under 18. Hand this screen to their parent or guardian, who reads the waiver and signs it for them.',
+      nameLabel: "Parent or guardian's full name",
+      agree: "I am Mia Reyes's parent or guardian. I have read this waiver and I agree to it for them.",
+    });
+    expect(deskBoxWords('Ben Stone', 'person', false)).toEqual({
+      handOver: 'Hand this screen to Ben Stone. They read the waiver and sign it themselves.',
+      nameLabel: 'Your full name',
+      agree: 'I have read this waiver and I agree to it.',
+    });
+    expect(deskSignedLine('Ben Stone')).toBe("Signed. Ben Stone's waiver is kept with their record.");
   });
 });

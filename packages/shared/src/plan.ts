@@ -10,7 +10,7 @@
 // it reads no clock, so "today" is an input — the route (item 4a) derives it from
 // the device's time zone and the server clock, never from a body field.
 import { z } from "zod";
-import { genderSchema, weightGoalSchema, type Gender, type WeightGoal } from "./users.js";
+import { ADULT_AGE, genderSchema, weightGoalSchema, type Gender, type WeightGoal } from "./users.js";
 
 /** What the person wants their weight to do: screen 1's weight choice, stored
  *  as it is asked (RULINGS 2026-09-10), so the screens and the maths share one
@@ -99,7 +99,8 @@ export const planStartDaySchema = calendarDaySchema.refine(
 /** Everything the calculator can act on. Every field is required here; the
  *  answers-so-far shape below is the one the screens send. Bounds are the same
  *  rails the fitness profile already uses (two decimals, as the columns store);
- *  age is 16 and over (RULINGS 2026-09-07). */
+ *  age is 16 and over here, under the 18 a profile can save (users.ts `ageSchema`),
+ *  so the under-18 rules below stay as a floor. */
 export const planInputsSchema = z
   .object({
     goal: planGoalSchema,
@@ -149,11 +150,6 @@ export const missingPlanInputSchema = z.enum([
   "sessionMinutes",
 ]);
 export type MissingPlanInput = z.infer<typeof missingPlanInputSchema>;
-
-/** Under this age there is never a calorie-cutting target (RULINGS 2026-09-07).
- *  Shared so screen 3 can leave its building-muscle mark off before the plan
- *  exists to say what each pace eats. */
-export const ADULT_AGE = 18;
 
 /** Which of a figure's two formulas the plan reads for a gender answer: the
  *  women's (or girls') for "female", the men's (or boys') for every other

@@ -22,7 +22,11 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
-import { workoutSummarySchema } from "@app/shared";
+import { DIET_LABEL_CAUTION, dietAllows, workoutSummarySchema, type Diet, type WorkoutSummary } from "@app/shared";
+import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
+import { amountWords } from "../src/modules/workouts/summaryContent.js";
+
+const DIET_OF = new Map(CURATED_FOODS.map((f) => [f.canonical, f.diet]));
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -182,6 +186,8 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     await seed(url ?? "");
     await sql`DELETE FROM workouts WHERE user_id IN
       (SELECT id FROM users WHERE email LIKE 'sum-%@example.com')`;
+    await sql`DELETE FROM meal_logs WHERE user_id IN
+      (SELECT id FROM users WHERE email LIKE 'sum-%@example.com')`;
     await sql`DELETE FROM users WHERE email LIKE 'sum-%@example.com'`;
     app = await buildApp(loadConfig(baseEnv));
     const a = await session("sum-alice@example.com");
@@ -330,46 +336,100 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     expect(smallBody.personalRecords).not.toContain("Longest workout session!");
   });
 
-  it("meal ideas follow the workout's OWN calorie band, and the person's diet as it is now", { timeout: 60_000 }, async () => {
-    // An hour of jump_squat (met 8.0, 70 kg fallback) = 8 × 70 × 1 h = 560 kcal,
-    // which clears the >400 band; the tiny workout above sits in the low one.
-    // Same account, different answers — which is the whole point of the card:
-    // the old rig served one canned payload for every workout, so this screen
-    // was unjudgeable. (First written as 30 minutes = 280 kcal, which is the
-    // MIDDLE band — the arithmetic, not the code, was wrong.)
+  /** Screen 9's diet, saved as the screen saves it. */
+  const eat = async (access: string, diet: Diet | null) => {
+    const res = await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { diet }, access });
+    expect(res.statusCode, res.body).toBe(200);
+  };
+  const read = async (id: string, access: string): Promise<WorkoutSummary> => workoutSummarySchema.parse((await summary(id, access)).json());
+  /** Each idea is near the calories it was sized to, and its line is its foods. */
+  const expectSized = (body: WorkoutSummary, kcal: readonly number[]) => {
+    expect(body.mealSuggestions.map((s) => s.timing)).toEqual(["Within 30 mins", "Within 2 hours"].slice(0, kcal.length));
+    body.mealSuggestions.forEach((one, at) => {
+      const wanted = kcal[at] ?? 0;
+      expect(Math.abs(one.idea.totals.kcal - wanted), one.meal).toBeLessThanOrEqual(wanted * 0.2);
+      expect(one.meal).toBe(one.idea.items.map((i) => `${i.name} (${amountWords(i)})`).join(" + "));
+    });
+  };
+
+  it("THE WORST THING: after a workout a vegan, and somebody with no diet answer, is offered only what a vegan eats", { timeout: 60_000 }, async () => {
+    // An hour of jump_squat (met 8.0, 70 kg fallback) = 8 × 70 × 1 h = 560 kcal:
+    // a hard workout. Alice has no calorie number, so it sizes the ideas itself.
     const hot = crypto.randomUUID();
     await sync(hot, daysAgoIso(1), [engineSet(1, { durationMs: 3_600_000, exercise: "jump_squat" })], cookieA);
-    const ideas = async (access: string) =>
-      workoutSummarySchema.parse((await summary(hot, access)).json()).mealSuggestions.map((s) => s.meal);
-    /** Screen 9's diet, saved as the screen saves it. */
-    const eat = async (access: string, diet: string | null) => {
-      const res = await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { diet }, access });
-      expect(res.statusCode, res.body).toBe(200);
-    };
 
-    // A non-vegetarian reads the ideas unswapped, in the market's words
-    // (RULINGS 2026-08-06 as amended 2026-09-13).
     await eat(cookieA, "non_vegetarian");
-    const hotBody = workoutSummarySchema.parse((await summary(hot, cookieA)).json());
-    expect(hotBody.caloriesBurned ?? 0).toBeGreaterThan(400);
-    expect(hotBody.mealSuggestions).toEqual([
-      { meal: "Protein shake + banana", timing: "Within 30 mins" },
-      { meal: "Grilled chicken + potatoes + vegetables", timing: "Within 2 hours" },
-      { meal: "Greek yogurt with berries", timing: "In 3–4 hours" },
-    ]);
-
-    // Another person's diet reaches nobody else's ideas.
+    const meat = await read(hot, cookieA);
+    expect(meat.caloriesBurned ?? 0).toBeGreaterThan(400);
+    expectSized(meat, [250, 600]);
+    expect(meat.mealLabelCaution).toBeNull();
+    // The same workout reads the same ideas, and another person's diet reaches nobody else's.
     await eat(cookieB, "vegan");
-    expect(await ideas(cookieA)).toContain("Grilled chicken + potatoes + vegetables");
+    expect((await read(hot, cookieA)).mealSuggestions).toEqual(meat.mealSuggestions);
 
-    // A vegan is never offered the chicken (RULINGS 2026-09-13), and a diet
-    // changed since the workout is the one the ideas follow.
-    const plant = ["Plant protein shake + banana", "Grilled tofu + potatoes + vegetables", "Soy yogurt with berries"];
+    for (const diet of ["vegan", "vegetarian", "vegetarian_eggs"] as const) {
+      await eat(cookieA, diet);
+      const body = await read(hot, cookieA);
+      expectSized(body, [250, 600]);
+      expect(body.mealLabelCaution, diet).toBe(DIET_LABEL_CAUTION);
+      for (const item of body.mealSuggestions.flatMap((s) => s.idea.items)) {
+        expect(dietAllows(diet, DIET_OF.get(item.canonical) ?? "non_vegetarian"), `${diet}: ${item.name}`).toBe(true);
+      }
+    }
+
+    // No answer is never a guess at meat: the ideas a vegan gets.
     await eat(cookieA, "vegan");
-    expect(await ideas(cookieA)).toEqual(plant);
-    // No answer is never a guess at meat: the ideas every diet can eat.
+    const vegan = await read(hot, cookieA);
     await eat(cookieA, null);
-    expect(await ideas(cookieA)).toEqual(plant);
+    const unanswered = await read(hot, cookieA);
+    expect(unanswered.mealSuggestions).toEqual(vegan.mealSuggestions);
+    expect(unanswered.mealLabelCaution).toBe(DIET_LABEL_CAUTION);
+
+    // Another workout of the same person gets other ideas.
+    const other = crypto.randomUUID();
+    await sync(other, daysAgoIso(2), [engineSet(1, { durationMs: 3_600_000, exercise: "jump_squat" })], cookieA);
+    expect((await read(other, cookieA)).mealSuggestions).not.toEqual(unanswered.mealSuggestions);
+  });
+
+  it("a workout of the person's own today is sized to what today has left, and an earlier day's to a usual meal", { timeout: 60_000 }, async () => {
+    // A plan that keeps the weight: 1,817 kcal a day (users.onboarding.routes.test.ts's golden person).
+    const carol = await session("sum-carol@example.com");
+    // Carol lives where today is another date than UTC's, and an hour or more from
+    // her midnight: so reading her day in UTC goes red, and the test never races
+    // her midnight. At any instant one of the three zones is so.
+    const now = new Date();
+    const zone = ["Pacific/Kiritimati", "Pacific/Honolulu", "Etc/GMT+12"].find((z) => {
+      const parts = new Intl.DateTimeFormat("en-CA", { timeZone: z, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(now);
+      const part = (t: string): string => parts.find((p) => p.type === t)?.value ?? "";
+      const hour = Number(part("hour"));
+      return `${part("year")}-${part("month")}-${part("day")}` !== now.toISOString().slice(0, 10) && hour >= 1 && hour <= 22;
+    });
+    if (zone === undefined) throw new Error("no zone an hour from its midnight on another date than UTC's");
+    await sql`UPDATE users SET timezone = ${zone} WHERE id = ${carol.userId}`;
+    const answers = {
+      weightGoal: "maintain", age: 30, gender: "female", heightCm: 165, weightKg: 70, dayActivity: "sitting",
+      trainingDays: 3, sessionMinutes: 45, diet: "non_vegetarian", mealsPerDay: 3,
+    };
+    expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: answers, access: carol.access })).statusCode).toBe(200);
+    const today = crypto.randomUUID();
+    const earlier = crypto.randomUUID();
+    await sync(today, new Date(Date.now() - 60_000).toISOString(), [engineSet(1)], carol.access);
+    await sync(earlier, daysAgoIso(2), [engineSet(1)], carol.access);
+
+    // Nothing eaten: something small, then a third of the day.
+    expectSized(await read(today, carol.access), [150, 606]);
+    expectSized(await read(earlier, carol.access), [150, 606]);
+
+    // All but 100 kcal of today eaten.
+    const almonds = CURATED_FOODS.find((f) => f.name === "Almonds");
+    if (almonds === undefined) throw new Error("no almonds on the food list");
+    const logged = await inject({
+      method: "POST", url: "/v1/nutrition/meals", access: carol.access,
+      body: { mealName: "A meal", takenAt: new Date().toISOString(), items: [{ canonical: almonds.canonical, grams: Math.round((1717 / almonds.kcal) * 100) }] },
+    });
+    expect(logged.statusCode, logged.body).toBe(201);
+    expect((await read(today, carol.access)).mealSuggestions).toEqual([]);
+    expectSized(await read(earlier, carol.access), [150, 606]);
   });
 
   it("CROSS-TENANT: another user's workout is 404, byte-identical to an unknown id (R3.2)", { timeout: 30_000 }, async () => {

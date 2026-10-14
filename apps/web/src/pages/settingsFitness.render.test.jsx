@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
+const toast = (await import('react-hot-toast')).default;
 const svc = { putFitnessProfile: vi.fn(() => Promise.resolve({ data: {} })) };
 vi.mock('../api/userApi', async (importOriginal) => ({ ...(await importOriginal()), userService: svc }));
 
@@ -32,6 +33,32 @@ const save = async () => {
 afterEach(() => {
   cleanup();
   svc.putFitnessProfile.mockClear();
+});
+
+describe('Settings → Fitness with an age under 18 kept from before (RULINGS 2026-09-15)', () => {
+  it('says why it cannot save, sends nothing, and Change your age opens Profile', async () => {
+    const onChangeAge = vi.fn();
+    render(
+      <FitnessTab
+        profile={{ fitnessGoals: [], weightGoal: null, availableEquipment: [], onboardingCompleted: true, age: 17 }}
+        onSaved={vi.fn()}
+        onChangeAge={onChangeAge}
+      />,
+    );
+    const why = 'You must be 18 or older to use this app.';
+    expect(screen.getByText(why)).toBeTruthy();
+    fireEvent.click(chip(/save changes/i));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(why));
+    expect(svc.putFitnessProfile).not.toHaveBeenCalled();
+    fireEvent.click(chip('Change your age'));
+    expect(onChangeAge).toHaveBeenCalledTimes(1);
+  });
+
+  it('at 18 says nothing and saves', async () => {
+    draw({ age: 18 });
+    expect(screen.queryByText('You must be 18 or older to use this app.')).toBeNull();
+    expect((await save()).age).toBe(18);
+  });
 });
 
 describe("Settings → Fitness: screen 1's two questions", () => {

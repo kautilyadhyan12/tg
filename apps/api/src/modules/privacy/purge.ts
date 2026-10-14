@@ -72,7 +72,10 @@ export interface PurgeResult {
    *  more than CONSENT_PROOF_RETENTION_DAYS ago (the proof of the disclaimer
    *  tap outlives the Day-14 purge, then goes). Zero on a dry run. */
   consentProofExpired: number;
-  /** Run-level: that one statement threw this run. Kept OUT of `errors` (it is
+  /** Run-level: signed waivers removed on the same six years (3e-iii): an app signature
+   *  from its account's deletion, a desk signature from its record's. Zero on a dry run. */
+  waiverSignaturesExpired: number;
+  /** Run-level: the six-year expiry (the consent log, then the waivers) threw this run. Kept OUT of `errors` (it is
    *  not a user's transaction) and still a shortfall — both entrypoints fail
    *  the run on it, and the next run retries: the delete is idempotent. */
   consentProofExpiryFailed: boolean;
@@ -189,6 +192,7 @@ export async function purgeDueUsers(
     errors: 0,
     schemaDriftSnapshots: schemaDrift,
     consentProofExpired: 0,
+    waiverSignaturesExpired: 0,
     consentProofExpiryFailed: false,
     photoFilesLeft: 0,
     dryRun,
@@ -275,6 +279,7 @@ export async function purgeDueUsers(
   const consentCutoff = new Date(now.getTime() - CONSENT_PROOF_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   try {
     result.consentProofExpired = await repo.deleteExpiredConsentProof(deps.sql, consentCutoff);
+    result.waiverSignaturesExpired = await repo.deleteExpiredWaiverSignatures(deps.sql, consentCutoff);
   } catch (err) {
     // NOT result.errors: that counter is "a user's transaction threw", and the
     // worker interpolates it into the message an operator wakes up to. One
@@ -287,7 +292,7 @@ export async function purgeDueUsers(
         errMessage: err instanceof Error ? err.message : undefined,
         event: "dpdp.purge.consent_expiry_failed",
       },
-      "consent-log expiry failed; will retry next run",
+      "consent-log or waiver expiry failed; will retry next run",
     );
   }
 

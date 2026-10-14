@@ -30,6 +30,7 @@ import {
   type MembershipTermUnit,
 } from "./memberships.js";
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
+import { MEMBERSHIP_PAYMENTS, gymDiscountSchema } from "./discounts.js";
 import { memberBillingSchema, memberPaymentByHandSchema } from "./memberBills.js";
 
 export const HELD_MEMBERSHIP_STATUSES = ["active", "frozen", "ended", "cancelled"] as const;
@@ -622,6 +623,13 @@ export const heldMembershipSchema = z
     /** Everything paid for the newest period counted as paid was given back (18a-ii): the
      *  page says "Refunded" for it, never "Paid". The days are kept (RULINGS 2026-10-10). */
     refundedInFull: z.boolean(),
+    /** The discount it was given with (18b-ii-b), as it was then: what came off each
+     *  discounted payment and which those are. With "every", `priceMinor` is already the
+     *  price after it; with "first", `priceMinor` is the full price of every later period. */
+    discount: z
+      .object({ name: z.string(), offMinor: z.number().int().min(1), payments: z.enum(MEMBERSHIP_PAYMENTS) })
+      .strict()
+      .nullable(),
     view: heldMembershipViewSchema,
     /** Its bills and payments (18a-i); null for a reader without the `billing.members` tick. */
     billing: memberBillingSchema.nullable(),
@@ -681,6 +689,8 @@ export const heldMembershipsResponseSchema = z
     listed: listedMembershipSchema.nullable(),
     /** Whether this reader may record payments (`billing.members`). */
     canBill: z.boolean(),
+    /** The gym's discounts in use that are for memberships (18b-ii-b), for the Add form. */
+    discounts: z.array(gymDiscountSchema),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;
@@ -698,8 +708,16 @@ export const giveHeldMembershipRequestSchema = z
     /** The price the screen showed, where it showed one (the Sell page, 18b-i): a type
      *  whose price is now anything else is not given. */
     priceMinor: z.number().int().min(0).max(99_999_999).optional(),
+    /** The gym's discount it is given with (18b-ii-b), and what the screen showed coming
+     *  off: worked out again on the server, and nothing is given where it comes to
+     *  anything else. Sent with `priceMinor`. */
+    discountId: z.string().uuid().optional(),
+    discountMinor: z.number().int().min(1).max(99_999_999).optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => (v.discountId === undefined) === (v.discountMinor === undefined) && (v.discountId === undefined || v.priceMinor !== undefined), {
+    message: "discount_needs_price",
+  });
 export type GiveHeldMembershipRequest = z.infer<typeof giveHeldMembershipRequestSchema>;
 
 /** `confirmBookings`: the number of bookings the screen was told the cancel would end

@@ -1135,7 +1135,7 @@ export async function expireStagedUploads(
  *  ends it is the gym ending. Takes the transaction, never its own, because a
  *  gym archived and its list kept is exactly the half-state nothing else would
  *  notice. */
-export async function deleteListForGym(tx: TransactionSql, gymId: string): Promise<void> {
+export async function deleteListForGym(tx: TransactionSql, gymId: string, at: Date): Promise<void> {
   await tx`DELETE FROM gym_member_list_uploads WHERE gym_id = ${gymId}`;
   // A visit that names an app account is that person's active day: it lets go of the
   // record and stays, as `deleteEntry` does; the rest go with the records.
@@ -1145,6 +1145,7 @@ export async function deleteListForGym(tx: TransactionSql, gymId: string): Promi
   await tx`
     UPDATE gym_attendance_removed SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id IS NOT NULL AND user_id IS NOT NULL`;
+  await letGoOfDeskSignatures(tx, gymId, null, at);
   await tx`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
   // The gym's own column headings (3a-v-b). Nothing points at them once the entries
   // are gone, and a catalogue outliving the gym it belongs to would be the one row of
@@ -1750,6 +1751,9 @@ export interface EntriesPageInput {
   tagIds: readonly string[] | null;
   /** Only these records (the people whose membership is over, 21c-iii), or null for no filter. */
   overIds: readonly string[] | null;
+  /** Only the current records that have not signed the waiver in use (3e-ii): every one
+   *  but `signed`, and nobody where the gym asks for none. Null for no filter. */
+  waiverNotSigned: { inUse: boolean; signed: readonly string[] } | null;
   /** The people whose three kinds of word the app answers (23a-i: they hold a membership
    *  here), and which of them pass the word filters asked, by the app's own words. Null
    *  where no word filter is asked. */
@@ -1774,6 +1778,8 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
   const appIds = input.appIds === null ? null : [...input.appIds];
   const tagIds = input.tagIds === null ? null : [...input.tagIds];
   const overIds = input.overIds === null ? null : [...input.overIds];
+  const waiverAsked = input.waiverNotSigned === null ? null : input.waiverNotSigned.inUse;
+  const waiverSigned = [...(input.waiverNotSigned?.signed ?? [])];
   const heldIds = [...(input.held?.ids ?? [])];
   const heldPassing = [...(input.held?.passing ?? [])];
   return sql`
@@ -1811,7 +1817,9 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
              OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
         AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))
         AND (${tagIds}::uuid[] IS NULL OR e.id = ANY(${tagIds}::uuid[]))
-        AND (${overIds}::uuid[] IS NULL OR (e.former_at IS NULL AND e.id = ANY(${overIds}::uuid[])))`;
+        AND (${overIds}::uuid[] IS NULL OR (e.former_at IS NULL AND e.id = ANY(${overIds}::uuid[])))
+        AND (${waiverAsked}::boolean IS NULL
+             OR (${waiverAsked}::boolean AND e.former_at IS NULL AND e.id <> ALL(${waiverSigned}::uuid[])))`;
 }
 
 /** Every record the filter chooses, in the list's order: who "Select all" selects. */
@@ -2225,11 +2233,21 @@ export async function setEntryFormer(tx: TransactionSql, gymId: string, entryId:
   return rows.length === 1;
 }
 
+/** A waiver signed at the desk stays as the gym's proof when its record is deleted for
+ *  good, with the day it was deleted: the purge removes it six years later (3e-iii). One
+ *  record, or every record of the gym when `entryId` is null. */
+async function letGoOfDeskSignatures(tx: TransactionSql, gymId: string, entryId: string | null, at: Date): Promise<void> {
+  await tx`
+    UPDATE gym_waiver_desk_signatures SET entry_id = NULL, record_deleted_at = ${at}
+    WHERE gym_id = ${gymId} AND entry_id IS NOT NULL
+      AND (${entryId}::uuid IS NULL OR entry_id = ${entryId}::uuid)`;
+}
+
 /** A record deleted for good: a former one deleted, or the one not kept when two
  *  are joined. A membership linked to it keeps its membership and loses the link (the
  *  foreign key's ON DELETE SET NULL); the last test in
  *  `memberList.byHand.routes.test.ts` lists every table that points at a record. */
-export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: string): Promise<boolean> {
+export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: string, at: Date): Promise<boolean> {
   // A visit that also names an app account stays that person's visit; the visits only
   // the record holds go with it (`gym_attendance_entry_fk`, ON DELETE CASCADE).
   await tx`
@@ -2239,6 +2257,7 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
   await tx`
     UPDATE gym_attendance_removed SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND user_id IS NOT NULL`;
+  await letGoOfDeskSignatures(tx, gymId, entryId, at);
   const rows = await tx<{ id: string }[]>`
     DELETE FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ${entryId}

@@ -56,6 +56,7 @@ const facts = (over = {}) => ({
     { source: 'walk_in', leads: 3, joined: 1 },
     { source: 'friend', leads: 1, joined: 1 },
   ],
+  yearEarlier: { joined: 0, late: 0, lateOn: null },
   ...over,
 });
 const report = (over) => membersReportFrom(facts(over));

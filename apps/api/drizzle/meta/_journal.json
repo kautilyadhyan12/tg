@@ -736,6 +736,41 @@
       "when": 1790035200105,
       "tag": "0105_phone_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1790121600106,
+      "tag": "0106_waiver_at_the_desk",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1790208000107,
+      "tag": "0107_membership_discounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1790294400108,
+      "tag": "0108_waiver_record_deleted",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1790380800109,
+      "tag": "0109_diet_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1790380800110,
+      "tag": "0110_food_day_targets",
+      "breakpoints": true
     }
   ]
 }

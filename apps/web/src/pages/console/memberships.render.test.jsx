@@ -28,6 +28,10 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   };
 });
 
+// The Discounts box under the price list (18b-ii-b) reads the Sell page's discounts.
+const register = { get: vi.fn(), addDiscount: vi.fn(), changeDiscount: vi.fn(), archiveDiscount: vi.fn(), restoreDiscount: vi.fn() };
+vi.mock('../../api/registerApi', () => ({ registerService: register }));
+
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', displayName: 'Jordan Hayes', email: 'jordan@example.com' }, logout: vi.fn() }),
 }));
@@ -99,6 +103,7 @@ beforeEach(() => {
   resetConsoleOrgs();
   orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type()] }) });
   orgService.getMembershipWords.mockResolvedValue({ data: { words: [], types: [] } });
+  register.get.mockImplementation(() => new Promise(() => undefined));
 });
 afterEach(() => cleanup());
 
@@ -128,6 +133,61 @@ describe('staff who may not change prices', () => {
     expect(await screen.findByText("We couldn't find an organisation you run at this address.")).toBeTruthy();
     expect(orgService.getMembershipTypes).not.toHaveBeenCalled();
     expect(orgService.getMembershipWords).not.toHaveBeenCalled();
+  });
+});
+
+describe('discounts for memberships (18b-ii-b)', () => {
+  const reach = { forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [] };
+  const base = { code: null, kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-14T10:00:00.000Z' };
+  const FIRST = { ...base, ...reach, id: 'd-first', name: 'First month', code: 'FIRST20', membershipPayments: 'first' };
+  const WATER = { ...base, ...reach, id: 'd-water', name: 'Water deal', forProducts: true, forMemberships: false, membershipPayments: null };
+  const sellPage = (discounts) => ({
+    currency: 'USD',
+    today: '2026-10-14',
+    tax: { bp: 0, included: false },
+    products: [],
+    archived: [],
+    archivedTotal: 0,
+    discounts,
+    archivedDiscounts: [],
+    archivedDiscountsTotal: 0,
+    membershipTypes: [{ id: type().id, name: 'Gold Monthly' }],
+    canSell: true,
+    canManage: true,
+    sales: [],
+    salesNotShown: 0,
+    payments: [],
+    paymentsNotShown: 0,
+    totals: { count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 },
+  });
+
+  it('are made and listed beside the price list: only the ones for memberships, and a new one starts on memberships', async () => {
+    register.get.mockResolvedValue(sellPage([FIRST, WATER]));
+    draw([gym()]);
+    const box = await screen.findByRole('region', { name: 'Discounts' });
+    const rows = await within(box).findAllByTestId('discount-row');
+    expect(rows.map((r) => r.textContent)).toEqual(['First monthActive20% off · Promo code FIRST20 · All memberships, first payment only · Not used yetChangeArchive']);
+    fireEvent.click(within(box).getByRole('button', { name: 'Add a discount' }));
+    const form = within(within(box).getByRole('form', { name: 'Add a discount' }));
+    expect(form.getByRole('checkbox', { name: 'Products' }).checked).toBe(false);
+    expect(form.getByRole('checkbox', { name: 'Memberships' }).checked).toBe(true);
+    fireEvent.change(form.getByLabelText('Discount name'), { target: { value: 'Founders' } });
+    fireEvent.change(form.getByRole('textbox', { name: 'Percentage off' }), { target: { value: '10' } });
+    fireEvent.click(form.getByLabelText('Every payment'));
+    const founders = { ...FIRST, id: 'd-founders', name: 'Founders', code: null, percentBp: 1000, membershipPayments: 'every' };
+    register.addDiscount.mockResolvedValue(sellPage([FIRST, founders, WATER]));
+    fireEvent.click(form.getByRole('button', { name: 'Add discount' }));
+    await waitFor(() => expect(register.addDiscount).toHaveBeenCalledTimes(1));
+    expect(register.addDiscount.mock.calls[0][1]).toMatchObject({ name: 'Founders', percentBp: 1000, forProducts: false, forMemberships: true, allMembershipTypes: true, membershipPayments: 'every' });
+    expect(await within(box).findByText("Founders added. Staff can now choose it when they add a membership on a member's page.")).toBeTruthy();
+    expect(within(box).getAllByTestId('discount-row')).toHaveLength(2);
+  });
+
+  it('a gym with none is told so in its own words', async () => {
+    register.get.mockResolvedValue(sellPage([WATER]));
+    draw([gym()]);
+    const box = await screen.findByRole('region', { name: 'Discounts' });
+    expect(await within(box).findByText('No discounts for memberships yet. Add one to take a percentage or a fixed amount off a membership, with a promo code if you want one.')).toBeTruthy();
   });
 });
 

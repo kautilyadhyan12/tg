@@ -143,9 +143,9 @@ export interface DeskRules {
 /** Where every gym starts: nobody is stopped. */
 export const DESK_RULES_START: DeskRules = { rules: CHECKIN_RULES_START, overdueAfterDays: 0 };
 
-const toRules = (row: { checkin_who: string; checkin_overdue: string; bills_overdue_days: number }): DeskRules => ({
+const toRules = (row: { checkin_who: string; checkin_overdue: string; checkin_waiver: string; bills_overdue_days: number }): DeskRules => ({
   // Text under a CHECK: parsed, so a choice this build does not know fails here.
-  rules: checkinRulesSchema.parse({ who: row.checkin_who, overdue: row.checkin_overdue }),
+  rules: checkinRulesSchema.parse({ who: row.checkin_who, overdue: row.checkin_overdue, waiver: row.checkin_waiver }),
   overdueAfterDays: row.bills_overdue_days,
 });
 
@@ -160,9 +160,9 @@ export interface DeskDevice extends DeskRules {
 /** The device a key belongs to, if it is switched on and its gym is open. */
 export async function deviceByKey(sql: SqlOrTx, keyHash: string): Promise<DeskDevice | null> {
   const rows = await sql<
-    { id: string; gym_id: string; gym_name: string; timezone: string; clock_format: string; checkin_who: string; checkin_overdue: string; bills_overdue_days: number }[]
+    { id: string; gym_id: string; gym_name: string; timezone: string; clock_format: string; checkin_who: string; checkin_overdue: string; checkin_waiver: string; bills_overdue_days: number }[]
   >`
-    SELECT d.id, d.gym_id, g.name AS gym_name, g.timezone, g.clock_format, g.checkin_who, g.checkin_overdue, g.bills_overdue_days
+    SELECT d.id, d.gym_id, g.name AS gym_name, g.timezone, g.clock_format, g.checkin_who, g.checkin_overdue, g.checkin_waiver, g.bills_overdue_days
     FROM gym_checkin_devices d
     JOIN gyms g ON g.id = d.gym_id
     WHERE d.key_hash = ${keyHash} AND d.switched_off_at IS NULL AND g.status = 'active'`;
@@ -181,17 +181,17 @@ export async function deviceByKey(sql: SqlOrTx, keyHash: string): Promise<DeskDe
 // ── WHO THE DESK LETS IN (16d) ──
 
 export async function deskRules(sql: SqlOrTx, gymId: string): Promise<DeskRules | null> {
-  const rows = await sql<{ checkin_who: string; checkin_overdue: string; bills_overdue_days: number }[]>`
-    SELECT checkin_who, checkin_overdue, bills_overdue_days FROM gyms WHERE id = ${gymId}`;
+  const rows = await sql<{ checkin_who: string; checkin_overdue: string; checkin_waiver: string; bills_overdue_days: number }[]>`
+    SELECT checkin_who, checkin_overdue, checkin_waiver, bills_overdue_days FROM gyms WHERE id = ${gymId}`;
   const row = rows[0];
   return row === undefined ? null : toRules(row);
 }
 
-/** Saves the gym's two choices, under the gym's lock; false where they were already so. */
+/** Saves the gym's three choices, under the gym's lock; false where they were already so. */
 export async function saveRules(tx: TransactionSql, gymId: string, rules: CheckinRules): Promise<boolean> {
   const rows = await tx`
-    UPDATE gyms SET checkin_who = ${rules.who}, checkin_overdue = ${rules.overdue}
-    WHERE id = ${gymId} AND (checkin_who <> ${rules.who} OR checkin_overdue <> ${rules.overdue})
+    UPDATE gyms SET checkin_who = ${rules.who}, checkin_overdue = ${rules.overdue}, checkin_waiver = ${rules.waiver}
+    WHERE id = ${gymId} AND (checkin_who <> ${rules.who} OR checkin_overdue <> ${rules.overdue} OR checkin_waiver <> ${rules.waiver})
     RETURNING id`;
   return rows.length === 1;
 }

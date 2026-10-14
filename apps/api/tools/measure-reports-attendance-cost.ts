@@ -1,6 +1,7 @@
 // What the Reports page's attendance figures cost to read (ROADMAP 21a-ii; CLAUDE.md §4
 // "Cost at full size"). One gym at the biggest size the app sells, 2,000 people on its list
-// (--people= for another size) each checking in three days a week for a year, with three
+// (--people= for another size) each checking in three days a week for two years, so the
+// same period a year earlier (21d-ii) has its own, with three
 // former records for each of them and 42 classes a week of 20 bookings, beside 19 gyms of
 // 200 doing the same: read through the service the route calls.
 //
@@ -36,8 +37,8 @@ const PERIOD = reportPeriodKeySchema.parse(periodArg === undefined ? "12m" : per
 const KEEP = process.argv.includes("--keep");
 const CLEAN_ONLY = process.argv.includes("--clean");
 const FORMER_EACH = 3;
-const VISIT_DAYS = 364;
-const CLASS_DAYS = 364;
+const VISIT_DAYS = 728;
+const CLASS_DAYS = 728;
 const CLASSES_A_DAY = 6;
 const BOOKINGS_A_CLASS = 20;
 const OTHER_GYMS = 19;
@@ -72,8 +73,8 @@ interface Made {
   classes: number;
 }
 
-/** A gym a year into check-in: `people` on its list, three former records for each, every
- *  person checked in three days a week, and classes every day for a year. */
+/** A gym two years into check-in: `people` on its list, three former records for each, every
+ *  person checked in three days a week, and classes every day for two years. */
 async function makeGym(people: number): Promise<Made> {
   const owner = randomUUID();
   await sql`INSERT INTO users (id, email, display_name) VALUES (${owner}, ${`${PREFIX}${owner}@example.com`}, 'Cost Owner')`;
@@ -91,7 +92,7 @@ async function makeGym(people: number): Promise<Made> {
       email: `${PREFIX}l-${String(i)}-${id}@example.com`,
       identity_key: createHash("sha256").update(id).digest("hex"),
       source: "upload",
-      created_at: new Date(now.getTime() - 400 * DAY_MS),
+      created_at: new Date(now.getTime() - 800 * DAY_MS),
       former_at: i >= people ? new Date(now.getTime() - 200 * DAY_MS) : null,
     };
   });
@@ -205,7 +206,7 @@ try {
   const cpu = os.cpus()[0];
   console.log(`measure-reports-attendance-cost: ${cpu?.model ?? "?"} at ${String(cpu?.speed ?? 0)} MHz · ${String(RUNS)} runs each`);
   console.log(
-    `one gym of ${String(PEOPLE)} on its list with ${String(big.visits)} visits in a year and ${String(big.classes)} classes, beside ${String(OTHER_GYMS)} gyms of ${String(OTHER_PEOPLE)} (${String(others[0]?.visits ?? 0)} visits each)`,
+    `one gym of ${String(PEOPLE)} on its list with ${String(big.visits)} visits in two years and ${String(big.classes)} classes, beside ${String(OTHER_GYMS)} gyms of ${String(OTHER_PEOPLE)} (${String(others[0]?.visits ?? 0)} visits each)`,
   );
   console.log(`  the answer is ${String(await read(big, PEOPLE))} characters`);
   await measure("the big gym's report, one read", () => read(big, PEOPLE));
