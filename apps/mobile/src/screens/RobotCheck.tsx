@@ -11,6 +11,8 @@ import { pageAddress, robotCheckPage, whereTo } from "./robotCheckPage";
 const TROUBLE = {
   failed: "We couldn’t check that you’re not a robot. Try again.",
   blocked: "The check didn’t load. Check your internet and try again.",
+  /** The server's key or address cannot draw a page: nothing the person can fix but wait. */
+  unusable: "We couldn’t show the check. Try again in a minute.",
 };
 
 /** Cloudflare's box is 65 points tall, whether it passes by itself or asks for a tap. */
@@ -28,7 +30,7 @@ interface RobotCheckProps {
 
 /** The robot check, in a box from the bottom: the server asked for it before it sends a code. */
 export function RobotCheck({ siteKey, apiUrl, line, onToken, onClose }: RobotCheckProps) {
-  const [trouble, setTrouble] = useState<keyof typeof TROUBLE | null>(null);
+  const [trouble, setTrouble] = useState<"failed" | "blocked" | null>(null);
   /** Each try draws a new box: an answer is spent once, and an expired one is no use. */
   const [round, setRound] = useState(0);
   const page = siteKey === null ? null : robotCheckPage(siteKey);
@@ -60,6 +62,8 @@ export function RobotCheck({ siteKey, apiUrl, line, onToken, onClose }: RobotChe
             allowFileAccess={false}
             mixedContentMode="never"
             onMessage={(event) => {
+              // Only the page itself speaks for the box, never a frame inside it.
+              if (!event.nativeEvent.url.startsWith(address)) return;
               let said: unknown;
               try {
                 said = JSON.parse(event.nativeEvent.data);
@@ -86,8 +90,8 @@ export function RobotCheck({ siteKey, apiUrl, line, onToken, onClose }: RobotChe
           />
         </View>
       )}
-      {page === null || address === null ? (
-        <Txt colour="badText">{TROUBLE.blocked}</Txt>
+      {siteKey === null ? null : page === null || address === null ? (
+        <Txt colour="badText">{TROUBLE.unusable}</Txt>
       ) : trouble === null ? null : (
         <View style={styles.trouble}>
           <Txt colour="badText">{TROUBLE[trouble]}</Txt>

@@ -39,6 +39,9 @@ describe("the page is drawn only for a key Cloudflare would issue", () => {
     const page = robotCheckPage("1x00000000000000000000AA") ?? "";
     const sources = [...page.matchAll(/src="([^"]+)"/g)].map((found) => found[1]);
     expect(sources).toEqual(["https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=drawBox"]);
+    // Two scripts in all: the page's own few lines, and Cloudflare's.
+    expect(page.match(/<script/g)).toHaveLength(2);
+    expect(page).not.toMatch(/createElement|import\(|fetch\(|XMLHttpRequest/);
     // A page with no icon of its own asks the api for /favicon.ico (seen on the phone).
     expect([...page.matchAll(/href="([^"]*)"/g)].map((found) => found[1])).toEqual(["data:,"]);
   });

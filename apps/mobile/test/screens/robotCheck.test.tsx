@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { Linking } from "react-native";
 import { App } from "../../src/App";
 import { RAVI, fakeServer, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
 
@@ -30,8 +31,10 @@ function busyNetwork(good: string[]) {
 interface Box {
   props: {
     source: { html: string; baseUrl: string };
-    onMessage: (event: { nativeEvent: { data: string } }) => void;
+    onMessage: (event: { nativeEvent: { data: string; url: string } }) => void;
     onError: () => void;
+    onShouldStartLoadWithRequest: (request: { url: string; isTopFrame: boolean }) => boolean;
+    onOpenWindow: (event: { nativeEvent: { targetUrl: string } }) => void;
   };
   gone: boolean;
 }
@@ -42,10 +45,10 @@ function box(): Box {
   if (last === undefined || open.length !== 1) throw new Error(`one box open was expected, found ${String(open.length)}`);
   return last;
 }
-/** What Cloudflare's box says back to the app. */
-const say = async (message: unknown) => {
+/** What Cloudflare's box says back to the app, from the page itself unless `from` says otherwise. */
+const say = async (message: unknown, from = "http://localhost:3000/") => {
   await act(() => {
-    box().props.onMessage({ nativeEvent: { data: typeof message === "string" ? message : JSON.stringify(message) } });
+    box().props.onMessage({ nativeEvent: { data: typeof message === "string" ? message : JSON.stringify(message), url: from } });
   });
 };
 
@@ -179,11 +182,37 @@ describe("what the box says back is read, never trusted", () => {
     expect(screen.getByTestId("robot-check-box")).toBeTruthy();
   });
 
-  it("a key the server never would send draws no page, and says the check did not load", async () => {
+  it("an answer from another frame in the box is not the page's, and nothing is sent", async () => {
+    const server = await openAndAsk(busyNetwork(["answer-8"]));
+    await screen.findByText("Security check");
+    await say({ kind: "token", token: "answer-8" }, "https://example.com/frame");
+    expect(sends(server)).toHaveLength(1);
+    expect(screen.getByText("Security check")).toBeTruthy();
+  });
+
+  it("a key the server never would send draws no page, and asks the person to wait", async () => {
     await openAndAsk(() => refusal(403, "robot_check", ASKS, { robotCheckKey: "</script><script>alert(1)" }));
     expect(await screen.findByText("Security check")).toBeTruthy();
     expect(screen.queryByTestId("robot-check-box")).toBeNull();
-    expect(screen.getByText("The check didn’t load. Check your internet and try again.")).toBeTruthy();
+    expect(screen.getByText("We couldn’t show the check. Try again in a minute.")).toBeTruthy();
+  });
+
+  it("a link in the box loads only the page; Cloudflare's own pages open in the phone's browser; anything else goes nowhere", async () => {
+    const opened = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    await openAndAsk(busyNetwork([]));
+    await screen.findByText("Security check");
+    const { onShouldStartLoadWithRequest: goes, onOpenWindow: opens } = box().props;
+    expect(goes({ url: "http://localhost:3000/", isTopFrame: true })).toBe(true);
+    expect(opened).not.toHaveBeenCalled();
+    expect(goes({ url: "https://www.cloudflare.com/privacypolicy/", isTopFrame: true })).toBe(false);
+    expect(opened).toHaveBeenLastCalledWith("https://www.cloudflare.com/privacypolicy/");
+    expect(goes({ url: "javascript:alert(1)", isTopFrame: true })).toBe(false);
+    expect(goes({ url: "intent://scan#Intent;end", isTopFrame: true })).toBe(false);
+    opens({ nativeEvent: { targetUrl: "https://www.cloudflare.com/website-terms/" } });
+    expect(opened).toHaveBeenLastCalledWith("https://www.cloudflare.com/website-terms/");
+    opens({ nativeEvent: { targetUrl: "file:///data/data/x" } });
+    expect(opened).toHaveBeenCalledTimes(2);
+    opened.mockRestore();
   });
 });
 
