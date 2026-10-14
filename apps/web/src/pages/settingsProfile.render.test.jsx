@@ -119,6 +119,25 @@ describe('Settings → Profile', () => {
     await waitFor(() => expect(screen.getAllByText('Kd')).toHaveLength(2)); // the header and the Name row
   });
 
+  it('refuses an age under 18 under the box and in the message, sends nothing, and takes 18', async () => {
+    serve();
+    render(<Settings />);
+    await loaded();
+    const why = 'You must be 18 or older to use this app.';
+    expect(screen.queryByText(why)).toBeNull();
+    type('30', '17');
+    expect(screen.getByText(why)).toBeTruthy();
+    // The box's own minimum stops Save in the browser; the page refuses it too.
+    save();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(svc.putFitnessProfile).not.toHaveBeenCalled();
+    expect(svc.updateProfile).not.toHaveBeenCalled();
+    type('17', '18');
+    expect(screen.queryByText(why)).toBeNull();
+    save();
+    await waitFor(() => expect(svc.putFitnessProfile).toHaveBeenCalledWith(expect.objectContaining({ age: 18 })));
+  });
+
   it("refuses a target typed on the wrong side of the weight, in screen 3's words, and sends nothing", async () => {
     serve();
     render(<Settings />);

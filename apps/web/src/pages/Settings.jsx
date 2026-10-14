@@ -19,7 +19,7 @@ import {
 import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, WEIGHT_GOAL_ICONS } from './onboarding/onboardingIcons';
 import HealthQuestion from './onboarding/HealthQuestion';
 import { useHealthScreening } from './onboarding/useHealthScreening';
-import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS } from '@app/shared';
+import { ADULT_AGE, CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, UNDER_AGE_LINE } from '@app/shared';
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
@@ -146,6 +146,8 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
   // still saves (Kd, 2026-09-14), held against the height, age and gender this
   // save leaves, and read as the boxes show it: 50.35 typed is under 50.4.
   const ageNow = parseInt(form.age, 10);
+  // The app is for 18 and over (RULINGS 2026-09-15): said under the box, and never sent.
+  const underAge = Number.isFinite(ageNow) && ageNow < ADULT_AGE;
   const typed = (text) => {
     const n = parseFloat(text);
     return Number.isFinite(n) ? n : null;
@@ -162,6 +164,10 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
     e.preventDefault();
     if (wrongSide !== null && targetTyped) {
       toast.error(wrongSide);
+      return;
+    }
+    if (underAge) {
+      toast.error(UNDER_AGE_LINE);
       return;
     }
     setLoading(true);
@@ -219,8 +225,9 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
         <Field label="Age">
           <input type="number" value={form.age}
             onChange={(e) => set('age', e.target.value)}
-            min={13} max={120}
+            min={ADULT_AGE} max={120}
             className="input-field" style={inputStyle} />
+          {underAge && <p role="alert" className="text-2xs" style={{ color: '#f87171' }}>{UNDER_AGE_LINE}</p>}
         </Field>
 
         <Field label="Gender">

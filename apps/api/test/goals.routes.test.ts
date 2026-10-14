@@ -90,6 +90,12 @@ d("goals routes (real Postgres)", () => {
   const answer = async (cookies: Cookies, body: unknown): Promise<void> => {
     expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body, cookies })).statusCode).toBe(200);
   };
+  /** No route saves an age under 18 since the app became 18+ (RULINGS 2026-09-15);
+   *  the plan's under-18 rules stay as a floor, so such an age is written here, as a
+   *  row from before would hold it. */
+  const storedAge = async (userId: string, age: number): Promise<void> => {
+    await sql`UPDATE user_fitness_profiles SET age = ${age} WHERE user_id = ${userId}`;
+  };
   const health = async (cookies: Cookies, body: unknown): Promise<void> => {
     expect((await inject({ method: "PUT", url: "/v1/users/me/health-screening", body, cookies })).statusCode).toBe(200);
   };
@@ -140,8 +146,9 @@ d("goals routes (real Postgres)", () => {
 
   describe("THE WORST THING: no weight to lose and no less to eat for a person the plan may not cut", () => {
     it("under 18: a weight to lose is refused, and the calories goal is the whole daily burn", { timeout: 60_000 }, async () => {
-      const { cookies } = await makeUser("teen");
-      await answer(cookies, { ...LOSING_ANSWERS, age: 16 });
+      const { userId, cookies } = await makeUser("teen");
+      await answer(cookies, LOSING_ANSWERS);
+      await storedAge(userId, 16);
       await health(cookies, { hasCondition: false });
 
       const refused = await put(cookies, randomUUID(), WEIGHT);
@@ -178,7 +185,7 @@ d("goals routes (real Postgres)", () => {
     });
 
     it("a goal kept from before the answer changed is held on the next read, and comes back when the answer does", { timeout: 60_000 }, async () => {
-      const { cookies } = await makeUser("changes");
+      const { userId, cookies } = await makeUser("changes");
       await answer(cookies, LOSING_ANSWERS);
       await health(cookies, { hasCondition: false });
       const weightId = randomUUID();
@@ -202,7 +209,7 @@ d("goals routes (real Postgres)", () => {
       expect((await one(cookies, caloriesId)).target).toBe(1267);
 
       // The age answer changed to 17: held again, and the calories are the whole daily burn.
-      await answer(cookies, { age: 17 });
+      await storedAge(userId, 17);
       expect(await one(cookies, weightId)).toMatchObject({ target: null, current: null, held: { code: "no_weight_loss", reasons: ["under_18"] } });
       expect((await one(cookies, caloriesId)).target).toBe(1895);
     });

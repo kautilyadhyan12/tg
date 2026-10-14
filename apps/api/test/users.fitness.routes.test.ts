@@ -310,6 +310,18 @@ d("users fitness-profile routes (real Postgres)", () => {
     expect(await finishedOnMe(cookies)).toBe(false);
   });
 
+  it("THE WORST THING: Settings refuses a 17-year-old's age and saves nothing; 18 is taken", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ofp-age@example.com");
+    for (const age of [17, 16]) {
+      const res = await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: { ...FULL_PROFILE, age }, cookies });
+      expect(res.statusCode, String(age)).toBe(400);
+    }
+    expect(await getProfile(cookies)).toMatchObject({ age: null });
+    const res = await inject({ method: "PUT", url: "/v1/users/me/fitness-profile", body: { ...FULL_PROFILE, age: 18 }, cookies });
+    expect(res.statusCode).toBe(200);
+    expect(await getProfile(cookies)).toMatchObject({ age: 18 });
+  });
+
   it("rejects every invalid body: unknown key, bad enum, out-of-bounds, duplicates", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("ofp-invalid@example.com");
     const bad: Record<string, unknown>[] = [
@@ -323,7 +335,7 @@ d("users fitness-profile routes (real Postgres)", () => {
       { mainGoal: "posture" }, // the old one-goal field is gone
       { availableEquipment: ["barbell"] }, // outside the enum
       { availableEquipment: ["none", "gym"] }, // "no equipment" stands alone
-      { age: 15 }, // below the floor of 16 (RULINGS 2026-09-07: the app is for 16 and over)
+      { age: 17 }, // below the floor of 18 (RULINGS 2026-09-15: the app is for 18 and over)
       { age: 121 }, // above the ceiling of 120
       { exerciseFrequency: 8 }, // > 7 days in a week
       { sessionDurationMin: 4 }, // below the 5-minute floor

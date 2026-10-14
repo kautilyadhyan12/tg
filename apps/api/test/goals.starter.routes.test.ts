@@ -89,6 +89,12 @@ d("starter goals (real Postgres)", () => {
   const answer = async (cookies: Cookies, body: unknown): Promise<void> => {
     expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body, cookies })).statusCode).toBe(200);
   };
+  /** No route saves an age under 18 since the app became 18+ (RULINGS 2026-09-15);
+   *  the plan's under-18 rules stay as a floor, so such an age is written here, as a
+   *  row from before would hold it. */
+  const storedAge = async (userId: string, age: number): Promise<void> => {
+    await sql`UPDATE user_fitness_profiles SET age = ${age} WHERE user_id = ${userId}`;
+  };
   const health = async (cookies: Cookies, body: unknown): Promise<void> => {
     expect((await inject({ method: "PUT", url: "/v1/users/me/health-screening", body, cookies })).statusCode).toBe(200);
   };
@@ -101,6 +107,15 @@ d("starter goals (real Postgres)", () => {
   const finished = async (name: string, answers: unknown = LOSING_ANSWERS, healthAnswer: unknown = NO_CONDITION) => {
     const user = await makeUser(name);
     await finishSetup(user.cookies, answers, healthAnswer);
+    return user;
+  };
+  /** Setup finished by a person whose stored age is under 18 (`storedAge`). */
+  const finishedTeen = async (name: string, age: number, healthAnswer: unknown = NO_CONDITION) => {
+    const user = await makeUser(name);
+    await answer(user.cookies, LOSING_ANSWERS);
+    await storedAge(user.userId, age);
+    await health(user.cookies, healthAnswer);
+    await answer(user.cookies, FINISH);
     return user;
   };
 
@@ -134,7 +149,7 @@ d("starter goals (real Postgres)", () => {
 
   describe("THE WORST THING: nobody the plan may not cut is handed a weight to lose", () => {
     it("under 18: no weight goal, and the calories goal is the whole daily burn", { timeout: 60_000 }, async () => {
-      const { cookies } = await finished("teen", { ...LOSING_ANSWERS, age: 16 });
+      const { cookies } = await finishedTeen("teen", 16);
       const goals = await list(cookies);
       expect(kinds(goals)).toEqual(["training_days", "active_minutes", "calories_within", "protein"]);
       expect(of(goals, "calories_within")).toMatchObject({ target: 1901, held: null });
@@ -160,13 +175,13 @@ d("starter goals (real Postgres)", () => {
         ["held-yes", 40, { hasCondition: true, checkFirst: "cleared" }],
         ["held-safe", 40, { hasCondition: true, checkFirst: "not_yet" }],
       ] as const) {
-        const { cookies } = await finished(name, { ...LOSING_ANSWERS, age }, healthAnswer);
+        const { cookies } = age < 18 ? await finishedTeen(name, age, healthAnswer) : await finished(name, { ...LOSING_ANSWERS, age }, healthAnswer);
         for (const g of await list(cookies)) expect(g.held, `${name} ${g.kind}`).toBeNull();
       }
     });
 
     it("the weight goal is refused afterwards too, by the route a person adds one with", { timeout: 60_000 }, async () => {
-      const { cookies } = await finished("teen-adds", { ...LOSING_ANSWERS, age: 16 });
+      const { cookies } = await finishedTeen("teen-adds", 16);
       await list(cookies);
       const res = await inject({
         method: "PUT",
@@ -186,12 +201,12 @@ d("starter goals (real Postgres)", () => {
     };
 
     it("a 16-year-old whose age is cleared after Finish: no goals and no mark; age back, the set with no weight goal", { timeout: 60_000 }, async () => {
-      const { cookies, userId } = await finished("teen-blank", { ...LOSING_ANSWERS, age: 16 });
+      const { cookies, userId } = await finishedTeen("teen-blank", 16);
       await answer(cookies, { age: null });
       expect(await list(cookies)).toEqual([]);
       expect(await markOf(userId)).toBeNull();
 
-      await answer(cookies, { age: 16 });
+      await storedAge(userId, 16);
       const goals = await list(cookies);
       expect(kinds(goals)).toEqual(["training_days", "active_minutes", "calories_within", "protein"]);
       expect(await markOf(userId)).not.toBeNull();
