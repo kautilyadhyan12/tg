@@ -13,6 +13,7 @@ CREATE TABLE "food_day_targets" (
   "fat_g" integer NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
   CONSTRAINT "food_day_targets_pkey" PRIMARY KEY ("user_id", "day"),
-  CONSTRAINT "food_day_targets_kcal_check" CHECK ("kcal" BETWEEN 0 AND 20000),
-  CONSTRAINT "food_day_targets_macros_check" CHECK ("protein_g" BETWEEN 0 AND 2000 AND "carbs_g" BETWEEN 0 AND 2000 AND "fat_g" BETWEEN 0 AND 2000)
+  -- No upper bound: these are whatever the rings showed, and the plan's own numbers have none.
+  CONSTRAINT "food_day_targets_kcal_check" CHECK ("kcal" >= 0),
+  CONSTRAINT "food_day_targets_macros_check" CHECK ("protein_g" >= 0 AND "carbs_g" >= 0 AND "fat_g" >= 0)
 );

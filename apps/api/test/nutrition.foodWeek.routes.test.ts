@@ -2,6 +2,7 @@
 // migration 0110. The first block is the job's worst thing: another person's meals in
 // somebody's week. Then the route's happy path, a validation failure, the person's own
 // time zone, the targets kept on the day a meal is logged, and a week across a change.
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { foodWeekResponseSchema, nutritionTargetsResponseSchema, type FoodWeekResponse } from "@app/shared";
@@ -97,9 +98,9 @@ d("your week in food (real Postgres)", () => {
     const kcal = items.reduce((n, i) => n + i.kcalPoint, 0);
     const protein = items.reduce((n, i) => n + i.proteinG, 0);
     await sql`
-      INSERT INTO meal_logs (user_id, taken_at, items, kcal_point, kcal_low, kcal_high, protein_g, carbs_g, fat_g,
+      INSERT INTO meal_logs (user_id, meal_name, taken_at, items, kcal_point, kcal_low, kcal_high, protein_g, carbs_g, fat_g,
                              portion_source, nutrition_sources, calc_version)
-      VALUES (${userId}, ${takenAt}, ${sql.json(items)}, ${kcal}, ${kcal}, ${kcal}, ${protein}, 0, 0,
+      VALUES (${userId}, 'A meal', ${takenAt}, ${sql.json(items)}, ${kcal}, ${kcal}, ${kcal}, ${protein}, 0, 0,
               'default', ${[...new Set(items.map((i) => i.nutritionSource))]}, 1)`;
   };
   const todayIn = (tz: string) => dayInTz(new Date(), tz);
@@ -239,6 +240,60 @@ d("your week in food (real Postgres)", () => {
     expect(w.days.at(-1)).toMatchObject({ today: true, targetsOfTheDay: true });
     // Today is shown and not counted: the two finished days with meals are judged.
     expect(w.facts.kcal.judged).toBe(2);
+  });
+
+  it("a plan with numbers past any form's limits still saves the meal once and keeps them", async () => {
+    const { cookies, id } = await makeUser("huge", {
+      weightGoal: "maintain", age: 25, gender: "male", heightCm: 230, weightKg: 400,
+      dayActivity: "very_active", trainingDays: 7, sessionMinutes: 240,
+    });
+    const now = nutritionTargetsResponseSchema.parse(JSON.parse((await inject({ method: "GET", url: "/v1/nutrition/targets", cookies })).body)).targets;
+    expect(now?.carbsG).toBeGreaterThan(2000);
+    const saved = await inject({
+      method: "POST", url: "/v1/nutrition/meals", cookies,
+      body: { mealName: "Lunch", takenAt: new Date().toISOString(), items: [{ canonical: "rice_white_cooked", grams: 200 }] },
+    });
+    expect(saved.statusCode, saved.body).toBe(201);
+    expect((await sql`SELECT 1 FROM meal_logs WHERE user_id = ${id}`).length).toBe(1);
+    const kept = await sql<{ carbs_g: number }[]>`SELECT carbs_g FROM food_day_targets WHERE user_id = ${id}`;
+    expect(kept.map((r) => r.carbs_g)).toEqual([now?.carbsG]);
+    const put = await inject({ method: "PUT", url: "/v1/nutrition/targets", cookies, body: { source: "app" } });
+    expect(put.statusCode, put.body).toBe(200);
+  });
+
+  it("keeps the targets on the day of the person's own time zone", async () => {
+    // UTC+14 and UTC-11 are a day or more apart at every hour, so a keep made on the
+    // UTC day is on the wrong day for at least one of them.
+    for (const zone of ["Pacific/Kiritimati", "Pacific/Pago_Pago"]) {
+      const name = `zonekeep-${zone.split("/")[1]?.toLowerCase() ?? ""}`;
+      const { cookies, id } = await makeUser(name);
+      await sql`UPDATE users SET timezone = ${zone} WHERE id = ${id}`;
+      const res = await inject({
+        method: "POST", url: "/v1/nutrition/meals", cookies,
+        body: { mealName: "Lunch", takenAt: new Date().toISOString(), items: [{ canonical: "rice_white_cooked", grams: 200 }] },
+      });
+      expect(res.statusCode, res.body).toBe(201);
+      const kept = await sql<{ day: string }[]>`SELECT day::text AS day FROM food_day_targets WHERE user_id = ${id}`;
+      expect(kept.map((r) => r.day), zone).toEqual([todayIn(zone)]);
+    }
+  });
+
+  it("keeps them on the phone's own-id save and on a change to a meal of today", async () => {
+    const phone = await makeUser("ownid");
+    const res = await inject({
+      method: "POST", url: "/v1/nutrition/meals", cookies: phone.cookies,
+      body: { id: randomUUID(), mealName: "Lunch", takenAt: new Date().toISOString(), items: [{ canonical: "rice_white_cooked", grams: 200 }] },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    expect((await sql`SELECT 1 FROM food_day_targets WHERE user_id = ${phone.id}`).length).toBe(1);
+
+    const changed = await makeUser("patched");
+    await putMeal(changed.id, new Date(), [item(500, 20)]);
+    expect((await sql`SELECT 1 FROM food_day_targets WHERE user_id = ${changed.id}`).length).toBe(0);
+    const rows = await sql<{ id: string }[]>`SELECT id FROM meal_logs WHERE user_id = ${changed.id}`;
+    const patch = await inject({ method: "PATCH", url: `/v1/nutrition/meals/${rows[0]?.id ?? ""}`, cookies: changed.cookies, body: { mealName: "Renamed" } });
+    expect(patch.statusCode, patch.body).toBe(200);
+    expect((await sql`SELECT 1 FROM food_day_targets WHERE user_id = ${changed.id}`).length).toBe(1);
   });
 
   it("changing one's own numbers keeps them as today's", async () => {

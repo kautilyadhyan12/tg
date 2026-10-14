@@ -449,7 +449,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 34e-ii. [ ] **The diet plan on the Food screen**, each meal logged with one tap; a meal outside the diet says so with Swap. Waits for 32b.
     - 34f. **Your week in food** (7d; split 2026-10-14: the server part needs no phone).
       - 34f-i. [ ] **The server works out your week in food**: the last 7 or 30 days against each day's targets, kept from now on.
-      - 34f-ii. [ ] **The chart on the Food screen**, with the facts under it in words ("Protein was under target on 5 of 7 days"). Waits for 32b.
+      - 34f-ii. [ ] **The chart on the Food screen**, with the facts under it in words ("Protein was under target on 5 of 6 days"). Waits for 32b.
 35. [ ] **Progress**: the charts, the workout calendar, body measurements and weigh-ins, badges; then weekly challenges and predictions on the new server (dead on the web; spec Part 2B §5).
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13).
 37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes.

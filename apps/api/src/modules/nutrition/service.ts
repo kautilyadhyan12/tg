@@ -692,7 +692,7 @@ export async function putTargets(
   }
   const pick = await repo.putRingTargets(deps.sql, userId, body.source, own);
   const answer = targetsFromPlan(planResult, pick, noCutReasons);
-  await keepTargetsOn(deps, userId, answer, null);
+  await keepTargetsOn(deps, userId, () => Promise.resolve(answer), null);
   return answer;
 }
 
@@ -701,25 +701,32 @@ const dayTargetsOf = (t: NutritionTargetsResponse["targets"]): FoodDayTargets | 
 
 /** Keep today's targets for "Your week in food" (ROADMAP 34f-i): a later day reads
  *  the day against them. `takenAt` null keeps them whatever was logged; a meal of
- *  another day keeps nothing, as that day's targets are not known now. */
+ *  another day keeps nothing, as that day's targets are not known now.
+ *
+ *  It runs after the meal or the numbers are saved, so it never fails them: a keep
+ *  that fails is logged, and that day is read against today's targets later. */
 async function keepTargetsOn(
-  deps: Pick<NutritionDeps, "sql">,
+  deps: Pick<NutritionDeps, "sql" | "log">,
   userId: string,
-  answer: NutritionTargetsResponse,
+  answer: () => Promise<NutritionTargetsResponse>,
   takenAt: Date | null,
   now: Date = new Date(),
 ): Promise<void> {
-  const targets = dayTargetsOf(answer.targets);
-  if (targets === null) return;
-  const timeZone = safeTimeZone((await getUserSyncContext(deps.sql, userId)).timezone);
-  const today = dayInTz(now, timeZone);
-  if (takenAt !== null && dayInTz(takenAt, timeZone) !== today) return;
-  await repo.keepDayTargets(deps.sql, userId, today, targets);
+  try {
+    const targets = dayTargetsOf((await answer()).targets);
+    if (targets === null) return;
+    const timeZone = safeTimeZone((await getUserSyncContext(deps.sql, userId)).timezone);
+    const today = dayInTz(now, timeZone);
+    if (takenAt !== null && dayInTz(takenAt, timeZone) !== today) return;
+    await repo.keepDayTargets(deps.sql, userId, today, targets);
+  } catch (err) {
+    deps.log.error({ event: "nutrition.day_targets_not_kept", userId, err }, "a day's targets could not be kept");
+  }
 }
 
 /** Keep today's targets once a meal of today is saved or changed. */
-async function keepTodaysTargets(deps: Pick<NutritionDeps, "sql">, userId: string, takenAt: Date, now: Date = new Date()): Promise<void> {
-  await keepTargetsOn(deps, userId, await getTargets(deps, userId), takenAt, now);
+async function keepTodaysTargets(deps: Pick<NutritionDeps, "sql" | "log">, userId: string, takenAt: Date): Promise<void> {
+  await keepTargetsOn(deps, userId, () => getTargets(deps, userId), takenAt);
 }
 
 /** Your week in food (ROADMAP 34f-i): the last 7 or 30 days of the person's own

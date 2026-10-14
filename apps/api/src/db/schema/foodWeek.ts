@@ -19,10 +19,8 @@ export const foodDayTargets = pgTable(
   },
   (t) => [
     primaryKey({ name: "food_day_targets_pkey", columns: [t.userId, t.day] }),
-    check("food_day_targets_kcal_check", sql`${t.kcal} BETWEEN 0 AND 20000`),
-    check(
-      "food_day_targets_macros_check",
-      sql`${t.proteinG} BETWEEN 0 AND 2000 AND ${t.carbsG} BETWEEN 0 AND 2000 AND ${t.fatG} BETWEEN 0 AND 2000`,
-    ),
+    // No upper bound: these are whatever the rings showed, and the plan's own numbers have none.
+    check("food_day_targets_kcal_check", sql`${t.kcal} >= 0`),
+    check("food_day_targets_macros_check", sql`${t.proteinG} >= 0 AND ${t.carbsG} >= 0 AND ${t.fatG} >= 0`),
   ],
 );

@@ -686,9 +686,9 @@ export type SwapDietPlanMealRequest = z.infer<typeof swapDietPlanMealRequestSche
 // ── Your week in food (ROADMAP 34f-i) ──────────────────────────────────────────
 
 /** The two spans the screen offers: the last 7 days or the last 30, today the last. */
-export const FOOD_WEEK_SPANS = [7, 30] as const;
+const foodWeekSpanSchema = z.union([z.literal(7), z.literal(30)]);
 export const foodWeekQuerySchema = z.object({
-  days: z.enum(["7", "30"]).default("7").transform((v) => (v === "7" ? 7 : 30)),
+  days: z.enum(["7", "30"]).default("7").transform(Number).pipe(foodWeekSpanSchema),
 }).strict();
 export type FoodWeekQuery = z.infer<typeof foodWeekQuerySchema>;
 
@@ -736,7 +736,8 @@ export const foodWeekDaySchema = z.object({
 export type FoodWeekDay = z.infer<typeof foodWeekDaySchema>;
 
 /** For each figure, how many finished days with meals and targets were under, on and
- *  over: "Protein was under target on 5 of 7 days" is `under` of `judged`. */
+ *  over: "Protein was under target on 5 of 6 days" is `under` of `judged`. Today is
+ *  never judged, so a span of 7 judges 6 days at most, and of 30, 29. */
 const factSchema = z.object({
   under: z.number().int().nonnegative(), on: z.number().int().nonnegative(),
   over: z.number().int().nonnegative(), judged: z.number().int().nonnegative(),
@@ -744,7 +745,7 @@ const factSchema = z.object({
 export type FoodWeekFact = z.infer<typeof factSchema>;
 
 export const foodWeekResponseSchema = z.object({
-  span: z.union([z.literal(7), z.literal(30)]),
+  span: foodWeekSpanSchema,
   /** Oldest first; today is the last. */
   days: z.array(foodWeekDaySchema).min(7).max(30),
   facts: z.object({ kcal: factSchema, proteinG: factSchema, carbsG: factSchema, fatG: factSchema }).strict(),
