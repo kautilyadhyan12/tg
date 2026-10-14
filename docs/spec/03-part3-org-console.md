@@ -3656,7 +3656,7 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
   record was joined to another.
 - **Not built**: a sale of several different products at once; a refund of a product sale
   on a later day; receipts (18g); discounts on memberships (18b-ii-b); tax on memberships
-  (18b-iii); product sales in Reports' money figures (21b).
+  (18b-iii). Product sales reach Reports' money figures with 21b-ii (§16.5).
 
 **As built, 18b-ii-a (2026-10-13; `rulings/2026-10-13-18b-ii-a.md`).** Discounts and promo
 codes on products, as Gymdesk and Mindbody do them.
@@ -5222,9 +5222,27 @@ keeps the currency it was given in, so a gym whose country changed still reads t
 recorded); payments and bills in another currency are left out and the page says so.
 `GET /v1/orgs/:gymId/reports/money`, from the same allowance as the other two reads; the
 rule is `moneyReportFrom` (`packages/shared/src/reportsMoney.ts`), the sums `readMoney`
-(`reports/repo.ts`), in one snapshot with the list's own counts. Not in this job (21b-ii):
-money by product, which waits for the Sell page (18b), and by coach, which no payment
-names today.
+(`reports/repo.ts`), in one snapshot with the list's own counts. Money by product and by
+staff came with 21b-ii, below.
+
+**Built by 21b-ii (2026-10-14): money by product and by staff.** Kd's choice of "a coach's
+money" (`rulings/2026-10-14-21b-ii.md`): the money each staff member **took in**, the
+payments and sales they recorded, as standard "sales by staff" reports do; the value of
+sessions a coach ran is payroll and is not built. **Product sales** of the Sell page (§14.3)
+that stand count in Collected, its months and its year-earlier line, each in the month of
+the day it was sold, in the gym's currency; a sale taken back is not money, and a sale in
+another currency is left out and said. The month-by-month table reads Memberships ·
+Product sales · Refunded · Collected only where a month it shows holds a sale, so a gym
+that never sells at the desk reads no column of zeros. A gym that has given no membership
+and sold something has its figures. Lifetime value stays membership money only, since a
+sale may be a walk-in's. **Money by product**: each product sold in the period, how many
+and the money, the most money first. **Money taken, by staff**: each staff member who
+recorded a payment or a sale in the period, the two and their total, the most first, an
+account since deleted last as "Deleted account"; refunds come off Collected, not off a
+person, and the table says so. Both follow the period and download as CSV; both are shown
+only with `billing.members`, like every money figure. The money read is the only Reports
+read that names a person, and it names only staff. Cost at twelve months, with 72,100 sales
+for the big gym: HANDOFF has the table.
 
 **Built by 21d-i (2026-10-13): the period.** One control at the top of Reports, **Last 4
 weeks · Last 3 months · Last 12 months**, that every part of the page follows; the page
