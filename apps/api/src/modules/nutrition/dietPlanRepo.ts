@@ -11,8 +11,9 @@ const storedDaysSchema = z.array(z.array(storedMealSchema)).length(7);
 export type StoredDays = z.infer<typeof storedDaysSchema>;
 
 export const EMPTY_WEEK: StoredDays = [[], [], [], [], [], [], []];
-/** How many of the phone's change ids are kept to know a change sent twice. */
-const KEPT_CHANGES = 50;
+/** How many of the phone's change ids are kept to know a change sent twice: more
+ *  than a phone holds unsent, so an old whole-day change sent again is never made again. */
+const KEPT_CHANGES = 500;
 
 export interface StoredPlan { days: StoredDays; recentChanges: readonly string[] }
 

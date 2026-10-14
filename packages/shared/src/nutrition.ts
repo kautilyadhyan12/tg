@@ -646,7 +646,9 @@ export type DietPlanDayReply = z.infer<typeof dietPlanDayReplySchema>;
 export const dietPlanMakeSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("ok") }).strict(),
   z.object({ status: z.literal("needs_answers"), missing: z.array(foodAnswerSchema).min(1) }).strict(),
-  z.object({ status: z.literal("needs_plan") }).strict(),
+  /** `setup`: the day has no calorie number yet. `new_goal`: the target weight is
+   *  behind the person (reached, or on the other side of their weight goal). */
+  z.object({ status: z.literal("needs_plan"), reason: z.enum(["setup", "new_goal"]) }).strict(),
 ]);
 export type DietPlanMake = z.infer<typeof dietPlanMakeSchema>;
 

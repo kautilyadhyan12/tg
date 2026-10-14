@@ -20,9 +20,11 @@ type Targets = NonNullable<Awaited<ReturnType<typeof getTargets>>["targets"]>;
 interface Person { make: DietPlanMake; diet: Awaited<ReturnType<typeof getUserFoodAnswers>>["diet"]; mealsPerDay: number | null; targets: Targets | null }
 
 async function person(deps: Pick<NutritionDeps, "sql">, userId: string): Promise<Person> {
-  const [{ diet, mealsPerDay }, { targets }] = await Promise.all([getUserFoodAnswers(deps.sql, userId), getTargets(deps, userId)]);
+  const [{ diet, mealsPerDay }, { targets, targetWrongSide }] = await Promise.all([getUserFoodAnswers(deps.sql, userId), getTargets(deps, userId)]);
   const missing = [...(diet === null ? ["diet" as const] : []), ...(mealsPerDay === null ? ["mealsPerDay" as const] : [])];
-  const make: DietPlanMake = missing.length > 0 ? { status: "needs_answers", missing } : targets === null ? { status: "needs_plan" } : { status: "ok" };
+  const make: DietPlanMake = missing.length > 0
+    ? { status: "needs_answers", missing }
+    : targets === null ? { status: "needs_plan", reason: targetWrongSide ? "new_goal" : "setup" } : { status: "ok" };
   return { make, diet, mealsPerDay, targets };
 }
 
@@ -65,7 +67,7 @@ export async function getDietPlan(deps: Pick<NutritionDeps, "sql">, userId: stri
 
 /** Each list of chosen foods priced, in one pass, as a logged meal's are. */
 async function priced(deps: NutritionDeps, userId: string, lists: readonly (readonly ChosenItem[])[]): Promise<MealItem[][]> {
-  const items = lists.length === 0 ? [] : await resolveChosenItems(deps, userId, lists.flat());
+  const items = lists.length === 0 ? [] : await resolveChosenItems(deps, userId, lists.flat(), false);
   let at = 0;
   return lists.map((list) => {
     const mine = items.slice(at, at + list.length);
@@ -76,25 +78,55 @@ async function priced(deps: NutritionDeps, userId: string, lists: readonly (read
 
 const chosenOf = (idea: MealIdea): ChosenItem[] => idea.items.map((i) => ({ canonical: i.canonical, grams: i.grams }));
 
+/** Meals that, priced, are still under the calories they must hold (a day past what
+ *  MOST_PLAN_MEALS meals hold, or a swapped meal): every amount made bigger by the gap,
+ *  and priced again, until they are not. A plan never offers less than the day's calories. */
+async function heldToTarget(
+  deps: NutritionDeps,
+  userId: string,
+  meals: readonly { idea: MealIdea }[],
+  items: MealItem[][],
+  kcalTarget: number,
+): Promise<MealItem[][]> {
+  let lists = meals.map((m) => chosenOf(m.idea));
+  for (let round = 0; round < 3; round++) {
+    const kcal = totals(items.flat()).kcalPoint;
+    if (kcal >= kcalTarget || kcal === 0) return items;
+    const grow = kcalTarget / kcal;
+    lists = lists.map((list) => list.map((i) => ("grams" in i ? { canonical: i.canonical, grams: Math.ceil(i.grams * grow) } : i)));
+    items = await priced(deps, userId, lists);
+  }
+  return items;
+}
+
 const refusal = (make: Exclude<DietPlanMake, { status: "ok" }>): NutritionError =>
   make.status === "needs_answers"
     ? new NutritionError(409, "needs_answers", "Answer the food questions in setup to get a meal plan.")
-    : new NutritionError(409, "needs_plan", "Finish setup to get a meal plan.");
+    : new NutritionError(409, "needs_plan", make.reason === "new_goal" ? "Set a new goal to get a meal plan." : "Finish setup to get a meal plan.");
 
 /** The app's plan, for the whole week or the days named; it replaces what they held. */
 export async function makeDietPlan(deps: NutritionDeps, userId: string, input: MakeDietPlanRequest): Promise<DietPlanResponse> {
-  const who = await person(deps, userId);
+  const [plan, who] = await Promise.all([readDietPlan(deps.sql, userId), person(deps, userId)]);
+  // Sent again (its reply was lost): the plan as it stands, whatever the answers are now.
+  if (plan.recentChanges.includes(input.changeId)) return reply(plan.days, who);
   if (who.make.status !== "ok") throw refusal(who.make);
   const { diet, mealsPerDay, targets } = who;
-  if (diet === null || mealsPerDay === null || targets === null) throw refusal({ status: "needs_plan" });
+  if (diet === null || mealsPerDay === null || targets === null) throw refusal({ status: "needs_plan", reason: "setup" });
   const days = input.days ?? [1, 2, 3, 4, 5, 6, 7];
-  const made = days.map((day) => planDay({ seed: `${userId}|make|${input.changeId}`, day, diet, mealsPerDay, kcalTarget: targets.kcal }));
+  const made = days.map((day) => planDay({
+    seed: `${userId}|make|${input.changeId}`, day, diet, mealsPerDay, kcalTarget: targets.kcal,
+  }));
   const items = await priced(deps, userId, made.flatMap((meals) => meals.map((m) => chosenOf(m.idea))));
   let at = 0;
+  const byDay = await Promise.all(made.map((meals) => {
+    const own = items.slice(at, (at += meals.length));
+    return heldToTarget(deps, userId, meals, own, targets.kcal);
+  }));
   const week = await changeDietPlan(deps.sql, userId, input.changeId, (current) => {
     const next = current.map((meals) => [...meals]);
     days.forEach((day, i) => {
-      next[day - 1] = (made[i] ?? []).map((m) => ({ mealType: m.mealType, items: items[at++] ?? [] }));
+      const own = byDay[i] ?? [];
+      next[day - 1] = (made[i] ?? []).map((m, j) => ({ mealType: m.mealType, items: own[j] ?? [] }));
     });
     return next;
   });
@@ -133,7 +165,12 @@ export async function swapDietPlanMeal(
     kcal: totals(meal.items).kcalPoint, foods: meal.items.map((i) => i.canonical),
   });
   if (idea === null) throw new NutritionError(409, "no_other_meal", "No other meal of this size fits your diet.");
-  const [items = []] = await priced(deps, userId, [chosenOf(idea)]);
+  const swapped = await priced(deps, userId, [chosenOf(idea)]);
+  // The swap never takes the day under its calories, nor further under them than it was.
+  const dayKcal = totals((plan.days[day - 1] ?? []).flatMap((m) => m.items)).kcalPoint;
+  const mealKcal = totals(meal.items).kcalPoint;
+  const least = who.targets === null ? 0 : Math.min(dayKcal, who.targets.kcal) - (dayKcal - mealKcal);
+  const [items = []] = least > 0 ? await heldToTarget(deps, userId, [{ idea }], swapped, least) : swapped;
   const week = await changeDietPlan(deps.sql, userId, input.changeId, (current) => {
     const meals = current[day - 1] ?? [];
     // Changed since it was read (another change came first): the idea was made for a meal that is gone.

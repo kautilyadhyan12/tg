@@ -1,9 +1,10 @@
 // A person's own diet plan (ROADMAP 34e-i): the rule that makes the week and swaps a
 // meal. The first block is the job's worst thing: a vegan's or vegetarian's plan holding
-// meat, fish, egg or milk, made or swapped. It reads every planned food's own TABLE
+// meat, fish, egg or milk, made or swapped; and a day made under the person's calories
+// (under 18 the app may not cut them at all). It reads every planned food's own TABLE
 // words (`foodDietByTable.ts`), never our names or our labels alone.
 import { describe, expect, it } from "vitest";
-import { dietAllows, mealIdeaSchema, type Diet, type MealType } from "@app/shared";
+import { MOST_PLAN_MEALS, dietAllows, mealIdeaSchema, type Diet, type MealType } from "@app/shared";
 import { planDay, planSlots, swapMeal, type PlanDayInput } from "../src/modules/nutrition/dietPlan.js";
 import { LEAST_MEAL_KCAL, MOST_LIGHT_KCAL, MOST_MEALS, MOST_MEAL_KCAL } from "../src/modules/nutrition/suggest.js";
 import { foodOf, tableLowest } from "./foodDietByTable.js";
@@ -35,7 +36,7 @@ const wrongFor = (diet: Diet, canonicals: Iterable<string>): string[] =>
     .filter((f) => !dietAllows(diet, f.diet) || !dietAllows(diet, tableLowest(f)))
     .map((f) => `${f.name} (${f.diet}; its table: ${tableLowest(f)})`);
 
-describe("THE WORST THING: no plan holds a food the person's diet does not eat", () => {
+describe("THE WORST THING: no plan holds a food the person's diet does not eat, or less than they may eat", () => {
   it.each(DIETS.filter((d) => d !== "non_vegetarian"))("a %s person's week, as the app makes it", (diet) => {
     const planned: string[] = [];
     let meals = 0;
@@ -66,6 +67,28 @@ describe("THE WORST THING: no plan holds a food the person's diet does not eat",
     }
     expect(swaps).toBeGreaterThan(10000);
     expect(wrongFor(diet, planned)).toEqual([]);
+  });
+
+  // The rule draws each day over its calories where it can; a day it leaves under them
+  // is made up by the server, which makes the amounts bigger (the route tests).
+  it.each(DIETS)("a %s person: from 1,200 to 3,400 kcal, few days are under the calories, and none by more than 10 %", (diet) => {
+    let days = 0;
+    let under = 0;
+    const far: string[] = [];
+    for (let kcalTarget = 1200; kcalTarget <= 3400; kcalTarget += 50) {
+      for (const mealsPerDay of MEAL_COUNTS) {
+        for (const day of DAYS) {
+          const meals = planDay(input({ seed: `p|make|${String(kcalTarget)}`, day, diet, mealsPerDay, kcalTarget }));
+          const kcal = meals.reduce((n, m) => n + m.idea.totals.kcal, 0);
+          days++;
+          if (kcal < kcalTarget) under++;
+          if (kcal < kcalTarget * 0.9 || meals.length > MOST_PLAN_MEALS) far.push(`${String(mealsPerDay)} meals, ${String(kcalTarget)} kcal, day ${String(day)}: ${String(kcal)} in ${String(meals.length)} meals`);
+        }
+      }
+    }
+    expect(far).toEqual([]);
+    // Measured 2026-10-14: a vegan's 19.7 % (a vegan plate is smaller), the others under 10 %.
+    expect(under / days).toBeLessThan(diet === "vegan" ? 0.25 : 0.1);
   });
 });
 
@@ -144,9 +167,8 @@ describe("the day the app makes", () => {
     const far: string[] = [];
     for (const diet of DIETS) {
       for (const one of sweep(diet)) {
-        const want = planSlots(one.mealsPerDay, one.kcalTarget).reduce((n, s) => n + s.kcal, 0);
         const got = planDay(one).reduce((n, m) => n + m.idea.totals.kcal, 0);
-        if (Math.abs(got - want) > want * 0.1) far.push(`${diet} ${String(one.mealsPerDay)} meals ${String(one.kcalTarget)} kcal day ${String(one.day)}: ${String(got)}`);
+        if (Math.abs(got - one.kcalTarget) > one.kcalTarget * 0.1) far.push(`${diet} ${String(one.mealsPerDay)} meals ${String(one.kcalTarget)} kcal day ${String(one.day)}: ${String(got)}`);
       }
     }
     expect(far).toEqual([]);
@@ -202,7 +224,7 @@ describe("swapping a meal", () => {
 
   it("a meal the person made huge or tiny is swapped for one within a meal's bounds", () => {
     const big = swapMeal({ seed: "s", diet: "vegan", mealType: "dinner", kcal: 2500, foods: [] });
-    expect(big?.totals.kcal).toBeLessThanOrEqual(MOST_MEAL_KCAL * 1.2);
+    expect(big?.totals.kcal).toBeLessThanOrEqual(MOST_MEAL_KCAL * 1.04 * 1.2); // sized 4 % over, as every planned meal
     const small = swapMeal({ seed: "s", diet: "vegan", mealType: "snack", kcal: 20, foods: [] });
     expect(small?.totals.kcal).toBeGreaterThanOrEqual(LEAST_MEAL_KCAL * 0.8);
   });
