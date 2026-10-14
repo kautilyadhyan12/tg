@@ -3,7 +3,7 @@
 // Every read names the gym in the WHERE and returns counts, never a person.
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
-import { REPORT_MONTHS, newCountedFrom, type AttendanceWindows, type ReportClassCounts, type YearEarlierSpan } from "@app/shared";
+import { REPORT_LIST_LAG_DAYS, REPORT_MONTHS, newCountedFrom, type AttendanceWindows, type ReportClassCounts, type YearEarlierSpan } from "@app/shared";
 
 const count = z.number().int().min(0);
 const countsRowSchema = z.object({
@@ -19,7 +19,7 @@ const countsRowSchema = z.object({
   stay_days: z.number().min(0),
   earlier_joined: count,
   earlier_late: count,
-  earlier_late_from: z.string().nullable(),
+  earlier_late_on: z.string().nullable(),
 });
 export type MemberCounts = z.infer<typeof countsRowSchema>;
 
@@ -70,8 +70,9 @@ export function listPeople(sql: Sql | TransactionSql, gymId: string, timezone: s
  *  the list began (`newCountedFrom`).
  *
  *  Who started over `earlier`, the same days a year back, both ends among them: those the
- *  list held by its last day, and those it took in only later, with the day the first of
- *  them was added. A file imported since with last year's join dates is in the second. */
+ *  list held by `REPORT_LIST_LAG_DAYS` after its last day (a month's import is on time),
+ *  and those it took in only later, with the day most of them were added, the earliest
+ *  where days tie. A file imported since with last year's join dates is in the second. */
 export async function readMemberCounts(
   sql: Sql | TransactionSql,
   gymId: string,
@@ -129,9 +130,11 @@ export async function readMemberCounts(
       (SELECT count(*)::int FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_leavers,
       (SELECT COALESCE(sum(GREATEST(p.left_on - p.started, 0)), 0)::float8
        FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_days,
-      (SELECT count(*)::int FROM was WHERE listed_on <= ${earlier.to}::date) AS earlier_joined,
-      (SELECT count(*)::int FROM was WHERE listed_on > ${earlier.to}::date) AS earlier_late,
-      (SELECT to_char(min(listed_on), 'YYYY-MM-DD') FROM was WHERE listed_on > ${earlier.to}::date) AS earlier_late_from
+      (SELECT count(*)::int FROM was WHERE listed_on <= ${earlier.to}::date + ${REPORT_LIST_LAG_DAYS}::int) AS earlier_joined,
+      (SELECT count(*)::int FROM was WHERE listed_on > ${earlier.to}::date + ${REPORT_LIST_LAG_DAYS}::int) AS earlier_late,
+      (SELECT to_char(w.listed_on, 'YYYY-MM-DD') FROM was w
+       WHERE w.listed_on > ${earlier.to}::date + ${REPORT_LIST_LAG_DAYS}::int
+       GROUP BY w.listed_on ORDER BY count(*) DESC, w.listed_on LIMIT 1) AS earlier_late_on
     FROM clock c`;
   return countsRowSchema.parse(rows[0]);
 }

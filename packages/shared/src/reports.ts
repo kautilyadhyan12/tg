@@ -12,6 +12,10 @@ export const REPORT_MONTHS = 12;
 export const REPORT_FULL_MONTHS_NEEDED = 3;
 /** Churn is worked out over this many full months, the newest ones. */
 export const REPORT_CHURN_MONTHS = 3;
+/** A person who joined in a year-earlier span and reached the list within this many days
+ *  after it is on time: a gym that imports last month's joiners each month has the same lag
+ *  today, so the two periods are counted alike. */
+export const REPORT_LIST_LAG_DAYS = 31;
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
@@ -61,12 +65,13 @@ export interface MembersReportFacts {
   yearEarlier: MembersEarlierCounts;
 }
 
-/** Who started in a year-earlier span: those the list held by its last day (`joined`), and
- *  those who reached it only later (`late`, the first of them added on `lateFrom`). */
+/** Who started in a year-earlier span: those the list held by `REPORT_LIST_LAG_DAYS` after
+ *  its last day (`joined`), and those who reached it only later (`late`; most of them were
+ *  added on `lateOn`, the earliest such day where days tie). */
 export interface MembersEarlierCounts {
   joined: number;
   late: number;
-  lateFrom: string | null;
+  lateOn: string | null;
 }
 
 /** Why a figure has no number. */
@@ -83,18 +88,19 @@ const membersEarlierSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("ok"), from: daySchema, to: daySchema, joined: countSchema }).strict(),
   /** The list began after new members of those days could be counted (`since`, null with no list). */
   z.object({ state: z.literal("no_history"), from: daySchema, to: daySchema, since: daySchema.nullable() }).strict(),
-  /** Most of those days' new members reached the list only after them, the first on `on`. */
+  /** Most of those days' new members reached the list only well after them, most of them on `on`. */
   z.object({ state: z.literal("added_later"), from: daySchema, to: daySchema, on: daySchema }).strict(),
 ]);
 export type MembersYearEarlier = z.infer<typeof membersEarlierSchema>;
 
 /** New members a year earlier. Given only where the list could count new members from
  *  that span's first day (`newCountedFrom`), and where most of those who started in it
- *  were on the list by its last day: one person typed in by hand before a gym imports its
- *  file would otherwise make the file's people look like a year of growth. */
+ *  were on the list within `REPORT_LIST_LAG_DAYS` of its last day: one person typed in by
+ *  hand before a gym imports its file would otherwise make the file's people look like a
+ *  year of growth. */
 export function membersYearEarlierFrom(firstListedOn: string | null, span: YearEarlierSpan, counts: MembersEarlierCounts): MembersYearEarlier {
   if (newCountedFrom(firstListedOn, span.from) !== span.from) return { state: "no_history", ...span, since: firstListedOn };
-  if (counts.late > counts.joined && counts.lateFrom !== null) return { state: "added_later", ...span, on: counts.lateFrom };
+  if (counts.late > counts.joined && counts.lateOn !== null) return { state: "added_later", ...span, on: counts.lateOn };
   return { state: "ok", ...span, joined: counts.joined };
 }
 

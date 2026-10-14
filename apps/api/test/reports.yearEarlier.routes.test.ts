@@ -337,6 +337,11 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
       // One member typed on 1 July 2025; the gym's file of 75 imported on 10 September 2026:
       // 35 joined in August and September 2025, 40 in August and September 2026.
       await listedMany(gym, ["Typed By Hand"], "2025-07-01");
+      // One more typed on 3 December 2025, who joined on 20 September: the day named is the
+      // day most of the late people came, not the first of them (the re-check's H2b).
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, joined_on)
+        VALUES (${gym}, 'Typed In December', 'rep-y-typed-december@example.com', ${"d".repeat(64)}, 'typed', '2025-12-03T11:00:00Z', '2025-09-20')`;
       await sql`
         INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, joined_on)
         SELECT ${gym}, 'From The File ' || n, 'rep-y-file-' || n || '@example.com', lpad('e' || n::text, 64, '0'), 'upload',
@@ -347,6 +352,27 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
       expect(r.yearEarlier).toEqual({ state: "added_later", ...SPAN["3m"], on: "2026-09-10" });
       // Twelve months a year earlier begin on 1 November 2024, before the list did.
       expect((await membersOf(gym, owner, "12m")).yearEarlier).toEqual({ state: "no_history", ...SPAN["12m"], since: "2025-07-01" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym that imports last month's joiners on the 1st of each month keeps its figure a year earlier: a month's lag is on time (the re-check's H2)",
+    async () => {
+      const owner = await makeUser("monthly");
+      const gym = await makeGym(owner, "Rep Year Monthly Import");
+      await listedMany(gym, ["First On The List"], "2024-01-10");
+      // One joiner a day from 1 August to 31 October 2025, each on the list from the 1st of the next month.
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, joined_on)
+        SELECT ${gym}, 'Joined ' || d::date, 'rep-y-monthly-' || to_char(d, 'YYYYMMDD') || '@example.com', lpad(to_char(d, 'YYYYMMDD'), 64, 'c'), 'upload',
+               (date_trunc('month', d) + interval '1 month' + interval '11 hours') AT TIME ZONE 'UTC', d::date
+        FROM generate_series(DATE '2025-08-01', DATE '2025-10-31', interval '1 day') AS d`;
+      // Four weeks a year earlier, 24 September to 21 October 2025: 28 joiners, those of
+      // October on the list from 1 November.
+      expect((await membersOf(gym, owner, "4w")).yearEarlier).toEqual({ state: "ok", ...SPAN["4w"], joined: 28 });
+      // Three months, 1 August to 20 October 2025: 31 + 30 + 20.
+      expect((await membersOf(gym, owner, "3m")).yearEarlier).toEqual({ state: "ok", ...SPAN["3m"], joined: 81 });
     },
     TEST_TIMEOUT_MS,
   );

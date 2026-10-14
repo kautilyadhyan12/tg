@@ -79,7 +79,7 @@ export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { 
       stay: { leavers: counts.stay_leavers, totalDays: counts.stay_days },
       leads,
       anyLead: leadRows.any,
-      yearEarlier: { joined: counts.earlier_joined, late: counts.earlier_late, lateFrom: counts.earlier_late_from },
+      yearEarlier: { joined: counts.earlier_joined, late: counts.earlier_late, lateOn: counts.earlier_late_on },
     }),
   });
 }

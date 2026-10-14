@@ -39,7 +39,7 @@ const members = (over = {}) =>
     stay: { leavers: 5, totalDays: 500 },
     leads: [{ source: 'walk_in', leads: 4, joined: 2 }],
     anyLead: true,
-    yearEarlier: { joined: 7, late: 0, lateFrom: null },
+    yearEarlier: { joined: 7, late: 0, lateOn: null },
     ...over,
   });
 const memberLine = (report, key) => memberTiles(report, GYM).find((t) => t.key === key).earlier;
@@ -114,7 +114,7 @@ describe('members a year earlier', () => {
   });
 
   it('most of those days\' new members added later: the day most of the list was added, never 0 (round one, H1)', () => {
-    const r = members({ yearEarlier: { joined: 0, late: 35, lateFrom: '2026-09-10' } });
+    const r = members({ yearEarlier: { joined: 0, late: 35, lateOn: '2026-09-10' } });
     expect(memberLine(r, 'new')).toBe('A year earlier: no figures. Most of your member list was added on 10 Sep 2026.');
   });
 

@@ -84,7 +84,7 @@ function members(over: Partial<MembersReportFacts>) {
       stay: { leavers: 5, totalDays: 500 },
       leads: [],
       anyLead: true,
-      yearEarlier: { joined: 7, late: 0, lateFrom: null },
+      yearEarlier: { joined: 7, late: 0, lateOn: null },
       ...over,
     }),
   );
@@ -127,14 +127,14 @@ describe("new members a year earlier", () => {
     ["the file of 35 imported a year later", 0, 35, "added_later"],
     ["the file of 35 beside one typed by hand", 1, 35, "added_later"],
   ])("%s (%s on time, %s late): %s", (_, joined, late, state) => {
-    const r = members({ yearEarlier: { joined, late, lateFrom: late === 0 ? null : "2026-09-10" } });
+    const r = members({ yearEarlier: { joined, late, lateOn: late === 0 ? null : "2026-09-10" } });
     expect(r.yearEarlier.state).toBe(state);
     if (r.yearEarlier.state === "ok") expect(r.yearEarlier.joined).toBe(joined);
     if (r.yearEarlier.state === "added_later") expect(r.yearEarlier.on).toBe("2026-09-10");
   });
 
   it("a list that began too late says so before anything about late arrivals", () => {
-    expect(members({ firstListedOn: "2026-09-10", yearEarlier: { joined: 0, late: 35, lateFrom: "2026-09-10" } }).yearEarlier).toEqual({
+    expect(members({ firstListedOn: "2026-09-10", yearEarlier: { joined: 0, late: 35, lateOn: "2026-09-10" } }).yearEarlier).toEqual({
       state: "no_history",
       ...SPAN,
       since: "2026-09-10",
