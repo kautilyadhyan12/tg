@@ -24,13 +24,19 @@ import {
 } from './reportsAttendanceView';
 import {
   OTHER_CURRENCY_NOTE,
+  MONEY_STAFF_NOTE,
   canReadMoney,
   moneyLine,
   moneyMissing,
+  moneyMonthColumns,
   moneyMonthName,
   moneyMonthRows,
   moneyMonthsCsv,
   moneyPeriodHead,
+  moneyProductRows,
+  moneyProductsCsv,
+  moneyStaffCsv,
+  moneyStaffRows,
   moneyTiles,
   moneyTypeRows,
   moneyTypesCsv,
@@ -58,7 +64,7 @@ import {
   wholeMonthsNote,
 } from './reportsView';
 
-// REPORTS (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i): the gym's figures about its members,
+// REPORTS (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i, 21d-ii): the gym's figures about its members,
 // its leads, its visits, its classes and its money, over the period picked at the top, each with how it is worked out, and a CSV of the counts. The menu draws the line
 // for `reports.read`; the address can be typed by anybody, so somebody without the tick is
 // told, and nothing is asked for them.
@@ -98,7 +104,22 @@ function Tile({ tile, className = '', children = null }) {
         {how.button}
       </div>
       {tile.value !== null ? <p className="c-big-sm c-t1">{tile.value}</p> : <p className="c-s14 c-t2">{tile.line}</p>}
+      {tile.split ? (
+        <dl className="flex flex-col gap-1 c-s14" data-testid={`split-${tile.key}`}>
+          {tile.split.map((row) => (
+            <div key={row.label} className="flex items-baseline justify-between gap-3">
+              <dt className="c-t2">{row.label}</dt>
+              <dd className="c-t1 c-w5 c-num">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       {tile.note !== null ? <p className="c-s13 c-t3">{tile.note}</p> : null}
+      {tile.earlier ? (
+        <p className="c-s13 c-t3" data-testid="year-earlier">
+          {tile.earlier}
+        </p>
+      ) : null}
       {how.line}
       {children}
     </section>
@@ -465,6 +486,9 @@ function MoneyFigures({ report, org, orgSlug }) {
   const words = orgWords(org.orgType);
   const tiles = moneyTiles(report, words, orgSlug);
   const types = moneyTypeRows(report);
+  const products = moneyProductRows(report);
+  const staff = moneyStaffRows(report);
+  const monthColumns = moneyMonthColumns(report);
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
@@ -492,7 +516,7 @@ function MoneyFigures({ report, org, orgSlug }) {
           <h3 className="c-h3">Money month by month</h3>
           <CsvButton name={csvName('money-by-month', report)} text={moneyMonthsCsv(report)} />
         </div>
-        <CountTable caption="Money, month by month" heads={['Month', 'Paid', 'Refunded', 'Collected']} rows={moneyMonthRows(report)} cells={['month', 'paid', 'refunded', 'collected']} />
+        <CountTable caption="Money, month by month" heads={monthColumns.heads} rows={moneyMonthRows(report)} cells={monthColumns.cells} />
         {wholeMonthsNote(report.period) !== null ? <p className="px-4 md:px-5 py-3 c-s13 c-t3">{wholeMonthsNote(report.period)}</p> : null}
       </section>
       {types.length > 0 ? (
@@ -507,6 +531,27 @@ function MoneyFigures({ report, org, orgSlug }) {
             rows={types}
             cells={['name', 'inUse', 'monthly', 'month', 'period']}
           />
+        </section>
+      ) : null}
+      {products.length > 0 ? (
+        <section className="c-card overflow-hidden" aria-label="Money by product" data-testid="money-by-product">
+          <div className="px-4 md:px-5 pt-4 pb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="c-h3">Money by product</h3>
+            <CsvButton name={csvName('money-by-product', report)} text={moneyProductsCsv(report)} />
+          </div>
+          <CountTable caption="Money, by product" heads={['Product', 'Sold', moneyPeriodHead(report)]} rows={products} cells={['name', 'sold', 'period']} />
+        </section>
+      ) : null}
+      {staff.length > 0 ? (
+        <section className="c-card overflow-hidden" aria-label="Sales by staff" data-testid="money-by-staff">
+          <div className="px-4 md:px-5 pt-4 pb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <h3 className="c-h3">Sales by staff</h3>
+              <p className="c-s13 c-t3">{MONEY_STAFF_NOTE}</p>
+            </div>
+            <CsvButton name={csvName('money-by-staff', report)} text={moneyStaffCsv(report)} />
+          </div>
+          <CountTable caption="Sales by staff" heads={['Staff member', 'Membership payments', 'Product sales', 'Total']} rows={staff} cells={['name', 'paid', 'sold', 'total']} />
         </section>
       ) : null}
     </>

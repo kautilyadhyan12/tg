@@ -1,4 +1,4 @@
-// THE REPORTS PAGE'S MONEY, drawn (ROADMAP 21b-i; spec Part 3 §16.5). Only the network is
+// THE REPORTS PAGE'S MONEY, drawn (ROADMAP 21b-i, 21b-ii; spec Part 3 §16.5). Only the network is
 // mocked: what staff see is read off the real page.
 //
 // The worst thing the screen could do: show a zero where the gym records no payment here,
@@ -46,6 +46,7 @@ const MEMBERS = membersReportFrom({
   stay: { leavers: 2, totalDays: 400 },
   leads: [],
   anyLead: false,
+  yearEarlier: { joined: 0, late: 0, lateOn: null },
 });
 const NO_VISITS = attendanceReportFrom({
   timezone: 'Europe/London',
@@ -93,6 +94,8 @@ const money = (over = {}) =>
     period: '12m',
     currency: 'GBP',
     anyMembership: true,
+    anySale: false,
+    firstSoldOn: null,
     firstPaidOn: '2026-06-10',
     otherCurrency: false,
     overdueAfterDays: 7,
@@ -103,8 +106,12 @@ const money = (over = {}) =>
       { typeId: 'gold', typeName: 'Gold Monthly', month: '2026-09', paidMinor: 12000, refundedMinor: 2000 },
       { typeId: 'day', typeName: 'One month', month: '2026-10', paidMinor: 6000, refundedMinor: 1500 },
     ],
+    sales: [],
+    products: [],
+    staff: [],
     owed: { currentMinor: 7998, currentPeople: 2, listPeople: 2, pastMinor: 6000, pastPeople: 1, overdueMinor: 4999, overduePeople: 1 },
     members: { today: TODAY, firstListedOn: '2026-01-05', everLeft: true, months: memberMonths },
+    yearEarlier: { paidMinor: 0, soldMinor: 0, refundedMinor: 0 },
     ...over,
   }));
 
@@ -142,12 +149,12 @@ describe('the money figures', () => {
     open();
     await screen.findByTestId('tile-recurring');
     expect(svc.money).toHaveBeenCalledWith('g1', '12m');
-    expect(moneyPart().getByText('These figures come from the payments your staff record in the app. The first was recorded on 10 Jun 2026.')).toBeTruthy();
+    expect(moneyPart().getByText('These figures come from the payments and sales your staff record in the app. The first was recorded on 10 Jun 2026.')).toBeTruthy();
 
     expect(within(tile('recurring')).getByText('£99.98')).toBeTruthy();
     expect(within(tile('recurring')).getByText('2 repeating memberships')).toBeTruthy();
     expect(within(tile('collected')).getByText('£345.00')).toBeTruthy();
-    expect(within(tile('collected')).getByText('since 10 Jun 2026, the first payment recorded here: £380.00 paid, £35.00 refunded · October, so far: £45.00')).toBeTruthy();
+    expect(within(tile('collected')).getByText('since 10 Jun 2026, the first payment or sale recorded here: £380.00 paid, £35.00 refunded · October, so far: £45.00')).toBeTruthy();
     expect(within(tile('due')).getByText('£139.98')).toBeTruthy();
     expect(within(tile('due')).getByText('2 members and 1 past member · £49.99 of it overdue')).toBeTruthy();
     // 300.00 collected in July to September, and 2 members left in them.
@@ -280,7 +287,109 @@ describe('the money figures', () => {
   it('says so where payments in another currency are left out', async () => {
     svc.money.mockResolvedValue(money({ otherCurrency: true }));
     open();
-    expect((await screen.findByTestId('other-currency-note')).textContent).toBe('Payments and bills in another currency, from before your country changed, are not counted here.');
+    expect((await screen.findByTestId('other-currency-note')).textContent).toBe('Payments, sales and bills in another currency, from before your country changed, are not counted here.');
+  });
+});
+
+describe('products sold at the desk, and who took the money (21b-ii)', () => {
+  const desk = {
+    anySale: true,
+    firstSoldOn: '2026-08-02',
+    sales: [
+      { month: '2026-08', soldMinor: 2500, periodSoldMinor: 2500 },
+      { month: '2026-10', soldMinor: 1200, periodSoldMinor: 1200 },
+    ],
+    products: [
+      { productId: 'w', name: 'Water', sold: 14, minor: 2100 },
+      { productId: 's', name: 'Shake', sold: 4, minor: 1600 },
+    ],
+    staff: [
+      { userId: null, name: null, paidMinor: 6000, soldMinor: 0 },
+      { userId: 'u1', name: 'Ravi Kumar', paidMinor: 20000, soldMinor: 3700 },
+      { userId: 'u2', name: 'Asha', paidMinor: 12000, soldMinor: 0 },
+    ],
+  };
+
+  it('Collected says what came from memberships and what from product sales; the months have a column for each', async () => {
+    svc.money.mockResolvedValue(money(desk));
+    open();
+    await screen.findByTestId('tile-recurring');
+    expect(within(tile('collected')).getByText('£382.00')).toBeTruthy();
+    expect(within(tile('collected')).getByText('since 10 Jun 2026, the first payment or sale recorded here · October, so far: £57.00')).toBeTruthy();
+    // What came from where is its own lines under the figure, not inside a sentence.
+    expect([...screen.getByTestId('split-collected').querySelectorAll('div')].map((row) => row.textContent)).toEqual([
+      'Memberships£380.00',
+      'Product sales£37.00',
+      'Refunded-£35.00',
+    ]);
+    expect(tableRows('Money, month by month')).toEqual([
+      ['Month', 'Memberships', 'Product sales', 'Refunded', 'Collected'],
+      ['Oct 2026 (so far)', '£60.00', '£12.00', '£15.00', '£57.00'],
+      ['Sep 2026', '£120.00', '£0.00', '£20.00', '£100.00'],
+      ['Aug 2026', '£100.00', '£25.00', '£0.00', '£125.00'],
+      ['Jul 2026', '£100.00', '£0.00', '£0.00', '£100.00'],
+      ['Jun 2026', '£0.00', '£0.00', '£0.00', '£0.00'],
+    ]);
+  });
+
+  it('lists each product sold, and each person who took money with a deleted account last, for the period', async () => {
+    svc.money.mockResolvedValue(money(desk));
+    open();
+    await screen.findByTestId('money-by-product');
+    expect(tableRows('Money, by product')).toEqual([
+      ['Product', 'Sold', 'Collected, last 12 months'],
+      ['Water', '14', '£21.00'],
+      ['Shake', '4', '£16.00'],
+    ]);
+    expect(tableRows('Sales by staff')).toEqual([
+      ['Staff member', 'Membership payments', 'Product sales', 'Total'],
+      ['Ravi Kumar', '£200.00', '£37.00', '£237.00'],
+      ['Asha', '£120.00', '£0.00', '£120.00'],
+      ['Deleted account', '£60.00', '£0.00', '£60.00'],
+    ]);
+    expect(within(screen.getByTestId('money-by-staff')).getByText('The membership payments and product sales each staff member recorded. Refunds are taken off Collected, not off anybody here.')).toBeTruthy();
+  });
+
+  it('the staff and product tables download as CSV, a name a spreadsheet would run saved as words', async () => {
+    const saved = [];
+    const real = globalThis.Blob;
+    vi.stubGlobal('Blob', function Blob(parts, options) {
+      saved.push(parts.join(''));
+      return new real(parts, options);
+    });
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    svc.money.mockResolvedValue(money({ ...desk, products: [{ productId: 'x', name: '=SUM(1)', sold: 1, minor: 100 }], staff: [{ userId: 'u', name: '+Bad', paidMinor: 0, soldMinor: 100 }] }));
+    open();
+    fireEvent.click(within(await screen.findByTestId('money-by-product')).getByRole('button', { name: 'Download CSV' }));
+    fireEvent.click(within(screen.getByTestId('money-by-staff')).getByRole('button', { name: 'Download CSV' }));
+    vi.unstubAllGlobals();
+    expect(saved).toEqual([
+      '"Product","Sold","Collected, last 12 months (GBP)"\r\n"\'=SUM(1)","1","1.00"\r\n',
+      '"Staff member","Membership payments (GBP)","Product sales (GBP)","Total (GBP)"\r\n"\'+Bad","0.00","1.00","1.00"\r\n',
+    ]);
+  });
+
+  it('a gym that never sells at the desk reads no product column, no product table and no zeros for sales', async () => {
+    open();
+    await screen.findByTestId('tile-recurring');
+    expect(tableRows('Money, month by month')[0]).toEqual(['Month', 'Paid', 'Refunded', 'Collected']);
+    expect(screen.queryByTestId('money-by-product')).toBeNull();
+    expect(screen.queryByText(/product sales/i)).toBeNull();
+    expect(screen.queryByTestId('split-collected')).toBeNull();
+  });
+
+  it('a gym that only sells at the desk has its figures, with no membership table', async () => {
+    svc.money.mockResolvedValue(money({ ...desk, anyMembership: false, firstPaidOn: null, held: [], months: [], staff: [{ userId: 'u1', name: 'Ravi Kumar', paidMinor: 0, soldMinor: 3700 }] }));
+    open();
+    await screen.findByTestId('tile-collected');
+    expect(tile('collected').querySelector('.c-big-sm').textContent).toBe('£37.00');
+    expect(moneyPart().getByText('These figures come from the payments and sales your staff record in the app. The first was recorded on 2 Aug 2026.')).toBeTruthy();
+    expect(screen.queryByTestId('money-by-membership')).toBeNull();
+    expect(tableRows('Sales by staff')).toEqual([
+      ['Staff member', 'Membership payments', 'Product sales', 'Total'],
+      ['Ravi Kumar', '£0.00', '£37.00', '£37.00'],
+    ]);
   });
 });
 
@@ -292,7 +401,7 @@ describe('a gym with no money figures', () => {
     await waitFor(() =>
       expect(
         part.getByText(
-          "No payment is recorded in the app yet. If you take payments in other software, your money figures are there. To see them here, record each payment on the member's page.",
+          "No payment or sale is recorded in the app yet. If you take payments in other software, your money figures are there. To see them here, record each payment on the member's page.",
         ),
       ).toBeTruthy(),
     );
@@ -351,9 +460,9 @@ describe('the period', () => {
     );
     open();
     await screen.findByTestId('tile-recurring');
-    expect(tile('collected').textContent).toBe('Collected£95.0023 Sep 2026 to 20 Oct 2026: £110.00 paid, £15.00 refunded · October, so far: £45.00');
+    expect(tile('collected').textContent).toBe('Collected£95.0023 Sep 2026 to 20 Oct 2026: £110.00 paid, £15.00 refunded · October, so far: £45.00A year earlier: £0.00 · up £95.00');
     fireEvent.click(within(tile('collected')).getByRole('button', { name: 'How Collected is worked out' }));
-    expect(within(tile('collected')).getByText('Payments your staff recorded from 23 Sep 2026 to today, less refunds noted in those days. A payment or a refund that was undone is not counted.')).toBeTruthy();
+    expect(within(tile('collected')).getByText('Membership payments and product sales your staff recorded from 23 Sep 2026 to today, less refunds noted in those days. A payment, sale or refund that was undone is not counted. A year earlier counts the same weekdays 52 weeks before: 24 Sep 2025 to 21 Oct 2025.')).toBeTruthy();
     // Whole months, each its own figure; and each membership's money in the four weeks.
     expect(tableRows('Money, month by month')).toEqual([
       ['Month', 'Paid', 'Refunded', 'Collected'],
@@ -371,7 +480,7 @@ describe('the period', () => {
     svc.money.mockResolvedValue(money({ period: '12m', firstPaidOn: '2026-06-10' }));
     open();
     await screen.findByTestId('tile-recurring');
-    expect(tile('collected').textContent).toContain('since 10 Jun 2026, the first payment recorded here');
+    expect(tile('collected').textContent).toContain('since 10 Jun 2026, the first payment or sale recorded here');
     svc.money.mockResolvedValue(money({ period: '12m', firstPaidOn: '2025-03-01' }));
     cleanup();
     open();

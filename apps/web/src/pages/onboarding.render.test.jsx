@@ -398,6 +398,18 @@ describe('onboarding screens 1–7', () => {
     await heading('Your target');
   });
 
+  it('an age under 18 kept from before says why, and "About you" cannot be left with it', async () => {
+    serve({ weightGoal: 'maintain', age: 17, gender: 'female', heightCm: 165, weightKg: 70 });
+    draw();
+    await heading('About you');
+    expect(screen.getByText('You must be 18 or older to use this app.')).toBeTruthy();
+    expect(button(/continue/i).disabled).toBe(true);
+    tap('Age: one more');
+    await saved({ age: 18 });
+    await waitFor(() => expect(screen.queryByText('You must be 18 or older to use this app.')).toBeNull());
+    expect(button(/continue/i).disabled).toBe(false);
+  });
+
   it('keeps the plan number on every screen once it exists', async () => {
     serve({ ...ALL, availableEquipment: [] });
     draw();
@@ -446,8 +458,9 @@ describe('onboarding screens 1–7', () => {
     }
     await settleWheels();
     expect(svc.patch).not.toHaveBeenCalled();
-    // Nobody under 16 can be picked: the wheel starts there.
-    expect(within(spin('Age')).queryByText('15')).toBeNull();
+    // Nobody under 18 can be picked: the wheel starts there (RULINGS 2026-09-15).
+    expect(within(spin('Age')).queryByText('17')).toBeNull();
+    expect(within(spin('Age')).getByText('18')).toBeTruthy();
     // The first touch saves: + moves one row on from the resting 30.
     tap('Age: one more');
     await saved({ age: 31 });
@@ -459,15 +472,15 @@ describe('onboarding screens 1–7', () => {
     draw();
     await heading('About you');
     const age = spin('Age');
-    age.scrollTop = 40 * 20;
+    age.scrollTop = 40 * 18;
     fireEvent.scroll(age);
     await settleWheels();
     expect(svc.patch).not.toHaveBeenCalled();
-    expect(age.scrollTop).toBe(40 * 14); // back on its resting row, 30
-    // A flick on a wheel the person has touched: row 20 of 16…120 is 36.
+    expect(age.scrollTop).toBe(40 * 12); // back on its resting row, 30
+    // A flick on a wheel the person has touched: row 18 of 18…120 is 36.
     fireEvent.focus(age);
     fireEvent.wheel(age);
-    age.scrollTop = 40 * 20;
+    age.scrollTop = 40 * 18;
     fireEvent.scroll(age);
     await saved({ age: 36 });
   });
@@ -487,12 +500,12 @@ describe('onboarding screens 1–7', () => {
     fireEvent.wheel(age);
     fireEvent.touchStart(age);
     fireEvent.pointerDown(age);
-    age.scrollTop = 40 * 20;
+    age.scrollTop = 40 * 18;
     fireEvent.scroll(age);
     fireEvent.touchEnd(age);
     await settleWheels();
     expect(svc.patch).not.toHaveBeenCalled();
-    expect(age.scrollTop).toBe(40 * 14);
+    expect(age.scrollTop).toBe(40 * 12);
     expect(age.getAttribute('aria-valuetext')).toBe('Not set');
     // Tapped or focused, it turns under the person's flick…
     fireEvent.focus(age);
@@ -531,11 +544,11 @@ describe('onboarding screens 1–7', () => {
     fireEvent.focus(age);
     gesture(age);
     await settleWheels();
-    age.scrollTop = 40 * 20;
+    age.scrollTop = 40 * 18;
     fireEvent.scroll(age);
     await settleWheels();
     expect(svc.patch).not.toHaveBeenCalled();
-    expect(age.scrollTop).toBe(40 * 14); // back on its resting row, 30
+    expect(age.scrollTop).toBe(40 * 12); // back on its resting row, 30
   });
 
   it('Tab away lets a wheel go, so a mouse wheel over it afterwards moves nothing', async () => {
@@ -548,11 +561,11 @@ describe('onboarding screens 1–7', () => {
     fireEvent.blur(age); // Tab moves the focus on
     expect(age.className).toContain('overflow-y-hidden');
     fireEvent.wheel(age);
-    age.scrollTop = 40 * 20;
+    age.scrollTop = 40 * 18;
     fireEvent.scroll(age);
     await settleWheels();
     expect(svc.patch).not.toHaveBeenCalled();
-    expect(age.scrollTop).toBe(40 * 14);
+    expect(age.scrollTop).toBe(40 * 12);
   });
 
   it('a slow drag that rests and goes on saves where the finger lifts, not where it rested', async () => {
@@ -566,12 +579,12 @@ describe('onboarding screens 1–7', () => {
     fireEvent.pointerDown(age);
     fireEvent.touchStart(age);
     fireEvent.pointerCancel(age);
-    age.scrollTop = 40 * 20; // resting on 36…
+    age.scrollTop = 40 * 18; // resting on 36…
     fireEvent.scroll(age);
     await settleWheels(); // …for longer than a wheel takes to settle
     expect(svc.patch).not.toHaveBeenCalled();
-    expect(age.scrollTop).toBe(40 * 20); // still under the finger
-    age.scrollTop = 40 * 29; // on to 45, then the finger lifts
+    expect(age.scrollTop).toBe(40 * 18); // still under the finger
+    age.scrollTop = 40 * 27; // on to 45, then the finger lifts
     fireEvent.scroll(age);
     fireEvent.touchEnd(age);
     await saved({ age: 45 });

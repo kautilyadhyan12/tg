@@ -16,6 +16,7 @@ import {
   healthScreeningSchema,
   putHealthScreeningRequestSchema,
   recordConsentRequestSchema,
+  UNDER_AGE_LINE,
 } from "../src/index.js";
 
 describe("health screening contract", () => {
@@ -173,7 +174,7 @@ describe("consent contract", () => {
     for (const purpose of consentPurposeSchema.options) {
       // v2 is what the health step and the plan show today (the sign-up note
       // has moved on to Kd's own words, v3: the next test)…
-      expect(CURRENT_DISCLAIMER_VERSION[purpose]).toBe(purpose === "sign_up" ? "v3" : "v2");
+      expect(CURRENT_DISCLAIMER_VERSION[purpose]).toBe(purpose === "sign_up" ? "v4" : "v2");
       const v1 = DISCLAIMER_WORDINGS[purpose]["v1"] ?? "";
       const v2 = DISCLAIMER_WORDINGS[purpose]["v2"] ?? "";
       expect(v1, purpose).not.toBe("");
@@ -191,7 +192,6 @@ describe("consent contract", () => {
   });
 
   it("the sign-up note shows Kd's own words, which keep 'follow their advice' and name what the health question asks about (Kd, 2026-09-14)", () => {
-    expect(CURRENT_DISCLAIMER_VERSION.sign_up).toBe("v3");
     const v3 = DISCLAIMER_WORDINGS.sign_up["v3"] ?? "";
     // Word for word what Kd said go to.
     expect(v3).toBe(
@@ -203,6 +203,10 @@ describe("consent contract", () => {
       expect(HEALTH_QUESTION, asked).toContain(asked);
       expect(v3, asked).toContain(asked);
     }
+    // The note today is v3 with the app's age in front, and nothing else changed
+    // (RULINGS 2026-09-15: 18 and over).
+    expect(CURRENT_DISCLAIMER_VERSION.sign_up).toBe("v4");
+    expect(DISCLAIMER_WORDINGS.sign_up["v4"]).toBe(`${UNDER_AGE_LINE} ${v3}`);
     // The words people ticked before stay, for the rows that carry them.
     expect(DISCLAIMER_WORDINGS.sign_up["v2"]).toContain("Talk to a doctor or another qualified professional before you start");
   });

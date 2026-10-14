@@ -336,11 +336,16 @@ describe("screen 1's goals: any number, and no tap unticks another (RULINGS 2026
 });
 
 describe('the wheels (Kd, 2026-09-10: nothing typed, nothing pre-filled)', () => {
-  it('offer ages from 16 to 120, every one an age the server takes, and nothing younger', () => {
+  it('offer ages from 18 to 120, every one an age the server takes, and nothing younger', () => {
     const ages = m.ageList(null);
-    expect([ages[0], ages[ages.length - 1]]).toEqual([16, 120]);
+    expect([ages[0], ages[ages.length - 1]]).toEqual([18, 120]);
     for (const age of ages) expect(accepts({ age }), String(age)).toBe(true);
-    expect(accepts({ age: 15 })).toBe(false);
+    expect(accepts({ age: 17 })).toBe(false);
+    // An age under 18 kept from before is shown, and "About you" is not answered with it.
+    expect(m.ageList(17)[0]).toBe(17);
+    const about = { ...ALL, displayName: 'Kd' };
+    expect(m.screenAnswered('about', { ...about, age: 17 })).toBe(false);
+    expect(m.screenAnswered('about', { ...about, age: 18 })).toBe(true);
   });
 
   it('weight: every pair of rows, in both units, is a weight the server takes and reads back as itself', () => {
@@ -400,7 +405,7 @@ describe('the wheels (Kd, 2026-09-10: nothing typed, nothing pre-filled)', () =>
   it('− and + move one row and stop at the ends; an inch carries into the feet', () => {
     const ages = m.ageList(null);
     expect(m.stepIn(ages, 30, 1)).toBe(31);
-    expect(m.stepIn(ages, 16, -1)).toBe(16);
+    expect(m.stepIn(ages, 18, -1)).toBe(18);
     expect(m.stepIn(ages, 120, 1)).toBe(120);
     expect(m.stepIn(m.plankList(null), 30, 1)).toBe(35);
     expect(m.stepInches({ ft: 5, inch: 11 }, 1)).toEqual({ ft: 6, inch: 0 });
@@ -572,7 +577,7 @@ describe('a target under the lowest healthy weight is said on screen 3 as it is 
   });
 
   it('names no floor for an age or a height the plan cannot take, so a 13 typed in Settings shows none', () => {
-    // The plan is for 16 and over (RULINGS 2026-09-07); Settings' age box still lets 13 be typed, and the server refuses it.
+    // The plan's rails start at 16, under the app's 18 (RULINGS 2026-09-15); Settings' box can still be typed lower, and says so.
     for (const age of [13, 15, 121, 16.5]) {
       expect(m.healthyFloorKg({ ...LOW, age }), String(age)).toBeNull();
       expect(m.healthyTargetLine('lose', { ...LOW, age }, 'metric'), String(age)).toBeNull();
