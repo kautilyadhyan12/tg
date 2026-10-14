@@ -15,6 +15,7 @@ export {
   deleteAccountRequestSchema,
   dietSchema,
   mealsPerDaySchema,
+  fitnessLevelSchema,
   fitnessProfileResponseSchema,
   fitnessProfileSchema,
   onboardingAnswersSchema,

@@ -12,6 +12,7 @@ import { createDualRateLimit } from "../auth/rateLimit.js";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
+import { onHealthAnswered } from "../gamification/service.js";
 import { safeTimeZone } from "../gamification/streak.js";
 import { createLogOnlyUsersEmailSender, type UsersEmailSender } from "./email.js";
 import {
@@ -168,7 +169,16 @@ export function registerUserRoutes(
   app.put("/v1/users/me/health-screening", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseBody(putHealthScreeningRequestSchema, req, reply);
     if (body === null) return;
-    const healthScreening = await service.putHealthScreening(usersDeps, authedUserId(req), body);
+    const userId = authedUserId(req);
+    const healthScreening = await service.putHealthScreening(usersDeps, userId, body);
+    // Safe mode pauses this week's challenges and the XP they would pay (35b). A failure here
+    // never fails the save: the next workout, meal or read of the challenges does it again.
+    await onHealthAnswered({ sql: deps.sql }, userId).catch((err: unknown) => {
+      app.log.warn(
+        { event: "gamification.health_recompute_failed", userId, errName: err instanceof Error ? err.name : typeof err },
+        "weekly challenges not paused after the health answer",
+      );
+    });
     return reply.status(200).send({ healthScreening });
   });
 
