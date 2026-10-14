@@ -43,8 +43,13 @@ export const EMPTY_FILTERS = {
   over: false,
   /** Only the members left off that list because they still owe a payment. */
   overOwing: false,
+  /** Only the members who have not signed the waiver the gym asks for today (3e-ii). */
+  waiverNotSigned: false,
   query: '',
 };
+
+/** The pill and the Filter's choice for the people who have not signed the waiver. */
+export const WAIVER_NOT_SIGNED_WORDS = 'Waiver not signed';
 
 /** The pill for the list the sign atop Members opens. */
 export const OVER_FILTER_WORDS = 'Membership ended or cancelled';
@@ -79,6 +84,7 @@ export function entriesQueryString(filters, cursor) {
     for (const { kind } of CHIP_KINDS) for (const word of filters[kind]) params.append(kind, word);
     if (filters.over) params.append('membership', 'over');
     else if (filters.overOwing) params.append('membership', 'over_owing');
+    if (filters.waiverNotSigned) params.append('waiver', 'not_signed');
   } else {
     // Past members have one word to be found by: who still owes (18a-ii).
     for (const word of filters.paymentStatus) params.append('paymentStatus', word);
@@ -114,6 +120,7 @@ export function activeFilters(filters, words) {
       out.push({ key: `app:${word}`, text: MEMBER_APP_FILTER_WORDS[word], without: toggleApp(filters, word) });
     }
   }
+  if (filters.waiverNotSigned) out.push({ key: 'waiver', text: WAIVER_NOT_SIGNED_WORDS, without: { ...filters, waiverNotSigned: false } });
   return [...out, ...tag];
 }
 
@@ -122,6 +129,7 @@ export function filtersAreEmpty(filters) {
     filters.tag === null &&
     !filters.over &&
     !filters.overOwing &&
+    !filters.waiverNotSigned &&
     filters.app.length === 0 &&
     filters.query.trim() === '' &&
     CHIP_KINDS.every(({ kind }) => filters[kind].length === 0)
@@ -446,6 +454,7 @@ export function selectionFilter(filters) {
     for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) out[kind] = [...filters[kind]];
     if (filters.over) out.membership = 'over';
     else if (filters.overOwing) out.membership = 'over_owing';
+    if (filters.waiverNotSigned) out.waiver = 'not_signed';
   } else if (filters.paymentStatus.length > 0) {
     out.paymentStatus = [...filters.paymentStatus];
   }

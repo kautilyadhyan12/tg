@@ -234,11 +234,30 @@ export default function Settings() {
       {/* WHO CAN CHECK IN (16d): whom the front desk checks in, on `org.manage` as the
           server gates it. Keyed per gym for the panels' reason above: it holds choices
           not saved yet. */}
-      {canEditGym ? <CheckinRulesPanel key={`checkin-rules-${org.id}`} org={org} readOnly={readOnly} attendanceTo={placeTo(orgSlug, 'attendance') ?? '../attendance'} /> : null}
+      {canEditGym ? (
+        <CheckinRulesPanel
+          key={`checkin-rules-${org.id}`}
+          org={org}
+          readOnly={readOnly}
+          attendanceTo={placeTo(orgSlug, 'attendance') ?? '../attendance'}
+          waiverTo={placeTo(orgSlug, 'waiver')}
+        />
+      ) : null}
 
       {/* WAIVER (3e-i): the gym's own waiver, signed in the app, on `org.manage` as the server
           gates it. Keyed per gym for the panels' reason above: it holds words not saved yet. */}
-      {canEditGym ? <WaiverPanel key={`waiver-${org.id}`} org={org} readOnly={readOnly} membersTo={placeTo(orgSlug, 'members') ?? '../members'} membersName={membersPageName(privileges, org.orgType)} /> : null}
+      {canEditGym ? (
+        <div id={SETTINGS_SECTION.waiver} style={{ scrollMarginTop: 16 }}>
+          <WaiverPanel
+            key={`waiver-${org.id}`}
+            org={org}
+            readOnly={readOnly}
+            startOpen={linked(section === SETTINGS_SECTION.waiver)}
+            membersTo={placeTo(orgSlug, 'members') ?? '../members'}
+            membersName={membersPageName(privileges, org.orgType)}
+          />
+        </div>
+      ) : null}
 
       {/* FOLLOW-UP EMAILS TO LEADS (20c-v): the owner's "Send them for me", on the
           privilege the server gates it with. Keyed per gym for the panels' reason above:

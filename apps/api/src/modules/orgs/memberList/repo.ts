@@ -1750,6 +1750,9 @@ export interface EntriesPageInput {
   tagIds: readonly string[] | null;
   /** Only these records (the people whose membership is over, 21c-iii), or null for no filter. */
   overIds: readonly string[] | null;
+  /** Only the current records that have not signed the waiver in use (3e-ii): every one
+   *  but `signed`, and nobody where the gym asks for none. Null for no filter. */
+  waiverNotSigned: { inUse: boolean; signed: readonly string[] } | null;
   /** The people whose three kinds of word the app answers (23a-i: they hold a membership
    *  here), and which of them pass the word filters asked, by the app's own words. Null
    *  where no word filter is asked. */
@@ -1774,6 +1777,8 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
   const appIds = input.appIds === null ? null : [...input.appIds];
   const tagIds = input.tagIds === null ? null : [...input.tagIds];
   const overIds = input.overIds === null ? null : [...input.overIds];
+  const waiverAsked = input.waiverNotSigned === null ? null : input.waiverNotSigned.inUse;
+  const waiverSigned = [...(input.waiverNotSigned?.signed ?? [])];
   const heldIds = [...(input.held?.ids ?? [])];
   const heldPassing = [...(input.held?.passing ?? [])];
   return sql`
@@ -1811,7 +1816,9 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
              OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
         AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))
         AND (${tagIds}::uuid[] IS NULL OR e.id = ANY(${tagIds}::uuid[]))
-        AND (${overIds}::uuid[] IS NULL OR (e.former_at IS NULL AND e.id = ANY(${overIds}::uuid[])))`;
+        AND (${overIds}::uuid[] IS NULL OR (e.former_at IS NULL AND e.id = ANY(${overIds}::uuid[])))
+        AND (${waiverAsked}::boolean IS NULL
+             OR (${waiverAsked}::boolean AND e.former_at IS NULL AND e.id <> ALL(${waiverSigned}::uuid[])))`;
 }
 
 /** Every record the filter chooses, in the list's order: who "Select all" selects. */

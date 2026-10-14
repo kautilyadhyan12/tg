@@ -58,15 +58,17 @@ interface Person {
   /** The day their oldest open bill fell due. */
   owedSince?: string | null;
   staff?: boolean;
+  /** Signed the waiver in use; null (the start) where the gym asks for none. */
+  waiverSigned?: boolean | null;
 }
 
 const ALL_RULES: CheckinRules[] = [
-  { who: "everyone", overdue: "let_in" },
-  { who: "everyone", overdue: "see_staff" },
-  { who: "current_membership", overdue: "let_in" },
-  { who: "current_membership", overdue: "see_staff" },
+  { who: "everyone", overdue: "let_in", waiver: "let_in" },
+  { who: "everyone", overdue: "see_staff", waiver: "let_in" },
+  { who: "current_membership", overdue: "let_in", waiver: "let_in" },
+  { who: "current_membership", overdue: "see_staff", waiver: "let_in" },
 ];
-const STRICT: CheckinRules = { who: "current_membership", overdue: "see_staff" };
+const STRICT: CheckinRules = { who: "current_membership", overdue: "see_staff", waiver: "let_in" };
 
 function stop(person: Person, rules: CheckinRules, overdueAfterDays = 0, today = TODAY): CheckinStopReason | null {
   const owedSince = person.owedSince ?? null;
@@ -77,6 +79,7 @@ function stop(person: Person, rules: CheckinRules, overdueAfterDays = 0, today =
     owedSince,
     today,
     overdueAfterDays,
+    waiverSigned: person.waiverSigned ?? null,
   });
 }
 
@@ -144,7 +147,7 @@ describe("where every gym starts, nobody is stopped", () => {
 });
 
 describe("only members with a current membership", () => {
-  const rules: CheckinRules = { who: "current_membership", overdue: "let_in" };
+  const rules: CheckinRules = { who: "current_membership", overdue: "let_in", waiver: "let_in" };
   const cases: [string, Person, CheckinStopReason | null][] = [
     ["nothing held in the app", { held: [] }, "no_membership"],
     ["only a word on the gym's file, whatever it says", { held: [], listedUnheld: "Active Gold" }, "no_membership"],
@@ -179,7 +182,7 @@ describe("only members with a current membership", () => {
 });
 
 describe("a payment overdue is sent to staff", () => {
-  const rules: CheckinRules = { who: "everyone", overdue: "see_staff" };
+  const rules: CheckinRules = { who: "everyone", overdue: "see_staff", waiver: "let_in" };
   const running = (owedSince: string | null): Person => ({ held: [one("Gold Monthly", given(monthly, "2026-09-01", false))], owedSince });
 
   // The day a bill first reads Overdue, for each of the gym's days of grace: the day after
@@ -210,7 +213,7 @@ describe("a payment overdue is sent to staff", () => {
     expect(stop(person, rules)).toBe("overdue");
     // With both choices on, the membership is what staff are told first.
     expect(stop(person, STRICT)).toBe("cancelled");
-    expect(stop(person, { who: "current_membership", overdue: "let_in" })).toBe("cancelled");
+    expect(stop(person, { who: "current_membership", overdue: "let_in", waiver: "let_in" })).toBe("cancelled");
   });
 
   it("the gym's owner and staff are let in with a bill overdue", () => {
@@ -222,8 +225,40 @@ describe("a payment overdue is sent to staff", () => {
   });
 });
 
+describe("a waiver not signed is sent to staff (3e-ii)", () => {
+  const rules: CheckinRules = { who: "everyone", overdue: "let_in", waiver: "see_staff" };
+  const paid: Person = { held: [one("Gold Monthly", given(monthly, "2026-10-01", true))] };
+  const cases: [string, Person, CheckinStopReason | null][] = [
+    ["signed the waiver in use", { ...paid, waiverSigned: true }, null],
+    ["has not signed it", { ...paid, waiverSigned: false }, "no_waiver"],
+    ["has not signed it and holds nothing here", { held: [], waiverSigned: false }, "no_waiver"],
+    ["the gym asks for no waiver", { ...paid, waiverSigned: null }, null],
+    ["the gym asks for none, and nothing held", { held: [], waiverSigned: null }, null],
+  ];
+
+  it.each(cases)("%s", (_name, person, expected) => {
+    expect(stop(person, rules)).toBe(expected);
+  });
+
+  it("is never asked while the gym lets everybody in", () => {
+    for (const [, person] of cases) expect(stop(person, CHECKIN_RULES_START)).toBeNull();
+    expect(checkinRulesStopAnyone(rules)).toBe(true);
+  });
+
+  it("the gym's owner and staff are let in without a signature", () => {
+    expect(stop({ ...paid, waiverSigned: false, staff: true }, rules)).toBeNull();
+  });
+
+  it("a membership or a payment is what staff are told first", () => {
+    const all: CheckinRules = { who: "current_membership", overdue: "see_staff", waiver: "see_staff" };
+    expect(stop({ held: [], waiverSigned: false }, all)).toBe("no_membership");
+    expect(stop({ held: [one("Gold Monthly", given(monthly, "2026-09-01", false))], owedSince: "2026-09-01", waiverSigned: false }, all)).toBe("overdue");
+    expect(stop({ ...paid, waiverSigned: false }, all)).toBe("no_waiver");
+  });
+});
+
 describe("the words staff read", () => {
   it("has a line for every reason", () => {
-    for (const reason of checkinStopReasonSchema.options) expect(CHECKIN_STOP_WORDS[reason]).toMatch(/^(No membership|Membership |Payment overdue)/);
+    for (const reason of checkinStopReasonSchema.options) expect(CHECKIN_STOP_WORDS[reason]).toMatch(/^(No membership|Membership |Payment overdue|Waiver not signed)/);
   });
 });
