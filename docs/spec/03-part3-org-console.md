@@ -3623,8 +3623,33 @@ codes on products, as Gymdesk and Mindbody do them.
   (`discount_id`, `discount_name`, `discount_minor`); a later change or an archive
   rewrites no sale, and the database refuses to delete a discount a sale points at. The day's list, a person's purchases and the note under the day's
   total say it; the total is what was paid.
-- **Not built**: discounts on memberships (18b-ii-b); two discounts on one sale; a sale
+- **Not built**: discounts on memberships (18b-ii-b, below); two discounts on one sale; a sale
   for nothing; a code a member types in their own app (18k); discounts in Reports.
+
+**As built, 18b-ii-b (2026-10-14; `rulings/2026-10-14-18b-ii-b.md`).** The same discounts on
+memberships.
+- **What a discount applies to**: products (all, or the ones ticked), memberships (all
+  membership types, or the ones ticked), or both. A discount made before this job is for
+  products alone, as it was. One for memberships says how often it comes off a
+  membership that renews: **First payment only** or **Every payment**; a membership paid
+  once (a day pass, a pack, a trial, a fixed term) gets it on that one payment.
+- **Used** on Sell's membership box and on a person's **Add membership**, from the same
+  Discount list and Promo code box as a product sale, offering only what the server
+  will take on that type today and what leaves something to pay. Price, Discount and
+  Total are shown above the button, and what every later payment is.
+- **The server** works out what comes off again (`membershipDiscount`) under the gym's
+  lock, and gives nothing where the price or what comes off is not what the screen showed.
+  A use is counted in the giving's own transaction by a statement that will not pass the
+  limit. The membership keeps which discount, its name as it was, what came off and which
+  payments (`gym_held_memberships.discount_*`, `0106`). With Every payment its price is
+  the price after the discount, so every bill opened from it carries it; with First payment
+  only its price stays the full price and only the bill opened when it was given is
+  discounted. A later change of the discount or the type's price rewrites nobody's.
+- **A person's page** says it under the membership: "Sold with First month: $10.00 off the
+  first payment. Every payment after it is $50.00."
+- **Not built**: a use given back when a membership is cancelled (it stands, as a redeemed
+  code does); a discount for a set number of months; a discount added to a membership
+  already given; discounts in Reports.
 
 ### 14.4 Pay by the gym's own link
 
