@@ -137,8 +137,13 @@ d("the register: discounts and promo codes (real Postgres)", () => {
     startsOn: null,
     endsOn: null,
     maxUses: null,
+    forProducts: true,
     allProducts: true,
     productIds: [],
+    forMemberships: false,
+    allMembershipTypes: true,
+    membershipTypeIds: [],
+    membershipPayments: null,
     ...over,
   });
   const addDiscount = async (gymId: string, cookies: Cookies, name: string, over: Record<string, unknown> = {}): Promise<GymDiscount> => {

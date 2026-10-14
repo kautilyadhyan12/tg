@@ -87,6 +87,7 @@ function held(n, type, startsOn, paid, moves = []) {
     fromList: false,
     notCharged: false,
     refundedInFull: false,
+    discount: null,
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, given, m, type.priceMinor, TODAY),
   };
@@ -101,6 +102,7 @@ const answer = (memberships, past = false, more = {}) => ({
     types: [GOLD, PACK],
     listed: null,
     canBill: true,
+    discounts: [],
     ...more,
   }),
 });
@@ -505,6 +507,71 @@ describe('adding a membership', () => {
     render(draw(ADA, 'Ada Lovelace'));
     await (await boxSoon()).findByRole('button', { name: 'Add membership' });
     expect(screen.queryByTestId('held-add')).toBeNull();
+  });
+
+  it('with a discount: offers the ones for the type picked, shows what it comes to, sends the price and what comes off, and the membership says what it was sold with', async () => {
+    const base = { kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z' };
+    const reach = { forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [] };
+    const founders = { ...base, ...reach, id: '55555555-5555-4555-8555-555555555555', name: 'Founders', code: null, membershipPayments: 'every', allMembershipTypes: false, membershipTypeIds: [GOLD.id] };
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { discounts: [founders] }));
+    // 20% of £49.99 is 9.998, so £10.00: £39.99 every month.
+    const sold = { ...held(1, GOLD, TODAY, true), priceMinor: 3999, discount: { name: 'Founders', offMinor: 1000, payments: 'every' } };
+    orgService.giveHeldMembership.mockResolvedValue(answer([sold], false, { discounts: [founders] }));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    // The pack is not what Founders is for.
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: PACK.id } });
+    expect(form.getByText('No discount applies to 10 classes today.')).toBeTruthy();
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    fireEvent.change(form.getByLabelText('Discount'), { target: { value: founders.id } });
+    const lines = form.getByTestId('sale-summary');
+    expect([...lines.querySelectorAll('dd')].map((x) => x.textContent)).toEqual(['£49.99', '-£10.00', '£39.99']);
+    expect(form.getByText('Every payment is £39.99 while the membership lasts.')).toBeTruthy();
+    fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
+    await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.giveHeldMembership.mock.calls[0][2]).toEqual({
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      typeId: GOLD.id,
+      startsOn: TODAY,
+      paid: false,
+      priceMinor: 4999,
+      discountId: founders.id,
+      discountMinor: 1000,
+    });
+    const box = await boxSoon();
+    expect(await box.findByText('Membership added.')).toBeTruthy();
+    expect(box.getByText('Sold with Founders: £10.00 off every payment.')).toBeTruthy();
+    expect(box.getByText('£39.99 every month')).toBeTruthy();
+  });
+
+  it('a discounted pack ticked as paid says the amount paid, the Total, never the full price', async () => {
+    const base = { kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z' };
+    const reach = { forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [] };
+    const first = { ...base, ...reach, id: '66666666-6666-4666-8666-666666666666', name: 'First month', code: 'FIRST20', membershipPayments: 'first' };
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { discounts: [first] }));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: PACK.id } });
+    expect(form.getByText('They have paid the £90.00')).toBeTruthy();
+    // 20% of £90.00 is £18.00: £72.00 is what is recorded, and what the tick says.
+    fireEvent.change(form.getByLabelText('Discount'), { target: { value: first.id } });
+    expect(form.getByText('They have paid the £72.00')).toBeTruthy();
+    expect(form.queryByText('They have paid the £90.00')).toBeNull();
+    expect([...form.getByTestId('sale-summary').querySelectorAll('dd')].map((x) => x.textContent)).toEqual(['£90.00', '-£18.00', '£72.00']);
+  });
+
+  it('staff who cannot take payments are offered no discount, and are sent none', async () => {
+    const base = { kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [] };
+    // Even were one sent, the screen offers none.
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { canBill: false, discounts: [{ ...base, id: '77777777-7777-4777-8777-777777777777', name: 'Founders', code: 'STAFFONLY', membershipPayments: 'every' }] }));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    expect(form.queryByLabelText('Discount')).toBeNull();
+    expect(form.queryByLabelText('Promo code')).toBeNull();
   });
 
   it('shows what the dates will be before it is added, and sends the type, the day and the tick once', async () => {

@@ -1,5 +1,5 @@
-// THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i and 18b-ii-a). Mirrors
-// `0102_register.sql` and `0104_discounts.sql` 1:1; the migrations carry the reasoning.
+// THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i, 18b-ii-a and 18b-ii-b). Mirrors
+// `0102_register.sql`, `0104_discounts.sql` and `0107_membership_discounts.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -19,6 +19,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
 import { gymMemberListEntries } from "./memberList.js";
+import { gymMembershipTypes } from "./memberships.js";
 import { gyms } from "./tenancy.js";
 import { users } from "./identity.js";
 
@@ -73,6 +74,10 @@ export const gymDiscounts = pgTable(
     maxUses: integer("max_uses"),
     uses: integer("uses").notNull().default(0),
     allProducts: boolean("all_products").notNull().default(true),
+    forProducts: boolean("for_products").notNull().default(true),
+    forMemberships: boolean("for_memberships").notNull().default(false),
+    allMembershipTypes: boolean("all_membership_types").notNull().default(true),
+    membershipPayments: text("membership_payments"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -94,6 +99,10 @@ export const gymDiscounts = pgTable(
     ),
     check("gym_discounts_days_check", sql`${t.startsOn} IS NULL OR ${t.endsOn} IS NULL OR ${t.endsOn} >= ${t.startsOn}`),
     check("gym_discounts_uses_check", sql`${t.uses} >= 0 AND (${t.maxUses} IS NULL OR ${t.maxUses} BETWEEN 1 AND 100000)`),
+    check(
+      "gym_discounts_applies_check",
+      sql`(${t.forProducts} OR ${t.forMemberships}) AND (${t.forProducts} OR ${t.allProducts}) AND (${t.forMemberships} OR ${t.allMembershipTypes}) AND (${t.forMemberships} = (${t.membershipPayments} IS NOT NULL)) AND (${t.membershipPayments} IS NULL OR ${t.membershipPayments} IN ('first','every'))`,
+    ),
     uniqueIndex("gym_discounts_name_uq")
       .on(t.gymId, sql`lower(${t.name})`)
       .where(sql`${t.archivedAt} IS NULL`),
@@ -125,6 +134,31 @@ export const gymDiscountProducts = pgTable(
     }).onDelete("cascade"),
     index("gym_discount_products_gym_idx").on(t.gymId),
     index("gym_discount_products_product_idx").on(t.productId),
+  ],
+);
+
+/** The membership types a discount is limited to (`0107`). */
+export const gymDiscountMembershipTypes = pgTable(
+  "gym_discount_membership_types",
+  {
+    gymId: uuid("gym_id").notNull(),
+    discountId: uuid("discount_id").notNull(),
+    membershipTypeId: uuid("membership_type_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_discount_membership_types_pk", columns: [t.discountId, t.membershipTypeId] }),
+    foreignKey({
+      name: "gym_discount_membership_types_discount_fk",
+      columns: [t.gymId, t.discountId],
+      foreignColumns: [gymDiscounts.gymId, gymDiscounts.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "gym_discount_membership_types_type_fk",
+      columns: [t.gymId, t.membershipTypeId],
+      foreignColumns: [gymMembershipTypes.gymId, gymMembershipTypes.id],
+    }).onDelete("cascade"),
+    index("gym_discount_membership_types_gym_idx").on(t.gymId),
+    index("gym_discount_membership_types_type_idx").on(t.membershipTypeId),
   ],
 );
 

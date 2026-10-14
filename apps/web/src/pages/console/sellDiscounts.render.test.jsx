@@ -61,8 +61,13 @@ const discount = (over = {}) => ({
   endsOn: null,
   maxUses: null,
   uses: 0,
+  forProducts: true,
   allProducts: true,
   productIds: [],
+  forMemberships: false,
+  allMembershipTypes: true,
+  membershipTypeIds: [],
+  membershipPayments: null,
   archivedAt: null,
   updatedAt: '2026-10-13T10:00:00.000Z',
   ...over,
@@ -80,6 +85,7 @@ const page = (over = {}) => ({
   discounts: [STAFF, discount(), TOWELS],
   archivedDiscounts: [],
   archivedDiscountsTotal: 0,
+  membershipTypes: [],
   canSell: true,
   canManage: true,
   sales: [],
@@ -217,7 +223,7 @@ describe('a sale with a discount', () => {
     pick('Product', 'p-water');
     expect(within(newSale()).queryByLabelText('Discount')).toBeNull();
     expect(within(newSale()).queryByLabelText('Promo code')).toBeNull();
-    expect(within(discounts()).getByText('No discounts yet. Add one to take a percentage or a fixed amount off a product, with a promo code if you want one.')).toBeTruthy();
+    expect(within(discounts()).getByText('No discounts for products yet. Add one to take a percentage or a fixed amount off a product, with a promo code if you want one.')).toBeTruthy();
   });
 });
 
@@ -253,11 +259,68 @@ describe('the Discounts list', () => {
     svc.addDiscount.mockResolvedValue(page({ discounts: [added] }));
     fireEvent.click(within(form).getByRole('button', { name: 'Add discount' }));
     await waitFor(() =>
-      expect(svc.addDiscount).toHaveBeenCalledWith('g1', { name: 'Members week', code: 'WEEK5', kind: 'amount', percentBp: null, amountMinor: 150, startsOn: null, endsOn: null, maxUses: 25, allProducts: false, productIds: ['p-water'] }),
+      expect(svc.addDiscount).toHaveBeenCalledWith('g1', { name: 'Members week', code: 'WEEK5', kind: 'amount', percentBp: null, amountMinor: 150, startsOn: null, endsOn: null, maxUses: 25, forProducts: true, allProducts: false, productIds: ['p-water'], forMemberships: false, allMembershipTypes: true, membershipTypeIds: [], membershipPayments: null }),
     );
-    expect(await within(discounts()).findByText('Members week added. Staff can now choose it on the sale form above.')).toBeTruthy();
+    expect(await within(discounts()).findByText('Members week added. Staff can now choose it when they sell a product.')).toBeTruthy();
     expect(within(discounts()).queryByRole('form')).toBeNull();
     expect(within(discounts()).getByTestId('discount-row').textContent).toBe('Members weekActive$1.50 off · Promo code WEEK5 · Water · Used 0 of 25ChangeArchive');
+  });
+
+  it('a discount for memberships: ticked instead of products, limited to the ones ticked, and asked how often before it is sent', async () => {
+    const types = [{ id: 't-gold', name: 'Gold Monthly' }, { id: 't-pass', name: 'Day pass' }];
+    svc.get.mockResolvedValue(page({ discounts: [], membershipTypes: types }));
+    open();
+    fireEvent.click(await within(await screen.findByRole('region', { name: 'Discounts' })).findByRole('button', { name: 'Add a discount' }));
+    const form = within(within(discounts()).getByRole('form', { name: 'Add a discount' }));
+    fireEvent.change(form.getByLabelText('Discount name'), { target: { value: 'First month' } });
+    fireEvent.change(form.getByRole('textbox', { name: 'Percentage off' }), { target: { value: '20' } });
+    fireEvent.click(form.getByRole('checkbox', { name: 'Products' }));
+    fireEvent.click(form.getByRole('button', { name: 'Add discount' }));
+    expect(form.getByText('Tick products, memberships, or both.')).toBeTruthy();
+    fireEvent.click(form.getByRole('checkbox', { name: 'Memberships' }));
+    fireEvent.click(form.getByLabelText('Selected memberships'));
+    fireEvent.click(form.getByRole('button', { name: 'Add discount' }));
+    expect(form.getByText('Tick at least one membership.')).toBeTruthy();
+    expect(form.getByText('Choose whether it comes off the first payment only or every payment.')).toBeTruthy();
+    expect(svc.addDiscount).not.toHaveBeenCalled();
+    fireEvent.click(form.getByRole('checkbox', { name: 'Gold Monthly' }));
+    fireEvent.click(form.getByLabelText('First payment only'));
+    const added = discount({ id: 'd-first', name: 'First month', code: null, forProducts: false, forMemberships: true, allMembershipTypes: false, membershipTypeIds: ['t-gold'], membershipPayments: 'first' });
+    svc.addDiscount.mockResolvedValue(page({ discounts: [added], membershipTypes: types }));
+    fireEvent.click(form.getByRole('button', { name: 'Add discount' }));
+    await waitFor(() =>
+      expect(svc.addDiscount).toHaveBeenCalledWith('g1', {
+        name: 'First month',
+        code: null,
+        kind: 'percent',
+        percentBp: 2000,
+        amountMinor: null,
+        startsOn: null,
+        endsOn: null,
+        maxUses: null,
+        forProducts: false,
+        allProducts: true,
+        productIds: [],
+        forMemberships: true,
+        allMembershipTypes: false,
+        membershipTypeIds: ['t-gold'],
+        membershipPayments: 'first',
+      }),
+    );
+    // Made on Sell for memberships only: it is listed on the Memberships page, and the line says so with its button.
+    expect(await within(discounts()).findByText("First month added. Staff can now choose it when they add a membership on a member's page. It is for memberships only, so it is listed on the Memberships page.")).toBeTruthy();
+    expect(within(discounts()).getByRole('link', { name: 'Open Memberships' })).toBeTruthy();
+    expect(within(discounts()).queryByTestId('discount-row')).toBeNull();
+  });
+
+  it('a gym with no membership types is told so in the form, with a button to Memberships', async () => {
+    svc.get.mockResolvedValue(page({ discounts: [], membershipTypes: [] }));
+    open();
+    fireEvent.click(await within(await screen.findByRole('region', { name: 'Discounts' })).findByRole('button', { name: 'Add a discount' }));
+    const form = within(within(discounts()).getByRole('form', { name: 'Add a discount' }));
+    fireEvent.click(form.getByRole('checkbox', { name: 'Memberships' }));
+    expect(form.getByText('You have no memberships on your price list yet.')).toBeTruthy();
+    expect(form.getByRole('link', { name: 'Open Memberships' })).toBeTruthy();
   });
 
   it('changes one, archives it after asking, and puts it back', async () => {
@@ -273,9 +336,9 @@ describe('the Discounts list', () => {
     svc.changeDiscount.mockResolvedValue(page({ discounts: [discount({ percentBp: 2500, uses: 4 })] }));
     fireEvent.click(within(form).getByRole('button', { name: 'Save discount' }));
     await waitFor(() =>
-      expect(svc.changeDiscount).toHaveBeenCalledWith('g1', 'd-summer', { name: 'Summer sale', code: 'SUMMER20', kind: 'percent', percentBp: 2500, amountMinor: null, startsOn: null, endsOn: null, maxUses: null, allProducts: true, productIds: [], updatedAt: '2026-10-13T10:00:00.000Z' }),
+      expect(svc.changeDiscount).toHaveBeenCalledWith('g1', 'd-summer', { name: 'Summer sale', code: 'SUMMER20', kind: 'percent', percentBp: 2500, amountMinor: null, startsOn: null, endsOn: null, maxUses: null, forProducts: true, allProducts: true, productIds: [], forMemberships: false, allMembershipTypes: true, membershipTypeIds: [], membershipPayments: null, updatedAt: '2026-10-13T10:00:00.000Z' }),
     );
-    expect(await within(discounts()).findByText('Summer sale saved. Sales already made keep the discount they were sold with.')).toBeTruthy();
+    expect(await within(discounts()).findByText('Summer sale saved. Sales and memberships already made keep the discount they were made with.')).toBeTruthy();
 
     // Archive asks first, and Keep it changes nothing.
     fireEvent.click(within(discounts()).getByRole('button', { name: 'Archive Summer sale' }));
