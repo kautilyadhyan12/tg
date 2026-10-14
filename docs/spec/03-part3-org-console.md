@@ -2017,8 +2017,9 @@ they never saw, or put a signature on a relative when a family shares one email 
 - **Privacy.** A person's "download my data" holds each waiver they signed with its words.
   A signature is kept with the gym after the person's account is deleted, on the consent
   log's footing: it is the gym's proof. **It is removed six years after the account is
-  deleted** (Kd, `rulings/2026-10-13-3e-i.md`; the consent log's own six years). Not built
-  yet: ROADMAP Stage 2 item 3e-iii.
+  deleted** (Kd, `rulings/2026-10-13-3e-i.md`; the consent log's own six years), by the
+  nightly purge's own step beside the consent log's (3e-iii,
+  `privacy/repo.ts` `deleteExpiredWaiverSignatures`).
 - **Limits:** staff reads 300 an hour a person (900 an address), saves and stops 30 (90);
   a member's read 120 (6,000 an address, a gym's wi-fi), signing 10 (600).
 - **Cost at full size** (2026-10-13, mains, 3,294 MHz, local database, a waiver of 29,990
@@ -2068,7 +2069,12 @@ a signature on the wrong record, on words they were not shown, or a child's own.
   otherwise `409 waiver_changed` / `waiver_not_in_use` or `404 person_not_found`, and
   nothing is written. Twice is once. Two records joined: the kept one takes the other's
   desk signatures it has none of; a record deleted for good lets go of its signature, which
-  stays as the gym's proof.
+  stays as the gym's proof with the day the record was deleted (`record_deleted_at`,
+  `0108`), and the purge removes it six years after that day (Kd,
+  `rulings/2026-10-14-3e-ii.md`; 3e-iii). A gym's whole list deleted with the gym
+  (`deleteListForGym`) is the same. A record cannot be deleted any other way while a
+  signature points at it (the link is checked when the change is saved), and a signature
+  with neither a record nor a day is refused, so none is ever kept for ever by mistake.
 - **Who has signed, by record** (`waiver/signed.ts`, one rule): a desk signature of the
   wording in use, or an app signature by the person the record certainly is (§18.4). An app
   signature on a shared family email signs no record. Members' Filter shows **Waiver not

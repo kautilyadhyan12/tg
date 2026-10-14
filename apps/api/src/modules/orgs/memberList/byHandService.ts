@@ -773,7 +773,7 @@ export async function deleteFormer(
     const stored = await repo.entryFor(tx, gymId, entryId);
     if (stored === null) throw notFound();
     if (stored.formerAt === null) throw new OrgsError(409, "not_former", MEMBER_LIST_BY_HAND_WORDS.not_former);
-    await repo.deleteEntry(tx, gymId, entryId);
+    await repo.deleteEntry(tx, gymId, entryId, deps.now());
     const version = await repo.bumpListVersion(tx, gymId);
     await insertAudit(tx, {
       actorUserId: userId,
@@ -850,7 +850,7 @@ export async function mergeEntries(
     await repo.moveBookingLinks(tx, gymId, goneId, keepId);
     await repo.movePtLinks(tx, gymId, goneId, keepId);
     await moveNotesAndTags(tx, gymId, goneId, keepId);
-    await repo.deleteEntry(tx, gymId, goneId);
+    await repo.deleteEntry(tx, gymId, goneId, at);
     const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");
     await repo.stampListedByContact(
