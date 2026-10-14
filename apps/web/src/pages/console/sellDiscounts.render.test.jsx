@@ -223,7 +223,7 @@ describe('a sale with a discount', () => {
     pick('Product', 'p-water');
     expect(within(newSale()).queryByLabelText('Discount')).toBeNull();
     expect(within(newSale()).queryByLabelText('Promo code')).toBeNull();
-    expect(within(discounts()).getByText('No discounts yet. Add one to take a percentage or a fixed amount off a product or a membership, with a promo code if you want one.')).toBeTruthy();
+    expect(within(discounts()).getByText('No discounts for products yet. Add one to take a percentage or a fixed amount off a product, with a promo code if you want one.')).toBeTruthy();
   });
 });
 
@@ -261,7 +261,7 @@ describe('the Discounts list', () => {
     await waitFor(() =>
       expect(svc.addDiscount).toHaveBeenCalledWith('g1', { name: 'Members week', code: 'WEEK5', kind: 'amount', percentBp: null, amountMinor: 150, startsOn: null, endsOn: null, maxUses: 25, forProducts: true, allProducts: false, productIds: ['p-water'], forMemberships: false, allMembershipTypes: true, membershipTypeIds: [], membershipPayments: null }),
     );
-    expect(await within(discounts()).findByText('Members week added. Staff can now choose it on the sale form above.')).toBeTruthy();
+    expect(await within(discounts()).findByText('Members week added. Staff can now choose it when they sell a product.')).toBeTruthy();
     expect(within(discounts()).queryByRole('form')).toBeNull();
     expect(within(discounts()).getByTestId('discount-row').textContent).toBe('Members weekActive$1.50 off · Promo code WEEK5 · Water · Used 0 of 25ChangeArchive');
   });
@@ -307,8 +307,10 @@ describe('the Discounts list', () => {
         membershipPayments: 'first',
       }),
     );
-    expect(await within(discounts()).findByText('First month added. Staff can now choose it when they sell or add a membership.')).toBeTruthy();
-    expect(within(discounts()).getByTestId('discount-row').textContent).toBe('First monthActive20% off · No promo code · Gold Monthly, first payment only · Not used yetChangeArchive');
+    // Made on Sell for memberships only: it is listed on the Memberships page, and the line says so with its button.
+    expect(await within(discounts()).findByText("First month added. Staff can now choose it when they add a membership on a member's page. It is for memberships only, so it is listed on the Memberships page.")).toBeTruthy();
+    expect(within(discounts()).getByRole('link', { name: 'Open Memberships' })).toBeTruthy();
+    expect(within(discounts()).queryByTestId('discount-row')).toBeNull();
   });
 
   it('a gym with no membership types is told so in the form, with a button to Memberships', async () => {

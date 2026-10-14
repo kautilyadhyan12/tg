@@ -3646,6 +3646,11 @@ memberships.
   the price after the discount, so every bill opened from it carries it; with First payment
   only its price stays the full price and only the bill opened when it was given is
   discounted. A later change of the discount or the type's price rewrites nobody's.
+- **One Discounts list, drawn on two pages** (Kd, 2026-10-14): the Memberships page, under
+  the price list, holds the discounts for memberships, and a new one there starts on
+  memberships; the Sell page holds the ones for products. One for both is on both, and one
+  saved that no longer applies to the page it was saved on says where it is listed, with
+  a button to that page.
 - **Sell sells products alone** (Kd, 2026-10-14): its New sale box has no membership
   choice. A **Sell a membership** box under it finds the member and opens their page
   with Add membership already open.

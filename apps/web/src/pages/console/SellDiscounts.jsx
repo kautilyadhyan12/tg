@@ -23,10 +23,11 @@ import {
 import { priceExample } from './sellView';
 import { SavedNote } from './SellProducts';
 
-// DISCOUNTS, on the Sell page (spec Part 3 §14.3; ROADMAP 18b-ii-a and 18b-ii-b): the gym's
-// own discounts and promo codes, on products, memberships or both, for staff who may
-// change prices. Whoever sells reads the list and picks from it on the sale form above,
-// and on a person's page when a membership is added.
+// DISCOUNTS (spec Part 3 §14.3; ROADMAP 18b-ii-a and 18b-ii-b): the gym's own discounts and
+// promo codes, on products, memberships or both, for staff who may change prices. One list,
+// drawn twice (Kd, 2026-10-14): the Sell page shows the ones for products (`use` 'products'),
+// the Memberships page the ones for memberships (`use` 'memberships'); one for both is on
+// both. Whoever sells picks from it on the sale form, and on a person's Add membership.
 
 const LINE = { borderTop: '1px solid var(--line)' };
 const BAD = { color: 'var(--bad)' };
@@ -239,12 +240,17 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
   );
 }
 
-export default function SellDiscounts({ gymId, page, locked, lockedNote, membershipsTo = null, onPage }) {
+export default function SellDiscounts({ gymId, page, locked, lockedNote, use = 'products', membershipsTo = null, otherTo = null, onPage }) {
+  const here = (d) => (use === 'products' ? d.forProducts : d.forMemberships);
+  const shown = page.discounts.filter(here);
+  const shownArchived = page.archivedDiscounts.filter(here);
   const canManage = page.canManage;
   const [draft, setDraft] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
   const [asking, setAsking] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
+  /** The last discount saved is listed on the other page. */
+  const [away, setAway] = useState(false);
   const full = page.discounts.length >= DISCOUNTS_MAX;
   const clear = { busy: false, error: null, done: null };
 
@@ -269,11 +275,15 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, members
       return;
     }
     const body = discountBody(draft, page.currency, page.products, page.membershipTypes);
-    const where = body.forProducts && body.forMemberships ? 'when they sell a product or a membership' : body.forMemberships ? 'when they sell or add a membership' : 'on the sale form above';
+    const where = body.forProducts && body.forMemberships ? 'when they sell a product or add a membership' : body.forMemberships ? "when they add a membership on a member's page" : 'when they sell a product';
+    // One that no longer applies here is listed on the other page: said, with its button.
+    const elsewhere = use === 'products' ? !body.forProducts : !body.forMemberships;
+    const away = elsewhere ? (use === 'products' ? ' It is for memberships only, so it is listed on the Memberships page.' : ' It is for products only, so it is listed on the Sell page.') : '';
     const ok = await run(
       () => (draft.id === null ? registerService.addDiscount(gymId, body) : registerService.changeDiscount(gymId, draft.id, body)),
-      draft.id === null ? `${body.name} added. Staff can now choose it ${where}.` : `${body.name} saved. Sales and memberships already made keep the discount they were made with.`,
+      (draft.id === null ? `${body.name} added. Staff can now choose it ${where}.` : `${body.name} saved. Sales and memberships already made keep the discount they were made with.`) + away,
     );
+    setAway(elsewhere);
     if (ok) setDraft(null);
   };
   const form = () => (
@@ -302,7 +312,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, members
             className="c-btn c-btn-s c-btn-lg"
             disabled={locked || full || state.busy}
             onClick={() => {
-              setDraft(emptyDiscountDraft());
+              setDraft(emptyDiscountDraft(use));
               setState(clear);
             }}
           >
@@ -317,13 +327,18 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, members
 
       {draft !== null && draft.id === null ? form() : null}
       {state.done !== null ? <SavedNote>{state.done}</SavedNote> : null}
+      {state.done !== null && away && otherTo !== null ? <PlaceLink to={otherTo}>{use === 'products' ? 'Open Memberships' : 'Open Sell'}</PlaceLink> : null}
       {state.error !== null && draft === null ? <Refusal>{state.error}</Refusal> : null}
 
-      {page.discounts.length === 0 ? (
-        <p className="c-s15 c-t2 m-0">No discounts yet. Add one to take a percentage or a fixed amount off a product or a membership, with a promo code if you want one.</p>
+      {shown.length === 0 ? (
+        <p className="c-s15 c-t2 m-0">
+          {use === 'products'
+            ? 'No discounts for products yet. Add one to take a percentage or a fixed amount off a product, with a promo code if you want one.'
+            : 'No discounts for memberships yet. Add one to take a percentage or a fixed amount off a membership, with a promo code if you want one.'}
+        </p>
       ) : (
         <ul className="list-none m-0 p-0">
-          {page.discounts.map((discount) => {
+          {shown.map((discount) => {
             const tag = discountStatusTag(discount, page.today, page.currency);
             return (
               <li key={discount.id} className="flex flex-col gap-3 py-3" style={LINE} data-testid="discount-row">
@@ -380,14 +395,14 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, members
         </ul>
       )}
 
-      {page.archivedDiscountsTotal > 0 ? (
+      {shownArchived.length > 0 ? (
         <div className="flex flex-col gap-2 pt-3" style={LINE}>
           <button type="button" className="c-btn-link c-s14 c-w6 self-start" style={ROW} aria-expanded={showArchived} onClick={() => setShowArchived((was) => !was)}>
-            {`${showArchived ? 'Hide' : 'Show'} archived discounts (${String(page.archivedDiscountsTotal)})`}
+            {`${showArchived ? 'Hide' : 'Show'} archived discounts (${String(shownArchived.length)})`}
           </button>
           {showArchived ? (
             <ul className="list-none m-0 p-0">
-              {page.archivedDiscounts.map((discount) => (
+              {shownArchived.map((discount) => (
                 <li key={discount.id} className="flex flex-wrap items-center justify-between gap-2 py-2" data-testid="archived-discount-row">
                   <span className="c-s14 c-t2">{`${discount.name} · ${discountRow(discount, page.products, page.membershipTypes)}`}</span>
                   {canManage ? (
@@ -403,7 +418,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, members
                   ) : null}
                 </li>
               ))}
-              {page.archivedDiscountsTotal > page.archivedDiscounts.length ? <li className="c-s13 c-t3 py-2">{`Showing the newest ${String(page.archivedDiscounts.length)}.`}</li> : null}
+              {page.archivedDiscountsTotal > page.archivedDiscounts.length ? <li className="c-s13 c-t3 py-2">{`Showing the newest ${String(shownArchived.length)}.`}</li> : null}
             </ul>
           ) : null}
         </div>

@@ -287,7 +287,9 @@ export const TOO_MANY_DISCOUNTS = `You can have ${String(DISCOUNTS_MAX)} discoun
 export const NO_MANAGING_DISCOUNTS = 'The owner, or staff who can change membership types and prices, can add and change discounts.';
 const HIDDEN_TEXT = 'Something hidden was pasted in with this. Delete it and type it again.';
 
-export function emptyDiscountDraft() {
+/** An empty form. On the Memberships page it starts on memberships, on Sell on products. */
+export function emptyDiscountDraft(use = 'products') {
+  const memberships = use === 'memberships';
   return {
     id: null,
     name: '',
@@ -295,10 +297,10 @@ export function emptyDiscountDraft() {
     percent: '',
     amount: '',
     code: '',
-    forProducts: true,
+    forProducts: !memberships,
     scope: 'all',
     productIds: [],
-    forMemberships: false,
+    forMemberships: memberships,
     typeScope: 'all',
     typeIds: [],
     payments: '',

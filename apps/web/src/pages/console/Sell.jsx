@@ -686,6 +686,7 @@ export default function Sell() {
             locked={readOnly}
             lockedNote={readOnlyNote(org.orgType)}
             membershipsTo={placeFor(orgSlug, privileges, 'memberships')}
+            otherTo={placeFor(orgSlug, privileges, 'memberships')}
             onPage={setPage}
           />
         </>
