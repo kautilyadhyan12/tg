@@ -735,16 +735,14 @@ export async function getFoodWeek(
   const today = dayInTz(now, timeZone);
   const days = spanDays(today, span);
   const from = days[0] ?? today;
-  const [meals, kept] = await Promise.all([
-    repo.mealsOnDays(deps.sql, userId, timeZone, from, today),
+  const [logged, kept] = await Promise.all([
+    repo.foodDays(deps.sql, userId, timeZone, from, today),
     repo.keptDayTargets(deps.sql, userId, from, today),
   ]);
   return foodWeek({
     span,
     today,
-    meals: meals.map(({ day, meal }) => ({
-      day, kcal: meal.kcalPoint, proteinG: meal.proteinG, carbsG: meal.carbsG, fatG: meal.fatG, items: meal.items,
-    })),
+    logged,
     kept,
     current: dayTargetsOf(targets),
   });

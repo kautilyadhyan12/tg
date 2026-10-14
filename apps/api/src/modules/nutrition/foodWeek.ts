@@ -1,16 +1,16 @@
 // Your week in food (ROADMAP 34f-i; 7d): the last 7 or 30 days of the person's own
 // meals against each day's targets, and the plain facts under them. Pure: the
-// service reads the meals, the kept targets and today's, and hands them here.
+// database adds up each day (repo `foodDays`); the service reads those, the kept
+// targets and today's, and hands them here.
 import {
   FOOD_WEEK_FIGURES,
   foodWeekResponseSchema,
-  sumMoreNutrients,
   type FoodBand,
   type FoodDayTargets,
   type FoodWeekDay,
   type FoodWeekFact,
   type FoodWeekResponse,
-  type MealItem,
+  type MoreTotal,
 } from "@app/shared";
 
 /** A figure within this share of its target, either way, is "on" target. */
@@ -38,20 +38,25 @@ export function spanDays(today: string, span: number): string[] {
   return days;
 }
 
-/** One logged meal, on its day of the person's own time zone. */
-export interface WeekMeal {
+/** A day's logged meals added up, on its day of the person's own time zone. */
+export interface DayTotals {
   day: string;
+  meals: number;
   kcal: number;
   proteinG: number;
   carbsG: number;
   fatG: number;
-  items: readonly MealItem[];
+  /** A food in the day is the scanner's own estimate. */
+  about: boolean;
+  fiberG: MoreTotal;
+  sodiumMg: MoreTotal;
 }
 
 export interface WeekInput {
   span: 7 | 30;
   today: string;
-  meals: readonly WeekMeal[];
+  /** Only days with a meal; the rest of the span is empty days. */
+  logged: readonly DayTotals[];
   /** The targets kept on a day (food_day_targets), by day. */
   kept: ReadonlyMap<string, FoodDayTargets>;
   /** Today's targets, the rings' own; null while the plan has no numbers. */
@@ -61,37 +66,32 @@ export interface WeekInput {
 const round1 = (v: number): number => Math.round(v * 10) / 10;
 
 export function foodWeek(input: WeekInput): FoodWeekResponse {
-  const byDay = new Map<string, WeekMeal[]>();
-  for (const meal of input.meals) {
-    const list = byDay.get(meal.day);
-    if (list === undefined) byDay.set(meal.day, [meal]);
-    else list.push(meal);
-  }
+  const byDay = new Map(input.logged.map((d) => [d.day, d]));
   const days = spanDays(input.today, input.span).map((day): FoodWeekDay => {
-    const meals = byDay.get(day) ?? [];
-    const items = meals.flatMap((m) => m.items);
-    const more = sumMoreNutrients(items);
+    const got = byDay.get(day);
     // Today is always read against today's targets: they can change during the day.
     const keptOnDay = day === input.today ? undefined : input.kept.get(day);
     const targets = keptOnDay ?? input.current;
+    const meals = got?.meals ?? 0;
     const eaten = {
-      kcal: meals.reduce((n, m) => n + m.kcal, 0),
-      proteinG: round1(meals.reduce((n, m) => n + m.proteinG, 0)),
-      carbsG: round1(meals.reduce((n, m) => n + m.carbsG, 0)),
-      fatG: round1(meals.reduce((n, m) => n + m.fatG, 0)),
+      kcal: got?.kcal ?? 0,
+      proteinG: round1(got?.proteinG ?? 0),
+      carbsG: round1(got?.carbsG ?? 0),
+      fatG: round1(got?.fatG ?? 0),
     };
     return {
       day,
       today: day === input.today,
-      meals: meals.length,
-      about: items.some((i) => i.nutritionSource === "estimate"),
+      meals,
+      about: got?.about ?? false,
       ...eaten,
-      fiberG: more.fiberG,
-      sodiumMg: more.sodiumMg,
+      // Kept as each food's figure is: fibre to a tenth of a gram, salt to the milligram.
+      fiberG: { amount: round1(got?.fiberG.amount ?? 0), notKnown: got?.fiberG.notKnown ?? 0 },
+      sodiumMg: { amount: Math.round(got?.sodiumMg.amount ?? 0), notKnown: got?.sodiumMg.notKnown ?? 0 },
       targets,
       targetsOfTheDay: targets !== null && (day === input.today || keptOnDay !== undefined),
       bands:
-        meals.length === 0 || targets === null
+        meals === 0 || targets === null
           ? null
           : {
               kcal: bandOf(eaten.kcal, targets.kcal),

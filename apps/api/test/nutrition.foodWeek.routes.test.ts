@@ -93,7 +93,7 @@ d("your week in food (real Postgres)", () => {
     return foodWeekResponseSchema.parse(JSON.parse(res.body));
   };
   /** A meal saved straight into the table, at an exact time. */
-  const putMeal = async (userId: string, takenAt: Date, items: ReturnType<typeof item>[]) => {
+  const putMeal = async (userId: string, takenAt: Date, items: Omit<ReturnType<typeof item>, "more">[]) => {
     const kcal = items.reduce((n, i) => n + i.kcalPoint, 0);
     const protein = items.reduce((n, i) => n + i.proteinG, 0);
     await sql`
@@ -163,6 +163,27 @@ d("your week in food (real Postgres)", () => {
       const res = await inject({ method: "GET", url: `/v1/nutrition/food-week?days=${bad}`, cookies });
       expect(res.statusCode, bad).toBe(400);
     }
+  });
+
+  it("adds up a day's meals: the four figures, an estimate makes it about, fibre and salt with the foods that lack them", async () => {
+    const { cookies, id } = await makeUser("sums");
+    const days = spanDays(todayIn("UTC"), 7);
+    const day = days[3] ?? "";
+    const plain = days[2] ?? "";
+    const withMore = (kcal: number, protein: number, fiberG: number | null, sodiumMg: number | null) => {
+      const it = item(kcal, protein, "usda", sodiumMg);
+      return { ...it, more: { ...it.more, fiberG } };
+    };
+    const savedBeforeMore = { name: "Old food", canonical: "rice_white_cooked", gramsPoint: 100, gramsRange: [90, 110], portionSource: "default", nutritionSource: "usda", kcalPoint: 100, kcalLow: 100, kcalHigh: 100, proteinG: 1.1, carbsG: 0, fatG: 0 };
+    await putMeal(id, noonOf(day), [withMore(300, 10.1, 2.1, 120), withMore(200, 5.2, null, 80)]);
+    await putMeal(id, new Date(`${day}T15:00:00Z`), [item(400, 20.3, "estimate"), savedBeforeMore]);
+    await putMeal(id, noonOf(plain), [withMore(500, 25, 3, 400)]);
+    const w = await week(cookies);
+    expect(w.days.find((x) => x.day === day)).toMatchObject({
+      meals: 2, kcal: 1000, proteinG: 36.7, about: true,
+      fiberG: { amount: 2.1, notKnown: 3 }, sodiumMg: { amount: 200, notKnown: 2 },
+    });
+    expect(w.days.find((x) => x.day === plain)).toMatchObject({ meals: 1, about: false, fiberG: { amount: 3, notKnown: 0 } });
   });
 
   it("puts a meal on the day of the person's own time zone", async () => {

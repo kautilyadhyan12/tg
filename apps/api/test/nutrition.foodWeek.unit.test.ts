@@ -1,8 +1,8 @@
 // Your week in food (ROADMAP 34f-i): the band rule over every class of case, the days
-// of a span, and the week built from meals, kept targets and today's.
+// of a span, and the week built from the day sums, kept targets and today's.
 import { describe, expect, it } from "vitest";
-import type { FoodDayTargets, MealItem } from "@app/shared";
-import { bandOf, foodWeek, spanDays, type WeekMeal } from "../src/modules/nutrition/foodWeek.js";
+import type { FoodDayTargets } from "@app/shared";
+import { bandOf, foodWeek, spanDays, type DayTotals } from "../src/modules/nutrition/foodWeek.js";
 
 describe("bandOf: within 10 % either way is on", () => {
   // [eaten, target, band]: each edge, a hair either side of it, nothing eaten, a zero target.
@@ -46,12 +46,9 @@ describe("spanDays", () => {
   });
 });
 
-const item = (over: Partial<MealItem> = {}): MealItem => ({
-  name: "Rice", canonical: "usda:x:1", gramsPoint: 100, gramsRange: [90, 110], portionSource: "default",
-  nutritionSource: "usda", kcalPoint: 130, kcalLow: 120, kcalHigh: 140, proteinG: 2.7, carbsG: 28, fatG: 0.3, ...over,
-});
-const meal = (day: string, kcal: number, proteinG: number, items: MealItem[] = [item()]): WeekMeal => ({
-  day, kcal, proteinG, carbsG: 200, fatG: 60, items,
+const logged = (day: string, kcal: number, proteinG: number, over: Partial<DayTotals> = {}): DayTotals => ({
+  day, meals: 1, kcal, proteinG, carbsG: 200, fatG: 60, about: false,
+  fiberG: { amount: 0, notKnown: 1 }, sodiumMg: { amount: 0, notKnown: 1 }, ...over,
 });
 const TARGETS: FoodDayTargets = { kcal: 2000, proteinG: 120, carbsG: 200, fatG: 60 };
 const OLD: FoodDayTargets = { kcal: 2500, proteinG: 150, carbsG: 300, fatG: 80 };
@@ -61,7 +58,7 @@ describe("foodWeek", () => {
     const week = foodWeek({
       span: 7, today: "2026-10-14", current: TARGETS,
       kept: new Map([["2026-10-10", OLD], ["2026-10-14", OLD]]),
-      meals: [meal("2026-10-10", 2000, 120), meal("2026-10-11", 2000, 120), meal("2026-10-14", 2000, 120)],
+      logged: [logged("2026-10-10", 2000, 120), logged("2026-10-11", 2000, 120), logged("2026-10-14", 2000, 120)],
     });
     const d10 = week.days.find((d) => d.day === "2026-10-10");
     const d11 = week.days.find((d) => d.day === "2026-10-11");
@@ -81,41 +78,36 @@ describe("foodWeek", () => {
   it("counts finished days with meals only: a day with none and today are not judged", () => {
     const week = foodWeek({
       span: 7, today: "2026-10-14", current: TARGETS, kept: new Map(),
-      meals: [
-        meal("2026-10-08", 2000, 80), meal("2026-10-09", 2000, 80), meal("2026-10-10", 2000, 120),
-        meal("2026-10-12", 2000, 200), meal("2026-10-14", 300, 10),
+      logged: [
+        logged("2026-10-08", 2000, 80), logged("2026-10-09", 2000, 80), logged("2026-10-10", 2000, 120),
+        logged("2026-10-12", 2000, 200), logged("2026-10-14", 300, 10),
       ],
     });
     expect(week.days).toHaveLength(7);
-    expect(week.days.find((d) => d.day === "2026-10-11")).toMatchObject({ meals: 0, bands: null, kcal: 0 });
+    expect(week.days.find((d) => d.day === "2026-10-11")).toMatchObject({ meals: 0, bands: null, kcal: 0, about: false });
     // Protein was under target on 2 of 4 days.
     expect(week.facts.proteinG).toEqual({ under: 2, on: 1, over: 1, judged: 4 });
     expect(week.facts.kcal).toEqual({ under: 0, on: 4, over: 0, judged: 4 });
   });
 
-  it("adds a day's meals together and marks a day holding an estimate as about", () => {
+  it("rounds a day's sums as each food's figures are kept", () => {
     const week = foodWeek({
       span: 7, today: "2026-10-14", current: TARGETS, kept: new Map(),
-      meals: [
-        meal("2026-10-13", 700, 30.15, [item({ more: { fiberG: 2, sugarsG: null, satFatG: null, unsatFatG: null, sodiumMg: 300, potassiumMg: null, calciumMg: null, ironMg: null, magnesiumMg: null, vitaminDUg: null } })]),
-        meal("2026-10-13", 500, 20.1, [item({ nutritionSource: "estimate" })]),
-      ],
+      logged: [logged("2026-10-13", 1200, 50.30000000000001, { about: true, fiberG: { amount: 2.06, notKnown: 1 }, sodiumMg: { amount: 300.4, notKnown: 0 } })],
     });
-    const d13 = week.days.find((d) => d.day === "2026-10-13");
-    expect(d13).toMatchObject({ meals: 2, kcal: 1200, proteinG: 50.3, about: true });
-    expect(d13?.fiberG).toEqual({ amount: 2, notKnown: 1 });
-    expect(d13?.sodiumMg).toEqual({ amount: 300, notKnown: 1 });
-    expect(week.days.find((d) => d.day === "2026-10-12")?.about).toBe(false);
+    expect(week.days.find((d) => d.day === "2026-10-13")).toMatchObject({
+      proteinG: 50.3, about: true, fiberG: { amount: 2.1, notKnown: 1 }, sodiumMg: { amount: 300, notKnown: 0 },
+    });
   });
 
   it("with no targets, shows what was eaten and judges nothing", () => {
-    const week = foodWeek({ span: 7, today: "2026-10-14", current: null, kept: new Map(), meals: [meal("2026-10-12", 2000, 120)] });
+    const week = foodWeek({ span: 7, today: "2026-10-14", current: null, kept: new Map(), logged: [logged("2026-10-12", 2000, 120)] });
     expect(week.days.find((d) => d.day === "2026-10-12")).toMatchObject({ kcal: 2000, targets: null, targetsOfTheDay: false, bands: null });
     expect(week.facts.kcal.judged).toBe(0);
   });
 
-  it("leaves out a meal outside the span", () => {
-    const week = foodWeek({ span: 7, today: "2026-10-14", current: TARGETS, kept: new Map(), meals: [meal("2026-10-07", 2000, 120)] });
+  it("leaves out a day outside the span", () => {
+    const week = foodWeek({ span: 7, today: "2026-10-14", current: TARGETS, kept: new Map(), logged: [logged("2026-10-07", 2000, 120)] });
     expect(week.days.every((d) => d.meals === 0)).toBe(true);
   });
 });
