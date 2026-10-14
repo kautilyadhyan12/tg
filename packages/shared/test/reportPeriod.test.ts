@@ -83,8 +83,7 @@ function members(over: Partial<MembersReportFacts>): ReturnType<typeof membersRe
       stay: { leavers: 0, totalDays: 0 },
       leads: [],
       anyLead: false,
-      yearEarlier: { joined: 0, left: 0, stay: { leavers: 0, totalDays: 0 }, leads: 0, leadsJoined: 0 },
-      firstLeadOn: null,
+      yearEarlier: { joined: 0, late: 0, lateFrom: null },
       ...over,
     }),
   );

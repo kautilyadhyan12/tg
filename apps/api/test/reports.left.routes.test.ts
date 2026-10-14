@@ -379,7 +379,7 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
           { month: "2026-09", full: true, activeAtStart: 17, joined: 1, left: 3, churnPercent: 11.8 },
           { month: "2026-10", full: false, activeAtStart: 15, joined: 0, left: 4, churnPercent: null },
         ],
-        leads: { ever: false, total: 0, joined: 0, percent: null, sources: [], yearEarlier: { state: "no_history", from: "2024-11-01", to: "2025-10-15", since: null } },
+        leads: { ever: false, total: 0, joined: 0, percent: null, sources: [] },
       };
       expect(await read(gym, owner)).toEqual(expected);
 

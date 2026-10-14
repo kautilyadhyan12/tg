@@ -4,7 +4,7 @@
 // counts into the figures, and says why where a figure cannot be given.
 import { z } from "zod";
 import { LEAD_SOURCES, leadSourceSchema, type LeadSource } from "./leads.js";
-import { coversFrom, reportPeriodOf, reportPeriodSchema, yearEarlierFigureSchema, yearEarlierOf, type ReportPeriodKey } from "./reportPeriod.js";
+import { reportPeriodOf, reportPeriodSchema, yearEarlierOf, type ReportPeriodKey, type YearEarlierSpan } from "./reportPeriod.js";
 
 /** How many months the page and its CSV show, the month in progress last. */
 export const REPORT_MONTHS = 12;
@@ -57,11 +57,16 @@ export interface MembersReportFacts {
   leads: readonly { source: LeadSource; leads: number; joined: number }[];
   /** Whether the gym has any lead at all, in the period or before it. */
   anyLead: boolean;
-  /** The same counts over the same days a year earlier (`yearEarlierOf`), each bounded at
-   *  both ends; new counted from that period's first day. */
-  yearEarlier: { joined: number; left: number; stay: { leavers: number; totalDays: number }; leads: number; leadsJoined: number };
-  /** The gym's day its first lead was added; null with none. */
-  firstLeadOn: string | null;
+  /** New members over the same days a year earlier (`yearEarlierOf`), both ends among them. */
+  yearEarlier: MembersEarlierCounts;
+}
+
+/** Who started in a year-earlier span: those the list held by its last day (`joined`), and
+ *  those who reached it only later (`late`, the first of them added on `lateFrom`). */
+export interface MembersEarlierCounts {
+  joined: number;
+  late: number;
+  lateFrom: string | null;
 }
 
 /** Why a figure has no number. */
@@ -74,13 +79,24 @@ const shareFigureSchema = z.discriminatedUnion("state", [
 ]);
 export type ReportShareFigure = z.infer<typeof shareFigureSchema>;
 
-const membersEarlierSchema = yearEarlierFigureSchema({
-  joined: countSchema,
-  left: countSchema,
-  /** Null where nobody left in those days. */
-  stay: z.object({ days: countSchema, leavers: countSchema.min(1) }).strict().nullable(),
-});
+const membersEarlierSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("ok"), from: daySchema, to: daySchema, joined: countSchema }).strict(),
+  /** The list began after new members of those days could be counted (`since`, null with no list). */
+  z.object({ state: z.literal("no_history"), from: daySchema, to: daySchema, since: daySchema.nullable() }).strict(),
+  /** Most of those days' new members reached the list only after them, the first on `on`. */
+  z.object({ state: z.literal("added_later"), from: daySchema, to: daySchema, on: daySchema }).strict(),
+]);
 export type MembersYearEarlier = z.infer<typeof membersEarlierSchema>;
+
+/** New members a year earlier. Given only where the list could count new members from
+ *  that span's first day (`newCountedFrom`), and where most of those who started in it
+ *  were on the list by its last day: one person typed in by hand before a gym imports its
+ *  file would otherwise make the file's people look like a year of growth. */
+export function membersYearEarlierFrom(firstListedOn: string | null, span: YearEarlierSpan, counts: MembersEarlierCounts): MembersYearEarlier {
+  if (newCountedFrom(firstListedOn, span.from) !== span.from) return { state: "no_history", ...span, since: firstListedOn };
+  if (counts.late > counts.joined && counts.lateFrom !== null) return { state: "added_later", ...span, on: counts.lateFrom };
+  return { state: "ok", ...span, joined: counts.joined };
+}
 
 const stayFigureSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("ok"), days: countSchema, leavers: countSchema.min(1) }).strict(),
@@ -108,10 +124,9 @@ export const membersReportSchema = z
      *  is still going, and is counted from `joinedFrom`: the period's first day, or the
      *  month after the list began when that is later. */
     inPeriod: z.object({ joined: countSchema.nullable(), joinedFrom: daySchema.nullable(), left: countSchema }).strict(),
-    /** The full months churn was worked out over, oldest first; empty without a figure. */
-    /** New, left and the average stay over the same days a year earlier; no figure where
-     *  the list began after new members could be counted from their first day. */
+    /** New members over the same days a year earlier (`membersYearEarlierFrom`). */
     yearEarlier: membersEarlierSchema,
+    /** The full months churn was worked out over, oldest first; empty without a figure. */
     churnMonths: z.array(monthSchema).max(REPORT_CHURN_MONTHS),
     churn: shareFigureSchema,
     retention: shareFigureSchema,
@@ -145,8 +160,6 @@ export const membersReportSchema = z
         sources: z
           .array(z.object({ source: leadSourceSchema, leads: countSchema.min(1), joined: countSchema, percent: percentSchema }).strict())
           .max(LEAD_SOURCES.length),
-        /** Leads added over the same days a year earlier, and how many of them are marked Joined today. */
-        yearEarlier: yearEarlierFigureSchema({ total: countSchema, joined: countSchema }),
       })
       .strict(),
   })
@@ -255,20 +268,7 @@ export function membersReportFrom(facts: MembersReportFacts): MembersReport {
   const leadsTotal = facts.leads.reduce((sum, s) => sum + s.leads, 0);
   const leadsJoined = facts.leads.reduce((sum, s) => sum + Math.min(s.joined, s.leads), 0);
 
-  // A year earlier is given only where the app's records cover every one of its days: a
-  // list that began inside them would read as a year of growth it never had.
-  const earlier = yearEarlierOf(period);
-  const listCovers = newCountedFrom(facts.firstListedOn, earlier.from) === earlier.from && coversFrom(facts.firstListedOn, earlier.from);
-  const was = facts.yearEarlier;
-  const yearEarlier: MembersYearEarlier = listCovers
-    ? {
-        state: "ok",
-        ...earlier,
-        joined: was.joined,
-        left: was.left,
-        stay: was.stay.leavers === 0 ? null : { days: Math.round(was.stay.totalDays / was.stay.leavers), leavers: was.stay.leavers },
-      }
-    : { state: "no_history", ...earlier, since: facts.firstListedOn };
+  const yearEarlier = membersYearEarlierFrom(facts.firstListedOn, yearEarlierOf(period), facts.yearEarlier);
 
   return {
     timezone: facts.timezone,
@@ -308,9 +308,6 @@ export function membersReportFrom(facts: MembersReportFacts): MembersReport {
         if (found === undefined || found.leads === 0) return [];
         return [{ source, leads: found.leads, joined: Math.min(found.joined, found.leads), percent: percentOf(found.joined, found.leads) }];
       }),
-      yearEarlier: coversFrom(facts.firstLeadOn, earlier.from)
-        ? { state: "ok", ...earlier, total: was.leads, joined: Math.min(was.leadsJoined, was.leads) }
-        : { state: "no_history", ...earlier, since: facts.firstLeadOn },
     },
   };
 }

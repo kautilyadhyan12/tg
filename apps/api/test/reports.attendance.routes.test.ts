@@ -45,11 +45,6 @@ const nextIp = () => `10.22.${String(Math.floor(ipCounter / 250))}.${String((ipC
 const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies =>
   Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
 
-/** A year earlier, for a gym whose records began in 2026
- *  (`reports.yearEarlier.routes.test.ts` holds the figures themselves). */
-const someText: unknown = expect.any(String);
-const NO_YEAR = { state: "no_history", from: someText, to: someText, since: someText };
-
 d("Reports, attendance: whose figures, who reads them, and what they count (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   // The real Redis where the run gives one (test:local does), so the limits are the real script's.
@@ -329,7 +324,6 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
             { weekStart: "2026-10-05", visits: 3, people: 3, full: false },
           ],
           // Ana, Ben and Cat are on the list; between them 7 visits in the five whole weeks to 4 October.
-          yearEarlier: NO_YEAR,
           perMember: { state: "ok", perWeek: 0.5, from: "2026-08-31", to: "2026-10-04", weeks: 5, members: 3, visits: 7, visitors: 3 },
           // Every day from the first check-in to today: this week's three visits are in it too
           // (Ben's at 00:30 on Monday, Ana's at noon on Thursday, the owner's at 09:00 today).
@@ -363,7 +357,6 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
               { name: "Open gym", classes: 1, places: null, booked: 2, fillPercent: null, attended: 1, noShows: 0, noShowPercent: 0 },
             ],
             moreTypes: 0,
-            yearEarlier: NO_YEAR,
           },
         });
 
@@ -381,7 +374,6 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
             { weekStart: "2026-10-05", visits: 1, people: 1, full: false },
           ],
           perMember: { state: "not_enough_data" },
-          yearEarlier: NO_YEAR,
           hours: { state: "not_enough_data" },
           classes: { state: "none_recent", from: "2025-11-01" },
         });

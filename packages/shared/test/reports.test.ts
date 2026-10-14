@@ -26,9 +26,6 @@ function monthsTo(today: string, named: Record<string, Partial<ReportMonthCounts
   return out;
 }
 
-/** Twelve months on 10 Oct 2026, a year earlier, for a gym that has never added a lead. */
-const NO_LEADS_YEAR_EARLIER = { state: "no_history", from: "2024-11-01", to: "2025-10-10", since: null };
-
 function facts(over: Partial<MembersReportFacts> = {}): MembersReportFacts {
   const today = over.today ?? "2026-10-10";
   return {
@@ -44,8 +41,7 @@ function facts(over: Partial<MembersReportFacts> = {}): MembersReportFacts {
     stay: { leavers: 0, totalDays: 0 },
     leads: [],
     anyLead: false,
-    yearEarlier: { joined: 0, left: 0, stay: { leavers: 0, totalDays: 0 }, leads: 0, leadsJoined: 0 },
-    firstLeadOn: null,
+    yearEarlier: { joined: 0, late: 0, lateFrom: null },
     ...over,
   };
 }
@@ -195,12 +191,11 @@ describe("leads that became members", () => {
         { source: "website", leads: 3, joined: 0, percent: 0 },
         { source: "friend", leads: 4, joined: 3, percent: 75 },
       ],
-      yearEarlier: NO_LEADS_YEAR_EARLIER,
     });
   });
 
   it("has no share with no leads, and leaves out a source nobody came from", () => {
-    expect(report().leads).toEqual({ ever: false, total: 0, joined: 0, percent: null, sources: [], yearEarlier: NO_LEADS_YEAR_EARLIER });
+    expect(report().leads).toEqual({ ever: false, total: 0, joined: 0, percent: null, sources: [] });
     expect(report({ leads: [{ source: "other", leads: 0, joined: 0 }] }).leads.sources).toEqual([]);
   });
 });
@@ -234,7 +229,7 @@ describe("the month the list began", () => {
 
 describe("leads before the period", () => {
   it("a gym with leads and none added in the period says so, apart from a gym that never had one", () => {
-    expect(report({ leads: [], anyLead: true }).leads).toEqual({ ever: true, total: 0, joined: 0, percent: null, sources: [], yearEarlier: NO_LEADS_YEAR_EARLIER });
+    expect(report({ leads: [], anyLead: true }).leads).toEqual({ ever: true, total: 0, joined: 0, percent: null, sources: [] });
     expect(report({ leads: [], anyLead: false }).leads.ever).toBe(false);
     // Leads counted in the period are leads, whatever the other read says.
     expect(report({ leads: [{ source: "friend", leads: 2, joined: 1 }], anyLead: false }).leads.ever).toBe(true);

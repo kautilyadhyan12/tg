@@ -43,8 +43,7 @@ const MEMBERS = membersReportFrom({
   stay: { leavers: 0, totalDays: 0 },
   leads: [],
   anyLead: false,
-  yearEarlier: { joined: 0, left: 0, stay: { leavers: 0, totalDays: 0 }, leads: 0, leadsJoined: 0 },
-  firstLeadOn: null,
+  yearEarlier: { joined: 0, late: 0, lateFrom: null },
 });
 
 // Saturday 10 October 2026. The first check-in was Monday 31 August: five whole weeks.
@@ -80,8 +79,6 @@ const facts = (over = {}) => ({
       { name: 'Open gym', classes: 1, limitedClasses: 0, places: 0, booked: 0, bookings: 2, attended: 1, noShows: 0 },
     ],
   },
-  firstClassOn: null,
-  yearEarlier: { visits: 0, people: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: [] },
   ...over,
 });
 const NOTHING = facts({ firstVisitOn: null, days: [], weeks: [], hours: [], hoursNoTime: 0, classes: { ever: false, types: [] } });

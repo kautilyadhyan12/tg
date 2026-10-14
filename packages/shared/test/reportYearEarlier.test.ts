@@ -5,14 +5,7 @@ import { describe, expect, it } from "vitest";
 import { addDays, daysBetween } from "../src/heldMemberships.js";
 import { REPORT_PERIODS, reportPeriodOf, yearEarlierOf, type ReportPeriodKey } from "../src/reportPeriod.js";
 import { REPORT_MONTHS, membersReportFrom, membersReportSchema, type MembersReportFacts } from "../src/reports.js";
-import {
-  attendanceReportFrom,
-  attendanceReportSchema,
-  attendanceYearEarlier,
-  weekdayOf,
-  type AttendanceReportFacts,
-  type ReportClassCounts,
-} from "../src/reportsAttendance.js";
+import { weekdayOf } from "../src/reportsAttendance.js";
 import { moneyReportFrom, moneyReportSchema, type MoneyReportFacts } from "../src/reportsMoney.js";
 
 const TODAY = "2026-10-14";
@@ -59,25 +52,6 @@ describe("the days a year earlier", () => {
       }
     }
   });
-
-  it("the whole weeks a year earlier are Monday to Sunday inside its days, none left out, on every day of two years", () => {
-    for (let today = "2025-01-01"; today <= "2026-12-31"; today = addDays(today, 1)) {
-      for (const key of REPORT_PERIODS) {
-        const { span, whole } = attendanceYearEarlier(today, key);
-        if (whole === null) {
-          expect(key).toBe("4w");
-          continue;
-        }
-        expect(weekdayOf(whole.from)).toBe(1);
-        expect(weekdayOf(whole.to)).toBe(7);
-        expect(whole.from >= span.from).toBe(true);
-        expect(whole.to <= span.to).toBe(true);
-        expect(daysBetween(whole.from, whole.to) + 1).toBe(whole.weeks * 7);
-        expect(daysBetween(span.from, whole.from)).toBeLessThan(7);
-        expect(daysBetween(whole.to, span.to)).toBeLessThan(8);
-      }
-    }
-  });
 });
 
 function monthsTo(today: string) {
@@ -110,18 +84,18 @@ function members(over: Partial<MembersReportFacts>) {
       stay: { leavers: 5, totalDays: 500 },
       leads: [],
       anyLead: true,
-      yearEarlier: { joined: 7, left: 4, stay: { leavers: 4, totalDays: 802 }, leads: 9, leadsJoined: 3 },
-      firstLeadOn: "2024-01-01",
+      yearEarlier: { joined: 7, late: 0, lateFrom: null },
       ...over,
     }),
   );
 }
 
-describe("members a year earlier", () => {
-  it("are the counts of those days, where the list covers them", () => {
-    const r = members({});
-    expect(r.yearEarlier).toEqual({ state: "ok", from: "2024-11-01", to: "2025-10-14", joined: 7, left: 4, stay: { days: 201, leavers: 4 } });
-    expect(r.leads.yearEarlier).toEqual({ state: "ok", from: "2024-11-01", to: "2025-10-14", total: 9, joined: 3 });
+/** Twelve months to 14 Oct 2026, a year earlier. */
+const SPAN = { from: "2024-11-01", to: "2025-10-14" };
+
+describe("new members a year earlier", () => {
+  it("are those who started in those days and were on the list by their last day", () => {
+    expect(members({}).yearEarlier).toEqual({ state: "ok", ...SPAN, joined: 7 });
   });
 
   // Where the list began, for twelve months whose year earlier starts 1 Nov 2024.
@@ -140,84 +114,35 @@ describe("members a year earlier", () => {
     if (r.yearEarlier.state === "no_history") expect(r.yearEarlier.since).toBe(firstListedOn);
   });
 
-  it("nobody left in those days: no average stay, never zero days", () => {
-    const r = members({ yearEarlier: { joined: 7, left: 0, stay: { leavers: 0, totalDays: 0 }, leads: 0, leadsJoined: 0 } });
-    expect(r.yearEarlier).toMatchObject({ state: "ok", left: 0, stay: null });
+  // Who started in those days, by when they reached the list: on time, and later (round
+  // one's H1: one member typed in July 2025, the gym's real file of 75 imported in
+  // September 2026, 35 of them joined in August and September 2025).
+  it.each<[string, number, number, "ok" | "added_later"]>([
+    ["nobody started", 0, 0, "ok"],
+    ["all on time", 7, 0, "ok"],
+    ["one late, the rest on time", 7, 1, "ok"],
+    ["as many late as on time: half the figure is still the app's own", 3, 3, "ok"],
+    ["one more late than on time", 3, 4, "added_later"],
+    ["one late and none on time", 0, 1, "added_later"],
+    ["the file of 35 imported a year later", 0, 35, "added_later"],
+    ["the file of 35 beside one typed by hand", 1, 35, "added_later"],
+  ])("%s (%s on time, %s late): %s", (_, joined, late, state) => {
+    const r = members({ yearEarlier: { joined, late, lateFrom: late === 0 ? null : "2026-09-10" } });
+    expect(r.yearEarlier.state).toBe(state);
+    if (r.yearEarlier.state === "ok") expect(r.yearEarlier.joined).toBe(joined);
+    if (r.yearEarlier.state === "added_later") expect(r.yearEarlier.on).toBe("2026-09-10");
   });
 
-  it.each<[string | null, boolean]>([
-    ["2024-11-01", true],
-    ["2024-11-02", false],
-    [null, false],
-  ])("leads first added on %s: a year earlier given %s", (firstLeadOn, given) => {
-    expect(members({ firstLeadOn }).leads.yearEarlier.state).toBe(given ? "ok" : "no_history");
-  });
-});
-
-function counts(over: Partial<ReportClassCounts> = {}): ReportClassCounts {
-  return { name: "Spin", classes: 4, limitedClasses: 4, places: 40, booked: 30, bookings: 30, attended: 20, noShows: 5, ...over };
-}
-
-function attendance(over: Partial<AttendanceReportFacts>) {
-  return attendanceReportSchema.parse(
-    attendanceReportFrom({
-      timezone: "Europe/London",
-      today: TODAY,
-      period: "4w",
-      firstVisitOn: "2025-01-06",
-      days: [],
-      weeks: [],
-      people: 0,
-      hours: [],
-      hoursNoTime: 0,
-      member: { members: 0, visits: 0, visitors: 0 },
-      classes: { ever: true, types: [counts()] },
-      firstClassOn: "2025-02-01",
-      yearEarlier: {
-        visits: 90,
-        people: 30,
-        member: { members: 20, visits: 60, visitors: 15 },
-        classes: [counts({ places: 50, booked: 25, attended: 9, noShows: 1 })],
-      },
-      ...over,
-    }),
-  );
-}
-
-describe("attendance a year earlier", () => {
-  it("visits, people and visits a member a week over its own whole weeks", () => {
-    const r = attendance({});
-    // 18 Sep to 15 Oct 2025: whole weeks 22 Sep to 12 Oct, three of them.
-    expect(r.yearEarlier).toEqual({
-      state: "ok",
-      from: "2025-09-18",
-      to: "2025-10-15",
-      visits: 90,
-      people: 30,
-      perMember: { perWeek: 1, weeks: 3, members: 20 },
+  it("a list that began too late says so before anything about late arrivals", () => {
+    expect(members({ firstListedOn: "2026-09-10", yearEarlier: { joined: 0, late: 35, lateFrom: "2026-09-10" } }).yearEarlier).toEqual({
+      state: "no_history",
+      ...SPAN,
+      since: "2026-09-10",
     });
-    if (r.classes.state !== "ok") throw new Error("no classes");
-    expect(r.classes.yearEarlier).toEqual({ state: "ok", from: "2025-09-18", to: "2025-10-15", classes: 4, fillPercent: 50, noShowPercent: 10 });
   });
 
-  it("the first check-in after those days began: a sentence with the day, never zero visits", () => {
-    expect(attendance({ firstVisitOn: "2025-09-19" }).yearEarlier).toEqual({ state: "no_history", from: "2025-09-18", to: "2025-10-15", since: "2025-09-19" });
-    expect(attendance({ firstVisitOn: "2025-09-18" }).yearEarlier.state).toBe("ok");
-    expect(attendance({ firstVisitOn: null }).yearEarlier).toMatchObject({ state: "no_history", since: null });
-  });
-
-  it("nobody on the list then: visits are given, visits a member a week is not", () => {
-    const r = attendance({ yearEarlier: { visits: 5, people: 2, member: { members: 0, visits: 0, visitors: 0 }, classes: [] } });
-    expect(r.yearEarlier).toMatchObject({ visits: 5, perMember: null });
-  });
-
-  it("classes: none before those days began is a sentence; none that ran in them gives no share", () => {
-    const late = attendance({ firstClassOn: "2025-09-19" });
-    if (late.classes.state !== "ok") throw new Error("no classes");
-    expect(late.classes.yearEarlier).toEqual({ state: "no_history", from: "2025-09-18", to: "2025-10-15", since: "2025-09-19" });
-    const none = attendance({ yearEarlier: { visits: 0, people: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: [] } });
-    if (none.classes.state !== "ok") throw new Error("no classes");
-    expect(none.classes.yearEarlier).toMatchObject({ state: "ok", classes: 0, fillPercent: null, noShowPercent: null });
+  it("nothing about leads a year earlier: the page shows none", () => {
+    expect(Object.keys(members({}).leads)).not.toContain("yearEarlier");
   });
 });
 

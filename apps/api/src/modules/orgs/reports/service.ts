@@ -6,7 +6,6 @@ import {
   attendanceReportFrom,
   attendanceReportResponseSchema,
   attendanceWindows,
-  attendanceYearEarlier,
   heldListWords,
   leadSourceSchema,
   memberCurrencyForCountry,
@@ -60,7 +59,7 @@ export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { 
     const gone = [...(await overNow(tx, gymId, today, null))].map(([id, left]) => ({ id, on: left.on }));
     return await repo.readMemberCounts(tx, gymId, org.timezone, today, gone, shown.from, earlier);
   });
-  const leadRows = await repo.readLeadCounts(deps.sql, gymId, org.timezone, shown.from, earlier);
+  const leadRows = await repo.readLeadCounts(deps.sql, gymId, org.timezone, shown.from);
   const leads: { source: LeadSource; leads: number; joined: number }[] = [];
   for (const row of leadRows.sources) {
     const source = leadSourceSchema.safeParse(row.source);
@@ -80,14 +79,7 @@ export async function getMembersReport(deps: ReportsDeps, gymId: string, org: { 
       stay: { leavers: counts.stay_leavers, totalDays: counts.stay_days },
       leads,
       anyLead: leadRows.any,
-      yearEarlier: {
-        joined: counts.earlier_joined,
-        left: counts.earlier_left,
-        stay: { leavers: counts.earlier_left, totalDays: counts.earlier_stay_days },
-        leads: leadRows.earlier.leads,
-        leadsJoined: leadRows.earlier.joined,
-      },
-      firstLeadOn: leadRows.firstOn,
+      yearEarlier: { joined: counts.earlier_joined, late: counts.earlier_late, lateFrom: counts.earlier_late_from },
     }),
   });
 }
@@ -99,9 +91,6 @@ export async function getAttendanceReport(deps: ReportsDeps, gymId: string, org:
   const windows = attendanceWindows(clock.today, clock.firstVisitOn, period);
   const visits = await repo.readVisitCounts(deps.sql, gymId, org.timezone, clock.today, windows);
   const classes = await repo.readClassCounts(deps.sql, gymId, org.timezone, windows.period.from, now);
-  const earlier = attendanceYearEarlier(clock.today, period);
-  const earlierVisits = await repo.readEarlierVisits(deps.sql, gymId, org.timezone, earlier.span, earlier.whole);
-  const earlierClasses = await repo.readClassCounts(deps.sql, gymId, org.timezone, earlier.span.from, now, earlier.span.to);
   return attendanceReportResponseSchema.parse({
     report: attendanceReportFrom({
       timezone: org.timezone,
@@ -115,13 +104,6 @@ export async function getAttendanceReport(deps: ReportsDeps, gymId: string, org:
       hoursNoTime: visits.hours_no_time,
       member: { members: visits.members, visits: visits.member_visits, visitors: visits.member_visitors },
       classes,
-      firstClassOn: classes.firstOn,
-      yearEarlier: {
-        visits: earlierVisits.visits,
-        people: earlierVisits.people,
-        member: { members: earlierVisits.members, visits: earlierVisits.member_visits, visitors: earlierVisits.member_visitors },
-        classes: earlierClasses.types,
-      },
     }),
   });
 }

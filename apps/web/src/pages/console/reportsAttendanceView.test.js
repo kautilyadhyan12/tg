@@ -28,8 +28,6 @@ const facts = (over = {}) => ({
   hoursNoTime: 0,
   member: { members: 1, visits: 9, visitors: 1 },
   classes: { ever: true, types: [{ name: 'Spin', classes: 1, limitedClasses: 1, places: 1, booked: 1, bookings: 1, attended: 1, noShows: 0 }] },
-  firstClassOn: null,
-  yearEarlier: { visits: 0, people: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: [] },
   ...over,
 });
 const report = (over) => attendanceReportFrom(facts(over));

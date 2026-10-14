@@ -4,16 +4,13 @@
 // The first test is the worst thing this job could do: an owner reads "a year earlier"
 // built from days other than the ones the page names, from the gym next door's rows, or
 // from a year the app was not used, and somebody without the money tick reads last
-// year's takings. One gym holds a joiner, a leaver, visits, a lead, a class and a payment
+// year's takings. One gym holds a joiner and a payment, both in pounds,
 // on the day before each year-earlier span begins, on its first day, on its last day and
 // on the day after; every year-earlier figure is the sum of exactly the days its answer names.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
   REPORT_PERIODS,
-  attendanceReportResponseSchema,
-  attendanceYearEarlier,
-  daysBetween,
   membersReportResponseSchema,
   moneyReportResponseSchema,
   type GymMembershipTypesResponse,
@@ -127,8 +124,8 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
     return { userId, cookies: cookieMap(login) };
   };
 
-  const makeGym = async (owner: User, name: string): Promise<string> => {
-    const res = await post("/v1/orgs", { trainsHere: false, name, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
+  const makeGym = async (owner: User, name: string, timezone = "Europe/London"): Promise<string> => {
+    const res = await post("/v1/orgs", { trainsHere: false, name, city: "Leeds", country: "GB", timezone }, owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
     const gymId = (JSON.parse(res.body) as { org: { id: string } }).org.id;
     await sql`
@@ -150,38 +147,6 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
       RETURNING id`;
     return rows.map((r) => r.id);
   };
-
-  /** Visits as staff's Check in leaves them, at nine in the morning of that day, one for each record. */
-  const visits = async (gymId: string, ownerId: string, entryIds: string[], day: string) => {
-    await sql`
-      INSERT INTO gym_attendance (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
-      SELECT ${gymId}, null, e, ${ownerId}, ${day}::date, 'staff', 'hours_unset', 'hours_unset', ${`${day}T09:00:00Z`}::timestamptz
-      FROM unnest(${entryIds}::uuid[]) AS e`;
-  };
-
-  /** One class with ten places at an instant. */
-  const classAt = async (gymId: string, typeId: string, at: string) => {
-    await sql`
-      INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
-      SELECT ${gymId}, ${typeId}, l::date, (EXTRACT(HOUR FROM l) * 60 + EXTRACT(MINUTE FROM l))::int, ${at}::timestamptz, 45, 10, 'scheduled'
-      FROM (SELECT ${at}::timestamptz AT TIME ZONE 'Europe/London' AS l) x`;
-  };
-  const classType = async (gymId: string): Promise<string> => {
-    const id = (await sql<{ id: string }[]>`
-      INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${gymId}, 'Spin', 45, 10, 'blue', false) RETURNING id`)[0]?.id;
-    if (id === undefined) throw new Error("no class type");
-    return id;
-  };
-
-  let leadNo = 0;
-  /** A lead added at noon in London on `day`; `joined` marks it Joined. */
-  const lead = async (gymId: string, day: string, joined: boolean) => {
-    leadNo += 1;
-    await sql`
-      INSERT INTO gym_leads (gym_id, full_name, email, source, status, created_at)
-      VALUES (${gymId}, ${`Lead ${String(leadNo)}`}, ${`rep-y-lead-${String(leadNo)}@example.com`}, 'walk_in', ${joined ? "joined" : "new"}, ${`${day}T11:00:00Z`}::timestamptz)`;
-  };
-
   /** The services' own clock for one step: noon in London on that day. */
   const on = (day: string) => ({ sql, now: () => new Date(`${day}T11:00:00Z`) });
   const first = (page: HeldMembershipsResponse) => {
@@ -232,13 +197,12 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
     return id;
   };
 
-  const read = async (gymId: string, who: User, part: "members" | "attendance" | "money", key: ReportPeriodKey) => {
+  const read = async (gymId: string, who: User, part: "members" | "money", key: ReportPeriodKey) => {
     const res = await get(`/v1/orgs/${gymId}/reports/${part}?period=${key}`, who.cookies);
     expect(res.statusCode, res.body).toBe(200);
     return JSON.parse(res.body) as unknown;
   };
   const membersOf = async (gymId: string, who: User, key: ReportPeriodKey) => membersReportResponseSchema.parse(await read(gymId, who, "members", key)).report;
-  const attendanceOf = async (gymId: string, who: User, key: ReportPeriodKey) => attendanceReportResponseSchema.parse(await read(gymId, who, "attendance", key)).report;
   const moneyOf = async (gymId: string, who: User, key: ReportPeriodKey) => {
     const report = moneyReportResponseSchema.parse(await read(gymId, who, "money", key)).report;
     if (report.state !== "ok") throw new Error(`no figures: ${report.state}`);
@@ -270,44 +234,18 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
       const nextOwner = await makeUser("next");
       const next = await makeGym(nextOwner, "Rep Year Next Door");
 
-      /** Every record on the list: when it went on, and when it came off. */
-      const people: { listed: string; left: string | null }[] = [];
-      const add = async (names: string[], listedOn: string, leftOn: string | null = null) => {
-        people.push(...names.map(() => ({ listed: listedOn, left: leftOn })));
-        return await listedMany(gym, names, listedOn, leftOn);
-      };
-
-      // The list began in January 2024. On each of the nine days one person joins and one leaves.
-      await add(["First On The List"], "2024-01-10");
+      // The list began in January 2024. On each of the nine days one person joins.
+      await listedMany(gym, ["First On The List"], "2024-01-10");
       // A file imported last week gave a join date inside every span: nobody the list held a
       // year earlier, so never new then.
       await sql`
         INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, joined_on)
         VALUES (${gym}, 'Imported Late', 'rep-y-imported-late@example.com', ${"f".repeat(64)}, 'upload', '2026-10-13T11:00:00Z', '2025-10-01')`;
-      people.push({ listed: "2026-10-13", left: null });
-      for (const day of DAYS) {
-        await add([`Joined ${day}`], day);
-        await add([`Left ${day}`], "2024-02-01", day);
-      }
-      // Visits double day by day (1, 2, 4 ... 256), each day's by people who come on no other
-      // of those days, so the visits and the people of every span are a sum no other span has.
-      const names = Array.from({ length: 2 ** DAYS.length - 1 }, (_, i) => `Regular ${String(i)}`);
-      const regulars = await add(names, "2024-03-01");
-      const cameOn = new Map<string, string[]>(DAYS.map((day, i) => [day, regulars.slice(2 ** i - 1, 2 ** (i + 1) - 1)]));
-      for (const [day, who] of cameOn) await visits(gym, owner.userId, who, day);
-      // Today, a period's own visit: never a year earlier.
-      await visits(gym, owner.userId, regulars.slice(0, 5), TODAY);
-      // A lead on each of the days, marked Joined on every other one.
-      for (const [i, day] of DAYS.entries()) await lead(gym, day, i % 2 === 0);
-      // A class at five in the afternoon on each of the days.
-      const spin = await classType(gym);
-      for (const day of DAYS) await classAt(gym, spin, `${day}T16:00:00Z`);
-      // And one yesterday, so the period has classes to set beside them.
-      await classAt(gym, spin, "2026-10-19T16:00:00Z");
+      for (const day of DAYS) await listedMany(gym, [`Joined ${day}`], day);
       // Payments double day by day (1.00, 2.00 ... 256.00) on one bill of 10,000.00.
       const yearly = await addType(gym, owner, "Three Years", {});
-      const [payer, sam] = await add(["Pat Pays In Parts", "Sam Pays Once"], "2024-03-01");
-      if (payer === undefined || sam === undefined) throw new Error("no payer");
+      const [payer, sam, eve] = await listedMany(gym, ["Pat Pays In Parts", "Sam Pays Once", "Eve Pays In Euros"], "2024-03-01");
+      if (payer === undefined || sam === undefined || eve === undefined) throw new Error("no payer");
       const held = await give(gym, owner, payer, yearly, "2024-10-30", false);
       for (const [i, day] of DAYS.entries()) await pay(gym, owner, payer, held.id, day, 100 * 2 ** i);
       // 10.00 paid on 15 August 2025, 0.20 of it given back on the first day of four weeks a year earlier.
@@ -316,87 +254,58 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
       // A payment inside every span that was taken back the next day is not money.
       const mistake = await pay(gym, owner, payer, held.id, NEXT_DOOR_DAY, 77700);
       await heldService.undoMemberPayment(on("2025-10-02"), owner.userId, gym, payer, held.id, mistake);
+      // A payment inside every span with 3.00 refunded, the payment then taken back: neither is money.
+      const refundedThenUndone = await pay(gym, owner, payer, held.id, "2025-10-05", 33300);
+      // Written straight in: the app refunds only a bill paid in full, and this one is not.
+      await sql`
+        INSERT INTO gym_member_refunds (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by)
+        VALUES (${gym}, ${refundedThenUndone}, 300, 'GBP', 'cash', 'other', gen_random_uuid(), '2025-10-06', ${owner.userId})`;
+      await sql`UPDATE gym_member_payments SET undone_at = '2025-10-07T11:00:00Z', undone_by = ${owner.userId} WHERE gym_id = ${gym} AND id = ${refundedThenUndone}`;
+      // A payment in euros inside every span, and a refund in euros: the gym's money is pounds.
+      const eurosHeld = await give(gym, owner, eve, yearly, "2024-10-30", false);
+      const euros = (await sql<{ id: string }[]>`
+        INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by)
+        SELECT ${gym}, b.id, 44400, 'EUR', 'cash', gen_random_uuid(), '2025-10-03', ${owner.userId}
+        FROM gym_member_bills b JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+        WHERE b.gym_id = ${gym} AND h.id = ${eurosHeld.id} AND b.period_index = 0
+        RETURNING id`)[0]?.id;
+      if (euros === undefined) throw new Error("no payment in euros");
+      await sql`
+        INSERT INTO gym_member_refunds (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by)
+        VALUES (${gym}, ${euros}, 400, 'EUR', 'cash', 'other', gen_random_uuid(), '2025-10-04', ${owner.userId})`;
       // Today, a period's own payment: never a year earlier.
       await pay(gym, owner, payer, held.id, TODAY, 99900);
 
-      // Next door, from 2025 on: a joiner, a leaver, a visit, a lead, a class and a payment inside every span.
+      // Next door, from 2025 on: a joiner and a payment inside every span.
       await listedMany(next, ["Their First"], "2024-01-10");
       const [theirs] = await listedMany(next, ["Their Joiner"], NEXT_DOOR_DAY);
-      await listedMany(next, ["Their Leaver"], "2024-02-01", NEXT_DOOR_DAY);
       if (theirs === undefined) throw new Error("no record");
-      await visits(next, nextOwner.userId, [theirs], NEXT_DOOR_DAY);
-      await lead(next, NEXT_DOOR_DAY, true);
-      await classAt(next, await classType(next), `${NEXT_DOOR_DAY}T16:00:00Z`);
       const theirHeld = await give(next, nextOwner, theirs, await addType(next, nextOwner, "Three Years", {}), NEXT_DOOR_DAY, false);
       await pay(next, nextOwner, theirs, theirHeld.id, NEXT_DOOR_DAY, 5000);
 
       for (const key of REPORT_PERIODS) {
         const span = SPAN[key];
         const days = DAYS.filter((day) => inSpan(day, key));
-        const members = await membersOf(gym, owner, key);
-        const attendance = await attendanceOf(gym, owner, key);
-        const money = await moneyOf(gym, owner, key);
-
-        // Members: one joiner and one leaver for each of the days in the span.
-        const stayed = days.map((day) => daysBetween("2024-02-01", day));
-        expect(members.yearEarlier, key).toEqual({
-          state: "ok",
-          ...span,
-          joined: days.length,
-          left: days.length,
-          stay: { days: Math.round(stayed.reduce((a, b) => a + b, 0) / stayed.length), leavers: stayed.length },
-        });
-        // Leads added on those days, and those of them marked Joined.
-        const joinedLeads = DAYS.filter((day, i) => inSpan(day, key) && i % 2 === 0).length;
-        expect(members.leads.yearEarlier, key).toEqual({ state: "ok", ...span, total: days.length, joined: joinedLeads });
-
-        // Attendance: the visits of those days, by the people who made them.
-        const visitsIn = days.reduce((sum, day) => sum + (cameOn.get(day)?.length ?? 0), 0);
-        const whole = attendanceYearEarlier(TODAY, key).whole;
-        if (whole === null) throw new Error("no whole weeks");
-        // Visits a member a week: the people on the list on the span's last day who were on it when its whole weeks began.
-        const onList = people.filter((p) => p.listed <= whole.from && (p.left === null || p.left > span.to)).length;
-        const regular = new Set(regulars);
-        const memberVisits = [...cameOn].reduce((sum, [day, who]) => (day >= whole.from && day <= whole.to ? sum + who.filter((id) => regular.has(id)).length : sum), 0);
-        expect(attendance.yearEarlier, key).toEqual({
-          state: "ok",
-          ...span,
-          visits: visitsIn,
-          people: visitsIn,
-          perMember: { perWeek: Math.round((memberVisits / whole.weeks / onList) * 10) / 10, weeks: whole.weeks, members: onList },
-        });
-        // Classes that started on those days: none booked, none marked.
-        expect(attendance.classes.state === "ok" ? attendance.classes.yearEarlier : null, key).toEqual({
-          state: "ok",
-          ...span,
-          classes: days.length,
-          fillPercent: 0,
-          noShowPercent: null,
-        });
-
+        // New members: one for each of the days in the span.
+        expect((await membersOf(gym, owner, key)).yearEarlier, key).toEqual({ state: "ok", ...span, joined: days.length });
         // Money: the payments of those days, less the refund where it falls in them.
         const paid = DAYS.reduce((sum, day, i) => (inSpan(day, key) ? sum + 100 * 2 ** i : sum), 0) + (inSpan(PAID_ONCE, key) ? 1000 : 0);
         const refunded = inSpan("2025-09-24", key) ? 20 : 0;
-        expect(money.yearEarlier, key).toEqual({ state: "ok", ...span, paidMinor: paid, refundedMinor: refunded, netMinor: paid - refunded });
+        expect((await moneyOf(gym, owner, key)).yearEarlier, key).toEqual({ state: "ok", ...span, paidMinor: paid, refundedMinor: refunded, netMinor: paid - refunded });
       }
 
       // The sums, said once as numbers, so a fault in the test's own arithmetic shows.
       // Four weeks a year earlier: 24 Sep, 20 Oct and 21 Oct 2025.
-      expect((await attendanceOf(gym, owner, "4w")).yearEarlier).toMatchObject({ visits: 32 + 64 + 128 });
       expect((await moneyOf(gym, owner, "4w")).yearEarlier).toMatchObject({ paidMinor: 3200 + 6400 + 12800, refundedMinor: 20 });
       // Three months: 1 Aug, 23 Sep, 24 Sep and 20 Oct 2025, and 15 August's 10.00.
       expect((await moneyOf(gym, owner, "3m")).yearEarlier).toMatchObject({ paidMinor: 800 + 1600 + 3200 + 6400 + 1000, netMinor: 800 + 1600 + 3200 + 6400 + 1000 - 20 });
-      expect((await membersOf(gym, owner, "3m")).yearEarlier).toMatchObject({ joined: 4, left: 4 });
-      // Twelve months: 1 Nov 2024 to 20 Oct 2025, six of the days.
-      expect((await attendanceOf(gym, owner, "12m")).yearEarlier).toMatchObject({ visits: 2 + 4 + 8 + 16 + 32 + 64, people: 126 });
+      expect((await membersOf(gym, owner, "3m")).yearEarlier).toMatchObject({ joined: 4 });
 
-      // Next door reads its own a year earlier, and none of this gym's: its list began
-      // in 2024, inside nothing; its first visit, lead, class and payment came in October 2025.
+      // Next door reads its own a year earlier, and none of this gym's: its list began in
+      // 2024; its first payment came in October 2025.
       for (const key of REPORT_PERIODS) {
         const span = SPAN[key];
-        expect((await membersOf(next, nextOwner, key)).yearEarlier, key).toMatchObject({ state: "ok", joined: 1, left: 1 });
-        expect((await membersOf(next, nextOwner, key)).leads.yearEarlier, key).toEqual({ state: "no_history", ...span, since: NEXT_DOOR_DAY });
-        expect((await attendanceOf(next, nextOwner, key)).yearEarlier, key).toEqual({ state: "no_history", ...span, since: NEXT_DOOR_DAY });
+        expect((await membersOf(next, nextOwner, key)).yearEarlier, key).toEqual({ state: "ok", ...span, joined: 1 });
         expect((await moneyOf(next, nextOwner, key)).yearEarlier, key).toEqual({ state: "no_history", ...span, since: NEXT_DOOR_DAY });
       }
 
@@ -421,6 +330,46 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
   );
 
   it(
+    "one member typed by hand before the gym's real file: no new members a year earlier, and the day most of the list was added (round one's H1)",
+    async () => {
+      const owner = await makeUser("typed");
+      const gym = await makeGym(owner, "Rep Year Typed First");
+      // One member typed on 1 July 2025; the gym's file of 75 imported on 10 September 2026:
+      // 35 joined in August and September 2025, 40 in August and September 2026.
+      await listedMany(gym, ["Typed By Hand"], "2025-07-01");
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, joined_on)
+        SELECT ${gym}, 'From The File ' || n, 'rep-y-file-' || n || '@example.com', lpad('e' || n::text, 64, '0'), 'upload',
+               '2026-09-10T11:00:00Z', CASE WHEN n <= 35 THEN DATE '2025-08-01' + n ELSE DATE '2026-08-01' + (n - 35) END
+        FROM generate_series(1, 75) AS n`;
+      const r = await membersOf(gym, owner, "3m");
+      expect(r.inPeriod.joined).toBe(40);
+      expect(r.yearEarlier).toEqual({ state: "added_later", ...SPAN["3m"], on: "2026-09-10" });
+      // Twelve months a year earlier begin on 1 November 2024, before the list did.
+      expect((await membersOf(gym, owner, "12m")).yearEarlier).toEqual({ state: "no_history", ...SPAN["12m"], since: "2025-07-01" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a year earlier is counted on the gym's own clock: in Auckland, a record at 00:30 on a span's first day is in it, one at 23:30 the night before is not",
+    async () => {
+      const owner = await makeUser("auckland");
+      const gym = await makeGym(owner, "Rep Year Auckland", "Pacific/Auckland");
+      await listedMany(gym, ["First In Auckland"], "2024-01-10");
+      // 1 August 2025 at 00:30 in Auckland (NZST, 12 hours ahead) is 31 July at 12:30 UTC.
+      const at = async (name: string, instant: string) => sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at)
+        VALUES (${gym}, ${name}, ${`rep-y-akl-${name.replace(/ /g, "")}@example.com`}, ${(name === "On The First Day" ? "1" : "2").padStart(64, "a")}, 'typed', ${instant}::timestamptz)`;
+      await at("On The First Day", "2025-07-31T12:30:00Z");
+      await at("The Night Before", "2025-07-31T11:30:00Z");
+      // Today in Auckland is 21 October 2026: three months a year earlier are 1 Aug to 21 Oct 2025.
+      expect((await membersOf(gym, owner, "3m")).yearEarlier).toEqual({ state: "ok", from: "2025-08-01", to: "2025-10-21", joined: 1 });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a gym whose records begin inside a year-earlier span reads no figure for it, with the day they began, never a zero",
     async () => {
       const owner = await makeUser("young");
@@ -428,30 +377,18 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
       // The list began on 15 August 2025, inside three and twelve months a year earlier and before four weeks.
       const [pat] = await listedMany(gym, ["Pat Young"], "2025-08-15");
       if (pat === undefined) throw new Error("no record");
-      await visits(gym, owner.userId, [pat], "2025-08-15");
-      await lead(gym, "2025-08-15", true);
-      const spin = await classType(gym);
-      await classAt(gym, spin, "2025-08-15T16:00:00Z");
-      await classAt(gym, spin, "2026-10-19T16:00:00Z");
       const held = await give(gym, owner, pat, await addType(gym, owner, "Three Years", {}), "2025-08-15", false);
       await pay(gym, owner, pat, held.id, "2025-08-15", 4200);
 
       for (const key of ["3m", "12m"] as const) {
-        const span = SPAN[key];
-        const none = { state: "no_history", ...span, since: "2025-08-15" };
-        const members = await membersOf(gym, owner, key);
-        const attendance = await attendanceOf(gym, owner, key);
-        expect(members.yearEarlier, key).toEqual(none);
-        expect(members.leads.yearEarlier, key).toEqual(none);
-        expect(attendance.yearEarlier, key).toEqual(none);
-        expect(attendance.classes.state === "ok" ? attendance.classes.yearEarlier : null, key).toEqual(none);
+        const none = { state: "no_history", ...SPAN[key], since: "2025-08-15" };
+        expect((await membersOf(gym, owner, key)).yearEarlier, key).toEqual(none);
         expect((await moneyOf(gym, owner, key)).yearEarlier, key).toEqual(none);
       }
       // Four weeks a year earlier began on 24 September 2025, after all of it: each is there, and is a zero.
-      expect((await attendanceOf(gym, owner, "4w")).yearEarlier).toMatchObject({ state: "ok", visits: 0, people: 0 });
       expect((await moneyOf(gym, owner, "4w")).yearEarlier).toMatchObject({ state: "ok", paidMinor: 0 });
-      // The list began in August: September's new members are counted from 1 September, so four weeks from 24 September have a figure.
-      expect((await membersOf(gym, owner, "4w")).yearEarlier).toMatchObject({ state: "ok", joined: 0, left: 0, stay: null });
+      // The list began in August: new members are counted from 1 September, so four weeks from 24 September have a figure.
+      expect((await membersOf(gym, owner, "4w")).yearEarlier).toEqual({ state: "ok", ...SPAN["4w"], joined: 0 });
     },
     TEST_TIMEOUT_MS,
   );

@@ -39,8 +39,7 @@ const members = (over = {}) =>
     stay: { leavers: 5, totalDays: 500 },
     leads: [{ source: 'walk_in', leads: 4, joined: 2 }],
     anyLead: true,
-    yearEarlier: { joined: 7, left: 5, stay: { leavers: 5, totalDays: 802 }, leads: 8, leadsJoined: 2 },
-    firstLeadOn: '2024-01-01',
+    yearEarlier: { joined: 7, late: 0, lateFrom: null },
     ...over,
   });
 const memberLine = (report, key) => memberTiles(report, GYM).find((t) => t.key === key).earlier;
@@ -59,8 +58,6 @@ const attendance = (over = {}) =>
     hoursNoTime: 0,
     member: { members: 20, visits: 40, visitors: 15 },
     classes: { ever: true, types: [SPIN] },
-    firstClassOn: '2025-02-01',
-    yearEarlier: { visits: 62, people: 30, member: { members: 20, visits: 60, visitors: 15 }, classes: [{ ...SPIN, places: 50, booked: 25, attended: 9, noShows: 1 }] },
     ...over,
   });
 const visitLine = (report, key) => visitTiles(report, GYM, '24h').find((t) => t.key === key).earlier;
@@ -116,11 +113,24 @@ describe('members a year earlier', () => {
     );
   });
 
-  it('the line under the picker names the days a year earlier', () => {
-    const r = members();
-    expect(periodLine(r.period, GYM, false, r.yearEarlier)).toBe(
-      "Showing 1 Nov 2025 to 14 Oct 2026. Members now, churn and retention are today's figures, so they stay the same whichever period you choose. \"A year earlier\" under a figure counts the same days a year before: 1 Nov 2024 to 14 Oct 2025.",
+  it('most of those days\' new members added later: the day most of the list was added, never 0 (round one, H1)', () => {
+    const r = members({ yearEarlier: { joined: 0, late: 35, lateFrom: '2026-09-10' } });
+    expect(memberLine(r, 'new')).toBe('A year earlier: no figures. Most of your member list was added on 10 Sep 2026.');
+  });
+
+  it('how New members is worked out names the days a year earlier and who is counted then', () => {
+    expect(memberTiles(members(), GYM).find((t) => t.key === 'new').how).toContain(
+      'A year earlier counts the same days a year before: 1 Nov 2024 to 14 Oct 2025. It counts only members who were on your list by the last of those days.',
     );
+    // Four weeks are set beside the same weekdays, so their dates are a day apart.
+    expect(memberTiles(members({ period: '4w' }), GYM).find((t) => t.key === 'new').how).toContain(
+      'A year earlier counts the same weekdays 52 weeks before: 18 Sep 2025 to 15 Oct 2025.',
+    );
+  });
+
+  it('nothing above the figures speaks of a year earlier: only the two tiles that carry the line do', () => {
+    const r = members();
+    expect(periodLine(r.period, GYM, true)).not.toContain('year earlier');
   });
 });
 

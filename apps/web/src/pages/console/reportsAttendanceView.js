@@ -272,7 +272,6 @@ export function hourGrid(report, clockFormat) {
 export function classTiles(report) {
   const classes = report.classes;
   if (classes.state !== 'ok') return null;
-
   const since = `classes that started since ${dayText(classes.from)} (${periodWords(report.period)})`;
   const fill = classes.fill;
   const noShows = classes.noShows;

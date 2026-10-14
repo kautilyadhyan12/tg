@@ -653,7 +653,7 @@ export default function Reports() {
           <PeriodPicker period={period} onPick={pick} />
           {mine.report !== null ? (
             <p className="c-s14 c-t2" data-testid="period-line">
-              {periodLine(mine.report.period, orgWords(org.orgType), canReadMoney(viewerPrivileges(org)), mine.report.yearEarlier)}
+              {periodLine(mine.report.period, orgWords(org.orgType), canReadMoney(viewerPrivileges(org)))}
             </p>
           ) : null}
         </div>
