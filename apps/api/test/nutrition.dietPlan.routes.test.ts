@@ -210,7 +210,9 @@ d("diet plan routes (real Postgres)", () => {
       ];
       const kcals: number[] = [];
       for (const { name, answers } of TEENS) {
-        const cookies = await makeUser(name, answers);
+        // No route saves an age under 18 since the app became 18+; the rules still hold a row from before.
+        const cookies = await makeUser(name, { ...answers, age: 40 });
+        await sql`UPDATE user_fitness_profiles SET age = ${answers.age} WHERE user_id = ${await idOf(name)}`;
         const rings = await ringsOf(cookies);
         if (name === "teen") expect(rings?.kcal).toBe(rings?.tdee);
         const kcal = rings?.kcal ?? Infinity;
