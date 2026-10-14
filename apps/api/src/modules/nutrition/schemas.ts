@@ -1,9 +1,10 @@
 export {
   analyzeMealPhotoRequestSchema, bodyMeasurementInputSchema, confirmMealRequestSchema,
-  createMealRequestSchema, dishwareInputSchema, foodSearchQuerySchema, genderSchema, manualMealRequestSchema,
-  mealEditPreviewRequestSchema, nutritionListQuerySchema, nutritionTargetsResponseSchema,
+  createMealRequestSchema, dietPlanDayParamsSchema, dishwareInputSchema, foodSearchQuerySchema, genderSchema, manualMealRequestSchema,
+  makeDietPlanRequestSchema, mealEditPreviewRequestSchema, nutritionListQuerySchema, nutritionTargetsResponseSchema,
   nutritionTargetsSchema, ownNutritionTargetsSchema, patchBodyMeasurementSchema, patchDishwareSchema,
-  patchMealRequestSchema, previewMealRequestSchema, putNutritionTargetsRequestSchema, ringTargetsSourceSchema,
+  patchMealRequestSchema, previewMealRequestSchema, putDietPlanDayRequestSchema, putNutritionTargetsRequestSchema,
+  ringTargetsSourceSchema, swapDietPlanMealRequestSchema,
 } from "@app/shared";
 export type {
   AnalyzeMealPhotoRequest, BodyMeasurementInput, ConfirmMealRequest, CreateMealRequest,

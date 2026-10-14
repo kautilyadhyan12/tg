@@ -445,7 +445,7 @@ async function amountOf(
   return { grams, dishwareRung: null, measure: { id: measure.id, name: measure.name, amount: chosen.amount } };
 }
 
-async function findFood(deps: NutritionDeps, query: string): Promise<FoodReference | null> {
+async function findFood(deps: NutritionDeps, query: string, search = true): Promise<FoodReference | null> {
   // An est_* canonical is a scan's own estimate, and lives only in that scan's
   // draft and the meal saved from it: nothing may look one up by name, or a
   // request could price a food at figures no table and no scan gave it.
@@ -472,7 +472,7 @@ async function findFood(deps: NutritionDeps, query: string): Promise<FoodReferen
   // path); full-text search is the last resort.
   const remembered = await canonicalCached(deps, query);
   if (remembered !== null) return remembered;
-  return (await cachedExternal(deps, query, 1))[0] ?? null;
+  return search ? ((await cachedExternal(deps, query, 1))[0] ?? null) : null;
 }
 
 /** Where a scanned food's numbers come from (`scanMatch.ts`): our list by whole
@@ -564,7 +564,7 @@ const asMeal = (r: repo.MealRow): Meal => ({
   itemsVersion: itemsVersion(r.items),
 });
 
-const totals = (items: readonly MealItem[]) => ({
+export const totals = (items: readonly MealItem[]) => ({
   kcalPoint: items.reduce((n, i) => n + i.kcalPoint, 0),
   kcalLow: items.reduce((n, i) => n + i.kcalLow, 0),
   kcalHigh: items.reduce((n, i) => n + i.kcalHigh, 0),
@@ -1142,14 +1142,17 @@ async function confirmNewMeal(deps: NutritionDeps, userId: string, input: Confir
 
 /** Search-resolved items for the manual flow — ONE implementation shared by
  *  createManualMeal and previewMeal (T3: divergence here is a trust bug). */
-async function resolveChosenItems(
+export async function resolveChosenItems(
   deps: NutritionDeps,
   userId: string,
   chosenItems: readonly ChosenItem[],
+  /** False where one request may hold many foods (a diet plan's day): only a food a
+   *  search already returned is priced, and none is searched for by its name. */
+  search = true,
 ): Promise<MealItem[]> {
   const foods: FoodReference[] = [];
   for (const chosen of chosenItems) {
-    const food = await findFood(deps, chosen.canonical);
+    const food = await findFood(deps, chosen.canonical, search);
     if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
     foods.push(food);
   }

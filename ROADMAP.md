@@ -444,7 +444,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 34d-i. [x] **The server makes the day's meal ideas** — merged 2026-10-14 (PR #257).
       - 34d-ii. [x] **The meal ideas after a workout come from the same place** — merged 2026-10-14 (PR #258).
       - 34d-iii. [ ] **The ideas on the Food screen**, each logged with one tap, and the Food option of Today's Recommended box (7a-ii). Waits for 32b.
-    - 34e. [ ] **Your own diet plan** (7c). 34f. [ ] **Your week in food** (7d). Each is split again by the terminal that reaches it.
+    - 34e. **Your own diet plan** (7c; split 2026-10-14: the server part needs no phone).
+      - 34e-i. [x] **The diet plan on the server** — merged 2026-10-14 (PR #264).
+      - 34e-ii. [ ] **The diet plan on the Food screen**, each meal logged with one tap; a meal outside the diet says so with Swap. Waits for 32b.
+    - 34f. [ ] **Your week in food** (7d). Split again by the terminal that reaches it.
 35. [ ] **Progress**: the charts, the workout calendar, body measurements and weigh-ins, badges; then weekly challenges and predictions on the new server (dead on the web; spec Part 2B §5).
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13).
 37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes.
