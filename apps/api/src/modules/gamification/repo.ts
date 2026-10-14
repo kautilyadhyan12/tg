@@ -317,12 +317,10 @@ export async function replaceWeekPicks(
     WHERE user_id = ${userId} AND week_start = ${weekStart}::date AND codes = ${sql.array([...was])}::text[]`;
 }
 
-/** Safe mode is on in this week: every challenge of the week but `gentle` is paused, and
- *  stays paused for the week. Run again, it changes nothing. */
-export async function holdWeek(tx: TransactionSql, userId: string, weekStart: string, gentle: readonly string[]): Promise<void> {
+/** The week's challenges Safe mode has paused (`codesToHold`), written under the XP lock. */
+export async function setHeldCodes(tx: TransactionSql, userId: string, weekStart: string, held: readonly string[]): Promise<void> {
   await tx`
-    UPDATE weekly_challenges
-    SET held_codes = ARRAY(SELECT c FROM unnest(codes) AS c WHERE c <> ALL(${tx.array([...gentle])}::text[]))
+    UPDATE weekly_challenges SET held_codes = ${tx.array([...held])}::text[]
     WHERE user_id = ${userId} AND week_start = ${weekStart}::date`;
 }
 

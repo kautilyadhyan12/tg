@@ -8,8 +8,8 @@
 // somebody whose weight is known (no weight, no calories); Safe mode gets only the gentle
 // ones; two challenges in a week never count the same thing; a workout count is a count
 // of days, and meals are days with food logged, so seven workouts in one evening are not
-// "every day this week". A challenge Safe mode paused in its week pays nothing for that
-// week, even after clearance.
+// "every day this week". Safe mode pauses the week's challenges not yet done: a paused
+// one pays nothing for that week, even after clearance, and one already done keeps its XP.
 import { createHash } from "node:crypto";
 import type {
   WeeklyChallenge,
@@ -157,6 +157,17 @@ export function measureChallenge(code: WeeklyChallengeCode, facts: WeekFacts, he
     xp: c.xp,
     held: held ? { code: "safe_mode" } : null,
   };
+}
+
+/** The week's challenges Safe mode pauses now: one already paused stays paused, and any
+ *  other but the gentle two is paused unless it is already done, so nobody loses XP for
+ *  answering the health question. */
+export function codesToHold(
+  codes: readonly WeeklyChallengeCode[],
+  heldCodes: readonly WeeklyChallengeCode[],
+  facts: WeekFacts,
+): WeeklyChallengeCode[] {
+  return codes.filter((c) => heldCodes.includes(c) || (pausedBySafeMode(c) && !measureChallenge(c, facts, false).done));
 }
 
 export interface ChallengeWeek {

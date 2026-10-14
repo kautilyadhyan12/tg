@@ -342,29 +342,43 @@ d("weekly challenges (real Postgres)", () => {
   });
 
   describe("Safe mode pauses the week's other challenges", () => {
-    it("at once when Safe mode is answered: a paused challenge pays nothing, and still nothing after clearance that week", { timeout: 60_000 }, async () => {
+    it("at once when Safe mode is answered: what is done keeps its XP, what is not pays nothing that week, even after clearance", { timeout: 60_000 }, async () => {
       const p = await makeUser("paused");
       const { weekStart } = thisWeek();
-      await setPicks(p.id, weekStart, ["train_days_3", "train_minutes_120"]);
-      for (let n = 0; n < 3; n++) await putWorkout(p.id, at(plus(weekStart, n), "07:00"), { minutes: 50 });
+      await setPicks(p.id, weekStart, ["train_days_3", "burn_kcal_1500", "train_minutes_120"]);
+      // Before Safe mode: 1,600 kcal (done), 100 minutes on 2 days (not done).
+      for (let n = 0; n < 2; n++) await putWorkout(p.id, at(plus(weekStart, n), "07:00"), { minutes: 50, kcal: 800 });
       await onWorkoutSynced({ sql }, p.id, "UTC");
-      expect((await read(p.cookies)).xpThisWeek).toBe(400);
-      const paid = await xpOf(p.id);
+      expect((await read(p.cookies)).xpThisWeek).toBe(250);
+      const before = await xpOf(p.id);
       const health = (checkFirst: string) =>
         inject({ method: "PUT", url: "/v1/users/me/health-screening", body: { hasCondition: true, checkFirst }, cookies: p.cookies });
 
       expect((await health("not_yet")).statusCode).toBe(200);
-      expect(await xpOf(p.id)).toBe(paid - 200);
+      expect(await xpOf(p.id)).toBe(before);
       const paused = await read(p.cookies);
-      expect(one(paused, "train_minutes_120")).toMatchObject({ done: true, held: { code: "safe_mode" } });
-      expect(one(paused, "train_days_3")).toMatchObject({ done: true, held: null });
-      expect(paused.xpThisWeek).toBe(200);
+      expect(one(paused, "burn_kcal_1500")).toMatchObject({ done: true, held: null });
+      expect(one(paused, "train_minutes_120")).toMatchObject({ done: false, held: { code: "safe_mode" } });
+      expect(one(paused, "train_days_3")).toMatchObject({ done: false, held: null });
+
+      // A third day in Safe mode: training on 3 days pays; 150 minutes is done but paused.
+      await putWorkout(p.id, at(plus(weekStart, 2), "07:00"), { minutes: 50, kcal: 800 });
+      await onWorkoutSynced({ sql }, p.id, "UTC");
+      const third = await read(p.cookies);
+      expect(one(third, "train_minutes_120")).toMatchObject({ done: true, held: { code: "safe_mode" } });
+      expect(third.xpThisWeek).toBe(250 + 200);
 
       // A professional clears them the same week: the paused challenge stays paused until Sunday.
       expect((await health("cleared")).statusCode).toBe(200);
-      await onWorkoutSynced({ sql }, p.id, "UTC");
-      expect(await xpOf(p.id)).toBe(paid - 200);
       expect(one(await read(p.cookies), "train_minutes_120").held).toEqual({ code: "safe_mode" });
+      const [row] = await sql<{ held_codes: string[] }[]>`
+        SELECT held_codes FROM weekly_challenges WHERE user_id = ${p.id} AND week_start = ${weekStart}::date`;
+      expect(row?.held_codes).toEqual(["train_minutes_120"]);
+      // What the week adds to the total: 450, never the paused 200.
+      const withWeek = await xpOf(p.id);
+      await sql`DELETE FROM weekly_challenges WHERE user_id = ${p.id}`;
+      await onWorkoutSynced({ sql }, p.id, "UTC");
+      expect(withWeek - (await xpOf(p.id))).toBe(450);
     });
   });
 

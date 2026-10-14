@@ -8,6 +8,7 @@ import {
   SAFE_MODE_CHALLENGES,
   challengeOf,
   challengeXp,
+  codesToHold,
   measureChallenge,
   pausedBySafeMode,
   pickChallenges,
@@ -54,6 +55,20 @@ describe("THE WORST THING: somebody in Safe mode is told to push harder", () => 
       expect(pausedBySafeMode(c.code), c.code).toBe(!SAFE_MODE_CHALLENGES.includes(c.code));
       expect(measureChallenge(c.code, NO_FACTS, true).held).toEqual({ code: "safe_mode" });
       expect(measureChallenge(c.code, NO_FACTS, false).held).toBeNull();
+    }
+  });
+
+  it("Safe mode pauses what is not yet done, keeps what is, and never lets a paused one go", () => {
+    const allDone: WeekFacts = { trainingDays: 7, kcalBurned: 9000, trainingMinutes: 900, form80Workouts: 9, form90Workouts: 9, families: 12, foodDays: 7 };
+    const partWeek: WeekFacts = { ...NO_FACTS, trainingDays: 2, kcalBurned: 1600, trainingMinutes: 100 };
+    const picked: WeeklyChallengeCode[] = ["train_days_3", "burn_kcal_1500", "train_minutes_120"];
+    expect(codesToHold(picked, [], partWeek)).toEqual(["train_minutes_120"]);
+    // Done later in the week, still paused.
+    expect(codesToHold(picked, ["train_minutes_120"], { ...partWeek, trainingMinutes: 150 })).toEqual(["train_minutes_120"]);
+    for (const c of CHALLENGES) {
+      const expectedWhenNotDone = pausedBySafeMode(c.code) ? [c.code] : [];
+      expect(codesToHold([c.code], [], NO_FACTS), c.code).toEqual(expectedWhenNotDone);
+      expect(codesToHold([c.code], [], allDone), c.code).toEqual([]);
     }
   });
 

@@ -16,8 +16,8 @@ import { weeklyChallengeCodeSchema, type GamificationMe, type WeeklyChallengeCod
 import { getPlanHealth, getUserFitnessLevel, getUserSyncContext } from "../users/service.js";
 import {
   NO_FACTS,
-  SAFE_MODE_CHALLENGES,
   challengeXp,
+  codesToHold,
   measureChallenge,
   pausedBySafeMode,
   pickChallenges,
@@ -83,12 +83,12 @@ async function recomputeXp(deps: GamificationDeps, userId: string, tz: string, n
   // getActivityDays' contract requires a validated zone, and the guard is
   // idempotent, so being self-contained costs nothing.
   const zone = safeTimeZone(tz);
-  // Safe mode on now pauses this week's challenges for the rest of the week (35b).
+  // Safe mode on now pauses this week's challenges not yet done, for the rest of the week (35b).
   const safeMode = (await getPlanHealth(deps.sql, userId))?.safeMode === true;
   const thisWeek = weekOf(dayInTz(now, zone)).weekStart;
   return await deps.sql.begin(async (tx) => {
     await repo.lockXpForUser(tx, userId); // serialize concurrent recompute (T3 F1)
-    if (safeMode) await repo.holdWeek(tx, userId, thisWeek, SAFE_MODE_CHALLENGES);
+    if (safeMode) await holdThisWeek(tx, userId, thisWeek);
     const counts = await repo.getXpAccrualCounts(tx, userId);
     const days = await repo.getActivityDays(tx, userId, zone);
     const earned = await repo.listEarned(tx, userId);
@@ -252,6 +252,16 @@ const codesOf = (stored: readonly string[]): WeeklyChallengeCode[] =>
     return parsed.success ? [parsed.data] : [];
   });
 
+/** Safe mode is on: this week's challenges not yet done are paused for the rest of the
+ *  week, and one already done keeps its XP (35b). Inside recomputeXp's lock. */
+async function holdThisWeek(tx: TransactionSql, userId: string, weekStart: string): Promise<void> {
+  const week = await repo.getWeekPicks(tx, userId, weekStart);
+  if (week === null) return;
+  const [facts] = await repo.weekFacts(tx, userId, safeTimeZone(week.timeZone), [weekStart]);
+  const held = codesToHold(codesOf(week.codes), codesOf(week.heldCodes), facts ?? NO_FACTS);
+  if (held.length !== week.heldCodes.length) await repo.setHeldCodes(tx, userId, weekStart, held);
+}
+
 /** XP from every week's done challenges (ROADMAP 35b), worked out again from the person's
  *  own workouts and meals, so a workout sent twice never pays twice. Each week is read in
  *  the zone it was picked in. Inside recomputeXp's lock. */
@@ -309,8 +319,10 @@ export async function getWeeklyChallenges(
     // Every challenge kept for the week is one the app no longer has.
     await repo.replaceWeekPicks(deps.sql, userId, weekStart, kept.codes, tz, await pick());
     changed = true;
-  } else if (safeMode && codesOf(kept.codes).some((c) => pausedBySafeMode(c) && !kept.heldCodes.includes(c))) {
-    changed = true;
+  } else if (safeMode) {
+    const [before] = await repo.weekFacts(deps.sql, userId, safeTimeZone(kept.timeZone), [weekStart]);
+    const held = codesOf(kept.heldCodes);
+    changed = codesToHold(codesOf(kept.codes), held, before ?? NO_FACTS).length !== held.length;
   }
   if (changed) await recomputeXp(deps, userId, tz, now);
   const week = await repo.getWeekPicks(deps.sql, userId, weekStart);
@@ -318,9 +330,10 @@ export async function getWeeklyChallenges(
 
   const [facts] = await repo.weekFacts(deps.sql, userId, safeTimeZone(week.timeZone), [weekStart]);
   const held = codesOf(week.heldCodes);
-  const challenges = codesOf(week.codes).map((code) =>
-    measureChallenge(code, facts ?? NO_FACTS, held.includes(code) || (safeMode && pausedBySafeMode(code))),
-  );
+  const challenges = codesOf(week.codes).map((code) => {
+    const done = measureChallenge(code, facts ?? NO_FACTS, false).done;
+    return measureChallenge(code, facts ?? NO_FACTS, held.includes(code) || (safeMode && pausedBySafeMode(code) && !done));
+  });
   return {
     weekStart,
     weekEnd,
