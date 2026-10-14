@@ -16,8 +16,8 @@ import {
   stoppedLine,
 } from './checkinRulesView';
 
-const START = { who: 'everyone', overdue: 'let_in' };
-const STRICT = { who: 'current_membership', overdue: 'see_staff' };
+const START = { who: 'everyone', overdue: 'let_in', waiver: 'let_in' };
+const STRICT = { who: 'current_membership', overdue: 'see_staff', waiver: 'let_in' };
 
 const person = (n, reason = 'ended') => ({ entryId: `e-${String(n)}`, name: `Person ${String(n)}`, reason });
 const preview = (listed, people, stopped = people.length) => ({ rules: STRICT, listed, stopped, people });
@@ -39,14 +39,14 @@ describe('the choices', () => {
   it('the closed box says what is saved', () => {
     expect(rulesSummary(null)).toBeUndefined();
     expect(rulesSummary(START)).toBe('Everyone on your list');
-    expect(rulesSummary({ who: 'everyone', overdue: 'see_staff' })).toBe('Everyone on your list · overdue payments sent to staff');
-    expect(rulesSummary({ who: 'current_membership', overdue: 'let_in' })).toBe('Only people with a current membership');
+    expect(rulesSummary({ who: 'everyone', overdue: 'see_staff', waiver: 'let_in' })).toBe('Everyone on your list · overdue payments sent to staff');
+    expect(rulesSummary({ who: 'current_membership', overdue: 'let_in', waiver: 'let_in' })).toBe('Only people with a current membership');
     expect(rulesSummary(STRICT)).toBe('Only people with a current membership · overdue payments sent to staff');
   });
 
   it('knows a choice not saved yet', () => {
     expect(rulesChanged(START, START)).toBe(false);
-    expect(rulesChanged({ ...START, overdue: 'see_staff' }, START)).toBe(true);
+    expect(rulesChanged({ ...START, overdue: 'see_staff', waiver: 'let_in' }, START)).toBe(true);
     expect(rulesChanged(STRICT, START)).toBe(true);
     expect(rulesChanged(null, START)).toBe(false);
   });

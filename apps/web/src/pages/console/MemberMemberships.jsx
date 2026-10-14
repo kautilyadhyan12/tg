@@ -4,6 +4,8 @@ import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
 import MembershipChoice from './MembershipChoice';
+import { MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
+import { NO_CODE, heldDiscountLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
 import { useCameBack } from './useCameBack';
 import { ENDING_NOT_TOLD } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
@@ -100,7 +102,7 @@ const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bi
 // names it only for somebody who can, and `membershipsTo` is the page's address for the
 // button under that sentence (null: no button).
 /** The Add membership form as it opens: the gym's one type already picked, from today. */
-const addForm = (types, today) => ({ requestKey: newRequestKey(), typeId: types.length === 1 ? types[0].id : '', startsOn: today, paid: false, method: '' });
+const addForm = (types, today) => ({ requestKey: newRequestKey(), typeId: types.length === 1 ? types[0].id : '', startsOn: today, paid: false, method: '', discountId: '', code: NO_CODE });
 
 export default function MemberMemberships({
   gymId,
@@ -241,6 +243,11 @@ export default function MemberMemberships({
       }
       setEnding(null);
       setRefusal(errorText(err, "We couldn't save that. Please try again."));
+      // A discount refused or changed: read the discounts again, and keep the form open.
+      const code = errorCode(err);
+      if (what === 'give' && typeof code === 'string' && (code.startsWith('discount_') || code === 'membership_discount_changed' || code === 'membership_price_changed')) {
+        setAttempt((n) => n + 1);
+      }
       // Somebody else changed it first: show it as it is now.
       if (STALE_CODES.includes(errorCode(err))) {
         setOpen(null);
@@ -789,6 +796,7 @@ export default function MemberMemberships({
           <span className={`c-tag ${TAG_TONES[tag.tone]} whitespace-nowrap`}>{tag.tag}</span>
         </div>
         <span className="c-s14 c-t2">{termLine(m)}</span>
+        {heldDiscountLine(m) !== null ? <span className="c-s14 c-t2">{heldDiscountLine(m)}</span> : null}
         <span className="c-s14 c-t2">{[datesLine(m), classes].filter((part) => part !== null).join(' · ')}</span>
         {pay !== null ? (
           <span className="c-s14 c-w5" style={{ color: pay.due ? 'var(--warn)' : 'var(--t1)' }} data-testid="held-payment">
@@ -845,7 +853,12 @@ export default function MemberMemberships({
 
   const renderAdd = () => {
     const choice = membershipChoice(types, form, today);
-    const ready = choice.type !== null && choice.problem === null && !choice.methodNeeded;
+    const offers = { discounts: shown.discounts, today, currency: choice.type === null ? null : choice.type.currency, canManage: managesTypes };
+    const free = choice.type !== null && choice.type.priceMinor === 0;
+    // A discount is used by whoever takes payments; the server sends nobody else any.
+    const discount = choice.type === null || free || !shown.canBill ? null : pickedDiscount(offers, choice.type, form.discountId);
+    const summary = discount === null ? null : membershipSummary(choice.type, discount);
+    const ready = choice.type !== null && choice.problem === null && !choice.methodNeeded && (discount === null || summary !== null);
     return (
       <form
         noValidate
@@ -855,7 +868,7 @@ export default function MemberMemberships({
         onSubmit={(e) => {
           e.preventDefault();
           if (!ready || busy) return;
-          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form)));
+          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary)));
         }}
       >
         <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
@@ -867,7 +880,28 @@ export default function MemberMemberships({
             <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink>
           </>
         ) : (
-          <MembershipChoice types={types} today={today} value={form} canBill={shown.canBill} onChange={(next) => setForm((f) => ({ ...f, ...next }))} />
+          <>
+            <MembershipChoice
+              types={types}
+              today={today}
+              value={form}
+              canBill={shown.canBill}
+              paidMinor={summary === null ? null : summary.totalMinor}
+              onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null } } : {}) }))}
+            />
+            {choice.type !== null && !free && shown.canBill ? (
+              <MembershipDiscountPicker
+                page={offers}
+                type={choice.type}
+                discountId={form.discountId}
+                setDiscountId={(id) => setForm((f) => ({ ...f, discountId: id }))}
+                code={form.code}
+                setCode={(code) => setForm((f) => ({ ...f, code }))}
+                disabled={busy}
+              />
+            ) : null}
+            <MembershipTotal summary={summary} />
+          </>
         )}
         <div className="flex flex-wrap gap-2">
           {types.length > 0 ? (

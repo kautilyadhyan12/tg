@@ -69,6 +69,8 @@ import { gymTimeZone, membersAgainstList } from "../memberList/repo.js";
 import { sameName } from "../memberList/samePerson.js";
 import { currentRecordOf } from "../memberList/whose.js";
 import { heldOnListOf, heldWithOwedOf } from "../memberships/onList.js";
+import { deskSignaturesOf, signaturesOf, waiverInUse } from "../waiver/repo.js";
+import { signedRecords } from "../waiver/signed.js";
 import { markCameAtCheckin, unmarkAfterVisitRemoved } from "../classes/attendance.js";
 import { looksLikePass, makePass, passWindow, readPass, windowEndsAt } from "./pass.js";
 import * as repo from "./repo.js";
@@ -518,13 +520,18 @@ async function stopsFor(
     const recordsOf = (at: AtDesk): readonly string[] => (at.who.entryId !== null ? [at.who.entryId] : at.maybe);
     const entryIds = [...new Set(people.flatMap(recordsOf))];
     const userIds = people.flatMap((at) => (at.who.userId === null ? [] : [at.who.userId]));
-    const [staff, facts] = await Promise.all([
+    const [staff, facts, waiver] = await Promise.all([
       repo.staffAmong(deps.sql, gymId, { userIds, entryIds }),
       heldWithOwedOf(deps.sql, gymId, today, entryIds),
+      desk.rules.waiver === "see_staff" ? waiverSignaturesOf(deps.sql, gymId, { userIds, entryIds }) : null,
     ]);
     for (const at of people) {
       const records = recordsOf(at);
       const isStaff = (at.who.userId !== null && staff.userIds.has(at.who.userId)) || records.some((id) => staff.entryIds.has(id));
+      // Signed in the app by this account, or at the desk on the record judged (3e-ii).
+      const signedInApp = waiver !== null && at.who.userId !== null && waiver.accounts.has(at.who.userId);
+      const waiverSigned = (entryId: string | null): boolean | null =>
+        waiver === null || waiver.waiverId === null ? null : signedInApp || (entryId !== null && waiver.records.has(entryId));
       const judge = (entryId: string | null): CheckinStopReason | null =>
         checkinStop({
           rules: desk.rules,
@@ -533,6 +540,7 @@ async function stopsFor(
           owedSince: entryId === null ? null : (facts.owedSince.get(entryId) ?? null),
           today,
           overdueAfterDays: desk.overdueAfterDays,
+          waiverSigned: waiverSigned(entryId),
         });
       // On no record at all: the app holds nothing for them.
       const reasons = records.length === 0 ? [judge(null)] : records.map(judge);
@@ -547,6 +555,22 @@ async function stopsFor(
     );
     return new Map();
   }
+}
+
+/** The waiver in use, and which of these accounts signed it in the app and which of these
+ *  records at the desk; `waiverId` null where the gym asks for none. */
+async function waiverSignaturesOf(
+  sql: Sql,
+  gymId: string,
+  named: { userIds: readonly string[]; entryIds: readonly string[] },
+): Promise<{ waiverId: string | null; accounts: Set<string>; records: Set<string> }> {
+  const waiver = await waiverInUse(sql, gymId);
+  if (waiver === null) return { waiverId: null, accounts: new Set(), records: new Set() };
+  const [app, atDesk] = await Promise.all([
+    signaturesOf(sql, gymId, waiver.id, named.userIds),
+    deskSignaturesOf(sql, gymId, waiver.id, named.entryIds),
+  ]);
+  return { waiverId: waiver.id, accounts: new Set(app.keys()), records: new Set(atDesk.keys()) };
 }
 
 /** What a read pass is, taking its one use if it is fresh; `spent` is where that use is
@@ -907,7 +931,7 @@ export async function getRules(deps: CheckinDeps, userId: string, gymId: string,
   if (!(await limit())) return null;
   const desk = await repo.deskRules(deps.sql, gymId);
   if (desk === null) throw orgNotFound();
-  return checkinRulesResponseSchema.parse(desk);
+  return checkinRulesResponseSchema.parse({ ...desk, waiverInUse: (await waiverInUse(deps.sql, gymId)) !== null });
 }
 
 /** Saves the two choices. The same choices saved twice change nothing and are noted once. */
@@ -929,13 +953,13 @@ export async function saveRules(
         action: "org.checkin_rules_changed",
         targetType: "gym",
         targetId: gymId,
-        meta: { who: rules.who, overdue: rules.overdue },
+        meta: { who: rules.who, overdue: rules.overdue, waiver: rules.waiver },
       });
     }
     return await repo.deskRules(tx, gymId);
   });
   if (desk === null) throw orgNotFound();
-  return checkinRulesResponseSchema.parse(desk);
+  return checkinRulesResponseSchema.parse({ ...desk, waiverInUse: (await waiverInUse(deps.sql, gymId)) !== null });
 }
 
 /** Who the desk would send to staff today under the choices asked, before they are saved:
@@ -952,9 +976,16 @@ export async function previewRules(
   const desk = await repo.deskRules(deps.sql, gymId);
   if (desk === null) throw orgNotFound();
   const today = dayInTz(deps.now(), await gymTimeZone(deps.sql, gymId));
-  // "Current membership" also stops whoever is in the app and on no record: they are counted.
-  const appMembers = rules.who === "current_membership" ? await membersAgainstList(deps.sql, gymId) : [];
-  const offList = appMembers.filter((member) => !member.onList).map((member) => member.userId);
+  // "Current membership" also stops whoever is in the app and on no record, and the waiver
+  // whoever of them has not signed it: they are counted. Who has signed is read by the one
+  // rule Members' Filter reads (3e-ii).
+  const asksWaiver = rules.waiver === "see_staff";
+  const appMembers = rules.who === "current_membership" || asksWaiver ? await membersAgainstList(deps.sql, gymId) : [];
+  const signed = asksWaiver ? await signedRecords(deps.sql, gymId, appMembers) : null;
+  const offList = appMembers
+    .filter((member) => !member.onList)
+    .filter((member) => rules.who === "current_membership" || (signed !== null && !signed.accounts.has(member.userId)))
+    .map((member) => member.userId);
   const [names, staff, facts] = await Promise.all([
     repo.currentNames(deps.sql, gymId),
     repo.staffAmong(deps.sql, gymId, { userIds: offList, entryIds: null }),
@@ -972,6 +1003,7 @@ export async function previewRules(
       owedSince: facts?.owedSince.get(record.id) ?? null,
       today,
       overdueAfterDays: desk.overdueAfterDays,
+      waiverSigned: signed === null ? null : signed.records.has(record.id),
     });
     if (reason === null) continue;
     stopped += 1;

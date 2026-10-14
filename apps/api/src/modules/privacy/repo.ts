@@ -382,6 +382,32 @@ export async function deleteExpiredConsentProof(sql: Sql, cutoff: Date): Promise
   return rows.length;
 }
 
+/** A gym's signed waiver, on the consent log's footing (Kd, rulings/2026-10-13-3e-i.md and
+ *  rulings/2026-10-14-3e-ii.md): an app signature goes six years after its account was
+ *  deleted, with the same two guards as deleteExpiredConsentProof; a desk signature six
+ *  years after its record was deleted for good (`record_deleted_at`, written by the record's
+ *  deletion). A signature whose person still has an account, or whose record is still on
+ *  the list, has no day to count from and stays. Returns how many went. */
+export async function deleteExpiredWaiverSignatures(sql: Sql, cutoff: Date): Promise<number> {
+  return sql.begin(async (tx) => {
+    const app = await tx<{ id: string }[]>`
+      DELETE FROM gym_waiver_signatures s
+      USING users u
+      WHERE u.id = s.user_id
+        AND u.status = 'deleted'
+        AND u.deleted_at IS NOT NULL
+        AND u.deleted_at <= ${cutoff}
+      RETURNING s.id`;
+    const desk = await tx<{ id: string }[]>`
+      DELETE FROM gym_waiver_desk_signatures
+      WHERE entry_id IS NULL
+        AND record_deleted_at IS NOT NULL
+        AND record_deleted_at <= ${cutoff}
+      RETURNING id`;
+    return app.length + desk.length;
+  });
+}
+
 /** The purge marker AND the ops record (Part 8: a user's life should be
  *  narratable from audit_log). actor_user_id is NULL — the sweep is the
  *  system acting on a schedule, not a person. `meta` carries counts only,

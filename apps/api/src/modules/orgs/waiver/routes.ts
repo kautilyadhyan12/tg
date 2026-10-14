@@ -4,15 +4,17 @@
 //   DELETE /v1/orgs/:gymId/waiver        stop asking for it
 //   GET    /v1/orgs/:gymId/waiver/mine   a member reads it, with their own signature
 //   POST   /v1/orgs/:gymId/waiver/sign   a member signs the wording they were shown
+//   GET    /v1/orgs/:gymId/member-list/entries/:entryId/waiver        the desk's box (3e-ii, `members.confirm`)
+//   POST   /v1/orgs/:gymId/member-list/entries/:entryId/waiver/sign   a person signs at the desk
 // Authenticate, then who the caller is at this gym, then the limit, then the handler: the
 // service asks the tick or the membership first and the limit after it.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { saveGymWaiverBodySchema, signWaiverBodySchema } from "@app/shared";
+import { saveGymWaiverBodySchema, signAtDeskBodySchema, signWaiverBodySchema } from "@app/shared";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { orgParamsSchema } from "../schemas.js";
+import { memberListEntryParamsSchema, orgParamsSchema } from "../schemas.js";
 import * as service from "./service.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -58,6 +60,10 @@ export function registerWaiverRoutes(app: FastifyInstance, deps: { sql: Sql; red
   // few times an hour, and each signing once (and again after a change of words).
   const memberReadLimit = createDualRateLimit({ name: "waiver_member_read", max: 120, ipMax: 6000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   const signLimit = createDualRateLimit({ name: "waiver_sign", max: 10, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  // The desk (3e-ii): one member of staff signing a queue of new people in on a busy
+  // evening, and a gym's few staff on one address.
+  const deskReadLimit = createDualRateLimit({ name: "waiver_desk_read", max: 300, ipMax: 900, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const deskSignLimit = createDualRateLimit({ name: "waiver_desk_sign", max: 60, ipMax: 180, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
 
   const url = "/v1/orgs/:gymId/waiver";
 
@@ -101,6 +107,26 @@ export function registerWaiverRoutes(app: FastifyInstance, deps: { sql: Sql; red
     const body = parseOr400(signWaiverBodySchema, req.body, req, reply);
     if (body === null) return;
     const signed = await service.signMyWaiver(waiverDeps, requireUserId(req), params.gymId, body, gate(signLimit)(req, reply));
+    if (signed === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(signed);
+  });
+
+  const deskUrl = "/v1/orgs/:gymId/member-list/entries/:entryId/waiver";
+
+  app.get(deskUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const desk = await service.getDeskWaiver(waiverDeps, requireUserId(req), params.gymId, params.entryId, gate(deskReadLimit)(req, reply));
+    if (desk === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(desk);
+  });
+
+  app.post(`${deskUrl}/sign`, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(signAtDeskBodySchema, req.body, req, reply);
+    if (body === null) return;
+    const signed = await service.signAtDesk(waiverDeps, requireUserId(req), params.gymId, params.entryId, body, gate(deskSignLimit)(req, reply));
     if (signed === null) return;
     return reply.status(200).header("cache-control", "no-store").send(signed);
   });

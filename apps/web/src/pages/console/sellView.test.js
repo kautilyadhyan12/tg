@@ -9,7 +9,6 @@ import {
   canSellMemberships,
   draftFromProduct,
   emptyProductDraft,
-  membershipSoldWords,
   personOption,
   productBody,
   productOption,
@@ -145,9 +144,6 @@ describe('the sale as it is shown', () => {
   it('what is said once it is sold', () => {
     expect(soldWords(sale())).toBe('Sold: 2 × Water to Maya Patel. $4.31, cash.');
     expect(soldWords(sale({ person: null, method: 'card_at_desk', quantity: 1, totalMinor: 215 }))).toBe('Sold: 1 × Water to a walk-in. $2.15, card at the desk.');
-    const month = { name: '1 Month', priceMinor: 4999, currency: 'USD' };
-    expect(membershipSoldWords(month, 'Maya Patel', 'bank_transfer')).toBe('1 Month given to Maya Patel and recorded as paid. $49.99, bank transfer.');
-    expect(membershipSoldWords({ ...month, name: 'Free trial', priceMinor: 0 }, 'Maya Patel', 'cash')).toBe('Free trial given to Maya Patel. Nothing to pay.');
   });
   it('a person the search found', () => {
     expect(personOption({ name: 'Maya Patel', email: null, memberNumber: null, past: false })).toBe('Maya Patel');

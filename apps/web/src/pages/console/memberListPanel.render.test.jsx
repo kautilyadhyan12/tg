@@ -295,6 +295,24 @@ describe("the gym's own list", () => {
     expect(filterBox().queryByRole('radiogroup', { name: 'Show' })).toBeNull();
   });
 
+  it('offers Waiver not signed while the gym asks for a waiver, with its count, and asks the server for it (3e-ii)', async () => {
+    orgService.getMemberList.mockResolvedValue({ data: { list: view({ waiverNotSigned: 4 }) } });
+    draw();
+    await openFilter();
+    const waiver = within(filterBox().getByRole('group', { name: 'Waiver' }));
+    fireEvent.click(waiver.getByRole('button', { name: 'Waiver not signed 4' }));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'waiver=not_signed'));
+    fireEvent.click(await filterBox().findByRole('button', { name: /^Show \d+ members?$/ }));
+    expect(within(screen.getByTestId('showing')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Waiver not signed', 'Clear']);
+  });
+
+  it('offers no waiver choice at a gym that asks for none', async () => {
+    orgService.getMemberList.mockResolvedValue({ data: { list: view({ waiverNotSigned: null }) } });
+    draw();
+    await openFilter();
+    expect(filterBox().queryByRole('group', { name: 'Waiver' })).toBeNull();
+  });
+
   it('asks for the ticked words, and "no status" as the people with none, then shows them on one line', async () => {
     draw();
     await openFilter();

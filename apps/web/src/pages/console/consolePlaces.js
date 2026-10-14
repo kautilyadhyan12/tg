@@ -24,6 +24,7 @@ export const SETTINGS_SECTION = {
   bookingRules: 'booking-rules',
   frontDesk: 'check-in-devices',
   leadEmails: 'follow-up-emails',
+  waiver: 'waiver',
 };
 
 /** The sections of Settings that the gym's details box holds. */
@@ -47,6 +48,7 @@ const PLACES = {
   bookingRules: { path: `/settings#${SETTINGS_SECTION.bookingRules}`, may: canManageSchedule },
   frontDesk: { path: `/settings#${SETTINGS_SECTION.frontDesk}`, may: canManageOrg },
   leadEmails: { path: `/settings#${SETTINGS_SECTION.leadEmails}`, may: canManageOrg },
+  waiver: { path: `/settings#${SETTINGS_SECTION.waiver}`, may: canManageOrg },
   memberships: { path: '/memberships', may: canManageMemberships },
   sell: { path: '/sell', may: canOpenSell },
   members: { path: '/members', may: onStaff },

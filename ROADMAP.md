@@ -133,8 +133,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 3d. [x] **The two extra passes' fixes** over "getting in" — merged 2026-10-02 (PR #154).
    - 3e. **A gym's waiver, signed in the app** (RULINGS 2026-10-08; spec Part 3 §10.10): split 2026-10-13 in two, built back to back (the line as first written is in `handoff/2026-10-13-3e-i.md`). The words are the gym's, never ours.
      - 3e-i. [x] **The gym writes it, and people sign in the app** — merged 2026-10-13 (PR #239).
-     - 3e-ii. [ ] **Signed at the desk with no app, and who has not signed**: staff open a person, who reads and signs on that screen (a parent or guardian for somebody under 18); a "Waiver not signed" choice in Members' Filter. Its plan asks Kd whether the front desk sends somebody who has not signed to staff (16d's box).
-     - 3e-iii. [ ] **A signed waiver is removed six years after its person deletes their account** (Kd, `rulings/2026-10-13-3e-i.md`): the purge that removes the consent log's proof after six years (`purge.ts`, `deleteExpiredConsentProof`) removes these signatures too; kept until then, and while the person has an account. Ordinary; no screen.
+     - 3e-ii. [x] **Signed at the desk, and who has not signed** — merged 2026-10-14 (PR #262).
+     - 3e-iii. [x] **A signed waiver is removed six years after its person is gone** — merged 2026-10-14 (PR #265).
    - ~~3c. **The code admits at once**~~ **(STRUCK 2026-09-21, never built)**; its plan of 2026-09-19 (spec Part 3 §9.13) went with it.
    - The line as Kd ruled it (RULINGS 2026-09-17): a roster upload that reconciles, invitations by email, and a code that admits at once — the code part reversed 2026-09-21; the rest is the lines above.
 4. **Staff, seats and the gym's own details** (split 2026-09-21; 4a and 4c are Part 1 of the re-plan and are built right after item 5, RULINGS 2026-09-21).
@@ -238,7 +238,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18b-i. [x] **The Sell page: products, a sale, tax on products, today's takings** — merged 2026-10-13 (PR #228).
      - 18b-ii. **Discounts and promo codes**, split 2026-10-13 in two (too big for one terminal; the line as first written is in `handoff/2026-10-13-18b-ii-a.md`):
        - 18b-ii-a. [x] **Discounts and promo codes on products** — merged 2026-10-13 (PR #244).
-       - 18b-ii-b. [ ] **The same discounts on memberships**: which membership types a discount applies to, First payment only or Every payment for a repeating one, used on Sell's membership box and on a person's page; the price a person was sold at stays on their membership.
+       - 18b-ii-b. [x] **The same discounts on memberships** — merged 2026-10-14 (PR #261).
      - 18b-iii. [ ] **Tax on memberships** (found by 18b-i's plan): the gym's tax as a line of its own on a membership's bill, for the types the gym marks as taxed; every reader of a bill's amount is checked. Kd's to say whether it is wanted before launch.
    - 18c. [ ] **Pay by the gym's own link**: the link pasted per membership type, "Pay {gym}" in the member's app, staff ticking paid.
    - 18d. [ ] **The first Connect button** — Square, once Kd has made its developer account (free; his to do when he chooses, RULINGS 2026-09-22); GoCardless if Square's sign-up refuses him. OAuth only, tokens encrypted and never logged, the member's card saved on the company's own page, webhooks by CLAUDE.md §4's rule. Reviewed by RUNNING the company's real sandbox. **2026-10-08 (RULINGS that day): Kd tries Square's sign-up now, picking India and no other country; once it has worked 18d is in Folder A's order after 18j.** Read on Square's own pages that day (spec Part 3 §14.7): its test area is "only available in regions where payment processing is supported", only credit and debit cards can be saved (never an Apple Pay or Google Pay payment), and its subscriptions take no bank debit.

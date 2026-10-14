@@ -92,6 +92,7 @@ describe('where each place is', () => {
       bookingRules: 'booking-rules',
       frontDesk: 'check-in-devices',
       leadEmails: 'follow-up-emails',
+      waiver: 'waiver',
     });
     // The postal address and the country are boxes inside the details: a link to either opens them.
     expect(DETAILS_SECTIONS).toEqual(['gym-details', 'postal-address', 'country']);
