@@ -154,14 +154,19 @@ function money(over: Partial<MoneyReportFacts>) {
       period: "3m",
       currency: "GBP",
       anyMembership: true,
+      anySale: false,
+      firstSoldOn: null,
       firstPaidOn: "2025-08-01",
       otherCurrency: false,
       overdueAfterDays: 0,
       held: [],
       months: [],
+      sales: [],
+      products: [],
+      staff: [],
       owed: { currentMinor: 0, currentPeople: 0, listPeople: 0, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 },
       members: { today: TODAY, firstListedOn: "2024-03-04", everLeft: false, months: monthsTo(TODAY) },
-      yearEarlier: { paidMinor: 120000, refundedMinor: 5000 },
+      yearEarlier: { paidMinor: 120000, soldMinor: 0, refundedMinor: 5000 },
       ...over,
     }),
   );
@@ -171,7 +176,7 @@ describe("money collected a year earlier", () => {
   it("payments less refunds of those days", () => {
     const r = money({});
     if (r.state !== "ok") throw new Error("no figures");
-    expect(r.yearEarlier).toEqual({ state: "ok", from: "2025-08-01", to: "2025-10-14", paidMinor: 120000, refundedMinor: 5000, netMinor: 115000 });
+    expect(r.yearEarlier).toEqual({ state: "ok", from: "2025-08-01", to: "2025-10-14", paidMinor: 120000, soldMinor: 0, refundedMinor: 5000, netMinor: 115000 });
   });
 
   it("the first payment recorded after those days began: a sentence with its day, never nothing collected", () => {

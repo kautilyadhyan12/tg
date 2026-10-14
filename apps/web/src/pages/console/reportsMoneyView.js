@@ -2,8 +2,8 @@ import { formatMinor, minorToPriceText } from '@app/shared';
 import { changeWords, countedSpan, csvWords, dayText, earlierDays, earlierLine, monthLong, monthShort, periodName } from './reportsView';
 import { PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 
-// The Reports page's money words (spec Part 3 §16.5; ROADMAP 21b-i, 21d-i). The figures come from
-// the payments staff record in the app; a figure the notebook cannot give is a sentence,
+// The Reports page's money words (spec Part 3 §16.5; ROADMAP 21b-i, 21b-ii, 21d-i). The figures come from
+// the payments and sales staff record in the app; a figure the notebook cannot give is a sentence,
 // never a zero.
 
 export function canReadMoney(privileges) {
@@ -25,17 +25,17 @@ function monthList(months) {
 
 /** The line under the heading: where the figures come from. */
 export function moneyLine(report) {
-  return `These figures come from the payments your staff record in the app. The first was recorded on ${dayText(report.firstPaidOn)}.`;
+  return `These figures come from the payments and sales your staff record in the app. The first was recorded on ${dayText(report.firstPaidOn)}.`;
 }
 
-export const OTHER_CURRENCY_NOTE = 'Payments and bills in another currency, from before your country changed, are not counted here.';
+export const OTHER_CURRENCY_NOTE = 'Payments, sales and bills in another currency, from before your country changed, are not counted here.';
 
 /** What takes the figures' place while there are none: the sentence, the place that
  *  starts them, its button, and who can for staff who may not open it. */
 export function moneyMissing(report, words) {
   if (report.state === 'no_memberships') {
     return {
-      line: `No membership has been given in the app yet. Money figures start when you set up your memberships, give them to your ${words.people} and record their payments.`,
+      line: `No membership has been given and nothing has been sold in the app yet. Money figures start when you give memberships to your ${words.people} and record their payments, or sell at the front desk.`,
       place: 'memberships',
       button: 'Set up memberships',
       ask: 'Staff who manage memberships can set them up.',
@@ -43,7 +43,7 @@ export function moneyMissing(report, words) {
   }
   if (report.state === 'no_payments') {
     return {
-      line: `No payment is recorded in the app yet. If you take payments in other software, your money figures are there. To see them here, record each payment on the ${words.person}'s page.`,
+      line: `No payment or sale is recorded in the app yet. If you take payments in other software, your money figures are there. To see them here, record each payment on the ${words.person}'s page.`,
       place: 'members',
       button: `Open ${words.peopleCap}`,
       ask: `Staff who can open ${words.peopleCap} can record payments.`,
@@ -76,6 +76,13 @@ export function moneyTiles(report, words, orgSlug) {
   const paidFrom = report.firstPaidOn > report.period.from ? report.firstPaidOn : report.period.from;
   const soFar = `${month}, so far: ${moneyText(report.thisMonth.netMinor, cur)}`;
   const refunded = report.inPeriod.refundedMinor > 0;
+  const sold = report.inPeriod.soldMinor > 0;
+  const parts = [
+    ...(sold
+      ? [`${moneyText(report.inPeriod.paidMinor, cur)} memberships`, `${moneyText(report.inPeriod.soldMinor, cur)} product sales`]
+      : [`${moneyText(report.inPeriod.paidMinor, cur)} paid`]),
+    ...(refunded ? [`${moneyText(report.inPeriod.refundedMinor, cur)} refunded`] : []),
+  ];
   const owedMinor = report.owed.minor + report.owed.pastMinor;
   // People the Members page also shows as Payment due, with no amount in the app.
   const listOnly = report.owed.listOnlyPeople;
@@ -122,10 +129,8 @@ export function moneyTiles(report, words, orgSlug) {
         (f) => `Your first payment was recorded on ${dayText(f.since)}.`,
         (f) => `${moneyText(f.netMinor, cur)} · ${changeWords(report.inPeriod.netMinor, f.netMinor, (n) => moneyText(n, cur))}`,
       ),
-      note: refunded
-        ? `${span}: ${moneyText(report.inPeriod.paidMinor, cur)} paid, ${moneyText(report.inPeriod.refundedMinor, cur)} refunded · ${soFar}`
-        : `${span} · ${soFar}`,
-      how: `Payments your staff recorded from ${dayText(paidFrom)} to today, less refunds noted in those days. A payment or a refund that was undone is not counted. ${earlierDays(report.period, report.yearEarlier)}`,
+      note: refunded || sold ? `${span}: ${parts.join(', ')} · ${soFar}` : `${span} · ${soFar}`,
+      how: `Membership payments and product sales your staff recorded from ${dayText(paidFrom)} to today, less refunds noted in those days. A payment, sale or refund that was undone is not counted. ${earlierDays(report.period, report.yearEarlier)}`,
       links: [],
     },
     {
@@ -155,6 +160,17 @@ export function moneyTiles(report, words, orgSlug) {
   ];
 }
 
+/** Whether the month-by-month table has a column for product sales: only where a month
+ *  it shows holds one, so a gym that never sells at the desk reads no column of zeros. */
+export const moneyHasSales = (report) => report.months.some((m) => m.soldMinor > 0);
+
+/** The month-by-month table's headings and the cells each row fills. */
+export function moneyMonthColumns(report) {
+  return moneyHasSales(report)
+    ? { heads: ['Month', 'Memberships', 'Product sales', 'Refunded', 'Collected'], cells: ['month', 'paid', 'sold', 'refunded', 'collected'] }
+    : { heads: ['Month', 'Paid', 'Refunded', 'Collected'], cells: ['month', 'paid', 'refunded', 'collected'] };
+}
+
 /** The month-by-month table's rows, newest first. */
 export function moneyMonthRows(report) {
   const cur = report.currency;
@@ -162,6 +178,7 @@ export function moneyMonthRows(report) {
     key: m.month,
     month: m.month === report.thisMonth.month ? `${monthShort(m.month)} (so far)` : monthShort(m.month),
     paid: moneyText(m.paidMinor, cur),
+    sold: moneyText(m.soldMinor, cur),
     refunded: moneyText(m.refundedMinor, cur),
     collected: moneyText(m.netMinor, cur),
   }));
@@ -180,6 +197,29 @@ export function moneyTypeRows(report) {
   }));
 }
 
+/** A row for each product sold in the period. */
+export function moneyProductRows(report) {
+  const cur = report.currency;
+  return report.products.map((p, i) => ({ key: `${String(i)}-${p.name}`, name: p.name, sold: count(p.sold), period: moneyText(p.minor, cur) }));
+}
+
+/** What an account that has since been deleted is called in the staff table. */
+export const DELETED_STAFF = 'Deleted account';
+
+export const MONEY_STAFF_NOTE = 'Who recorded each payment and sale. Refunds are taken off Collected, not off anybody here.';
+
+/** A row for each staff member who recorded a payment or a sale in the period. */
+export function moneyStaffRows(report) {
+  const cur = report.currency;
+  return report.staff.map((m, i) => ({
+    key: `${String(i)}-${m.name ?? ''}`,
+    name: m.name ?? DELETED_STAFF,
+    paid: moneyText(m.paidMinor, cur),
+    sold: moneyText(m.soldMinor, cur),
+    total: moneyText(m.totalMinor, cur),
+  }));
+}
+
 /** The month's name, for the membership table's heading. */
 export const moneyMonthName = (report) => monthName(report.thisMonth.month);
 /** "Collected, last 3 months": the membership table's last heading. */
@@ -190,14 +230,18 @@ const csv = (rows) => `${rows.map((row) => row.map(cell).join(',')).join('\r\n')
 /** An amount as a plain number for a spreadsheet: "49.99", "-60.00". */
 const plain = (minor, currency) => (minor < 0 ? `-${minorToPriceText(-minor, currency)}` : minorToPriceText(minor, currency));
 
-/** The months as a CSV: amounts only, oldest first. */
+/** The months as a CSV: amounts only, oldest first, with the table's own columns. */
 export function moneyMonthsCsv(report) {
   const cur = report.currency;
+  const sales = moneyHasSales(report);
   return csv([
-    ['Month', `Paid (${cur})`, `Refunded (${cur})`, `Collected (${cur})`],
+    sales
+      ? ['Month', `Memberships (${cur})`, `Product sales (${cur})`, `Refunded (${cur})`, `Collected (${cur})`]
+      : ['Month', `Paid (${cur})`, `Refunded (${cur})`, `Collected (${cur})`],
     ...report.months.map((m) => [
       m.month === report.thisMonth.month ? `${m.month} (so far)` : m.month,
       plain(m.paidMinor, cur),
+      ...(sales ? [plain(m.soldMinor, cur)] : []),
       plain(m.refundedMinor, cur),
       plain(m.netMinor, cur),
     ]),
@@ -210,5 +254,20 @@ export function moneyTypesCsv(report) {
   return csv([
     ['Membership', 'In use now', `Monthly recurring (${cur})`, `Collected in ${report.thisMonth.month} (${cur})`, `${moneyPeriodHead(report)} (${cur})`],
     ...report.types.map((t) => [csvWords(t.name), t.inUse, plain(t.monthlyMinor, cur), plain(t.monthNetMinor, cur), plain(t.periodNetMinor, cur)]),
+  ]);
+}
+
+/** The products as a CSV: counts and amounts. */
+export function moneyProductsCsv(report) {
+  const cur = report.currency;
+  return csv([['Product', 'Sold', `${moneyPeriodHead(report)} (${cur})`], ...report.products.map((p) => [csvWords(p.name), p.sold, plain(p.minor, cur)])]);
+}
+
+/** The staff as a CSV: who recorded what, in amounts. */
+export function moneyStaffCsv(report) {
+  const cur = report.currency;
+  return csv([
+    ['Staff', `Memberships (${cur})`, `Product sales (${cur})`, `Total (${cur})`],
+    ...report.staff.map((m) => [csvWords(m.name ?? DELETED_STAFF), plain(m.paidMinor, cur), plain(m.soldMinor, cur), plain(m.totalMinor, cur)]),
   ]);
 }

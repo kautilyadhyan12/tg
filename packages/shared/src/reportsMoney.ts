@@ -1,7 +1,8 @@
-// The console's Reports page: the money figures (spec Part 3 §16.5; ROADMAP 21b-i).
+// The console's Reports page: the money figures (spec Part 3 §16.5; ROADMAP 21b-i, 21b-ii).
 //
 // Read from the gym's own notebook (§14.2): the memberships it gave here, their bills,
-// the payments staff recorded and the refunds they noted. The app holds no money, so a
+// the payments staff recorded and the refunds they noted, and the products sold on the
+// Sell page (§14.3). The app holds no money, so a
 // gym that records no payment here has no figures and is told why, never shown a zero.
 import { z } from "zod";
 import { heldMembershipView, type HeldMembership } from "./heldMemberships.js";
@@ -39,6 +40,33 @@ export interface MoneyMonthOfType {
   periodRefundedMinor: number;
 }
 
+/** Products sold at the desk in one month, as the database added them up: sales that stand. */
+export interface MoneyMonthOfSales {
+  /** 'YYYY-MM'. */
+  month: string;
+  soldMinor: number;
+  /** The part that falls on the period's own days. */
+  periodSoldMinor: number;
+}
+
+/** One product's sales that stand, over the period's days. */
+export interface MoneyProduct {
+  productId: string;
+  name: string;
+  /** How many were sold. */
+  sold: number;
+  minor: number;
+}
+
+/** What one staff member recorded over the period's days: payments and sales that stand.
+ *  `userId` is null for an account that has since been deleted. */
+export interface MoneyStaff {
+  userId: string | null;
+  name: string | null;
+  paidMinor: number;
+  soldMinor: number;
+}
+
 export interface MoneyReportFacts {
   timezone: string;
   /** The gym's own day today. */
@@ -49,8 +77,12 @@ export interface MoneyReportFacts {
   currency: string | null;
   /** Whether a membership has ever been given here. */
   anyMembership: boolean;
+  /** Whether a product has ever been sold here. */
+  anySale: boolean;
   /** The gym's day of the first payment that stands; null with none. */
   firstPaidOn: string | null;
+  /** The gym's day of the first sale that stands; null with none. */
+  firstSoldOn: string | null;
   /** A payment or a bill owed stands in another currency (the gym's country changed): not counted. */
   otherCurrency: boolean;
   /** How many days after its due date an unpaid bill reads Overdue. */
@@ -58,6 +90,12 @@ export interface MoneyReportFacts {
   held: readonly MoneyHeld[];
   /** The last twelve months, the month in progress among them; a month with nothing is absent. */
   months: readonly MoneyMonthOfType[];
+  /** The same twelve months' sales at the desk. */
+  sales: readonly MoneyMonthOfSales[];
+  /** The period's sales, by product. */
+  products: readonly MoneyProduct[];
+  /** The period's payments and sales, by who recorded them. */
+  staff: readonly MoneyStaff[];
   /** Bills still open whose day has come, less what is paid on them. */
   owed: {
     currentMinor: number;
@@ -71,9 +109,11 @@ export interface MoneyReportFacts {
   };
   /** The list's own counts, for churn: lifetime value divides by it. */
   members: Pick<MembersReportFacts, "today" | "firstListedOn" | "everLeft" | "months">;
-  /** Payments and refunds that stand, over the same days a year earlier (`yearEarlierOf`). */
-  yearEarlier: { paidMinor: number; refundedMinor: number };
+  /** Payments, sales and refunds that stand, over the same days a year earlier (`yearEarlierOf`). */
+  yearEarlier: { paidMinor: number; soldMinor: number; refundedMinor: number };
 }
+
+const collectedShape = { paidMinor: minorSchema, soldMinor: minorSchema, refundedMinor: minorSchema, netMinor: netSchema };
 
 const lifetimeSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("ok"), minor: minorSchema, months: z.array(monthSchema).min(1), leavers: countSchema.min(1) }).strict(),
@@ -90,16 +130,19 @@ const moneyFiguresSchema = z
     today: daySchema,
     period: reportPeriodSchema,
     currency: z.string().regex(/^[A-Z]{3}$/),
+    /** The first payment or sale recorded here. */
     firstPaidOn: daySchema,
     otherCurrency: z.boolean(),
     /** Each repeating membership in use today, its price as one month. */
     recurring: z.object({ monthlyMinor: minorSchema, memberships: countSchema }).strict(),
-    thisMonth: z.object({ month: monthSchema, paidMinor: minorSchema, refundedMinor: minorSchema, netMinor: netSchema }).strict(),
-    /** Payments that stand less refunds that stand, over the period's days. */
-    inPeriod: z.object({ paidMinor: minorSchema, refundedMinor: minorSchema, netMinor: netSchema }).strict(),
-    /** The same over the same days a year earlier; no figure where the first payment
-     *  recorded here came after they began. */
-    yearEarlier: yearEarlierFigureSchema({ paidMinor: minorSchema, refundedMinor: minorSchema, netMinor: netSchema }),
+    /** `paidMinor` is membership payments, `soldMinor` products sold at the desk;
+     *  `netMinor` is both less refunds. */
+    thisMonth: z.object({ month: monthSchema, ...collectedShape }).strict(),
+    /** Payments and sales that stand less refunds that stand, over the period's days. */
+    inPeriod: z.object(collectedShape).strict(),
+    /** The same over the same days a year earlier; no figure where the first payment or
+     *  sale recorded here came after they began. */
+    yearEarlier: yearEarlierFigureSchema(collectedShape),
     owed: z
       .object({
         minor: minorSchema,
@@ -117,7 +160,7 @@ const moneyFiguresSchema = z
       .strict(),
     lifetimeValue: lifetimeSchema,
     /** The months the period touches, from the month of the first payment, oldest first, the month in progress last. */
-    months: z.array(z.object({ month: monthSchema, paidMinor: minorSchema, refundedMinor: minorSchema, netMinor: netSchema }).strict()).max(12),
+    months: z.array(z.object({ month: monthSchema, ...collectedShape }).strict()).max(12),
     /** A membership the gym sells that is in use, or took or gave back money in the period. */
     types: z.array(
       z
@@ -130,12 +173,18 @@ const moneyFiguresSchema = z
         })
         .strict(),
     ),
+    /** Each product sold in the period, the most money first. */
+    products: z.array(z.object({ name: z.string(), sold: countSchema, minor: minorSchema }).strict()),
+    /** Each staff member who recorded a payment or a sale in the period, the most money
+     *  first; `name` is null for an account since deleted. */
+    staff: z.array(z.object({ name: z.string().nullable(), paidMinor: minorSchema, soldMinor: minorSchema, totalMinor: minorSchema }).strict()),
   })
   .strict();
 
 export const moneyReportSchema = z.discriminatedUnion("state", [
   moneyFiguresSchema,
-  /** `no_memberships`: nothing has been given here. `no_payments`: none is recorded. */
+  /** `no_memberships`: no membership has been given and nothing sold here. `no_payments`:
+   *  no payment or sale is recorded. */
   z.object({ state: z.enum(["no_memberships", "no_payments"]), timezone: z.string(), today: daySchema }).strict(),
 ]);
 export type MoneyReport = z.infer<typeof moneyReportSchema>;
@@ -161,22 +210,25 @@ const monthOf = (day: string): string => day.slice(0, 7);
  *
  *  Monthly recurring revenue counts a repeating membership only while it is in use today:
  *  not one that is frozen, not started yet, ended, cancelled or free. Collected is the
- *  payments that stand, each in the month it was paid, less the refunds that stand, each
- *  in the month the money went back. Lifetime value is the money a member brings in a
- *  month over the share of members who leave in a month, both over the same full months
- *  churn is worked out over: that is the money collected in those months for each member
- *  who left in them. It is not given before payments were recorded for the whole of those
- *  months, nor where nobody left in them. Collected and the months and memberships listed
- *  follow the period; what is owed, recurring revenue and lifetime value do not. */
+ *  payments and the sales at the desk that stand, each in the month of its day, less the
+ *  refunds that stand, each in the month the money went back. Lifetime value is the money
+ *  a member brings in a month over the share of members who leave in a month, both over
+ *  the same full months churn is worked out over: that is the membership money collected
+ *  in those months for each member who left in them (a sale may be a walk-in's, so sales
+ *  are not in it). It is not given before payments were recorded for the whole of those
+ *  months, nor where nobody left in them. Collected, the months, and the memberships,
+ *  products and staff listed follow the period; what is owed, recurring revenue and
+ *  lifetime value do not. */
 export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
   const period = reportPeriodOf(facts.period, facts.today);
   const base = { timezone: facts.timezone, today: facts.today };
-  if (facts.currency === null || !facts.anyMembership) return { state: "no_memberships", ...base };
-  if (facts.firstPaidOn === null) return { state: "no_payments", ...base };
+  if (facts.currency === null || (!facts.anyMembership && !facts.anySale)) return { state: "no_memberships", ...base };
+  const firstOn = earliest(facts.firstPaidOn, facts.firstSoldOn);
+  if (firstOn === null) return { state: "no_payments", ...base };
   const earlier = yearEarlierOf(period);
 
   const thisMonth = monthOf(facts.today);
-  const firstMonth = monthOf(facts.firstPaidOn);
+  const firstMonth = monthOf(firstOn);
 
   interface TypeSums {
     name: string;
@@ -209,24 +261,41 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
     memberships += 1;
   }
 
-  const byMonth = new Map<string, { paidMinor: number; refundedMinor: number }>();
-  const inPeriod = { paidMinor: 0, refundedMinor: 0 };
+  interface Sums {
+    paidMinor: number;
+    soldMinor: number;
+    refundedMinor: number;
+  }
+  const byMonth = new Map<string, Sums>();
+  const sumsOf = (month: string): Sums => {
+    const had = byMonth.get(month);
+    if (had !== undefined) return had;
+    const made = { paidMinor: 0, soldMinor: 0, refundedMinor: 0 };
+    byMonth.set(month, made);
+    return made;
+  };
+  const inPeriod = { paidMinor: 0, soldMinor: 0, refundedMinor: 0 };
   for (const row of facts.months) {
     if (row.month > thisMonth) continue;
     inPeriod.paidMinor += row.periodPaidMinor;
     inPeriod.refundedMinor += row.periodRefundedMinor;
-    const sums = byMonth.get(row.month) ?? { paidMinor: 0, refundedMinor: 0 };
+    const sums = sumsOf(row.month);
     sums.paidMinor += row.paidMinor;
     sums.refundedMinor += row.refundedMinor;
-    byMonth.set(row.month, sums);
     const type = typeOf(row.typeId, row.typeName);
     type.periodNetMinor += row.periodPaidMinor - row.periodRefundedMinor;
     type.moved ||= row.periodPaidMinor > 0 || row.periodRefundedMinor > 0;
     if (row.month === thisMonth) type.monthNetMinor += row.paidMinor - row.refundedMinor;
   }
-  const monthSums = (month: string): { month: string; paidMinor: number; refundedMinor: number; netMinor: number } => {
-    const sums = byMonth.get(month) ?? { paidMinor: 0, refundedMinor: 0 };
-    return { month, ...sums, netMinor: sums.paidMinor - sums.refundedMinor };
+  for (const row of facts.sales) {
+    if (row.month > thisMonth) continue;
+    inPeriod.soldMinor += row.periodSoldMinor;
+    sumsOf(row.month).soldMinor += row.soldMinor;
+  }
+  const net = (sums: Sums): number => sums.paidMinor + sums.soldMinor - sums.refundedMinor;
+  const monthSums = (month: string): Sums & { month: string; netMinor: number } => {
+    const sums = byMonth.get(month) ?? { paidMinor: 0, soldMinor: 0, refundedMinor: 0 };
+    return { month, ...sums, netMinor: net(sums) };
   };
 
   const shown: string[] = [];
@@ -238,14 +307,14 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
     ...base,
     period,
     currency: facts.currency,
-    firstPaidOn: facts.firstPaidOn,
+    firstPaidOn: firstOn,
     otherCurrency: facts.otherCurrency,
     recurring: { monthlyMinor, memberships },
     thisMonth: monthSums(thisMonth),
-    inPeriod: { ...inPeriod, netMinor: inPeriod.paidMinor - inPeriod.refundedMinor },
-    yearEarlier: coversFrom(facts.firstPaidOn, earlier.from)
-      ? { state: "ok", ...earlier, ...facts.yearEarlier, netMinor: facts.yearEarlier.paidMinor - facts.yearEarlier.refundedMinor }
-      : { state: "no_history", ...earlier, since: facts.firstPaidOn },
+    inPeriod: { ...inPeriod, netMinor: net(inPeriod) },
+    yearEarlier: coversFrom(firstOn, earlier.from)
+      ? { state: "ok", ...earlier, ...facts.yearEarlier, netMinor: net(facts.yearEarlier) }
+      : { state: "no_history", ...earlier, since: firstOn },
     owed: {
       minor: facts.owed.currentMinor,
       people: facts.owed.currentPeople,
@@ -256,13 +325,32 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
       overduePeople: facts.owed.overduePeople,
       overdueAfterDays: facts.overdueAfterDays,
     },
-    lifetimeValue: lifetimeValue(facts, (month) => monthSums(month).netMinor),
+    lifetimeValue: lifetimeValue(facts, (month) => {
+      const sums = monthSums(month);
+      return sums.paidMinor - sums.refundedMinor;
+    }),
     months: shown.map(monthSums),
     types: [...types.values()]
       .filter((t) => t.inUse > 0 || t.moved)
       .sort((a, b) => b.periodNetMinor - a.periodNetMinor || b.monthlyMinor - a.monthlyMinor || a.name.localeCompare(b.name))
       .map((t) => ({ name: t.name, inUse: t.inUse, monthlyMinor: t.monthlyMinor, monthNetMinor: t.monthNetMinor, periodNetMinor: t.periodNetMinor })),
+    products: facts.products
+      .filter((p) => p.sold > 0)
+      .map((p) => ({ name: p.name, sold: p.sold, minor: p.minor }))
+      .sort((a, b) => b.minor - a.minor || b.sold - a.sold || a.name.localeCompare(b.name)),
+    staff: facts.staff
+      .map((m) => ({ name: m.name, paidMinor: m.paidMinor, soldMinor: m.soldMinor, totalMinor: m.paidMinor + m.soldMinor }))
+      .filter((m) => m.totalMinor > 0)
+      // A deleted account last: it is nobody the gym can ask.
+      .sort((a, b) => Number(a.name === null) - Number(b.name === null) || b.totalMinor - a.totalMinor || (a.name ?? "").localeCompare(b.name ?? "")),
   };
+}
+
+/** The earlier of two days, either of which may be missing. */
+function earliest(a: string | null, b: string | null): string | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return a < b ? a : b;
 }
 
 function lifetimeValue(facts: MoneyReportFacts, netOf: (month: string) => number): MoneyLifetimeFigure {

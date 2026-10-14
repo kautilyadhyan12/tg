@@ -320,15 +320,15 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
       // Not Jon (frozen), Gus (cancelled), Ivy (not started), Kim (free), nor a one-off.
       expect(report.recurring).toEqual({ monthlyMinor: 4999 * 3 + 4000 + 5200, memberships: 5 });
       expect(report.months).toEqual([
-        { month: "2026-06", paidMinor: 4999 + 48000, refundedMinor: 0, netMinor: 52999 },
+        { month: "2026-06", paidMinor: 4999 + 48000, soldMinor: 0, refundedMinor: 0, netMinor: 52999 },
         // Gus's 49.99 was taken back: not money.
-        { month: "2026-07", paidMinor: 4999 + 48000, refundedMinor: 0, netMinor: 52999 },
-        { month: "2026-08", paidMinor: 4999 + 4999 + 6000, refundedMinor: 0, netMinor: 15998 },
-        { month: "2026-09", paidMinor: 4999 + 2000 + 6000, refundedMinor: 2000, netMinor: 10999 },
+        { month: "2026-07", paidMinor: 4999 + 48000, soldMinor: 0, refundedMinor: 0, netMinor: 52999 },
+        { month: "2026-08", paidMinor: 4999 + 4999 + 6000, soldMinor: 0, refundedMinor: 0, netMinor: 15998 },
+        { month: "2026-09", paidMinor: 4999 + 2000 + 6000, soldMinor: 0, refundedMinor: 2000, netMinor: 10999 },
         // Ben's refund was taken back: not counted.
-        { month: "2026-10", paidMinor: 4999 + 1200, refundedMinor: 6000, netMinor: 199 },
+        { month: "2026-10", paidMinor: 4999 + 1200, soldMinor: 0, refundedMinor: 6000, netMinor: 199 },
       ]);
-      expect(report.thisMonth).toEqual({ month: "2026-10", paidMinor: 6199, refundedMinor: 6000, netMinor: 199 });
+      expect(report.thisMonth).toEqual({ month: "2026-10", paidMinor: 6199, soldMinor: 0, refundedMinor: 6000, netMinor: 199 });
       // Dee's 49.99; Eve's 29.99 left of September and all of October. Gus's cancelled bill
       // is owed by nobody, Ivy's has not fallen due, and Hal is a past member.
       expect(report.owed).toEqual({
@@ -362,7 +362,7 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
       // Next door reads its own, and only its own.
       const theirReport = figures(await read(next, nextOwner));
       expect(theirReport.recurring).toEqual({ monthlyMinor: 3000, memberships: 1 });
-      expect(theirReport.months).toEqual([{ month: "2026-10", paidMinor: 3000, refundedMinor: 0, netMinor: 3000 }]);
+      expect(theirReport.months).toEqual([{ month: "2026-10", paidMinor: 3000, soldMinor: 0, refundedMinor: 0, netMinor: 3000 }]);
       expect(theirReport.owed).toMatchObject({ minor: 0, people: 0, pastMinor: 0, pastPeople: 0 });
       expect(theirReport.types).toEqual([{ name: "Gold Monthly", inUse: 1, monthlyMinor: 3000, monthNetMinor: 3000, periodNetMinor: 3000 }]);
       expect(theirReport.lifetimeValue).toEqual({ state: "nobody_left" });
@@ -411,7 +411,7 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
       expect(report).toMatchObject({
         firstPaidOn: "2026-10-15",
         recurring: { monthlyMinor: 4999, memberships: 1 },
-        thisMonth: { paidMinor: 4999, refundedMinor: 0, netMinor: 4999 },
+        thisMonth: { paidMinor: 4999, soldMinor: 0, refundedMinor: 0, netMinor: 4999 },
         owed: { minor: 0, people: 0 },
         lifetimeValue: { state: "nobody_left" },
       });
@@ -504,7 +504,7 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
         currency: "USD",
         otherCurrency: true,
         recurring: { monthlyMinor: 3000, memberships: 1 },
-        thisMonth: { paidMinor: 3000, refundedMinor: 0, netMinor: 3000 },
+        thisMonth: { paidMinor: 3000, soldMinor: 0, refundedMinor: 0, netMinor: 3000 },
         owed: { minor: 0, people: 0 },
       });
       expect(after.types.map((t) => t.name)).toEqual(["Dollar Monthly"]);

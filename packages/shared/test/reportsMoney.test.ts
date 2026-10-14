@@ -79,14 +79,19 @@ function facts(over: Partial<MoneyReportFacts> = {}): MoneyReportFacts {
     period: "12m",
     currency: "GBP",
     anyMembership: true,
+    anySale: false,
+    firstSoldOn: null,
     firstPaidOn: "2026-01-10",
     otherCurrency: false,
     overdueAfterDays: 0,
     held: [],
     months: [],
+    sales: [],
+    products: [],
+    staff: [],
     owed: { currentMinor: 0, currentPeople: 0, listPeople: 0, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 },
     members: { today: TODAY, firstListedOn: "2026-01-05", everLeft: true, months: monthsTo(TODAY, LEAVING) },
-    yearEarlier: { paidMinor: 0, refundedMinor: 0 },
+    yearEarlier: { paidMinor: 0, soldMinor: 0, refundedMinor: 0 },
     ...over,
   };
 }
@@ -158,11 +163,11 @@ describe("collected: payments less refunds, month by month", () => {
       months: [money("gold", "2026-08", 10000), money("day", "2026-08", 6000), money("gold", "2026-09", 10000, 2500), money("day", "2026-10", 0, 6000), money("gold", "2026-10", 4999)],
     });
     expect(r.months).toEqual([
-      { month: "2026-08", paidMinor: 16000, refundedMinor: 0, netMinor: 16000 },
-      { month: "2026-09", paidMinor: 10000, refundedMinor: 2500, netMinor: 7500 },
-      { month: "2026-10", paidMinor: 4999, refundedMinor: 6000, netMinor: -1001 },
+      { month: "2026-08", paidMinor: 16000, soldMinor: 0, refundedMinor: 0, netMinor: 16000 },
+      { month: "2026-09", paidMinor: 10000, soldMinor: 0, refundedMinor: 2500, netMinor: 7500 },
+      { month: "2026-10", paidMinor: 4999, soldMinor: 0, refundedMinor: 6000, netMinor: -1001 },
     ]);
-    expect(r.thisMonth).toEqual({ month: "2026-10", paidMinor: 4999, refundedMinor: 6000, netMinor: -1001 });
+    expect(r.thisMonth).toEqual({ month: "2026-10", paidMinor: 4999, soldMinor: 0, refundedMinor: 6000, netMinor: -1001 });
     expect(r.types).toEqual([
       { name: "GOLD", inUse: 0, monthlyMinor: 0, monthNetMinor: 4999, periodNetMinor: 22499 },
       { name: "DAY", inUse: 0, monthlyMinor: 0, monthNetMinor: -6000, periodNetMinor: 0 },
@@ -172,8 +177,8 @@ describe("collected: payments less refunds, month by month", () => {
   it("a month with nothing is a zero between two with something, and twelve at most are shown", () => {
     const r = figures({ firstPaidOn: "2025-03-02", months: [money("gold", "2025-11", 500), money("gold", "2026-01", 700)] });
     expect(r.months).toHaveLength(12);
-    expect(r.months[0]).toEqual({ month: "2025-11", paidMinor: 500, refundedMinor: 0, netMinor: 500 });
-    expect(r.months[1]).toEqual({ month: "2025-12", paidMinor: 0, refundedMinor: 0, netMinor: 0 });
+    expect(r.months[0]).toEqual({ month: "2025-11", paidMinor: 500, soldMinor: 0, refundedMinor: 0, netMinor: 500 });
+    expect(r.months[1]).toEqual({ month: "2025-12", paidMinor: 0, soldMinor: 0, refundedMinor: 0, netMinor: 0 });
     expect(r.months[11]?.month).toBe("2026-10");
   });
 
@@ -256,5 +261,100 @@ describe("what is carried through as the database counted it", () => {
     const r = figures({ owed: { currentMinor: 100 * currentPeople, currentPeople, listPeople, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 } });
     expect(r.owed.listOnlyPeople).toBe(want);
     expect(r.owed.people).toBe(currentPeople);
+  });
+});
+
+describe("products sold at the desk (21b-ii)", () => {
+  const sale = (month: string, soldMinor: number, periodSoldMinor = soldMinor) => ({ month, soldMinor, periodSoldMinor });
+
+  it.each<[string, Partial<MoneyReportFacts>, string]>([
+    ["no membership given and nothing sold", { anyMembership: false }, "no_memberships"],
+    ["no membership given, a product sold: figures", { anyMembership: false, anySale: true, firstPaidOn: null, firstSoldOn: "2026-10-02" }, "ok"],
+    ["memberships, no payment, a product sold: figures", { firstPaidOn: null, anySale: true, firstSoldOn: "2026-09-30" }, "ok"],
+    ["a product sold once, then taken back: nothing stands", { anyMembership: false, anySale: true, firstPaidOn: null, firstSoldOn: null }, "no_payments"],
+    ["a sale in a country we do not serve", { currency: null, anySale: true, firstSoldOn: "2026-10-02" }, "no_memberships"],
+  ])("%s", (_name, over, state) => {
+    expect(report(over).state).toBe(state);
+  });
+
+  it("are in collected, each month and the period, beside membership payments; the first day is the earlier of the two", () => {
+    const r = figures({
+      period: "3m",
+      firstPaidOn: "2026-09-10",
+      firstSoldOn: "2026-08-20",
+      anySale: true,
+      months: [money("gold", "2026-09", 4999), money("gold", "2026-10", 4999, 1000)],
+      sales: [sale("2026-08", 750), sale("2026-09", 300), sale("2026-10", 1250)],
+    });
+    expect(r.firstPaidOn).toBe("2026-08-20");
+    expect(r.months).toEqual([
+      { month: "2026-08", paidMinor: 0, soldMinor: 750, refundedMinor: 0, netMinor: 750 },
+      { month: "2026-09", paidMinor: 4999, soldMinor: 300, refundedMinor: 0, netMinor: 5299 },
+      { month: "2026-10", paidMinor: 4999, soldMinor: 1250, refundedMinor: 1000, netMinor: 5249 },
+    ]);
+    expect(r.thisMonth).toEqual({ month: "2026-10", paidMinor: 4999, soldMinor: 1250, refundedMinor: 1000, netMinor: 5249 });
+    expect(r.inPeriod).toEqual({ paidMinor: 9998, soldMinor: 2300, refundedMinor: 1000, netMinor: 11298 });
+    // The months listed add up to the period's own figure.
+    expect(r.months.reduce((sum, m) => sum + m.netMinor, 0)).toBe(r.inPeriod.netMinor);
+  });
+
+  it("only the part of a month inside the period is counted, and a month after today never", () => {
+    const r = figures({ period: "4w", anySale: true, firstSoldOn: "2026-01-02", sales: [sale("2026-09", 900, 400), sale("2026-10", 600), sale("2026-11", 5000)] });
+    expect(r.inPeriod.soldMinor).toBe(1000);
+    expect(r.months.map((m) => m.soldMinor)).toEqual([900, 600]);
+  });
+
+  it("a year earlier counts sales too, and the earlier first sale says how far back the records go", () => {
+    const facts = { period: "3m" as const, anySale: true, firstPaidOn: "2026-01-10", firstSoldOn: "2025-06-01", yearEarlier: { paidMinor: 10000, soldMinor: 2500, refundedMinor: 500 } };
+    expect(figures(facts).yearEarlier).toEqual({ state: "ok", from: "2025-08-01", to: "2025-10-20", paidMinor: 10000, soldMinor: 2500, refundedMinor: 500, netMinor: 12000 });
+    expect(figures({ ...facts, firstSoldOn: "2025-08-02" }).yearEarlier).toEqual({ state: "no_history", from: "2025-08-01", to: "2025-10-20", since: "2025-08-02" });
+  });
+
+  it("lifetime value is membership money only: a sale may be a walk-in's", () => {
+    const quarter = [money("gold", "2026-07", 300000), money("gold", "2026-08", 310000, 10000), money("gold", "2026-09", 400000)];
+    const without = figures({ months: quarter }).lifetimeValue;
+    const withSales = figures({ months: quarter, anySale: true, firstSoldOn: "2026-07-01", sales: [sale("2026-07", 90000), sale("2026-08", 90000), sale("2026-09", 90000)] }).lifetimeValue;
+    expect(withSales).toEqual(without);
+    expect(withSales).toEqual({ state: "ok", minor: 100000, months: ["2026-07", "2026-08", "2026-09"], leavers: 10 });
+  });
+
+  it("products: the most money first, then the most sold, then by name; none sold is not listed", () => {
+    const r = figures({
+      anySale: true,
+      firstSoldOn: "2026-02-01",
+      products: [
+        { productId: "a", name: "Water", sold: 40, minor: 4000 },
+        { productId: "b", name: "Shake", sold: 10, minor: 4000 },
+        { productId: "c", name: "Bar", sold: 20, minor: 4000 },
+        { productId: "d", name: "Towel", sold: 1, minor: 1500 },
+        { productId: "e", name: "Gloves", sold: 2, minor: 9000 },
+        { productId: "f", name: "Old stock", sold: 0, minor: 0 },
+      ],
+    });
+    expect(r.products).toEqual([
+      { name: "Gloves", sold: 2, minor: 9000 },
+      { name: "Water", sold: 40, minor: 4000 },
+      { name: "Bar", sold: 20, minor: 4000 },
+      { name: "Shake", sold: 10, minor: 4000 },
+      { name: "Towel", sold: 1, minor: 1500 },
+    ]);
+  });
+
+  it("staff: payments and sales each recorded, the most first, an account since deleted last, nobody with nothing", () => {
+    const r = figures({
+      staff: [
+        { userId: null, name: null, paidMinor: 99999, soldMinor: 0 },
+        { userId: "u1", name: "Ravi", paidMinor: 5000, soldMinor: 500 },
+        { userId: "u2", name: "Asha", paidMinor: 0, soldMinor: 9000 },
+        { userId: "u3", name: "Ben", paidMinor: 5500, soldMinor: 0 },
+        { userId: "u4", name: "Cat", paidMinor: 0, soldMinor: 0 },
+      ],
+    });
+    expect(r.staff).toEqual([
+      { name: "Asha", paidMinor: 0, soldMinor: 9000, totalMinor: 9000 },
+      { name: "Ben", paidMinor: 5500, soldMinor: 0, totalMinor: 5500 },
+      { name: "Ravi", paidMinor: 5000, soldMinor: 500, totalMinor: 5500 },
+      { name: null, paidMinor: 99999, soldMinor: 0, totalMinor: 99999 },
+    ]);
   });
 });
