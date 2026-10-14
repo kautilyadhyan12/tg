@@ -1,6 +1,6 @@
 import { REPORT_FULL_WEEKS_NEEDED, addDays, weekdayOf } from '@app/shared';
 import { clockLabel } from './hoursView';
-import { changeWords, csvWords, dayText, earlierLine, monthShort, percentText, periodWords } from './reportsView';
+import { csvWords, dayText, monthShort, percentText, periodWords } from './reportsView';
 
 // The Reports page's attendance words (spec Part 3 §16.5; ROADMAP 21a-ii, 21d-i). Every figure
 // says how it is worked out, and a figure the gym's check-ins or classes cannot give is a
@@ -49,7 +49,6 @@ export function visitsLine(report) {
 export function visitTiles(report, words, clockFormat) {
   const week = report.weeks.length > 0 ? report.weeks[report.weeks.length - 1] : null;
   const shownFrom = report.days.length > 0 ? report.days[0].day : report.period.from;
-  const firstCheckIn = (since) => `Your first check-in was on ${dayText(since)}.`;
 
   let member;
   if (report.perMember.state === 'ok') {
@@ -108,7 +107,6 @@ export function visitTiles(report, words, clockFormat) {
       label: 'Visits',
       value: count(report.inPeriod.visits),
       line: null,
-      earlier: earlierLine(report.yearEarlier, firstCheckIn, (f) => `${count(f.visits)} · ${changeWords(report.inPeriod.visits, f.visits)}`),
       note: `${count(report.inPeriod.people)} ${report.inPeriod.people === 1 ? 'person' : 'people'} · ${span(shownFrom, report.period.to)}${week === null ? '' : ` · this week, so far: ${count(week.visits)}`}`,
       how: `Every check-in from ${dayText(shownFrom)} to today${shownFrom === report.period.from ? '' : ', the day of your first check-in'}. Someone who comes on three days is three visits and one person.`,
     },

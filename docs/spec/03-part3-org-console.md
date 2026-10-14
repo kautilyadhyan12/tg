@@ -5164,9 +5164,9 @@ period, one small line, "A year earlier: 9 · up 3", for the same days a year be
 a Monday is set beside a Monday; three and twelve months go back a calendar year, the same
 months up to the same day of the month (29 February is 28 February). The line under the
 picker names those days. **Which figures (Kd, 2026-10-14, `rulings/2026-10-14-21d-ii.md`):
-three, the ones an owner checks for growth:** New members, Visits, and Collected for staff
-shown money, each with "up", "down" or "the same". Every other figure has no line. The
-reads still answer a year earlier for members who left, the average stay, leads, visits a
+two:** New members, and Collected for staff shown money, each with "up", "down" or "the
+same". Every other figure has no line, and nothing in Attendance has one. The reads still
+answer a year earlier for members who left, the average stay, leads, visits, visits a
 member a week (the people on the list on that span's last day who were on it when its
 whole weeks began, over its whole weeks), how full classes were and no-shows; the page
 does not show them.

@@ -49,9 +49,9 @@ export function periodLine(period, words, seesMoney, yearEarlier = null) {
   return `Showing ${periodSpan(period)}. ${still.slice(0, -1).join(', ')} and ${still[still.length - 1]} are today's figures, so they stay the same whichever period you choose.${earlier}`;
 }
 
-// A YEAR EARLIER. Under the three figures an owner checks for growth, New members, Visits
-// and Collected (Kd, 2026-10-14), the same figure for the same days a year before; where the
-// app has no records of all those days, why there is none.
+// A YEAR EARLIER. Under New members and Collected only (Kd, 2026-10-14), the same figure
+// for the same days a year before; where the app has no records of all those days, why
+// there is none.
 
 /** "up 3", "down 3" or "the same", with `text` writing the difference. */
 export function changeWords(now, then, text = (n) => n.toLocaleString('en-GB')) {

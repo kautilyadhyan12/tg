@@ -1,4 +1,4 @@
-// The Reports page, a year earlier (ROADMAP 21d-ii): the line under New members, Visits and
+// The Reports page, a year earlier (ROADMAP 21d-ii): the line under New members and
 // Collected, and no other figure (Kd, 2026-10-14). The worst thing it could do is set a figure beside a zero from a year the app
 // was not used, or beside somebody else's days: a gym without those records reads why.
 import { describe, expect, it } from 'vitest';
@@ -125,18 +125,13 @@ describe('members a year earlier', () => {
 });
 
 describe('attendance a year earlier', () => {
-  it('visits, with how it moved; visits a member a week, the busiest time and the class tiles have none', () => {
+  it('no Attendance tile has a line (Kd, 2026-10-14)', () => {
     const r = attendance();
-    expect(visitLine(r, 'visits')).toBe('A year earlier: 62 · down 12');
+    expect(visitLine(r, 'visits')).toBeUndefined();
     expect(visitLine(r, 'per-member')).toBeUndefined();
     expect(visitLine(r, 'busiest')).toBeUndefined();
     expect(classLine(r, 'fill')).toBeUndefined();
     expect(classLine(r, 'no-shows')).toBeUndefined();
-  });
-
-  it('a first check-in after those days began reads its day, never 0 visits', () => {
-    const r = attendance({ firstVisitOn: '2025-09-20' });
-    expect(visitLine(r, 'visits')).toBe('A year earlier: no figures. Your first check-in was on 20 Sep 2025.');
   });
 
 });
