@@ -534,10 +534,25 @@ d("onboarding v2 routes (real Postgres)", () => {
     expect((await get(cookies)).plan).toMatchObject(GOLDEN_LOSE);
   });
 
-  it("never cuts calories under 18, with no health answer at all", { timeout: 30_000 }, async () => {
-    const { cookies } = await makeUser("ob-teen@example.com");
+  it("THE WORST THING: a 17-year-old's age is refused and nothing is saved; 18 is taken", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("ob-age@example.com");
     await completeScreens(cookies);
-    const teen = await patchOk(cookies, { age: 17 });
+    const before = (await get(cookies)).answers;
+    for (const age of [17, 16]) {
+      const res = await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { age }, cookies });
+      expect(res.statusCode, String(age)).toBe(400);
+    }
+    expect((await get(cookies)).answers).toEqual(before);
+    expect((await patchOk(cookies, { age: 18 })).answers).toMatchObject({ age: 18 });
+  });
+
+  it("never cuts calories under 18, with no health answer at all", { timeout: 30_000 }, async () => {
+    const { userId, cookies } = await makeUser("ob-teen@example.com");
+    await completeScreens(cookies);
+    // No route saves an age under 18 since the app became 18+ (RULINGS 2026-09-15);
+    // the floor stays for a row from before.
+    await sql`UPDATE user_fitness_profiles SET age = 17 WHERE user_id = ${userId}`;
+    const teen = await get(cookies);
     // resting 10·70 + 6.25·165 − 5·17 − 161 = 1485.25; burn 1485.25·1.2 + 112.5 = 1894.8
     expect(teen.plan).toMatchObject({
       restingBurnKcal: 1485,
@@ -602,7 +617,7 @@ d("onboarding v2 routes (real Postgres)", () => {
       { fitnessGoals: ["weight_loss"] }, // a weight choice now, never a goal beside one
       { fitnessGoals: ["posture", "posture"] }, // a set, not a list
       { fitnessGoals: ["get_ripped"] },
-      { age: 15 }, // the app is for 16 and over
+      { age: 17 }, // the app is for 18 and over
       { age: 121 },
       { gender: "yes" },
       { heightCm: 49 },
@@ -1050,6 +1065,12 @@ d("onboarding v2 routes (real Postgres)", () => {
 
     // Answered on its own route, and the finish is taken.
     await answerHealth(cookies, { hasCondition: false });
+    // …but not with an age under 18 kept from before the app became 18+
+    // (RULINGS 2026-09-15): no route saves one now, so it is written here.
+    await sql`UPDATE user_fitness_profiles SET age = 17 WHERE user_id = ${userId}`;
+    await refused({ onboardingCompleted: true }, ["age"]);
+    expect(await completed()).toBe(false);
+    await patchOk(cookies, { age: SCREENS.aboutYou.age });
     const done = await patchOk(cookies, { onboardingCompleted: true });
     expect(done.answers["onboardingCompleted"]).toBe(true);
     expect(done.plan).toMatchObject(GOLDEN_LOSE);
