@@ -883,6 +883,16 @@ describe("the gym's waiver on a person's page (3e-i)", () => {
     expect(within(screen.getByTestId('desk-waiver')).getByTestId('waiver-line').textContent).toBe('Waiver signedat the desk on 14 October 2026 as Ada Lovelace');
   });
 
+  it("a relative on a shared email never reads as signed by the record's desk signature (re-check, High-A)", async () => {
+    orgService.getMemberListEntry.mockResolvedValue(
+      inApp({ displayName: 'Luis Reyes', sharedEmail: true, waiverSigned: null }, { waiverDesk: { name: 'Ada Lovelace', signer: 'person', at: '2026-10-14T09:00:00.000Z', by: 'Sam' } }),
+    );
+    openBox(ADA);
+    const who = within(await screen.findByTestId('in-app-person'));
+    expect(who.getByTestId('waiver-line').textContent).toBe('Waiver not signed');
+    expect(who.queryByText('Signed at the desk')).toBeNull();
+  });
+
   it('the one person in the app on a shared email: the desk card offers only the desk (round one, High-2)', async () => {
     orgService.getMemberListEntry.mockResolvedValue(inApp({ sharedEmail: true, waiverSigned: { name: 'Leo Lovelace', at: '2026-10-13T09:00:00.000Z' } }));
     openBox(ADA);

@@ -157,6 +157,9 @@ describe("a person's page", () => {
   it('never says not signed in the app line of somebody who signed at the desk (round one, High-1)', () => {
     const desk = { name: 'Ben Stone', signer: 'person', at: 'x', by: null };
     expect(waiverLineParts({ waiverSigned: null, sharedEmail: false }, () => '', desk)).toEqual({ tone: 'plain', label: 'Signed at the desk', rest: ' · not signed in the app yet' });
+    // A relative on an email the family shares is never shown as signed by the record's
+    // desk signature: it is somebody else's (re-check, High-A).
+    expect(waiverLineParts({ waiverSigned: null, sharedEmail: true }, () => '', desk)).toEqual({ tone: 'warn', label: 'Waiver not signed', rest: '' });
     // Their own signature in the app still reads as theirs.
     expect(waiverLineParts({ waiverSigned: { name: 'Ben Stone', at: 'x' }, sharedEmail: false }, () => '14 October 2026', desk).label).toBe('Waiver signed');
   });

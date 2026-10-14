@@ -80,7 +80,8 @@ export function waiverLine(member, when) {
  *  still asks them, since a desk signature is the record's and not the account's. */
 export function waiverLineParts(member, when, desk = null) {
   const signed = member.waiverSigned ?? null;
-  if (signed === null && desk !== null) return { tone: 'plain', label: 'Signed at the desk', rest: ' · not signed in the app yet' };
+  // Never on an email a family shares: the record's desk signature may be a relative's.
+  if (signed === null && desk !== null && member.sharedEmail !== true) return { tone: 'plain', label: 'Signed at the desk', rest: ' · not signed in the app yet' };
   if (signed === null) return { tone: 'warn', label: 'Waiver not signed', rest: '' };
   const day = when(signed.at);
   const on = day === '' ? '' : ` on ${day}`;
