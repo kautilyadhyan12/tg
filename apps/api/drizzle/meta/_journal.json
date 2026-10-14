@@ -743,6 +743,13 @@
       "when": 1790121600106,
       "tag": "0106_waiver_at_the_desk",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1790208000107,
+      "tag": "0107_waiver_record_deleted",
+      "breakpoints": true
     }
   ]
 }

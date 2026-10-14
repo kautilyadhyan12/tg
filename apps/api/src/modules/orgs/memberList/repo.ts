@@ -1145,6 +1145,7 @@ export async function deleteListForGym(tx: TransactionSql, gymId: string): Promi
   await tx`
     UPDATE gym_attendance_removed SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id IS NOT NULL AND user_id IS NOT NULL`;
+  await letGoOfDeskSignatures(tx, gymId, null);
   await tx`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
   // The gym's own column headings (3a-v-b). Nothing points at them once the entries
   // are gone, and a catalogue outliving the gym it belongs to would be the one row of
@@ -2232,6 +2233,16 @@ export async function setEntryFormer(tx: TransactionSql, gymId: string, entryId:
   return rows.length === 1;
 }
 
+/** A waiver signed at the desk stays as the gym's proof when its record is deleted for
+ *  good, with the day it was deleted: the purge removes it six years later (3e-iii). One
+ *  record, or every record of the gym when `entryId` is null. */
+async function letGoOfDeskSignatures(tx: TransactionSql, gymId: string, entryId: string | null): Promise<void> {
+  await tx`
+    UPDATE gym_waiver_desk_signatures SET entry_id = NULL, record_deleted_at = now()
+    WHERE gym_id = ${gymId} AND entry_id IS NOT NULL
+      AND (${entryId}::uuid IS NULL OR entry_id = ${entryId}::uuid)`;
+}
+
 /** A record deleted for good: a former one deleted, or the one not kept when two
  *  are joined. A membership linked to it keeps its membership and loses the link (the
  *  foreign key's ON DELETE SET NULL); the last test in
@@ -2246,6 +2257,7 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
   await tx`
     UPDATE gym_attendance_removed SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND user_id IS NOT NULL`;
+  await letGoOfDeskSignatures(tx, gymId, entryId);
   const rows = await tx<{ id: string }[]>`
     DELETE FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ${entryId}
